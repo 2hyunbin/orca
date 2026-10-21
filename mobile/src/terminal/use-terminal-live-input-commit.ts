@@ -26,6 +26,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
   activeHandleRef,
   activeSessionTabType,
   activeSessionTabTypeRef,
+  buildLivePasteText,
   connected,
   liveInputRef,
   liveInputTerminalHandles,
@@ -72,6 +73,7 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
   } = useTerminalLivePendingInputFlush({
     activeHandleRef,
     activeSessionTabTypeRef,
+    buildLivePasteText,
     liveInputRef,
     liveInputTerminalHandlesRef,
     sendLiveTerminalInputRef,
