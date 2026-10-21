@@ -95,6 +95,46 @@ describe('OrcaRuntimeService.resolveAgentDetectionHost', () => {
     expect(selector).not.toHaveBeenCalled()
   })
 
+  it('refuses a repository target without a store while retaining the untargeted default', async () => {
+    const runtime = new OrcaRuntimeService(null)
+    await expect(runtime.resolveAgentDetectionHost(undefined, local.id)).rejects.toThrow(
+      'repo_not_found'
+    )
+    expect(await runtime.resolveAgentDetectionHost(undefined)).toEqual({ kind: 'local' })
+    expect(
+      await runtime.resolveAgentDetectionHost(FLOATING_TERMINAL_WORKTREE_ID, local.id)
+    ).toEqual({
+      kind: 'local'
+    })
+  })
+
+  it.each(['removed', 'path', 'owner', 'connection', 'duplicate'] as const)(
+    'refuses a selected repository %s change across the selector await',
+    async (change) => {
+      const selected = { ...local, path: '\\\\wsl$\\Old\\home\\repo' }
+      const repos: Repo[] = [selected]
+      const { runtime } = makeRuntime(repos)
+      const pending = runtime.resolveAgentDetectionHost(undefined, local.id)
+      repos.splice(
+        0,
+        1,
+        ...(change === 'removed'
+          ? []
+          : change === 'duplicate'
+            ? [selected, { ...selected }]
+            : [
+                {
+                  ...selected,
+                  ...(change === 'path' ? { path: '\\\\wsl$\\Current\\home\\repo' } : {}),
+                  ...(change === 'owner' ? { executionHostId: 'ssh:build-host' as const } : {}),
+                  ...(change === 'connection' ? { connectionId: 'build-host' } : {})
+                }
+              ])
+      )
+      await expect(pending).rejects.toThrow('repo_target_changed')
+    }
+  )
+
   it('keeps repo detection on its configured runtime for a Windows path', async () => {
     const { runtime } = makeRuntime([local])
     expect(await runtime.resolveAgentDetectionHost(undefined, local.id)).toMatchObject({

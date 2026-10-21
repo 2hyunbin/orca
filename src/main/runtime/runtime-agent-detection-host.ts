@@ -23,10 +23,22 @@ export async function resolveRuntimeAgentDetectionHost(
 ): Promise<AgentDetectionHost> {
   const { store } = context
   if (!store) {
+    if (!worktreeId && repoId) {
+      throw new Error('repo_not_found')
+    }
     return HOST_DEFAULT_AGENT_DETECTION
   }
   if (!worktreeId && repoId) {
     const repo = await context.resolveRepo(`id:${repoId}`)
+    const current = store.getRepos?.().filter((entry) => entry.id === repo.id) ?? []
+    if (
+      current.length !== 1 ||
+      current[0].path !== repo.path ||
+      current[0].executionHostId !== repo.executionHostId ||
+      current[0].connectionId !== repo.connectionId
+    ) {
+      throw new Error('repo_target_changed')
+    }
     return resolveWorkspaceAgentDetectionHost(store, {
       kind: 'worktree',
       repoId: repo.id,
