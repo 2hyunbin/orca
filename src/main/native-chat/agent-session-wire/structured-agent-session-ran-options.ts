@@ -87,7 +87,10 @@ export async function noteStructuredAgentSessionReportedOptions(
 export type StructuredAgentSessionRanRecorder = (
   sessionId: string,
   fence: number
-) => ((handed: StructuredAgentSessionHandedOptions) => Promise<void>) & { checkpoint?: () => void }
+) => ((handed: StructuredAgentSessionHandedOptions) => Promise<void>) & {
+  prepareInput?: () => void
+  checkpoint?: () => void
+}
 
 /** Keeps observation identity at input, so an early report is neither lost nor an old fallback. */
 export function createStructuredAgentSessionRanRecorder(
@@ -100,6 +103,12 @@ export function createStructuredAgentSessionRanRecorder(
     (handed: StructuredAgentSessionHandedOptions) =>
       recordStructuredAgentSessionRanOptions(context, sessionId, fence, handed, checkpoint),
     {
+      prepareInput: () => {
+        const child = currentChild(context, sessionId, fence)
+        if (child) {
+          delete childRuns.get(child)?.owed
+        }
+      },
       checkpoint: () => {
         const child = currentChild(context, sessionId, fence)
         checkpoint = { reported: child ? childRuns.get(child)?.reported : undefined }

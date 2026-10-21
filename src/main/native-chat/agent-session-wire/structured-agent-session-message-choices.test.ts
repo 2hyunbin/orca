@@ -76,6 +76,11 @@ it('records what a later readback reports when the start named only a filled-in 
   expect(await first.result).toMatchObject({ ok: true })
   await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(1))
   expect(rig.store.getRecord(SESSION)?.options).toBeUndefined()
+  await rig.settleAccepted(first.id, 'a')
+  const preparation = Promise.withResolvers<never>()
+  rig.dispatch.mockImplementationOnce(() => preparation.promise)
+  await rig.send('rejected before preparation').result
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(2))
   await rig.host.handleAdapterEvent({
     type: 'options-reported',
     sessionId: SESSION,
@@ -83,6 +88,7 @@ it('records what a later readback reports when the start named only a filled-in 
     acquisitionGeneration: 'generation-1',
     reportedOptions: { model: 'opus[1m]', effort: 'high' }
   })
+  preparation.reject(new Error('content preparation failed'))
   await eventually(() =>
     expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'opus[1m]', effort: 'high' })
   )
@@ -213,6 +219,7 @@ it.each(['before', 'during', 'after'])(
       if (when === 'before') {
         await report('previous-model')
       }
+      input.onInputPreparation?.()
       input.onExecutionSnapshot?.()
       if (when === 'during') {
         await report('actual-model')

@@ -213,6 +213,7 @@ async function dispatchSafely(
       ...(signal ? { signal } : {}),
       fence: ctx.fence,
       requestedAt,
+      onInputPreparation: ctx.recordRanOptions?.prepareInput,
       onExecutionSnapshot: ctx.recordRanOptions?.checkpoint
     })
     return signal?.aborted && outcome.state === 'rejected' ? cancelledDispatch() : outcome

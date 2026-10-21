@@ -89,6 +89,8 @@ export async function dispatchClaudeMessage(
   const outcome = await dispatchClaudeTurn(session, input, async () => {
     await input.beforeDispatch?.()
     try {
+      input.signal?.throwIfAborted()
+      input.onInputPreparation?.()
       if (messageOptions !== undefined) {
         await applyClaudeMessageOptions(session, messageOptions, timeoutMs, input.signal)
       }

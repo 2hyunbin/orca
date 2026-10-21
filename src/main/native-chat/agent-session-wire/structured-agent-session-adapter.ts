@@ -287,6 +287,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     requestedAt?: number
     /** Revalidate after preparation, immediately before writing to the provider. */
     beforeDispatch?: () => Promise<void>
+    /** Local preparation boundary before choices can mutate the provider. */
+    onInputPreparation?: () => void
     /** In-process checkpoint after applying choices, before capturing execution evidence. */
     onExecutionSnapshot?: () => void
   }): Promise<AgentSessionDispatchOutcome>
