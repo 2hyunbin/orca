@@ -27,26 +27,15 @@ const NOT_SAVED_MESSAGE = "The file wasn't saved. Try saving again."
 
 export function attachEditorAutosaveController(store: AppStoreApi): () => void {
   const saveQueue = createEditorSaveQueue(store)
-  const {
-    queueSave,
-    quiesceFileSave,
-    clearAutoSaveTimer,
-    bumpSaveGeneration,
-    holdAutoSave,
-    syncAutoSave
-  } = saveQueue
+  const { queueSave, settleFileSaves, holdAutoSave, syncAutoSave } = saveQueue
 
   const { handleSaveDirtyFiles, handlePrepareHotExit } = createEditorRestartSaveHandlers({
     store,
     queueSave,
-    quiesceFileSave
+    settleFileSaves
   })
 
-  const handleExternalFileChange = createEditorExternalChangeTabReset({
-    store,
-    clearAutoSaveTimer,
-    bumpSaveGeneration
-  })
+  const handleExternalFileChange = createEditorExternalChangeTabReset(store)
 
   const handleSaveAndClose = async (event: Event): Promise<void> => {
     if (!(event instanceof CustomEvent)) {
@@ -133,9 +122,9 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
         release = holdAutoSave(keys)
         matchingFiles = state.openFiles.filter((file) => keys.has(editorFileHoldKey(state, file)))
       }
-      await Promise.all(matchingFiles.map((file) => quiesceFileSave(file.id)))
+      await Promise.all(matchingFiles.map((file) => settleFileSaves(file.id)))
     } catch (error) {
-      // Why: a failed quiesce (e.g. an unresolved CSV cell) must stop the discard, not strand its hold.
+      // Why: a failed settle (e.g. an unresolved CSV cell) must stop the discard, not strand its hold.
       release?.()
       detail.reject?.(error instanceof Error ? error.message : String(error))
       return

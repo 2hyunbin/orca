@@ -23,7 +23,16 @@ export function editorFileHoldKey(state: AppState, file: OpenFile): string {
   if (file.mode !== 'edit' && !(file.mode === 'diff' && file.diffSource === 'unstaged')) {
     return file.id
   }
-  return physicalFileKey(resolveEditorModelOwner(file, state), file.filePath) ?? file.id
+  return editorPathHoldKey(state, file, file.filePath) ?? file.id
+}
+
+/** The physical file `filePath` names on `owner`'s host; null while that host is unknown. */
+export function editorPathHoldKey(
+  state: AppState,
+  owner: Parameters<typeof resolveEditorModelOwner>[0],
+  filePath: string
+): string | null {
+  return physicalFileKey(resolveEditorModelOwner(owner, state), filePath)
 }
 
 /**

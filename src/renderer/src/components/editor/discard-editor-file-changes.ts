@@ -7,11 +7,11 @@ export async function discardEditorBuffer(fileId: string): Promise<void> {
   if (!isLastEditorBufferView(useAppStore.getState(), fileId)) {
     return
   }
-  // Why: "Don't Save" must win over any pending autosave write for the same tab.
+  // Why: drop the autosave timer and let running saves land before the edits are dropped.
   try {
     await requestEditorSaveQuiesce({ fileId })
   } catch (error) {
-    console.warn('Autosave quiesce failed before discard', error)
+    console.warn('Autosave settle failed before discard', error)
   }
   const state = useAppStore.getState()
   state.markFileDirty(fileId, false)
@@ -19,7 +19,7 @@ export async function discardEditorBuffer(fileId: string): Promise<void> {
   state.clearEditorDraft(fileId)
 }
 
-/** "Don't Save": cancel pending saves, drop unsaved edits, then close the tab. */
+/** "Don't Save": settle saves, drop unsaved edits, then close the tab. */
 export async function discardEditorFileChangesAndClose(fileId: string): Promise<void> {
   await discardEditorBuffer(fileId)
   useAppStore.getState().closeFile(fileId)

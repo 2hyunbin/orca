@@ -4,8 +4,6 @@ import type { OpenFile } from '@/store/slices/editor'
 import { needsSavePromptOnClose } from '@/store/slices/editor/buffers/editor-buffer-close-rule'
 import type { EditorBufferViewIndex } from '@/store/slices/editor/buffers/editor-buffer-views'
 import { restartSaveTargets } from './editor-autosave-state-projections'
-import { EDITOR_SAVE_KEYS } from './editor-save-queue'
-import { editorTabModelUri } from './editor-save-disk-precondition'
 import {
   flushPendingEditorBuffer,
   hasPendingEditorBufferChange,
@@ -69,14 +67,6 @@ describe('editor buffer entry points return the per-tab answer', () => {
   it('restartSaveTargets equals the dirty tabs', () => {
     const state = seed()
     expect(restartSaveTargets(state)).toEqual(state.openFiles.filter((file) => file.isDirty))
-  })
-
-  it.each(IDS)('save keys for %s equal the model URI queue and the tab-id timer', (id) => {
-    const state = seed()
-    const file = state.openFiles.find((candidate) => candidate.id === id)
-    const oldQueueKey = file?.mode === 'edit' ? editorTabModelUri(state, file) : id
-    expect(EDITOR_SAVE_KEYS.queue(state, id)).toBe(oldQueueKey)
-    expect(EDITOR_SAVE_KEYS.schedule(state, id)).toBe(id)
   })
 
   it.each([
