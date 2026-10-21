@@ -118,7 +118,7 @@ export const SIDEBAR_INPUT_METHODS = [
       if (connectionId === undefined || signal?.aborted) {
         throw new Error('client_disconnected')
       }
-      if (facts.reportClientView(connectionId, params)) {
+      if (facts.reportClientWorkspaceView(connectionId, params)) {
         runtime.registerSubscriptionCleanup(
           `sidebar-view-${connectionId}`,
           () => facts.workspaceViewers.dropClient(connectionId),

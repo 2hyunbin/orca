@@ -169,7 +169,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
   }
 
   /** A client's view; a phone session it now shows, and did not before, has been read. */
-  reportClientView(connectionId: string, view: ClientWorkspaceView): boolean {
+  reportClientWorkspaceView(connectionId: string, view: ClientWorkspaceView): boolean {
     const shown = new Set(this.workspaceViewers.shownPhoneSessions(connectionId))
     const first = this.workspaceViewers.reportClientView(connectionId, view)
     for (const worktreeId of this.workspaceViewers.shownPhoneSessions(connectionId)) {
