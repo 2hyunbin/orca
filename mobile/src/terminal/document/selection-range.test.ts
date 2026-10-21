@@ -93,3 +93,37 @@ describe('word selection uses the rendered xterm cell range', () => {
     expect(f.select).toHaveBeenLastCalledWith(2, 99, 1)
   })
 })
+
+describe('Unicode selection boundaries across every rendered column', () => {
+  it.each([
+    ['한글', 4],
+    ['cafe\u0301', 4],
+    ['𐐀x', 2],
+    ['👍🏽', 4],
+    ['👨‍👩‍👧‍👦', 8],
+    ['🏳️‍🌈', 3],
+    ['🇰🇷', 2],
+    ['❤️', 1]
+  ] as const)('keeps %s whole at each of its %i cells after wide text', async (text, width) => {
+    const f = await fixture(`가 ${text} next`)
+    for (let col = 3; col < 3 + width; col++) {
+      seedWordSelection(f.scope, col, 0)
+      expect(f.select).toHaveBeenLastCalledWith(3, 0, width)
+      expect(f.selected()).toBe(text)
+    }
+    seedWordSelection(f.scope, 3 + width + 1, 0)
+    expect(f.selected()).toBe('next')
+  })
+
+  it('keeps the last wide word on the row and the next wrapped row independent', async () => {
+    const f = await fixture(' '.repeat(56) + '한글next')
+    for (const col of [56, 57, 58, 59]) {
+      seedWordSelection(f.scope, col, 0)
+      expect(f.select).toHaveBeenLastCalledWith(56, 0, 4)
+      expect(f.selected()).toBe('한글')
+    }
+    seedWordSelection(f.scope, 0, 1)
+    expect(f.select).toHaveBeenLastCalledWith(0, 1, 4)
+    expect(f.selected()).toBe('next')
+  })
+})
