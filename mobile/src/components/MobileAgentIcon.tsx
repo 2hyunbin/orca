@@ -107,7 +107,9 @@ export function MobileAgentIcon({ agentId, size = 16 }: { agentId: string; size?
 
   // Why: prefer the favicon bundled into the app over Google's favicon service,
   // which is unreachable in some regions and offline (#8451).
-  const bundledIcon = MOBILE_AGENT_ICON_ASSETS[agentId as TuiAgent]
+  const iconAgentId = agentId === 'dsb' ? 'dsh' : agentId
+  // SAFETY: arbitrary ids only probe the optional icon map and fall through when absent.
+  const bundledIcon = MOBILE_AGENT_ICON_ASSETS[iconAgentId as TuiAgent]
   if (bundledIcon) {
     return <BundledIcon source={bundledIcon} size={size} />
   }
