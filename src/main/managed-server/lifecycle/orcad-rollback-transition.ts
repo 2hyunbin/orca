@@ -172,6 +172,10 @@ export async function rollbackOrcadLocked(
     if (blocked.retainFence) {
       lock.retain()
     }
+    // A withdrawn stop was never sent, so the server keeps serving and must take terminals again.
+    if (blocked.code === 'orcad_rollback_stop_withdrawn') {
+      await reopenAdmission(options)
+    }
     const recovered = blocked.restartIncumbent
       ? ` ${await putIncumbentBack(options, lock, transaction, incumbent)}`
       : ''

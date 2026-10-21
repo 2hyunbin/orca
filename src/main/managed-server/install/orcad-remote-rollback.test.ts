@@ -26,7 +26,7 @@ vi.mock('./orcad-remote-record-file', async (importOriginal) => ({
 }))
 
 const barrier = vi.hoisted(() => {
-  const state: { log: string[] | null; state: 'retired' | 'unproven' } = {
+  const state: { log: string[] | null; state: 'retired' | 'unproven' | 'withdrawn' } = {
     log: null,
     state: 'retired'
   }
@@ -49,6 +49,9 @@ vi.mock('../lifecycle/orcad-rollback-terminal-barrier', async (importOriginal) =
     context: { version: string }
   ) => {
     barrier.log?.push(`stop:${context.version}`)
+    if (barrier.state === 'withdrawn') {
+      return { state: 'withdrawn', reason: 'The stop was cancelled before orcad acted on it.' }
+    }
     return barrier.state === 'retired'
       ? { state: 'retired' }
       : { state: 'unproven', reason: 'A terminal started after the census.' }
@@ -289,6 +292,16 @@ describe('rollbackOrcad', () => {
     )
     expect(result).toMatchObject({ outcome: 'refused', code: 'orcad_rollback_census_unavailable' })
     expect(log).toEqual([])
+    expect(releaseIncumbentAdmission).toHaveBeenCalledOnce()
+  })
+
+  it('reopens admission when its stop was withdrawn before orcad acted on it', async () => {
+    scriptHost([])
+    barrier.state = 'withdrawn'
+    const releaseIncumbentAdmission = vi.fn(async () => {})
+    await expect(rollbackOrcad(options({ releaseIncumbentAdmission }))).resolves.toMatchObject({
+      code: 'orcad_rollback_stop_withdrawn'
+    })
     expect(releaseIncumbentAdmission).toHaveBeenCalledOnce()
   })
 
