@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
 import {
   createTestStore,
@@ -12,6 +12,7 @@ import {
 } from './store-test-helpers'
 import { buildOrphanTerminalCleanupPatch } from './terminal-orphan-helpers'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
+import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
 
 const mockUnregisterPtyDataHandlers = vi.hoisted(() => vi.fn<() => unknown[]>(() => []))
 const mockRestorePtyDataHandlersAfterFailedShutdown = vi.hoisted(() => vi.fn())
@@ -35,7 +36,25 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
   }
 })
 
+// Main answers the window's browser-tab commands and its frames draw them (switch-on builds).
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeRpcClientWithLayoutApply(await importOriginal())
+)
+vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeLayoutClientWithTestFrames(await importOriginal())
+)
+
 const mockApi = createStoreCascadesMockApi()
+
+let main: TabsDrawnFromMain | undefined
+afterEach(() => {
+  main?.close()
+  main = undefined
+})
 
 describe('setActiveWorktree', () => {
   beforeEach(() => {
@@ -153,7 +172,7 @@ describe('setActiveWorktree', () => {
     expect(s.activeTabId).toBe(terminalTabId)
   })
 
-  it('promotes the next tab in the focused split into the global active surface on close', () => {
+  it('promotes the next tab in the focused split into the global active surface on close', async () => {
     const store = createTestStore()
     const wt = 'repo1::/path/wt1'
     const terminalTabId = 'terminal-1'
@@ -224,8 +243,10 @@ describe('setActiveWorktree', () => {
       },
       activeGroupIdByWorktree: { [wt]: groupId }
     })
+    main = await drawTabsFromMain(store)
 
     store.getState().closeBrowserTab(browserTabId)
+    await main.settle()
 
     const s = store.getState()
     expect(s.groupsByWorktree[wt]?.[0]?.activeTabId).toBe(terminalTabId)

@@ -6,6 +6,7 @@ import type { Tab, TabGroup, TabGroupLayoutNode } from '../../../shared/tab-type
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import type { StructuredAgentSessionLaunchIntent } from '@/lib/launch-structured-agent-session'
 import type * as LaunchAdmissionModule from './structured-agent-session-launch-admission'
+import type * as RpcClientModule from '@/runtime/runtime-rpc-client'
 
 const mocks = vi.hoisted(() => ({
   createIntent: vi.fn(),
@@ -81,10 +82,16 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: (target: unknown, method: string, params?: unknown) =>
     mocks.callRuntimeRpc(target, method, params)
 }))
-vi.mock('@/runtime/runtime-rpc-client', () => ({
-  callRuntimeRpc: mocks.callRuntimeRpc,
-  ensureRuntimeEnvironmentCompatible: vi.fn(async () => undefined)
-}))
+// Switch-on, main answers the window's chat opens.
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeRpcClientWithLayoutApply({
+    ...(await importOriginal<typeof RpcClientModule>()),
+    callRuntimeRpc: mocks.callRuntimeRpc,
+    ensureRuntimeEnvironmentCompatible: vi.fn(async () => undefined)
+  })
+)
 vi.mock('@/runtime/structured-agent-session-status-feed', () => ({
   getStructuredAgentSessionStatusFeed: () => ({
     getSessionObservation: (sessionId: string) =>
@@ -138,6 +145,8 @@ import {
 } from './structured-agent-session-launch-prompt'
 import { resetStructuredAgentLaunchPersistenceForTests } from './structured-agent-session-launch-persistence'
 import { resetStructuredAgentLaunchRegistryForTests } from './structured-agent-session-launch-registry'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 
 const WORKTREE_ID = 'wt-new-chat'
 
@@ -181,6 +190,18 @@ function published(...sessionIds: string[]): RuntimeMobileSessionTabsResult[] {
       isActive: false
     }))
   }))
+}
+
+/** The chats opened in the workspace: switch-on, those the window asked main to open, which this
+ *  stand-in store cannot draw from frames. */
+function openedChats(): { entityId: string; groupId?: string }[] | undefined {
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    return store.state.unifiedTabsByWorktree[WORKTREE_ID]
+  }
+  return layoutApplyTestTransport
+    .sentOfType('openAgentSessionTab')
+    .filter((command) => command.workspace === WORKTREE_ID)
+    .map((command) => ({ entityId: command.sessionId, groupId: command.groupId }))
 }
 
 const first = launchIntent('session-first')
@@ -244,6 +265,7 @@ beforeEach(() => {
   mocks.statusBySession.clear()
   mocks.liveSessions.clear()
   store.state = emptyStoreState()
+  layoutApplyTestTransport.reset()
   mocks.createIntent
     .mockReturnValueOnce(first)
     .mockReturnValueOnce(second)
@@ -266,7 +288,7 @@ describe('a second "new chat" with no text', () => {
 
     expect(firstPick.sessionId).toBe(first.sessionId)
     expect(secondPick.sessionId).toBe(second.sessionId)
-    expect(store.state.unifiedTabsByWorktree[WORKTREE_ID]).toHaveLength(2)
+    expect(openedChats()).toHaveLength(2)
   })
 
   it('opens a second chat beside an empty one that published and sits idle', async () => {
@@ -276,7 +298,7 @@ describe('a second "new chat" with no text', () => {
     const secondPick = pick('plus-pick-2')
 
     expect(secondPick.sessionId).toBe(second.sessionId)
-    expect(store.state.unifiedTabsByWorktree[WORKTREE_ID]).toHaveLength(2)
+    expect(openedChats()).toHaveLength(2)
     await expect(secondPick.settlement).resolves.toEqual({
       kind: 'structured',
       sessionId: second.sessionId
@@ -313,7 +335,7 @@ describe('a "new chat" with text', () => {
     const notes = pick('notes-send', { prompt: 'review notes' })
 
     expect(notes.sessionId).toBe(second.sessionId)
-    expect(store.state.unifiedTabsByWorktree[WORKTREE_ID]).toHaveLength(2)
+    expect(openedChats()).toHaveLength(2)
     expect(hasStagedStructuredLaunchPrompt(blank.sessionId)).toBe(false)
     expect(hasStagedStructuredLaunchPrompt(second.sessionId)).toBe(true)
   })
@@ -325,11 +347,9 @@ describe('a "new chat" with text', () => {
     const notes = pick('notes-send', { prompt: 'review notes', group: 'group-right' })
 
     expect(notes.sessionId).toBe(second.sessionId)
-    expect(
-      store.state.unifiedTabsByWorktree[WORKTREE_ID]?.find(
-        (tab) => tab.entityId === second.sessionId
-      )?.groupId
-    ).toBe('group-right')
+    expect(openedChats()?.find((tab) => tab.entityId === second.sessionId)?.groupId).toBe(
+      'group-right'
+    )
     expect(mocks.focusGroup).not.toHaveBeenCalled()
   })
 })
