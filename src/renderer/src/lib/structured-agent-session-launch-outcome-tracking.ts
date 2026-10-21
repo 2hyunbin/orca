@@ -27,11 +27,7 @@ function cleanupLaunchState(state: StructuredLaunchState): void {
 }
 
 export function maybeCleanupLaunchState(state: StructuredLaunchState): void {
-  if (
-    state.callers.outcome === 'failed' ||
-    structuredLaunchCallersHavePendingWork(state.callers) ||
-    Object.keys(state.selection.held).length > 0
-  ) {
+  if (state.callers.outcome === 'failed' || structuredLaunchCallersHavePendingWork(state.callers)) {
     return
   }
   cleanupLaunchState(state)

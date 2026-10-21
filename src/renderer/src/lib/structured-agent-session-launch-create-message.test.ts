@@ -62,6 +62,16 @@ import {
   retryStructuredAgentSessionLaunch,
   getStructuredAgentSessionLaunchLifecycle
 } from './structured-agent-session-launch'
+import { structuredSessionSelectionController } from './structured-agent-session-selection-controller'
+import {
+  applyStructuredAgentSessionOptions,
+  createStructuredAgentSessionOptionState
+} from '../../../shared/structured-agent-session-options'
+import { structuredAgentSessionSeedCatalog } from '../../../shared/structured-agent-session-seed-catalog'
+import {
+  structuredAgentSessionMessageSelection,
+  structuredAgentSessionOptionView
+} from '../../../shared/structured-agent-session-option-view'
 import { holdStructuredAgentSessionLaunchOption } from './structured-agent-session-launch-options'
 import {
   recordHostModelCatalogSnapshot,
@@ -241,6 +251,7 @@ describe('the first message owned by create', () => {
   ])(
     "keeps a remembered model the host's saved list lacks, %s: create names no other",
     async (_kind, resume) => {
+      mocks.exactSupport.mockResolvedValue(true)
       mocks.settings = {
         nativeChatSessionOptions: {
           claude: { model: 'claude-gone' }
@@ -263,6 +274,7 @@ describe('the first message owned by create', () => {
         await launch.launchResult
         // The host seeds the remembered model itself.
         expect(createParams().options?.model).toBeUndefined()
+        expect(createParams().firstMessage?.selection).toEqual({ model: 'claude-gone' })
       } finally {
         mocks.settings = {}
       }
@@ -488,15 +500,17 @@ describe('the first message owned by create', () => {
     ).toBeNull()
   })
 
-  it('publishes while a later option write still waits for the agent', async () => {
+  it('publishes two late picks without a mirror and retires to another client or local Low', async () => {
     const create = deferred<unknown>()
-    const option = deferred<unknown>()
+    const replies = [deferred<unknown>(), deferred<unknown>()]
+    let writes = 0
     mocks.call.mockImplementation((_target, method) =>
-      method === 'agentSession.setOption' ? option.promise : create.promise
+      method === 'agentSession.setOption' ? replies[writes++]!.promise : create.promise
     )
     const launch = start()
     await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
-    holdStructuredAgentSessionLaunchOption(launch.sessionId, 'model', 'later-pick')
+    holdStructuredAgentSessionLaunchOption(launch.sessionId, 'model', 'sonnet')
+    holdStructuredAgentSessionLaunchOption(launch.sessionId, 'effort', 'high')
     create.resolve(created())
     let published = false
     void launch.launchResult.then(() => {
@@ -507,9 +521,47 @@ describe('the first message owned by create', () => {
     await expect(launch.promptDeliveryResult).resolves.toMatchObject({ delivered: true })
     expect(mocks.call.mock.calls.map(([, method]) => method)).toEqual([
       'agentSession.create',
+      'agentSession.setOption',
       'agentSession.setOption'
     ])
-    option.resolve({ ok: true, value: { selected: 'later-pick' } })
+    const controller = structuredSessionSelectionController(target, launch.sessionId, 'codex')
+    expect(controller.pending()).toHaveLength(2)
+    replies[1]!.resolve({ ok: true, value: { options: { effort: 'high' } } })
+    replies[0]!.resolve({ ok: true, value: { options: { model: 'sonnet' } } })
+    await vi.waitFor(() => expect(controller.captureRead()).toHaveLength(2))
+    const catalog = structuredAgentSessionSeedCatalog('codex')!
+    const base = applyStructuredAgentSessionOptions(
+      createStructuredAgentSessionOptionState('codex', catalog),
+      catalog,
+      {
+        models: [
+          {
+            id: 'sonnet',
+            label: 'Sonnet',
+            efforts: [
+              { value: 'low', label: 'Low' },
+              { value: 'high', label: 'High' }
+            ]
+          }
+        ],
+        current: {
+          model: 'sonnet',
+          effort: 'low',
+          acceptedInputSources: { model: 'saved', effort: 'saved' }
+        }
+      }
+    )
+    const capture = () =>
+      structuredAgentSessionMessageSelection(
+        structuredAgentSessionOptionView(base, undefined, controller.overlay())
+      )
+    controller.retire(controller.captureRead())
+    expect(capture()).toEqual({ model: 'sonnet', effort: 'low' })
+    const localLow = controller.issue('effort', 'low', 'sonnet')
+    expect(capture()).toEqual({ model: 'sonnet', effort: 'low' })
+    controller.settle(localLow, { kind: 'accepted', options: { effort: 'low' } })
+    controller.retire(controller.captureRead())
+    expect(capture()).toEqual({ model: 'sonnet', effort: 'low' })
   })
 
   it('recovers a reload by replaying the frozen create when the old row is outside history', async () => {

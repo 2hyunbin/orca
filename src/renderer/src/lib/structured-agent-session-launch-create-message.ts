@@ -15,6 +15,7 @@ import { firstFrameOptionState } from '@/components/native-chat/use-structured-a
 import {
   applyStructuredLaunchHeldOptions,
   holdStructuredLaunchCreatePicks,
+  structuredLaunchOptionOverlay,
   settleStructuredLaunchCreateOptions
 } from './structured-agent-session-launch-options'
 import { structuredAgentSessionDrawnValues } from '../../../shared/structured-agent-session-option-snapshot'
@@ -61,24 +62,25 @@ function structuredLaunchCreateOptions(state: StructuredLaunchState): {
   options?: Readonly<Record<string, string>>
   selection?: Readonly<Record<string, string>>
 } {
-  const { intent, selection } = state
+  const { intent } = state
+  const overlay = structuredLaunchOptionOverlay(state)
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
     newLaunch: !intent.params.resumeFrom,
     worktree: intent.params.worktree,
     seedsModel: intent.seedOptions?.model !== undefined
   })
   // Create has always carried options, so any host takes what the chat shows.
-  const view = structuredAgentSessionOptionView(firstFrame, intent.seedOptions, selection.held)
+  const view = structuredAgentSessionOptionView(firstFrame, intent.seedOptions, overlay)
   const drawn = structuredAgentSessionDrawnValues(view)
   // Each held value as the picker draws it; the held picks themselves stay as the user made them.
   const held = Object.fromEntries(
-    Object.entries(selection.held).map(([id, encoded]) => {
+    Object.entries(overlay).map(([id, encoded]) => {
       const value = id === 'model' ? undefined : drawn[id]?.value
       const shown = value === undefined ? null : encodeStructuredAgentSessionOptionValue(id, value)
       return [id, shown ?? encoded]
     })
   )
-  holdStructuredLaunchCreatePicks(state, selection.held)
+  holdStructuredLaunchCreatePicks(state)
   const options = {
     ...held,
     ...structuredAgentSessionSendSelection(view)

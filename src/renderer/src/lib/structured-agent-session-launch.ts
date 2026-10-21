@@ -145,10 +145,7 @@ function restartStructuredLaunchState(state: StructuredLaunchState): void {
   state.callers.outcome = 'pending'
   // A new create seeds from the settings of now (a paired server's arrive with its probe); picks
   // held through the failure still apply.
-  state.selection = {
-    ...initialStructuredLaunchSelection(state.intent),
-    held: state.selection.held
-  }
+  state.selection = initialStructuredLaunchSelection(state.intent)
   state.onHostSeed = (seedOptions) => adoptPairedHostSeed(state, seedOptions)
   state.promise = publishWithHeldOptions(
     state,

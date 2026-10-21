@@ -276,13 +276,13 @@ export function useStructuredAgentSessionOptionState(args: {
   const optionView = useCallback(
     (
       state: StructuredAgentSessionOptionState,
-      seed: Readonly<Record<string, string>> | undefined,
-      held: Readonly<Record<string, string>>
+      seed: Readonly<Record<string, string>> | undefined
     ) =>
-      structuredAgentSessionOptionView(state, state.catalogSource === 'live' ? undefined : seed, {
-        ...held,
-        ...controller.overlay()
-      }),
+      structuredAgentSessionOptionView(
+        state,
+        state.catalogSource === 'live' ? undefined : seed,
+        controller.overlay()
+      ),
     [controller]
   )
   const takesSendOptions = useStructuredAgentSessionHostCapability(

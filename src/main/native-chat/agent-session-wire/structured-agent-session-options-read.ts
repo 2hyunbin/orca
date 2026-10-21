@@ -7,6 +7,7 @@ import type {
   AgentSessionModelCatalogResult,
   AgentSessionOptionsResult
 } from '../../../shared/agent-session-wire'
+import type { AgentSessionAcceptedInputSources } from '../../../shared/agent-session-options-result'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type {
   AgentJournalCursor,
@@ -234,11 +235,35 @@ export async function readStructuredAgentSessionOptions(
   // first send pins. A model the child leaves blank shows the at-rest one, with its marking.
   const defaultedBy = (key: 'model' | 'effort') =>
     (key === 'model' && !options.current.model ? selected : options).current.defaulted
-  const defaulted = structuredAgentSessionNeverSent(record, session.journal)
+  const neverSent = structuredAgentSessionNeverSent(record, session.journal)
+  const defaulted = neverSent
     ? []
     : (['model', 'effort'] as const).filter(
         (key) => saved[key] === undefined && defaultedBy(key)?.includes(key) === true
       )
+  const acceptedInputSources: AgentSessionAcceptedInputSources = {}
+  for (const key of ['model', 'effort', 'fastMode', 'serviceTier'] as const) {
+    if (
+      current[key] !== undefined &&
+      saved[key] !== undefined &&
+      !(key === 'model' && refusedModel)
+    ) {
+      acceptedInputSources[key] = 'saved'
+    }
+  }
+  for (const key of ['model', 'effort'] as const) {
+    if (
+      neverSent &&
+      saved[key] === undefined &&
+      current[key] !== undefined &&
+      defaultedBy(key)?.includes(key)
+    ) {
+      acceptedInputSources[key] = 'policy'
+    }
+  }
+  if (saved.fastMode === undefined && selected.current.fastMode === false) {
+    acceptedInputSources.fastMode = 'policy'
+  }
   const confirmed = options.current.confirmed?.filter((key) =>
     key === 'model' || key === 'effort' || key === 'fastMode' || key === 'serviceTier'
       ? current[key] === options.current[key]
@@ -248,6 +273,7 @@ export async function readStructuredAgentSessionOptions(
     ...options,
     current: {
       ...current,
+      acceptedInputSources,
       defaulted,
       confirmed,
       ...(options.current.fastModeState ? { fastModeState: options.current.fastModeState } : {}),

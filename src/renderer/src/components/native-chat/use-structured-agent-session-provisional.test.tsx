@@ -136,7 +136,7 @@ describe('useStructuredAgentSession provisional launch gate', () => {
         agent: 'codex',
         isVisible: true,
         transportEnabled: false,
-        launch: { kind: 'new', seedOptions: { model: 'gpt-5.5' }, heldOptions: {} }
+        launch: { kind: 'new', seedOptions: { model: 'gpt-5.5' } }
       })
     )
 
@@ -178,7 +178,7 @@ describe('useStructuredAgentSession provisional launch gate', () => {
           agent: 'grok',
           isVisible: true,
           transportEnabled: false,
-          launch: { kind: 'new', heldOptions: {} }
+          launch: { kind: 'new' }
         })
       )
     expect(render().result.current.canStop).toBe(false)

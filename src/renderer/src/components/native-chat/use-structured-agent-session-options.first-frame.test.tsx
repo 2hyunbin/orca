@@ -108,7 +108,6 @@ function renderNewChat(args: {
       mutate: vi.fn() as unknown as StructuredAgentSessionMutate,
       launch: {
         kind: 'new',
-        heldOptions: {},
         worktree: 'id:wt-1',
         ...(args.seedOptions ? { seedOptions: args.seedOptions } : {})
       }

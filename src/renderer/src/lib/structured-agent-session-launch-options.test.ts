@@ -207,7 +207,8 @@ describe('picks made while a chat launches', () => {
     markStructuredAgentSessionLaunchPublished(WORKTREE_ID, SESSION_ID, 'local')
     expect(lifecycle()).toBe('pending')
     expect(mutations()).toEqual([
-      { method: 'agentSession.setOption', fence: 7, key: 'model', value: 'gpt-picked' }
+      { method: 'agentSession.setOption', fence: 7, key: 'model', value: 'gpt-picked' },
+      { method: 'agentSession.setOption', fence: 7, key: 'effort', value: 'high' }
     ])
     setOptionReplies[0]!.resolve({
       ok: true,
@@ -361,8 +362,7 @@ describe('picks made while a chat launches', () => {
     expect(retryStructuredAgentSessionLaunch(WORKTREE_ID, SESSION_ID)).toBe(true)
     // The retried create seeds from the saved selection of now.
     expect(getStructuredAgentSessionLaunchSelection(SESSION_ID)).toEqual({
-      seed: { model: 'gpt-saved-since' },
-      held: { model: 'gpt-picked' }
+      seed: { model: 'gpt-saved-since' }
     })
     await settle()
     expect(mutations()).toEqual([
@@ -399,7 +399,7 @@ describe('picks made while a chat launches', () => {
     })
     await settle()
 
-    expect(seen[0]).toEqual({ seed: { model: 'gpt-seeded' }, held: {} })
+    expect(seen[0]).toBeNull()
     expect(lifecycle()).toBeNull()
   })
 })

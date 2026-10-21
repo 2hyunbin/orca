@@ -10,6 +10,7 @@ vi.mock('@/lib/structured-agent-session-launch-options', () => ({
 import { CLAUDE_SESSION_OPTION_CATALOG } from '../../../../shared/agent-session-option-catalog-claude-codex'
 import {
   applyStructuredAgentSessionModelCatalog,
+  applyStructuredAgentSessionOptions,
   createStructuredAgentSessionOptionState
 } from '../../../../shared/structured-agent-session-options'
 import { structuredAgentSessionOptionView } from '../../../../shared/structured-agent-session-option-view'
@@ -48,11 +49,10 @@ function sendOptionsFor(
   const { result } = renderHook(() =>
     useStructuredAgentSessionSendOptions(
       'session-1',
-      { kind: 'new', seedOptions, heldOptions: {} },
+      { kind: 'new', seedOptions },
       {
         optionStateRef,
-        optionView: (state, seed, held) =>
-          structuredAgentSessionOptionView(state, seed, { ...held, ...pending }),
+        optionView: (state, seed) => structuredAgentSessionOptionView(state, seed, pending),
         takesSelection,
         takesSendOptions
       }
@@ -87,4 +87,47 @@ describe('what each composer send carries', () => {
   it('carries nothing to an older host', () => {
     expect(sendOptionsFor(false, {})()).toEqual({})
   })
+})
+
+it('desktop capture freezes only accepted echoed inputs; empty origin differs from legacy absence', () => {
+  const state = createStructuredAgentSessionOptionState('claude', CLAUDE_SESSION_OPTION_CATALOG)
+  const answer = {
+    models: [{ id: 'opus[1m]', label: 'Opus', efforts: levels('high'), supportsFastMode: true }],
+    fastModeSupport: { supported: true },
+    current: {
+      model: 'opus[1m]',
+      effort: 'high',
+      fastMode: false,
+      confirmed: ['model', 'effort'],
+      acceptedInputSources: { model: 'saved' as const, fastMode: 'policy' as const }
+    }
+  }
+  const source = {
+    optionStateRef: {
+      current: applyStructuredAgentSessionOptions(state, CLAUDE_SESSION_OPTION_CATALOG, answer)
+    },
+    optionView: (current: typeof state) => structuredAgentSessionOptionView(current, undefined, {}),
+    takesSelection: true,
+    takesSendOptions: false
+  }
+  const { result } = renderHook(() =>
+    useStructuredAgentSessionSendOptions('session-2', undefined, source)
+  )
+  const captured = result.current()
+  expect(captured).toEqual({ selection: { model: 'opus[1m]', fastMode: 'false' } })
+  source.optionStateRef.current = applyStructuredAgentSessionOptions(
+    state,
+    CLAUDE_SESSION_OPTION_CATALOG,
+    { ...answer, current: { ...answer.current, acceptedInputSources: {} } }
+  )
+  expect(result.current()).toEqual({ selection: {} })
+  source.optionStateRef.current = applyStructuredAgentSessionOptions(
+    state,
+    CLAUDE_SESSION_OPTION_CATALOG,
+    { ...answer, current: { ...answer.current, acceptedInputSources: undefined } }
+  )
+  expect(result.current()).toEqual({
+    selection: { model: 'opus[1m]', fastMode: 'false' }
+  })
+  expect(captured).toEqual({ selection: { model: 'opus[1m]', fastMode: 'false' } })
 })

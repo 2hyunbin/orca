@@ -147,6 +147,7 @@ type ProbeProps = {
   fence: number | null
   mutate: StructuredAgentSessionMutate
   optionStamp?: string
+  sendSelection?: boolean
   onRender: (controller: Controller) => void
 }
 
@@ -160,7 +161,7 @@ function Probe(props: ProbeProps): null {
       fence: props.fence,
       mutate: props.mutate,
       ...(props.optionStamp ? { optionStamp: props.optionStamp } : {}),
-      hostSupport: { permissionModes: true }
+      hostSupport: { permissionModes: true, sendSelection: props.sendSelection }
     })
   )
   return null
@@ -751,4 +752,39 @@ describe('useMobileStructuredAgentOptions after a lost pick reply', () => {
     expect(client.optionReads()).toBe(5)
     await harness.unmount()
   })
+})
+
+it('phone captures accepted echoed inputs, preserves false, and freezes empty vs legacy presence', async () => {
+  let answer: AgentSessionOptionsResult = {
+    ...FAST_OPTIONS,
+    current: { ...FAST_OPTIONS.current, acceptedInputSources: {} }
+  }
+  const client = optionsClient(async () => answer)
+  const { mutate } = recordingMutate(async () =>
+    accepted({ key: 'model', value: 'gpt-live' }, true)
+  )
+  const harness = await mountOptions({
+    ...BASE,
+    client: client.client,
+    mutate,
+    sendSelection: true
+  })
+  expect(harness.current().sendSelection()).toEqual({ selection: {} })
+  answer = {
+    ...answer,
+    current: { ...answer.current, acceptedInputSources: { model: 'saved', fastMode: 'policy' } }
+  }
+  await harness.rerender({ optionStamp: 'saved-origin' })
+  await settle()
+  const captured = harness.current().sendSelection()
+  expect(captured).toEqual({ selection: { model: 'gpt-live', fastMode: 'false' } })
+  answer = {
+    ...answer,
+    current: { ...answer.current, effort: 'high', acceptedInputSources: { effort: 'saved' } }
+  }
+  await harness.rerender({ optionStamp: 'other-client' })
+  await settle()
+  expect(harness.current().sendSelection()).toEqual({ selection: { effort: 'high' } })
+  expect(captured).toEqual({ selection: { model: 'gpt-live', fastMode: 'false' } })
+  await harness.unmount()
 })

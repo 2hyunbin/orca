@@ -24,7 +24,6 @@ export type SelectionOperation = {
   value: string
   model: string | null
   transmitted: boolean
-  queued: boolean
   outcome?: SelectionOutcome
   result: Promise<SelectionOutcome>
   resolve: (outcome: SelectionOutcome) => void
@@ -37,7 +36,7 @@ export function createStructuredSessionSelectionController(
   let sequence = 0
   let revision = 0
   let adopted = 0
-  let tail = Promise.resolve()
+  const inFlight = new Set<Promise<void>>()
   const operations = new Map<number, SelectionOperation>()
   const latest = new Map<string, number>()
   const remembered = new Map<string, number>()
@@ -120,7 +119,6 @@ export function createStructuredSessionSelectionController(
         value,
         model: key === 'model' ? value : model,
         transmitted: false,
-        queued: false,
         result: reply.promise,
         resolve: reply.resolve
       }
@@ -172,31 +170,25 @@ export function createStructuredSessionSelectionController(
       }
     },
     flush(send: (operation: SelectionOperation) => Promise<SelectionOutcome>): Promise<void> {
-      const unsent = [...operations.values()].filter(
-        (op) => !op.queued && !op.transmitted && !op.outcome
-      )
+      const unsent = [...operations.values()].filter((op) => !op.transmitted && !op.outcome)
       unsent.sort((a, b) => OPTION_ORDER.indexOf(a.key) - OPTION_ORDER.indexOf(b.key))
       for (const operation of unsent) {
-        operation.queued = true
-        tail = tail
-          .then(async () => {
-            if (operation.outcome) {
-              return
-            }
-            operation.transmitted = true
-            notify()
-            settle(operation, await send(operation))
-          })
-          .catch(() => {
-            settle(operation, { kind: 'unknown' })
-          })
+        if (operation.outcome || operation.transmitted) {
+          continue
+        }
+        operation.transmitted = true
+        const completion = (async () => {
+          settle(operation, await send(operation))
+        })()
+          .catch(() => settle(operation, { kind: 'unknown' }))
+          .finally(() => inFlight.delete(completion))
+        inFlight.add(completion)
+        notify()
       }
       return (async () => {
-        let pending: Promise<void>
-        do {
-          pending = tail
-          await pending
-        } while (pending !== tail)
+        while (inFlight.size) {
+          await Promise.all(inFlight)
+        }
       })()
     },
     abandon(): void {

@@ -3,13 +3,15 @@ import { createStructuredSessionSelectionController } from './structured-agent-s
 
 // Creation, attachment and revalidation share identities even when two picks have equal values.
 describe('chat selection operation handoff', () => {
-  it('keeps the frozen opening choice and skips a queued obsolete hold before a newer attached pick', async () => {
+  it('freezes opening identities, supersedes unsent holds and issues attached picks before old replies', async () => {
     const remember = vi.fn()
     const controller = createStructuredSessionSelectionController(remember)
     const opening = controller.issue('model', 'opus', null)
     const frozen = controller.freeze()
     const model = controller.issue('model', 'sonnet', null)
     const oldEffort = controller.issue('effort', 'high', 'sonnet')
+    const obsolete = controller.issue('effort', 'low', 'sonnet')
+    await expect(oldEffort.result).resolves.toEqual({ kind: 'superseded' })
     const modelReply = Promise.withResolvers<void>()
     const send = vi.fn(async (op) => {
       if (op === model) {
@@ -27,11 +29,23 @@ describe('chat selection operation handoff', () => {
     expect(frozen).toEqual([opening])
     expect(controller.overlay()).toEqual({ model: 'opus', effort: 'low', fastMode: 'true' })
     expect(controller.pending()).toContain(newerModel)
-    await expect(oldEffort.result).resolves.toEqual({ kind: 'superseded' })
+    expect(send.mock.calls.map(([op]) => op)).toEqual([
+      model,
+      obsolete,
+      newerModel,
+      newerEffort,
+      fast
+    ])
     const beforeCompletion = controller.captureRead()
     modelReply.resolve()
     await sending
-    expect(send.mock.calls.map(([op]) => op)).toEqual([model, newerModel, newerEffort, fast])
+    expect(send.mock.calls.map(([op]) => op)).toEqual([
+      model,
+      obsolete,
+      newerModel,
+      newerEffort,
+      fast
+    ])
     controller.retire(beforeCompletion)
     expect(controller.overlay()).toEqual({ model: 'opus', effort: 'low', fastMode: 'true' })
     // The next complete answer can contain another client's newer values; equality is irrelevant.

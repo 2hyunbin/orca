@@ -112,7 +112,7 @@ function renderNewChat(agent: string) {
       unloadedTurnRevisions: undefined,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: no pick is made, so mutate is never called.
       mutate: vi.fn() as unknown as StructuredAgentSessionMutate,
-      launch: { kind: 'new', heldOptions: {}, worktree: 'id:wt-1' }
+      launch: { kind: 'new', worktree: 'id:wt-1' }
     })
     frames.push(pill(options.optionSnapshot))
     return options

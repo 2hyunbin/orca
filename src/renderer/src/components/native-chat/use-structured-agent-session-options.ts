@@ -19,12 +19,9 @@ import { useStructuredAgentSessionOptionState } from './use-structured-agent-ses
 import { agentSessionWriteFailureText } from './agent-session-write-notice-text'
 import type { StructuredAgentSessionLaunchView } from './use-native-chat-provisional-launch'
 import {
-  getStructuredAgentSessionLaunchSelection,
   setStructuredSessionSelectionOption,
   holdStructuredAgentSessionLaunchOption
 } from '@/lib/structured-agent-session-launch-options'
-
-const NO_HELD_OPTIONS: Readonly<Record<string, string>> = {}
 
 export function useStructuredAgentSessionOptions(args: {
   agent: AgentType
@@ -47,7 +44,6 @@ export function useStructuredAgentSessionOptions(args: {
   const providerStarting = args.providerStarting ?? false
   const newLaunch = launch?.kind === 'new'
   const launchSeedOptions = launch?.seedOptions
-  const held = launch?.heldOptions ?? NO_HELD_OPTIONS
   // Published but not attached: the launch no longer holds picks and there is no fence to send one.
   const acceptsPicks = (!transportEnabled || fence !== null) && launch?.seedPending !== true
   const optionCatalog = useMemo(() => structuredAgentSessionSeedCatalog(agent), [agent])
@@ -101,15 +97,13 @@ export function useStructuredAgentSessionOptions(args: {
     onListingLanded: rereadOptions
   })
 
-  const snapshot = structuredAgentSessionOptionSnapshot(
-    optionView(optionState, launchSeedOptions, held)
-  )
+  const snapshot = structuredAgentSessionOptionSnapshot(optionView(optionState, launchSeedOptions))
   const optionSnapshot = acceptsPicks
     ? snapshot
     : lockedStructuredAgentSessionOptionSnapshot(snapshot)
   const setStructuredOption = useCallback(
     async (id: string, value: string | boolean): Promise<boolean> => {
-      const view = optionView(optionStateRef.current, launchSeedOptions, held)
+      const view = optionView(optionStateRef.current, launchSeedOptions)
       const pickState = {
         ...view,
         pendingId:
@@ -160,7 +154,6 @@ export function useStructuredAgentSessionOptions(args: {
     [
       controller,
       fence,
-      held,
       launchSeedOptions,
       target,
       optionCatalog,
@@ -176,15 +169,13 @@ export function useStructuredAgentSessionOptions(args: {
   const setOption = useCallback(
     async (id: string, value: string | boolean) => {
       await setStructuredOption(id, value)
-      // Read, not rendered: a pick the launch just took is not in this render's props yet.
-      const currentHeld = getStructuredAgentSessionLaunchSelection(sessionId)?.held
       return {
         snapshot: structuredAgentSessionOptionSnapshot(
-          optionView(optionStateRef.current, launchSeedOptions, currentHeld ?? NO_HELD_OPTIONS)
+          optionView(optionStateRef.current, launchSeedOptions)
         )
       }
     },
-    [launchSeedOptions, optionStateRef, optionView, sessionId, setStructuredOption]
+    [launchSeedOptions, optionStateRef, optionView, setStructuredOption]
   )
   const optionSurface = useMemo<SessionOptionsSurface>(
     () => ({

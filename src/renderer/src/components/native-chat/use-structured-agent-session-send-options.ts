@@ -25,9 +25,7 @@ export function useStructuredAgentSessionSendOptions(
     // Read, not rendered: a pick the launch just took is not in this render's props yet.
     const selection = getStructuredAgentSessionLaunchSelection(sessionId)
     // A pick on its way resolves as the picker shows it.
-    const view = optionView(optionStateRef.current, selection?.seed ?? launch?.seedOptions, {
-      ...(selection?.held ?? launch?.heldOptions)
-    })
+    const view = optionView(optionStateRef.current, selection?.seed ?? launch?.seedOptions)
     return takesSelection
       ? { selection: structuredAgentSessionMessageSelection(view) }
       : { options: structuredAgentSessionSendSelection(view) }

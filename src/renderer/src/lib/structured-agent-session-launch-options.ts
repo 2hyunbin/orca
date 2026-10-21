@@ -22,7 +22,6 @@ import {
 } from './structured-agent-session-launch-recovery'
 import {
   getStructuredLaunchStateBySessionId,
-  notifyStructuredLaunchListeners,
   subscribeStructuredAgentLaunchStatus,
   type StructuredLaunchState
 } from './structured-agent-session-launch-registry'
@@ -41,8 +40,6 @@ import {
 export type StructuredLaunchSelection = {
   /** The immutable create seed, until a queried host answer replaces it. */
   seed?: Readonly<Record<string, string>>
-  /** Encoded picks made before publish; the launch applies them before it publishes. */
-  held: Readonly<Record<string, string>>
   /** A paired server has not yet said what create seeds, so nothing can be picked against it. */
   seedPending?: true
 }
@@ -52,7 +49,6 @@ export function initialStructuredLaunchSelection(
 ): StructuredLaunchSelection {
   return {
     seed: intent.seedOptions,
-    held: {},
     ...(intent.target.kind !== 'local' && !intent.seedOptions ? { seedPending: true } : {})
   }
 }
@@ -76,27 +72,11 @@ const selectionController = (state: StructuredLaunchState) => {
   return controller
 }
 const receipts = new WeakMap<StructuredLaunchState, StructuredAgentLaunchReceipt>()
-const subscribed = new WeakSet<StructuredLaunchState>()
-function observeSelection(state: StructuredLaunchState): void {
-  if (subscribed.has(state)) {
-    return
-  }
-  subscribed.add(state)
-  const unsubscribe = selectionController(state).subscribe(() => {
-    state.selection = {
-      ...state.selection,
-      held: Object.fromEntries(
-        selectionController(state)
-          .pending()
-          .map((op) => [op.key, op.value])
-      )
-    }
-    notifyStructuredLaunchListeners()
-    if (state.cancelled || state.callers.outcome === 'published') {
-      unsubscribe()
-    }
-    state.callers.onSettled()
-  })
+/** Create and the attached view read the same finite operation overlay. */
+export function structuredLaunchOptionOverlay(
+  state: StructuredLaunchState
+): Record<string, string> {
+  return selectionController(state).overlay()
 }
 
 /**
@@ -117,7 +97,6 @@ export function holdStructuredAgentSessionLaunchOption(
   if (state.selection.seedPending) {
     return null
   }
-  observeSelection(state)
   const model = picker
     ? (structuredAgentSessionOptionPicks(picker, { [id]: encoded })[0]?.modelId ?? null)
     : (state.selection.seed?.model ?? null)
@@ -173,10 +152,7 @@ export async function setStructuredSessionSelectionOption(
 const createHeld = new WeakMap<StructuredLaunchState, readonly SelectionOperation[]>()
 
 /** Freeze identities, so a later equal-valued choice is a distinct operation. */
-export function holdStructuredLaunchCreatePicks(
-  state: StructuredLaunchState,
-  _held: Readonly<Record<string, string>>
-): void {
+export function holdStructuredLaunchCreatePicks(state: StructuredLaunchState): void {
   createHeld.set(state, selectionController(state).freeze(createHeld.get(state)))
 }
 

@@ -1,5 +1,14 @@
 // A chat's options at rest come from the host catalog without waiting on a listing.
 
+import { CODEX_SESSION_OPTION_CATALOG } from '../../../shared/agent-session-option-catalog-claude-codex'
+import {
+  applyStructuredAgentSessionOptions,
+  createStructuredAgentSessionOptionState
+} from '../../../shared/structured-agent-session-options'
+import {
+  structuredAgentSessionMessageSelection,
+  structuredAgentSessionOptionView
+} from '../../../shared/structured-agent-session-option-view'
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
@@ -94,13 +103,18 @@ describe('options at rest', () => {
     const current = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: true
     })
-    expect(current.current).toEqual({ defaulted: [], permissionMode: 'ask' })
+    expect(current.current).toEqual({
+      defaulted: [],
+      acceptedInputSources: {},
+      permissionMode: 'ask'
+    })
     expect(read).toHaveBeenCalledTimes(1)
     const older = await readStructuredAgentSessionOptions(context, SESSION, {
       readsWithoutModel: false
     })
     // A new chat that has sent nothing runs that default, which its first send pins.
     expect(older.current).toEqual({
+      acceptedInputSources: { model: 'policy' },
       model: 'gpt-account',
       defaulted: [],
       permissionMode: 'ask'
@@ -190,6 +204,7 @@ describe('options at rest', () => {
         model: 'later-model',
         effort: 'off',
         defaulted: [],
+        acceptedInputSources: { model: 'saved', effort: 'saved' },
         ...(provider === 'codex' ? { permissionMode: 'ask' } : {})
       })
       for (const emptyStart of [false, true]) {
@@ -266,6 +281,7 @@ describe('a chat at rest, read by the host', () => {
   ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
     const read = await readAtRest(facts, items, wroteBeforeOpen)
     expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
+    expect(read.current.acceptedInputSources).toEqual(defaulted.length ? {} : { model: 'policy' })
   })
 
   it.each([
@@ -484,6 +500,10 @@ it('uses Off for unpicked Claude Fast at rest and over a native On report, prese
       .fastMode
   ).toBe(false)
   expect(live).not.toHaveBeenCalled()
+  expect(
+    (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })).current
+      .acceptedInputSources
+  ).toEqual({ fastMode: 'policy' })
   session.child.phase = 'ready'
   expect(
     (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })).current
@@ -493,7 +513,90 @@ it('uses Off for unpicked Claude Fast at rest and over a native On report, prese
     record.options = { fastMode }
     expect(
       (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true }))
+        .current.acceptedInputSources
+    ).toEqual({ fastMode: 'saved' })
+    expect(
+      (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true }))
         .current.fastMode
     ).toBe(fastMode === 'true')
   }
 })
+
+it.each([false, true])(
+  'captures accepted origins through host read and shared view, resumed=%s',
+  async (resumed) => {
+    const record = restingRecord()
+    if (resumed) {
+      record.providerHandleChain = [{ origin: 'adopted' }]
+    }
+    const models: AgentSessionModelOption[] = [
+      {
+        id: 'opus[1m]',
+        label: 'Alias',
+        efforts: [{ value: 'high', label: 'High' }],
+        supportsFastMode: true,
+        serviceTiers: [{ value: 'priority', label: 'Fast' }]
+      },
+      { id: 'other', label: 'Other', efforts: [], serviceTiers: [{ value: 'flex', label: 'Flex' }] }
+    ]
+    const session = {
+      child: { fence: 1 },
+      params: { provider: 'codex' },
+      journal: restingJournal()
+    }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies the fields used by the options read.
+    const context = {
+      deps: {
+        adapter: {
+          readOptions: async () => ({
+            models,
+            fastModeSupport: { supported: true },
+            current: { model: 'opus[1m]', effort: 'high', confirmed: ['model', 'effort'] }
+          })
+        },
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => record }
+      },
+      serialize: (_id: string, task: () => Promise<unknown>) => task(),
+      openConversation: async () => session,
+      conversation: async () => session
+    } as unknown as StructuredAgentSessionMutationContext
+    const capture = async () => {
+      const answer = await readStructuredAgentSessionOptions(context, SESSION, {
+        readsWithoutModel: true
+      })
+      const state = applyStructuredAgentSessionOptions(
+        createStructuredAgentSessionOptionState('codex'),
+        CODEX_SESSION_OPTION_CATALOG,
+        answer,
+        { newLaunch: !resumed }
+      )
+      return {
+        answer,
+        selection: structuredAgentSessionMessageSelection(
+          structuredAgentSessionOptionView(state, undefined, {})
+        )
+      }
+    }
+    expect((await capture()).answer.current.acceptedInputSources).toEqual({})
+    expect((await capture()).selection).toEqual({})
+    for (const model of ['opus[1m]', 'retired-unlisted']) {
+      for (const fastMode of ['false', 'true']) {
+        record.options = { model, effort: 'high', fastMode, serviceTier: 'flex' }
+        const captured = await capture()
+        expect(captured.answer.current.acceptedInputSources).toEqual({
+          model: 'saved',
+          effort: 'saved',
+          fastMode: 'saved',
+          serviceTier: 'saved'
+        })
+        expect(captured.selection).toEqual({
+          model,
+          effort: 'high',
+          fastMode,
+          serviceTier: model === 'opus[1m]' ? 'default' : 'flex'
+        })
+      }
+    }
+  }
+)

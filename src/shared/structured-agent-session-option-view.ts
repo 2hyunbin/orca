@@ -19,15 +19,8 @@ function catalogListsSeedModel(
   return model === undefined || Boolean(state.catalog?.models.some((entry) => entry.id === model))
 }
 
-/**
- * What the picker shows before the host has confirmed this session's values:
- * `seed` (the selection a launch seeds) stands in until the record names a
- * model of the chat's own, and `held` picks outrank both until the host settles them. All show as `dispatched`;
- * derived on every read, never written into the record. A model the list lacks is kept: a list
- * is no evidence the chat's own model cannot run.
- *
- * The permission mode reads its own way: the held pick, else what the host stated, else the seed.
- */
+/** Query base or immutable launch seed, with finite controller operations above it.
+ *  Display provenance stays separate from accepted input while catalog labels load. */
 export function structuredAgentSessionOptionView(
   state: StructuredAgentSessionOptionState,
   seed: Readonly<Record<string, string>> | undefined,
@@ -57,29 +50,31 @@ function modelOptionView(
   const unconfirmedSeed =
     seed !== undefined && structuredAgentSessionModelId(state.record, 'own') === null
   const hasHeld = Object.keys(held).length > 0
-  // A saved pick the host's list does not name would show its raw id or another model's label.
-  if (
-    unconfirmedSeed &&
-    state.catalogSource === 'host' &&
-    !hasHeld &&
-    !catalogListsSeedModel(state, seed)
-  ) {
-    return { ...state, catalogSource: 'seed' }
-  }
-  // Only a host's or the session's list names a saved pick: a built-in label may be replaced.
   const seeded =
     unconfirmedSeed &&
     (state.catalogSource === 'host' || state.catalogSource === 'live') &&
     catalogListsSeedModel(state, seed)
-  if (!state.catalog || (!seeded && !hasHeld)) {
+  if (!state.catalog || (!unconfirmedSeed && !hasHeld)) {
     return state
   }
   let view: StructuredAgentSessionOptionState = {
     ...state,
     record: cloneStructuredAgentSessionOptionRecord(state.record)
   }
-  if (seeded) {
-    view = commitStructuredAgentSessionOptionValues(view, seed)
+  if (unconfirmedSeed) {
+    view = commitStructuredAgentSessionOptionValues(view, seed, 'seeded')
+    if (!seeded) {
+      // The immutable input remains capturable before a host list can label it.
+      for (const id of Object.keys(seed)) {
+        const tracked = view.record.values[id]
+        if (tracked) {
+          tracked.source = 'default'
+        }
+      }
+      if (state.catalogSource === 'host' && !hasHeld) {
+        view = { ...view, catalogSource: 'seed' }
+      }
+    }
   }
   return { ...commitStructuredAgentSessionOptionValues(view, held), pendingId: state.pendingId }
 }
@@ -108,25 +103,30 @@ export function structuredAgentSessionSendSelection(
     : undefined
 }
 
-/** The four controls as shown, with resumed default model/effort left as inheritance. */
+/** Exact capture uses accepted origins; absent metadata keeps the older host contract. */
 export function structuredAgentSessionMessageSelection(
   view: StructuredAgentSessionOptionState
 ): Record<string, string> {
   const selection: Record<string, string> = {}
-  for (const descriptor of structuredAgentSessionOptionSnapshot(view)) {
-    if (!['model', 'effort', 'fastMode', 'serviceTier'].includes(descriptor.id)) {
-      continue
-    }
-    if (
-      (descriptor.id === 'model' || descriptor.id === 'effort') &&
+  const snapshot = structuredAgentSessionOptionSnapshot(view)
+  for (const id of ['model', 'effort', 'fastMode', 'serviceTier'] as const) {
+    const descriptor = snapshot.find((entry) => entry.id === id)
+    if (view.acceptedInputSources !== undefined) {
+      if (!view.acceptedInputSources[id]) {
+        continue
+      }
+    } else if (
+      (id === 'model' || id === 'effort') &&
       view.defaultsUnsent &&
-      descriptor.valueSource === 'default'
+      descriptor?.valueSource === 'default'
     ) {
       continue
     }
-    const value = descriptor.kind.currentValue
+    const value =
+      descriptor?.kind.currentValue ??
+      (view.acceptedInputSources !== undefined ? view.record.values[id]?.value : undefined)
     if (value !== undefined) {
-      selection[descriptor.id] = String(value)
+      selection[id] = String(value)
     }
   }
   return selection

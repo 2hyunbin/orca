@@ -61,7 +61,7 @@ function renderOptions(initial: Props = {}) {
         turnId: null,
         unloadedTurnRevisions: undefined,
         mutate,
-        launch: { kind: 'new', seedOptions: { model: 'gpt-5.5' }, heldOptions: {} }
+        launch: { kind: 'new', seedOptions: { model: 'gpt-5.5' } }
       }),
     { initialProps: initial }
   )

@@ -125,7 +125,6 @@ type RenderProps = {
   launch?: 'new' | 'resume'
   hidden?: boolean
   launchSeedOptions?: Record<string, string>
-  heldOptions?: Record<string, string>
   worktree?: string
   agent?: 'claude' | 'codex'
   providerStarting?: boolean
@@ -163,7 +162,6 @@ function renderOptions(initial: RenderProps, mutate: StructuredAgentSessionMutat
               launch: {
                 kind: props.launch,
                 ...(props.launchSeedOptions ? { seedOptions: props.launchSeedOptions } : {}),
-                heldOptions: props.heldOptions ?? {},
                 ...(props.worktree ? { worktree: props.worktree } : {})
               }
             }
@@ -369,7 +367,7 @@ describe('useStructuredAgentSessionOptions', () => {
         expect.anything()
       )
       // The launch owns the pick; the view renders what it holds.
-      rerender({ ...PROVISIONAL, launchSeedOptions: SEED, heldOptions: { model: 'gpt-5.6-luna' } })
+      rerender({ ...PROVISIONAL, launchSeedOptions: SEED })
       expect(currentValue(result.current.optionSnapshot, 'model')).toBe('gpt-5.6-luna')
       expect(descriptor(result.current.optionSnapshot, 'model')?.valueSource).toBe('dispatched')
       expect(calls).not.toHaveBeenCalled()
@@ -538,7 +536,7 @@ describe('useStructuredAgentSessionOptions', () => {
       expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('low')
       const { optionStateRef, optionView } = result.current.sendSource
       expect(
-        structuredAgentSessionSendSelection(optionView(optionStateRef.current, undefined, {}))
+        structuredAgentSessionSendSelection(optionView(optionStateRef.current, undefined))
       ).toEqual({ model: 'opus', effort: 'low' })
       await waitFor(() => expect(reads).toHaveLength(3))
       // Another client's newer answer retires the accepted operation without value equality.
@@ -787,7 +785,7 @@ describe('useStructuredAgentSessionOptions', () => {
         )
         const { optionStateRef, optionView } = result.current.sendSource
         expect(
-          structuredAgentSessionSendSelection(optionView(optionStateRef.current, undefined, {}))
+          structuredAgentSessionSendSelection(optionView(optionStateRef.current, undefined))
         ).toEqual({ model: 'opus', effort: 'high' })
         unmount()
       }

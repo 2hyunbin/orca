@@ -16,15 +16,11 @@ export type StructuredAgentSessionLaunchView = {
   kind: 'new' | 'resume'
   /** The encoded selection the launch seeded, shown until the host names the model. */
   seedOptions?: Readonly<Record<string, string>>
-  /** Picks the launch holds and applies before it publishes. */
-  heldOptions: Readonly<Record<string, string>>
   /** Where the chat runs; its own config may replace the listed default. */
   worktree?: string
   /** Its paired server has not said what create seeds yet; picks wait for it. */
   seedPending?: true
 }
-
-const NO_HELD_OPTIONS: Readonly<Record<string, string>> = {}
 
 function useLaunchView(
   sessionId: string,
@@ -37,8 +33,8 @@ function useLaunchView(
       const current = getStructuredAgentSessionLaunchSelection(sessionId)
       if (current) {
         snapshot = current
-      } else if (snapshot && snapshot.held !== NO_HELD_OPTIONS) {
-        snapshot = { seed: snapshot.seed, held: NO_HELD_OPTIONS, seedPending: true }
+      } else if (snapshot && !snapshot.seedPending) {
+        snapshot = { seed: snapshot.seed, seedPending: true }
       }
       return snapshot
     }
@@ -46,7 +42,6 @@ function useLaunchView(
       read,
       subscribe: (notify: () => void) =>
         subscribeStructuredAgentLaunchStatus(() => {
-          // Capture accepted picks even when retirement happens before React renders.
           read()
           notify()
         })
@@ -70,7 +65,6 @@ function useLaunchView(
         : null
     })
   }
-  const held = selection?.held ?? NO_HELD_OPTIONS
   const seedPending = launching && (!selection || selection.seedPending === true)
   return useMemo(
     () =>
@@ -79,11 +73,10 @@ function useLaunchView(
             kind: intent.kind,
             ...(selection?.seed ? { seedOptions: selection.seed } : {}),
             ...(seedPending ? { seedPending: true as const } : {}),
-            heldOptions: held,
             ...(worktreeId ? { worktree: toRuntimeWorktreeSelector(worktreeId) } : {})
           }
         : undefined,
-    [held, intent.kind, selection?.seed, seedPending, worktreeId]
+    [intent.kind, selection?.seed, seedPending, worktreeId]
   )
 }
 
