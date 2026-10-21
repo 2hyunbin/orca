@@ -6,6 +6,7 @@ import {
   resolveRuntimeNavigationTarget
 } from '../../../shared/runtime-navigation'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
+import { isPaneSleepRecord } from '../../../shared/agent-session-resume'
 import type { Repo } from '../../../shared/repo-types'
 import type { TerminalWorkspaceLaunchScope } from '../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -132,8 +133,12 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
             this.store?.getWorkspaceSession?.(getRepoExecutionHostId(repo))
               .sleepingAgentSessionsByPaneKey ?? {}
           ).some(
-            // Why: a tab-open record resumes when its tab opens, headless or not.
-            (record) => record.worktreeId === worktree.id && record.restoreOnTabOpenOnly !== true
+            // Why: only slept panes need a wake ('live'/'quit' agents are not asleep), and a
+            // tab-open record resumes when its tab opens, headless or not.
+            (record) =>
+              record.worktreeId === worktree.id &&
+              isPaneSleepRecord(record) &&
+              record.restoreOnTabOpenOnly !== true
           )
         ) {
           // Why: headless is only degraded when this worktree actually has a
