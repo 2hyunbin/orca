@@ -510,6 +510,15 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       expect(mocks.incumbentReadiness).not.toHaveBeenCalled()
     })
 
+    it('does not label readiness with a build another client replaced meanwhile', async () => {
+      withRecord(newer)
+      mocks.readRecord.mockResolvedValueOnce({ ...newer, active: '2.1.0+ef' })
+      mocks.deploy.mockResolvedValueOnce(policyRefused)
+      mocks.incumbentReadiness.mockResolvedValueOnce(NEWER_READINESS)
+      await expect(launch()).resolves.toMatchObject({ outcome: 'deferred' })
+      expect(mocks.deploy).toHaveBeenCalledTimes(1)
+    })
+
     it('falls back to the deploy gate when the newer build cannot be proven serving', async () => {
       withRecord(newer)
       mocks.deploy.mockResolvedValueOnce(policyRefused)

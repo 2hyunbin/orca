@@ -171,8 +171,9 @@ async function launchOverTransport(
         context,
         slot
       })
-      // Unproven: the deploy below still gates on the census and the downgrade refusal.
-      if (readiness) {
+      // Unproven, or another client activated a build meanwhile: the deploy below re-plans under
+      // the fence, still gated on the census and the downgrade refusal.
+      if (readiness && (await readOrcadActivationRecord(slot)).active === incumbentVersion) {
         return readyLaunch({ fullVersion: incumbentVersion, readiness })
       }
     }
