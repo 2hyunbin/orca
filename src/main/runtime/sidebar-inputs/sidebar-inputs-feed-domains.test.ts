@@ -50,14 +50,7 @@ function repo(overrides: Partial<Repo> = {}): Repo {
 
 /** This host lists `r::/w/same` locally and over SSH; a paired server lists the same id. */
 function harness(hostFacts: Record<string, WorkspaceActivityFacts>) {
-  const rowsRevision = new ProducerRevision()
-  const listings = {
-    count: 0,
-    fail: false,
-    hold: false,
-    onlyLocal: false,
-    releases: [] as (() => void)[]
-  }
+  const listing = { scanned: true }
   const repos = [repo(), repo({ connectionId: 'box' })]
   const serverRow = normalizePairedServerRow('runtime:env', {
     worktreeId: ID,
@@ -85,28 +78,22 @@ function harness(hostFacts: Record<string, WorkspaceActivityFacts>) {
       })
     },
     workspaceRows: {
-      revision: rowsRevision,
-      snapshot: async () => {
-        listings.count += 1
-        if (listings.fail) {
-          throw new Error('listing failed')
-        }
-        const hosts = listings.onlyLocal ? (['local'] as const) : (['local', 'ssh:box'] as const)
-        if (listings.hold) {
-          await new Promise<void>((resolve) => listings.releases.push(resolve))
-        }
-        return {
-          revision: rowsRevision.value,
-          rows: Object.fromEntries(
-            buildWorkspaceRows({
-              worktrees: hosts.map(worktree),
-              folderWorkspaces: [],
-              repos,
-              lineageById: {}
-            })
-          )
-        }
-      }
+      revision: new ProducerRevision(),
+      ready: async () => {},
+      snapshot: () =>
+        listing.scanned
+          ? {
+              revision: 0,
+              rows: Object.fromEntries(
+                buildWorkspaceRows({
+                  worktrees: [worktree('local'), worktree('ssh:box')],
+                  folderWorkspaces: [],
+                  repos,
+                  lineageById: {}
+                })
+              )
+            }
+          : null
     },
     store: () => null,
     onClientEvent: () => () => {}
@@ -120,7 +107,7 @@ function harness(hostFacts: Record<string, WorkspaceActivityFacts>) {
     }
     return domain.read()
   }
-  return { read, listings, rowsRevision }
+  return { read, listing }
 }
 
 describe('the activity domain', () => {
@@ -137,43 +124,12 @@ describe('the activity domain', () => {
 
   it('never lends a paired server’s activity to this host’s same-id rows', async () => {
     const { read } = harness({})
-    expect(Object.keys(await read('activity'))).toEqual([`runtime:env|${ID}`])
+    expect(Object.keys((await read('activity')) ?? {})).toEqual([`runtime:env|${ID}`])
   })
 
-  it('shares one listing per rows revision with the workspaces domain', async () => {
-    const { read, listings, rowsRevision } = harness({})
-    await Promise.all([read('activity'), read('workspaces')])
-    expect(listings.count).toBe(1)
-    await read('activity')
-    expect(listings.count).toBe(1)
-    rowsRevision.bump()
-    await Promise.all([read('activity'), read('workspaces')])
-    expect(listings.count).toBe(2)
-  })
-
-  it('keeps a newer listing’s rows when an older one lands after it', async () => {
-    const busy = { ...IDLE_WORKSPACE_ACTIVITY, browser: true }
-    const { read, listings, rowsRevision } = harness({ [ID]: busy })
-    listings.hold = true
-    const older = read('activity')
-    listings.hold = false
-    rowsRevision.bump()
-    listings.onlyLocal = true
-    await read('activity')
-    listings.releases.forEach((release) => release())
-    await older
-    listings.fail = true
-    rowsRevision.bump()
-    expect(Object.keys(await read('activity'))).toEqual([`local|${ID}`, `runtime:env|${ID}`])
-  })
-
-  it('keys by the last rows listed while a listing fails', async () => {
-    const busy = { ...IDLE_WORKSPACE_ACTIVITY, browser: true }
-    const { read, listings, rowsRevision } = harness({ [ID]: busy })
-    await read('activity')
-    listings.fail = true
-    rowsRevision.bump()
-    await expect(read('workspaces')).rejects.toThrow('listing failed')
-    expect(await read('activity')).toMatchObject({ [`local|${ID}`]: busy })
+  it('publishes nothing until this host’s rows are first scanned', async () => {
+    const { read, listing } = harness({})
+    listing.scanned = false
+    expect(await read('activity')).toBeNull()
   })
 })

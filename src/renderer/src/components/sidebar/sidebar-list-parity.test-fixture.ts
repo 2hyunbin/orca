@@ -42,7 +42,7 @@ import type { SidebarInputsFeedDomain } from '../../../../main/runtime/sidebar-i
 import type { SidebarFeedDomains } from '../../../../shared/sidebar-list/sidebar-feed-domains'
 import { buildSidebarFeedCatalog } from '../../../../shared/sidebar-list/sidebar-feed-catalog'
 import {
-  projectCatalogFromWindowState,
+  projectCatalogDomain,
   windowCatalogFromServerAnswers
 } from './sidebar-list-parity-project-catalog.test-fixture'
 
@@ -269,7 +269,7 @@ export function feedDomainsFromWindowState(
     domain('pairedServerRows', () => Object.fromEntries(serverRows)),
     domain('desktop', () => readWindowDesktopSidebarFacts(state)),
     // Main's own builder, over the store and server reads the window's catalog came from.
-    domain('projectCatalog', () => projectCatalogFromWindowState(state))
+    projectCatalogDomain(state)
   ]
 }
 

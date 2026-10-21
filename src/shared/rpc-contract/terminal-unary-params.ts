@@ -71,7 +71,10 @@ export const TerminalListParams = z.object({
   requireFreshPtyLiveness: z.boolean().optional(),
   // Why: layouts are ~31% of a large listing and only the human CLI formatter
   // reads them. Absent means "include" so pre-flag clients keep rendering them.
-  includeVisualLayouts: z.boolean().optional()
+  includeVisualLayouts: z.boolean().optional(),
+  // Layout-owner hosts show the workspace's unshown live terminals before listing (a window's
+  // activation sweep); other hosts drop it, as they did before it existed.
+  placeUnshownLiveTerminals: z.boolean().optional()
 })
 
 export const TerminalResolveActive = z.object({
