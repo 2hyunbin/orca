@@ -40,11 +40,13 @@ const TUI_SCRIPT = [
 test('an idle full-screen program shows its current frame after a network outage', async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
 {}, testInfo) => {
   test.setTimeout(10 * 60_000)
-  let proxy: FreezableTcpProxy | null = null
+  // Why a holder: assigned inside the callback, which narrowing cannot see.
+  const opened: { proxy: FreezableTcpProxy | null } = { proxy: null }
   try {
     await withManagedHost(testInfo, async (fixture) => {
       const { host } = fixture
-      proxy = await startFreezableTcpProxy(host.input.host, host.input.port ?? 22)
+      const proxy = await startFreezableTcpProxy(host.input.host, host.input.port ?? 22)
+      opened.proxy = proxy
       // Why the proxy: the profile reaches sshd only through it, so cutting it is the network.
       host.input = { ...host.input, port: proxy.port }
       const dir = `/tmp/orca-idle-frame-${Date.now()}`
@@ -80,6 +82,6 @@ test('an idle full-screen program shows its current frame after a network outage
       }
     })
   } finally {
-    await proxy?.close()
+    await opened.proxy?.close()
   }
 })
