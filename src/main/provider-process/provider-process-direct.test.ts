@@ -448,10 +448,15 @@ it.runIf(process.platform !== 'win32')(
             }
     })
     const realRead = files.readFile
+    const listing = vi
+      .spyOn(files, 'readdir')
+      .mockRejectedValueOnce(Object.assign(new Error('inventory denied'), { code: 'EACCES' }))
     const read = vi
       .spyOn(files, 'readFile')
       .mockRejectedValueOnce(Object.assign(new Error('unreadable'), { code: 'EACCES' }))
     try {
+      await expectHomeBlocked(home, 'could not verify')
+      listing.mockRestore()
       await expectHomeBlocked(home, 'could not verify')
       read.mockRejectedValueOnce(
         Object.assign(new Error('removed after listing'), { code: 'ENOENT' })
@@ -486,6 +491,7 @@ it.runIf(process.platform !== 'win32')(
     } finally {
       rows.mockRestore()
       signal.mockRestore()
+      listing.mockRestore()
       read.mockRestore()
       setProviderRecoveryMutationOwner(false)
       setAppEnvironment(saved)

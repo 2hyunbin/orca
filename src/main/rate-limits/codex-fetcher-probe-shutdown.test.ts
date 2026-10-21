@@ -4,16 +4,10 @@ import type * as ProcessHostModule from '@orca/process-host'
 import type { ProcessSpec } from '@orca/process-host/process-spec'
 import { readPosixProcessRow } from '../provider-process/provider-process-row-read'
 import * as ledger from '../provider-process/provider-process-ledger'
-import * as files from 'node:fs/promises'
-import * as backend from './codex-backend-usage-client'
 import { getAppEnvironment } from '../../shared/app-environment'
 import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { EventEmitter } from 'node:events'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('node:fs/promises', async (original) => ({
-  ...(await original<typeof files>())
-}))
 
 const { childSpawnMock, resolveCodexCommandMock, ptySpawnMock } = vi.hoisted(() => ({
   childSpawnMock: vi.fn(),
@@ -116,36 +110,6 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
   })
-
-  it.each([false, true])(
-    'reports unavailable verification with backend fallback=%s',
-    async (succeeds) => {
-      vi.spyOn(files, 'readdir').mockRejectedValue(
-        Object.assign(new Error('inventory denied'), { code: 'EACCES' })
-      )
-      const fallback = {
-        provider: 'codex',
-        status: 'ok',
-        session: null,
-        weekly: null,
-        error: null,
-        updatedAt: Date.now()
-      } as const
-      vi.spyOn(backend, 'fetchCodexRateLimitsViaBackend').mockResolvedValue(
-        succeeds ? fallback : null
-      )
-      const result = await fetchCodexRateLimits()
-      expect(result).toMatchObject(
-        succeeds
-          ? fallback
-          : {
-              status: 'error',
-              error: 'Orca could not verify previous Codex processes. Try again.'
-            }
-      )
-      expect(childSpawnMock).not.toHaveBeenCalled()
-    }
-  )
 
   it('gives a cold app-server the full boot budget before any deadline fires', async () => {
     const rpcChild = makeRpcChild()
