@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it } from 'vitest'
 import { FakeSession } from '../transport/mobile-endpoint-supervisor-test-fakes'
+import type { RpcClient } from '../transport/rpc-client'
 import { useNewWorkspaceExecutionTarget } from './use-new-workspace-execution-target'
 
 const mounted: ReactTestRenderer[] = []
@@ -24,9 +25,15 @@ describe('New Workspace agent detection', () => {
       })
     })
     let detected: Set<string> | null = null
-    function Harness({ repoId }: { repoId: string }) {
+    function Harness({
+      repoId,
+      selectedClient = client
+    }: {
+      repoId: string
+      selectedClient?: RpcClient
+    }) {
       detected = useNewWorkspaceExecutionTarget({
-        client,
+        client: selectedClient,
         repoId,
         connectionId: null,
         visible: true
@@ -53,6 +60,21 @@ describe('New Workspace agent detection', () => {
       resolveNext?.({ id: 'reply', ok: true, result: ['codex'] })
     })
     expect(detected).toEqual(new Set(['codex']))
+    const otherHost = new FakeSession('connected')
+    otherHost.sendRequest.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveNext = resolve
+        })
+    )
+    await act(async () => {
+      renderer?.update(createElement(Harness, { repoId: 'host-repo', selectedClient: otherHost }))
+    })
+    expect(detected).toBeNull()
+    await act(async () => {
+      resolveNext?.({ id: 'reply', ok: true, result: ['gemini'] })
+    })
+    expect(detected).toEqual(new Set(['gemini']))
   })
 
   it('keeps the SSH request and connection gate', async () => {

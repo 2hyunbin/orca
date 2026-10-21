@@ -13,6 +13,7 @@ import {
 } from '../tasks/workspace-ssh-gate'
 
 type DetectedAgentIdsState = {
+  client: RpcClient
   connectionId: string | null
   repoId: string | null
   ids: Set<string>
@@ -48,7 +49,8 @@ export function useNewWorkspaceExecutionTarget(args: {
     connecting: connectingTargetId === connectionId
   })
   const detectedAgentIds =
-    detectedAgentIdsState?.connectionId === connectionId &&
+    detectedAgentIdsState?.client === client &&
+    detectedAgentIdsState.connectionId === connectionId &&
     detectedAgentIdsState.repoId === repoId &&
     (connectionId === null || sshGate.status === 'connected')
       ? detectedAgentIdsState.ids
@@ -100,6 +102,7 @@ export function useNewWorkspaceExecutionTarget(args: {
             )
         if (!stale) {
           setDetectedAgentIdsState({
+            client,
             connectionId,
             repoId,
             ids: detected.accepted ? new Set(detected.value) : new Set()
@@ -107,7 +110,7 @@ export function useNewWorkspaceExecutionTarget(args: {
         }
       } catch {
         if (!stale) {
-          setDetectedAgentIdsState({ connectionId, repoId, ids: new Set() })
+          setDetectedAgentIdsState({ client, connectionId, repoId, ids: new Set() })
         }
       }
     })()
