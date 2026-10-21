@@ -8,7 +8,8 @@ import {
   TERMINAL_WRITE_SLICE_UNITS,
   enqueueWrite,
   enqueueWriteBoundary,
-  pumpWrites
+  pumpWrites,
+  resetWriteQueue
 } from './write-queue'
 import { XTERM_ENGINE_JS } from '../terminal-webview-engine.generated'
 
@@ -295,6 +296,78 @@ describe('terminal WebView write queue', () => {
       scope.term?.dispose()
       vi.useRealTimers()
     }
+  })
+
+  it('keeps one parse in flight while a sliced backlog compacts and live writes arrive', () => {
+    const queue = createWriteQueue(WRITE_QUEUE_SOURCE)
+    const replay = Array.from({ length: 300 }, (_, index) =>
+      `${index}:`.padEnd(TERMINAL_WRITE_SLICE_UNITS, '.')
+    ).join('')
+    const live = 'live'.repeat(TERMINAL_WRITE_SLICE_UNITS)
+    const boundaries: string[] = []
+    queue.enqueue(replay)
+    queue.enqueueBoundary(() => boundaries.push(queue.writes.join('')))
+    queue.pump()
+    queue.enqueue(live)
+    queue.pump()
+    expect(queue.pendingWrites).toHaveLength(1)
+    expect(queue.writes.join('')).toBe(replay.slice(0, TERMINAL_WRITE_SLICE_UNITS))
+    for (let i = 0; i < 299; i++) {
+      queue.flushWrite()
+      expect(queue.pendingWrites).toHaveLength(1)
+      expect(boundaries).toEqual([])
+    }
+    queue.flushWrite()
+    expect(boundaries).toEqual([replay])
+    drain(queue)
+    expect(queue.writes.join('')).toBe(replay + live)
+    expect(queue.snapshot()).toEqual({ slots: [], head: 0 })
+  })
+
+  it('fences an old slice callback from a replacement terminal and its drain boundary', () => {
+    const scope = createTerminalDocumentScope()
+    const old = createWriteQueue(WRITE_QUEUE_SOURCE)
+    const replacement = createWriteQueue(WRITE_QUEUE_SOURCE)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only write is reached; the held callbacks model xterm completion.
+    scope.term = {
+      write: (data: string, done: () => void) => {
+        old.writes.push(data)
+        old.pendingWrites.push(done)
+      }
+    } as unknown as typeof scope.term
+    scope.ready = true
+    enqueueWrite(scope, 'old'.repeat(TERMINAL_WRITE_SLICE_UNITS))
+    const oldBoundary = vi.fn()
+    enqueueWriteBoundary(scope, oldBoundary)
+    pumpWrites(scope, scope.terminalGeneration)
+    scope.terminalGeneration++
+    resetWriteQueue(scope)
+    scope.writesDraining = false
+    scope.afterDrainCallbacks = []
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: replacement implements the same held xterm write callback.
+    scope.term = {
+      write: (data: string, done: () => void) => {
+        replacement.writes.push(data)
+        replacement.pendingWrites.push(done)
+      }
+    } as unknown as typeof scope.term
+    const next = 'new'.repeat(TERMINAL_WRITE_SLICE_UNITS)
+    enqueueWrite(scope, next)
+    const newBoundary = vi.fn()
+    enqueueWriteBoundary(scope, newBoundary)
+    pumpWrites(scope, scope.terminalGeneration)
+    old.flushWrite()
+    expect(scope.writesDraining).toBe(true)
+    expect(replacement.pendingWrites).toHaveLength(1)
+    expect(newBoundary).not.toHaveBeenCalled()
+    while (replacement.pendingWrites.length) {
+      replacement.flushWrite()
+    }
+    expect(replacement.writes.join('')).toBe(next)
+    expect(old.writes).toHaveLength(1)
+    expect(oldBoundary).not.toHaveBeenCalled()
+    expect(newBoundary).toHaveBeenCalledTimes(1)
+    expect(scope.writeQueue).toEqual([])
   })
 
   it('drains writes in FIFO order', () => {
