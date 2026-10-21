@@ -204,12 +204,7 @@ describe('window-tab lane: terminal.create {windowTab} -> provider', () => {
       rows: 40,
       hidden: true,
       // Main's create always names the provider delivery the window's spawn defaults to.
-      commandDelivery: 'provider',
-      // Main today stamps the workspace id on folders only (host lane, the same create).
-      orcaEnv:
-        workspace.kind === 'folder' || !Array.isArray(window.orcaEnv)
-          ? window.orcaEnv
-          : window.orcaEnv.filter((key) => key !== 'ORCA_WORKSPACE_ID')
+      commandDelivery: 'provider'
     })
     expect(trackMock.mock.calls).toEqual([['agent_started', request.telemetry]])
   })
