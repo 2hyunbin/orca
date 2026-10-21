@@ -9,8 +9,13 @@ vi.mock('./client', () => ({
   isTelemetryEnabled: () => true
 }))
 
-import type { Store } from '../persistence'
-import { WSL_USAGE_SNAPSHOT_INTERVAL_MS, WslUsageReporter } from './wsl-usage-reporter'
+import {
+  collectWslProjects,
+  listRunningDistrosForSnapshot,
+  WSL_USAGE_SNAPSHOT_INTERVAL_MS,
+  WslUsageReporter,
+  type WslUsageStore
+} from './wsl-usage-reporter'
 import type { WslUsageSnapshotInput } from './wsl-usage-snapshot'
 
 const input: WslUsageSnapshotInput = {
@@ -22,9 +27,11 @@ const input: WslUsageSnapshotInput = {
   wslHostsGateOpen: false
 }
 
-// SAFETY: the reporter only hands the store to `gather`, which these tests replace.
-// oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: see above.
-const store = {} as Store
+const store: WslUsageStore = {
+  getRepos: () => [],
+  getProjects: () => [],
+  getSettings: () => ({})
+}
 
 describe('WslUsageReporter', () => {
   let dir: string
@@ -73,6 +80,22 @@ describe('WslUsageReporter', () => {
     expect(trackMock).not.toHaveBeenCalled()
   })
 
+  it('does not regather an hour after a failed gather', async () => {
+    gather.mockRejectedValueOnce(new Error('store unavailable'))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const instance = reporter()
+    expect(await instance.reportIfDue()).toBe(false)
+    now += 60 * 60 * 1000
+    expect(await instance.reportIfDue()).toBe(false)
+    expect(gather).toHaveBeenCalledTimes(1)
+    warn.mockRestore()
+  })
+
+  it('treats a stamp from the future as due', async () => {
+    writeFileSync(join(dir, 'wsl-usage-telemetry.json'), JSON.stringify({ lastSentAt: now + 1e9 }))
+    expect(await reporter().reportIfDue()).toBe(true)
+  })
+
   it('stamps a dropped send so the gather is not repaid hourly', async () => {
     trackMock.mockReturnValue(false)
     const instance = reporter()
@@ -92,5 +115,70 @@ describe('WslUsageReporter', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(await reporter().reportIfDue()).toBe(false)
     warn.mockRestore()
+  })
+})
+
+describe('listRunningDistrosForSnapshot', () => {
+  it('reuses a confirmed list without probing', async () => {
+    const probe = vi.fn(async () => ['Other'])
+    const running = await listRunningDistrosForSnapshot(
+      [{ distro: 'Ubuntu' }],
+      () => ['Ubuntu'],
+      probe
+    )
+    expect(running).toEqual(['Ubuntu'])
+    expect(probe).not.toHaveBeenCalled()
+  })
+
+  it('probes once when nothing is cached and a user distro exists', async () => {
+    const probe = vi.fn(async () => ['Ubuntu'])
+    const running = await listRunningDistrosForSnapshot([{ distro: 'Ubuntu' }], () => null, probe)
+    expect(running).toEqual(['Ubuntu'])
+    expect(probe).toHaveBeenCalledTimes(1)
+  })
+
+  it('never probes without a user distro', async () => {
+    const probe = vi.fn(async () => [])
+    await listRunningDistrosForSnapshot([{ distro: 'docker-desktop' }], () => null, probe)
+    await listRunningDistrosForSnapshot(null, () => null, probe)
+    expect(probe).not.toHaveBeenCalled()
+  })
+})
+
+describe('collectWslProjects', () => {
+  const wslStore: WslUsageStore = {
+    getRepos: () => [
+      {
+        id: 'a',
+        path: '\\\\wsl$\\Ubuntu\\home\\me\\a',
+        displayName: 'a',
+        badgeColor: '',
+        addedAt: 0
+      },
+      {
+        id: 'c',
+        path: '/mnt/d/src/c',
+        displayName: 'c',
+        badgeColor: '',
+        addedAt: 0,
+        kind: 'folder',
+        executionHostId: 'runtime:env-1'
+      }
+    ],
+    getProjects: () => [],
+    getSettings: () => ({})
+  }
+
+  it('skips WSL-host projects while the gate is closed, without reading environments', () => {
+    const readHostDistros = vi.fn(() => new Map([['env-1', 'Debian']]))
+    expect(collectWslProjects(wslStore, false, readHostDistros, 'Ubuntu')).toEqual([
+      { location: 'distro_fs', kind: 'git', distro: 'Ubuntu' }
+    ])
+    expect(readHostDistros).not.toHaveBeenCalled()
+  })
+
+  it('counts a WSL-host project on a Windows drive when the gate is open', () => {
+    const projects = collectWslProjects(wslStore, true, () => new Map([['env-1', 'Debian']]), null)
+    expect(projects).toContainEqual({ location: 'windows_drive', kind: 'folder', distro: 'Debian' })
   })
 })

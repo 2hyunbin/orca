@@ -4,11 +4,13 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Store } from '../persistence'
+import type { GlobalSettings } from '../../shared/global-settings-types'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../shared/execution-host'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import { isWslHostRuntimeEnvironment } from '../../shared/runtime-environments'
 import { resolveLocalWorkspaceRuntime } from '../local-project-runtime-resolution'
 import { getCachedWslAvailability } from '../wsl-availability'
+import { getCachedWslDistros } from '../wsl'
 import { listConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import { filterUserWslDistros } from '../wsl-distro-list-output'
 import { peekConfirmedRunningWslDistros } from '../wsl-running-distro-cache'
@@ -44,10 +46,15 @@ function readWslPackageVersion(): string | null {
   }
 }
 
-function collectWslProjects(
-  store: Store,
-  userDataPath: string,
-  gateOpen: boolean
+export type WslUsageStore = Pick<Store, 'getRepos' | 'getProjects'> & {
+  getSettings: () => Partial<Pick<GlobalSettings, 'localWindowsRuntimeDefault'>>
+}
+
+export function collectWslProjects(
+  store: WslUsageStore,
+  gateOpen: boolean,
+  readHostDistros: () => Map<string, string>,
+  defaultDistro: string | null
 ): WslUsageProject[] {
   const projects: WslUsageProject[] = []
   let wslHostDistroByEnvironment: Map<string, string> | null = null
@@ -59,7 +66,8 @@ function collectWslProjects(
         resolveLocalWorkspaceRuntime(store, repo, repo.path)
       )
       if (project) {
-        projects.push(project)
+        // `wsl.exe` lists the default distro first; naming it keeps distinct-distro counts honest.
+        projects.push({ ...project, distro: project.distro ?? defaultDistro })
       }
       continue
     }
@@ -67,7 +75,7 @@ function collectWslProjects(
     if (host.kind !== 'runtime' || !gateOpen) {
       continue
     }
-    wslHostDistroByEnvironment ??= readWslHostDistros(userDataPath)
+    wslHostDistroByEnvironment ??= readHostDistros()
     const distro = wslHostDistroByEnvironment.get(host.environmentId)
     if (distro) {
       projects.push(classifyWslHostProject(repo, distro))
@@ -88,30 +96,41 @@ function readWslHostDistros(userDataPath: string): Map<string, string> {
   }
 }
 
+/** Reuse a confirmed running list; otherwise one shared probe, and none when no user distro exists. */
+export async function listRunningDistrosForSnapshot(
+  registrations: readonly { distro: string }[] | null,
+  peek: () => readonly string[] | null = peekConfirmedRunningWslDistros,
+  probe: () => Promise<string[]> = listConfirmedRunningWslDistros
+): Promise<string[]> {
+  const cached = peek()
+  if (cached) {
+    return [...cached]
+  }
+  const userNames = filterUserWslDistros((registrations ?? []).map(({ distro }) => distro))
+  return userNames.length > 0 ? probe() : []
+}
+
 export async function gatherWslUsageSnapshotInput(
-  store: Store,
+  store: WslUsageStore,
   userDataPath: string
 ): Promise<WslUsageSnapshotInput> {
   const gateOpen = wslHostsGateOpen()
   const registrations = await readWslDistroRegistrations()
   const userDistros = await listWslHostDistros({
     readRegistrations: async () => registrations,
-    // Reuse a confirmed list; otherwise one shared probe, and none when no user distro exists.
-    listRunning: async () => {
-      const cached = peekConfirmedRunningWslDistros()
-      if (cached) {
-        return [...cached]
-      }
-      const userNames = filterUserWslDistros((registrations ?? []).map(({ distro }) => distro))
-      return userNames.length > 0 ? listConfirmedRunningWslDistros() : []
-    }
+    listRunning: () => listRunningDistrosForSnapshot(registrations)
   })
   return {
     registeredDistroCount: registrations?.length ?? null,
     userDistros,
     wslPackageVersion: readWslPackageVersion(),
     wslAvailableCached: getCachedWslAvailability(),
-    projects: collectWslProjects(store, userDataPath, gateOpen),
+    projects: collectWslProjects(
+      store,
+      gateOpen,
+      () => readWslHostDistros(userDataPath),
+      getCachedWslDistros()?.[0] ?? null
+    ),
     wslHostsGateOpen: gateOpen
   }
 }
@@ -141,7 +160,7 @@ export class WslUsageReporter {
   private readonly stampFile: string
 
   constructor(
-    private readonly store: Store,
+    private readonly store: WslUsageStore,
     private readonly userDataPath: string,
     private readonly deps: WslUsageReporterDeps = {}
   ) {
@@ -179,17 +198,18 @@ export class WslUsageReporter {
       if (this.lastSentAt === undefined) {
         this.lastSentAt = await readLastSentAt(this.stampFile)
       }
-      if (this.lastSentAt !== null && now - this.lastSentAt < WSL_USAGE_SNAPSHOT_INTERVAL_MS) {
+      // A stamp from the future (clock moved back) counts as due rather than blocking for months.
+      const elapsed = this.lastSentAt === null ? Infinity : now - this.lastSentAt
+      if (elapsed >= 0 && elapsed < WSL_USAGE_SNAPSHOT_INTERVAL_MS) {
         return false
       }
+      // Stamp the attempt before gathering: a failing gather or dropped send must not re-pay hourly.
+      this.lastSentAt = now
+      await writeFile(this.stampFile, JSON.stringify({ lastSentAt: now })).catch(() => {})
       const input = await (
         this.deps.gather ?? (() => gatherWslUsageSnapshotInput(this.store, this.userDataPath))
       )()
-      const sent = track('wsl_usage_snapshot', buildWslUsageSnapshot(input))
-      // Stamp the attempt, not the send: a dropped payload must not re-pay the gather every hour.
-      this.lastSentAt = now
-      await writeFile(this.stampFile, JSON.stringify({ lastSentAt: now })).catch(() => {})
-      return sent
+      return track('wsl_usage_snapshot', buildWslUsageSnapshot(input))
     } catch (error) {
       console.warn('[telemetry] wsl usage snapshot failed:', error)
       return false
