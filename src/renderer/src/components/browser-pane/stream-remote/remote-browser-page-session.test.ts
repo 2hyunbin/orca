@@ -27,6 +27,7 @@ function setup(args: { list: ListReply; switchOn?: boolean; onList?: () => void 
   })
   const calls: { method: string; params: unknown }[] = []
   let stored: RemoteBrowserPageHandle | null = null
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the fake answers each method with the reply shape its caller reads.
   const callRpc = (async (_target: unknown, method: string, params?: unknown) => {
     calls.push({ method, params })
     if (method === 'browser.tabList') {
