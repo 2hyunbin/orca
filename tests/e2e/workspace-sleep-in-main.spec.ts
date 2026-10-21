@@ -39,10 +39,19 @@ function readSleepState(page: Page, worktreeId: string): Promise<SleepState> {
     if (!listed.ok) {
       throw new Error(listed.error.message)
     }
+    const result = listed.result
+    if (
+      typeof result !== 'object' ||
+      result === null ||
+      !('totalCount' in result) ||
+      typeof result.totalCount !== 'number'
+    ) {
+      throw new Error('terminal.list returned no totalCount')
+    }
     return {
       windowLivePtys: tabs.reduce((n, tab) => n + (state.ptyIdsByTabId[tab.id]?.length ?? 0), 0),
       tabs: tabs.length,
-      hostLiveTerminals: (listed.result as { totalCount: number }).totalCount
+      hostLiveTerminals: result.totalCount
     }
   }, worktreeId)
 }

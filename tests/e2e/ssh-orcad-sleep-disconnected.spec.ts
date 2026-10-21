@@ -42,11 +42,12 @@ function livePtys(page: Page, worktreeId: string): Promise<number> {
 test('sleep on a disconnected SSH host keeps the workspace open, and sleeping again retries', async (// oxlint-disable-next-line no-empty-pattern -- Owns its app launch through a restart session.
 {}, testInfo) => {
   test.setTimeout(12 * 60_000)
-  let proxy: FreezableTcpProxy | null = null
+  const proxies: FreezableTcpProxy[] = []
   try {
     await withManagedHost(testInfo, async (fixture) => {
       const { host } = fixture
-      proxy = await startFreezableTcpProxy(host.input.host, host.input.port ?? 22)
+      const proxy = await startFreezableTcpProxy(host.input.host, host.input.port ?? 22)
+      proxies.push(proxy)
       host.input = { ...host.input, port: proxy.port }
       const { page, seeded } = await launchManagedWorkspace(fixture)
       const tabId = await openTerminalTab(page, seeded.worktreeId)
@@ -74,6 +75,6 @@ test('sleep on a disconnected SSH host keeps the workspace open, and sleeping ag
         .toBe(0)
     })
   } finally {
-    await proxy?.close()
+    await Promise.all(proxies.map((proxy) => proxy.close()))
   }
 })
