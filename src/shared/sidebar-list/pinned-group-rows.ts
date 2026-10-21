@@ -1,4 +1,3 @@
-import type { Repo } from '../repo-types'
 import type { WorktreeOccurrencePlan } from '../worktree-occurrence-plan'
 import type { Worktree } from '../worktree/types'
 import { getWorktreeExecutionHostId } from '../execution-host'
@@ -6,7 +5,7 @@ import type { ExecutionHostId } from '../execution-host'
 import { PINNED_GROUP_KEY } from './group-keys'
 import { appendWorktreeRows, buildImportedWorktreesCardRow } from './row-builders'
 import type { NoticeHostContext } from './host-labels'
-import type { ImportedWorktreesCardCandidate, Row } from './row-types'
+import type { ImportedWorktreesCardCandidate, RepoOfWorktree, Row } from './row-types'
 
 /**
  * The Pinned section's rows.
@@ -16,7 +15,7 @@ import type { ImportedWorktreesCardCandidate, Row } from './row-types'
  */
 export function emitPinnedGroup(
   pinnedSectionWorktrees: Worktree[],
-  repoOf: (worktree: Worktree) => Repo | undefined,
+  repoOf: RepoOfWorktree,
   defaultHostId: ExecutionHostId,
   collapsedGroups: Set<string>,
   renderedNaturalAnchorRepoIds: ReadonlySet<string>,

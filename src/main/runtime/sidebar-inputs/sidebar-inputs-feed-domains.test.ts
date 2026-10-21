@@ -51,7 +51,7 @@ function repo(overrides: Partial<Repo> = {}): Repo {
 /** This host lists `r::/w/same` locally and over SSH; a paired server lists the same id. */
 function harness(hostFacts: Record<string, WorkspaceActivityFacts>) {
   const rowsRevision = new ProducerRevision()
-  const listings = { count: 0 }
+  const listings = { count: 0, fail: false }
   const repos = [repo(), repo({ connectionId: 'box' })]
   const serverRow = normalizePairedServerRow('runtime:env', {
     worktreeId: ID,
@@ -82,6 +82,9 @@ function harness(hostFacts: Record<string, WorkspaceActivityFacts>) {
       revision: rowsRevision,
       snapshot: async () => {
         listings.count += 1
+        if (listings.fail) {
+          throw new Error('listing failed')
+        }
         return {
           revision: rowsRevision.value,
           rows: Object.fromEntries(
@@ -136,5 +139,15 @@ describe('the activity domain', () => {
     rowsRevision.bump()
     await Promise.all([read('activity'), read('workspaces')])
     expect(listings.count).toBe(2)
+  })
+
+  it('keys by the last rows listed while a listing fails', async () => {
+    const busy = { ...IDLE_WORKSPACE_ACTIVITY, browser: true }
+    const { read, listings, rowsRevision } = harness({ [ID]: busy })
+    await read('activity')
+    listings.fail = true
+    rowsRevision.bump()
+    await expect(read('workspaces')).rejects.toThrow('listing failed')
+    expect(await read('activity')).toMatchObject({ [`local|${ID}`]: busy })
   })
 })

@@ -42,6 +42,7 @@ import type {
   NewExternalWorktreesInboxCandidate,
   PendingCreationRef,
   PinnedWorktreeDisplayPolicy,
+  RepoOfWorktree,
   Row,
   SidebarPRGroupReader,
   WorktreeGroupBy
@@ -58,8 +59,8 @@ export type SidebarRowPlanInputs = {
   /** Visible worktrees in the frozen sort order. */
   worktrees: Worktree[]
   repoMap: Map<string, Repo>
-  /** A row's own registration where one repo id is registered on several hosts; else repoMap's. */
-  repoOfWorktree?: (worktree: Worktree) => Repo | undefined
+  /** Defaults to repoMap's registration for the row's repo id. */
+  repoOfWorktree?: RepoOfWorktree
   prGroupOf: SidebarPRGroupReader
   repoOrder?: Map<string, number>
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
@@ -189,7 +190,7 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
     // mixed at all. Scoping to naturalWorktrees left pinned remotes unlabelled.
     const mixedWorktreeHostContextLabels = getMixedWorktreeHostContextLabels(
       worktrees,
-      repoMap,
+      repoOf,
       hostLabelById,
       defaultHostId
     )
@@ -238,13 +239,13 @@ export function planSidebarRows(inputs: SidebarRowPlanInputs) {
           hostWorktreeCounts: getLaneHostWorktreeCounts(
             naturalWorktrees,
             renderableFolderWorkspaces,
-            repoMap,
+            repoOf,
             defaultHostId
           ),
           hostWorktreeIds: getLaneHostWorktreeIds(
             naturalWorktrees,
             renderableFolderWorkspaces,
-            repoMap,
+            repoOf,
             defaultHostId
           ),
           worktreeIds: naturalWorktrees.map((worktree) => worktree.id)

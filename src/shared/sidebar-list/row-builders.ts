@@ -17,6 +17,7 @@ import type {
   NewExternalWorktreesInboxRow,
   PendingCreationRef,
   PendingCreationRow,
+  RepoOfWorktree,
   Row
 } from './row-types'
 
@@ -66,7 +67,7 @@ export function buildNewExternalWorktreesInboxRow(
 
 export function appendWorktreeRows(
   result: Row[],
-  repoOf: (worktree: Worktree) => Repo | undefined,
+  repoOf: RepoOfWorktree,
   plan: WorktreeOccurrencePlan<Worktree>,
   options: {
     collapsedGroups: Set<string>

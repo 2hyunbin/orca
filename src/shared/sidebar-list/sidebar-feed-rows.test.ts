@@ -362,3 +362,24 @@ describe('the desktop’s hover hold over the shared builder', () => {
     ])
   })
 })
+
+describe('buildSidebarFeedRows reads a row’s own registration of a repo two hosts register', () => {
+  it('files and counts an unqualified local row under this computer, not the server', () => {
+    // The server's registration of `r` comes last, so a lookup by repo id alone finds it.
+    const repos = [repo('r'), repo('r', { executionHostId: 'runtime:env' })]
+    const workspaces = buildWorkspaceRows({
+      worktrees: [worktree('r::/w/a')],
+      folderWorkspaces: [],
+      repos: [repos[0]],
+      lineageById: {}
+    })
+    const built = buildSidebarFeedRows(
+      domains({ workspaces }),
+      catalog(repos),
+      view({ visibleWorkspaceHostIds: ['local'] })
+    )
+    expect(outline(built.sectionRows)).toEqual(['|r::/w/a@0'])
+    const header = built.sectionRows.find((row) => row.type === 'header')
+    expect(header).toMatchObject({ hostWorktreeIds: new Map([['local', ['r::/w/a']]]) })
+  })
+})

@@ -74,10 +74,12 @@ export function sidebarInputsFeedDomains(
   }
   // One listing per rows revision: the workspaces domain publishes it and keys this host's activity.
   let listing: { revision: number; rows: Promise<Record<string, WorkspaceRow>> } | null = null
+  // A failed listing keeps the last rows published, so activity keeps keying by them meanwhile.
+  let listedRows: Record<string, WorkspaceRow> = {}
   const listRows = (): Promise<Record<string, WorkspaceRow>> => {
     const revision = workspaceRows.revision.value
     if (listing?.revision !== revision) {
-      const rows = workspaceRows.snapshot().then((snapshot) => snapshot.rows)
+      const rows = workspaceRows.snapshot().then((snapshot) => (listedRows = snapshot.rows))
       const pending = { revision, rows }
       listing = pending
       rows.catch(() => {
@@ -93,7 +95,10 @@ export function sidebarInputsFeedDomains(
       name: 'activity',
       read: async () => ({
         // This host's session tabs and agents are by bare id, so a same-id pair it lists share them.
-        ...keyWorkspaceActivityByRow(facts.getWorkspaceActivityFacts().facts, await listRows()),
+        ...keyWorkspaceActivityByRow(
+          facts.getWorkspaceActivityFacts().facts,
+          await listRows().catch(() => listedRows)
+        ),
         ...buildPairedServerActivityFacts(
           pairedServerRows.snapshot().servers,
           (hostId) => sources.store()?.getWorkspaceSession?.(hostId) ?? null
