@@ -42,8 +42,11 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
   private placementRun: Promise<LiveTerminalPlacement> | null = null
   /** What the next pass covers: every workspace, or the ones a window's sweep asked for. */
   private placementQueued: 'all' | Set<string> | null = null
-  /** The one pass running now, without the passes queued behind it. */
-  private placementPass: Promise<LiveTerminalPlacement> | null = null
+  /** The one pass running now, without the passes queued behind it, and what it covers. */
+  private placementPass: {
+    run: Promise<LiveTerminalPlacement>
+    scope: 'all' | ReadonlySet<string>
+  } | null = null
   private stopFollowingProviderRebinds: (() => void) | null = null
 
   /**
@@ -69,8 +72,8 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
       do {
         const scope = this.placementQueued ?? 'all'
         this.placementQueued = null
-        this.placementPass = this.placeUnshownLiveTerminalsOnce(scope)
-        placement = await this.placementPass
+        this.placementPass = { run: this.placeUnshownLiveTerminalsOnce(scope), scope }
+        placement = await this.placementPass.run
       } while (this.placementQueued)
       return placement
     }
@@ -109,11 +112,19 @@ export abstract class OrcaRuntimeWithRestoredTerminalPlacement extends OrcaRunti
     if (!ORCA_LAYOUT_OWNER_IS_MAIN || !('initial' in command) || !command.initial || !pass) {
       return null
     }
+    // A sweep's pass places only its own workspace's terminals: another workspace waits for none.
+    const { scope } = pass
+    if (
+      scope !== 'all' &&
+      ![...scope].some((worktreeId) => worktreeIdsEqual(worktreeId, command.workspace))
+    ) {
+      return null
+    }
     let timer: NodeJS.Timeout | undefined
     const cap = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, FIRST_SURFACE_PLACEMENT_WAIT_MS)
     })
-    return Promise.race([pass.catch(() => {}), cap]).finally(() => clearTimeout(timer))
+    return Promise.race([pass.run.catch(() => {}), cap]).finally(() => clearTimeout(timer))
   }
 
   private async placeUnshownLiveTerminalsOnce(

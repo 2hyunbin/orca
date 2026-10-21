@@ -113,8 +113,8 @@ function adoptHostOwnedSurface(
 ): boolean {
   const store = getState()
   const known = tabExists(store, owner.tabId)
-  // Switch point, a paired server's workspace (a local one returns before this): the frames draw
-  // a pane the server holds for this terminal; the window makes no tab or pane of its own.
+  // Switch point, a paired server's workspace (the gate blocks those before any sweep today; a
+  // local one returns before this): frames draw the server's pane; the window makes none.
   if (ORCA_LAYOUT_OWNER_IS_MAIN && !known) {
     return framesShowRecordedPane(worktreeId, owner)
   }
