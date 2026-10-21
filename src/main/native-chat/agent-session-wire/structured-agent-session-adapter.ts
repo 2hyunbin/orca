@@ -33,10 +33,7 @@ import type {
   AgentSessionRecord
 } from '../../../shared/agent-session-record'
 import type { StructuredAgentSessionAtRestCommands } from './structured-agent-session-at-rest-commands'
-import type {
-  AgentSessionModelOption,
-  AgentSessionSlashCommand
-} from '../../../shared/agent-session-wire'
+import type { AgentSessionSlashCommand } from '../../../shared/agent-session-wire'
 import type { AgentSessionThreadGoalChange } from '../../../shared/agent-session-thread-goal-wire'
 import type { AgentSessionRefusalReason } from '../../../shared/agent-session-wire-refusals'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
@@ -397,12 +394,6 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     sessionId: string,
     options: Readonly<Record<string, string>>
   ): StructuredAgentSessionOptionProjection | undefined
-  /** Bounded child acquisition before the existing ordered pick transaction. */
-  projectPickOptions?(
-    sessionId: string,
-    options: Readonly<Record<string, string>>,
-    installed: readonly AgentSessionModelOption[] | undefined
-  ): Promise<ReturnType<NonNullable<StructuredAgentSessionAdapter['projectOptions']>>>
   /** Fetch off the lane, then apply the result under the same child's fence. */
   prepareReadOptions?(input: {
     sessionId: string

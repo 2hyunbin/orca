@@ -1,20 +1,14 @@
 import { structuredAgentSessionThreadGoalReport } from './structured-agent-session-thread-goal'
-// A chat's options, live or at rest.
-//
-// The record keeps the next message's choices; the catalog names known defaults. A provider's
-// reports remain execution facts and never replace the saved selection.
+// Saved choices, catalog defaults and actual execution reports remain separate facts.
 
 import type {
   AgentSessionModelCatalogResult,
   AgentSessionOptionsResult
 } from '../../../shared/agent-session-wire'
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { decodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
 import { finishedListingIds } from '../../../shared/structured-agent-session-options'
 import { savedEffectiveServiceTier } from '../../../shared/structured-agent-session-effective-tier'
 import { journalOpenReadRefusal } from '../agent-session-journal/journal-open-failure'
-import type { StructuredAgentDefinition } from './structured-agent-definition'
-import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
 import { retainedAgentModelCatalogModels } from '../agent-model-catalog/agent-model-catalog-entry'
 import { saveStructuredAgentSessionListing } from './structured-agent-session-start-listing'
@@ -49,14 +43,6 @@ export const IN_PROCESS_OPTIONS_READER: StructuredAgentSessionOptionsReader = {
   readsWithoutModel: true
 }
 
-/** The at-rest rules of the record's agent, as this runtime registered it; null for any other. */
-function restingOptionRules(
-  agents: Pick<StructuredAgentRegistry, 'definition'>,
-  record: AgentSessionRecord
-): StructuredAgentDefinition['restingOptions'] | null {
-  return agents.definition(record.provider)?.restingOptions ?? null
-}
-
 async function readStructuredAgentSessionOptionsAtRest(
   deps: Pick<StructuredAgentSessionHostDeps, 'store' | 'agents' | 'modelCatalog'>,
   sessionId: string,
@@ -66,7 +52,7 @@ async function readStructuredAgentSessionOptionsAtRest(
   if (!record) {
     throw new Error('agent_session_identity_required')
   }
-  const rules = restingOptionRules(deps.agents, record)
+  const rules = deps.agents.definition(record.provider)?.restingOptions ?? null
   const readCatalog = async (
     inSessionWorkspace: boolean
   ): Promise<AgentSessionModelCatalogResult> =>
@@ -75,6 +61,7 @@ async function readStructuredAgentSessionOptionsAtRest(
         agent: record.provider,
         sessionId,
         savedOnly: true,
+        ...(!reader.readsWithoutModel ? { legacyOptionsDisplay: true as const } : {}),
         ...(inSessionWorkspace
           ? { inSessionWorkspace: true as const }
           : independentAgentModelCatalog(record.provider)
@@ -110,11 +97,12 @@ async function readStructuredAgentSessionOptionsAtRest(
         .catch(() => null)
     : catalog
   const listedModelIds = proof ? finishedListingIds(proof) : undefined
-  const defaultModels = independentAgentModelCatalog(record.provider)
-    ? proof && proof.origin !== 'unknown'
-      ? proof.models
-      : []
-    : models
+  const defaultModels =
+    independentAgentModelCatalog(record.provider) && reader.readsWithoutModel
+      ? proof && proof.origin !== 'unknown'
+        ? proof.models
+        : []
+      : models
   const fastMode =
     saved.fastMode === undefined
       ? null
@@ -202,12 +190,7 @@ export async function readStructuredAgentSessionOptions(
     (rested ??= await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader))
   let options: Omit<AgentSessionOptionsResult, 'rewind'>
   if (live) {
-    const {
-      catalogListing,
-      currentModelObservation: _observation,
-      fastModeRestriction: _restriction,
-      ...answer
-    } = live
+    const { catalogListing, ...answer } = live
     options = answer
     // A child with no listing of its own reads the saved one, as at rest, so a row reads the same.
     // With no record there is nothing saved to read, and the answer stays the child's own.
@@ -266,9 +249,7 @@ export async function readStructuredAgentSessionOptions(
         ? selected.current.serviceTier
         : (options.current.serviceTier ?? selected.current.serviceTier)
   }
-  // A chat that saved a value has no default for it: the saved value shows, or the child it
-  // refused runs what it reports. A chat that has sent nothing runs the default it shows, which its
-  // first send pins. A model the child leaves blank shows the at-rest one, with its marking.
+  // Defaults describe only values the chat has not saved; the first send pins them.
   const defaultedBy = (key: 'model' | 'effort') =>
     (key === 'model' && !options.current.model ? selected : options).current.defaulted
   const defaulted = structuredAgentSessionNeverSent(record, session.journal)
@@ -284,17 +265,23 @@ export async function readStructuredAgentSessionOptions(
   const independent = independentAgentModelCatalog(agent)
   if (independent) {
     const { inventory, fallback, listedModelIds } = await atRest()
-    const sameChild =
-      started.kind !== 'rest' && (await context.conversation(sessionId)).child === started.child
+    if (saved.model === undefined && current.model && inventory.origin !== 'unknown') {
+      current.model =
+        inventory.models.find(
+          (row) => row.id === current.model || row.resolvedModel === current.model
+        )?.id ?? current.model
+    }
     const { listedServiceTiers: _tiers, ...view } = structuredAgentSessionCapabilityView(
       inventory,
       current.model,
-      sameChild ? live?.currentModelObservation : undefined,
       fallback,
-      sameChild ? live?.fastModeRestriction : undefined
+      live?.fastModeSupport?.supported === false &&
+        live.fastModeSupport.reason !== 'model-not-supported'
+        ? live.fastModeSupport
+        : undefined
     )
     options = { ...options, ...view, listedModelIds, current }
-    const projected = sameChild
+    const projected = live
       ? adapter.projectOptions?.(sessionId, {
           ...saved,
           ...(model ? { model } : {})

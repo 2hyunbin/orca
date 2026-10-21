@@ -83,7 +83,9 @@ export function useHostModelCatalogUpgrade(args: {
     worktree
   } = args
   const receiver = useRef(args.receiveCatalog)
-  receiver.current = args.receiveCatalog
+  useEffect(() => {
+    receiver.current = args.receiveCatalog
+  }, [args.receiveCatalog])
   const waitKey = `${structuredAgentSessionHostKey(target)}\u0000${agent}\u0000${sessionId}`
   const [verdict, setVerdict] = useState<{
     key: string

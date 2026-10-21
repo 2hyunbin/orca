@@ -2,9 +2,15 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as HostCapability from '@/runtime/structured-agent-session-host-capability'
 
-const mocks = vi.hoisted(() => ({ call: vi.fn() }))
+const mocks = vi.hoisted(() => ({ call: vi.fn(), coherent: false }))
 
+vi.mock('@/runtime/structured-agent-session-host-capability', async (original) => ({
+  ...(await original<typeof HostCapability>()),
+  useStructuredAgentSessionHostCapability: (_target: unknown, capability: string) =>
+    capability === 'agent-session.coherent-model-catalog.v1' && mocks.coherent
+}))
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.call
@@ -30,8 +36,6 @@ import {
 } from '@/runtime/host-model-catalog-snapshots'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
 import { useStructuredAgentSessionOptions } from './use-structured-agent-session-options'
-
-import { structuredAgentSessionSendSelection } from '../../../../shared/structured-agent-session-option-view'
 
 const LOCAL_TARGET = { kind: 'local' } as const
 const PAIRED_TARGET = { kind: 'environment', environmentId: 'server-1' } as const
@@ -143,6 +147,7 @@ describe('a new chat picker’s first frame', () => {
   afterEach(() => vi.useRealTimers())
   beforeEach(() => {
     mocks.call.mockReset()
+    mocks.coherent = false
     resetHostModelCatalogSnapshotsForTests()
   })
 
@@ -161,172 +166,60 @@ describe('a new chat picker’s first frame', () => {
     unmount()
   })
 
-  it('retains child-only effort slots disabled across a fence and inventory reply', async () => {
-    const replacement = deferred<unknown>()
-    const inventory = deferred<unknown>()
-    let fence = 1
+  it('uses installed controls and keeps saved values through a quiet refresh', async () => {
+    mocks.coherent = true
     const child: AgentSessionOptionsResult = {
-      models: [{ id: 'A', label: 'A', isDefault: false, efforts: EFFORTS }],
-      current: { model: 'A', effort: 'high', permissionMode: 'ask', defaulted: [] }
+      models: [{ id: 'A', label: 'Old child A', isDefault: false, efforts: EFFORTS }],
+      current: { model: 'A', effort: 'low', permissionMode: 'ask', defaulted: [] }
     }
-    let raw = listed([{ id: 'A', label: 'A' }])
-    let optionsAnswer = () => Promise.resolve(child)
-    let followed = deferred<AgentSessionModelCatalogResult>()
+    let raw = { ...listed([{ id: 'A', label: 'Installed A' }]), listingInProgress: false }
+    const next = deferred<AgentSessionModelCatalogResult>()
     mocks.call.mockImplementation(
       (_target: unknown, method: string, params: { waitForListing?: boolean }) =>
         method === 'agentSession.options'
-          ? fence === 1
-            ? optionsAnswer()
-            : replacement.promise
+          ? Promise.resolve(child)
           : method === 'agentSession.modelCatalog'
-            ? fence === 1
-              ? params.waitForListing
-                ? followed.promise
-                : Promise.resolve(raw)
-              : inventory.promise
+            ? params.waitForListing
+              ? next.promise
+              : Promise.resolve(raw)
             : new Promise(() => {})
     )
-    const writes = vi.fn().mockResolvedValue(null)
-    const mutate: StructuredAgentSessionMutate = writes
-    const effortFrames: (boolean | undefined)[] = []
-    const view = renderHook(
-      ({ currentFence }) => {
-        const options = useStructuredAgentSessionOptions({
-          agent: 'codex',
-          sessionId: 'session-1',
-          target: LOCAL_TARGET,
-          transportEnabled: true,
-          isVisible: true,
-          providerVisible: true,
-          fence: currentFence,
-          turnId: null,
-          unloadedTurnRevisions: undefined,
-          mutate
-        })
-        effortFrames.push(options.optionSnapshot.find((row) => row.id === 'effort')?.settable)
-        return options
-      },
-      { initialProps: { currentFence: 1 } }
+    const view = renderHook(() =>
+      useStructuredAgentSessionOptions({
+        agent: 'codex',
+        sessionId: 'session-1',
+        target: LOCAL_TARGET,
+        transportEnabled: true,
+        isVisible: true,
+        providerVisible: true,
+        fence: 1,
+        turnId: null,
+        unloadedTurnRevisions: undefined,
+        mutate: vi.fn()
+      })
     )
     const effort = () => view.result.current.optionSnapshot.find((row) => row.id === 'effort')
     await waitFor(() => expect(effort()?.settable).toBe(true))
-    const reads = () =>
-      mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.options').length
-    const catalogs = () =>
-      mocks.call.mock.calls.filter(([, method]) => method === 'agentSession.modelCatalog').length
-    const demand = () => act(async () => view.result.current.optionSurface.demandModelCatalog?.())
-    const baselineReads = reads()
-    const baselineCatalogs = catalogs()
-    const beforeUnchanged = effortFrames.length
-    raw = { ...raw, origin: 'live-session', fetchedAt: 2_000 }
-    await demand()
-    expect(effort()?.settable).toBe(true)
-    expect(reads()).toBe(baselineReads)
-    expect(catalogs()).toBe(baselineCatalogs + 1)
-    expect(effortFrames.slice(beforeUnchanged).every((settable) => settable === true)).toBe(true)
-    const staleSetter = view.result.current.setStructuredOption
-    const oldReadback = deferred<AgentSessionOptionsResult>()
-    optionsAnswer = () => oldReadback.promise
-    await act(async () => {
-      await staleSetter('permissionMode', 'full-access')
-    })
-    const currentRead = deferred<AgentSessionOptionsResult>()
-    optionsAnswer = () => currentRead.promise
-    raw = { ...raw, models: raw.models.map((row) => ({ ...row, efforts: [EFFORTS[1]!] })) }
-    await demand()
-    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
-    expect(await staleSetter('effort', 'low')).toBe(false)
-    expect(writes).toHaveBeenCalledTimes(1)
-    expect(view.result.current.optionSnapshot.find((row) => row.id === 'model')?.settable).toBe(
-      true
+    raw = { ...raw, listingInProgress: true }
+    await act(async () => view.result.current.optionSurface.demandModelCatalog?.())
+    expect(effort()?.settable).toBe(false)
+    await act(async () =>
+      next.resolve({
+        ...raw,
+        listingInProgress: false,
+        models: raw.models.map((row) => ({ ...row, efforts: [EFFORTS[1]!] }))
+      })
     )
-    expect(
-      view.result.current.optionSnapshot.find((row) => row.id === 'permissionMode')?.settable
-    ).toBe(true)
-    expect(
-      structuredAgentSessionSendSelection(view.result.current.sendSource.optionStateRef.current)
-    ).toBeUndefined()
+    await waitFor(() =>
+      expect(effort()).toMatchObject({
+        settable: true,
+        kind: { currentValue: 'low', choices: expect.arrayContaining([EFFORTS[1]]) }
+      })
+    )
     expect(view.result.current.sendSource.optionStateRef.current.record.values).toMatchObject({
       model: { value: 'A' },
-      effort: { value: 'high' }
+      effort: { value: 'low' }
     })
-    const refusedSurface = await view.result.current.optionSurface.setOption('effort', 'low')
-    expect(refusedSurface.snapshot.find((row) => row.id === 'effort')?.settable).toBe(false)
-    // A refused model write still releases current reconciliation behind the stale readback.
-    await act(async () => {
-      expect(await staleSetter('model', 'A')).toBe(false)
-    })
-    await act(async () => oldReadback.resolve(child))
-    expect(effort()?.settable).toBe(false)
-    expect(reads()).toBe(baselineReads + 2)
-    const highOnly = { ...child, models: raw.models }
-    await act(async () => currentRead.resolve(highOnly))
-    expect(effort()).toBeUndefined()
-    expect(await staleSetter('effort', 'low')).toBe(false)
-    expect(view.result.current.sendSource.optionStateRef.current.record.values.effort?.value).toBe(
-      'high'
-    )
-    const childRead = deferred<AgentSessionOptionsResult>()
-    optionsAnswer = () => childRead.promise
-    raw = { ...listed([{ id: 'B', label: 'B' }]), listingInProgress: true }
-    await demand()
-    expect(effort()).toBeUndefined()
-    await act(async () => childRead.resolve(child))
-    expect(effort()?.settable).toBe(true)
-    writes.mockResolvedValueOnce({
-      key: 'effort',
-      value: 'low',
-      options: { model: 'A', effort: 'low' }
-    })
-    optionsAnswer = () =>
-      Promise.resolve({ ...child, current: { ...child.current, effort: 'low' } })
-    await act(async () => {
-      expect(await view.result.current.setStructuredOption('effort', 'low')).toBe(true)
-    })
-    expect(writes).toHaveBeenLastCalledWith('agentSession.setOption', 'agentSession.setOption', {
-      key: 'effort',
-      value: 'low'
-    })
-    writes.mockResolvedValueOnce({
-      key: 'effort',
-      value: 'high',
-      options: { model: 'A', effort: 'high' }
-    })
-    optionsAnswer = () => Promise.resolve(child)
-    await act(async () => {
-      await view.result.current.setStructuredOption('effort', 'high')
-    })
-    const beforeFollow = reads()
-    const beforeCatalogs = catalogs()
-    // Identical progress carries no new dependency and schedules no repeated options work.
-    vi.useFakeTimers()
-    const firstFollow = followed
-    followed = deferred<AgentSessionModelCatalogResult>()
-    await act(async () => {
-      firstFollow.resolve(raw)
-      await vi.advanceTimersByTimeAsync(1_000)
-    })
-    expect(reads()).toBe(beforeFollow)
-    expect(effort()?.settable).toBe(true)
-    raw = { ...raw, listingInProgress: undefined }
-    await act(async () => followed.resolve(raw))
-    expect(reads()).toBe(beforeFollow + 1)
-    expect(effort()?.settable).toBe(true)
-    expect(catalogs()).toBe(beforeCatalogs + 1)
-    vi.useRealTimers()
-    await demand()
-    expect(reads()).toBe(beforeFollow + 1)
-    expect(effort()?.settable).toBe(true)
-    writes.mockClear()
-    fence = 2
-    view.rerender({ currentFence: 2 })
-    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
-    await act(async () => inventory.resolve(CODEX_LIST))
-    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
-    expect(await view.result.current.setStructuredOption('effort', 'low')).toBe(false)
-    expect(mutate).not.toHaveBeenCalled()
-    await act(async () => replacement.resolve(child))
-    await waitFor(() => expect(effort()?.settable).toBe(true))
     view.unmount()
   })
 

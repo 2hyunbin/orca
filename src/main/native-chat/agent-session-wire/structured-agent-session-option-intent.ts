@@ -57,7 +57,7 @@ export async function recordStructuredAgentSessionOptionIntent(
       'getRecord' | 'replaceSessionOptions' | 'reviseSessionOptions'
     >
     agents: Pick<StructuredAgentRegistry, 'definition'>
-    adapter?: Pick<StructuredAgentSessionAdapter, 'projectOptions' | 'projectPickOptions'>
+    adapter?: Pick<StructuredAgentSessionAdapter, 'projectOptions'>
   } & Parameters<typeof savedAgentSessionCatalogModels>[0],
   ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'fence' | 'publish' | 'now'>,
   input: { key: string; value: string }
@@ -74,19 +74,7 @@ export async function recordStructuredAgentSessionOptionIntent(
       )
     }
   }
-  const inventory = await savedAgentSessionCatalogModels(deps, record.provider, sessionId)
-  const projection =
-    input.key === 'model'
-      ? undefined
-      : await deps.adapter
-          ?.projectPickOptions?.(sessionId, record.options ?? {}, inventory)
-          .catch(() => undefined)
-  const models =
-    input.key === 'model'
-      ? inventory
-      : (projection?.models ??
-        deps.adapter?.projectOptions?.(sessionId, record.options ?? {})?.models ??
-        inventory)
+  const models = await savedAgentSessionCatalogModels(deps, record.provider, sessionId)
   let options: Readonly<Record<string, string>>
   if (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
     const permissionMode = input.value

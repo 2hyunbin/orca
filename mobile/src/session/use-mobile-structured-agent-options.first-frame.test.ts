@@ -59,7 +59,7 @@ async function mount(initial: Props) {
       enabled: true,
       fence: props.fence,
       mutate,
-      hostSupport: { permissionModes: true }
+      hostSupport: { permissionModes: true, coherentModelCatalog: true }
     })
     latest = options
     frames.push(modelChoices(options.optionSnapshot))
@@ -118,85 +118,23 @@ describe('the phone picker’s first frame', () => {
     await harness.unmount()
   })
 
-  it('keeps predecessor effort slots disabled until the replacement answers', async () => {
+  it('replaces installed controls while preserving the saved effort', async () => {
     const child: AgentSessionOptionsResult = {
-      models: [
-        {
-          id: 'A',
-          label: 'A',
-          isDefault: false,
-          efforts: [
-            { value: 'low', label: 'Low' },
-            { value: 'high', label: 'High' }
-          ]
-        }
-      ],
-      current: { model: 'A', effort: 'high', permissionMode: 'ask', defaulted: [] }
+      models: HOST_LIST.models,
+      current: { model: 'gpt-host', effort: 'high', permissionMode: 'ask', defaulted: [] }
     }
-    let replacement = false
-    let answer!: (value: AgentSessionOptionsResult) => void
     let raw = HOST_LIST
-    let reads = 0
-    let optionsAnswer = () => Promise.resolve(child)
     const rpc = client(
       () => Promise.resolve(raw),
-      () => {
-        reads += 1
-        return replacement ? new Promise((resolve) => (answer = resolve)) : optionsAnswer()
-      }
+      () => Promise.resolve(child)
     )
     const harness = await mount({ rpc, fence: 1 })
-    const effort = () => harness.snapshot().find((row) => row.id === 'effort')
-    expect(effort()?.settable).toBe(true)
-    const baseline = reads
-    const beforeUnchanged = harness.effortFrames.length
+    raw = { ...HOST_LIST, models: [] }
     await act(async () => harness.options().optionSurface.demandModelCatalog?.())
-    expect(reads).toBe(baseline)
-    expect(effort()?.settable).toBe(true)
-    expect(harness.effortFrames.slice(beforeUnchanged).every((settable) => settable === true)).toBe(
-      true
-    )
-    const staleSetter = harness.options().setStructuredOption
-    let oldAnswer!: (value: AgentSessionOptionsResult) => void
-    optionsAnswer = () =>
-      new Promise((resolve) => {
-        oldAnswer = resolve
-      })
-    await act(async () => {
-      await staleSetter('permissionMode', 'full-access')
+    expect(harness.snapshot().find((row) => row.id === 'effort')).toMatchObject({
+      settable: false,
+      kind: { currentValue: 'high' }
     })
-    let currentAnswer!: (value: AgentSessionOptionsResult) => void
-    optionsAnswer = () =>
-      new Promise((resolve) => {
-        currentAnswer = resolve
-      })
-    const highOnly = {
-      ...child,
-      models: child.models.map((row) => ({ ...row, efforts: [row.efforts[1]!] }))
-    }
-    raw = { origin: 'probe', fetchedAt: 2_000, models: highOnly.models }
-    await act(async () => harness.options().optionSurface.demandModelCatalog?.())
-    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
-    expect(await staleSetter('effort', 'low')).toBe(false)
-    expect(harness.mutate).toHaveBeenCalledTimes(1)
-    await act(async () => oldAnswer(child))
-    expect(effort()?.settable).toBe(false)
-    expect(reads).toBe(baseline + 2)
-    await act(async () => currentAnswer(highOnly))
-    expect(effort()).toBeUndefined()
-    expect(await staleSetter('effort', 'low')).toBe(false)
-    await act(async () => harness.options().optionSurface.demandModelCatalog?.())
-    expect(reads).toBe(baseline + 2)
-    expect(effort()).toBeUndefined()
-    optionsAnswer = () => Promise.resolve(child)
-    raw = HOST_LIST
-    await act(async () => harness.options().optionSurface.demandModelCatalog?.())
-    expect(effort()?.settable).toBe(true)
-    replacement = true
-    await harness.update({ rpc, fence: 2 })
-    expect(effort()).toMatchObject({ settable: false, kind: { currentValue: 'high' } })
-    await act(async () => answer(child))
-    expect(effort()?.settable).toBe(true)
     await harness.unmount()
   })
 })

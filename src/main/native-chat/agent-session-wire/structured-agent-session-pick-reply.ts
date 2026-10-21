@@ -1,6 +1,7 @@
 // The saved catalog rows a pick, a new chat's options and a turn's record are admitted against,
 // and a pick's answer: the tier the chat's model runs; the record keeps the pick itself.
 
+import { structuredAgentSessionCapabilityView } from './structured-agent-session-option-models'
 import { savedEffectiveServiceTier } from '../../../shared/structured-agent-session-effective-tier'
 import type { AgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
 import type { AgentSessionModelOption } from '../../../shared/agent-session-wire'
@@ -18,7 +19,9 @@ export async function savedAgentSessionCatalogModels(
   const listing = await deps.modelCatalog
     ?.read({ agent: provider, sessionId, savedOnly: true, verifiedOnly, ...scope })
     .catch(() => null)
-  return listing && listing.origin !== 'unknown' ? listing.models : undefined
+  return listing && listing.origin !== 'unknown'
+    ? structuredAgentSessionCapabilityView(listing, undefined).models
+    : undefined
 }
 
 /** The committed options with the tier the chat's model runs, as the at-rest answer names it. */

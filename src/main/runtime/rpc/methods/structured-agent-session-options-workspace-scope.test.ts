@@ -62,7 +62,10 @@ async function readOptions(client: typeof OLDER_CLIENT | typeof CURRENT_CLIENT) 
 
 /** A Codex chat with no pick, at rest in a repo; `configured` gives the repo a `.codex/config.toml`
  *  that sets the effort. */
-async function chatAtRest(repoConfig: { configured: boolean; complete?: boolean }): Promise<void> {
+async function chatAtRest(repoConfig: {
+  configured: boolean
+  complete?: boolean
+}): Promise<ReturnType<typeof createAgentModelCatalogService>> {
   await foundRestTestChat(rig)
   // The chat never picked: its next start runs whatever its config resolves.
   await rig.store.replaceSessionOptions({
@@ -133,6 +136,7 @@ async function chatAtRest(repoConfig: { configured: boolean; complete?: boolean 
   await rig.restart({ modelCatalog })
   setStructuredAgentSessionHost(rig.host)
   rig.adapter.acquire.mockClear()
+  return modelCatalog
 }
 
 beforeEach(async () => {
@@ -180,12 +184,21 @@ describe('options at rest in a repo whose config may pick the model', () => {
 
 describe('options at rest in a repo with no config of its own', () => {
   it('names the default model and its effort for a client that needs a model', async () => {
-    await chatAtRest({ configured: false })
+    const catalog = await chatAtRest({ configured: false })
 
     expect(await readOptions(OLDER_CLIENT)).toMatchObject({
       ok: true,
       result: { current: { model: 'gpt-5.5', effort: 'medium' } }
     })
+    const current = await readOptions(CURRENT_CLIENT)
+    expect(current).toMatchObject({ ok: true })
+    expect(current).not.toHaveProperty('result.current.model')
+    expect(current).not.toHaveProperty('result.current.effort')
+    expect(await catalog.read({ agent: 'codex', savedOnly: true })).toMatchObject({
+      models: [{ id: 'gpt-5.5', isDefault: false }],
+      listingNamesConfiguredModel: false
+    })
+    expect(rig.store.getRecord(SESSION)!.options).toEqual({})
   })
 })
 

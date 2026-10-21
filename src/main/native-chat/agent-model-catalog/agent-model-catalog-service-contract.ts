@@ -44,6 +44,8 @@ export type AgentModelCatalogService = {
     savedOnly?: boolean
     verifiedOnly?: boolean
     legacy?: boolean
+    /** Old options readers need account-default presentation, never launch or admission proof. */
+    legacyOptionsDisplay?: true
   }) => Promise<AgentSessionModelCatalogResult>
   /** Incoming listing ids, checking only a launch-added row against the pinned account. */
   retainedLiveModelIds: (

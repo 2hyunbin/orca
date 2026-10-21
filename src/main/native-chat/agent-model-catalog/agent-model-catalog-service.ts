@@ -29,10 +29,7 @@ import type {
   AgentModelCatalogServiceDeps,
   AgentModelCatalogService
 } from './agent-model-catalog-service-contract'
-export type {
-  AgentModelCatalogServiceDeps,
-  AgentModelCatalogService
-} from './agent-model-catalog-service-contract'
+export type { AgentModelCatalogServiceDeps, AgentModelCatalogService }
 import { resolveAgentModelCatalogScope } from './agent-model-catalog-scope'
 import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
 import { PrioritySemaphore } from '../../../shared/priority-semaphore'
@@ -179,7 +176,8 @@ export function createAgentModelCatalogService(
       })
       // Every answer carries the reason the probe last found, read when the answer is made.
       const answer = async (
-        listed: AgentModelCatalogEntry | null
+        listed: AgentModelCatalogEntry | null,
+        extra: { listingInProgress?: true } = {}
       ): Promise<AgentSessionModelCatalogResult> => {
         if (
           params.verifiedOnly &&
@@ -200,7 +198,9 @@ export function createAgentModelCatalogService(
         const result = display
           ? agentModelCatalogResultFromEntry(
               display,
-              independent && (!deps.store.verified(display) || (!exact && !params.legacy))
+              independent &&
+                !params.legacyOptionsDisplay &&
+                (!deps.store.verified(display) || (!exact && !params.legacy))
                 ? false
                 : exact && listed !== null && deps.store.verified(listed)
                   ? true
@@ -219,6 +219,7 @@ export function createAgentModelCatalogService(
           deps.agentReadsProjectModelConfig?.(params.agent) === false
         return {
           ...(result ?? { origin: 'unknown' }),
+          ...extra,
           ...(holdsEverywhere ? { defaultHoldsInEveryWorkspace: true as const } : {}),
           ...(result && (folder !== undefined || exact)
             ? { modelsDifferByWorkspace: true as const }
@@ -234,20 +235,18 @@ export function createAgentModelCatalogService(
             : {})
         }
       }
-      // Death evidence keeps a read after an observed exit from spawning another agent; a new chat
-      // also starts released, but still needs its first listing.
+      // An observed exit prevents background relaunch; a new chat can still discover.
       if (
         params.savedOnly ||
         (!exact && scoped?.lease?.claimStatus === 'released' && scoped.lease.deathEvidence)
       ) {
         return answer(entry)
       }
-      // Past its TTL, only the probe re-derives a held reason. The reason is served meanwhile;
-      // only a read that asks waits for the probe's answer.
+      // Only a requested wait blocks on rechecking an expired held reason.
       if (probe && probeHome && !lifetime.signal.aborted && deps.store.heldReasonDue(fingerprint)) {
         void deps.store.refresh(fingerprint, params.agent, probe, list)
         if (!params.waitForListing) {
-          return answer(entry)
+          return answer(entry, { listingInProgress: true })
         }
         await deps.store.pendingListing(fingerprint, true, params.legacy)
         return answer(deps.store.get(fingerprint))

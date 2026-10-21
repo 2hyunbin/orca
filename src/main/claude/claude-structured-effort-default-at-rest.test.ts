@@ -274,7 +274,7 @@ describe('Claude effort default at rest', () => {
 
     // Its first turn runs what the CLI reports (claude-opus-5-5[1m]), as that row.
     const ran = (await child.readOptions({ sessionId: SESSION, fence: 7 })).current
-    expect(ran).toMatchObject({ model: 'opus[1m]' })
+    expect(ran).toMatchObject({ model: 'claude-opus-5-5[1m]' })
     expect(ran.defaulted ?? []).not.toContain('model')
   })
 
@@ -420,7 +420,9 @@ describe('Claude effort default at rest', () => {
     const resting = await readAtRest(new AgentModelCatalogStore(), record)
 
     // A Codex child lists nothing without its catalog, so the answer leaves the list to the client.
-    expect(resting.models).toEqual([])
+    expect(resting.models).toEqual([
+      { id: 'gpt-5.5', label: 'gpt-5.5', isDefault: false, efforts: [], effortsKnown: false }
+    ])
     expect(pickerEffort(resting, 'codex')).toBe('high')
   })
 

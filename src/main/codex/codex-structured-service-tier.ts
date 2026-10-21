@@ -141,9 +141,6 @@ export function projectCodexSessionOptions(
   if (!session || session.ended || session.connection.closed) {
     return undefined
   }
-  if (options.model && session.currentModelCapabilities?.model !== options.model) {
-    delete session.currentModelCapabilities
-  }
   const selected = { ...session, options: new Map(Object.entries(options)) }
   return {
     models: codexSessionCapabilities(selected).models,

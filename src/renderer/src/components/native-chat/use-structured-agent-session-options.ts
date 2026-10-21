@@ -1,5 +1,5 @@
 import { toast } from 'sonner'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { AgentSessionOptionResult } from '../../../../shared/agent-session-wire'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured-agent-session-seed-catalog'
@@ -72,7 +72,6 @@ export function useStructuredAgentSessionOptions(args: {
     receiveCatalog,
     beginOptionWrite,
     isCurrentContext,
-    capabilitiesPending,
     conversationSupport
   } = useStructuredAgentSessionOptionState({
     agent,
@@ -207,13 +206,12 @@ export function useStructuredAgentSessionOptions(args: {
   const lockSnapshotRef = useRef(
     (snapshot: ReturnType<typeof structuredAgentSessionOptionSnapshot>) => snapshot
   )
-  lockSnapshotRef.current = (snapshot) =>
-    !acceptsPicks
-      ? lockedStructuredAgentSessionOptionSnapshot(snapshot)
-      : capabilitiesPending()
-        ? lockedStructuredAgentSessionOptionSnapshot(snapshot, true)
-        : snapshot
-  const optionSnapshot = lockSnapshotRef.current(
+  const lockSnapshot = (snapshot: ReturnType<typeof structuredAgentSessionOptionSnapshot>) =>
+    !acceptsPicks ? lockedStructuredAgentSessionOptionSnapshot(snapshot) : snapshot
+  useLayoutEffect(() => {
+    lockSnapshotRef.current = lockSnapshot
+  })
+  const optionSnapshot = lockSnapshot(
     structuredAgentSessionOptionSnapshot(optionView(optionState, launchSeedOptions, held))
   )
   const setStructuredOption = useCallback(

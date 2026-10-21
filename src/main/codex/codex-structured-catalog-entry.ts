@@ -32,48 +32,14 @@ export function codexAcquireCatalogListing(
   return entry ? listingFromEntry(entry) : null
 }
 
-/** Held inventory describes alternatives; only the eligible child can override current controls. */
-export type CodexCapabilitySession = Pick<CodexSession, 'catalogAccess' | 'options'> &
-  Partial<
-    Pick<
-      CodexSession,
-      | 'fence'
-      | 'acquisitionGeneration'
-      | 'ended'
-      | 'exitObservedAt'
-      | 'currentModelCapabilities'
-      | 'reportedOptions'
-    >
-  > & {
-    connection?: Pick<CodexSession['connection'], 'request'> &
-      Partial<Pick<CodexSession['connection'], 'closed'>>
-  }
-
-export function codexCurrentModelObservation(
-  session: CodexCapabilitySession,
-  model = session.options.get('model') ?? session.reportedOptions?.model
-) {
-  const fact = session.currentModelCapabilities
-  return fact &&
-    fact.model === model &&
-    fact.connection === session.connection &&
-    fact.fence === session.fence &&
-    fact.generation === session.acquisitionGeneration &&
-    !session.ended &&
-    session.exitObservedAt === undefined &&
-    !session.connection?.closed
-    ? fact.observation
-    : undefined
-}
-
+/** Installed inventory supplies every session's capability choices. */
 export function codexSessionCapabilities(
-  session: CodexCapabilitySession,
+  session: Pick<CodexSession, 'catalogAccess' | 'options'> &
+    Partial<Pick<CodexSession, 'reportedOptions'>>,
   model = session.options.get('model') ?? session.reportedOptions?.model
 ): ReturnType<typeof structuredAgentSessionCapabilityView> {
-  const listing = codexAcquireCatalogListing(session.catalogAccess) ?? { models: [] }
   return structuredAgentSessionCapabilityView(
-    listing,
-    model,
-    codexCurrentModelObservation(session, model)
+    codexAcquireCatalogListing(session.catalogAccess) ?? { origin: 'unknown' },
+    model
   )
 }

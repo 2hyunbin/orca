@@ -1,7 +1,4 @@
-import type {
-  StructuredAgentSessionLiveOptions,
-  StructuredAgentCurrentModelObservation
-} from '../native-chat/agent-session-wire/structured-agent-session-option-models'
+import type { StructuredAgentSessionLiveOptions } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import { agentSessionEffortLevels } from '../../shared/agent-session-effort-levels'
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
@@ -16,14 +13,12 @@ import {
 } from './codex-structured-service-tier'
 import {
   composeCodexSessionOptionCatalog,
-  fetchCodexModelCatalogListing,
   readCodexStructuredSessionOptionCatalog,
   type CodexSessionOptionCatalog
 } from './codex-structured-model-catalog'
 import {
   codexAcquireCatalogListing,
-  codexSessionCapabilities,
-  codexCurrentModelObservation
+  codexSessionCapabilities
 } from './codex-structured-catalog-entry'
 export { codexAcquireCatalogListing } from './codex-structured-catalog-entry'
 
@@ -53,61 +48,6 @@ export function reportedCodexSessionOptions(
 export type { CodexSessionOptionCatalog } from './codex-structured-model-catalog'
 
 export { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'
-
-/** Acquire only the exact current row, then apply inside the session's ordered read. */
-async function prepareCodexCurrentCapabilities(session: CodexSession, timeoutMs?: number) {
-  const model = session.options.get('model') ?? session.reportedOptions.model
-  const connection = session.connection
-  let fact = session.currentModelCapabilities
-  if (
-    !fact ||
-    fact.model !== model ||
-    fact.connection !== connection ||
-    fact.fence !== session.fence ||
-    fact.generation !== session.acquisitionGeneration
-  ) {
-    delete session.currentModelCapabilities
-    if (!model || session.ended || connection.closed || session.exitObservedAt !== undefined) {
-      return () => {}
-    }
-    fact = { model, connection, fence: session.fence, generation: session.acquisitionGeneration }
-    session.currentModelCapabilities = fact
-  }
-  const captured = fact
-  let observation: StructuredAgentCurrentModelObservation | undefined
-  const pending = (captured.pending ??= fetchCodexModelCatalogListing({
-    connection,
-    timeoutMs,
-    configuration: false,
-    currentModel: captured.model,
-    observeCurrentModel: (value) => {
-      observation = value
-    }
-  })
-    .then(() => observation)
-    .catch(() => undefined))
-  const acquired = await pending
-  return () => {
-    if (
-      session.currentModelCapabilities !== captured ||
-      session.ended ||
-      connection.closed ||
-      session.exitObservedAt !== undefined ||
-      session.fence !== captured.fence ||
-      session.acquisitionGeneration !== captured.generation ||
-      session.connection !== connection ||
-      (session.options.get('model') ?? session.reportedOptions.model) !== captured.model
-    ) {
-      return
-    }
-    if (captured.pending === pending) {
-      delete captured.pending
-    }
-    if (acquired) {
-      captured.observation = acquired
-    }
-  }
-}
 
 export async function readCodexStructuredSessionOptions(input: {
   connection: Pick<CodexAppServerConnection, 'request'>
@@ -149,22 +89,13 @@ export async function readLiveCodexSessionOptions(
   return (await prepareLiveCodexSessionOptions(session, timeoutMs))()
 }
 
-/** Fetch outside the session lane; apply against current child/model identity inside it. */
+/** Demand discovery outside the session lane; compose from its installed snapshot inside it. */
 export async function prepareLiveCodexSessionOptions(
   session: CodexSession,
-  timeoutMs: number | undefined
+  _timeoutMs: number | undefined
 ): Promise<() => StructuredAgentSessionLiveOptions> {
-  const [apply] = await Promise.all([
-    prepareCodexCurrentCapabilities(session, timeoutMs),
-    session.catalogAccess?.demand?.()
-  ])
-  return () => {
-    apply()
-    return {
-      ...composeLiveCodexCatalog(session, codexSessionCapabilities(session)),
-      currentModelObservation: codexCurrentModelObservation(session)
-    }
-  }
+  await session.catalogAccess?.demand?.()
+  return () => composeLiveCodexCatalog(session, codexSessionCapabilities(session))
 }
 
 export async function applyCodexStructuredSessionOption(
@@ -194,7 +125,6 @@ function applyUnlistedCodexSessionOption(
   ) {
     // An effort saved under another model is unverified for this one; its default applies.
     session.options.delete('effort')
-    delete session.currentModelCapabilities
   }
   session.options.set(key, value)
   return Object.fromEntries(session.options)
@@ -269,9 +199,6 @@ function applyValidatedCodexStructuredSessionOption(
         : (model?.efforts.find((entry) => entry.value === requestedEffort)?.value ??
           model?.defaultEffort ??
           model?.efforts[0]?.value)
-  if (modelId !== priorModel) {
-    delete session.currentModelCapabilities
-  }
   session.options.set('model', modelId)
   if (effort) {
     session.options.set('effort', effort)

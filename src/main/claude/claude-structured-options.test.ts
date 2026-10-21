@@ -1,8 +1,3 @@
-import { structuredAgentSessionCapabilityView } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
-import { agentSessionOptionAdmitted } from '../runtime/agent-session-record-options'
-import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
-import { applyCodexStructuredSessionOption } from '../codex/codex-structured-session-options'
-import { optionSession } from '../codex/codex-structured-option-session.test-fixture'
 import { describe, expect, it, vi } from 'vitest'
 import { setClaudeStructuredOption } from './claude-structured-options'
 import type { ClaudeSession } from './claude-structured-session-state'
@@ -19,8 +14,6 @@ import {
 
 function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSession {
   return {
-    // An empty catalog identifies no model, so the pre-flight refuses nothing and
-    // this stays a test about fencing.
     connection: {
       setModel,
       supportedModels: async (): Promise<unknown[]> => []
@@ -138,14 +131,6 @@ describe('Claude structured Fast mode', () => {
     )
   })
 
-  it('rejects definitively unsupported Fast before applying', async () => {
-    const { session, applyFlagSettings } = fastModeSession(false)
-    await expect(
-      setClaudeStructuredOption(session, { key: 'fastMode', value: 'true' }, undefined)
-    ).rejects.toThrow('does not support Fast mode')
-    expect(applyFlagSettings).not.toHaveBeenCalled()
-  })
-
   it.each([undefined, false])(
     'allows explicit Fast off when model support is %s',
     async (supportsFastMode) => {
@@ -158,8 +143,8 @@ describe('Claude structured Fast mode', () => {
     }
   )
 
-  // Turning Fast off needs no support evidence, so it must not pay a catalog round trip.
-  it('reads no catalog to turn Fast off, but does to turn it on', async () => {
+  // Host admission already checked the installed catalog.
+  it('applies Fast picks without a child catalog round trip', async () => {
     const { session } = fastModeSession(true)
     const listed = session.connection.supportedModels
     let reads = 0
@@ -176,7 +161,7 @@ describe('Claude structured Fast mode', () => {
     await expect(
       setClaudeStructuredOption(session, { key: 'fastMode', value: 'true' }, undefined)
     ).resolves.toMatchObject({ fastMode: 'true' })
-    expect(reads).toBe(1)
+    expect(reads).toBe(0)
   })
 
   it('resolves the running CLI default model before applying Fast', async () => {
@@ -225,9 +210,9 @@ describe('Claude structured Fast mode', () => {
     // Switched back to a model that allows Fast: state reported, reason omitted.
     observeClaudeFastModeFacts(session, { fast_mode_state: 'on' })
     expect(session.fastModeDisabledReason).toBeUndefined()
-    await expect(readClaudeStructuredSessionOptions(session, undefined)).resolves.toMatchObject({
-      fastModeSupport: { supported: true }
-    })
+    expect(
+      (await readClaudeStructuredSessionOptions(session, undefined)).fastModeSupport
+    ).toBeUndefined()
     await expect(
       setClaudeStructuredOption(session, { key: 'fastMode', value: 'true' }, undefined)
     ).resolves.toMatchObject({ fastMode: 'true' })
@@ -258,15 +243,13 @@ describe('Claude structured Fast mode', () => {
     expect(session.confirmedOptions.has('fastMode')).toBe(true)
   })
 
-  it('publishes support and explicit false from running CLI reports', async () => {
+  it('reports actual Fast values without child capability rows', async () => {
     const { session } = fastModeSession(true)
     observeClaudeFastModeFacts(session, {
       fast_mode_state: 'cooldown',
       fast_mode_disabled_reason: null
     })
     await expect(readClaudeStructuredSessionOptions(session, undefined)).resolves.toMatchObject({
-      models: [expect.objectContaining({ id: 'opus', supportsFastMode: true })],
-      fastModeSupport: { supported: true },
       current: {
         model: 'opus',
         fastMode: false,
@@ -287,21 +270,6 @@ describe('Claude structured Fast mode', () => {
       fastModeSupport: { supported: false, reason: 'not_first_party' },
       current: { fastMode: false, fastModeState: 'off' }
     })
-  })
-
-  it('reconciles Fast off when switching to a model without support', async () => {
-    const { session, applyFlagSettings } = fastModeSession(true)
-    session.options.set('fastMode', 'true')
-    session.connection.supportedModels = async () => [
-      { value: 'opus', displayName: 'Opus', supportsFastMode: true },
-      { value: 'haiku', displayName: 'Haiku', supportsFastMode: false }
-    ]
-
-    await expect(
-      setClaudeStructuredOption(session, { key: 'model', value: 'haiku' }, undefined)
-    ).resolves.toMatchObject({ model: 'haiku', fastMode: 'false' })
-    expect(applyFlagSettings).toHaveBeenCalledWith({ fastMode: false }, { timeoutMs: undefined })
-    expect(session.appliedInputOptions.get('fastMode')).toBe('false')
   })
 
   it('keeps Fast on across a model switch while support discovery is transient', async () => {
@@ -334,26 +302,6 @@ describe('Claude structured Fast mode', () => {
     })
     expect(session.options.get('fastMode')).toBe('false')
     expect(session.confirmedOptions.has('fastMode')).toBe(true)
-  })
-
-  it('keeps the accepted model when the unsupported-model Fast-off write fails', async () => {
-    const { session, applyFlagSettings } = fastModeSession(true)
-    session.options.set('fastMode', 'true')
-    session.reportedOptions.fastMode = true
-    session.confirmedOptions.add('fastMode')
-    session.connection.supportedModels = async () => [
-      { value: 'opus', displayName: 'Opus', supportsFastMode: true },
-      { value: 'haiku', displayName: 'Haiku', supportsFastMode: false }
-    ]
-    applyFlagSettings.mockRejectedValueOnce(new Error('flag write failed'))
-
-    await expect(
-      setClaudeStructuredOption(session, { key: 'model', value: 'haiku' }, undefined)
-    ).resolves.toMatchObject({ model: 'haiku', fastMode: 'false' })
-    expect(session.reportedOptions.fastMode).toBe(true)
-    expect(session.confirmedOptions.has('fastMode')).toBe(false)
-    expect(session.appliedInputOptions.get('model')).toBe('haiku')
-    expect(session.appliedInputOptions.has('fastMode')).toBe(false)
   })
 
   it('treats an unrecognized provider disabled reason as unavailable', async () => {
@@ -389,15 +337,6 @@ describe('Claude Fast mode against a catalog that identifies nothing', () => {
       setClaudeStructuredOption(session, { key: 'fastMode', value: 'true' }, undefined)
     ).resolves.toMatchObject({ fastMode: 'true' })
     expect(applyFlagSettings).toHaveBeenCalledWith({ fastMode: true }, { timeoutMs: undefined })
-  })
-
-  it('still refuses Fast on when the catalog lists the model and omits Fast support', async () => {
-    const { session, applyFlagSettings } = fastModeSession(undefined)
-
-    await expect(
-      setClaudeStructuredOption(session, { key: 'fastMode', value: 'true' }, undefined)
-    ).rejects.toThrow('does not support Fast mode')
-    expect(applyFlagSettings).not.toHaveBeenCalled()
   })
 })
 
@@ -466,91 +405,4 @@ describe('Claude structured option write under the request deadline', () => {
       setClaudeStructuredOption(session, { key: 'model', value: 'sonnet' }, 10)
     ).rejects.toBeInstanceOf(ClaudeControlRequestTimeoutError)
   })
-})
-
-describe('unknown versus explicitly empty effort across host and adapters', () => {
-  it.each([false, true])(
-    'keeps a scalar only while effort metadata is unknown (%s)',
-    async (known) => {
-      const row = {
-        id: 'opus',
-        label: 'Opus',
-        isDefault: false,
-        efforts: [],
-        ...(known ? {} : { effortsKnown: false as const })
-      }
-      expect(agentSessionOptionAdmitted('claude', [row], 'opus', 'effort', 'high')).toBe(!known)
-      const { session } = fastModeSession(undefined)
-      session.connection.supportedModels = async () => [
-        { value: 'opus', ...(known ? { supportsEffort: false } : {}) }
-      ]
-      session.connection.applyFlagSettings = async () => {}
-      session.connection.getSettings = async () => ({ effective: { effortLevel: 'high' } })
-      const installed = {
-        models: [
-          {
-            ...row,
-            efforts: [{ value: 'high', label: 'High' }],
-            effortsKnown: undefined,
-            supportsFastMode: true
-          }
-        ]
-      }
-      const read = async () => {
-        const answer = await readClaudeStructuredSessionOptions(session, undefined)
-        return structuredAgentSessionCapabilityView(
-          installed,
-          'opus',
-          answer.currentModelObservation,
-          [],
-          answer.fastModeRestriction
-        )
-      }
-      expect((await read()).models[0]?.efforts).toEqual(known ? [] : installed.models[0]?.efforts)
-      const rawRead = session.connection.supportedModels
-      session.connection.supportedModels = async () => []
-      expect((await read()).models[0]?.efforts).toEqual(installed.models[0]?.efforts)
-      session.connection.supportedModels = async () => {
-        throw new Error('unavailable')
-      }
-      expect((await read()).models[0]?.efforts).toEqual(installed.models[0]?.efforts)
-      session.connection.supportedModels = async () => [{ value: 'opus', supportsFastMode: false }]
-      expect((await read()).models[0]?.supportsFastMode).toBe(false)
-      session.connection.supportedModels = rawRead
-      expect((await read()).models[0]?.supportsFastMode).toBe(true)
-      for (const reason of ['pending', 'preference', 'sdk_opt_in_required']) {
-        session.fastModeDisabledReason = reason
-        expect((await read()).models[0]?.supportsFastMode).toBe(true)
-      }
-      session.fastModeDisabledReason = 'account-disabled'
-      expect((await read()).models[0]?.supportsFastMode).toBe(false)
-      delete session.fastModeDisabledReason
-
-      expect(agentSessionOptionAdmitted('claude', installed.models, 'opus', 'effort', 'low')).toBe(
-        false
-      )
-      const applied = setClaudeStructuredOption(
-        session,
-        { key: 'effort', value: 'high' },
-        undefined
-      )
-      await (known
-        ? expect(applied).rejects.toThrow('does not accept effort')
-        : expect(applied).resolves.toMatchObject({ effort: 'high' }))
-      const codex = optionSession(vi.fn())
-      codex.options.set('model', 'opus')
-      const store = new AgentModelCatalogStore()
-      store.recordSuccess(
-        'scope',
-        'codex',
-        { models: [row], complete: true, origin: 'probe' },
-        'discovery'
-      )
-      codex.catalogAccess = { store, fingerprint: 'scope', accountHomePath: '/qa' }
-      const picked = applyCodexStructuredSessionOption(codex, 'effort', 'high')
-      await (known
-        ? expect(picked).rejects.toThrow('does not support high')
-        : expect(picked).resolves.toMatchObject({ effort: 'high' }))
-    }
-  )
 })

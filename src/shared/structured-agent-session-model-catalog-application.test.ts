@@ -165,7 +165,7 @@ describe('structured option state from the host model catalog', () => {
     expect(live.catalogSource).toBe('live')
     const refreshed = applyStructuredAgentSessionModelCatalog(live, SEED, HOST_CATALOG, {
       ...LAUNCH,
-      holdControls: true
+      coherentCatalog: true
     })
     for (const agent of ['grok', 'pi']) {
       const sourced = { ...live, record: { ...live.record, agent } }
@@ -173,7 +173,7 @@ describe('structured option state from the host model catalog', () => {
         sourced
       )
     }
-    expect(refreshed.catalog?.models.map((row) => row.id)).toEqual(['gpt-hosted', 'gpt-live'])
+    expect(refreshed.catalog?.models.map((row) => row.id)).toEqual(['gpt-hosted'])
     expect(refreshed.record).toBe(live.record)
     const snapshot = structuredAgentSessionOptionSnapshot(live)
     const model = snapshot.find((descriptor) => descriptor.id === 'model')!

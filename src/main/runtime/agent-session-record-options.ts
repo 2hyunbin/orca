@@ -1,3 +1,4 @@
+import { independentAgentModelCatalog } from '../../shared/agent-model-catalog-ownership'
 import { agentSessionEffortLevels } from '../../shared/agent-session-effort-levels'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import type {
@@ -84,7 +85,10 @@ export function pickAgentSessionOption(
   { key, value, models, ...at }: AgentSessionOptionPick
 ): AgentSessionRecord {
   // A live child's own menu may offer more than its saved row (Pi's probe stops at high).
-  if (key !== 'model' && record.lease.claimStatus !== 'live') {
+  if (
+    key !== 'model' &&
+    (independentAgentModelCatalog(record.provider) || record.lease.claimStatus !== 'live')
+  ) {
     const { model } = record.options ?? {}
     assertAgentSessionOptionsAdmitted(record.provider, models, {
       ...(model ? { model } : {}),
@@ -124,7 +128,8 @@ export function recordAgentSessionRanOptions(
   const added = Object.entries({ ...options, model }).filter(
     ([key, value]) =>
       saved[key] === undefined &&
-      agentSessionOptionAdmitted(record.provider, models, model, key, value)
+      (independentAgentModelCatalog(record.provider) ||
+        agentSessionOptionAdmitted(record.provider, models, model, key, value))
   )
   return added.length === 0
     ? record

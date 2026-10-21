@@ -66,6 +66,8 @@ export type StructuredAgentSessionOptionState = {
   /** The permission mode the host or launch last stated; null shows no picker. */
   permissionMode: string | null
   pendingId: string | null
+  listingInProgress?: boolean
+  fastModeRestricted?: boolean
 }
 
 /** With `seedCatalog`, the state holds the static seed from the first frame, but the picker shows
@@ -117,16 +119,18 @@ export function finishedListingIds(catalog: AgentSessionModelCatalogResult): str
 /**
  * Applies the host's stored model catalog: models only, no current selection
  * and no record writes, so nothing here reads as a committed value — the pick
- * stays provisional until an options result confirms it. Retained controls
- * are presentation while the owner awaits a matching projection.
+ * stays provisional until an options result confirms it.
  */
 export function applyStructuredAgentSessionModelCatalog(
   state: StructuredAgentSessionOptionState,
   seed: AgentSessionOptionCatalog,
   catalog: AgentSessionModelCatalogResult,
-  options: { newLaunch: boolean; holdControls?: boolean }
+  options: { newLaunch: boolean; coherentCatalog?: boolean }
 ): StructuredAgentSessionOptionState {
-  if (state.catalogSource === 'live' && !independentAgentModelCatalog(state.record.agent)) {
+  if (
+    state.catalogSource === 'live' &&
+    !(options.coherentCatalog && independentAgentModelCatalog(state.record.agent))
+  ) {
     return state
   }
   const models =
@@ -136,23 +140,10 @@ export function applyStructuredAgentSessionModelCatalog(
           discoveredModel(model, catalog.fastModeSupport?.supported === true)
         )
   if (catalog.origin === 'unknown') {
-    return settleStructuredAgentSessionBuiltinCatalog(state)
-  }
-  const selected = state.record.values.model?.value
-  const currentRow = options.holdControls
-    ? state.catalog?.models.find((row) => row.id === selected)
-    : undefined
-  const inventory = models.map((row) =>
-    currentRow?.id === row.id ? { ...row, options: currentRow.options } : row
-  )
-  if (currentRow && !inventory.some((row) => row.id === currentRow.id)) {
-    inventory.push({
-      id: currentRow.id,
-      label: currentRow.label,
-      description: currentRow.description,
-      options: currentRow.options,
-      isDefault: false
-    })
+    const settled = settleStructuredAgentSessionBuiltinCatalog(state)
+    return Boolean(settled.listingInProgress) === (catalog.listingInProgress === true)
+      ? settled
+      : { ...settled, listingInProgress: catalog.listingInProgress === true }
   }
   // The host says whether its listed default is what this launch runs; an older host never says,
   // so the client's own knowledge of the agent stands in. A reopened chat may keep its own model.
@@ -165,9 +156,11 @@ export function applyStructuredAgentSessionModelCatalog(
     // as a provisional `default`-source value, never a confirmed one.
     catalog: {
       ...(state.catalogSource === 'live' ? (state.catalog ?? seed) : seed),
-      models: inventory,
+      models,
       ...(namesDefault ? { defaultModelIsCliDefault: true } : {})
     },
+    verifiedModelIds: finishedListingIds(catalog),
+    listingInProgress: catalog.listingInProgress === true,
     catalogSource: state.catalogSource === 'live' ? 'live' : 'host'
   }
 }
@@ -178,7 +171,7 @@ export function applyStructuredAgentSessionOptions(
   result: AgentSessionOptionsResult,
   /** Whether this view started the chat, which runs the default it shows until its first send.
    *  Absent reads as a chat it did not start, which never names a default as its own. */
-  launch: { newLaunch: boolean } = { newLaunch: false }
+  launch: { newLaunch: boolean; coherentCatalog?: boolean } = { newLaunch: false }
 ): StructuredAgentSessionOptionState {
   const { current } = result
   // A value the host supplied from a catalog default is context for the picker, not the chat's own.
@@ -199,11 +192,22 @@ export function applyStructuredAgentSessionOptions(
   )
   return {
     ...state,
-    catalog: structuredAgentSessionOptionCatalog(seed, result),
-    catalogSource: 'live',
+    catalog:
+      launch.coherentCatalog && independentAgentModelCatalog(state.record.agent)
+        ? state.catalog
+        : structuredAgentSessionOptionCatalog(seed, result),
+    fastModeRestricted:
+      result.fastModeSupport?.supported === false &&
+      result.fastModeSupport.reason !== 'model-not-supported',
+    catalogSource: launch.coherentCatalog && state.catalogSource === 'seed' ? 'seed' : 'live',
     olderHost: current.defaulted === undefined ? true : undefined,
     defaultsUnsent: current.defaulted !== undefined && !launch.newLaunch ? true : undefined,
-    verifiedModelIds: result.listedModelIds?.length ? result.listedModelIds : undefined,
+    verifiedModelIds:
+      launch.coherentCatalog && independentAgentModelCatalog(state.record.agent)
+        ? state.verifiedModelIds
+        : result.listedModelIds?.length
+          ? result.listedModelIds
+          : undefined,
     permissionMode: result.current.permissionMode ?? null
   }
 }

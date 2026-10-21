@@ -1,15 +1,10 @@
-import {
-  createStructuredAgentSessionOptionProjection,
-  observeStructuredAgentSessionInventory
-} from '../../../../shared/structured-agent-session-option-projection'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentSessionConversationCommand } from '../../../../shared/agent-session-conversation-command'
 import type {
   AgentSessionModelCatalogResult,
   AgentSessionOptionsResult
 } from '../../../../shared/agent-session-wire'
 import type { AgentSessionRewindSupport } from '../../../../shared/agent-session-rewind'
-import { independentAgentModelCatalog } from '../../../../shared/agent-model-catalog-ownership'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { AgentSessionOptionCatalog } from '../../../../shared/agent-session-option-catalog'
 import { structuredAgentSessionSeedCatalog } from '../../../../shared/structured-agent-session-seed-catalog'
@@ -22,6 +17,7 @@ import {
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { structuredAgentSessionOptionView } from '../../../../shared/structured-agent-session-option-view'
+import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../../shared/structured-agent-session-surface-capabilities'
 import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
 import {
   useStructuredAgentSessionHostCapability,
@@ -109,7 +105,9 @@ export function useStructuredAgentSessionOptionState(args: {
   )
   // Read only when a fence or session resets the state, so a new target alone resets nothing.
   const firstFrameLaunch = useRef({ target, newLaunch, worktree, seedsModel })
-  firstFrameLaunch.current = { target, newLaunch, worktree, seedsModel }
+  useEffect(() => {
+    firstFrameLaunch.current = { target, newLaunch, worktree, seedsModel }
+  }, [target, newLaunch, worktree, seedsModel])
   const optionStateRef = useRef(optionState)
   const activeOptionRecordRef = useRef(optionState.record)
   // A pick on its way to the host, which every send carries too.
@@ -124,15 +122,16 @@ export function useStructuredAgentSessionOptionState(args: {
     []
   )
   const hostKey = structuredAgentSessionHostKey(target)
-  const projection = useMemo(
-    () => createStructuredAgentSessionOptionProjection(),
-    [identity, hostKey, newLaunch, worktree]
-  )
-  const contextRef = useRef({ projection, fence })
-  contextRef.current = { projection, fence }
-  const isCurrentContext = useCallback(
-    () => contextRef.current.projection === projection && contextRef.current.fence === fence,
-    [projection, fence]
+  const contextKey = JSON.stringify([identity, hostKey, newLaunch, worktree, fence])
+  const contextRef = useRef(contextKey)
+  useEffect(() => {
+    contextRef.current = contextKey
+  }, [contextKey])
+  const isCurrentContext = useCallback(() => contextRef.current === contextKey, [contextKey])
+  const writes = useRef({ count: 0, readback: false })
+  const coherentCatalog = useStructuredAgentSessionHostCapability(
+    target,
+    AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY
   )
   const optionIdentityRef = useRef(identity)
   useEffect(() => {
@@ -154,20 +153,14 @@ export function useStructuredAgentSessionOptionState(args: {
         : seeded
     // The chat's own, which a restart for a new mode keeps: the picker never blanks between them.
     const next = sameSession ? { ...kept, permissionMode: previous.permissionMode } : kept
-    projection.writes = 0
-    projection.pendingRead = false
+    writes.current = { count: 0, readback: false }
     optionMutationGeneration.current += 1
     pendingOptionsRef.current = {}
     optionStateRef.current = next
     activeOptionRecordRef.current = next.record
     setOptionState(next)
-  }, [agent, fence, identity, projection])
+  }, [agent, contextKey, fence, identity])
 
-  const capabilitiesPending = () =>
-    independentAgentModelCatalog(agent) &&
-    providerVisible &&
-    (!providerStarting || readsBeforeStart) &&
-    (!projection.initial || projection.accepted !== projection.revision)
   const optionsReadRef = useRef<CoalescedPollRunner | null>(null)
   // Refresh options each turn to confirm which model the provider actually selected, and once
   // the provider starts: only then has the host read what it will run.
@@ -180,13 +173,12 @@ export function useStructuredAgentSessionOptionState(args: {
       if (!isCurrentContext()) {
         return
       }
-      if (projection.writes) {
-        projection.pendingRead = true
+      if (writes.current.count) {
+        writes.current.readback = true
         return
       }
-      projection.pendingRead = false
+      writes.current.readback = false
       const record = activeOptionRecordRef.current
-      const revision = projection.revision
       const readGeneration = optionMutationGeneration.current
       const result = await callStructuredAgentSession<AgentSessionOptionsResult>(
         target,
@@ -197,10 +189,8 @@ export function useStructuredAgentSessionOptionState(args: {
         !stale &&
         isCurrentContext() &&
         activeOptionRecordRef.current === record &&
-        projection.revision === revision &&
         optionMutationGeneration.current === readGeneration
       ) {
-        projection.accepted = revision
         setConversationSupport({
           sessionId,
           commands: result.conversationCommands ?? [],
@@ -214,7 +204,10 @@ export function useStructuredAgentSessionOptionState(args: {
         })
         updateOptionState((current) =>
           current.record === activeOptionRecordRef.current
-            ? applyStructuredAgentSessionOptions(current, optionCatalog, result, { newLaunch })
+            ? applyStructuredAgentSessionOptions(current, optionCatalog, result, {
+                newLaunch,
+                coherentCatalog
+              })
             : current
         )
       }
@@ -229,7 +222,7 @@ export function useStructuredAgentSessionOptionState(args: {
   }, [
     newLaunch,
     isCurrentContext,
-    projection,
+    coherentCatalog,
     fence,
     optionCatalog,
     // Another device's pick moves it.
@@ -257,41 +250,30 @@ export function useStructuredAgentSessionOptionState(args: {
   const rereadOptions = useCallback(() => optionsReadRef.current?.run(), [])
   const receiveCatalog = (
     catalog: AgentSessionModelCatalogResult | null,
-    event: 'demand' | 'progress' | 'settled'
+    _event: 'demand' | 'progress' | 'settled'
   ) => {
-    const independent = independentAgentModelCatalog(agent)
-    const changed = independent && observeStructuredAgentSessionInventory(projection, catalog)
     updateOptionState((current) =>
-      catalog &&
-      optionCatalog &&
-      (!independent || changed || capabilitiesPending() || current.catalogSource !== 'live')
+      catalog && optionCatalog
         ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
             newLaunch,
-            holdControls: capabilitiesPending() || conversationSupport?.fence !== fence
+            coherentCatalog
           })
-        : { ...settleStructuredAgentSessionBuiltinCatalog(current) }
+        : { ...settleStructuredAgentSessionBuiltinCatalog(current), listingInProgress: false }
     )
-    if (
-      changed ||
-      (event !== 'progress' && independent && capabilitiesPending()) ||
-      event === 'settled'
-    ) {
+    if (!coherentCatalog && catalog && catalog.origin !== 'unknown' && !catalog.listingInProgress) {
       rereadOptions()
     }
   }
-  const beginOptionWrite = (id: string) => {
+  const beginOptionWrite = (_id: string) => {
     const record = activeOptionRecordRef.current
-    projection.writes += 1
-    if (id === 'model' && independentAgentModelCatalog(agent)) {
-      projection.revision += 1
-    }
+    writes.current.count += 1
     return (readback: boolean) => {
       if (!isCurrentContext() || activeOptionRecordRef.current !== record) {
         return
       }
-      projection.writes -= 1
-      projection.pendingRead ||= readback
-      if (!projection.writes && (projection.pendingRead || capabilitiesPending())) {
+      writes.current.count -= 1
+      writes.current.readback ||= readback
+      if (!writes.current.count && writes.current.readback) {
         rereadOptions()
       }
     }
@@ -312,7 +294,6 @@ export function useStructuredAgentSessionOptionState(args: {
     receiveCatalog,
     beginOptionWrite,
     isCurrentContext,
-    capabilitiesPending,
     optionState,
     optionStateRef,
     activeOptionRecordRef,

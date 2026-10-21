@@ -56,7 +56,9 @@ export function useMobileHostModelCatalogUpgrade(args: {
     worktree
   } = args
   const receiver = useRef(args.receiveCatalog)
-  receiver.current = args.receiveCatalog
+  useEffect(() => {
+    receiver.current = args.receiveCatalog
+  }, [args.receiveCatalog])
   const [rereads, setRereads] = useState(0)
   const recheck = useCallback(() => setRereads((count) => count + 1), [])
   useEffect(() => {

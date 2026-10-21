@@ -194,10 +194,9 @@ function applyClaudeSettingsFacts(
  *  on every reopen, past a later settings change. */
 function claudeStartedReportedOptions(
   session: ClaudeSession,
-  catalog: unknown[],
-  readMutationSequence = session.optionMutationSequence
+  catalog: unknown[]
 ): Pick<ClaudeOpenFacts, 'reportedOptions'> {
-  const { current } = claudeStructuredSessionOptionsFrom(session, catalog, readMutationSequence)
+  const { current } = claudeStructuredSessionOptionsFrom(session, catalog)
   const { model: _projected, ...rest } = current
   const model = claudeExecutionObservations(session).model
   const observed = { ...rest, ...(model ? { model } : {}) }
@@ -230,11 +229,7 @@ export async function openClaudeSession(input: {
   }
   applyClaudeInitializeFacts(session, initialized)
   const result: ClaudeOpenFacts = {
-    ...claudeStartedReportedOptions(
-      session,
-      readClaudeModels(initialized.initialization),
-      session.fastModeAtStart ? session.optionMutationSequence - 1 : undefined
-    )
+    ...claudeStartedReportedOptions(session, readClaudeModels(initialized.initialization))
   }
   void settleClaudeStartupSettings(input, initialized)
   return result

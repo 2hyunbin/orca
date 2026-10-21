@@ -120,14 +120,14 @@ function shownTier(state: StructuredAgentSessionOptionState): string | undefined
 }
 
 describe("a Codex chat's speed, shown and sent", () => {
-  it('uses the same eligible child tiers through failure, including unknown, empty and reported opaque', async () => {
+  it('uses installed tiers through discovery failure, retaining only reported opaque exceptions', async () => {
     for (const [child, tier, runs] of [
-      [{ tiers: ['priority'] }, 'priority', 'priority'],
+      [{ tiers: ['priority'] }, 'priority', 'default'],
       [{ tiers: ['ultrafast'] }, 'priority', 'default'],
-      [{}, 'priority', 'priority'],
+      [{}, 'priority', 'default'],
       [{ tiers: [] }, 'priority', 'default'],
       [{ tiers: [], reported: 'opaque' }, 'opaque', 'opaque'],
-      [{ tiers: [], reported: 'ultrafast' }, 'ultrafast', 'default']
+      [{ tiers: [], reported: 'ultrafast' }, 'ultrafast', 'ultrafast']
     ] as const) {
       await expect(hostRuns({ model: 'm2', serviceTier: tier }, 120_000, child)).resolves.toEqual({
         firstTurn: runs,

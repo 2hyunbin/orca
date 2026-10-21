@@ -1,4 +1,3 @@
-import { projectClaudeSessionOptionPick } from './claude-structured-option-projection'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { dispatchClaudeCommand } from './claude-structured-command-dispatch'
@@ -258,9 +257,6 @@ export class ClaudeStructuredSessionAdapter implements StructuredAgentSessionAda
   }
   readOptions = (input: { sessionId: string; fence: number }) =>
     readClaudeStructuredSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
-  projectPickOptions: NonNullable<StructuredAgentSessionAdapter['projectPickOptions']> = (
-    ...args
-  ) => projectClaudeSessionOptionPick(this.sessions, this.deps.requestTimeoutMs, ...args)
   readOptionRestoreFailures = (sessionId: string): readonly string[] => {
     const session = this.sessions.get(sessionId)
     return session?.retiredModel !== undefined && !session.options.has('model') ? ['model'] : []

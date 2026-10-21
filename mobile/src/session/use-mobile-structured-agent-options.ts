@@ -1,6 +1,6 @@
 import type { AgentSessionConversationCommand } from '../../../src/shared/agent-session-conversation-command'
 import { useMobileStructuredOptionState } from './use-mobile-structured-option-state'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { isAgentSessionHandleProvider } from '../../../src/shared/agent-session-provider-handle'
 import { structuredAgentSessionSeedCatalog } from '../../../src/shared/structured-agent-session-seed-catalog'
 import type { AgentSessionOptionResult } from '../../../src/shared/agent-session-wire'
@@ -31,8 +31,6 @@ import { mobileCreatedStructuredSession } from './mobile-created-structured-sess
 import { encodeStructuredAgentSessionOptionValue } from '../../../src/shared/structured-agent-session-option-codec'
 import { useMobileStructuredOptionSurface } from './use-mobile-structured-option-surface'
 
-import { independentAgentModelCatalog } from '../../../src/shared/agent-model-catalog-ownership'
-
 const NO_COMMANDS: readonly AgentSessionConversationCommand[] = []
 
 export function useMobileStructuredAgentOptions(args: {
@@ -45,7 +43,10 @@ export function useMobileStructuredAgentOptions(args: {
   /** Moves when the host's status says a session option changed; each move re-reads them. */
   optionStamp?: string
   /** What the host advertised; null until its status probe answers. */
-  hostSupport: Pick<StructuredAgentSessionHostSupport, 'permissionModes'> | null
+  hostSupport: Pick<
+    StructuredAgentSessionHostSupport,
+    'permissionModes' | 'coherentModelCatalog'
+  > | null
 }) {
   const { agent, client, enabled, fence, mutate, optionStamp, sessionId, hostSupport } = args
   // Every agent's seed, as on the desktop: a built-in list or the provider-default pill.
@@ -68,7 +69,7 @@ export function useMobileStructuredAgentOptions(args: {
     conversationSupport,
     imageSupport,
     awaitingOptions,
-    projection,
+    writes,
     readRef,
     receiveCatalog,
     isCurrentContext
@@ -81,12 +82,9 @@ export function useMobileStructuredAgentOptions(args: {
     client,
     optionStamp,
     newLaunch: createdHere !== undefined,
-    worktree: createdHere?.worktree
+    worktree: createdHere?.worktree,
+    coherentCatalog: hostSupport?.coherentModelCatalog === true
   })
-  const capabilitiesPending = () =>
-    independentAgentModelCatalog(agent ?? '') &&
-    enabled &&
-    (!projection.initial || projection.accepted !== projection.revision)
   const demandModelCatalog = useMobileHostModelCatalogUpgrade({
     agent,
     client,
@@ -112,13 +110,12 @@ export function useMobileStructuredAgentOptions(args: {
   const lockSnapshotRef = useRef(
     (snapshot: ReturnType<typeof structuredAgentSessionShownSnapshot>) => snapshot
   )
-  lockSnapshotRef.current = (snapshot) =>
-    awaitingOptions
-      ? lockedStructuredAgentSessionOptionSnapshot(snapshot)
-      : capabilitiesPending()
-        ? lockedStructuredAgentSessionOptionSnapshot(snapshot, true)
-        : snapshot
-  const shown = lockSnapshotRef.current(structuredAgentSessionShownSnapshot(optionState))
+  const lockSnapshot = (snapshot: ReturnType<typeof structuredAgentSessionShownSnapshot>) =>
+    awaitingOptions ? lockedStructuredAgentSessionOptionSnapshot(snapshot) : snapshot
+  useLayoutEffect(() => {
+    lockSnapshotRef.current = lockSnapshot
+  })
+  const shown = lockSnapshot(structuredAgentSessionShownSnapshot(optionState))
   const optionSnapshot = legacyHostPermissions
     ? [...shown, legacyHostPermissionDescriptor()]
     : shown
@@ -144,10 +141,7 @@ export function useMobileStructuredAgentOptions(args: {
         return false
       }
       const targetRecord = currentState.record
-      projection.writes += 1
-      if (id === 'model' && independentAgentModelCatalog(agent ?? '')) {
-        projection.revision += 1
-      }
+      writes.current.count += 1
       const mutationGeneration = ++optionMutationGeneration.current
       const isCurrent = (): boolean =>
         isCurrentContext() &&
@@ -216,12 +210,9 @@ export function useMobileStructuredAgentOptions(args: {
           )
         }
         if (isCurrentContext() && activeOptionRecordRef.current === targetRecord) {
-          projection.writes -= 1
-          projection.pendingRead ||= readsBack && isCurrent()
-          if (
-            !projection.writes &&
-            (projection.pendingRead || projection.accepted !== projection.revision)
-          ) {
+          writes.current.count -= 1
+          writes.current.readback ||= readsBack && isCurrent()
+          if (!writes.current.count && writes.current.readback) {
             readRef.current?.()
           }
         }
@@ -234,7 +225,7 @@ export function useMobileStructuredAgentOptions(args: {
       createdHere,
       mutate,
       optionCatalog,
-      projection,
+      writes,
       isCurrentContext,
       sessionId,
       updateOptionState

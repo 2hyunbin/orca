@@ -7,12 +7,7 @@ import { callAgentSession } from './mobile-structured-agent-session-rpc'
 import { forgetMobileCreatedStructuredSession } from './mobile-created-structured-sessions'
 import { createCoalescingKeyedRunner } from '../../../src/shared/coalescing-keyed-runner'
 import type { RpcClient } from '../transport/rpc-client'
-import { independentAgentModelCatalog } from '../../../src/shared/agent-model-catalog-ownership'
-import {
-  createStructuredAgentSessionOptionProjection,
-  observeStructuredAgentSessionInventory
-} from '../../../src/shared/structured-agent-session-option-projection'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AgentSessionOptionCatalog } from '../../../src/shared/agent-session-option-catalog'
 import { cloneStructuredAgentSessionOptionRecord } from '../../../src/shared/structured-agent-session-option-state'
 import {
@@ -28,6 +23,7 @@ export function useMobileStructuredOptionState(args: {
   optionStamp?: string
   newLaunch: boolean
   worktree?: string
+  coherentCatalog?: boolean
   agent: string | null
   enabled: boolean
   fence: number | null
@@ -43,7 +39,8 @@ export function useMobileStructuredOptionState(args: {
     client,
     optionStamp,
     newLaunch,
-    worktree
+    worktree,
+    coherentCatalog = false
   } = args
   const [optionState, setOptionState] = useState(() =>
     createStructuredAgentSessionOptionState(agent ?? 'codex', optionCatalog)
@@ -60,16 +57,16 @@ export function useMobileStructuredOptionState(args: {
     },
     []
   )
-  const projection = useMemo(
-    () => createStructuredAgentSessionOptionProjection(),
-    [agent, client, sessionId, newLaunch, worktree]
-  )
-  const contextRef = useRef({ projection, fence })
-  contextRef.current = { projection, fence }
+  const contextKey = JSON.stringify([agent, sessionId, newLaunch, worktree, fence])
+  const contextRef = useRef({ key: contextKey, client })
+  useEffect(() => {
+    contextRef.current = { key: contextKey, client }
+  }, [contextKey, client])
   const isCurrentContext = useCallback(
-    () => contextRef.current.projection === projection && contextRef.current.fence === fence,
-    [projection, fence]
+    () => contextRef.current.key === contextKey && contextRef.current.client === client,
+    [contextKey, client]
   )
+  const writes = useRef({ count: 0, readback: false })
   const optionIdentityRef = useRef(`${agent}:${sessionId}`)
   useEffect(() => {
     const identity = `${agent}:${sessionId}`
@@ -89,14 +86,13 @@ export function useMobileStructuredOptionState(args: {
         : seeded
     // The chat's own, which a restart for a new mode keeps: the pill never blanks between them.
     const next = sameSession ? { ...kept, permissionMode: previous.permissionMode } : kept
-    projection.writes = 0
-    projection.pendingRead = false
+    writes.current = { count: 0, readback: false }
     optionMutationGeneration.current += 1
     pendingOptionRef.current = null
     optionStateRef.current = next
     activeOptionRecordRef.current = next.record
     setOptionState(next)
-  }, [agent, enabled, fence, optionCatalog, sessionId, projection])
+  }, [agent, enabled, fence, optionCatalog, sessionId, contextKey, client])
 
   const [conversationSupport, setConversationSupport] = useState<{
     sessionId: string
@@ -114,31 +110,19 @@ export function useMobileStructuredOptionState(args: {
     conversationSupport?.sessionId === sessionId && conversationSupport.fence !== fence
 
   const readRef = useRef<(() => void) | null>(null)
-  const capabilitiesPending = () =>
-    independentAgentModelCatalog(agent ?? '') &&
-    enabled &&
-    (!projection.initial || projection.accepted !== projection.revision)
   const receiveCatalog = (
     catalog: AgentSessionModelCatalogResult | null,
-    event: 'demand' | 'progress' | 'settled'
+    _event: 'demand' | 'progress' | 'settled'
   ) => {
-    const independent = independentAgentModelCatalog(agent ?? '')
-    const changed = independent && observeStructuredAgentSessionInventory(projection, catalog)
     updateOptionState((current) =>
-      catalog &&
-      optionCatalog &&
-      (!independent || changed || capabilitiesPending() || current.catalogSource !== 'live')
+      catalog && optionCatalog
         ? applyStructuredAgentSessionModelCatalog(current, optionCatalog, catalog, {
             newLaunch,
-            holdControls: capabilitiesPending() || awaitingOptions
+            coherentCatalog
           })
-        : { ...settleStructuredAgentSessionBuiltinCatalog(current) }
+        : { ...settleStructuredAgentSessionBuiltinCatalog(current), listingInProgress: false }
     )
-    if (
-      changed ||
-      (event !== 'progress' && independent && capabilitiesPending()) ||
-      event === 'settled'
-    ) {
+    if (!coherentCatalog && catalog && catalog.origin !== 'unknown' && !catalog.listingInProgress) {
       readRef.current?.()
     }
   }
@@ -153,29 +137,21 @@ export function useMobileStructuredOptionState(args: {
         if (stale || !isCurrentContext()) {
           return
         }
-        if (projection.writes) {
-          projection.pendingRead = true
+        if (writes.current.count) {
+          writes.current.readback = true
           return
         }
-        projection.pendingRead = false
+        writes.current.readback = false
         const record = activeOptionRecordRef.current
-        const revision = projection.revision
         const readGeneration = optionMutationGeneration.current
         const result = await callAgentSession<AgentSessionOptionsResult>(
           client,
           'agentSession.options',
           { sessionId }
         )
-        if (
-          stale ||
-          !isCurrentContext() ||
-          activeOptionRecordRef.current !== record ||
-          projection.revision !== revision ||
-          optionMutationGeneration.current !== readGeneration
-        ) {
+        if (stale || !isCurrentContext() || activeOptionRecordRef.current !== record) {
           return
         }
-        projection.accepted = revision
         // This view keeps its latch; a later one may run a model picked here.
         forgetMobileCreatedStructuredSession(sessionId)
         setImageSupport({
@@ -183,9 +159,15 @@ export function useMobileStructuredOptionState(args: {
           acceptsImages: result.acceptsImages,
           statesPermissionMode: result.current?.permissionMode !== undefined
         })
+        if (optionMutationGeneration.current !== readGeneration) {
+          return
+        }
         setConversationSupport({ sessionId, fence, commands: result.conversationCommands ?? [] })
         updateOptionState((current) =>
-          applyStructuredAgentSessionOptions(current, optionCatalog, result, { newLaunch })
+          applyStructuredAgentSessionOptions(current, optionCatalog, result, {
+            newLaunch,
+            coherentCatalog
+          })
         )
       }).catch(() => undefined)
     }
@@ -202,7 +184,7 @@ export function useMobileStructuredOptionState(args: {
     optionCatalog,
     optionStamp,
     isCurrentContext,
-    projection,
+    coherentCatalog,
     sessionId,
     fence,
     updateOptionState
@@ -212,7 +194,7 @@ export function useMobileStructuredOptionState(args: {
     conversationSupport,
     imageSupport,
     awaitingOptions,
-    projection,
+    writes,
     readRef,
     receiveCatalog,
     isCurrentContext,
