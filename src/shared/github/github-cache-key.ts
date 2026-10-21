@@ -44,16 +44,21 @@ export function repoCacheKeyHostId(key: string, owners: readonly string[]): Exec
   if (owners.some((owner) => key.startsWith(`${owner}::`))) {
     return LOCAL_EXECUTION_HOST_ID
   }
-  const scopeEnd = key.indexOf('::')
-  if (scopeEnd === -1) {
-    return null
+  // Why not the first `::`: a task-source scope with empty parts contains `::` itself.
+  for (const owner of owners) {
+    const marker = `::${owner}::`
+    for (let at = key.indexOf(marker); at !== -1; at = key.indexOf(marker, at + 1)) {
+      const scope = key.slice(0, at)
+      // Why the `::` check: a composed host id is encoded, so a candidate spanning `::` is owner + suffix.
+      const hostId =
+        (scope.includes('::') ? null : normalizeExecutionHostId(scope)) ??
+        taskSourceCacheScopeHostId(scope)
+      if (hostId) {
+        return hostId
+      }
+    }
   }
-  const rest = key.slice(scopeEnd + 2)
-  if (!owners.some((owner) => rest.startsWith(`${owner}::`))) {
-    return null
-  }
-  const scope = key.slice(0, scopeEnd)
-  return normalizeExecutionHostId(scope) ?? taskSourceCacheScopeHostId(scope)
+  return null
 }
 
 function getGitHubCacheHostScope(

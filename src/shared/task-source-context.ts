@@ -186,10 +186,18 @@ export function getTaskSourceCacheScope(
     .join(':')
 }
 
-/** The host a {@link getTaskSourceCacheScope} scope was built for, or null when `scope` isn't one. */
+// provider, hostId, projectId, projectHostSetupId, repoId, identity; accountLabel is optional.
+const TASK_SOURCE_CACHE_SCOPE_FIXED_PARTS = 6
+
+/** The host a {@link getTaskSourceCacheScope} scope was built for, or null when `scope` isn't a whole one. */
 export function taskSourceCacheScopeHostId(scope: string): ExecutionHostId | null {
-  const [provider, encodedHostId] = scope.split(':')
-  if (!isTaskProvider(provider) || !encodedHostId) {
+  // Why count parts: empty parts put `::` inside a scope, so a truncated prefix must not parse as one.
+  const parts = scope.split(':')
+  const whole =
+    parts.length === TASK_SOURCE_CACHE_SCOPE_FIXED_PARTS ||
+    (parts.length === TASK_SOURCE_CACHE_SCOPE_FIXED_PARTS + 1 && parts.at(-1) !== '')
+  const [provider, encodedHostId] = parts
+  if (!whole || !isTaskProvider(provider) || !encodedHostId) {
     return null
   }
   try {

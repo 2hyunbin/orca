@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { parseGitHubIssueOrPRLink } from '../../../../shared/github/links'
 import { githubRepoIdentityKey } from '../../../../shared/github/repository-identity-key'
 import { getTaskSourceCacheScope } from '../../../../shared/task-source-context'
-import { getRepoExecutionHostId, normalizeExecutionHostId } from '../../../../shared/execution-host'
+import { getRepoExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { repoMatchesHostIdentity } from '../slices/repo-host-identity'
 import { evictRepoCacheEntries, repoCacheEviction, type RepoCacheEviction } from './cache-identity'
@@ -18,14 +18,10 @@ function repoCacheEvictionForRow(
   state: AppState,
   repoId: string,
   repoPath: string | undefined,
-  hostId?: string
+  hostId?: ExecutionHostId
 ): RepoCacheEviction {
   const row = hostId ? undefined : findRepoForGitHubOwner(state, repoId, repoPath ?? '')
-  const evictedHostId = hostId
-    ? normalizeExecutionHostId(hostId)
-    : row
-      ? getRepoExecutionHostId(row)
-      : null
+  const evictedHostId = hostId ?? (row ? getRepoExecutionHostId(row) : null)
   return repoCacheEviction(state.repos, repoId, repoPath, evictedHostId)
 }
 
@@ -118,8 +114,6 @@ export const createWorkItemMutationActions = (
       const issues = evictRepoCacheEntries(s.issueCache, eviction)
       const checks = evictRepoCacheEntries(s.checksCache, eviction)
       const comments = evictRepoCacheEntries(s.commentsCache, eviction)
-      // Why: hosted reviews (GitLab MRs and the rest) use the same repo key shape.
-      const hostedReviews = evictRepoCacheEntries(s.hostedReviewCache, eviction)
       const updates: Partial<AppState> = {}
 
       if (workItems.evicted) {
@@ -137,9 +131,6 @@ export const createWorkItemMutationActions = (
       }
       if (comments.evicted) {
         updates.commentsCache = comments.cache
-      }
-      if (hostedReviews.evicted) {
-        updates.hostedReviewCache = hostedReviews.cache
       }
 
       return updates

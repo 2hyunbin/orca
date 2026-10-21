@@ -255,7 +255,7 @@ export type GitHubSlice = {
     hostId: ExecutionHostId
   ) => Promise<void>
   /** Drops the row's entries on every host scope; `hostId` names the row so a same-id twin on another host keeps its own. */
-  evictGitHubRepoCaches: (repoId: string, repoPath?: string, hostId?: string) => void
+  evictGitHubRepoCaches: (repoId: string, repoPath?: string, hostId?: ExecutionHostId) => void
   // ── ProjectV2 view cache ─────────────────────────────────────────────
   projectViewCache: Record<string, ProjectViewCacheEntry<GitHubProjectTable>>
   /** `sourceTarget` names the board's row-less source host; the focused server is never read. */

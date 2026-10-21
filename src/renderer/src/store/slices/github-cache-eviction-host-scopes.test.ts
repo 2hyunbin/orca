@@ -5,7 +5,6 @@ import {
   sourceScopedRepoCacheKey,
   workItemsCacheKey
 } from '../github/cache-identity'
-import { getHostedReviewCacheKey } from './hosted-review-cache-identity'
 import {
   createTestStore,
   githubSourceContext,
@@ -29,6 +28,13 @@ const localRow: Repo = {
 // Why no executionHostId: older SSH rows carry only connectionId.
 const sshRow: Repo = { ...localRow, path: '/remote/twin', addedAt: 2, connectionId: 'builder' }
 
+function sshSourceScopes(repoId: string): string[] {
+  const full = githubSourceContext(SSH_HOST, repoId)
+  // Why: empty parts put `::` inside the scope, which a first-`::` split misreads.
+  const sparse = { ...full, projectHostSetupId: null, providerIdentity: null }
+  return [getTaskSourceCacheScope(full), getTaskSourceCacheScope(sparse)]
+}
+
 /** Every repo-owned cache seeded with one entry per host scope, keyed by the real builders. */
 function seedEveryHostScope(repoId: string, repoPath: string) {
   const entry = { data: [], fetchedAt: 1 }
@@ -40,39 +46,32 @@ function seedEveryHostScope(repoId: string, repoPath: string) {
         workItems: workItemsCacheKey(repoId, 20, '', hostId),
         pr: prCacheKey(repoPath, repoId, 'main', null, null, hostId, true),
         issue: issueCacheKey(repoPath, repoId, 7, null, null, hostId, true),
-        checks: sourceScopedRepoCacheKey(repoPath, repoId, 'pr-checks::7', null, null, hostId),
-        hostedReview: getHostedReviewCacheKey(repoPath, 'main', null, repoId, null, hostId, true)
+        checks: sourceScopedRepoCacheKey(repoPath, repoId, 'pr-checks::7', null, null, hostId)
       }
     ])
   )
-  const sourceKey = workItemsCacheKey(
-    repoId,
-    20,
-    '',
-    getTaskSourceCacheScope(githubSourceContext(SSH_HOST, repoId))
+  const sourceKeys = sshSourceScopes(repoId).map((scope) =>
+    workItemsCacheKey(repoId, 20, '', scope)
   )
   const all = Object.values(keys)
   return {
     keys,
-    sourceKey,
+    sourceKeys,
     state: {
       workItemsCache: Object.fromEntries(
-        [...all.map((k) => k.workItems), sourceKey].map((key) => [key, entry])
+        [...all.map((k) => k.workItems), ...sourceKeys].map((key) => [key, entry])
       ),
       prCache: Object.fromEntries(all.map((k) => [k.pr, { data: makePR(), fetchedAt: 1 }])),
       issueCache: Object.fromEntries(all.map((k) => [k.issue, { data: null, fetchedAt: 1 }])),
-      checksCache: Object.fromEntries(all.map((k) => [k.checks, entry])),
-      hostedReviewCache: Object.fromEntries(
-        all.map((k) => [k.hostedReview, { data: null, fetchedAt: 1 }])
-      )
+      checksCache: Object.fromEntries(all.map((k) => [k.checks, entry]))
     }
   }
 }
 
 function cachedKeys(store: ReturnType<typeof createTestStore>): string[] {
   const s = store.getState()
-  return [s.workItemsCache, s.prCache, s.issueCache, s.checksCache, s.hostedReviewCache].flatMap(
-    (cache) => Object.keys(cache)
+  return [s.workItemsCache, s.prCache, s.issueCache, s.checksCache].flatMap((cache) =>
+    Object.keys(cache)
   )
 }
 
@@ -91,8 +90,7 @@ describe('repo cache eviction across host scopes', () => {
       workItemsCache: { ...removed.state.workItemsCache, ...other.state.workItemsCache },
       prCache: { ...removed.state.prCache, ...other.state.prCache },
       issueCache: { ...removed.state.issueCache, ...other.state.issueCache },
-      checksCache: { ...removed.state.checksCache, ...other.state.checksCache },
-      hostedReviewCache: { ...removed.state.hostedReviewCache, ...other.state.hostedReviewCache }
+      checksCache: { ...removed.state.checksCache, ...other.state.checksCache }
     })
 
     store.getState().evictGitHubRepoCaches('repo-1', '/repo/one', 'local')
@@ -102,16 +100,26 @@ describe('repo cache eviction across host scopes', () => {
         ...Object.keys(other.state.workItemsCache),
         ...Object.keys(other.state.prCache),
         ...Object.keys(other.state.issueCache),
-        ...Object.keys(other.state.checksCache),
-        ...Object.keys(other.state.hostedReviewCache)
+        ...Object.keys(other.state.checksCache)
       ].sort()
     )
+  })
+
+  it('keeps another repo’s entry under a source scope that names this repo', () => {
+    const store = createTestStore()
+    const [, sparseScope] = sshSourceScopes('repo-1')
+    const otherKey = workItemsCacheKey('repo-2', 20, '', sparseScope)
+    store.setState({ workItemsCache: { [otherKey]: { data: [], fetchedAt: 1 } } })
+
+    store.getState().evictGitHubRepoCaches('repo-1', '/repo/one')
+
+    expect(Object.keys(store.getState().workItemsCache)).toEqual([otherKey])
   })
 
   it('removing the SSH twin keeps the local twin’s entries, and the reverse', () => {
     const seeded = seedEveryHostScope('twin', localRow.path)
     const local = Object.values(seeded.keys.local)
-    const ssh = [...Object.values(seeded.keys.ssh), seeded.sourceKey]
+    const ssh = [...Object.values(seeded.keys.ssh), ...seeded.sourceKeys]
 
     const store = createTestStore()
     store.setState({ repos: [localRow, sshRow], ...seeded.state })
