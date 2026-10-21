@@ -37,16 +37,33 @@ function isNamed(row: Extract<Row, { type: 'terminal' }>): boolean {
   return !!row.customTitle || !!row.parentLayout?.titlesByLeafId?.[row.leafId]?.trim()
 }
 
+type MergeRules = {
+  exited: (ptyId: string) => boolean
+  /** Whether a terminal runs now; given, a running window terminal outranks a binding that runs nowhere. */
+  live?: (ptyId: string) => boolean
+  /** Keeps every window row main does not list, terminals too, where they stood in the window. */
+  keepUnlisted?: boolean
+}
+
+/** Whether the window's terminal id stands over main's binding (see withWindowFacts). */
+function keepsWindowPtyId(
+  main: string | null | undefined,
+  window: string | null | undefined,
+  { exited, live }: MergeRules
+): boolean {
+  if (!window || window === main) {
+    return false
+  }
+  // A start whose bind write is still in flight: main's binding is the terminal it replaced.
+  return main ? !!live && live(window) && !live(main) : !exited(window)
+}
+
 /**
  * Main's row with the fields only the window knows, from the window's row of the same id. A
  * window terminal id names a pane main has not bound yet (an SSH restore before its terminal
  * registers), unless main has seen that terminal exit: then main's cleared binding wins.
  */
-function withWindowFacts(
-  row: Row,
-  windowRow: Row | undefined,
-  exited: (ptyId: string) => boolean
-): Row {
+function withWindowFacts(row: Row, windowRow: Row | undefined, rules: MergeRules): Row {
   if (row.type === 'terminal' && windowRow?.type === 'terminal') {
     return {
       ...row,
@@ -54,9 +71,7 @@ function withWindowFacts(
       ...(!isNamed(row) && !isNamed(windowRow) ? { title: windowRow.title } : {}),
       ...(windowRow.terminalTheme ? { terminalTheme: windowRow.terminalTheme } : {}),
       ...(windowRow.agentStatus !== undefined ? { agentStatus: windowRow.agentStatus } : {}),
-      ...(!row.ptyId && windowRow.ptyId && !exited(windowRow.ptyId)
-        ? { ptyId: windowRow.ptyId }
-        : {}),
+      ...(keepsWindowPtyId(row.ptyId, windowRow.ptyId, rules) ? { ptyId: windowRow.ptyId } : {}),
       ...(windowRow.launchDraft !== undefined ? { launchDraft: windowRow.launchDraft } : {}),
       ...(windowRow.launchDraftCreatedAt !== undefined
         ? { launchDraftCreatedAt: windowRow.launchDraftCreatedAt }
@@ -79,12 +94,12 @@ function withWindowFacts(
 }
 
 /** The id a group's tab order lists a row under: a terminal pane's tab, else the row itself. */
-function orderIdOf(row: Row): string {
+export function orderIdOf(row: Row): string {
   return row.type === 'terminal' ? row.parentTabId : row.id
 }
 
 /** Each window-only id placed after the id it follows in the window's group, else at the end. */
-function withWindowOnlyIds(
+export function withWindowOnlyIds(
   tabOrder: readonly string[],
   windowOrder: readonly string[],
   windowOnly: ReadonlySet<string>
@@ -132,15 +147,19 @@ function withWindowOnlyRows(
 export function withMainSessionTabRows(
   published: RuntimeMobileSessionTabsSnapshot,
   projected: MainSessionTabRows,
-  exited: (ptyId: string) => boolean
+  exited: (ptyId: string) => boolean,
+  opts: Omit<MergeRules, 'exited'> = {}
 ): RuntimeMobileSessionTabsSnapshot {
+  const rules = { ...opts, exited }
   const windowRows = new Map(published.tabs.map((row) => [row.id, row]))
   const projectedIds = new Set(projected.tabs.map((row) => row.id))
-  const windowOnly = published.tabs.filter((row) => !projectedIds.has(row.id) && !isMainRow(row))
+  const windowOnly = published.tabs.filter(
+    (row) => !projectedIds.has(row.id) && (rules.keepUnlisted || !isMainRow(row))
+  )
   // A main-held row is main's; a browser or chat row stays the window's while both list it.
   const rows = projected.tabs.map((row) =>
     isMainRow(row)
-      ? withWindowFacts(row, windowRows.get(row.id), exited)
+      ? withWindowFacts(row, windowRows.get(row.id), rules)
       : (windowRows.get(row.id) ?? row)
   )
   const windowOnlyIds = new Set(windowOnly.map((row) => row.id))

@@ -119,7 +119,20 @@ describe('session.tabs on a windowless server (switch on)', () => {
         throw new Error('threeTabSurfaceRuntime saves three tabs')
       }
       const serveTab = { ...first, id: 'serve-tab', ptyId: 'serve-1', sortOrder: 3, createdAt: 9 }
-      setSession({ ...session, tabsByWorktree: { [TEST_WORKTREE_ID]: [...saved, serveTab] } })
+      const serveLeaf = '99999999-9999-4999-8999-999999999999'
+      setSession({
+        ...session,
+        tabsByWorktree: { [TEST_WORKTREE_ID]: [...saved, serveTab] },
+        terminalLayoutsByTabId: {
+          ...session.terminalLayoutsByTabId,
+          [serveTab.id]: {
+            root: { type: 'leaf', leafId: serveLeaf },
+            activeLeafId: serveLeaf,
+            expandedLeafId: null,
+            ptyIdsByLeafId: { [serveLeaf]: 'serve-1' }
+          }
+        }
+      })
       runtime.registerPty('serve-1', TEST_WORKTREE_ID)
       runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
       await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
@@ -170,6 +183,10 @@ describe('session.tabs on a windowless server (switch on)', () => {
         [SAVED_GROUP_ID]
       ])
       expect(tabStrip(seen.at(-1))).toEqual(SAVED_STRIP)
+      // A list after that rebuild serves main's groups too, through the writer.
+      const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+      expect(listed.tabGroups?.map((group) => group.id)).toEqual([SAVED_GROUP_ID])
+      expect(tabStrip(listed)).toEqual(SAVED_STRIP)
       expect(runtime.mobileSessionTabsByWorktree.get(TEST_WORKTREE_ID)?.snapshotVersion).toBe(
         settled?.snapshotVersion
       )

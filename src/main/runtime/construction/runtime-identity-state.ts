@@ -115,9 +115,9 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
   ): RuntimeMobileSessionTabsSnapshot {
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      // Every writer stores main's rows, so no push or list carries rows main's layout dropped.
-      const merged = startedMainTerminalSurfaces(this)?.withMainRows(snapshot) ?? snapshot
-      // A write main's layout wholly overrides (a rebuild from the saved session) changes nothing.
+      // Every write keeps main's order and groups; its rows and their facts stay as written.
+      const merged = startedMainTerminalSurfaces(this)?.withMainOrder(snapshot) ?? snapshot
+      // A write main's order wholly overrides (a rebuild from the saved session) changes nothing.
       if (
         existing &&
         headlessMobileSnapshotContentUnchanged(existing, merged) &&
