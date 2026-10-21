@@ -31,7 +31,9 @@ describe('applyRemoteViewerLaunchEnv', () => {
 
   it('still applies the Claude image rule and never marks Claude', () => {
     vi.stubEnv('CLAUDE_CODE_FORCE_TERMINAL_IMAGES', undefined)
-    const launch = { launchAgent: 'claude' as const }
+    const launch: { launchAgent: 'claude'; env?: Record<string, string> } = {
+      launchAgent: 'claude'
+    }
     expect(applyRemoteViewerLaunchEnv(launch, false).env).toEqual({
       CLAUDE_CODE_FORCE_TERMINAL_IMAGES: '0'
     })
