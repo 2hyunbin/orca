@@ -6,7 +6,6 @@ import { resolvePtyBoundActiveLeafId } from '@/components/terminal-pane/terminal
 import type { AppState } from '@/store/types'
 import { layoutContainsLeafId } from '../../../shared/workspace-layout/terminal-pane-tree'
 import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-published'
-import type { WorkspaceLayoutCache } from '@/store/workspace-layout-cache'
 import { isDrawnTabHeld } from './layout-owner-drawn-tab-holds'
 import { isTabPaneTreeHeld } from './layout-owner-pane-intents'
 
