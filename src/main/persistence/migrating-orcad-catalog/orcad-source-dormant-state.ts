@@ -45,6 +45,8 @@ export type OrcadMigrationSourceDormantInspection = {
   blockedSessionItems: string[]
   /** What a confirmed "Move anyway" leaves in this desktop's retained profile. */
   leftBehindItems: string[]
+  /** Automations a local WSL move carries disabled, to re-enable on the host once it commits. */
+  automationsEnabledAtSource: string[]
 }
 
 /** The user confirmed "Move anyway" for this host: what can't move stays on this desktop. */
@@ -53,8 +55,11 @@ export function orcadMigrationLeavesBehind(
   targetId: string | null
 ): boolean {
   // A local WSL move has no "Move anyway": what can't move blocks it.
-  return targetId !== null && state.sshTargets.some(
-    (target) => target.id === targetId && target.managedServerLeaveBehind !== undefined
+  return (
+    targetId !== null &&
+    state.sshTargets.some(
+      (target) => target.id === targetId && target.managedServerLeaveBehind !== undefined
+    )
   )
 }
 
@@ -241,7 +246,8 @@ export function collectOrcadMigrationSourceDormantState(
     },
     blockedCounts,
     blockedSessionItems,
-    leftBehindItems
+    leftBehindItems,
+    automationsEnabledAtSource: automationState.enabledAtSourceIds
   }
 }
 

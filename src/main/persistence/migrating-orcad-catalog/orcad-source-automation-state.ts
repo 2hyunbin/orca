@@ -26,6 +26,8 @@ export type OrcadMigrationSourceAutomationInspection = {
   automationRuns: AutomationRun[]
   blockedAutomationCount: number
   blockedRunCount: number
+  /** Moved disabled, as the wire requires; the move re-enables these on the host after commit. */
+  enabledAtSourceIds: string[]
 }
 
 export function collectOrcadMigrationSourceAutomationState(
@@ -47,6 +49,7 @@ export function collectOrcadMigrationSourceAutomationState(
   const automationRuns: AutomationRun[] = []
   let blockedAutomationCount = 0
   let blockedRunCount = 0
+  const enabledAtSourceIds: string[] = []
 
   for (const [automationId, matching] of automationsById) {
     const runs = runsByAutomationId.get(automationId) ?? []
@@ -59,7 +62,12 @@ export function collectOrcadMigrationSourceAutomationState(
       blockedRunCount += runs.length
       continue
     }
-    automations.push(projectAutomationToDestination(matching[0]))
+    const projected = projectAutomationToDestination(matching[0])
+    if (scope.kind === 'local-wsl' && projected.enabled) {
+      enabledAtSourceIds.push(projected.id)
+      projected.enabled = false
+    }
+    automations.push(projected)
     automationRuns.push(...runs.map(projectAutomationRunToDestination))
   }
 
@@ -70,7 +78,14 @@ export function collectOrcadMigrationSourceAutomationState(
   }
   automations.sort((left, right) => compareKeys(left.id, right.id))
   automationRuns.sort((left, right) => compareKeys(left.id, right.id))
-  return { automations, automationRuns, blockedAutomationCount, blockedRunCount }
+  enabledAtSourceIds.sort(compareKeys)
+  return {
+    automations,
+    automationRuns,
+    blockedAutomationCount,
+    blockedRunCount,
+    enabledAtSourceIds
+  }
 }
 
 export function automationTouchesScope(

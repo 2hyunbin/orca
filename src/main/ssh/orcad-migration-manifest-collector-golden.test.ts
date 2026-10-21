@@ -92,7 +92,14 @@ function richState(): PersistedState {
     createdAt: 1
   }
   state.sparsePresetsByRepo['repo-1'] = [
-    { id: 'preset', repoId: 'repo-1', name: 'Src', directories: ['src'], createdAt: 1, updatedAt: 2 }
+    {
+      id: 'preset',
+      repoId: 'repo-1',
+      name: 'Src',
+      directories: ['src'],
+      createdAt: 1,
+      updatedAt: 2
+    }
   ]
   state.automations = [
     {
@@ -105,7 +112,10 @@ function richState(): PersistedState {
     }
   ]
   state.automationRuns = [
-    { ...DORMANT_AUTOMATION_RUN, runContext: { ...DORMANT_AUTOMATION_RUN.runContext!, hostId: HOST } }
+    {
+      ...DORMANT_AUTOMATION_RUN,
+      runContext: { ...DORMANT_AUTOMATION_RUN.runContext!, hostId: HOST }
+    }
   ]
   const host = getDefaultWorkspaceSession()
   host.activeRepoId = 'repo-1'
@@ -137,7 +147,12 @@ function richState(): PersistedState {
 function sharedRepoState(): PersistedState {
   const state = richState()
   // The same repo id registered on this desktop too: legacy unqualified keys stay put.
-  state.repos.push({ ...REPOSITORY, connectionId: undefined, executionHostId: 'local', path: '/home/user/repo-1' })
+  state.repos.push({
+    ...REPOSITORY,
+    connectionId: undefined,
+    executionHostId: 'local',
+    path: '/home/user/repo-1'
+  })
   state.worktreeMeta['repo-1::/srv/repo-1-unqualified'] = meta()
   const child = worktreeWorkspaceKey(WORKTREE)
   state.workspaceLineageByChildKey[child] = {
