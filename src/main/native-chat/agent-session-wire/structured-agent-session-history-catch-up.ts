@@ -145,16 +145,20 @@ export async function runHistoryCatchUp<View>(input: {
     const epoch = history.epoch
     let planned: { view: View } | undefined
     const view = (): View => (planned ??= { view: input.readView(history) }).view
-    const plan = await input.prepare({
-      view,
-      history,
-      journal,
-      signal: controller.signal,
-      deadline,
-      check,
-      yieldTurn: () => setImmediate(),
-      warn
-    })
+    const plan = await waitForPromiseWithSignal(
+      input.prepare({
+        view,
+        history,
+        journal,
+        signal: controller.signal,
+        deadline,
+        check,
+        yieldTurn: () => setImmediate(),
+        warn
+      }),
+      controller.signal
+    )
+    check()
     if (!plan) {
       return 'nothing'
     }
@@ -218,6 +222,7 @@ export async function runHistoryCatchUp<View>(input: {
     warn('import-skipped', error)
     return 'skipped'
   } finally {
+    controller.abort()
     clearTimeout(timer)
     input.signal?.removeEventListener('abort', abort)
   }
