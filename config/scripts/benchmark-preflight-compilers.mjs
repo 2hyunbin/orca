@@ -42,14 +42,14 @@ const report = {
 }
 const save = () =>
   writeFileSync(path.join(output, `${reportName}.json`), `${JSON.stringify(report, null, 2)}\n`)
-const command = (program, args, label) =>
+const command = (program, args, label, arm) =>
   measurePreflightCommand({
     program,
     args,
     label,
     root,
     output,
-    env,
+    env: arm === 'native' ? { ...env, GOMEMLIMIT: '11GiB' } : env,
     ...(process.platform === 'win32' ? { timeoutMs: 900_000 } : {})
   })
 const version = await command(bun, ['--version'], 'bun-version')
@@ -116,7 +116,8 @@ async function suite(arm, state, pair, comparison) {
             ...(await command(
               program,
               args,
-              `${comparison}-${pair}-${arm}-${state}-${path.basename(config)}`
+              `${comparison}-${pair}-${arm}-${state}-${path.basename(config)}`,
+              arm
             ))
           }
         })
@@ -209,7 +210,7 @@ for (const { config } of TYPECHECK_PROJECTS) {
     )
     for (const arm of ['native', 'bun']) {
       const [program, args] = invocation(config, arm)
-      const result = await command(program, args, `probe-${path.basename(config)}-${arm}`)
+      const result = await command(program, args, `probe-${path.basename(config)}-${arm}`, arm)
       report.parity.push({ config, arm, ...result })
       save()
       if (
@@ -234,7 +235,7 @@ for (const { config } of TYPECHECK_PROJECTS) {
   }
   for (const arm of ['native', 'bun']) {
     const [program, args] = invocation(config, arm, ['--listFilesOnly'])
-    const result = await command(program, args, `files-${path.basename(config)}-${arm}`)
+    const result = await command(program, args, `files-${path.basename(config)}-${arm}`, arm)
     if (result.code !== 0) {
       throw new Error(`Could not enumerate ${arm} ${config}: ${result.stderr}`)
     }
