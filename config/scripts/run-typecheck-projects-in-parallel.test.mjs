@@ -47,12 +47,9 @@ describe('typecheck project admission', () => {
     )
   })
 
-  it('holds CI batches inside the memory budget except the measured node singleton', () => {
+  it('holds every CI batch inside the memory budget', () => {
     const budget = admissibleHeapGib(CI_RUNNER.totalBytes)
-    const batches = planFor(CI_RUNNER)
-    const nodeBatch = batches[batchOf(batches, 'config/tsconfig.node.json')]
-    expect(nodeBatch).toEqual([{ config: 'config/tsconfig.node.json', heapGib: 15 }])
-    for (const batch of batches.filter((candidate) => candidate !== nodeBatch)) {
+    for (const batch of planFor(CI_RUNNER)) {
       const claimed = batch.reduce((total, project) => total + project.heapGib, 0)
       expect(claimed).toBeLessThanOrEqual(budget)
     }
@@ -90,9 +87,9 @@ describe('typecheck project admission', () => {
   })
 
   it('never lets one project outgrow a CI runner on its own', () => {
-    // Oversized singletons may exceed the admission budget, but must fit physical memory.
+    // A single project over budget runs anyway, so this is the ceiling the pool cannot rescue.
     const heaviest = Math.max(...TYPECHECK_PROJECTS.map((project) => project.heapGib))
-    expect(heaviest).toBeLessThan(CI_RUNNER.totalBytes / 1024 ** 3)
+    expect(heaviest).toBeLessThanOrEqual(admissibleHeapGib(CI_RUNNER.totalBytes))
   })
 })
 
