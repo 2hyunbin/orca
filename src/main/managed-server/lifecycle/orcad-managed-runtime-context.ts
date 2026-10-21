@@ -11,7 +11,10 @@ import { sshOrcadHostTransport } from '../../ssh/orcad-ssh-host-transport'
 import type { OrcadHostTarget } from '../../ssh/orcad-host-transport'
 import type { OrcadActivationRecord } from '../activation/orcad-activation-record'
 import { refuseOrcadHostDowngrade } from '../../ssh/orcad-host-version-admission'
-import type { OrcadTerminalCensus } from '../../../shared/orcad-terminal-census'
+import {
+  type OrcadTerminalCensus,
+  UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
+} from '../../../shared/orcad-terminal-census'
 import { probeActiveOrcadReadiness } from '../../ssh/orcad-active-readiness'
 import { resolveOrcadRemoteContext, type OrcadRemoteContext } from '../install/orcad-remote-context'
 import { ORCAD_INSTALL_MODEL } from '../install/remote-install-model'
@@ -137,7 +140,7 @@ export function managedOrcadDeployPolicy(
   // Why unknown when a version is active: only the daemon can count its sessions, and
   // a deploy that guessed zero would restart over live terminals.
   const census: OrcadTerminalCensus = context.activationRecord.active
-    ? { liveSessions: null, startedSinceActivation: null, daemonProtocolVersion: null }
+    ? UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
     : { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: null }
   return {
     census,

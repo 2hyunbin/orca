@@ -19,8 +19,6 @@ import {
 import { removeRemoteTreeCommand } from '../../ssh/ssh-remote-commands'
 import { RELAY_INSTALL_LOCK_NAME } from '../../../shared/relay-install-lock-name'
 
-export { RELAY_INSTALL_LOCK_NAME }
-
 const INSTALL_LOCK_POLL_MS = 1_000
 // Why: a fresh lock can cross the stale threshold during our bounded wait.
 // Recheck infrequently so it becomes recoverable without adding an exec per poll.
