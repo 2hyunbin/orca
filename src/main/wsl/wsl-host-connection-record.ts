@@ -5,7 +5,7 @@ import {
 } from '../../shared/runtime-environment-wsl-host-store'
 import type { WslHostDeploymentRecord } from '../../shared/wsl-host-deployment-store'
 import type { WslHostStatus } from '../../shared/wsl-host-types'
-import { readWslDistroRegistryIdShared } from './wsl-distro-registry-id'
+import { readWslDistroRegistryId } from './wsl-distro-registry-id'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 
@@ -43,14 +43,18 @@ export const WSL_HOST_REGISTRATION_WAIT_MS = 6_000
 // Why per process: only a read this process ran vouches for the registration running now.
 const latestRegistrationReads = new Map<
   string,
-  { distro: string; read: Promise<WslHostRegistrationRead> }
+  { distro: string; read: Promise<WslHostRegistrationRead>; failed: boolean }
 >()
+
+// Why uncached: the 30s shared read can predate an unregister and re-import under the same name.
+const readLiveRegistryId = (distro: string): Promise<string | null> =>
+  readWslDistroRegistryId(distro)
 
 /** Records the live registration GUID when the record lacks it or names an older one (a re-import). */
 export async function observeWslHostRegistration(
   userDataPath: string,
   record: WslHostRegistrationTarget,
-  readRegistryId: (distro: string) => Promise<string | null> = readWslDistroRegistryIdShared
+  readRegistryId: (distro: string) => Promise<string | null> = readLiveRegistryId
 ): Promise<boolean> {
   return (await startRegistrationRead(userDataPath, record, readRegistryId)).recorded
 }
@@ -68,8 +72,9 @@ export async function awaitWslHostRegistration(
   } = {}
 ): Promise<string | null> {
   const latest = latestRegistrationReads.get(target.environmentId)
+  // Why retry a failed read: otherwise one transient reg.exe failure pins the fallback jar.
   const read =
-    latest?.distro === target.distro
+    latest?.distro === target.distro && !latest.failed
       ? latest.read
       : startRegistrationRead(userDataPath, target, options.readRegistryId)
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -90,11 +95,18 @@ export function resetWslHostRegistrationReadsForTests(): void {
 function startRegistrationRead(
   userDataPath: string,
   target: WslHostRegistrationTarget,
-  readRegistryId: (distro: string) => Promise<string | null> = readWslDistroRegistryIdShared
+  readRegistryId: (distro: string) => Promise<string | null> = readLiveRegistryId
 ): Promise<WslHostRegistrationRead> {
-  const read = readAndRecordRegistration(userDataPath, target, readRegistryId)
-  latestRegistrationReads.set(target.environmentId, { distro: target.distro, read })
-  return read
+  const entry = {
+    distro: target.distro,
+    read: readAndRecordRegistration(userDataPath, target, readRegistryId),
+    failed: false
+  }
+  latestRegistrationReads.set(target.environmentId, entry)
+  void entry.read.then((outcome) => {
+    entry.failed = outcome.distroId === null
+  })
+  return entry.read
 }
 
 async function readAndRecordRegistration(

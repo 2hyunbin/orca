@@ -137,6 +137,19 @@ describe('WSL host registration observation', () => {
     })
 
     expect(findWslHostDeployment(userDataPath, 'wsl:ubuntu')?.observedDistroId).toBe(distroId)
-    expect(await awaitWslHostRegistration(userDataPath, record)).toBeNull()
+    expect(
+      await awaitWslHostRegistration(userDataPath, record, { readRegistryId: async () => null })
+    ).toBeNull()
+  })
+
+  it('retries a failed read for the next browser start instead of pinning the fallback', async () => {
+    const record = addHost(distroId)
+    await observeWslHostRegistration(userDataPath, record, async () => null)
+    const read = vi.fn(async (_distro: string) => distroId)
+
+    expect(await awaitWslHostRegistration(userDataPath, record, { readRegistryId: read })).toBe(
+      distroId
+    )
+    expect(read).toHaveBeenCalledOnce()
   })
 })
