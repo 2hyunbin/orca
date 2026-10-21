@@ -118,6 +118,23 @@ describe('a start into a pane main holds', () => {
     expect(store.withdrawTerminalPane).not.toHaveBeenCalled()
   })
 
+  it('shows no failure when another owner won the pane it held', async () => {
+    const { register } = statuses()
+    const { runtimeStore } = storeAnswering('exists')
+    await expect(
+      spawnInAdmittedPane(
+        runtimeStore,
+        {
+          spawn: vi.fn(async () => {
+            throw new PaneOwnerContentionError()
+          })
+        },
+        { ...ARGS, startStatus: { sink: register, keepOnFailure: true } }
+      )
+    ).rejects.toThrow('terminal_pane_owner_changed')
+    expect(register.get(PANE_KEY, UNBOUND)).toBeNull()
+  })
+
   it('keeps a pane the create wrote only when asked to; otherwise takes it back as today', async () => {
     const failing = {
       spawn: vi.fn(async () => {
