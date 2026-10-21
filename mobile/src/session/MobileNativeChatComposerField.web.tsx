@@ -28,6 +28,7 @@ function scrollTopOf(event: unknown): number {
 export function MobileNativeChatComposerField({
   value,
   skillToken,
+  style,
   ref,
   ...props
 }: MobileNativeChatComposerFieldProps) {
@@ -40,7 +41,12 @@ export function MobileNativeChatComposerField({
         <View pointerEvents="none" style={styles.copyLayer}>
           <Text
             aria-hidden
-            style={[inputStyles.input, styles.copy, { transform: [{ translateY: -scrollTop }] }]}
+            style={[
+              inputStyles.input,
+              style,
+              styles.copy,
+              { transform: [{ translateY: -scrollTop }] }
+            ]}
           >
             <Text style={skillStyles.token}>{skillToken}</Text>
             {value.slice(skillToken.length)}
@@ -50,7 +56,7 @@ export function MobileNativeChatComposerField({
       <TextInput
         ref={ref}
         value={value}
-        style={skillToken ? [inputStyles.input, clearText.field] : inputStyles.input}
+        style={[inputStyles.input, style, skillToken && clearText.field]}
         // Only the copy reads it, and there is a copy only while a skill leads.
         onScroll={skillToken ? (event) => setScrollTop(scrollTopOf(event)) : undefined}
         {...props}

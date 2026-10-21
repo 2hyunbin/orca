@@ -172,6 +172,62 @@ const INSET_CASES = [
 ]
 
 describeRender('native chat question cards in a constrained viewport', () => {
+  it('keeps an editable draft mounted while rotating an open question above the keyboard', async () => {
+    const { page, errors } = await openPrompt(
+      { width: 402, height: 874 },
+      '?keyboard=208&bottom=21&chrome=62'
+    )
+    try {
+      const composer = page.getByPlaceholder('Ask anything, @ to mention files, / for commands')
+      await composer.fill('Draft survives rotation\n'.repeat(8))
+      await composer.evaluate((node) => {
+        node.dataset.rotationWitness = 'same-field'
+      })
+      await page.setViewportSize({ width: 874, height: 402 })
+      await expect.poll(async () => (await readPromptLayout(page)).chat.height).toBeGreaterThan(24)
+      const layout = await readPromptLayout(page)
+      expect(layout.composer.height).toBeLessThan(80)
+      expect(layout.prompt.height).toBeGreaterThanOrEqual(22)
+      expect(layout.composer.bottom).toBeLessThanOrEqual(402 - 208 - 21 + 1)
+      expect(layout.documentHeight).toBeLessThanOrEqual(402)
+      await composer.fill('Edited in landscape')
+      expect(await composer.getAttribute('data-rotation-witness')).toBe('same-field')
+      await page.getByText(PROMPT_QUESTION, { exact: true }).click()
+      await scrollQuestionToEnd(page)
+      await page.getByText('Other…', { exact: true }).click()
+      await page.getByPlaceholder('Type your answer', { exact: true }).fill('Keep context')
+      expect(await composer.isVisible()).toBe(false)
+      await page.getByText('Submit', { exact: true }).click()
+      expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toEqual([
+        { indices: [], other: 'Keep context' }
+      ])
+      await page.evaluate(() => {
+        for (const node of document.querySelectorAll('*')) {
+          if (['auto', 'scroll'].includes(getComputedStyle(node).overflowY)) {
+            node.scrollTop = 0
+          }
+        }
+      })
+      await page.getByLabel('Collapse', { exact: true }).click()
+      expect(await composer.inputValue()).toBe('Edited in landscape')
+      await composer.focus()
+      expect(await composer.isVisible()).toBe(true)
+      await page.getByLabel('Expand', { exact: true }).click()
+      expect(await page.getByPlaceholder('Type your answer', { exact: true }).inputValue()).toBe(
+        'Keep context'
+      )
+      await scrollQuestionToEnd(page)
+      await page.getByText('Cancel', { exact: true }).click()
+      expect(await page.evaluate(() => globalThis.__orcaPromptViewportCancels)).toBe(1)
+      await page.setViewportSize({ width: 402, height: 874 })
+      expect(await composer.getAttribute('data-rotation-witness')).toBe('same-field')
+      expect(await composer.inputValue()).toBe('Edited in landscape')
+      expect(errors).toEqual([])
+    } finally {
+      await page.close()
+    }
+  })
+
   it('keeps terminal-only question navigation reachable above the keyboard', async () => {
     const { page, errors } = await openPrompt(
       { width: 375, height: 650 },

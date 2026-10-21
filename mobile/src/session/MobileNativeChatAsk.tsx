@@ -8,6 +8,7 @@ import { MobileNativeChatCardHeaderAction } from './MobileNativeChatCardHeaderAc
 import { useMobileNativeChatAskAutoAdvance } from './use-mobile-native-chat-ask-auto-advance'
 
 type Props = {
+  onInteract?: () => void
   prompt: AskPrompt
   /** Deliver the chosen answer (per-question option indices + free text) —
    *  index-based so Claude's arrow-navigate selector can be driven by the
@@ -28,6 +29,7 @@ const OTHER = -1
  *  with a subtle green accent on the active choice to match the rest of the app. */
 export function MobileNativeChatAsk({
   prompt,
+  onInteract,
   onAnswer,
   onCancel,
   onCollapse
@@ -179,7 +181,11 @@ export function MobileNativeChatAsk({
       style={styles.card}
       onLayout={(event) => recordHeight('card', event.nativeEvent.layout.height)}
     >
-      <ScrollView style={styles.scroll} keyboardShouldPersistTaps="always">
+      <ScrollView
+        style={styles.scroll}
+        keyboardShouldPersistTaps="always"
+        onScrollBeginDrag={onInteract}
+      >
         {total > 1 ? (
           <ScrollView
             horizontal
@@ -214,7 +220,9 @@ export function MobileNativeChatAsk({
 
         <View style={styles.body}>
           <View style={styles.questionRow}>
-            <Text style={styles.questionText}>{q.question}</Text>
+            <Text style={styles.questionText} onPress={onInteract}>
+              {q.question}
+            </Text>
             <MobileNativeChatCardHeaderAction
               onCollapse={
                 onCollapse &&
@@ -234,7 +242,10 @@ export function MobileNativeChatAsk({
               selected={(selections[index] ?? []).includes(optIndex)}
               multi={q.multiSelect}
               disabled={submitting}
-              onPress={() => toggle(index, optIndex, q.multiSelect)}
+              onPress={() => {
+                toggle(index, optIndex, q.multiSelect)
+                onInteract?.()
+              }}
             />
           ))}
           <OptionRow
@@ -242,7 +253,10 @@ export function MobileNativeChatAsk({
             selected={otherSelected}
             multi={q.multiSelect}
             disabled={submitting}
-            onPress={() => toggle(index, OTHER, q.multiSelect)}
+            onPress={() => {
+              toggle(index, OTHER, q.multiSelect)
+              onInteract?.()
+            }}
           />
           {otherSelected ? (
             <TextInput
@@ -252,6 +266,7 @@ export function MobileNativeChatAsk({
               placeholder="Type your answer"
               placeholderTextColor={colors.textMuted}
               multiline
+              onFocus={onInteract}
               autoFocus
             />
           ) : null}

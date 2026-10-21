@@ -14,6 +14,7 @@ import { MobileNativeChatPromptStrip } from './MobileNativeChatPromptStrip'
  *  view toggle); `ask` arrives already nulled once answered. */
 export function MobileNativeChatPromptCard({
   ask,
+  onInteract,
   askKey,
   onDismissAsk,
   onAnswerAsk,
@@ -29,6 +30,7 @@ export function MobileNativeChatPromptCard({
   question,
   onAnswerQuestion
 }: {
+  onInteract?: () => void
   ask?: AskPrompt | null
   askKey?: string | null
   onDismissAsk?: () => void
@@ -70,6 +72,7 @@ export function MobileNativeChatPromptCard({
       <MobileNativeChatAsk
         key={askKey ?? 'ask'}
         prompt={ask}
+        onInteract={onInteract}
         onAnswer={async (selections) => {
           const accepted = (await onAnswerAsk?.(ask, selections)) ?? false
           if (accepted) {

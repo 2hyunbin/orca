@@ -9,14 +9,15 @@ import { mobileNativeChatInputStyles as inputStyles } from './mobile-native-chat
 export function MobileNativeChatComposerField({
   value,
   skillToken,
+  style,
   ref,
   ...props
 }: MobileNativeChatComposerFieldProps) {
   if (!skillToken) {
-    return <TextInput ref={ref} value={value} style={inputStyles.input} {...props} />
+    return <TextInput ref={ref} value={value} style={[inputStyles.input, style]} {...props} />
   }
   return (
-    <TextInput ref={ref} style={inputStyles.input} {...props}>
+    <TextInput ref={ref} style={[inputStyles.input, style]} {...props}>
       <Text style={styles.token}>{skillToken}</Text>
       {value.slice(skillToken.length)}
     </TextInput>

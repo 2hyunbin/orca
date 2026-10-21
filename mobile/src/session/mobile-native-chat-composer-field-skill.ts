@@ -4,7 +4,7 @@ import { colors } from '../theme/mobile-theme'
 /** The composer's text field on both platforms: a TextInput that draws a leading skill in place. */
 export type MobileNativeChatComposerFieldProps = Omit<
   TextInputProps,
-  'value' | 'children' | 'onScroll' | 'style'
+  'value' | 'children' | 'onScroll'
 > & {
   value: string
   /** The skill the draft leads with, drawn highlighted in place. */

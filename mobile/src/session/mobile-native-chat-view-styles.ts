@@ -4,6 +4,7 @@ import { colors, spacing, typography } from '../theme/mobile-theme'
 const FLOATING_CONTROLS_BOTTOM = spacing.md
 
 export const styles = StyleSheet.create({
+  hidden: { display: 'none' },
   root: {
     flex: 1,
     backgroundColor: colors.bgBase

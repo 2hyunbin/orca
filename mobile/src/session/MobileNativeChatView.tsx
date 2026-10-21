@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { nativeChatTaskListPredecessors } from '../../../src/shared/native-chat-task-list-history'
 import {
   MobileNativeChatDisclosureContext,
@@ -22,6 +22,7 @@ import type {
 import type { NativeChatTurnJournal } from '../../../src/shared/native-chat-turn-membership'
 import type { NativeChatResolvedPrompt } from '../../../src/shared/native-chat-resolution-receipt'
 import { colors } from '../theme/mobile-theme'
+import { useResponsiveLayout } from '../layout/responsive-layout'
 import { styles } from './mobile-native-chat-view-styles'
 import { mobileNativeChatListFooter } from './mobile-native-chat-list-footer'
 import { mobileNativeChatListHeader } from './mobile-native-chat-list-header'
@@ -234,6 +235,12 @@ export function MobileNativeChatView({
   const insets = useSafeAreaInsets()
   // Lift the composer clear of the keyboard, plus the bottom safe-area so it
   // never sits under the home indicator / nav bar (mirrors the terminal dock).
+  const [activeQuestionKey, setActiveQuestionKey] = useState<string | null>(null)
+  const questionKey = ask ? JSON.stringify([sendSurfaceId, promptKey, askKey, ask]) : null
+  const { isLandscapePhone } = useResponsiveLayout()
+  const compactComposer = isLandscapePhone && keyboardInset > 0 && ask != null
+  const hideComposer =
+    compactComposer && !collapsedPrompt && questionKey != null && activeQuestionKey === questionKey
   const bottomPad = keyboardInset > 0 ? keyboardInset + insets.bottom : insets.bottom
   const { fontScale, pinchGesture } = useMobileNativeChatPinchGesture()
 
@@ -400,12 +407,28 @@ export function MobileNativeChatView({
             onAnswerAsk,
             onCancelAsk,
             onCancelPrompt,
-            onCollapseAsk
+            onCollapseAsk: onCollapseAsk
+              ? () => {
+                  setActiveQuestionKey(null)
+                  onCollapseAsk()
+                }
+              : undefined
           }}
+          onInteract={() => setActiveQuestionKey(questionKey)}
           requiresTerminal={askRequiresTerminal}
           onAnswerInTerminal={onAnswerInTerminal}
           {...{ permission, onRespondPermission, question, onAnswerQuestion, onCollapsePrompt }}
-          collapsedPrompt={collapsedPrompt}
+          collapsedPrompt={
+            collapsedPrompt
+              ? {
+                  ...collapsedPrompt,
+                  expand: () => {
+                    setActiveQuestionKey(null)
+                    collapsedPrompt.expand()
+                  }
+                }
+              : null
+          }
         />
       </View>
       {sendErrorMessage ? (
@@ -419,8 +442,11 @@ export function MobileNativeChatView({
         </View>
       ) : null}
       {/* Directly on the composer, which it tucks into. */}
-      {trayContent}
+      <View style={hideComposer ? styles.hidden : undefined}>{trayContent}</View>
       <MobileNativeChatComposer
+        compact={compactComposer}
+        hidden={hideComposer}
+        onFocus={() => setActiveQuestionKey(null)}
         structured={structuredActivityUi ? structuredComposer : null}
         value={composerText}
         onChangeText={onComposerTextChange}
