@@ -18,18 +18,18 @@ export type QueuedChatTabChange = { worktreeId: string; change: ChatTabChange }
  * reaches it, so a close follows the open it undoes. A refusal is logged, never thrown.
  */
 export function createChatTabLayoutQueue(deps: {
-  partitionOf: (worktreeId: string) => {
-    hostId: ExecutionHostId
-    session: WorkspaceSessionState | null
-  }
+  sessionOf: (worktreeId: string) => WorkspaceSessionState | null
+  /** Read only for a worktree with a saved session; it throws for one the host cannot place. */
+  hostIdOf: (worktreeId: string) => ExecutionHostId
   apply: (command: ChatTabLayoutCommand) => Promise<LayoutApplyReply>
 }): (changesNow: () => readonly QueuedChatTabChange[]) => void {
   let queue: Promise<void> = Promise.resolve()
   const commandNow = ({ worktreeId, change }: QueuedChatTabChange) => {
-    const { hostId, session } = deps.partitionOf(worktreeId)
+    const session = deps.sessionOf(worktreeId)
     if (!session) {
       return chatTabLayoutCommand(undefined, undefined, worktreeId, change)
     }
+    const hostId = deps.hostIdOf(worktreeId)
     const { loaded, activeGroupId } = loadChatTabLayout(hostId, session, worktreeId)
     return chatTabLayoutCommand(
       loaded.layout.workspaces[worktreeId],
@@ -41,17 +41,15 @@ export function createChatTabLayoutQueue(deps: {
   return (changesNow) => {
     queue = queue.then(async () => {
       for (const queued of changesNow()) {
-        const command = commandNow(queued)
-        if (!command) {
-          continue
-        }
+        // A change that fails is logged and the queue goes on: a later change must still land.
         try {
-          const reply = await deps.apply(command)
-          if (!reply.ok) {
+          const command = commandNow(queued)
+          const reply = command ? await deps.apply(command) : null
+          if (command && reply && !reply.ok) {
             console.warn(`[agent-session-tabs] ${command.type} refused:`, reply.code)
           }
         } catch (error) {
-          console.warn(`[agent-session-tabs] ${command.type} failed:`, error)
+          console.warn('[agent-session-tabs] a chat tab change failed:', error)
         }
       }
     })

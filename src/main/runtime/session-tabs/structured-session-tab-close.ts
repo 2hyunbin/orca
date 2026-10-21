@@ -339,10 +339,8 @@ export abstract class OrcaRuntimeWithCloseStructuredAgentSessionTab extends Orca
   }
 
   private readonly queueChatTabChanges = createChatTabLayoutQueue({
-    partitionOf: (worktreeId) => ({
-      hostId: this.getWorkspaceSessionHostIdForWorktree(worktreeId),
-      session: this.getWorkspaceSessionForWorktree(worktreeId)
-    }),
+    sessionOf: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
+    hostIdOf: (worktreeId) => this.getWorkspaceSessionHostIdForWorktree(worktreeId),
     apply: (command) => this.applyLayoutCommand(command)
   })
 }
