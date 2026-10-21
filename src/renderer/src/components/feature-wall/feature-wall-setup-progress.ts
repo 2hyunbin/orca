@@ -6,6 +6,7 @@ import {
 } from '../../../../shared/feature-wall-setup-steps'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { Worktree } from '../../../../shared/worktree/types'
+import { selectWorktreesByRepo } from '../../store/workspace-record-selectors'
 
 export type FeatureWallSetupProgressInput = {
   ready?: boolean
@@ -68,7 +69,7 @@ export function hasCompletedPreBrowserSetup(input: FeatureWallSetupProgressInput
     input.settings?.notifications.enabled === true &&
     input.settings.notifications.agentTaskComplete === true &&
     hasFeatureInteraction(input.featureInteractions, 'terminal-pane-split') &&
-    countAvailableNonMainWorktrees(input.worktreesByRepo) >= 1 &&
+    countAvailableNonMainWorktrees(selectWorktreesByRepo(input)) >= 1 &&
     input.hasConnectedTaskSource &&
     input.browserUseSkillInstalled &&
     input.computerUseSkillInstalled &&
@@ -92,7 +93,7 @@ export function getFeatureWallSetupProgress(
     notifications:
       input.settings?.notifications.enabled === true &&
       input.settings.notifications.agentTaskComplete === true,
-    'two-worktrees': countAvailableNonMainWorktrees(input.worktreesByRepo) >= 1,
+    'two-worktrees': countAvailableNonMainWorktrees(selectWorktreesByRepo(input)) >= 1,
     // Why: the 'browser' interaction fires when a non-blank page is viewed, so
     // opening any real page in Orca's browser durably completes this milestone.
     browser: hasFeatureInteraction(input.featureInteractions, 'browser'),
