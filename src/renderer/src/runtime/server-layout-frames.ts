@@ -2,7 +2,8 @@
 // this window from its layout stream instead of the session.tabs mirror (design H5). One source per
 // workspace at a time: the mirror stops writing a workspace's layout as the stream's snapshot comes
 // in, and gets it back, with a fresh snapshot, when the stream stops. session.tabs keeps flowing for
-// terminal handles and statuses either way.
+// terminal handles and statuses either way. A workspace with editor tabs only this desktop shows
+// gates once the server's main took them (server-layout-editor-handover.ts).
 
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
@@ -20,6 +21,7 @@ import { serverHeldPanes, showServerLayoutHeldPanes } from './server-held-panes'
 import { createServerViewReport, onServerControlConnected } from './server-layout-view-report'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
 import { provideServerLayoutApplyRoutes } from './server-layout-apply-routes'
+import { createServerEditorHandover } from './server-layout-editor-handover'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
 import {
   isFrameDrawnServerWorkspace,
@@ -77,9 +79,20 @@ function openServerFrames(
       })
     }
   }
+  const startHandover = () =>
+    createServerEditorHandover({
+      environmentId,
+      getState: () => store.getState(),
+      serverLayout: (key) => translator.serverLayout(key),
+      onAnswered: () => admitNew()
+    })
+  /** Per connection: a workspace a refusal kept on the mirror tries again on the next one. */
+  let handover = startHandover()
   /** Gates the workspaces the stream holds that are this server's; returns the ones newly gated. */
   const regate = (): string[] => {
-    const keys = new Set(translator.keys().filter(owns))
+    const keys = new Set(
+      translator.keys().filter((key) => owns(key) && (gated.has(key) || handover.admits(key)))
+    )
     const added = [...keys].filter((key) => !gated.has(key))
     if (added.length > 0 || keys.size !== gated.size) {
       gate(keys)
@@ -101,6 +114,8 @@ function openServerFrames(
   }
   const handBack = (): void => {
     live = false
+    handover.close()
+    handover = startHandover()
     gate(new Set())
     showHeld()
   }
@@ -160,6 +175,15 @@ function openServerFrames(
       }
     }
   })
+  /** Gates, then draws, workspaces that may gate only now. */
+  function admitNew(): void {
+    const added = live ? regate() : []
+    showHeld()
+    if (added.length > 0) {
+      // The mirror may have drawn them meanwhile.
+      sync.redraw(added)
+    }
+  }
   // A workspace can turn out to be this server's after its snapshot (pairing just finished): it is
   // gated, then drawn, as the routing that names it arrives.
   let routing: unknown[] = []
@@ -172,12 +196,7 @@ function openServerFrames(
       return
     }
     routing = next
-    const added = live ? regate() : []
-    showHeld()
-    if (added.length > 0) {
-      // The mirror may have drawn them meanwhile.
-      sync.redraw(added)
-    }
+    admitNew()
   })
   const stopHandles = onMirroredTerminalHandlesChanged((environment, worktreeId) => {
     const frame = environment === environmentId ? translator.rebind(worktreeId) : null
@@ -200,6 +219,7 @@ function openServerFrames(
   return {
     gated: () => gated,
     close: (returnWorkspaces) => {
+      handover.close()
       stopRoutes()
       stopRouting()
       stopHandles()

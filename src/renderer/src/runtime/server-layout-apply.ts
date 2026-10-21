@@ -1,6 +1,7 @@
 // A layout intent for a workspace a paired server's frames draw goes to that server's main
 // (design H5c), under the server's ids. Only the intents on one list do; any other keeps today's
-// path, as does every intent for a server that does not advertise `layout.intents.v1`.
+// path, as does every intent for a server that does not advertise `layout.intents.v1`. Editor
+// opens go too (H5d): a new tab keeps the id the window proposed, which the server's frame draws.
 
 import type {
   LayoutApplyReply,
@@ -8,11 +9,12 @@ import type {
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import type { LayoutApplyHandlers, WindowLayoutCommand } from './layout-apply-send'
 import { serverLayoutApplyRoute, type ServerLayoutApplyRoute } from './server-layout-apply-routes'
+import { serverEditorFileId } from './server-layout-frame-ids'
 
 /**
- * The intents a server's main takes from a paired desktop now: tab and group placement, and pane
- * sizes and moves, which main applies with no window. Not yet: anything that starts, stops or
- * closes a terminal, until main does that itself headless (D2), nor editor opens (D3a).
+ * The intents a server's main takes from a paired desktop now: tab and group placement, pane
+ * sizes and moves, and editor opens, which main applies with no window. Not yet: anything that
+ * starts, stops or closes a terminal, until main does that itself headless (D2), nor tab closes.
  */
 export const SERVER_ROUTED_LAYOUT_COMMANDS = [
   'moveTab',
@@ -20,7 +22,8 @@ export const SERVER_ROUTED_LAYOUT_COMMANDS = [
   'setGroupRatios',
   'setPaneRatios',
   'equalizePanes',
-  'movePane'
+  'movePane',
+  'openEditorTab'
 ] as const satisfies readonly WindowLayoutCommand['type'][]
 
 type ServerRoutedCommand = Extract<
@@ -58,8 +61,25 @@ export function serverLayoutApplyFor(
     // Group ids are the server's own: frames carry them unchanged.
     return { route, command }
   }
+  if (command.type === 'openEditorTab') {
+    // A new tab has no server id yet: editor tab ids are kept, so the proposed one is the server's.
+    return { route, command: serverEditorOpen(worktreeId, command) }
+  }
   const tabId = route.serverTabId(command.tabId)
   return tabId ? { route, command: { ...command, tabId } } : null
+}
+
+type EditorOpen = Extract<WindowLayoutCommand, { type: 'openEditorTab' }>
+
+/** An editor open under the server's ids: its own file id, and a record owned by no environment. */
+export function serverEditorOpen(worktreeId: string, command: EditorOpen): EditorOpen {
+  const { file, ...rest } = command
+  const fileId = serverEditorFileId(command.fileId, worktreeId, file ? [file] : [])
+  if (!file) {
+    return { ...rest, fileId }
+  }
+  const { runtimeEnvironmentId: _desktopOwner, ...serverFile } = file
+  return { ...rest, fileId, file: serverFile }
 }
 
 /**

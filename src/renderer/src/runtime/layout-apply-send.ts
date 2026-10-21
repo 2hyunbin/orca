@@ -237,48 +237,59 @@ export function sendLayoutApply(
   const target: RuntimeClientTarget = server
     ? { kind: 'environment', environmentId: server.route.environmentId }
     : { kind: 'local' }
-  // Null: the call threw before any answer.
-  const answer = (reply: LayoutApplyReply | null): void => {
-    if (server) {
-      handleServerLayoutReply(server, command.type, reply, handlers)
-    } else if (reply) {
-      handleReply(state, worktreeId, command, reply, handlers)
-    } else {
-      handlers.refused?.('call_failed')
+  callLayoutApply(target, worktreeId, server?.command ?? command, (reply) => {
+    try {
+      if (server) {
+        handleServerLayoutReply(server, command.type, reply, handlers)
+      } else if (reply) {
+        handleReply(state, worktreeId, command, reply, handlers)
+      } else {
+        handlers.refused?.('call_failed')
+      }
+    } finally {
+      release()
     }
-  }
+  })
+  return true
+}
+
+/**
+ * Sends one intent to a paired server's main, never this window's: a workspace's editor tabs
+ * handed over before that server's frames draw it (H5d). `answer` gets the reply once the frame
+ * holding it is in, or null when the call failed.
+ */
+export function sendToServerMain(
+  environmentId: string,
+  worktreeId: string,
+  command: WindowLayoutCommand,
+  answer: (reply: LayoutApplyReply | null) => void
+): void {
+  callLayoutApply({ kind: 'environment', environmentId }, worktreeId, command, answer)
+}
+
+function callLayoutApply(
+  target: RuntimeClientTarget,
+  worktreeId: string,
+  command: WindowLayoutCommand,
+  answer: (reply: LayoutApplyReply | null) => void
+): void {
   void callRuntimeRpc<LayoutApplyReply>(target, 'layout.apply', {
-    command: { ...(server?.command ?? command), workspace: worktreeId }
+    command: { ...command, workspace: worktreeId }
   })
     .then(
       (reply) =>
-        afterLayoutFrame(
-          reply.frameSeq,
-          () => {
-            try {
-              answer(reply)
-            } finally {
-              release()
-            }
-          },
-          layoutFramePositionKey(target)
-        ),
+        afterLayoutFrame(reply.frameSeq, () => answer(reply), layoutFramePositionKey(target)),
       (error: unknown) => {
         // Why: a thrown write is rolled back. An indeterminate disk write is not, and may leave a
         // pane main minted, which its frame then draws. Never sent again: main may have applied it.
         console.warn(`[layout-owner] ${command.type} refused: call_failed`, errorMessage(error))
-        try {
-          answer(null)
-        } finally {
-          release()
-        }
+        answer(null)
       }
     )
     // A throwing handler is not a failed call; it must not run the fallback too.
     .catch((error: unknown) => {
       console.warn(`[layout-owner] ${command.type} handler threw:`, errorMessage(error))
     })
-  return true
 }
 
 function handleReply(

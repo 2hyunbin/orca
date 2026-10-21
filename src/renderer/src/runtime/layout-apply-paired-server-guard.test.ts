@@ -9,7 +9,12 @@ import type { AppState } from '@/store/types'
 const mocks = vi.hoisted(() => ({ callRuntimeRpc: vi.fn() }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.callRuntimeRpc }))
 
-import { recordLayoutApply, sendLayoutApply, type WindowLayoutCommand } from './layout-apply-send'
+import {
+  recordLayoutApply,
+  sendLayoutApply,
+  sendToServerMain,
+  type WindowLayoutCommand
+} from './layout-apply-send'
 import { sendGeneratedTabTitles } from './generated-tab-titles-send'
 import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { createInitialTerminalThroughLayoutOwner } from '@/store/terminals/terminal-tab-create-through-layout-owner'
@@ -98,6 +103,20 @@ describe.each(PAIRED_WORKSPACES)('$name', ({ workspaceId, rows }) => {
     ).toEqual([false])
     expect(layoutApplyCalls()).toEqual([])
     expect(answer).not.toHaveBeenCalled()
+  })
+
+  it('an editor hand-over reaches that server’s main, never this window’s', () => {
+    mocks.callRuntimeRpc.mockReturnValue(new Promise(() => {}))
+    sendToServerMain(
+      'env-b',
+      workspaceId,
+      { type: 'openEditorTab', tabId: 't', fileId: 'f', contentType: 'editor' },
+      vi.fn()
+    )
+
+    expect(layoutApplyCalls().map((call) => call[0])).toEqual([
+      { kind: 'environment', environmentId: 'env-b' }
+    ])
   })
 
   it('the activation terminal create sends nothing', () => {
