@@ -252,6 +252,6 @@ it.each([false, true])(
     })
     const description = getChatPermissionSearchEntry(typed).description
     expect(container.querySelector('#chat-permissions')?.textContent).toContain(description)
-    expect(description.includes('own settings')).toBe(typed)
+    expect(description?.includes('own settings')).toBe(typed)
   }
 )

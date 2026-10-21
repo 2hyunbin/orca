@@ -69,7 +69,7 @@ describe('durable execution-host launch settings', () => {
       expect(resolveTuiAgentLaunchEnv('goose', settings)).toMatchObject({ GOOSE_MODE: 'auto' })
       expect(newChatPermissionModeForSettings('claude', settings)).toBe('auto')
       const loadedController = new RuntimeClientSettingsController(reloaded)
-      expect(loadedController.get().agentDefaultArgs.codex).toBe('--config=sandbox_mode=read-only')
+      expect(loadedController.get().agentDefaultArgs?.codex).toBe('--config=sandbox_mode=read-only')
       for (const agent of ['antigravity', 'opencode', 'opencode2', 'omp']) {
         expect(newChatPermissionModeForSettings(agent, reloaded.getSettings())).toBe('ask')
         expect(resolveTuiAgentLaunchArgs(agent, reloaded.getSettings())).toBe('')

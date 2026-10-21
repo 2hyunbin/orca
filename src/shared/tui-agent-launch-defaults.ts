@@ -214,7 +214,11 @@ export function resolveTuiAgentLaunchEnv(
   const value: unknown = configured && Object.getOwnPropertyDescriptor(configured, agent)?.value
   const own =
     value && typeof value === 'object'
-      ? normalizeTuiAgentEnvRecord({ [agent]: value })[agent]
+      ? Object.fromEntries(
+          Object.entries(value).filter(
+            (entry): entry is [string, string] => typeof entry[1] === 'string'
+          )
+        )
       : undefined
   if (!hasTypedAgentPermission(settings) || !isTuiAgent(agent)) {
     return own ?? getTuiAgentDefaultEnv(agent)
