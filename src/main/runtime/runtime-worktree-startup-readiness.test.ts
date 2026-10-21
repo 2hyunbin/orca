@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { OPENCODE_AGENT_ROW_GRACE_MS } from '../../shared/opencode-agent-row-scanner'
 import {
   deliverWorktreeStartupFollowup,
+  pasteWorktreeStartupDraftWhenReady,
   waitForWorktreeStartupDraft,
   type WorktreeStartupReadinessHost
 } from './runtime-worktree-startup-readiness'
@@ -414,5 +415,61 @@ describe('OpenCode submit readiness', () => {
       await vi.advanceTimersByTimeAsync(1)
       expect(result.value).toBe('pty-1')
     })
+  })
+})
+
+describe('startup draft delivery', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  function fixture(write: WorktreeStartupReadinessHost['write']) {
+    return {
+      getPtyId: () => 'pty-draft',
+      getForegroundProcess: async () => 'aider',
+      subscribeToData: () => () => {},
+      readRecentOutput: () => '\x1b[?2004h',
+      write
+    } satisfies WorktreeStartupReadinessHost
+  }
+
+  it('preserves an entire UTF-8 ticket draft across bounded launch writes', async () => {
+    vi.useFakeTimers()
+    const draft = `https://gitlab.example.com/group/project/-/work_items/379?context=${'é日本語🙂'.repeat(4000)}`
+    const received: string[] = []
+    const kinds: string[] = []
+    const write = vi.fn((_ptyId: string, data: string, kind: string) => {
+      kinds.push(kind)
+      if (Buffer.byteLength(data, 'utf8') > 16 * 1024) {
+        return false
+      }
+      received.push(Buffer.from(data).toString('utf8'))
+      return true
+    })
+    pasteWorktreeStartupDraftWhenReady(fixture(write), 'term-draft', {
+      agent: 'aider',
+      content: draft
+    })
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(received.join('')).toBe(`\x1b[200~${draft}\x1b[201~`)
+    expect(write.mock.calls.length).toBeGreaterThan(1)
+    expect(kinds.every((kind) => kind === 'launch')).toBe(true)
+  })
+
+  it('stops after a rejected chunk instead of appending a truncated suffix', async () => {
+    vi.useFakeTimers()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const write = vi.fn().mockReturnValueOnce(true).mockReturnValue(false)
+    pasteWorktreeStartupDraftWhenReady(fixture(write), 'term-draft', {
+      agent: 'aider',
+      content: 'x'.repeat(50_000)
+    })
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(write).toHaveBeenCalledTimes(2)
+    expect(warn).toHaveBeenCalledWith(
+      '[worktree-create] failed to paste startup draft:',
+      expect.any(Error)
+    )
   })
 })
