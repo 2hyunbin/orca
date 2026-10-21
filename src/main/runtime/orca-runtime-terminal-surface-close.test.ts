@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { Store } from '../persistence/loading-store/store'
@@ -331,7 +332,7 @@ describe('mobile close of one pane in a split tab', () => {
     expect(harness.getSession().terminalLayoutsByTabId[TAB_ID]).toMatchObject({
       root: { type: 'leaf', leafId: SIBLING_LEAF_ID }
     })
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
+    expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
   })
 })
 
@@ -340,12 +341,28 @@ describe('mobile close of a tab the desktop renderer lists', () => {
   it('still asks the renderer, whose pin guard can refuse it', async () => {
     const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
     harness.rejectTerminalTabClose(new Error('terminal_tab_pinned'))
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main's layout holds the pin and refuses the close itself; the renderer is not asked.
+      harness.editSession((session) => ({
+        ...session,
+        tabsByWorktree: {
+          [WORKTREE_ID]: (session.tabsByWorktree[WORKTREE_ID] ?? []).map((tab) => ({
+            ...tab,
+            isPinned: true
+          }))
+        }
+      }))
+    }
 
     await expect(
       harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_ID, { reason: 'user' })
     ).rejects.toThrow('terminal_tab_pinned')
 
-    expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_ID)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      expect(harness.closeTerminalTab).not.toHaveBeenCalled()
+    } else {
+      expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_ID)
+    }
     expect(harness.kill).not.toHaveBeenCalled()
     expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([
       expect.objectContaining({ id: TAB_ID })

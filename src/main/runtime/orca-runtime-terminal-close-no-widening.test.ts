@@ -312,11 +312,8 @@ describe('an explicit close of one pane never widens into its tab', () => {
       expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
       return
     }
-    if (entry === 'cli-graph' || entry === 'cli-pty') {
-      expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
-      return
-    }
-    expect(harness.closeTerminalPane).toHaveBeenCalledExactlyOnceWith(TAB_ID, LEAF_ID)
+    // A phone's close through main is main's layout close too (#31571), as the CLI's is.
+    expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
   })
 })
 
@@ -395,12 +392,7 @@ describe("a close of a tab's last pane still closes the tab", () => {
 
       await closePane(entry, harness)
 
-      if (entry === 'cli-graph') {
-        expectDesktopClosesTab(harness)
-        return
-      }
-      expect(harness.closeTerminalTab.mock.calls.map((call) => call[0])).toEqual([TAB_ID])
-      expect(harness.closeTerminalPane).not.toHaveBeenCalled()
+      expectDesktopClosesTab(harness)
     }
   )
 })
