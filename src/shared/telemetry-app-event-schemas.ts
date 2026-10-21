@@ -29,7 +29,10 @@ export const nthRepoAddedSchema = z.number().int().nonnegative().optional()
 
 export const appOpenedSchema = z
   .object({
-    nth_repo_added: nthRepoAddedSchema
+    nth_repo_added: nthRepoAddedSchema,
+    // Accept retired sampling fields from older callers; current builds no longer emit them.
+    tab_close_sampled: z.boolean().optional(),
+    tab_close_sample_rate: z.literal(0.1).optional()
   })
   .strict()
 
