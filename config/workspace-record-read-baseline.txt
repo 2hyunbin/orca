@@ -1,0 +1,83 @@
+# Renderer reads of `worktreesByRepo` / `folderWorkspaces` / `detectedWorktreesByRepo`
+# outside src/renderer/src/store/workspace-record-selectors.ts, as `<count> <file>`.
+# This is a RATCHET: counts may only go DOWN. Read through the selectors instead.
+# Remaining rows: store writers, and readers of a loosely typed state or a passed-in copy.
+# Prune after a fix: pnpm check:workspace-record-read-ratchet --prune
+
+3 src/renderer/src/attention/notification-subject-owner.ts
+4 src/renderer/src/components/dashboard/build-dashboard-bucket-counts.ts
+3 src/renderer/src/components/dashboard/dashboard-card-terminal-input.ts
+1 src/renderer/src/components/dashboard/dashboard-snapshot-workspaces.ts
+1 src/renderer/src/components/dashboard/dashboard-worktree-launch-options.ts
+4 src/renderer/src/components/dashboard/useDashboardPopoutBridge.ts
+2 src/renderer/src/components/dashboard/useRetainedAgents.ts
+6 src/renderer/src/components/editor/closed-editor-tab-controller.ts
+1 src/renderer/src/components/editor/markdown-document-worktree-path-selector.ts
+1 src/renderer/src/components/feature-wall/feature-wall-setup-progress.ts
+3 src/renderer/src/components/quick-open-file-list.ts # at the max-lines limit; moves with its next split
+2 src/renderer/src/components/right-sidebar/useFileExplorerWatch.ts
+1 src/renderer/src/components/sidebar/add-repo-skip-finalization.ts
+1 src/renderer/src/components/sidebar/imported-worktrees-card-candidates.ts
+1 src/renderer/src/components/sidebar/new-external-worktrees-inbox-candidates.ts
+3 src/renderer/src/components/sidebar/worktree-list/listing/use-main-list-model.ts
+2 src/renderer/src/components/sidebar/worktree-list/listing/use-window-list-model.ts
+1 src/renderer/src/components/sidebar/worktree-list/navigation/pending-reveal-inputs.ts
+2 src/renderer/src/components/sidebar/worktree-list/navigation/use-pending-reveal.ts
+2 src/renderer/src/components/sidebar/worktree-list/viewport/VirtualizedWorktreeViewport.tsx
+1 src/renderer/src/components/sidebar/worktree-manual-order-catalog.ts
+2 src/renderer/src/components/skills/skill-install-workspace-choices.ts
+1 src/renderer/src/components/terminal-pane/pty-connection/agent-idle-working-handlers.ts
+1 src/renderer/src/components/terminal-pane/terminal-worktree-path-link.ts
+1 src/renderer/src/components/workspace-space/space-window-state.ts
+1 src/renderer/src/hooks/composer-state/composer-source-state.ts
+2 src/renderer/src/hooks/composer-state/composer-target-state.ts
+5 src/renderer/src/lib/agent-background-session-test-state.ts
+1 src/renderer/src/lib/connection-owner-resolution.ts
+2 src/renderer/src/lib/direct-ssh-target-scope.ts
+3 src/renderer/src/lib/duplicate-paired-servers.ts
+1 src/renderer/src/lib/folder-workspace-runtime-owner.ts
+1 src/renderer/src/lib/http-link-routing.ts
+2 src/renderer/src/lib/local-project-runtime-workspace.ts
+3 src/renderer/src/lib/resolve-owner.ts
+3 src/renderer/src/lib/resolved-worktree-execution-host.ts
+2 src/renderer/src/lib/runtime-session-mirror-owners.ts
+3 src/renderer/src/lib/sleeping-record-execution-host-scope.ts
+4 src/renderer/src/lib/terminal-worktree-route.ts
+3 src/renderer/src/lib/typing-latency/diagnostic-summary.ts
+2 src/renderer/src/lib/unread-badge-count.ts
+1 src/renderer/src/lib/workspace-directory.ts
+3 src/renderer/src/lib/workspace-session-host-persistence.ts
+1 src/renderer/src/lib/workspace-session.ts # at the max-lines limit; moves with its next split
+2 src/renderer/src/lib/workspace-terminal-host-authority.ts
+1 src/renderer/src/lib/worktree-activation-pty-inventory.ts
+1 src/renderer/src/lib/worktree-initial-terminal-seeding.ts
+2 src/renderer/src/lib/worktree-operation-catalog-route.ts
+6 src/renderer/src/lib/worktree-operation-route.ts
+2 src/renderer/src/lib/worktree-runtime-owner.ts
+3 src/renderer/src/runtime/local-structured-session-tab-retirement.ts
+2 src/renderer/src/runtime/sync-runtime-graph/sync-key.ts
+3 src/renderer/src/store/folder-workspaces/folder-workspace-catalog-actions.ts
+7 src/renderer/src/store/folder-workspaces/folder-workspace-catalog.ts
+5 src/renderer/src/store/folder-workspaces/folder-workspace-mutations.ts
+1 src/renderer/src/store/project-groups/project-group-removal-state.ts
+4 src/renderer/src/store/repos/converted-ssh-host-rows.ts
+5 src/renderer/src/store/repos/repo-catalog-merge.ts
+5 src/renderer/src/store/repos/repo-removal.ts
+6 src/renderer/src/store/slices/diff-comment-persistence.ts
+12 src/renderer/src/store/slices/workspace-attention/workspace-unread-flag.ts
+2 src/renderer/src/store/slices/worktrees/create/created-worktree-state-merge.ts
+1 src/renderer/src/store/slices/worktrees/listing/detected-worktree-meta.ts # feeds an existing row-type cast; moves when the detected domain lands
+3 src/renderer/src/store/slices/worktrees/listing/fetch-detected-worktrees.ts
+13 src/renderer/src/store/slices/worktrees/listing/fetched-worktree-merge.ts
+6 src/renderer/src/store/slices/worktrees/listing/known-ssh-worktree-fetch.ts
+3 src/renderer/src/store/slices/worktrees/listing/worktree-sort-order-patch.ts
+6 src/renderer/src/store/slices/worktrees/metadata/hosted-review-link-mutation.ts
+6 src/renderer/src/store/slices/worktrees/metadata/update-worktree-meta.ts
+8 src/renderer/src/store/slices/worktrees/metadata/update-worktrees-meta.ts
+3 src/renderer/src/store/slices/worktrees/metadata/worktree-git-identity-update.ts
+1 src/renderer/src/store/slices/worktrees/metadata/worktree-lineage-refresh.ts
+6 src/renderer/src/store/slices/worktrees/session/worktree-activity-bump.ts
+6 src/renderer/src/store/slices/worktrees/teardown/host-qualified-worktree-row-removal.ts
+8 src/renderer/src/store/slices/worktrees/teardown/purge-stale-runtime-host-state.ts
+1 src/renderer/src/store/slices/worktrees/teardown/remove-worktree-store-cleanup.ts
+8 src/renderer/src/store/terminals/workspace-terminal-hydration.ts
