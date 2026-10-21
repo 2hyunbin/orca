@@ -85,17 +85,6 @@ export function editorModelDraftHolder(state: AppState, file: OpenFile): OpenFil
   )
 }
 
-/** Whether a store snapshot is whole enough to resolve a tab's model siblings. */
-export function isWholeEditorState(state: unknown): state is AppState {
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    'editorDrafts' in state &&
-    'worktreesByRepo' in state &&
-    'setLastKnownDiskSignature' in state
-  )
-}
-
 /**
  * The one disk version of a code-view model: every tab sharing the model holds the same value, set
  * only here. Other views keep their own. Returns the sibling tabs whose value moved.

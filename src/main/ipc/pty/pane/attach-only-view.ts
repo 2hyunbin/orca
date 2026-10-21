@@ -1,24 +1,28 @@
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { SessionNotFoundError } from '../../../daemon/daemon-errors'
 import { PANE_NOT_LIVE_ERROR } from '../../../../shared/pane-attach-only-view'
-import type { PtySpawnResult } from '../../../providers/pty-provider-contract'
-import type { StablePaneSpawnContext } from './stable-owner'
+import type {
+  IPtyProvider,
+  PtySpawnOptions,
+  PtySpawnResult
+} from '../../../providers/pty-provider-contract'
 
 /**
  * Layout-owner build: a window view of a pane with no recorded owner attaches to the terminal it
  * names, or starts nothing; main starts a pane whose terminal is gone.
  */
 export async function attachViewWithoutOwner(
-  args: StablePaneSpawnContext
+  provider: IPtyProvider,
+  spawnOptions: PtySpawnOptions
 ): Promise<PtySpawnResult> {
-  if (!args.spawnOptions.sessionId) {
+  if (!spawnOptions.sessionId) {
     throw new Error(PANE_NOT_LIVE_ERROR)
   }
   try {
-    return await args.provider.spawn({
-      cols: args.spawnOptions.cols,
-      rows: args.spawnOptions.rows,
-      sessionId: args.spawnOptions.sessionId,
+    return await provider.spawn({
+      cols: spawnOptions.cols,
+      rows: spawnOptions.rows,
+      sessionId: spawnOptions.sessionId,
       attachOnly: true
     })
   } catch (error) {

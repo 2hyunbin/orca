@@ -179,7 +179,7 @@ export function TerminalPaneRecoveryPortals({
     <>
       {managedPanes.map((pane) => {
         const recoveryState = ptyRecoveryStatesByPaneId[pane.id]
-        if (!recoveryState) {
+        if (!recoveryState || recoveryState.reason === 'ownership') {
           return null
         }
         return createPortal(

@@ -108,6 +108,34 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
     expect(split.tabId).toBe(TAB_ID)
   })
 
+  it('lists the new pane to phones and session.tabs with no window report', async () => {
+    const { runtime, handle } = setup()
+    // A phone already lists the tab, so the new pane must be published, not just hydrated.
+    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+
+    const split = await runtime.splitTerminal(handle, { direction: 'vertical' })
+
+    const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(
+      listed.tabs.some(
+        (tab) =>
+          tab.type === 'terminal' && tab.parentTabId === TAB_ID && tab.leafId === split.leafId
+      )
+    ).toBe(true)
+  })
+
+  it('a split no one asked to see leaves the phones’ active tab alone; one asked for takes it', async () => {
+    const { runtime, handle } = setup()
+    const listed = () => runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    const before = (await listed()).activeTabId
+
+    await runtime.splitTerminal(handle, { direction: 'vertical', activate: false })
+    expect((await listed()).activeTabId).toBe(before)
+
+    const shown = await runtime.splitTerminal(handle, { direction: 'horizontal' })
+    expect((await listed()).activeTabId).toBe(`${TAB_ID}::${shown.leafId}`)
+  })
+
   it('the window’s own split keeps its proposed pane id, folder and size', async () => {
     const { runtime, leafIds, spawn } = setup()
 
@@ -266,5 +294,23 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
       status: 'failed',
       reason: 'runtime_unavailable'
     })
+  })
+
+  it('refuses a taken pane id before anything else, even when main cannot start', async () => {
+    const { runtime } = setup()
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+
+    await expect(
+      runtime.splitTerminalPane(
+        { worktreeId: TEST_WORKTREE_ID, tabId: TAB_ID, leafId: HEADLESS_LEAF_ID },
+        { direction: 'vertical', newLeafId: HEADLESS_LEAF_ID, keepPaneOnStartFailure: true }
+      )
+    ).rejects.toThrow('pane_exists')
+    // The live pane is not marked as a failed start.
+    expect(runtime.startStatusOf(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))).toBeNull()
   })
 })

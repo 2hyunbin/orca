@@ -10,6 +10,7 @@ import type { LayoutCommandRunOptions, WindowLayoutCommand } from '../../runtime
 import { runLayoutPaneStarts, startsPanes } from '../recovery/layout-command-pane-starts'
 import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identity'
 import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
+import { PaneOwnerContentionError } from '../../../ipc/pty/pane/pane-spawn-operation'
 
 export type FailedStartPane = { tabId: string; leafId: string }
 
@@ -135,6 +136,10 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     { title }: dependencies.TerminalCreateOptions,
     error: unknown
   ): Promise<void> {
+    if (error instanceof PaneOwnerContentionError) {
+      // Another owner's terminal runs in the pane; the window attaches to it.
+      return
+    }
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(worktreeSelector, created)
     const create = { type: 'createTerminalTab' as const, workspace: workspace.id, ...pane }
     const reply = await this.applyLayoutCommand(title ? { ...create, title } : create)

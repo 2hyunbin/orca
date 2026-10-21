@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import { NEWER_DAEMON_HOLD_ERROR } from '../../shared/newer-daemon-hold'
 import { setupLayoutOwnerRuntime, WORKTREE_ID } from './orca-runtime-layout-owner-start-fixture'
+import { PaneOwnerContentionError } from '../ipc/pty/pane/pane-spawn-operation'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
@@ -59,6 +60,18 @@ describe('layout-owner build: a start main could not make keeps its pane, showin
       status: 'held',
       reason: NEWER_DAEMON_HOLD_ERROR
     })
+  })
+
+  it('shows no failure when another owner won the pane, whose terminal the window attaches to', async () => {
+    const { runtime, spawn } = setupLayoutOwnerRuntime()
+    spawn.mockRejectedValueOnce(new PaneOwnerContentionError())
+
+    await expect(
+      runtime.createTerminal(`id:${WORKTREE_ID}`, { keepPaneOnStartFailure: true })
+    ).rejects.toThrow('terminal_pane_owner_changed')
+
+    const { tabId, leafId } = spawn.mock.calls[0]![0]
+    expect(runtime.startStatusOf(`${tabId}:${leafId}`)).toBeNull()
   })
 
   it('still takes back the pane of a start that did not ask to keep it', async () => {
