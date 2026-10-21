@@ -8,6 +8,7 @@ import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-session-contracts'
+import type { RuntimeMobileSessionSnapshotTab } from '../../../../shared/runtime-mobile-session-tab-contracts'
 import { withMainSessionTabRows } from '../../session-tabs/main-session-tab-rows'
 import { withMainTabOrder } from '../../session-tabs/main-session-tab-order'
 import { headlessMobileSnapshotContentUnchanged } from '../../mobile-session-snapshot-equality'
@@ -53,6 +54,7 @@ class MainSurfacePublisher {
   private scheduled = false
   private forceNext = false
   private mergeNext = false
+  private catchUpNext = false
 
   constructor(private readonly host: MainTerminalSurfacesHost) {
     this.index = new TerminalSurfaceIndex({
@@ -94,7 +96,8 @@ class MainSurfacePublisher {
 
   /**
    * After a layout commit: held rows take main's new rows, names and order. A row main's layout
-   * lacks stays (drops are the close path's); an added terminal passes the window's exit filters.
+   * lacks stays (drops are the close path's); a terminal row added or rebound passes the window's
+   * exit filters.
    */
   private mergeIntoHeldRows(): void {
     this.index.surfaces()
@@ -107,14 +110,31 @@ class MainSurfacePublisher {
         live: this.host.live,
         keepUnlisted: true
       })
-      const heldIds = new Set(held.tabs.map((row) => row.id))
-      const next = merged.tabs.some((row) => row.type === 'terminal' && !heldIds.has(row.id))
+      const heldPtyIds = new Map(held.tabs.map((row) => [row.id, terminalIdOf(row)]))
+      const next = merged.tabs.some(
+        (row) =>
+          row.type === 'terminal' &&
+          (!heldPtyIds.has(row.id) || heldPtyIds.get(row.id) !== terminalIdOf(row))
+      )
         ? this.host.fenceExited(merged)
         : merged
       if (!headlessMobileSnapshotContentUnchanged(held, next)) {
         this.host.replaceHeldRows(worktreeId, next)
       }
     }
+  }
+
+  /** Whether a held row names another terminal than the one main's layout binds to its pane. */
+  private heldIdsLag(): boolean {
+    const bound = new Map(
+      this.index.surfaces().leaves.map((leaf) => [`${leaf.tabId}::${leaf.leafId}`, leaf.ptyId])
+    )
+    return [...this.host.heldRows().values()].some((held) =>
+      held.tabs.some((row) => {
+        const binding = row.type === 'terminal' ? bound.get(row.id) : null
+        return !!binding && binding !== terminalIdOf(row)
+      })
+    )
   }
 
   /** The pane main's layout binds a terminal to, read fresh; null when no pane main owns holds it. */
@@ -202,30 +222,36 @@ class MainSurfacePublisher {
   /** A pane's terminal came or went: its record changes with no layout change, so reinstall. */
   terminalChanged(): void {
     this.index.invalidateRouting()
-    this.schedule({ force: true })
+    // A binding main made before its terminal connected reaches the held rows now.
+    this.schedule({ force: true, catchUp: true })
   }
 
   /** Deferred so a connected flip, noted inside syncWindowGraph's record update, cannot recurse into it. */
-  private schedule(opts: { force?: boolean; merge?: boolean } = {}): void {
+  private schedule(opts: { force?: boolean; merge?: boolean; catchUp?: boolean } = {}): void {
     this.forceNext ||= opts.force === true
-    // Only a layout commit changes main's rows; a terminal connecting changes none.
+    // A layout commit changes main's rows; a terminal connecting only a binding they lag behind.
     this.mergeNext ||= opts.merge === true
+    this.catchUpNext ||= opts.catchUp === true
     if (this.scheduled) {
       return
     }
     this.scheduled = true
     queueMicrotask(() => {
-      const { forceNext: force, mergeNext: merge } = this
+      const { forceNext: force, mergeNext: merge, catchUpNext: catchUp } = this
       this.scheduled = false
       this.forceNext = false
       this.mergeNext = false
+      this.catchUpNext = false
       this.republish({ force })
-      if (merge) {
+      if (merge || (catchUp && this.heldIdsLag())) {
         this.mergeIntoHeldRows()
       }
     })
   }
 }
+
+const terminalIdOf = (row: RuntimeMobileSessionSnapshotTab): string | null =>
+  row.type === 'terminal' ? (row.ptyId ?? null) : null
 
 /** The runtime a publisher belongs to; any runtime instance, held weakly. */
 type SurfacesOwner = WeakKey

@@ -70,4 +70,35 @@ describe('a layout commit merged into held rows (layout-owner build)', () => {
       withMainSessionTabRows(published, projected, NONE_EXITED, { live: () => true }).tabs[0]
     ).toMatchObject({ ptyId: 'pty-old' })
   })
+
+  it('keeps the held terminal when main binds one the host saw exit', () => {
+    const published = held([terminal('t::1', 'pty-live')])
+    const projected = rows([terminal('t::1', 'pty-retired')])
+
+    expect(
+      withMainSessionTabRows(published, projected, (ptyId) => ptyId === 'pty-retired').tabs[0]
+    ).toMatchObject({ ptyId: 'pty-live' })
+  })
+
+  it("keeps a kept pane's tab where it stood in its group, not in the active group", () => {
+    const published: RuntimeMobileSessionTabsSnapshot = {
+      ...held([terminal('t::1'), terminal('v::1'), terminal('u::1')]),
+      activeGroupId: 'g1',
+      tabGroups: [
+        { id: 'g1', activeTabId: 't', tabOrder: ['t'] },
+        { id: 'g2', activeTabId: 'v', tabOrder: ['v', 'u'] }
+      ]
+    }
+    const projected: MainSessionTabRows = {
+      ...rows([terminal('t::1'), terminal('v::1')]),
+      tabGroups: [
+        { id: 'g1', activeTabId: 't', tabOrder: ['t'] },
+        { id: 'g2', activeTabId: 'v', tabOrder: ['v'] }
+      ]
+    }
+
+    const merged = withMainSessionTabRows(published, projected, NONE_EXITED, { keepUnlisted: true })
+
+    expect(merged.tabGroups?.map((group) => group.tabOrder)).toEqual([['t'], ['v', 'u']])
+  })
 })

@@ -7,6 +7,7 @@
 // view's mode, file id and draft version).
 
 import type { RuntimeMobileSessionSnapshotTab } from '../../../shared/runtime-mobile-session-tab-contracts'
+import { orderIdOf, placeInMainGroups, withStrayIn } from './main-session-tab-group-placement'
 import type {
   RuntimeMobileSessionTabGroup,
   RuntimeMobileSessionTabsSnapshot
@@ -54,8 +55,15 @@ function keepsWindowPtyId(
   if (!window || window === main) {
     return false
   }
+  if (!main) {
+    return !exited(window)
+  }
+  // Main's binding names a terminal the host saw exit; the window's has not.
+  if (exited(main)) {
+    return !exited(window)
+  }
   // A start whose bind write is still in flight: main's binding is the terminal it replaced.
-  return main ? !!live && live(window) && !live(main) : !exited(window)
+  return !!live && live(window) && !live(main)
 }
 
 /**
@@ -91,31 +99,6 @@ function withWindowFacts(row: Row, windowRow: Row | undefined, rules: MergeRules
     return { ...row, isDirty: windowRow.isDirty }
   }
   return row
-}
-
-/** The id a group's tab order lists a row under: a terminal pane's tab, else the row itself. */
-export function orderIdOf(row: Row): string {
-  return row.type === 'terminal' ? row.parentTabId : row.id
-}
-
-/** Each window-only id placed after the id it follows in the window's group, else at the end. */
-export function withWindowOnlyIds(
-  tabOrder: readonly string[],
-  windowOrder: readonly string[],
-  windowOnly: ReadonlySet<string>
-): string[] {
-  const order = [...tabOrder]
-  windowOrder.forEach((id, index) => {
-    if (!windowOnly.has(id) || order.includes(id)) {
-      return
-    }
-    const after = windowOrder
-      .slice(0, index)
-      .toReversed()
-      .find((previous) => order.includes(previous))
-    order.splice(after === undefined ? 0 : order.indexOf(after) + 1, 0, id)
-  })
-  return order
 }
 
 /** Main's rows in main's order, each window-only row after the row it follows in the window's. */
@@ -167,20 +150,18 @@ export function withMainSessionTabRows(
   const listed = new Map(merged.map((row) => [row.id, row]))
   const windowActive = published.activeTabId ? listed.get(published.activeTabId) : undefined
   const windowGroups = new Map((published.tabGroups ?? []).map((group) => [group.id, group]))
-  const tabGroups: RuntimeMobileSessionTabGroup[] = (projected.tabGroups ?? []).map((group) => {
-    const tabOrder = withWindowOnlyIds(
-      group.tabOrder,
-      windowGroups.get(group.id)?.tabOrder ?? [],
-      windowOnlyIds
-    )
-    // The tab the window shows in this group, when main's group still holds it; while main's
-    // selection stands (the window selects a row main lacks), main's groups stay as main has them.
+  // Groups list a terminal under its tab (orderIdOf), so a kept pane keeps its tab's place.
+  const windowOnlyOrder = new Set(windowOnly.map(orderIdOf))
+  const placement = placeInMainGroups(
+    projected.tabGroups ?? [],
+    published.tabGroups ?? [],
+    windowOnlyOrder
+  )
+  // The tab the window shows in each group, when main's group still holds it; while main's
+  // selection stands (the window selects a row main lacks), main's groups stay as main has them.
+  let tabGroups: RuntimeMobileSessionTabGroup[] = placement.groups.map((group) => {
     const shown = windowActive ? windowGroups.get(group.id)?.activeTabId : undefined
-    return {
-      ...group,
-      tabOrder,
-      ...(shown && tabOrder.includes(shown) ? { activeTabId: shown } : {})
-    }
+    return shown && group.tabOrder.includes(shown) ? { ...group, activeTabId: shown } : group
   })
   const activeGroupIndex = (activeRow: Row | undefined): number => {
     const byRow = activeRow
@@ -196,20 +177,15 @@ export function withMainSessionTabRows(
       ? byWindow
       : tabGroups.findIndex((group) => group.id === projected.activeGroupId)
   }
-  const placed = new Set(tabGroups.flatMap((group) => group.tabOrder))
   // A window-only row in a group main does not hold joins the active group: groups and their
   // layout are main's, so the phone gets no group the layout lacks.
-  const stray = (published.tabGroups ?? []).flatMap((group) =>
-    group.tabOrder.filter((id) => windowOnlyIds.has(id) && !placed.has(id))
-  )
-  const strayInto = Math.max(activeGroupIndex(windowActive), 0)
-  const strayGroup = tabGroups[strayInto]
-  if (stray.length > 0 && strayGroup) {
-    tabGroups[strayInto] = { ...strayGroup, tabOrder: [...strayGroup.tabOrder, ...stray] }
+  const { stray } = placement
+  if (stray.length > 0 && tabGroups.length > 0) {
+    tabGroups = withStrayIn(tabGroups, stray, Math.max(activeGroupIndex(windowActive), 0))
   } else if (stray.length > 0) {
     // Main lists no group: the window's groups hold the rows only it knows.
     for (const group of published.tabGroups ?? []) {
-      const own = group.tabOrder.filter((id) => windowOnlyIds.has(id))
+      const own = group.tabOrder.filter((id) => windowOnlyOrder.has(id))
       if (own.length > 0) {
         tabGroups.push({ ...group, tabOrder: own })
       }

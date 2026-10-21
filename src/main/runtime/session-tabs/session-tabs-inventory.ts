@@ -46,8 +46,11 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       },
       heldRows: () => this.mobileSessionTabsByWorktree,
       replaceHeldRows: (worktreeId, next) => {
-        this.storeMobileSessionSnapshot(worktreeId, next)
-        this.scheduleMobileSessionTabsChanged(worktreeId)
+        const before = this.mobileSessionTabsByWorktree.get(worktreeId)
+        // The writer stores nothing when main's order already holds: then nothing is pushed.
+        if (this.storeMobileSessionSnapshot(worktreeId, next) !== before) {
+          this.scheduleMobileSessionTabsChanged(worktreeId)
+        }
       },
       fenceExited: (rows) => this.applyMobileSessionRetirementFences(rows)
     })
