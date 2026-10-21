@@ -1,4 +1,12 @@
-import { type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import {
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState
+} from 'react'
 import { View, Pressable, useWindowDimensions, ScrollView, Keyboard, Modal } from 'react-native'
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler'
 import Animated, {
@@ -15,7 +23,7 @@ import { spacing } from '../theme/mobile-theme'
 import { resolveBottomDrawerFillHeight } from './bottom-drawer-fill-height'
 import { resolveBottomDrawerKeyboardInset } from './bottom-drawer-keyboard-inset'
 import { BOTTOM_DRAWER_HIDE_DURATION_MS } from './bottom-drawer-constants'
-import { DrawerBackdropAlreadyDimmedContext } from './drawer-backdrop-continuity'
+import { DimmedBackdropOfferContext } from './drawer-backdrop-continuity'
 import { bottomDrawerStyles as styles } from './bottom-drawer-styles'
 import {
   useBottomDrawerModalHost,
@@ -66,8 +74,16 @@ export function MountedBottomDrawer({
 }: MountedBottomDrawerProps) {
   const translateY = useSharedValue(0)
   const progress = useSharedValue(0)
-  // Held at full until a close starts, for a drawer opening over a scrim that already dims.
-  const backdropFloor = useSharedValue(useContext(DrawerBackdropAlreadyDimmedContext) ? 1 : 0)
+  // Held at full while the sheet opens, for a drawer opening over a scrim that already dims. Set
+  // after mount: on the web a pinned sheet's `opacity: 0` only lands if the mounted style differs.
+  const takeDimmedBackdrop = useContext(DimmedBackdropOfferContext)
+  const backdropFloor = useSharedValue(0)
+  useLayoutEffect(() => {
+    if (takeDimmedBackdrop !== null) {
+      backdropFloor.value = 1
+      takeDimmedBackdrop()
+    }
+  }, [backdropFloor, takeDimmedBackdrop])
   const keyboardOffset = useSharedValue(0)
   const scrollOffsetY = useSharedValue(0)
   const scrollRef = useRef<ScrollView>(null)
@@ -125,11 +141,12 @@ export function MountedBottomDrawer({
     if (visible) {
       translateY.value = 0
       scrollOffsetY.value = 0
-      progress.value = withTiming(1, { duration: SHOW_DURATION })
+      progress.value = withTiming(1, { duration: SHOW_DURATION }, () => {
+        backdropFloor.value = 0
+      })
     } else {
       Keyboard.dismiss()
       setKeyboardInset(0)
-      backdropFloor.value = 0
       progress.value = withTiming(0, { duration: BOTTOM_DRAWER_HIDE_DURATION_MS }, (finished) => {
         if (finished) {
           runOnJS(onHidden)()
@@ -200,13 +217,12 @@ export function MountedBottomDrawer({
       return
     }
     Keyboard.dismiss()
-    backdropFloor.value = 0
     progress.value = withTiming(0, { duration: BOTTOM_DRAWER_HIDE_DURATION_MS }, (finished) => {
       if (finished) {
         runOnJS(onClose)()
       }
     })
-  }, [backdropFloor, onClose, progress, visible])
+  }, [onClose, progress, visible])
 
   // One seam, both platforms: natively this is the hardware key, and inside the shell's page it is
   // a claim the shell hands one press over on. Every session sheet renders through this component,

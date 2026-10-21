@@ -9,8 +9,8 @@ vi.mock('../navigation/route-handoff', () => ({ useRouteHandoff: () => handoff }
 vi.mock('../transport/host-client-hooks', () => ({
   useHostClient: () => ({ client: null, state: 'connected' })
 }))
-vi.mock('../transport/host-status-gates', () => ({
-  useHostStatusGates: () => ({ hostCapabilities: ['cap'] })
+vi.mock('../components/host-protocol-gates-context', () => ({
+  useHostProtocolGates: () => ({ hostCapabilities: ['cap'] })
 }))
 vi.mock('./use-host-worktree-rows', () => ({
   useHostWorktreeRows: () => [{ path: '/repo/marlin', repoId: 'r1', branch: 'marlin' }]

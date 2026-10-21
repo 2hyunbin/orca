@@ -8,10 +8,6 @@ export type MobileSessionRouteParams = {
   name?: string
   /** The server a `runtime:` workspace runs on; absent for the desktop's own workspaces. */
   executionHost?: ExecutionHostId
-  /** Set by the create flow, so the session screen treats the workspace as just made. */
-  created?: boolean
-  /** Host-reported create warning (e.g. the startup terminal failed to spawn). */
-  warning?: string
 }
 
 /** Identities stay raw — the navigator owns the params, so pre-encoding a
@@ -21,9 +17,7 @@ export function mobileSessionRouteTarget({
   worktreeId,
   name,
   paneKey,
-  executionHost,
-  created,
-  warning
+  executionHost
 }: MobileSessionRouteParams): HostStackRouteTarget {
   return {
     name: '[hostId]/session/[worktreeId]',
@@ -32,9 +26,7 @@ export function mobileSessionRouteTarget({
       worktreeId,
       ...(name ? { name } : {}),
       ...(paneKey ? { paneKey } : {}),
-      ...(executionHost ? { executionHost } : {}),
-      ...(created ? { created: '1' } : {}),
-      ...(warning?.trim() ? { warning } : {})
+      ...(executionHost ? { executionHost } : {})
     }
   }
 }

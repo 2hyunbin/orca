@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'expo-router'
-import { OverlayScrim } from '../components/overlay-scrim'
 import { PickerModal } from '../components/PickerModal'
-import { useConnectedHostPicker } from '../components/use-connected-host-picker'
+import { hostPickerOptions } from '../components/use-connected-host-picker'
 import { selectConnectableHostProfiles } from '../transport/host-catalog-selection'
 import { loadHostCatalog } from '../transport/host-store'
 import type { HostProfile } from '../transport/types'
 
 /**
  * Home's "Create Workspace On" picker, inside the overlay so the drawer that follows opens from the
- * same window: once a desktop is picked the screen stays dimmed while the picker slides away.
+ * same window. A pick starts the load at once, so its scrim is up while the picker slides away.
  */
 export function NewWorkspaceHostPicker({
   hostIds,
@@ -20,40 +19,25 @@ export function NewWorkspaceHostPicker({
 }) {
   const router = useRouter()
   const hosts = useOfferedHosts(hostIds)
-  const { pickHost, pickerProps } = useConnectedHostPicker(hosts ?? [])
-  const [picked, setPicked] = useState(false)
-  const offeredRef = useRef(false)
-
-  useEffect(() => {
-    if (hosts === null || offeredRef.current) {
-      return
-    }
-    offeredRef.current = true
-    if (hosts.length === 0) {
-      router.back()
-      return
-    }
-    pickHost(onPick)
-  }, [hosts, onPick, pickHost, router])
-
+  const [open, setOpen] = useState(true)
+  const pickedRef = useRef(false)
   return (
-    <>
-      {picked ? <OverlayScrim /> : null}
-      <PickerModal
-        title="Create Workspace On"
-        {...pickerProps}
-        onSelect={(hostId) => {
-          setPicked(true)
-          pickerProps.onSelect(hostId)
-        }}
-        onAfterClose={() => {
-          pickerProps.onAfterClose()
-          if (!picked) {
-            router.back()
-          }
-        }}
-      />
-    </>
+    <PickerModal
+      title="Create Workspace On"
+      visible={hosts !== null && open}
+      options={hostPickerOptions(hosts ?? [])}
+      selected=""
+      onSelect={(hostId) => {
+        pickedRef.current = true
+        onPick(hostId)
+      }}
+      onClose={() => setOpen(false)}
+      onAfterClose={() => {
+        if (!pickedRef.current) {
+          router.back()
+        }
+      }}
+    />
   )
 }
 

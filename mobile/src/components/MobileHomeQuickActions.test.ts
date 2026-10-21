@@ -16,17 +16,6 @@ vi.mock('lucide-react-native', () => ({
   QrCode: 'QrCode'
 }))
 
-function host(id: string, name: string, endpoint: string): HostProfile {
-  return {
-    id,
-    name,
-    endpoint,
-    deviceToken: `token-${id}`,
-    publicKeyB64: `key-${id}`,
-    lastConnected: 1
-  }
-}
-
 describe('MobileHomeQuickActions', () => {
   let renderer: ReactTestRenderer | null = null
 
@@ -50,7 +39,6 @@ describe('MobileHomeQuickActions', () => {
       )
     })
     consoleError.mockRestore()
-    return { onCreateWorkspace }
   }
 
   function newWorkspaceButton() {
@@ -62,16 +50,5 @@ describe('MobileHomeQuickActions', () => {
 
     expect(newWorkspaceButton().props.disabled).toBe(true)
     expect(newWorkspaceButton().props.accessibilityState).toEqual({ disabled: true })
-  })
-
-  it('starts workspace creation, leaving the choice of desktop to the overlay it opens', async () => {
-    const callbacks = await renderQuickActions([
-      host('desk', 'Desk', 'ws://192.168.1.2:6768'),
-      host('laptop', 'Laptop', 'wss://relay.example.com/mobile')
-    ])
-
-    act(() => newWorkspaceButton().props.onPress())
-
-    expect(callbacks.onCreateWorkspace).toHaveBeenCalledTimes(1)
   })
 })

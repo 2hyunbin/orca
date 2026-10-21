@@ -1,7 +1,7 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useLocalSearchParams } from 'expo-router'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { DrawerBackdropAlreadyDimmedContext } from '../components/drawer-backdrop-continuity'
+import { DimmedBackdropOfferContext } from '../components/drawer-backdrop-continuity'
 import { NewWorktreeModalController } from '../components/NewWorktreeModalController'
 import { hostNewWorktreeSessionRoute } from '../host-new-worktree-session-route'
 import { useHostWorktreeRows } from './use-host-worktree-rows'
@@ -10,7 +10,7 @@ import { firstParam } from '../navigation/route-param-reader'
 import { workspaceRouteHref } from '../navigation/workspace-execution-host'
 import { openExternalLink } from '../platform/external-link'
 import { useHostClient } from '../transport/host-client-hooks'
-import { useHostStatusGates } from '../transport/host-status-gates'
+import { useHostProtocolGates } from '../components/host-protocol-gates-context'
 
 const NO_HOST_LABELS: ReadonlyMap<ExecutionHostId, string> = new Map()
 
@@ -23,13 +23,15 @@ export function NewWorkspacePageScreen() {
   const hostId = firstParam(params.hostId)
   const router = useRouteHandoff()
   const { client, state: connState } = useHostClient(hostId)
-  const { hostCapabilities } = useHostStatusGates({ hostId, client, connState })
+  const { hostCapabilities } = useHostProtocolGates()
   const worktrees = useHostWorktreeRows(client, connState === 'connected', hostId)
   const worktreePaths = useMemo(() => worktrees.map((worktree) => worktree.path), [worktrees])
+  const [dimmedBackdropOffered, setDimmedBackdropOffered] = useState(true)
+  const takeDimmedBackdrop = useCallback(() => setDimmedBackdropOffered(false), [])
 
   return (
     // The overlay that opened this page has dimmed the screen with the same scrim until now.
-    <DrawerBackdropAlreadyDimmedContext.Provider value>
+    <DimmedBackdropOfferContext.Provider value={dimmedBackdropOffered ? takeDimmedBackdrop : null}>
       <NewWorktreeModalController
         visible
         client={client}
@@ -49,6 +51,6 @@ export function NewWorkspacePageScreen() {
         }
         onClose={() => router.back()}
       />
-    </DrawerBackdropAlreadyDimmedContext.Provider>
+    </DimmedBackdropOfferContext.Provider>
   )
 }

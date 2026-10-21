@@ -15,7 +15,6 @@ vi.mock('../transport/host-store', () => ({
   loadHostCatalog: async () => catalog.current
 }))
 vi.mock('../components/PickerModal', () => ({ PickerModal: 'PickerModal' }))
-vi.mock('../components/overlay-scrim', () => ({ OverlayScrim: 'OverlayScrim' }))
 vi.mock('./NewWorkspaceOverlay', () => ({ NewWorkspaceOverlay: 'NewWorkspaceOverlay' }))
 
 import NewWorkspaceOverlayRoute from '../../app/new-workspace'
@@ -52,8 +51,7 @@ describe("Home's New Workspace overlay", () => {
     return {
       overlayFor: () =>
         root.findAll((node) => String(node.type) === 'NewWorkspaceOverlay')[0]?.props.hostId,
-      picker: () => root.find((node) => String(node.type) === 'PickerModal'),
-      dimmed: () => root.findAll((node) => String(node.type) === 'OverlayScrim').length > 0
+      picker: () => root.find((node) => String(node.type) === 'PickerModal')
     }
   }
 
@@ -64,7 +62,7 @@ describe("Home's New Workspace overlay", () => {
     expect(overlay.overlayFor()).toBe('desk')
   })
 
-  it('asks which desktop, keeps Home dimmed once one is picked, then opens its drawer', async () => {
+  it('asks which desktop and starts its drawer while the picker slides away', async () => {
     catalog.current = [entry('laptop', 'Laptop'), entry('desk', 'Desk')]
     const overlay = await open(['desk', 'laptop'])
 
@@ -74,10 +72,13 @@ describe("Home's New Workspace overlay", () => {
       ['desk', 'laptop']
     )
 
-    act(() => overlay.picker().props.onSelect('laptop'))
-    // The picker slides away over the scrim the drawer's own backdrop then takes over from.
+    // PickerModal closes itself after a select.
+    act(() => {
+      overlay.picker().props.onSelect('laptop')
+      overlay.picker().props.onClose()
+    })
     expect(overlay.picker().props.visible).toBe(false)
-    expect(overlay.dimmed()).toBe(true)
+    expect(overlay.overlayFor()).toBe('laptop')
 
     act(() => overlay.picker().props.onAfterClose())
     expect(overlay.overlayFor()).toBe('laptop')

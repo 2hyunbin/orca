@@ -9,7 +9,8 @@ import { ProtocolBlockScreen } from './ProtocolBlockScreen'
 type Props = {
   hostId: string | undefined
   children: ReactNode
-  /** In place of the full-screen spinner, for a route drawn over another screen. */
+  /** In place of the full-screen spinner, for a route drawn over another screen: once that route
+   *  is mounted it already dims what it is drawn over, so a later pending window covers nothing. */
   pending?: ReactNode
   /** In place of the block screen, for a route that hands a blocked host to the host list. */
   blocked?: ReactNode
@@ -33,6 +34,7 @@ export function HostProtocolGate({
   const blocked = compatVerdict.kind === 'blocked'
   const pending = statusPending && resolvedHostIdRef.current !== hostKey
   const holdBack = pending && mountedHostIdRef.current !== hostKey
+  const covered = pending && pendingView === undefined
 
   // Why: React can replay or discard a render, so the latches record committed
   // outcomes only — a discarded children render must not count as mounted.
@@ -75,13 +77,11 @@ export function HostProtocolGate({
           style={styles.host}
           // Why: the overlay blocks in-tree touches but TalkBack can still walk the covered
           // stack; hide it while pending (Android counterpart of the overlay's iOS modal flag).
-          importantForAccessibility={pending ? 'no-hide-descendants' : 'auto'}
+          importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}
         >
           {children}
         </View>
-        {pending && pendingView !== undefined ? (
-          pendingView
-        ) : pending ? (
+        {covered ? (
           // Why: once the stack is mounted, unmounting it for a pending status.get destroys
           // in-flight nested navigation, so cover it instead. Mount effects underneath still
           // run — they wait for connState 'connected' and every capability-dependent call

@@ -10,8 +10,13 @@ export default function NewWorkspaceOverlayRoute() {
   const params = useLocalSearchParams<{ hostIds?: string | string[] }>()
   const [offered] = useState(() => readOfferedHostIds(firstParam(params.hostIds)))
   const [hostId, setHostId] = useState(offered.length === 1 ? offered[0] : null)
-  if (hostId === null) {
-    return <NewWorkspaceHostPicker hostIds={offered} onPick={setHostId} />
-  }
-  return <NewWorkspaceOverlay hostId={hostId} />
+  return (
+    <>
+      {/* Kept mounted past the pick so it slides away over the load that pick started. */}
+      {offered.length === 1 ? null : (
+        <NewWorkspaceHostPicker hostIds={offered} onPick={setHostId} />
+      )}
+      {hostId === null ? null : <NewWorkspaceOverlay hostId={hostId} />}
+    </>
+  )
 }

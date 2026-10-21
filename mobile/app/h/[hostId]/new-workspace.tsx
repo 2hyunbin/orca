@@ -1,9 +1,12 @@
-import { NewWorkspacePageScreen } from '../../../src/new-workspace/NewWorkspacePageScreen'
+import { Redirect, useLocalSearchParams } from 'expo-router'
+import { firstParam } from '../../../src/navigation/route-param-reader'
+import { newWorkspaceOverlayHref } from '../../../src/new-workspace/new-workspace-overlay-route'
 
 /**
- * The page's Create Workspace route, which Home's `/new-workspace` overlay opens in its shell. One
- * file for both platforms: the screen is plain React Native, so no shell-mounting native sibling.
+ * Natively this path is the overlay over the screen that asked for it; the page's file is the
+ * drawer that overlay hosts.
  */
 export default function NewWorkspaceRoute() {
-  return <NewWorkspacePageScreen />
+  const params = useLocalSearchParams<{ hostId?: string | string[] }>()
+  return <Redirect href={newWorkspaceOverlayHref([firstParam(params.hostId)])} />
 }

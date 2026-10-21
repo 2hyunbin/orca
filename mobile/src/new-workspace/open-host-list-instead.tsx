@@ -1,8 +1,11 @@
 import { useEffect } from 'react'
 import { useRouteHandoff } from '../navigation/route-handoff'
 
-/** A host the gate blocks, on an overlay route: the host list explains it full screen. */
-export function OverlayGateBlocked({ hostId }: { hostId: string }) {
+/**
+ * An overlay whose page cannot show (a blocked or older desktop, a failed load): the host list,
+ * full screen, says why in its place.
+ */
+export function OpenHostListInstead({ hostId }: { hostId: string }) {
   const router = useRouteHandoff()
   useEffect(() => {
     router.replace(`/h/${encodeURIComponent(hostId)}`)
