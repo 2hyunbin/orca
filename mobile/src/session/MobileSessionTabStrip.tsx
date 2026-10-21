@@ -5,6 +5,7 @@ import { triggerMediumImpact } from '../platform/haptics'
 import { MobileAgentIcon } from '../components/MobileAgentIcon'
 import {
   getMobileSessionTabTitle,
+  getMobileTerminalTabHostAgentIdentity,
   resolveMobileTerminalTabAgentId
 } from './mobile-terminal-tab-agent'
 import { colors } from '../theme/mobile-theme'
@@ -41,6 +42,7 @@ export function MobileSessionTabStrip({
     scrollActiveTabIntoView,
     switchSessionTab,
     openSessionTabActionSheetAfterKeyboardDismiss,
+    terminals,
     visibleTabs
   } = controller
   const tabBarKeepsKeyboard = useKeyboardPersistingTaps('handled')
@@ -85,62 +87,66 @@ export function MobileSessionTabStrip({
           scrollActiveTabIntoView(activeSessionTabIdRef.current, false)
         }}
       >
-        {visibleTabs.map((t, index) => (
-          <Pressable
-            key={t.id}
-            style={[
-              styles.tab,
-              index === 0 && !inTopBar && styles.tabFirst,
-              t.id === activeSessionTabId && styles.tabActive
-            ]}
-            onLayout={(e) => {
-              const { x, width } = e.nativeEvent.layout
-              tabLayoutsRef.current.set(t.id, { x, width })
-              if (t.id === activeSessionTabIdRef.current) {
-                scrollActiveTabIntoView(t.id, false)
-              }
-            }}
-            onPress={() => switchSessionTab(t)}
-            accessibilityRole="tab"
-            accessibilityLabel={getMobileSessionTabTitle(t)}
-            accessibilityState={{ selected: t.id === activeSessionTabId }}
-            onLongPress={() => {
-              triggerMediumImpact()
-              openSessionTabActionSheetAfterKeyboardDismiss(t)
-            }}
-            delayLongPress={400}
-          >
-            <View style={styles.tabLabelRow}>
-              <View style={styles.tabIcon}>
-                {t.type === 'browser' && (
-                  <Globe size={13} color={colors.textSecondary} strokeWidth={2.1} />
-                )}
-                {t.type === 'markdown' && (
-                  <FileText size={13} color={colors.textSecondary} strokeWidth={2.1} />
-                )}
-                {t.type === 'file' && (
-                  <File size={13} color={colors.textSecondary} strokeWidth={2.1} />
-                )}
-                {t.type === 'agent-session' && <MobileAgentIcon agentId={t.agent} size={13} />}
-                {t.type === 'terminal' &&
-                  (() => {
-                    const agentId = resolveMobileTerminalTabAgentId(t)
-                    return agentId ? (
-                      <MobileAgentIcon agentId={agentId} size={13} />
-                    ) : (
-                      <SquareTerminal size={13} color={colors.textSecondary} strokeWidth={2.1} />
-                    )
-                  })()}
+        {visibleTabs.map((t, index) => {
+          const hostAgentIdentity = getMobileTerminalTabHostAgentIdentity(t, terminals)
+          const title = getMobileSessionTabTitle(t, hostAgentIdentity)
+          return (
+            <Pressable
+              key={t.id}
+              style={[
+                styles.tab,
+                index === 0 && !inTopBar && styles.tabFirst,
+                t.id === activeSessionTabId && styles.tabActive
+              ]}
+              onLayout={(e) => {
+                const { x, width } = e.nativeEvent.layout
+                tabLayoutsRef.current.set(t.id, { x, width })
+                if (t.id === activeSessionTabIdRef.current) {
+                  scrollActiveTabIntoView(t.id, false)
+                }
+              }}
+              onPress={() => switchSessionTab(t)}
+              accessibilityRole="tab"
+              accessibilityLabel={title}
+              accessibilityState={{ selected: t.id === activeSessionTabId }}
+              onLongPress={() => {
+                triggerMediumImpact()
+                openSessionTabActionSheetAfterKeyboardDismiss(t)
+              }}
+              delayLongPress={400}
+            >
+              <View style={styles.tabLabelRow}>
+                <View style={styles.tabIcon}>
+                  {t.type === 'browser' && (
+                    <Globe size={13} color={colors.textSecondary} strokeWidth={2.1} />
+                  )}
+                  {t.type === 'markdown' && (
+                    <FileText size={13} color={colors.textSecondary} strokeWidth={2.1} />
+                  )}
+                  {t.type === 'file' && (
+                    <File size={13} color={colors.textSecondary} strokeWidth={2.1} />
+                  )}
+                  {t.type === 'agent-session' && <MobileAgentIcon agentId={t.agent} size={13} />}
+                  {t.type === 'terminal' &&
+                    (() => {
+                      const agentId = resolveMobileTerminalTabAgentId(t, hostAgentIdentity)
+                      return agentId ? (
+                        <MobileAgentIcon agentId={agentId} size={13} />
+                      ) : (
+                        <SquareTerminal size={13} color={colors.textSecondary} strokeWidth={2.1} />
+                      )
+                    })()}
+                </View>
+                <Text
+                  style={[styles.tabText, t.id === activeSessionTabId && styles.tabTextActive]}
+                  numberOfLines={1}
+                >
+                  {title}
+                </Text>
               </View>
-              <Text
-                style={[styles.tabText, t.id === activeSessionTabId && styles.tabTextActive]}
-                numberOfLines={1}
-              >
-                {getMobileSessionTabTitle(t)}
-              </Text>
-            </View>
-          </Pressable>
-        ))}
+            </Pressable>
+          )
+        })}
       </ScrollView>
       {/* Why: pinned outside the scroll strip so the new-agent button stays reachable however far the tabs scroll. */}
       <MobileSessionHeaderIconButton
