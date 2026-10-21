@@ -385,10 +385,6 @@ jobs:
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: node config/scripts/run-ratchets.mjs
 
-      - name: Enforce host-list render ratchet
-        if: needs.code_paths.outputs.static_analysis == 'true'
-        run: node config/scripts/check-host-list-render-ratchet.mjs
-
       - name: Check Node runtime pin
         if: needs.code_paths.outputs.static_analysis == 'true'
         run: node config/scripts/check-node-runtime-pin.mjs
