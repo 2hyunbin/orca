@@ -296,8 +296,8 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
         }
       }
     }
-    for (const [paneKey, evidence] of this.currentAuthorityObservations) {
-      if (evidence.connectionId === normalizedConnectionId) {
+    for (const [paneKey, observation] of this.currentAuthorityObservations) {
+      if (observation.evidence.connectionId === normalizedConnectionId) {
         this.currentAuthorityObservations.delete(paneKey)
       }
     }

@@ -232,6 +232,10 @@ export abstract class AgentHookServerState extends AgentHookServerAuthorityState
     origin: AgentStatusObservationOrigin,
     observedAt: number
   ): AgentStatusObservation
+  protected abstract applyDerivedStatus(
+    source: AgentHookEventPayload,
+    event: AgentHookEventPayload
+  ): EnrichedAgentHookEventPayload | undefined
   protected abstract applyNormalizedStatus(
     payload: AgentHookEventPayload,
     onAccepted?: () => void,
