@@ -1,4 +1,7 @@
 import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
+import { writeTerminalOutput } from '@/lib/pane-manager/pane-terminal-output-scheduler'
+import { STARTUP_CWD_FALLBACK_NOTICE } from './startup-cwd-fallback-notice'
+import { shouldWritePtyOutputForeground } from './foreground-output-scan'
 import { armPaneOwnerRetry } from './pane-owner-recovery'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { warnTerminalLifecycleAnomaly } from '../terminal-lifecycle-diagnostics'
@@ -208,6 +211,17 @@ function connectDeferredSessionReattach(
         coldRestoreStartup,
         outputCallbacks.generation
       )
+      if (
+        accepted &&
+        isCurrentReattach() &&
+        result &&
+        typeof result === 'object' &&
+        result.startupCwdFallback
+      ) {
+        writeTerminalOutput(session.pane.terminal, STARTUP_CWD_FALLBACK_NOTICE, {
+          foreground: shouldWritePtyOutputForeground(session.deps.isVisibleRef.current)
+        })
+      }
       session.finishReattachLiveDataDeferral(accepted, outputCallbacks.generation)
       const gen = await preSignalPromise
       if (typeof gen === 'number') {
