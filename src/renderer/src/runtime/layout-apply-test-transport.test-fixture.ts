@@ -314,7 +314,7 @@ export async function answeringLayoutApplyTestTransport(): Promise<
   typeof layoutApplyTestTransport
 > {
   const client: object = await import('./runtime-rpc-client')
-  const answering: unknown = Reflect.get(client, ANSWERING_TRANSPORT)
+  const answering = ANSWERING_TRANSPORT in client ? client[ANSWERING_TRANSPORT] : undefined
   return isLayoutApplyTestTransport(answering) ? answering : layoutApplyTestTransport
 }
 

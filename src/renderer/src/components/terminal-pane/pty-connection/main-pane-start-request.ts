@@ -3,25 +3,12 @@
 
 import { useAppStore } from '@/store'
 import { sendLayoutApply } from '@/runtime/layout-apply-send'
-import { runtimeEnvironmentIdUnlessTwin } from '@/lib/resolve-owner'
 import { parsePaneKey } from '../../../../../shared/stable-pane-id'
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
 import { adoptMainBinding, waitsForMainPaneStart } from './main-pane-start-wait'
 import { startDeferredSessionReattach } from './deferred-session-reattach-connect'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { mainStartsPane } from './main-starts-pane'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
-
-/** Whether main starts this pane's terminal: a layout-owner build, and main owns the workspace. */
-export function mainStartsPane(session: {
-  deps: ConnectPanePtySession['deps']
-  runtimeEnvironmentId?: string | null
-}): boolean {
-  return (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
-    !session.runtimeEnvironmentId &&
-    !runtimeEnvironmentIdUnlessTwin(useAppStore.getState(), session.deps.worktreeId)
-  )
-}
 
 type MainPaneStartHandlers = {
   /** Runs once main's start for the pane ends: the pane is bound to its terminal. */

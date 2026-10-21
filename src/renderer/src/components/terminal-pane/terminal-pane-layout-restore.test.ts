@@ -41,8 +41,9 @@ async function restoreWithSwitch(on: boolean): Promise<void> {
       buffersByLeafId: { [LEAF]: 'shared history' }
     }
   }
-  restoreTerminalPaneLayout({
-    manager: manager as never,
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the restore reads only the members this fixture supplies.
+  const args = {
+    manager,
     deps: {
       initialLayoutRef,
       tabId: TAB,
@@ -53,11 +54,12 @@ async function restoreWithSwitch(on: boolean): Promise<void> {
       setPaneTitles: vi.fn(),
       paneTitlesRef: { current: {} },
       setExpandedPane: vi.fn()
-    } as never,
-    refs: { restoredViewportBlankingPanesRef: { current: new Set() } } as never,
-    ptyDeps: { mountFollowsTerminalPark: false } as never,
+    },
+    refs: { restoredViewportBlankingPanesRef: { current: new Set() } },
+    ptyDeps: { mountFollowsTerminalPark: false },
     initialLayoutHadBuffers: true
-  })
+  } as unknown as Parameters<typeof restoreTerminalPaneLayout>[0]
+  restoreTerminalPaneLayout(args)
 }
 
 describe('restoreTerminalPaneLayout history source', () => {

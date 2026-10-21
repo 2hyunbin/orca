@@ -9,7 +9,7 @@ import { NEWER_DAEMON_HOLD_ERROR } from '../../../../../shared/newer-daemon-hold
 import { PANE_NOT_LIVE_ERROR } from '../../../../../shared/pane-attach-only-view'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
-import { mainStartsPane } from './main-pane-start-request'
+import { mainStartsPane } from './main-starts-pane'
 
 import {
   awaitAgentStatusStartupSnapshot,

@@ -14,7 +14,7 @@ import {
 
 import { restoredSnapshotPaintsPrintableContent } from '../restored-snapshot-coverage'
 import { ackPaintedColdRestore } from './painted-cold-restore-ack'
-import { mainStartsPane } from './main-pane-start-request'
+import { mainStartsPane } from './main-starts-pane'
 import { fitReattachedPaneToGrid, noteReattachAltFrameSkip } from './reattach-grid-fit'
 
 import type { ReattachPayloadContext } from './reattach-payload-context'

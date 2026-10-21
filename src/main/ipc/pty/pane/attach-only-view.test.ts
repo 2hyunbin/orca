@@ -20,6 +20,7 @@ function viewOf(spawn: ReturnType<typeof vi.fn>, owner: StablePaneOwner | null) 
     run: () =>
       spawnForStablePane({
         runtime: undefined,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a view of a stable pane calls only provider.spawn.
         provider: { spawn } as unknown as IPtyProvider,
         spawnOptions: { cols: 80, rows: 24, sessionId: 'pty-1', command: 'claude --resume s' },
         owner,

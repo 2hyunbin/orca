@@ -62,9 +62,12 @@ describe('a painted cold-restore ack in the layout-owner build', () => {
       {},
       { get: (_target, key) => (key === 'isRestoredPaneBoundTo' ? isRestoredPaneBoundTo : vi.fn()) }
     )
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the Proxy answers every runtime hook the handlers install.
     registerPtyHandlers(mainWindow, runtime as never)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the ack listener calls only ackColdRestore.
     setLocalPtyProvider({ ackColdRestore } as never)
     const call = onMock.mock.calls.findLast((entry: unknown[]) => entry[0] === 'pty:ackColdRestore')
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ipcMain.on registered this channel with an (event, args) listener.
     const listener = call?.[1] as (event: unknown, args: unknown) => void
     listener(null, args)
     return ackColdRestore

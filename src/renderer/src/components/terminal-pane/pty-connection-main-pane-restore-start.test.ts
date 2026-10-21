@@ -25,9 +25,7 @@ import { PANE_NOT_LIVE_ERROR } from '../../../../shared/pane-attach-only-view'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
-const sent = vi.hoisted(
-  () => [] as { command: WindowLayoutCommand; handlers: LayoutApplyHandlers }[]
-)
+const sent = vi.hoisted((): { command: WindowLayoutCommand; handlers: LayoutApplyHandlers }[] => [])
 vi.mock('@/runtime/layout-apply-send', async (importOriginal) => ({
   ...(await importOriginal<LayoutApplySendModule>()),
   sendLayoutApply: (
@@ -101,7 +99,7 @@ async function connectBound(
 /** Main's start: the frame shows the pane starting, its reply lands, then the pane binds. */
 async function mainStartsAndBinds(ptyId: string): Promise<void> {
   setStore({ terminalPaneStartsByPaneKey: { [PANE_KEY]: { status: 'resuming' } } })
-  sent.at(-1)?.handlers.apply({} as never)
+  sent.at(-1)?.handlers.apply({})
   await flushAsyncTicks()
   setStore({ ...layoutBoundTo(ptyId), terminalPaneStartsByPaneKey: {} })
   await flushAsyncTicks()

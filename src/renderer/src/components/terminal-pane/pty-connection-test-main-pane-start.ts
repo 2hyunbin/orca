@@ -37,6 +37,7 @@ export function expectNoWindowStart(transport: MockTransport, store?: ResumeRegi
   if (store) {
     expect(store.registerAgentLaunchConfig).not.toHaveBeenCalled()
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mock transport's connect takes one options argument.
   for (const [options] of transport.connect.mock.calls as [ConnectOptions | undefined][]) {
     expect(options?.command).toBeUndefined()
     expect(options?.resumeProviderSession).toBeUndefined()
