@@ -16,17 +16,22 @@ function withMainSleepRecords(stored: Records | undefined, saved: Records): Reco
   return Object.fromEntries([...kept, ...main])
 }
 
+/**
+ * The window never writes or clears a workspace sleep's records: a full save that omits the field
+ * and a patch that names it, even as undefined, both keep main's. A patch that omits it is left be.
+ */
 export function windowSaveKeepingMainSleepRecords<
   T extends WorkspaceSessionState | WorkspaceSessionPatch
->(stored: WorkspaceSessionState, save: T): T {
-  const saved = save.sleepingAgentSessionsByPaneKey
-  return saved
-    ? {
-        ...save,
-        sleepingAgentSessionsByPaneKey: withMainSleepRecords(
-          stored.sleepingAgentSessionsByPaneKey,
-          saved
-        )
-      }
-    : save
+>(stored: WorkspaceSessionState, save: T, kind: 'set' | 'patch'): T {
+  if (kind === 'patch' && !Object.hasOwn(save, 'sleepingAgentSessionsByPaneKey')) {
+    return save
+  }
+  const merged = withMainSleepRecords(
+    stored.sleepingAgentSessionsByPaneKey,
+    save.sleepingAgentSessionsByPaneKey ?? {}
+  )
+  return {
+    ...save,
+    sleepingAgentSessionsByPaneKey: Object.keys(merged).length > 0 ? merged : undefined
+  }
 }

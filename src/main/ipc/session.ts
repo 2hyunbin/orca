@@ -54,7 +54,7 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
       store.setWorkspaceSession(
         ORCA_LAYOUT_OWNER_IS_MAIN
           ? sessionForMain(args, hostId)
-          : windowSaveKeepingMainSleepRecords(store.getWorkspaceSession(hostId), args),
+          : windowSaveKeepingMainSleepRecords(store.getWorkspaceSession(hostId), args, 'set'),
         hostId
       )
     }
@@ -65,7 +65,7 @@ export function registerSessionHandlers(store: Store, runtime: OrcaRuntimeServic
       store.patchWorkspaceSession(
         ORCA_LAYOUT_OWNER_IS_MAIN
           ? patchForMain(args, hostId)
-          : windowSaveKeepingMainSleepRecords(store.getWorkspaceSession(hostId), args),
+          : windowSaveKeepingMainSleepRecords(store.getWorkspaceSession(hostId), args, 'patch'),
         hostId
       )
     }

@@ -286,4 +286,41 @@ describe('opening a workspace-slept running agent on a host with no window', () 
     landSpawn({ id: 'persisted-pty' })
     await vi.waitFor(() => expect(resumeSleepingAgents).toHaveBeenCalledWith(TEST_WORKTREE_ID))
   })
+
+  describe("the window's open of a slept pane (worktrees:resumeSleptPane)", () => {
+    const pane = { worktreeId: TEST_WORKTREE_ID, tabId: 'host-tab', leafId: HEADLESS_LEAF_ID }
+
+    it('resumes once; a second open after it finished attaches to the same terminal', async () => {
+      const fixture = makeWorkingSleepStore()
+      const { runtime, spawn, opened } = openPane(fixture.runtimeStore, 'openable', {
+        withWindow: true,
+        tap: false
+      })
+      await opened
+      await expect(runtime.resumeSleptPane(pane)).resolves.toBe(true)
+      expect(spawn).toHaveBeenCalledOnce()
+      expect(spawnedCommand(spawn)).toContain('provider-session-1')
+
+      await expect(runtime.resumeSleptPane(pane)).resolves.toBe(true)
+      expect(spawn).toHaveBeenCalledOnce()
+    })
+
+    it("a reloaded window's open attaches to the terminal main started, never a second resume", async () => {
+      const fixture = makeWorkingSleepStore()
+      const { runtime, spawn, opened } = openPane(fixture.runtimeStore, 'openable', {
+        withWindow: true,
+        tap: false
+      })
+      await opened
+      await runtime.resumeSleptPane(pane)
+      // The reload: the window's graph restarts and its panes ask again.
+      runtime.attachWindow(TEST_WINDOW_ID)
+      runtime.markGraphReady(TEST_WINDOW_ID)
+      await expect(runtime.resumeSleptPane(pane)).resolves.toBe(true)
+      expect(spawn).toHaveBeenCalledOnce()
+      expect(fixture.getSession().sleepingAgentSessionsByPaneKey?.[PANE_KEY]).toMatchObject(
+        PANE_OWNED
+      )
+    })
+  })
 })
