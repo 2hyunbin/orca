@@ -300,7 +300,26 @@ export function runtimeRpcClientWithLayoutApply(actual: RpcClientModule): RpcCli
     }
     return actual.callRuntimeRpc<TResult>(target, method, params, options)
   }
-  return { ...actual, callRuntimeRpc }
+  const client = { ...actual, callRuntimeRpc }
+  // Why: vi.resetModules keeps the mocked client, so a test's later import of this fixture is a
+  // fresh copy; `answeringLayoutApplyTestTransport` reads the copy the mocked client answers with.
+  Object.defineProperty(client, ANSWERING_TRANSPORT, { value: layoutApplyTestTransport })
+  return client
+}
+
+const ANSWERING_TRANSPORT = 'layoutApplyTestTransport'
+
+/** The transport the mocked RPC client answers with, even after `vi.resetModules`. */
+export async function answeringLayoutApplyTestTransport(): Promise<
+  typeof layoutApplyTestTransport
+> {
+  const client: object = await import('./runtime-rpc-client')
+  const answering: unknown = Reflect.get(client, ANSWERING_TRANSPORT)
+  return isLayoutApplyTestTransport(answering) ? answering : layoutApplyTestTransport
+}
+
+function isLayoutApplyTestTransport(value: unknown): value is typeof layoutApplyTestTransport {
+  return typeof value === 'object' && value !== null && 'sentOfType' in value && 'reset' in value
 }
 
 type LayoutClientModule = typeof LayoutClient
