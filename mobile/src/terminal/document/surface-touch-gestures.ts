@@ -100,7 +100,7 @@ export function attachSurfaceEventHandlers(
   targetSurface.addEventListener(
     'touchstart',
     function (e) {
-      if (dispatcherShouldBlockSurface(scope)) {
+      if (targetSurface !== scope.surface || dispatcherShouldBlockSurface(scope)) {
         return
       }
       if (scope.touchGesture.momentumId) {
@@ -132,7 +132,7 @@ export function attachSurfaceEventHandlers(
   targetSurface.addEventListener(
     'touchmove',
     function (e) {
-      if (dispatcherShouldBlockSurface(scope)) {
+      if (targetSurface !== scope.surface || dispatcherShouldBlockSurface(scope)) {
         return
       }
       if (!scope.term) {
@@ -211,7 +211,7 @@ export function attachSurfaceEventHandlers(
   targetSurface.addEventListener(
     'touchend',
     function (e) {
-      if (dispatcherShouldBlockSurface(scope)) {
+      if (targetSurface !== scope.surface || dispatcherShouldBlockSurface(scope)) {
         return
       }
       if (!scope.term) {
@@ -296,4 +296,7 @@ export function stopSurfaceTouchGestures(scope: TerminalDocumentScope) {
     cancelAnimationFrame(scope.touchGesture.momentumId)
     scope.touchGesture.momentumId = null
   }
+  scope.touchGesture.velY = 0
+  scope.touchGesture.accumDelta = 0
+  scope.touchGesture.isPinching = false
 }
