@@ -20206,6 +20206,7 @@
   },
   "aiVault": {
     "antigravityReferenceDescription": "Continues in a new Antigravity CLI conversation using this transcript as a reference.",
+    "searchHitSourceHost": "Found on {{value0}}",
     "antigravityIdeToCli": "IDE → CLI",
     "antigravity2ToCli": "2.0 → CLI",
     "continueInCli": "Continue in CLI",
@@ -20630,7 +20631,17 @@
   "tabHoverCard": {
     "browser": "Browser",
     "editor": "Editor",
-    "terminal": "Terminal"
+    "terminal": "Terminal",
+    "namingFailure": {
+      "regenerating": "Regenerating…",
+      "regenerate": "Regenerate name",
+      "title": "Couldn't name this chat",
+      "description": "The chat-name agent stopped with an error, so the chat keeps its first message as its name.",
+      "viewError": "view error",
+      "dialogTitle": "Chat auto-name failed",
+      "dialogDescriptionStart": "Orca couldn't generate a name for",
+      "dialogDescriptionEnd": "from its first message."
+    }
   },
   "updates": {
     "installBlock": {
