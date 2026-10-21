@@ -13,7 +13,7 @@ import {
   taskProviderIdentityCachePart,
   type TaskProviderIdentity
 } from './task-provider-identity'
-import type { TaskProvider } from './task-providers'
+import { isTaskProvider, type TaskProvider } from './task-providers'
 import type { GlobalSettings } from './global-settings-types'
 import type { Repo } from './repo-types'
 
@@ -184,6 +184,19 @@ export function getTaskSourceCacheScope(
   ]
     .map(encodeCachePart)
     .join(':')
+}
+
+/** The host a {@link getTaskSourceCacheScope} scope was built for, or null when `scope` isn't one. */
+export function taskSourceCacheScopeHostId(scope: string): ExecutionHostId | null {
+  const [provider, encodedHostId] = scope.split(':')
+  if (!isTaskProvider(provider) || !encodedHostId) {
+    return null
+  }
+  try {
+    return normalizeExecutionHostId(decodeURIComponent(encodedHostId))
+  } catch {
+    return null
+  }
 }
 
 export function buildWorkspaceRunContext(args: {
