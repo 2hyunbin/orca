@@ -213,7 +213,11 @@ for (const { label, env } of HOSTS) {
       await expect
         .poll(
           async () => {
-            if (!readText(sinkPath).includes('input:BEFORE')) {
+            const mounted = await page.evaluate(
+              (id) => window.__paneManagers?.has(id) ?? false,
+              webTabId
+            )
+            if (mounted && !readText(sinkPath).includes('input:BEFORE')) {
               await typeIntoPane(page, webTabId, 'BEFORE')
             }
             return readPane(page, webTabId)
