@@ -11,6 +11,7 @@ import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id
 import { inferWorktreeIdFromPtyId } from '../../runtime-worktree-path-identity'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import {
+  mainDecidesLeafLiveness,
   mainPaneRecordFacts,
   noteMainPaneRecordChange,
   withoutPaneClaim
@@ -21,6 +22,21 @@ import {
 } from '../../pty-recorded-surface-topology'
 
 export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceRepoScanRefresh {
+  /** Switch-on, a pane main owns is no proof its terminal runs: its record decides (L80). */
+  protected mainDecidesLiveness(worktreeId: string): boolean {
+    return mainDecidesLeafLiveness(this, worktreeId)
+  }
+
+  /** An inventory's connection verdict; main's panes that bind the terminal re-compose. */
+  protected setPtyConnected(pty: RuntimePtyWorktreeRecord, connected: boolean): void {
+    const prior = mainPaneRecordFacts(pty)
+    pty.connected = connected
+    pty.disconnectedAt = connected ? null : (pty.disconnectedAt ?? Date.now())
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      noteMainPaneRecordChange(this, prior, pty)
+    }
+  }
+
   protected abstract nextTitleObservationSequence(): number
 
   protected abstract setPtyManagementTitleFromObservedTitle(

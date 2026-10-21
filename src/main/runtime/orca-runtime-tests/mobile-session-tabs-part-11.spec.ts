@@ -318,6 +318,7 @@ describe('OrcaRuntimeService', () => {
       getSession: () => WorkspaceSessionState
       kill: ReturnType<typeof vi.fn>
       closeTerminal: ReturnType<typeof vi.fn>
+      exitShell: (ptyId: string) => Promise<void>
     } {
       const layout = makeHeadlessTerminalLayout({
         [HEADLESS_LEAF_ID]: 'serve-left',
@@ -344,12 +345,21 @@ describe('OrcaRuntimeService', () => {
       )
       const kill = vi.fn(() => true)
       const closeTerminal = vi.fn()
+      const liveShells = new Set(['serve-left', 'serve-right'])
       const runtime = new OrcaRuntimeService(runtimeStore as never)
       runtime.setPtyController({
         write: () => true,
         kill,
         getForegroundProcess: async () => null,
-        listProcesses: async () => []
+        // The host lists both shells until one exits.
+        listProcesses: async () =>
+          [...liveShells].map((id) => ({
+            id,
+            title: 'shell',
+            cwd: TEST_WORKTREE_PATH,
+            worktreeId: TEST_WORKTREE_ID,
+            wslDistro: null
+          }))
       })
       runtime.setNotifier({ closeTerminal } as never)
       runtime.syncWindowGraph(1, {
@@ -387,7 +397,11 @@ describe('OrcaRuntimeService', () => {
       ]) {
         registerLivePty(runtime, ptyId, TEST_WORKTREE_ID, null, { tabId: 'host-tab', leafId })
       }
-      return { runtime, getSession, kill, closeTerminal }
+      const exitShell = async (ptyId: string): Promise<void> => {
+        liveShells.delete(ptyId)
+        await runtime.onPtyExit(ptyId, 0)
+      }
+      return { runtime, getSession, kill, closeTerminal, exitShell }
     }
 
     it('refuses a pty-exit echoed close of a live split leaf (direct-kill branch)', async () => {
@@ -423,8 +437,8 @@ describe('OrcaRuntimeService', () => {
       // parent (live sibling included), so the close must be refused — but a
       // republish would re-add the dead leaf on the echoing client and feed a
       // refuse→republish→re-echo loop.
-      const { runtime, getSession, kill, closeTerminal } = makeSplitLeafRuntime()
-      await runtime.onPtyExit('serve-right', 0)
+      const { runtime, getSession, kill, closeTerminal, exitShell } = makeSplitLeafRuntime()
+      await exitShell('serve-right')
       const events: { worktree: string }[] = []
       const unsubscribe = runtime.onMobileSessionTabsChanged((snapshot) => events.push(snapshot))
 

@@ -3,6 +3,7 @@
 
 import type { PaneStartFactOf } from '../../pane-start-statuses'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
@@ -362,6 +363,15 @@ export function mainLayoutHoldsPane(runtime: SurfacesOwner, paneKey: string): bo
   const surfaces = startedMainTerminalSurfaces(runtime)
   const pane = parsePaneKey(paneKey)
   return surfaces && pane ? surfaces.paneOf(pane.tabId, pane.leafId) !== null : null
+}
+
+/**
+ * Switch-on, whether a pane in the workspace is main's own: then the pane existing proves nothing
+ * about its terminal, whose record and the host's inventory decide whether it runs. A paired
+ * server's workspace (a `runtime:<env>` window graph) keeps the window's rule.
+ */
+export function mainDecidesLeafLiveness(runtime: SurfacesOwner, worktreeId: string): boolean {
+  return ORCA_LAYOUT_OWNER_IS_MAIN && mainListsEveryPane(runtime, worktreeId)
 }
 
 /** Whether main lists the workspace's panes, so terminal.list shows every saved one. */

@@ -19,6 +19,19 @@ import type { WorkspaceSessionState } from '../../../shared/workspace-session-st
 import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records'
 
 export abstract class OrcaRuntimeWithAttachWindow extends OrcaRuntimeWithNotifySshStateChanged {
+  protected abstract mainDecidesLiveness(worktreeId: string): boolean
+
+  /**
+   * Whether a graph leaf's terminal runs. A graph cannot revoke a host-certified exit, and a pane
+   * main owns is no proof its terminal runs: the terminal's record decides (L80).
+   */
+  protected graphLeafConnected(ptyId: string | null, worktreeId: string): boolean {
+    if (ptyId === null || this.getPtyLivenessVerdict(ptyId)?.status === 'exited') {
+      return false
+    }
+    return !this.mainDecidesLiveness(worktreeId) || this.ptysById.get(ptyId)?.connected === true
+  }
+
   /** The group each workspace shows, as the attached window last reported it (syncWindowGraph). */
   protected readonly activeGroupViewFacts = new ActiveGroupViewFacts()
 
