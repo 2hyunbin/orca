@@ -225,9 +225,9 @@ describe('createBrowserSlice annotations', () => {
         'browser',
         expect.objectContaining({ activate: false })
       )
-      // A frame's build remembers a worktree's only browser tab, as a restore does.
-      expect(store.getState().activeBrowserTabIdByWorktree['wt-1']).toBeNull()
     }
+    // A background open leaves the worktree's remembered browser tab unset.
+    expect(store.getState().activeBrowserTabIdByWorktree['wt-1']).toBeNull()
     expect(store.getState().activeTabType).toBe('terminal')
     expect(store.getState().activeBrowserTabId).toBeNull()
   })

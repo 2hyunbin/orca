@@ -293,7 +293,23 @@ export function buildLayoutFrameSlices({
     browserTabsByWorktree: browser.browserTabsByWorktree,
     browserPagesByWorkspace: browser.browserPagesByWorkspace,
     remoteBrowserPageHandlesByPageId: browser.remoteBrowserPageHandlesByPageId,
-    activeBrowserTabIdByWorktree: browser.activeBrowserTabIdByWorktree,
+    activeBrowserTabIdByWorktree: withUnchosenBrowserTabsUnset(
+      browser.activeBrowserTabIdByWorktree,
+      view
+    ),
     activeTabTypeByWorktree: browser.activeTabTypeByWorktree
   }
+}
+
+/** A workspace this window chose no browser tab in keeps none, as a background open leaves it. */
+function withUnchosenBrowserTabsUnset(
+  restored: Record<string, string | null>,
+  view: DesktopLayoutView
+): Record<string, string | null> {
+  return Object.fromEntries(
+    Object.entries(restored).map(([key, tabId]) => [
+      key,
+      view.activeBrowserTabIdByWorktree?.[key] ? tabId : null
+    ])
+  )
 }
