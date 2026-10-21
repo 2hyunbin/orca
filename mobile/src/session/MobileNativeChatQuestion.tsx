@@ -4,6 +4,7 @@ import { ArrowUp, Check, CircleHelp } from 'lucide-react-native'
 import { MobileNativeChatCardHeaderAction } from './MobileNativeChatCardHeaderAction'
 import { colors, radii, spacing, typography } from '../theme/mobile-theme'
 import { mobileNativeChatInputStyles } from './mobile-native-chat-input-styles'
+import { useMobileNativeChatReplyScroll } from './use-mobile-native-chat-reply-scroll'
 import {
   formatQuestionAnswerByIndexes,
   formatQuestionAnswerWithOtherByIndexes,
@@ -29,6 +30,7 @@ export function MobileNativeChatQuestion({
   onCancel,
   onCollapse
 }: Props): React.JSX.Element {
+  const { scrollRef, inputRef, revealReply } = useMobileNativeChatReplyScroll()
   const [selectedOptionIndexes, setSelectedOptionIndexes] = useState<number[]>([])
   const [freeText, setFreeText] = useState(() => question.freeTextInput?.initialValue ?? '')
   const [sending, setSending] = useState(false)
@@ -110,6 +112,8 @@ export function MobileNativeChatQuestion({
 
   return (
     <ScrollView
+      ref={scrollRef}
+      onLayout={revealReply}
       testID="native-chat-question-card"
       style={styles.card}
       contentContainerStyle={styles.cardContent}
@@ -182,6 +186,8 @@ export function MobileNativeChatQuestion({
       {allowOther ? (
         <View testID="native-chat-question-reply" style={styles.freeTextRow}>
           <TextInput
+            ref={inputRef}
+            onFocus={revealReply}
             style={mobileNativeChatInputStyles.freeInput}
             value={freeText}
             onChangeText={setFreeText}
