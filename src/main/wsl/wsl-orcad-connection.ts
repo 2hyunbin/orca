@@ -25,7 +25,7 @@ import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
 import { resolveWslOrcadPairing } from './wsl-orcad-pairing-identity'
 import { trackWslOrcadHostEnvironment } from './wsl-orcad-host-environments'
 import {
-  listenWslOrcadStdioBridge,
+  listenWslOrcadStdioBridgeOnPreferredPort,
   type WslOrcadStdioBridgeOptions
 } from './wsl-orcad-stdio-bridge'
 
@@ -228,19 +228,27 @@ export class WslOrcadConnectionManager {
       (current?.connection.environmentId === environmentId
         ? parsePairingCode(current.connection.pairingOffer)
         : null)
-    const pairingForPort = (port: number): Promise<string> =>
-      resolveWslOrcadPairing(launch, port, paired, this.dependencies.verifyIdentity)
     if (
       current &&
       current.connection.remotePort === launch.port &&
       current.connection.environmentId === environmentId
     ) {
-      const pairingOffer = await pairingForPort(current.connection.localPort)
+      const pairingOffer = await resolveWslOrcadPairing(
+        launch,
+        current.connection.localPort,
+        paired,
+        this.dependencies.verifyIdentity
+      )
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
-      const announce = options.status ? status.ready : null
-      return this.refreshOffer(key, current, launch, pairingOffer, announce)
+      return this.refreshOffer(
+        key,
+        current,
+        launch,
+        pairingOffer,
+        options.status ? status.ready : null
+      )
     }
     // orcad moved ports (or this is the first connect): the old bridge dials a dead port.
     const preferredLocalPort = current?.connection.localPort ?? options.localPort ?? 0
@@ -250,17 +258,26 @@ export class WslOrcadConnectionManager {
       trackWslOrcadHostEnvironment(current.connection, null)
       this.dependencies.onChange?.(distro, null, status.pending)
     }
-    const forward = await this.listen(transport, {
-      environmentId,
-      remotePort: launch.port,
-      localPort: preferredLocalPort,
-      label: `Orca server in WSL: ${label}`
-    })
+    const forward = await listenWslOrcadStdioBridgeOnPreferredPort(
+      transport,
+      {
+        environmentId,
+        remotePort: launch.port,
+        localPort: preferredLocalPort,
+        label: `Orca server in WSL: ${label}`
+      },
+      this.dependencies.listen
+    )
     try {
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
-      const pairingOffer = await pairingForPort(forward.entry.localPort)
+      const pairingOffer = await resolveWslOrcadPairing(
+        launch,
+        forward.entry.localPort,
+        paired,
+        this.dependencies.verifyIdentity
+      )
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
@@ -312,26 +329,6 @@ export class WslOrcadConnectionManager {
       this.dependencies.onChange?.(entry.connection.distro, entry.connection, announce ?? READY)
     }
     return entry.connection
-  }
-
-  /** A persisted local port may be taken by now; a free one beats no connection. */
-  private async listen(
-    transport: OrcadHostTransport,
-    options: WslOrcadStdioBridgeOptions
-  ): Promise<StartedPortForward> {
-    const listen = this.dependencies.listen ?? listenWslOrcadStdioBridge
-    try {
-      return await listen(transport, options)
-    } catch (error) {
-      if (options.localPort === 0) {
-        throw error
-      }
-      console.warn(
-        `[wsl] Could not rebind local port ${options.localPort}; picking another:`,
-        error instanceof Error ? error.message : error
-      )
-      return listen(transport, { ...options, localPort: 0 })
-    }
   }
 
   private async closeEntry(key: string, entry: ActiveWslOrcadConnection): Promise<void> {

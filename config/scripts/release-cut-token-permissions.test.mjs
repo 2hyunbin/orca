@@ -19,11 +19,34 @@ const EXPECTED_MATRIX = {
   '.github/workflows/node-server-tests.yml#changes': { contents: 'read' },
   '.github/workflows/node-server-tests.yml#desktop_template': { contents: 'read' },
   '.github/workflows/node-server-tests.yml#linux_glibc217_compat': { contents: 'read' },
-  '.github/workflows/node-server-tests.yml#linux_glibc_floor': { contents: 'read' },
-  '.github/workflows/node-server-tests.yml#linux_musl': { contents: 'read' },
+  '.github/workflows/node-server-tests.yml#linux_glibc_floor': {
+    actions: 'read',
+    contents: 'read'
+  },
+  '.github/workflows/node-server-tests.yml#linux_musl': { actions: 'read', contents: 'read' },
   '.github/workflows/node-server-tests.yml#mobile_web_bundle': { contents: 'read' },
-  '.github/workflows/node-server-tests.yml#persistence': { contents: 'read' },
+  '.github/workflows/node-server-tests.yml#persistence': { actions: 'read', contents: 'read' },
   '.github/workflows/release-mac-build.yml#build-mac': { actions: 'read', contents: 'write' },
+  '.github/workflows/release-mac-build.yml#qualification-template': {
+    actions: 'read',
+    contents: 'read'
+  },
+  ...Object.fromEntries(
+    [
+      'changes',
+      'desktop_template',
+      'linux_glibc217_compat',
+      'linux_glibc_floor',
+      'linux_musl',
+      'mobile_web_bundle',
+      'persistence'
+    ].map((job) => [
+      `.github/workflows/release-mac-build.yml#qualification-template -> .github/workflows/node-server-tests.yml#${job}`,
+      ['persistence', 'linux_glibc_floor', 'linux_musl'].includes(job)
+        ? { actions: 'read', contents: 'read' }
+        : { contents: 'read' }
+    ])
+  ),
   [`${RELEASE_WORKFLOW}#build`]: { actions: 'read', contents: 'write' },
   [`${RELEASE_WORKFLOW}#build-mac`]: { actions: 'write', contents: 'read' },
   [`${RELEASE_WORKFLOW}#verify-mac-build`]: { actions: 'read', contents: 'read' },
@@ -39,7 +62,7 @@ const EXPECTED_MATRIX = {
     {
       contents: 'read'
     },
-  [`${RELEASE_WORKFLOW}#orcad-template`]: { contents: 'read' },
+  [`${RELEASE_WORKFLOW}#orcad-template`]: { actions: 'read', contents: 'read' },
   [`${RELEASE_WORKFLOW}#orcad-template -> .github/workflows/node-server-tests.yml#changes`]: {
     contents: 'read'
   },
@@ -53,9 +76,11 @@ const EXPECTED_MATRIX = {
     },
   [`${RELEASE_WORKFLOW}#orcad-template -> .github/workflows/node-server-tests.yml#linux_glibc_floor`]:
     {
+      actions: 'read',
       contents: 'read'
     },
   [`${RELEASE_WORKFLOW}#orcad-template -> .github/workflows/node-server-tests.yml#linux_musl`]: {
+    actions: 'read',
     contents: 'read'
   },
   [`${RELEASE_WORKFLOW}#orcad-template -> .github/workflows/node-server-tests.yml#mobile_web_bundle`]:
@@ -63,6 +88,7 @@ const EXPECTED_MATRIX = {
       contents: 'read'
     },
   [`${RELEASE_WORKFLOW}#orcad-template -> .github/workflows/node-server-tests.yml#persistence`]: {
+    actions: 'read',
     contents: 'read'
   },
   [`${RELEASE_WORKFLOW}#post-release-e2e`]: { actions: 'write' },
@@ -222,7 +248,11 @@ describe('release-cut token permissions', () => {
     expect(tagJobs.map(([jobName]) => jobName).sort()).toEqual(RELEASE_TAG_EXECUTION_JOBS)
     for (const [jobName] of tagJobs) {
       if (!PUBLISH_TAG_JOBS.has(jobName)) {
-        expect(matrix[`${RELEASE_WORKFLOW}#${jobName}`]).toEqual({ contents: 'read' })
+        expect(matrix[`${RELEASE_WORKFLOW}#${jobName}`]).toEqual(
+          jobName === 'orcad-template'
+            ? { actions: 'read', contents: 'read' }
+            : { contents: 'read' }
+        )
       }
     }
   })
@@ -245,8 +275,12 @@ describe('release-cut token permissions', () => {
     }
 
     const macWorkflow = readWorkflow('.github/workflows/release-mac-build.yml')
-    expect(macWorkflow.jobs['build-mac'].if).toBe("github.repository == 'stablyai/orca'")
-    expect(checkoutRef(macWorkflow.jobs['build-mac'])).toBe('refs/tags/${{ inputs.tag }}')
+    expect(macWorkflow.jobs['build-mac'].if).toBe(
+      "${{ !cancelled() && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'stablyai/orca' }}"
+    )
+    expect(checkoutRef(macWorkflow.jobs['build-mac'])).toBe(
+      "${{ inputs.qualification_only && github.sha || format('refs/tags/{0}', inputs.tag) }}"
+    )
 
     const e2eWorkflow = readWorkflow('.github/workflows/e2e.yml')
     for (const jobName of Object.keys(e2eWorkflow.jobs)) {
