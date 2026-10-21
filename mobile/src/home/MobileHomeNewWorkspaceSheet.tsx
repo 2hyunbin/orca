@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'expo-router'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { getCachedWorktrees } from '../cache/worktree-cache'
+import { getProvenCachedWorktrees } from '../cache/worktree-cache'
 import { NewWorktreeModalController } from '../components/NewWorktreeModalController'
 import { hostStackHostRoute } from '../navigation/host-stack-navigation'
 import { openExternalLink } from '../platform/external-link'
@@ -57,13 +57,14 @@ export function MobileHomeNewWorkspaceSheet({ hostId, onCreated, onClose }: Prop
   )
 }
 
-/** The host's worktrees, seeded from the catalog Home last read so the sheet never opens blind. */
+/** The host's worktrees, seeded from the catalog Home last read so the sheet never opens blind.
+ *  Proven rows only: Home's cold-start seed is a pathless resume row the name picker cannot read. */
 function useHostWorktreeRows(
   client: RpcClient | null,
   connected: boolean,
   hostId: string
-): readonly Worktree[] {
-  const [rows, setRows] = useState(() => getCachedWorktrees(hostId) ?? [])
+): readonly Pick<Worktree, 'path' | 'repoId' | 'branch'>[] {
+  const [rows, setRows] = useState(() => getProvenCachedWorktrees(hostId) ?? [])
 
   useEffect(() => {
     if (!client || !connected) {
@@ -86,6 +87,6 @@ function useHostWorktreeRows(
     }
   }, [client, connected, hostId])
 
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these are worktree.ps rows, the same ones the host screen's snapshot client admits as `Worktree`.
-  return rows as Worktree[]
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: proven worktree.ps rows, which the host screen's snapshot client admits as `Worktree`; the sheet reads only these three.
+  return rows as Pick<Worktree, 'path' | 'repoId' | 'branch'>[]
 }

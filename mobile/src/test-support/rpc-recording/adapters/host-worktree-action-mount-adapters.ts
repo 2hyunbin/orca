@@ -33,7 +33,6 @@ export function hostWorktreeActionMountAdapters(
         typeof import('../../../host-screen/use-host-worktree-actions')
       >('mobile/src/host-screen/use-host-worktree-actions.ts').useHostWorktreeActions
       const state = observableModel(context, {
-        newWorktreeModalVisibleRef: { current: false },
         pinnedIds: new Set<string>(),
         worktrees: [ROW],
         lastKnownWorktrees: [ROW],

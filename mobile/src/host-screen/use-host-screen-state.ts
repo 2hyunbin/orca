@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
 import type { ExecutionHostHealth } from '../../../src/shared/execution-host-health'
 import { getCachedWorktrees } from '../cache/worktree-cache'
@@ -74,6 +74,11 @@ export function useHostScreenState(hostId: string | undefined) {
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null)
   const [confirmRemoveHost, setConfirmRemoveHost] = useState(false)
   const [showNewWorktree, setShowNewWorktree] = useState(false)
+  // Why the ref too: the catalog poll reads it from callbacks that outlive this render.
+  const setNewWorktreeVisible = useCallback((visible: boolean) => {
+    newWorktreeModalVisibleRef.current = visible
+    setShowNewWorktree(visible)
+  }, [])
   const [sleptIds, setSleptIds] = useState<Set<string>>(new Set())
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
   // Desktop's "Also show pinned worktrees in their original lists"; off by default.
@@ -127,7 +132,7 @@ export function useHostScreenState(hostId: string | undefined) {
     setRepoHostIdByRepoId,
     setServedProjectSections,
     setDesktopRepos,
-    setShowNewWorktree,
+    setNewWorktreeVisible,
     setSearch,
     setServerNotice,
     setServerWorkspaces,

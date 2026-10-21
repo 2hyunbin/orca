@@ -116,6 +116,7 @@ vi.mock('./use-mobile-home-data', () => ({
   })
 }))
 
+import { setCachedWorktrees } from '../cache/worktree-cache'
 import { MobileHomeScreen } from './MobileHomeScreen'
 
 describe('Home New Workspace', () => {
@@ -140,12 +141,19 @@ describe('Home New Workspace', () => {
       .findAll((node) => String(node.type) === 'Pressable')
       .find((node) => node.findAll((text) => text.props.children === 'New Workspace').length > 0)!
 
+    // Home's cold-start seed: a resume row with no path, which the name picker cannot read.
+    setCachedWorktrees('laptop', [{ worktreeId: 'wt-0', displayName: 'Marlin' }])
+
     act(() => newWorkspace.props.onPress())
     act(() => picker().props.onSelect('laptop'))
     act(() => picker().props.onAfterClose())
 
     expect(sheet()).toHaveLength(1)
-    expect(sheet()[0]!.props).toMatchObject({ visible: true, hostId: 'laptop' })
+    expect(sheet()[0]!.props).toMatchObject({
+      visible: true,
+      hostId: 'laptop',
+      existingWorktreePaths: []
+    })
     expect(navigation.router.push).not.toHaveBeenCalled()
 
     // The modal closes itself before reporting the create, as the real one does.

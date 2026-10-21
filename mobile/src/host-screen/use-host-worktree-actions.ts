@@ -53,7 +53,6 @@ export function useHostWorktreeActions(args: {
     state
   } = args
   const {
-    newWorktreeModalVisibleRef,
     pinnedIds,
     setActionError,
     setConfirmRemoveHost,
@@ -61,7 +60,7 @@ export function useHostWorktreeActions(args: {
     setOptimisticActiveWorktreeIdentity,
     setPinnedIds,
     serverWorkspaces,
-    setShowNewWorktree,
+    setNewWorktreeVisible,
     setServerNotice,
     setServerWorkspaces,
     setSleptIds,
@@ -79,15 +78,14 @@ export function useHostWorktreeActions(args: {
     leaveHostRoute(router)
   }, [router])
 
-  // Why the ref too: the catalog poll reads it from callbacks that outlive this render.
-  const openNewWorktreeModal = useCallback(() => {
-    newWorktreeModalVisibleRef.current = true
-    setShowNewWorktree(true)
-  }, [newWorktreeModalVisibleRef, setShowNewWorktree])
-  const closeNewWorktreeModal = useCallback(() => {
-    newWorktreeModalVisibleRef.current = false
-    setShowNewWorktree(false)
-  }, [newWorktreeModalVisibleRef, setShowNewWorktree])
+  const openNewWorktreeModal = useCallback(
+    () => setNewWorktreeVisible(true),
+    [setNewWorktreeVisible]
+  )
+  const closeNewWorktreeModal = useCallback(
+    () => setNewWorktreeVisible(false),
+    [setNewWorktreeVisible]
+  )
 
   const updateLocalPins = useCallback(
     (worktreeId: string, pinned: boolean) => {

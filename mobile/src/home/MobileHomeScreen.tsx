@@ -183,6 +183,7 @@ export function MobileHomeScreen() {
       />
       {newWorkspaceHostId ? (
         <MobileHomeNewWorkspaceSheet
+          key={newWorkspaceHostId}
           hostId={newWorkspaceHostId}
           onCreated={openMobileSession}
           onClose={() => setNewWorkspaceHostId(null)}
