@@ -240,6 +240,52 @@ describe('terminal live input commit hook', () => {
     }
   })
 
+  it.each([
+    {
+      name: 'appended jamo',
+      initial: 'ᄉᆞ',
+      lateFields: ['ᄉᆞᆞ'],
+      beforeRetry: ['ᄉᆞ'],
+      afterRetry: ['ᄉᆞ', 'ᆞ', '\r']
+    },
+    {
+      name: 'replaced archaic vowel',
+      initial: 'ᄋᆞ',
+      lateFields: ['', 'ᄋᆢ'],
+      beforeRetry: ['ᄋᆞ', '\x7f\x7f'],
+      afterRetry: ['ᄋᆞ', '\x7f\x7f', 'ᄋᆢ', '\r']
+    }
+  ])('preserves $name arriving during submit until explicit retry', async (test) => {
+    vi.useFakeTimers()
+    let acceptInitial: (accepted: boolean) => void = () => {}
+    const { captures, handlers, sent, unmount } = createTerminalLiveInputCommitHarness({
+      send: async (_handle, bytes) =>
+        bytes === test.initial
+          ? new Promise<boolean>((resolve) => {
+              acceptInitial = resolve
+            })
+          : true
+    })
+    try {
+      changeLiveInput(handlers, test.initial, false)
+      const submitted = handlers.handleLiveInputSubmit()
+      for (const text of test.lateFields) {
+        changeLiveInput(handlers, text, false)
+      }
+      acceptInitial(true)
+      expect(await submitted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(sent).toEqual(test.beforeRetry)
+      expect(captures.at(-1)).toBe(test.lateFields.at(-1))
+
+      expect(await handlers.handleLiveInputSubmit()).toBe(true)
+      expect(sent).toEqual(test.afterRetry)
+      expect(captures.at(-1)).toBe('')
+    } finally {
+      unmount()
+    }
+  })
+
   it.each(['terminal-a', 'terminal-b'])(
     'preserves newer input on %s after a rapid terminal transition',
     async (nextHandle) => {

@@ -182,7 +182,10 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
           : Promise.resolve(true)
       const flushed = await waitForPendingLiveInputFlush()
       const committed = await pendingCommit
-      if (pendingLiveInputFlushRef.current.generation !== generation) {
+      if (
+        pendingLiveInputFlushRef.current.generation !== generation ||
+        heldLiveInputTextRef.current.length > 0
+      ) {
         return false
       }
 
