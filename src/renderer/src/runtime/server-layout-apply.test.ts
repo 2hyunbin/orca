@@ -180,7 +180,7 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
     await settle()
 
     expect(orderOf(store)).toEqual([TAB_2, TAB_1])
-    expect(handlers.apply).toHaveBeenCalledWith({ tabId: TAB_2 })
+    expect(handlers.apply).toHaveBeenCalledWith({ tabId: TAB_2 }, { framesKey: ENV, routed: true })
     expect(handlers.asToday).not.toHaveBeenCalled()
   })
 
