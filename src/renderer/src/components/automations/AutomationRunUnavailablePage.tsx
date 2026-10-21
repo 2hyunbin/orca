@@ -36,7 +36,7 @@ export function AutomationRunUnavailablePage({
                 'auto.components.automations.AutomationsPage.pendingAutomationRunMissing',
                 'Run history no longer available.'
               ),
-              recovery: 'retry'
+              recovery: null
             }
           }
           onRecover={onRecover}

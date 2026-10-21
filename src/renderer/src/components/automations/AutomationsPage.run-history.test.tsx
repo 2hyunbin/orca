@@ -143,7 +143,7 @@ describe('AutomationsPage run history through detail controls', () => {
   })
 
   it.each(['failed read', 'pruned run'] as const)(
-    'keeps recovery and Back available after rerun history returns a %s',
+    'keeps Back usable after rerun history returns a %s',
     async (outcome) => {
       const user = userEvent.setup()
       const original = makeRun({ status: 'dispatch_failed', error: 'Original launch failed' })
@@ -172,10 +172,21 @@ describe('AutomationsPage run history through detail controls', () => {
         outcome === 'failed read' ? 'History host unreachable' : 'Run history no longer available.'
       )
       expect(page.getByRole('button', { name: 'Back to runs' })).toBeTruthy()
+      if (outcome === 'pruned run') {
+        expect(page.queryByRole('button', { name: 'Retry' })).toBeNull()
+        await act(async () => user.click(page.getByRole('button', { name: 'Back to runs' })))
+        expect(page.getByRole('tab', { name: 'Runs 1', selected: true })).toBeTruthy()
+        return
+      }
+      expect(page.getByText('Original launch failed')).toBeTruthy()
       const historyReads = api.automations.listRuns.mock.calls.length
-      api.automations.listRuns.mockResolvedValue([saved, original])
+      const retry = Promise.withResolvers<ReturnType<typeof makeRun>[]>()
+      api.automations.listRuns.mockReturnValueOnce(retry.promise)
 
       await act(async () => user.click(page.getByRole('button', { name: 'Retry' })))
+      expect(page.queryByRole('alert')).toBeNull()
+      expect(page.getByText('Original launch failed')).toBeTruthy()
+      await act(async () => retry.resolve([saved, original]))
       await settleHostQueries()
 
       expect(api.automations.listRuns).toHaveBeenCalledTimes(historyReads + 1)

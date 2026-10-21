@@ -41,9 +41,7 @@ export type AutomationHostInvalidation = {
   dispose: () => void
 }
 
-export function automationChangeCatalogRef(
-  event: AutomationAuthorityChangeEvent
-): StableAutomationCatalogRef | null {
+function catalogRefFor(event: AutomationAuthorityChangeEvent): StableAutomationCatalogRef | null {
   if (!event.selector) {
     return null
   }
@@ -102,7 +100,7 @@ export function createAutomationHostInvalidation(
       if (disposed) {
         return
       }
-      const ref = automationChangeCatalogRef(event)
+      const ref = catalogRefFor(event)
       if (ref) {
         scopedKeys.add(hostStableKey(ref))
       } else {

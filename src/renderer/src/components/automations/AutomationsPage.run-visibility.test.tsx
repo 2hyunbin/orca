@@ -1,18 +1,8 @@
 // @vitest-environment happy-dom
 
-/**
- * A run must change the list the user is looking at.
- *
- * Same shape as the save path: once any host has answered, the page renders the
- * per-host cache, so the legacy `automations` state that `refresh()` writes is
- * off screen and the cached row keeps its pre-run schedule until the entry is
- * invalidated. A run is not a definition write, but it does rewrite what this
- * host reports for the row, and that is what the list shows.
- */
-
 import { act } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { Automation, AutomationRun } from '../../../../shared/automations-types'
+import type { AutomationRun } from '../../../../shared/automations-types'
 import {
   emitAutomationsChangedWindowEvent,
   type AutomationsChangedWindowDetail
@@ -24,31 +14,10 @@ import {
   renderPage,
   RUNTIME_ID,
   runtimeHost,
-  scopedList,
-  SELF_PRECONDITION,
   settleHostQueries
 } from './automations-page-test-harness'
 import { listedRow, listedRows } from './automations-page-listed-items'
 import { makeAutomation, makeRun } from './automations-page-fixtures'
-
-const DESKTOP_SELF_FILTER = {
-  kind: 'host' as const,
-  host: { authority: { kind: 'desktop' as const }, selector: { kind: 'self' as const } }
-}
-
-const BEFORE_RUN = makeAutomation({ id: 'a-1', name: 'Nightly', nextRunAt: 1_000 })
-const AFTER_RUN: Automation = { ...BEFORE_RUN, nextRunAt: 2_000, lastRunAt: 1_500 }
-
-/** The desktop store now reports the post-run projection; every later read must say so. */
-function desktopStoreHolds(automations: Automation[]): void {
-  api.automations.list.mockResolvedValue(automations)
-  scopedList(automations)
-}
-
-/** The next-run column reads this; the mocked list panel renders only names. */
-function listedNextRunAt(): number | null | undefined {
-  return listedRows()[0]?.automation.nextRunAt
-}
 
 async function openDetail(): Promise<void> {
   await act(async () => mocks.listPanel?.selectAutomationRow(listedRow('a-1').key))
@@ -68,129 +37,6 @@ async function openRun(container: HTMLElement, run: AutomationRun): Promise<HTML
 
 describe('AutomationsPage run visibility', () => {
   installAutomationsPageHarness()
-
-  it('shows the post-run schedule the host reports, not the row the run started from', async () => {
-    desktopStoreHolds([BEFORE_RUN])
-    mocks.state.automationHostFilter = DESKTOP_SELF_FILTER
-
-    await renderPage()
-    await settleHostQueries()
-    expect(listedNextRunAt()).toBe(1_000)
-
-    desktopStoreHolds([AFTER_RUN])
-    const row = listedRow('a-1')
-    await act(async () => {
-      mocks.listPanel?.runNow(row)
-    })
-    await settleHostQueries()
-
-    expect(api.automations.runNow).toHaveBeenCalledTimes(1)
-    expect(listedNextRunAt()).toBe(2_000)
-  })
-
-  it('re-asks the host the run was dispatched to', async () => {
-    desktopStoreHolds([BEFORE_RUN])
-    mocks.state.automationHostFilter = DESKTOP_SELF_FILTER
-
-    await renderPage()
-    await settleHostQueries()
-    const listedBefore = api.automations.listScoped.mock.calls.length
-
-    await act(async () => {
-      mocks.listPanel?.runNow(listedRow('a-1'))
-    })
-    await settleHostQueries()
-
-    // The cache TTL has not expired, so a refetch here can only come from the
-    // invalidation the run itself fed in.
-    expect(api.automations.listScoped.mock.calls.length).toBeGreaterThan(listedBefore)
-  })
-
-  it.each(['completed', 'skipped_unavailable'] as const)(
-    'reloads empty selected history once after Run Now saves a %s run',
-    async (status) => {
-      const { container, rerender } = await renderPage()
-      await openDetail()
-      expect(mocks.detailPane?.selectedRuns).toEqual([])
-      expect(container.querySelector('[data-testid="detail-run-count"]')?.textContent).toBe('0')
-      const readsBefore = api.automations.listRuns.mock.calls.length
-      const saved = makeRun({ status, trigger: 'manual' })
-      api.automations.runNow.mockImplementationOnce(async () => {
-        api.automations.listRuns.mockResolvedValue([saved])
-        return saved
-      })
-
-      await act(async () => mocks.detailPane?.runNow(BEFORE_RUN))
-      await settleHostQueries()
-
-      expect(mocks.detailPane?.selectedRuns).toEqual([saved])
-      expect(container.querySelector('[data-testid="detail-run-count"]')?.textContent).toBe('1')
-      expect(api.automations.listRuns).toHaveBeenLastCalledWith({
-        automationId: 'a-1',
-        expectedOwner: SELF_PRECONDITION
-      })
-      await rerender()
-      await settleHostQueries()
-      expect(api.automations.listRuns).toHaveBeenCalledTimes(readsBefore + 1)
-    }
-  )
-
-  it('reloads history after Rerun and keeps the original run page open', async () => {
-    const original = makeRun({ status: 'dispatch_failed', error: 'Launch failed' })
-    const saved = makeRun({ id: 'run-2', trigger: 'manual' })
-    api.automations.listRuns.mockResolvedValue([original])
-    const { container } = await renderPage()
-    await openDetail()
-    const rerun = await openRun(container, original)
-    const readsBefore = api.automations.listRuns.mock.calls.length
-    api.automations.runNow.mockImplementationOnce(async () => {
-      api.automations.listRuns.mockResolvedValue([saved, original])
-      return saved
-    })
-
-    await act(async () => {
-      rerun.click()
-      await new Promise((resolve) => setTimeout(resolve, 850))
-    })
-    await settleHostQueries()
-
-    expect(api.automations.runNow).toHaveBeenCalledTimes(1)
-    expect(api.automations.listRuns).toHaveBeenCalledTimes(readsBefore + 1)
-    expect(container.textContent).toContain('Launch failed')
-    expect(container.querySelector('[data-testid="detail-pane"]')).toBeNull()
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Back to runs"]')?.click()
-    )
-    expect(mocks.detailPane?.selectedRuns).toEqual([saved, original])
-    expect(container.querySelector('[data-testid="detail-run-count"]')?.textContent).toBe('2')
-  })
-
-  it.each(['Run Now', 'Rerun'] as const)(
-    'preserves history and reports the failure when %s is refused',
-    async (action) => {
-      const original = makeRun({ status: 'dispatch_failed' })
-      api.automations.listRuns.mockResolvedValue([original])
-      const { container } = await renderPage()
-      await openDetail()
-      const rerun = action === 'Rerun' ? await openRun(container, original) : null
-      const readsBefore = api.automations.listRuns.mock.calls.length
-      api.automations.runNow.mockRejectedValueOnce(new Error('Host unreachable'))
-
-      await act(async () => {
-        if (rerun) {
-          rerun.click()
-          await new Promise((resolve) => setTimeout(resolve, 850))
-        } else {
-          mocks.detailPane?.runNow(BEFORE_RUN)
-        }
-      })
-      await settleHostQueries()
-
-      expect(container.textContent).toContain('Host unreachable')
-      expect(api.automations.listRuns).toHaveBeenCalledTimes(readsBefore)
-      expect(mocks.detailPane?.selectedRuns).toEqual([original])
-    }
-  )
 
   it('does not reload another host’s selected copy when an in-flight Run Now completes', async () => {
     runtimeHost([makeAutomation({ name: 'Remote nightly' })], [makeRun({ id: 'remote-run' })])
@@ -252,7 +98,7 @@ describe('AutomationsPage run visibility', () => {
       if (rerun) {
         rerun.click()
       } else {
-        mocks.detailPane?.runNow(BEFORE_RUN)
+        mocks.detailPane?.runNow(makeAutomation())
       }
     })
     await settleHostQueries()

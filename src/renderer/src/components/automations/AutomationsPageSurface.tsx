@@ -243,6 +243,8 @@ export function AutomationsPageSurface({
           viewState={runPage.selectedAutomationRunPageViewState}
           canRerun={runPage.canRerunSelectedAutomationRunPage}
           isRerunPending={runPage.isSelectedAutomationRunPageRerunPending}
+          notice={setup.selectedRunsNotice}
+          onRecoverHistory={recoverSelectedRuns}
           onRerun={() =>
             runSelectedRowAction((row) =>
               runActions.rerunAutomationRun(row, selectedAutomationRunPage)

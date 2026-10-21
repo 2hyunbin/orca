@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { installWindowVisibilityInterval } from '@/lib/window-visibility-interval'
 import { useAppStore } from '@/store'
+import { AUTOMATIONS_CHANGED_EVENT } from '@/lib/automations-changed-window-event'
 import { hostStableKey } from '../../../../shared/automation-owner-key'
 import {
   getAutomationHostTargetKey,
@@ -8,8 +9,6 @@ import {
   listAutomationsForTarget
 } from './automation-host-client'
 import { automationAuthorityCatalogKey } from './automation-host-catalog-types'
-import { automationChangeCatalogRef } from './automation-host-invalidation'
-import { subscribeAutomationHostInvalidation } from './automation-host-invalidation-window-events'
 import { useSelectedAutomationRunHistory } from './use-selected-automation-run-history'
 import type { AutomationsPageDestinationState } from './use-automations-page-destination-state'
 import type { AutomationsPageListState } from './use-automations-page-list-state'
@@ -38,13 +37,14 @@ export function useAutomationsPageRefresh({
     isLoading,
     automationHostTargetKey,
     setRelativeNow,
-    runHistoryReloadToken,
-    setRunHistoryReloadToken,
+    setSelectedAutomationRuns,
     workspaceNameCacheRef
   } = local
   const { scopedExternal, selectedRow } = list
+  const subscribeInvalidation = list.hostCatalog.subscribeInvalidation
   const { automationHostTargetFor } = destination
   const reloadExternalManagers = scopedExternal.reload
+  const [selectedRunHistoryReloadToken, setSelectedRunHistoryReloadToken] = useState(0)
   // Async completions and host events must use the current selection.
   const selectedRowRef = useRef(selectedRow)
   selectedRowRef.current = selectedRow
@@ -52,10 +52,15 @@ export function useAutomationsPageRefresh({
   const refreshRunHistory = useCallback(
     (rowKey: string): void => {
       if (rowKey === selectedRowRef.current?.key) {
-        setRunHistoryReloadToken((token) => token + 1)
+        setSelectedAutomationRuns((current) =>
+          current.rowKey === rowKey && current.notice
+            ? { ...current, notice: null, rowKey: current.runs.length > 0 ? rowKey : null }
+            : current
+        )
+        setSelectedRunHistoryReloadToken((token) => token + 1)
       }
     },
-    [setRunHistoryReloadToken]
+    [setSelectedAutomationRuns]
   )
 
   const refresh = useCallback(
@@ -150,33 +155,26 @@ export function useAutomationsPageRefresh({
     selected: selectedRow,
     context: destination.automationDispatchContext,
     legacyTarget: automationHostTargetFor,
+    authorityForRow: destination.automationAuthorityForRow,
     navigation: pendingAutomationRunNavigation,
-    reloadToken: runHistoryReloadToken,
+    reloadToken: selectedRunHistoryReloadToken,
     onSettled: local.setSelectedAutomationRuns
   })
   useEffect(() => {
-    return subscribeAutomationHostInvalidation((event) => {
+    return subscribeInvalidation((stableKeys) => {
       const row = selectedRowRef.current
-      if (row) {
-        const ref = row.catalogRef
-        const target = automationHostTargetFor(row)
-        const authority =
-          ref?.authority ??
-          (target?.kind === 'environment'
-            ? { kind: 'runtime' as const, environmentId: target.environmentId }
-            : { kind: 'desktop' as const })
-        const changedRef = automationChangeCatalogRef(event)
-        if (
-          automationAuthorityCatalogKey(event.authority) ===
-            automationAuthorityCatalogKey(authority) &&
-          (!ref || !changedRef || hostStableKey(ref) === hostStableKey(changedRef))
-        ) {
-          refreshRunHistory(row.key)
-        }
+      if (row && (!row.catalogRef || stableKeys.includes(hostStableKey(row.catalogRef)))) {
+        refreshRunHistory(row.key)
       }
-      void refresh()
     })
-  }, [automationHostTargetFor, refresh, refreshRunHistory])
+  }, [subscribeInvalidation, refreshRunHistory])
+  useEffect(() => {
+    const onAutomationsChanged = (): void => {
+      void refresh()
+    }
+    window.addEventListener(AUTOMATIONS_CHANGED_EVENT, onAutomationsChanged)
+    return () => window.removeEventListener(AUTOMATIONS_CHANGED_EVENT, onAutomationsChanged)
+  }, [refresh])
   useEffect(() => {
     const onVisibilityOrFocus = (): void => {
       if (document.visibilityState === 'visible') {
