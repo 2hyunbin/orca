@@ -1,11 +1,11 @@
 import {
   isSameSavedWorktreeParent,
-  sharesWorktreeLineageBoundary
+  sharesWorktreeLineageBoundary,
+  worktreeLineageFromWorkspaceLineage
 } from '../../shared/resolved-worktree-lineage'
 import type { ParentWorktreeRef } from '../../shared/worktree/lineage-types'
 import type { GitPushTarget, Worktree } from '../../shared/worktree/types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
-import { worktreeLineageFromWorkspaceLineage } from '../../shared/resolved-worktree-lineage'
 import { worktreeWorkspaceKey } from '../../shared/workspace-scope'
 import { splitWorktreeId } from '../../shared/worktree/id'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
