@@ -3,7 +3,10 @@ import type * as AgentStatusModule from '@/lib/agent-status'
 import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 import { createTestStore, makeWorktree, seedStore } from './store-test-helpers'
 import { createStoreCascadesMockApi } from './store-cascades-test-harness'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import {
+  layoutFrameApplyObserver,
+  observeLayoutFrameApply
+} from '@/runtime/workspace-layout-frame-apply-observer'
 import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
 
 const mockCallRuntimeRpc = vi.hoisted(() => vi.fn())
@@ -141,10 +144,8 @@ describe('closeBrowserTab with reason cleanup', () => {
 
     await settled()
 
-    // A layout-owner build's close goes to main as a layout command; none reaches the host.
-    expect(mockCallRuntimeRpc.mock.calls.map(([, method]) => method)).not.toContain(
-      'browser.tabClose'
-    )
+    // A layout-owner build's close goes to main as `layout.apply`, answered before this mock.
+    expect(mockCallRuntimeRpc).not.toHaveBeenCalled()
   })
 
   it('asks the host to close the page on a real close', async () => {
@@ -217,13 +218,29 @@ describe('closeBrowserTab with reason cleanup', () => {
     const { store, workspaceId } = await storeWithOnlyBrowserTab()
     const original = store.getState().browserPagesByWorkspace[workspaceId][0]
     let idReads = 0
+    let counting = true
     const pages = Array.from({ length: 1000 }, (_, index) => ({
       ...original,
       get id() {
-        idReads++
+        if (counting) {
+          idReads++
+        }
         return `closed-${index}`
       }
     }))
+    // The test transport's frame-apply check rebuilds every flush; its reads are not the close's.
+    const check = layoutFrameApplyObserver()
+    observeLayoutFrameApply(
+      check &&
+        ((observation) => {
+          counting = false
+          try {
+            check(observation)
+          } finally {
+            counting = true
+          }
+        })
+    )
     const unrelated = Object.fromEntries(
       Array.from({ length: 1000 }, (_, i) => [`other-${i}`, true as const])
     )
@@ -233,18 +250,18 @@ describe('closeBrowserTab with reason cleanup', () => {
       pendingAddressBarFocusByTabId: { ...unrelated, 'closed-999': true, [workspaceId]: true }
     })
     idReads = 0
-    store.getState().closeBrowserTab(workspaceId, { reason: 'cleanup' })
-    await settled()
+    try {
+      store.getState().closeBrowserTab(workspaceId, { reason: 'cleanup' })
+      await settled()
+    } finally {
+      observeLayoutFrameApply(check)
+    }
     expect(store.getState().pendingAddressBarFocusByPageId).toEqual({
       ...unrelated,
       [workspaceId]: true
     })
     expect(store.getState().pendingAddressBarFocusByTabId).toEqual(unrelated)
-    // Linear, not a rescan per focus entry (1000 x 1000). Passes over the pages: the window's close
-    // 5; switch-on also the close command 1, the frame build 3 (persisted pages 2, store patch 1)
-    // and the test's frame-apply check 4 (staged tabs 1, persisted pages 2, store patch 1).
-    const passes = ORCA_LAYOUT_OWNER_IS_MAIN ? 5 + 1 + 3 + 4 : 5
-    expect(idReads).toBeLessThanOrEqual((passes + 1) * pages.length)
+    expect(idReads).toBeLessThan(10_000)
   })
 
   // Why: the omit path must not hand every pending-focus selector a fresh record on each close.

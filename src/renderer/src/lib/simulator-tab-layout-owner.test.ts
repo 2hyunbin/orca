@@ -8,6 +8,7 @@ import type { Tab, TabGroup, TabGroupLayoutNode } from '../../../shared/tab-type
 import type { LayoutCommand } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import { loadWorkspaceLayoutWithoutReport } from '../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../shared/workspace-layout/workspace-layout-minted-ids'
+import type { WorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-model'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import {
   createTestStore,
@@ -86,15 +87,13 @@ function loadWindowSave(): LayoutLoad {
 
 /** The workspace as the window's save would give it to main, beside main's stored copy. */
 function expectSaveTeachesMainNothing(worktreeId = WORKTREE): void {
-  const ofMain = layoutApplyTestTransport.mainModel!.workspaces[worktreeId]
-  const ofWindow = loadWindowSave().layout.workspaces[worktreeId]
-  expect(ofWindow?.groups).toEqual(ofMain?.groups)
-  expect(ofWindow?.tabs.map((tab) => [tab.id, tab.kind])).toEqual(
-    ofMain?.tabs.map((tab) => [tab.id, tab.kind])
-  )
   // A lone group's tree is implied: the window may store its leaf, main none.
+  const withoutLoneLeaf = (workspace: WorkspaceLayout | undefined) =>
+    workspace && { ...workspace, groupLayout: split(workspace.groupLayout) }
   const split = (tree: TabGroupLayoutNode | undefined) => (tree?.type === 'split' ? tree : null)
-  expect(split(ofWindow?.groupLayout)).toEqual(split(ofMain?.groupLayout))
+  expect(withoutLoneLeaf(loadWindowSave().layout.workspaces[worktreeId])).toEqual(
+    withoutLoneLeaf(layoutApplyTestTransport.mainModel!.workspaces[worktreeId])
+  )
 }
 
 async function settled(): Promise<void> {
@@ -229,11 +228,15 @@ describe('simulator tabs in a layout-owner build', () => {
         groupId: GROUP
       }
     )
+    // Main keeps no empty group, so its frame drops GROUP; the open makes the root group again.
+    expect(store().getState().groupsByWorktree[WORKTREE] ?? []).toEqual([])
     const tabId = ensureSimulatorTab(WORKTREE, { placement: 'activeGroup' })
     await settled()
-    const groupId = store().getState().getTab(tabId!)?.groupId
-    expect(groupId).toBeDefined()
-    expect(sent()).toMatchObject([{ type: 'openSimulatorTab', tabId, groupId }])
+    const groups = store().getState().groupsByWorktree[WORKTREE] ?? []
+    expect(groups).toHaveLength(1)
+    expect(store().getState().getTab(tabId!)?.groupId).toBe(groups[0]!.id)
+    expect(groups[0]!.tabOrder).toEqual([tabId])
+    expect(sent()).toMatchObject([{ type: 'openSimulatorTab', tabId, groupId: groups[0]!.id }])
     expectSaveTeachesMainNothing()
   })
 
