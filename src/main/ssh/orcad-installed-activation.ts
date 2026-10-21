@@ -20,7 +20,10 @@ import {
 } from '../managed-server/activation/orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from './orcad-candidate-launch-verdict'
 import { planOrcadUpdate } from './orcad-update-plan'
-import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
+import {
+  ORCAD_UPDATE_ADMISSION_STOP_BY_MS,
+  type OrcadTerminalCensus
+} from '../../shared/orcad-terminal-census'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'
 import { ORCAD_LOG_FILENAME } from '../managed-server/install/orcad-remote-host-support'
 import { orcadSnapshotFailureReason } from '../managed-server/host-state/orcad-state-snapshot-space'
@@ -185,6 +188,7 @@ export async function activateInstalledOrcad(
   }
 
   // Last check before anything stops: the census above may predate a long upload.
+  const recountedAt = now().getTime()
   if (incumbent) {
     const recount = planOrcadUpdate({
       record,
@@ -218,6 +222,15 @@ export async function activateInstalledOrcad(
       await reopenIncumbentAdmission(options)
     }
     throw error
+  }
+  // The recount's fence lapses on its own; a stop after that could kill a terminal admitted since.
+  if (incumbent && now().getTime() - recountedAt > ORCAD_UPDATE_ADMISSION_STOP_BY_MS) {
+    await reopenIncumbentAdmission(options)
+    return notActivated(
+      'orcad_update_terminal_census_unavailable',
+      'The terminal count went stale before the current server could be stopped, so nothing ' +
+        'was stopped. Orca will try the update again.'
+    )
   }
   lock.retainOnError()
   // Past the first mutation a cancel would strand a stopped host, so the run finishes or rolls back.

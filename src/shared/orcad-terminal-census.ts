@@ -34,6 +34,9 @@ export const ORCAD_TERMINAL_ADMISSION_MAX_FENCE_MS = 5 * 60_000
 /** What an update's last census asks for; it lapses on its own if the desktop never returns. */
 export const ORCAD_UPDATE_ADMISSION_FENCE_MS = 60_000
 
+/** How long after its recount an update may still send the stop: the fence, less signal latency. */
+export const ORCAD_UPDATE_ADMISSION_STOP_BY_MS = ORCAD_UPDATE_ADMISSION_FENCE_MS - 15_000
+
 /** RPC a managed orcad answers with its census; clients call it only when advertised. */
 export const ORCAD_TERMINAL_CENSUS_METHOD = 'orcad.terminalCensus'
 

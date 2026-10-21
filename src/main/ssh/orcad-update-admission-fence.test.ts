@@ -36,7 +36,10 @@ import { acquireInstallLock } from '../managed-server/install/remote-install-loc
 import { writeAtomicOrcadRemoteRecord } from '../managed-server/install/orcad-remote-record-file'
 import { deployOrcad } from './orcad-remote-deploy'
 import { getRemoteHostPlatform } from './ssh-remote-platform'
-import { ORCAD_UPDATE_ADMISSION_FENCE_MS } from '../../shared/orcad-terminal-census'
+import {
+  ORCAD_UPDATE_ADMISSION_FENCE_MS,
+  ORCAD_UPDATE_ADMISSION_STOP_BY_MS
+} from '../../shared/orcad-terminal-census'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
 import {
   TerminalUpdateAdmission,
@@ -49,6 +52,7 @@ import {
 } from '../managed-server/activation/orcad-activation-host-test-harness'
 
 let host = FakeOrcadHost.deployedOld()
+let clockMs = Date.parse('2026-02-02T00:00:00.000Z')
 /** The incumbent server's own admission, as its census handler drives it. */
 let admission = new TerminalUpdateAdmission(async () => [])
 
@@ -77,7 +81,7 @@ function deploy(recount: OrcadTerminalCensus | Error = IDLE, force?: boolean) {
     port: 7777,
     readinessTimeoutMs: 50,
     sleep: async () => {},
-    now: () => new Date('2026-02-02T00:00:00.000Z'),
+    now: () => new Date(clockMs),
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc217',
     census: IDLE,
@@ -91,6 +95,7 @@ function deploy(recount: OrcadTerminalCensus | Error = IDLE, force?: boolean) {
 beforeEach(() => {
   vi.clearAllMocks()
   host = FakeOrcadHost.deployedOld()
+  clockMs = Date.parse('2026-02-02T00:00:00.000Z')
   admission = new TerminalUpdateAdmission(async () => [])
   vi.mocked(execCommand).mockImplementation(async (_conn, command) => host.exec(command))
   vi.mocked(acquireInstallLock).mockImplementation(async (_conn, _dir, _host, options) => {
@@ -168,4 +173,22 @@ describe("an update's terminal admission fence", () => {
       expect(admission.isClosed()).toBe(underway)
     }
   )
+
+  it('stops nothing once the fence may have lapsed before the stop could be sent', async () => {
+    vi.mocked(writeAtomicOrcadRemoteRecord).mockImplementation(async (_target, path, contents) => {
+      if (path.endsWith('transaction.json')) {
+        clockMs += ORCAD_UPDATE_ADMISSION_STOP_BY_MS + 1
+      }
+      host.write(path, contents)
+    })
+    const { result } = deploy()
+
+    await expect(result).resolves.toMatchObject({
+      outcome: 'installed-not-activated',
+      code: 'orcad_update_terminal_census_unavailable'
+    })
+    expect(host.commands.some((command) => command.includes('kill -TERM'))).toBe(false)
+    expect([...host.alive]).toEqual([OLD])
+    expect(admission.isClosed()).toBe(false)
+  })
 })
