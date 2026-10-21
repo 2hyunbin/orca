@@ -182,6 +182,15 @@ function runHostAccountSignIn(
   if (running?.done) {
     return running.done
   }
+  // Why one server per provider: Settings shows one Add/Cancel per provider, so Cancel always
+  // has exactly one sign-in it can mean, even after Settings reopens on another server.
+  if (runningHostAccountSignInOwner(provider)) {
+    return Promise.reject(
+      new Error(
+        `A ${provider === 'claude' ? 'Claude' : 'Codex'} sign-in is still running on another server. Cancel or finish it there first.`
+      )
+    )
+  }
   const attempt: Attempt = {
     owner,
     provider,
@@ -209,7 +218,7 @@ function runHostAccountSignIn(
   return done
 }
 
-/** The server this client is signing `provider` in on, wherever Settings now points. */
+/** The one server this client is signing `provider` in on, wherever Settings now points. */
 export function runningHostAccountSignInOwner(
   provider: HostAccountSignInProvider
 ): EnvironmentTarget | null {

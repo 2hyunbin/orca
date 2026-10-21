@@ -104,6 +104,10 @@ describe('host account sign-in client', () => {
     const adding = addCodexAccountOnHost(OWNER)
     expect(runningHostAccountSignInOwner('codex')).toEqual(OWNER)
     expect(runningHostAccountSignInOwner('claude')).toBeNull()
+    // A second server for the same provider would make Cancel ambiguous, so it is refused.
+    await expect(
+      addCodexAccountOnHost({ kind: 'environment', environmentId: 'other' })
+    ).rejects.toThrow('still running on another server')
     start.resolve(status({}))
     await adding
     expect(runningHostAccountSignInOwner('codex')).toBeNull()
