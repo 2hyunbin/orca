@@ -10,6 +10,7 @@ import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-lau
 import type { ProvisionalLaunchArgs } from './structured-agent-session-provisional-tab'
 import { insertUnifiedTabAfterAnchor } from './unified-tab-anchor-insertion'
 import { useAppStore } from '@/store'
+import type { OpenedAgentSessionTab } from './structured-agent-session-tab-open-through-layout-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import {
@@ -56,7 +57,7 @@ export async function openTerminalForDeclinedChat(
   args: ProvisionalLaunchArgs,
   worktreeId: string,
   target: RuntimeClientTarget,
-  tab: Tab,
+  tab: OpenedAgentSessionTab,
   settlement: StructuredAgentLaunchSettlement
 ): Promise<StructuredAgentLaunchSettlement> {
   if (

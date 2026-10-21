@@ -1,6 +1,6 @@
 // A chat tab open in a layout-owner build: the window sends the open under the chat's own tab id;
-// main's frame draws the tab, and only then does the window select it. The returned tab names
-// what the frame will draw; a caller acting on it in the store waits with `afterPendingTab`.
+// main's frame draws the tab, and only then does the window select it. A caller acting on the
+// returned tab in the store waits with `afterPendingTab`.
 
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { Tab } from '../../../shared/tab-types'
@@ -24,8 +24,13 @@ export type AgentSessionTabOpen = {
   drawHere: () => Tab
 }
 
+/** What a caller may rely on before main's frame draws the tab: its id and the chat it shows. */
+export type OpenedAgentSessionTab = Pick<Tab, 'id' | 'entityId'>
+
 /** Null when main is not asked (a paired server owns the workspace's layout): draw as today. */
-export function openAgentSessionTabThroughLayoutOwner(open: AgentSessionTabOpen): Tab | null {
+export function openAgentSessionTabThroughLayoutOwner(
+  open: AgentSessionTabOpen
+): OpenedAgentSessionTab | null {
   const { worktreeId, sessionId } = open
   const state = useAppStore.getState()
   const tabId = structuredAgentSessionTabId(sessionId)
@@ -38,20 +43,7 @@ export function openAgentSessionTabThroughLayoutOwner(open: AgentSessionTabOpen)
   if (!placement) {
     return null
   }
-  const tab: Tab = {
-    id: tabId,
-    entityId: sessionId,
-    groupId: placement.groupId,
-    worktreeId,
-    executionHostId: open.executionHostId,
-    contentType: 'agent-session',
-    agentSessionAgent: open.agent,
-    label,
-    customLabel: null,
-    color: null,
-    sortOrder: 0,
-    createdAt: Date.now()
-  }
+  const tab = { id: tabId, entityId: sessionId }
   // A second launch of the same chat waits for the first open.
   if (hasPendingEntityTab(worktreeId, sessionId)) {
     return tab

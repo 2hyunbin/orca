@@ -138,6 +138,15 @@ function labelAsUser(tabId: string, label: string, color: string): void {
   sendLayoutCommandToOwner('wt-1', { type: 'setTabProps', tabId, color }, asToday)
 }
 
+/** The group main's frame drew the tab in. */
+function groupOf(tabId: string): string {
+  const groupId = useAppStore.getState().getTab(tabId)?.groupId
+  if (!groupId) {
+    throw new Error(`No drawn tab ${tabId}`)
+  }
+  return groupId
+}
+
 function openChat(requestedSurface?: 'chat') {
   let complete!: (value: AgentTerminalLaunchCompletion) => void
   const completion = new Promise<AgentTerminalLaunchCompletion>((resolve) => {
@@ -214,15 +223,14 @@ describe('a provisional structured chat tab', () => {
       view.unmount()
       return
     }
-    // Switch-on, main's frame draws the tab the open named, at main's time; selecting it stamps
-    // its focus time.
+    // Switch-on, main's frame draws the tab the open named.
     expect(useAppStore.getState().unifiedTabsByWorktree['wt-1']).toContainEqual(
-      expect.objectContaining({ ...chat, createdAt: expect.any(Number) })
+      expect.objectContaining({ ...chat, contentType: 'agent-session' })
     )
     // Move the source while its host is preparing the terminal, then invest in the composer.
     const sibling = useAppStore.getState().createUnifiedTab('wt-1', 'terminal', {
       entityId: 'sibling',
-      split: { sourceGroupId: chat.groupId, splitDirection: 'right', activate: true }
+      split: { sourceGroupId: groupOf(chat.id), splitDirection: 'right', activate: true }
     })
     const groupId = sibling.groupId
     // Main loads only terminal tabs with their terminal's record.
@@ -356,15 +364,16 @@ describe('a provisional structured chat tab', () => {
     await main.settle()
     refuse()
     await vi.waitFor(() => expect(fallback).toHaveBeenCalled())
+    const chatGroupId = groupOf(chat.id)
     const state = useAppStore.getState()
     const sibling = state.createUnifiedTab('wt-1', 'terminal', {
       entityId: 'sibling',
-      targetGroupId: chat.groupId,
+      targetGroupId: chatGroupId,
       activate: false
     })
     const terminal = state.createUnifiedTab('wt-1', 'terminal', {
       id: 'replacement',
-      targetGroupId: chat.groupId,
+      targetGroupId: chatGroupId,
       activate: false
     })
     useAppStore.setState({
@@ -378,11 +387,11 @@ describe('a provisional structured chat tab', () => {
     const slot = structuredAgentSessionTabId('hidden-launch')
     useAppStore.getState().ensureWorktreeRootGroup('wt-1', {
       tabId: slot,
-      targetGroupId: chat.groupId,
+      targetGroupId: chatGroupId,
       precedingTabIds: []
     })
     const order = () =>
-      useAppStore.getState().groupsByWorktree['wt-1']?.find((g) => g.id === chat.groupId)?.tabOrder
+      useAppStore.getState().groupsByWorktree['wt-1']?.find((g) => g.id === chatGroupId)?.tabOrder
     expect(order()).toEqual([slot, chat.id, sibling.id, terminal.id])
 
     await act(async () => {

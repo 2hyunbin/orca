@@ -24,7 +24,10 @@ import {
 } from './structured-agent-session-launch-registry'
 import { structuredAgentSessionFocusOwner } from '@/runtime/structured-agent-session-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import { openAgentSessionTabThroughLayoutOwner } from './structured-agent-session-tab-open-through-layout-owner'
+import {
+  openAgentSessionTabThroughLayoutOwner,
+  type OpenedAgentSessionTab
+} from './structured-agent-session-tab-open-through-layout-owner'
 import {
   clearWebSessionFocusIntentIfMatches,
   peekWebSessionFocusIntent,
@@ -146,7 +149,7 @@ export function openStructuredAgentSessionProvisionalTab(args: {
   /** The tab the chat opens right after, in that tab's group. */
   afterTabId?: string
   activate?: boolean
-}): Tab {
+}): OpenedAgentSessionTab {
   const state = useAppStore.getState()
   const existing = findStructuredLaunchTab(args)
   if (existing) {
