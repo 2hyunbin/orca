@@ -422,6 +422,21 @@ describe('every start input of a new tab reaches main’s create (L252)', () => 
     expect(isAgentStartupDeliveryConsumed(CODEX_DRAFT_DELIVERY)).toBe(true)
   })
 
+  it('keeps nothing of the start for a pane another owner’s terminal won', async () => {
+    await startParamsFor({
+      command: 'cmd',
+      launchAgent: 'command-code',
+      launchConfig: LAUNCH_CONFIG,
+      initialAgentStatus: { agent: 'command-code', prompt: 'go' }
+    })
+
+    mocks.create!.reject(new Error('terminal_pane_owner_changed'))
+    await settle()
+
+    // That terminal never ran this start: it gets no status seed from it.
+    expect(peekMainStartedPaneView(PANE_KEY)).toBeUndefined()
+  })
+
   it('gives the whole startup back when main does not hold the tab', async () => {
     const startup: TabStartup = {
       command: 'codex',

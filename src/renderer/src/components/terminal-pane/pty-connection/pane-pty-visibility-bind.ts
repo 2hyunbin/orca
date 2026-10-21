@@ -131,7 +131,10 @@ export function installPanePtyVisibilityBind(session: ConnectPanePtySession): vo
       const view = takeMainStartedPaneView(session.cacheKey)
       if (view) {
         session.mainStartedPaneView = view
-        session.applyInitialAgentStatus()
+        // A late attach must not undo what the agent's hook already reported for this new pane.
+        if (!useAppStore.getState().agentStatusByPaneKey[session.cacheKey]) {
+          session.applyInitialAgentStatus()
+        }
       }
     }
     // Spawn/attach completion is when a pane gains a concrete PTY ID. The initial

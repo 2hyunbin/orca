@@ -174,6 +174,38 @@ export function registerPtyConnectionStartupCommandDeliveryTests(): void {
       )
     })
 
+    it('keeps a status the agent already reported when it attaches late to the terminal main started', async () => {
+      vi.doMock('../../../../shared/layout-owner-switch', () => ({
+        ORCA_LAYOUT_OWNER_IS_MAIN: true
+      }))
+      onTestFinished(() => {
+        vi.doUnmock('../../../../shared/layout-owner-switch')
+      })
+      const { connectPanePty } = await import('./pty-connection')
+      const { noteMainStartsPane } = await import('@/store/terminals/main-started-pane-view')
+      const ptyId = 'pty-main-started'
+      const transport = createMockTransport(ptyId)
+      transport.connect.mockResolvedValue({ id: ptyId })
+      transportFactoryQueue.push(transport)
+      // The agent's hook already said it finished before this pane attached.
+      mockStoreState = {
+        ...mockStoreState,
+        tabsByWorktree: { 'wt-1': [{ id: 'tab-1', ptyId: null }] },
+        agentStatusByPaneKey: {
+          [makePaneKey('tab-1', LEAF_1)]: { state: 'done', agentType: 'command-code' }
+        }
+      }
+      noteMainStartsPane(makePaneKey('tab-1', LEAF_1), {
+        initialAgentStatus: { agent: 'command-code', prompt: 'Fix the status' }
+      })
+
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the pane, manager and deps fakes carry every member connectPanePty reads, as in this file's other tests.
+      connectPanePty(createPane(1) as never, createManager(1) as never, createDeps() as never)
+      await flushAsyncTicks()
+
+      expect(mockStoreState.setAgentStatus).not.toHaveBeenCalled()
+    })
+
     it('arms no draft paste of its own for a pane main starts, even one that captured the startup', async () => {
       vi.doMock('../../../../shared/layout-owner-switch', () => ({
         ORCA_LAYOUT_OWNER_IS_MAIN: true

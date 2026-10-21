@@ -11,6 +11,7 @@ import { isWslShellName } from '../../../../shared/local-windows-terminal-runtim
 import type { AppState } from '../types'
 import type { TerminalPaneStart } from './terminal-state'
 import { getRemoteConnectionIdForWorktree, worktreeUsesWslPath } from './terminal-workspace-routing'
+import { forgetMainStartedPane } from './main-started-pane-view'
 import {
   handStartupToMain,
   takeStartupBackFromMain,
@@ -111,7 +112,8 @@ export function startWindowTabInMain(
         return
       }
       if (message === 'terminal_pane_owner_changed') {
-        // Another owner's terminal runs in the pane; it attaches to that one.
+        // Another owner's terminal runs in the pane; it attaches to that one, which never ran this.
+        forgetMainStartedPane(paneKey)
         clearWindowTabMark(store, paneKey, mark)
         return
       }
