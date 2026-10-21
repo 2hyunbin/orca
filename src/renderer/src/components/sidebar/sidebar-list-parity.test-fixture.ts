@@ -21,6 +21,7 @@ import type {
 } from '../../../../shared/sidebar-list/sidebar-feed-rows'
 import type { SmartStampFields } from '../../../../shared/sidebar-list/sort-stamps'
 import { buildPairedServerActivityFacts } from '../../../../shared/sidebar-list/paired-server-activity-facts'
+import { keyWorkspaceActivityByRow } from '../../../../shared/sidebar-list/workspace-activity-facts'
 import { GOLDEN_NOW, folder, lineage } from './sidebar-list-golden-factories.test-fixture'
 import {
   GROUPED_REPOS,
@@ -41,7 +42,7 @@ import type { SidebarInputsFeedDomain } from '../../../../main/runtime/sidebar-i
 import type { SidebarFeedDomains } from '../../../../shared/sidebar-list/sidebar-feed-domains'
 import { buildSidebarFeedCatalog } from '../../../../shared/sidebar-list/sidebar-feed-catalog'
 import {
-  projectCatalogFromWindowState,
+  projectCatalogDomain,
   windowCatalogFromServerAnswers
 } from './sidebar-list-parity-project-catalog.test-fixture'
 
@@ -213,17 +214,16 @@ export function feedDomainsFromWindowState(
     read,
     watch: () => () => {}
   })
+  const workspaceRows = Object.fromEntries(
+    buildWorkspaceRows({
+      worktrees,
+      folderWorkspaces: state.folderWorkspaces,
+      repos: state.repos,
+      lineageById: state.worktreeLineageById
+    })
+  )
   return [
-    domain('workspaces', () =>
-      Object.fromEntries(
-        buildWorkspaceRows({
-          worktrees,
-          folderWorkspaces: state.folderWorkspaces,
-          repos: state.repos,
-          lineageById: state.worktreeLineageById
-        })
-      )
-    ),
+    domain('workspaces', () => workspaceRows),
     domain('activity', () => ({
       // The window's browser and chat tabs, as its saved session for the server holds them.
       ...buildPairedServerActivityFacts(
@@ -237,7 +237,10 @@ export function feedDomainsFromWindowState(
           unifiedTabs: state.unifiedTabsByWorktree
         })
       ),
-      ...Object.fromEntries(toLocallyOwnedRows(state, windowActivity))
+      ...keyWorkspaceActivityByRow(
+        Object.fromEntries(toLocallyOwnedRows(state, windowActivity)),
+        workspaceRows
+      )
     })),
     domain('review', () => ({
       ...buildPairedServerReviewFacts(
@@ -247,12 +250,7 @@ export function feedDomainsFromWindowState(
         })),
         state.prCache
       ),
-      ...Object.fromEntries(
-        toLocallyOwnedRows(
-          state,
-          new Map(Object.entries(buildWorkspaceReviewFacts(worktrees, state.repos, state.prCache)))
-        )
-      )
+      ...buildWorkspaceReviewFacts(worktrees, state.repos, state.prCache)
     })),
     domain('creations', () =>
       Object.fromEntries(
@@ -271,7 +269,7 @@ export function feedDomainsFromWindowState(
     domain('pairedServerRows', () => Object.fromEntries(serverRows)),
     domain('desktop', () => readWindowDesktopSidebarFacts(state)),
     // Main's own builder, over the store and server reads the window's catalog came from.
-    domain('projectCatalog', () => projectCatalogFromWindowState(state))
+    projectCatalogDomain(state)
   ]
 }
 
