@@ -33,6 +33,7 @@ import {
   peekWebSessionFocusIntent,
   resolveWebSessionVisibleTabId
 } from '@/runtime/web-session-focus-intent'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
 type LaunchSurface = {
   sessionId: string
@@ -247,7 +248,7 @@ export function restoreStructuredLaunchSurfaces(): void {
   const catalog = {
     workspaces: [
       ...state.allWorktrees(),
-      ...state.folderWorkspaces.flatMap((workspace) => {
+      ...selectFolderWorkspaces(state).flatMap((workspace) => {
         const group = findIndexedProjectGroupOwner(state.projectGroups, workspace.projectGroupId)
         const host = workspace.executionHostId || workspace.connectionId ? workspace : group
         const owned = host && { ...workspace, executionHostId: getCatalogOwnerHostId(host) }

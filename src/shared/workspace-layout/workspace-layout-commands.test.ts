@@ -333,9 +333,10 @@ describe('layout command refusals', () => {
     const recorded = applyLayoutCommand(bound, { ...sleep, recordOnly: true }, context)
     expect(recorded).toMatchObject({ ok: true, effects: { stopPtyIds: [] } })
     const recordedModel = recorded.ok ? recorded.model : bound
+    // A running agent's capture is its resume record, not a sleep.
     expect(recordedModel.workspaces[WS]!.leaves![leafB]).toEqual({
       ptyId: 'pty-b',
-      sleeping: {
+      resume: {
         agent: 'codex',
         providerSession: { key: 'session_id', id: 's' },
         prompt: 'p',

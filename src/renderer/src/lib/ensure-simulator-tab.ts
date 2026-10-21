@@ -17,6 +17,7 @@ import {
   openingSimulatorTabId,
   openSimulatorTabThroughLayoutOwner
 } from './simulator-tab-layout-owner'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
 type EnsureSimulatorTabOptions = {
   targetGroupId?: string
@@ -35,7 +36,7 @@ type ExistingSimulatorTab = {
 function getSimulatorWorktrees(state: ReturnType<typeof useAppStore.getState>, worktreeId: string) {
   return [
     ...(state.allWorktrees?.() ?? []),
-    ...(state.folderWorkspaces ?? []).map(folderWorkspaceToWorktree)
+    ...(selectFolderWorkspaces(state) ?? []).map(folderWorkspaceToWorktree)
   ].filter((worktree) => worktree.id === worktreeId)
 }
 

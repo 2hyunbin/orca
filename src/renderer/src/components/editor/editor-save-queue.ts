@@ -35,6 +35,7 @@ import {
   type EditorSaveResult,
   type EditorSaveTrigger
 } from './editor-save-disk-precondition'
+import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -159,7 +160,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
           return 'failed'
         }
         const worktree = liveFile.worktreeId
-          ? findWorktreeById(state.worktreesByRepo ?? {}, liveFile.worktreeId)
+          ? findWorktreeById(selectWorktreesByRepo(state) ?? {}, liveFile.worktreeId)
           : null
         const fileContext = getEditorFileOperationContext(state, liveFile, worktree?.path ?? null)
         const connectionId = fileContext.connectionId
