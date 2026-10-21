@@ -1,6 +1,7 @@
 // Layout-owner build: only main's wake of a pane's own sleeping record stands in for the window's
 // restore, so only that start records whether the agent came back.
 import { describe, expect, it, vi } from 'vitest'
+import type { PaneResumeOutcome } from '../../shared/workspace-layout/workspace-layout-published'
 import { setupLayoutOwnerRuntime, WORKTREE_ID } from './orca-runtime-layout-owner-start-fixture'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
@@ -13,7 +14,12 @@ const RESUME = {
 async function resumedPaneOutcome(opts: { resumesSleepingRecord?: true }) {
   const { runtime, spawn } = setupLayoutOwnerRuntime()
   // The spawn reports that it resumed the agent, as main's runtime spawn does for any resume.
-  spawn.mockImplementation(async () => ({ id: 'pty-1', resumeOutcome: 'restored' as const }))
+  spawn.mockImplementation(
+    async (args: { onResumeOutcome?: (ptyId: string, outcome: PaneResumeOutcome) => void }) => {
+      args.onResumeOutcome?.('pty-1', 'restored')
+      return { id: 'pty-1' }
+    }
+  )
   await runtime.createTerminal(`id:${WORKTREE_ID}`, { ...RESUME, ...opts })
   const { tabId, leafId } = spawn.mock.calls[0]![0]
   return runtime.resumeOutcomeOf(`${tabId}:${leafId}`)

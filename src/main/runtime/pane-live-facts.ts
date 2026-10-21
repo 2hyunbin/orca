@@ -7,14 +7,28 @@ export function bindingOf(pane: { ptyId?: string; ptyGeneration?: number }): str
   return `${pane.ptyId ?? ''}#${pane.ptyGeneration ?? ''}`
 }
 
+/** A bind the fact waits for: to `ptyId`, at a generation above `afterGeneration` when given. */
+export type AwaitedBind = { ptyId: string; afterGeneration?: number }
+
+function isAwaitedBind(binding: string, { ptyId, afterGeneration }: AwaitedBind): boolean {
+  const prefix = `${ptyId}#`
+  return (
+    binding.startsWith(prefix) &&
+    (afterGeneration === undefined || Number(binding.slice(prefix.length)) > afterGeneration)
+  )
+}
+
 export class PaneLiveFacts<T> {
-  private readonly byPaneKey = new Map<string, { fact: T; ptyId?: string; binding?: string }>()
+  private readonly byPaneKey = new Map<
+    string,
+    { fact: T; awaits?: AwaitedBind; binding?: string }
+  >()
 
   constructor(private readonly changed: () => void) {}
 
-  /** With `ptyId`, the fact waits to show until the pane binds that terminal. */
-  set(paneKey: string, fact: T, ptyId?: string): void {
-    this.byPaneKey.set(paneKey, { fact, ...(ptyId !== undefined ? { ptyId } : {}) })
+  /** With `awaits`, the fact shows only once the pane binds that terminal. */
+  set(paneKey: string, fact: T, awaits?: AwaitedBind): void {
+    this.byPaneKey.set(paneKey, { fact, ...(awaits ? { awaits } : {}) })
     this.changed()
   }
 
@@ -35,11 +49,9 @@ export class PaneLiveFacts<T> {
     if (!entry) {
       return null
     }
-    // Why not ended: a start's bind write can land after the fact it set.
-    if (entry.binding === undefined && entry.ptyId !== undefined) {
-      if (!binding.startsWith(`${entry.ptyId}#`)) {
-        return null
-      }
+    // Why not ended: the start's own bind may not have landed yet (a same-id respawn included).
+    if (entry.binding === undefined && entry.awaits && !isAwaitedBind(binding, entry.awaits)) {
+      return null
     }
     entry.binding ??= binding
     if (entry.binding !== binding) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { spawnInAdmittedPane } from './runtime-pane-admission'
+import type { RuntimeStore } from './runtime-store-contract'
 import {
   bindingOf,
   PaneResumeOutcomes,
@@ -8,7 +9,10 @@ import {
   withPaneStartFacts
 } from './pane-start-statuses'
 import { splitPublishedLayout } from '../../shared/workspace-layout/workspace-layout-records'
-import type { PublishedWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-published'
+import type {
+  PaneResumeOutcome,
+  PublishedWorkspaceLayout
+} from '../../shared/workspace-layout/workspace-layout-published'
 import { LOCAL_EXECUTION_HOST_ID } from '../../shared/execution-host'
 
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
@@ -22,7 +26,7 @@ function outcomes() {
 describe("a pane's resume outcome (layout-owner build)", () => {
   it('shows once the pane binds the terminal it names, not before', () => {
     const { changed, register } = outcomes()
-    register.set(PANE_KEY, 'restored', 'pty-new')
+    register.set(PANE_KEY, 'restored', { ptyId: 'pty-new' })
     expect(changed).toHaveBeenCalledOnce()
 
     // The start's bind write has not landed: the pane still shows its old terminal.
@@ -35,9 +39,18 @@ describe("a pane's resume outcome (layout-owner build)", () => {
     )
   })
 
+  it('waits past the pane’s old bind when the start keeps its terminal id', () => {
+    const { register } = outcomes()
+    register.set(PANE_KEY, 'restored', { ptyId: 'pty-1', afterGeneration: 4 })
+
+    // The frame before the start's bind still shows the old terminal under the same id.
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 4 }))).toBeNull()
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 5 }))).toBe('restored')
+  })
+
   it('ends when the pane binds again, a same-id respawn included', () => {
     const { register } = outcomes()
-    register.set(PANE_KEY, 'resume-unavailable', 'pty-1')
+    register.set(PANE_KEY, 'resume-unavailable', { ptyId: 'pty-1' })
     const first = bindingOf({ ptyId: 'pty-1', ptyGeneration: 1 })
     expect(register.get(PANE_KEY, first)).toBe('resume-unavailable')
 
@@ -68,7 +81,7 @@ describe("a pane's resume outcome (layout-owner build)", () => {
       browserTabs: []
     }
     const { register } = outcomes()
-    register.set(PANE_KEY, 'restored', 'pty-1')
+    register.set(PANE_KEY, 'restored', { ptyId: 'pty-1' })
 
     const records = splitPublishedLayout(
       withPaneStartFacts(
@@ -96,11 +109,26 @@ describe("main's start records a resume outcome only when it wakes the pane's re
     paneSpawnOperation: { mustExist: true }
   }
 
-  async function start(register: PaneResumeOutcomes, resumesSleepingRecord: boolean) {
+  async function start(
+    register: PaneResumeOutcomes,
+    resumesSleepingRecord: boolean,
+    boundGeneration?: number
+  ) {
     const sink = new PaneStartStatuses(() => {})
+    const store = { getPtyBindingGeneration: () => boundGeneration }
     await spawnInAdmittedPane(
-      null,
-      { spawn: vi.fn(async () => ({ id: 'pty-1', resumeOutcome: 'restored' as const })) },
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a reconnect's start reads only the pane's bind generation.
+      store as unknown as RuntimeStore,
+      {
+        spawn: vi.fn(
+          async (args: {
+            onResumeOutcome?: (ptyId: string, outcome: PaneResumeOutcome) => void
+          }) => {
+            args.onResumeOutcome?.('pty-1', 'restored')
+            return { id: 'pty-1' }
+          }
+        )
+      },
       {
         ...RECONNECT,
         startStatus: { sink, keepOnFailure: false, resumeOutcomes: register, resumesSleepingRecord }
@@ -119,9 +147,16 @@ describe("main's start records a resume outcome only when it wakes the pane's re
     expect(other.peek(PANE_KEY)).toBeNull()
   })
 
+  it('waits for a bind newer than the one the pane had when the start began', async () => {
+    const { register } = outcomes()
+    await start(register, true, 4)
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 4 }))).toBeNull()
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 5 }))).toBe('restored')
+  })
+
   it("ends the pane's earlier outcome when a later start begins", async () => {
     const { register } = outcomes()
-    register.set(PANE_KEY, 'resume-unavailable', 'pty-0')
+    register.set(PANE_KEY, 'resume-unavailable', { ptyId: 'pty-0' })
     await start(register, false)
     expect(register.peek(PANE_KEY)).toBeNull()
   })

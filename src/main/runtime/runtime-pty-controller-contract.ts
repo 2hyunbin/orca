@@ -100,6 +100,8 @@ export type RuntimePtyController = {
     signal?: AbortSignal
     refuseSleptWorktree?: boolean
     onPtySpawnCommitted?: () => void
+    /** Layout-owner build: whether a fresh start resumed its agent, told before its bind is written. */
+    onResumeOutcome?: (ptyId: string, outcome: PaneResumeOutcome) => void
     paneSpawnOperation?: PaneSpawnOperation
     adoptedStablePane?: {
       result: PtySpawnResult
@@ -119,8 +121,6 @@ export type RuntimePtyController = {
     wslDistro?: string
     stablePaneOwner?: { handle: string; tabId: string; leafId: string }
     agentSessionEnsure?: AgentSessionClaimedSpawnResult
-    /** Layout-owner build: whether a fresh start resumed the agent it was asked to. */
-    resumeOutcome?: PaneResumeOutcome
   }>
   /** The local terminal owner's automatic-restore state; null when it has no fork gate. */
   getAutomaticWorkStatus?(): Promise<AutomaticWorkStatus | null>

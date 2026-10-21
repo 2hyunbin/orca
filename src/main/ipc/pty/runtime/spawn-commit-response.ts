@@ -4,7 +4,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import type { PaneResumeOutcome } from '../../../../shared/workspace-layout/workspace-layout-published'
 
 /** Whether a fresh start resumed the agent it was asked to; a reattach ran no launch command. */
-function resumeOutcomeOf(ctx: RuntimePtySpawnState): PaneResumeOutcome | null {
+export function resumeOutcomeOf(ctx: RuntimePtySpawnState): PaneResumeOutcome | null {
   if (!ctx.args.resumeProviderSession || ctx.result.isReattach) {
     return null
   }
@@ -13,6 +13,18 @@ function resumeOutcomeOf(ctx: RuntimePtySpawnState): PaneResumeOutcome | null {
   }
   // A resume dropped silently named another agent's session: nothing came back, and nothing is owed.
   return ctx.codexResumeArgvDropped ? null : 'restored'
+}
+
+/**
+ * Switch point: tells the start whether it resumed the pane's agent before the pane's bind is
+ * written, so the frame that first shows the new terminal carries the outcome too.
+ */
+export function reportRuntimeResumeOutcome(ctx: RuntimePtySpawnState): void {
+  const outcome =
+    ORCA_LAYOUT_OWNER_IS_MAIN && ctx.args.onResumeOutcome ? resumeOutcomeOf(ctx) : null
+  if (outcome) {
+    ctx.args.onResumeOutcome?.(ctx.result.id, outcome)
+  }
 }
 
 export function completeRuntimeSpawnResponse(ctx: RuntimePtySpawnState) {
@@ -45,12 +57,5 @@ export function completeRuntimeSpawnResponse(ctx: RuntimePtySpawnState) {
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
     noteRuntimePaneCreateResult(ctx.paneSpawnReservationKey, joined)
   }
-  // Switch point: main's own start publishes whether it resumed the pane's agent.
-  const resumeOutcome = ORCA_LAYOUT_OWNER_IS_MAIN ? resumeOutcomeOf(ctx) : null
-  return {
-    ...ctx.result,
-    ...response,
-    wslDistro: ctx.result.wslDistro ?? undefined,
-    ...(resumeOutcome ? { resumeOutcome } : {})
-  }
+  return { ...ctx.result, ...response, wslDistro: ctx.result.wslDistro ?? undefined }
 }

@@ -1,5 +1,9 @@
 import { PaneOwnerContentionError } from '../ipc/pty/pane/pane-spawn-operation'
-import { toSshExecutionHostId } from '../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  normalizeExecutionHostId,
+  toSshExecutionHostId
+} from '../../shared/execution-host'
 import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import type {
   TerminalPaneAdmission,
@@ -164,6 +168,16 @@ export async function spawnInAdmittedPane(
   let admittedAs: TerminalPaneAdmissionOutcome | undefined
   startStatus?.sink.set(paneKey, { status: 'starting' })
   startStatus?.resumeOutcomes?.clear(paneKey)
+  const resumeOutcomes = startStatus?.resumesSleepingRecord ? startStatus.resumeOutcomes : undefined
+  if (resumeOutcomes) {
+    // Why the generation now: a respawn may keep the terminal id, so only a later bind is this one.
+    const afterGeneration = store?.getPtyBindingGeneration?.(
+      normalizeExecutionHostId(hostIdOf(args)) ?? LOCAL_EXECUTION_HOST_ID,
+      args.leafId
+    )
+    spawnArgs.onResumeOutcome = (ptyId, outcome) =>
+      resumeOutcomes.set(paneKey, outcome, { ptyId, afterGeneration })
+  }
   let run: { outcome: TerminalPaneAdmissionOutcome | undefined; result: Awaited<ReturnType<Spawn>> }
   const start = async (
     admitted: TerminalPaneAdmissionOutcome | undefined
@@ -210,8 +224,8 @@ export async function spawnInAdmittedPane(
   if (outcome === 'admitted' && elsewhere) {
     await withdrawRuntimePane(store, args)
   }
-  if (startStatus?.resumesSleepingRecord && result.resumeOutcome && !elsewhere) {
-    startStatus.resumeOutcomes?.set(paneKey, result.resumeOutcome, result.id)
+  if (elsewhere) {
+    resumeOutcomes?.clear(paneKey)
   }
   return result
 }

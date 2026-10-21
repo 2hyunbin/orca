@@ -49,11 +49,20 @@ function resumablePaneRuntime(outcome: PaneResumeOutcome | undefined, recorded =
   )
   // A paired desktop's layout stream: what main publishes is what it reads.
   const desktopStream = runtime.subscribeWorkspaceLayouts(() => {})
-  // A daemon start keeps the session id it was asked for.
-  const spawn = vi.fn(async (args: { sessionId?: string; resumeProviderSession?: unknown }) => ({
-    id: args.sessionId ?? 'pty-started',
-    ...(outcome ? { resumeOutcome: outcome } : {})
-  }))
+  // A daemon start keeps the session id it was asked for, and reports its resume before binding.
+  const spawn = vi.fn(
+    async (args: {
+      sessionId?: string
+      resumeProviderSession?: unknown
+      onResumeOutcome?: (ptyId: string, outcome: PaneResumeOutcome) => void
+    }) => {
+      const id = args.sessionId ?? 'pty-started'
+      if (outcome) {
+        args.onResumeOutcome?.(id, outcome)
+      }
+      return { id }
+    }
+  )
   runtime.setPtyController({
     spawn,
     write: () => true,

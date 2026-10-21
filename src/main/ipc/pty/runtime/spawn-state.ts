@@ -24,6 +24,7 @@ import type {
   AgentSessionSurfaceBinding
 } from '../../../../shared/agent-session-host-authority'
 import { localProvider } from '../provider/registry'
+import type { PaneResumeOutcome } from '../../../../shared/workspace-layout/workspace-layout-published'
 
 export type RuntimePtySpawnState = {
   deps: PtyRuntimeControllerDeps
@@ -136,6 +137,8 @@ export type RuntimePtySpawnArgs = {
   signal?: AbortSignal
   refuseSleptWorktree?: boolean
   onPtySpawnCommitted?: () => void
+  /** Layout-owner build: whether a fresh start resumed its agent, told before its bind is written. */
+  onResumeOutcome?: (ptyId: string, outcome: PaneResumeOutcome) => void
   paneSpawnOperation?: PaneSpawnOperation
   adoptedStablePane?: {
     result: PtySpawnResult
