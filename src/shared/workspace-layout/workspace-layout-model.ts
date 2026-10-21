@@ -7,6 +7,7 @@ import type { SleepingAgentSessionRecord } from '../agent-session-resume'
 import type { AgentType } from '../agent-status-types'
 import type { AiVaultSessionTitle } from '../ai-vault-session-title'
 import type { PersistedClientHostedBrowserPage } from '../client-hosted-browser-page-record'
+import type { ClosedTerminalPanesByPaneKey } from '../closed-terminal-panes'
 import type { ClosedTerminalTabTombstone } from '../closed-terminal-tab-tombstones'
 import type { EditorTabView } from '../editor-tab-view-types'
 import type { ExecutionHostId } from '../execution-host'
@@ -110,6 +111,8 @@ export type WorkspaceLayout = {
 export type WorkspaceLayoutRecords = {
   defaultTabsAppliedByWorkspace?: Record<string, true>
   clientHostedBrowserPagesByWorkspace?: Record<string, PersistedClientHostedBrowserPage[]>
+  /** Panes main dropped while their terminals may run on (layout-owner builds). */
+  closedTerminalPanesByPaneKey?: ClosedTerminalPanesByPaneKey
 }
 
 /** What only older builds read from today's documents; the layout never reads it back. */

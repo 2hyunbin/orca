@@ -28,6 +28,7 @@ import {
 import { renameEditorFiles } from './workspace-layout-editor-rekey'
 import { openSimulatorTab } from './workspace-layout-simulator-tab'
 import { updateLegacyPersistence } from './workspace-layout-legacy-persistence'
+import { recordDroppedPanes } from './workspace-layout-closed-panes'
 import type { WorkspaceLayoutModel } from './workspace-layout-model'
 import {
   closePane,
@@ -78,7 +79,16 @@ export function applyLayoutCommand(
   context: LayoutContext
 ): Applied {
   const result = applyCommand(model, command, context)
-  return result.ok ? { ...result, model: updateLegacyPersistence(model, result.model) } : result
+  return result.ok
+    ? {
+        ...result,
+        model: recordDroppedPanes(
+          model,
+          updateLegacyPersistence(model, result.model),
+          context.now()
+        )
+      }
+    : result
 }
 
 function applyCommand(

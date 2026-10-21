@@ -12,6 +12,7 @@ import { advertisedUrlWatcher } from '../../../ports/advertised-url-watcher'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { exitedSplitPaneFacts } from './exited-split-pane-rule'
+import { takeClosedPaneOfExitedPty } from './closed-pane-of-exited-pty'
 import type {
   RuntimePtyWorktreeRecord,
   RuntimeLeafRecord
@@ -36,6 +37,22 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
   protected abstract cancelPendingDriverMutations(ptyId: string): void
 
   protected abstract rememberPtyLivenessVerdict(ptyId: string, verdict: PtyLivenessVerdict): void
+
+  /** The pane main's close already dropped, from its closed-pane record; null while main holds it. */
+  private takeClosedPaneOfExit(
+    pty: RuntimePtyWorktreeRecord | undefined,
+    exitIncarnationId: PtyIncarnationId | undefined
+  ): { tabId: string; paneKey: string } | null {
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN || !pty || this.paneOfPty(pty).paneKey) {
+      return null
+    }
+    return takeClosedPaneOfExitedPty(
+      this.store,
+      this.tryGetWorkspaceSessionHostIdForWorktree(pty.worktreeId),
+      pty,
+      exitIncarnationId ?? pty.incarnationId
+    )
+  }
 
   onPtyExit(
     ptyId: string,
@@ -82,6 +99,10 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     // Why: collect before retirePtyAgentLaunchAuthority, which deletes the restored-authority
     // receipt a receipt-only pane's key comes from.
     const exitPaneKeys = this.collectAgentStatusPaneKeysForPty(ptyId)
+    const closedPane = this.takeClosedPaneOfExit(pty, exitIncarnationId)
+    if (closedPane) {
+      exitPaneKeys.add(closedPane.paneKey)
+    }
     if (preservesAbnormalSshSurface) {
       const prior = this.ptyLivenessVerdictByPtyId.get(ptyId)?.verdict
       this.rememberPtyLivenessVerdict(ptyId, {
@@ -133,7 +154,7 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
           leafId: leaf.leafId
         })
       }
-      const recorded = this.paneOfPty(pty)
+      const recorded = closedPane ?? this.paneOfPty(pty)
       const parsedPaneKey = parsePaneKey(recorded.paneKey ?? '')
       if (pty && recorded.tabId && parsedPaneKey) {
         exactSurfaceByKey.set(`${pty.worktreeId}\0${recorded.tabId}\0${parsedPaneKey.leafId}`, {
@@ -293,7 +314,10 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     // that teardown, so settle from them too (STA-4603).
     const ptyHandle = this.handleByPtyId.get(ptyId)
     if (ptyHandle && !exitedSurfaces.some((surface) => surface.handle === ptyHandle)) {
-      exitedSurfaces.push({ handle: ptyHandle, paneKey: this.paneOfPty(pty).paneKey })
+      exitedSurfaces.push({
+        handle: ptyHandle,
+        paneKey: closedPane?.paneKey ?? this.paneOfPty(pty).paneKey
+      })
     }
     if (!preservesAbnormalSshSurface) {
       for (const surface of exitedSurfaces) {
