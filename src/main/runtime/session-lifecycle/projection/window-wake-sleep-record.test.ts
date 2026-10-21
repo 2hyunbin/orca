@@ -19,7 +19,9 @@ const RESUMED: SleepingAgentSessionRecord = {
 
 async function markedRecord(stored: SleepingAgentSessionRecord) {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the edit reads only the records.
-  let session = { sleepingAgentSessionsByPaneKey: { [PANE_KEY]: stored } } as WorkspaceSessionState
+  let session = {
+    sleepingAgentSessionsByPaneKey: { [PANE_KEY]: stored }
+  } as unknown as WorkspaceSessionState
   await markResumedRecordLive(
     async (edit) => {
       session = edit(session) ?? session
