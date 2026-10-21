@@ -17,6 +17,9 @@ import {
   toggleVisibleHostRow
 } from '../../../../shared/workspace-view/workspace-host-visibility'
 import { getSidebarHostHealthLabel, type SidebarHostOption } from './sidebar-host-options'
+import { useBoundedHostRows } from '../host-picker/use-bounded-host-rows'
+import { HostListSearchField } from '../host-picker/HostListSearchField'
+import { HostListOverflowNote } from '../host-picker/HostListOverflowNote'
 import { translate } from '@/i18n/i18n'
 
 type SidebarHostScopeMenuSectionProps = {
@@ -76,6 +79,9 @@ export function SidebarHostScopeMenuSection({
     ).map((host) => host.id)
   )
 
+  // Why checked rows pinned under a filter: a host the filter shows must stay uncheckable.
+  const rows = useBoundedHostRows(hostRows, allVisible ? undefined : checkedRowIds)
+
   const toggleAllHosts = (): void => {
     const next = toggleAllVisibleHosts(hostOptions, visibleWorkspaceHostIds)
     if (next === null) {
@@ -128,7 +134,10 @@ export function SidebarHostScopeMenuSection({
             </span>
           </span>
         </DropdownMenuCheckboxItem>
-        {hostRows.map((host) => (
+        {rows.searchable ? (
+          <HostListSearchField value={rows.query} onChange={rows.setQuery} inMenu />
+        ) : null}
+        {rows.shown.map((host) => (
           <DropdownMenuCheckboxItem
             key={host.id}
             checked={!allVisible && checkedRowIds.has(host.id)}
@@ -145,6 +154,7 @@ export function SidebarHostScopeMenuSection({
             </span>
           </DropdownMenuCheckboxItem>
         ))}
+        <HostListOverflowNote hiddenCount={rows.hiddenCount} />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   )

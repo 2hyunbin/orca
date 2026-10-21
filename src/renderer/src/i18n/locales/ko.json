@@ -1275,6 +1275,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "호스트 검색…",
+        "noHostsMatch": "일치하는 호스트가 없습니다.",
+        "moreHosts_one": "호스트 {{count}}개 더 있음. 이름으로 검색하세요.",
+        "moreHosts_other": "호스트 {{count}}개 더 있음. 이름으로 검색하세요."
+      },
       "CodexRestartChip": {
         "c72a5fb234": "다시 시작",
         "9263e75f49": "Codex는 이전 계정을 사용하고 있습니다",
