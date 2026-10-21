@@ -148,7 +148,7 @@ export async function setWorktreeLineageForRuntime(
   return {
     target,
     hostId: getRuntimeTargetHostId(target),
-    lineage: result.worktree.lineage ?? null,
+    lineage: result.worktree.savedLineage ?? result.worktree.lineage ?? null,
     updatedRemoteWorktree: result.worktree
   }
 }

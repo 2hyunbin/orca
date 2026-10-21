@@ -1,3 +1,4 @@
+import { folderWorkspaceToWorktree } from '../shared/folder-workspace-worktree'
 import type { Worktree } from '../shared/worktree/types'
 import type { Repo } from '../shared/repo-types'
 import { getRepoExecutionHostId } from '../shared/execution-host'
@@ -5,6 +6,7 @@ import { getRepoIdFromWorktreeId, splitWorktreeId } from '../shared/worktree/id'
 import { isFolderRepo } from '../shared/repo-kind'
 import {
   getConnectedWorktreeLineageIds,
+  mergeWorkspaceLineageRecords,
   projectResolvedWorktreeLineage
 } from '../shared/resolved-worktree-lineage'
 import { readWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
@@ -21,7 +23,12 @@ import type { RuntimeStore } from './runtime/runtime-store-contract'
 
 type HostPeerStore = Pick<
   RuntimeStore,
-  'getRepos' | 'getAllWorktreeMeta' | 'getWorktreeMetaForHost' | 'getAllWorktreeLineage'
+  | 'getRepos'
+  | 'getAllWorktreeMeta'
+  | 'getWorktreeMetaForHost'
+  | 'getAllWorktreeLineage'
+  | 'getAllWorkspaceLineage'
+  | 'getFolderWorkspaces'
 >
 
 /** Project a per-repo publication against persisted peers on its execution host. */
@@ -30,9 +37,13 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   repo: Repo,
   rows: readonly T[]
 ) {
-  const lineageById = store.getAllWorktreeLineage?.() ?? {}
+  const lineageById = mergeWorkspaceLineageRecords(
+    store.getAllWorktreeLineage?.() ?? {},
+    store.getAllWorkspaceLineage?.() ?? {}
+  )
+  const folders = store.getFolderWorkspaces?.().map(folderWorkspaceToWorktree) ?? []
   if (rows.length === 0) {
-    return projectResolvedWorktreeLineage(rows, lineageById)
+    return projectResolvedWorktreeLineage(rows, lineageById, folders)
   }
   const relatedIds = getConnectedWorktreeLineageIds(
     rows.map((row) => row.id),
@@ -40,7 +51,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   )
   const ownIds = new Set(rows.map((row) => row.id))
   if ([...relatedIds].every((id) => ownIds.has(id) || getRepoIdFromWorktreeId(id) === repo.id)) {
-    return projectResolvedWorktreeLineage(rows, lineageById)
+    return projectResolvedWorktreeLineage(rows, lineageById, folders)
   }
   const repos = store.getRepos()
   const reposById = new Map<string, Repo[]>()
@@ -104,5 +115,5 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
       )
     )
   }
-  return projectResolvedWorktreeLineage(rows, lineageById, peers)
+  return projectResolvedWorktreeLineage(rows, lineageById, [...folders, ...peers])
 }

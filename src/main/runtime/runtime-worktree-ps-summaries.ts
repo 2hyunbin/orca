@@ -60,7 +60,11 @@ export function buildRuntimeWorktreePsSummaries(args: {
       ...(lineage?.parentWorktreeInstanceId !== undefined
         ? { parentWorktreeInstanceId: lineage.parentWorktreeInstanceId }
         : {}),
-      savedLineage: worktree.savedLineage ?? args.store?.getWorktreeLineage?.(worktree.id) ?? null,
+      savedLineage:
+        worktree.savedLineage ??
+        args.store?.getWorktreeLineage?.(worktree.id) ??
+        worktree.lineage ??
+        null,
       parentWorktreeId: worktree.parentWorktreeId,
       childWorktreeIds: worktree.childWorktreeIds,
       displayName: worktree.displayName,
@@ -101,6 +105,7 @@ export function buildRuntimeWorktreePsSummaries(args: {
     const worktree = folderWorkspaceToWorktree(folderWorkspace)
     summaries.set(worktree.id, {
       workspaceKind: 'folder-workspace',
+      hostId: worktree.hostId,
       worktreeId: worktree.id,
       repoId: worktree.repoId,
       repo: projectGroup.name,

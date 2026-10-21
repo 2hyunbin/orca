@@ -42,7 +42,8 @@ export type WorktreeLineageRecordingResolution =
 export function recordCreatedWorktreeLineage(
   store: RuntimeStore | null,
   worktree: Pick<Worktree, 'id' | 'instanceId' | 'hostId'>,
-  resolution: WorktreeLineageRecordingResolution
+  resolution: WorktreeLineageRecordingResolution,
+  createdAt = Date.now()
 ): {
   lineage: WorktreeLineage | null
   workspaceLineage: WorkspaceLineage | null
@@ -57,7 +58,6 @@ export function recordCreatedWorktreeLineage(
 
   const childInstanceId = worktree.instanceId
   const parentInstanceId = resolution.parent.instanceId
-  const createdAt = Date.now()
   const target = store ? worktreeRowTarget(store, worktree) : undefined
   if (childInstanceId && parentInstanceId && target && store?.setWorktreeLineage) {
     lineage =

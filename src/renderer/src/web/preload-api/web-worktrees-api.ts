@@ -223,7 +223,7 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
         parentWorktreeRef,
         noParent
       })
-      return result.worktree.lineage ?? null
+      return result.worktree.savedLineage ?? result.worktree.lineage ?? null
     },
     persistSortOrder: async ({ orderedIds, hostIds }) => {
       await callRuntimeResult('worktree.persistSortOrder', { orderedIds, hostIds })

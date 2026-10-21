@@ -185,16 +185,16 @@ describe('recordWorkspaceLineageForCreatedWorktree', () => {
     })
   })
 
-  it('records only workspace lineage for a folder-workspace parent', () => {
+  it('records the immutable folder identity in both lineage rows', () => {
     const store = createStore({ folderWorkspaceIds: ['folder-1'] })
 
     const result = record(store, { parentWorkspace: folderWorkspaceKey('folder-1') })
 
-    expect(store.setWorktreeLineage).not.toHaveBeenCalled()
-    expect(result.lineage).toBeNull()
+    expect(store.setWorktreeLineage).toHaveBeenCalledOnce()
+    expect(result.lineage).toMatchObject({ parentWorktreeInstanceId: 'folder:folder-1' })
     expect(result.workspaceLineage).toMatchObject({
       parentWorkspaceKey: folderWorkspaceKey('folder-1'),
-      parentInstanceId: null,
+      parentInstanceId: 'folder:folder-1',
       capture: { source: 'active-workspace', confidence: 'explicit' }
     })
   })

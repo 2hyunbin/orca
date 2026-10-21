@@ -156,8 +156,7 @@ import {
 import {
   hostWorktreeTargetForRepo,
   readAllWorktreeMetaForHost,
-  readWorktreeMetaForHost,
-  worktreeRowTarget
+  readWorktreeMetaForHost
 } from '../persistence/host-qualified-worktree-meta'
 // Why: bound the fallback `git fetch origin` so a Windows credential-manager GUI hang (STA-1292) can't wedge worktree creation forever.
 const CREATE_BASE_FALLBACK_FETCH_TIMEOUT_MS = 60_000
@@ -238,20 +237,25 @@ export function recordWorkspaceLineageForCreatedWorktree(
 ): CreatedWorktreeLineageRecords {
   if (args.parentWorktreeRef) {
     const ref = args.parentWorktreeRef
-    return recordCreatedWorktreeLineage(store, worktree, {
-      kind: 'lineage',
-      parent: {
-        type: 'reference',
-        workspaceKey: ref.worktreeId.startsWith('folder:')
-          ? `folder:${ref.worktreeId.slice(7)}`
-          : worktreeWorkspaceKey(ref.worktreeId),
-        worktreeId: ref.worktreeId,
-        instanceId: ref.instanceId
+    return recordCreatedWorktreeLineage(
+      store,
+      worktree,
+      {
+        kind: 'lineage',
+        parent: {
+          type: 'reference',
+          workspaceKey: ref.worktreeId.startsWith('folder:')
+            ? `folder:${ref.worktreeId.slice(7)}`
+            : worktreeWorkspaceKey(ref.worktreeId),
+          worktreeId: ref.worktreeId,
+          instanceId: ref.instanceId
+        },
+        ...(ref.external ? { parentStore: 'external' as const } : {}),
+        origin: 'manual',
+        capture: { source: 'manual-action', confidence: 'explicit' }
       },
-      ...(ref.external ? { parentStore: 'external' as const } : {}),
-      origin: 'manual',
-      capture: { source: 'manual-action', confidence: 'explicit' }
-    })
+      createdAt
+    )
   }
   if (!args.parentWorkspace || !worktree.instanceId) {
     return NO_CREATED_WORKTREE_LINEAGE
@@ -281,51 +285,41 @@ export function recordWorkspaceLineageForCreatedWorktree(
     return NO_CREATED_WORKTREE_LINEAGE
   }
 
-  // Why: only a worktree parent produces sidebar nesting; a folder parent has no WorktreeLineage row.
-  let lineage: CreateWorktreeResult['lineage'] = null
-  let lineageOwnedByTwin = false
-  if (parentScope.type === 'worktree' && parentWorktreeMeta) {
-    if (!parentWorktreeMeta.instanceId) {
-      console.warn(
-        `[worktree-create] parent ${parentScope.worktreeId} has no instance identity; skipping lineage`
-      )
-    } else {
-      const target = worktreeRowTarget(store, worktree)
-      lineage =
-        (target &&
-          store.setWorktreeLineage(target, {
-            worktreeId: worktree.id,
-            worktreeInstanceId: worktree.instanceId,
-            parentWorktreeId: parentScope.worktreeId,
-            parentWorktreeInstanceId: parentWorktreeMeta.instanceId,
-            origin: 'manual',
-            capture: { source: 'manual-action', confidence: 'explicit' },
-            createdAt
-          })) ??
-        null
-      lineageOwnedByTwin = lineage === null
+  const instanceId =
+    parentScope.type === 'folder' ? args.parentWorkspace : parentWorktreeMeta?.instanceId
+  if (!instanceId) {
+    return {
+      lineage: null,
+      workspaceLineage: store.setWorkspaceLineage({
+        childWorkspaceKey,
+        childInstanceId: worktree.instanceId,
+        parentWorkspaceKey: args.parentWorkspace,
+        parentInstanceId: null,
+        origin: 'manual',
+        capture: { source: 'manual-action', confidence: 'explicit' },
+        createdAt
+      })
     }
   }
-
-  // Why: a workspace row for an out-of-boundary worktree parent is a cross-host link that survives restarts.
-  // A twin-owned bucket keeps the twin's workspace row too.
-  if (lineageOwnedByTwin) {
-    return NO_CREATED_WORKTREE_LINEAGE
-  }
-
-  const workspaceLineage = store.setWorkspaceLineage({
-    childWorkspaceKey,
-    childInstanceId: worktree.instanceId,
-    parentWorkspaceKey: args.parentWorkspace,
-    parentInstanceId: parentWorktreeMeta?.instanceId ?? null,
-    origin: 'manual',
-    capture: {
-      source: parentScope.type === 'worktree' ? 'manual-action' : 'active-workspace',
-      confidence: 'explicit'
+  return recordCreatedWorktreeLineage(
+    store,
+    worktree,
+    {
+      kind: 'lineage',
+      parent: {
+        type: 'reference',
+        workspaceKey: args.parentWorkspace,
+        worktreeId: parentScope.type === 'worktree' ? parentScope.worktreeId : args.parentWorkspace,
+        instanceId
+      },
+      origin: 'manual',
+      capture: {
+        source: parentScope.type === 'worktree' ? 'manual-action' : 'active-workspace',
+        confidence: 'explicit'
+      }
     },
     createdAt
-  })
-  return { lineage, workspaceLineage }
+  )
 }
 
 async function spawnLocalStartupAndSetupTerminals(args: {

@@ -1,3 +1,4 @@
+import { folderWorkspaceToWorktree } from '../../../shared/folder-workspace-worktree'
 import { OrcaRuntimeWithReadKittyFile } from '../orca-runtime-read-kitty-file'
 import type { RuntimeWorkspaceRepoScanRefresh } from './workspace-repo-scan-refresh'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
@@ -15,7 +16,10 @@ import {
   resolveRepoWorktreeRows,
   resolveScopedWorktreeIdRow
 } from '../repo-worktree-row-resolution'
-import { projectResolvedWorktreeLineage } from '../../../shared/resolved-worktree-lineage'
+import {
+  projectResolvedWorktreeLineage,
+  mergeWorkspaceLineageRecords
+} from '../../../shared/resolved-worktree-lineage'
 import type { RepoWorktreeRowDeps } from '../repo-worktree-row-resolution'
 import { listRuntimeFolderWorkspaces } from '../runtime-worktree-filesystem'
 import type { ExecutionHostId } from '../../../shared/execution-host'
@@ -116,8 +120,15 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
         async (repo) => await resolveRepoWorktreeRows(deps, repo, metaById, projectRuntimeByRepoId)
       )
     )
-    const lineageById = this.store?.getAllWorktreeLineage?.() ?? {}
-    const worktrees = projectResolvedWorktreeLineage(perRepoWorktrees.flat(), lineageById)
+    const lineageById = mergeWorkspaceLineageRecords(
+      this.store.getAllWorktreeLineage?.() ?? {},
+      this.store.getAllWorkspaceLineage?.() ?? {}
+    )
+    const worktrees = projectResolvedWorktreeLineage(
+      perRepoWorktrees.flat(),
+      lineageById,
+      this.store.getFolderWorkspaces?.().map(folderWorkspaceToWorktree) ?? []
+    )
     return { worktrees, platformByRepoId }
   }
 

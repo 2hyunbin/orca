@@ -1,3 +1,4 @@
+import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import type { WorktreeMetaBatchUpdate, WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import {
@@ -13,7 +14,7 @@ import { worktreeOwnerHostIds } from '@/lib/worktree-runtime-owner-index'
 function hasChangedLineageAncestor(
   get: WorktreeSliceGet,
   worktreeId: string,
-  changedWorktreeIds: ReadonlySet<string>,
+  changedWorktreeIdentities: ReadonlySet<string>,
   // The focused copy's host: its lineage walks that host's rows, never a same-id twin's.
   hostId: ExecutionHostId | undefined
 ): boolean {
@@ -28,7 +29,7 @@ function hasChangedLineageAncestor(
     if (!parent) {
       break
     }
-    if (changedWorktreeIds.has(parent.id)) {
+    if (changedWorktreeIdentities.has(getWorktreeHostIdentity(parent))) {
       return true
     }
     child = parent
@@ -50,7 +51,7 @@ export function createSetWorktreesPinnedAndReveal(
     const activeHostId = get().activeWorkspaceExecutionHostId ?? null
     // Skip worktrees already in the target state so a no-op toggle doesn't scroll the viewport away.
     const updates: WorktreeMetaBatchUpdate[] = []
-    const changedWorktreeIds = new Set<string>()
+    const changedWorktreeIdentities = new Set<string>()
     let didChange = false
     let revealWorktreeId: string | null = null
     for (const target of targets) {
@@ -70,9 +71,7 @@ export function createSetWorktreesPinnedAndReveal(
         !activeHostId ||
         target.hostId === activeHostId ||
         worktreeOwnerHostIds(current).includes(activeHostId)
-      if (onFocusedHost) {
-        changedWorktreeIds.add(worktreeId)
-      }
+      changedWorktreeIdentities.add(getWorktreeHostIdentity(current))
       const workspaceScope = parseWorkspaceKey(worktreeId)
       if (workspaceScope?.type === 'folder') {
         void get().updateWorktreeMeta(worktreeId, { isPinned }, { executionHostId })
@@ -97,7 +96,7 @@ export function createSetWorktreesPinnedAndReveal(
       hasChangedLineageAncestor(
         get,
         activeSidebarWorktreeId,
-        changedWorktreeIds,
+        changedWorktreeIdentities,
         activeHostId ?? undefined
       )
     ) {

@@ -4,6 +4,7 @@ import type { RuntimeStore } from './runtime-store-contract'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
 import { RuntimeWorktreeLineageController } from './runtime-worktree-lineage-controller'
 import { resolveRuntimeWorktreeCreateLineage } from './runtime-worktree-lineage-resolution'
+import { updateRuntimeManagedWorktreeMetadata } from './runtime-managed-worktree-metadata'
 import { recordCreatedWorktreeLineage } from './runtime-worktree-lineage-recording'
 
 function row(id: string): ResolvedWorktree {
@@ -50,7 +51,9 @@ function setup(links: Record<string, WorktreeLineage>) {
     getWorktreeMeta: (id: string) => ({ instanceId: id, hostId: 'local' }),
     getRepos: () => [],
     getWorktreeLineage: (id: string) => links[id],
-    getWorkspaceLineage: () => undefined,
+    getAllWorkspaceLineage: () => ({}),
+    setWorktreeMeta: vi.fn(),
+    removeWorktreeLineage: vi.fn(),
     setWorktreeLineage,
     setWorkspaceLineage
   } as unknown as RuntimeStore
@@ -113,5 +116,44 @@ describe('cross-machine lineage writes', () => {
     expect(() =>
       setup({ Q: edge('Q', 'P') }).controller.validateParent(row('P'), row('Q'))
     ).toThrow('cycle')
+  })
+  it('reasserts an external parent without looking it up, refuses a different one, and always clears it', async () => {
+    const { store } = setup({ C: edge('C', 'P', true) })
+    const child = row('C')
+    const ports = {
+      resolveWorktree: vi.fn(async () => child),
+      validateParent: vi.fn(),
+      invalidateResolved: vi.fn(),
+      invalidateScan: vi.fn(),
+      notifyChanged: vi.fn(),
+      showWorktree: vi.fn(async () => child)
+    }
+    await updateRuntimeManagedWorktreeMetadata({
+      selector: 'id:C',
+      updates: {
+        lineage: { parentWorktreeRef: { worktreeId: 'P', instanceId: 'P', external: true } }
+      },
+      store,
+      ports
+    })
+    expect(ports.resolveWorktree).toHaveBeenCalledTimes(1)
+    expect(store.setWorktreeLineage).not.toHaveBeenCalled()
+    await expect(
+      updateRuntimeManagedWorktreeMetadata({
+        selector: 'id:C',
+        updates: {
+          lineage: { parentWorktreeRef: { worktreeId: 'Q', instanceId: 'Q', external: true } }
+        },
+        store,
+        ports
+      })
+    ).rejects.toThrow('chain reaches another Orca install')
+    await updateRuntimeManagedWorktreeMetadata({
+      selector: 'id:C',
+      updates: { lineage: { noParent: true } },
+      store,
+      ports
+    })
+    expect(store.removeWorktreeLineage).toHaveBeenCalledOnce()
   })
 })

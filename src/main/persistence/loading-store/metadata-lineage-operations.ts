@@ -317,7 +317,7 @@ export function removeWorkspaceLineageForFolderParent(
   for (const [childKey, lineage] of Object.entries(
     owner[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey
   )) {
-    if (lineage.parentWorkspaceKey === parentKey) {
+    if (lineage.parentStore !== 'external' && lineage.parentWorkspaceKey === parentKey) {
       delete owner[metadataLineageOperationsContext].runtime.state.workspaceLineageByChildKey[
         childKey as WorkspaceKey
       ]

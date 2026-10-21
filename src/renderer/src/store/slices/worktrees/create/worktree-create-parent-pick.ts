@@ -10,7 +10,10 @@ import {
 } from '../../../../../../shared/workspace-scope'
 import { folderWorkspaceToWorktree } from '../../../../../../shared/folder-workspace-worktree'
 import { getIndexedWorktreesById } from '@/store/worktree-repo-index'
-import type { ExecutionHostId } from '../../../../../../shared/execution-host'
+import {
+  getWorktreeExecutionHostId,
+  type ExecutionHostId
+} from '../../../../../../shared/execution-host'
 import { lineageStoreKeyForRow } from '../../../../../../shared/resolved-worktree-lineage'
 import type { ParentWorktreeRef } from '../../../../../../shared/worktree/lineage-types'
 
@@ -32,9 +35,14 @@ export function resolveWorktreeCreateParent(
   requestedParentWorktreeId: string | undefined,
   executionHostId: ExecutionHostId
 ): WorktreeCreateParentPick {
-  const picked = requestedParentWorktreeId
-    ? getIndexedWorktreesById(state.worktreesByRepo, requestedParentWorktreeId).find(
-        (candidate) => !candidate.isArchived
+  const candidates = requestedParentWorktreeId
+    ? getIndexedWorktreesById(state.worktreesByRepo, requestedParentWorktreeId)
+    : []
+  const picked = candidates.find((row) => row.hostId === executionHostId) ?? candidates[0]
+  const pickedHost = picked
+    ? getWorktreeExecutionHostId(
+        picked,
+        state.repos.find((repo) => repo.id === picked.repoId)
       )
     : undefined
   const usable = picked && !picked.isArchived ? picked.id : undefined
@@ -42,13 +50,14 @@ export function resolveWorktreeCreateParent(
   if (usable) {
     return {
       parentWorkspace: worktreeWorkspaceKey(usable),
-      ...(picked.instanceId && picked.hostId !== executionHostId
+      ...(picked.instanceId && pickedHost !== executionHostId
         ? {
             parentWorktreeRef: {
               worktreeId: picked.id,
               instanceId: picked.instanceId,
               external:
-                lineageStoreKeyForRow(picked) !== lineageStoreKeyForRow({ hostId: executionHostId })
+                lineageStoreKeyForRow({ ...picked, hostId: pickedHost }) !==
+                lineageStoreKeyForRow({ hostId: executionHostId })
             }
           }
         : {}),

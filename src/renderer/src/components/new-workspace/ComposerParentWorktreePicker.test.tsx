@@ -273,7 +273,7 @@ describe('ComposerParentWorktreePicker', () => {
     expect(candidateLabels().join(' ')).toContain('Other repo')
   })
 
-  it('offers another project on the same host and excludes another host', () => {
+  it('offers parents in another project and on another host', () => {
     seed([
       makeWorktree({ id: 'same', displayName: 'Same host', hostId: 'local', projectId: 'proj1' }),
       makeWorktree({
@@ -302,7 +302,7 @@ describe('ComposerParentWorktreePicker', () => {
     fireEvent.click(trigger())
 
     expect(candidateLabels().join(' ')).toContain('Same host')
-    expect(candidateLabels().join(' ')).not.toContain('Other host')
+    expect(candidateLabels().join(' ')).toContain('Other host')
     expect(candidateLabels().join(' ')).toContain('Other project')
   })
 

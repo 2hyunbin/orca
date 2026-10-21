@@ -1,3 +1,4 @@
+import { worktreeLineageFromWorkspaceLineage } from '../../../../shared/resolved-worktree-lineage'
 import type { ParentWorktreeRef } from '../../../../shared/worktree/lineage-types'
 import { ipcMain } from 'electron'
 import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
@@ -115,7 +116,12 @@ export function registerWorktreeMetadataHandlers(context: WorktreeIpcContext): v
                 : undefined
       })
       notifyWorktreesChanged(mainWindow, parseWorktreeId(args.worktreeId).repoId)
-      return store.getWorktreeLineage(args.worktreeId) ?? null
+      const workspace = args.worktreeId.startsWith('folder:')
+        ? store.getWorkspaceLineage(`folder:${args.worktreeId.slice(7)}`)
+        : undefined
+      return workspace
+        ? worktreeLineageFromWorkspaceLineage(workspace)
+        : (store.getWorktreeLineage(args.worktreeId) ?? null)
     }
   )
 

@@ -207,6 +207,9 @@ export function projectResolvedWorktreeLineage<T extends Worktree>(
 ): WorktreeWithResolvedLineage<T>[] {
   const allWorktrees: readonly Worktree[] = [...worktrees, ...knownPeers]
   const edgeOf = (row: Worktree): WorktreeLineage | null | undefined => {
+    if (row.savedLineage !== undefined && lineageStoreKeyForRow(row)) {
+      return row.savedLineage
+    }
     const saved = lineageById[row.id]
     return saved?.worktreeId === row.id && saved.worktreeInstanceId === row.instanceId
       ? saved
@@ -238,5 +241,20 @@ export function worktreeLineageFromWorkspaceLineage(edge: WorkspaceLineage): Wor
     worktreeInstanceId: edge.childInstanceId ?? '',
     parentWorktreeId: parent?.type === 'worktree' ? parent.worktreeId : edge.parentWorkspaceKey,
     parentWorktreeInstanceId: edge.parentInstanceId ?? ''
+  }
+}
+
+export function mergeWorkspaceLineageRecords(
+  worktreeLineage: Readonly<Record<string, WorktreeLineage>>,
+  workspaceLineage: Readonly<Record<string, WorkspaceLineage>>
+): Record<string, WorktreeLineage> {
+  return {
+    ...Object.fromEntries(
+      Object.values(workspaceLineage).map((edge) => {
+        const lineage = worktreeLineageFromWorkspaceLineage(edge)
+        return [lineage.worktreeId, lineage]
+      })
+    ),
+    ...worktreeLineage
   }
 }

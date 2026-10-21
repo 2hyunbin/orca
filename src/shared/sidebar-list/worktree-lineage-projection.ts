@@ -13,6 +13,12 @@ export function getProjectedWorktreeLineage(
   worktree: Worktree,
   lineageById: Readonly<Record<string, WorktreeLineage>>
 ): WorktreeLineage | null | undefined {
+  if (
+    worktree.savedLineage !== undefined &&
+    (worktree.runtimeOwnerEnvironmentId || worktree.hostId?.startsWith('runtime:'))
+  ) {
+    return worktree.savedLineage
+  }
   const saved = lineageById[worktree.id]
   if (saved?.worktreeId === worktree.id && saved.worktreeInstanceId === worktree.instanceId) {
     return saved

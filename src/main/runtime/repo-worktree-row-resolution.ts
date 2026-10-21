@@ -1,3 +1,4 @@
+import { folderWorkspaceToWorktree } from '../../shared/folder-workspace-worktree'
 import { preserveFolderUpgradeWorktreePath } from '../folder-upgrade-worktree-path'
 import {
   splitWorktreeId,
@@ -13,6 +14,7 @@ import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identit
 import { isFolderRepo } from '../../shared/repo-kind'
 import {
   getConnectedWorktreeLineageIds,
+  mergeWorkspaceLineageRecords,
   projectResolvedWorktreeLineage
 } from '../../shared/resolved-worktree-lineage'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
@@ -43,6 +45,7 @@ type RepoWorktreeRowStore = Pick<
   | 'setWorktreeMeta'
   | 'getAllWorktreeLineage'
   | 'getAllWorkspaceLineage'
+  | 'getFolderWorkspaces'
   | 'removeWorktreeLineage'
 >
 
@@ -238,7 +241,10 @@ export async function resolveScopedWorktreeIdRow(
   if (!target) {
     return null
   }
-  const lineageById = store.getAllWorktreeLineage?.() ?? {}
+  const lineageById = mergeWorkspaceLineageRecords(
+    store.getAllWorktreeLineage?.() ?? {},
+    store.getAllWorkspaceLineage?.() ?? {}
+  )
   const relatedIds = getConnectedWorktreeLineageIds([target.id], lineageById)
   const relatedRepoIds = new Set(
     [...relatedIds]
@@ -246,7 +252,24 @@ export async function resolveScopedWorktreeIdRow(
       .filter((id) => id !== undefined)
   )
   relatedRepoIds.delete(repo.id)
-  const relatedRepos = store.getRepos().filter((candidate) => relatedRepoIds.has(candidate.id))
+  const savedHosts = new Map<string, Set<ExecutionHostId>>()
+  for (const id of relatedIds) {
+    const host = store.getAllWorktreeMeta()[id]?.hostId
+    const relatedRepoId = splitWorktreeIdForFilesystem(id)?.repoId
+    if (host && relatedRepoId) {
+      const hosts = savedHosts.get(relatedRepoId) ?? new Set<ExecutionHostId>()
+      hosts.add(host)
+      savedHosts.set(relatedRepoId, hosts)
+    }
+  }
+  const relatedRepos = store
+    .getRepos()
+    .filter(
+      (candidate) =>
+        relatedRepoIds.has(candidate.id) &&
+        (!savedHosts.has(candidate.id) ||
+          savedHosts.get(candidate.id)?.has(getRepoExecutionHostId(candidate)))
+    )
   if (new Set(relatedRepos.map((candidate) => candidate.id)).size !== relatedRepos.length) {
     return null
   }
@@ -257,6 +280,10 @@ export async function resolveScopedWorktreeIdRow(
       resolveRepoWorktreeRows(deps, relatedRepo, metaById, projectRuntimeByRepoId)
     )
   )
-  const projected = projectResolvedWorktreeLineage([...ownerRows, ...otherRows.flat()], lineageById)
+  const projected = projectResolvedWorktreeLineage(
+    [...ownerRows, ...otherRows.flat()],
+    lineageById,
+    store.getFolderWorkspaces?.().map(folderWorkspaceToWorktree) ?? []
+  )
   return projected[ownerRows.indexOf(target)] ?? null
 }

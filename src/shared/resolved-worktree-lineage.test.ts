@@ -247,6 +247,14 @@ describe('cross-store lineage contract', () => {
         child
       )
     ).toBe(copy)
+    const left = { ...parent, id: 'copy-a' }
+    const right = { ...parent, id: 'copy-b' }
+    const outside = { ...parent, id: 'other', hostId: 'runtime:server' as const }
+    expect(
+      resolveWorktreeLineageParents([child, left, outside, right], (row) =>
+        row === child ? { ...edge, parentWorktreeId: 'missing', parentStore: 'external' } : null
+      ).get(child)
+    ).toBe(outside)
     const external = { ...edge, parentWorktreeInstanceId: 'r', parentStore: 'external' as const }
     expect(
       resolveWorktreeLineageParents([child, remote], (row) =>
@@ -296,12 +304,20 @@ describe('cross-store lineage contract', () => {
     })
     const desktop = readFeedPairedServerRow(snapshot.servers[0].rows[0])!.worktree
     expect(
-      resolveWorktreeLineageParents([parent, desktop], (item) => item.lineage).get(desktop)
+      resolveWorktreeLineageParents(
+        [parent, desktop],
+        (item) => item.savedLineage ?? item.lineage
+      ).get(desktop)
     ).toBe(parent)
     const phoneChild = readFeedPairedServerRow(snapshot.servers[0].rows[0])!.worktree
     expect(
-      resolveWorktreeLineageParents([parent, phoneChild], (item) => item.lineage).get(phoneChild)
+      resolveWorktreeLineageParents(
+        [parent, phoneChild],
+        (item) => item.savedLineage ?? item.lineage
+      ).get(phoneChild)
     ).toBe(parent)
-    expect(resolveWorktreeLineageParents([phoneChild], (item) => item.lineage).size).toBe(0)
+    expect(
+      resolveWorktreeLineageParents([phoneChild], (item) => item.savedLineage ?? item.lineage).size
+    ).toBe(0)
   })
 })
