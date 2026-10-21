@@ -1,4 +1,4 @@
-import '../provider-process/mock-provider-process-group.test-support'
+import { registerScriptedProviderChild } from '../provider-process/mock-provider-process-group.test-support'
 // The chat sign-in against a scripted Antigravity server.
 
 import { createServer } from 'node:http'
@@ -61,7 +61,6 @@ afterEach(async () => {
   await Promise.allSettled(
     vi.mocked(ANTIGRAVITY_LAUNCH_SPEC.launchGate.run).mock.results.map((result) => result.value)
   )
-  vi.restoreAllMocks()
   await Promise.all(folders.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
@@ -76,7 +75,7 @@ function fakeServer(agent: AcpScriptedAgent, stderr = new PassThrough()) {
     kill: vi.fn(() => true)
   })
   child.stdin.once('finish', () => completeFakeSpawn(child))
-  return child
+  return registerScriptedProviderChild(child)
 }
 
 /** Scripted browser output; the real command/parser has its own fixture. */

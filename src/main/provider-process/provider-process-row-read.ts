@@ -1,3 +1,5 @@
+import type { ProviderGroupMember } from './provider-process-group'
+import { hasUnambiguousStartTime } from '../pty-descendant-termination'
 import { readFile } from 'node:fs/promises'
 import { runProcess } from '@orca/process-host'
 import type { ProviderCleanupBudget } from './provider-process-exit-deadline'
@@ -104,4 +106,81 @@ async function readPsProcessRow(
   } catch {
     return 'unverifiable'
   }
+}
+
+export async function readProviderWriterVerdict(
+  members: readonly ProviderGroupMember[],
+  budget: ProviderCleanupBudget,
+  read: typeof readPosixProcessRow
+): Promise<'live' | 'unknown' | 'exited'> {
+  let unknown = false
+  for (const member of members) {
+    if (!budget.active) {
+      return 'unknown'
+    }
+    const row = await read(member.pid, process.platform, budget)
+    if (
+      row === 'unverifiable' ||
+      (row && !row.zombie && process.platform === 'darwin' && !member.startedAt.endsWith('Z'))
+    ) {
+      unknown = true
+    } else if (row && !row.zombie && row.startedAt === member.startedAt) {
+      return 'live'
+    }
+  }
+  return unknown ? 'unknown' : 'exited'
+}
+
+/** A newer observation replaces an object; an older in-flight read cannot delete that evidence. */
+export async function pruneProviderMembers(
+  members: ProviderGroupMember[],
+  budget: ProviderCleanupBudget,
+  read: typeof readPosixProcessRow,
+  anchor?: number
+): Promise<'live' | 'unknown' | 'exited'> {
+  const live = new Set<ProviderGroupMember>()
+  const anchors = new Set<ProviderGroupMember>()
+  const observed = [...members]
+  for (const member of observed) {
+    const verdict = await readProviderWriterVerdict([member], budget, read)
+    if (!budget.active) {
+      return 'unknown'
+    }
+    const index = members.indexOf(member)
+    if (index === -1) {
+      continue
+    }
+    if (verdict === 'exited' && member.pid !== anchor) {
+      members.splice(index, 1)
+    } else {
+      const current = { ...member }
+      members[index] = current
+      if (verdict === 'live') {
+        live.add(current)
+      }
+      if (verdict === 'exited') {
+        anchors.add(current)
+      }
+    }
+  }
+  return members.some((member) => live.has(member))
+    ? 'live'
+    : members.every((member) => anchors.has(member))
+      ? 'exited'
+      : 'unknown'
+}
+
+/** A launch owner needs a live, unambiguous identity for this host process. */
+export async function readHostRow(
+  budget: ProviderCleanupBudget,
+  read: typeof readPosixProcessRow
+): Promise<ProviderProcessRow | null> {
+  const boundary = Date.now()
+  const owner = await read(process.pid, process.platform, budget)
+  return !owner ||
+    owner === 'unverifiable' ||
+    owner.zombie ||
+    (owner.startResolution === 'second' && !hasUnambiguousStartTime(owner.startedAt, boundary))
+    ? null
+    : owner
 }

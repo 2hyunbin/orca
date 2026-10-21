@@ -4,7 +4,11 @@ import { z } from 'zod'
 import { getAppEnvironment } from '../../shared/app-environment'
 import type { ProviderCleanupBudget } from './provider-process-exit-deadline'
 import type { ProviderGroupMember } from './provider-process-group'
-import { readPosixProcessRow } from './provider-process-row-read'
+import {
+  readPosixProcessRow,
+  readProviderWriterVerdict,
+  pruneProviderMembers
+} from './provider-process-row-read'
 
 const member = z.object({
   pid: z.number().int().min(2),
@@ -204,10 +208,17 @@ export async function publishProviderEntry(
       entry.groupRetired = true
     }
   }
+  await pruneProviderMembers(
+    entry.members,
+    budget,
+    readPosixProcessRow,
+    entry.groupRetired ? undefined : entry.pgid
+  )
   if (!budget.active) {
     return
   }
   if (entry.groupRetired && !entry.resource) {
+    entry.members.length = 0
     await unlink(path).catch(() => {})
     entries.delete(entry.token)
     return
@@ -260,26 +271,11 @@ export function runProviderRecovery(
 }
 
 export const UNKNOWN_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000
-export async function writerVerdict(
+export function writerVerdict(
   members: readonly ProviderGroupMember[],
   budget: ProviderCleanupBudget
-): Promise<'live' | 'unknown' | 'exited'> {
-  let unknown = false
-  for (const member of members) {
-    if (!budget.active) {
-      return 'unknown'
-    }
-    const row = await readPosixProcessRow(member.pid, process.platform, budget)
-    if (
-      row === 'unverifiable' ||
-      (row && !row.zombie && process.platform === 'darwin' && !member.startedAt.endsWith('Z'))
-    ) {
-      unknown = true
-    } else if (row && !row.zombie && row.startedAt === member.startedAt) {
-      return 'live'
-    }
-  }
-  return unknown ? 'unknown' : 'exited'
+) {
+  return readProviderWriterVerdict(members, budget, readPosixProcessRow)
 }
 
 export function deriveObligation(
@@ -304,5 +300,8 @@ export function deriveObligation(
     entry.groupRetired = true
   } else {
     delete entry.resource
+  }
+  if (entry.groupRetired && !entry.resource) {
+    entry.members.length = 0
   }
 }

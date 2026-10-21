@@ -1,4 +1,4 @@
-import '../provider-process/mock-provider-process-group.test-support'
+import { registerScriptedProviderChild } from '../provider-process/mock-provider-process-group.test-support'
 import {
   completeFakeSpawn,
   createFakePipedChild
@@ -220,7 +220,7 @@ describe('generateCommitMessageFromContext', () => {
 
   it('reports branch changes when pull request field output cannot be parsed', async () => {
     const child = createFakePipedChild(9_999_999)
-    spawnMock.mockReturnValue(child)
+    spawnMock.mockReturnValue(registerScriptedProviderChild(child))
 
     const pullRequest = generatePullRequestFieldsFromContext(
       {

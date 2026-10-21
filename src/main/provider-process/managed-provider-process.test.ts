@@ -278,37 +278,18 @@ describe('managed provider process', () => {
   })
 })
 
-it('keeps a known writer excluded after it moves out of its recorded group', async () => {
-  const fixture = fakeChild()
-  const pid = fixture.child.pid!
+function recordMembers(members: { pid: number; pgid: number; startedAt: string }[]): void {
   vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
     capture: async () => {},
     retire: async () => {},
-    members: () => [{ pid: pid + 1, pgid: pid, startedAt: '2026-10-20T12:00:00.000Z' }]
+    members: () => members
   })
-  const read = vi.spyOn(processRows, 'readPosixProcessRow').mockResolvedValue({
-    pid: pid + 1,
-    ppid: 1,
-    pgid: pid + 1,
-    startedAt: '2026-10-20T12:00:00.000Z',
-    startResolution: 'clock-tick'
-  })
-  const managed = launch(fixture, 'darwin')
-  fixture.child.emit('exit', 0, null)
-  await managed.completion
-  await expect(managed.verifyWriters()).resolves.toBe('live')
-  read.mockResolvedValue(null)
-  await expect(managed.verifyWriters()).resolves.toBe('released')
-})
+}
 
 it('joins natural cleanup after an earlier unproven close before publishing completion', async () => {
   vi.useFakeTimers()
   const fixture = fakeChild()
-  vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
-    capture: async () => {},
-    retire: async () => {},
-    members: () => []
-  })
+  recordMembers([])
   vi.spyOn(groups, 'signalProviderGroup').mockImplementation(() => {})
   vi.spyOn(groups, 'stopRecordedProviderGroup').mockResolvedValue('unverifiable')
   const natural = Promise.withResolvers<DescendantTreeVerdict>()
@@ -335,11 +316,7 @@ it('joins a tree attached while final output drains before publishing completion
   vi.useFakeTimers()
   const fixture = fakeChild()
   fixture.child.removeAllListeners('exit')
-  vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
-    capture: async () => {},
-    retire: async () => {},
-    members: () => []
-  })
+  recordMembers([])
   vi.spyOn(groups, 'signalProviderGroup').mockImplementation(() => {})
   vi.spyOn(groups, 'observeProviderGroup').mockResolvedValue('exited')
   const managed = launch(fixture, 'darwin')
@@ -364,11 +341,7 @@ it('retries qualified cleanup when another pending exit callback starts close be
   const fixture = fakeChild()
   const pid = fixture.child.pid!
   const members = [{ pid, pgid: pid, startedAt: 'original' }]
-  vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
-    capture: async () => {},
-    retire: async () => {},
-    members: () => members
-  })
+  recordMembers(members)
   let current = 'reused'
   let absent = false
   vi.spyOn(processRows, 'readPosixProcessRow').mockImplementation(async () => ({

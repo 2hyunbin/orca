@@ -1,4 +1,4 @@
-import '../provider-process/mock-provider-process-group.test-support'
+import { registerScriptedProviderChild } from '../provider-process/mock-provider-process-group.test-support'
 import { PassThrough } from 'node:stream'
 import { afterEach, expect, it, vi } from 'vitest'
 import {
@@ -16,10 +16,8 @@ it('ends a direct open and reaps its child when initialize never answers', async
   child.stderr = new PassThrough()
   child.stdin = new PassThrough()
   child.stdin.on('finish', () => completeFakeSpawn(child))
-  const opening = openCodexAppServerConnection(
-    { command: 'codex', args: ['app-server'] },
-    {},
-    () => child
+  const opening = openCodexAppServerConnection({ command: 'codex', args: ['app-server'] }, {}, () =>
+    registerScriptedProviderChild(child)
   ).catch((error: unknown) => error)
 
   await vi.advanceTimersByTimeAsync(14_999)

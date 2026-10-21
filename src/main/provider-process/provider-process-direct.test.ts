@@ -56,6 +56,16 @@ async function readWhenWritten(path: string): Promise<string> {
   throw new Error(`fixture did not write ${path}`)
 }
 
+async function expectHomeBlocked(home: string, message: string): Promise<void> {
+  await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(message)
+}
+
+async function expectOtherHomeAvailable(home: string): Promise<void> {
+  await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
+    'other'
+  )
+}
+
 describe.runIf(process.platform !== 'win32')('direct provider ownership', () => {
   it('keeps the actual parent, final output and status while reaping inherited group pipes', async () => {
     const root = await folder()
@@ -213,6 +223,7 @@ it.runIf(process.platform !== 'win32')(
     const root = await folder()
     const writerFile = join(root, 'writer-pid')
     const escapedFile = join(root, 'escaped')
+    const toolFile = join(root, 'tool-pid')
     const python = [
       'import os, sys, time',
       `open(${JSON.stringify(writerFile)}, 'w').write(str(os.getpid()))`,
@@ -230,7 +241,14 @@ it.runIf(process.platform !== 'win32')(
           '-e',
           `
     const writer=require('node:child_process').spawn('/usr/bin/python3',['-c',${JSON.stringify(python)}],{stdio:['pipe','inherit','inherit']});
-    process.stdin.on('data',chunk=>writer.stdin.write(chunk));
+    let tool;
+    process.stdin.on('data',chunk=>{
+      if(String(chunk).trim()==='tool'){
+        tool=require('node:child_process').spawn(process.execPath,['-e','setInterval(()=>{},60000)'],{stdio:'ignore'});
+        require('node:fs').writeFileSync(${JSON.stringify(toolFile)},String(tool.pid));
+      } else if(String(chunk).trim()==='retire') tool.kill('SIGKILL');
+      else writer.stdin.write(chunk);
+    });
     setInterval(()=>{},60000);
   `
         ]
@@ -238,6 +256,7 @@ it.runIf(process.platform !== 'win32')(
       { site: 'escaped-writer-test', resource: { kind: 'codex-home', key: home } }
     )
     children.push(managed.child)
+    const record = recorded.mock.results[0]!.value
     managed.child.stdout.resume()
     const writerPid = Number(await readWhenWritten(writerFile))
     await delay(1_100)
@@ -251,20 +270,40 @@ it.runIf(process.platform !== 'win32')(
     let unavailable = false
     let holding = false
     try {
-      await recorded.mock.results[0]!.value.capture()
-      expect(
-        recorded.mock.results[0]!.value.members().some((member) => member.pid === writerPid)
-      ).toBe(true)
+      await record.capture()
+      expect(record.members().some((member) => member.pid === writerPid)).toBe(true)
+      for (let batch = 0; batch < 2; batch++) {
+        await files.rm(toolFile, { force: true })
+        managed.child.stdin.write('tool\n')
+        const toolPid = Number(await readWhenWritten(toolFile))
+        await delay(1_100)
+        await record.capture()
+        expect(record.members().some((member) => member.pid === toolPid)).toBe(true)
+        managed.child.stdin.write('retire\n')
+        await vi.waitFor(async () =>
+          expect(await processRows.readPosixProcessRow(toolPid)).toBeNull()
+        )
+        await record.capture()
+        expect(
+          record
+            .members()
+            .map((member) => member.pid)
+            .sort()
+        ).toEqual([managed.child.pid, writerPid].sort())
+        const entry = providerLedgerStates().find(
+          ({ entry }) => entry.pgid === managed.child.pid
+        )!.entry
+        const persisted = JSON.parse(
+          await files.readFile(join(entry.directory, `${entry.token}.json`), 'utf8')
+        )
+        expect(persisted.members).toEqual(record.members())
+      }
       managed.child.stdin.write('escape\n')
       await readWhenWritten(escapedFile)
       mkdir.mockImplementationOnce(() => publication.promise.then(() => undefined))
       expect(await managed.close()).toMatchObject({ root: 'exited', tree: 'exited' })
-      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'still using this account home'
-      )
-      await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
-        'other'
-      )
+      await expectHomeBlocked(home, 'still using this account home')
+      await expectOtherHomeAvailable(home)
       vi.spyOn(auth, 'probeCodexAuthPresence').mockResolvedValue('present')
       const fallback = vi.spyOn(backend, 'fetchCodexRateLimitsViaBackend').mockResolvedValue(null)
       const spawn = vi.spyOn(managedProcesses, 'spawnManagedProviderProcess')
@@ -282,9 +321,7 @@ it.runIf(process.platform !== 'win32')(
         const result = await fetchCodexRateLimits({ codexHomePath: home })
         expect(result).toMatchObject({ status: 'error', error })
         expect(spawn).not.toHaveBeenCalled()
-        await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
-          'other'
-        )
+        await expectOtherHomeAvailable(home)
         return result
       }
       await refusal(
@@ -325,6 +362,7 @@ it.runIf(process.platform !== 'win32')(
         )
       )
       await expect(withCodexHomeProcessLock(home, async () => 'safe')).resolves.toBe('safe')
+      expect(record.members()).toEqual([])
       slots.resolve()
       await Promise.all(issued)
       publication.resolve()
@@ -334,7 +372,7 @@ it.runIf(process.platform !== 'win32')(
       publication.resolve()
       slots.resolve()
       await Promise.all(issued)
-      await recorded.mock.results[0]!.value.capture()
+      await record.capture()
       recorded.mockRestore()
       mkdir.mockRestore()
       try {
@@ -414,15 +452,11 @@ it.runIf(process.platform !== 'win32')(
       .spyOn(files, 'readFile')
       .mockRejectedValueOnce(Object.assign(new Error('unreadable'), { code: 'EACCES' }))
     try {
-      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'could not verify'
-      )
+      await expectHomeBlocked(home, 'could not verify')
       read.mockRejectedValueOnce(
         Object.assign(new Error('removed after listing'), { code: 'ENOENT' })
       )
-      await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
-        'other'
-      )
+      await expectOtherHomeAvailable(home)
       setAppEnvironment(saved)
       providerLedgerStates()
       setAppEnvironment(environment)
@@ -434,26 +468,16 @@ it.runIf(process.platform !== 'win32')(
       })
       await ledger.recoverProviderLaunches()
       const published = await realRead(path, 'utf8')
-      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'could not verify'
-      )
+      await expectHomeBlocked(home, 'could not verify')
       expect(await realRead(path, 'utf8')).toBe(published)
       failFinal = false
-      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'still using'
-      )
-      await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
-        'other'
-      )
+      await expectHomeBlocked(home, 'still using')
+      await expectOtherHomeAvailable(home)
       expect(JSON.parse(await realRead(path, 'utf8')).unknownSince.resource).toBeUndefined()
       state = 'unknown'
-      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'could not verify'
-      )
+      await expectHomeBlocked(home, 'could not verify')
       const anchor = JSON.parse(await realRead(path, 'utf8')).unknownSince.resource
-      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
-        'could not verify'
-      )
+      await expectHomeBlocked(home, 'could not verify')
       expect(JSON.parse(await realRead(path, 'utf8')).unknownSince.resource).toBe(anchor)
       state = 'zombie'
       await expect(withCodexHomeProcessLock(home, async () => 'safe')).resolves.toBe('safe')

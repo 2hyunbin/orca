@@ -1,21 +1,22 @@
+import { registerScriptedProviderChild } from '../provider-process/mock-provider-process-group.test-support'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
-import type * as ChildProcessModule from 'node:child_process'
 import type * as ProcessHostModule from '@orca/process-host'
-import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
 import type { ProcessSpec } from '@orca/process-host/process-spec'
 import { readPosixProcessRow } from '../provider-process/provider-process-row-read'
-import { recordProviderLaunch } from '../provider-process/provider-process-ledger'
+import * as ledger from '../provider-process/provider-process-ledger'
 import * as files from 'node:fs/promises'
 import * as backend from './codex-backend-usage-client'
-import { getAppEnvironment, setAppEnvironment } from '../../shared/app-environment'
-import { join } from 'node:path'
-import { PassThrough } from 'node:stream'
+import { getAppEnvironment } from '../../shared/app-environment'
+import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
 import { EventEmitter } from 'node:events'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 
-const { childSpawnMock, readFileMock, resolveCodexCommandMock, ptySpawnMock } = vi.hoisted(() => ({
+vi.mock('node:fs/promises', async (original) => ({
+  ...(await original<typeof files>())
+}))
+
+const { childSpawnMock, resolveCodexCommandMock, ptySpawnMock } = vi.hoisted(() => ({
   childSpawnMock: vi.fn(),
-  readFileMock: vi.fn(),
   resolveCodexCommandMock: vi.fn(),
   ptySpawnMock: vi.fn()
 }))
@@ -26,19 +27,9 @@ vi.mock(
   () =>
     import('../worker-thread-child-process/worker-thread-child-process-in-process.test-fixtures')
 )
-vi.mock('node:child_process', async (original) => ({
-  ...(await original<typeof ChildProcessModule>()),
-  spawn: childSpawnMock
-}))
-
 // The recovery's supervised stop imports the process-table reader, which needs the real execFile.
 vi.mock('../codex/codex-state-db-backfill-recovery', () => ({
   startCodexStateDbBackfillRecoveryInBackground: vi.fn()
-}))
-
-vi.mock('node:fs/promises', async (original) => ({
-  ...(await original<typeof files>()),
-  readFile: readFileMock
 }))
 
 vi.mock('../codex-cli/command', () => ({
@@ -54,39 +45,40 @@ vi.mock('./codex-auth-presence', () => ({
   probeCodexAuthPresence: vi.fn(() => 'present')
 }))
 
-import { fetchCodexRateLimits } from './codex-fetcher'
+import { fetchCodexRateLimits as fetch } from './codex-fetcher'
+const fetchCodexRateLimits = (options?: Parameters<typeof fetch>[0]) =>
+  fetch({ codexHomePath: getAppEnvironment().getPath('userData'), ...options })
 import { probeCodexAuthPresence } from './codex-auth-presence'
 
 function makeRpcChild() {
-  type RpcChild = EventEmitter & {
-    pid: number
-    stdout: PassThrough
-    stderr: PassThrough
-    stdin: EventEmitter & { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> }
-    kill: ReturnType<typeof vi.fn>
-    exitCode: number | null
-  }
-  // Why: like the real app-server, the fake dies on stdin EOF or a signal —
-  // the graceful shutdown path resolves only once the child reports exit.
+  const child = Object.assign(createFakePipedChild(9_999_999), {
+    stdin: Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn() }),
+    kill: vi.fn(() => true)
+  })
+  child.exitCode = null
+  // EOF and a signal both report an actual scripted exit.
   const exitNow = (): void => {
     child.exitCode = 0
     child.emit('exit', 0, null)
   }
-  const stdin = Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn(exitNow) })
-  const kill = vi.fn(() => {
+  child.stdin.end.mockImplementation(exitNow)
+  child.kill.mockImplementation(() => {
     exitNow()
     return true
   })
-  const child: RpcChild = Object.assign(new EventEmitter(), {
-    pid: 9_999_999,
-    stdout: new PassThrough(),
-    stderr: new PassThrough(),
-    stdin,
-    kill,
-    exitCode: null
-  })
   child.once('exit', (code, signal) => child.emit('close', code, signal))
   return child
+}
+
+// Flush real inventory I/O without advancing the fake deadline clock.
+async function atCurrentTime(assertion: () => unknown, ms = 0): Promise<void> {
+  await vi.advanceTimersByTimeAsync(ms)
+  await vi.waitFor(assertion, { interval: 0 })
+}
+
+async function initialized(child: ReturnType<typeof makeRpcChild>): Promise<void> {
+  await atCurrentTime(() => expect(child.stdin.write).toHaveBeenCalled())
+  await vi.advanceTimersByTimeAsync(0)
 }
 
 function respondToRpcRateLimitRead(
@@ -120,55 +112,20 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     vi.clearAllMocks()
     resolveCodexCommandMock.mockReturnValue('codex')
     vi.mocked(probeCodexAuthPresence).mockResolvedValue('present')
-    readFileMock.mockRejectedValue(new Error('no auth fixture'))
     vi.stubGlobal('fetch', vi.fn())
-    vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-      if (pid !== -9_999_999) {
-        throw new Error(`Unexpected fixture signal: ${pid}`)
-      }
-      const child = childSpawnMock.mock.results.at(-1)?.value
-      if (!child || child.exitCode !== null) {
-        throw Object.assign(new Error('gone'), { code: 'ESRCH' })
-      }
-      if (signal !== 0) {
-        child.kill(signal)
-      }
-      return true
-    })
-    vi.mocked(readPosixProcessRow).mockImplementation(async () => {
-      const child = childSpawnMock.mock.results.at(-1)?.value
-      return child?.exitCode === null
-        ? {
-            pid: 9_999_999,
-            pgid: 9_999_999,
-            ppid: process.pid,
-            startedAt: 'fixture-start',
-            startResolution: 'clock-tick'
-          }
-        : null
-    })
   })
 
   afterEach(() => {
     vi.useRealTimers()
-    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
   it.each([false, true])(
     'reports unavailable verification with backend fallback=%s',
     async (succeeds) => {
-      const saved = getAppEnvironment()
-      setAppEnvironment({
-        ...saved,
-        getPath: (key) =>
-          key === 'userData'
-            ? join(saved.getPath(key), `unavailable-${succeeds}`)
-            : saved.getPath(key)
-      })
-      const inventory = vi
-        .spyOn(files, 'readdir')
-        .mockRejectedValue(Object.assign(new Error('inventory denied'), { code: 'EACCES' }))
+      vi.spyOn(files, 'readdir').mockRejectedValue(
+        Object.assign(new Error('inventory denied'), { code: 'EACCES' })
+      )
       const fallback = {
         provider: 'codex',
         status: 'ok',
@@ -180,21 +137,16 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       vi.spyOn(backend, 'fetchCodexRateLimitsViaBackend').mockResolvedValue(
         succeeds ? fallback : null
       )
-      try {
-        const result = await fetchCodexRateLimits()
-        expect(result).toMatchObject(
-          succeeds
-            ? fallback
-            : {
-                status: 'error',
-                error: 'Orca could not verify previous Codex processes. Try again.'
-              }
-        )
-        expect(childSpawnMock).not.toHaveBeenCalled()
-      } finally {
-        inventory.mockRestore()
-        setAppEnvironment(saved)
-      }
+      const result = await fetchCodexRateLimits()
+      expect(result).toMatchObject(
+        succeeds
+          ? fallback
+          : {
+              status: 'error',
+              error: 'Orca could not verify previous Codex processes. Try again.'
+            }
+      )
+      expect(childSpawnMock).not.toHaveBeenCalled()
     }
   )
 
@@ -232,7 +184,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     })
 
     const resultPromise = fetchCodexRateLimits()
-    await vi.waitFor(() => expect(childSpawnMock).toHaveBeenCalledOnce())
+    await initialized(rpcChild)
     await vi.advanceTimersByTimeAsync(19_999)
     expect(rpcChild.kill).not.toHaveBeenCalled()
 
@@ -273,19 +225,17 @@ describe('fetchCodexRateLimits probe shutdown', () => {
 
     try {
       const resultPromise = fetchCodexRateLimits()
-      await vi.advanceTimersByTimeAsync(0)
+      await initialized(rpcChild)
       await vi.advanceTimersByTimeAsync(9_999)
       expect(rpcChild.kill).not.toHaveBeenCalled()
 
       await vi.advanceTimersByTimeAsync(1)
       expect(rpcChild.stdin.end).toHaveBeenCalledTimes(1)
       expect(rpcChild.kill).not.toHaveBeenCalled()
-      await vi.advanceTimersByTimeAsync(1_000)
-      expect(rpcChild.kill).toHaveBeenCalledWith('SIGTERM')
+      await atCurrentTime(() => expect(rpcChild.kill).toHaveBeenCalledWith('SIGTERM'), 1_000)
       expect(rpcChild.kill).not.toHaveBeenCalledWith('SIGKILL')
 
-      await vi.advanceTimersByTimeAsync(3_000)
-      expect(rpcChild.kill).toHaveBeenCalledWith('SIGKILL')
+      await atCurrentTime(() => expect(rpcChild.kill).toHaveBeenCalledWith('SIGKILL'), 3_000)
       await expect(resultPromise).resolves.toMatchObject({
         status: 'error',
         error: 'RPC timeout'
@@ -307,7 +257,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     const first = fetchCodexRateLimits({
       codexHomePath: '/managed/home-a'
     })
-    await vi.advanceTimersByTimeAsync(0)
+    await initialized(firstChild)
     const second = fetchCodexRateLimits({
       codexHomePath: '/managed/home-a'
     })
@@ -319,8 +269,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     firstChild.emit('close', 0, null)
     await vi.advanceTimersByTimeAsync(1)
     await vi.advanceTimersByTimeAsync(1)
-    await vi.advanceTimersByTimeAsync(1)
-    expect(childSpawnMock).toHaveBeenCalledTimes(2)
+    await atCurrentTime(() => expect(childSpawnMock).toHaveBeenCalledTimes(2), 1)
     await expect(second).resolves.toMatchObject({ status: 'ok' })
     await first
   })
@@ -336,7 +285,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     otherChild.pid = 9_999_993
     firstChild.stdin.end = vi.fn()
     const writer = { pid: 9_999_990, pgid: firstChild.pid, startedAt: 'captured-writer' }
-    vi.mocked(recordProviderLaunch).mockReturnValueOnce({
+    vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValueOnce({
       capture: async () => {},
       retire: async () => {},
       members: () => [writer]
@@ -347,10 +296,11 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     vi.spyOn(group, 'observeProviderGroup').mockImplementation(async (pid) =>
       pid === firstChild.pid ? gate.promise : 'exited'
     )
-    vi.mocked(readPosixProcessRow).mockImplementation(async (pid) =>
-      pid === writer.pid && writerLive
-        ? { ...writer, ppid: 1, startResolution: 'clock-tick' }
-        : null
+    const read = vi.mocked(readPosixProcessRow).getMockImplementation()!
+    vi.mocked(readPosixProcessRow).mockImplementation((pid, ...args) =>
+      pid === writer.pid
+        ? Promise.resolve(writerLive ? { ...writer, ppid: 1, startResolution: 'clock-tick' } : null)
+        : read(pid, ...args)
     )
     childSpawnMock
       .mockReturnValueOnce(firstChild)
@@ -358,17 +308,25 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       .mockReturnValueOnce(nextChild)
     respondToRpcRateLimitRead(otherChild, { primary: { usedPercent: 3 } })
     respondToRpcRateLimitRead(nextChild, { primary: { usedPercent: 4 } })
+    const pending: Promise<unknown>[] = []
+    const controller = new AbortController()
+    const home = '/managed/early-close'
+    const request = (codexHomePath = home) => {
+      const result = fetchCodexRateLimits({ codexHomePath, signal: controller.signal })
+      pending.push(result)
+      return result
+    }
     try {
-      const first = fetchCodexRateLimits({ codexHomePath: '/managed/early-close' })
-      await vi.advanceTimersByTimeAsync(0)
+      const first = request()
+      await initialized(firstChild)
       firstChild.exitCode = 1
       firstChild.emit('exit', 1, null)
       await vi.advanceTimersByTimeAsync(0)
       await expect(first).resolves.toMatchObject({ status: 'error' })
-      const same = fetchCodexRateLimits({ codexHomePath: '/managed/early-close' })
-      const other = fetchCodexRateLimits({ codexHomePath: '/managed/early-close-other' })
-      await vi.advanceTimersByTimeAsync(1)
-      expect(childSpawnMock).toHaveBeenCalledTimes(2)
+      const same = request()
+      const other = request(`${home}-other`)
+      await initialized(otherChild)
+      await atCurrentTime(() => expect(childSpawnMock).toHaveBeenCalledTimes(2), 1)
       await expect(other).resolves.toMatchObject({ status: 'ok' })
       writerLive = false
       gate.resolve('exited')
@@ -376,7 +334,18 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       await expect(same).resolves.toMatchObject({ status: 'ok' })
       expect(childSpawnMock).toHaveBeenCalledTimes(3)
     } finally {
+      writerLive = false
       gate.resolve('exited')
+      controller.abort()
+      for (const child of [firstChild, otherChild, nextChild]) {
+        if (child.exitCode === null) {
+          child.kill('SIGKILL')
+        }
+      }
+      await vi.runAllTimersAsync()
+      vi.useRealTimers()
+      await Promise.allSettled(pending)
+      vi.mocked(readPosixProcessRow).mockImplementation(read)
       Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
     }
   })
@@ -404,7 +373,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       const first = fetchCodexRateLimits({
         codexHomePath: '/managed/home-error'
       })
-      await vi.advanceTimersByTimeAsync(0)
+      await initialized(firstChild)
       firstChild.emit('error', new Error('stdio failed'))
       const second = fetchCodexRateLimits({
         codexHomePath: '/managed/home-error'
@@ -413,9 +382,9 @@ describe('fetchCodexRateLimits probe shutdown', () => {
 
       expect(firstChild.stdin.end).toHaveBeenCalledOnce()
       expect(childSpawnMock).toHaveBeenCalledTimes(1)
-      await vi.advanceTimersByTimeAsync(4_000)
-      expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL')
-      expect(childSpawnMock).toHaveBeenCalledTimes(2)
+      await atCurrentTime(() => expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM'), 1_000)
+      await atCurrentTime(() => expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL'), 3_000)
+      await atCurrentTime(() => expect(childSpawnMock).toHaveBeenCalledTimes(2))
       await vi.advanceTimersByTimeAsync(1)
       await vi.advanceTimersByTimeAsync(1)
       await expect(first).resolves.toMatchObject({ status: 'error', error: 'stdio failed' })
@@ -469,19 +438,18 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       const first = fetchCodexRateLimits({
         codexHomePath: home
       })
-      await vi.advanceTimersByTimeAsync(0)
+      await initialized(firstChild)
       expect(firstChild.stdin.end).toHaveBeenCalledOnce()
 
       const second = fetchCodexRateLimits({
         codexHomePath: home
       })
-      await vi.advanceTimersByTimeAsync(3_999)
+      await atCurrentTime(() => expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM'), 1_000)
+      await vi.advanceTimersByTimeAsync(2_999)
       expect(childSpawnMock).toHaveBeenCalledTimes(1)
 
-      await vi.advanceTimersByTimeAsync(1)
-      expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL')
-      await vi.advanceTimersByTimeAsync(1)
-      expect(childSpawnMock).toHaveBeenCalledTimes(2)
+      await atCurrentTime(() => expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL'), 1)
+      await atCurrentTime(() => expect(childSpawnMock).toHaveBeenCalledTimes(2), 1)
       await vi.advanceTimersByTimeAsync(1)
       await expect(first).resolves.toMatchObject({
         status: 'error',
@@ -516,18 +484,17 @@ describe('fetchCodexRateLimits probe shutdown', () => {
       const first = fetchCodexRateLimits({
         codexHomePath: '/managed/home-async-stdin-error'
       })
-      await vi.advanceTimersByTimeAsync(0)
+      await initialized(firstChild)
       firstChild.stdin.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
       const second = fetchCodexRateLimits({
         codexHomePath: '/managed/home-async-stdin-error'
       })
 
-      await vi.advanceTimersByTimeAsync(3_999)
+      await atCurrentTime(() => expect(firstChild.kill).toHaveBeenCalledWith('SIGTERM'), 1_000)
+      await vi.advanceTimersByTimeAsync(2_999)
       expect(childSpawnMock).toHaveBeenCalledTimes(1)
-      await vi.advanceTimersByTimeAsync(1)
-      expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL')
-      await vi.advanceTimersByTimeAsync(1)
-      expect(childSpawnMock).toHaveBeenCalledTimes(2)
+      await atCurrentTime(() => expect(firstChild.kill).toHaveBeenCalledWith('SIGKILL'), 1)
+      await atCurrentTime(() => expect(childSpawnMock).toHaveBeenCalledTimes(2), 1)
       await vi.advanceTimersByTimeAsync(1)
       await expect(first).resolves.toMatchObject({ status: 'error', error: 'write EPIPE' })
       await expect(second).resolves.toMatchObject({ status: 'ok' })
@@ -537,21 +504,16 @@ describe('fetchCodexRateLimits probe shutdown', () => {
   })
 })
 
-vi.mock('@orca/process-host', async (original) => ({
-  ...(await original<typeof ProcessHostModule>()),
-  spawnProcess: (spec: ProcessSpec) => childSpawnMock(spec.program, spec.args ?? [], spec)
-}))
-
-vi.mock('../provider-process/provider-process-ledger', async (original) => ({
-  ...(await original<typeof ProviderLedgerModule>()),
-  recordProviderLaunch: vi.fn(() => ({
-    capture: async () => {},
-    retire: async () => {},
-    members: () => [{ pid: 9_999_999, pgid: 9_999_999, startedAt: 'fixture-start' }]
-  }))
-}))
-
-vi.mock('../provider-process/provider-process-row-read', () => ({ readPosixProcessRow: vi.fn() }))
+vi.mock('@orca/process-host', async (original) => {
+  const actual = await original<typeof ProcessHostModule>()
+  return {
+    ...actual,
+    spawnProcess: (spec: ProcessSpec) =>
+      spec.program === 'codex'
+        ? registerScriptedProviderChild(childSpawnMock(spec.program, spec.args ?? [], spec))
+        : actual.spawnProcess(spec)
+  }
+})
 
 vi.mock('node:timers/promises', () => ({
   setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))

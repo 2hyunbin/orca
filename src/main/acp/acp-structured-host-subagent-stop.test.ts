@@ -1,4 +1,5 @@
-import '../provider-process/mock-provider-process-group.test-support'
+import * as managedProcesses from '../provider-process/managed-provider-process'
+import { registerScriptedProviderChild } from '../provider-process/mock-provider-process-group.test-support'
 import {
   completeFakeSpawn,
   createFakePipedChild
@@ -42,6 +43,7 @@ const EXIT_AFTER_STOP_MS = 2373
 const timestamp = z.object({ _meta: z.object({ agentTimestampMs: z.number() }) })
 
 async function stoppingChild(reportsOutcome: boolean) {
+  const managed = vi.spyOn(managedProcesses, 'spawnManagedProviderProcess')
   const agent = new AcpScriptedAgent()
   const stderr = new PassThrough()
   const child = Object.assign(createFakePipedChild(9_999_999), {
@@ -50,7 +52,7 @@ async function stoppingChild(reportsOutcome: boolean) {
     stderr,
     stdio: [agent.stdin, agent.stdout, stderr, null, null] satisfies PipedChildProcess['stdio']
   })
-  const spawn = vi.fn<PipedProcessSpawner>(() => child)
+  const spawn = vi.fn<PipedProcessSpawner>(() => registerScriptedProviderChild(child))
   teardown.mockImplementation(async () => {
     completeFakeSpawn(child)
     return 'exited'
@@ -119,7 +121,8 @@ async function stoppingChild(reportsOutcome: boolean) {
     setTimeout(() => completeFakeSpawn(child), EXIT_AFTER_STOP_MS)
   })
   expect(await stop(hosted.host)).toMatchObject({ ok: true, value: { cancelled: true } })
-  return { ...hosted, child, agent, original, rosters, finished, closeAt, childWork }
+  const completion = managed.mock.results[0]!.value.completion
+  return { ...hosted, child, agent, original, rosters, finished, closeAt, childWork, completion }
 }
 
 describe('Grok child outcome during a full host Stop', () => {
@@ -155,6 +158,7 @@ describe('Grok child outcome during a full host Stop', () => {
   it('leaves the child unverifiable when shutdown supplies no authoritative outcome', async () => {
     const fixture = await stoppingChild(false)
     await vi.advanceTimersByTimeAsync(EXIT_AFTER_STOP_MS)
+    await fixture.completion
     const [unavailable] = await fixture.rosters()
     expect(fixture.childWork.views()).toMatchObject([{ membership: 'settled', outcome: 'unknown' }])
     expect(unavailable.row.itemId).toBe(fixture.original.row.itemId)

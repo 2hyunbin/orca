@@ -1,10 +1,9 @@
 export type { ProviderLaunchRecord } from './provider-process-inventory'
 export { hasRecordedProviderLaunch } from './provider-process-group'
 import { randomUUID } from 'node:crypto'
-import { hasUnambiguousStartTime } from '../pty-descendant-termination'
 import { join } from 'node:path'
 import { ProviderCleanupBudget } from './provider-process-exit-deadline'
-import { readPosixProcessRow } from './provider-process-row-read'
+import { readPosixProcessRow, readHostRow, pruneProviderMembers } from './provider-process-row-read'
 import {
   captureProviderGroup,
   stopRecordedProviderGroup,
@@ -189,26 +188,21 @@ export function recordProviderLaunch(
   resource?: ProviderResource
 ): ProviderLaunchRecord {
   const token = randomUUID()
-  let members: ProviderGroupMember[] = []
+  const members: ProviderGroupMember[] = []
   let state: ProviderLedgerState | undefined
   let retired = false
   let released = false
   let unknownSince: number | undefined
-  let tail = Promise.resolve()
   const uncaptured: Pick<ProviderLedgerState, 'tail' | 'flight'> = { tail: Promise.resolve() }
-  const enqueue = (action: () => Promise<void>): Promise<void> => {
-    tail = tail
-      .then(action)
-      .catch((error: unknown) =>
-        console.warn('[provider-process] ownership recording failed', error)
-      )
-    return tail
-  }
+  const enqueue = (action: () => Promise<void>) => serializeProviderEntry(uncaptured, action)
+  const verifyMembers = (budget: ProviderCleanupBudget) =>
+    pruneProviderMembers(members, budget, readPosixProcessRow, retired ? undefined : pgid)
   const capture = (budget = new ProviderCleanupBudget(Date.now() + 2_000)): Promise<void> =>
     enqueue(async () => {
       if (retired || !budget.active) {
         return
       }
+      await verifyMembers(budget)
       const observed = await captureProviderGroup(pgid, true, budget)
       if (retired || !budget.active) {
         return
@@ -218,21 +212,18 @@ export function recordProviderLaunch(
         return
       }
       for (const row of observed) {
-        if (!members.some((old) => old.pid === row.pid && old.startedAt === row.startedAt)) {
+        const old = members.find((old) => old.pid === row.pid && old.startedAt === row.startedAt)
+        if (old) {
+          members[members.indexOf(old)] = { ...old }
+        } else {
           members.push(row)
         }
       }
       if (!members.length) {
         return
       }
-      const boundary = Date.now()
-      const owner = await readPosixProcessRow(process.pid, process.platform, budget)
-      if (
-        !owner ||
-        owner === 'unverifiable' ||
-        owner.zombie ||
-        (owner.startResolution === 'second' && !hasUnambiguousStartTime(owner.startedAt, boundary))
-      ) {
+      const owner = await readHostRow(budget, readPosixProcessRow)
+      if (!owner) {
         return
       }
       state ??= installProviderLedgerEntry(
@@ -262,7 +253,7 @@ export function recordProviderLaunch(
   return {
     capture,
     async verifyResource(budget) {
-      const verdict = await writerVerdict(members, budget)
+      const verdict = await verifyMembers(budget)
       if (!budget.active) {
         return 'unknown'
       }
@@ -282,6 +273,9 @@ export function recordProviderLaunch(
           return 'unknown'
         }
         console.warn('[provider-process] abandoning unpersisted unknown resource obligation', token)
+        if (retired) {
+          members.length = 0
+        }
         return 'released'
       }
       return verdict === 'exited' ? 'released' : 'live'
@@ -293,15 +287,21 @@ export function recordProviderLaunch(
     retire: () => {
       retired = true
       const current = state
-      if (!current) {
-        return Promise.resolve()
+      if (current) {
+        current.entry.groupRetired = true
       }
-      current.entry.groupRetired = true
-      return enqueue(() =>
-        serializeProviderEntry(current, () =>
-          publishProviderEntry(current, new ProviderCleanupBudget())
-        )
-      )
+      return verifyMembers(new ProviderCleanupBudget()).then(() => {
+        if (!resource || released) {
+          members.length = 0
+        }
+        return current
+          ? enqueue(() =>
+              serializeProviderEntry(current, () =>
+                publishProviderEntry(current, new ProviderCleanupBudget())
+              )
+            )
+          : undefined
+      })
     }
   }
 }
