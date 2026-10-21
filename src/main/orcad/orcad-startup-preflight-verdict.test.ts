@@ -45,6 +45,7 @@ const runtime = (overrides: Partial<StartupPreflightRuntime> = {}): StartupPrefl
   arch: 'x64',
   osRelease: '25.3.0',
   tempDirectory: temp,
+  libraryCache: join(slot, 'ld.so.cache'),
   ...overrides
 })
 
@@ -149,15 +150,31 @@ describe('startup preflight fingerprint', () => {
     ).toBeNull()
   })
 
-  it.runIf(process.platform !== 'linux')(
-    'is null on Linux without a shared-library cache: unknown means probe',
-    async () => {
-      // This host has no /etc/ld.so.cache, as on musl; a Linux runtime must not treat it as unchanged.
-      expect(
-        await computeStartupPreflightFingerprint(slot, runtime({ platform: 'linux' }))
-      ).toBeNull()
-    }
-  )
+  it('ignores files appearing in the temp directory, as the probe’s own database does', async () => {
+    const before = await computeStartupPreflightFingerprint(slot, runtime())
+    writeFileSync(join(temp, 'orca-profile-preflight-x'), 'scratch')
+    expect(await computeStartupPreflightFingerprint(slot, runtime())).toBe(before)
+  })
+
+  it('on Linux, keys the library cache by content: a boot-time rewrite keeps the verdict', async () => {
+    const cache = join(slot, 'ld.so.cache')
+    writeFileSync(cache, 'libs-v1')
+    const linux = runtime({ platform: 'linux' })
+    const before = await computeStartupPreflightFingerprint(slot, linux)
+    expect(before).not.toBeNull()
+    // WSL regenerates the cache on every boot: same bytes, new mtime.
+    utimesSync(cache, new Date(), new Date(Date.now() + 60_000))
+    writeFileSync(cache, 'libs-v1')
+    expect(await computeStartupPreflightFingerprint(slot, linux)).toBe(before)
+    writeFileSync(cache, 'libs-v2')
+    expect(await computeStartupPreflightFingerprint(slot, linux)).not.toBe(before)
+  })
+
+  it('is null on Linux without a shared-library cache: unknown means probe', async () => {
+    expect(
+      await computeStartupPreflightFingerprint(slot, runtime({ platform: 'linux' }))
+    ).toBeNull()
+  })
 })
 
 describe('startup preflight verdict file', () => {
@@ -168,9 +185,9 @@ describe('startup preflight verdict file', () => {
       runtimeVersion: '24.21.0'
     }
     await writeStartupPreflightVerdict(verdictPath, verdict)
-    expect(await readStartupPreflightVerdict(verdictPath)).toEqual({ format: 2, ...verdict })
+    expect(await readStartupPreflightVerdict(verdictPath)).toEqual({ format: 3, ...verdict })
     expect(readdirSync(slot).filter((name) => name.endsWith('.tmp'))).toEqual([])
-    writeFileSync(verdictPath, JSON.stringify({ ...verdict, format: 1 }))
+    writeFileSync(verdictPath, JSON.stringify({ ...verdict, format: 2 }))
     expect(await readStartupPreflightVerdict(verdictPath)).toBeNull()
     writeFileSync(verdictPath, 'not json')
     expect(await readStartupPreflightVerdict(verdictPath)).toBeNull()

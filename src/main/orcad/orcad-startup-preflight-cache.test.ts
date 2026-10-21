@@ -59,7 +59,7 @@ function readyResult(nonce: string | undefined): ProcessResult {
 
 function matchingVerdict() {
   return {
-    format: 2,
+    format: 3,
     fingerprint,
     artifactVersion: identity,
     runtimeVersion: NODE_RUNTIME_PIN.version

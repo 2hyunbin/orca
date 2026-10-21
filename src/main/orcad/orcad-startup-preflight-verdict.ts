@@ -22,8 +22,7 @@ import { resolveBundledOrcadSlot } from './orcad-bundled-runtime'
 
 export const ORCAD_STARTUP_PREFLIGHT_VERDICT_FILENAME = '.orcad-startup-preflight.json'
 // Bump whenever the preflight or the fingerprint gains a check, so old verdicts stop matching.
-const VERDICT_FORMAT = 2
-const LINUX_LIBRARY_CACHE = '/etc/ld.so.cache'
+const VERDICT_FORMAT = 3
 const PENDING_SUFFIX = '.pending'
 // Identifies this process's skip claim, so it never settles or clears another start's.
 const START_TOKEN = randomUUID()
@@ -44,6 +43,8 @@ export type StartupPreflightRuntime = {
   arch: string
   osRelease: string
   tempDirectory: string
+  /** Linux only. */
+  libraryCache: string
 }
 
 function currentRuntime(): StartupPreflightRuntime {
@@ -53,7 +54,8 @@ function currentRuntime(): StartupPreflightRuntime {
     platform: process.platform,
     arch: process.arch,
     osRelease: release(),
-    tempDirectory: tmpdir()
+    tempDirectory: tmpdir(),
+    libraryCache: '/etc/ld.so.cache'
   }
 }
 
@@ -93,11 +95,14 @@ export async function computeStartupPreflightFingerprint(
     // An OS update can change the libraries native modules load on any platform.
     parts.push(`os:${runtime.osRelease}`)
     // The probe writes its disposable database here; an unwritable temp directory must re-probe.
+    // Not its mtime: every file created in it, the probe's own included, changes that.
     await access(runtime.tempDirectory, constants.W_OK)
-    parts.push(await statPart(`tmp:${runtime.tempDirectory}`, runtime.tempDirectory))
+    const temp = await stat(runtime.tempDirectory)
+    parts.push(`tmp:${runtime.tempDirectory}:${temp.ino}:${temp.dev}`)
     if (runtime.platform === 'linux') {
-      // Absent (musl, unusual layouts) is unknown, not "unchanged": those hosts probe every start.
-      parts.push(await statPart('ld.so.cache', LINUX_LIBRARY_CACHE))
+      // Contents, not stat: WSL rewrites this cache on every boot. Absent (musl) is unknown: probe.
+      const cache = await readFile(runtime.libraryCache)
+      parts.push(`ld.so.cache:${createHash('sha256').update(cache).digest('hex')}`)
     }
     return createHash('sha256').update(parts.join('\n')).digest('hex')
   } catch {
