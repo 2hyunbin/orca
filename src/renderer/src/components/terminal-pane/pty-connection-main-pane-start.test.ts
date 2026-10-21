@@ -216,25 +216,11 @@ describe('a pane main is starting a terminal for', () => {
     expect((await mainLayoutApplyTransport()).sentOfType('startPane')).toEqual([])
   })
 
-  it('holds a held pane, and attaches only after its reopen asks main', async () => {
-    const { newerDaemonHoldStore, reopenHeldTerminals } = await import('./newer-daemon-hold-state')
-    await mainStartsPaneAs({ ptyId: 'pty-main', bind: startLeaf1 })
+  it("connects a held pane as today, so main's refusal holds it", async () => {
     const { transport } = await connectWithStart({ status: 'held' })
 
-    expect(newerDaemonHoldStore.getState().panes[PANE_KEY]).toBeDefined()
-    expect(transport.connect).not.toHaveBeenCalled()
+    expect(transport.connect.mock.calls.length + transport.attach.mock.calls.length).toBe(1)
     expect((await mainLayoutApplyTransport()).sentOfType('startPane')).toEqual([])
-
-    // Main's start ends the hold's status as it binds the pane.
-    setStore({ terminalPaneStartsByPaneKey: {} })
-    await reopenHeldTerminals()
-    await flushAsyncTicks()
-
-    await expectWindowStartAskedMain(transport, PANE_KEY)
-    expect(transport.connect).toHaveBeenCalledTimes(1)
-    expect(transport.connect).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'pty-main', attachOnlyView: true })
-    )
   })
 
   it('starts a pane with no start from main as before', async () => {

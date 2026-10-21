@@ -8,8 +8,6 @@ import { parsePaneKey } from '../../../../../shared/stable-pane-id'
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
 import { adoptMainBinding, waitsForMainPaneStart } from './main-pane-start-wait'
 import { startDeferredSessionReattach } from './deferred-session-reattach-connect'
-import { holdForNewerDaemon } from './newer-daemon-hold-pane'
-import type { HeldPaneReopenOutcome } from '../newer-daemon-hold-state'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
@@ -102,6 +100,8 @@ export function startPaneThroughMainThenAttach(
         const ptyId = session.deps.restoredPtyIdByLeafId?.[session.pane.leafId] ?? null
         if (ptyId) {
           session.mainStartAttachPending = true
+          // Main started a fresh terminal: follow its output, as a window start does.
+          session.resetFreshSpawnFollowOutput()
           startDeferredSessionReattach(session, ptyId)
         }
         resolve(ptyId)
@@ -115,13 +115,10 @@ export function startPaneThroughMainThenAttach(
   })
 }
 
-/** Main's restore statuses that need a view to start the pane: its first view is the wake. */
-const RESTORE_FROM_STATUSES = new Set(['sleeping', 'held'])
-
 /**
  * Layout-owner build, at connect: whether main's start of the pane (under way, or one this view
  * asks for) stands in for the window's own. A sleeping pane is started on its first view; a held
- * pane shows today's held screen and starts once the user reopens it. `connect` attaches after.
+ * pane attaches as today, and main's refusal holds it. `connect` attaches after.
  */
 export function defersToMainPaneStart(
   session: ConnectPanePtySession,
@@ -133,16 +130,8 @@ export function defersToMainPaneStart(
   if (!mainStartsPane(session) || session.mainPaneStartHandedBack) {
     return false
   }
-  const start = useAppStore.getState().terminalPaneStartsByPaneKey[session.cacheKey]
-  if (!start || !RESTORE_FROM_STATUSES.has(start.status)) {
+  if (useAppStore.getState().terminalPaneStartsByPaneKey[session.cacheKey]?.status !== 'sleeping') {
     return false
-  }
-  if (start.status === 'held') {
-    const boundPtyId = session.deps.restoredPtyIdByLeafId?.[session.pane.leafId]
-    holdForNewerDaemon(session, boundPtyId ?? session.cacheKey, () =>
-      startHeldPaneThroughMain(session, connect)
-    )
-    return true
   }
   const startOnView = (): void => {
     session.mainPaneStartOnReveal = null
@@ -161,24 +150,4 @@ export function defersToMainPaneStart(
     session.mainPaneStartOnReveal = startOnView
   }
   return true
-}
-
-/** A held pane's reopen: main starts it, and the outcome says whether it came back. */
-function startHeldPaneThroughMain(
-  session: ConnectPanePtySession,
-  connect: () => void
-): Promise<HeldPaneReopenOutcome> {
-  const agentResumed = Boolean(session.buildColdRestoreAgentResumeStartup())
-  return new Promise((resolve) => {
-    const sent = startPaneThroughMain(session, {
-      attach: () => {
-        connect()
-        resolve({ reopened: true, agentResumed })
-      },
-      refused: () => resolve({ reopened: false, agentResumed: false })
-    })
-    if (!sent) {
-      resolve({ reopened: false, agentResumed: false })
-    }
-  })
 }

@@ -79,7 +79,8 @@ function connectDeferredSessionReattach(
   let heldByNewerDaemon = false
   // Why: main started this pane's agent; the window's attach never resumes it a second time.
   const attachOnlyView = mainStartsPane(session)
-  const coldRestoreStartup = attachOnlyView ? null : session.buildColdRestoreAgentResumeStartup()
+  const resumeStartup = session.buildColdRestoreAgentResumeStartup()
+  const coldRestoreStartup = attachOnlyView ? null : resumeStartup
   const outputCallbacks = session.captureTransportOutputCallbacks(
     (message) => {
       if (isSshSessionGoneError(message)) {
@@ -100,7 +101,8 @@ function connectDeferredSessionReattach(
       }
       session.reportError(message)
     },
-    toProcessExitStartup(coldRestoreStartup ?? session.paneStartup)
+    // Why the resume even under main: it is what main ran, so a capacity retry resumes it again.
+    toProcessExitStartup(resumeStartup ?? session.paneStartup)
   )
   session.beginReattachLiveDataDeferral(outputCallbacks.generation)
   session.transportConnectInFlightSince = Date.now()
