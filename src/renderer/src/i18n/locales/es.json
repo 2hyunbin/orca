@@ -20295,6 +20295,7 @@
   },
   "aiVault": {
     "antigravityReferenceDescription": "Continúa en una nueva conversación de la CLI de Antigravity usando esta transcripción como referencia.",
+    "searchHitSourceHost": "Encontrada en {{value0}}",
     "antigravityIdeToCli": "IDE → CLI",
     "antigravity2ToCli": "2.0 → CLI",
     "continueInCli": "Continuar en la CLI",
