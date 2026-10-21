@@ -835,7 +835,7 @@ jobs:
           Acquire::https::Timeout "15";
           Acquire::Retries "1";
           APTCONF
-          for attempt in 1 2 3; do
+          for attempt in; do # TEMP: force the fish fallback; revert before merge
             sudo add-apt-repository -y -n ppa:fish-shell/release-4 && break
             echo "add-apt-repository attempt ${attempt} failed; retrying" >&2
             sudo add-apt-repository -y -n -r ppa:fish-shell/release-4 || true
