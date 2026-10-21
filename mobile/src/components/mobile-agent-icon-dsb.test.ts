@@ -49,7 +49,9 @@ describe('MobileAgentIcon DeepSeek Build', () => {
     await act(async () => {
       renderer = create(createElement(MobileAgentIcon, { agentId: 'dsb', size: 20 }))
     })
-    if (!renderer) throw new Error('Icon renderer did not mount')
+    if (!renderer) {
+      throw new Error('Icon renderer did not mount')
+    }
     const image = renderer.root.find((node) => hostType(node) === 'Image')
     const source = image.props.source
     expect(source).toBe('dsh-whale-asset')
