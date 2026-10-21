@@ -168,18 +168,26 @@ export function WslHostsSection({
                 meta={
                   <span className="truncate">
                     {deferred
-                      ? `${translate(
+                      ? translate(
                           'auto.components.settings.managedServers.row.deferredVersion',
                           'Update to {{version}} deferred.',
                           { version: deferred.candidateVersion }
-                        )} ${managedServerOutcomeLabel(
-                          { outcome: 'deferred', code: deferred.code },
-                          deferred.forceable === true
-                        )}`
+                        )
                       : `${unavailableLabel ?? getWslHostRowDetail(status)}${
                           !unavailableLabel && status?.detail ? ` — ${status.detail}` : ''
                         }`}
                   </span>
+                }
+                // Why: the one-line meta truncates; what the user must do to let the update apply wraps here.
+                footer={
+                  deferred ? (
+                    <p className="text-xs text-muted-foreground">
+                      {managedServerOutcomeLabel(
+                        { outcome: 'deferred', code: deferred.code },
+                        deferred.forceable === true
+                      )}
+                    </p>
+                  ) : null
                 }
                 status={getWslHostRowStatus(status, unavailableLabel !== null)}
                 primaryAction={
