@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { onDriverChange } from '@/lib/pane-manager/mobile-driver-state'
-import { onOverrideChange } from '@/lib/pane-manager/mobile-fit-overrides'
+import { getFitOverrideForPty, onOverrideChange } from '@/lib/pane-manager/mobile-fit-overrides'
 import type { ManagedPane, PaneManager } from '@/lib/pane-manager/pane-manager'
 import { safeFit } from '@/lib/pane-manager/pane-tree-ops'
-import { applyDesktopFitFallbackAfterReplay } from './desktop-fit-fallback'
+import {
+  applyDesktopFitFallbackAfterReplay,
+  fitAndRefreshDesktopPane
+} from './desktop-fit-fallback'
 import { getOverrideAffectedPanes, getPanesNeedingOverrideFit } from './override-affected-panes'
 import type { PtyTransport } from './pty-transport-types'
 
@@ -41,6 +44,7 @@ export function useMobileOverlayTicks({ managerRef, paneTransportsRef }: MobileO
   // Why: override state lives in a Map for perf; this counter forces a re-render on override change so the mobile-fit banner toggles.
   const [, setOverrideTick] = useState(0)
   useEffect(() => {
+    let active = true
     const pendingFitFrames = new Set<number>()
     const pendingFallbackTimers = new Set<number>()
 
@@ -99,10 +103,12 @@ export function useMobileOverlayTicks({ managerRef, paneTransportsRef }: MobileO
         return
       }
       if (event.mode === 'desktop-fit') {
+        const shouldRestorePane = (pane: ManagedPane): boolean =>
+          active && !getFitOverrideForPty(event.ptyId) && getAffectedPanes().includes(pane)
         // Why: fitAddon.fit() measures the DOM, so run under rAF after layout settles; the timeout is a safety net if fit silently threw.
         const fitAffectedPanes = (): void => {
           for (const pane of getAffectedPanes()) {
-            safeFit(pane)
+            fitAndRefreshDesktopPane(pane, () => shouldRestorePane(pane))
           }
         }
         scheduleFitFrame(fitAffectedPanes)
@@ -117,7 +123,7 @@ export function useMobileOverlayTicks({ managerRef, paneTransportsRef }: MobileO
             applyDesktopFitFallbackAfterReplay(pane, {
               ...event,
               // Why: the timeout/replay queue can outlive this pane binding; never apply old server dims to a replacement PTY.
-              shouldApply: () => getAffectedPanes().includes(pane)
+              shouldApply: () => shouldRestorePane(pane)
             })
           }
         })
@@ -125,6 +131,7 @@ export function useMobileOverlayTicks({ managerRef, paneTransportsRef }: MobileO
     })
 
     return () => {
+      active = false
       unsubscribe()
       for (const frameId of pendingFitFrames) {
         window.cancelAnimationFrame(frameId)

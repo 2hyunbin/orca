@@ -1,5 +1,6 @@
 import type { ManagedPane } from '@/lib/pane-manager/pane-manager-types'
-import { safeFit } from '@/lib/pane-manager/pane-fit'
+import { safeFit, safeFitAndThen } from '@/lib/pane-manager/pane-fit'
+import { requestFullViewportPresent } from '@/lib/pane-manager/terminal-render-pause-release'
 import { deferTerminalGeometryMutationDuringRebuild } from '@/lib/pane-manager/terminal-scroll-intent-rebuild'
 
 type DesktopFitFallbackDimensions = {
@@ -8,6 +9,28 @@ type DesktopFitFallbackDimensions = {
   priorCols?: number | null
   priorRows?: number | null
   shouldApply?: () => boolean
+}
+
+function refreshDesktopPaneContents(pane: Pick<ManagedPane, 'terminal'>): void {
+  if (pane.terminal.rows > 0 && !requestFullViewportPresent(pane.terminal)) {
+    pane.terminal.refresh(0, pane.terminal.rows - 1)
+  }
+}
+
+export function fitAndRefreshDesktopPane(pane: ManagedPane, shouldApply: () => boolean): void {
+  const applyFit = (): void => {
+    if (!shouldApply()) {
+      return
+    }
+    safeFitAndThen(pane, 'desktop-fit-refresh', () => refreshDesktopPaneContents(pane), {
+      shouldContinue: shouldApply,
+      retryIfUnmeasurable: true,
+      deferIfHidden: true
+    })
+  }
+  if (!deferTerminalGeometryMutationDuringRebuild(pane.terminal, 'desktop-fit-refresh', applyFit)) {
+    applyFit()
+  }
 }
 
 export function applyDesktopFitFallbackAfterReplay(
@@ -27,6 +50,7 @@ export function applyDesktopFitFallbackAfterReplay(
     if (stuckAtPriorGrid && dimensions.cols > 0 && dimensions.rows > 0) {
       pane.terminal.resize(dimensions.cols, dimensions.rows)
     }
+    refreshDesktopPaneContents(pane)
   }
   // Why: the server dimensions are only a fallback; source-dimension replay
   // must parse and restore its viewport before this can reflow xterm.
