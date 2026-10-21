@@ -10,7 +10,8 @@ import {
   TYPECHECK_PROJECTS,
   admissibleHeapGib,
   planTypecheckBatches,
-  resolveProjectCompiler
+  resolveProjectCompiler,
+  typecheckBatches
 } from './run-typecheck-projects-in-parallel.mjs'
 
 const parityOnly = process.argv.slice(2).includes('--parity-only')
@@ -96,7 +97,12 @@ async function suite(arm, state, pair, comparison) {
     arm === 'native'
       ? nativeBatches
       : arm === 'bun-pair'
-        ? [TYPECHECK_PROJECTS.slice(0, 2), TYPECHECK_PROJECTS.slice(2)]
+        ? typecheckBatches(TYPECHECK_PROJECTS, {
+            compiler: 'bun',
+            bunConcurrency: 2,
+            memoryBytes: totalmem(),
+            parallelism: availableParallelism()
+          })
         : TYPECHECK_PROJECTS.map((project) => [project])
   const start = performance.now()
   const projects = []
