@@ -13,3 +13,4 @@
 - Persistence tests that assert against a store path the exercised code never writes.
 - Tests that assert capability flags instead of actual delivery or acknowledgement.
 - Negative controls that pass because an unrelated guard fires or the rejection path is unreachable.
+- Tests that sleep or wait on real time, retries, polling, or networks instead of using fake clocks and deterministic boundaries.
