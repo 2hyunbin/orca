@@ -136,10 +136,11 @@ export function closeContentTabThroughLayoutOwner(
           settle(closedId)
         }
       },
-      // A tab main no longer holds was closed there first (a host's chat close).
+      // A tab main no longer holds, or whose workspace it no longer holds, was closed there first
+      // (a host's chat close, a removed workspace).
       refused: (code) => {
         const shows = get().unifiedTabsByWorktree[tab.worktreeId]?.some((e) => e.id === tab.id)
-        if (code === 'tab_not_found' && !shows) {
+        if ((code === 'tab_not_found' || code === 'workspace_not_found') && !shows) {
           dropped()
         } else {
           settle(null)

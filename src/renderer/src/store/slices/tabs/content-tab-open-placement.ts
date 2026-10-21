@@ -39,7 +39,7 @@ export function contentTabOpenPlacement(
   const placement = resolveUnifiedTabCreatePlacement({
     groups,
     tabs: state.unifiedTabsByWorktree[worktreeId] ?? [],
-    activeGroupId: state.activeGroupIdByWorktree[worktreeId],
+    activeGroupId: state.activeGroupIdByWorktree?.[worktreeId],
     targetGroupId: request.targetGroupId,
     afterTabId: request.afterTabId,
     executionHostId: request.executionHostId,
