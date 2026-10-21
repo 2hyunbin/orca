@@ -426,15 +426,12 @@ export default function BrowserAddressBar({
               ref={inputRef}
               value={value}
               onFocus={handleFocus}
-              onMouseDown={addressBarClickSelect.onMouseDown}
-              onClick={addressBarClickSelect.onClick}
+              {...addressBarClickSelect}
               onBlur={handleBlur}
               onKeyDown={handleKeyDown}
               data-orca-browser-address-bar="true"
               className="h-auto border-0 bg-transparent px-0 text-sm shadow-none focus-visible:ring-0"
-              spellCheck={false}
-              autoCapitalize="none"
-              autoCorrect="off"
+              {...{ spellCheck: false, autoCapitalize: 'none', autoCorrect: 'off' }}
               onChange={(event) => {
                 const nextValue = event.target.value
                 // Why: typing creates a new suggestion list, so keyboard selection
