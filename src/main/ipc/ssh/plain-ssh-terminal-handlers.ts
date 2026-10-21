@@ -12,6 +12,7 @@ import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry
 import { findSystemSsh } from '../../ssh/system-transport/system-ssh-binary'
 import { ensureNodePtySpawnHelperExecutable } from '../../providers/local-pty-utils'
 import {
+  ackPlainSshTerminal,
   closePlainSshTerminal,
   closePlainSshTerminalsOwnedBy,
   openPlainSshTerminal,
@@ -57,11 +58,12 @@ function endSessionsWithOwner(sender: WebContents): void {
 }
 
 export function registerPlainSshTerminalHandlers(): void {
-  const { open, write, resize, close, event } = PLAIN_SSH_TERMINAL_CHANNELS
+  const { open, write, resize, close, ack, event } = PLAIN_SSH_TERMINAL_CHANNELS
   ipcMain.removeHandler(open)
   ipcMain.removeAllListeners(write)
   ipcMain.removeAllListeners(resize)
   ipcMain.removeAllListeners(close)
+  ipcMain.removeAllListeners(ack)
 
   ipcMain.handle(
     open,
@@ -89,5 +91,8 @@ export function registerPlainSshTerminalHandlers(): void {
   })
   ipcMain.on(close, (ipcEvent, args: { sessionId?: unknown }) => {
     closePlainSshTerminal(args?.sessionId, ipcEvent.sender.id)
+  })
+  ipcMain.on(ack, (ipcEvent, args: { sessionId?: unknown; chars?: unknown }) => {
+    ackPlainSshTerminal(args?.sessionId, ipcEvent.sender.id, args?.chars)
   })
 }

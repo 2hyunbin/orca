@@ -17,40 +17,27 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 
 const written: string[] = []
 
-vi.mock('@xterm/xterm', () => ({
-  Terminal: class {
-    cols = 80
-    rows = 24
-    loadAddon(): void {}
-    open(): void {}
-    focus(): void {}
-    dispose(): void {}
-    write(data: string): void {
-      written.push(data)
-    }
-    onData(): { dispose: () => void } {
-      return { dispose: () => {} }
-    }
-    onResize(): { dispose: () => void } {
-      return { dispose: () => {} }
-    }
-  }
+// The standalone terminal is the preview's, covered by its tests; this stands in for xterm.
+vi.mock('@/components/standalone-terminal/open-standalone-terminal', () => ({
+  openStandaloneTerminal: () => ({
+    terminal: {
+      cols: 80,
+      rows: 24,
+      loadAddon: () => {},
+      focus: () => {},
+      onResize: () => ({ dispose: () => {} })
+    },
+    write: (chunk: string, options: { onDone?: () => void }) => {
+      written.push(chunk)
+      options.onDone?.()
+    },
+    dispose: () => {}
+  })
 }))
 vi.mock('@xterm/addon-fit', () => ({
   FitAddon: class {
     fit(): void {}
   }
-}))
-vi.mock('@xterm/xterm/css/xterm.css', () => ({}))
-// Shared with the dashboard preview terminal and covered there.
-vi.mock('@/components/dashboard-popout/preview-terminal-key-handler', () => ({
-  installPreviewTerminalKeyHandler: () => () => {}
-}))
-vi.mock('@/components/dashboard-popout/preview-terminal-app-menu-clipboard', () => ({
-  installPreviewTerminalAppMenuClipboard: () => () => {}
-}))
-vi.mock('@/components/dashboard-popout/preview-terminal-compatibility', () => ({
-  installPreviewTerminalCompatibility: () => () => {}
 }))
 
 const blocked: SshManagedServerStatus = {
@@ -62,11 +49,13 @@ const blocked: SshManagedServerStatus = {
 let emit: (event: PlainSshTerminalEvent) => void = () => {}
 const open = vi.fn<(args: unknown) => Promise<PlainSshTerminalOpenResult>>()
 const close = vi.fn()
+const ack = vi.fn()
 
 beforeEach(() => {
   written.length = 0
   open.mockReset()
   close.mockReset()
+  ack.mockReset()
   Object.defineProperty(window, 'ResizeObserver', {
     configurable: true,
     value: class {
@@ -80,6 +69,7 @@ beforeEach(() => {
       plainSsh: {
         open,
         close,
+        ack,
         write: vi.fn(),
         resize: vi.fn(),
         onEvent: (callback: (event: PlainSshTerminalEvent) => void) => {
@@ -144,6 +134,8 @@ describe('plain SSH terminal', () => {
     act(() => emit({ kind: 'data', sessionId: 's1', data: 'Enter passphrase: ' }))
     await act(async () => resolveOpen({ ok: true, sessionId: 's1', label: 'lambda' }))
     expect(written).toEqual(['Enter passphrase: '])
+    // Rendered output is acked, so main resumes a paused ssh.
+    expect(ack).toHaveBeenCalledWith({ sessionId: 's1', chars: 'Enter passphrase: '.length })
 
     act(() => emit({ kind: 'exit', sessionId: 's1', exitCode: 0 }))
     await waitFor(() => expect(screen.queryByText('Plain SSH · lambda')).toBeNull())

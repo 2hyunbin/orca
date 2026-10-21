@@ -1,25 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
-import { Terminal } from '@xterm/xterm'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
-import '@xterm/xterm/css/xterm.css'
+import type { Terminal } from '@xterm/xterm'
 import type {
   PlainSshTerminalEvent,
   PlainSshTerminalOpenResult
 } from '../../../../shared/plain-ssh-terminal'
+import { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import { buildDefaultTerminalOptions } from '@/lib/pane-manager/pane-terminal-options'
-import { buildFontFamily } from '@/lib/monospace-font-family'
-import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { useEffectiveMacOptionAsAlt } from '@/lib/keyboard-layout/use-effective-mac-option-as-alt'
 import { composeActiveTerminalTheme } from '@/components/terminal-pane/terminal-appearance'
-import { resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
+import { getBuiltinTheme, resolveEffectiveTerminalAppearance } from '@/lib/terminal-theme'
 import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-prefers-dark'
-import { TERMINAL_PASTE_MAX_BYTES } from '@/components/terminal-pane/terminal-paste-limits'
-import { installPreviewTerminalKeyHandler } from '@/components/dashboard-popout/preview-terminal-key-handler'
-import { installPreviewTerminalAppMenuClipboard } from '@/components/dashboard-popout/preview-terminal-app-menu-clipboard'
-import { installPreviewTerminalCompatibility } from '@/components/dashboard-popout/preview-terminal-compatibility'
-import { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
+import { buildPreviewTerminalOptions } from '@/components/dashboard-popout/preview-terminal-options'
+import { openStandaloneTerminal } from '@/components/standalone-terminal/open-standalone-terminal'
 import { removePlainSshPanel } from '@/ssh/plain-ssh-terminal-panels'
 
 export type PlainSshTerminalPhase =
@@ -30,6 +24,7 @@ export type PlainSshTerminalPhase =
 
 /** Output ssh may print before the open reply lands; more than this is never a login banner. */
 const EARLY_EVENT_LIMIT = 256
+const SCROLLBACK_ROWS = 5_000
 
 export function plainSshOpenFailureText(
   result: Extract<PlainSshTerminalOpenResult, { ok: false }>
@@ -61,7 +56,7 @@ export function plainSshOpenFailureText(
   }
 }
 
-/** One plain SSH session; it starts on mount and hangs up on unmount. */
+/** One plain SSH session on Orca's standalone terminal; it starts on mount and hangs up on unmount. */
 export function PlainSshTerminalView({
   targetId,
   hidden,
@@ -77,11 +72,17 @@ export function PlainSshTerminalView({
   const settings = useAppStore((s) => s.settings)
   const systemPrefersDark = useSystemPrefersDark()
   const macOptionAsAlt = useEffectiveMacOptionAsAlt(settings?.terminalMacOptionAsAlt)
-  const [initial] = useState(() => ({ settings, systemPrefersDark, macOptionAsAlt }))
+  // Why refs: keys and appearance read live values; a remount would hang up the SSH session.
+  const settingsRef = useRef(settings)
+  const systemPrefersDarkRef = useRef(systemPrefersDark)
+  const macOptionAsAltRef = useRef(macOptionAsAlt)
   const onPhaseRef = useRef(onPhase)
-  useEffect(() => {
+  useLayoutEffect(() => {
+    settingsRef.current = settings
+    systemPrefersDarkRef.current = systemPrefersDark
+    macOptionAsAltRef.current = macOptionAsAlt
     onPhaseRef.current = onPhase
-  }, [onPhase])
+  }, [settings, systemPrefersDark, macOptionAsAlt, onPhase])
 
   useEffect(() => {
     const container = containerRef.current
@@ -89,51 +90,87 @@ export function PlainSshTerminalView({
     if (!container || !api) {
       return
     }
-    const base = initial.settings
-    const theme = base
-      ? composeActiveTerminalTheme(
-          resolveEffectiveTerminalAppearance(base, initial.systemPrefersDark).theme,
-          base
-        )
-      : undefined
-    const terminal = new Terminal({
-      ...buildDefaultTerminalOptions(),
-      ...(base
-        ? { fontSize: base.terminalFontSize, fontFamily: buildFontFamily(base.terminalFontFamily) }
-        : {}),
-      theme: theme ?? undefined
+    const mountSettings = settingsRef.current
+    const appearance = mountSettings
+      ? resolveEffectiveTerminalAppearance(mountSettings, systemPrefersDarkRef.current)
+      : null
+    const theme =
+      mountSettings && appearance
+        ? composeActiveTerminalTheme(
+            appearance.theme ?? getBuiltinTheme(appearance.themeName),
+            mountSettings
+          )
+        : null
+    const kittyKeyboardModes = new TerminalKittyKeyboardModeTracker({ kittyKeyboard: true })
+    let sessionId: string | null = null
+    const standalone = openStandaloneTerminal({
+      container,
+      options: buildPreviewTerminalOptions({
+        settings: mountSettings,
+        terminalInput: null,
+        macOptionIsMeta: macOptionAsAltRef.current === 'true',
+        theme,
+        themeMode: appearance?.mode ?? 'dark',
+        cols: 80,
+        rows: 24,
+        scrollback: SCROLLBACK_ROWS
+      }),
+      kittyKeyboardModes,
+      sessionKey: `plain-ssh:${targetId}`,
+      sendInput: (data) => {
+        if (!sessionId) {
+          return false
+        }
+        api.write({ sessionId, data })
+        return true
+      },
+      getSettings: () => settingsRef.current,
+      getMacOptionAsAlt: () => macOptionAsAltRef.current,
+      getTerminalInput: () => null
     })
+    if (!standalone) {
+      onPhaseRef.current({
+        kind: 'failed',
+        message: translate(
+          'auto.components.plainSshTerminal.terminalUnavailable',
+          'Orca couldn’t open a terminal here.'
+        )
+      })
+      return
+    }
+    const { terminal } = standalone
     const fit = new FitAddon()
     terminal.loadAddon(fit)
-    terminal.open(container)
-    // Why before any output: wide characters bake into the buffer at the widths active when written.
-    const disposeCompatibility = installPreviewTerminalCompatibility(terminal, {
-      getSettings: () => useAppStore.getState().settings
-    })
-    // The shortcut policy needs the keyboard protocol the remote TUI negotiated (xterm advertises it).
-    const kittyKeyboardModes = new TerminalKittyKeyboardModeTracker({ kittyKeyboard: true })
     terminalRef.current = terminal
     fitRef.current = fit
     fit.fit()
 
-    let sessionId: string | null = null
     let phase: 'opening' | 'open' | 'done' = 'opening'
     let disposed = false
     const early: PlainSshTerminalEvent[] = []
+    // Why: output dropped past the early cap was never rendered, but main still counts it unacked.
+    const droppedEarlyChars = new Map<string, number>()
     let unsubscribe: () => void = () => {}
     const finish = (next: PlainSshTerminalPhase | null): void => {
       phase = 'done'
       sessionId = null
       early.length = 0
+      droppedEarlyChars.clear()
       unsubscribe()
       if (next) {
         onPhaseRef.current(next)
       }
     }
-    const handle = (event: PlainSshTerminalEvent): void => {
+    const handle = (event: PlainSshTerminalEvent, id: string): void => {
       if (event.kind === 'data') {
-        kittyKeyboardModes.scan(event.data)
-        terminal.write(event.data)
+        standalone.write(event.data, {
+          live: true,
+          onDone: () => {
+            if (!disposed) {
+              api.ack({ sessionId: id, chars: event.data.length })
+            }
+          }
+        })
         return
       }
       // A clean logout closes the window; anything else keeps its output, with no shell after it.
@@ -145,12 +182,16 @@ export function PlainSshTerminalView({
     }
     unsubscribe = api.onEvent((event) => {
       if (phase === 'opening') {
-        // Why: ssh can print before the open reply lands; hold a bounded amount until the id is known.
         if (early.length < EARLY_EVENT_LIMIT) {
           early.push(event)
+        } else if (event.kind === 'data') {
+          droppedEarlyChars.set(
+            event.sessionId,
+            (droppedEarlyChars.get(event.sessionId) ?? 0) + event.data.length
+          )
         }
-      } else if (phase === 'open' && event.sessionId === sessionId) {
-        handle(event)
+      } else if (phase === 'open' && sessionId && event.sessionId === sessionId) {
+        handle(event, sessionId)
       }
     })
     void api
@@ -166,12 +207,18 @@ export function PlainSshTerminalView({
           finish({ kind: 'failed', message: plainSshOpenFailureText(result) })
           return
         }
-        sessionId = result.sessionId
+        const id = result.sessionId
+        sessionId = id
         phase = 'open'
         onPhaseRef.current({ kind: 'open' })
+        const dropped = droppedEarlyChars.get(id)
+        droppedEarlyChars.clear()
+        if (dropped) {
+          api.ack({ sessionId: id, chars: dropped })
+        }
         for (const event of early.splice(0)) {
-          if (phase === 'open' && event.sessionId === result.sessionId) {
-            handle(event)
+          if (phase === 'open' && event.sessionId === id) {
+            handle(event, id)
           }
         }
         terminal.focus()
@@ -184,41 +231,6 @@ export function PlainSshTerminalView({
           })
         }
       })
-
-    const pasteClipboardText = async (activeElement: Element | null): Promise<void> => {
-      const text = await window.api.ui
-        .readClipboardText({ maxBytes: TERMINAL_PASTE_MAX_BYTES })
-        .catch(() => '')
-      if (text && !disposed && activeElement && container.contains(activeElement)) {
-        // Why paste, not write: xterm adds bracketed-paste markers when the remote shell asked.
-        terminal.paste(text)
-      }
-    }
-    // Same copy, paste and shortcut policy as Orca's other standalone terminals.
-    const disposeKeyHandler = installPreviewTerminalKeyHandler({
-      terminal,
-      claimImeKeyEvent: () => false,
-      pasteClipboardText: (activeElement) => void pasteClipboardText(activeElement),
-      sendInput: (data) => terminal.input(data),
-      getShortcutContext: () => ({
-        clientPlatform: getShortcutPlatform(),
-        macOptionAsAlt: initial.macOptionAsAlt,
-        keybindings: useAppStore.getState().keybindings,
-        terminalInput: null,
-        getKittyKeyboardFlags: () => kittyKeyboardModes.flags,
-        terminalShortcutPolicy: useAppStore.getState().settings?.terminalShortcutPolicy
-      })
-    })
-    const disposeAppMenuClipboard = installPreviewTerminalAppMenuClipboard({
-      container,
-      getTerminal: () => terminal,
-      pasteClipboardText: (activeElement) => void pasteClipboardText(activeElement)
-    })
-    const dataListener = terminal.onData((data) => {
-      if (sessionId) {
-        api.write({ sessionId, data })
-      }
-    })
     const resizeListener = terminal.onResize(({ cols, rows }) => {
       if (sessionId) {
         api.resize({ sessionId, cols, rows })
@@ -233,20 +245,16 @@ export function PlainSshTerminalView({
     return () => {
       disposed = true
       observer.disconnect()
-      dataListener.dispose()
       resizeListener.dispose()
-      disposeKeyHandler()
-      disposeAppMenuClipboard()
-      disposeCompatibility()
       unsubscribe()
       if (sessionId) {
         api.close({ sessionId })
       }
-      terminal.dispose()
+      standalone.dispose()
       terminalRef.current = null
       fitRef.current = null
     }
-  }, [initial, targetId])
+  }, [targetId])
 
   useEffect(() => {
     if (!hidden) {

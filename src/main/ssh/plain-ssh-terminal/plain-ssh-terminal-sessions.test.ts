@@ -3,6 +3,7 @@ import type * as pty from 'node-pty'
 import type { SshTarget } from '../../../shared/ssh-types'
 import type { PlainSshTerminalEvent } from '../../../shared/plain-ssh-terminal'
 import {
+  ackPlainSshTerminal,
   closeAllPlainSshTerminals,
   closePlainSshTerminal,
   closePlainSshTerminalsOwnedBy,
@@ -30,6 +31,8 @@ type FakePty = {
   write: ReturnType<typeof vi.fn>
   resize: ReturnType<typeof vi.fn>
   kill: ReturnType<typeof vi.fn>
+  pause: ReturnType<typeof vi.fn>
+  resume: ReturnType<typeof vi.fn>
   emitData: (data: string) => void
   emitExit: (exitCode: number, signal?: number) => void
 }
@@ -46,6 +49,8 @@ function fakeSpawn(file: string, args: string[] | string, options: pty.IPtyForkO
     write: vi.fn(),
     resize: vi.fn(),
     kill: vi.fn(() => fake.emitExit(129)),
+    pause: vi.fn(),
+    resume: vi.fn(),
     emitData: (data) => onData?.(data),
     emitExit: (exitCode, signal) => onExit?.({ exitCode, signal })
   }
@@ -56,6 +61,8 @@ function fakeSpawn(file: string, args: string[] | string, options: pty.IPtyForkO
     write: fake.write,
     resize: fake.resize,
     kill: fake.kill,
+    pause: fake.pause,
+    resume: fake.resume,
     destroy: vi.fn(),
     onData: (listener: (data: string) => void) => {
       onData = listener
@@ -193,6 +200,25 @@ describe('plain SSH terminal sessions', () => {
     closePlainSshTerminal(first.ok ? first.sessionId : '', 1)
     expect(await open(deps(), 'lambda', 2)).toMatchObject({ ok: true })
     spawned[0].emitExit(129)
+  })
+
+  it('pauses ssh while the window has too much unrendered output, and resumes on ack', async () => {
+    const result = await open(deps(), 'lambda', 1)
+    const sessionId = result.ok ? result.sessionId : ''
+    const chunk = 'x'.repeat(64 * 1024)
+    for (let i = 0; i < 8; i++) {
+      spawned[0].emitData(chunk)
+    }
+    expect(spawned[0].pause).not.toHaveBeenCalled()
+    spawned[0].emitData(chunk)
+    expect(spawned[0].pause).toHaveBeenCalledTimes(1)
+    // Another window's ack is ignored.
+    ackPlainSshTerminal(sessionId, 2, 9 * chunk.length)
+    expect(spawned[0].resume).not.toHaveBeenCalled()
+    ackPlainSshTerminal(sessionId, 1, 6 * chunk.length)
+    expect(spawned[0].resume).not.toHaveBeenCalled()
+    ackPlainSshTerminal(sessionId, 1, 2 * chunk.length)
+    expect(spawned[0].resume).toHaveBeenCalledTimes(1)
   })
 
   it('reports a signal kill, which is not a clean logout', async () => {

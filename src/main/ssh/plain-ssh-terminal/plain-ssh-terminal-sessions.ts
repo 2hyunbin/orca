@@ -36,6 +36,9 @@ type Session = {
   proc: pty.IPty
   exited: Promise<void>
   hungUp: boolean
+  /** Output sent but not yet rendered by the window, in UTF-16 units. */
+  unacked: number
+  paused: boolean
 }
 
 /** A host's one claim, taken before the first await so concurrent opens can't both spawn. */
@@ -43,6 +46,9 @@ type Slot = { owner: number; token: symbol; session: Session | null }
 
 const FORCE_KILL_AFTER_MS = 5_000
 const QUIT_FORCE_KILL_AFTER_MS = 1_000
+// Why: a flood (cat of a big file) must wait for the window to render, not pile up in IPC.
+const PAUSE_ABOVE_UNACKED = 512 * 1024
+const RESUME_BELOW_UNACKED = 128 * 1024
 const MIN_SIZE = 2
 const MAX_SIZE = 1_000
 
@@ -169,13 +175,21 @@ export async function openPlainSshTerminal(
     exited: new Promise((resolve) => {
       markExited = resolve
     }),
-    hungUp: false
+    hungUp: false,
+    unacked: 0,
+    paused: false
   }
   sessions.set(session.id, session)
   slot.session = session
   proc.onData((data) => {
     if (!sink({ kind: 'data', sessionId: session.id, data })) {
       releaseSlot(target.id, slot)
+      return
+    }
+    session.unacked += data.length
+    if (!session.paused && session.unacked > PAUSE_ABOVE_UNACKED) {
+      session.paused = true
+      proc.pause()
     }
   })
   proc.onExit(({ exitCode, signal }) => {
@@ -216,6 +230,18 @@ export function resizePlainSshTerminal(
   const session = ownedSession(sessionId, owner)
   if (session) {
     session.proc.resize(clampSize(cols, session.proc.cols), clampSize(rows, session.proc.rows))
+  }
+}
+
+export function ackPlainSshTerminal(sessionId: unknown, owner: number, chars: unknown): void {
+  const session = ownedSession(sessionId, owner)
+  if (!session || typeof chars !== 'number' || !Number.isFinite(chars) || chars <= 0) {
+    return
+  }
+  session.unacked = Math.max(0, session.unacked - chars)
+  if (session.paused && session.unacked < RESUME_BELOW_UNACKED) {
+    session.paused = false
+    session.proc.resume()
   }
 }
 

@@ -4,6 +4,8 @@ export const PLAIN_SSH_TERMINAL_CHANNELS = {
   write: 'plainSsh:write',
   resize: 'plainSsh:resize',
   close: 'plainSsh:close',
+  /** Output the window has rendered, in UTF-16 units of `data`; ssh is paused while too much is unrendered. */
+  ack: 'plainSsh:ack',
   event: 'plainSsh:event'
 } as const
 
