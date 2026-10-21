@@ -16,7 +16,9 @@ import { useMountedRef } from '@/hooks/useMountedRef'
 import { useAppStore } from '@/store'
 import { getAllWorktreesFromState } from '@/store/selectors'
 import { translate } from '@/i18n/i18n'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { toSshExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
+import { RemovalUnsavedFilesNotice } from './RemovalUnsavedFilesNotice'
+import { projectRemovalTargets } from './removal-unsaved-files'
 import { clearHostRename } from './host-rename-remove'
 import type { HostRemovalTarget } from './host-rename-remove'
 import { resolveSshHostRemoval } from './ssh-host-remove-resolution'
@@ -49,6 +51,7 @@ export function HostRemoveDialog({
 
   const repos = useAppStore((s) => s.repos)
   const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
+  const detectedWorktreesByRepo = useAppStore((s) => s.detectedWorktreesByRepo)
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
 
   // Resolve which workspaces live on the target so the dialog can offer to
@@ -64,6 +67,20 @@ export function HostRemoveDialog({
       sshConnectionStates
     })
   }, [target, repos, worktreesByRepo, sshConnectionStates])
+
+  const unsavedTargets = useMemo(() => {
+    if (!sshResolution || !deleteWorkspaces) {
+      return []
+    }
+    const hostId = toSshExecutionHostId(sshResolution.targetId)
+    return [
+      ...sshResolution.workspaceWorktreeIds.map((id) => ({ id, hostId })),
+      ...projectRemovalTargets(
+        { worktreesByRepo, detectedWorktreesByRepo },
+        sshResolution.hostRepoIds.map((repoId) => ({ repoId, hostId }))
+      )
+    ]
+  }, [deleteWorkspaces, detectedWorktreesByRepo, sshResolution, worktreesByRepo])
 
   const workspaceCount = sshResolution?.workspaceCount ?? 0
   const hasWorkspaces = workspaceCount > 0
@@ -207,7 +224,7 @@ export function HostRemoveDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent surface="security" className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
             {translate(
@@ -276,6 +293,8 @@ export function HostRemoveDialog({
             </div>
           </div>
         ) : null}
+
+        <RemovalUnsavedFilesNotice targets={unsavedTargets} enabled={open} />
 
         <DialogFooter className="gap-2 sm:gap-2">
           <Button

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
+import { projectRemovalTargets } from '../../removal-unsaved-files'
 import { translate } from '@/i18n/i18n'
 import { selectProjectGroupRemovalTargets } from '@/store/slices/project-group-removal-targets'
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
@@ -165,6 +166,21 @@ export function useProjectGroupDialogs(args: {
   )
   const removeContainedProjects =
     deleteProjectCount > 0 && deleteDialog?.removeContainedProjects === true
+  const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
+  const detectedWorktreesByRepo = useAppStore((s) => s.detectedWorktreesByRepo)
+  const deleteUnsavedTargets = useMemo(
+    () =>
+      removeContainedProjects && deleteTargets
+        ? projectRemovalTargets(
+            { worktreesByRepo, detectedWorktreesByRepo },
+            deleteTargets.projects.map((project) => ({
+              repoId: project.id,
+              hostId: project.hostId
+            }))
+          )
+        : [],
+    [deleteTargets, detectedWorktreesByRepo, removeContainedProjects, worktreesByRepo]
+  )
 
   const handleDeleteProjectGroup = useCallback(
     (groupId: string, groupName: string, hostId?: ExecutionHostId) => {
@@ -198,6 +214,7 @@ export function useProjectGroupDialogs(args: {
     deleteProjectCount,
     deleteProjectNames,
     removeContainedProjects,
+    deleteUnsavedTargets,
     handleCreateGroupFromRepo,
     handleMoveProjectToGroup,
     handleRemoveProjectFromGroup,

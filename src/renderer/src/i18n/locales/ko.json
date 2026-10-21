@@ -19401,6 +19401,13 @@
           "checking": "변경 사항 확인 중…",
           "checkingDetails": "확인 중…",
           "unavailableDetails": "세부 정보를 사용할 수 없음"
+        },
+        "unsavedEdits": {
+          "discarded_one": "파일 {{count}}개의 저장되지 않은 편집 내용이 버려집니다:",
+          "discarded_other": "파일 {{count}}개의 저장되지 않은 편집 내용이 버려집니다:",
+          "moreFiles": "외 {{value}}개",
+          "blocked_one": "먼저 {{name}}에서 저장되지 않은 파일 {{count}}개를 저장하거나 닫으세요",
+          "blocked_other": "먼저 {{name}}에서 저장되지 않은 파일 {{count}}개를 저장하거나 닫으세요"
         }
       }
     },
