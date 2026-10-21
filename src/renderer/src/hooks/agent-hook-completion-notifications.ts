@@ -4,7 +4,7 @@ import { createAgentCompletionCoordinator } from '@/components/terminal-pane/age
 import type {
   AgentCompletionCoordinator,
   AgentCompletionStatusSnapshot
-} from '@/components/terminal-pane/agent-completion-coordinator-types'
+} from '../../../shared/agent-completion-coordinator-types'
 import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-terminal-inspection'
 import { dispatchTerminalNotification } from '@/components/terminal-pane/use-notification-dispatch'
 import { collectLeafIdsInOrder } from '@/components/terminal-pane/layout-serialization'

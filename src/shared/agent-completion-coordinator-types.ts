@@ -1,6 +1,6 @@
-import type { ParsedAgentStatusPayload } from '../../../../shared/agent-status-types'
-import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
-import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-terminal-inspection'
+import type { ParsedAgentStatusPayload } from './agent-status-types'
+import type { RecognizedAgentProcess } from './agent-process-recognition'
+import type { TerminalProcessInspection as RuntimeTerminalProcessInspection } from './terminal-process-inspection'
 
 export type AgentCompletionStatusSnapshot = ParsedAgentStatusPayload & {
   stateStartedAt?: number

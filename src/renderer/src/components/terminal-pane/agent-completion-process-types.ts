@@ -1,9 +1,9 @@
-import type { AgentCompletionCoordinatorOptions } from './agent-completion-coordinator-types'
+import type { AgentCompletionCoordinatorOptions } from '../../../../shared/agent-completion-coordinator-types'
 import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
 import type {
   AgentCompletionIdentityScope,
   LastCompletionIdentity
-} from './agent-completion-identity-store'
+} from '../../../../shared/agent-completion-identity-store'
 import type { PendingTitleController } from './agent-completion-pending-title'
 import type { PollCadenceTier } from './agent-completion-poll-cadence'
 

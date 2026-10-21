@@ -9,7 +9,11 @@ import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
 /** The desktop implementation of the runtime's optional desktop facilities. */
 export const electronRuntimeDesktopSurface: RuntimeDesktopSurface = {
   translateNotification: translateMain,
-  isAwayForMobileNotifications: () => readDesktopAwayState(powerMonitor),
+  isAwayForMobileNotifications: () =>
+    readDesktopAwayState(
+      powerMonitor,
+      BrowserWindow.getAllWindows().some((window) => !window.isDestroyed() && window.isVisible())
+    ),
   showNotification: ({ title, body }) => {
     if (!Notification.isSupported()) {
       return false

@@ -7,6 +7,8 @@ import { DesktopPushService } from './desktop-push-service'
 import { PushUnregisterOutbox } from './push-unregister-outbox'
 import { createPushHostKeypair } from './push-host-challenge-fixtures'
 import { PushDispatcher } from './push-dispatcher'
+import type { PushGatewayClient } from './push-gateway-client'
+import { createHarness, registration } from './push-dispatcher.test-fixture'
 
 const paths: string[] = []
 afterEach(() => {
@@ -31,7 +33,7 @@ function harness() {
   let live = false
   let reachable = true
   const client = {
-    registerDevice: vi.fn(async () => {
+    registerDevice: vi.fn(async (): ReturnType<PushGatewayClient['registerDevice']> => {
       live = true
       return { ok: true, registrationId: 'stable-id' }
     }),
@@ -291,4 +293,78 @@ it('reports shutdown as retryable and allows registration after restart', async 
     registered: true
   })
   h.service.stop()
+})
+
+it('uses accepted destination leases across restart, refused renewal and expiry', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  const h = harness()
+  const start = Date.now()
+  const day = 86400_000
+  const filter = { sourceAgentAlerts: true, hostAgentAlerts: true }
+  h.client.send.mockResolvedValue({ ok: true, results: [] })
+  try {
+    await h.service.register({ ...input, deviceId: h.deviceId, filter })
+    const saved = new DeviceRegistry(h.path).getDevice(h.deviceId)!.pushRegistration!
+    const digest = saved.destinationDigest!
+    h.registry.setPushRegistration(h.registry.addDevice('old pairing', 'mobile').deviceId, {
+      ...saved,
+      registrationId: 'old-pairing',
+      filter: { sourceAgentAlerts: true },
+      expiresAt: saved.expiresAt - 1
+    })
+    const b = new PushDispatcher({ registry: h.registry, client: h.client as never })
+    const a = createHarness({
+      devices: [
+        {
+          deviceId: 'both',
+          pushRegistration: registration({
+            destinationDigest: digest,
+            filter,
+            expiresAt: start + 14 * day
+          })
+        }
+      ]
+    })
+    for (const age of [6, 6.5, 7]) {
+      vi.setSystemTime(start + age * day)
+      const sourcePlan = {
+        kind: 'terminal' as const,
+        direct: h.service.planAgentAlert({ hostAgentAlert: true })
+      }
+      const event = {
+        type: 'notification' as const,
+        source: 'agent-task-complete' as const,
+        title: 'Needs input',
+        body: '',
+        worktreeId: 'folder',
+        agentState: 'waiting' as const,
+        sourcePlan,
+        notificationSeq: age * 2,
+        notificationEpoch: 'source'
+      }
+      b.enqueue(event)
+      b.enqueue({ ...event, sourcePlan: undefined, executionHostAnnounces: true })
+      a.dispatcher.enqueue({
+        ...event,
+        sourcePlan: { ...sourcePlan, carrier: true },
+        executionHost: 'runtime:b'
+      })
+      if (age === 6.5) {
+        h.client.registerDevice.mockResolvedValueOnce({ ok: false, reason: 'unreachable' })
+        expect(await h.service.register({ ...input, deviceId: h.deviceId, filter })).toMatchObject({
+          registered: false
+        })
+        expect(h.registry.getDevice(h.deviceId)!.pushRegistration).toEqual(saved)
+      }
+    }
+    await tick()
+    expect(h.client.send.mock.calls.map(([send]) => send.registrationIds)).toEqual([
+      ['stable-id'],
+      ['stable-id']
+    ])
+    expect(a.sends.map((send) => send.registrationIds)).toEqual([['reg-1']])
+  } finally {
+    h.service.stop()
+    vi.useRealTimers()
+  }
 })

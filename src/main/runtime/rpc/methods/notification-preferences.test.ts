@@ -27,6 +27,15 @@ it('keeps desktop-disabled events out of legacy live and replay streams', async 
   ]
   controller.dispatch({
     type: 'notification',
+    source: 'agent-task-complete',
+    title: 'source only',
+    body: '',
+    worktreeId: 'folder',
+    emittedAt: 10000,
+    hostAgentAlert: true
+  })
+  controller.dispatch({
+    type: 'notification',
     source: 'terminal-bell',
     title: 'bell',
     body: '',
@@ -75,6 +84,7 @@ it('preserves legacy workspace cooldown while letting current phones filter befo
     }
   ]
   const controller = new RuntimeMobileNotificationController()
+  controller.dispatch({ ...events[0]!, source: 'agent-task-complete', hostAgentAlert: true })
   events.forEach((event) => controller.dispatch(event))
   const recorded = controller.getMissedSince(0)
   expect(recorded.filter(createNotificationStreamFilter())).toEqual([

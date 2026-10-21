@@ -263,7 +263,7 @@ export const NOTIFICATIONS_REMOTE_PUSH_RUNTIME_CAPABILITY = 'notifications.remot
 // Hosts with this push their own terminal agents' hook news to their own phones from main, so a
 // paired desktop may skip forwarding it to a phone that registered with this host directly.
 export const NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY =
-  'notifications.host-agent-alerts.v1' as const
+  'notifications.source-agent-alerts.v1' as const
 
 export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
   'git.antigravity-configured-model.v1' as const

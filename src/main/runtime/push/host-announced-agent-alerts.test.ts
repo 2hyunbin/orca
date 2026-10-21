@@ -4,18 +4,16 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentHookServer } from '../../agent-hooks/server'
 import { AgentTransitionDetector } from '../../agent-hooks/agent-transition-detector'
-import { createNotificationDeliveryService } from '../../notifications/notification-delivery-service'
 import { buildAgentNotificationId } from '../../../shared/agent-notification-id'
+import { resetAgentCompletionIdentityStoreForTest } from '../../../shared/agent-completion-identity-store'
 import type { ParsedAgentStatusPayload } from '../../../shared/agent-status-types'
-import { encodePairingOffer } from '../../../shared/pairing'
-import { addEnvironmentFromPairingCode } from '../../../shared/runtime-environment-store'
-import { deriveRelayHostId } from '../mobile-cloud-relay/relay-http-client'
 import {
   RuntimeMobileNotificationController,
   type MobileNotificationDispatchEvent
 } from '../runtime-mobile-notification-controller'
 import { createTerminalAgentMobileAttention } from '../terminal-agent-mobile-attention'
-import { resolveExecutionHostPushFingerprints } from './execution-host-push-fingerprints'
+import { SourceAgentAlertEvent } from '../source-agent-alert-event'
+import { planSourceAgentRecipients } from './push-dispatcher'
 import { createHarness, flush, registration } from './push-dispatcher.test-fixture'
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
@@ -23,7 +21,7 @@ vi.mock('../../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn(() 
 
 const WT = 'repo-1::/tmp/a'
 const PANE = 'tab-a:22222222-2222-4222-8222-222222222222'
-const SERVER_KEY = Buffer.alloc(32, 7).toString('base64')
+const DIGEST = 'a'.repeat(64)
 const SETTINGS = {
   enabled: true,
   agentTaskComplete: true,
@@ -36,7 +34,6 @@ const SETTINGS = {
   notifyHiddenWorkspaces: true
 } as const
 
-/** Machine B: the hook server, the transition detector and the phone announcer, as the runtime wires them. */
 function createExecutionHost(controller?: RuntimeMobileNotificationController) {
   const server = new AgentHookServer()
   const detector = new AgentTransitionDetector({
@@ -44,7 +41,6 @@ function createExecutionHost(controller?: RuntimeMobileNotificationController) {
     now: Date.now
   })
   const announced: MobileNotificationDispatchEvent[] = []
-  const holds = new Set<() => void>()
   detector.subscribe(
     createTerminalAgentMobileAttention({
       readRow: (paneKey) => detector.latestRow(paneKey),
@@ -57,17 +53,15 @@ function createExecutionHost(controller?: RuntimeMobileNotificationController) {
       },
       retire: (worktreeId, paneKey, before) =>
         controller?.retireTerminalAttention(worktreeId, paneKey, before),
-      now: Date.now,
-      schedule: (run) => {
-        holds.add(run)
-        return () => holds.delete(run)
-      }
+      now: Date.now
     })
   )
   detector.attach(server)
   let clock = 10_000
   return {
     announced,
+    server,
+    detector,
     hook(
       row: Partial<ParsedAgentStatusPayload> & Pick<ParsedAgentStatusPayload, 'state'>,
       newTurn = false
@@ -87,12 +81,8 @@ function createExecutionHost(controller?: RuntimeMobileNotificationController) {
       }
       return detector.latestRow(PANE)!.stateStartedAt
     },
-    /** The quiet window elapses. */
     settle() {
-      for (const run of holds) {
-        holds.delete(run)
-        run()
-      }
+      vi.advanceTimersByTime(1500)
     }
   }
 }
@@ -103,7 +93,8 @@ const idAt = (stateStartedAt: number) =>
 describe('host-announced agent alerts', () => {
   let userDataPath: string
   beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
+    resetAgentCompletionIdentityStoreForTest()
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
     userDataPath = mkdtempSync(join(tmpdir(), 'orca-host-announced-alerts-'))
   })
   afterEach(() => {
@@ -134,7 +125,6 @@ describe('host-announced agent alerts', () => {
     host.settle()
     expect(host.announced).toHaveLength(1)
 
-    // Needs input is news at once.
     const askedAt = host.hook({ state: 'waiting' })
     expect(host.announced.at(-1)).toMatchObject({
       agentState: 'waiting',
@@ -162,7 +152,8 @@ describe('host-announced agent alerts', () => {
           deviceId: 'updated-phone',
           pushRegistration: registration({
             registrationId: 'reg-updated',
-            filter: { hostAgentAlerts: true }
+            destinationDigest: DIGEST,
+            filter: { hostAgentAlerts: true, sourceAgentAlerts: true }
           })
         },
         { deviceId: 'older-phone', pushRegistration: registration({ registrationId: 'reg-older' }) }
@@ -175,47 +166,128 @@ describe('host-announced agent alerts', () => {
     host.hook({ state: 'working' })
     host.hook({ state: 'done' })
     host.settle()
-    deliver(host.announced[0]!)
-    // The window's hook-lane copy of the same turn, from the tab it holds.
-    deliver({
-      type: 'notification',
-      source: 'agent-task-complete',
-      title: 'feat/x - Claude finished',
-      body: 'Done.',
-      worktreeId: WT,
-      agentState: 'done',
-      executionHostAnnounces: true
-    })
+    deliver({ ...host.announced[0]!, sourcePlan: { kind: 'terminal', direct: [DIGEST] } })
+    deliver({ ...host.announced[0]!, hostAgentAlert: false, executionHostAnnounces: true })
     await flush()
     expect(push.sends.map((send) => send.registrationIds)).toEqual([['reg-updated'], ['reg-older']])
   })
 
-  it('retires the host delivery when its pane resumes, preserving a current background completion', async () => {
-    const controller = new RuntimeMobileNotificationController()
-    controller.configureDismissalStore(userDataPath)
-    const push = createHarness({
+  it('keeps unknown replay and non-agent programs silent through the actual hook projection', () => {
+    const host = createExecutionHost()
+    host.server.ingestRemote(
+      {
+        paneKey: PANE,
+        tabId: 'tab-a',
+        worktreeId: WT,
+        isReplay: true,
+        source: 'claude',
+        hookEventName: 'Stop',
+        payload: { state: 'done', agentType: 'claude', prompt: 'old' }
+      },
+      null
+    )
+    expect(host.detector.latestRow(PANE)?.isReplay).toBe(true)
+    host.settle()
+    expect(host.announced).toEqual([])
+    host.hook({ state: 'working' })
+    host.hook({ state: 'done' })
+    host.hook({ state: 'working', agentType: 'make' })
+    host.hook({ state: 'done', agentType: 'make' })
+    host.settle()
+    expect(host.announced).toEqual([])
+    host.hook({ state: 'working' })
+    const completedAt = Date.now() + 500
+    host.hook({ state: 'working', turnCompletedAt: completedAt })
+    host.hook({ state: 'done' })
+    host.settle()
+    expect(host.announced.map((event) => event.notificationId)).toEqual([idAt(completedAt)])
+  })
+
+  it('uses one source recipient set for direct and carrier delivery, and retires each sender identity', async () => {
+    const source = new RuntimeMobileNotificationController()
+    const carrier = new RuntimeMobileNotificationController()
+    source.configureDismissalStore(join(userDataPath, 'source'))
+    carrier.configureDismissalStore(join(userDataPath, 'carrier'))
+    const direct = registration({
+      registrationId: 'direct',
+      destinationDigest: DIGEST,
+      filter: { hostAgentAlerts: true, sourceAgentAlerts: true }
+    })
+    const onlyA = registration({
+      registrationId: 'only-a',
+      destinationDigest: 'b'.repeat(64),
+      filter: { sourceAgentAlerts: true, hostAgentAlerts: false }
+    })
+    const devices = [{ deviceId: 'phone', pushRegistration: direct }]
+    const b = createHarness({ devices })
+    const a = createHarness({
       devices: [
-        { deviceId: 'phone', pushRegistration: registration({ filter: { hostAgentAlerts: true } }) }
+        { deviceId: 'both', pushRegistration: { ...direct, registrationId: 'both-a' } },
+        { deviceId: 'only-a', pushRegistration: onlyA }
       ]
     })
-    controller.onDispatched((event) => push.dispatcher.enqueue(event))
-    const host = createExecutionHost(controller)
+    source.setPushRegistrar({
+      planAgentAlert: () =>
+        planSourceAgentRecipients(
+          { listDevices: () => devices, setPushRegistration: () => true },
+          true
+        ),
+      register: async () => ({ registered: false, reason: 'throttled' }),
+      unregister: async () => ({ unregistered: false }),
+      test: async () => ({ accepted: false, reason: 'unavailable' })
+    })
+    source.onDispatched((event) => {
+      b.dispatcher.enqueue(event)
+      const parsed = SourceAgentAlertEvent.safeParse(event)
+      if (parsed.success) {
+        carrier.carrySourceAlert('runtime:server', parsed.data)
+      }
+    })
+    carrier.onDispatched((event) => a.dispatcher.enqueue(event))
+    carrier.setSourceHost('runtime:server', true)
+    const host = createExecutionHost(source)
     try {
       host.hook({ state: 'working' })
-      const askedAt = host.hook({ state: 'waiting' })
+      const at = host.hook({ state: 'waiting' })
       await flush()
-      const delivered = {
-        notificationId: idAt(askedAt)!,
-        notificationEpoch: controller.getEpoch(),
+      expect(b.sends.map((send) => send.registrationIds)).toEqual([['direct']])
+      expect(a.sends.map((send) => send.registrationIds)).toEqual([['only-a']])
+      carrier.dispatch({
+        type: 'notification',
+        source: 'agent-task-complete',
+        title: 'raw window copy',
+        body: '',
+        worktreeId: WT,
+        executionHost: 'runtime:server',
+        executionHostAnnounces: true,
+        agentState: 'waiting'
+      })
+      await flush()
+      expect(a.sends).toHaveLength(1)
+      vi.setSystemTime(Date.now() + 1000)
+      host.server.ingestRemote(
+        {
+          paneKey: PANE,
+          tabId: 'tab-a',
+          worktreeId: WT,
+          source: 'claude',
+          isReplay: true,
+          payload: { state: 'working', prompt: 'next', agentType: 'claude' }
+        },
+        null
+      )
+      await flush()
+      expect(b.sends.at(-1)?.notification).toMatchObject({
+        kind: 'dismiss',
+        notificationId: idAt(at),
         notificationSeq: 1
-      }
-      host.hook({ state: 'working' })
-      host.hook({ state: 'working', lastAssistantMessage: 'Still working' })
-      await flush()
-      expect(push.sends.map((send) => send.notification.kind)).toEqual([undefined, 'dismiss'])
-      expect(push.sends[1]?.notification).toMatchObject(delivered)
-      expect(controller.reconcileDismissedPushes([delivered])).toEqual([delivered])
-
+      })
+      expect(a.sends.at(-1)?.notification).toMatchObject({
+        kind: 'dismiss',
+        notificationEpoch: carrier.getEpoch(),
+        notificationSeq: 1
+      })
+      expect(a.sends.at(-1)?.notification.notificationId).not.toBe(idAt(at))
       const completedAt = Date.now() + 500
       host.hook({ state: 'working', turnCompletedAt: completedAt })
       host.hook({
@@ -223,103 +295,15 @@ describe('host-announced agent alerts', () => {
         turnCompletedAt: completedAt,
         lastAssistantMessage: 'Background work'
       })
-      await flush()
-      expect(controller.getMissedSince(0).filter((event) => event.type === 'dismiss')).toHaveLength(
-        1
-      )
+      expect(source.getMissedSince(0).filter((event) => event.type === 'dismiss')).toHaveLength(1)
       host.hook({ state: 'working' }, true)
-      expect(controller.getMissedSince(0).at(-1)).toMatchObject({
+      expect(source.getMissedSince(0).at(-1)).toMatchObject({
         type: 'dismiss',
         notificationId: idAt(completedAt)
       })
     } finally {
-      await controller.closeDismissals()
+      await source.closeDismissals()
+      await carrier.closeDismissals()
     }
-  })
-
-  it('a desktop forwarding that news skips only phones that hear the host directly', async () => {
-    const environment = addEnvironmentFromPairingCode(userDataPath, {
-      name: 'build server',
-      pairingCode: encodePairingOffer({
-        v: 2,
-        endpoint: 'wss://server.example/runtime',
-        publicKeyB64: SERVER_KEY,
-        deviceToken: 'device-token',
-        pairedDeviceId: 'desktop-a'
-      }),
-      now: 100
-    })
-    // The phone names the host by the fingerprint the push gateway stamps on the host's own pushes.
-    const serverFingerprint = deriveRelayHostId(Buffer.from(SERVER_KEY, 'base64'))
-    const day = 86_400_000
-    const push = createHarness({
-      devices: [
-        {
-          deviceId: 'phone-paired-with-both',
-          pushRegistration: registration({
-            registrationId: 'reg-both',
-            filter: {
-              directAgentAlertHosts: [{ fingerprint: serverFingerprint, until: Date.now() + day }]
-            }
-          })
-        },
-        {
-          deviceId: 'phone-paired-with-desktop-only',
-          pushRegistration: registration({ registrationId: 'reg-desktop-only' })
-        },
-        {
-          deviceId: 'phone-with-lapsed-claim',
-          pushRegistration: registration({
-            registrationId: 'reg-lapsed',
-            filter: {
-              directAgentAlertHosts: [{ fingerprint: serverFingerprint, until: Date.now() - 1 }]
-            }
-          })
-        }
-      ],
-      resolveExecutionHostFingerprints: (executionHost) =>
-        resolveExecutionHostPushFingerprints(executionHost, userDataPath)
-    })
-    let seq = 0
-    const desktop = createNotificationDeliveryService({
-      readNotificationSettings: () => ({ ...SETTINGS, mutedNotificationSourceIds: [] }),
-      findActiveWindow: () => null,
-      isWindowVisible: () => false,
-      setTrayAttention: vi.fn(),
-      isNotificationSupported: () => true,
-      dispatchMobileNotification: (event) =>
-        push.dispatcher.enqueue({ ...event, notificationSeq: ++seq, notificationEpoch: 'epoch' }),
-      readAuthorizationStatus: () => Promise.resolve('authorized'),
-      recordDeliveryOutcome: vi.fn(),
-      deliverNative: () => ({ delivered: true }),
-      platform: 'linux',
-      now: Date.now
-    })
-    const executionHost = `runtime:${environment.id}` as const
-
-    // The window's hook-lane copy of the server's turn.
-    desktop.dispatch({
-      source: 'agent-task-complete',
-      worktreeId: WT,
-      executionHost,
-      executionHostAnnounces: true,
-      agentState: 'done'
-    })
-    await flush()
-    expect(push.sends.flatMap((send) => send.registrationIds).sort()).toEqual([
-      'reg-desktop-only',
-      'reg-lapsed'
-    ])
-
-    // A title-only completion is known only to the desktop, so every phone still gets it.
-    push.sends.length = 0
-    vi.setSystemTime(Date.now() + day)
-    desktop.dispatch({ source: 'agent-task-complete', worktreeId: WT, executionHost })
-    await flush()
-    expect(push.sends.flatMap((send) => send.registrationIds).sort()).toEqual([
-      'reg-both',
-      'reg-desktop-only',
-      'reg-lapsed'
-    ])
   })
 })

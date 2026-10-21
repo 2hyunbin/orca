@@ -2,12 +2,12 @@ import type {
   AgentCompletionCoordinatorOptions,
   AgentCompletionStatusSnapshot
 } from './agent-completion-coordinator-types'
-import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
+import type { RecognizedAgentProcess } from './agent-process-recognition'
 import type {
   AgentCompletionIdentityScope,
   LastCompletionIdentity
 } from './agent-completion-identity-store'
-import { isPiCompatibleAgentType } from '../../../../shared/pi-agent-kind'
+import { isPiCompatibleAgentType } from './pi-agent-kind'
 
 type CompletionSource = 'hook' | 'title' | 'process-exit'
 
@@ -36,7 +36,10 @@ type ProcessState = {
 }
 
 type CompletionControllerOptions = {
-  options: AgentCompletionCoordinatorOptions
+  options: Pick<
+    AgentCompletionCoordinatorOptions,
+    'paneKey' | 'isLive' | 'dispatchCompletion' | 'dispatchAttention' | 'dispatchHookLifecycle'
+  >
   state: CompletionState
   processState: ProcessState
   identityScope: AgentCompletionIdentityScope

@@ -20,7 +20,7 @@ import {
 import type {
   AgentCompletionCoordinatorOptions,
   AgentCompletionStatusSnapshot
-} from './agent-completion-coordinator-types'
+} from '../../../../shared/agent-completion-coordinator-types'
 
 const HOOK_DONE_QUIET_MS = 1_500
 

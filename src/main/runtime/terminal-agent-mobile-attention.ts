@@ -1,6 +1,7 @@
 // The execution host announces hook news even when no window holds the agent's tab.
 // Keep the window's completion rules until the host supplies one turn-end signal.
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
+import { isRecognizedAgentType } from '../../shared/agent-process-recognition'
 import { agentMainAgentVerdict } from '../../shared/agent-main-agent-verdict'
 import { buildAgentNotificationId } from '../../shared/agent-notification-id'
 import type { AgentStatusIpcPayload, AgentStatusState } from '../../shared/agent-status-types'
@@ -8,7 +9,12 @@ import type {
   NotificationDispatchRequest,
   NotificationSettings
 } from '../../shared/notification-settings-types'
-import { isPiCompatibleAgentType } from '../../shared/pi-agent-kind'
+import { createAgentCompletionHookObserver } from '../../shared/agent-completion-hook-observer'
+import {
+  createAgentCompletionNotificationController,
+  type CompletionState
+} from '../../shared/agent-completion-notification-controller'
+import { createAgentCompletionIdentityScope } from '../../shared/agent-completion-identity-store'
 import { buildNotificationOptions } from '../ipc/notification-options'
 import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
@@ -25,53 +31,12 @@ export type TerminalAgentMobileAttentionDeps = {
   dispatch: (event: MobileNotificationDispatchEvent) => void
   retire: (worktreeId: string, paneKey: string, before: number) => void
   now: () => number
-  schedule?: (run: () => void, delayMs: number) => () => void
-}
-
-type PaneMemory = {
-  lastId: string | null
-  sawWorking: boolean
-  lastTurnCompletedAt: number | null
-  heldId: string | null
-  cancelHold: (() => void) | null
-}
-
-function finiteOrNull(value: number | undefined): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 export function createTerminalAgentMobileAttention(
   deps: TerminalAgentMobileAttentionDeps
 ): (change: AgentPaneChange) => void {
-  const panes = new Map<string, PaneMemory>()
-  const schedule =
-    deps.schedule ??
-    ((run, delayMs) => {
-      const timer = setTimeout(run, delayMs)
-      timer.unref?.()
-      return () => clearTimeout(timer)
-    })
-
-  const memoryFor = (paneKey: string): PaneMemory => {
-    let memory = panes.get(paneKey)
-    if (!memory) {
-      memory = {
-        lastId: null,
-        sawWorking: false,
-        lastTurnCompletedAt: null,
-        heldId: null,
-        cancelHold: null
-      }
-      panes.set(paneKey, memory)
-    }
-    return memory
-  }
-
-  const cancelHold = (memory: PaneMemory): void => {
-    memory.cancelHold?.()
-    memory.cancelHold = null
-    memory.heldId = null
-  }
+  const panes = new Map<string, ReturnType<typeof createPane>>()
 
   const announce = (
     worktreeId: string,
@@ -125,110 +90,124 @@ export function createTerminalAgentMobileAttention(
     })
   }
 
+  const createPane = (paneKey: string, worktreeId: string) => {
+    const identityScope = createAgentCompletionIdentityScope(paneKey, 'host')
+    const state: CompletionState = {
+      currentTurn: 0,
+      workingStatusObserved: false,
+      requiresFreshWorking: false,
+      lastCompletionToken: null,
+      lastCompletionAt: 0,
+      lastCompletedTurn: null,
+      lastCompletionSource: null,
+      lastCompletionIdentity: null,
+      lastAttentionToken: null,
+      pendingHookDoneTimer: null,
+      pendingHookDoneTitle: null,
+      pendingHookDonePayload: null
+    }
+    const emit = (
+      snapshot: Parameters<
+        ReturnType<typeof createAgentCompletionHookObserver>['observeHookStatus']
+      >[0]
+    ) => {
+      const row = deps.readRow(paneKey)
+      const id = buildAgentNotificationId({
+        worktreeId,
+        paneKey,
+        stateStartedAt: snapshot.stateStartedAt
+      })
+      if (row && id) {
+        announce(worktreeId, { ...row, ...snapshot }, snapshot.state, id)
+      }
+    }
+    const notification = createAgentCompletionNotificationController({
+      options: {
+        paneKey,
+        isLive: () => panes.has(paneKey),
+        dispatchCompletion: (_title, meta) => {
+          const row = meta?.agentStatus ?? deps.readRow(paneKey)
+          if (row) {
+            emit(row)
+          }
+        },
+        dispatchAttention: (_title, meta) => emit(meta.agentStatus)
+      },
+      state,
+      identityScope,
+      processState: { processSession: 0, lastForegroundAgent: null, hasAgentRunEvidence: true }
+    })
+    const observer = createAgentCompletionHookObserver({
+      options: { paneKey },
+      state,
+      establishAgentEvidence: () => {},
+      recordPaneActivity: () => {},
+      dropPendingTitle: () => {},
+      clearPendingHookDone: notification.clearPendingHookDone,
+      dispatchAttention: notification.dispatchAttention,
+      dispatchCompletion: notification.dispatchCompletion,
+      scheduleHookDoneCompletion: notification.scheduleHookDoneCompletion,
+      doneShouldUseQuietWindow: notification.doneShouldUseQuietWindow,
+      hookCompletionIdentity: notification.hookCompletionIdentity,
+      hookCompletionAgentIdentity: notification.hookCompletionAgentIdentity,
+      completionIdentityFor: notification.completionIdentityFor,
+      openStampedTail: identityScope.openStampedTail,
+      rememberHandledTurnCompletedAt: identityScope.rememberTurnCompletedAt,
+      turnCompletedAtAlreadyHandled: identityScope.turnCompletedAtAlreadyHandled,
+      consumePendingStampedTailForAgent: identityScope.consumePendingStampedTailForAgent,
+      consumeStampedTailForCurrentCoordinator: identityScope.consumeStampedTail,
+      clearOriginStampedTail: identityScope.clearOriginStampedTail,
+      clearProcessExitCompletion: identityScope.clearProcessExitCompletion,
+      recordWorkingBoundary: identityScope.recordWorkingBoundary
+    })
+    return { worktreeId, state, observer, identityScope, notification }
+  }
+
   return (change) => {
-    // Every look arrives as `seeded` or `observed`; `moved` repeats one of them.
     if (change.kind === 'moved') {
       return
     }
     const { paneKey } = change
     const row = deps.readRow(paneKey)
-    const memory = panes.get(paneKey)
-    if (!row || !change.workspace) {
-      if (memory) {
-        cancelHold(memory)
-        panes.delete(paneKey)
-      }
+    const previous = panes.get(paneKey)
+    if (
+      !row ||
+      !change.workspace ||
+      row.structuredHost ||
+      row.programStatusOnly ||
+      row.providerSessionOnly ||
+      !isRecognizedAgentType(row.agentType)
+    ) {
+      previous?.notification.clearPendingHookDone()
+      previous?.identityScope.dispose(false)
+      panes.delete(paneKey)
       return
     }
-    // Native chat rows are announced by their own host producer.
-    if (row.structuredHost || row.programStatusOnly || row.providerSessionOnly) {
-      return
-    }
-    // The id the window builds: the hook's own workspace first, as its status applicator reads it.
     const worktreeId = row.worktreeId ?? change.workspace.worktreeId
-    const pane = memoryFor(paneKey)
-    const turnCompletedAt = finiteOrNull(row.turnCompletedAt)
-    const id = (stateStartedAt: number): string | null =>
-      buildAgentNotificationId({ worktreeId, paneKey, stateStartedAt })
-
-    // A relay replay of a turn this host never saw end is news, as the window's replay rule has it.
+    // Live or replayed current facts can retire old news; unconfirmed hydration cannot.
+    if (row.state === 'working' && !row.restoredUnconfirmed) {
+      deps.retire(worktreeId, paneKey, Math.max(row.turnStartedAt ?? 0, row.stateStartedAt))
+    }
+    const pane = previous ?? createPane(paneKey, worktreeId)
+    panes.set(paneKey, pane)
+    const identity = pane.notification.hookCompletionIdentity(row)
     const unseenReplay =
       row.isReplay === true &&
-      memory !== undefined &&
-      ((row.state === 'working' && turnCompletedAt !== null) ||
-        (row.state === 'done' && id(row.stateStartedAt) !== pane.lastId))
+      previous !== undefined &&
+      ((row.state === 'working' && row.turnCompletedAt !== undefined) ||
+        (row.state === 'done' && identity !== pane.state.lastCompletionIdentity?.identity))
     if (change.kind === 'seeded' && !unseenReplay) {
-      // Restored or replayed: never news, only what later rows compare against.
-      pane.lastId = id(row.stateStartedAt)
-      pane.lastTurnCompletedAt = turnCompletedAt
-      pane.sawWorking = row.state === 'working'
-      return
-    }
-
-    if (row.state === 'working') {
-      cancelHold(pane)
-      if (change.kind === 'observed') {
-        deps.retire(worktreeId, paneKey, Math.max(row.turnStartedAt ?? 0, row.stateStartedAt))
+      pane.state.workingStatusObserved = row.state === 'working'
+      pane.state.lastCompletionIdentity = identity
+        ? { source: 'hook', identity, agentIdentity: row.agentType ?? null }
+        : null
+      if (row.turnCompletedAt !== undefined) {
+        pane.identityScope.rememberTurnCompletedAt(row.turnCompletedAt)
       }
-      const sawWorking = pane.sawWorking
-      pane.sawWorking = true
-      if (turnCompletedAt === null || turnCompletedAt === pane.lastTurnCompletedAt) {
+      {
         return
       }
-      pane.lastTurnCompletedAt = turnCompletedAt
-      const turnId = id(turnCompletedAt)
-      if (sawWorking && turnId && turnId !== pane.lastId) {
-        pane.lastId = turnId
-        announce(worktreeId, row, 'done', turnId)
-      }
-      return
     }
-
-    if (row.state === 'blocked' || row.state === 'waiting') {
-      cancelHold(pane)
-      const attentionId = id(row.stateStartedAt)
-      if (attentionId && attentionId !== pane.lastId) {
-        pane.lastId = attentionId
-        announce(worktreeId, row, row.state, attentionId)
-      }
-      return
-    }
-
-    // `done`: a session boundary is not a turn, and a turn already announced by its stamp is old news.
-    const doneId = id(row.stateStartedAt)
-    if (
-      row.sessionBoundary ||
-      !doneId ||
-      doneId === pane.lastId ||
-      doneId === pane.heldId ||
-      (turnCompletedAt !== null && turnCompletedAt === pane.lastTurnCompletedAt)
-    ) {
-      return
-    }
-    cancelHold(pane)
-    if (turnCompletedAt !== null) {
-      pane.lastTurnCompletedAt = turnCompletedAt
-    }
-    // Pi emits milestone `done`s mid-turn, and a turn can resume at once; the window holds those.
-    if (!pane.sawWorking && !isPiCompatibleAgentType(row.agentType?.trim().toLowerCase())) {
-      pane.lastId = doneId
-      announce(worktreeId, row, 'done', doneId)
-      return
-    }
-    pane.heldId = doneId
-    pane.cancelHold = schedule(() => {
-      pane.cancelHold = null
-      pane.heldId = null
-      const current = deps.readRow(paneKey)
-      if (
-        panes.get(paneKey) !== pane ||
-        current?.state !== 'done' ||
-        current.stateStartedAt !== row.stateStartedAt
-      ) {
-        return
-      }
-      pane.lastId = doneId
-      announce(worktreeId, current, 'done', doneId)
-    }, HOST_HOOK_DONE_QUIET_MS)
+    pane.observer.observeHookStatus(row)
   }
 }

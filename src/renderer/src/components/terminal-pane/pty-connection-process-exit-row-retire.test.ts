@@ -5,7 +5,7 @@ import { toAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalAgent } from '../../../../shared/terminal-agent'
 import type * as CoordinatorModule from './agent-completion-coordinator'
-import type { AgentCompletionCoordinatorOptions } from './agent-completion-coordinator-types'
+import type { AgentCompletionCoordinatorOptions } from '../../../../shared/agent-completion-coordinator-types'
 import { createDeferred, flushAsyncTicks } from './pty-connection-test-async'
 import {
   createMockTransport,

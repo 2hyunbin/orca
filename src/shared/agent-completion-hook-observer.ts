@@ -1,8 +1,9 @@
-import { isRecognizedAgentType } from '../../../../shared/agent-process-recognition'
+import { isRecognizedAgentType } from './agent-process-recognition'
 import type {
   AgentCompletionCoordinatorOptions,
   AgentCompletionStatusSnapshot
 } from './agent-completion-coordinator-types'
+import type { createAgentCompletionNotificationController } from './agent-completion-notification-controller'
 import type { LastCompletionIdentity } from './agent-completion-identity-store'
 
 type HookObserverState = {
@@ -18,13 +19,19 @@ type HookObserverState = {
 }
 
 type HookObserverOptions = {
-  options: AgentCompletionCoordinatorOptions
+  options: Pick<AgentCompletionCoordinatorOptions, 'paneKey' | 'dispatchHookLifecycle'>
   state: HookObserverState
   establishAgentEvidence: () => void
   recordPaneActivity: () => void
   clearPendingHookDone: () => void
   dispatchAttention: (payload: AgentCompletionStatusSnapshot) => void
-  dispatchCompletion: (source: 'hook', title: string, override?: Record<string, unknown>) => boolean
+  dispatchCompletion: (
+    source: 'hook',
+    title: string,
+    override?: Parameters<
+      ReturnType<typeof createAgentCompletionNotificationController>['dispatchCompletion']
+    >[2]
+  ) => boolean
   scheduleHookDoneCompletion: (title: string, payload: AgentCompletionStatusSnapshot) => void
   doneShouldUseQuietWindow: (payload: AgentCompletionStatusSnapshot) => boolean
   hookCompletionIdentity: (payload: AgentCompletionStatusSnapshot) => string | null

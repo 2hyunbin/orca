@@ -23,6 +23,7 @@ export const NotificationGetMissedSinceParams = z.object({
   lastSeenSeq: z.number().int().min(0, 'lastSeenSeq must be a non-negative integer'),
   epoch: z.string().optional(),
   includeDesktopSuppressed: z.boolean().optional(),
+  sourceEvents: z.boolean().optional(),
   deliveredPushes: z
     .array(
       z.object({
@@ -40,15 +41,7 @@ export const NotificationPushFilterParams = z.object({
   onlyWhenDesktopAway: z.boolean().optional(),
   sound: z.boolean().optional(),
   hostAgentAlerts: z.boolean().optional(),
-  directAgentAlertHosts: z
-    .array(
-      z.object({
-        fingerprint: z.string().min(1).max(64),
-        until: z.number().int().nonnegative()
-      })
-    )
-    .max(64)
-    .optional()
+  sourceAgentAlerts: z.boolean().optional()
 })
 
 export const NotificationRegisterPushParams = z
@@ -68,5 +61,8 @@ export const NotificationRegisterPushParams = z
   })
 
 export const NotificationsSubscribeParams = z
-  .object({ includeDesktopSuppressed: z.boolean().optional() })
+  .object({
+    includeDesktopSuppressed: z.boolean().optional(),
+    sourceEvents: z.boolean().optional()
+  })
   .optional()

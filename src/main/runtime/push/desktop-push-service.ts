@@ -2,7 +2,7 @@
 // registration each paired phone asked for, and the durable delete queue. Built
 // alongside DesktopRelayService but deliberately not gated on cloud sign-in: the
 // gateway authenticates with the host keypair, so accountless hosts push too.
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import {
   MOBILE_PUSH_LEASE_MS,
   type MobilePushTestResult,
@@ -13,7 +13,7 @@ import { runKeyedSerializedOperation } from '../../cli/keyed-promise-queue'
 import type { DeviceRegistry } from '../device-registry'
 import type { OrcaRuntimeService } from '../orca-runtime'
 import type { OrcaRuntimeRpcServer } from '../runtime-rpc'
-import { PushDispatcher } from './push-dispatcher'
+import { PushDispatcher, planSourceAgentRecipients } from './push-dispatcher'
 import { PushGatewayClient } from './push-gateway-client'
 import { PushRegisterThrottle } from './push-register-throttle'
 import type { PushUnregisterOutbox } from './push-unregister-outbox'
@@ -82,6 +82,10 @@ export class DesktopPushService {
     const client =
       options.client ?? new PushGatewayClient({ gatewayUrl: options.gatewayUrl, keypair })
     return new DesktopPushService(options, registry, client)
+  }
+
+  planAgentAlert(event: { hostAgentAlert?: boolean }): string[] {
+    return planSourceAgentRecipients(this.registry, event.hostAgentAlert === true)
   }
 
   start(): void {
@@ -263,6 +267,15 @@ export class DesktopPushService {
     try {
       const stored = this.registry.setPushRegistration(input.deviceId, {
         registrationId,
+        ...(input.filter.sourceAgentAlerts
+          ? {
+              destinationDigest: createHash('sha256')
+                .update(
+                  JSON.stringify([input.platform, input.apnsEnvironment ?? null, input.token])
+                )
+                .digest('hex')
+            }
+          : {}),
         filter: input.filter,
         expiresAt: Date.now() + MOBILE_PUSH_LEASE_MS
       })

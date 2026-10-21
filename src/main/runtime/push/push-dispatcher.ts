@@ -14,7 +14,6 @@ import type {
 } from '../runtime-mobile-notification-controller'
 import type { PushGatewayClient, PushSendNotification } from './push-gateway-client'
 import { PushOutcomeCounters } from './push-outcome-counters'
-import { resolveExecutionHostPushFingerprints } from './execution-host-push-fingerprints'
 
 const PUSH_RETRY_DELAY_MS = 2_000
 // The gateway rejects a whole request above this, so a host with more paired
@@ -33,11 +32,35 @@ type PushDispatcherOptions = {
   registry: PushDispatcherRegistry
   /** Test seam: lets a suite drive the single retry without real time. */
   scheduleRetry?: (run: () => void, delayMs: number) => void
-  /** The push fingerprints of the paired server named by an event's `executionHost`. */
-  resolveExecutionHostFingerprints?: (executionHost: string) => string[]
+}
+
+export function planSourceAgentRecipients(
+  registry: PushDispatcherRegistry,
+  terminal: boolean
+): string[] {
+  return activePushTargets(registry).flatMap(({ registration }) =>
+    registration.destinationDigest && (!terminal || registration.filter.hostAgentAlerts === true)
+      ? [registration.destinationDigest]
+      : []
+  )
 }
 
 type PushTarget = { deviceId: string; registration: MobilePushRegistration }
+
+function activePushTargets(registry: PushDispatcherRegistry): PushTarget[] {
+  const targets = new Map<string, PushTarget>()
+  for (const { deviceId, pushRegistration: registration } of registry.listDevices()) {
+    if (!registration || registration.expiresAt <= Date.now()) {
+      continue
+    }
+    const key = registration.destinationDigest ?? deviceId
+    // Re-pairing the same destination must not keep a second, contradictory delivery mode.
+    if ((targets.get(key)?.registration.expiresAt ?? 0) <= registration.expiresAt) {
+      targets.set(key, { deviceId, registration })
+    }
+  }
+  return [...targets.values()]
+}
 
 function clip(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim()
@@ -59,50 +82,38 @@ export function mapPushAgentState(
 
 function allowsPushDelivery(
   registration: MobilePushRegistration,
-  event: MobileNotificationEvent,
-  executionHostFingerprints: () => readonly string[]
+  event: MobileNotificationDispatchEvent
 ): boolean {
-  return (
-    event.type === 'notification' &&
-    event.desktopAllowed !== false &&
-    (!registration.filter.onlyWhenDesktopAway || event.desktopAway !== false) &&
-    hookNewsReachesPhoneOnce(registration, event, executionHostFingerprints)
-  )
-}
-
-/**
- * A terminal agent's hook news has two announcers: the execution host's main, for phones that take
- * host agent alerts, and a window's copy for every other phone. Each phone gets exactly one.
- */
-function hookNewsReachesPhoneOnce(
-  registration: MobilePushRegistration,
-  event: MobileNotificationDispatchEvent,
-  executionHostFingerprints: () => readonly string[]
-): boolean {
-  const takesHostAlerts = registration.filter.hostAgentAlerts === true
-  if (event.hostAgentAlert) {
-    return takesHostAlerts
-  }
-  if (!event.executionHostAnnounces) {
-    return true
-  }
-  return event.executionHost
-    ? !phoneHearsHostDirectly(registration, executionHostFingerprints)
-    : !takesHostAlerts
-}
-
-/** The phone said the execution host pushes it this news itself, and that claim has not lapsed. */
-function phoneHearsHostDirectly(
-  registration: MobilePushRegistration,
-  executionHostFingerprints: () => readonly string[]
-): boolean {
-  const direct = registration.filter.directAgentAlertHosts
-  if (!direct?.length) {
+  if (
+    event.desktopAllowed === false ||
+    (registration.filter.onlyWhenDesktopAway && event.desktopAway === false)
+  ) {
     return false
   }
-  const now = Date.now()
-  const fingerprints = executionHostFingerprints()
-  return direct.some((host) => host.until > now && fingerprints.includes(host.fingerprint))
+  const modern = !!registration.destinationDigest && registration.filter.sourceAgentAlerts === true
+  if (event.sourcePlan) {
+    if (!modern) {
+      return event.sourcePlan.kind === 'structured' && !event.sourcePlan.carrier
+    }
+    if (
+      event.sourcePlan.kind === 'terminal' &&
+      !event.sourcePlan.carrier &&
+      !registration.filter.hostAgentAlerts
+    ) {
+      return false
+    }
+    const direct = event.sourcePlan.direct.includes(registration.destinationDigest!)
+    return event.sourcePlan.carrier ? !direct : direct
+  }
+  if (event.hostAgentAlert) {
+    return false
+  }
+  if (event.executionHostAnnounces) {
+    return event.executionHost
+      ? !(event.sourceOwned && modern)
+      : !(modern && registration.filter.hostAgentAlerts)
+  }
+  return true
 }
 
 export class PushDispatcher {
@@ -112,13 +123,10 @@ export class PushDispatcher {
   private readonly client: PushGatewayClient
   private readonly registry: PushDispatcherRegistry
   private readonly scheduleRetry: (run: () => void, delayMs: number) => void
-  private readonly resolveExecutionHostFingerprints: (executionHost: string) => string[]
 
   constructor(options: PushDispatcherOptions) {
     this.client = options.client
     this.registry = options.registry
-    this.resolveExecutionHostFingerprints =
-      options.resolveExecutionHostFingerprints ?? resolveExecutionHostPushFingerprints
     this.scheduleRetry =
       options.scheduleRetry ??
       ((run, delayMs) => {
@@ -199,18 +207,8 @@ export class PushDispatcher {
     if (agentState === undefined) {
       return null
     }
-    let fingerprints: string[] | undefined
-    const executionHostFingerprints = (): string[] =>
-      (fingerprints ??= event.executionHost
-        ? this.resolveExecutionHostFingerprints(event.executionHost)
-        : [])
-    const targets = this.registry.listDevices().flatMap((device) => {
-      const registration = device.pushRegistration
-      if (
-        !registration ||
-        registration.expiresAt <= Date.now() ||
-        !allowsPushDelivery(registration, event, executionHostFingerprints)
-      ) {
+    const targets = activePushTargets(this.registry).flatMap(({ deviceId, registration }) => {
+      if (!allowsPushDelivery(registration, event)) {
         return []
       }
       if (
@@ -218,13 +216,13 @@ export class PushDispatcher {
         !reserveNotificationCooldown(
           this.recentNotifications,
           // Keyed news is announced once by its producer, so only its own repeat may collapse it.
-          JSON.stringify([device.deviceId, event.attentionKey ?? event.worktreeId ?? 'global']),
+          JSON.stringify([deviceId, event.attentionKey ?? event.worktreeId ?? 'global']),
           event.emittedAt
         )
       ) {
         return []
       }
-      return [{ deviceId: device.deviceId, registration }]
+      return [{ deviceId, registration }]
     })
     if (targets.length === 0) {
       return null

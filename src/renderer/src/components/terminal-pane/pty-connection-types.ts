@@ -4,7 +4,7 @@ import type { PtyTransport, PtyTransportRecoveryState } from './pty-transport-ty
 import type { SessionRestoredBannerReason } from './session-restored-banner-pane-state'
 import type { ReplayingPanesRef } from './replay-guard'
 import type { RestoredViewportBlankingPanesRef } from './terminal-restored-viewport'
-import type { AgentCompletionStatusSnapshot } from './agent-completion-coordinator-types'
+import type { AgentCompletionStatusSnapshot } from '../../../../shared/agent-completion-coordinator-types'
 import type { EventProps } from '../../../../shared/telemetry-events'
 import type { TerminalColorSchemeMode } from '../../../../shared/terminal-color-scheme-protocol'
 import type { StartupCommandDelivery } from '../../../../shared/codex-startup-delivery'

@@ -1,4 +1,4 @@
-import type { AgentCompletionIdentityScope } from './agent-completion-identity-store'
+import type { AgentCompletionIdentityScope } from '../../../../shared/agent-completion-identity-store'
 
 type LifecycleState = {
   workingStatusObserved: boolean

@@ -1,3 +1,5 @@
+import { app } from 'electron'
+import { startRuntimeEnvironmentAgentAlerts } from '../ipc/runtime-environments/runtime-environment-agent-alerts'
 import { getOrcaPushGatewayUrl } from '../orca-profiles/profile-cloud-auth-config'
 import { DesktopPushService } from '../runtime/push/desktop-push-service'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
@@ -22,6 +24,8 @@ export function startDesktopPushService(runtimeRpc: OrcaRuntimeRpcServer): void 
       gatewayUrl: getOrcaPushGatewayUrl()
     })
     pushService?.start()
+    const stopSources = startRuntimeEnvironmentAgentAlerts(runtime)
+    app.once('before-quit', stopSources)
     state.desktopPushService = pushService
   } catch (error) {
     console.warn(

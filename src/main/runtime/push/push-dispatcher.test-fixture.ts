@@ -21,7 +21,6 @@ export function createHarness(options: {
   devices: { deviceId: string; pushRegistration?: MobilePushRegistration }[]
   results?: PushSendResult[]
   sendImpl?: () => Promise<never>
-  resolveExecutionHostFingerprints?: (executionHost: string) => string[]
 }): {
   dispatcher: PushDispatcher
   sends: SendCall[]
@@ -61,10 +60,7 @@ export function createHarness(options: {
       registry,
       scheduleRetry: (run) => {
         retry = run
-      },
-      ...(options.resolveExecutionHostFingerprints
-        ? { resolveExecutionHostFingerprints: options.resolveExecutionHostFingerprints }
-        : {})
+      }
     }),
     sends,
     cleared,

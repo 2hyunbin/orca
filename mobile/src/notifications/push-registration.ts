@@ -12,7 +12,6 @@ import type {
   MobilePushRegisterInput
 } from '../../../src/shared/mobile-push-contract'
 import { NOTIFICATIONS_REMOTE_PUSH_RUNTIME_CAPABILITY } from '../../../src/shared/protocol-version'
-import { deriveHostFingerprint } from './push-host-fingerprint'
 import type { RpcClient } from '../transport/rpc-client'
 import { startRuntimeCapabilityProbe } from '../transport/runtime-capability-probe'
 import { pushRouteRegister, pushRouteUnregister } from './mobile-push-registration-operations'
@@ -42,7 +41,6 @@ type HostPushState = {
   supported: boolean | null
   /** The host pushes its own agents' alerts here, so other hosts need not forward them. */
   announcesAgentAlerts: boolean
-  fingerprint: string | null
   capabilityProbeStop: (() => void) | null
   chain: Promise<void>
 }
@@ -59,7 +57,6 @@ function hostState(hostId: string): HostPushState {
       connection: { client: null },
       supported: null,
       announcesAgentAlerts: false,
-      fingerprint: null,
       capabilityProbeStop: null,
       chain: Promise.resolve()
     }
@@ -179,8 +176,8 @@ async function reconcileHost(hostId: string): Promise<void> {
       timer = setTimeout(() => resolve(null), TOKEN_TIMEOUT_MS)
     })
   ]).finally(() => clearTimeout(timer))
-  const host = { announcesAgentAlerts: state.announcesAgentAlerts, fingerprint: state.fingerprint }
-  const { filter, optedIn } = registrationFilter(
+  const host = { announcesAgentAlerts: state.announcesAgentAlerts }
+  const filter = registrationFilter(
     await readRecords(),
     hostId,
     host,
@@ -195,19 +192,15 @@ async function reconcileHost(hostId: string): Promise<void> {
     return
   }
   const outcome = await sendRegister(client, token, filter)
-  if (outcome === 'refused') {
-    // A host that won't push this phone must stop vouching for it at once.
-    await mutateRecordsFor(hostId, (current) => current.direct.delete(hostId))
-  }
   if (outcome !== 'registered' || hostsById.get(hostId) !== state) {
     return
   }
+  await mutateRecordsFor(hostId, (current) => recordRegistered(current, hostId, host))
   if (generation !== consentGeneration) {
     await mutateRecords((current) => current.pending.add(hostId))
     void enqueueReconcile(hostId)
     return
   }
-  await mutateRecordsFor(hostId, (current) => recordRegistered(current, hostId, host, optedIn))
 }
 
 function enqueueReconcile(hostId: string): Promise<void> {
@@ -233,10 +226,9 @@ async function reconcileAllHosts(): Promise<void> {
 export function attachPushRegistration(
   hostId: string,
   client: PushClient,
-  hostPublicKeyB64?: string
+  _hostPublicKeyB64?: string
 ): () => void {
   const state = hostState(hostId)
-  state.fingerprint = hostPublicKeyB64 ? deriveHostFingerprint(hostPublicKeyB64) : null
   if (state.connection.client !== client) {
     state.capabilityProbeStop?.()
     state.capabilityProbeStop = null

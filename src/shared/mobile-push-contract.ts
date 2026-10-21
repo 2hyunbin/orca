@@ -18,22 +18,20 @@ export type MobilePushApnsEnvironment = (typeof MOBILE_PUSH_APNS_ENVIRONMENTS)[n
 /** A host keeps a phone's push registration this long after the phone last renewed it. */
 export const MOBILE_PUSH_LEASE_MS = 7 * 24 * 60 * 60_000
 
-/** Another host that pushes this phone its own agent alerts, until `until` (epoch ms). */
-export type DirectAgentAlertHost = { fingerprint: string; until: number }
-
 export type MobilePushFilter = {
   onlyWhenDesktopAway?: boolean
   sound?: boolean
   /** This phone takes the host's own agent alerts from main instead of its window's copies. Set only
    *  when no host it registered with would still forward them, so a mixed-version setup keeps today's path. */
   hostAgentAlerts?: boolean
-  /** A forwarding desktop skips host-announced alerts from these hosts; the phone hears them directly. */
-  directAgentAlertHosts?: DirectAgentAlertHost[]
+  /** Uses canonical source events when this host carries another host’s alerts. */
+  sourceAgentAlerts?: boolean
 }
 
 /** Persisted on the paired DeviceEntry so a host restart can push without the phone re-registering. */
 export type MobilePushRegistration = {
   registrationId: string
+  destinationDigest?: string
   filter: MobilePushFilter
   expiresAt: number
 }
@@ -67,38 +65,19 @@ function parseFilter(value: unknown): MobilePushFilter | null {
   if (
     (filter.onlyWhenDesktopAway !== undefined && typeof filter.onlyWhenDesktopAway !== 'boolean') ||
     (filter.sound !== undefined && typeof filter.sound !== 'boolean') ||
-    (filter.hostAgentAlerts !== undefined && typeof filter.hostAgentAlerts !== 'boolean')
+    (filter.hostAgentAlerts !== undefined && typeof filter.hostAgentAlerts !== 'boolean') ||
+    (filter.sourceAgentAlerts !== undefined && typeof filter.sourceAgentAlerts !== 'boolean')
   ) {
     return null
   }
-  const directAgentAlertHosts = parseDirectAgentAlertHosts(filter.directAgentAlertHosts)
   return {
     ...(typeof filter.onlyWhenDesktopAway === 'boolean'
       ? { onlyWhenDesktopAway: filter.onlyWhenDesktopAway }
       : {}),
     ...(typeof filter.sound === 'boolean' ? { sound: filter.sound } : {}),
     ...(filter.hostAgentAlerts === true ? { hostAgentAlerts: true } : {}),
-    ...(directAgentAlertHosts.length > 0 ? { directAgentAlertHosts } : {})
+    ...(filter.sourceAgentAlerts === true ? { sourceAgentAlerts: true } : {})
   }
-}
-
-// A malformed entry only costs a duplicate alert, so it is dropped rather than failing the row.
-function parseDirectAgentAlertHosts(value: unknown): DirectAgentAlertHost[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  return value.flatMap((entry: unknown) =>
-    entry &&
-    typeof entry === 'object' &&
-    'fingerprint' in entry &&
-    'until' in entry &&
-    typeof entry.fingerprint === 'string' &&
-    entry.fingerprint.length > 0 &&
-    typeof entry.until === 'number' &&
-    Number.isFinite(entry.until)
-      ? [{ fingerprint: entry.fingerprint, until: entry.until }]
-      : []
-  )
 }
 
 /**
@@ -124,6 +103,10 @@ export function parseMobilePushRegistration(value: unknown): MobilePushRegistrat
   return {
     registrationId: registration.registrationId,
     filter,
+    ...(typeof registration.destinationDigest === 'string' &&
+    /^[a-f0-9]{64}$/.test(registration.destinationDigest)
+      ? { destinationDigest: registration.destinationDigest }
+      : {}),
     expiresAt: registration.expiresAt
   }
 }

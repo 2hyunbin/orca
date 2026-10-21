@@ -20,7 +20,7 @@ import { isSupersededAgentCompletionSnapshot } from './agent-completion-snapshot
 import type {
   AgentCompletionDispatchMeta,
   AgentCompletionStatusSnapshot
-} from './agent-completion-coordinator-types'
+} from '../../../../shared/agent-completion-coordinator-types'
 import { getNotificationWorkspaceLabels } from './terminal-notification-state'
 import { createTerminalAttentionSurface } from './terminal-attention-surface'
 import {

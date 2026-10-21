@@ -4,20 +4,20 @@ import type {
   AgentCompletionCoordinator,
   AgentCompletionCoordinatorOptions,
   AgentCompletionStatusSnapshot
-} from './agent-completion-coordinator-types'
+} from '../../../../shared/agent-completion-coordinator-types'
 import {
   createAgentCompletionIdentityScope,
   getAgentCompletionCoordinatorIdentityCountForTest,
   resetAgentCompletionCoordinatorIdentitiesForTest
-} from './agent-completion-identity-store'
+} from '../../../../shared/agent-completion-identity-store'
 import { createAgentCompletionProcessMonitor } from './agent-completion-process-monitor'
 import { createPendingTitleController } from './agent-completion-pending-title'
 import {
   createAgentCompletionNotificationController,
   type CompletionState
-} from './agent-completion-notification-controller'
+} from '../../../../shared/agent-completion-notification-controller'
 import { createAgentCompletionTitleObserver } from './agent-completion-title-observer'
-import { createAgentCompletionHookObserver } from './agent-completion-hook-observer'
+import { createAgentCompletionHookObserver } from '../../../../shared/agent-completion-hook-observer'
 import { createAgentCompletionLifecycle } from './agent-completion-lifecycle'
 
 type CompletionSource = 'hook' | 'title' | 'process-exit'

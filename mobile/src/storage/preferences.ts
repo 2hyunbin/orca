@@ -41,45 +41,13 @@ const REMOTE_PUSH_HOST_REGISTRATIONS_KEY = 'orca:remotePushHostRegistrations'
 export type RemotePushHostRegistrations = {
   readonly registeredHostIds: readonly string[]
   readonly pendingUnregisterHostIds: readonly string[]
-  /** Hosts that announce their own agent alerts, keyed by host id: their push fingerprint, when this
-   *  phone last registered there, and whether it took those alerts. Other hosts are told about the
-   *  ones it took, so they don't forward them too. */
-  readonly directAlertHosts?: Readonly<Record<string, DirectAlertHostRecord>>
-}
-
-export type DirectAlertHostRecord = {
-  readonly fingerprint: string
-  readonly registeredAt: number
-  readonly optedIn: boolean
+  /** Last successfully registered source-feed capability, not remote delivery ownership. */
+  readonly sourceAlertHostIds?: readonly string[]
 }
 
 const EMPTY_REMOTE_PUSH_HOST_REGISTRATIONS: RemotePushHostRegistrations = {
   registeredHostIds: [],
   pendingUnregisterHostIds: []
-}
-
-function directAlertHostRecords(value: unknown): Record<string, DirectAlertHostRecord> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return {}
-  }
-  const records: Record<string, DirectAlertHostRecord> = {}
-  for (const [hostId, entry] of Object.entries(value)) {
-    if (
-      entry &&
-      typeof entry === 'object' &&
-      typeof entry.fingerprint === 'string' &&
-      entry.fingerprint &&
-      typeof entry.registeredAt === 'number' &&
-      Number.isFinite(entry.registeredAt)
-    ) {
-      records[hostId] = {
-        fingerprint: entry.fingerprint,
-        registeredAt: entry.registeredAt,
-        optedIn: entry.optedIn === true
-      }
-    }
-  }
-  return records
 }
 
 export async function loadRemotePushHostRegistrations(): Promise<RemotePushHostRegistrations> {
@@ -92,7 +60,7 @@ export async function loadRemotePushHostRegistrations(): Promise<RemotePushHostR
     return {
       registeredHostIds: stringArray(parsed.registeredHostIds),
       pendingUnregisterHostIds: stringArray(parsed.pendingUnregisterHostIds),
-      directAlertHosts: directAlertHostRecords(parsed.directAlertHosts)
+      sourceAlertHostIds: stringArray(parsed.sourceAlertHostIds)
     }
   } catch {
     return EMPTY_REMOTE_PUSH_HOST_REGISTRATIONS

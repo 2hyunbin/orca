@@ -1,3 +1,4 @@
+import type { SourceAgentAlertEvent } from './source-agent-alert-event'
 import { reserveNotificationCooldown } from '../../shared/notification-burst-cooldown'
 import { buildAgentNotificationId } from '../../shared/agent-notification-id'
 import type { AgentStatusState } from '../../shared/agent-status-types'
@@ -44,6 +45,8 @@ export type MobileNotificationDispatchEvent = {
   executionHostAnnounces?: boolean
   /** This host's main announced it from the hook rows, for phones that take host agent alerts. */
   hostAgentAlert?: boolean
+  sourcePlan?: { kind: 'terminal' | 'structured'; direct: readonly string[]; carrier?: boolean }
+  sourceOwned?: boolean
 }
 
 export type MobileNotificationDismissEvent = {
@@ -51,6 +54,7 @@ export type MobileNotificationDismissEvent = {
   notificationId: string
   notificationSeq?: number
   notificationEpoch?: string
+  sourceOnly?: boolean
   dismissedDelivery?: DeliveredNotificationIdentity
 }
 
@@ -60,6 +64,7 @@ export type MobileNotificationEvent =
 
 /** The desktop push service, once it exists; absent on hosts that never started one. */
 export type MobilePushRegistrar = {
+  planAgentAlert?(event: Pick<MobileNotificationDispatchEvent, 'hostAgentAlert'>): string[]
   test(deviceId: string): Promise<MobilePushTestResult>
   register(input: MobilePushRegisterInput): Promise<MobilePushRegisterResult>
   unregister(deviceId: string): Promise<{ unregistered: boolean }>
@@ -67,6 +72,7 @@ export type MobilePushRegistrar = {
 
 export class RuntimeMobileNotificationController {
   private readonly listeners = new Set<(event: MobileNotificationEvent) => void>()
+  readonly sourceHosts = new Set<string>()
   private readonly legacyCooldown = new Map<string, number>()
   private readonly replay = new MobileNotificationReplayBuffer()
   private pushRegistrar: MobilePushRegistrar | null = null
@@ -123,8 +129,26 @@ export class RuntimeMobileNotificationController {
 
   dispatch(event: MobileNotificationEvent): void {
     if (event.type === 'notification') {
+      if (
+        !event.sourcePlan &&
+        (event.hostAgentAlert || event.structuredOrigin) &&
+        !event.executionHost
+      ) {
+        event = {
+          ...event,
+          sourcePlan: Object.freeze({
+            kind: event.hostAgentAlert ? 'terminal' : 'structured',
+            direct: Object.freeze(this.pushRegistrar?.planAgentAlert?.(event) ?? [])
+          })
+        }
+      }
+      if (event.executionHostAnnounces && event.executionHost) {
+        event = { ...event, sourceOwned: this.sourceHosts.has(event.executionHost) }
+      }
       // Decide once before recording so reconnect and buffer eviction cannot reset cooldown.
       const legacySocketAllowed =
+        !event.hostAgentAlert &&
+        !event.sourcePlan?.carrier &&
         event.desktopAllowed !== false &&
         (event.emittedAt === undefined ||
           reserveNotificationCooldown(
@@ -160,8 +184,66 @@ export class RuntimeMobileNotificationController {
     )
   }
 
-  getMissedSince(lastSeenSeq: number, epoch?: string) {
-    return this.replay.getMissedSince(lastSeenSeq, epoch)
+  getMissedSince(lastSeenSeq: number, epoch?: string, sourceEvents = false) {
+    return this.replay
+      .getMissedSince(lastSeenSeq, epoch)
+      .filter(
+        (event) =>
+          !sourceEvents ||
+          event.type !== 'notification' ||
+          !event.notificationId ||
+          this.reconcileDismissedPushes([{ ...event, notificationId: event.notificationId }])
+            .length === 0
+      )
+  }
+
+  setSourceHost(executionHost: string, supported: boolean): void {
+    if (supported) {
+      this.sourceHosts.add(executionHost)
+    } else {
+      this.sourceHosts.delete(executionHost)
+    }
+  }
+
+  carriedSourceDeliveries(executionHost: `runtime:${string}`): DeliveredNotificationIdentity[] {
+    const prefix = `carry:${encodeURIComponent(executionHost)}:`
+    return (this.dismissalStore?.liveDeliveries(prefix) ?? []).flatMap((delivery) => {
+      const [id, epoch, seq] = delivery.notificationId.slice(prefix.length).split(':')
+      return id && epoch && seq
+        ? [
+            {
+              notificationId: decodeURIComponent(id),
+              notificationEpoch: decodeURIComponent(epoch),
+              notificationSeq: Number(seq)
+            }
+          ]
+        : []
+    })
+  }
+
+  carrySourceAlert(executionHost: `runtime:${string}`, event: SourceAgentAlertEvent): void {
+    const source = event.type === 'dismiss' ? event.dismissedDelivery : event
+    const notificationId = [
+      'carry',
+      encodeURIComponent(executionHost),
+      encodeURIComponent(source.notificationId),
+      encodeURIComponent(source.notificationEpoch),
+      source.notificationSeq
+    ].join(':')
+    if (event.type === 'dismiss') {
+      for (const delivery of this.dismissalStore?.liveDeliveries(notificationId) ?? []) {
+        if (delivery.notificationId === notificationId) {
+          this.retireDelivery(delivery)
+        }
+      }
+    } else if (!this.dismissalStore?.hasNotification(notificationId)) {
+      this.dispatch({
+        ...event,
+        notificationId,
+        executionHost,
+        sourcePlan: { ...event.sourcePlan, carrier: true }
+      })
+    }
   }
 
   getEpoch(): string {
@@ -176,6 +258,10 @@ export class RuntimeMobileNotificationController {
     this.dispatch({
       type: 'dismiss',
       notificationId: delivery.notificationId,
+      ...(delivery.notificationId.startsWith('agent:') ||
+      delivery.notificationId.startsWith('carry:')
+        ? { sourceOnly: true }
+        : {}),
       dismissedDelivery: {
         notificationId: delivery.notificationId,
         notificationEpoch: delivery.notificationEpoch,
