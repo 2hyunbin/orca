@@ -4,13 +4,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type RouteDependencies = {
   pathnames: string[]
+  routes: { pathname: string; params?: Record<string, string> }[]
+  clears: ((param: string, value: string) => void)[]
+  setParams: Record<string, string>[]
   hostId: string | string[]
+  action: string | undefined
   refusals: number
 }
 
 const dependencies = vi.hoisted((): RouteDependencies => ({
   pathnames: [],
+  routes: [],
+  clears: [],
+  setParams: [],
   hostId: 'host-1',
+  action: undefined,
   refusals: 0
 }))
 
@@ -24,7 +32,10 @@ vi.mock('react-native', () => ({
 }))
 
 vi.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ hostId: dependencies.hostId })
+  useLocalSearchParams: () => ({ hostId: dependencies.hostId, action: dependencies.action }),
+  useRouter: () => ({
+    setParams: (params: Record<string, string>) => dependencies.setParams.push(params)
+  })
 }))
 
 vi.mock('./PageRouteUnavailableScreen', () => ({
@@ -35,8 +46,16 @@ vi.mock('./PageRouteUnavailableScreen', () => ({
 }))
 
 vi.mock('./MobileWebShellScreen', () => ({
-  MobileWebShellScreen: (props: { hostId: string; route: { pathname: string } }) => {
+  MobileWebShellScreen: (props: {
+    hostId: string
+    route: { pathname: string; params?: Record<string, string> }
+    onRouteParamClear?: (param: string, value: string) => void
+  }) => {
     dependencies.pathnames.push(props.route.pathname)
+    dependencies.routes.push(props.route)
+    if (props.onRouteParamClear) {
+      dependencies.clears.push(props.onRouteParamClear)
+    }
     return null
   }
 }))
@@ -53,8 +72,36 @@ async function renderRoute(): Promise<void> {
 describe('the worktree-list route that hands off to the shell', () => {
   beforeEach(() => {
     dependencies.pathnames.length = 0
+    dependencies.routes.length = 0
+    dependencies.clears.length = 0
+    dependencies.setParams.length = 0
     dependencies.refusals = 0
     dependencies.hostId = 'host-1'
+    dependencies.action = undefined
+  })
+
+  it("hands the page the home screen's New Workspace request, which the list opens the sheet for", async () => {
+    dependencies.action = 'newWorktree'
+    await renderRoute()
+    expect(dependencies.routes).toEqual([
+      { pathname: '/h/host-1', params: { action: 'newWorktree' } }
+    ])
+  })
+
+  it('sends no params when nothing was asked for', async () => {
+    await renderRoute()
+    expect(dependencies.routes).toEqual([{ pathname: '/h/host-1' }])
+  })
+
+  it('erases the request once the page names it back, and only that one', async () => {
+    dependencies.action = 'newWorktree'
+    await renderRoute()
+    const clear = dependencies.clears.at(-1)
+    clear?.('paneKey', 'newWorktree')
+    clear?.('action', 'other')
+    expect(dependencies.setParams).toEqual([])
+    clear?.('action', 'newWorktree')
+    expect(dependencies.setParams).toEqual([{ action: '' }])
   })
 
   it('encodes the host id into the pathname, like the shell route already does', async () => {

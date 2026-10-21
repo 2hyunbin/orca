@@ -435,6 +435,20 @@ describe('the page erasing a one-shot route param', () => {
     expect(bridge.routeParamClears()).toEqual([{ param: 'paneKey', value: 'p-1' }])
   })
 
+  it("carries up the worktree list's clear of the New Workspace request", () => {
+    const bridge = harness({ route: { pathname: '/h/host-a', params: { action: 'newWorktree' } } })
+    bridge.host.receive(clientFrame({ type: 'ready' }))
+    bridge.host.receive(
+      clientFrame({
+        type: 'notify',
+        name: BRIDGE_ROUTE_PARAM_CLEAR,
+        param: 'action',
+        value: 'newWorktree'
+      })
+    )
+    expect(bridge.routeParamClears()).toEqual([{ param: 'action', value: 'newWorktree' }])
+  })
+
   it('carries no clear up from a page that has not asked for a session', () => {
     const bridge = harness({ route: { pathname: '/h/host-a/session/wt-1' } })
     bridge.host.receive(

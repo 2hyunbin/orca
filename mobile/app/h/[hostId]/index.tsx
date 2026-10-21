@@ -1,6 +1,8 @@
-import { useLocalSearchParams } from 'expo-router'
+import { useCallback } from 'react'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { firstParam } from '../../../src/navigation/route-param-reader'
 import { MobileWebShellScreen } from '../../../src/mobile-web-shell/MobileWebShellScreen'
+import type { BridgeClearableRouteParam } from '../../../src/mobile-web-shell/bridge/bridge-route-update'
 import { shellScreenRoute } from '../../../src/mobile-web-shell/shell-screen-route'
 import { PageRouteUnavailableScreen } from '../../../src/mobile-web-shell/PageRouteUnavailableScreen'
 
@@ -16,13 +18,33 @@ function HostListScreen() {
   // `a,b` and `encodeURIComponent` makes it the single segment `a%2Cb` — which the bridge's
   // segment rule accepts, so the shell would open a page for a host nobody has. An empty array is
   // truthy, so a bare read also builds `/h/` and hands that over; this answers `''` and stays.
-  const params = useLocalSearchParams<{ hostId?: string | string[] }>()
+  const params = useLocalSearchParams<{
+    hostId?: string | string[]
+    action?: string | string[]
+  }>()
   const hostId = firstParam(params.hostId)
+  // The home screen's New Workspace asks for the create sheet with `action=newWorktree`. One-shot:
+  // the page names it back once applied and it is erased here, so a page reload does not reopen it.
+  const action = firstParam(params.action)
+  const router = useRouter()
+  const eraseAction = useCallback(
+    (param: BridgeClearableRouteParam, value: string) => {
+      if (param === 'action' && action !== '' && value === action) {
+        router.setParams({ action: '' })
+      }
+    },
+    [action, router]
+  )
 
   // Asked here as every route file asks it: encoding does not save a `.` or `..` host id, which fails
   // the bridge's segment rule.
   const route =
-    hostId === '' ? null : shellScreenRoute({ pathname: `/h/${encodeURIComponent(hostId)}` })
+    hostId === ''
+      ? null
+      : shellScreenRoute({
+          pathname: `/h/${encodeURIComponent(hostId)}`,
+          ...(action === '' ? {} : { params: { action } })
+        })
   if (route === null) {
     return <PageRouteUnavailableScreen hostId={hostId} />
   }
@@ -33,6 +55,7 @@ function HostListScreen() {
       key={hostId}
       hostId={hostId}
       route={route}
+      onRouteParamClear={eraseAction}
     />
   )
 }
