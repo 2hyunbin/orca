@@ -46,16 +46,28 @@ export function startMessageBridge(scope: TerminalDocumentScope) {
   scope.uninstallHostTransport = scope.installHostTransport((frame) =>
     handleIncomingMessage(scope, frame)
   )
-  if (scope.hasEngine()) {
-    // Why: ready carries the cell box xterm itself laid out, so the host sizes the first subscribe.
-    if (scope.start().shown) {
-      prepareTerminal(scope)
+  const reportReady = () => {
+    if (!scope.uninstallHostTransport) {
+      return
     }
-    // Why: the first init's report is checked against the box the terminal built before ready laid out.
-    scope.reportedCellBox = laidOutCellBox(scope)
-    notify(scope, { type: 'web-ready', cellBox: scope.reportedCellBox?.cellBox ?? null })
+    if (scope.hasEngine()) {
+      // Why: ready carries the cell box xterm itself laid out, so the host sizes the first subscribe.
+      if (scope.start().shown) {
+        prepareTerminal(scope)
+      }
+      scope.reportedCellBox = laidOutCellBox(scope)
+      notify(scope, { type: 'web-ready', cellBox: scope.reportedCellBox?.cellBox ?? null })
+    } else {
+      reportEngineError(scope, 'terminal engine missing', 'xterm failed to load', true)
+    }
+  }
+  // The WebGL atlas retains missing glyphs if it paints before the bundled font finishes loading.
+  if (document.fonts && !document.fonts.check('13px "Orca Nerd Font Symbols"', '\ue0b0')) {
+    void document.fonts
+      .load('13px "Orca Nerd Font Symbols"', '\ue0b0')
+      .then(reportReady, reportReady)
   } else {
-    reportEngineError(scope, 'terminal engine missing', 'xterm failed to load', true)
+    reportReady()
   }
 }
 

@@ -34,7 +34,8 @@ enum MobileWebShellCsp {
     // `http:` stays out: it reaches no image TLS cannot serve, and a cleartext image is readable
     // and replaceable in flight by anything on the path.
     "img-src 'self' data: blob: https:",
-    "font-src 'none'",
+    // Bundled terminal symbol fonts are embedded data URLs and never need a network fetch.
+    "font-src data:",
     // The origin is one read-only directory behind the manifest map, so 'self' reaches nothing the
     // page cannot already read, and the bootstrap page reads ./manifest.json through it. This is
     // the fence for fetch and XMLHttpRequest; the document-start script covers only the two things
