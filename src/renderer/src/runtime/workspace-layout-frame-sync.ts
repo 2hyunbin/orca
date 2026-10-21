@@ -27,7 +27,7 @@ import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layou
 import { liveTitleUpdates } from './workspace-layout-frame-changes'
 import { terminalLayoutsWithReboundFrames } from './workspace-layout-frame-bindings'
 import { terminalLayoutsWithFramePaneTrees } from './workspace-layout-frame-pane-trees'
-import { showFramePaneStarts } from './workspace-layout-frame-pane-starts'
+import { framePaneFactsShown, showFramePaneStarts } from './workspace-layout-frame-pane-starts'
 import {
   fullLayoutFrameBuildPatch,
   workspaceLayoutFrameBuildPatch,
@@ -94,7 +94,7 @@ export function openWorkspaceLayoutFrameSync(
   /** Workspaces whose pane trees the store may still lack: a build ran for them, or a tab the
    *  window's own command held skipped one. */
   let paneTreeKeys = new Set<string>()
-  const paneStartsShown = new Map<string, ReadonlySet<string>>()
+  const paneStartsShown = framePaneFactsShown()
 
   /** The moved tabs' selections this flush's writes took. */
   let selectionsTaken: MovedTabSelection[] = []
