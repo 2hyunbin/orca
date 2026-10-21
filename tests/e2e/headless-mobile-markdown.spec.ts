@@ -66,6 +66,20 @@ test('a phone creates, edits, and saves a note on a host without a renderer', as
       })
     ).rejects.toThrow('conflict')
     expect(await readFile(path.join(testRepoPath, 'untitled.md'), 'utf8')).toBe('external edit')
+    await phone.call('files.createFile', {
+      worktree,
+      relativePath: 'second.md',
+      expectedExecutionHostId: 'local'
+    })
+    await phone.call('files.open', { worktree, relativePath: 'second.md' })
+    const withSecond = await phone.call<RuntimeMobileSessionTabsResult>('session.tabs.list', {
+      worktree
+    })
+    expect(
+      withSecond.tabs
+        .filter((candidate) => candidate.type === 'markdown')
+        .map((candidate) => candidate.relativePath)
+    ).toEqual(['untitled.md', 'second.md'])
     await phone.call('session.tabs.close', { worktree, tabId: tab.id, reason: 'user' })
     await expect(phone.call('markdown.readTab', params)).rejects.toThrow('tab_not_found')
   } finally {
