@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  structuredSessionSelectionAuthority,
+  structuredSessionSelectionController
+} from '@/lib/structured-agent-session-selection-controller'
+import { subscribeRuntimeHostContactRegained } from '@/runtime/runtime-host-contact-regained'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { AgentSessionConversationCommand } from '../../../../shared/agent-session-conversation-command'
 import type { AgentSessionOptionsResult } from '../../../../shared/agent-session-wire'
 import type { AgentSessionRewindSupport } from '../../../../shared/agent-session-rewind'
@@ -13,7 +18,10 @@ import {
 } from '../../../../shared/structured-agent-session-options'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { structuredAgentSessionOptionView } from '../../../../shared/structured-agent-session-option-view'
-import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
+import {
+  AGENT_SESSION_SEND_SELECTION_RUNTIME_CAPABILITY,
+  AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY
+} from '../../../../shared/agent-session-create-capabilities'
 import { useStructuredAgentSessionHostCapability } from '@/runtime/structured-agent-session-host-capability'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { readHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
@@ -102,9 +110,15 @@ export function useStructuredAgentSessionOptionState(args: {
   }, [newLaunch, seedsModel, target, worktree])
   const optionStateRef = useRef(optionState)
   const activeOptionRecordRef = useRef(optionState.record)
-  // A pick on its way to the host, which every send carries too.
-  const pendingOptionsRef = useRef<Record<string, string>>({})
-  const optionMutationGeneration = useRef(0)
+  const [, setContact] = useState(0)
+  const authority = structuredSessionSelectionAuthority(target)
+  const controller = structuredSessionSelectionController(target, sessionId, agent)
+  const selectionRevision = useSyncExternalStore(controller.subscribe, controller.snapshot)
+  const terminal = controller.captureRead().join(',')
+  const takesSelection = useStructuredAgentSessionHostCapability(
+    target,
+    AGENT_SESSION_SEND_SELECTION_RUNTIME_CAPABILITY
+  )
   const updateOptionState = useCallback(
     (update: (current: StructuredAgentSessionOptionState) => StructuredAgentSessionOptionState) => {
       const next = update(optionStateRef.current)
@@ -121,11 +135,13 @@ export function useStructuredAgentSessionOptionState(args: {
         : current,
     [newLaunch, optionCatalog]
   )
-  const optionIdentityRef = useRef(identity)
+  const host = target.kind === 'local' ? 'local' : target.environmentId
+  const optionIdentity = JSON.stringify([identity, host, authority])
+  const optionIdentityRef = useRef(optionIdentity)
   useEffect(() => {
     const previous = optionStateRef.current
-    const sameSession = optionIdentityRef.current === identity
-    optionIdentityRef.current = identity
+    const sameSession = optionIdentityRef.current === optionIdentity
+    optionIdentityRef.current = optionIdentity
     const launch = firstFrameLaunch.current
     const seeded = firstFrameOptionState(agent, launch.target, {
       newLaunch: launch.newLaunch,
@@ -144,29 +160,39 @@ export function useStructuredAgentSessionOptionState(args: {
         : seeded
     // The chat's own, which a restart for a new mode keeps: the picker never blanks between them.
     const next = sameSession ? { ...kept, permissionMode: previous.permissionMode } : kept
-    optionMutationGeneration.current += 1
-    pendingOptionsRef.current = {}
     optionStateRef.current = next
     activeOptionRecordRef.current = next.record
     setOptionState(next)
-  }, [agent, fence, identity])
+  }, [agent, fence, optionIdentity])
 
+  const readEpoch = useRef(0)
   const optionsReadRef = useRef<CoalescedPollRunner | null>(null)
   // Refresh options each turn to confirm which model the provider actually selected, and once
   // the provider starts: only then has the host read what it will run.
   useEffect(() => {
-    if (!providerVisible || (providerStarting && !readsBeforeStart) || !optionCatalog) {
+    if (
+      !providerVisible ||
+      (providerStarting && !readsBeforeStart && !takesSelection) ||
+      !optionCatalog
+    ) {
       return
     }
     let stale = false
     const runner = createCoalescedPollRunner(async () => {
-      const readGeneration = optionMutationGeneration.current
+      const epoch = readEpoch.current
+      const record = activeOptionRecordRef.current
+      const completed = controller.captureRead()
       const result = await callStructuredAgentSession<AgentSessionOptionsResult>(
         target,
         'agentSession.options',
         { sessionId }
       )
-      if (!stale && optionMutationGeneration.current === readGeneration) {
+      if (
+        !stale &&
+        readEpoch.current === epoch &&
+        structuredSessionSelectionAuthority(target) === authority &&
+        activeOptionRecordRef.current === record
+      ) {
         setConversationSupport({
           sessionId,
           commands: result.conversationCommands ?? [],
@@ -179,10 +205,9 @@ export function useStructuredAgentSessionOptionState(args: {
           fence
         })
         updateOptionState((current) =>
-          current.record === activeOptionRecordRef.current
-            ? applyOptionsAnswer(current, result)
-            : current
+          current.record === record ? applyOptionsAnswer(current, result) : current
         )
+        controller.retire(completed)
       }
     })
     optionsReadRef.current = runner
@@ -193,16 +218,16 @@ export function useStructuredAgentSessionOptionState(args: {
     }
   }, [
     applyOptionsAnswer,
+    authority,
+    controller,
+    takesSelection,
     fence,
     optionCatalog,
-    // Another device's pick moves it.
-    hostOptionStamp,
     providerStarting,
     providerVisible,
     readsBeforeStart,
     sessionId,
     target,
-    turnId,
     updateOptionState
   ])
 
@@ -212,12 +237,54 @@ export function useStructuredAgentSessionOptionState(args: {
   useEffect(() => {
     if (contextRefresh !== seenContextRefresh.current) {
       seenContextRefresh.current = contextRefresh
+      readEpoch.current += 1
       optionsReadRef.current?.run()
     }
   }, [contextRefresh])
 
   // An options answer made before the account's listing landed listed none of it.
-  const rereadOptions = useCallback(() => optionsReadRef.current?.run(), [])
+  const rereadOptions = useCallback(() => {
+    readEpoch.current += 1
+    optionsReadRef.current?.run()
+  }, [])
+  const readStamp = JSON.stringify([hostOptionStamp, turnId])
+  const seenReadStamp = useRef(readStamp)
+  useEffect(() => {
+    if (seenReadStamp.current !== readStamp) {
+      seenReadStamp.current = readStamp
+      rereadOptions()
+    }
+  }, [readStamp, rereadOptions])
+  useEffect(() => {
+    if (terminal) {
+      rereadOptions()
+    }
+  }, [terminal, rereadOptions])
+  useEffect(
+    () =>
+      target.kind === 'environment'
+        ? subscribeRuntimeHostContactRegained(target.environmentId, () => {
+            if (structuredSessionSelectionAuthority(target) !== authority) {
+              controller.abandon()
+            }
+            setContact((value) => value + 1)
+            rereadOptions()
+          })
+        : undefined,
+    [target, authority, controller, rereadOptions]
+  )
+  const optionView = useCallback(
+    (
+      state: StructuredAgentSessionOptionState,
+      seed: Readonly<Record<string, string>> | undefined,
+      held: Readonly<Record<string, string>>
+    ) =>
+      structuredAgentSessionOptionView(state, state.catalogSource === 'live' ? undefined : seed, {
+        ...held,
+        ...controller.overlay()
+      }),
+    [controller]
+  )
   const takesSendOptions = useStructuredAgentSessionHostCapability(
     target,
     AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY
@@ -225,15 +292,16 @@ export function useStructuredAgentSessionOptionState(args: {
 
   return {
     // What the picker shows and a send carries.
-    optionView: structuredAgentSessionOptionView,
+    optionView,
+    controller,
+    selectionRevision,
+    takesSelection,
     takesSendOptions,
     conversationSupport,
     rereadOptions,
     optionState,
     optionStateRef,
     activeOptionRecordRef,
-    pendingOptionsRef,
-    optionMutationGeneration,
     updateOptionState,
     applyOptionsAnswer
   }

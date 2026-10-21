@@ -115,6 +115,7 @@ export async function performSend(
     source?: AgentSessionMessageSource
     /** The send's `options` record, read once here into the choices the message keeps. */
     options?: Readonly<Record<string, string>>
+    selection?: Readonly<Record<string, string>>
   }
 ): Promise<TurnOutcome<AgentSessionSendResult>> {
   const existing = ctx.journal
@@ -132,7 +133,7 @@ export async function performSend(
       value: { clientMessageId: input.clientMessageId, submission: { ...existing } }
     }
   }
-  const captured = captureStructuredExecutionOptions(ctx, input.options)
+  const captured = captureStructuredExecutionOptions(ctx, input.options, input.selection)
   if ('refusal' in captured) {
     return { ok: false, refusal: captured.refusal }
   }

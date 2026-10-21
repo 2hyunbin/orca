@@ -7,6 +7,7 @@ import {
 } from './structured-agent-session-launch-prompt'
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
 import {
+  structuredAgentSessionMessageSelection,
   structuredAgentSessionOptionView,
   structuredAgentSessionSendSelection
 } from '../../../shared/structured-agent-session-option-view'
@@ -32,10 +33,12 @@ export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchStat
     return
   }
   const firstMessage = prepareStructuredLaunchPromptForCreate(intent.sessionId, intent.target)
-  const options = structuredLaunchCreateOptions(state)
+  const { options, selection } = structuredLaunchCreateOptions(state)
   const params = {
     ...intent.params,
-    ...(firstMessage ? { firstMessage } : {}),
+    ...(firstMessage
+      ? { firstMessage: { ...firstMessage, ...(selection !== undefined ? { selection } : {}) } }
+      : {}),
     ...(options ? { options } : {})
   }
   intent.params = {
@@ -54,9 +57,10 @@ export function prepareStructuredLaunchCreateMessage(state: StructuredLaunchStat
 
 /** Picks held so far, and the chat's own model and effort: a first message starts its turn on
  *  them, as a later send does. */
-function structuredLaunchCreateOptions(
-  state: StructuredLaunchState
-): Readonly<Record<string, string>> | undefined {
+function structuredLaunchCreateOptions(state: StructuredLaunchState): {
+  options?: Readonly<Record<string, string>>
+  selection?: Readonly<Record<string, string>>
+} {
   const { intent, selection } = state
   const firstFrame = firstFrameOptionState(intent.agent, intent.target, {
     newLaunch: !intent.params.resumeFrom,
@@ -79,7 +83,12 @@ function structuredLaunchCreateOptions(
     ...held,
     ...structuredAgentSessionSendSelection(view)
   }
-  return Object.keys(options).length ? options : undefined
+  return {
+    ...(Object.keys(options).length ? { options } : {}),
+    ...(intent.sendSelectionSupport
+      ? { selection: structuredAgentSessionMessageSelection(view) }
+      : {})
+  }
 }
 
 /** Later picks use the normal option path without holding publication behind startup. */

@@ -100,6 +100,7 @@ export function useMobileStructuredAgentSession(
     sessionId,
     enabled,
     fence: state.fence,
+    turnId: state.activity?.turnId,
     mutate,
     optionStamp,
     hostSupport
@@ -199,7 +200,7 @@ export function useMobileStructuredAgentSession(
     commandPending: commandPendingRef,
     controller: sendController,
     onSendError,
-    sendOptions: hostSupport?.sendOptions === true ? options.sendSelection : undefined
+    sendSelection: options.sendSelection
   })
   const turnIndicator = useMemo(
     () => ({

@@ -20,7 +20,8 @@ const levels = (...values: string[]) => values.map((value) => ({ value, label: v
 function sendOptionsFor(
   takesSendOptions: boolean,
   pending: Record<string, string>,
-  seedOptions: Record<string, string> = { model: 'sonnet', effort: 'high' }
+  seedOptions: Record<string, string> = { model: 'sonnet', effort: 'high' },
+  takesSelection = false
 ) {
   const optionStateRef = {
     current: applyStructuredAgentSessionModelCatalog(
@@ -29,9 +30,16 @@ function sendOptionsFor(
       {
         origin: 'probe',
         fetchedAt: 1,
+        fastModeSupport: { supported: true },
         models: [
           { id: 'opus[1m]', label: 'Opus', isDefault: false, efforts: levels('low', 'xhigh') },
-          { id: 'sonnet', label: 'Sonnet', isDefault: true, efforts: levels('low', 'high') }
+          {
+            id: 'sonnet',
+            label: 'Sonnet',
+            isDefault: true,
+            efforts: levels('low', 'high'),
+            supportsFastMode: true
+          }
         ]
       },
       { newLaunch: true }
@@ -43,8 +51,9 @@ function sendOptionsFor(
       { kind: 'new', seedOptions, heldOptions: {} },
       {
         optionStateRef,
-        pendingOptionsRef: { current: pending },
-        optionView: structuredAgentSessionOptionView,
+        optionView: (state, seed, held) =>
+          structuredAgentSessionOptionView(state, seed, { ...held, ...pending }),
+        takesSelection,
         takesSendOptions
       }
     )
@@ -55,22 +64,27 @@ function sendOptionsFor(
 describe('what each composer send carries', () => {
   it('carries the shown model and effort to a host that takes them, on every send', () => {
     const sendOptions = sendOptionsFor(true, {})
-    expect(sendOptions()).toEqual({ model: 'sonnet', effort: 'high' })
-    expect(sendOptions()).toEqual({ model: 'sonnet', effort: 'high' })
+    expect(sendOptions()).toEqual({ options: { model: 'sonnet', effort: 'high' } })
+    expect(sendOptions()).toEqual({ options: { model: 'sonnet', effort: 'high' } })
   })
 
   it('carries a pick still on its way, resolved as the picker shows it', () => {
     expect(sendOptionsFor(true, { model: 'opus[1m]', effort: 'low' })()).toMatchObject({
-      model: 'opus[1m]',
-      effort: 'low'
+      options: { model: 'opus[1m]', effort: 'low' }
     })
     // A model the list lacks runs as picked.
     expect(sendOptionsFor(true, { model: 'claude-retired' })()).toMatchObject({
-      model: 'claude-retired'
+      options: { model: 'claude-retired' }
+    })
+  })
+
+  it('captures the same full shown tuple on a capable host, including explicit Fast Off', () => {
+    expect(sendOptionsFor(false, { fastMode: 'false' }, undefined, true)()).toEqual({
+      selection: { model: 'sonnet', effort: 'high', fastMode: 'false' }
     })
   })
 
   it('carries nothing to an older host', () => {
-    expect(sendOptionsFor(false, {})()).toBeUndefined()
+    expect(sendOptionsFor(false, {})()).toEqual({})
   })
 })

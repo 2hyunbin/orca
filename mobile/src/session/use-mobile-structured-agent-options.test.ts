@@ -303,7 +303,7 @@ describe('useMobileStructuredAgentOptions fast mode', () => {
 describe('useMobileStructuredAgentOptions post-write refresh', () => {
   it('reads options back after an accepted same-fence write and applies the refreshed value', async () => {
     const client = optionsClient(queuedReads(FAST_OPTIONS, FAST_OPTIONS_ON))
-    // `options: {}` commits nothing optimistically, so only the refresh can move the value.
+    // The reply settles the operation; only the query installs the chat's selection.
     const { mutate } = recordingMutate(async () =>
       accepted({ key: 'fastMode', value: 'true', options: {} }, true)
     )
@@ -322,7 +322,7 @@ describe('useMobileStructuredAgentOptions post-write refresh', () => {
     await harness.unmount()
   })
 
-  it('skips the refresh when the write landed against a different fence', async () => {
+  it('revalidates an accepted operation even when its reply names an older fence', async () => {
     const client = optionsClient(queuedReads(FAST_OPTIONS, FAST_OPTIONS_ON))
     const { mutate } = recordingMutate(async () =>
       accepted({ key: 'fastMode', value: 'true', options: {} }, false)
@@ -334,8 +334,8 @@ describe('useMobileStructuredAgentOptions post-write refresh', () => {
     })
     await settle()
 
-    expect(client.optionReads()).toBe(1)
-    expect(currentValueOf(harness.current().optionSnapshot, 'fastMode')).toBe(false)
+    expect(client.optionReads()).toBe(2)
+    expect(currentValueOf(harness.current().optionSnapshot, 'fastMode')).toBe(true)
     await harness.unmount()
   })
 })
@@ -346,7 +346,15 @@ describe('useMobileStructuredAgentOptions generation fencing', () => {
     const first = optionsClient(queuedReads(FAST_OPTIONS))
     // A reconnect hands the hook a new client, so only the read effect re-runs: the record
     // survives and the in-flight read is not marked stale. Generation is the only guard left.
-    const reconnected = optionsClient(() => stale.promise)
+    const reconnected = optionsClient(
+      () => stale.promise,
+      async () => ({
+        origin: 'probe',
+        fetchedAt: 1,
+        models: FAST_OPTIONS.models,
+        fastModeSupport: { supported: true }
+      })
+    )
     const { mutate } = recordingMutate(async () => ({ status: 'unknown' }))
     const harness = await mountOptions({ ...BASE, client: first.client, mutate })
 
@@ -705,7 +713,9 @@ describe('useMobileStructuredAgentOptions after a lost pick reply', () => {
       () => pendingRead.promise,
       () => Promise.resolve(answer('m2', 'flex'))
     ]
-    const client = optionsClient(() => reads.shift()!())
+    const client = optionsClient(() =>
+      (reads.shift() ?? (() => Promise.resolve(answer('m2', 'flex'))))()
+    )
     const { mutate } = recordingMutate(async () => ({ status: 'unknown' }))
     const harness = await mountOptions({ ...BASE, client: client.client, mutate })
     expect(speed(harness.current())?.value).toBe('priority')
@@ -738,7 +748,7 @@ describe('useMobileStructuredAgentOptions after a lost pick reply', () => {
     await harness.rerender({ optionStamp: 'status-3' })
     expect(currentValueOf(harness.current().optionSnapshot, 'model')).toBe('m2')
     expect(speed(harness.current())?.value).toBe('flex')
-    expect(client.optionReads()).toBe(4)
+    expect(client.optionReads()).toBe(5)
     await harness.unmount()
   })
 })

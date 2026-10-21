@@ -11,6 +11,7 @@ export type StructuredAgentSessionPendingSend = {
   previewUris: readonly string[]
   queuedAt: number
   delivery?: 'queue-if-active'
+  selection?: Readonly<Record<string, string>>
   options?: Readonly<Record<string, string>>
   usageLimitContinuationOfTurnItemId?: string
   /**

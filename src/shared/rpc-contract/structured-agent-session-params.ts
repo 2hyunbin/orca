@@ -1,3 +1,4 @@
+import { AgentSessionSelectionSchema } from '../agent-session-execution-options'
 import {
   SendBody,
   MAX_OPTION_LABEL,
@@ -11,12 +12,14 @@ export {
 } from './structured-agent-session-message-params'
 import {
   Identifier,
+  MutationEnvelope,
   JournalCursor,
   MAX_ID_LENGTH,
   SessionId
 } from './structured-agent-session-identifiers'
 export {
   Identifier,
+  MutationEnvelope,
   JournalCursor,
   MAX_ID_LENGTH,
   SessionId
@@ -45,18 +48,6 @@ const MAX_QUESTION_ANSWER_OPTIONS = 64
 
 /** One relaunch cannot offer more chats than a profile plausibly holds. */
 export const MAX_RESTART_RESUME_SESSIONS = 512
-
-export const MutationEnvelope = z
-  .object({
-    sessionId: SessionId,
-    clientOperationId: Identifier('Invalid client operation id'),
-    /** Null is the "must not exist yet" case; every other call fences. */
-    expectedRuntimeFence: z.number().int().positive().nullable(),
-    payloadFingerprint: z
-      .string()
-      .regex(/^[0-9a-f]{64}$/, 'Payload fingerprint must be a sha256 hex digest')
-  })
-  .strict()
 
 export const ProviderHandle = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('codex'), threadId: Identifier('Invalid thread id') }).strict(),
@@ -147,11 +138,16 @@ export const SendParams = z
     /** The composer's choices for the turn this message starts, kept with the message until it is
      *  dispatched. Sent only when `agent-session.send-options.v1` is advertised. Operation fingerprint only. */
     options: AgentSessionOptions.optional(),
+    selection: AgentSessionSelectionSchema.optional(),
     // Strict payload: only hosts advertising the bound usage-limit send capability accept this.
     usageLimitContinuationOfTurnItemId: Identifier('Invalid source turn item id').optional(),
     body: SendBody
   })
   .strict()
+  .refine(
+    (value) => value.options === undefined || value.selection === undefined,
+    'Choose options or selection'
+  )
 
 export const CreateIntentParams = z
   .object({
@@ -165,7 +161,8 @@ export const CreateIntentParams = z
     firstMessage: z
       .object({
         clientMessageId: Identifier('Invalid client message id'),
-        body: SendParams.shape.body
+        body: SendBody,
+        selection: AgentSessionSelectionSchema.optional()
       })
       .strict()
       .optional(),

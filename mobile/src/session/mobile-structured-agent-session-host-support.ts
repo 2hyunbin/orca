@@ -10,7 +10,10 @@ import {
   AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY,
   AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY
 } from '../../../src/shared/protocol-version'
-import { AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY } from '../../../src/shared/agent-session-create-capabilities'
+import {
+  AGENT_SESSION_SEND_SELECTION_RUNTIME_CAPABILITY,
+  AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY
+} from '../../../src/shared/agent-session-create-capabilities'
 import { AGENT_SESSION_PERMISSION_MODES_RUNTIME_CAPABILITY } from '../../../src/shared/agent-session-permission-modes-capability'
 import { AGENT_SESSION_PHONE_ATTACHMENTS_RUNTIME_CAPABILITY } from '../../../src/shared/runtime-capability-constants'
 
@@ -32,6 +35,7 @@ export type StructuredAgentSessionHostSupport = {
   /** A Stop that stopped nothing adds no row, so a repeated Stop is quiet. */
   quietRepeatedStop: boolean
   /** A send may carry the model and effort its turn runs on. */
+  sendSelection?: boolean
   sendOptions: boolean
   /** A Stop naming no turn stops what the chat has in flight; an older host needs the turn. */
   conversationStop: boolean
@@ -57,6 +61,7 @@ export function structuredAgentSessionHostSupport(
     ),
     statusFeed: capabilities.includes(AGENT_SESSION_STATUS_FEED_RUNTIME_CAPABILITY),
     quietRepeatedStop: capabilities.includes(AGENT_SESSION_REPEATED_STOP_RUNTIME_CAPABILITY),
+    sendSelection: capabilities.includes(AGENT_SESSION_SEND_SELECTION_RUNTIME_CAPABILITY),
     sendOptions: capabilities.includes(AGENT_SESSION_SEND_OPTIONS_RUNTIME_CAPABILITY),
     conversationStop: capabilities.includes(AGENT_SESSION_CONVERSATION_STOP_RUNTIME_CAPABILITY),
     permissionModes: capabilities.includes(AGENT_SESSION_PERMISSION_MODES_RUNTIME_CAPABILITY),

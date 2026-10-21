@@ -37,6 +37,7 @@ export type StructuredAgentSessionCreateParams = {
 export type StructuredAgentSessionFirstMessage = {
   clientMessageId: string
   body: z.infer<typeof SendBody>
+  selection?: Readonly<Record<string, string>>
 }
 
 /** Provider-prefixed so a session id names its lane on sight, and underscore-only

@@ -455,3 +455,45 @@ describe('live Codex option reads', () => {
     expect(apply).not.toHaveBeenCalled()
   })
 })
+
+it('uses Off for unpicked Claude Fast at rest and over a native On report, preserving explicit true and false', async () => {
+  const record = {
+    ...restingRecord(),
+    provider: 'claude',
+    accountHome: { variable: 'CLAUDE_CONFIG_DIR' as const, path: '/homes/a' }
+  }
+  const live = vi.fn(async () => ({ models: [], current: { model: 'opus', fastMode: true } }))
+  const session = {
+    params: { provider: 'claude' },
+    child: { phase: 'starting', fence: 1 },
+    journal: restingJournal()
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture supplies all fields the effective options reader uses.
+  const context = {
+    deps: {
+      adapter: { readOptions: live },
+      agents: claudeAndCodexAgents(),
+      store: { getRecord: () => record }
+    },
+    serialize: (_id: string, task: () => Promise<unknown>) => task(),
+    openConversation: async () => session,
+    conversation: async () => session
+  } as unknown as StructuredAgentSessionMutationContext
+  expect(
+    (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })).current
+      .fastMode
+  ).toBe(false)
+  expect(live).not.toHaveBeenCalled()
+  session.child.phase = 'ready'
+  expect(
+    (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })).current
+      .fastMode
+  ).toBe(false)
+  for (const fastMode of ['true', 'false']) {
+    record.options = { fastMode }
+    expect(
+      (await readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true }))
+        .current.fastMode
+    ).toBe(fastMode === 'true')
+  }
+})

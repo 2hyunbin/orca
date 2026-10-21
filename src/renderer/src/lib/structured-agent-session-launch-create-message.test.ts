@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   return {
     call: vi.fn<(target: unknown, method: string, params: unknown) => Promise<unknown>>(),
     supports: vi.fn<() => Promise<boolean>>(),
+    exactSupport: vi.fn<() => Promise<boolean>>(),
     admit: vi.fn<() => Promise<HostCreateSupport>>(),
     inventory: vi.fn(),
     settings
@@ -30,7 +31,8 @@ vi.mock('../../../shared/layout-owner-switch', () => ({
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: vi.fn(async () => ({})) }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.call,
-  supportsStructuredAgentSessionCreateMessage: mocks.supports
+  supportsStructuredAgentSessionCreateMessage: mocks.supports,
+  structuredAgentSessionHostSupports: mocks.exactSupport
 }))
 vi.mock('./structured-agent-session-host-admission', () => ({
   askHostCreateSupport: mocks.admit
@@ -61,7 +63,10 @@ import {
   getStructuredAgentSessionLaunchLifecycle
 } from './structured-agent-session-launch'
 import { holdStructuredAgentSessionLaunchOption } from './structured-agent-session-launch-options'
-import { recordHostModelCatalogSnapshot } from '@/runtime/host-model-catalog-snapshots'
+import {
+  recordHostModelCatalogSnapshot,
+  resetHostModelCatalogSnapshotsForTests
+} from '@/runtime/host-model-catalog-snapshots'
 import { resetStructuredAgentLaunchRegistryForTests } from './structured-agent-session-launch-registry'
 import {
   resetStructuredAgentLaunchPersistenceForTests,
@@ -158,6 +163,8 @@ describe('the first message owned by create', () => {
     resetStructuredAgentSessionReadOwnersForTests()
     clearNativeChatDraftCacheForTests()
     mocks.supports.mockResolvedValue(true)
+    mocks.exactSupport.mockResolvedValue(false)
+    resetHostModelCatalogSnapshotsForTests()
     mocks.admit.mockResolvedValue({ kind: 'admitted' })
     mocks.inventory.mockRejectedValue(new Error('an extra inventory read must not gate create'))
   })
@@ -168,14 +175,32 @@ describe('the first message owned by create', () => {
   })
 
   it('freezes the message and held options in create and publishes without another read or send', async () => {
+    mocks.exactSupport.mockResolvedValue(true)
+    recordHostModelCatalogSnapshot(target, 'codex', null, {
+      origin: 'probe',
+      fetchedAt: 1,
+      defaultHoldsInEveryWorkspace: true,
+      models: [
+        {
+          id: 'picked-model',
+          label: 'Picked',
+          efforts: [
+            { value: 'low', label: 'Low' },
+            { value: 'high', label: 'High' }
+          ]
+        }
+      ]
+    })
     const create = deferred<unknown>()
     mocks.call.mockReturnValue(create.promise)
     const launch = start()
     holdStructuredAgentSessionLaunchOption(launch.sessionId, 'model', 'picked-model')
+    holdStructuredAgentSessionLaunchOption(launch.sessionId, 'effort', 'high')
     await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
     const params = createParams()
     expect(params.firstMessage?.body.blocks).toEqual([{ type: 'text', text: 'opening text' }])
-    expect(params.options).toEqual({ model: 'picked-model' })
+    expect(params.options).toEqual({ model: 'picked-model', effort: 'high' })
+    expect(params.firstMessage?.selection).toEqual({ model: 'picked-model', effort: 'high' })
     expect(params.envelope.payloadFingerprint).toBe(
       structuredAgentSessionCreateFingerprint({ sessionId: launch.sessionId, ...params })
     )

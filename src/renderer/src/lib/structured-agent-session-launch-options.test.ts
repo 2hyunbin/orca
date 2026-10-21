@@ -384,7 +384,7 @@ describe('picks made while a chat launches', () => {
     expect(holdStructuredAgentSessionLaunchOption(SESSION_ID, 'model', 'gpt-late')).toBeNull()
   })
 
-  it('folds an accepted pick into what the launch reports it runs', async () => {
+  it('keeps the seed immutable when a pick settles, awaiting a queried base', async () => {
     mocks.launch.mockResolvedValue({ sessionId: SESSION_ID, fence: 1 })
     startStructuredAgentLaunch(WORKTREE_ID, 'codex', { requestId: 'request-7' })
     holdStructuredAgentSessionLaunchOption(SESSION_ID, 'effort', 'high')
@@ -399,7 +399,7 @@ describe('picks made while a chat launches', () => {
     })
     await settle()
 
-    expect(seen[0]).toEqual({ seed: { model: 'gpt-seeded', effort: 'high' }, held: {} })
+    expect(seen[0]).toEqual({ seed: { model: 'gpt-seeded' }, held: {} })
     expect(lifecycle()).toBeNull()
   })
 })

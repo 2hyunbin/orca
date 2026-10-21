@@ -163,7 +163,7 @@ export function useStructuredAgentSession(args: {
     historyLoaded: transportEnabled && state.status === 'ready',
     isWorking: transportState.isWorking,
     stopping: stopControl.stopping,
-    sendOptions
+    sendSelection: sendOptions
   })
 
   const contextUsage = useStructuredAgentSessionContextUsage(

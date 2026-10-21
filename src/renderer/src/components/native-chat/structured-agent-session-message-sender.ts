@@ -1,3 +1,4 @@
+import { forgetStructuredSessionSelection } from '@/lib/structured-agent-session-selection-controller'
 // The one way a structured chat message reaches its host: composer, launch prompt and a message sent
 // from outside the chat all call `sendStructuredAgentSessionMessage`, with or without the chat's view
 // mounted. The host's journal and queue own every message they hold. This module keeps, in memory
@@ -268,6 +269,7 @@ export function stopStructuredAgentSessionSends(sessionId: string): void {
 
 /** A cancelled launch or a purged worktree: its sends are dropped, and their callers told so. */
 export function dropStructuredAgentSessionSends(sessionId: string): void {
+  forgetStructuredSessionSelection(sessionId)
   for (const entry of getStructuredAgentSessionPendingSends(sessionId)) {
     const runtime = runtimes.get(entry.clientMessageId)
     runtime?.abort.abort()

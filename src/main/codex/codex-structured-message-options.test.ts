@@ -186,7 +186,7 @@ describe('Codex captured message choices', () => {
       )
     const ran = { model: 'model-a', effort: 'low' }
     expect(await send('first', { model: 'model-a' })).toMatchObject({ ranOptions: ran })
-    expect(request.mock.calls[0]?.[1]).toMatchObject(ran)
+    expect(request.mock.calls.find(([method]) => method === 'turn/start')?.[1]).toMatchObject(ran)
     session.activeTurnIds = new Set(['turn-1'])
     const steered = await send('steer', { model: 'model-a', serviceTier: 'priority' })
     expect(request.mock.calls.at(-1)?.[0]).toBe('turn/steer')
@@ -194,14 +194,13 @@ describe('Codex captured message choices', () => {
     expect(steered).not.toHaveProperty('ranOptions.serviceTier')
   })
 
-  it('inherits untouched native tier and personality without a configuration probe', async () => {
+  it('inherits untouched native tier and personality while capturing its configured baseline', async () => {
     const request = vi.fn(async (_method: string) => ({ turn: { id: 'native' } }))
     const session = optionSession(request)
     session.reportedOptions = { model: 'model-a', serviceTier: 'flex', serviceTierKnown: true }
     const turnOptions = await resolvedCodexMessageOptions(session, {})
     await startCodexTurn(session, { clientMessageId: 'native', body: USER_MESSAGE, turnOptions })
-    expect(request).toHaveBeenCalledOnce()
-    expect(request.mock.calls[0]?.[0]).toBe('turn/start')
+    expect(request.mock.calls.map(([method]) => method)).toEqual(['config/read', 'turn/start'])
     expect(turnOptions).toEqual({})
   })
 
@@ -288,4 +287,39 @@ describe('Codex captured message choices', () => {
     ).rejects.toThrow('connection lost after write')
     expect(Object.fromEntries(unknown.options)).toEqual({ model: 'attempted' })
   })
+})
+
+it('exposes the configured applied speed under the exact child identity without consulting turn observations', async () => {
+  const codex = fakeCodex({
+    'config/read': () => ({ config: { service_tier: 'priority' } }),
+    'turn/start': () => ({ turn: { id: 'opened' } })
+  })
+  const adapter = adapterFor(codex)
+  const acquired = await acquireReadyCodexForTest(adapter, {
+    identity: identityFor('session-1'),
+    fence: 7,
+    spawnToken: 'spawn-1'
+  })
+  await adapter.dispatch({
+    sessionId: 'session-1',
+    clientMessageId: 'first',
+    body: USER_MESSAGE,
+    executionOptions: {},
+    fence: 7
+  })
+  const input = {
+    sessionId: 'session-1',
+    fence: 7,
+    acquisitionGeneration: acquired.acquisitionGeneration,
+    next: { serviceTier: 'priority' }
+  }
+  expect(adapter.readAppliedInputOptions(input)).toMatchObject({
+    active: { serviceTier: 'priority' },
+    next: { serviceTier: 'priority' }
+  })
+  expect(
+    adapter.readAppliedInputOptions({ ...input, next: { serviceTier: 'default' } })
+  ).toMatchObject({ active: { serviceTier: 'priority' }, next: { serviceTier: 'default' } })
+  expect(adapter.readAppliedInputOptions({ ...input, acquisitionGeneration: 'retired' })).toBeNull()
+  await adapter.closeAll()
 })

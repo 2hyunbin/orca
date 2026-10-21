@@ -20,7 +20,10 @@ import {
   prepareLiveCodexSessionOptions,
   readLiveCodexSessionOptions
 } from './codex-structured-session-options'
-import { resolvedCodexMessageOptions } from './codex-structured-message-options'
+import {
+  readCodexAppliedInputOptions,
+  resolvedCodexMessageOptions
+} from './codex-structured-message-options'
 import {
   CodexAcquisitionRegistry,
   requireLiveCodexSession,
@@ -306,6 +309,12 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
       throw new Error(`codex app-server has no thread option named ${input.key}`)
     }
     return applyCodexStructuredSessionOption(this.session(input.sessionId), input.key, input.value)
+  }
+
+  readAppliedInputOptions: NonNullable<StructuredAgentSessionAdapter['readAppliedInputOptions']> = (
+    input
+  ) => {
+    return readCodexAppliedInputOptions(this.sessions.get(input.sessionId), input)
   }
 
   readOptions = (input: { sessionId: string; fence: number }) =>

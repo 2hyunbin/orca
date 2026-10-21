@@ -75,6 +75,7 @@ export function sendStructuredAgentSessionTurn(
     /** Host-local: whether the sending client can manage an image card. */
     queuedImageCards?: boolean
     options?: Readonly<Record<string, string>>
+    selection?: Readonly<Record<string, string>>
     usageLimitContinuationOfTurnItemId?: string
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`

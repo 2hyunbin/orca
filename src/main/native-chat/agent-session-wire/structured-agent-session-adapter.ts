@@ -379,6 +379,13 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   setOption(
     input: StructuredAgentSessionSetOptionInput
   ): Promise<void | Readonly<Record<string, string>>>
+  /** Applied inputs for this exact child; observations never decide message admission. */
+  readAppliedInputOptions?(input: {
+    sessionId: string
+    fence: number
+    acquisitionGeneration: string | null
+    next: AgentSessionExecutionOptions | undefined
+  }): { active: AgentSessionExecutionOptions; next: AgentSessionExecutionOptions } | null
   /** Fetch off the lane, then apply the result under the same child's fence. */
   prepareReadOptions?(input: {
     sessionId: string

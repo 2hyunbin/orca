@@ -162,6 +162,7 @@ export async function maybeQueueStructuredAgentSessionSend(
     delivery?: 'queue-if-active'
     queuedImageCards?: boolean
     options?: Readonly<Record<string, string>>
+    selection?: Readonly<Record<string, string>>
     /** A person's send at a chat surface: every attachment it names must still be stored. */
     userSend?: true
     /** A person's message the host sends for them. */
@@ -207,7 +208,7 @@ export async function maybeQueueStructuredAgentSessionSend(
   if (refusal) {
     return { ok: false, refusal }
   }
-  const captured = captureStructuredExecutionOptions(ctx, params.options)
+  const captured = captureStructuredExecutionOptions(ctx, params.options, params.selection)
   if ('refusal' in captured) {
     return { ok: false, refusal: captured.refusal }
   }

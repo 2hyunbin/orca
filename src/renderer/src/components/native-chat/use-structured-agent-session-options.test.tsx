@@ -2,15 +2,30 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import type { SelectionOutcome } from '../../../../shared/structured-agent-session-selection-operations'
 
-const mocks = vi.hoisted(() => ({
-  call: vi.fn(),
-  enqueue: vi.fn(),
-  hold: vi.fn<
-    (sessionId: string, id: string, encoded: string, picker?: unknown) => Promise<unknown> | null
-  >(),
-  toastError: vi.fn<(message: string) => void>()
-}))
+const mocks = vi.hoisted(() => {
+  const selection: { target: RuntimeClientTarget; agent: 'codex' | 'claude' } = {
+    target: { kind: 'local' },
+    agent: 'codex'
+  }
+  return {
+    call: vi.fn(),
+    enqueue: vi.fn(),
+    pick: vi.fn(),
+    ...selection,
+    hold: vi.fn<
+      (
+        sessionId: string,
+        id: string,
+        encoded: string,
+        picker?: unknown
+      ) => Promise<SelectionOutcome> | null
+    >(),
+    toastError: vi.fn<(message: string) => void>()
+  }
+})
 
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
 
@@ -22,15 +37,48 @@ vi.mock('./native-chat-session-option-settings-write', () => ({
   enqueueSessionOptionSettingsWrite: mocks.enqueue
 }))
 
-vi.mock('@/lib/structured-agent-session-launch-options', () => ({
-  holdStructuredAgentSessionLaunchOption: mocks.hold,
-  getStructuredAgentSessionLaunchSelection: () => null
-}))
+vi.mock('@/lib/structured-agent-session-launch-options', async () => {
+  const { structuredSessionSelectionController } =
+    await import('@/lib/structured-agent-session-selection-controller')
+  return {
+    holdStructuredAgentSessionLaunchOption: (...args: Parameters<typeof mocks.hold>) => {
+      const reply = mocks.hold(...args)
+      if (!reply) {
+        return null
+      }
+      const controller = structuredSessionSelectionController(mocks.target, args[0], mocks.agent)
+      const operation = controller.issue(
+        args[1],
+        args[2],
+        args[1] === 'model' ? args[2] : 'gpt-5.5'
+      )
+      void reply.then((outcome) => controller.settle(operation, outcome))
+      return operation.result
+    },
+    setStructuredSessionSelectionOption: async (
+      _target: unknown,
+      _session: string,
+      _fence: number,
+      key: string,
+      value: string
+    ) => {
+      const result = await mocks.pick('agentSession.setOption', 'agentSession.setOption', {
+        key,
+        value
+      })
+      return result
+        ? { kind: 'accepted', options: result.options ?? { [key]: value } }
+        : { kind: 'unknown' }
+    },
+    getStructuredAgentSessionLaunchSelection: () => null
+  }
+})
 
 import type { SessionOptionDescriptor } from '../../../../shared/native-chat-session-options'
 import type { StructuredAgentSessionMutate } from './use-structured-agent-session-mutate'
 import { useStructuredAgentSessionOptions } from './use-structured-agent-session-options'
 import { structuredAgentSessionSendSelection } from '../../../../shared/structured-agent-session-option-view'
+import { forgetStructuredSessionSelection } from '@/lib/structured-agent-session-selection-controller'
 import { resetHostModelCatalogSnapshotsForTests } from '@/runtime/host-model-catalog-snapshots'
 
 const LOCAL_TARGET = { kind: 'local' } as const
@@ -93,6 +141,9 @@ const ATTACHED: RenderProps = { transportEnabled: true, fence: 1, launch: 'new' 
 const REOPENED: RenderProps = { transportEnabled: true, fence: 1 }
 
 function renderOptions(initial: RenderProps, mutate: StructuredAgentSessionMutate) {
+  mocks.pick.mockImplementation(mutate)
+  mocks.target = initial.paired ? PAIRED_TARGET : LOCAL_TARGET
+  mocks.agent = initial.agent ?? 'codex'
   return renderHook(
     (props: RenderProps) =>
       useStructuredAgentSessionOptions({
@@ -186,6 +237,7 @@ const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0
 
 describe('useStructuredAgentSessionOptions', () => {
   beforeEach(() => {
+    forgetStructuredSessionSelection('session-1')
     mocks.call.mockReset()
     mocks.enqueue.mockReset()
     mocks.hold.mockReset()
@@ -452,7 +504,7 @@ describe('useStructuredAgentSessionOptions', () => {
       unmount()
     })
 
-    it('commits a held pick accepted after the chat attached, so the next send carries it', async () => {
+    it('revalidates a held pick accepted after the chat attached, so the next send carries it', async () => {
       const claudeModels = [{ id: 'opus', label: 'Opus', isDefault: true, efforts }]
       const ownEffort = (effort: string) => ({
         models: claudeModels,
@@ -463,7 +515,7 @@ describe('useStructuredAgentSessionOptions', () => {
         modelCatalog: async () => ({ origin: 'probe', fetchedAt: 1, models: claudeModels }),
         options: () => new Promise((resolve) => reads.push(resolve))
       })
-      let accept = (_outcome: unknown): void => {}
+      let accept = (_outcome: SelectionOutcome): void => {}
       mocks.hold.mockReturnValue(new Promise((resolve) => (accept = resolve)))
       const claude = { agent: 'claude' as const, launchSeedOptions: { model: 'opus' } }
       const { result, rerender, unmount } = renderOptions(
@@ -489,6 +541,11 @@ describe('useStructuredAgentSessionOptions', () => {
         structuredAgentSessionSendSelection(optionView(optionStateRef.current, undefined, {}))
       ).toEqual({ model: 'opus', effort: 'low' })
       await waitFor(() => expect(reads).toHaveLength(3))
+      // Another client's newer answer retires the accepted operation without value equality.
+      await act(async () => reads[2]!(ownEffort('high')))
+      await waitFor(() =>
+        expect(currentValue(result.current.optionSnapshot, 'effort')).toBe('high')
+      )
       unmount()
     })
 
@@ -776,8 +833,13 @@ describe('useStructuredAgentSessionOptions', () => {
         current: { ...pick.current, confirmed: ['model'] }
       }
       let reads = 0
-      // The read after the pick never lands, so only the reply speaks.
-      answer({ options: () => (++reads === 1 ? Promise.resolve(live) : new Promise(() => {})) })
+      // The authoritative read supplies model-dependent normalization; replies settle operations.
+      answer({
+        options: async () =>
+          ++reads === 1
+            ? live
+            : { ...live, current: { ...live.current, model: 'second', ...pick.reply } }
+      })
       const { mutate } = mutateWith(async () => ({
         key: 'model',
         value: 'second',

@@ -31,7 +31,7 @@ import { subscribeRuntimeRpc } from './runtime-rpc-subscribe'
 /** Read a capability through the runtime's existing status cache. A failed/unknown
  *  probe is treated as legacy so a newer call is never made before the host has
  *  proved it understands it. */
-async function structuredAgentSessionHostSupports(
+export async function structuredAgentSessionHostSupports(
   target: RuntimeClientTarget,
   capability: RuntimeCapability
 ): Promise<boolean> {

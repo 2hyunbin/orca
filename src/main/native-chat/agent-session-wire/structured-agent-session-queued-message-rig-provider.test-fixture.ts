@@ -16,6 +16,7 @@ import {
 } from './structured-agent-session-host-test-data'
 
 export type QueuedRigProviderOptions = {
+  appliedInputs?: StructuredAgentSessionAdapter['readAppliedInputOptions']
   rewind?: NonNullable<StructuredAgentSessionAdapter['rewind']>
   recoverRewind?: NonNullable<StructuredAgentSessionAdapter['recoverRewind']>
   /** A child started for a chat whose chain already names a thread resumes it, so a chat whose
@@ -66,6 +67,7 @@ export function createQueuedRigProvider(
     ...(options.reportsEffort ? { effort: options.reportsEffort } : {})
   })
   const scripted: StructuredAgentSessionAdapter = {
+    ...(options.appliedInputs ? { readAppliedInputOptions: options.appliedInputs } : {}),
     open: () =>
       options.starting
         ? new Promise((resolve) => {

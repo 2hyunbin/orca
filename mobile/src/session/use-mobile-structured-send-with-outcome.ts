@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionSendControl } from '../../../src/shared/structured-agent-session-send-mutation'
 import { selectAgentSessionCurrentRequests } from '../../../src/shared/agent-session-current-requests'
 // The structured composer's one send seam: a slash command dispatches as a
 // conversation command, and everything else goes out as an
@@ -64,6 +65,7 @@ export function useMobileStructuredSendWithOutcome(args: {
   >
   onSendError: MobileNativeChatSendErrorReporter
   /** The chat's own model and effort each send carries; absent for an older host, which takes neither. */
+  sendSelection?: () => Pick<StructuredAgentSessionSendControl, 'options' | 'selection'>
   sendOptions?: () => Readonly<Record<string, string>> | undefined
 }): (
   text: string,
@@ -83,6 +85,7 @@ export function useMobileStructuredSendWithOutcome(args: {
     onSendError,
     queueCapable,
     sendOptions,
+    sendSelection,
     sessionId,
     stateRef,
     stopping
@@ -108,6 +111,7 @@ export function useMobileStructuredSendWithOutcome(args: {
         onSendError('Message not sent')
         return 'rejected'
       }
+      const captured = sendSelection?.() ?? { options: sendOptions?.() }
       const sendAttachments = attachments ?? []
       const commandOutcome = await dispatchMobileStructuredCommand({
         text,
@@ -156,8 +160,6 @@ export function useMobileStructuredSendWithOutcome(args: {
         queuedAt: Date.now(),
         ...(stopping ? { sentWhileStopping: true as const } : {})
       }
-      // A pick on its way holds the send, so the chat's values are what it holds.
-      const options = sendOptions?.()
       const outcome = await sendMobileStructuredAgentSessionMessage({
         client,
         sessionId,
@@ -167,7 +169,7 @@ export function useMobileStructuredSendWithOutcome(args: {
         ...(mobileStructuredSendQueues(queueCapable, stateRef.current)
           ? { delivery: 'queue-if-active' as const }
           : {}),
-        ...(options ? { options } : {}),
+        ...captured,
         deadline,
         clientMessageId: send.clientMessageId,
         onAccepted: (cursor) =>
@@ -191,6 +193,7 @@ export function useMobileStructuredSendWithOutcome(args: {
       onSendError,
       queueCapable,
       sendOptions,
+      sendSelection,
       sessionId,
       stateRef,
       stopping

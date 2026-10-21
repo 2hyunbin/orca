@@ -224,3 +224,42 @@ describe("a message sent while a person's Stop ends the turn", () => {
     expect(reads.mock.calls.length).toBeLessThanOrEqual(3)
   })
 })
+
+it('admits changed speed immediately but delivers after the active turn, while the configured same speed still steers', async () => {
+  rig = await createQueuedMessageTestRig({
+    reportsModel: 'different-provider-echo',
+    appliedInputs: ({ next }) => ({
+      active: { model: 'literal-alias', serviceTier: 'priority' },
+      next: { ...next, serviceTier: next?.serviceTier ?? 'priority' }
+    })
+  })
+  const opening = rig.send('first', undefined, {
+    carried: { model: 'literal-alias', serviceTier: 'priority' }
+  })
+  expect(await opening.result).toMatchObject({ ok: true })
+  await eventually(async () =>
+    expect((await rig.submission(opening.id))?.handedOverAt).toBeDefined()
+  )
+  const first = opening.id
+  await rig.settleAccepted(first, 'first')
+  await turn('turn-1', first, 'running')
+  const initial = rig.dispatch.mock.calls.length
+  const same = rig.send('same configured speed', undefined, {
+    carried: { model: 'literal-alias', serviceTier: 'priority' }
+  })
+  expect(await same.result).toMatchObject({ ok: true })
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(initial + 1))
+  const changed = rig.send('standard next', undefined, {
+    carried: { model: 'literal-alias', serviceTier: 'default' }
+  })
+  expect(await changed.result).toMatchObject({ ok: true })
+  await laneDrained()
+  expect(await rig.submission(changed.id)).toMatchObject({
+    dispatchState: 'pending',
+    options: { serviceTier: 'default' }
+  })
+  expect((await rig.submission(changed.id))?.handedOverAt).toBeUndefined()
+  expect(rig.dispatch).toHaveBeenCalledTimes(initial + 1)
+  await turn('turn-1', first, 'interrupted')
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledTimes(initial + 2))
+})

@@ -107,3 +107,27 @@ export function structuredAgentSessionSendSelection(
     ? { ...(model ? { model } : {}), ...(effort ? { effort } : {}) }
     : undefined
 }
+
+/** The four controls as shown, with resumed default model/effort left as inheritance. */
+export function structuredAgentSessionMessageSelection(
+  view: StructuredAgentSessionOptionState
+): Record<string, string> {
+  const selection: Record<string, string> = {}
+  for (const descriptor of structuredAgentSessionOptionSnapshot(view)) {
+    if (!['model', 'effort', 'fastMode', 'serviceTier'].includes(descriptor.id)) {
+      continue
+    }
+    if (
+      (descriptor.id === 'model' || descriptor.id === 'effort') &&
+      view.defaultsUnsent &&
+      descriptor.valueSource === 'default'
+    ) {
+      continue
+    }
+    const value = descriptor.kind.currentValue
+    if (value !== undefined) {
+      selection[descriptor.id] = String(value)
+    }
+  }
+  return selection
+}

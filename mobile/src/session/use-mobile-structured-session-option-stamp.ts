@@ -17,7 +17,9 @@ export function useMobileStructuredSessionOptionStamp(args: {
     (listener: () => void) => (feed ? feed.subscribe(listener) : noSubscription()),
     [feed]
   )
-  const readStamp = (): string =>
-    agentSessionStatusOptionStamp(feed && sessionId ? feed.getSnapshot().get(sessionId) : undefined)
+  const readStamp = (): string => {
+    const summary = feed && sessionId ? feed.getSnapshot().get(sessionId) : undefined
+    return JSON.stringify([agentSessionStatusOptionStamp(summary), summary?.hostExecutionPhase])
+  }
   return useSyncExternalStore(subscribe, readStamp, readStamp)
 }

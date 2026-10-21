@@ -173,6 +173,7 @@ export async function startCodexTurn(
   host.appliedTurnOptions = input.turnOptions ?? Object.fromEntries(host.options)
   // host.options now holds this message's choices; an unoffered tier runs as standard.
   const requested = codexTurnRequestOptions(host)
+  host.appliedTurnOptions = { ...host.appliedTurnOptions, ...requested }
   let answer: unknown
   try {
     answer = await host.connection.request(

@@ -187,3 +187,63 @@ describe('a send kept as a card because Orca stopped before handing it over', ()
     }
   })
 })
+
+it('captures the shown tuple despite unseen saved picks, preserves personality, and distinguishes empty exact from legacy capture', async () => {
+  const saved = {
+    model: 'hidden-model',
+    effort: 'low',
+    serviceTier: 'priority',
+    personality: 'friendly'
+  }
+  await rig.store.replaceSessionOptions({
+    sessionId: SESSION,
+    fence: 1,
+    now: Date.now(),
+    options: saved
+  })
+  const send = (selection?: Record<string, string>, delivery?: 'queue-if-active') => {
+    const body = hostTestMessage('shown selection')
+    const fields = {
+      body,
+      ...(selection !== undefined ? { selection } : {}),
+      ...(delivery ? { delivery } : {})
+    }
+    const params = {
+      ...fields,
+      envelope: rig.envelope(fields, 'agentSession.send', hostTestOperationId())
+    }
+    return { params, result: rig.host.send(CALLER, params) }
+  }
+  const shown = { model: 'shown-model', effort: 'high', serviceTier: 'default' }
+  const exact = send(shown)
+  expect(await exact.result).toMatchObject({
+    ok: true,
+    value: { submission: { options: { ...shown, personality: 'friendly' } } }
+  })
+  expect(rig.store.getRecord(SESSION)?.options).toEqual(saved)
+  const empty = send({})
+  expect(await empty.result).toMatchObject({
+    ok: true,
+    value: { submission: { options: { personality: 'friendly' } } }
+  })
+  expect((await rig.submission(empty.params.envelope.clientOperationId))?.options).toEqual({
+    personality: 'friendly'
+  })
+  expect(await send().result).toMatchObject({ ok: true, value: { submission: { options: saved } } })
+  const changed = {
+    ...exact.params,
+    selection: {},
+    envelope: {
+      ...exact.params.envelope,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({
+        method: 'agentSession.send',
+        sessionId: SESSION,
+        fields: { body: exact.params.body, selection: {} }
+      })
+    }
+  }
+  expect(await rig.host.send(CALLER, changed)).toMatchObject({
+    ok: false,
+    refusal: { code: 'agent_session_operation_conflict' }
+  })
+})

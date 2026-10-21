@@ -93,7 +93,9 @@ async function readStructuredAgentSessionOptionsAtRest(
   const listedModelIds = finishedListingIds(catalog)
   const fastMode =
     saved.fastMode === undefined
-      ? null
+      ? rules?.acceptsKey('fastMode')
+        ? false
+        : null
       : decodeStructuredAgentSessionOptionValue('fastMode', saved.fastMode)
   // An unknown model is one the client already treats as unconfirmed. Only a real listing names the
   // account's default; a built-in list's default is a guess, so with none the client keeps its own.
@@ -220,10 +222,7 @@ export async function readStructuredAgentSessionOptions(
     ...options.current,
     ...(model !== undefined ? { model } : {}),
     effort: saved.effort ?? options.current.effort,
-    fastMode:
-      saved.fastMode !== undefined
-        ? selected.current.fastMode
-        : (options.current.fastMode ?? selected.current.fastMode),
+    fastMode: selected.current.fastMode ?? options.current.fastMode,
     // The saved tier as the shared speed rule runs it under the saved model.
     serviceTier:
       saved.serviceTier !== undefined

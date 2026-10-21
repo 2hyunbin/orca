@@ -1,3 +1,4 @@
+import { sendSingleFlightRequest } from '../transport/request-single-flight'
 import type {
   AgentSessionMutationResult,
   AgentSessionWireRefusalCode
@@ -91,13 +92,15 @@ export async function callAgentSession<TResult>(
   method: string,
   params: unknown,
   timeoutMs = STRUCTURED_SEND_TIMEOUT_MS,
-  options?: { failWhenDisconnected?: boolean }
+  options?: { failWhenDisconnected?: boolean; coalesce?: string }
 ): Promise<TResult> {
-  const response = await client.sendRequest(method, params, {
-    timeoutMs,
-    budgetSpansConnect: true,
-    ...(options?.failWhenDisconnected ? { failWhenDisconnected: true } : {})
-  })
+  const response = options?.coalesce
+    ? await sendSingleFlightRequest(client, options.coalesce, method, params)
+    : await client.sendRequest(method, params, {
+        timeoutMs,
+        budgetSpansConnect: true,
+        ...(options?.failWhenDisconnected ? { failWhenDisconnected: true } : {})
+      })
   if (!response.ok) {
     throw new AgentSessionRpcResponseError(
       response.error.code,
