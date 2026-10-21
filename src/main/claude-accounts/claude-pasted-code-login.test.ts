@@ -64,8 +64,8 @@ describe('runClaudePastedCodeLogin', () => {
     const runCommand = vi.fn<RunCommand>(async (_args, _config, _timeout, options) => {
       options?.onStdin?.((text) => written.push(text))
       // Split mid-link, as a pipe may deliver it.
-      options?.onOutput?.(TRANSCRIPT.slice(0, 200))
-      options?.onOutput?.(TRANSCRIPT.slice(200))
+      options?.onStdout?.(TRANSCRIPT.slice(0, 200))
+      options?.onStdout?.(TRANSCRIPT.slice(200))
       await vi.waitFor(() => expect(written).toEqual(['the-code#state\n']))
       return ''
     })
@@ -90,7 +90,7 @@ describe('runClaudePastedCodeLogin', () => {
       options?.onStdin?.(() => {
         sent = true
       })
-      options?.onOutput?.(TRANSCRIPT)
+      options?.onStdout?.(TRANSCRIPT)
       await vi.waitFor(() => expect(sent).toBe(true))
       throw new Error('Claude command failed: Login failed: Request failed with status code 400')
     })

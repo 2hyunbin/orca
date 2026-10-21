@@ -26,8 +26,8 @@ export type ClaudeCommandOptions = {
   keepStdinOpen?: boolean
   /** BROWSER for Claude, as Claude's own host sees the path. */
   browser?: string
-  /** Every output chunk as Claude prints it. */
-  onOutput?: (text: string) => void
+  /** Every stdout chunk as Claude prints it. */
+  onStdout?: (text: string) => void
   /** Hands over a writer for Claude's stdin; needs `keepStdinOpen`. */
   onStdin?: (write: (text: string) => void) => void
 }
@@ -131,7 +131,6 @@ export function runClaudeCommandProcess(
       terminateClaudeProcess(child, interactiveLogin, afterKill)
     }
     const appendOutput = (chunk: Buffer): void => {
-      options?.onOutput?.(chunk.toString())
       output = `${output}${chunk.toString()}`
       if (output.length > MAX_COMMAND_OUTPUT_CHARS) {
         output = output.slice(-MAX_COMMAND_OUTPUT_CHARS)
@@ -177,6 +176,10 @@ export function runClaudeCommandProcess(
     }, timeoutMs)
     stdout?.on('data', appendOutput)
     stderr?.on('data', appendOutput)
+    const onStdout = options?.onStdout
+    if (onStdout) {
+      stdout?.on('data', (chunk: Buffer) => onStdout(chunk.toString()))
+    }
     child.on('error', onError)
     child.on(completionEvent, onDone)
     const stdin = options?.keepStdinOpen && !interactiveLogin ? child.stdin : null

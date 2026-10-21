@@ -79,7 +79,7 @@ export async function runClaudePastedCodeLogin(
       onStdin: (write) => {
         writeStdin = write
       },
-      onOutput: (text) => {
+      onStdout: (text) => {
         if (prompted) {
           return
         }
@@ -101,7 +101,9 @@ export async function runClaudePastedCodeLogin(
     })
   } catch (error) {
     // Why: Claude's own words for a bad code are an HTTP status, which says nothing to a person.
-    throw codeSent && !controller.signal.aborted
+    // Only its own exit counts; a timeout or denial keeps its message.
+    const exited = error instanceof Error && /^Claude command (failed|exited)/.test(error.message)
+    throw codeSent && exited && !controller.signal.aborted
       ? new Error(CLAUDE_PASTED_CODE_REJECTED_MESSAGE, { cause: error })
       : error
   } finally {

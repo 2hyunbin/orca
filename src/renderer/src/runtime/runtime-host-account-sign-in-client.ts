@@ -18,8 +18,10 @@ type EnvironmentTarget = Extract<RuntimeClientTarget, { kind: 'environment' }>
 const CALL_TIMEOUT_MS = 20_000
 // Why above the host's 20s long poll: an unchanged flow answers at its own deadline, not ours.
 const WAIT_TIMEOUT_MS = 35_000
-const WAIT_RETRIES = 3
+// Why just under the host's 90s silence window: past it the host has ended the flow anyway.
+const WAIT_RETRY_WINDOW_MS = 80_000
 const WAIT_RETRY_DELAY_MS = 2_000
+const NOT_ACTIVE = 'This sign-in is no longer active in this client.'
 const CANCELLED_MESSAGE: Record<HostAccountSignInProvider, string> = {
   claude: 'Claude sign-in was cancelled.',
   codex: CODEX_LOGIN_CANCELLED_MESSAGE
@@ -35,6 +37,8 @@ type Session = {
 
 /** The sign-in each server runs for this client, per provider, while it is shown. */
 const shown = new Map<string, Session>()
+/** Cancels clicked before the host answered the start; applied once it does. */
+const pendingCancels = new Set<string>()
 const listeners = new Set<() => void>()
 
 const keyOf = (owner: EnvironmentTarget, provider: HostAccountSignInProvider): string =>
@@ -90,7 +94,8 @@ export function readHostAccountSignIn(
 }
 
 async function waitForChange(session: Session): Promise<HostAccountSignInStatus> {
-  for (let attempt = 0; ; attempt += 1) {
+  const giveUpAt = Date.now() + WAIT_RETRY_WINDOW_MS
+  for (;;) {
     try {
       return await call(
         session,
@@ -100,7 +105,8 @@ async function waitForChange(session: Session): Promise<HostAccountSignInStatus>
       )
     } catch (error) {
       // Why retry: a dropped answer says nothing about the login, which keeps running on the host.
-      if (attempt >= WAIT_RETRIES) {
+      const ended = error instanceof Error && error.message.includes(NOT_ACTIVE)
+      if (ended || Date.now() >= giveUpAt) {
         throw error
       }
       await new Promise((resolve) => setTimeout(resolve, WAIT_RETRY_DELAY_MS))
@@ -121,12 +127,17 @@ async function runHostAccountSignIn(
     HOST_ACCOUNT_SIGN_IN_RUNTIME_CAPABILITY,
     'This server runs an older Orca that cannot add accounts from here. Update Orca on that server, or run `orca account add` in a terminal there.'
   )
+  const key = keyOf(owner, provider)
+  pendingCancels.delete(key)
   const session: Session = {
     ...pairing,
     status: await call(pairing, 'accounts.hostSignInStart', { provider })
   }
-  shown.set(keyOf(owner, provider), session)
+  shown.set(key, session)
   notify()
+  if (pendingCancels.delete(key)) {
+    void cancelHostAccountSignIn(owner, provider).catch(() => {})
+  }
   try {
     while (!HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES.has(session.status.phase)) {
       const next = await waitForChange(session)
@@ -179,7 +190,7 @@ export async function submitHostAccountSignInCode(
 ): Promise<void> {
   const session = owner.kind === 'environment' ? shown.get(keyOf(owner, provider)) : undefined
   if (!session) {
-    throw new Error('This sign-in is no longer active in this client.')
+    throw new Error(NOT_ACTIVE)
   }
   const status = await call(session, 'accounts.hostSignInSubmitCode', {
     flowId: session.status.flowId,
@@ -193,9 +204,14 @@ export async function cancelHostAccountSignIn(
   owner: RuntimeClientTarget,
   provider: HostAccountSignInProvider
 ): Promise<boolean> {
-  const session = owner.kind === 'environment' ? shown.get(keyOf(owner, provider)) : undefined
-  if (!session) {
+  if (owner.kind !== 'environment') {
     return false
+  }
+  const session = shown.get(keyOf(owner, provider))
+  if (!session) {
+    // Why: Cancel shows as soon as Add is clicked, before the host has answered the start.
+    pendingCancels.add(keyOf(owner, provider))
+    return true
   }
   const status = await call(session, 'accounts.hostSignInCancel', {
     flowId: session.status.flowId
