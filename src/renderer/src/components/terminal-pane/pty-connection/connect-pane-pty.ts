@@ -84,6 +84,7 @@ export function connectPanePty(
   session.startupInjectTimer = null
   session.agentTaskCompleteNotificationGraceTimer = null
   session.agentTaskCompleteNotificationMaxTimer = null
+  session.hookOwnedIdleAbsorbsBell = false
   session.agentTaskCompleteStatusUnsubscribe = null
   session.agentTaskCompleteSettingsUnsubscribe = null
   session.agentTaskCompleteNotificationGeneration = 0

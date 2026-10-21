@@ -1473,6 +1473,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "Search hosts…",
+        "noHostsMatch": "No hosts match.",
+        "moreHosts_one": "{{count}} more host. Search by name to find it.",
+        "moreHosts_other": "{{count}} more hosts. Search by name to find one."
+      },
       "BrowserCookieImportDisclosure": {
         "title": "Google logins aren't imported",
         "description": "Sign in to Google directly in Orca."
