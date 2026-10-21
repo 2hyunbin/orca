@@ -1,4 +1,5 @@
 import { ProducerRevision } from './producer-revision'
+import { PairedServerMetaWrites } from './paired-server-meta-writes'
 import { toRuntimeExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
 import { describePairedServerHosts } from '../../../shared/paired-server-hosts'
 import type { MobileRelayServerWorktreeRow } from '../../../shared/mobile-relay-hosts-contract'
@@ -45,7 +46,12 @@ type ServerEntry = {
   watch: MobileDesktopRelayHostWatch | null
   refreshing: Promise<void> | null
   refreshAgain: boolean
+  /** Fetches started under this pairing; a fresh-read waiter needs one started after it. */
+  fetchesStarted: number
+  freshReadWaiters: FreshReadWaiter[]
 }
+
+type FreshReadWaiter = { after: number; contactGeneration: number; done: (read: boolean) => void }
 
 /**
  * The desktop's one live set of paired-server workspace rows, needing no window. A server is
@@ -58,6 +64,8 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
   private readonly servers = new Map<string, ServerEntry>()
   private hosts: MobileDesktopRelayHosts | null = null
   readonly revision = new ProducerRevision()
+  /** This desktop's metadata edits to these servers, each settled by a fresh read of their rows. */
+  readonly metaWrites: PairedServerMetaWrites = new PairedServerMetaWrites(this)
 
   constructor(
     private readonly options: {
@@ -86,6 +94,7 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
       stopStatus()
       stopRetired()
       for (const entry of this.servers.values()) {
+        settleFreshReads(entry, () => false)
         entry.watch?.close()
       }
       this.servers.clear()
@@ -105,6 +114,7 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
     )
     for (const [environmentId, entry] of this.servers) {
       if (fences.get(environmentId) !== entry.fence) {
+        settleFreshReads(entry, () => false)
         entry.watch?.close()
         this.servers.delete(environmentId)
         this.revision.bump()
@@ -126,7 +136,9 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
           catalogStale: true,
           watch: null,
           refreshing: null,
-          refreshAgain: false
+          refreshAgain: false,
+          fetchesStarted: 0,
+          freshReadWaiters: []
         })
         this.revision.bump()
       }
@@ -136,6 +148,8 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
       if (inContact !== entry.inContact) {
         entry.inContact = inContact
         entry.contactGeneration += 1
+        // A gap in contact means no later read can vouch for a write made before it.
+        settleFreshReads(entry, () => false)
         entry.confirmed = false
         entry.catalogStale ||= inContact
         this.revision.bump()
@@ -164,6 +178,26 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
       entry.refreshing = refreshing
     }
     return entry.refreshing
+  }
+
+  /**
+   * Calls `done(true)` once a rows read that started after this call answers under the same
+   * contact; `done(false)` if contact changes or the server goes first. Never settles on a value.
+   */
+  afterFreshRead(environmentId: string, done: (read: boolean) => void): void {
+    const entry = this.servers.get(environmentId)
+    if (!entry?.inContact) {
+      done(false)
+      return
+    }
+    entry.freshReadWaiters.push({
+      after: entry.fetchesStarted,
+      contactGeneration: entry.contactGeneration,
+      done
+    })
+    // A fetch in flight started before the write's reply; one more runs after it.
+    entry.refreshAgain ||= entry.refreshing !== null
+    void this.refresh(environmentId)
   }
 
   /** The server's raw rows as last fetched under this pairing; null when none were. */
@@ -241,6 +275,7 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
 
   private async fetch(hosts: MobileDesktopRelayHosts, entry: ServerEntry): Promise<void> {
     const { contactGeneration } = entry
+    const started = ++entry.fetchesStarted
     const call = async (method: string, params?: unknown) =>
       hosts.call({ environmentId: entry.environmentId }, method, params, {
         // Why the transport's normal bound: nothing waits on this fetch (readers take the latest
@@ -279,5 +314,23 @@ export class PairedServerRowsProducer implements ServerWorktreeRows {
     entry.confirmed = entry.inContact && entry.contactGeneration === contactGeneration
     // Every answer moves the revision: rows carry activity that changes without a catalog event.
     this.revision.bump()
+    settleFreshReads(
+      entry,
+      (waiter) => waiter.after < started && waiter.contactGeneration === contactGeneration,
+      (waiter) => waiter.after < started
+    )
+  }
+}
+
+/** Settles the waiters `due` picks (all by default) with `read(waiter)`; the rest keep waiting. */
+function settleFreshReads(
+  entry: ServerEntry,
+  read: (waiter: FreshReadWaiter) => boolean,
+  due: (waiter: FreshReadWaiter) => boolean = () => true
+): void {
+  const settled = entry.freshReadWaiters.filter(due)
+  entry.freshReadWaiters = entry.freshReadWaiters.filter((waiter) => !due(waiter))
+  for (const waiter of settled) {
+    waiter.done(read(waiter))
   }
 }

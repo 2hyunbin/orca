@@ -1,4 +1,10 @@
 import { terminalImageViewerSupported } from '../../../terminal-image-viewer-env'
+import {
+  closeOutcome,
+  queueTerminalWorkspaceCommand,
+  sleepLostContact,
+  sleepOutcome
+} from '../../../workspaces/workspace-lifecycle-commands'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../shared/sidebar-inputs-switch'
 import { defineMethod } from '../../core'
 import {
@@ -135,13 +141,24 @@ export const TERMINAL_LIFECYCLE_METHODS = [
     name: 'terminal.closeAll',
     permission: 'workspace',
     params: TerminalCloseAll,
-    handler: async (params, { runtime }) => runtime.closeTerminalsForWorktree(params.worktree)
+    handler: async (params, { runtime }) =>
+      queueTerminalWorkspaceCommand(runtime, params.worktree, {
+        kind: 'close',
+        run: () => runtime.closeTerminalsForWorktree(params.worktree),
+        outcome: closeOutcome
+      })
   }),
   defineMethod({
     name: 'terminal.sleep',
     permission: 'workspace',
     params: TerminalSleep,
-    handler: async (params, { runtime }) => runtime.sleepTerminalsForWorktree(params.worktree)
+    handler: async (params, { runtime }) =>
+      queueTerminalWorkspaceCommand(runtime, params.worktree, {
+        kind: 'sleep',
+        run: () => runtime.sleepTerminalsForWorktree(params.worktree),
+        outcome: sleepOutcome,
+        lostContact: sleepLostContact
+      })
   }),
   defineMethod({
     name: 'terminal.stopExact',
