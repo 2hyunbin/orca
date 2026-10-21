@@ -295,6 +295,24 @@ describe('rollbackManagedOrcadEnvironment', () => {
     })
     expect(mocks.rebuildTunnel).toHaveBeenCalledWith(harness.userDataPath, 'environment-1')
   })
+
+  it('hands the rollback a recount that closes admission, and a reopen that only reopens it', async () => {
+    mocks.rollback.mockResolvedValueOnce({ outcome: 'refused', code: 'x', reason: 'y' })
+    await rollbackManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    const options = mocks.rollback.mock.calls[0]?.[0]
+    // The count here is unfenced; rollbackOrcad recounts under the host lock.
+    expect(mocks.census.mock.calls.map((call) => call[4]?.closeAdmissionForMs)).toEqual([undefined])
+    await options.recountCensus()
+    await options.releaseIncumbentAdmission()
+    expect(mocks.census.mock.calls.map((call) => call[4])).toEqual([
+      { releaseFinishedAutomationTerminals: true },
+      {
+        releaseFinishedAutomationTerminals: true,
+        closeAdmissionForMs: ORCAD_UPDATE_ADMISSION_FENCE_MS
+      },
+      { closeAdmissionForMs: 0 }
+    ])
+  })
 })
 
 describe('recoverManagedOrcadEnvironment', () => {
