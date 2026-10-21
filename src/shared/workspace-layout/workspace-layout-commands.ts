@@ -35,6 +35,8 @@ import {
   movePane,
   movePaneToNewTab,
   renamePane,
+  setPaneGrid,
+  releasePaneTerminal,
   setPaneRatios,
   splitPane
 } from './workspace-layout-pane-commands'
@@ -125,6 +127,10 @@ function applyCommand(
       return renameTab(model, command)
     case 'renamePane':
       return renamePane(model, command)
+    case 'setPaneGrid':
+      return setPaneGrid(model, command)
+    case 'releasePaneTerminal':
+      return releasePaneTerminal(model, command)
     case 'setTabProps':
       return setTabProps(model, command)
     case 'setChatPane':
