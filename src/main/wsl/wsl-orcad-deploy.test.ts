@@ -400,7 +400,7 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       fullVersion: '1.5.0+ab',
       verdict: {}
     })
-    await launch(undefined, { force: true })
+    await launch(undefined, { intent: 'force' })
     expect(mocks.deploy.mock.calls[0][0]).toMatchObject({
       force: true,
       census: LIVE
@@ -555,7 +555,7 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
         fullVersion: '1.5.0+ab',
         verdict: {}
       })
-      await expect(launch(undefined, { force: true })).resolves.toMatchObject({
+      await expect(launch(undefined, { intent: 'force' })).resolves.toMatchObject({
         outcome: 'ready',
         fullVersion: '1.5.0+ab'
       })
@@ -597,8 +597,40 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       })
       expect(mocks.deploy).toHaveBeenCalledTimes(1)
       // Force is the explicit retry.
-      await launch(undefined, { force: true })
+      await launch(undefined, { intent: 'force' })
       expect(mocks.deploy).toHaveBeenCalledTimes(2)
+    })
+
+    it('serves the restored incumbent on the very connect that rejected the candidate', async () => {
+      mocks.deploy.mockResolvedValueOnce(rejected)
+      mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('1.4.0+aa', INCUMBENT_READINESS))
+      await expect(launch()).resolves.toMatchObject({
+        outcome: 'ready',
+        fullVersion: '1.4.0+aa',
+        deferredUpdate: { code: 'orcad_candidate_readiness_rejected', forceable: true }
+      })
+    })
+
+    it('retries a failed candidate on Update, and still defers over live terminals', async () => {
+      mocks.deploy.mockResolvedValueOnce(rejected)
+      await launch()
+      mocks.adoptRunning.mockClear()
+      mocks.deploy.mockResolvedValueOnce({
+        outcome: 'installed-not-activated',
+        fullVersion: '1.5.0+ab',
+        code: 'orcad_update_terminals_running',
+        reason: '2 terminals are running'
+      })
+      await expect(launch(undefined, { intent: 'update' })).resolves.toMatchObject({
+        outcome: 'ready',
+        fullVersion: '1.4.0+aa',
+        deferredUpdate: { code: 'orcad_update_terminals_running', forceable: true }
+      })
+      expect(mocks.adoptRunning).not.toHaveBeenCalled()
+      // Update is not Force: the deploy still gates on the terminals the incumbent counted.
+      expect(mocks.deploy.mock.calls[1][0]).toMatchObject({ force: false, census: LIVE })
+      const { admitRecord } = mocks.deploy.mock.calls[1][0]
+      expect(admitRecord({ ...activeOld, rolledBackFrom: '1.5.0+ab' }, '1.5.0+ab')).toBeNull()
     })
 
     it('keeps retrying an update that only waited, or that a newer host refused', async () => {
@@ -617,7 +649,7 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       expect(mocks.adoptRunning).not.toHaveBeenCalled()
     })
 
-    it('forgets a failure once a deploy goes through', async () => {
+    it('lets the next connect try again once an explicit Force went through', async () => {
       mocks.deploy.mockResolvedValueOnce(rejected)
       await launch()
       mocks.deploy.mockResolvedValueOnce({
@@ -625,10 +657,9 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
         fullVersion: '1.5.0+ab',
         verdict: {}
       })
-      await launch(undefined, { force: true })
+      await launch(undefined, { intent: 'force' })
       mocks.deploy.mockResolvedValueOnce(rejected)
       await launch()
-      expect(mocks.adoptRunning).not.toHaveBeenCalled()
       expect(mocks.deploy).toHaveBeenCalledTimes(3)
     })
 

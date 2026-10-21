@@ -220,10 +220,10 @@ describe('WslOrcadConnectionManager', () => {
     const incumbent = await manager.ensure('Ubuntu')
     expect(incumbent.deferredUpdate).toEqual(deferredUpdate)
     launches.push({ ...ready(first.port), fullVersion: '2.0.0' })
-    const updated = await manager.ensure('Ubuntu', { force: true })
+    const updated = await manager.ensure('Ubuntu', { intent: 'force' })
     expect(deployAndLaunch).toHaveBeenLastCalledWith(
       'Ubuntu',
-      expect.objectContaining({ force: true })
+      expect.objectContaining({ intent: 'force' })
     )
     expect(updated).toMatchObject({
       fullVersion: '2.0.0',
@@ -238,19 +238,19 @@ describe('WslOrcadConnectionManager', () => {
   it('runs a forced connect after a plain one in flight instead of joining it', async () => {
     const { manager, deployAndLaunch } = setup()
     const plain = manager.ensure('Ubuntu')
-    const forced = manager.ensure('Ubuntu', { force: true })
+    const forced = manager.ensure('Ubuntu', { intent: 'force' })
     await Promise.all([plain, forced])
     expect(deployAndLaunch).toHaveBeenCalledTimes(2)
     expect(deployAndLaunch).toHaveBeenLastCalledWith(
       'Ubuntu',
-      expect.objectContaining({ force: true })
+      expect.objectContaining({ intent: 'force' })
     )
   })
 
   it('drops a queued forced connect that a close overtook', async () => {
     const { manager, deployAndLaunch } = setup()
     const plain = manager.ensure('Ubuntu')
-    const forced = manager.ensure('Ubuntu', { force: true })
+    const forced = manager.ensure('Ubuntu', { intent: 'force' })
     await manager.close('Ubuntu')
     await plain.catch(() => {})
     await expect(forced).rejects.toBeInstanceOf(WslOrcadConnectionSupersededError)

@@ -40,6 +40,7 @@ import { readRemoteOrcadBuildHash } from '../managed-server/install/orcad-remote
 import { deployOrcad, type OrcadDeployOptions } from './orcad-remote-deploy'
 import { ORCAD_ACTIVATION_POLICY_REFUSED_CODE } from './orcad-installed-activation'
 import { pruneManagedOrcadVersions } from '../managed-server/lifecycle/orcad-managed-version-gc'
+import { clearOrcadUpdateFailedThisLaunch } from '../managed-server/lifecycle/orcad-managed-update-failure-memory'
 import { rollbackOrcad } from '../managed-server/install/orcad-remote-rollback'
 import { collectManagedTerminalCensus } from './orcad-terminal-census-client'
 import { updateTerminalCounts } from './orcad-fenced-stop'
@@ -94,14 +95,16 @@ export function updateManagedOrcadEnvironment(
   userDataPath: string,
   args: LifecycleArgs & { force?: boolean }
 ): Promise<OrcadManagedDeployResult> {
-  return withManagedOrcadLifecycle(userDataPath, args.selector, async (managed) =>
-    runManagedOrcadUpdate(
+  return withManagedOrcadLifecycle(userDataPath, args.selector, async (managed) => {
+    // An explicit Update is the retry a connect's failure memory withholds.
+    clearOrcadUpdateFailedThisLaunch({ kind: 'ssh', id: managed.deployment.sshTargetId })
+    return runManagedOrcadUpdate(
       userDataPath,
       managed,
       await resolveLinkedOrcadContext(managed.environment, managed.deployment, args.signal),
       args
     )
-  )
+  })
 }
 
 /** The Managed servers update, run inside the target's lifecycle queue with a resolved context. */

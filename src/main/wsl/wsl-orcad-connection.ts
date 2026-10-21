@@ -4,6 +4,7 @@
  * distro; a relaunch that moved orcad's port moves the bridge with it. In memory only: the
  * deployment record (C7) persists what `onChange` reports.
  */
+import type { WslHostConnectIntent } from '../../shared/wsl-host-types'
 import { errorMessage } from '../../shared/error-message'
 import { parsePairingCode, type PairingOffer } from '../../shared/pairing'
 import type { ServeReadiness } from '../server/serve-readiness'
@@ -68,11 +69,14 @@ export type WslOrcadConnectOptions = {
   label?: string
   /** Rebinds a port a persisted pairing offer already names; 0 or absent picks a free one. */
   localPort?: number
-  force?: boolean
+  intent?: WslHostConnectIntent
   signal?: AbortSignal
   /** What `onChange` reports while this connect runs and once it is ready (liveness recovery). */
   status?: WslOrcadConnectStatus
 }
+
+/** What a user-initiated connect asks of the host's update. */
+export type WslOrcadConnectIntent = Pick<WslOrcadConnectOptions, 'intent'>
 
 type WslOrcadConnectStatus = { pending: WslOrcadConnectionStatus; ready: WslOrcadConnectionStatus }
 
@@ -118,10 +122,10 @@ export class WslOrcadConnectionManager {
     const key = wslDistroHolderKey(name)
     const pending = this.inFlight.get(key)
     if (pending) {
-      if (!options.force) {
+      if (!options.intent) {
         return pending
       }
-      // Force needs its own deploy; joining a plain connect would silently drop it.
+      // An Update or Force needs its own deploy; joining a plain connect would silently drop it.
       const generation = this.generation(key)
       return pending
         .catch(() => {})
@@ -211,7 +215,7 @@ export class WslOrcadConnectionManager {
     const launch = await (this.dependencies.deployAndLaunch ?? deployAndLaunchWslOrcad)(distro, {
       environmentId,
       label,
-      force: options.force,
+      intent: options.intent,
       signal: options.signal,
       holder: this.dependencies.holder,
       createTransport: () => transport

@@ -31,6 +31,9 @@ export type WslHostStatus = {
   deferredUpdate?: WslHostDeferredUpdate | null
 }
 
+/** An explicit Update retries a skipped build behind the terminal census; Force also passes it. */
+export type WslHostConnectIntent = 'update' | 'force'
+
 export type WslHostDeferredUpdate = {
   candidateVersion: string
   /** The update planner's deferral code, as Managed servers reports it. */

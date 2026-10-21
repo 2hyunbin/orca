@@ -17,6 +17,13 @@ export type ManagedOrcadAutoUpdateSkip =
   | 'migrating'
   | OrcadHostVersionRefusal
 
+/**
+ * Why a host's orcad build may change, the same three for SSH and WSL: a connect applies the
+ * skips below; an explicit Update retries what they skipped, still behind the terminal census;
+ * Force also passes the census.
+ */
+export type OrcadUpdateIntent = 'connect' | 'update' | 'force'
+
 export type ManagedOrcadAutoUpdatePlan =
   | { action: 'update' }
   | { action: 'skip'; reason: ManagedOrcadAutoUpdateSkip }
@@ -50,6 +57,13 @@ export function planManagedOrcadAutoUpdate(input: {
   return input.failedBefore ? { action: 'skip', reason: 'failed-before' } : { action: 'update' }
 }
 
+export function planOrcadUpdateForIntent(
+  intent: OrcadUpdateIntent,
+  input: Parameters<typeof planManagedOrcadAutoUpdate>[0]
+): ManagedOrcadAutoUpdatePlan {
+  return intent === 'connect' ? planManagedOrcadAutoUpdate(input) : { action: 'update' }
+}
+
 /** Why a fenced activation refuses a build the plan skips; null when it may activate. */
 export function orcadUpdateSkipRefusal(
   plan: ManagedOrcadAutoUpdatePlan,
@@ -61,8 +75,8 @@ export function orcadUpdateSkipRefusal(
     return null
   }
   return plan.reason === 'rolled-back'
-    ? `This host's server rolled back from ${candidateVersion}, so it is not activated again ` +
-        'without Force.'
+    ? `This host's server rolled back from ${candidateVersion}, so a connect does not activate ` +
+        'it again; choose Update to retry it.'
     : `Orca ${record.activeAppVersion} last ran this host's server, newer than this ` +
         `Orca (${appVersion}). Update Orca to start it.`
 }

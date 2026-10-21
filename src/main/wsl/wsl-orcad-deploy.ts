@@ -23,6 +23,9 @@ import {
 } from '../managed-server/lifecycle/orcad-managed-runtime-context'
 import { isWaitingOrcadUpdateDeferral } from '../managed-server/lifecycle/orcad-managed-auto-update'
 import { clearOrcadUpdateFailedThisLaunch } from '../managed-server/lifecycle/orcad-managed-update-failure-memory'
+import type { OrcadUpdateIntent } from '../managed-server/lifecycle/orcad-managed-update-decision'
+import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
+import { errorMessage } from '../../shared/error-message'
 import { pruneManagedOrcadVersions } from '../managed-server/lifecycle/orcad-managed-version-gc'
 import { wakeAlreadyActiveOrcad } from '../ssh/orcad-already-active-wake'
 import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
@@ -40,7 +43,7 @@ import { createWslOrcadHostTransport, type WslOrcadHostTransport } from './wsl-o
 import { readWslOrcadIncumbent, type WslOrcadIncumbent } from './wsl-orcad-incumbent'
 import { adoptUnrecordedWslOrcad } from './wsl-orcad-instance-adoption'
 import {
-  admitWslOrcadUpdate,
+  admitWslOrcadLaunch,
   recordWslOrcadUpdateFailure,
   wslOrcadDeferralFailure
 } from './wsl-orcad-update-admission'
@@ -71,7 +74,8 @@ export type WslOrcadDeployOptions = {
   /** The WSL environment's id; keys host-scoped state (wake dedupe). Defaults per distro. */
   environmentId?: string
   label?: string
-  force?: boolean
+  /** Defaults to a connect. */
+  intent?: OrcadUpdateIntent
   signal?: AbortSignal
   /** Defaults to one created over `userData`; the app should pass its shared instance. */
   holder?: WslDistroHolder
@@ -155,25 +159,18 @@ async function launchOverTransport(
   const appVersion = getAppEnvironment().getVersion()
   const candidateVersion = readLocalFullVersion(localOrcadDir)
   const failureHost = { kind: 'wsl', id: target.id } as const
-  const admission = await admitWslOrcadUpdate({
-    slot,
-    record: context.activationRecord,
-    candidateVersion,
-    appVersion,
-    host: failureHost,
-    force: options.force
-  })
-  if (admission.action === 'defer') {
-    return { outcome: 'deferred', distro: name, ...admission.deferredUpdate }
+  const intent = options.intent ?? 'connect'
+  const admit = (record: OrcadActivationRecord, admitIntent: OrcadUpdateIntent) =>
+    admitWslOrcadLaunch(
+      { slot, record, candidateVersion, appVersion, host: failureHost, intent: admitIntent },
+      name,
+      readyLaunch
+    )
+  const admitted = await admit(context.activationRecord, intent)
+  if ('outcome' in admitted) {
+    return admitted
   }
-  if (admission.action === 'serve') {
-    const ready = await readyLaunch({
-      fullVersion: admission.version,
-      readiness: admission.readiness
-    })
-    return admission.deferredUpdate ? { ...ready, deferredUpdate: admission.deferredUpdate } : ready
-  }
-  context = { ...context, activationRecord: admission.record }
+  context = { ...context, activationRecord: admitted }
   const incumbentVersion = context.activationRecord.active
   // Only an update asks the incumbent: the same version is a no-op deploy on every connect.
   const incumbent: WslOrcadIncumbent | null =
@@ -188,7 +185,7 @@ async function launchOverTransport(
     conn,
     localOrcadDir,
     target: context.serverTarget,
-    ...managedOrcadDeployPolicy(context, appVersion, options.force),
+    ...managedOrcadDeployPolicy(context, appVersion, intent),
     ...(incumbent
       ? {
           census: incumbent.census,
@@ -196,20 +193,28 @@ async function launchOverTransport(
           releaseIncumbentAdmission: incumbent.releaseAdmission
         }
       : {}),
-    force: options.force,
+    force: intent === 'force',
     appVersion,
     recordedNodeRuntimeProbe: true
   }).catch((error: unknown) => {
     if (!signal?.aborted) {
       recordWslOrcadUpdateFailure(failureHost, incumbentVersion, {
         code: 'orcad_update_failed',
-        reason: error instanceof Error ? error.message : String(error)
+        reason: errorMessage(error)
       })
     }
     throw error
   })
   if (deployed.outcome === 'installed-not-activated') {
-    recordWslOrcadUpdateFailure(failureHost, incumbentVersion, wslOrcadDeferralFailure(deployed))
+    const failure = wslOrcadDeferralFailure(deployed)
+    recordWslOrcadUpdateFailure(failureHost, incumbentVersion, failure)
+    if (incumbentVersion && failure) {
+      // The rejected candidate was undone, so serve the restored incumbent on this connect too.
+      const retried = await admit(await readOrcadActivationRecord(slot), 'connect')
+      if ('outcome' in retried) {
+        return retried
+      }
+    }
     const deferredUpdate: WslOrcadDeferredUpdate = {
       candidateVersion: deployed.fullVersion,
       code: deployed.code,

@@ -10,10 +10,12 @@ import { readOrcadActivationRecord } from '../managed-server/activation/orcad-ac
 import { isWaitingOrcadUpdateDeferral } from '../managed-server/lifecycle/orcad-managed-auto-update'
 import {
   orcadUpdateSkipRefusal,
-  planManagedOrcadAutoUpdate,
-  type ManagedOrcadAutoUpdatePlan
+  planOrcadUpdateForIntent,
+  type ManagedOrcadAutoUpdatePlan,
+  type OrcadUpdateIntent
 } from '../managed-server/lifecycle/orcad-managed-update-decision'
 import {
+  clearOrcadUpdateFailedThisLaunch,
   orcadUpdateFailureThisLaunch,
   recordOrcadUpdateFailedThisLaunch,
   type OrcadUpdateFailure,
@@ -22,6 +24,9 @@ import {
 import { ORCAD_ACTIVATION_POLICY_REFUSED_CODE } from '../ssh/orcad-installed-activation'
 import type { OrcadSlotOptions } from '../ssh/orcad-recovery-slot'
 import { adoptRunningOrcadVersion } from '../ssh/orcad-running-version-adoption'
+import type { WslOrcadLaunch } from './wsl-orcad-deploy'
+
+type WslOrcadReadyLaunch = Extract<WslOrcadLaunch, { outcome: 'ready' }>
 
 export type WslOrcadUpdateAdmission =
   | {
@@ -41,14 +46,18 @@ export async function admitWslOrcadUpdate(args: {
   candidateVersion: string
   appVersion: string
   host: OrcadUpdateFailureHost
-  force?: boolean
+  intent: OrcadUpdateIntent
 }): Promise<WslOrcadUpdateAdmission> {
   const { record, candidateVersion, appVersion } = args
-  if (!record.active || args.force) {
+  if (args.intent !== 'connect') {
+    // An explicit Update is the retry a connect's failure memory withholds.
+    clearOrcadUpdateFailedThisLaunch(args.host)
+  }
+  if (!record.active) {
     return { action: 'deploy', record }
   }
   const failure = orcadUpdateFailureThisLaunch(args.host)
-  const plan = planManagedOrcadAutoUpdate({
+  const plan = planOrcadUpdateForIntent(args.intent, {
     record,
     candidateVersion,
     appVersion,
@@ -78,6 +87,29 @@ export async function admitWslOrcadUpdate(args: {
         ? null
         : skippedUpdateHint(plan, failure, record, candidateVersion, appVersion)
   }
+}
+
+/** The launch an admission ends in, or the record to deploy on. */
+export async function admitWslOrcadLaunch(
+  args: Parameters<typeof admitWslOrcadUpdate>[0],
+  distro: string,
+  readyLaunch: (serving: {
+    fullVersion: string
+    readiness: ServeReadiness
+  }) => Promise<WslOrcadReadyLaunch>
+): Promise<WslOrcadLaunch | OrcadActivationRecord> {
+  const admission = await admitWslOrcadUpdate(args)
+  if (admission.action === 'deploy') {
+    return admission.record
+  }
+  if (admission.action === 'defer') {
+    return { outcome: 'deferred', distro, ...admission.deferredUpdate }
+  }
+  const ready = await readyLaunch({
+    fullVersion: admission.version,
+    readiness: admission.readiness
+  })
+  return admission.deferredUpdate ? { ...ready, deferredUpdate: admission.deferredUpdate } : ready
 }
 
 /**
