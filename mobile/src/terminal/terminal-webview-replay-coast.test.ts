@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { createTerminalDocument } from './document/create-terminal-document'
 import { terminalDocumentDouble } from './document/document-terminal-double.test-support'
 import { TERMINAL_DOCUMENT_SCRIPT } from './terminal-webview-document-script.generated'
 import { TERMINAL_DOCUMENT_MARKUP } from './terminal-webview-html'
@@ -13,12 +14,16 @@ describe('snapshot replacement ends the previous terminal scroll', () => {
   let alternate: boolean
   let messages: Array<{ type: string; enabled?: boolean }>
   let oldSurface: HTMLElement
+  let stopDocument: (() => void) | undefined
 
   function frame() {
     now += 16
-    const pending = [...frames.values()]
-    frames.clear()
-    pending.forEach((callback) => callback(now))
+    const pending = [...frames]
+    for (const [id, callback] of pending) {
+      if (frames.delete(id)) {
+        callback(now)
+      }
+    }
   }
 
   function settle() {
@@ -41,20 +46,36 @@ describe('snapshot replacement ends the previous terminal scroll', () => {
     )
   }
 
-  function touch(type: string, y: number, surface = oldSurface) {
+  function touchPoints(
+    type: string,
+    points: Array<{ x: number; y: number }>,
+    surface = oldSurface
+  ) {
     const event = new Event(type, { bubbles: true, cancelable: true })
     Object.defineProperty(event, 'touches', {
-      value:
-        type === 'touchend' ? [] : [{ identifier: 0, clientX: 40, clientY: y, target: surface }]
+      value: points.map((point, identifier) => ({
+        identifier,
+        clientX: point.x,
+        clientY: point.y,
+        target: surface
+      }))
     })
     Object.defineProperty(event, 'timeStamp', { value: now })
     surface.dispatchEvent(event)
   }
 
-  function boot(program: boolean) {
+  function touch(type: string, y: number, surface = oldSurface) {
+    touchPoints(type, type === 'touchend' ? [] : [{ x: 40, y }], surface)
+  }
+
+  function boot(program: boolean, disposable = false) {
     alternate = program
     document.body.innerHTML = TERMINAL_DOCUMENT_MARKUP
-    new Function(TERMINAL_DOCUMENT_SCRIPT)()
+    if (disposable) {
+      stopDocument = createTerminalDocument().stop
+    } else {
+      new Function(TERMINAL_DOCUMENT_SCRIPT)()
+    }
     init()
     settle()
     oldSurface = document.getElementById('terminal-surface')!
@@ -92,6 +113,7 @@ describe('snapshot replacement ends the previous terminal scroll', () => {
     inputs = []
     alternate = false
     messages = []
+    stopDocument = undefined
     vi.spyOn(window, 'addEventListener')
     vi.spyOn(document, 'addEventListener')
     vi.spyOn(performance, 'now').mockImplementation(() => now)
@@ -150,6 +172,7 @@ describe('snapshot replacement ends the previous terminal scroll', () => {
   })
 
   afterEach(() => {
+    stopDocument?.()
     for (const [type, listener, options] of vi.mocked(window.addEventListener).mock.calls) {
       window.removeEventListener(type, listener, options)
     }
@@ -227,6 +250,99 @@ describe('snapshot replacement ends the previous terminal scroll', () => {
     touch('touchend', 360)
     settle()
     expect(scrolls).toEqual([])
+  })
+
+  it('retires an unfinished pinch while allowing a new pinch after replay', () => {
+    boot(false)
+    touchPoints('touchstart', [
+      { x: 40, y: 300 },
+      { x: 80, y: 300 }
+    ])
+    touchPoints('touchmove', [
+      { x: 30, y: 300 },
+      { x: 90, y: 300 }
+    ])
+    init(true)
+    settle()
+    messages.length = 0
+    touch('touchend', 300)
+    expect(messages.filter((message) => message.type === 'font-scale-changed')).toEqual([])
+
+    oldSurface = document.getElementById('terminal-surface')!
+    touchPoints('touchstart', [
+      { x: 40, y: 300 },
+      { x: 80, y: 300 }
+    ])
+    touchPoints('touchmove', [
+      { x: 20, y: 300 },
+      { x: 100, y: 300 }
+    ])
+    touch('touchend', 300)
+    expect(messages.filter((message) => message.type === 'font-scale-changed')).toHaveLength(1)
+  })
+
+  it('keeps long presses usable after repeated replacements', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    boot(false)
+    touch('touchstart', 400)
+    init(true)
+    init()
+    settle()
+    messages.length = 0
+    vi.advanceTimersByTime(500)
+    expect(
+      messages.filter((message) => message.type === 'set-select-mode' && message.enabled)
+    ).toEqual([])
+
+    oldSurface = document.getElementById('terminal-surface')!
+    touch('touchstart', 400)
+    vi.advanceTimersByTime(500)
+    expect(
+      messages.filter((message) => message.type === 'set-select-mode' && message.enabled)
+    ).toHaveLength(1)
+  })
+
+  it.each(['coast', 'queued drag'])(
+    'stops %s on dispose without affecting a later mount',
+    (motion) => {
+      boot(false, true)
+      if (motion === 'coast') {
+        fling()
+      } else {
+        touch('touchstart', 400)
+        now += 16
+        touch('touchmove', 360)
+      }
+      const stopPrevious = stopDocument
+      if (!stopPrevious) {
+        throw new Error('Disposable document did not start')
+      }
+      stopPrevious()
+      scrolls.length = 0
+      inputs.length = 0
+      touch('touchend', 360)
+      settle()
+      expect(scrolls).toEqual([])
+      expect(inputs).toEqual([])
+
+      boot(false, true)
+      stopPrevious()
+      fling()
+      frame()
+      expect(scrolls.length).toBeGreaterThan(0)
+    }
+  )
+
+  it('drops a pending long press on dispose', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    boot(false, true)
+    touch('touchstart', 400)
+    stopDocument?.()
+    messages.length = 0
+    vi.advanceTimersByTime(500)
+    touch('touchend', 400)
+    settle()
+    expect(messages).toEqual([])
   })
 
   it.each([false, true])('still accepts a new fling after replacement (program=%s)', (program) => {
