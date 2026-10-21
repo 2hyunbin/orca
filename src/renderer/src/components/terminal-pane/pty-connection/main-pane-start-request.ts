@@ -5,7 +5,11 @@ import { useAppStore } from '@/store'
 import { sendLayoutApply } from '@/runtime/layout-apply-send'
 import { parsePaneKey } from '../../../../../shared/stable-pane-id'
 import { recordPtyConnectDiagnostic } from './pty-connect-limits'
-import { adoptMainBinding, waitsForMainPaneStart } from './main-pane-start-wait'
+import {
+  adoptMainBinding,
+  showPaneStartFailure,
+  waitsForMainPaneStart
+} from './main-pane-start-wait'
 import { startDeferredSessionReattach } from './deferred-session-reattach-connect'
 import { mainStartsPane } from './main-starts-pane'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
@@ -33,7 +37,7 @@ export function startPaneThroughMain(
   }
   recordPtyConnectDiagnostic(`pane=${session.pane.id} -> START THROUGH MAIN`)
   const refused = (code: string): void => {
-    showStartRefusal(session, code)
+    showPaneStartFailure(session, code)
     handlers.refused?.()
   }
   return sendLayoutApply(
@@ -55,12 +59,6 @@ export function startPaneThroughMain(
   )
 }
 
-function showStartRefusal(session: ConnectPanePtySession, code: string): void {
-  if (!session.disposed) {
-    session.deps.onPtyErrorRef?.current?.(session.pane.id, `The terminal could not start: ${code}`)
-  }
-}
-
 /**
  * Layout-owner build: the window's own start of a pane (a wake, a hibernated agent's wake, a
  * restart replacement, a reattach that found its terminal gone) asks main instead, then attaches
@@ -76,7 +74,7 @@ export function startPaneThroughMainThenAttach(
   if (session.mainStartAttach) {
     // Why main's own code: the attach to main's start found no terminal; asking again would loop on a pane
     // whose terminal ends at once.
-    showStartRefusal(session, 'terminal_not_started')
+    showPaneStartFailure(session, 'terminal_not_started')
     return Promise.resolve(null)
   }
   return new Promise((resolve) => {

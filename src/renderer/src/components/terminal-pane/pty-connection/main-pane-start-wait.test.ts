@@ -78,4 +78,20 @@ describe('waitsForMainPaneStart', () => {
       'The terminal could not start: spawn exploded'
     )
   })
+  // Owner-visible row 27: a start main could not bind shows its reason through this wait.
+  it('shows terminal_not_started from main through the wait', async () => {
+    const { waitsForMainPaneStart } = await import('./main-pane-start-wait')
+    const pane = session()
+    store.setStarts({ [PANE_KEY]: { status: 'starting' } })
+    const failed = vi.fn()
+
+    waitsForMainPaneStart(pane, vi.fn(), failed)
+    store.setStarts({ [PANE_KEY]: { status: 'failed', reason: 'terminal_not_started' } })
+
+    expect(failed).toHaveBeenCalledOnce()
+    expect(pane.deps.onPtyErrorRef?.current).toHaveBeenCalledWith(
+      1,
+      'The terminal could not start: terminal_not_started'
+    )
+  })
 })

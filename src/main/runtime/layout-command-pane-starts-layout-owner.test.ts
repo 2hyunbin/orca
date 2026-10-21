@@ -3,6 +3,8 @@
 // resume record in the pane-owned form, and a failed start shows on the pane and keeps the record.
 import { describe, expect, it, vi } from 'vitest'
 import type { SleepingAgentSessionRecord as SleepingRecord } from '../../shared/agent-session-resume'
+import type { RuntimeMobileSessionTerminalTab } from '../../shared/runtime-types'
+import type { RestoredPaneTrigger } from './terminal/recovery/restored-pane-start'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
@@ -22,6 +24,17 @@ const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
 const PANE = { worktreeId: TEST_WORKTREE_ID, tabId: 'host-tab', leafId: HEADLESS_LEAF_ID }
 
 class StatusRuntime extends OrcaRuntimeService {
+  /** The start's create ends with no terminal, as one that exits before main can bind it. */
+  startsNoTerminal = false
+  protected override materializePendingMobileSessionTerminal(
+    worktreeId: string,
+    tab: RuntimeMobileSessionTerminalTab,
+    trigger: RestoredPaneTrigger & { sessionId?: string }
+  ): Promise<string | null> {
+    return this.startsNoTerminal
+      ? Promise.resolve(null)
+      : super.materializePendingMobileSessionTerminal(worktreeId, tab, trigger)
+  }
   setStartStatus(paneKey: string, status: 'sleeping'): void {
     this.paneStartStatuses?.set(paneKey, { status })
   }
@@ -225,6 +238,21 @@ describe('a client’s startPane in the layout-owner build', () => {
 
     await vi.waitFor(() =>
       expect(runtime.startStatusOf(PANE_KEY)).toMatchObject({ status: 'failed' })
+    )
+  })
+  // Owner-visible row 27: the window shows this reason through its wait for main's start.
+  it('shows terminal_not_started when the terminal ends before main can bind it', async () => {
+    const { runtime } = await desktopRuntime()
+    runtime.setStartStatus(PANE_KEY, 'sleeping')
+    runtime.startsNoTerminal = true
+
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+
+    await vi.waitFor(() =>
+      expect(runtime.startStatusOf(PANE_KEY)).toEqual({
+        status: 'failed',
+        reason: 'terminal_not_started'
+      })
     )
   })
 })

@@ -52,10 +52,7 @@ export function waitsForMainPaneStart(
   let shown = start
   const showFailure = (): void => {
     if (shown.status === 'failed' && !session.disposed) {
-      session.deps.onPtyErrorRef?.current?.(
-        session.pane.id,
-        `The terminal could not start: ${shown.reason ?? 'unknown error'}`
-      )
+      showPaneStartFailure(session, shown.reason)
       for (const failed of wait.failed) {
         failed()
       }
@@ -102,5 +99,18 @@ export function adoptMainBinding(
   if (ptyId) {
     session.deps.restoredLeafId = leafId
     session.deps.restoredPtyIdByLeafId = { ...session.deps.restoredPtyIdByLeafId, [leafId]: ptyId }
+  }
+}
+
+/** The one place a pane shows why main's start of it failed (owner-visible row 27). */
+export function showPaneStartFailure(
+  session: ConnectPanePtySession,
+  reason: string | undefined
+): void {
+  if (!session.disposed) {
+    session.deps.onPtyErrorRef?.current?.(
+      session.pane.id,
+      `The terminal could not start: ${reason ?? 'unknown error'}`
+    )
   }
 }
