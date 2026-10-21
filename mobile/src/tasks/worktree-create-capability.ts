@@ -83,6 +83,8 @@ export function useNewWorktreeRuntimeCapabilities(
 } {
   const [capabilityState, setCapabilityState] = useState<{
     client: RpcClient
+    generation: number | undefined
+    connectedAt: number | null | undefined
     capabilities: NewWorktreeRuntimeCapabilities
   } | null>(null)
   const capabilityProbeRef = useRef<{
@@ -143,7 +145,12 @@ export function useNewWorktreeRuntimeCapabilities(
       clearTimeout(retry)
       const capabilities = await getCapabilities()
       if (!stale && capabilities) {
-        setCapabilityState({ client, capabilities })
+        setCapabilityState({
+          client,
+          generation: client.getGeneration?.(),
+          connectedAt: client.getLastConnectedAt(),
+          capabilities
+        })
         retryDelay = 1_000
       }
       if (!stale && !capabilityProbeRef.current && client.getState() === 'connected') {
@@ -153,6 +160,7 @@ export function useNewWorktreeRuntimeCapabilities(
     }
     const unsubscribe = client.onStateChange((state) => {
       if (state === 'connected') {
+        setCapabilityState(null)
         capabilityProbeRef.current = null
         void refresh()
       }
@@ -174,7 +182,12 @@ export function useNewWorktreeRuntimeCapabilities(
     () => getCapabilities().then((capabilities) => capabilities?.agentLaunch ?? false),
     [getCapabilities]
   )
-  const capabilities = capabilityState?.client === client ? capabilityState.capabilities : null
+  const capabilities =
+    capabilityState?.client === client &&
+    capabilityState?.generation === client?.getGeneration?.() &&
+    capabilityState?.connectedAt === client?.getLastConnectedAt()
+      ? capabilityState?.capabilities
+      : null
   return {
     tasksSupported: capabilities?.tasksSupported ?? false,
     hostPlatform: capabilities?.hostPlatform ?? null,

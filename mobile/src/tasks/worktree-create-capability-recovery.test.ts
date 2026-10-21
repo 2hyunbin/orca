@@ -12,7 +12,10 @@ function connection() {
   client.sendRequest.mockResolvedValue({
     id: 'status',
     ok: true,
-    result: { capabilities: ['mobile.tasks.v1', 'worktree.create-idempotency.v1'] },
+    result: {
+      capabilities: ['mobile.tasks.v1', 'worktree.create-idempotency.v1'],
+      hostPlatform: 'linux'
+    },
     _meta: { runtimeId: 'test' }
   })
   return {
@@ -205,4 +208,27 @@ describe('capability probe recovery', () => {
     })
     expect(host.sendRequest).toHaveBeenCalledTimes(2)
   })
+  it.each([true, false])(
+    'hides prior capabilities after reconnect with the sheet initially enabled=%s',
+    async (enabled) => {
+      const host = connection()
+      await render(host.client)
+      expect(current?.tasksSupported).toBe(true)
+      expect(current?.hostPlatform).toBe('linux')
+      await render(host.client, enabled)
+      let reject: ((reason: Error) => void) | undefined
+      host.sendRequest.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, fail) => {
+            reject = fail
+          })
+      )
+      await act(async () => host.reconnect())
+      await render(host.client)
+      expect(current?.tasksSupported).toBe(false)
+      expect(current?.hostPlatform).toBeNull()
+      await act(async () => reject?.(new Error('replacement offline')))
+      expect(current?.tasksSupported).toBe(false)
+    }
+  )
 })
