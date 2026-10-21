@@ -161,7 +161,10 @@ jobs:
       - name: Parallelize Windows checkout
         if: inputs.fast_runners && runner.os == 'Windows'
         shell: bash
-        run: git config --global checkout.workers 0
+        run: |
+          git config --global checkout.workers 0
+          # These fresh native builds do not need MSBuild's incremental file tracking.
+          echo 'TrackFileAccess=false' >> "$GITHUB_ENV"
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.ref }}

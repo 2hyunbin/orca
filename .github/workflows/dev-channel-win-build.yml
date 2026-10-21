@@ -183,7 +183,10 @@ jobs:
       - name: Enable parallel checkout
         if: inputs.fast_release
         shell: bash
-        run: git config --global checkout.workers 0
+        run: |
+          git config --global checkout.workers 0
+          # These fresh native builds do not need MSBuild's incremental file tracking.
+          echo 'TrackFileAccess=false' >> "$GITHUB_ENV"
 
       - name: Checkout the built commit
         uses: actions/checkout@v6
