@@ -117,7 +117,7 @@ export type PtySpawnIpcDeps = PtySpawnCodexResumeDeps & {
     cwd: string | undefined,
     missingDirFallback?: TerminalStartupCwdMissingDirFallback
   ) => string | undefined
-  localStartupCwdDirectoryExists: (path: string) => boolean
+  localStartupCwdDirectoryExists: (path: string) => Promise<boolean>
   transitionSpawnHiddenRendererPtyDeliveryState: (id: string, hidden: boolean) => void
   trustedTerminalHandleEnv: Set<string>
   sendPtySpawnedToRenderer: (id: string) => void

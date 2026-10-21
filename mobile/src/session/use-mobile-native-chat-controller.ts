@@ -66,6 +66,7 @@ export function useMobileNativeChatController(args: {
     activeChatStructured,
     activeTabAgentWorking,
     isTabChatView,
+    sessionViewReady,
     setTabView,
     nativeChatStatus,
     showNativeChat,
@@ -271,6 +272,7 @@ export function useMobileNativeChatController(args: {
   })
 
   return {
+    sessionViewReady,
     isTabChatView,
     setTabView,
     toggleTabChatView,

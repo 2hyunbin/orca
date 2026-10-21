@@ -1379,6 +1379,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "Rechercher des hôtes…",
+        "noHostsMatch": "Aucun hôte ne correspond.",
+        "moreHosts_one": "{{count}} autre hôte. Recherchez-le par son nom.",
+        "moreHosts_other": "{{count}} autres hôtes. Recherchez par nom pour en trouver un."
+      },
       "BrowserCookieImportDisclosure": {
         "title": "Connexions Google non importées",
         "description": "Connectez-vous à Google directement dans Orca."
@@ -3936,6 +3942,12 @@
             "connectedHostCount_one": "{{count}} hôte",
             "connectedHostCount_other": "{{count}} hôtes",
             "connecting": "Connexion…",
+            "searchSshHosts": "Rechercher des hôtes SSH…",
+            "noMatchingSshHosts": "Aucun hôte SSH ne correspond.",
+            "moreSshHostMatches_one": "{{count}} autre résultat. Continuez à taper pour affiner.",
+            "moreSshHostMatches_other": "{{count}} autres résultats. Continuez à taper pour affiner.",
+            "moreSshHosts_one": "Trouver {{count}} autre hôte SSH…",
+            "moreSshHosts_other": "Chercher parmi {{count}} autres hôtes SSH…",
             "runtime_unavailable_transport_up": "Orque indisponible"
           },
           "StatusBar": {
@@ -6950,7 +6962,6 @@
           "4e32e030b2": "Stocké localement. Orca ne l'envoie qu'à platform.minimax.io pour les actualisations de consommation.",
           "remoteServerFallback": "le serveur distant",
           "loadAccountsFailed": "Impossible de charger les comptes du fournisseur.",
-          "remoteScopeAccounts": "Affiche les comptes gérés par {{value0}}. Ajoutez ou réauthentifiez les comptes sur ce serveur.",
           "accountScopePrefix": "Portée des comptes",
           "accountScopeRemoteServerUnnamed": "Serveur distant",
           "remoteScopeLocalAccountsKept": "Les comptes gérés sur ce bureau restent inchangés. Repassez le runtime par défaut sur Local desktop pour les voir.",
@@ -14409,8 +14420,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} sessions ne peuvent pas être supprimées depuis Orca.",
             "resumeInNewNativeChat": "Reprendre dans un nouveau chat",
             "resumeInNewCli": "Reprendre dans un nouveau terminal",
-            "resumeInNewCliTooltipFork": "Forke cette conversation dans une nouvelle session CLI.",
-            "resumeInNewCliTooltipChat": "Le chat natif reste tel quel."
+            "resumeInNewCliTooltipFork": "Démarre une nouvelle session de l’agent de terminal avec une copie de cette conversation.",
+            "resumeInNewCliTooltipChat": "Ce chat reste inchangé."
           },
           "AiVaultSessionDeleteDialog": {
             "title": "Supprimer cette session ?",
@@ -19174,8 +19185,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Passer à l’agent de terminal",
-          "switchToChatView": "Passer à l’interface de chat",
+          "switchToTerminalView": "Continuer avec l’agent de terminal",
+          "switchToChatView": "Continuer dans l’interface de chat",
           "closeTabsToLeft": "Fermer tous les onglets à gauche"
         },
         "BrowserTab": {
