@@ -138,7 +138,7 @@ export class WorkspaceSleepCoordinator {
           host.kind === 'environment'
             ? environmentKey(host.environmentId, target.worktreeId)
             : explicitKey(runtime.listRepos(), `id:${target.worktreeId}`)
-        return key !== null && runtime.workspaceLifecycle?.isPaused(key) === true
+        return key !== null && runtime.workspaceLifecycle?.pausedKeys().includes(key) === true
       },
       submit: (target, command) => {
         const host = target.terminalHost

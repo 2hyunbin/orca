@@ -1,6 +1,4 @@
 import { ProducerRevision } from '../sidebar-inputs/producer-revision'
-import { worktreeIdentityKey } from '../../../shared/worktree/id'
-import { getWorktreeIdFromHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import type {
   WorkspaceLifecycleHint,
   WorkspaceLifecycleKind
@@ -44,6 +42,8 @@ type WorkspaceQueue = {
 type Signal = { promise: Promise<void>; notify: () => void }
 
 const OBSERVE_RETRY_MS = 5_000
+// Long enough for a lookup on a reachable host, so its command keeps its place in the order.
+const LOOKUP_ORDER_WAIT_MS = 500
 
 function signal(): Signal {
   let notify!: () => void
@@ -67,8 +67,11 @@ export class WorkspaceLifecycleQueue {
   private readonly queues = new Map<string, WorkspaceQueue>()
   private membership: LifecycleMembership = (done) => done()
   private nextSeq = 0
-  /** Arrivals still looking up their workspace; nothing that arrived after them starts first. */
-  private readonly resolving = new Set<number>()
+  /**
+   * Arrivals still looking up their workspace, by when they arrived. A later arrival waits for
+   * them only briefly: the lookup may name any workspace, and a dead host must not stall them all.
+   */
+  private readonly resolving = new Map<number, number>()
   private resolved: Signal = signal()
   private readonly creations = new WorkspaceLifecycleCreations<Entry>({
     revision: this.revision,
@@ -78,7 +81,18 @@ export class WorkspaceLifecycleQueue {
     finish: (key, entry) => this.finishEntry(key, entry)
   })
 
-  constructor(private readonly retryDelay: (ms: number) => Promise<void> = sleep) {}
+  constructor(
+    private readonly retryDelay: (ms: number) => Promise<void> = sleep,
+    private readonly now: () => number = Date.now
+  ) {}
+
+  /** How long `seq` still waits for an earlier arrival's lookup; 0 once none holds it. */
+  private lookupWaitMs(seq: number): number {
+    const waits = [...this.resolving].flatMap(([earlier, arrivedAt]) =>
+      earlier < seq ? [arrivedAt + LOOKUP_ORDER_WAIT_MS - this.now()] : []
+    )
+    return Math.max(0, ...waits)
+  }
 
   /** Where finished creates and deletes wait to be listed; until set they settle at once. */
   setMembership(membership: LifecycleMembership): void {
@@ -98,7 +112,7 @@ export class WorkspaceLifecycleQueue {
     command: LifecycleCommand<T>
   ): Promise<T> {
     const seq = this.nextSeq++
-    this.resolving.add(seq)
+    this.resolving.set(seq, this.now())
     let key: string | null
     try {
       key = await resolveKey()
@@ -148,19 +162,9 @@ export class WorkspaceLifecycleQueue {
     return this.creations.snapshot()
   }
 
-  isPaused(key: string): boolean {
-    return this.queues.get(key)?.paused != null
-  }
-
-  /** Whether any host's copy of this workspace waits for its host to confirm a command. */
-  isPausedFor(worktreeId: string): boolean {
-    const wanted = worktreeIdentityKey(worktreeId)
-    for (const [key, queue] of this.queues) {
-      if (queue.paused && getWorktreeIdFromHostIdentity(key) === wanted) {
-        return true
-      }
-    }
-    return false
+  /** Host-qualified keys whose last command went unconfirmed by its host. */
+  pausedKeys(): string[] {
+    return [...this.queues].flatMap(([key, queue]) => (queue.paused ? [key] : []))
   }
 
   private enqueue<T>(key: string, command: LifecycleCommand<T>, seq: number): Promise<T> {
@@ -269,8 +273,9 @@ export class WorkspaceLifecycleQueue {
           // A create running outside the queue; its close drains again.
           return
         }
-        if ([...this.resolving].some((seq) => seq < head!.seq)) {
-          await this.resolved.promise
+        const waitMs = this.lookupWaitMs(head.seq)
+        if (waitMs > 0) {
+          await Promise.race([this.resolved.promise, this.retryDelay(waitMs)])
           continue
         }
         if (queue.paused && !head.command.delete?.force) {
