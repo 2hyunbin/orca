@@ -424,8 +424,7 @@ export default function BrowserAddressBar({
             {leadingIcon ?? <Globe className="size-4 shrink-0 text-muted-foreground" />}
             <Input
               ref={inputRef}
-              value={value}
-              onFocus={handleFocus}
+              {...{ value, onFocus: handleFocus }}
               onMouseDown={addressBarClickSelect.onMouseDown}
               onClick={addressBarClickSelect.onClick}
               onBlur={handleBlur}
