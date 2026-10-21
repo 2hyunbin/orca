@@ -45,9 +45,10 @@ describe('toEditorModelUri', () => {
     const remoteUri = toEditorModelUri(path, '["hub-a","ssh:target#1"]')
     const remote = URI.parse(remoteUri)
     expect(remote.scheme).toBe('vscode-remote')
-    expect(remote.authority).toMatch(/^[0-9a-f]{16}$/)
-    // A UNC server, the authority of a local file URI, moves into the remote path.
-    expect(remote.path).toBe(local.authority ? `//${local.authority}${local.path}` : local.path)
+    // A UNC server, the authority of a local file URI, moves into the path and marks the owner.
+    expect(remote.authority).toMatch(local.authority ? /^[0-9a-f]{16}-unc$/ : /^[0-9a-f]{16}$/)
+    expect(remote.path).toBe(local.authority ? `/${local.authority}${local.path}` : local.path)
+    expect(remote.path).not.toMatch(/^\/\//)
     expect(remote.fragment).toBe('')
     expect(remote.toString()).toBe(remoteUri)
     expect(toEditorModelUri(remoteUri)).toBe(remoteUri)

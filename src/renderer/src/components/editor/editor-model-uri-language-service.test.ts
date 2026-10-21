@@ -50,6 +50,24 @@ describe('editor model URIs in the TypeScript language service', () => {
     expect(definitions?.map((definition) => definition.fileName)).toEqual([value])
   })
 
+  it('serves hover and definitions for a remote UNC file, apart from the same POSIX path', async () => {
+    const text = "import { value } from './value'\nvalue\n"
+    const view = toEditorModelUri('//server/share/src/view.ts', hostA)
+    const value = toEditorModelUri('//server/share/src/value.ts', hostA)
+    const worker = workerWith({
+      [view]: text,
+      [value]: 'export const value = 1\n',
+      [toEditorModelUri('/server/share/src/value.ts', hostA)]: 'export const value = 2\n'
+    })
+    const position = text.lastIndexOf('value')
+
+    const definitions = await worker.getDefinitionAtPosition(view, position)
+    const hover = await worker.getQuickInfoAtPosition(view, position)
+
+    expect(definitions?.map((definition) => definition.fileName)).toEqual([value])
+    expect(hover?.displayParts?.map((part) => part.text).join('')).toContain('value: 1')
+  })
+
   it.each([
     ['../value', '/repo/value.ts'],
     ['../../../../../repo/src/value', '/repo/src/value.ts'],

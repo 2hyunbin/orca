@@ -4,6 +4,7 @@ const FILE_SCHEME = /^file:/i
 // Monaco keeps closed-file undo for this scheme, and its default labels show the URI path.
 const OWNED_SCHEME = 'vscode-remote'
 const OWNED_SCHEME_PREFIX = /^vscode-remote:/i
+const UNC_AUTHORITY_SUFFIX = '-unc'
 
 /** Two FNV-1a lanes: a short, stable authority per owner, so different owners don't collide. */
 function ownerAuthority(ownerKey: string): string {
@@ -31,13 +32,11 @@ export function toEditorModelUri(filePath: string, ownerKey = ''): string {
   if (OWNED_SCHEME_PREFIX.test(filePath)) {
     // An existing owned key: its authority is its owner, its path the host's path.
     const owned = URI.parse(filePath)
-    return ownerKey
-      ? URI.from({
-          scheme: OWNED_SCHEME,
-          authority: ownerAuthority(ownerKey),
-          path: owned.path
-        }).toString()
-      : owned.toString()
+    if (!ownerKey) {
+      return owned.toString()
+    }
+    const unc = owned.authority.endsWith(UNC_AUTHORITY_SUFFIX)
+    return ownedModelUri(ownerKey, owned.path, unc)
   }
   const parsed = FILE_SCHEME.test(filePath) ? URI.parse(filePath) : URI.file(filePath)
   const local = URI.file(parsed.fsPath)
@@ -48,8 +47,16 @@ export function toEditorModelUri(filePath: string, ownerKey = ''): string {
   // authority of its own scheme: the TypeScript service names files by URI and treats
   // `scheme://authority/` as a root, so the file name stays last (TSX detection) and `..` can't
   // climb into another owner's tree or into local `file:` models.
-  // The re-parse applies `toString`'s drive-letter fold; a UNC server moves into the path.
+  // The re-parse applies `toString`'s drive-letter fold.
   const folded = URI.parse(local.toString())
-  const path = folded.authority ? `//${folded.authority}${folded.path}` : folded.path
-  return URI.from({ scheme: OWNED_SCHEME, authority: ownerAuthority(ownerKey), path }).toString()
+  return folded.authority
+    ? ownedModelUri(ownerKey, `/${folded.authority}${folded.path}`, true)
+    : ownedModelUri(ownerKey, folded.path, false)
+}
+
+function ownedModelUri(ownerKey: string, path: string, unc: boolean): string {
+  // Why UNC marks the authority, not the path: the TypeScript worker looks models up by its
+  // normalized name, which collapses a `//server` path, and `/server/...` is a different file.
+  const authority = ownerAuthority(ownerKey) + (unc ? UNC_AUTHORITY_SUFFIX : '')
+  return URI.from({ scheme: OWNED_SCHEME, authority, path }).toString()
 }
