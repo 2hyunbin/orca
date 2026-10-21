@@ -40,6 +40,8 @@ export type OrcadRollbackOptions = {
   bindHost: string
   port: number
   census: OrcadTerminalCensus
+  /** Epoch ms after which `census`'s admission fence may lapse, so the stop must not be sent. */
+  stopBy?: number
   /** Expected build hash of the rollback target, from the client's copy of those bytes. */
   targetBuildHash: string
   /** The rollback target's daemon protocol facts, from the same copy. */

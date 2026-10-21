@@ -294,6 +294,23 @@ describe('rollbackManagedOrcadEnvironment', () => {
       fullVersion: MANAGED_PREVIOUS_VERSION
     })
     expect(mocks.rebuildTunnel).toHaveBeenCalledWith(harness.userDataPath, 'environment-1')
+    // The stopped server held admission until exit; the new one starts open, so nothing reopens.
+    expect(mocks.census.mock.calls.map((call) => call[4]?.closeAdmissionForMs)).toEqual([
+      ORCAD_UPDATE_ADMISSION_FENCE_MS
+    ])
+  })
+
+  it('closes admission at its count and reopens it unless the rollback went ahead', async () => {
+    const closes = () => mocks.census.mock.calls.map((call) => call[4]?.closeAdmissionForMs)
+    mocks.rollback.mockResolvedValueOnce({ outcome: 'refused', code: 'x', reason: 'y' })
+    await rollbackManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    expect(closes()).toEqual([ORCAD_UPDATE_ADMISSION_FENCE_MS, 0])
+    expect(mocks.rollback.mock.calls[0]?.[0]?.stopBy).toEqual(expect.any(Number))
+
+    mocks.census.mockClear()
+    mocks.census.mockResolvedValueOnce({ ...idle, liveSessions: 1 }).mockResolvedValue(idle)
+    await rollbackManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    expect(closes()).toEqual([ORCAD_UPDATE_ADMISSION_FENCE_MS, 0])
   })
 })
 

@@ -126,6 +126,15 @@ export async function rollbackOrcadLocked(
   }
 
   const startedAt = now()
+  // The census's fence lapses on its own; a stop after that could kill a terminal admitted since.
+  if (options.stopBy !== undefined && startedAt.getTime() > options.stopBy) {
+    return {
+      outcome: 'refused',
+      code: 'orcad_rollback_census_unavailable',
+      reason:
+        'The terminal count went stale before the server could be stopped. Retry the rollback.'
+    }
+  }
   let transaction: OrcadRollbackTransaction = createOrcadRollbackTransaction({
     transactionId: randomUUID(),
     incumbentVersion: incumbent.version,

@@ -251,6 +251,16 @@ describe('rollbackOrcad', () => {
     expect(vi.mocked(writeAtomicOrcadRemoteRecord)).not.toHaveBeenCalled()
   })
 
+  it('stops nothing once its census may have outlived the admission fence', async () => {
+    const log: string[] = []
+    scriptHost(log)
+    const stopBy = Date.parse('2026-02-02T00:00:00.000Z') - 1
+    const result = await rollbackOrcad(options({ stopBy }))
+    expect(result).toMatchObject({ outcome: 'refused', code: 'orcad_rollback_census_unavailable' })
+    expect(log).toEqual([])
+    expect(vi.mocked(writeAtomicOrcadRemoteRecord)).not.toHaveBeenCalled()
+  })
+
   it('refuses when the snapshot is gone from the host', async () => {
     const log: string[] = []
     scriptHost(log, { snapshot: 'ABSENT' })

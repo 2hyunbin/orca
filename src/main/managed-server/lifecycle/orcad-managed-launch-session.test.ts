@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getRemoteHostPlatform, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
+import {
+  ORCAD_UPDATE_ADMISSION_FENCE_MS,
+  ORCAD_UPDATE_ADMISSION_STOP_BY_MS
+} from '../../../shared/orcad-terminal-census'
 
 const mocks = vi.hoisted(() => {
   const host: { current: RemoteHostPlatform | null } = { current: null }
@@ -155,6 +159,56 @@ describe('restartManagedOrcadEnvironment', () => {
     expect(result.outcome).toBe('not-restarted')
     expect(mocks.wake).toHaveBeenCalledOnce()
     expect(mocks.rebuild).toHaveBeenCalledOnce()
+  })
+})
+
+describe('restartManagedOrcadEnvironment terminal admission', () => {
+  const closes = () => mocks.census.mock.calls.map((call) => call[4]?.closeAdmissionForMs)
+
+  it('closes admission at the count, so nothing starts before the stop', async () => {
+    mocks.census.mockResolvedValue(census(0))
+    await restartManagedOrcadEnvironment('/u', 'env-1')
+    expect(closes()).toEqual([ORCAD_UPDATE_ADMISSION_FENCE_MS])
+  })
+
+  it.each([
+    ['terminals run', 2, undefined],
+    ['the stop was withdrawn', 0, { state: 'withdrawn', reason: 'withdrawn' }]
+  ])('reopens admission on the serving server when %s', async (_case, live, stop) => {
+    mocks.census.mockResolvedValue(census(live))
+    if (stop) {
+      mocks.stop.mockResolvedValue(stop)
+    }
+    await restartManagedOrcadEnvironment('/u', 'env-1')
+    expect(closes()).toEqual([ORCAD_UPDATE_ADMISSION_FENCE_MS, 0])
+  })
+
+  it('leaves admission closed while the stop may still land', async () => {
+    mocks.census.mockResolvedValue(census(0))
+    mocks.stop.mockResolvedValue({ state: 'unsettled', reason: 'still stopping' })
+    await restartManagedOrcadEnvironment('/u', 'env-1')
+    expect(closes()).toEqual([ORCAD_UPDATE_ADMISSION_FENCE_MS])
+  })
+
+  it('stops nothing once the count may have outlived its fence', async () => {
+    type Options = { closeAdmissionForMs?: number }
+    mocks.census.mockImplementation(
+      async (...args: [unknown, unknown, unknown, unknown, Options]) => {
+        if (args[4]?.closeAdmissionForMs) {
+          vi.setSystemTime(Date.now() + ORCAD_UPDATE_ADMISSION_STOP_BY_MS + 1)
+        }
+        return census(0)
+      }
+    )
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const result = await restartManagedOrcadEnvironment('/u', 'env-1')
+      expect(result.outcome).toBe('not-restarted')
+      expect(mocks.stop).not.toHaveBeenCalled()
+      expect(closes()).toEqual([ORCAD_UPDATE_ADMISSION_FENCE_MS, 0])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

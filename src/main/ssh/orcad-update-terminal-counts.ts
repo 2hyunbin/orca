@@ -5,8 +5,8 @@ import {
 import type { OrcadTerminalCensusRequestOptions } from './orcad-terminal-census-client'
 
 /**
- * The counts an update makes against one incumbent. Only the last, just before the stop, closes
- * its terminal admission: the first precedes an upload that may take minutes.
+ * The counts an update, rollback or restart makes against one incumbent. Only the last, just
+ * before the stop, closes its terminal admission: an update's first precedes a long upload.
  */
 export function updateTerminalCounts(
   count: (options: OrcadTerminalCensusRequestOptions) => Promise<OrcadTerminalCensus>
@@ -26,4 +26,27 @@ export function updateTerminalCounts(
       await count({ closeAdmissionForMs: 0 })
     }
   }
+}
+
+/**
+ * Runs the stop the fenced count admitted; unless it `succeeded`, reopens admission on the server
+ * that keeps serving. Best effort: a stop already begun holds admission until exit regardless.
+ */
+export async function reopeningAdmissionUnless<T>(
+  succeeded: (result: T) => boolean,
+  releaseIncumbentAdmission: () => Promise<void>,
+  stop: () => Promise<T>
+): Promise<T> {
+  const reopen = (): Promise<void> => releaseIncumbentAdmission().catch(() => {})
+  let result: T
+  try {
+    result = await stop()
+  } catch (error) {
+    await reopen()
+    throw error
+  }
+  if (!succeeded(result)) {
+    await reopen()
+  }
+  return result
 }
