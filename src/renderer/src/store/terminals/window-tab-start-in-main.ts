@@ -1,6 +1,6 @@
 // Layout-owner build: a new tab the window draws has its first terminal started by main, under the
 // window's ids, once main has written the tab; the pane waits and then attaches (D1b-1's wait).
-// Starts main's create cannot yet carry keep the window's own spawn (ledger L251).
+// Starts main's create cannot yet carry keep the window's own spawn (ledger L252).
 
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
@@ -20,7 +20,7 @@ type StartStore = {
 
 /**
  * Whether a startup needs the window's own spawn: a field main's create does not carry yet. One
- * predicate, so moving these into main (L251) deletes it.
+ * predicate, so moving these into main (L252) deletes it.
  */
 export function startupNeedsWindowSpawn(startup: TabStartup | undefined): boolean {
   if (!startup) {
@@ -45,7 +45,7 @@ export function windowTabStartsInMain(state: AppState, tab: TerminalTab): boolea
   return (
     !tab.ptyId &&
     !tab.forceHostRuntime &&
-    // SSH and WSL starts keep the window's spawn and its prompts until L251.
+    // SSH and WSL starts keep the window's spawn and its prompts until L252.
     !getRemoteConnectionIdForWorktree(state, tab.worktreeId) &&
     !worktreeUsesWslPath(state, tab.worktreeId) &&
     (tab.shellOverride === undefined || isSupportedWindowsShellOverride(tab.shellOverride)) &&

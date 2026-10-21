@@ -5,14 +5,15 @@ import { createStoreCascadesMockApi } from './store-cascades-test-harness'
 import { provideLayoutFrameTerminalPanes } from '@/runtime/layout-frame-terminal-panes'
 import { startupNeedsWindowSpawn } from '../terminals/window-tab-start-in-main'
 
-const mocks = vi.hoisted(() => ({
-  layoutOwnerIsMain: true,
-  create: null as null | {
-    resolve: (value: unknown) => void
-    reject: (error: Error) => void
-  },
-  callRuntimeRpc: vi.fn()
-}))
+type HeldCreate = { resolve: (value: unknown) => void; reject: (error: Error) => void }
+
+const mocks = vi.hoisted(() => {
+  const held: { layoutOwnerIsMain: boolean; create: HeldCreate | null } = {
+    layoutOwnerIsMain: true,
+    create: null
+  }
+  return Object.assign(held, { callRuntimeRpc: vi.fn() })
+})
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({
   get ORCA_LAYOUT_OWNER_IS_MAIN() {
