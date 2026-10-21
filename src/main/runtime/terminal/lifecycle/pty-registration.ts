@@ -13,7 +13,7 @@ import type { OrchestrationCompatibilityTerminalAuthority } from '../../runtime-
 import type { RuntimeMobileSessionCreateTerminalResult } from '../../../../shared/runtime-session-contracts'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { mainTerminalRegistered } from '../surface/main-terminal-surfaces'
-import { assertPaneBoundAtRegistration } from './bind-first-registration'
+import { assertPaneBoundAtRegistration, isRuntimeHostedWorkspace } from './bind-first-registration'
 
 export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalidateAllHandlesForPty {
   protected abstract ensurePtyBackedMobileSurfaceForRendererTab(
@@ -114,9 +114,14 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
         : {}),
       ...(binding?.incarnationId ? { incarnationId: binding.incarnationId } : {})
     })
-    // Switch point: bind-first; main's layout already names this pane (L80). A runtime with no
-    // session store (tests only) has no layout to bind in.
-    if (ORCA_LAYOUT_OWNER_IS_MAIN && paneKey && this.store?.getWorkspaceSession) {
+    // Switch point: bind-first; main's layout already names this pane (L80). A paired server's
+    // workspace is that server's layout, and a runtime with no session store (tests) has none.
+    if (
+      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      paneKey &&
+      this.store?.getWorkspaceSession &&
+      !isRuntimeHostedWorkspace(this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId))
+    ) {
       assertPaneBoundAtRegistration(ptyId, paneKey, this.paneOfPty(pty).paneKey)
     }
     const hostScope = this.getOrchestrationCompatibilityHostScope(pty)

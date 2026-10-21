@@ -11,6 +11,7 @@ import {
 } from './orca-runtime-test-fixtures.spec'
 import type { RuntimeNotifier } from './runtime-notifier-contract'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { bindPaneFirst, committingSpawn } from './bind-first-pane.test-fixture'
 
 describe('terminal rename before renderer graph hydration', () => {
   it.each(['Media Engine Orch', null])(
@@ -24,7 +25,7 @@ describe('terminal rename before renderer graph hydration', () => {
       const runtime = new OrcaRuntimeService(checkedStore)
       const renameTerminal = vi.fn()
       runtime.setPtyController({
-        spawn: vi.fn(async () => ({ id: 'omp-initial-pty' })),
+        spawn: vi.fn(committingSpawn(runtime, async () => ({ id: 'omp-initial-pty' }))),
         write: () => true,
         kill: () => true,
         getForegroundProcess: async () => null
@@ -51,10 +52,14 @@ describe('terminal rename before renderer graph hydration', () => {
 
       expect(getSession().tabsByWorktree[TEST_WORKTREE_ID][0].customTitle).toBe(title)
       expect(renameTerminal).toHaveBeenCalledWith('host-tab', title)
-      runtime.onPtyExit('omp-initial-pty', 0)
+      // Switch-on, main closes a tab whose last terminal exits, so there the PTY is replaced by a
+      // restart: a new runtime over the same saved session.
+      if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+        runtime.onPtyExit('omp-initial-pty', 0)
+      }
       const restored = new OrcaRuntimeService(checkedStore)
       restored.setPtyController({
-        spawn: vi.fn(async () => ({ id: 'omp-replacement-pty' })),
+        spawn: vi.fn(committingSpawn(restored, async () => ({ id: 'omp-replacement-pty' }))),
         write: () => true,
         kill: () => true,
         getForegroundProcess: async () => null
@@ -74,7 +79,7 @@ describe('terminal rename before renderer graph hydration', () => {
     const notifier = createMobileCreateTestNotifier(vi.fn())
     runtime.setNotifier(notifier)
     runtime.setPtyController({
-      spawn: vi.fn(async () => ({ id: 'surviving-pty' })),
+      spawn: vi.fn(committingSpawn(runtime, async () => ({ id: 'surviving-pty' }))),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -110,7 +115,15 @@ describe('terminal view rename characterization', () => {
     }
   }
   it('keeps rename persistence before the current notifier with its own receiver', async () => {
-    const runtime = new OrcaRuntimeService()
+    // Switch-on, main's layout says which tab holds the terminal; that layout lives in a store.
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the rename path reads only the session bindPaneFirst adds to this store.
+    const runtime = new OrcaRuntimeService(ORCA_LAYOUT_OWNER_IS_MAIN ? ({} as never) : undefined)
+    bindPaneFirst(runtime, {
+      worktreeId: 'folder-workspace',
+      tabId: 'host-tab',
+      leafId: '00000000-0000-4000-8000-000000000002',
+      ptyId: 'rename-pty'
+    })
     const pty = runtime['recordPtyWorktree']('rename-pty', 'folder-workspace', {
       tabId: 'host-tab'
     })

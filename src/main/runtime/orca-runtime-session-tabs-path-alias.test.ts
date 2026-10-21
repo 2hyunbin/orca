@@ -8,6 +8,8 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { OrcaRuntimeService } from './orca-runtime'
 import { RpcDispatcher } from './rpc/dispatcher'
 import { SESSION_TAB_METHODS } from './rpc/methods/session-tabs'
+import { getRepoExecutionHostId } from '../../shared/execution-host'
+import { bindPaneFirst } from './bind-first-pane.test-fixture'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -101,6 +103,21 @@ function publishGraph(
   })
 }
 
+/** registerPty as the host's spawn commit runs it: main's layout on the repo's host binds the pane first. */
+function registerBoundPty(
+  runtime: OrcaRuntimeService,
+  ptyId: string,
+  connectionId: string | null,
+  repo: { connectionId?: string | null; executionHostId?: string | null } = {}
+): void {
+  bindPaneFirst(
+    runtime,
+    { worktreeId: WORKTREE, tabId: 'tab', leafId: LEAF, ptyId },
+    getRepoExecutionHostId(repo)
+  )
+  runtime.registerPty(ptyId, WORKTREE, connectionId, { tabId: 'tab', leafId: LEAF })
+}
+
 describe('session tab workspace path aliases', () => {
   it.each(
     [
@@ -125,7 +142,7 @@ describe('session tab workspace path aliases', () => {
       const ptyId = ptyConnectionId
         ? toAppSshPtyId(ptyConnectionId, 'pty-existing')
         : 'pty-existing'
-      runtime.registerPty(ptyId, WORKTREE, ptyConnectionId ?? null, { tabId: 'tab', leafId: LEAF })
+      registerBoundPty(runtime, ptyId, ptyConnectionId ?? null, repo)
       if (binding !== 'unpublished') {
         publishGraph(runtime, WORKTREE, [], ptyId, binding)
       } else {
@@ -242,10 +259,12 @@ describe('session tab workspace path aliases', () => {
   it.each([false, true])(
     'recovers a surviving renderer PTY without pinning an empty alias (discovered during refresh: %s)',
     async (duringRefresh) => {
-      const runtime = new OrcaRuntimeService()
+      // Why a store: main's layout binds the surviving pane in the store's workspace session.
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: no repository rows; the fixture binds the session methods main's layout reads.
+      const runtime = new OrcaRuntimeService({ getRepos: () => [] } as never)
       runtime.attachWindow(1)
       const register = async () => {
-        runtime.registerPty('pty-existing', WORKTREE, null, { tabId: 'tab', leafId: LEAF })
+        registerBoundPty(runtime, 'pty-existing', null)
       }
       if (duringRefresh) {
         vi.spyOn(

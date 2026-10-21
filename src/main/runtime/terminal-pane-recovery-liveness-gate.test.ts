@@ -8,6 +8,8 @@ import {
 } from './orca-runtime-test-fixtures.spec'
 import { makePaneKey } from './orca-runtime-test-mocks.spec'
 import { OrcaRuntimeService } from './orca-runtime'
+import { registerBoundPty } from './bind-first-pane.test-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type {
   RuntimeTerminalCreate,
   RuntimeTerminalResolvePane
@@ -17,6 +19,10 @@ import type {
 // a remote pane. Lives in a `.test.ts` rather than beside the other recoverPane cases in
 // orca-runtime-tests/*.spec.ts because config/vitest.config.ts — the config CI runs — includes only
 // `*.test.ts`, so a ratchet placed there would never execute.
+
+// A host-attested exit whose pane stays to recover. Main closes a pane on a vouched -1 end
+// (exitedSplitPaneOutcome), as the window does; a failed process keeps its pane.
+const ATTESTED_EXIT_CODE = ORCA_LAYOUT_OWNER_IS_MAIN ? 1 : -1
 
 describe('terminal.recoverPane liveness gate', () => {
   it('recreates a shell for an SSH pane the relay disowned, the only evidence this gate ever gets', async () => {
@@ -43,7 +49,10 @@ describe('terminal.recoverPane liveness gate', () => {
       ],
       getForegroundProcess: async () => null
     } as never)
-    runtime.registerPty(ptyId, TEST_WORKTREE_ID, 'ssh-target', { tabId, leafId: HEADLESS_LEAF_ID })
+    registerBoundPty(runtime, ptyId, TEST_WORKTREE_ID, 'ssh-target', {
+      tabId,
+      leafId: HEADLESS_LEAF_ID
+    })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
     // The sweep is what disconnects the pane: handlePtyReattachFailure tells only the renderer and
     // the reattach spawn path only expires the lease, so nothing else reaches the runtime record.
@@ -74,7 +83,10 @@ describe('terminal.recoverPane liveness gate', () => {
     const ptyId = 'ssh:ssh-target@@pty-11'
     const runtime = createRuntimeWithSshLease(ptyId, tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(ptyId, TEST_WORKTREE_ID, 'ssh-target', { tabId, leafId: HEADLESS_LEAF_ID })
+    registerBoundPty(runtime, ptyId, TEST_WORKTREE_ID, 'ssh-target', {
+      tabId,
+      leafId: HEADLESS_LEAF_ID
+    })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
     runtime.onPtyExit(ptyId, -1)
     runtime.markPtyLivenessLive(ptyId)
@@ -94,7 +106,10 @@ describe('terminal.recoverPane liveness gate', () => {
     const ptyId = 'ssh:ssh-target@@pty-12'
     const runtime = createRuntimeWithSshLease(ptyId, tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(ptyId, TEST_WORKTREE_ID, 'ssh-target', { tabId, leafId: HEADLESS_LEAF_ID })
+    registerBoundPty(runtime, ptyId, TEST_WORKTREE_ID, 'ssh-target', {
+      tabId,
+      leafId: HEADLESS_LEAF_ID
+    })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
     runtime.onPtyExit(ptyId, -1)
     expect(runtime.getPtyLivenessVerdict(ptyId)?.status).toBe('unverifiable')
@@ -113,9 +128,12 @@ describe('terminal.recoverPane liveness gate', () => {
     const ptyId = 'ssh:ssh-target@@pty-13'
     const runtime = createRuntimeWithSshLease(ptyId, tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(ptyId, TEST_WORKTREE_ID, 'ssh-target', { tabId, leafId: HEADLESS_LEAF_ID })
+    registerBoundPty(runtime, ptyId, TEST_WORKTREE_ID, 'ssh-target', {
+      tabId,
+      leafId: HEADLESS_LEAF_ID
+    })
     const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
-    runtime.onPtyExit(ptyId, -1, undefined, { hostExitConfirmed: true })
+    runtime.onPtyExit(ptyId, ATTESTED_EXIT_CODE, undefined, { hostExitConfirmed: true })
     expect(runtime.getPtyLivenessVerdict(ptyId)?.status).toBe('exited')
     const createTerminal = vi.spyOn(runtime, 'createTerminal').mockResolvedValue({
       handle: 'term-replacement',
@@ -163,7 +181,10 @@ function createRecoveryPane(tabId: string) {
     ]
   })
   const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-  runtime.registerPty(ptyId, TEST_WORKTREE_ID, 'ssh-target', { tabId, leafId: HEADLESS_LEAF_ID })
+  registerBoundPty(runtime, ptyId, TEST_WORKTREE_ID, 'ssh-target', {
+    tabId,
+    leafId: HEADLESS_LEAF_ID
+  })
   const handle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
   return { runtime, paneKey, ptyId, handle, recoveryKey: `${TEST_WORKTREE_ID}\0${paneKey}` }
 }
@@ -218,7 +239,7 @@ describe('terminal pane recovery uses the current Root state', () => {
   it('shares a rejected recovery and removes it before a later retry', async () => {
     const tabId = 'tab-rejected-recovery'
     const { runtime, paneKey, ptyId, handle, recoveryKey } = createRecoveryPane(tabId)
-    runtime.onPtyExit(ptyId, -1, undefined, { hostExitConfirmed: true })
+    runtime.onPtyExit(ptyId, ATTESTED_EXIT_CODE, undefined, { hostExitConfirmed: true })
     const creation = deferred<RuntimeTerminalCreate>()
     const create = vi
       .spyOn(runtime, 'createTerminal')
@@ -246,7 +267,7 @@ describe('terminal pane recovery uses the current Root state', () => {
   it('keeps a newer pending entry when an earlier recovery settles', async () => {
     const tabId = 'tab-newer-recovery'
     const { runtime, paneKey, ptyId, handle, recoveryKey } = createRecoveryPane(tabId)
-    runtime.onPtyExit(ptyId, -1, undefined, { hostExitConfirmed: true })
+    runtime.onPtyExit(ptyId, ATTESTED_EXIT_CODE, undefined, { hostExitConfirmed: true })
     const creation = deferred<RuntimeTerminalCreate>()
     const create = vi.spyOn(runtime, 'createTerminal').mockImplementation(function (
       this: PaneRecoveryRuntime,

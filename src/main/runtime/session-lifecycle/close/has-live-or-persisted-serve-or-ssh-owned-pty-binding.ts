@@ -9,6 +9,7 @@ import type {
   RuntimeMobileSessionTerminalTab
 } from '../../../../shared/runtime-types'
 import { SSH_PANE_RECOVERY_GRACE_MS } from '../../orca-runtime-core'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
 export abstract class OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding extends OrcaRuntimeWithReconcileHeadlessMobileSessionBrowserTabs {
   protected abstract setPairedRendererSessionOwnership(
@@ -141,7 +142,13 @@ export abstract class OrcaRuntimeWithHasLiveOrPersistedServeOrSshOwnedPtyBinding
       )
       for (const ptyId of ptyIds) {
         const pty = this.ptysById.get(ptyId)
-        if (pty?.worktreeId === worktreeId && this.paneOfPty(pty).tabId === parentTabId) {
+        // Switch point: main's close has already dropped the pane, so main naming no tab means the
+        // terminal is still the closed tab's; one main moved elsewhere keeps its ownership.
+        const heldTabId = pty ? this.paneOfPty(pty).tabId : undefined
+        if (
+          pty?.worktreeId === worktreeId &&
+          (heldTabId === parentTabId || (ORCA_LAYOUT_OWNER_IS_MAIN && heldTabId === null))
+        ) {
           pty.runtimeSessionOwned = false
           this.setPairedRendererSessionOwnership(pty.ptyId, false)
         }
