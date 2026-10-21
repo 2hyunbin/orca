@@ -254,7 +254,8 @@ export type GitHubSlice = {
     /** Required: a twin's rows share the id, so only the caller's row host names which one changed. */
     hostId: ExecutionHostId
   ) => Promise<void>
-  evictGitHubRepoCaches: (repoId: string, repoPath?: string) => void
+  /** Drops the row's entries on every host scope; `hostId` names the row so a same-id twin on another host keeps its own. */
+  evictGitHubRepoCaches: (repoId: string, repoPath?: string, hostId?: ExecutionHostId) => void
   // ── ProjectV2 view cache ─────────────────────────────────────────────
   projectViewCache: Record<string, ProjectViewCacheEntry<GitHubProjectTable>>
   /** `sourceTarget` names the board's row-less source host; the focused server is never read. */

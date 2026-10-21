@@ -136,7 +136,10 @@ jobs:
           fi
 
   persistence:
-    needs: [changes, mobile_web_bundle]
+    needs: changes
+    permissions:
+      contents: read
+      actions: read
     concurrency:
       group: node-server-persistence-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
@@ -144,7 +147,6 @@ jobs:
     # Drafts re-trigger at readiness; inherited caller events must not depend on PR fields.
     if: >-
       ${{ !cancelled() && needs.changes.outputs.should_run != 'false' &&
-      (needs.changes.outputs.qualification == 'false' || needs.mobile_web_bundle.result == 'success') &&
       (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
@@ -211,6 +213,32 @@ jobs:
         if: runner.os == 'Windows'
         with:
           arches: ${{ (inputs.build_template && matrix.os == 'windows-2022') && 'x64 arm64' || (runner.arch == 'ARM64' && 'arm64' || 'x64') }}
+      - name: Wait for the qualified mobile bundle
+        if: needs.changes.outputs.qualification != 'false'
+        uses: actions/github-script@v8
+        with: &mobile-bundle-wait
+          script: |
+            const deadline = Date.now() + 15 * 60_000
+            while (Date.now() < deadline) {
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100
+              })
+              const producers = jobs.filter(job => job.name === 'mobile_web_bundle' ||
+                job.name.endsWith(' / mobile_web_bundle'))
+              if (producers.length > 1) throw new Error('Ambiguous mobile bundle producer')
+              const producer = producers[0]
+              if (producer?.status === 'completed') {
+                if (producer.conclusion !== 'success') {
+                  throw new Error(`Mobile bundle production did not succeed: ${producer.conclusion}`)
+                }
+                const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+                  ...context.repo, run_id: context.runId, per_page: 100
+                })
+                if (artifacts.some(artifact => artifact.name === 'orcad-mobile-web-bundle' && !artifact.expired)) return
+              }
+              await new Promise(resolve => setTimeout(resolve, 5_000))
+            }
+            throw new Error('Timed out waiting for the qualified mobile bundle')
       - uses: actions/download-artifact@v8
         if: needs.changes.outputs.qualification != 'false'
         with:
@@ -351,16 +379,19 @@ jobs:
           overwrite: true
 
   linux_glibc_floor:
-    needs: [changes, mobile_web_bundle]
+    needs: changes
+    permissions:
+      contents: read
+      actions: read
     concurrency:
       group: node-server-linux_glibc_floor-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
     # Each Linux lane owns its inputs; the template still requires every lane to pass.
     if: >-
       ${{ !cancelled() &&
-      needs.mobile_web_bundle.result == 'success' &&
       needs.changes.outputs.should_run != 'false' &&
-      needs.changes.outputs.qualification != 'false' }}
+      needs.changes.outputs.qualification != 'false' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
       matrix:
@@ -407,6 +438,9 @@ jobs:
           pnpm build:orcad-prebuilds
           pnpm build:orcad-prebuilds --require-slots "$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
           pnpm build:orcad-prebuilds --smoke
+      - name: Wait for the qualified mobile bundle
+        uses: actions/github-script@v8
+        with: *mobile-bundle-wait
       - uses: actions/download-artifact@v8
         with:
           name: orcad-mobile-web-bundle
@@ -481,15 +515,18 @@ jobs:
           overwrite: true
 
   linux_musl:
-    needs: [changes, mobile_web_bundle]
+    needs: changes
+    permissions:
+      contents: read
+      actions: read
     concurrency:
       group: node-server-linux_musl-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
     if: >-
       ${{ !cancelled() &&
-      needs.mobile_web_bundle.result == 'success' &&
       needs.changes.outputs.should_run != 'false' &&
-      needs.changes.outputs.qualification != 'false' }}
+      needs.changes.outputs.qualification != 'false' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
       matrix:
@@ -507,21 +544,19 @@ jobs:
         id: pnpm-verification
         with:
           container-toolchain: 'true'
-      - uses: actions/download-artifact@v8
-        with:
-          name: orcad-mobile-web-bundle
-          path: out/mobile-web
-      - name: Verify native Alpine artifact and persistence
+      - name: Prepare native Alpine artifact
         env:
           VERIFICATION_CACHE_PATH: ${{ steps.pnpm-verification.outputs.path }}
         run: |
           touch "$VERIFICATION_CACHE_PATH"
+          mkdir -p out/mobile-web
           # Multi-arch index digest of the tag; re-resolve it whenever NODE_RUNTIME_PIN moves.
-          docker run --rm --init -i \
+          docker run --rm --init --detach --name orcad-alpine \
             -e ORCA_BACKGROUND_LAUNCH=1 \
             -v "$VERIFICATION_CACHE_PATH:/root/.cache/pnpm/lockfile-verified.jsonl" \
             -v "$GITHUB_WORKSPACE:/work" -w /work \
-            node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 sh -s <<'NODE_SERVER_QUALIFICATION'
+            node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 sleep infinity
+          docker exec -i orcad-alpine sh -s <<'NODE_SERVER_PREPARATION'
           set -eu
           apk add --no-cache bash git libstdc++ python3 make g++
           git config --global --add safe.directory /work
@@ -530,9 +565,24 @@ jobs:
           pnpm build:orcad-prebuilds
           pnpm build:orcad-prebuilds --require-slots "$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
           pnpm build:orcad-prebuilds --smoke
+          NODE_SERVER_PREPARATION
+      - name: Wait for the qualified mobile bundle
+        uses: actions/github-script@v8
+        with: *mobile-bundle-wait
+      - uses: actions/download-artifact@v8
+        with:
+          name: orcad-mobile-web-bundle
+          path: out/mobile-web
+      - name: Verify native Alpine artifact and persistence
+        run: |
+          docker exec -i orcad-alpine sh -s <<'NODE_SERVER_QUALIFICATION'
+          set -eu
           pnpm build:orcad
           pnpm test:node-server --artifact
           NODE_SERVER_QUALIFICATION
+      - name: Clean up the Alpine qualification container
+        if: always()
+        run: docker rm --force orcad-alpine
       - name: Keep this runner's musl slot for the desktop template
         if: inputs.build_template
         uses: actions/upload-artifact@v7

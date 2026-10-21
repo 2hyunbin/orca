@@ -159,10 +159,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         const connectionId = fileContext.connectionId
         const precondition = editorSavePrecondition(liveFile, trigger)
         if (precondition.kind === 'blocked') {
-          // Why: a mobile refusal is reported to mobile; the desktop tab may not even be dirty.
-          if (trigger !== 'mobile') {
-            setModelExternalMutation(store.getState(), file.id, 'changed')
-          }
+          setModelExternalMutation(store.getState(), file.id, 'changed')
           return 'blocked-stale'
         }
         // Why: stamp before writing so useEditorExternalWatch ignores our own fs:changed echo (editor-self-write-registry).
@@ -191,13 +188,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         if (!writeResult.ok) {
           clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
           // Why: the banner (or deleted tombstone) explains the refusal and pauses autosave.
-          if (trigger !== 'mobile') {
-            setModelExternalMutation(
-              store.getState(),
-              file.id,
-              writeResult.diskConflict === 'missing' ? 'deleted' : 'changed'
-            )
-          }
+          setModelExternalMutation(
+            store.getState(),
+            file.id,
+            writeResult.diskConflict === 'missing' ? 'deleted' : 'changed'
+          )
           return 'blocked-stale'
         }
 
