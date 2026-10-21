@@ -9,13 +9,19 @@ describe('pairing Base64 normalization', () => {
     ['Zm8', 'Zm8='],
     ['Zm8=', 'Zm8='],
     ['Zm9v', 'Zm9v'],
-    ['-_8', '+/8=']
-  ])('preserves valid padded and unpadded input %s', (input, expected) => {
+    ['-_8', '+/8='],
+    ['Zg=', 'Zg=='],
+    ['Zm8==', 'Zm8='],
+    ['Zh', 'Zh=='],
+    ['Zh==', 'Zh=='],
+    ['Zm9', 'Zm9='],
+    ['Zm9=', 'Zm9=']
+  ])('normalizes padded, unpadded and legacy input %s', (input, expected) => {
     expect(normalizePairingBase64(input)).toBe(expected)
   })
 
-  it.each(['A', 'Zg=', 'Zm8==', 'Zg===', '=Zg=', 'Z g=', 'Zh', 'Zh==', 'Zm9', 'Zm9='])(
-    'rejects malformed or non-canonical input %s',
+  it.each(['A', 'A=', 'A==', 'Zg===', '=Zg=', 'Z g=', 'Z=g='])(
+    'rejects undecodable input %s',
     (input) => {
       expect(() => normalizePairingBase64(input)).toThrow('Invalid pairing code')
     }

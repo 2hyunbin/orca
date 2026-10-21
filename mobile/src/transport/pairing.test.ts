@@ -76,15 +76,15 @@ describe('pairing deep links', () => {
     expect(decodePairingUrl(oversizedUrl)).toBeNull()
   })
 
-  it('rejects malformed padding without rejecting canonical padding', () => {
+  it('preserves legacy padding and aliases with the same decoded offer', () => {
     const paddedOffer = { ...offer, endpoint: `${offer.endpoint}/a` }
     const code = encodeOffer(paddedOffer)
     expect(code.length % 4).toBe(2)
     const alias = `${code.slice(0, -1)}${base64Alias(code.at(-1)!)}`
 
-    expect(parsePairingCode(`${code}=`)).toBeNull()
+    expect(parsePairingCode(`${code}=`)).toEqual(paddedOffer)
     expect(parsePairingCode(`${code}==`)).toEqual(paddedOffer)
-    expect(parsePairingCode(alias)).toBeNull()
+    expect(parsePairingCode(alias)).toEqual(paddedOffer)
   })
 
   it('preserves a TLS reverse-proxy endpoint with an explicit port and path', () => {

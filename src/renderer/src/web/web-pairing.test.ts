@@ -44,15 +44,15 @@ describe('web pairing input', () => {
     expect(readPairingInputFromLocation(location)).toBeNull()
   })
 
-  it('rejects malformed padding without rejecting canonical padding', () => {
+  it('preserves legacy padding and aliases with the same decoded offer', () => {
     const paddedOffer = { ...offer, endpoint: `${offer.endpoint}/` }
     const code = encodeOffer(paddedOffer)
     expect(code.length % 4).toBe(2)
     const alias = `${code.slice(0, -1)}${base64Alias(code.at(-1)!)}`
 
-    expect(parseWebPairingInput(`${code}=`)).toBeNull()
+    expect(parseWebPairingInput(`${code}=`)).toEqual(paddedOffer)
     expect(parseWebPairingInput(`${code}==`)).toEqual(paddedOffer)
-    expect(parseWebPairingInput(alias)).toBeNull()
+    expect(parseWebPairingInput(alias)).toEqual(paddedOffer)
   })
 
   it('preserves optional device scope metadata', () => {

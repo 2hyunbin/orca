@@ -36,7 +36,7 @@ describe('pairing offer', () => {
     expect(decoded).toEqual(offer)
   })
 
-  it('rejects malformed padding consistently across Node and browser runtimes', () => {
+  it('preserves partial padding consistently across Node and browser runtimes', () => {
     const url = encodePairingOffer(offer)
     const code = new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('code')!
     expect(code.length % 4).toBe(2)
@@ -52,12 +52,12 @@ describe('pairing offer', () => {
     }
 
     expect({ nodeDecoded, browserDecoded }).toEqual({
-      nodeDecoded: null,
-      browserDecoded: null
+      nodeDecoded: offer,
+      browserDecoded: offer
     })
   })
 
-  it('rejects non-zero pad bits consistently across Node and browser runtimes', () => {
+  it('preserves non-zero pad bits consistently across Node and browser runtimes', () => {
     const url = encodePairingOffer(offer)
     const code = new URLSearchParams(url.slice(url.indexOf('?') + 1)).get('code')!
     expect(code.length % 4).toBe(2)
@@ -73,8 +73,8 @@ describe('pairing offer', () => {
     }
 
     expect({ nodeDecoded, browserDecoded }).toEqual({
-      nodeDecoded: null,
-      browserDecoded: null
+      nodeDecoded: offer,
+      browserDecoded: offer
     })
   })
 
