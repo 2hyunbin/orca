@@ -9,6 +9,7 @@ import {
 import { registerPendingEditorFlush } from './editor-pending-flush'
 import { trackEditorBaselineRestamp } from './editor-save-disk-precondition'
 import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
+import type * as MutationClient from '@/runtime/runtime-file-mutation-client'
 import {
   createEditorStore,
   createFakeEditorDisk,
@@ -22,6 +23,18 @@ const storeRef = vi.hoisted((): { current: ReturnType<typeof createEditorStore> 
 }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => storeRef.current?.getState() } }))
 vi.mock('@/lib/connection-context', () => ({ getConnectionIdForFile: () => undefined }))
+// Stands in for a remote host's status/capability round trip before the bytes are sent.
+const hostCheck = vi.hoisted((): { wait: Promise<void> | null } => ({ wait: null }))
+vi.mock('@/runtime/runtime-file-mutation-client', async (importOriginal) => {
+  const actual = await importOriginal<typeof MutationClient>()
+  return {
+    ...actual,
+    writeRuntimeFile: async (...args: Parameters<typeof actual.writeRuntimeFile>) => {
+      await hostCheck.wait
+      return actual.writeRuntimeFile(...args)
+    }
+  }
+})
 
 const PATH = '/repo/a.ts'
 
@@ -85,6 +98,7 @@ describe("Don't Save against running and queued saves", () => {
   })
 
   afterEach(() => {
+    hostCheck.wait = null
     detach()
     vi.useRealTimers()
     __clearSelfWriteRegistryForTests()
@@ -183,10 +197,42 @@ describe("Don't Save against running and queued saves", () => {
 
   it('a save asked for after the discard still writes', async () => {
     edit('a')
-    await discardEditorBuffer(PATH)
+    const release = await discardEditorBuffer(PATH)
+    release()
     edit('fresh')
     await requestEditorFileSave({ fileId: PATH })
 
     expect(disk.files.get(PATH)).toBe('fresh')
+  })
+
+  it("Don't Save during a slow host check sends no bytes", async () => {
+    edit('a')
+    const check = gate()
+    hostCheck.wait = check.wait
+    const save = requestEditorFileSave({ fileId: PATH })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const discard = discardEditorFileChangesAndClose(PATH)
+    check.open()
+    await Promise.all([save, discard])
+
+    expect(disk.fs.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('a view republishing the dropped text during the drain gets no autosave', async () => {
+    edit('a')
+    const release = holdNextWrite(disk)
+    const running = requestEditorFileSave({ fileId: PATH })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const discard = discardEditorFileChangesAndClose(PATH)
+    // A mounted rich or notebook view restores its cells while the running save drains.
+    edit('cells')
+    await vi.advanceTimersByTimeAsync(2000)
+    release()
+    await Promise.all([running, discard])
+    await vi.advanceTimersByTimeAsync(5000)
+
+    expect(written()).toEqual(['a'])
   })
 })

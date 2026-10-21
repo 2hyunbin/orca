@@ -12,7 +12,7 @@ import {
 import { discardEditorFileChangesAndClose } from './discard-editor-file-changes'
 import type * as EditorAutosave from './editor-autosave'
 
-const quiesce = vi.hoisted(() => vi.fn(async () => undefined))
+const quiesce = vi.hoisted(() => vi.fn(async () => () => {}))
 vi.mock('./editor-autosave', async (importOriginal) => ({
   ...(await importOriginal<typeof EditorAutosave>()),
   requestEditorSaveQuiesce: quiesce
@@ -101,7 +101,7 @@ describe('editor buffer entry points return the per-tab answer', () => {
 
     await discardEditorFileChangesAndClose('/repo/a.ts')
 
-    expect(quiesce).toHaveBeenCalledWith({ fileId: '/repo/a.ts' })
+    expect(quiesce).toHaveBeenCalledWith({ fileId: '/repo/a.ts', discard: true })
     const state = useAppStore.getState()
     expect(state.openFiles.some((file) => file.id === '/repo/a.ts')).toBe(false)
     expect(state.editorDrafts['/repo/a.ts']).toBeUndefined()

@@ -38,7 +38,7 @@ import {
 import { withEditorFileWriteLock } from './editor-file-write-lock'
 import { editorSaveWriterView } from './editor-save-writer-view'
 import { createEditorSaveSlots, type EditorSaveRequest } from './editor-save-slots'
-import { editorDiscardEpoch } from './editor-discard-epoch'
+import { EditorSaveDiscardedError, editorDiscardEpoch } from './editor-discard-epoch'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -49,7 +49,7 @@ export type EditorSaveQueue = {
     trigger?: EditorSaveTrigger
   ) => Promise<EditorSaveResult>
   /** Flushes pending text, drops the autosave timer, then waits for the running and queued saves. */
-  settleFileSaves: (fileId: string) => Promise<void>
+  settleFileSaves: (fileId: string, flush?: boolean) => Promise<void>
   /** Pauses autosave of these files (hold keys), in every workspace, until the release runs. */
   holdAutoSave: (keys: ReadonlySet<string>) => () => void
   syncAutoSave: () => void
@@ -113,7 +113,9 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
     const nothingToWrite = trigger === 'autosave' ? 'failed' : 'written'
     // Why: before the flush, which could republish discarded edits; no await follows before the write.
-    if (editorDiscardEpoch(recordKeyOf(request.fileId)) !== request.discardEpoch) {
+    const discarded = (): boolean =>
+      editorDiscardEpoch(recordKeyOf(request.fileId)) !== request.discardEpoch
+    if (discarded()) {
       return nothingToWrite
     }
     flushPendingEditorBuffer(store.getState(), fileId, trigger === 'autosave')
@@ -154,11 +156,20 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         liveFile.filePath,
         contentToSave,
         editorTabFileAccess(state, liveFile),
-        precondition
+        precondition,
+        // Why: a remote write awaits host checks first; a discard in that window must stop the bytes.
+        () => {
+          if (discarded()) {
+            throw new EditorSaveDiscardedError()
+          }
+        }
       )
     } catch (error) {
       // Why: the self-write stamp is only valid after a real write; clear on failure so it can't suppress a real update.
       clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
+      if (error instanceof EditorSaveDiscardedError) {
+        return nothingToWrite
+      }
       throw error
     }
     if (!writeResult.ok) {
@@ -234,9 +245,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     })
   }
 
-  const settleFileSaves = async (fileId: string): Promise<void> => {
+  const settleFileSaves = async (fileId: string, flush = true): Promise<void> => {
     // Why: rich markdown debounces serialization, so force the pending draft out before dropping the timer.
-    flushPendingEditorBuffer(store.getState(), fileId)
+    if (flush) {
+      flushPendingEditorBuffer(store.getState(), fileId)
+    }
     const key = recordKeyOf(fileId)
     clearScheduledAutoSave(key)
     await slots.settle(key)

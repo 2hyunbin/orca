@@ -9,3 +9,10 @@ export function editorDiscardEpoch(recordId: string): number {
 export function bumpEditorDiscardEpoch(recordId: string): void {
   epochs.set(recordId, editorDiscardEpoch(recordId) + 1)
 }
+
+/** Thrown before sending a save that a discard voided while it waited on the host. */
+export class EditorSaveDiscardedError extends Error {
+  constructor() {
+    super('The edits were discarded before the save was sent.')
+  }
+}

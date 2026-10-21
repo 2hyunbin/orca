@@ -113,8 +113,13 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
     try {
       const state = store.getState()
       let matchingFiles: OpenFile[]
+      const discard = 'fileId' in detail && detail.discard === true
       if ('fileId' in detail) {
         matchingFiles = state.openFiles.filter((file) => file.id === detail.fileId)
+        // Why: a view may republish the dropped text while saves drain; no autosave may write it.
+        if (discard) {
+          release = holdAutoSave(new Set(matchingFiles.map((f) => editorFileHoldKey(state, f))))
+        }
       } else {
         // Why: a git discard rewrites the file under every workspace showing it, and the guarded
         // write's compare fallback (older hosts) can't refuse a save that read disk just before git.
@@ -122,7 +127,7 @@ export function attachEditorAutosaveController(store: AppStoreApi): () => void {
         release = holdAutoSave(keys)
         matchingFiles = state.openFiles.filter((file) => keys.has(editorFileHoldKey(state, file)))
       }
-      await Promise.all(matchingFiles.map((file) => settleFileSaves(file.id)))
+      await Promise.all(matchingFiles.map((file) => settleFileSaves(file.id, !discard)))
     } catch (error) {
       // Why: a failed settle (e.g. an unresolved CSV cell) must stop the discard, not strand its hold.
       release?.()
