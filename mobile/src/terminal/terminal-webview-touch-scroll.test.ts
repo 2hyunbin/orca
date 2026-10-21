@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { terminalDocumentDouble } from './document/document-terminal-double.test-support'
 import type { TerminalDocumentTerminal } from './document/document-terminal-shape'
+import { createTerminalDocument } from './document/create-terminal-document'
 import { TERMINAL_DOCUMENT_SCRIPT } from './terminal-webview-document-script.generated'
 import { TERMINAL_DOCUMENT_MARKUP } from './terminal-webview-html'
 
@@ -62,11 +63,17 @@ describe('terminal WebView touch scrolling', () => {
   let now: number
   let postMessage: ReturnType<typeof vi.fn<(data: string) => void>>
   let scrollLines: ReturnType<typeof vi.fn<(lines: number) => void>>
+  let stopDocument: (() => void) | undefined
 
-  function boot(): void {
+  function boot(importedDocument = false): void {
     document.body.innerHTML = TERMINAL_DOCUMENT_MARKUP
     // The bundle the WebView loads, run as the WebView runs it.
-    new Function(TERMINAL_DOCUMENT_SCRIPT)()
+    if (importedDocument) {
+      const terminalDocument = createTerminalDocument()
+      stopDocument = () => terminalDocument.stop()
+    } else {
+      new Function(TERMINAL_DOCUMENT_SCRIPT)()
+    }
     window.dispatchEvent(
       new MessageEvent('message', {
         data: JSON.stringify({ type: 'init', cols: 40, rows: 24, initialData: '' })
@@ -89,14 +96,21 @@ describe('terminal WebView touch scrolling', () => {
   }
 
   function fireTouch(type: string, point: { x: number; y: number } | null): void {
+    fireTouches(type, point ? [point] : [])
+  }
+
+  function fireTouches(type: string, points: Array<{ x: number; y: number }>): void {
     const surface = document.getElementById('terminal-surface')
     if (!surface) {
       throw new Error('terminal surface missing')
     }
     const event = new Event(type, { bubbles: true, cancelable: true })
-    const touches = point
-      ? [{ identifier: 0, clientX: point.x, clientY: point.y, target: surface }]
-      : []
+    const touches = points.map((point, identifier) => ({
+      identifier,
+      clientX: point.x,
+      clientY: point.y,
+      target: surface
+    }))
     Object.defineProperty(event, 'touches', { value: touches })
     surface.dispatchEvent(event)
   }
@@ -155,6 +169,8 @@ describe('terminal WebView touch scrolling', () => {
   })
 
   afterEach(() => {
+    stopDocument?.()
+    stopDocument = undefined
     for (const [type, listener, options] of vi.mocked(window.addEventListener).mock.calls) {
       window.removeEventListener(type, listener, options)
     }
@@ -163,6 +179,7 @@ describe('terminal WebView touch scrolling', () => {
     }
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it('scrolls scrollback for a drag slower than one pixel per frame', () => {
@@ -225,5 +242,91 @@ describe('terminal WebView touch scrolling', () => {
     runFrames(30)
 
     expect(terminalInputBytes()).toBe(bytesWhileTouching)
+  })
+
+  it('drops an uncommitted scroll when a second finger starts a pinch', () => {
+    boot()
+    fireTouch('touchstart', { x: 40, y: 400 })
+    now += FRAME_MS
+    fireTouch('touchmove', { x: 40, y: 380 })
+    fireTouches('touchstart', [
+      { x: 40, y: 380 },
+      { x: 140, y: 380 }
+    ])
+    runFrames(1)
+    fireTouch('touchend', null)
+    runFrames(30)
+
+    expect(scrolledRows()).toBe(0)
+    expect(terminalInputBytes()).toBe('')
+  })
+
+  it('drops queued scroll and velocity when the platform cancels a touch', () => {
+    boot()
+    fireTouch('touchstart', { x: 40, y: 400 })
+    now += FRAME_MS
+    fireTouch('touchmove', { x: 40, y: 320 })
+    fireTouch('touchcancel', null)
+    fireTouch('touchend', null)
+    runFrames(30)
+
+    expect(scrolledRows()).toBe(0)
+    expect(terminalInputBytes()).toBe('')
+    fireTouch('touchstart', { x: 40, y: 320 })
+    fireTouch('touchend', null)
+    expect(
+      postMessage.mock.calls.filter(([raw]) => JSON.parse(raw).type === 'terminal-tap')
+    ).toHaveLength(1)
+  })
+
+  it('does not send cancelled momentum to an alternate-screen app', () => {
+    buffer = { baseY: 0, type: 'alternate', viewportY: 0 }
+    boot()
+    fireTouch('touchstart', { x: 40, y: 400 })
+    dragUp(400, 20, 5)
+    const bytesBeforeCancel = terminalInputBytes()
+    expect(bytesBeforeCancel).toContain(ESC_ARROW_DOWN)
+    fireTouch('touchcancel', null)
+    fireTouch('touchend', null)
+    runFrames(30)
+
+    expect(terminalInputBytes()).toBe(bytesBeforeCancel)
+  })
+
+  it('retires queued scroll and momentum when the document is disposed', () => {
+    boot(true)
+    fireTouch('touchstart', { x: 40, y: 400 })
+    now += FRAME_MS
+    fireTouch('touchmove', { x: 40, y: 320 })
+    fireTouch('touchend', null)
+    stopDocument?.()
+    runFrames(30)
+
+    expect(scrolledRows()).toBe(0)
+    expect(terminalInputBytes()).toBe('')
+  })
+
+  it('retires subthreshold scroll velocity when a long press enters selection', () => {
+    boot()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    fireTouch('touchstart', { x: 40, y: 400 })
+    now += 480
+    fireTouch('touchmove', { x: 40, y: 399.5 })
+    now += 19
+    fireTouch('touchmove', { x: 40, y: 391.5 })
+    now += 1
+    vi.advanceTimersByTime(500)
+    expect(
+      postMessage.mock.calls.some(([raw]) => {
+        const message = JSON.parse(raw)
+        return message.type === 'set-select-mode' && message.enabled
+      })
+    ).toBe(true)
+
+    fireTouch('touchend', null)
+    runFrames(30)
+
+    expect(scrolledRows()).toBe(0)
+    expect(terminalInputBytes()).toBe('')
   })
 })

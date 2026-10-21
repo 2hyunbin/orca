@@ -114,8 +114,9 @@ export function attachSurfaceEventHandlers(
       }
       const touches = touchesInRoot(scope.root, e.touches)
       if (touches.length === 2) {
+        stopSurfaceTouchGestures(scope)
+        resetSmoothScrollOffset(scope)
         scope.touchGesture.isPinching = true
-        scope.smoothScrollOffsetY = 0
         scope.touchGesture.pinchDist = getDistance(touches[0], touches[1])
         scope.touchGesture.pinchScale = scope.userScale
         const mid = pinchMidpoint(scope, touches[0], touches[1])
@@ -293,6 +294,18 @@ export function attachSurfaceEventHandlers(
     },
     { capture: true, passive: true }
   )
+
+  targetSurface.addEventListener(
+    'touchcancel',
+    function () {
+      if (targetSurface !== scope.surface) {
+        return
+      }
+      stopSurfaceTouchGestures(scope)
+      resetSmoothScrollOffset(scope)
+    },
+    { capture: true, passive: true }
+  )
 }
 
 export function startSurfaceTouchGestures(scope: TerminalDocumentScope) {
@@ -305,4 +318,7 @@ export function stopSurfaceTouchGestures(scope: TerminalDocumentScope) {
     cancelAnimationFrame(scope.touchGesture.momentumId)
     scope.touchGesture.momentumId = null
   }
+  scope.touchGesture.velY = 0
+  scope.touchGesture.accumDelta = 0
+  scope.touchGesture.isPinching = false
 }
