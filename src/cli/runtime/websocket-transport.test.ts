@@ -1,3 +1,4 @@
+import { TERMINAL_INTERFACE_CAPABILITY } from '../../shared/terminal-interface-observation'
 import { SKILL_INSTALL_RESULT_V2_CAPABILITY } from '../../shared/skill-install-capability'
 import { createServer, type Server } from 'node:http'
 import { mkdtempSync } from 'node:fs'
@@ -76,6 +77,7 @@ describe('CLI remote WebSocket transport', () => {
     expect(runtime.authFrames).toContainEqual(
       expect.objectContaining({
         clientCapabilities: [
+          TERMINAL_INTERFACE_CAPABILITY,
           AGENT_SESSION_BACKGROUND_TASK_STOP_CAPABILITY,
           AGENT_SESSION_BACKGROUND_TASK_ROW_STOP_CAPABILITY,
           AGENT_SESSION_BACKGROUND_TASK_CHILD_VIEWS_CAPABILITY,

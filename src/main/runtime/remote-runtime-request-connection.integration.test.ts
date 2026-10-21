@@ -146,6 +146,7 @@ describe('remote runtime request connection integration', () => {
           }
           return repo
         },
+        getTerminalInterfaceClientEventSnapshot: () => [],
         onClientEvent: (listener: (event: RuntimeClientEvent) => void) => {
           clientEventListeners.add(listener)
           return () => clientEventListeners.delete(listener)
@@ -308,6 +309,7 @@ describe('remote runtime request connection integration', () => {
         },
         cancelMobileDictationForConnection: () => {},
         onClientDisconnected: () => {},
+        getTerminalInterfaceClientEventSnapshot: () => [],
         onClientEvent: (listener: (event: RuntimeClientEvent) => void) => {
           clientEventListeners.add(listener)
           return () => clientEventListeners.delete(listener)
@@ -556,6 +558,7 @@ describe('remote runtime request connection integration', () => {
         },
         cancelMobileDictationForConnection: () => {},
         onClientDisconnected: () => {},
+        getTerminalInterfaceClientEventSnapshot: () => [],
         onClientEvent: (listener: (event: RuntimeClientEvent) => void) => {
           clientEventListeners.add(listener)
           return () => clientEventListeners.delete(listener)
