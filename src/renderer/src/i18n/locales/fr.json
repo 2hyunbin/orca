@@ -12653,7 +12653,6 @@
         "sshManagedHostRemove": {
           "description": "Orca s’exécute sur {{label}}. Dans Orca sur vos hôtes SSH, utilisez Arrêter… pour retirer Orca de l’hôte, ou Oublier… si l’hôte n’existe plus. Vous pourrez ensuite supprimer cet hôte SSH.",
           "open": "Ouvrir Orca sur vos hôtes SSH",
-          "descriptionServers": "Orca tourne sur {{label}}. Dans Serveurs Orca distants, ouvrez le menu ⋯ d’Orca sur {{label}} et choisissez « Arrêter… » pour retirer Orca de l’hôte, ou « Oublier… » si l’hôte n’existe plus. Vous pourrez ensuite supprimer cet hôte SSH.",
           "openServers": "Ouvrir Serveurs Orca distants"
         },
         "managedServers": {
@@ -12677,7 +12676,6 @@
             "confirmForget": "Oublier sur ce poste",
             "keepLinked": "Garder lié",
             "forgetDescription": "Dissocie ce serveur ici sans contacter son hôte. Si l'hôte revient, le serveur y tourne peut-être encore.",
-            "title": "Orca sur {{host}}",
             "orcaVersion": "Orca sur cet hôte : {{version}}",
             "stopOrcaDescription": "Arrête Orca sur l’hôte SSH et le retire de cette liste.",
             "updateOrcaOnHost": "Mettre à jour Orca sur cet hôte"
@@ -13022,9 +13020,6 @@
           "emptyDescription": "Associez une machine de développement, une machine cloud ou un ordinateur chez vous. Ses sessions continuent de tourner quand cet ordinateur est en veille.",
           "movePaused": "Déplacement en pause",
           "shareTitle": "Partager cet ordinateur",
-          "shareDescriptionNamed": "Permettez à un navigateur, un téléphone ou un autre Orca de travailler sur {{name}}.",
-          "shareDescription": "Permettez à un navigateur, un téléphone ou un autre Orca de travailler sur cet ordinateur.",
-          "shareButton": "Partager…",
           "done": "Terminé",
           "unreachableLead": "Orca n’a pas pu joindre ce serveur.",
           "updateFailedLead": "La dernière mise à jour n’a pas abouti.",
@@ -14414,8 +14409,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} sessions ne peuvent pas être supprimées depuis Orca.",
             "resumeInNewNativeChat": "Reprendre dans un nouveau chat",
             "resumeInNewCli": "Reprendre dans un nouveau terminal",
-            "resumeInNewCliTooltipFork": "Forke cette conversation dans une nouvelle session CLI.",
-            "resumeInNewCliTooltipChat": "Le chat natif reste tel quel."
+            "resumeInNewCliTooltipFork": "Démarre une nouvelle session de l’agent de terminal avec une copie de cette conversation.",
+            "resumeInNewCliTooltipChat": "Ce chat reste inchangé."
           },
           "AiVaultSessionDeleteDialog": {
             "title": "Supprimer cette session ?",
@@ -19179,8 +19174,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Passer à l’agent de terminal",
-          "switchToChatView": "Passer à l’interface de chat",
+          "switchToTerminalView": "Continuer avec l’agent de terminal",
+          "switchToChatView": "Continuer dans l’interface de chat",
           "closeTabsToLeft": "Fermer tous les onglets à gauche"
         },
         "BrowserTab": {

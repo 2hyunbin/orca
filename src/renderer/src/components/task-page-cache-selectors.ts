@@ -62,6 +62,11 @@ export function deriveTaskPageGitHubWorkItemsFetchOptions(
   }
 }
 
+// Why canonical: the fetch keys by the row's execution host, and an SSH row may carry only connectionId.
+function taskPageRepoCacheScope(repo: TaskPageRepoCacheInput): string {
+  return repo.sourceCacheScope ?? getRepoExecutionHostId(repo)
+}
+
 export function selectTaskPageWorkItemsCacheEntries(
   workItemsCache: WorkItemsCache,
   repos: readonly TaskPageRepoCacheInput[],
@@ -69,10 +74,7 @@ export function selectTaskPageWorkItemsCacheEntries(
   query: string
 ): (CacheEntry<readonly GitHubWorkItem[]> | undefined)[] {
   return repos.map(
-    (repo) =>
-      workItemsCache[
-        workItemsCacheKey(repo.id, limit, query, repo.sourceCacheScope ?? repo.executionHostId)
-      ]
+    (repo) => workItemsCache[workItemsCacheKey(repo.id, limit, query, taskPageRepoCacheScope(repo))]
   )
 }
 
@@ -86,7 +88,7 @@ export function buildTaskPageRepoSourceState(
       repoId: repo.id,
       repoPath: repo.path,
       hostId: getRepoExecutionHostId(repo),
-      sourceKey: `${repo.id}::${repo.sourceCacheScope ?? repo.executionHostId ?? 'local'}`,
+      sourceKey: `${repo.id}::${taskPageRepoCacheScope(repo)}`,
       sources: entry?.sources ?? null,
       error: entry?.error ?? null
     }

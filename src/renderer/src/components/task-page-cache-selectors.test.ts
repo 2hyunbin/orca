@@ -268,6 +268,16 @@ describe('task page cache selectors', () => {
     expect(nextPages[0]?.[1]).toBe(remote)
   })
 
+  it('names each twin row host in source state, even when the twins share a path', () => {
+    const local = { id: 'repo-1', path: '/same/path' }
+    const ssh = { id: 'repo-1', path: '/same/path', connectionId: 'devbox' }
+
+    expect(buildTaskPageRepoSourceState([local, ssh], []).map((state) => state.hostId)).toEqual([
+      'local',
+      'ssh:devbox'
+    ])
+  })
+
   it('reconciles paged table rows with patched work-item cache entries', () => {
     const stale = {
       ...workItem('pr-1', 'repo-1'),

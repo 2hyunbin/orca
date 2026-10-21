@@ -54,13 +54,10 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
       tabs.find((tab) => tab.isActive) ??
       tabs[0] ??
       null
-    const terminalTabs = tabs.filter(
-      (tab): tab is RuntimeMobileSessionTerminalTab => tab.type === 'terminal'
-    )
     const tabGroups = mergeMobileSessionTabGroups(
       snapshot.worktree,
       snapshot.tabGroups ?? existing.tabGroups ?? [],
-      terminalTabs,
+      tabs,
       activeTab?.type === 'terminal' ? activeTab : null
     )
     return {
@@ -171,9 +168,6 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
       tabs.find((tab) => tab.isActive) ??
       tabs[0] ??
       null
-    const terminalTabs = tabs.filter(
-      (tab): tab is RuntimeMobileSessionTerminalTab => tab.type === 'terminal'
-    )
     return {
       ...existing,
       publicationEpoch: this.getMergedMobileSessionPublicationEpoch(existing, tabs),
@@ -186,7 +180,7 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
         mergeMobileSessionTabGroups(
           existing.worktree,
           existing.tabGroups ?? [],
-          terminalTabs,
+          tabs,
           activeTab?.type === 'terminal' ? activeTab : null
         ),
         existing.tabGroups ?? [],
