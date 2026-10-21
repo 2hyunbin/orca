@@ -10,7 +10,10 @@ import type { WslHostService } from '../../wsl/wsl-host-service'
 import { setWslHostService } from '../../wsl/wsl-host-service-instance'
 import { getGitHubPRCacheKeyCandidates } from '../../../shared/github/github-cache-key'
 import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
-import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import {
+  getWorktreeHostIdentity,
+  hostWorktreeTarget
+} from '../../../shared/worktree/host-qualified-identity'
 import {
   prGroupOfReviewFact,
   WorkspaceReviewFactsSnapshotSchema,
@@ -245,7 +248,7 @@ describe('sidebar inputs feed announcements', () => {
     }
     phone.notice(notice)
     await phone.settle()
-    const fact = phone.view().review?.[worktree.id]
+    const fact = phone.view().review?.[getWorktreeHostIdentity(worktree)]
     expect(fact).toEqual({ provider: 'github', reviewState: 'merged' })
     expect(prGroupOfReviewFact(feedReviewFact(fact))).toBe('done')
     phone.disconnect()

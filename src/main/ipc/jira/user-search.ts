@@ -1,5 +1,9 @@
 import { ipcMain } from 'electron'
-import { listAssignableUsers, listAssignableUsersForProject, searchUsers } from '../jira/issues'
+import {
+  listAssignableUsers,
+  listAssignableUsersForProject,
+  searchUsers
+} from '../../jira/jira-issue-create-metadata'
 
 function normalizeSiteId(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined

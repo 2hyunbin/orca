@@ -9,35 +9,49 @@ const mocks = vi.hoisted(() => ({
   listFavouriteFilters: vi.fn()
 }))
 vi.mock('electron', () => ({ ipcMain: { handle: mocks.handle } }))
-vi.mock('../preflight/agent-detection', () => ({ _resetPreflightCache: vi.fn() }))
-vi.mock('../jira/favourite-filters', () => ({ listFavouriteFilters: mocks.listFavouriteFilters }))
-vi.mock('../jira/client', () => ({
+vi.mock('../../preflight/agent-detection', () => ({ _resetPreflightCache: vi.fn() }))
+vi.mock('../../jira/favourite-filters', () => ({
+  listFavouriteFilters: mocks.listFavouriteFilters
+}))
+vi.mock('../../jira/client', () => ({
   connect: vi.fn(),
   disconnect: vi.fn(),
   getStatus: vi.fn(),
   selectSite: vi.fn(),
   testConnection: vi.fn()
 }))
-vi.mock('../jira/issues', () => ({
+vi.mock('../../jira/jira-issue-mutations', () => ({
   addIssueComment: vi.fn(),
   createIssue: vi.fn(),
+  updateIssue: vi.fn()
+}))
+vi.mock('../../jira/jira-issue-read', () => ({
   getIssue: vi.fn(),
-  getIssueSummary: vi.fn(),
-  getIssueComments: vi.fn(),
+  getIssueSummary: vi.fn()
+}))
+vi.mock('../../jira/jira-issue-comments', () => ({
+  getIssueComments: vi.fn()
+}))
+vi.mock('../../jira/jira-transition-queries', () => ({
   getProjectStatusOrder: vi.fn(),
+  listTransitions: vi.fn()
+}))
+vi.mock('../../jira/jira-issue-create-metadata', () => ({
   listCreateFields: mocks.listCreateFields,
   listIssueTypes: mocks.listIssueTypes,
-  listIssues: vi.fn(),
   listPriorities: mocks.listPriorities,
-  listProjects: mocks.listProjects,
-  listTransitions: vi.fn(),
-  searchIssues: vi.fn(),
-  updateIssue: vi.fn(),
   listAssignableUsers: vi.fn(),
   listAssignableUsersForProject: vi.fn(),
   searchUsers: vi.fn()
 }))
-import { registerJiraHandlers } from './jira'
+vi.mock('../../jira/jira-project-queries', () => ({
+  listProjects: mocks.listProjects
+}))
+vi.mock('../../jira/jira-issue-search', () => ({
+  listIssues: vi.fn(),
+  searchIssues: vi.fn()
+}))
+import { registerJiraHandlers } from './register-handlers'
 
 function handler(channel: string) {
   const callback = mocks.handle.mock.calls.find(([name]) => name === channel)?.[1]

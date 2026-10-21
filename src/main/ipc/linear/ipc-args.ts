@@ -1,5 +1,5 @@
-import type { LinearCustomViewModel } from '../../shared/linear/project-types'
-import type { LinearWorkspaceSelection } from '../../shared/linear/workspace-types'
+import type { LinearCustomViewModel } from '../../../shared/linear/project-types'
+import type { LinearWorkspaceSelection } from '../../../shared/linear/workspace-types'
 
 export function normalizeWorkspaceId(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined

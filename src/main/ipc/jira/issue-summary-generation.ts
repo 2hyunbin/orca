@@ -2,13 +2,13 @@ import { ipcMain } from 'electron'
 import {
   GenerateIssueSummary,
   CancelGenerateIssueSummary
-} from '../../shared/rpc-contract/jira-params'
-import type { Store } from '../persistence'
-import type { CommitMessageAgentEnvironmentResolvers } from '../text-generation/commit-message-agent-environment'
+} from '../../../shared/rpc-contract/jira-params'
+import type { Store } from '../../persistence/loading-store/store'
+import type { CommitMessageAgentEnvironmentResolvers } from '../../text-generation/commit-message-agent-environment'
 import {
   cancelJiraIssueSummaryRequest,
   generateJiraIssueSummaryRequest
-} from '../text-generation/jira-issue-summary-requests'
+} from '../../text-generation/jira-issue-summary-requests'
 
 export function registerJiraIssueSummaryGenerationHandlers(
   store: Pick<Store, 'getSettings'>,

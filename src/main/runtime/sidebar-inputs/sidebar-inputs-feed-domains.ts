@@ -22,6 +22,7 @@ import {
 } from '../../../shared/sidebar-list/workspace-review-facts'
 import { buildPairedServerActivityFacts } from '../../../shared/sidebar-list/paired-server-activity-facts'
 import { parseExecutionHostId } from '../../../shared/execution-host'
+import { keyWorkspaceActivityByRow } from '../../../shared/sidebar-list/workspace-activity-facts'
 
 /** This host's store and connection registries, read the way sidebarInputs.desktopFacts reads them. */
 export function readRuntimeDesktopSidebarFacts(store: RuntimeStore): DesktopSidebarFacts {
@@ -102,17 +103,25 @@ export function sidebarInputsFeedDomains(
   return [
     {
       name: 'activity',
-      read: () => ({
-        // A paired server's rows too; this host's own rows win an id both list.
-        ...buildPairedServerActivityFacts(
-          pairedServerRows.snapshot().servers,
-          (hostId) => sources.store()?.getWorkspaceSession?.(hostId) ?? null
-        ),
-        ...facts.getWorkspaceActivityFacts().facts
-      }),
+      read: () => {
+        const rows = workspaceRows.snapshot()?.rows
+        if (!rows) {
+          return null
+        }
+        return {
+          // This host's session tabs and agents are by bare id, so a same-id pair it lists share them.
+          ...keyWorkspaceActivityByRow(facts.getWorkspaceActivityFacts().facts, rows),
+          ...buildPairedServerActivityFacts(
+            pairedServerRows.snapshot().servers,
+            (hostId) => sources.store()?.getWorkspaceSession?.(hostId) ?? null
+          )
+        }
+      },
+      ready: () => workspaceRows.ready(),
       watch: (changed) => {
         const detaches = [
           facts.workspaceActivityFacts.revision.onChange(changed),
+          workspaceRows.revision.onChange(changed),
           pairedServerRows.revision.onChange(changed),
           // This desktop's saved session for a paired server holds its browser and chat tabs there.
           sources.store()?.onWorkspaceSessionWritten?.((hostId) => {
@@ -248,9 +257,9 @@ export function sidebarInputsFeedDomains(
         const store = requireStore()
         const prCache = store.getGitHubCache().pr
         return {
-          // A paired server's rows by the window's cache too; this host's own rows win an id both list.
-          ...buildPairedServerReviewFacts(pairedServerRows.snapshot().servers, prCache),
-          ...buildWorkspaceReviewFacts(worktrees, store.getRepos(), prCache)
+          ...buildWorkspaceReviewFacts(worktrees, store.getRepos(), prCache),
+          // A paired server's rows by the window's cache too.
+          ...buildPairedServerReviewFacts(pairedServerRows.snapshot().servers, prCache)
         }
       },
       watch: (changed) => {

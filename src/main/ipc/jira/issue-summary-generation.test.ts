@@ -2,11 +2,11 @@ import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ handle: vi.fn(), generate: vi.fn(), cancel: vi.fn() }))
 vi.mock('electron', () => ({ ipcMain: { handle: mocks.handle } }))
-vi.mock('../text-generation/jira-issue-summary-requests', () => ({
+vi.mock('../../text-generation/jira-issue-summary-requests', () => ({
   generateJiraIssueSummaryRequest: mocks.generate,
   cancelJiraIssueSummaryRequest: mocks.cancel
 }))
-import { registerJiraIssueSummaryGenerationHandlers } from './jira-issue-summary-generation'
+import { registerJiraIssueSummaryGenerationHandlers } from './issue-summary-generation'
 function handler(channel: string) {
   const callback = mocks.handle.mock.calls.find(([name]) => name === channel)?.[1]
   if (typeof callback !== 'function') {
