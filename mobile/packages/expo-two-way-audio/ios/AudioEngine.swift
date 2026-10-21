@@ -11,6 +11,7 @@ class AudioEngine {
     public private(set) var voiceIOFormat: AVAudioFormat
     public private(set) var isRecording = false
     private var interruptionIntent = RecordingInterruptionIntent()
+    private var isTornDown = false
 
     public var onMicDataCallback: ((Data) -> Void)?
     public var onInputVolumeCallback: ((Float) -> Void)?
@@ -176,6 +177,7 @@ class AudioEngine {
     }
 
     func start() {
+        guard !isTornDown else { return }
         do {
             try avAudioEngine.start()
         } catch {
@@ -184,6 +186,7 @@ class AudioEngine {
     }
 
     func playPCMData(_ pcmData: Data) {
+        guard !isTornDown else { return }
         // Looks like we don't get a proper AEC for the very first chunks of audio that we play.
         // To work around this, we will discard microphone input for the first few milliseconds.
         // This will give the AEC time to adapt to the playback audio.
@@ -241,6 +244,7 @@ class AudioEngine {
     }
 
     func toggleRecording(_ val: Bool, preservingInterruptionIntent: Bool = false) -> Bool {
+        guard !val || !isTornDown else { return false }
         if !preservingInterruptionIntent {
             // An explicit stop also cancels a resume queued before JavaScript cancelled dictation.
             interruptionIntent.cancel()
@@ -292,6 +296,8 @@ class AudioEngine {
     }
 
     func tearDown() {
+        guard !isTornDown else { return }
+        isTornDown = true
         stopRecordingAndPlayer()
         avAudioEngine.stop()
     }
@@ -314,6 +320,7 @@ class AudioEngine {
     }
 
     func resumePlayback() {
+        guard !isTornDown else { return }
         if !speechPlayer.isPlaying {
             speechPlayer.play()
             print("Playback resumed")
@@ -321,12 +328,14 @@ class AudioEngine {
     }
 
     private func checkEngineIsRunning() {
+        guard !isTornDown else { return }
         if !avAudioEngine.isRunning {
             start()
         }
     }
 
     private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard !isTornDown else { return }
         guard let userInfo = notification.userInfo,
               let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
@@ -355,6 +364,7 @@ class AudioEngine {
     }
 
     private func handleMediaServicesWereReset() {
+        guard !isTornDown else { return }
         self.avAudioEngine.stop()
         self.setup()
         self.start()
