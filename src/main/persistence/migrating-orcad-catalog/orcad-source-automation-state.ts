@@ -12,7 +12,8 @@ import type {
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import type { TaskSourceContext, WorkspaceRunContext } from '../../../shared/task-source-context'
 import {
-  createOrcadMigrationSourceScope,
+  createOrcadMigrationExportScope,
+  orcadMigrationScopeOwnsWholeHost,
   orcadMigrationOwnerMatchesScope,
   orcadMigrationOwnsRepoId,
   type OrcadMigrationSourceScope,
@@ -32,7 +33,7 @@ export function collectOrcadMigrationSourceAutomationState(
   source: OrcadMigrationManifestSource,
   catalog: OrcadMigrationCatalogPayload
 ): OrcadMigrationSourceAutomationInspection {
-  const scope = createOrcadMigrationSourceScope({ source, catalog, repos: state.repos })
+  const scope = createOrcadMigrationExportScope({ source, catalog, repos: state.repos })
   const touchedAutomations = state.automations.filter((entry) =>
     automationTouchesScope(entry, scope)
   )
@@ -98,6 +99,17 @@ function runTouchesScope(run: AutomationRun, scope: OrcadMigrationSourceScope): 
 }
 
 function automationCanTransfer(automation: Automation, scope: OrcadMigrationSourceScope): boolean {
+  if (scope.kind === 'local-wsl') {
+    // This desktop schedules it today; the host's scheduler takes over (enabled state kept).
+    return (
+      automation.executionTargetType === 'local' &&
+      automation.schedulerOwner === 'local_host_service' &&
+      scope.repoIds.has(getAutomationRunRepoId(automation)) &&
+      ownerCanTransfer(automation.workspaceId, scope) &&
+      contextCanTransfer(automation.runContext, scope) &&
+      contextCanTransfer(automation.sourceContext, scope)
+    )
+  }
   return (
     automation.enabled === false &&
     automation.executionTargetType === 'ssh' &&
@@ -129,6 +141,12 @@ function contextTouchesScope(
   context: WorkspaceRunContext | TaskSourceContext | null | undefined,
   scope: OrcadMigrationSourceScope
 ): boolean {
+  if (!orcadMigrationScopeOwnsWholeHost(scope)) {
+    return (
+      (!context?.hostId || context.hostId === scope.hostId) &&
+      orcadMigrationOwnsRepoId(scope, context?.repoId)
+    )
+  }
   return (
     context?.hostId === scope.hostId ||
     (!context?.hostId && orcadMigrationOwnsRepoId(scope, context?.repoId))

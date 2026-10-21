@@ -14,7 +14,7 @@ import { collectOrcadMigrationRetiredWorktreeNamespaces } from './orcad-source-r
 import { collectOrcadMigrationSourceAutomationState } from './orcad-source-automation-state'
 import { collectOrcadMigrationSourceWorkspaceSession } from './orcad-source-workspace-session'
 import {
-  createOrcadMigrationSourceScope,
+  createOrcadMigrationExportScope,
   orcadMigrationOwnerMatchesScope,
   unqualifyOrcadMigrationOwnerKey
 } from './orcad-source-scope'
@@ -48,8 +48,12 @@ export type OrcadMigrationSourceDormantInspection = {
 }
 
 /** The user confirmed "Move anyway" for this host: what can't move stays on this desktop. */
-export function orcadMigrationLeavesBehind(state: PersistedState, targetId: string): boolean {
-  return state.sshTargets.some(
+export function orcadMigrationLeavesBehind(
+  state: PersistedState,
+  targetId: string | null
+): boolean {
+  // A local WSL move has no "Move anyway": what can't move blocks it.
+  return targetId !== null && state.sshTargets.some(
     (target) => target.id === targetId && target.managedServerLeaveBehind !== undefined
   )
 }
@@ -61,7 +65,7 @@ export function collectOrcadMigrationSourceDormantState(
   storage?: TerminalScrollbackSnapshotStorage,
   destinationEnvironmentId?: string
 ): OrcadMigrationSourceDormantInspection {
-  const scope = createOrcadMigrationSourceScope({ source, catalog, repos: state.repos })
+  const scope = createOrcadMigrationExportScope({ source, catalog, repos: state.repos })
   const blockedCounts = emptyBlockedCounts()
   const destinationRepos = catalog.repositories.map(toOrcadDestinationRepository)
   const setupByRepoId = new Map(
