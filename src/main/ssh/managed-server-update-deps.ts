@@ -23,7 +23,10 @@ export function managedServerUpdateDeps(userDataPath: string): ManagedServerUpda
     // SshTarget is published to peers.
     failedThisLaunch: (target) => orcadUpdateFailedThisLaunch({ kind: 'ssh', id: target.id }),
     recordUpdateFailure: (target, reason) => {
-      recordOrcadUpdateFailedThisLaunch({ kind: 'ssh', id: target.id })
+      recordOrcadUpdateFailedThisLaunch(
+        { kind: 'ssh', id: target.id },
+        { code: 'orcad_update_failed', reason }
+      )
       registry.updateTarget(target.id, { managedServerUpdateFailure: { reason, appVersion } })
     },
     clearUpdateFailure: (target) => {

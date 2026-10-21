@@ -49,3 +49,20 @@ export function planManagedOrcadAutoUpdate(input: {
   }
   return input.failedBefore ? { action: 'skip', reason: 'failed-before' } : { action: 'update' }
 }
+
+/** Why a fenced activation refuses a build the plan skips; null when it may activate. */
+export function orcadUpdateSkipRefusal(
+  plan: ManagedOrcadAutoUpdatePlan,
+  record: OrcadActivationRecord,
+  candidateVersion: string,
+  appVersion: string
+): string | null {
+  if (plan.action !== 'skip' || plan.reason === 'current') {
+    return null
+  }
+  return plan.reason === 'rolled-back'
+    ? `This host's server rolled back from ${candidateVersion}, so it is not activated again ` +
+        'without Force.'
+    : `Orca ${record.activeAppVersion} last ran this host's server, newer than this ` +
+        `Orca (${appVersion}). Update Orca to start it.`
+}

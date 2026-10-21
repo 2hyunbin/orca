@@ -10,7 +10,7 @@ import { computeLocalOrcadBuildHash } from '../../ssh/orcad-local-build-hash'
 import { sshOrcadHostTransport } from '../../ssh/orcad-ssh-host-transport'
 import type { OrcadHostTarget } from '../../ssh/orcad-host-transport'
 import type { OrcadActivationRecord } from '../activation/orcad-activation-record'
-import { planManagedOrcadAutoUpdate } from './orcad-managed-update-decision'
+import { orcadUpdateSkipRefusal, planManagedOrcadAutoUpdate } from './orcad-managed-update-decision'
 import {
   type OrcadTerminalCensus,
   UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
@@ -153,17 +153,16 @@ export function managedOrcadDeployPolicy(
     // record to check first, so only the fenced read can refuse. An explicit force runs it anyway,
     // as `environment update --force` does.
     admitRecord: (record, candidateVersion) => {
-      const plan = force
-        ? null
-        : planManagedOrcadAutoUpdate({ record, candidateVersion, appVersion, failedBefore: false })
-      if (plan?.action !== 'skip' || plan.reason === 'current') {
+      if (force) {
         return null
       }
-      return plan.reason === 'rolled-back'
-        ? `This host's server rolled back from ${candidateVersion}, so it is not activated again ` +
-            'without Force.'
-        : `Orca ${record.activeAppVersion} last ran this host's server, newer than this ` +
-            `Orca (${appVersion}). Update Orca to start it.`
+      const plan = planManagedOrcadAutoUpdate({
+        record,
+        candidateVersion,
+        appVersion,
+        failedBefore: false
+      })
+      return orcadUpdateSkipRefusal(plan, record, candidateVersion, appVersion)
     }
   }
 }

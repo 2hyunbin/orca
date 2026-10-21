@@ -511,7 +511,14 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       await expect(launch()).resolves.toMatchObject({
         outcome: 'ready',
         fullVersion: '1.4.0+aa',
-        readiness: INCUMBENT_READINESS
+        readiness: INCUMBENT_READINESS,
+        // Force stays offered: it is the one explicit retry.
+        deferredUpdate: {
+          candidateVersion: '1.5.0+ab',
+          code: 'orcad_activation_policy_refused',
+          reason: expect.stringMatching(/rolled back from 1\.5\.0\+ab/),
+          forceable: true
+        }
       })
       expect(mocks.deploy).not.toHaveBeenCalled()
     })
@@ -578,7 +585,16 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       mocks.deploy.mockResolvedValue(rejected)
       await expect(launch()).resolves.toMatchObject({ outcome: 'deferred' })
       mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('1.4.0+aa', INCUMBENT_READINESS))
-      await expect(launch()).resolves.toMatchObject({ outcome: 'ready', fullVersion: '1.4.0+aa' })
+      await expect(launch()).resolves.toMatchObject({
+        outcome: 'ready',
+        fullVersion: '1.4.0+aa',
+        deferredUpdate: {
+          candidateVersion: '1.5.0+ab',
+          code: 'orcad_candidate_readiness_rejected',
+          reason: rejected.reason,
+          forceable: true
+        }
+      })
       expect(mocks.deploy).toHaveBeenCalledTimes(1)
       // Force is the explicit retry.
       await launch(undefined, { force: true })
