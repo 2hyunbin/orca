@@ -102,6 +102,7 @@ export function runClaudeCommandProcess(
         timeout = null
       }
       stdout?.off('data', appendOutput)
+      stdout?.off('data', forwardStdout)
       stderr?.off('data', appendOutput)
       child.off('error', onError)
       child.off(completionEvent, onDone)
@@ -130,6 +131,7 @@ export function runClaudeCommandProcess(
       terminationPending = true
       terminateClaudeProcess(child, interactiveLogin, afterKill)
     }
+    const forwardStdout = (chunk: Buffer): void => options?.onStdout?.(chunk.toString())
     const appendOutput = (chunk: Buffer): void => {
       output = `${output}${chunk.toString()}`
       if (output.length > MAX_COMMAND_OUTPUT_CHARS) {
@@ -176,9 +178,8 @@ export function runClaudeCommandProcess(
     }, timeoutMs)
     stdout?.on('data', appendOutput)
     stderr?.on('data', appendOutput)
-    const onStdout = options?.onStdout
-    if (onStdout) {
-      stdout?.on('data', (chunk: Buffer) => onStdout(chunk.toString()))
+    if (options?.onStdout) {
+      stdout?.on('data', forwardStdout)
     }
     child.on('error', onError)
     child.on(completionEvent, onDone)

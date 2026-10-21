@@ -1,13 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HostAccountSignInStatus } from '../../../shared/host-account-sign-in-types'
 
-const rpc = vi.hoisted(() => ({
-  calls: [] as { method: string; params: unknown; revision: number | undefined }[],
-  answer: (_method: string, _params: unknown): unknown => null
-}))
+type RecordedCall = { method: string; params: unknown; revision: number | undefined }
+const rpc = vi.hoisted(() => {
+  const calls: RecordedCall[] = []
+  return {
+    calls,
+    capability: Promise.resolve(),
+    answer: (_method: string, _params: unknown): unknown => null
+  }
+})
 
 vi.mock('./runtime-rpc-client', () => ({
-  assertRuntimeEnvironmentCapability: vi.fn(async () => {}),
+  assertRuntimeEnvironmentCapability: vi.fn(() => rpc.capability),
   callRuntimeRpc: vi.fn(
     async (
       _target: unknown,
@@ -39,6 +44,7 @@ function status(patch: Partial<HostAccountSignInStatus>): HostAccountSignInStatu
 
 beforeEach(() => {
   rpc.calls.length = 0
+  rpc.capability = Promise.resolve()
 })
 
 describe('host account sign-in client', () => {
@@ -54,6 +60,16 @@ describe('host account sign-in client', () => {
     ])
     expect(rpc.calls.every((call) => call.revision === 7)).toBe(true)
     expect(readHostAccountSignIn(OWNER, 'codex')).toBeNull()
+  })
+
+  it('starts nothing on the host when Cancel lands during the capability check', async () => {
+    const capability = Promise.withResolvers<void>()
+    rpc.capability = capability.promise
+    const adding = addCodexAccountOnHost(OWNER)
+    await expect(cancelHostAccountSignIn(OWNER, 'codex')).resolves.toBe(true)
+    capability.resolve()
+    await expect(adding).rejects.toThrow('Codex sign-in was cancelled.')
+    expect(rpc.calls).toEqual([])
   })
 
   it('applies a Cancel clicked before the host answered the start', async () => {

@@ -12,13 +12,13 @@ import { CODEX_LOGIN_CANCELLED_MESSAGE } from '../../../shared/codex-auth-errors
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { assertRuntimeEnvironmentCapability, callRuntimeRpc } from './runtime-rpc-client'
 import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
+import { classifyTerminalProcessInspectionFailure } from '../../../shared/terminal-process-inspection'
 
 type EnvironmentTarget = Extract<RuntimeClientTarget, { kind: 'environment' }>
 
 const CALL_TIMEOUT_MS = 20_000
 // Why above the host's 20s long poll: an unchanged flow answers at its own deadline, not ours.
 const WAIT_TIMEOUT_MS = 35_000
-// Why just under the host's 90s silence window: past it the host has ended the flow anyway.
 const WAIT_RETRY_WINDOW_MS = 80_000
 const WAIT_RETRY_DELAY_MS = 2_000
 const NOT_ACTIVE = 'This sign-in is no longer active in this client.'
@@ -27,18 +27,22 @@ const CANCELLED_MESSAGE: Record<HostAccountSignInProvider, string> = {
   codex: CODEX_LOGIN_CANCELLED_MESSAGE
 }
 
-/** A sign-in one server runs for this client, pinned to the pairing it started on. */
-type Session = {
+/**
+ * One Add Account click against one server, registered before its first await so a Cancel at any
+ * point lands on it. Pinned to the pairing it started on: a re-paired id names another machine,
+ * which must never get this flow's code.
+ */
+type Attempt = {
   owner: EnvironmentTarget
-  /** Why pinned: a re-paired id names another machine, which must never get this flow's code. */
+  provider: HostAccountSignInProvider
   pairingRevision: number | undefined
-  status: HostAccountSignInStatus
+  cancelled: boolean
+  /** The host's flow, once it answered the start. */
+  status: HostAccountSignInStatus | null
 }
 
-/** The sign-in each server runs for this client, per provider, while it is shown. */
-const shown = new Map<string, Session>()
-/** Cancels clicked before the host answered the start; applied once it does. */
-const pendingCancels = new Set<string>()
+/** The attempt each server runs for this client, per provider. */
+const attempts = new Map<string, Attempt>()
 const listeners = new Set<() => void>()
 
 const keyOf = (owner: EnvironmentTarget, provider: HostAccountSignInProvider): string =>
@@ -51,32 +55,25 @@ function notify(): void {
 }
 
 function call(
-  session: Pick<Session, 'owner' | 'pairingRevision'>,
+  attempt: Attempt,
   method: string,
   params: unknown,
   timeoutMs = CALL_TIMEOUT_MS
 ): Promise<HostAccountSignInStatus> {
-  return callRuntimeRpc<HostAccountSignInStatus>(session.owner, method, params, {
+  return callRuntimeRpc<HostAccountSignInStatus>(attempt.owner, method, params, {
     timeoutMs,
-    expectedEnvironmentPairingRevision: session.pairingRevision
+    expectedEnvironmentPairingRevision: attempt.pairingRevision
   })
 }
 
-function publish(session: Session, status: HostAccountSignInStatus): void {
-  // Why: a slow answer must not roll a newer status back, nor revive a flow that already ended.
-  if (shown.get(keyOf(session.owner, status.provider)) !== session) {
+/** Records a newer status of the attempt's own flow; a slow answer never rolls it back. */
+function advance(attempt: Attempt, status: HostAccountSignInStatus): void {
+  const current = attempt.status
+  if (current && (status.flowId !== current.flowId || status.revision <= current.revision)) {
     return
   }
-  if (status.flowId === session.status.flowId && status.revision >= session.status.revision) {
-    session.status = status
-    notify()
-  }
-}
-
-function clear(session: Session): void {
-  const key = keyOf(session.owner, session.status.provider)
-  if (shown.get(key) === session) {
-    shown.delete(key)
+  attempt.status = status
+  if (attempts.get(keyOf(attempt.owner, attempt.provider)) === attempt) {
     notify()
   }
 }
@@ -90,23 +87,33 @@ export function readHostAccountSignIn(
   owner: RuntimeClientTarget,
   provider: HostAccountSignInProvider
 ): HostAccountSignInStatus | null {
-  return owner.kind === 'environment' ? (shown.get(keyOf(owner, provider))?.status ?? null) : null
+  return owner.kind === 'environment'
+    ? (attempts.get(keyOf(owner, provider))?.status ?? null)
+    : null
 }
 
-async function waitForChange(session: Session): Promise<HostAccountSignInStatus> {
+/** Only a lost answer is worth asking again; a refusal or a re-paired server is final. */
+function isRetryable(error: unknown): boolean {
+  const reason = classifyTerminalProcessInspectionFailure(error)
+  return reason === 'timeout' || reason === 'transport_loss'
+}
+
+async function waitForChange(
+  attempt: Attempt,
+  status: HostAccountSignInStatus
+): Promise<HostAccountSignInStatus> {
+  // Why a window: the host ends a flow nobody asked about for 90s, so asking longer is pointless.
   const giveUpAt = Date.now() + WAIT_RETRY_WINDOW_MS
   for (;;) {
     try {
       return await call(
-        session,
+        attempt,
         'accounts.hostSignInWait',
-        { flowId: session.status.flowId, afterRevision: session.status.revision },
+        { flowId: status.flowId, afterRevision: status.revision },
         WAIT_TIMEOUT_MS
       )
     } catch (error) {
-      // Why retry: a dropped answer says nothing about the login, which keeps running on the host.
-      const ended = error instanceof Error && error.message.includes(NOT_ACTIVE)
-      if (ended || Date.now() >= giveUpAt) {
+      if (!isRetryable(error) || Date.now() >= giveUpAt) {
         throw error
       }
       await new Promise((resolve) => setTimeout(resolve, WAIT_RETRY_DELAY_MS))
@@ -118,47 +125,57 @@ async function runHostAccountSignIn(
   owner: EnvironmentTarget,
   provider: HostAccountSignInProvider
 ): Promise<HostAccountSignInStatus> {
-  const pairing = {
-    owner,
-    pairingRevision: captureRuntimeEnvironmentRequestRevision(owner.environmentId)
-  }
-  await assertRuntimeEnvironmentCapability(
-    owner.environmentId,
-    HOST_ACCOUNT_SIGN_IN_RUNTIME_CAPABILITY,
-    'This server runs an older Orca that cannot add accounts from here. Update Orca on that server, or run `orca account add` in a terminal there.'
-  )
   const key = keyOf(owner, provider)
-  pendingCancels.delete(key)
-  const session: Session = {
-    ...pairing,
-    status: await call(pairing, 'accounts.hostSignInStart', { provider })
+  const attempt: Attempt = {
+    owner,
+    provider,
+    pairingRevision: captureRuntimeEnvironmentRequestRevision(owner.environmentId),
+    cancelled: false,
+    status: null
   }
-  shown.set(key, session)
-  notify()
-  if (pendingCancels.delete(key)) {
-    void cancelHostAccountSignIn(owner, provider).catch(() => {})
-  }
+  attempts.set(key, attempt)
   try {
-    while (!HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES.has(session.status.phase)) {
-      const next = await waitForChange(session)
-      publish(session, next)
-      // Why: the loop advances even when another session has taken this one's place on screen.
-      if (next.revision > session.status.revision) {
-        session.status = next
-      }
+    await assertRuntimeEnvironmentCapability(
+      owner.environmentId,
+      HOST_ACCOUNT_SIGN_IN_RUNTIME_CAPABILITY,
+      'This server runs an older Orca that cannot add accounts from here. Update Orca on that server, or run `orca account add` in a terminal there.'
+    )
+    if (attempt.cancelled) {
+      throw new Error(CANCELLED_MESSAGE[provider])
     }
+    advance(attempt, await call(attempt, 'accounts.hostSignInStart', { provider }))
+    if (attempt.cancelled) {
+      // Why: the Cancel came before the host named its flow; tell it now.
+      await requestHostCancel(attempt)
+    }
+    let status = attempt.status
+    while (status && !HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES.has(status.phase)) {
+      advance(attempt, await waitForChange(attempt, status))
+      status = attempt.status
+    }
+    if (status?.phase === 'signedIn') {
+      return status
+    }
+    throw new Error(
+      status?.phase === 'cancelled' || !status
+        ? CANCELLED_MESSAGE[provider]
+        : (status.error ?? 'Sign-in failed. Try again.')
+    )
   } finally {
-    clear(session)
+    if (attempts.get(key) === attempt) {
+      attempts.delete(key)
+      notify()
+    }
   }
-  const { status } = session
-  if (status.phase === 'signedIn') {
-    return status
+}
+
+async function requestHostCancel(attempt: Attempt): Promise<void> {
+  if (attempt.status) {
+    advance(
+      attempt,
+      await call(attempt, 'accounts.hostSignInCancel', { flowId: attempt.status.flowId })
+    )
   }
-  throw new Error(
-    status.phase === 'cancelled'
-      ? CANCELLED_MESSAGE[provider]
-      : (status.error ?? 'Sign-in failed. Try again.')
-  )
 }
 
 /** Adds a Claude account on `owner`: its login runs there, and this client relays the code. */
@@ -188,15 +205,14 @@ export async function submitHostAccountSignInCode(
   provider: HostAccountSignInProvider,
   code: string
 ): Promise<void> {
-  const session = owner.kind === 'environment' ? shown.get(keyOf(owner, provider)) : undefined
-  if (!session) {
+  const attempt = owner.kind === 'environment' ? attempts.get(keyOf(owner, provider)) : undefined
+  if (!attempt?.status) {
     throw new Error(NOT_ACTIVE)
   }
-  const status = await call(session, 'accounts.hostSignInSubmitCode', {
-    flowId: session.status.flowId,
-    code
-  })
-  publish(session, status)
+  advance(
+    attempt,
+    await call(attempt, 'accounts.hostSignInSubmitCode', { flowId: attempt.status.flowId, code })
+  )
 }
 
 /** True when there was a sign-in to cancel. */
@@ -204,18 +220,11 @@ export async function cancelHostAccountSignIn(
   owner: RuntimeClientTarget,
   provider: HostAccountSignInProvider
 ): Promise<boolean> {
-  if (owner.kind !== 'environment') {
+  const attempt = owner.kind === 'environment' ? attempts.get(keyOf(owner, provider)) : undefined
+  if (!attempt) {
     return false
   }
-  const session = shown.get(keyOf(owner, provider))
-  if (!session) {
-    // Why: Cancel shows as soon as Add is clicked, before the host has answered the start.
-    pendingCancels.add(keyOf(owner, provider))
-    return true
-  }
-  const status = await call(session, 'accounts.hostSignInCancel', {
-    flowId: session.status.flowId
-  })
-  publish(session, status)
+  attempt.cancelled = true
+  await requestHostCancel(attempt)
   return true
 }
