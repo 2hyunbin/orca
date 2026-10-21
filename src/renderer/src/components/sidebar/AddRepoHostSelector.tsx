@@ -103,7 +103,8 @@ export function AddRepoHostSelector({
               />
             ) : null}
             <CommandList>
-              {showHostSetupActions ? (
+              {/* Why hidden while searching: Enter must pick the matching host, not open setup. */}
+              {showHostSetupActions && rows.query === '' ? (
                 <Popover open={addHostOpen} onOpenChange={setAddHostOpen}>
                   <PopoverTrigger asChild>
                     <CommandItem

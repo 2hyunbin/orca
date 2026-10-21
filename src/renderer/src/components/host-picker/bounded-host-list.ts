@@ -3,15 +3,32 @@ export const HOST_LIST_ROW_LIMIT = 50
 
 export type BoundedHostList<T> = {
   shown: T[]
-  /** Hosts matching the query that the limit left out. */
+  /** Hosts matching the query that the limits left out. */
   hiddenCount: number
+}
+
+type MatchRank = 'exact' | 'prefix' | 'contains' | null
+
+function rankHost(host: { label: string; searchText?: string }, needle: string): MatchRank {
+  const label = host.label.toLowerCase()
+  if (label === needle) {
+    return 'exact'
+  }
+  if (label.startsWith(needle)) {
+    return 'prefix'
+  }
+  if (label.includes(needle) || host.searchText?.toLowerCase().includes(needle)) {
+    return 'contains'
+  }
+  return null
 }
 
 /**
  * The one choke point for drawing a list of hosts. Pinned hosts (current value, checked or muted
- * ones) always show so state is never hidden; the rest are narrowed by `query` and capped. Matches
- * rank exact names, then prefixes, then substrings (of the label or `searchText`), so typing a host's
- * full name always reaches it.
+ * ones) come first so state stays visible; the rest are ranked by `query`: exact names, then
+ * prefixes, then substrings (of the label or `searchText`). Pinned and other matches each get
+ * their own `limit`, so a long pinned set never crowds out what the user is searching for, and
+ * typing a host's full name always reaches it.
  */
 export function boundHostList<T extends { id: string; label: string; searchText?: string }>(
   hosts: readonly T[],
@@ -20,27 +37,21 @@ export function boundHostList<T extends { id: string; label: string; searchText?
   const { pinnedIds, limit = HOST_LIST_ROW_LIMIT } = options
   const needle = (options.query ?? '').trim().toLowerCase()
   const pinned: T[] = []
-  const exact: T[] = []
-  const prefix: T[] = []
-  const contains: T[] = []
+  const ranked: Record<Exclude<MatchRank, null>, T[]> = { exact: [], prefix: [], contains: [] }
   for (const host of hosts) {
-    if (pinnedIds?.has(host.id)) {
-      pinned.push(host)
+    const rank = rankHost(host, needle)
+    if (rank === null) {
       continue
     }
-    const label = host.label.toLowerCase()
-    if (label === needle) {
-      exact.push(host)
-    } else if (label.startsWith(needle)) {
-      prefix.push(host)
-    } else if (label.includes(needle) || host.searchText?.toLowerCase().includes(needle)) {
-      contains.push(host)
+    if (pinnedIds?.has(host.id)) {
+      pinned.push(host)
+    } else {
+      ranked[rank].push(host)
     }
   }
-  const matches = [...exact, ...prefix, ...contains]
-  const room = Math.max(0, limit - pinned.length)
+  const matches = [...ranked.exact, ...ranked.prefix, ...ranked.contains]
   return {
-    shown: [...pinned, ...matches.slice(0, room)],
-    hiddenCount: Math.max(0, matches.length - room)
+    shown: [...pinned.slice(0, limit), ...matches.slice(0, limit)],
+    hiddenCount: Math.max(0, pinned.length - limit) + Math.max(0, matches.length - limit)
   }
 }

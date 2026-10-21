@@ -46,7 +46,8 @@ describe('host lists with a 13,692-host ssh config', () => {
     expect(nodeCount()).toBeLessThan(50)
     fireEvent.click(screen.getByRole('combobox', { name: 'Host' }))
     const search = await screen.findByRole('combobox', { name: 'Search hosts…' })
-    expect(screen.getAllByRole('option')).toHaveLength(HOST_LIST_ROW_LIMIT)
+    // The current choice is pinned on top of a full page of others.
+    expect(screen.getAllByRole('option')).toHaveLength(HOST_LIST_ROW_LIMIT + 1)
     expect(screen.getByText(/more hosts\. Search by name/)).toBeTruthy()
     expect(nodeCount()).toBeLessThan(NODE_BUDGET)
     fireEvent.change(search, { target: { value: lastName } })
@@ -137,7 +138,35 @@ describe('host lists with a 13,692-host ssh config', () => {
     )
     expect(nodeCount()).toBeLessThan(NODE_BUDGET)
     const list = screen.getByRole('listbox')
-    expect(within(list).getAllByRole('option').length).toBeLessThanOrEqual(HOST_LIST_ROW_LIMIT)
+    expect(within(list).getAllByRole('option').length).toBeLessThanOrEqual(HOST_LIST_ROW_LIMIT + 1)
+  })
+
+  it('Add Project host search hides setup actions so Enter picks the typed host', () => {
+    const hosts: SidebarHostOption[] = names.map((name, i) => ({
+      id: `runtime:server-${i}`,
+      label: name,
+      detail: '',
+      kind: 'runtime',
+      health: 'available',
+      presence: 'configured'
+    }))
+    const onSelectHost = vi.fn()
+    render(
+      <AddRepoHostSelector
+        hosts={hosts}
+        selectedHostId={hosts[0]!.id}
+        open
+        onOpenChange={vi.fn()}
+        onSelectHost={onSelectHost}
+        onAddSshHost={vi.fn()}
+      />
+    )
+    expect(screen.getByText('Add remote host')).toBeTruthy()
+    const search = screen.getByRole('combobox', { name: 'Search hosts…' })
+    fireEvent.change(search, { target: { value: lastName } })
+    expect(screen.queryByText('Add remote host')).toBeNull()
+    fireEvent.keyDown(search, { key: 'Enter' })
+    expect(onSelectHost).toHaveBeenCalledWith(`runtime:server-${HOST_COUNT - 1}`)
   })
 
   it('composer run-target rows bound hosts that still need setup', () => {

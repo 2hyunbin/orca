@@ -27,6 +27,9 @@ vi.mock('@/components/ui/dropdown-menu', () => {
     DropdownMenuSub: Pass,
     DropdownMenuSubTrigger: Pass,
     DropdownMenuSubContent: Pass,
+    DropdownMenuItem: ({ children }: { children?: React.ReactNode }) => (
+      <div role="menuitem">{children}</div>
+    ),
     DropdownMenuCheckboxItem: ({ children }: { children?: React.ReactNode }) => (
       <div role="menuitemcheckbox">{children}</div>
     )
@@ -66,7 +69,7 @@ describe('host menus and settings with a 13,692-host ssh config', () => {
     )
     expect(nodeCount()).toBeLessThan(NODE_BUDGET)
     expect(screen.getAllByRole('menuitemcheckbox').length).toBeLessThanOrEqual(
-      HOST_LIST_ROW_LIMIT + 1
+      HOST_LIST_ROW_LIMIT + 2
     )
     expect(screen.getByText(lastName)).toBeTruthy()
   })

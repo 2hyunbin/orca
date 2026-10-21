@@ -1,7 +1,51 @@
+import { useRef } from 'react'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { searchHostsLabel } from './host-picker-copy'
 
-/** Search box for a bounded host checklist. */
+const MENU_ITEM_SELECTOR = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]'
+
+/** Moves focus from the search item to the menu item before or after it. */
+function focusAdjacentMenuItem(from: HTMLElement, step: 1 | -1): void {
+  const menu = from.closest('[role="menu"]')
+  const item = from.closest<HTMLElement>(MENU_ITEM_SELECTOR)
+  if (!menu || !item) {
+    return
+  }
+  const items = Array.from(menu.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR)).filter(
+    (candidate) => !candidate.hasAttribute('data-disabled')
+  )
+  items[items.indexOf(item) + step]?.focus()
+}
+
+function HostListSearchInput({
+  value,
+  onChange,
+  inputRef,
+  onKeyDown
+}: {
+  value: string
+  onChange: (value: string) => void
+  inputRef?: React.RefObject<HTMLInputElement | null>
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
+}): React.JSX.Element {
+  return (
+    <Input
+      ref={inputRef}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder={searchHostsLabel()}
+      aria-label={searchHostsLabel()}
+      className="h-7"
+    />
+  )
+}
+
+/**
+ * Search box for a bounded host checklist. Inside a dropdown menu it is a menu item, so arrow keys
+ * reach it like any row; focusing the item hands focus to the input, and arrows leave it again.
+ */
 export function HostListSearchField({
   value,
   onChange,
@@ -9,28 +53,46 @@ export function HostListSearchField({
 }: {
   value: string
   onChange: (value: string) => void
-  /** Inside a dropdown menu: keep typed letters out of the menu's typeahead. */
   inMenu?: boolean
 }): React.JSX.Element {
+  const inputRef = useRef<HTMLInputElement>(null)
+  if (!inMenu) {
+    return (
+      <div className="p-1">
+        <HostListSearchInput value={value} onChange={onChange} />
+      </div>
+    )
+  }
   return (
-    <div className="p-1">
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={
-          inMenu
-            ? (event) => {
-                if (event.key !== 'Escape' && event.key !== 'Tab') {
-                  event.stopPropagation()
-                }
-              }
-            : undefined
+    <DropdownMenuItem
+      onSelect={(event) => event.preventDefault()}
+      onFocus={(event) => {
+        if (event.target === event.currentTarget) {
+          inputRef.current?.focus()
         }
-        onPointerDown={inMenu ? (event) => event.stopPropagation() : undefined}
-        placeholder={searchHostsLabel()}
-        aria-label={searchHostsLabel()}
-        className="h-7"
+      }}
+    >
+      <HostListSearchInput
+        value={value}
+        onChange={onChange}
+        inputRef={inputRef}
+        onKeyDown={(event) => {
+          if (event.nativeEvent.isComposing) {
+            event.stopPropagation()
+            return
+          }
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault()
+            event.stopPropagation()
+            focusAdjacentMenuItem(event.currentTarget, event.key === 'ArrowDown' ? 1 : -1)
+            return
+          }
+          // Why: letters, Space and Enter belong to the input, not the menu's typeahead or select.
+          if (event.key !== 'Escape' && event.key !== 'Tab') {
+            event.stopPropagation()
+          }
+        }}
       />
-    </div>
+    </DropdownMenuItem>
   )
 }

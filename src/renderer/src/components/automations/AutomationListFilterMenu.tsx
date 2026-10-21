@@ -151,9 +151,10 @@ function AutomationHostFilterRows({
   selectedHostKeys: readonly string[]
   onToggle: (stableKey: string) => void
 }): React.JSX.Element {
+  const selected = new Set(selectedHostKeys)
   const rows = useBoundedHostRows(
     entries.map((entry) => ({ id: entry.stableKey, label: entry.label })),
-    new Set(selectedHostKeys)
+    selected
   )
   return (
     <>
@@ -163,7 +164,7 @@ function AutomationHostFilterRows({
       {rows.shown.map((row) => (
         <DropdownMenuCheckboxItem
           key={row.id}
-          checked={selectedHostKeys.includes(row.id)}
+          checked={selected.has(row.id)}
           onCheckedChange={() => onToggle(row.id)}
           onSelect={(event) => event.preventDefault()}
         >
