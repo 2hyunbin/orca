@@ -524,11 +524,13 @@ describe('Claude structured journal translation', () => {
           terminal_reason: 'aborted_streaming'
         })
       )
-      // The partial text is already journaled; only the live state is dropped.
+      // The final critical snapshot revises the partial's identity, then drops live state.
       expect(translator.pendingStreamedBlocks).toBe(0)
     }
 
-    expect(assistantMessages(state.items)).toHaveLength(3)
+    expect(
+      new Set(assistantMessages(state.items).map((item) => agentJournalItemKey(item.identity))).size
+    ).toBe(3)
   })
 
   it('keeps an ordinary successful result off the timeline', () => {

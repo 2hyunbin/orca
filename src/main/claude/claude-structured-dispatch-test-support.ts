@@ -47,6 +47,8 @@ export function sessionFor(send: Mock = vi.fn().mockResolvedValue(undefined)): C
       account: undefined,
       resumesTranscript: false,
       claudeConfigDir: '/claude-home',
+      cwd: '/work',
+      history: { leafUuid: null, covered: true, contextActivity: 0 },
       onLateRefusal: () => {}
     }
   }

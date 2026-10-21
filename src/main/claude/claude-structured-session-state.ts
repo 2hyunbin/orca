@@ -221,6 +221,8 @@ export type ClaudeSession = {
     resumesTranscript: boolean
     /** The account home the child writes its transcript in, pinned at launch. */
     claudeConfigDir: string
+    cwd: string
+    history: { leafUuid: string | null; covered: boolean; contextActivity: number }
     onLateRefusal: (error: Error) => void
   }
 }

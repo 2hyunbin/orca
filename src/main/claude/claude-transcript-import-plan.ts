@@ -1,8 +1,13 @@
-import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
+import { isDeepStrictEqual } from 'node:util'
+import {
+  agentJournalItemKey,
+  parseAgentJournalItemKey
+} from '../../shared/agent-session-journal-item-key'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalItemBody,
-  type AgentJournalItemIdentity
+  type AgentJournalItemIdentity,
+  type AgentJournalTurnScope
 } from '../../shared/agent-session-journal-types'
 import { journalLifecycleItemMutation } from '../native-chat/agent-session-journal/journal-row-builders'
 import type { JournalLifecycleIdentityMutationInput } from '../native-chat/agent-session-journal/journal-lifecycle-mutation'
@@ -35,28 +40,7 @@ import {
   type ClaudeMessageEnvelope
 } from './claude-structured-item-translation'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
-
-/** Every key a live chat could have written this transcript row under. */
-function liveKeys(envelope: ClaudeMessageEnvelope, row: Record<string, unknown>): string[] {
-  const { sessionId, uuid } = envelope
-  const keys = [agentJournalItemKey(claudeMessageIdentity(envelope))]
-  if (envelope.messageId && typeof row.apiBlockIndex === 'number') {
-    const source = claudeSourceBlockId(envelope.messageId, row.apiBlockIndex)
-    keys.push(agentJournalItemKey({ provider: 'claude', sessionId, uuid: source }))
-  }
-  keys.push(agentJournalItemKey(claudeThinkingIdentity(sessionId, uuid)))
-  for (const tool of claudeToolUses(envelope)) {
-    keys.push(agentJournalItemKey(claudeToolIdentity(sessionId, tool.id)))
-  }
-  for (const part of envelope.content) {
-    const result = claudeRecord(part)
-    const toolUseId = result?.type === 'tool_result' ? claudeText(result.tool_use_id) : null
-    if (toolUseId) {
-      keys.push(agentJournalItemKey(claudeToolIdentity(sessionId, toolUseId)))
-    }
-  }
-  return keys
-}
+import { createClaudeTranscriptItemReader } from './claude-transcript-item-reader'
 
 function isPrompt(envelope: ClaudeMessageEnvelope | null): boolean {
   return (
@@ -65,11 +49,7 @@ function isPrompt(envelope: ClaudeMessageEnvelope | null): boolean {
   )
 }
 
-/**
- * The rows a chat lacks for transcript rows written outside it, through the live translator in a
- * sink of its own: nothing reaches the chat until the whole plan is admitted. The sink offers no
- * journal-reading revision, so a turn row lands as its lifecycle and no write revises a live row.
- */
+/** An isolated projection of final source items, compared with saved historical content. */
 export function createClaudeTranscriptImportPlan(input: {
   sessionId: string
   providerSessionId: string
@@ -79,22 +59,74 @@ export function createClaudeTranscriptImportPlan(input: {
   check: () => void
 }) {
   const mutations = new Map<string, JournalLifecycleIdentityMutationInput>()
+  const { saved, scopeOf, dependencies } = createClaudeTranscriptItemReader(input.journal)
+  const aliases = new Map<string, AgentJournalItemIdentity>()
+  let historicalScope: AgentJournalTurnScope | null = null
+  const matchSource = (identities: AgentJournalItemIdentity[]) => {
+    const matches = identities.flatMap((identity) => {
+      const item = saved(agentJournalItemKey(identity))
+      return item ? [item] : []
+    })
+    if (new Set(matches.map((item) => item.itemId)).size > 1) {
+      throw new Error('ambiguous-history-identity')
+    }
+    const item = matches[0]
+    const identity = item ? parseAgentJournalItemKey(item.itemId) : identities[0]
+    if (!identity) {
+      throw new Error('unknown-history-identity')
+    }
+    for (const candidate of identities) {
+      aliases.set(agentJournalItemKey(candidate), identity)
+    }
+    if (item) {
+      historicalScope = scopeOf(item)
+    }
+  }
   const append = (
-    identity: AgentJournalItemIdentity,
-    body: AgentJournalItemBody,
+    rawIdentity: AgentJournalItemIdentity,
+    projected: AgentJournalItemBody,
     options: StructuredAgentSessionItemAppendOptions
   ) => {
     input.check()
+    const identity = aliases.get(agentJournalItemKey(rawIdentity)) ?? rawIdentity
     const key = agentJournalItemKey(identity)
-    const mutation = {
-      ...journalLifecycleItemMutation(options, identity, body),
-      // Display only: an outside prompt names no send of this chat's.
-      ...(body.kind === 'message' && body.role === 'user' ? { echoOf: null } : {})
+    const existing = saved(key)
+    if (projected.kind === 'turn' && (existing || historicalScope)) {
+      return { accepted: true } as const
     }
-    // A later write of a row replaces its body where the first one put it, as the journal does;
-    // the batch then sees each row once. Bytes are counted there.
-    mutations.set(key, mutation)
-    if (mutations.size > HISTORY_CATCH_UP_MAX_OPERATIONS) {
+    let body = projected
+    let turnScope = historicalScope ?? options.turnScope
+    if (existing) {
+      if (body.kind === 'message' && body.role === 'user') {
+        return { accepted: true } as const
+      }
+      turnScope = scopeOf(existing)
+      if (body.kind === 'tool-call' && existing.body.kind === 'tool-call') {
+        // A call alone cannot undo its saved result; result-only suffixes keep the call metadata.
+        body =
+          body.state === 'running'
+            ? existing.body
+            : { ...existing.body, ...body, name: existing.body.name, input: existing.body.input }
+      }
+      if (
+        body.kind === 'message' &&
+        body.role === 'reasoning' &&
+        existing.body.kind === 'message'
+      ) {
+        body = { ...existing.body, ...body }
+      }
+      if (isDeepStrictEqual(existing.body, body)) {
+        return { accepted: true } as const
+      }
+    }
+    mutations.set(key, {
+      ...journalLifecycleItemMutation({ ...options, turnScope }, identity, body),
+      ...(body.kind === 'message' && body.role === 'user' ? { echoOf: null } : {})
+    })
+    if (
+      mutations.size > HISTORY_CATCH_UP_MAX_OPERATIONS ||
+      dependencies.size > HISTORY_CATCH_UP_MAX_OPERATIONS
+    ) {
       throw new Error('too-large')
     }
     return { accepted: true } as const
@@ -112,7 +144,6 @@ export function createClaudeTranscriptImportPlan(input: {
     sink,
     fallbackIdPrefix: `history:${input.providerSessionId}`
   })
-  const known = (key: string) => input.journal.item(input.journal.canonicalItemId(key)) !== null
   const idle = (observedAt?: number) =>
     translator.handle({
       type: 'message',
@@ -138,17 +169,32 @@ export function createClaudeTranscriptImportPlan(input: {
       if (!envelope && !queued) {
         return
       }
-      const keys = envelope
-        ? liveKeys(envelope, row)
-        : [
-            agentJournalItemKey({
-              provider: 'claude',
-              sessionId: input.providerSessionId,
-              uuid
-            })
-          ]
-      if (keys.some(known)) {
-        return
+      if (envelope?.role === 'assistant') {
+        const source =
+          envelope.messageId && typeof row.apiBlockIndex === 'number'
+            ? {
+                provider: 'claude' as const,
+                sessionId: envelope.sessionId,
+                uuid: claudeSourceBlockId(envelope.messageId, row.apiBlockIndex)
+              }
+            : null
+        const thinking = envelope.content.some((part) => claudeRecord(part)?.type === 'thinking')
+        const frameIdentity = thinking
+          ? claudeThinkingIdentity(envelope.sessionId, envelope.uuid)
+          : claudeMessageIdentity(envelope)
+        matchSource(source ? [source, frameIdentity] : [frameIdentity])
+      }
+      if (envelope) {
+        for (const tool of claudeToolUses(envelope)) {
+          matchSource([claudeToolIdentity(envelope.sessionId, tool.id)])
+        }
+        for (const part of envelope.content) {
+          const result = claudeRecord(part)
+          const toolUseId = result?.type === 'tool_result' ? claudeText(result.tool_use_id) : null
+          if (toolUseId) {
+            matchSource([claudeToolIdentity(envelope.sessionId, toolUseId)])
+          }
+        }
       }
       const parsedAt = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN
       const observedAt = Number.isFinite(parsedAt) ? parsedAt : undefined
@@ -171,12 +217,33 @@ export function createClaudeTranscriptImportPlan(input: {
         })
         return
       }
-      // A prompt ends the turn before it, which a transcript records no result for.
+      // A prompt ends its predecessor before changing the historical turn context.
       idle(observedAt)
+      historicalScope = null
       const identity: AgentJournalItemIdentity = {
         provider: 'claude',
         sessionId: input.providerSessionId,
         uuid: decoded.id
+      }
+      const existing = saved(agentJournalItemKey(identity))
+      if (existing) {
+        const promptKey = existing.itemId
+        input.journal.visitItems((itemId, _sequence, body) => {
+          if (
+            body.kind === 'turn' &&
+            body.userItemId &&
+            input.journal.canonicalItemId(body.userItemId) === promptKey
+          ) {
+            const turn = saved(itemId)
+            if (turn) {
+              historicalScope = scopeOf({
+                ...existing,
+                turnScope: { kind: 'turn', turnItemId: itemId }
+              })
+            }
+          }
+        })
+        return
       }
       append(identity, legacyItemBody(decoded, LEGACY_IMPORT_BLOCK_LIMITS), {
         turnScope: AGENT_JOURNAL_THREAD_SCOPE
@@ -199,11 +266,12 @@ export function createClaudeTranscriptImportPlan(input: {
       translator.flush()
       // A row that renders nothing (a thinking block saved without its text) adds no divider either.
       const rows = [...mutations.values()]
-      if (!rows.some((row) => row.kind === 'item' && row.body.kind !== 'turn')) {
-        return null
-      }
       const batch = createHistoryCatchUpBatch()
-      if (input.rewound !== null) {
+      const created = rows.filter((row) => !dependencies.has(agentJournalItemKey(row.identity)))
+      if (
+        input.rewound !== null &&
+        created.some((row) => row.kind === 'item' && row.body.kind !== 'turn')
+      ) {
         batch.push(
           journalLifecycleItemMutation(
             { turnScope: AGENT_JOURNAL_THREAD_SCOPE },
@@ -224,8 +292,11 @@ export function createClaudeTranscriptImportPlan(input: {
         input.journal.epoch,
         input.providerSessionId,
         uuids,
-        [...mutations.keys()]
+        rows
       ])
+    },
+    get dependencies() {
+      return dependencies
     },
     dispose: () => translator.dispose()
   }

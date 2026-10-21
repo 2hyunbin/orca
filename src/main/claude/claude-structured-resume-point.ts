@@ -3,40 +3,86 @@ import type {
   ClaudeStructuredSessionAdapterDeps
 } from './claude-structured-session-state'
 import { settleClaudeTurnEndWaiters } from './claude-request-end-wait'
+import { isRootClaudeFrame } from './claude-turn-opening'
+
+export function claudeTurnResumePointWriter(
+  sessionId: string,
+  sessions: ReadonlyMap<string, ClaudeSession>,
+  deps: Pick<ClaudeStructuredSessionAdapterDeps, 'persistResumePoint'>
+) {
+  return (
+    session: ClaudeSession | null,
+    message: Record<string, unknown>,
+    leafUuid: string | null
+  ): void => {
+    if (session && message.type === 'result' && isRootClaudeFrame(message)) {
+      persistClaudeTurnResumePoint(
+        sessionId,
+        session,
+        deps,
+        () => sessions.get(sessionId) === session,
+        leafUuid
+      )
+    }
+  }
+}
 
 /**
  * Record a completed turn: its leaf becomes the one close and exit persist, and the durable point
  * advances in place so an owner that dies before its close path runs keeps it. Writes run one at a
  * time, and a failure is only logged: this is bookkeeping and must never fail the turn.
  */
-export function persistClaudeTurnResumePoint(
+function persistClaudeTurnResumePoint(
   sessionId: string,
   session: ClaudeSession,
-  deps: Pick<ClaudeStructuredSessionAdapterDeps, 'persistResumePoint'>
+  deps: Pick<ClaudeStructuredSessionAdapterDeps, 'persistResumePoint'>,
+  isCurrent: () => boolean,
+  leafUuid: string | null
 ): void {
-  if (session.closeFinalization || session.closeFinalized) {
+  // Ending a request never waits for optional history or durable bookkeeping.
+  settleClaudeTurnEndWaiters(session)
+  if (session.closeFinalization || session.closeFinalized || !isCurrent()) {
     return
   }
-  session.turnEndLeafUuid = session.leafUuid
-  // The turn ended: a Stop waiting to end the child re-reads what Claude still has in flight.
-  settleClaudeTurnEndWaiters(session)
-  const leafUuid = session.turnEndLeafUuid
+  const translator = session.translator
+  if (
+    !session.initialization.history.covered ||
+    !translator?.finalOutputAdmitted ||
+    translator.currentTurnId !== null ||
+    translator.pendingStreamedBlocks > 0
+  ) {
+    return
+  }
   const persist = deps.persistResumePoint
-  if (!persist || leafUuid === null || session.resumePointWrite?.leafUuid === leafUuid) {
+  if (leafUuid === null || session.resumePointWrite?.leafUuid === leafUuid) {
+    return
+  }
+  const written = session.events
+    ?.written?.()
+    .catch((error: unknown) => ({ ok: false as const, error }))
+  if (!written) {
     return
   }
   const previous = session.resumePointWrite?.settled ?? Promise.resolve()
   const write: NonNullable<ClaudeSession['resumePointWrite']> = {
     leafUuid,
     settled: previous
-      .then(() =>
-        persist({
+      .then(async () => {
+        const result = await written
+        if (!result.ok) {
+          throw result.error
+        }
+        if (!isCurrent()) {
+          return
+        }
+        session.turnEndLeafUuid = leafUuid
+        await persist?.({
           sessionId,
           providerSessionId: session.providerSessionId,
           leafUuid,
           fence: session.fence
         })
-      )
+      })
       .catch((error: unknown) => {
         console.warn('[claude-resume-point] turn-end resume point was not persisted:', {
           sessionId,

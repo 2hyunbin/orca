@@ -56,6 +56,8 @@ function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSe
       account: undefined,
       resumesTranscript: false,
       claudeConfigDir: '/claude-home',
+      cwd: '/work',
+      history: { leafUuid: null, covered: true, contextActivity: 0 },
       onLateRefusal: () => {}
     }
   }

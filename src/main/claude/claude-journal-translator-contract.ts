@@ -38,6 +38,8 @@ export type ClaudeJournalTranslator = {
   /** Moves with the main conversation and each accepted send; a context report
    *  asked for before it moved may no longer describe the context. */
   readonly contextActivity: number
+  /** Every final snapshot and turn settlement this acquisition tried was admitted. */
+  readonly finalOutputAdmitted: boolean
   markContextActivity: () => void
   /** Fires with the turn a fresh `/context` breakdown should be recorded on. */
   subscribeContextUsageRequests: (

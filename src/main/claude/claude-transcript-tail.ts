@@ -27,7 +27,9 @@ export async function readClaudeTranscriptTail(input: {
   const maxBytes = input.maxBytes ?? CLAUDE_TRANSCRIPT_TAIL_MAX_BYTES
   const handle = await open(input.filePath, 'r')
   try {
+    input.check()
     const { size } = await handle.stat()
+    input.check()
     const newestFirst: Record<string, unknown>[] = []
     // The line being read backwards, as the pieces each chunk holds of it, newest first.
     let pieces: Buffer[] = []
@@ -50,6 +52,7 @@ export async function readClaudeTranscriptTail(input: {
       position -= length
       const chunk = Buffer.alloc(length)
       await handle.read(chunk, 0, length, position)
+      input.check()
       let end = length
       for (let index = length - 1; index >= 0; index -= 1) {
         if (chunk[index] !== 0x0a) {

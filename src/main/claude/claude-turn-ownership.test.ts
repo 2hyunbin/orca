@@ -107,6 +107,7 @@ function sessionHoldingTurn(turnId: string | null): ReturnType<typeof sessionFor
     commandInterruptRequested: vi.fn(),
     flush: vi.fn(),
     contextActivity: 0,
+    finalOutputAdmitted: true,
     markContextActivity: vi.fn(),
     subscribeContextUsageRequests: () => () => {},
     recordContextReport: () => {},

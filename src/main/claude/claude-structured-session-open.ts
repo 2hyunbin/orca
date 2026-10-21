@@ -63,17 +63,27 @@ export async function openClaudeStructuredSession(input: {
   }
   current()
   // The stored leaf is set only on a resume, and is the chat's last completed turn.
-  const leafUuid = session.turnEndLeafUuid
+  const history = session.initialization.history
+  const leafUuid = history.leafUuid
   if (resumesTranscript && leafUuid && session.events) {
-    await waitForPromiseWithSignal(
+    history.covered = await waitForPromiseWithSignal(
       catchUpClaudeTranscript({
         sessionId: request.sessionId,
         providerSessionId: session.providerSessionId,
         leafUuid,
         claudeConfigDir: session.initialization.claudeConfigDir,
+        cwd: session.initialization.cwd,
         sink: session.events,
         signal: request.signal,
-        assertCurrent: current,
+        assertCurrent: () => {
+          current()
+          if (
+            session.translator?.contextActivity !== history.contextActivity ||
+            session.dispatchSequence !== 0
+          ) {
+            throw new Error('claude made live progress before catch-up completed')
+          }
+        },
         ...(deps.logger ? { logger: deps.logger } : {})
       }),
       request.signal

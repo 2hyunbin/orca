@@ -12,6 +12,8 @@ import { createTrackedJournalOpener } from '../native-chat/agent-session-journal
 import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { testEventSinkLogging } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
+import * as sessionFileResolver from '../native-chat/session-file-resolver'
+import * as transcriptTail from './claude-transcript-tail'
 import { catchUpClaudeTranscript } from './claude-transcript-catch-up'
 
 const SESSION = 'session-claude-catch-up'
@@ -89,14 +91,15 @@ const outsideTurn = [
 const journals = createTrackedJournalOpener()
 const cleanups: (() => Promise<void>)[] = []
 afterEach(async () => {
+  vi.restoreAllMocks()
   for (const cleanup of cleanups.splice(0)) {
     await cleanup()
   }
 })
 
-async function chat() {
+async function chat(project = '-work', cwd = '/work') {
   const root = await mkdtemp(join(tmpdir(), 'orca-claude-catch-up-'))
-  const projects = join(root, 'claude-home', 'projects', '-work')
+  const projects = join(root, 'claude-home', 'projects', project)
   await mkdir(projects, { recursive: true })
   const transcript = join(projects, `${SID}.jsonl`)
   await writeFile(transcript, '')
@@ -122,10 +125,14 @@ async function chat() {
   return {
     journal,
     warn,
+    deferred,
     write: (rows: readonly Record<string, unknown>[]) =>
       appendFile(transcript, rows.map((row) => `${JSON.stringify(row)}\n`).join('')),
     /** The chat's own turn, sent and streamed live the way the SDK reports it. */
-    live: async () => {
+    live: async (
+      options: { interrupted?: boolean; tool?: boolean; text?: string; thinking?: string } = {}
+    ) => {
+      const text = options.text ?? 'answer 1'
       await journal.appendSubmission({
         clientMessageId: 'send-1',
         body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'ask 1' }] },
@@ -152,29 +159,73 @@ async function chat() {
       stream('s3', {
         type: 'content_block_delta',
         index: 0,
-        delta: { type: 'text_delta', text: 'answer 1' }
+        delta: { type: 'text_delta', text }
       })
-      frame({
-        type: 'assistant',
-        uuid: 'a1',
-        session_id: SID,
-        parent_tool_use_id: null,
-        message: { id: 'msg_a', role: 'assistant', content: [{ type: 'text', text: 'answer 1' }] }
-      })
+      if (!options.interrupted) {
+        frame({
+          type: 'assistant',
+          uuid: 'a1',
+          session_id: SID,
+          parent_tool_use_id: null,
+          message: { id: 'msg_a', role: 'assistant', content: [{ type: 'text', text }] }
+        })
+      }
+      if (options.tool) {
+        frame({
+          type: 'assistant',
+          uuid: 'call',
+          session_id: SID,
+          parent_tool_use_id: null,
+          message: {
+            id: 'call',
+            role: 'assistant',
+            content: [
+              { type: 'tool_use', id: 'toolu_1', name: 'Read', input: { path: 'original' } }
+            ]
+          }
+        })
+      }
+      if (options.thinking) {
+        stream('thought-start', { type: 'message_start', message: { id: 'msg_thought' } })
+        stream('thought-block', {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'thinking', thinking: '' }
+        })
+        stream('thought-delta', {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'thinking_delta', thinking: options.thinking }
+        })
+      }
+      if (options.interrupted) {
+        translator.handle({ type: 'ended', sessionId: SESSION, reason: 'crash', observedAt: 3_000 })
+      } else {
+        frame({ type: 'result', subtype: 'success', session_id: SID, parent_tool_use_id: null })
+      }
       translator.flush()
       translator.dispose()
       await deferred.drained()
     },
-    open: async (leafUuid: string) => {
-      await catchUpClaudeTranscript({
+    open: async (
+      leafUuid: string,
+      options: Pick<
+        Parameters<typeof catchUpClaudeTranscript>[0],
+        'signal' | 'timeoutMs' | 'assertCurrent'
+      > = {}
+    ) => {
+      const covered = await catchUpClaudeTranscript({
         sessionId: SESSION,
         providerSessionId: SID,
         leafUuid,
         claudeConfigDir: join(root, 'claude-home'),
+        cwd,
         sink: deferred.sink,
-        logger: { warn, error: vi.fn() }
+        logger: { warn, error: vi.fn() },
+        ...options
       })
-      return deferred.drained()
+      await deferred.drained()
+      return covered
     },
     rows: () =>
       journal.snapshot().items.flatMap((item) => {
@@ -192,6 +243,121 @@ async function chat() {
 }
 
 describe('Claude chat catch-up', () => {
+  it.each([
+    ['-work', '/work', false],
+    ['-work-caf-', '/work/cafe\u0301', false],
+    ['-old-work', '/moved-work', true]
+  ] as const)(
+    'uses the selected-home bucket, retaining moved-project fallback: %s',
+    async (project, cwd, fallback) => {
+      const c = await chat(project, cwd)
+      await c.write([...chatTurn, ...outsideTurn])
+      const resolve = vi.spyOn(sessionFileResolver, 'resolveSessionFilePath')
+      expect(await c.open('a1')).toBe(true)
+      expect(c.rows()).toContain('assistant:answer 2')
+      expect(resolve).toHaveBeenCalledTimes(fallback ? 1 : 0)
+      if (fallback) {
+        expect(resolve).toHaveBeenCalledWith(
+          'claude',
+          SID,
+          expect.objectContaining({ claudeProjectsDir: expect.any(String) }),
+          expect.any(AbortSignal)
+        )
+      }
+    }
+  )
+
+  it('completes interrupted text and a result-only tool once at their original positions', async () => {
+    const c = await chat()
+    await c.live({
+      interrupted: true,
+      tool: true,
+      text: 'unfinished, differently normalized',
+      thinking: 'retained thought'
+    })
+    const before = c.journal.snapshot().items
+    const tool = before.find((item) => item.body.kind === 'tool-call')!
+    const text = before.find(
+      (item) => item.body.kind === 'message' && item.body.role === 'assistant'
+    )!
+    const turn = before.find((item) => item.body.kind === 'turn')!
+    const thinking = before.find(
+      (item) => item.body.kind === 'message' && item.body.role === 'reasoning'
+    )!
+    await c.write([
+      prompt('boundary', null, 'saved before crash', 1),
+      reply('a1', 'boundary', 'msg_a', { type: 'text', text: 'final answer, normalized' }, 2),
+      reply('thinking-final', 'a1', 'msg_thought', { type: 'thinking', thinking: '' }, 3),
+      { ...outsideTurn[4], parentUuid: 'thinking-final' }
+    ])
+    expect(await c.open('boundary')).toBe(true)
+    const afterText = c.journal.item(text.itemId)!
+    const afterTool = c.journal.item(tool.itemId)!
+    expect(afterText).toMatchObject({
+      sequence: text.sequence,
+      turnScope: text.turnScope,
+      body: { blocks: [{ type: 'text', text: 'final answer, normalized' }] }
+    })
+    expect(afterTool).toMatchObject({
+      sequence: tool.sequence,
+      turnScope: tool.turnScope,
+      body: {
+        name: 'Read',
+        input: { path: 'original' },
+        state: 'completed',
+        output: { head: 'hello' }
+      }
+    })
+    expect(c.journal.item(turn.itemId)).toEqual(turn)
+    expect(c.journal.item(thinking.itemId)).toEqual(thinking)
+    expect(c.rows().some((row) => row.startsWith('(continued-outside'))).toBe(false)
+    const completed = c.journal.snapshot().items
+    expect(await c.open('boundary')).toBe(true)
+    expect(c.journal.snapshot().items).toEqual(completed)
+  })
+
+  it('does not place historical lifecycle after live work that arrives during its read', async () => {
+    const c = await chat()
+    await c.live()
+    await c.write([...chatTurn, ...outsideTurn])
+    const read = transcriptTail.readClaudeTranscriptTail
+    const live = createClaudeJournalTranslator({ sink: c.deferred.sink })
+    vi.spyOn(transcriptTail, 'readClaudeTranscriptTail').mockImplementationOnce(async (input) => {
+      const tail = await read(input)
+      live.handle({
+        type: 'message',
+        sessionId: SESSION,
+        message: {
+          type: 'stream_event',
+          uuid: 'wake',
+          session_id: SID,
+          parent_tool_use_id: null,
+          event: { type: 'message_start', message: { id: 'live-wake' } }
+        }
+      })
+      return tail
+    })
+    expect(await c.open('a1')).toBe(false)
+    expect(c.rows()).not.toContain('user:ask 2')
+    const running = c.journal.snapshot().items.findLast((item) => item.body.kind === 'turn')
+    expect(running?.body).toMatchObject({ state: 'running' })
+    live.dispose()
+  })
+
+  it('cancels fallback discovery and cannot commit a late result', async () => {
+    const c = await chat('-old-work', '/new-work')
+    await c.write([...chatTurn, ...outsideTurn])
+    const lookup = Promise.withResolvers<string | null>()
+    const resolve = vi
+      .spyOn(sessionFileResolver, 'resolveSessionFilePath')
+      .mockReturnValueOnce(lookup.promise)
+    expect(await c.open('a1', { timeoutMs: 5 })).toBe(false)
+    expect(resolve.mock.calls[0]?.[3]?.aborted).toBe(true)
+    lookup.resolve(null)
+    await new Promise<void>((done) => setImmediate(done))
+    expect(c.rows()).toEqual([])
+  })
+
   it('shows the turns made outside the chat once, in order, under one divider', async () => {
     const c = await chat()
     await c.live()

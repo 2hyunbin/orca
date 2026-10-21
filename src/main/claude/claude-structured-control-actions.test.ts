@@ -251,6 +251,7 @@ describe('answerClaudePrompt', () => {
       commandInterruptRequested: vi.fn(),
       flush: vi.fn(),
       contextActivity: 0,
+      finalOutputAdmitted: true,
       markContextActivity: vi.fn(),
       subscribeContextUsageRequests: () => () => {},
       recordContextReport: () => {},
