@@ -63,6 +63,7 @@ export abstract class OrcaRuntimeWithMainLayoutAgentLaunchTabs extends OrcaRunti
       if (!landed) {
         throw new Error('agent_launch_tab_unplaced')
       }
+      this.showLaunchTabInWindow(request, { frameSeq: reply.frameSeq, created: !existed })
       // A retry naming the same tab finds it: the launch made no tab, so it takes none back.
       if (existed) {
         return { tabId, created: false, placement: { groupId: landed } }
@@ -77,6 +78,25 @@ export abstract class OrcaRuntimeWithMainLayoutAgentLaunchTabs extends OrcaRunti
         placement: { groupId: landed, ...(fallback ? { fallback } : {}) }
       }
     })
+  }
+
+  /**
+   * An attached window keeps what it kept for a tab it made: the launch's pane (whose outcome it
+   * shows), the prompt that pane offers to copy, and the viewer rule. Its tab is main's.
+   */
+  private showLaunchTabInWindow(
+    request: Omit<AgentLaunchTabPublishRequest, 'requestId'>,
+    shownByMain: NonNullable<AgentLaunchTabPublishRequest['shownByMain']>
+  ): void {
+    if (!this.notifier?.publishAgentLaunchTab || !this.getAvailableAuthoritativeWindow()) {
+      return
+    }
+    // A view: the launch never waits on it or fails over it.
+    void this.notifier
+      .publishAgentLaunchTab({ ...request, shownByMain })
+      .catch((error: unknown) => {
+        console.warn('[agent-launch] the window did not keep the launch tab main wrote', error)
+      })
   }
 
   /**

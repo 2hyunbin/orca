@@ -5,12 +5,15 @@
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import type { WindowLayoutCommand } from '../runtime-layout-apply'
 import { NO_STOP, type ExplicitCloseStop } from './explicit-terminal-close-pty-stops'
+import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
 
 export type MainLayoutCloseHost = {
   /** Every pane of a tab main owns, in pane order. */
   panesOfTab: (tabId: string) => { leafId: string; ptyId: string | null }[]
   applyLayoutCommand: (command: WindowLayoutCommand) => Promise<LayoutApplyReply>
   stop: (ptyIds: string[], addressedPtyId: string) => Promise<ExplicitCloseStop>
+  /** The tab's saved remote session id, which a relay may still run with no pane bound to it. */
+  remoteSessionIdOf: (tabId: string) => string | undefined
 }
 
 export type MainLayoutCloseTarget = {
@@ -44,6 +47,9 @@ export async function closeInMainLayout(
   target: MainLayoutCloseTarget
 ): Promise<MainLayoutClose | null> {
   const panes = host.panesOfTab(target.tabId)
+  // Read before the close drops it. Only an SSH relay id is a durable identity worth a stop.
+  const remoteSessionId = host.remoteSessionIdOf(target.tabId)
+  const dormant = remoteSessionId && parseAppSshPtyId(remoteSessionId) ? [remoteSessionId] : []
   const pane = panes.find((entry) => entry.leafId === target.leafId)
   if (!pane) {
     return null
@@ -78,7 +84,7 @@ export async function closeInMainLayout(
   }
   const addressedPtyId = target.addressedPtyId === undefined ? pane.ptyId : target.addressedPtyId
   const ended = closesTab
-    ? panes.flatMap((entry) => (entry.ptyId ? [entry.ptyId] : []))
+    ? [...new Set([...panes.flatMap((entry) => (entry.ptyId ? [entry.ptyId] : [])), ...dormant])]
     : addressedPtyId
       ? [addressedPtyId]
       : []

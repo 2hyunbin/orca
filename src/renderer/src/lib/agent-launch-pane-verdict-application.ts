@@ -9,11 +9,16 @@ import { collectLeafIdsInOrder } from '@/components/terminal-pane/terminal-layou
 import { useAppStore } from '@/store'
 import { forgetAgentLaunchPanePrompt } from './agent-launch-pane-prompt'
 import { settleAgentLaunchPaneStart } from './agent-launch-pane-start'
+import { applyVerdictToUndrawnLaunchTab } from './agent-launch-tab-main-written'
 
 export function applyAgentLaunchPaneVerdict(event: AgentLaunchPaneVerdictEvent): void {
   const { worktreeId, tabId, leafId, verdict } = event
   const state = useAppStore.getState()
   const tab = state.tabsByWorktree[worktreeId]?.find((candidate) => candidate.id === tabId)
+  // A main-written tab this window does not draw yet keeps the verdict until it draws.
+  if (!tab && applyVerdictToUndrawnLaunchTab(event)) {
+    return
+  }
   // Only a pane its tab says a launch laid out: a verdict never touches anything else.
   if (tab?.agentLaunchPane?.leafId !== leafId) {
     return

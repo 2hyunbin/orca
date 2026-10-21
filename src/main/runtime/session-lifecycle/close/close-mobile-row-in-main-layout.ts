@@ -40,7 +40,9 @@ export abstract class OrcaRuntimeWithCloseMobileRowInMainLayout extends OrcaRunt
       {
         panesOfTab: (id) => surfaces.panesOfTab(id),
         applyLayoutCommand: (command) => this.applyLayoutCommand(command),
-        stop: (ptyIds, addressed) => this.stopExplicitlyClosedTabPtys(ptyIds, addressed)
+        stop: (ptyIds, addressed) => this.stopExplicitlyClosedTabPtys(ptyIds, addressed),
+        remoteSessionIdOf: (id) =>
+          this.getWorkspaceSessionForWorktree(worktreeId)?.remoteSessionIdsByTabId?.[id]
       },
       {
         worktreeId,

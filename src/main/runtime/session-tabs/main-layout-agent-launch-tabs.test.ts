@@ -68,3 +68,44 @@ describe("an agent launch's early tab in a workspace main owns, with no window",
     expect(tabIds()).toContain(NEW_TAB)
   })
 })
+
+describe("an agent launch's early tab in a workspace main owns, with a window attached", () => {
+  it('is written by main, and the window keeps its pane, prompt and view without making a tab', async () => {
+    const { fixture, tabIds } = launchHost()
+    const publishAgentLaunchTab = vi.fn(async () => {
+      throw new Error('the window makes no tab here')
+    })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the early tab reads only this notice.
+    fixture.runtime.setNotifier({ publishAgentLaunchTab } as never)
+    Object.assign(fixture.runtime, { getAvailableAuthoritativeWindow: () => ({}) })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the early tab reads only the runtime off its context.
+    const context = { runtime: fixture.runtime } as unknown as RpcContext
+
+    await publishAgentLaunchTabEarly(
+      {
+        agent: 'claude',
+        target: { kind: 'existing', worktree: `id:${WORKTREE_ID}` },
+        paneKey: `${NEW_TAB}:${NEW_LEAF}`,
+        surface: 'terminal',
+        prompt: { text: 'fix the build', delivery: 'submit' },
+        operationId: 'op-1'
+      },
+      context
+    )
+
+    expect(tabIds()).toContain(NEW_TAB)
+    // Told once main's tab is written, as the window's own publication was answered.
+    await vi.waitFor(() =>
+      expect(publishAgentLaunchTab).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tabId: NEW_TAB,
+          leafId: NEW_LEAF,
+          prompt: 'fix the build',
+          operationId: 'op-1',
+          viewer: expect.any(String),
+          shownByMain: { frameSeq: expect.any(Number), created: true }
+        })
+      )
+    )
+  })
+})

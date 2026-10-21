@@ -18,6 +18,8 @@ export type MainHandleCloseHost = {
   /** The handle's pane in the runtime graph; throws as a stale handle does. */
   liveLeaf: () => { worktreeId: string; tabId: string; leafId: string; ptyId: string | null }
   applyLayoutCommand: (command: WindowLayoutCommand) => Promise<LayoutApplyReply>
+  /** The tab's dormant SSH relay session, which a tab close also ends. */
+  remoteSessionIdOf: (worktreeId: string, tabId: string) => string | undefined
   stop: (ptyIds: string[], addressedPtyId: string) => Promise<ExplicitCloseStop>
   describe: (
     handle: string,
@@ -58,6 +60,7 @@ export async function closeMainOwnedPaneByHandle(
         {
           panesOfTab: (tabId) => surfaces.panesOfTab(tabId),
           applyLayoutCommand: host.applyLayoutCommand,
+          remoteSessionIdOf: (tabId) => host.remoteSessionIdOf(target.worktreeId, tabId),
           stop: host.stop
         },
         {
