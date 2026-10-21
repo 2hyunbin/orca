@@ -4084,7 +4084,13 @@
             "runtime_workspace_window_closed": "Workspace window closed",
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
-            "connecting": "Connecting…"
+            "connecting": "Connecting…",
+            "searchSshHosts": "Search SSH hosts…",
+            "noMatchingSshHosts": "No SSH hosts match.",
+            "moreSshHostMatches_one": "{{count}} more match. Keep typing to narrow it down.",
+            "moreSshHostMatches_other": "{{count}} more matches. Keep typing to narrow them down.",
+            "moreSshHosts_one": "Find {{count}} more SSH host…",
+            "moreSshHosts_other": "Find among {{count}} more SSH hosts…"
           },
           "StatusBar": {
             "9659e38343": "Ports",
@@ -14587,8 +14593,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} sessions can't be deleted from Orca.",
             "resumeInNewNativeChat": "Resume in New Chat",
             "resumeInNewCli": "Resume in New Terminal",
-            "resumeInNewCliTooltipFork": "Forks this conversation into a new CLI session.",
-            "resumeInNewCliTooltipChat": "The native chat stays as it is."
+            "resumeInNewCliTooltipFork": "Start a new terminal agent session with a copy of this conversation.",
+            "resumeInNewCliTooltipChat": "This chat stays unchanged."
           },
           "AiVaultSessionDeleteDialog": {
             "title": "Delete this session?",
@@ -19393,8 +19399,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Switch to Terminal Agent",
-          "switchToChatView": "Switch to Chat UI",
+          "switchToTerminalView": "Continue with Terminal Agent",
+          "switchToChatView": "Continue in Chat UI",
           "closeTabsToLeft": "Close All Tabs To The Left"
         },
         "BrowserTab": {

@@ -3827,6 +3827,12 @@
             "connectedHostCount_one": "{{count}} 个主机",
             "connectedHostCount_other": "{{count}} 个主机",
             "connecting": "正在连接…",
+            "searchSshHosts": "搜索 SSH 主机…",
+            "noMatchingSshHosts": "没有匹配的 SSH 主机。",
+            "moreSshHostMatches_one": "还有 {{count}} 个匹配项，继续输入以缩小范围。",
+            "moreSshHostMatches_other": "还有 {{count}} 个匹配项，继续输入以缩小范围。",
+            "moreSshHosts_one": "在另外 {{count}} 个 SSH 主机中查找…",
+            "moreSshHosts_other": "在另外 {{count}} 个 SSH 主机中查找…",
             "runtime_unavailable_transport_up": "Orca 不可用",
             "runtime_workspace_window_closed": "工作区窗口已关闭"
           },
@@ -14301,8 +14307,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} 会话无法在 Orca 中删除。",
             "resumeInNewNativeChat": "在新聊天中恢复",
             "resumeInNewCli": "在新终端中恢复",
-            "resumeInNewCliTooltipFork": "将此对话派生到新的 CLI 会话中。",
-            "resumeInNewCliTooltipChat": "本机聊天保持不变。"
+            "resumeInNewCliTooltipFork": "使用此对话的副本启动新的终端智能体会话。",
+            "resumeInNewCliTooltipChat": "此聊天保持不变。"
           },
           "AiVaultSessionDeleteDialog": {
             "title": "要删除此会话吗？",
@@ -19070,8 +19076,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "切换到终端智能体",
-          "switchToChatView": "切换到聊天UI",
+          "switchToTerminalView": "使用终端智能体继续",
+          "switchToChatView": "在聊天界面中继续",
           "closeTabsToLeft": "关闭左侧的所有选项卡"
         },
         "BrowserTab": {

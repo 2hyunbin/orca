@@ -1,4 +1,4 @@
-name: Adhoc qualified server template
+name: Qualified server template
 
 on:
   workflow_call:
@@ -6,6 +6,10 @@ on:
       ref:
         required: true
         type: string
+      fast_runners:
+        description: Opt into faster adhoc runners; production stays on free GitHub runners
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -15,7 +19,7 @@ env:
 
 jobs:
   cache:
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ inputs.fast_runners && 'blacksmith-2vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 10
     outputs:
       key: ${{ steps.identity.outputs.key }}
@@ -40,7 +44,10 @@ jobs:
       - name: Identify today's exact source tree
         id: identity
         shell: bash
-        run: echo "key=orcad-qualified-template-v1-$(git -C .build/workflow-policy rev-parse HEAD:.github)-$(git rev-parse HEAD)-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+        env:
+          RUNNER_PROFILE: ${{ inputs.fast_runners && 'fast' || 'github-hosted' }}
+        # Production must never reuse qualification from the adhoc runner pool.
+        run: echo "key=orcad-qualified-template-v2-$RUNNER_PROFILE-$(git -C .build/workflow-policy rev-parse HEAD:.github)-$(git rev-parse HEAD)-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v5
         id: restore
         continue-on-error: true
@@ -78,12 +85,12 @@ jobs:
     with:
       ref: ${{ inputs.ref }}
       build_template: true
-      fast_runners: true
+      fast_runners: ${{ inputs.fast_runners }}
 
   save:
     needs: [cache, qualify]
     if: needs.qualify.result == 'success'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: ${{ inputs.fast_runners && 'blacksmith-2vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v8
