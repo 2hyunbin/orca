@@ -1,60 +1,56 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-
-const host = vi.hoisted(() => ({ platform: 'win32', env: {}, execPath: 'node' }))
-const run = vi.hoisted(() => vi.fn())
-const initialize = vi.hoisted(() => vi.fn())
-vi.mock('node:process', () => ({ default: host }))
-vi.mock('@orca/process-host', () => ({ runProcessSync: run }))
-vi.mock('./initialize-windows-native-toolchain.mjs', async (importOriginal) => ({
-  ...(await importOriginal()),
-  initializeWindowsNativeToolchain: initialize
-}))
-
 import { nodeGypRebuild } from './orcad-prebuild-node-gyp.mjs'
 
 let directory
 beforeEach(() => {
   directory = mkdtempSync(join(tmpdir(), 'orcad-node-gyp-'))
-  host.platform = 'win32'
-  host.env = { PATH: 'original', TOKEN: 'preserved' }
-  run.mockReset().mockReturnValue({ code: 0 })
-  initialize.mockReset()
 })
-afterEach(() => rmSync(directory, { recursive: true, force: true }))
+afterEach(() => {
+  vi.unstubAllGlobals()
+  rmSync(directory, { recursive: true, force: true })
+})
 
-const rebuild = () =>
-  nodeGypRebuild({ stagedDir: directory, workDir: directory, nodeDir: 'pinned-headers' })
+function compile(runProcess) {
+  return nodeGypRebuild({
+    stagedDir: directory,
+    workDir: directory,
+    nodeDir: 'pinned-headers',
+    runProcess
+  })
+}
 
-it('passes the initialized Windows toolchain only to the compiler child', async () => {
-  initialize.mockReturnValue({ Path: 'compiler', VCINSTALLDIR: 'selected' })
-  await rebuild()
+it('preserves an explicitly selected Windows compiler in the child environment', async () => {
+  const environment = { PATH: 'selected-path', VCINSTALLDIR: 'selected', TOKEN: 'preserved' }
+  vi.stubGlobal('process', { ...process, platform: 'win32', env: environment })
+  const run = vi.fn(() => ({ code: 0 }))
+  expect(await compile(run)).toBe(join(directory, 'build', 'Release'))
   expect(run).toHaveBeenCalledWith(
     expect.objectContaining({
-      env: { Path: 'compiler', VCINSTALLDIR: 'selected', TOKEN: 'preserved' },
+      env: environment,
       args: expect.arrayContaining(['rebuild', '--nodedir=pinned-headers']),
       cwd: directory,
       stdio: 'inherit'
     })
   )
-  expect(host.env).toEqual({ PATH: 'original', TOKEN: 'preserved' })
+  expect(environment).toEqual({
+    PATH: 'selected-path',
+    VCINSTALLDIR: 'selected',
+    TOKEN: 'preserved'
+  })
 })
 
-it('retains discovery when initialization is unavailable or a compiler is already selected', async () => {
-  await rebuild()
-  expect(run.mock.calls[0][0].env).toBe(host.env)
-})
-
-it('does not discover Windows tools on other hosts', async () => {
-  host.platform = 'linux'
-  await rebuild()
-  expect(initialize).not.toHaveBeenCalled()
-  expect(run.mock.calls[0][0].env).toBe(host.env)
+it('keeps the current environment and writes the compile policy on other hosts', async () => {
+  vi.stubGlobal('process', { ...process, platform: 'linux' })
+  const run = vi.fn(() => ({ code: 0 }))
+  await compile(run)
+  expect(run.mock.calls[0][0].env).toBe(process.env)
+  expect(run.mock.calls[0][0].args).toContain(join(directory, 'prebuild-compile.gypi'))
+  expect(readFileSync(join(directory, 'prebuild-compile.gypi'), 'utf8')).toContain('NAPI_VERSION')
 })
 
 it('propagates compiler failures', async () => {
-  run.mockReturnValue({ code: 9 })
-  await expect(rebuild()).rejects.toThrow('status 9')
+  await expect(compile(() => ({ code: 9 }))).rejects.toThrow('status 9')
 })
