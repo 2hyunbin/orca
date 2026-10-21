@@ -49,10 +49,8 @@ describe('resolveMobileImageAttachmentAgent', () => {
     expect(resolveMobileImageAttachmentAgent(tab, null)).toBe('codex')
   })
 
-  it('uses the terminal title when a manually started agent has no hook identity', () => {
-    expect(resolveMobileImageAttachmentAgent(terminalTab({ title: 'Codex ready' }), null)).toBe(
-      'codex'
-    )
+  it('ignores display-only titles when no agent identity is owned', () => {
+    expect(resolveMobileImageAttachmentAgent(terminalTab({ title: 'OpenCode' }), null)).toBe(null)
   })
 
   it('falls back to the native chat agent when the terminal names none', () => {

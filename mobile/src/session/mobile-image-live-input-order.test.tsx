@@ -6,6 +6,7 @@ import type { RpcResponse } from '../transport/types'
 import type { TerminalLiveInputSender } from '../terminal/terminal-live-input-sender'
 import { useTerminalLiveInputCommit } from '../terminal/use-terminal-live-input-commit'
 import { attachMobileImageToTerminal } from './mobile-image-attachment'
+import { resolveMobileImageAttachmentAgent } from './mobile-image-paste-agent'
 import { useMobileAttachmentInputLeaseGate } from './use-mobile-attachment-input-lease-gate'
 import { useMobileSessionTerminalSendActions } from './use-mobile-session-terminal-send-actions'
 import { useMobileTerminalPaste } from './use-mobile-terminal-paste'
@@ -22,7 +23,11 @@ const ref = <T,>(current: T) => ({ current })
 const renderers: ReactTestRenderer[] = []
 const imagePayload = '\x1b[200~/tmp/orca-image.png\x1b[201~ '
 
-function fixture() {
+function fixture(title = 'Terminal') {
+  const agent = resolveMobileImageAttachmentAgent(
+    { type: 'terminal', id: 'tab-1', title, terminal: 'term-1', isActive: true },
+    null
+  )
   const sends: Array<{ terminal: unknown; text: unknown; enter: unknown }> = []
   let resolveText!: (value: RpcResponse) => void
   let textStarted!: () => void
@@ -118,7 +123,7 @@ function fixture() {
     })
     paste = useMobileTerminalPaste({
       ...scope,
-      agent: null,
+      agent,
       flushPendingLiveInputBeforeExternalSend: live.flushPendingLiveInputBeforeExternalSend,
       getActiveWorktreeConnectionId: async () => null,
       onError: vi.fn(),
@@ -145,7 +150,7 @@ function fixture() {
             client,
             terminal: 'term-1',
             deviceToken: 'phone',
-            agent: null,
+            agent,
             pickImage: async () => ({ base64: 'AAAA' }),
             getConnectionId: async () => null,
             beforeTerminalSend
@@ -212,5 +217,14 @@ it.each(['picker', 'clipboard'] as const)(
     test.acceptText(true)
     await attachment
     expect(test.sends).toEqual([{ terminal: 'term-1', text: '한글', enter: false }])
+  }
+)
+
+it.each(['picker', 'clipboard'] as const)(
+  '%s keeps anonymous image attachment bytes when the terminal display title names another agent',
+  async (entry) => {
+    const test = fixture('OpenCode')
+    await test.attach(entry)
+    expect(test.sends).toEqual([{ terminal: 'term-1', text: imagePayload, enter: false }])
   }
 )

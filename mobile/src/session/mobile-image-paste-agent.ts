@@ -1,4 +1,4 @@
-import { resolveMobileTerminalTabAgentId } from './mobile-terminal-tab-agent'
+import { resolveMobileTerminalTabOwnedAgentId } from './mobile-terminal-tab-agent'
 import type { MobileSessionTab } from './mobile-session-route-types'
 
 export function resolveMobileImageAttachmentAgent(
@@ -6,7 +6,7 @@ export function resolveMobileImageAttachmentAgent(
   nativeChatAgent: string | null
 ): string | null {
   if (tab?.type === 'terminal') {
-    return resolveMobileTerminalTabAgentId(tab) ?? nativeChatAgent
+    return resolveMobileTerminalTabOwnedAgentId(tab) ?? nativeChatAgent
   }
   return nativeChatAgent
 }
