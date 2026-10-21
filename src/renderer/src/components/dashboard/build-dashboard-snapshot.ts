@@ -253,7 +253,8 @@ export function buildDashboardSnapshot(
             row,
             generatedTitlesEnabled,
             terminalLayoutsByTabId[row.tab.id],
-            paneTitlesByTabId[row.tab.id]
+            paneTitlesByTabId[row.tab.id],
+            state
           )
         ),
         ...(terminalInput ? { terminalInput } : {})

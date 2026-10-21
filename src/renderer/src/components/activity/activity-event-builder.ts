@@ -6,6 +6,7 @@ import type {
   MigrationUnsupportedPtyEntry
 } from '../../../../shared/agent-status-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import type { Repo } from '../../../../shared/repo-types'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { Tab } from '../../../../shared/tab-types'
@@ -39,6 +40,7 @@ export type BuildActivityEventsArgs = {
   unifiedTabsByWorktree?: Record<string, Tab[]>
   worktreeMap: Map<string, Worktree>
   repoMap: Map<string, Repo>
+  ownerState?: WorktreeRuntimeOwnerState
   repos?: readonly Repo[]
   resolveWorktree?: (worktreeId: string, executionHostId?: ExecutionHostId) => Worktree | undefined
   acknowledgedAgentsByPaneKey: Record<string, number>
@@ -58,7 +60,11 @@ export function buildActivityEvents(
   const events: ActivityEvent[] = []
   const paneEntryByPaneKey: Record<string, AgentStatusEntry> = {}
   const seenEventIds = new Set<string>()
-  const tabContext = buildActivityTabContext(args.tabsByWorktree, args.unifiedTabsByWorktree)
+  const tabContext = buildActivityTabContext(
+    args.tabsByWorktree,
+    args.unifiedTabsByWorktree,
+    args.ownerState
+  )
   const tabHostIndex = buildActivityTabHostIndex(args.unifiedTabsByWorktree)
   const ownerCache = new Map<string, ActivityEventOwner>()
   const liveAgentByPaneKey: Record<string, ActivityLiveAgentSnapshot> = {}

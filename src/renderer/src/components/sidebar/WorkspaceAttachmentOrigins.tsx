@@ -9,11 +9,13 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { WorkspaceAttachment, Worktree } from '../../../../shared/worktree/types'
 import type { Tab } from '../../../../shared/tab-types'
 import { getWorkspaceAttachmentOriginKey } from '../../../../shared/workspace-attachment-origins'
+import { useStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
 import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
 
 const EMPTY_TABS: Tab[] = []
 
 function useReferenceTabs(workspace: Worktree): Tab[] {
+  useStructuredChatTabNames()
   const tabs = useAppStore((s) => s.unifiedTabsByWorktree?.[workspace.id] ?? EMPTY_TABS)
   const state = useAppStore.getState()
   return tabs.filter((tab) => {
@@ -46,7 +48,9 @@ export function WorkspaceAttachmentOrigins({
             (origin.hostId ?? 'local') === (workspace.hostId ?? 'local')
         )
         const label =
-          (tab?.contentType === 'agent-session' ? readStructuredChatTabName(tab) : null) ||
+          (tab?.contentType === 'agent-session'
+            ? readStructuredChatTabName(tab, useAppStore.getState())
+            : null) ||
           tab?.customLabel ||
           tab?.label ||
           origin.label ||

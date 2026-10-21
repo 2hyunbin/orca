@@ -14,16 +14,16 @@ type ChatTabNameSource = Pick<
 
 /** A chat tab's name, read once outside React (labels built in plain functions): the same order
  *  the tab strip uses, from the host's feed as it stands now. Null while the chat has no name.
- *  Without `state`, a tab from before hosts were stamped on tabs finds no host and shows only a
- *  name of its own. */
+ *  Legacy tabs resolve their owner from the workspace just as the reactive tab reader does. */
 export function readStructuredChatTabSavedName(
   tab: ChatTabNameSource,
-  state?: WorktreeRuntimeOwnerState
+  state: WorktreeRuntimeOwnerState
 ): string | null {
-  const owner = state ? structuredAgentSessionOwnerForTab(state, tab) : tab.executionHostId
+  const owner = structuredAgentSessionOwnerForTab(state, tab)
   const target = structuredAgentSessionTargetForHost(owner)
   const name = target
-    ? getStructuredAgentSessionStatusFeed(target).getSnapshot().get(tab.entityId)?.conversationName
+    ? getStructuredAgentSessionStatusFeed(target).getNamingSnapshot().get(tab.entityId)
+        ?.conversationName
     : undefined
   return tab.customLabel?.trim() || (isAgentSessionConversationName(name) ? name : null)
 }
@@ -31,7 +31,7 @@ export function readStructuredChatTabSavedName(
 /** The chat tab's shown label: its name, else the tab's default label. */
 export function readStructuredChatTabName(
   tab: ChatTabNameSource,
-  state?: WorktreeRuntimeOwnerState
+  state: WorktreeRuntimeOwnerState
 ): string {
   return readStructuredChatTabSavedName(tab, state) ?? tab.label
 }

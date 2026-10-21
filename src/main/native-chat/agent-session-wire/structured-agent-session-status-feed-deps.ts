@@ -15,6 +15,7 @@ import type { StructuredAgentSessionLogger } from './structured-agent-session-lo
 import type { StructuredAgentSessionChildWorkProducer } from './structured-agent-session-subagent-rows'
 import type { StructuredAgentSessionStatusObserverOptions } from './structured-agent-session-status-observation'
 import type { StructuredAgentSessionStatusSink } from './structured-agent-session-status-ownership'
+import { structuredSummaryConversationNaming } from './structured-agent-session-status-summary'
 
 export type StatusFeedSession = {
   journal: AgentSessionJournal
@@ -29,6 +30,7 @@ export type StatusFeedSession = {
 export type StructuredAgentSessionStatusFeedDeps = {
   sessions: ReadonlyMap<string, StatusFeedSession>
   getRecord: (sessionId: string) => AgentSessionRecord | null
+  listRecords?: () => AgentSessionRecord[]
   /** `AgentSessionRecordStore.replacedRuntime`; absent where no runtime was replaced. */
   replacedRuntime?: (sessionId: string) => { fence: number } | undefined
   now: () => number
@@ -68,11 +70,20 @@ export type StatusPublication = {
 
 /** Naming activity does not depend on any readable journal or retained summary. */
 export function structuredAgentSessionNamingSnapshot(
-  deps: StructuredAgentSessionStatusFeedDeps
+  deps: StructuredAgentSessionStatusFeedDeps,
+  sessionId?: string
 ): AgentSessionStatusEvent {
+  const record = sessionId === undefined ? null : deps.getRecord(sessionId)
+  const records = sessionId === undefined ? (deps.listRecords?.() ?? []) : record ? [record] : []
+  const conversationNames = records.map((entry) => ({
+    sessionId: entry.sessionId,
+    conversationName: entry.conversationName ?? null,
+    ...structuredSummaryConversationNaming(entry, deps.namingFailure?.(entry.sessionId))
+  }))
   return {
     type: 'snapshot',
     sessions: [],
-    namingActiveSessionIds: deps.namingActiveSessionIds?.() ?? []
+    namingActiveSessionIds: deps.namingActiveSessionIds?.() ?? [],
+    ...(conversationNames.length ? { conversationNames } : {})
   }
 }

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { mobileStructuredSessionStatusFeed } from '../session/mobile-structured-session-status-feed'
+import type { AgentSessionConversationNames } from '../../../src/shared/agent-session-conversation-names'
 import { useForceReconnect } from '../transport/host-client-hooks'
 import { useWorkspaceClient } from '../transport/use-workspace-client'
 import type { RpcClient } from '../transport/rpc-client'
@@ -23,12 +25,21 @@ export { MOBILE_AI_VAULT_CAPABILITY }
 // global recency list; the in-scope Claude union is capped separately host-side,
 // so the response can still be large — hence virtualization + lazy preview.
 const MOBILE_AI_VAULT_SESSION_LIMIT = 500
+const EMPTY_NAMES: AgentSessionConversationNames = new Map()
+const noSubscription = () => () => {}
+const noNames = () => EMPTY_NAMES
 
 export type AgentHistoryScreenState =
   | { kind: 'loading' }
   | { kind: 'unsupported' }
   | { kind: 'error'; message: string }
-  | { kind: 'ready'; sessions: AiVaultSession[]; issues: AiVaultScanIssue[] }
+  | {
+      kind: 'ready'
+      sessions: AiVaultSession[]
+      issues: AiVaultScanIssue[]
+      hostId: string
+      client: RpcClient
+    }
 
 export type MobileAgentHistoryStateParams = {
   hostId: string
@@ -149,6 +160,8 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
         )
         setScreenState({
           kind: 'ready',
+          hostId,
+          client,
           // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the reader checks both containers; the rows stay the host's own records because `agent` is a vocabulary this client echoes back on resume. aivault-history-screen-listed `normal` records a full row: every member the cards and the resume path read unguarded.
           sessions: result.sessions as AiVaultSession[],
           // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: same reader, same container check; the issue rows are the host's AiVaultScanIssue and are only counted, never read member-wise (MobileAgentSessionHistoryPanel.tsx:335).
@@ -205,10 +218,31 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
     [connState, forceReconnect, hostId, loadSessions, scope]
   )
 
+  const feed = useMemo(() => (client ? mobileStructuredSessionStatusFeed(client) : null), [client])
+  const names = useSyncExternalStore(
+    feed?.subscribe ?? noSubscription,
+    feed?.getNamingSnapshot ?? noNames,
+    noNames
+  )
+  const namedScreenState = useMemo(
+    () =>
+      screenState.kind === 'ready' && screenState.hostId === hostId && screenState.client === client
+        ? {
+            ...screenState,
+            sessions: screenState.sessions.map((session) => {
+              const id = session.structuredSession?.sessionId
+              const title = id ? names.get(id)?.conversationName : null
+              return title ? { ...session, title } : session
+            })
+          }
+        : screenState,
+    [screenState, names, hostId, client]
+  )
+
   return {
     connState,
     scope,
-    screenState,
+    screenState: namedScreenState,
     refreshing,
     hostStatusResult,
     activeWorktreePath,

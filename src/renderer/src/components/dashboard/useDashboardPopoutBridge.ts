@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAppStore, type AppState } from '@/store'
+import { subscribeStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
 import { revealDashboardAgent } from './reveal-dashboard-agent'
 import { runSleepWorktree } from '../sidebar/sleep-worktree-flow'
 import type { RepoIcon } from '../../../../shared/repo-icon'
@@ -94,12 +95,17 @@ export function dashboardSnapshotInputsChanged(
  *  because react-doctor's effect-needs-cleanup false-positives on `subscribe`
  *  inside an effect body; the caller's cleanup does unsubscribe. */
 function watchSnapshotInputs(onChanged: () => void): () => void {
-  return useAppStore.subscribe((state, previousState) => {
+  const stopNames = subscribeStructuredChatTabNames(onChanged)
+  const stopStore = useAppStore.subscribe((state, previousState) => {
     // Why: unrelated high-frequency store writes must not rebuild a cross-worktree snapshot.
     if (dashboardSnapshotInputsChanged(state, previousState)) {
       onChanged()
     }
   })
+  return () => {
+    stopNames()
+    stopStore()
+  }
 }
 
 /**

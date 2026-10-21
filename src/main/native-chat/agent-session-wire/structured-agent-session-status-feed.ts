@@ -28,6 +28,7 @@ import {
 } from './structured-agent-session-status-feed-deps'
 import {
   renamedStructuredStatusSummary,
+  retainedStructuredStatusSummaries,
   structuredAgentSessionStatusSummary
 } from './structured-agent-session-status-summary'
 import { structuredStatusChildWork } from './structured-agent-session-status-child-work'
@@ -73,7 +74,7 @@ export class StructuredAgentSessionStatusFeed {
   /** Opens with every session this host has projected, live ones re-read, then only changes. */
   subscribe(subscriber: StructuredAgentSessionStatusSubscriber): () => void {
     // Naming completion must be observable even if a held journal cannot be read.
-    if (this.deps.namingActiveSessionIds) {
+    if (this.deps.namingActiveSessionIds || this.deps.listRecords) {
       this.emit(subscriber, structuredAgentSessionNamingSnapshot(this.deps))
     }
     // Re-project before registering: a change found here has to reach the subscribers that
@@ -84,7 +85,7 @@ export class StructuredAgentSessionStatusFeed {
     this.subscribers.set(subscriber.id, subscriber)
     this.emit(subscriber, {
       type: 'snapshot',
-      sessions: [...this.published.values()].map(({ summary }) => summary)
+      sessions: retainedStructuredStatusSummaries(this.published.values(), this.deps)
     })
     return () => this.unsubscribe(subscriber.id)
   }
@@ -158,7 +159,7 @@ export class StructuredAgentSessionStatusFeed {
 
   /** Naming activity is published even when the chat has no retained status row. */
   publishConversationName(sessionId: string): void {
-    this.broadcast(structuredAgentSessionNamingSnapshot(this.deps))
+    this.broadcast(structuredAgentSessionNamingSnapshot(this.deps, sessionId))
     this.publishRecordNotes(sessionId)
   }
 

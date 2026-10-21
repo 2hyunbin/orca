@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
+import { useStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
 import { QuickLaunchAgentMenuItems } from '@/components/tab-bar/QuickLaunchButton'
 import { AgentStateDot, agentStateLabel } from '@/components/AgentStateDot'
 import { AgentTypeIcon } from '@/lib/agent-type-icon'
@@ -68,10 +69,13 @@ export function ReviewNotesSendMenuContent({
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
   const agentRows = useWorktreeAgentRows(worktreeId)
   const now = useNow(30_000)
+  const chatNames = useStructuredChatTabNames()
   const sendTargets = useMemo(() => {
     void agentStatusEpoch
+    void chatNames
     return deriveNotesSendAgentTargets(
       {
+        ...useAppStore.getState(),
         agentStatusByPaneKey,
         tabsByWorktree,
         unifiedTabsByWorktree,
@@ -85,6 +89,7 @@ export function ReviewNotesSendMenuContent({
     // Why: stale-boundary timers bump this epoch without replacing the
     // status map, so eligibility must derive again when freshness flips.
     agentStatusEpoch,
+    chatNames,
     agentStatusByPaneKey,
     tabsByWorktree,
     unifiedTabsByWorktree,

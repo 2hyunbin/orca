@@ -17,7 +17,10 @@ export const STRUCTURED_AGENT_SESSION_RENAME_METHODS = [
         params.name,
         params.legacyAlias ? 'legacy-alias' : 'rename'
       )
-      return result ?? { name: null, applied: false }
+      if (!result) {
+        throw new Error('agent_session_identity_required')
+      }
+      return result
     }
   })
 ]

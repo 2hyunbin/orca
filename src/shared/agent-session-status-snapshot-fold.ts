@@ -14,6 +14,9 @@ export function foldAgentSessionStatusEvent(
   event: AgentSessionStatusEvent
 ): AgentSessionStatusSnapshot {
   if (event.type === 'snapshot') {
+    if (event.sessions.length === 0) {
+      return snapshot
+    }
     const next = new Map(snapshot)
     for (const session of event.sessions) {
       next.set(session.sessionId, session)

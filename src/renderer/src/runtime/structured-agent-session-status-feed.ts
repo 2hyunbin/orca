@@ -8,6 +8,10 @@
 import { AGENT_SESSION_WORKSPACE_SLEEP_MARK_RUNTIME_CAPABILITY } from '../../../shared/agent-session-workspace-sleep'
 import type { AgentSessionStatusEvent } from '../../../shared/agent-session-wire'
 import {
+  foldAgentSessionConversationNames,
+  type AgentSessionConversationNames
+} from '../../../shared/agent-session-conversation-names'
+import {
   foldAgentSessionStatusEvent,
   revokeAgentSessionStatusLive,
   type AgentSessionStatusSnapshot
@@ -22,6 +26,7 @@ export type StructuredAgentSessionStatusSnapshot = AgentSessionStatusSnapshot
 export type StructuredAgentSessionStatusFeedOwner = {
   activate: () => () => void
   getSnapshot: () => StructuredAgentSessionStatusSnapshot
+  getNamingSnapshot: () => AgentSessionConversationNames
   getSessionSleepState: (sessionId: string) => number | null | undefined
   getNamingActive: (sessionId: string) => boolean | null
   getSessionObservation: (sessionId: string) => 'live' | 'unverifiable'
@@ -41,6 +46,7 @@ export function structuredAgentSessionStatusFeedKey(target: RuntimeClientTarget)
 
 function createOwner(target: RuntimeClientTarget): OwnedStatusFeed {
   let snapshot: StructuredAgentSessionStatusSnapshot = new Map()
+  let names: AgentSessionConversationNames = new Map()
   let namingActiveSessionIds: Set<string> | null = null
   const confirmedSessions = new Set<string>()
   // Disconnect revokes live execution, but each chat's last Sleep answer still holds.
@@ -86,6 +92,7 @@ function createOwner(target: RuntimeClientTarget): OwnedStatusFeed {
     } else {
       return
     }
+    names = foldAgentSessionConversationNames(names, event)
     setSnapshot(foldAgentSessionStatusEvent(snapshot, event))
   }
   const active = (candidate: number): boolean => activations.size > 0 && candidate === generation
@@ -230,6 +237,7 @@ function createOwner(target: RuntimeClientTarget): OwnedStatusFeed {
       }
     },
     getSnapshot: () => snapshot,
+    getNamingSnapshot: () => names,
     getSessionSleepState: (sessionId) => {
       const known = knownSleep.get(sessionId)
       return known !== undefined ? known : sleepResolved ? null : undefined

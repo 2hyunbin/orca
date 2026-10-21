@@ -1,6 +1,7 @@
 import { useDeferredValue, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
+import { useStructuredChatTabNames } from '@/runtime/structured-chat-name-observation'
 import { getRepoMapFromState, getWorktreeMapFromState } from '@/store/selectors'
 import type { AppState } from '@/store/types'
 import {
@@ -146,6 +147,7 @@ export function useAgentPaneThreads(args: {
   )
   // Why: agentStatusEpoch is a dep (not used in the body) so the memo recomputes when freshness boundaries expire even without new PTY data.
   const agentStatusEpoch = useAppStore((s) => s.agentStatusEpoch)
+  const chatNames = useStructuredChatTabNames()
 
   // Why per-hook caches: unchanged panes keep their exact event/snapshot/thread object
   // identities across rebuilds, so a status write to one agent leaves every other row's
@@ -173,6 +175,7 @@ export function useAgentPaneThreads(args: {
           worktreeMap: storeData.worktreeMap,
           repoMap: storeData.repoMap,
           repos: storeData.repos,
+          ownerState: useAppStore.getState(),
           resolveWorktree: storeData.getKnownWorktreeById,
           acknowledgedAgentsByPaneKey: storeData.acknowledgedAgentsByPaneKey,
           activityClearedAtByPaneKey: storeData.activityClearedAtByPaneKey,
@@ -182,7 +185,7 @@ export function useAgentPaneThreads(args: {
         eventBuildCacheRef.current
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [storeData, agentStatusEpoch]
+    [storeData, agentStatusEpoch, chatNames]
   )
 
   const allThreads = useMemo(

@@ -1,3 +1,4 @@
+import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import type { AppState } from '@/store/types'
 import type { AgentStatusEntry, AgentType } from '../../../shared/agent-status-types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
@@ -18,7 +19,8 @@ export type RunningAgentTargetState = Pick<
   | 'terminalLayoutsByTabId'
   | 'ptyIdsByTabId'
 > &
-  Partial<Pick<AppState, 'runtimePaneTitlesByTabId'>>
+  Partial<Pick<AppState, 'runtimePaneTitlesByTabId'>> &
+  WorktreeRuntimeOwnerState
 
 type RunningAgentSendTargetEligibility = {
   status: 'eligible' | 'disabled'
@@ -189,7 +191,7 @@ function deriveStructuredAgentSendTargets(
       tabId: tab.id,
       sessionId: tab.entityId,
       agentType: tab.agentSessionAgent,
-      title: readStructuredChatTabName(tab),
+      title: readStructuredChatTabName(tab, state),
       entry,
       status: disabledReason ? 'disabled' : 'eligible',
       ...(disabledReason ? { disabledReason } : {})

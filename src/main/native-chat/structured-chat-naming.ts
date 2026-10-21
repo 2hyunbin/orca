@@ -168,6 +168,15 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
     }
   }
 
+  const generationStillCurrent = (store: NamingStore, record: AgentSessionRecord) => {
+    const current = store.getRecord(record.sessionId)
+    return (
+      current !== null &&
+      current.conversationNameSource !== 'user' &&
+      current.conversationName === record.conversationName
+    )
+  }
+
   async function name(summary: AgentSessionStatusSummary) {
     const store = deps.getStore()
     const record = store?.getRecord(summary.sessionId)
@@ -199,8 +208,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
     }
     refresh(seeded.location.workspaceId, seeded.sessionId)
     const seedName = seeded.conversationName
-    const stillSeeded = () =>
-      !namingOff() && store.getRecord(seeded.sessionId)?.conversationName === seedName
+    const stillSeeded = () => !namingOff() && generationStillCurrent(store, seeded)
     const chatName = await generateName(
       seeded,
       firstPrompt,
@@ -216,8 +224,7 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
   /** The user asked again: one try, replacing whatever name the chat has when it starts. */
   async function rename(store: NamingStore, record: AgentSessionRecord) {
     const current = record.conversationName ?? ''
-    const stillCurrent = () =>
-      (store.getRecord(record.sessionId)?.conversationName ?? '') === current
+    const stillCurrent = () => generationStillCurrent(store, record)
     const firstPrompt = clampConversationNameFirstPrompt(
       await deps.readJournalFirstPrompt(record.sessionId)
     )
@@ -274,8 +281,8 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       const { record, applied } = await store.setUserConversationName(sessionId, name, write)
       if (applied) {
         forget(sessionId)
-        refresh(record.location.workspaceId, sessionId)
       }
+      refresh(record.location.workspaceId, sessionId)
       return { name: record.conversationName ?? null, applied }
     }
   }

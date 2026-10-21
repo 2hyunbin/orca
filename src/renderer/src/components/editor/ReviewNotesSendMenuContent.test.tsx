@@ -80,6 +80,10 @@ vi.mock('zustand/react/shallow', () => ({
   useShallow: (selector: unknown) => selector
 }))
 
+vi.mock('@/runtime/structured-chat-name-observation', () => ({
+  useStructuredChatTabNames: () => ''
+}))
+
 vi.mock('@/lib/active-agent-note-send', () => ({
   activeAgentNotesSendFailureMessage: (
     status: string,

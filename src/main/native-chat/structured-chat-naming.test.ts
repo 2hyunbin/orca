@@ -303,7 +303,7 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
       state.deps.generate = vi.fn(async () => ({ name: 'New name' }))
       state.handle.regenerate(id)
       state.handle.regenerate(id)
-      expect(events.at(-1)).toEqual({
+      expect(events.at(-1)).toMatchObject({
         type: 'snapshot',
         sessions: [],
         namingActiveSessionIds: [id]
@@ -311,7 +311,11 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
       prompt.resolve('Repair login')
       await settle()
       expect(state.deps.readJournalFirstPrompt).toHaveBeenCalledTimes(1)
-      expect(events.at(-1)).toEqual({ type: 'snapshot', sessions: [], namingActiveSessionIds: [] })
+      expect(events.at(-1)).toMatchObject({
+        type: 'snapshot',
+        sessions: [],
+        namingActiveSessionIds: []
+      })
       expect(state.handle.failure(id)).toBe(failure)
       state.deps.readJournalFirstPrompt = async () => ''
       state.handle.regenerate(id)
@@ -331,6 +335,23 @@ describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provid
     await settle()
     expect(state.read()?.conversationName).toBe('auth/login')
     expect(state.deps.generate).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a successful user name free of a late generation failure for the same text', async () => {
+    const state = rig(provider)
+    const generation = deferred<StructuredChatNameGeneration>()
+    state.deps.generate = vi.fn(() => generation.promise)
+    state.handle(state.summary, { replay: false })
+    await settle()
+    await state.handle.setUserName(
+      state.summary.sessionId,
+      'Please repair the login flow',
+      'rename'
+    )
+    generation.resolve({ error: 'Generation failed' })
+    await settle()
+    expect(state.handle.failure(state.summary.sessionId)).toBeUndefined()
+    expect(state.read()?.conversationNameSource).toBe('user')
   })
 
   it('protects a name changed while generation runs', async () => {

@@ -4,6 +4,10 @@ import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import { resolveAgentRowPaneLiveTitle } from './agent-row-pane-live-title'
 import type { DashboardAgentRow } from './useDashboardData'
+import type { AppState } from '@/store/types'
+import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
+import { structuredChatTabById } from '@/lib/structured-chat-tab-index'
+import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
 
 export function rowTask(row: DashboardAgentRow): string {
   return (row.entry.orchestration?.taskTitle ?? '').trim() || (row.entry.prompt ?? '').trim()
@@ -32,16 +36,22 @@ export function rowConversationName(
   row: DashboardAgentRow,
   generatedTitlesEnabled: boolean,
   layout: TerminalLayoutSnapshot | undefined,
-  paneTitles: Record<number, string> | undefined
+  paneTitles: Record<number, string> | undefined,
+  state: WorktreeRuntimeOwnerState & Partial<Pick<AppState, 'unifiedTabsByWorktree'>> = {}
 ): string | undefined {
   const parentPaneKey = row.entry.orchestration?.parentPaneKey
   // Why: a child row rendered on its parent's tab does not own that tab's name.
   if (
-    row.lineage?.depth === 1 &&
-    parentPaneKey !== undefined &&
-    parsePaneKey(parentPaneKey)?.tabId === row.tab.id
+    row.rowSource === 'subagent' ||
+    (row.lineage?.depth === 1 &&
+      parentPaneKey !== undefined &&
+      parsePaneKey(parentPaneKey)?.tabId === row.tab.id)
   ) {
     return undefined
+  }
+  const chat = structuredChatTabById(state.unifiedTabsByWorktree, row.tab.worktreeId, row.tab.id)
+  if (chat) {
+    return readStructuredChatTabName(chat, state)
   }
   const paneLiveTitle = resolveAgentRowPaneLiveTitle(
     layout,

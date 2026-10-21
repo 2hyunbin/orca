@@ -64,6 +64,24 @@ export function structuredAgentSessionOwnerForTab(
   return tab.executionHostId ?? resolveStructuredAgentSessionOwner(state, tab.worktreeId)
 }
 
+/** Inputs to the legacy workspace-owner resolver, compared before scanning chat tabs. */
+export function structuredAgentSessionOwnerInputs(state: WorktreeRuntimeOwnerState): unknown[] {
+  return [
+    state.repos,
+    state.worktreesByRepo,
+    state.detectedWorktreesByRepo,
+    state.folderWorkspaces,
+    state.projectGroups,
+    state.settings?.activeRuntimeEnvironmentId,
+    state.restoredRuntimeHostIdByWorkspaceSessionKey,
+    state.activeWorktreeId,
+    state.activeWorkspaceExecutionHostId,
+    state.runtimeEnvironments,
+    state.runtimeEnvironmentCatalogHydrated,
+    state.removedRuntimeEnvironmentIds
+  ]
+}
+
 /** The host a runtime target serves, for bookkeeping keyed by host. */
 export function executionHostIdForStructuredTarget(target: RuntimeClientTarget): ExecutionHostId {
   return target.kind === 'local'

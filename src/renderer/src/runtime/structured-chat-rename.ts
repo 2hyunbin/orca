@@ -5,7 +5,13 @@ import type { Tab } from '../../../shared/tab-types'
 import { normalizeAgentSessionConversationName } from '../../../shared/agent-session-conversation-name'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { supportsStructuredAgentSessionRename } from './structured-agent-session-client'
-import { structuredAgentSessionTargetForTab } from './structured-agent-session-owner'
+import {
+  structuredAgentSessionTargetForTab,
+  structuredAgentSessionOwnerForTab,
+  executionHostIdForStructuredTarget
+} from './structured-agent-session-owner'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { sendTabChangeToLayoutOwner } from '@/store/terminals/tab-change-through-layout-owner'
 
 type RenameResult = { name: string | null; applied: boolean }
 
@@ -45,7 +51,12 @@ export async function renameStructuredChatTab(
     toast.error(translate('components.tab.bar.chatRename.failed', "Couldn't rename this chat"))
     return
   }
-  dropLegacyAlias(get, tab.id, tab.customLabel ?? null)
+  await dropLegacyAlias(
+    get,
+    tab,
+    tab.customLabel ?? null,
+    executionHostIdForStructuredTarget(target)
+  )
 }
 
 /**
@@ -65,26 +76,78 @@ export async function uploadLegacyStructuredChatRename(
   try {
     await callRuntimeRpc<RenameResult>(target, 'agentSession.rename', {
       sessionId: tab.entityId,
-      name: alias,
+      name: normalizeAgentSessionConversationName(alias) ?? '',
       legacyAlias: true
     })
   } catch (error) {
     console.warn('[structured-chat-rename] legacy rename upload failed', error)
     return false
   }
-  dropLegacyAlias(get, tab.id, alias)
-  return true
+  return dropLegacyAlias(get, tab, alias, executionHostIdForStructuredTarget(target))
 }
 
 /** Clears the tab's own name only if it is still the one the host just answered for. */
-function dropLegacyAlias(get: () => AppState, tabId: string, alias: string | null): void {
+async function dropLegacyAlias(
+  get: () => AppState,
+  tab: Tab,
+  alias: string | null,
+  owner: string
+): Promise<boolean> {
   if (alias === null) {
-    return
+    return true
   }
-  const current = Object.values(get().unifiedTabsByWorktree)
-    .flat()
-    .find((entry) => entry.id === tabId)
-  if (current?.customLabel === alias) {
-    get().setTabCustomLabel(tabId, null, { recordInteraction: false })
+  const state = get()
+  const matches = () => {
+    const latest = get()
+    const current = latest.unifiedTabsByWorktree[tab.worktreeId]?.find(
+      (entry) => entry.id === tab.id
+    )
+    return (
+      current?.contentType === 'agent-session' &&
+      current.entityId === tab.entityId &&
+      current.customLabel === alias &&
+      structuredAgentSessionOwnerForTab(latest, current) === owner
+    )
   }
+  if (!matches()) {
+    return true
+  }
+  const clear = () => {
+    if (matches()) {
+      get().setTabCustomLabel(tab.id, null, { recordInteraction: false })
+    }
+  }
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    clear()
+    return true
+  }
+  return new Promise((resolve) => {
+    if (
+      !sendTabChangeToLayoutOwner(
+        state,
+        tab,
+        (id) => ({
+          type: 'renameTab',
+          tabId: id,
+          kind: 'custom',
+          title: null,
+          expected: { entityId: tab.entityId, executionHostId: owner, customTitle: alias }
+        }),
+        () => {
+          clear()
+          resolve(true)
+        },
+        {
+          shown: () => {
+            clear()
+            resolve(true)
+          },
+          refused: () => resolve(false)
+        }
+      )
+    ) {
+      clear()
+      resolve(true)
+    }
+  })
 }

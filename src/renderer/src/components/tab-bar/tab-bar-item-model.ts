@@ -1,3 +1,5 @@
+import { readStructuredChatTabName } from '@/runtime/structured-chat-tab-name'
+import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import type { BrowserTab as BrowserTabState } from '../../../../shared/browser-workspace-types'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
 import type { Tab, WorkspaceVisibleTabType } from '../../../../shared/tab-types'
@@ -69,14 +71,21 @@ export function resolveEditorTabGitStatus(
   return statusByRelativePath.get(normalizeRelativePath(file.relativePath)) ?? null
 }
 
-export function getTabDragLabel(item: TabBarItem, generatedTitlesEnabled: boolean): string {
+export function getTabDragLabel(
+  item: TabBarItem,
+  generatedTitlesEnabled: boolean,
+  state: WorktreeRuntimeOwnerState = {}
+): string {
   if (item.type === 'terminal') {
     return resolveTerminalTabTitle(item.data, generatedTitlesEnabled, item.data.title)
   }
   if (item.type === 'browser') {
     return getBrowserTabLabel(item.data)
   }
-  if (item.type === 'simulator' || item.type === 'agent-session') {
+  if (item.type === 'agent-session') {
+    return readStructuredChatTabName(item.data, state)
+  }
+  if (item.type === 'simulator') {
     return item.data.label || 'Mobile Emulator'
   }
   return getEditorDisplayLabel(item.data)
@@ -87,14 +96,16 @@ export function getTabLayoutSignature(
   {
     generatedTitlesEnabled,
     isExpanded,
-    status
+    status,
+    state
   }: {
     generatedTitlesEnabled: boolean
     isExpanded: boolean
     status?: string | null
+    state?: WorktreeRuntimeOwnerState
   }
 ): string {
-  const label = getTabDragLabel(item, generatedTitlesEnabled)
+  const label = getTabDragLabel(item, generatedTitlesEnabled, state)
   if (item.type === 'terminal') {
     return `${item.type}:${item.id}:${item.isPinned}:${isExpanded}:${Boolean(item.data.color)}:${label}`
   }
@@ -272,12 +283,14 @@ export function buildTabStripLayoutKey(
   items: readonly TabBarItem[],
   generatedTitlesEnabled: boolean,
   expandedPaneByTabId: Record<string, boolean>,
-  statusByRelativePath: Map<string, string>
+  statusByRelativePath: Map<string, string>,
+  state?: WorktreeRuntimeOwnerState
 ): string {
   return items
     .map((item) =>
       getTabLayoutSignature(item, {
         generatedTitlesEnabled,
+        state,
         isExpanded: expandedPaneByTabId[item.id] === true,
         status:
           item.type === 'editor'
