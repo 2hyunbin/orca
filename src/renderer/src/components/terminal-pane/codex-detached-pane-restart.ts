@@ -210,7 +210,6 @@ async function executeDetachedCodexPaneRestart(
     cols: 80,
     rows: 24,
     ...(cwd ? { cwd } : {}),
-    cwdFallback: 'worktree',
     ...startup,
     env: { ...startup.env, ...buildPaneIdentityEnv(state, worktreeId, tab.id, leafId) },
     worktreeId,
