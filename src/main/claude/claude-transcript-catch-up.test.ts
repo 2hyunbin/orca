@@ -17,6 +17,9 @@ import { catchUpClaudeTranscript } from './claude-transcript-catch-up'
 const SESSION = 'session-claude-catch-up'
 const SID = '402eff2b-84dc-4e05-8fe8-49fffb2cd3c3'
 
+/** One content block of a saved assistant row. */
+type ClaudeContentPart = { type: string } & Record<string, unknown>
+
 const at = (n: number) => new Date(Date.UTC(2026, 9, 21, 12, 0, n)).toISOString()
 const prompt = (uuid: string, parentUuid: string | null, text: string, n: number) => ({
   type: 'user',
@@ -28,7 +31,13 @@ const prompt = (uuid: string, parentUuid: string | null, text: string, n: number
   timestamp: at(n),
   message: { role: 'user', content: text }
 })
-const reply = (uuid: string, parentUuid: string, messageId: string, part: object, n: number) => ({
+const reply = (
+  uuid: string,
+  parentUuid: string,
+  messageId: string,
+  part: ClaudeContentPart,
+  n: number
+) => ({
   type: 'assistant',
   uuid,
   parentUuid,
@@ -113,7 +122,7 @@ async function chat() {
   return {
     journal,
     warn,
-    write: (rows: object[]) =>
+    write: (rows: readonly Record<string, unknown>[]) =>
       appendFile(transcript, rows.map((row) => `${JSON.stringify(row)}\n`).join('')),
     /** The chat's own turn, sent and streamed live the way the SDK reports it. */
     live: async () => {
@@ -130,9 +139,9 @@ async function chat() {
         fence: 1
       })
       const translator = createClaudeJournalTranslator({ sink: deferred.sink })
-      const frame = (message: object) =>
+      const frame = (message: Record<string, unknown>) =>
         translator.handle({ type: 'message', sessionId: SESSION, message, observedAt: 2_000 })
-      const stream = (uuid: string, event: object) =>
+      const stream = (uuid: string, event: Record<string, unknown>) =>
         frame({ type: 'stream_event', uuid, session_id: SID, parent_tool_use_id: null, event })
       stream('s1', { type: 'message_start', message: { id: 'msg_a' } })
       stream('s2', {
