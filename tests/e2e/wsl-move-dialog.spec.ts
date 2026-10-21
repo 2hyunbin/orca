@@ -168,17 +168,31 @@ type FakeScript = {
   results: WslMoveResult[]
 }
 
+/** The scripted host's state in Electron main, shared by the evaluate calls below. */
+type FakeMoveState = {
+  starts: unknown[]
+  pending: ((result: unknown) => void)[]
+  results: unknown[]
+  unfinished: unknown[]
+  cancelAllowed: boolean
+}
+
+declare global {
+  // Set only in Electron main, by installFakeMove.
+  var __wslMoveFake: FakeMoveState | undefined
+}
+
 /** Swaps main's move handlers for a scripted host; the renderer and its bridge stay real. */
 async function installFakeMove(app: ElectronApplication, script: FakeScript): Promise<void> {
   await app.evaluate(({ ipcMain }, fake) => {
-    const state: {
-      starts: unknown[]
-      pending: ((result: unknown) => void)[]
-      results: unknown[]
-      unfinished: unknown[]
-      cancelAllowed: boolean
-    } = { starts: [], pending: [], results: [...fake.results], unfinished: [], cancelAllowed: true }
-    Object.assign(globalThis, { __wslMoveFake: state })
+    const state: FakeMoveState = {
+      starts: [],
+      pending: [],
+      results: [...fake.results],
+      unfinished: [],
+      cancelAllowed: true
+    }
+    globalThis.__wslMoveFake = state
     for (const channel of [
       'wslMove:preview',
       'wslMove:start',
@@ -210,8 +224,10 @@ async function sendProgress(app: ElectronApplication, event: WslMoveProgressEven
 /** Ends the running start with the next scripted result. */
 async function finishStart(app: ElectronApplication, unfinished: unknown[] = []): Promise<void> {
   await app.evaluate((_electron, nextUnfinished) => {
-    // Set by installFakeMove in this same main process.
-    const state = Reflect.get(globalThis, '__wslMoveFake')
+    const state = globalThis.__wslMoveFake
+    if (!state) {
+      throw new Error('installFakeMove did not run')
+    }
     state.unfinished = nextUnfinished
     state.pending.shift()?.(state.results.shift())
   }, unfinished)
@@ -366,7 +382,7 @@ test('moves projects through preview, blockers, progress and result', async ({},
     await page.keyboard.press('Escape')
     await expect(dialog).toBeVisible()
     await proof(page, testInfo, 'success')
-    expect(await app.evaluate(() => Reflect.get(globalThis, '__wslMoveFake').starts)).toEqual([
+    expect(await app.evaluate(() => globalThis.__wslMoveFake?.starts)).toEqual([
       { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [] },
       { distro: DISTRO, repoIds: [apiId], folderWorkspaceIds: [] }
     ])
