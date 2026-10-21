@@ -7,6 +7,10 @@
 // admitted without the writer lease; the delivery loop starts the provider child a send needs, and
 // an operation only the provider can perform starts it before admission.
 
+import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat-usage-limit-cut'
+import { refuse } from '../../../shared/agent-session-wire'
+import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
+import { shouldQueueStructuredAgentSessionSend } from './structured-agent-session-queued-messages'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionCancelResult,
@@ -58,7 +62,6 @@ import {
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
 import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
-import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 
 export function sendStructuredAgentSessionTurn(
   context: StructuredAgentSessionMutationContext,
@@ -71,6 +74,7 @@ export function sendStructuredAgentSessionTurn(
     /** Host-local: whether the sending client can manage an image card. */
     queuedImageCards?: boolean
     options?: Readonly<Record<string, string>>
+    usageLimitContinuationOfTurnItemId?: string
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`
      *  origin, so a restart or a close keeps it as a card if it never reached the
@@ -92,15 +96,35 @@ export function sendStructuredAgentSessionTurn(
       params.envelope,
       {
         ...plan,
-        run: (ctx) =>
-          runQueueableStructuredAgentSessionSend(
-            context,
-            ctx,
-            params,
-            async () =>
-              structuredAgentSessionSendBlock(context.deps.store.getRecord(ctx.sessionId)) ??
-              (await plan.run(ctx))
-          )
+        run: async (ctx) => {
+          const record = context.deps.store.getRecord(ctx.sessionId)
+          const blocked = structuredAgentSessionSendBlock(record)
+          if (blocked) {
+            return blocked
+          }
+          if (params.usageLimitContinuationOfTurnItemId !== undefined) {
+            const snapshot = ctx.journal.snapshot()
+            const cut = latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
+            if (
+              cut?.turnItemId !== params.usageLimitContinuationOfTurnItemId ||
+              shouldQueueStructuredAgentSessionSend({
+                record,
+                journal: ctx.journal,
+                work: contextStructuredAgentSessionCurrentWork(ctx)
+              })
+            ) {
+              return {
+                ok: false as const,
+                refusal: refuse(
+                  'agent_session_operation_invalid',
+                  { reason: 'continuationSuperseded' },
+                  'This chat has moved on. Check the latest messages before continuing.'
+                )
+              }
+            }
+          }
+          return runQueueableStructuredAgentSessionSend(context, ctx, params, () => plan.run(ctx))
+        }
       },
       sendPreparation(context, params.envelope, arrival, selection)
     )
@@ -279,9 +303,6 @@ export function structuredAgentSessionMutationDelegates(
       reader: StructuredAgentSessionOptionsReader = IN_PROCESS_OPTIONS_READER
     ) => readStructuredAgentSessionOptions(context(), sessionId, reader),
     settleLateDispatch: (input: Parameters<typeof settleStructuredAgentSessionLateDispatch>[1]) =>
-      settleStructuredAgentSessionLateDispatch(context(), input),
-    releaseUnansweredDispatches: (
-      input: Parameters<typeof releaseStructuredAgentSessionUnansweredDispatches>[1]
-    ) => releaseStructuredAgentSessionUnansweredDispatches(context(), input)
+      settleStructuredAgentSessionLateDispatch(context(), input)
   }
 }

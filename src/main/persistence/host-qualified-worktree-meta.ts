@@ -1,3 +1,4 @@
+import { getRepoRegistrationHostIds } from '../../shared/repo-host-identity'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import type { Repo } from '../../shared/repo-types'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
@@ -74,7 +75,7 @@ export function readWorktreeMetaForRepo(
 
 /**
  * The row an id-only caller (an agent hook, a sort list) means: the id's own host stamp, else its
- * repo's only row. Undefined when same-id twins leave it ambiguous: callers skip, never guess.
+ * repo's only host. Undefined when same-id twins leave it ambiguous: callers skip, never guess.
  */
 export function resolveWorktreeMetaOwner(
   store: {
@@ -83,15 +84,17 @@ export function resolveWorktreeMetaOwner(
   },
   worktreeId: string
 ): HostWorktreeTarget | undefined {
+  const repoId = getRepoIdFromWorktreeId(worktreeId)
+  const owners = store.getRepos().filter((repo) => repo.id === repoId)
+  // Why: the raw-id row's stamp names whichever twin wrote first, not the twin the caller means.
+  if (getRepoRegistrationHostIds(owners, repoId).size > 1) {
+    return undefined
+  }
   const stamped = store.getWorktreeMeta(worktreeId)?.hostId
   if (stamped) {
     return hostWorktreeTarget({ id: worktreeId, hostId: stamped })
   }
-  const repoId = getRepoIdFromWorktreeId(worktreeId)
-  const owners = store.getRepos().filter((repo) => repo.id === repoId)
-  return owners.length === 1 && owners[0]
-    ? hostWorktreeTargetForRepo(worktreeId, owners[0])
-    : undefined
+  return owners[0] ? hostWorktreeTargetForRepo(worktreeId, owners[0]) : undefined
 }
 
 /** A worktree row's own host when it carries one; otherwise as `resolveWorktreeMetaOwner`. */
