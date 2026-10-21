@@ -101,18 +101,34 @@ describe('the status menu with a very large imported SSH host list', () => {
     expect(screen.getByText('node-12345')).toBeTruthy()
   })
 
-  it('points the hidden idle hosts at the searchable SSH hosts settings', () => {
+  it('says how many idle hosts are hidden and finds any of them by name', () => {
     render(<SshStatusSegment compact={false} iconOnly={false} />)
-    fireEvent.click(
-      screen.getByText(
-        `Search ${IMPORTED_HOST_COUNT - 2 - SSH_STATUS_MENU_IDLE_ROW_LIMIT} more SSH hosts…`
-      )
-    )
-    expect(state.openSettingsTarget).toHaveBeenCalledWith({
-      pane: 'ssh',
-      repoId: null,
-      sectionId: 'ssh'
+    const hidden = IMPORTED_HOST_COUNT - 2 - SSH_STATUS_MENU_IDLE_ROW_LIMIT
+    expect(screen.getByText(`${hidden} more SSH hosts. Search by name to find one.`)).toBeTruthy()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search SSH hosts…' }), {
+      target: { value: 'NODE-13691' }
     })
-    expect(state.setActiveView).toHaveBeenCalledWith('settings')
+    expect(screen.getByText('node-13691')).toBeTruthy()
+    expect(screen.queryByText('node-00000')).toBeNull()
+    // Live and busy hosts stay listed while searching.
+    expect(screen.getByText('node-09000')).toBeTruthy()
+    expect(screen.queryByText(/more SSH hosts/)).toBeNull()
+  })
+
+  it('says when no idle host matches the search', () => {
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search SSH hosts…' }), {
+      target: { value: 'no-such-host' }
+    })
+    expect(screen.getByText('No SSH hosts match.')).toBeTruthy()
+    expect(screen.queryAllByRole('button', { name: 'Connect' })).toHaveLength(0)
+  })
+
+  it('shows no search box when every idle host fits', () => {
+    state.sshTargetLabels = new Map([['ssh-1', 'solo']])
+    state.sshConnectionStates = new Map()
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    expect(screen.getByText('solo')).toBeTruthy()
+    expect(screen.queryByRole('textbox')).toBeNull()
   })
 })

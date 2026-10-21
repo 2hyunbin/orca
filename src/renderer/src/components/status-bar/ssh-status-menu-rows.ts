@@ -7,20 +7,29 @@ export type SshStatusMenuTarget = { id: string; label: string; status: SshConnec
 
 export type SshStatusMenuRows = {
   connected: SshStatusMenuTarget[]
-  /** In-progress or failed hosts, then idle ones up to the limit. */
+  /** In-progress or failed hosts, then idle ones matching the query, up to the limit. */
   inactive: SshStatusMenuTarget[]
+  /** Idle hosts matching the query that the limit left out. */
   hiddenIdleCount: number
+  /** Whether any idle host matched the query; always true for an empty query with idle hosts. */
+  idleMatched: boolean
 }
 
 /**
- * Live and busy hosts always get a row; idle ones are capped, hosts that own projects first so the
- * cap keeps the machines the user works on rather than the top of a generated config.
+ * Live and busy hosts always get a row. Idle ones are narrowed by the menu's search and capped,
+ * hosts that own projects first so the cap keeps the machines the user works on rather than the
+ * top of a generated config.
  */
 export function splitSshStatusMenuRows(
   targets: readonly SshStatusMenuTarget[],
-  projectHostIds: ReadonlySet<string> = new Set(),
-  idleRowLimit = SSH_STATUS_MENU_IDLE_ROW_LIMIT
+  options: {
+    projectHostIds?: ReadonlySet<string>
+    query?: string
+    idleRowLimit?: number
+  } = {}
 ): SshStatusMenuRows {
+  const { projectHostIds, idleRowLimit = SSH_STATUS_MENU_IDLE_ROW_LIMIT } = options
+  const needle = (options.query ?? '').trim().toLowerCase()
   const connected: SshStatusMenuTarget[] = []
   const active: SshStatusMenuTarget[] = []
   const idleWithProjects: SshStatusMenuTarget[] = []
@@ -30,7 +39,9 @@ export function splitSshStatusMenuRows(
       connected.push(target)
     } else if (target.status !== 'disconnected') {
       active.push(target)
-    } else if (projectHostIds.has(target.id)) {
+    } else if (needle !== '' && !target.label.toLowerCase().includes(needle)) {
+      continue
+    } else if (projectHostIds?.has(target.id)) {
       idleWithProjects.push(target)
     } else {
       idleOthers.push(target)
@@ -41,6 +52,7 @@ export function splitSshStatusMenuRows(
   return {
     connected,
     inactive: [...active, ...shownIdle],
-    hiddenIdleCount: idle.length - shownIdle.length
+    hiddenIdleCount: idle.length - shownIdle.length,
+    idleMatched: idle.length > 0
   }
 }

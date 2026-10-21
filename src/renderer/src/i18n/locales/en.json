@@ -4085,8 +4085,10 @@
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
             "connecting": "Connecting…",
-            "moreSshHosts_one": "Search {{count}} more SSH host…",
-            "moreSshHosts_other": "Search {{count}} more SSH hosts…"
+            "searchSshHosts": "Search SSH hosts…",
+            "noMatchingSshHosts": "No SSH hosts match.",
+            "moreSshHosts_one": "{{count}} more SSH host. Search by name to find it.",
+            "moreSshHosts_other": "{{count}} more SSH hosts. Search by name to find one."
           },
           "StatusBar": {
             "9659e38343": "Ports",

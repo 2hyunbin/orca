@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import { useAppStore } from '../../store'
 import type { SshConnectionStatus } from '../../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
@@ -27,7 +28,9 @@ import { RuntimeHostStatusRow } from './RuntimeHostStatusRow'
 import {
   connectedHostCountLabel,
   connectingHostsLabel,
-  moreSshHostsLabel
+  moreSshHostsLabel,
+  noMatchingSshHostsLabel,
+  searchSshHostsLabel
 } from './ssh-status-segment-copy'
 import { splitSshStatusMenuRows } from './ssh-status-menu-rows'
 import { SshTargetStatusRow } from './SshTargetStatusRow'
@@ -66,6 +69,7 @@ export function SshStatusSegment({
   const openSettingsTarget = useAppStore((s) => s.openSettingsTarget)
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [hostQuery, setHostQuery] = useState('')
   const [repairTarget, setRepairTarget] = useState<{ id: string; label: string } | null>(null)
 
   const projectHostIds = useMemo(
@@ -141,8 +145,11 @@ export function SshStatusSegment({
   const {
     connected: connectedTargets,
     inactive: disconnectedTargets,
-    hiddenIdleCount
-  } = splitSshStatusMenuRows(targets, projectHostIds)
+    hiddenIdleCount,
+    idleMatched
+  } = splitSshStatusMenuRows(targets, { projectHostIds, query: hostQuery })
+  // Why in the menu and not a Settings link: web clients connect hosts here but have no SSH pane.
+  const showHostSearch = hostQuery !== '' || hiddenIdleCount > 0
   const connectRuntimeHost = useCallback(
     async (environmentId: string): Promise<void> => {
       if (await connectRuntimeHostAndReloadProjects(environmentId)) {
@@ -192,6 +199,9 @@ export function SshStatusSegment({
       open={menuOpen}
       onOpenChange={(open) => {
         setMenuOpen(open)
+        if (!open) {
+          setHostQuery('')
+        }
         if (open) {
           void hydrateRuntimeEnvironmentStatuses()
           void syncSshConfigTargetsPassively()
@@ -290,20 +300,36 @@ export function SshStatusSegment({
             onRepair={() => openRepair(host)}
           />
         ))}
+        {showHostSearch ? (
+          <div className="p-1">
+            <Input
+              value={hostQuery}
+              onChange={(event) => setHostQuery(event.target.value)}
+              onKeyDown={(event) => {
+                // Why: keep typed letters out of the menu's typeahead; Escape and Tab still close it.
+                if (event.key !== 'Escape' && event.key !== 'Tab') {
+                  event.stopPropagation()
+                }
+              }}
+              onPointerDown={(event) => event.stopPropagation()}
+              placeholder={searchSshHostsLabel()}
+              aria-label={searchSshHostsLabel()}
+              className="h-7 px-2 text-xs"
+            />
+          </div>
+        ) : null}
         {disconnectedTargets.map((t) => (
           <SshTargetStatusRow key={t.id} targetId={t.id} label={t.label} status={t.status} />
         ))}
-        {hiddenIdleCount > 0 && (
-          <DropdownMenuItem
-            onSelect={() => {
-              recordFeatureInteraction('ssh')
-              openSettingsTarget({ pane: 'ssh', repoId: null, sectionId: 'ssh' })
-              setActiveView('settings')
-            }}
-          >
+        {hiddenIdleCount > 0 ? (
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">
             {moreSshHostsLabel(hiddenIdleCount)}
-          </DropdownMenuItem>
-        )}
+          </div>
+        ) : hostQuery !== '' && !idleMatched ? (
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+            {noMatchingSshHostsLabel()}
+          </div>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {

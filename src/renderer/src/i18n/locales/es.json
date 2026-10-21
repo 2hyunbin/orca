@@ -3822,8 +3822,10 @@
             "connectedHostCount_one": "{{count}} host",
             "connectedHostCount_other": "{{count}} hosts",
             "connecting": "Conectando…",
-            "moreSshHosts_one": "Buscar entre {{count}} host SSH más…",
-            "moreSshHosts_other": "Buscar entre {{count}} hosts SSH más…",
+            "searchSshHosts": "Buscar hosts SSH…",
+            "noMatchingSshHosts": "Ningún host SSH coincide.",
+            "moreSshHosts_one": "{{count}} host SSH más. Búscalo por nombre.",
+            "moreSshHosts_other": "{{count}} hosts SSH más. Busca por nombre para encontrar uno.",
             "runtime_unavailable_transport_up": "Orca no disponible",
             "runtime_workspace_window_closed": "Ventana del espacio de trabajo cerrada"
           },
