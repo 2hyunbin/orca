@@ -95,7 +95,8 @@
         "korean": "한국어",
         "japanese": "日本語",
         "spanish": "Español",
-        "french": "Français"
+        "french": "Français",
+        "portuguese": "Português (Brasil)"
       },
       "statusBar": {
         "claudeToggleDescription": "显示当前工作区的 Claude Token 与费用消耗情况。",
@@ -12722,7 +12723,8 @@
           "behindRolledBack": "运行的 Orca 服务器比此应用旧；上次更新已回滚。请使用“更新服务器”重试。",
           "behindNoTemplate": "运行的 Orca 服务器无法由此应用更新；此版本没有适用于此主机的服务器。",
           "behindMigrating": "运行 Orca 服务器，它会在项目迁移完成后更新。",
-          "behindCheckFailed": "运行 Orca 服务器；Orca 无法检查它是否落后于此应用。"
+          "behindCheckFailed": "运行 Orca 服务器；Orca 无法检查它是否落后于此应用。",
+          "refusedBlockedReason": "此主机尚未设置 Orca。{{reason}}"
         },
         "deltaMove": {
           "action": "迁移新项目…",

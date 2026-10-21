@@ -95,7 +95,8 @@
         "korean": "한국어",
         "japanese": "日本語",
         "spanish": "Español",
-        "french": "Français"
+        "french": "Français",
+        "portuguese": "Português (Brasil)"
       },
       "statusBar": {
         "claudeToggleDescription": "Muestra el consumo de tokens y el costo de Claude para el espacio de trabajo activo.",
@@ -12703,7 +12704,8 @@
           "behindRolledBack": "Ejecuta una versión del servidor de Orca más antigua que esta app; la última actualización se revirtió. Usa Actualizar servidor para intentarlo de nuevo.",
           "behindNoTemplate": "Ejecuta una versión del servidor de Orca que esta app no puede actualizar; esta compilación no incluye un servidor para este host.",
           "behindMigrating": "Ejecuta el servidor de Orca, que se actualizará cuando termine el traslado de sus proyectos.",
-          "behindCheckFailed": "Ejecuta el servidor de Orca; Orca no pudo comprobar si está por detrás de esta app."
+          "behindCheckFailed": "Ejecuta el servidor de Orca; Orca no pudo comprobar si está por detrás de esta app.",
+          "refusedBlockedReason": "Orca aún no está configurado en este host. {{reason}}"
         },
         "deltaMove": {
           "action": "Mover los proyectos nuevos…",
