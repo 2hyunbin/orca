@@ -163,6 +163,21 @@ describe('edit host handleSave', () => {
     act(() => renderer.unmount())
   })
 
+  it('previews and saves the secure default port when switching a LAN host to WSS', async () => {
+    const renderer = await renderEditHostRoute()
+    setFieldValue(renderer, 'Address', 'wss://tunnel.example.com')
+
+    expect(findText(renderer, 'Connects to wss://tunnel.example.com:443')).toBe(true)
+    await pressSave(renderer)
+
+    expect(dependencies.updateHostNameAndEndpoint).toHaveBeenCalledWith('host-1', {
+      endpoint: 'wss://tunnel.example.com:443'
+    })
+    expect(dependencies.refreshHostClient).toHaveBeenCalledWith('host-1')
+    expect(dependencies.back).toHaveBeenCalledTimes(1)
+    act(() => renderer.unmount())
+  })
+
   it('saves name and endpoint together in one call, then reconnects', async () => {
     const renderer = await renderEditHostRoute()
     setFieldValue(renderer, 'Name', 'Home Desk')
