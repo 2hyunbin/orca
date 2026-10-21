@@ -144,7 +144,7 @@ describe('OrcaRuntimeService', () => {
       [fId]: edge(fId, gId),
       [gId]: edge(gId, hId)
     }
-    const setWorktreeLineage = vi.fn()
+    const setWorktreeLineage = vi.fn((_target: HostWorktreeTarget, lineage) => lineage)
     const runtimeStore = {
       ...store,
       getRepos: () => [
@@ -175,7 +175,7 @@ describe('OrcaRuntimeService', () => {
         lineage: { parentWorktree: `id:${parentId}` }
       })
       expect(setWorktreeLineage).toHaveBeenLastCalledWith(
-        childId,
+        expect.objectContaining({ id: childId }),
         expect.objectContaining({ parentWorktreeId: parentId })
       )
     }
