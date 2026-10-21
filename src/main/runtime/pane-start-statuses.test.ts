@@ -23,12 +23,17 @@ const ARGS = {
 }
 const PANE_KEY = `${ARGS.tabId}:${ARGS.leafId}`
 
-function storeAnswering(admit: 'admitted' | 'exists') {
+function storeAnswering(admit: 'admitted' | 'exists', paneWritten = true) {
   const store = {
     admitTerminalPane: vi.fn(async () => admit),
-    withdrawTerminalPane: vi.fn(async () => null)
+    withdrawTerminalPane: vi.fn(async () => null),
+    getWorkspaceSession: vi.fn(() => ({
+      terminalLayoutsByTabId: paneWritten
+        ? { [ARGS.tabId]: { root: { type: 'leaf', leafId: ARGS.leafId } } }
+        : {}
+    }))
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the admission path calls only these two store methods.
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the admission path calls only these three store methods.
   return { store, runtimeStore: store as unknown as RuntimeStore }
 }
 
@@ -75,6 +80,23 @@ describe('a start into a pane main holds', () => {
     ).rejects.toThrow('shell not found')
     expect(register.get(PANE_KEY, UNBOUND)).toEqual({ status: 'failed', reason: 'shell not found' })
     expect(store.withdrawTerminalPane).not.toHaveBeenCalled()
+  })
+
+  it('clears the status when the pane was closed before its start failed', async () => {
+    const { register } = statuses()
+    const { runtimeStore } = storeAnswering('exists', false)
+    await expect(
+      spawnInAdmittedPane(
+        runtimeStore,
+        {
+          spawn: vi.fn(async () => {
+            throw new Error('shell not found')
+          })
+        },
+        { ...ARGS, startStatus: { sink: register, keepOnFailure: false } }
+      )
+    ).rejects.toThrow('shell not found')
+    expect(register.get(PANE_KEY, UNBOUND)).toBeNull()
   })
 
   it('keeps a pane the create wrote only when asked to; otherwise takes it back as today', async () => {
