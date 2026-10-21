@@ -1,14 +1,15 @@
 import { ipcMain } from 'electron'
-import { createProject, getProject, listProjectIssues, listProjects } from '../linear/projects'
+import { createProject, getProject, listProjects } from '../../linear/linear-project-queries'
+import { listProjectIssues } from '../../linear/linear-project-issue-queries'
 import {
   normalizeConcreteWorkspaceId,
   normalizeIdList,
   normalizeOptionalDate,
   normalizeWorkspaceId,
   normalizeWorkspaceSelection
-} from './linear-ipc-args'
-import { clampLinearIssueListLimit } from '../../shared/linear/issue-read-limits'
-import type { LinearWorkspaceSelection } from '../../shared/linear/workspace-types'
+} from './ipc-args'
+import { clampLinearIssueListLimit } from '../../../shared/linear/issue-read-limits'
+import type { LinearWorkspaceSelection } from '../../../shared/linear/workspace-types'
 
 export function registerLinearProjectHandlers(): void {
   ipcMain.handle(
