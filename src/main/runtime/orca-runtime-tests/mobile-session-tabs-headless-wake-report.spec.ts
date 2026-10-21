@@ -41,7 +41,10 @@ async function activateOnHeadlessServe(
     },
     ownerHostId
   )
-  const getWorkspaceSession = vi.fn(runtimeStore.getWorkspaceSession)
+  // The fixture also answers a host-less read; this check must name the host, so that read is empty.
+  const getWorkspaceSession = vi.fn((hostId?: string) =>
+    hostId === undefined ? getDefaultWorkspaceSession() : runtimeStore.getWorkspaceSession(hostId)
+  )
   const runtime = new OrcaRuntimeService({
     ...runtimeStore,
     getRepos: () => [repo],
