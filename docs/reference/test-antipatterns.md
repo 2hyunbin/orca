@@ -4,7 +4,7 @@
 - Tests that mock internal database, ORM, builder, or service chains so wrong tables, fields, joins, filters, or arguments cannot fail.
 - Tests whose fixtures, field names, thresholds, or expected statuses encode behavior different from real producers or the source contract.
 - Tests whose names promise inputs or behavior that their setup never exercises.
-- Tests duplicated by a stronger integration, end-to-end, real-database, or sibling test.
+- Tests that duplicate stronger coverage and add no unique coverage, faster feedback, or better failure diagnosis.
 - Tests that copy inventories, manifests, export lists, source imports, or literal strings instead of proving behavior.
 - Tests of private predicates, call shapes, or provider-local replays that duplicate shared helper coverage.
 - Test-only exports, globals, wrappers, or production paths that exist solely to make tests possible.
