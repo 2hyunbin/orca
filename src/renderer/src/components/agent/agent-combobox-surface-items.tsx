@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { CommandItem, CommandSeparator } from '@/components/ui/command'
-import { AgentIcon, type AgentCatalogEntry } from '@/lib/agent-catalog'
+import { AgentIcon, getAgentCatalog, type AgentCatalogEntry } from '@/lib/agent-catalog'
 import { searchAgentPickerEntries } from '@/lib/agent-picker-search'
 import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 import type { NewTabAgentMenuRow } from '@/lib/new-tab-agent-menu-rows'
@@ -55,16 +55,16 @@ export function visibleSurfaceRows(
 export function surfaceCommandValues(
   model: NewTabAgentMenuModel,
   picker: {
-    agents: readonly AgentCatalogEntry[]
     query: string
     value: TuiAgent | null
     blankValue: string
     blankMatchesQuery: boolean
   }
 ): { rows: NewTabAgentMenuRow[]; selected: string | null; highlighted: string } {
-  const rows = visibleSurfaceRows(model, picker.agents, picker.query)
+  // Disabled rows are listed with their reason, so every agent is searched, not only pickable ones.
+  const rows = visibleSurfaceRows(model, getAgentCatalog(), picker.query)
   const selected =
-    surfaceRowValue(visibleSurfaceRows(model, picker.agents, ''), picker.value) ?? null
+    surfaceRowValue(visibleSurfaceRows(model, getAgentCatalog(), ''), picker.value) ?? null
   const first = rows.find((row) => row.kind !== 'chat-unavailable')
   const highlighted = !picker.query.trim()
     ? (selected ?? picker.blankValue)
@@ -87,16 +87,10 @@ export function surfaceRowValue(
 }
 
 /** A chat row's terminal button runs the agent's CLI, so only a detected CLI gets one. */
-function rowOffersTerminal(
-  model: NewTabAgentMenuModel | undefined,
-  row?: NewTabAgentMenuRow
-): boolean {
-  return (
-    row?.kind === 'chat' &&
-    model?.state === 'settled' &&
-    model.detection.detectedIds?.includes(row.agent) === true
-  )
-}
+const rowOffersTerminal = (model?: NewTabAgentMenuModel, row?: NewTabAgentMenuRow): boolean =>
+  row?.kind === 'chat' &&
+  model?.state === 'settled' &&
+  model.detection.detectedIds?.includes(row.agent) === true
 
 /** cmdk keeps focus in the search box, so ArrowRight arms the highlighted row's terminal button. */
 export function useSurfaceRowArming(

@@ -66,7 +66,6 @@ afterEach(() => {
   setLocalRuntimeCapabilitiesForTests(null)
   useAppStore.setState(initial, true)
 })
-
 it('acquires inactive B independently of detection, preserves unknown truth and selected catalog intent', async () => {
   const catalogReply = Promise.withResolvers<unknown>()
   rpc.call.mockReturnValue(catalogReply.promise)
@@ -91,7 +90,6 @@ it('acquires inactive B independently of detection, preserves unknown truth and 
   expect(agentChoiceOpensAsChat(useAppStore.getState(), 'grok', workspace, ['grok'])).toBe(true)
   lease.release()
 })
-
 it('releases a pending stream at the chat deadline while slow ordinary detection keeps waiting', async () => {
   vi.useFakeTimers()
   const handle = Promise.withResolvers<{ unsubscribe: () => void }>()
@@ -113,7 +111,6 @@ it('releases a pending stream at the chat deadline while slow ordinary detection
   await action
   expect(settled).toHaveBeenCalledOnce()
 })
-
 it('keeps one still-detecting action on the current open through learning/reconnect', async () => {
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
   const detect = Promise.withResolvers<[]>()
@@ -132,7 +129,6 @@ it('keeps one still-detecting action on the current open through learning/reconn
   rpc.subscribe.mock.calls.at(-1)![3].onClose()
   await action
 })
-
 it('adapts only absent publication on older hosts and shares the saved Checks gate with pre-create execution', async () => {
   setLocalRuntimeCapabilitiesForTests([CHAT, CATALOG, INSTALL])
   const local = { kind: 'git-worktree' } as const

@@ -44,7 +44,7 @@ function renderPicker(
   const onPick = vi.fn()
   const element: ReactElement = (
     <AgentCombobox
-      agents={AGENT_CATALOG}
+      agents={AGENT_CATALOG.filter((agent) => agent.id !== 'grok')}
       value={value}
       onValueChange={vi.fn()}
       allowBlankTerminal
