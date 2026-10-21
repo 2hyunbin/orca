@@ -137,6 +137,8 @@ describe('HostSidebarFeedReader', () => {
       const attempts = host.sendRequest.mock.calls.length
       expect(attempts).toBeGreaterThan(1)
       expect(attempts).toBeLessThan(10)
+      // Said once it stops, so the list falls back rather than spinning on it.
+      expect(host.reads).toEqual([{ installed: null, unavailable: false, gaveUp: true }])
 
       // A fresh trigger gets a fresh budget, which disposal cancels.
       host.reader.refresh()
@@ -165,7 +167,7 @@ describe('HostSidebarFeedReader', () => {
       })
       host.reader.refresh()
       await vi.advanceTimersByTimeAsync(10 * 60_000)
-      expect(host.reads).toEqual([])
+      expect(host.reads).toEqual([{ installed: null, unavailable: false, gaveUp: true }])
       expect(host.sendRequest.mock.calls.length).toBeLessThan(20)
     } finally {
       vi.useRealTimers()
@@ -195,6 +197,12 @@ describe('readHostSidebarFeed', () => {
       kind: 'loading'
     })
     expect(readHostSidebarFeed({ installed, unavailable: false })).toMatchObject({ kind: 'ready' })
+  })
+
+  it('has failed, not still loading, once every read gave up before one installed', () => {
+    expect(readHostSidebarFeed({ installed: null, unavailable: false, gaveUp: true })).toEqual({
+      kind: 'failed'
+    })
   })
 
   it('asks to reopen when the host means other things by its inputs', () => {

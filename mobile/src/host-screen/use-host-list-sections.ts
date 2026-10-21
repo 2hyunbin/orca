@@ -131,9 +131,9 @@ function useFeedHostListSections({
     [domains, catalog, view]
   )
   const lastVisited = useLastVisitedWorktreeOnHost(hostId)
-  // Only under a feed this page cannot read (an older desktop): before the first read the list
-  // waits for the feed, or the host's last installed one, so it never draws a shape the desktop doesn't.
-  const preFeed = feed?.kind === 'reopen'
+  // Only under a feed this page cannot read (an older desktop) or one whose reads all failed, so the
+  // list never sticks on the spinner; before the first read it waits for the feed or the host's last one.
+  const preFeed = feed?.kind === 'reopen' || feed?.kind === 'failed'
   const sections = useMemo(
     () =>
       built

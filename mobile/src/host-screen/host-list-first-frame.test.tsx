@@ -141,6 +141,26 @@ describe("the host list's first frame under the feed", () => {
     expect(rowIds()).toEqual(LISTED.map((row) => row.worktreeId))
   })
 
+  it('falls back to the worktree.ps list once every feed read gave up, never a stuck spinner', async () => {
+    await open('host-1')
+    await read({ installed: null, unavailable: false, gaveUp: true })
+    expect(kind).toBe('failed')
+    expect(rowIds()).toEqual(LISTED.map((row) => row.worktreeId))
+    await read({ installed: INSTALLED, unavailable: false })
+    expect(kind).toBe('ready')
+    expect(drawn[0]?.icon).toBe('pin')
+  })
+
+  it("keeps the host's last installed feed when the fresh reads give up", async () => {
+    await open('host-1')
+    await read({ installed: INSTALLED, unavailable: false })
+    act(() => renderers.splice(0).forEach((renderer) => renderer.unmount()))
+    await open('host-1')
+    await read({ installed: null, unavailable: false, gaveUp: true })
+    expect(kind).toBe('ready')
+    expect(drawn[0]?.icon).toBe('pin')
+  })
+
   it('forgets a feed the host stopped serving', async () => {
     await open('host-1')
     await read({ installed: INSTALLED, unavailable: false })
