@@ -70,6 +70,7 @@ export function AgentLaunchSettingsCatalog({
   nativeChatPermissionsSupported?: boolean
   local?: {
     settings: GlobalSettings
+    saveEnvironment: (agent: TuiAgent, value: Record<string, string>) => Promise<void>
     updateSettings: (updates: Partial<GlobalSettings>) => void | Promise<void>
   }
 }): React.JSX.Element {
@@ -188,26 +189,7 @@ export function AgentLaunchSettingsCatalog({
       typed
         ? saveUserArgs(agent.id, agent.label, value)
         : mutate({ type: 'arguments', agent: agent.id, value }),
-    onSaveEnv: async (value) => {
-      if (!local) {
-        return
-      }
-      const previous = resolveTuiAgentLaunchEnv(
-        agent.id,
-        local.settings,
-        window.api.platform.get().platform
-      )
-      for (const name of new Set([...Object.keys(previous), ...Object.keys(value)])) {
-        if (previous[name] === value[name]) {
-          continue
-        }
-        await mutate(
-          Object.hasOwn(value, name)
-            ? { type: 'environment-set', agent: agent.id, name, value: value[name] }
-            : { type: 'environment-remove', agent: agent.id, name }
-        )
-      }
-    },
+    onSaveEnv: (value) => local?.saveEnvironment(agent.id, value),
     ...(!local
       ? {
           environmentNames: settings.environmentNames[agent.id] ?? [],

@@ -1,3 +1,7 @@
+import { toast } from 'sonner'
+import { getAgentLabel } from '@/lib/agent-catalog'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import { resolveTuiAgentLaunchEnv } from '../../../../shared/tui-agent-launch-defaults'
 import { useRef } from 'react'
 import { useAppStore } from '@/store'
 import {
@@ -69,19 +73,62 @@ function LocalAgentLaunchSettings({
   renderPermissions: AgentPermissionsRenderer
 }): React.JSX.Element {
   const tail = useRef<Promise<void> | null>(null)
-  const mutate = (mutation: AgentLaunchSettingsMutation): Promise<void> => {
+  const apply = (
+    agent: TuiAgent | undefined,
+    compute: (current: GlobalSettings, platform: NodeJS.Platform) => Partial<GlobalSettings>
+  ): Promise<void> => {
     const write = (tail.current ?? Promise.resolve())
       .catch(() => {})
       .then(async () => {
         const current = useAppStore.getState().settings ?? settings
-        const platform = window.api.platform.get().platform
-        await useAppStore
-          .getState()
-          .updateSettingsOrThrow(agentLaunchSettingsMutationUpdates(current, mutation, platform))
+        const updates = compute(current, window.api.platform.get().platform)
+        if (Object.keys(updates).length) {
+          await useAppStore.getState().updateSettingsOrThrow(updates)
+        }
+      })
+      .catch((error: unknown) => {
+        toast.error(
+          agent
+            ? translate(
+                'settings.agents.saveFailedAgent',
+                '{{agent}} settings could not be saved. Try again.',
+                { agent: getAgentLabel(agent) }
+              )
+            : translate(
+                'settings.agents.saveFailed',
+                'Agent settings could not be saved. Try again.'
+              )
+        )
+        throw error
       })
     tail.current = write
     return write
   }
+  const mutate = (mutation: AgentLaunchSettingsMutation): Promise<void> =>
+    apply('agent' in mutation ? mutation.agent : undefined, (current, platform) =>
+      agentLaunchSettingsMutationUpdates(current, mutation, platform)
+    )
+  const saveEnvironment = (agent: TuiAgent, requested: Record<string, string>): Promise<void> =>
+    apply(agent, (current, platform) => {
+      const previous = resolveTuiAgentLaunchEnv(agent, current, platform)
+      let working = current
+      let updates: Partial<GlobalSettings> = {}
+      for (const name of new Set([...Object.keys(previous), ...Object.keys(requested)])) {
+        if (previous[name] === requested[name]) {
+          continue
+        }
+        const next = agentLaunchSettingsMutationUpdates(
+          working,
+          Object.hasOwn(requested, name)
+            ? { type: 'environment-set', agent, name, value: requested[name] }
+            : { type: 'environment-remove', agent, name },
+          platform
+        )
+        updates = { ...updates, ...next }
+        working = { ...working, ...next }
+      }
+      return updates
+    })
   return (
     <AgentLaunchSettingsCatalog
       settings={projectAgentLaunchSettings(settings, window.api.platform.get().platform)}
@@ -90,7 +137,7 @@ function LocalAgentLaunchSettings({
       hostName={null}
       renderPermissions={renderPermissions}
       nativeChatPermissionsSupported
-      local={{ settings, updateSettings }}
+      local={{ settings, updateSettings, saveEnvironment }}
     />
   )
 }

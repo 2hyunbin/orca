@@ -84,7 +84,7 @@ export type AgentCatalogRowProps = {
   onSetEnabled: (enabled: boolean) => void
   onSaveOverride: (value: string) => void | Promise<void>
   onSaveArgs: (value: string) => void | Promise<void>
-  onSaveEnv: (value: Record<string, string>) => void
+  onSaveEnv: (value: Record<string, string>) => void | Promise<void>
   sessionSourceHome?: AgentSessionSourceHomeControl
   environmentNames?: readonly string[]
   /** Absent for agents without a configurable permission mode on this host. */
@@ -317,17 +317,16 @@ export function AgentCatalogRow({
                   }
                 />
               </div>
-              {environmentEditor ??
-                ((defaultEnvSummary || envSummary) && (
-                  <div className="mt-2">
-                    <AgentDefaultEnvInput
-                      key={`${agentId}:${envSummary}`}
-                      defaultEnv={defaultEnv}
-                      envOverride={envOverride}
-                      onSaveEnv={onSaveEnv}
-                    />
-                  </div>
-                ))}
+              {environmentEditor ?? (
+                <div className="mt-2">
+                  <AgentDefaultEnvInput
+                    key={agentId}
+                    defaultEnv={defaultEnv}
+                    envOverride={envOverride}
+                    onSaveEnv={onSaveEnv}
+                  />
+                </div>
+              )}
               {sessionSourceHome && (
                 <div className="mt-2">
                   <AgentSessionSourceHomeInput

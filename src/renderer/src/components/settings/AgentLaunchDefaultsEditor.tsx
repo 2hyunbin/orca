@@ -158,21 +158,31 @@ export function AgentDefaultEnvInput({
 }: {
   defaultEnv: Record<string, string>
   envOverride: Record<string, string>
-  onSaveEnv: (value: Record<string, string>) => void
-}): React.JSX.Element {
+  onSaveEnv: (value: Record<string, string>) => void | Promise<void>
+}): React.JSX.Element | null {
   const defaultEnvText = stringifyAgentDefaultEnvDraft(defaultEnv)
   const draftSeed = stringifyAgentDefaultEnvDraft(envOverride)
-  const [envDraft, setEnvDraft] = useState(draftSeed)
+  const [draft, setDraft] = useState<string | null>(null)
+  const envDraft = draft ?? draftSeed
+  const { pending, write } = useAgentLaunchFieldWrite()
   const [envDraftTooLarge, setEnvDraftTooLarge] = useState(false)
   const envDraftErrorId = useId()
   const commitEnv = (): void => {
     const parsedDraft = parseAgentDefaultEnvDraft(envDraft)
     setEnvDraftTooLarge(parsedDraft.tooLarge)
     if (!parsedDraft.tooLarge) {
-      onSaveEnv(parsedDraft.env)
+      setDraft(envDraft)
+      write(
+        stringifyAgentDefaultEnvDraft(parsedDraft.env),
+        () => onSaveEnv(parsedDraft.env),
+        () => setDraft((current) => (current === envDraft ? null : current))
+      )
     }
   }
 
+  if (!defaultEnvText && !draftSeed && draft === null && !pending) {
+    return null
+  }
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">
@@ -181,8 +191,9 @@ export function AgentDefaultEnvInput({
       <div className="flex items-center gap-2">
         <Input
           value={envDraft}
+          readOnly={pending}
           onChange={(event) => {
-            setEnvDraft(event.target.value)
+            setDraft(event.target.value)
             if (envDraftTooLarge) {
               setEnvDraftTooLarge(false)
             }
@@ -194,9 +205,8 @@ export function AgentDefaultEnvInput({
               event.currentTarget.blur()
             }
             if (event.key === 'Escape') {
-              setEnvDraft(draftSeed)
+              setDraft(null)
               setEnvDraftTooLarge(false)
-              event.currentTarget.blur()
             }
           }}
           placeholder={
@@ -211,15 +221,21 @@ export function AgentDefaultEnvInput({
             envDraftTooLarge && 'border-destructive/50 bg-destructive/5'
           )}
         />
-        {draftSeed !== defaultEnvText && (
+        {(draftSeed !== defaultEnvText || envDraft !== defaultEnvText) && (
           <Button
             type="button"
             variant="ghost"
             size="xs"
             onClick={() => {
-              onSaveEnv(defaultEnv)
-              setEnvDraft(defaultEnvText)
-              setEnvDraftTooLarge(false)
+              setDraft(envDraft)
+              write(
+                defaultEnvText,
+                () => onSaveEnv(defaultEnv),
+                () => {
+                  setDraft((current) => (current === envDraft ? null : current))
+                  setEnvDraftTooLarge(false)
+                }
+              )
             }}
             className="h-7 shrink-0 text-xs text-muted-foreground hover:text-foreground"
           >
