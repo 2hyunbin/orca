@@ -297,6 +297,25 @@ describe('window-tab lane: one start, one agent_started, owned by main', () => {
     expect(trackMock.mock.calls).toEqual([])
   })
 
+  it('tells the window an agent launch it cannot read never started, running no shell for it', async () => {
+    const lanes = await admitted()
+    const verdicts = vi.spyOn(lanes.runtime, 'reportAgentLaunchPaneVerdict')
+
+    const response = await createWindowTab(lanes.runtime, {
+      worktree: `id:${String(PLUS.request.worktreeId)}`,
+      windowTab: true,
+      tabId: PLUS.request.tabId,
+      leafId: PLUS.request.leafId,
+      agentLaunch: { launch: 7 }
+    })
+
+    expect(response.ok).toBe(false)
+    expect(lanes.provider).not.toHaveBeenCalled()
+    expect(verdicts.mock.calls.map(([, verdict]) => verdict)).toEqual([
+      { kind: 'not-started', code: 'agent_launch_request_invalid' }
+    ])
+  })
+
   it('launches one agent for two starts of the same agent-launch pane', async () => {
     const lanes = await admitted()
     const params = {

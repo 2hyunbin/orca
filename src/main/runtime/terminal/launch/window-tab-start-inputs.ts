@@ -29,7 +29,7 @@ export function windowTabStartOptions(
 ): Partial<CreateOptions> & WindowTabStartInputs {
   return {
     ...(params.telemetry ? { telemetry: params.telemetry } : {}),
-    ...(params.agentLaunch ? { agentLaunch: params.agentLaunch } : {}),
+    ...(params.agentLaunch !== undefined ? { agentLaunch: params.agentLaunch } : {}),
     ...(params.startupAgent ? { startupAgent: params.startupAgent } : {}),
     ...(params.agentArgs !== undefined ? { agentArgs: params.agentArgs } : {}),
     ...(params.launchPreferences ? { launchPreferences: params.launchPreferences } : {}),

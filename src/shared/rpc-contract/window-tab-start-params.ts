@@ -21,11 +21,8 @@ export const WindowTabStartInputParams = {
     })
     .optional()
     .catch(undefined),
-  /** The pane's own `agent.launch` request, checked as its pty:spawn checks it. */
-  agentLaunch: z
-    .object({ launch: z.record(z.string(), z.unknown()) })
-    .optional()
-    .catch(undefined),
+  // Unchecked here: main's launch lifecycle checks it, so one it cannot read still gets a verdict.
+  agentLaunch: z.unknown().optional(),
   /** An agent main's planner builds the launch for (the OpenCode model start). */
   startupAgent: TuiAgentParam.optional().catch(undefined),
   agentArgs: AgentArgs.optional().catch(undefined),
