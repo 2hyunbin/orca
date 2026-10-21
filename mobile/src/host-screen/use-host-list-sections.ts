@@ -131,8 +131,9 @@ function useFeedHostListSections({
     [domains, catalog, view]
   )
   const lastVisited = useLastVisitedWorktreeOnHost(hostId)
-  // Before the first read, and under a feed this page cannot read, the rows it already holds.
-  const preFeed = feed?.kind === 'loading' || feed?.kind === 'reopen'
+  // Only under a feed this page cannot read (an older desktop): before the first read the list
+  // waits for the feed, or the host's last installed one, so it never draws a shape the desktop doesn't.
+  const preFeed = feed?.kind === 'reopen'
   const sections = useMemo(
     () =>
       built
