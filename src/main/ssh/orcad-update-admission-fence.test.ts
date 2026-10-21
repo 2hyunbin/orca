@@ -87,7 +87,9 @@ function deploy(recount: OrcadTerminalCensus | Error = { ...IDLE, ...OLDER }, ca
     now: () => new Date(clockMs),
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc217',
-    census: capable ? { ...IDLE, restartAdmissionSupported: true } : { ...IDLE, ...OLDER },
+    census: capable
+      ? { ...IDLE, chatWork: 0, restartAdmissionSupported: true }
+      : { ...IDLE, ...OLDER },
     recountCensus,
     releaseIncumbentAdmission,
     ...(capable ? { restartAdmission: host.restartAdmission(OLD) } : { force: true })
