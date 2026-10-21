@@ -20060,6 +20060,7 @@
       "empty": "サブ Agent が見つかりませんでした。"
     },
     "antigravityReferenceDescription": "このトランスクリプトを参照として使用して、新規 Antigravity CLI 会話を続けます。",
+    "searchHitSourceHost": "{{value0}} で見つかりました",
     "antigravityIdeToCli": "IDE → CLI",
     "antigravity2ToCli": "2.0 → CLI",
     "continueInCli": "CLIで続行",
