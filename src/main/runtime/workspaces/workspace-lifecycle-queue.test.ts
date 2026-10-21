@@ -322,6 +322,23 @@ describe('WorkspaceLifecycleQueue', () => {
     expect(log).toEqual(['sleep (by name)', 'wake (by id)'])
   })
 
+  it('lets a lookup stuck on a dead host hold another workspace only briefly', async () => {
+    let clock = 0
+    const queue = new WorkspaceLifecycleQueue(
+      async (ms) => {
+        clock += ms
+      },
+      () => clock
+    )
+    void queue.submitResolving(() => new Promise<string | null>(() => {}), {
+      kind: 'sleep',
+      run: async () => 'never'
+    })
+    const other = queue.submit('ssh:other|r::/w', { kind: 'wake', run: async () => 'woken' })
+    expect(await other).toBe('woken')
+    expect(clock).toBe(500)
+  })
+
   it('never cancels a command because its requester went away', async () => {
     const queue = new WorkspaceLifecycleQueue()
     const log: string[] = []
