@@ -4,6 +4,7 @@ import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { blockRemovalForUnsavedFiles } from './removal-unsaved-files'
 import { getExecutionHostIdForFolderWorkspace } from '@/lib/folder-workspace-runtime-owner'
 import { getFolderWorkspaceHostId } from '../../../../shared/folder-workspace-execution-host'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
 /** Mirrors deleteFolderWorkspace: its tabs close only when no same-id folder survives elsewhere. */
 export function folderWorkspaceDeleteClosesTabs(
@@ -16,7 +17,7 @@ export function folderWorkspaceDeleteClosesTabs(
     folderWorkspaceId,
     executionHostId
   )
-  return !state.folderWorkspaces.some(
+  return !selectFolderWorkspaces(state).some(
     (workspace) =>
       workspace.id === folderWorkspaceId &&
       getFolderWorkspaceHostId(workspace, state.projectGroups) !== ownerHostId
@@ -35,8 +36,8 @@ export function deleteFolderWorkspaceUnlessUnsaved(
 ): Promise<boolean> | null {
   const workspaceKey = folderWorkspaceKey(folderWorkspaceId)
   const name =
-    getState().folderWorkspaces?.find((workspace) => workspace.id === folderWorkspaceId)?.name ??
-    folderWorkspaceId
+    selectFolderWorkspaces(getState()).find((workspace) => workspace.id === folderWorkspaceId)
+      ?.name ?? folderWorkspaceId
   // Why block, not confirm: the files stay on disk, so the user saves or closes them first.
   if (
     folderWorkspaceDeleteClosesTabs(getState(), folderWorkspaceId, executionHostId) &&

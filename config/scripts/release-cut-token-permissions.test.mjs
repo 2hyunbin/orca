@@ -32,7 +32,7 @@ const EXPECTED_MATRIX = {
       'persistence'
     ].map((job) => [
       `.github/workflows/release-mac-build.yml#qualification-template -> .github/workflows/qualified-orcad-template.yml#qualify -> .github/workflows/node-server-tests.yml#${job}`,
-      { contents: 'read' }
+      job === 'desktop_template' ? { actions: 'read', contents: 'read' } : { contents: 'read' }
     ])
   ),
   ...Object.fromEntries(
@@ -68,6 +68,7 @@ const EXPECTED_MATRIX = {
     },
   [`${RELEASE_WORKFLOW}#orcad-template -> .github/workflows/qualified-orcad-template.yml#qualify -> .github/workflows/node-server-tests.yml#desktop_template`]:
     {
+      actions: 'read',
       contents: 'read'
     },
   [`${RELEASE_WORKFLOW}#orcad-template -> .github/workflows/qualified-orcad-template.yml#qualify -> .github/workflows/node-server-tests.yml#linux_glibc217_compat`]:

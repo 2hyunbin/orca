@@ -7,6 +7,7 @@ import { parseExecutionHostId } from '../../../../shared/execution-host'
 import { parseWorkspaceKey, folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getEditorModelOwnerKey } from './editor-model-owner'
 import { translate } from '@/i18n/i18n'
+import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
 
 function closedUnsavedFilesToastTitle(count: number, workspace: string): string {
   return count === 1
@@ -24,7 +25,7 @@ function closedUnsavedFilesToastTitle(count: number, workspace: string): string 
 
 function workspaceStillOpen(state: AppState, worktreeId: string): boolean {
   if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
-    return state.folderWorkspaces.some(
+    return selectFolderWorkspaces(state).some(
       (workspace) => folderWorkspaceKey(workspace.id) === worktreeId
     )
   }

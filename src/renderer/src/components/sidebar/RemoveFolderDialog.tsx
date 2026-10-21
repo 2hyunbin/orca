@@ -19,6 +19,10 @@ import { countOpenRepoTerminalTabs } from '@/store/repos/repo-removal'
 import { getRecipeVmSshTargetForHost } from '@/lib/recipe-vm-managed-host'
 import { RemovalUnsavedFilesNotice } from './RemovalUnsavedFilesNotice'
 import { projectRemovalTargets } from './removal-unsaved-files'
+import {
+  selectDetectedWorktreesByRepo,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
 
 // Why: interpolated into the sentence so locales control where the name sits;
 // U+0000 cannot appear in a real project name, so the split is unambiguous.
@@ -60,14 +64,14 @@ const RemoveFolderDialog = React.memo(function RemoveFolderDialog() {
   const onRecipeVmServer = useAppStore(
     (s) =>
       getRecipeVmSshTargetForHost(s.runtimeEnvironments, hostId) !== null ||
-      (s.worktreesByRepo[repoId] ?? []).some(
+      (selectWorktreesByRepo(s)[repoId] ?? []).some(
         (worktree) =>
           worktree.hostId === hostId && worktree.ephemeralVmCheckoutMode === 'provisioned-root'
       )
   )
 
-  const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
-  const detectedWorktreesByRepo = useAppStore((s) => s.detectedWorktreesByRepo)
+  const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
+  const detectedWorktreesByRepo = useAppStore((s) => selectDetectedWorktreesByRepo(s))
   const unsavedTargets = useMemo(
     () =>
       projectRemovalTargets(

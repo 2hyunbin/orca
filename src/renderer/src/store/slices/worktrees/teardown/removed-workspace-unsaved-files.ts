@@ -11,6 +11,7 @@ import {
   type EditorModelOwner
 } from '@/components/editor/editor-model-owner'
 import { folderWorkspaceKey } from '../../../../../../shared/workspace-scope'
+import { selectFolderWorkspaces, selectWorktreesByRepo } from '../../../workspace-record-selectors'
 
 /** Set by a removal the user confirmed in a dialog that listed its unsaved files. */
 export type RemovalUnsavedEditsOptions = { unsavedEditsConfirmed?: boolean }
@@ -31,10 +32,10 @@ export type ClosedUnsavedFile = {
 }
 
 function workspaceLabel(s: AppState, worktreeId: string): string {
-  const worktree = Object.values(s.worktreesByRepo)
+  const worktree = Object.values(selectWorktreesByRepo(s) ?? {})
     .flat()
     .find((candidate) => candidate.id === worktreeId)
-  const folder = s.folderWorkspaces?.find(
+  const folder = (selectFolderWorkspaces(s) ?? []).find(
     (candidate) => folderWorkspaceKey(candidate.id) === worktreeId
   )
   return worktree?.displayName ?? folder?.name ?? worktreeId
@@ -112,7 +113,7 @@ export function flushRemovedRuntimeHostPendingEdits(
   )
   flushWorkspacePendingEdits(
     state,
-    Object.values(state.worktreesByRepo ?? {})
+    Object.values(selectWorktreesByRepo(state) ?? {})
       .flat()
       .filter(
         (row) =>
