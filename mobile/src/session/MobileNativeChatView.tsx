@@ -241,6 +241,10 @@ export function MobileNativeChatView({
   const compactComposer = isLandscapePhone && keyboardInset > 0 && ask != null
   const hideComposer =
     compactComposer && !collapsedPrompt && questionKey != null && activeQuestionKey === questionKey
+  const releaseQuestionFocus = (action: () => void) => () => {
+    setActiveQuestionKey(null)
+    action()
+  }
   const bottomPad = keyboardInset > 0 ? keyboardInset + insets.bottom : insets.bottom
   const { fontScale, pinchGesture } = useMobileNativeChatPinchGesture()
 
@@ -407,27 +411,17 @@ export function MobileNativeChatView({
             onAnswerAsk,
             onCancelAsk,
             onCancelPrompt,
-            onCollapseAsk: onCollapseAsk
-              ? () => {
-                  setActiveQuestionKey(null)
-                  onCollapseAsk()
-                }
-              : undefined
+            onCollapseAsk: onCollapseAsk && releaseQuestionFocus(onCollapseAsk)
           }}
           onInteract={() => setActiveQuestionKey(questionKey)}
           requiresTerminal={askRequiresTerminal}
           onAnswerInTerminal={onAnswerInTerminal}
           {...{ permission, onRespondPermission, question, onAnswerQuestion, onCollapsePrompt }}
           collapsedPrompt={
-            collapsedPrompt
-              ? {
-                  ...collapsedPrompt,
-                  expand: () => {
-                    setActiveQuestionKey(null)
-                    collapsedPrompt.expand()
-                  }
-                }
-              : null
+            collapsedPrompt && {
+              ...collapsedPrompt,
+              expand: releaseQuestionFocus(collapsedPrompt.expand)
+            }
           }
         />
       </View>
