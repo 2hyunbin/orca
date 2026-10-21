@@ -135,6 +135,14 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
       makePaneKey(source.tabId, leafId),
       spawnSurfaceClaimSequence(this.graphSequence)
     )
+    // Phones and session.tabs list the pane without a window's report, as the other splits do.
+    this.publishPtyBackedMobileSessionTerminal(workspace.id, createdPty, {
+      tabId: source.tabId,
+      leafId,
+      title: null,
+      activate: true,
+      split: { splitFromLeafId: source.leafId, direction: opts.direction }
+    })
     return {
       handle: this.issuePtyHandle(createdPty),
       tabId: source.tabId,

@@ -108,6 +108,22 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
     expect(split.tabId).toBe(TAB_ID)
   })
 
+  it('lists the new pane to phones and session.tabs with no window report', async () => {
+    const { runtime, handle } = setup()
+    // A phone already lists the tab, so the new pane must be published, not just hydrated.
+    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+
+    const split = await runtime.splitTerminal(handle, { direction: 'vertical' })
+
+    const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(
+      listed.tabs.some(
+        (tab) =>
+          tab.type === 'terminal' && tab.parentTabId === TAB_ID && tab.leafId === split.leafId
+      )
+    ).toBe(true)
+  })
+
   it('the window’s own split keeps its proposed pane id, folder and size', async () => {
     const { runtime, leafIds, spawn } = setup()
 
