@@ -28,6 +28,7 @@ import { closeContentTabThroughLayoutOwner } from './content-tab-close-through-l
 import { isEditorTabContentType } from '../editor/tabs/editor-tab-content-type'
 import type { AppState } from '../../types'
 import type { TuiAgent } from '../../../../../shared/tui-agent'
+import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../../shared/execution-host'
 
 export function createTabsCloseActions(
@@ -79,7 +80,10 @@ export function createTabsCloseActions(
             provisional,
             layoutOwner: state,
             // Switch point: main's frames draw this machine's chats, so main opens it again.
-            ...(ORCA_LAYOUT_OWNER_IS_MAIN && target.kind === 'local' && tab.agentSessionAgent
+            ...(ORCA_LAYOUT_OWNER_IS_MAIN &&
+            target.kind === 'local' &&
+            tab.agentSessionAgent &&
+            isTuiAgent(tab.agentSessionAgent)
               ? { reopen: reopenChatTab(worktreeId, tab.entityId, tab.agentSessionAgent) }
               : {})
           })
