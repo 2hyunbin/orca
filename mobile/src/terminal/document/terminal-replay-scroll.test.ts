@@ -20,6 +20,8 @@ function createReplayHarness() {
   vi.stubGlobal('cancelAnimationFrame', () => {})
   document.body.innerHTML = TERMINAL_DOCUMENT_MARKUP
   const terminals: Terminal[] = []
+  const writeCompletions: Array<() => void> = []
+  let deferWrites = false
   const scope = createTerminalDocumentScope({
     hasEngine: () => true,
     installHostTransport: () => () => {},
@@ -45,7 +47,17 @@ function createReplayHarness() {
           // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: xterm's own buffer; only getCell's cell parameter is narrower in the document shape, as in terminal-web-document-mount.ts.
           return terminal.buffer as unknown as TerminalDocumentTerminal['buffer']
         },
-        write: (data, callback) => terminal.write(data, callback),
+        write: (data, callback) =>
+          terminal.write(data, () => {
+            if (callback) {
+              if (deferWrites) {
+                writeCompletions.push(callback)
+              } else {
+                callback()
+              }
+            }
+          }),
+        clear: () => terminal.clear(),
         reset: () => terminal.reset(),
         resize: (cols, rows) => terminal.resize(cols, rows),
         scrollToLine: (line) => terminal.scrollToLine(line),
@@ -62,12 +74,27 @@ function createReplayHarness() {
   scopes.push(scope)
 
   const snapshot = Array.from({ length: 200 }, (_, index) => `ROW_${index}`).join('\r\n')
-  const replay = (preserveScroll = false, cols = 80) => {
-    handleMsg(scope, { type: 'init', cols, rows: 24, initialData: snapshot, preserveScroll })
+  const replay = (preserveScroll = false, cols = 80, initialData = snapshot) => {
+    handleMsg(scope, { type: 'init', cols, rows: 24, initialData, preserveScroll })
     frames.shift()?.(0)
   }
   const drain = () => new Promise<void>((resolve) => afterWritesDrained(scope, resolve))
-  return { scope, terminals, replay, drain }
+  return {
+    scope,
+    terminals,
+    replay,
+    drain,
+    snapshot,
+    parse: () => new Promise<void>((resolve) => terminals.at(-1)!.write('', resolve)),
+    deferWrites: (defer: boolean) => {
+      deferWrites = defer
+    },
+    releaseWrites: () => {
+      for (const complete of writeCompletions.splice(0).toReversed()) {
+        complete()
+      }
+    }
+  }
 }
 
 afterEach(() => {
@@ -139,5 +166,144 @@ describe('mobile terminal replay reading position', () => {
     const buffer = harness.scope.committedTerm!.buffer.active
     expect(buffer.viewportY).toBe(buffer.baseY)
     expect(buffer.getLine(buffer.length - 1)?.translateToString(true)).toBe('LIVE_OUTPUT')
+  })
+
+  it('ignores a cancelled replay completion after the newest replay and live output commit', async () => {
+    const harness = createReplayHarness()
+    harness.replay()
+    await harness.drain()
+    harness.terminals[0]!.scrollToLine(40)
+    harness.deferWrites(true)
+    harness.replay(true, 81)
+    await harness.parse()
+    const cancelled = vi.spyOn(harness.terminals[1]!, 'dispose')
+    harness.terminals[0]!.scrollToLine(60)
+
+    harness.deferWrites(false)
+    harness.replay(true, 82)
+    handleMsg(harness.scope, { type: 'write', data: '\r\nNEWEST_LIVE_OUTPUT' })
+    await harness.drain()
+    harness.releaseWrites()
+
+    const buffer = harness.scope.committedTerm!.buffer.active
+    expect(buffer.baseY - buffer.viewportY).toBe(116)
+    expect(buffer.getLine(buffer.length - 1)?.translateToString(true)).toBe('NEWEST_LIVE_OUTPUT')
+    expect(harness.scope.term).toBe(harness.scope.committedTerm)
+    expect(harness.scope.pendingTerm).toBeNull()
+    expect(cancelled).toHaveBeenCalledOnce()
+    expect(document.querySelectorAll('#terminal-container > div')).toHaveLength(1)
+  })
+
+  it.each([
+    ['alternate screen', '\x1b[?1049h\x1b[HTUI_CONTENT', 'alternate', 'TUI_CONTENT'],
+    ['reset snapshot', '\x1bcRESET_CONTENT', 'normal', 'RESET_CONTENT']
+  ])('does not apply a normal scrollback offset to a %s', async (_, snapshot, type, content) => {
+    const harness = createReplayHarness()
+    harness.replay()
+    await harness.drain()
+    harness.terminals[0]!.scrollToLine(40)
+    harness.replay(true, 81)
+    harness.replay(true, 82, snapshot)
+    await harness.drain()
+
+    const buffer = harness.scope.committedTerm!.buffer.active
+    expect(buffer.type).toBe(type)
+    expect(buffer.viewportY).toBe(0)
+    expect(buffer.baseY).toBe(0)
+    expect(buffer.getLine(0)?.translateToString(true)).toBe(content)
+  })
+
+  it('does not revive the cleared reading position on a later replay', async () => {
+    const harness = createReplayHarness()
+    harness.replay()
+    await harness.drain()
+    harness.terminals[0]!.scrollToLine(40)
+    handleMsg(harness.scope, { type: 'clear' })
+    harness.replay(true, 81)
+    harness.replay(true, 82)
+    await harness.drain()
+
+    const buffer = harness.scope.committedTerm!.buffer.active
+    expect(buffer.viewportY).toBe(buffer.baseY)
+  })
+
+  it('disposes both replay surfaces and ignores a write completion after unmount', async () => {
+    const harness = createReplayHarness()
+    harness.replay()
+    await harness.drain()
+    const committedDispose = vi.spyOn(harness.terminals[0]!, 'dispose')
+    harness.deferWrites(true)
+    harness.replay(true, 81)
+    await harness.parse()
+    const pendingDispose = vi.spyOn(harness.terminals[1]!, 'dispose')
+
+    stopTerminalDocument(harness.scope)
+    harness.releaseWrites()
+
+    expect(committedDispose).toHaveBeenCalledOnce()
+    expect(pendingDispose).toHaveBeenCalledOnce()
+    expect(harness.scope.term).toBeNull()
+    expect(harness.scope.committedTerm).toBeNull()
+    expect(harness.scope.scheduledFrames).toEqual([])
+  })
+
+  it('does not resurrect an anchor cleared while a replay was pending', async () => {
+    const harness = createReplayHarness()
+    harness.replay()
+    await harness.drain()
+    harness.terminals[0]!.scrollToLine(40)
+    harness.deferWrites(true)
+    harness.replay(true, 81)
+    await harness.parse()
+    handleMsg(harness.scope, { type: 'clear' })
+    harness.deferWrites(false)
+    harness.replay(true, 82)
+    await harness.drain()
+    harness.releaseWrites()
+
+    const buffer = harness.scope.committedTerm!.buffer.active
+    expect(buffer.viewportY).toBe(buffer.baseY)
+  })
+
+  it('keeps only the last of eight replacements and honors its non-preserving reset', async () => {
+    const harness = createReplayHarness()
+    harness.replay()
+    await harness.drain()
+    harness.terminals[0]!.scrollToLine(40)
+    harness.deferWrites(true)
+    for (let index = 1; index <= 8; index++) {
+      harness.replay(true, 80 + index)
+      await harness.parse()
+      harness.terminals[0]!.scrollToLine(40 + index)
+    }
+
+    harness.deferWrites(false)
+    harness.replay(false, 89)
+    await harness.drain()
+    harness.releaseWrites()
+    handleMsg(harness.scope, { type: 'write', data: '\r\nAFTER_RESET' })
+    await harness.drain()
+
+    const buffer = harness.scope.committedTerm!.buffer.active
+    expect(buffer.viewportY).toBe(buffer.baseY)
+    expect(buffer.getLine(buffer.length - 1)?.translateToString(true)).toBe('AFTER_RESET')
+    expect(harness.scope.pendingTerm).toBeNull()
+    expect(document.querySelectorAll('#terminal-container > div')).toHaveLength(1)
+  })
+
+  it('follows a normal snapshot when the committed terminal was on the alternate screen', async () => {
+    const harness = createReplayHarness()
+    harness.replay(false, 80, harness.snapshot + '\x1b[?1049h\x1b[HTUI_CONTENT')
+    await harness.drain()
+    expect(harness.scope.committedTerm!.buffer.active.type).toBe('alternate')
+
+    harness.replay(true, 81)
+    harness.replay(true, 82)
+    await harness.drain()
+
+    const buffer = harness.scope.committedTerm!.buffer.active
+    expect(buffer.type).toBe('normal')
+    expect(buffer.viewportY).toBe(buffer.baseY)
+    expect(buffer.getLine(buffer.length - 1)?.translateToString(true)).toBe('ROW_199')
   })
 })

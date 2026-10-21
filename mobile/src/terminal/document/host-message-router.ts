@@ -102,9 +102,9 @@ export function handleMsg(scope: TerminalDocumentScope, msg: TerminalHostMessage
     scope.initialOscLinks = []
     scope.initialOscLinkRowOffset = 0
     scope.initialOscLinkEvictionReady = false
-    if (scope.term) {
-      scope.term.clear()
-      scope.term.reset()
+    for (const terminal of new Set([scope.term, scope.committedTerm])) {
+      terminal?.clear()
+      terminal?.reset()
     }
     emitModesIfChanged(scope)
     emitKeyboardAvoidanceMetrics(scope)
