@@ -45,7 +45,9 @@ export function projectHydratedBrowserSession(
         : [
             {
               // Switch point: a frame names the page before its record lands; keep that id stable.
-              id: (ORCA_LAYOUT_OWNER_IS_MAIN ? tab.pageIds?.[0] : undefined) ?? createBrowserUuid(),
+              id:
+                (ORCA_LAYOUT_OWNER_IS_MAIN ? (tab.activePageId ?? tab.pageIds?.[0]) : undefined) ??
+                createBrowserUuid(),
               workspaceId: tab.id,
               worktreeId,
               url: normalizeUrl(tab.url),

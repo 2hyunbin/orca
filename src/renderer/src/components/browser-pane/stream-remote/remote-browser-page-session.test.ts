@@ -42,7 +42,7 @@ function setup(args: { show: ShowReply; switchOn?: boolean; onShow?: () => void 
         throw rpcError('browser_tab_not_found')
       }
       if (args.show === 'other-error') {
-        throw rpcError('method_not_found')
+        throw rpcError('request_timeout')
       }
       return { tab: { url: 'https://example.test/', title: 'Example' } }
     }
@@ -100,12 +100,15 @@ describe('RemoteBrowserPageSession.ensureRemotePage without a stored handle', ()
     expect(harness.stored()).toEqual({ environmentId: 'env-1', remotePageId: 'created-page' })
   })
 
-  it('creates a page when the host probe fails any other way', async () => {
+  // A timeout or transient failure says nothing about the page; creating would duplicate a live one.
+  it('surfaces any other probe failure without creating a page', async () => {
     const harness = setup({ show: 'other-error' })
 
-    await expect(harness.ensure()).resolves.toBe('created-page')
+    await expect(harness.ensure()).rejects.toMatchObject({ code: 'request_timeout' })
 
-    expect(harness.methods()).toEqual(['browser.tabShow', 'browser.tabCreate'])
+    expect(harness.methods()).toEqual(['browser.tabShow'])
+    expect(harness.tokens.remotePage).toBeNull()
+    expect(harness.stored()).toBeNull()
     expect(harness.closedMissing).toEqual([])
   })
 

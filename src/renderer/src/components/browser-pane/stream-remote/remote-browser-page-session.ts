@@ -123,7 +123,7 @@ export class RemoteBrowserPageSession {
     }
   }
 
-  /** The row's own id when the host runs that page; undefined sends the caller on to create it. */
+  /** The row's own id when the host runs that page; undefined when the host has none, so create. */
   private async adoptHostPage(
     token: RemoteBrowserOperationToken
   ): Promise<string | null | undefined> {
@@ -142,9 +142,13 @@ export class RemoteBrowserPageSession {
         release()
         return null
       }
-    } catch {
-      // Not found, or a host that cannot say: create as before; a handle-less row has nothing to close.
+    } catch (error) {
       release()
+      // Only a page the host truly lacks is created; a timeout must not duplicate a live page.
+      if (!isRemoteBrowserPageMissingError(error)) {
+        throw error
+      }
+      // A handle-less row has nothing to close.
       return tokens.isCurrent(token) ? undefined : null
     }
     this.deps.writeStoredHandle({ environmentId: token.environmentId, remotePageId: provisional })

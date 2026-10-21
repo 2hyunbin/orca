@@ -12,7 +12,9 @@ vi.mock('../../../../../shared/layout-owner-switch', () => ({
 const WT = 'repo-1::/srv/wt'
 
 /** A frame published between the server's openBrowserTab and its page record: the tab names its page. */
-function frameBeforePageRecord(): WorkspaceSessionState {
+function frameBeforePageRecord(
+  tab: { activePageId?: string; pageIds?: string[] } = { pageIds: ['host-page-1'] }
+): WorkspaceSessionState {
   return {
     activeRepoId: null,
     activeWorktreeId: null,
@@ -32,7 +34,7 @@ function frameBeforePageRecord(): WorkspaceSessionState {
           canGoForward: false,
           loadError: null,
           createdAt: 1,
-          pageIds: ['host-page-1']
+          ...tab
         }
       ]
     },
@@ -40,7 +42,10 @@ function frameBeforePageRecord(): WorkspaceSessionState {
   }
 }
 
-function hydratedPageIds(): { pageIds: string[]; workspacePageIds: string[] } {
+function hydratedPageIds(tab?: { activePageId?: string; pageIds?: string[] }): {
+  pageIds: string[]
+  workspacePageIds: string[]
+} {
   const projected = projectHydratedBrowserSession(
     {
       activeWorktreeId: null,
@@ -49,7 +54,7 @@ function hydratedPageIds(): { pageIds: string[]; workspacePageIds: string[] } {
       openFiles: [],
       tabsByWorktree: {}
     },
-    frameBeforePageRecord(),
+    frameBeforePageRecord(tab),
     new Set([WT])
   )
   return {
@@ -67,6 +72,18 @@ describe('projectHydratedBrowserSession for a tab whose page record has not land
 
     expect(first).toEqual({ pageIds: ['host-page-1'], workspacePageIds: ['host-page-1'] })
     expect(second).toEqual(first)
+  })
+
+  // The page a host starts for a saved tab is its active one (ServeBrowserTabs.startableIn).
+  it('prefers the page the tab records as active', () => {
+    layoutOwner.isMain = true
+
+    const { pageIds } = hydratedPageIds({
+      activePageId: 'host-page-2',
+      pageIds: ['host-page-1', 'host-page-2']
+    })
+
+    expect(pageIds).toEqual(['host-page-2'])
   })
 
   it('keeps minting a fresh page id with the layout-owner switch off', () => {
