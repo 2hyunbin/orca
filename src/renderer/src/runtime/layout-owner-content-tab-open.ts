@@ -30,7 +30,7 @@ export function openContentTabThroughLayoutOwner(
 ): boolean {
   const { worktreeId, command } = open
   const groupId = command.groupId
-  const settle = beginPendingTab(command.tabId, worktreeId, open.entityId, groupId)
+  const settle = beginPendingTab(command.tabId, worktreeId, open.entityId, { kind: 'open', groupId })
   const release = expectTabFacts({ ...open.facts, worktreeId, tabId: command.tabId })
   const sent = sendLayoutApply(state, worktreeId, command, {
     apply: (result) => {

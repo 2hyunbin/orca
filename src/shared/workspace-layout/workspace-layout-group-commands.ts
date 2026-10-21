@@ -17,6 +17,7 @@ import type { CommandOf, LayoutContext } from './workspace-layout-command-types'
 import type { WorkspaceLayout, WorkspaceLayoutModel } from './workspace-layout-model'
 import { withWorkspace } from './workspace-layout-removal'
 import { groupShowsTabFile } from './workspace-layout-workspace-move'
+import { withGroupSplitRatios } from './split-ratio-intents'
 
 function sourceGroupOf(workspace: WorkspaceLayout, tabId: string) {
   return findTab(workspace, tabId)
@@ -41,7 +42,8 @@ export function moveTab(model: WorkspaceLayoutModel, command: CommandOf<'moveTab
     )
     return applied(withWorkspace(model, command.workspace, { ...workspace, groups }))
   }
-  if (groupShowsTabFile(workspace, command.toGroupId, findTab(workspace, command.tabId)!)) {
+  const tab = findTab(workspace, command.tabId)
+  if (tab && groupShowsTabFile(workspace, command.toGroupId, tab)) {
     return refuse('tab_exists')
   }
   const moved = buildHeadlessTabGroupMove({
@@ -130,12 +132,17 @@ export function setGroupRatios(
   const workspace = model.workspaces[command.workspace]!
   const first = workspace.groups[0]
   const current = workspace.groupLayout ?? (first && { type: 'leaf' as const, groupId: first.id })
-  if (!current || !sameGroupsIgnoringRatios(current, command.groupLayout)) {
+  const groupLayout = !current
+    ? null
+    : command.ratios
+      ? withGroupSplitRatios(current, command.ratios)
+      : command.groupLayout && sameGroupsIgnoringRatios(current, command.groupLayout)
+        ? command.groupLayout
+        : null
+  if (!groupLayout) {
     return refuse('group_set_changed')
   }
-  return applied(
-    withWorkspace(model, command.workspace, { ...workspace, groupLayout: command.groupLayout })
-  )
+  return applied(withWorkspace(model, command.workspace, { ...workspace, groupLayout }))
 }
 
 type NewGroupOpen = CommandOf<

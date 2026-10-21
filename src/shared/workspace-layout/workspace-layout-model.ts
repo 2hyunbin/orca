@@ -10,7 +10,7 @@ import type { PersistedClientHostedBrowserPage } from '../client-hosted-browser-
 import type { ClosedTerminalTabTombstone } from '../closed-terminal-tab-tombstones'
 import type { ExecutionHostId } from '../execution-host'
 import type { TabContentType, TabGroupLayoutNode } from '../tab-types'
-import type { TerminalPaneLayoutNode, TerminalTab } from '../terminal-tab-types'
+import type { TerminalGrid, TerminalPaneLayoutNode, TerminalTab } from '../terminal-tab-types'
 import type { PersistedOpenFile } from '../workspace-session-state-types'
 import type { BrowserWorkspace } from '../browser-workspace-types'
 import type { LayoutEditorView } from './layout-editor-view'
@@ -84,6 +84,8 @@ export type LayoutLeaf = {
   incarnationId?: string
   /** User pane title. */
   title?: string
+  /** The pane's last grid: the size its terminal starts at. */
+  lastGrid?: TerminalGrid
   sleeping?: LayoutSleepingRecord
 }
 

@@ -672,9 +672,18 @@ describe('createEditorSlice openDiff', () => {
     const tabId = store.getState().unifiedTabsByWorktree['wt-1']![0]!.id
     const pin = (): void => store.getState().pinFile('/repo/a.ts')
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      withLayoutOwnerTabProps({ togglePinned: pin }, () => 'wt-1').togglePinned({
+      withLayoutOwnerTabProps(
+        {
+          togglePinned: pin,
+          makePreviewFilePermanent: (fileId, tab) =>
+            store.getState().makePreviewFilePermanent(fileId, tab)
+        },
+        () => 'wt-1'
+      ).togglePinned({
         unifiedTabId: tabId,
-        isPinned: false
+        isPinned: false,
+        type: 'editor',
+        data: { id: '/repo/a.ts' }
       })
     } else {
       pin()

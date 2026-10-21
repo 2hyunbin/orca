@@ -16,6 +16,7 @@ import type { Tab } from '../../../../../../shared/tab-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
 import { withPreviewEnded } from '../../tabs/tab-preview-flag'
 import { previewEditorTabsOf } from '../tabs/editor-tab-layout-owner'
+import { afterPendingEntityTabs, hasPendingEntityTab } from '@/runtime/layout-owner-pending-tabs'
 import {
   endsPreviewHere,
   promotePreviewTabsThroughLayoutOwner
@@ -235,6 +236,21 @@ export function createMarkdownPreviewActions(
       // Switch point: main makes the preview tabs the user kept permanent.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && promoted.length > 0) {
         promotePreviewTabsThroughLayoutOwner(get(), set, promoted)
+      }
+      // Switch point: a double click keeps a preview main has yet to draw, once its frame does.
+      const worktreeId = get().openFiles.find((file) => file.id === fileId)?.worktreeId
+      if (ORCA_LAYOUT_OWNER_IS_MAIN && worktreeId && hasPendingEntityTab(worktreeId, fileId)) {
+        // Tabs asked for above are not asked again, even after main answered (or refused) them.
+        const asked = new Set(promoted.map((tab) => tab.id))
+        afterPendingEntityTabs(worktreeId, fileId, () =>
+          promotePreviewTabsThroughLayoutOwner(
+            get(),
+            set,
+            previewEditorTabsOf(get().unifiedTabsByWorktree, fileId, tabId).filter(
+              (tab) => !asked.has(tab.id)
+            )
+          )
+        )
       }
     },
 

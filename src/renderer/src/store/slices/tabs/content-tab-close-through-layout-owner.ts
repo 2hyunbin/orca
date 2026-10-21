@@ -5,7 +5,12 @@
 
 import type { Tab } from '../../../../../shared/tab-types'
 import { sendLayoutApply } from '@/runtime/layout-apply-send'
-import { afterPendingTab, beginPendingTab, isPendingTab } from '@/runtime/layout-owner-pending-tabs'
+import {
+  afterPendingTab,
+  beginPendingTab,
+  isPendingTab,
+  isTabClosePending
+} from '@/runtime/layout-owner-pending-tabs'
 import type { AppState } from '../../types'
 import { pickNextActiveTab } from '../tab-group-state'
 import { isEditorTabContentType } from '../editor/tabs/editor-tab-content-type'
@@ -81,7 +86,11 @@ export function closeContentTabThroughLayoutOwner(
   if (!closesThroughLayoutOwner(tab.contentType) || closingAsToday.has(tab.id)) {
     return false
   }
-  // A second close, or a close of a tab still opening, goes once main answered the first ask.
+  // A repeat close joins the one in flight; its waiters (closeFile's cleanup) stay on it.
+  if (isTabClosePending(tab.id)) {
+    return true
+  }
+  // A close of a tab still opening goes once main answered the open.
   if (isPendingTab(tab.id)) {
     afterPendingTab(tab.id, () => {
       const drawn = get().unifiedTabsByWorktree[tab.worktreeId]?.find((e) => e.id === tab.id)
@@ -91,7 +100,7 @@ export function closeContentTabThroughLayoutOwner(
     })
     return true
   }
-  const settle = beginPendingTab(tab.id, tab.worktreeId, tab.entityId)
+  const settle = beginPendingTab(tab.id, tab.worktreeId, tab.entityId, { kind: 'close' })
   const dropped = (): void => {
     // Waiters first: a closeFile's content cleanup must not undo the selection.
     settle(tab.id)
@@ -118,12 +127,14 @@ export function closeContentTabThroughLayoutOwner(
       },
       asToday: () => {
         closingAsToday.add(tab.id)
+        let closedId: string | null = null
         try {
           close.closeHere()
+          closedId = tab.id
         } finally {
           closingAsToday.delete(tab.id)
+          settle(closedId)
         }
-        settle(tab.id)
       },
       // A tab main no longer holds was closed there first (a host's chat close).
       refused: (code) => {

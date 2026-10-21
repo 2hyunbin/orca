@@ -4,11 +4,13 @@
 /** The tab main's frame shows (its own id for a repeat open), or null when main refused. */
 type Outcome = string | null
 
+/** An open, with the group it asked for, or a close; `cleansFile`: a closeFile waits on it. */
+type PendingAsk = { kind: 'open'; groupId?: string } | { kind: 'close'; cleansFile?: true }
+
 type PendingTab = {
   worktreeId: string
   entityId: string
-  /** The group an open asked for; none for a close. */
-  groupId?: string
+  ask: PendingAsk
   waiters: ((outcome: Outcome) => void)[]
 }
 
@@ -19,9 +21,9 @@ export function beginPendingTab(
   tabId: string,
   worktreeId: string,
   entityId: string,
-  groupId?: string
+  ask: PendingAsk
 ): (outcome: Outcome) => void {
-  const entry: PendingTab = { worktreeId, entityId, ...(groupId ? { groupId } : {}), waiters: [] }
+  const entry: PendingTab = { worktreeId, entityId, ask, waiters: [] }
   pending.set(tabId, entry)
   return (outcome) => {
     if (pending.get(tabId) !== entry) {
@@ -54,7 +56,27 @@ export function isPendingTab(tabId: string): boolean {
 
 /** The group a pending open asked for. */
 export function pendingTabGroupId(tabId: string): string | undefined {
-  return pending.get(tabId)?.groupId
+  const ask = pending.get(tabId)?.ask
+  return ask?.kind === 'open' ? ask.groupId : undefined
+}
+
+/** Whether main has yet to answer this tab's close: a repeat close joins it, sending nothing. */
+export function isTabClosePending(tabId: string): boolean {
+  return pending.get(tabId)?.ask.kind === 'close'
+}
+
+/** Notes that a closeFile's cleanup waits on this tab's pending close. */
+export function markPendingCloseCleansFile(tabId: string): void {
+  const ask = pending.get(tabId)?.ask
+  if (ask?.kind === 'close') {
+    ask.cleansFile = true
+  }
+}
+
+/** Whether a closeFile's cleanup already waits on this tab's pending close. */
+export function pendingCloseCleansFile(tabId: string): boolean {
+  const ask = pending.get(tabId)?.ask
+  return ask?.kind === 'close' && ask.cleansFile === true
 }
 
 /** Whether a tab showing this entity is still being opened or closed. */

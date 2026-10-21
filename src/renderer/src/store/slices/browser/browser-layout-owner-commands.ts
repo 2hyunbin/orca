@@ -26,7 +26,7 @@ export function sendBrowserLayoutCommand(
   // A page being added is pending on its tab: a caller acting on the tab's pages waits for it.
   const settle =
     command.type === 'openBrowserPage'
-      ? beginPendingTab(command.pageId, worktreeId, command.browserTabId)
+      ? beginPendingTab(command.pageId, worktreeId, command.browserTabId, { kind: 'open' })
       : () => {}
   const sent = sendLayoutApply(get(), worktreeId, command, {
     apply: () => {

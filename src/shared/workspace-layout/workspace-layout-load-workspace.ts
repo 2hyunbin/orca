@@ -205,5 +205,27 @@ export function loadWorkspace(args: WorkspaceLoadArgs): WorkspaceLayout {
   if (browserTabs) {
     workspace.browserTabs = browserTabs
   }
+  const editorViews = loadEditorViews(args, tabs)
+  if (editorViews) {
+    workspace.editorViews = editorViews
+  }
   return workspace
+}
+
+/** The views main holds for this workspace's editor tabs; a tab no longer here has none. */
+function loadEditorViews(
+  args: WorkspaceLoadArgs,
+  tabs: WorkspaceLayout['tabs']
+): WorkspaceLayout['editorViews'] {
+  const held = args.context.editorViewsOf?.(args.key)
+  if (!held) {
+    return undefined
+  }
+  const views = Object.fromEntries(
+    tabs.flatMap((tab) => {
+      const view = tab.kind === 'terminal' ? undefined : held[tab.id]
+      return view ? [[tab.id, view] as const] : []
+    })
+  )
+  return Object.keys(views).length > 0 ? views : undefined
 }

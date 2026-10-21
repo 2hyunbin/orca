@@ -16,8 +16,6 @@ import {
   relativePathInsideRoot
 } from '../../../shared/cross-platform-path'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../shared/constants'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import { shouldHydrateWithOwnedEditorFileId } from '@/store/slices/editor/file-ids/hydrated-editor-file-ids'
 
 // Re-export the shared, flavor-aware containment check: move selection must fold
 // case + separators (Windows/UNC/WSL) so a same-file tab differing only in case
@@ -251,13 +249,6 @@ export function remapOpenEditorTabsForPathChange({
     runtimeEnvironmentId?: string | null
   }): string => {
     const updatedPath = updatedPathOf(file)
-    // Switch point: main's frames restore a runtime-owned or floating file under its owned id.
-    if (
-      ORCA_LAYOUT_OWNER_IS_MAIN &&
-      shouldHydrateWithOwnedEditorFileId(file.worktreeId, file.runtimeEnvironmentId)
-    ) {
-      return buildOwnedEditorFileId(updatedPath, file.worktreeId, file.runtimeEnvironmentId)
-    }
     const ownerKey = ownerKeyOf(file)
     const claimed = plainPathOwner.get(updatedPath)
     if (claimed === ownerKey) {

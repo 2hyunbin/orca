@@ -16,8 +16,8 @@ import { unifiedTabsKeepWorktreeSelected } from './unified-tabs-keep-worktree-se
 import { mayShareEditorBackingFile } from '../file-ids/editor-file-ids'
 import { isSameOwnedDocument } from '../file-ids/same-owned-editor-document'
 import { isEditorTabContentType } from '../tabs/editor-tab-content-type'
+import { closeFileTabsThroughLayoutOwner } from '../tabs/editor-tab-close-through-layout-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../../shared/layout-owner-switch'
-import { afterPendingTabs, hasPendingEntityTab } from '@/runtime/layout-owner-pending-tabs'
 
 function findAdjacentOpenFileId(
   files: readonly OpenFile[],
@@ -303,19 +303,12 @@ export function createCloseFileAction(
 
       // Switch point: the file's content goes once main's frame dropped its tabs; a refusal keeps both.
       if (ORCA_LAYOUT_OWNER_IS_MAIN && unifiedTabIdsToClose.length > 0) {
-        for (const unifiedTabId of unifiedTabIdsToClose) {
-          get().closeUnifiedTab(unifiedTabId)
-        }
-        afterPendingTabs(unifiedTabIdsToClose, (outcomes) => {
-          // A reopen while the close was in flight keeps the file.
-          const worktreeId = preClose?.worktreeId ?? ''
-          const reopened =
-            hasPendingEntityTab(worktreeId, fileId) ||
-            (get().unifiedTabsByWorktree[worktreeId] ?? []).some((tab) => tab.entityId === fileId)
-          if (outcomes.every((outcome) => outcome !== null) && !reopened) {
-            cleanUp()
-          }
-        })
+        closeFileTabsThroughLayoutOwner(
+          get,
+          unifiedTabIdsToClose,
+          { worktreeId: preClose?.worktreeId ?? '', fileId },
+          cleanUp
+        )
         return
       }
       cleanUp()

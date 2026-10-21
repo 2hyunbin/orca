@@ -15,7 +15,8 @@ export type ContentRekey = {
 
 type Entry = { rekey: ContentRekey; fileIds: readonly string[]; waiters: ((ok: boolean) => void)[] }
 
-/** A rekey outlives its frame only when main never answers; keep the newest few. */
+/** A rekey outlives its frame only when main never answers. Past the cap the oldest settles as
+ *  dropped (its waiters hear false) and its content stays under the old ids. */
 const MAX_REKEYS = 64
 
 const pending = new Set<Entry>()
@@ -44,13 +45,23 @@ export function expectContentRekey(
   const entry: Entry = { rekey, fileIds, waiters: [] }
   pending.add(entry)
   if (pending.size > MAX_REKEYS) {
-    finish(pending.values().next().value!, false)
+    const oldest = pending.values().next().value
+    if (oldest) {
+      finish(oldest, false)
+    }
   }
   return {
     applied: (show, state) => {
-      if (pending.has(entry)) {
+      if (!pending.has(entry)) {
+        return
+      }
+      // A throwing rekey settles as dropped, so its waiters never hang.
+      let ok = false
+      try {
         show(rekey.patch(state))
-        finish(entry, true)
+        ok = true
+      } finally {
+        finish(entry, ok)
       }
     },
     dropped: () => finish(entry, false)
@@ -89,8 +100,13 @@ export function shownContentRekeyPatch(
   let patch: Partial<AppState> = {}
   for (const entry of pending) {
     if (entry.rekey.shows(cache)) {
-      patch = { ...patch, ...entry.rekey.patch({ ...state, ...patch }) }
-      finish(entry, true)
+      let ok = false
+      try {
+        patch = { ...patch, ...entry.rekey.patch({ ...state, ...patch }) }
+        ok = true
+      } finally {
+        finish(entry, ok)
+      }
     }
   }
   return patch

@@ -1,13 +1,29 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { create } from 'zustand'
 import { useAppStore } from '@/store'
 import {
   assertEditorBufferInvariant,
   withEditorBufferRecords
 } from './editor-buffer-record-lifecycle'
-import type { EditorBufferRecords } from './slices/editor/buffers/editor-buffer-record'
+import {
+  adoptMirroredEditorBuffers,
+  type EditorBufferRecords
+} from './slices/editor/buffers/editor-buffer-record'
 import type { OpenFile } from './slices/editor/types/open-file'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
+import { drawTabsFromMain } from './slices/tabs-drawn-from-main.test-fixture'
+
+// Switch on: main renames the tabs, and its frame rekeys the content (T1 transport, apply mode).
+vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeRpcClientWithLayoutApply(await importOriginal())
+)
+vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
+  (
+    await import('@/runtime/layout-apply-test-transport.test-fixture')
+  ).runtimeLayoutClientWithTestFrames(await importOriginal())
+)
 
 function openEditTab(filePath = '/repo/a.md', worktreeId = 'wt-1'): string {
   return useAppStore.getState().openFile(
@@ -119,8 +135,10 @@ describe('editor buffer records', () => {
     expect(fileOf(id)?.pendingDiskBaselineVerification).toBe(undefined)
   })
 
-  it('re-keys the record with a self-move and gates the moved dirty tab on both copies', () => {
+  it('re-keys the record with a self-move and gates the moved dirty tab on both copies', async () => {
+    const main = await drawTabsFromMain(useAppStore)
     const id = openEditTab()
+    await main.settle()
     useAppStore.getState().markFileDirty(id, true)
     useAppStore.getState().setLastKnownDiskSignature(id, 'sig-a')
     const watch = watchInvariant()
@@ -137,6 +155,8 @@ describe('editor buffer records', () => {
       ],
       moveOperationId: 'move-1'
     })
+    await main.settle()
+    main.close()
 
     watch.stop()
     expect(result).toEqual({ ok: true })
@@ -204,6 +224,27 @@ describe('editor buffer records', () => {
       isDirty: true,
       externalMutation: 'changed'
     })
+  })
+
+  it("adopts a host republish of a mirrored tab's buffer state, as remote session sync writes it", () => {
+    const id = openEditTab()
+    const republish = (mirroredFromRuntimeSession: true | undefined): void =>
+      useAppStore.setState((state) => {
+        const openFiles = state.openFiles.map((file) =>
+          file.id === id ? { ...file, isDirty: !file.isDirty, mirroredFromRuntimeSession } : file
+        )
+        return {
+          openFiles,
+          editorBuffers: adoptMirroredEditorBuffers(state.editorBuffers, openFiles)
+        }
+      })
+
+    // Why: only host-owned tabs adopt; a local tab's buffer state is written through its record.
+    expect(() => republish(undefined)).toThrow(/"isDirty" of/)
+    republish(true)
+
+    expect(useAppStore.getState().editorBuffers[id]?.isDirty).toBe(true)
+    expect(fileOf(id)?.isDirty).toBe(true)
   })
 
   it('rejects a slice write that changes a mirror field without its record', () => {

@@ -106,9 +106,18 @@ vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
           const pin = (): void => store.getState().pinTab(tab.id)
           // A layout-owner build pins through main first, as the tab bar does; then main promotes.
           if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-            withLayoutOwnerTabProps({ togglePinned: pin }, () => WT).togglePinned({
+            withLayoutOwnerTabProps(
+              {
+                togglePinned: pin,
+                makePreviewFilePermanent: (fileId, tabId) =>
+                  store.getState().makePreviewFilePermanent(fileId, tabId)
+              },
+              () => WT
+            ).togglePinned({
               unifiedTabId: tab.id,
-              isPinned: false
+              isPinned: false,
+              type: 'editor',
+              data: { id: 'f.ts' }
             })
           } else {
             pin()
@@ -161,7 +170,7 @@ vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
         expect(store.getState().groupsByWorktree[WT][0].tabOrder).toEqual([t3.id, t2.id, t1.id])
       })
 
-      it('syncs isPinned to the TerminalTab in tabsByWorktree (reconcile echo guard)', () => {
+      it('syncs isPinned to the TerminalTab in tabsByWorktree (reconcile echo guard)', async () => {
         // Why: reconcile derives pin from tabsByWorktree[*].isPinned; without syncing, a host snapshot re-computes isPinned:false and un-pins during the echo window.
         const tab = store.getState().createUnifiedTab(WT, 'terminal')
         store.setState((state) => ({
@@ -182,11 +191,27 @@ vi.mock('@/runtime/runtime-layout-client', async (importOriginal) =>
           }
         }))
 
-        store.getState().pinTab(tab.id)
-        expect(store.getState().tabsByWorktree[WT][0].isPinned).toBe(true)
-
-        store.getState().unpinTab(tab.id)
-        expect(store.getState().tabsByWorktree[WT][0].isPinned).toBe(false)
+        // A layout-owner build draws the color from main's frame.
+        const main = await drawTabsFromMain(store)
+        try {
+          const interaction = vi.fn()
+          store.setState({ recordFeatureInteraction: interaction })
+          store.getState().pinTab(tab.id, { recordInteraction: false })
+          expect(store.getState().tabsByWorktree[WT][0].isPinned).toBe(true)
+          store.getState().unpinTab(tab.id, { recordInteraction: false })
+          expect(store.getState().tabsByWorktree[WT][0].isPinned).toBe(false)
+          store.getState().setTabColor(tab.entityId, '#ff0000', { recordInteraction: false })
+          await main.settle()
+          expect(store.getState().tabsByWorktree[WT][0].color).toBe('#ff0000')
+          expect(interaction).not.toHaveBeenCalled()
+          store.getState().pinTab(tab.id)
+          store.getState().unpinTab(tab.id)
+          store.getState().setTabColor(tab.entityId, null)
+          await main.settle()
+          expect(interaction).toHaveBeenCalledTimes(3)
+        } finally {
+          main.close()
+        }
       })
     })
   })

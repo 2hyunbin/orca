@@ -275,6 +275,43 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
       expect(useAppStore.getState().editorDrafts).toEqual({ [newId]: 'unsaved' })
     })
 
+    it('moves a file restored in two splits as one tab, rekeyed with the frame that shows it', async () => {
+      const oldId = openRestoredSource()
+      await settledSent()
+      const left = useAppStore.getState().groupsByWorktree[SOURCE]?.[0]?.id ?? ''
+      const right = useAppStore.getState().createEmptySplitGroup(SOURCE, left, 'right') ?? ''
+      useAppStore.getState().openFile(
+        {
+          filePath: FILE_PATH,
+          relativePath: FILE_PATH,
+          worktreeId: SOURCE,
+          runtimeEnvironmentId: null,
+          language: 'markdown',
+          mode: 'edit'
+        },
+        { suppressActiveRuntimeFallback: true, targetGroupId: right }
+      )
+      await settledSent()
+      expect(windowView(SOURCE).map((group) => group.tabs.length)).toEqual([1, 1])
+
+      const result = reparent(oldId)
+      const newId = result.ok ? result.fileId : ''
+      const outcome = contentRekeyOutcome([oldId])
+      await settledSent()
+
+      expect(await outcome).toBe(true)
+      expect(windowView(TARGET)).toEqual([
+        { group: expect.any(String), tabs: [expect.objectContaining({ entity: newId })] }
+      ])
+      expect(windowView(SOURCE)).toEqual([])
+      expectMainMatchesWindow()
+      expect(useAppStore.getState().openFiles).toEqual([
+        expect.objectContaining({ id: newId, worktreeId: TARGET })
+      ])
+      const shown = windowView(TARGET)[0]?.tabs[0]?.id
+      expect(useAppStore.getState().groupsByWorktree[TARGET]?.[0]?.activeTabId).toBe(shown)
+    })
+
     it('changes nothing when main refuses the move', async () => {
       const oldId = openRestoredSource()
       await settledSent()

@@ -12,6 +12,13 @@ import type { EditorTabSelection, OpenFile } from '../types/open-file'
 import { isEditorTabContentType, type EditorTabContentType } from './editor-tab-content-type'
 import { restorableEditorFile } from './editor-tab-layout-owner'
 import { layoutEditorViewOfOpenFile } from './open-file-layout-view'
+import { layoutFrameWorkspace } from '@/runtime/layout-frame-workspaces'
+import { editorTabFile } from '../../../../../../shared/workspace-layout/workspace-layout-editor-tab-file'
+import { stableJson } from '../../../../../../shared/workspace-layout/workspace-layout-load-report'
+import {
+  publishEditorFile,
+  publishEditorView
+} from '../../../../../../shared/workspace-layout/workspace-layout-published'
 
 type EditorTabOpen = {
   fileId: string
@@ -88,14 +95,25 @@ export function openEditorTabThroughLayoutOwner(
     // Main stamps the tab's time (ledger L186); the frame draws it.
     ...(open.isPreview ? { preview: true } : {})
   }
-  const settle = beginPendingTab(tabId, worktreeId, fileId, groupId)
+  const settle = beginPendingTab(tabId, worktreeId, fileId, { kind: 'open', groupId })
   const sent = sendLayoutApply(state, worktreeId, command, {
     apply: (result) => {
       const shownId = result.tabId ?? tabId
-      selectDrawnEditorTab(state, worktreeId, shownId, open.selection)
-      settle(shownId)
+      // A throwing selection must not leave the tab pending: its waiters would never run.
+      try {
+        selectDrawnEditorTab(state, worktreeId, shownId, open.selection)
+      } finally {
+        settle(shownId)
+      }
     },
-    asToday: () => settle(open.drawHere(tabId)?.id ?? null),
+    asToday: () => {
+      let shownId: string | null = null
+      try {
+        shownId = open.drawHere(tabId)?.id ?? null
+      } finally {
+        settle(shownId)
+      }
+    },
     refused: () => settle(null)
   })
   if (!sent) {
@@ -122,6 +140,25 @@ function selectDrawnEditorTab(
   })
 }
 
+/** Whether main's latest frame shows the tab with this record and view: a reopen sends nothing then. */
+function frameHoldsEditorContent(
+  tab: Pick<Tab, 'id' | 'entityId' | 'worktreeId'>,
+  content: ReturnType<typeof editorTabContent>
+): boolean {
+  const workspace = layoutFrameWorkspace(tab.worktreeId)
+  const shown = workspace?.tabs.find((entry) => entry.id === tab.id)
+  if (!workspace || shown?.entityId !== tab.entityId) {
+    return false
+  }
+  const record = content.file && editorTabFile(workspace, tab.entityId)
+  return (
+    (!content.view ||
+      stableJson(shown.editorView ?? null) === stableJson(publishEditorView(content.view))) &&
+    (!content.file ||
+      (record !== undefined && stableJson(record) === stableJson(publishEditorFile(content.file))))
+  )
+}
+
 /** An open the window answered with a tab it already shows: main takes its current record and view. */
 export function sendReusedEditorTabToLayoutOwner(
   state: AppState,
@@ -132,7 +169,7 @@ export function sendReusedEditorTabToLayoutOwner(
     return
   }
   const content = editorTabContent(file)
-  if (!content.file && !content.view) {
+  if ((!content.file && !content.view) || frameHoldsEditorContent(tab, content)) {
     return
   }
   const keep = (): void => {}

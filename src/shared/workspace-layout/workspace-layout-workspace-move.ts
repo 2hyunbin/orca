@@ -45,10 +45,28 @@ export function groupShowsTabFile(
   )
 }
 
+type Move = CommandOf<'moveTabToWorkspace'>['tabs'][number] & { tab: LayoutTab }
+
+/** The tab a group already shows for each file, by kind and entity: a layout-owner build's fold. */
+function shownFiles(workspace: WorkspaceLayout, groupId: string): Map<string, string> {
+  const shown = new Map<string, string>()
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    return shown
+  }
+  for (const id of workspace.groups.find((group) => group.id === groupId)?.tabOrder ?? []) {
+    const tab = findTab(workspace, id)
+    if (tab && EDITOR_KINDS.has(tab.kind)) {
+      shown.set(`${tab.kind}\0${tab.entityId}`, tab.id)
+    }
+  }
+  return shown
+}
+
 /**
  * Each tab leaves its workspace and is appended to `groupId` under its new ids, with its view (the
  * window's new one when it sends one); the file's record moves with it. Only editor tabs move: no
- * other kind's records follow it.
+ * other kind's records follow it. In a layout-owner build a tab whose file the group already shows
+ * (or an earlier moved tab does) folds into that tab, as the loader folds a saved duplicate.
  */
 export function moveTabToWorkspace(
   model: WorkspaceLayoutModel,
@@ -65,9 +83,17 @@ export function moveTabToWorkspace(
   ) {
     return refuse('invalid_params')
   }
-  let source = model.workspaces[fromKey]!
+  const sourceLayout = model.workspaces[fromKey]
+  if (!sourceLayout) {
+    return refuse('workspace_not_found')
+  }
+  let source = sourceLayout
   let target = workspaceOrEmpty(model, toKey)
-  const moves: (CommandOf<'moveTabToWorkspace'>['tabs'][number] & { tab: LayoutTab })[] = []
+  const shown = shownFiles(target, command.groupId)
+  const moves: Move[] = []
+  const folds: LayoutTab[] = []
+  // Where the last tab named lands: under its new id, or as the tab it folded into.
+  let landed = command.groupId
   for (const move of command.tabs) {
     const tab = findTab(source, move.tabId)
     if (!tab) {
@@ -76,21 +102,24 @@ export function moveTabToWorkspace(
     if (!EDITOR_KINDS.has(tab.kind)) {
       return refuse('invalid_params')
     }
+    const key = `${tab.kind}\0${move.newEntityId}`
+    const kept = shown.get(key)
+    if (kept !== undefined) {
+      folds.push(tab)
+      landed = kept
+      continue
+    }
     const held = Object.values(model.workspaces).some((workspace) =>
       workspace.tabs.some((entry) => entry.id === move.newTabId && entry !== tab)
     )
-    const moved = { ...tab, id: move.newTabId, entityId: move.newEntityId }
-    const twice = moves.some(
-      (prior) => prior.tab.kind === tab.kind && prior.newEntityId === move.newEntityId
-    )
-    if (
-      held ||
-      groupShowsTabFile(target, command.groupId, moved) ||
-      (twice && ORCA_LAYOUT_OWNER_IS_MAIN)
-    ) {
+    if (held) {
       return refuse('tab_exists')
     }
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      shown.set(key, move.newTabId)
+    }
     moves.push({ tab, ...move })
+    landed = move.newTabId
   }
   if (!target.groups.some((group) => group.id === command.groupId)) {
     if (target.groups.length > 0) {
@@ -99,13 +128,13 @@ export function moveTabToWorkspace(
     // A workspace with no group takes the window's, as openEditorTab does.
     target = { ...target, groups: [{ id: command.groupId, tabOrder: [] }] }
   }
+  for (const tab of folds) {
+    source = withoutTab(source, tab.id)
+  }
   for (const { tab, newTabId, newEntityId, view: newView } of moves) {
     const view = newView ?? source.editorViews?.[tab.id]
-    source = removeTabFromWorkspace(source, tab.id)
-    if (source.editorViews) {
-      source = { ...source, editorViews: withoutKey(source.editorViews, tab.id) }
-    }
-    const end = target.groups.find((group) => group.id === command.groupId)!.tabOrder.length
+    source = withoutTab(source, tab.id)
+    const end = target.groups.find((group) => group.id === command.groupId)?.tabOrder.length ?? 0
     target = placeNewTab(
       target,
       toKey,
@@ -121,7 +150,15 @@ export function moveTabToWorkspace(
     ;({ source, target } = moveEditorFile(source, target, command.file))
   }
   const next = withWorkspace(withWorkspace(model, fromKey, source), toKey, target)
-  return applied(next, { tabId: moves.at(-1)!.newTabId, groupId: command.groupId })
+  return applied(next, { tabId: landed, groupId: command.groupId })
+}
+
+/** The workspace without the tab and its view. */
+function withoutTab(workspace: WorkspaceLayout, tabId: string): WorkspaceLayout {
+  const removed = removeTabFromWorkspace(workspace, tabId)
+  return removed.editorViews
+    ? { ...removed, editorViews: withoutKey(removed.editorViews, tabId) }
+    : removed
 }
 
 /** The file's record moves with its tabs. */

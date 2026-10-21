@@ -27,13 +27,32 @@ import { layoutEditorViewOfOpenFile } from './open-file-layout-view'
 
 type TabMove = { tab: Tab; newTabId: string; newEntityId: string }
 
-const tabRekeysOf = (moves: readonly TabMove[]): TabRekey[] =>
-  moves.map(({ tab, newTabId, newEntityId }) => ({
-    tabId: tab.id,
-    entityId: tab.entityId,
-    newTabId,
-    newEntityId
-  }))
+/**
+ * Each moved tab under the ids main's frame shows it with: a tab whose file the target group
+ * already shows, or an earlier moved tab does, folds into that one, as main folds it.
+ */
+function tabRekeysOf(
+  state: AppState,
+  to: string,
+  groupId: string,
+  moves: readonly TabMove[]
+): TabRekey[] {
+  const tabs = new Map((state.unifiedTabsByWorktree[to] ?? []).map((tab) => [tab.id, tab]))
+  const shown = new Map<string, string>()
+  for (const id of state.groupsByWorktree[to]?.find((group) => group.id === groupId)?.tabOrder ??
+    []) {
+    const tab = tabs.get(id)
+    if (tab) {
+      shown.set(`${tab.contentType}\0${tab.entityId}`, tab.id)
+    }
+  }
+  return moves.map(({ tab, newTabId, newEntityId }) => {
+    const key = `${tab.contentType}\0${newEntityId}`
+    const landed = shown.get(key) ?? newTabId
+    shown.set(key, landed)
+    return { tabId: tab.id, entityId: tab.entityId, newTabId: landed, newEntityId }
+  })
+}
 
 function moveCommand(
   args: RestoredEditorOwnerMigration,
@@ -100,17 +119,12 @@ export function reparentRestoredEditorThroughLayoutOwner(
   const { source, newFileId, previewIdMigrations } = destination
   const from = source.worktreeId
   const migrations = new Map([[source.id, newFileId], ...previewIdMigrations])
-  const moves: TabMove[] = (state.unifiedTabsByWorktree[from] ?? []).flatMap((tab) =>
-    migrations.has(tab.entityId)
-      ? [
-          {
-            tab,
-            newTabId: migrations.get(tab.id) ?? tab.id,
-            newEntityId: migrations.get(tab.entityId)!
-          }
-        ]
-      : []
-  )
+  const moves: TabMove[] = (state.unifiedTabsByWorktree[from] ?? []).flatMap((tab) => {
+    const newEntityId = migrations.get(tab.entityId)
+    return newEntityId === undefined
+      ? []
+      : [{ tab, newTabId: migrations.get(tab.id) ?? tab.id, newEntityId }]
+  })
   if (moves.length === 0) {
     return null
   }
@@ -127,23 +141,26 @@ export function reparentRestoredEditorThroughLayoutOwner(
   const renamedFile = (id: string): OpenFile | undefined =>
     planned.patch.openFiles?.find((file) => file.id === id && file.worktreeId === to)
   const command = moveCommand(args, source, moves, groupId, renamedFile, newFileId)
+  const rekeys = tabRekeysOf(state, to, groupId, moves)
   const expected = expectContentRekey(
     {
-      shows: (cache) => framesShowTabRekeys(cache, from, to, tabRekeysOf(moves)),
+      shows: (cache) => framesShowTabRekeys(cache, from, to, rekeys),
       // Re-checked against the store the frame finds; a move gone stale rekeys nothing.
       patch: (s) => transitionOf(s)?.patch ?? {}
     },
     [...migrations.keys(), ...migrations.values()]
   )
   const sent = sendLayoutApply(state, from, command, {
-    apply: () => {
+    apply: (result) => {
       expected.applied((patch) => set(patch), get())
-      if (activatesTarget) {
+      // Main's answer names the tab the move landed as, a folded one's kept tab included.
+      const landed = result.tabId ?? rekeys.at(-1)?.newTabId
+      if (activatesTarget && landed) {
         get().setActiveWorktree(to, args.targetExecutionHostId, {
           stateTransition: () => ({
             patch: {},
             activate: true,
-            preferredActiveUnifiedTabId: moves.at(-1)!.newTabId
+            preferredActiveUnifiedTabId: landed
           })
         })
       }

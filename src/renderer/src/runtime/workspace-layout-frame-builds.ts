@@ -111,7 +111,8 @@ export function layoutFrameFlushPatch(
   if (rebound.size > 0) {
     let layouts = { ...state, ...patch }.terminalLayoutsByTabId
     for (const [key, tabIds] of rebound) {
-      const next = terminalLayoutsWithFrameBindings(layouts, key, cache[key]!, tabIds)
+      const layout = cache[key]
+      const next = layout && terminalLayoutsWithFrameBindings(layouts, key, layout, tabIds)
       if (next) {
         layouts = next
       } else {

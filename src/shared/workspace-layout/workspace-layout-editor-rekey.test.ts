@@ -162,3 +162,75 @@ describe('editor tabs follow a file renamed on disk', () => {
     })
   })
 })
+
+describe("one disk move's renames across workspaces", () => {
+  const OTHER = 'other-ws'
+
+  /** a.ts open in WS and in a second workspace of the same partition. */
+  function twoWorkspaces(): WorkspaceLayoutModel {
+    return build(
+      testContext(),
+      [
+        {
+          type: 'openEditorTab',
+          workspace: OTHER,
+          tabId: 'other-a',
+          fileId: '/repo/a.ts',
+          contentType: 'editor',
+          file: file('/repo/a.ts')
+        },
+        {
+          type: 'openEditorTab',
+          workspace: OTHER,
+          tabId: 'other-c',
+          fileId: '/repo/c.ts',
+          contentType: 'editor',
+          file: file('/repo/c.ts')
+        }
+      ],
+      setup()
+    ).model
+  }
+
+  const both = (otherRenames: EditorFileRename[]) => ({
+    type: 'renameEditorFiles' as const,
+    workspace: WS,
+    renames: [edit('/repo/a.ts', '/repo/src/a.ts')],
+    alsoIn: [{ workspace: OTHER, renames: otherRenames }]
+  })
+
+  it('renames both workspaces in one change', () => {
+    const model = twoWorkspaces()
+    const result = applyLayoutCommand(
+      model,
+      both([edit('/repo/a.ts', '/repo/src/a.ts')]),
+      testContext()
+    )
+    if (!result.ok) {
+      throw new Error(result.code)
+    }
+    expect(checkWorkspaceLayoutModelRules([result.model], [model])).toEqual([])
+    for (const key of [WS, OTHER]) {
+      expect(result.model.workspaces[key]?.tabs.map((tab) => tab.entityId)).toContain(
+        '/repo/src/a.ts'
+      )
+    }
+  })
+
+  it('changes neither when one workspace refuses', () => {
+    // OTHER would take c.ts's id, which an open file holds.
+    expect(
+      applyLayoutCommand(twoWorkspaces(), both([edit('/repo/a.ts', '/repo/c.ts')]), testContext())
+    ).toEqual({ ok: false, code: 'invalid_params' })
+    expect(
+      applyLayoutCommand(
+        twoWorkspaces(),
+        {
+          ...both([]),
+          alsoIn: [{ workspace: 'missing', renames: [edit('/repo/a.ts', '/repo/b.ts')] }]
+        },
+        testContext()
+      )
+    ).toEqual({ ok: false, code: 'workspace_not_found' })
+  })
+})

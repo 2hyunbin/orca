@@ -206,29 +206,79 @@ describe('moveTabToWorkspace', () => {
   })
 
   it.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
-    'refuses a second tab for a file the target group already shows, layout-owner build',
+    'folds a tab into the one the target group already shows for its file, layout-owner build',
+    () => {
+      const { ctx, model, terminal } = twoWorkspaces()
+      const shown = build(
+        ctx,
+        [
+          {
+            type: 'openEditorTab',
+            workspace: TO,
+            tabId: 'shown-tab',
+            fileId: NEW_ID,
+            contentType: 'editor',
+            groupId: 'target-group'
+          }
+        ],
+        model
+      )
+
+      const moved = build(ctx, [move()], shown.model)
+
+      // The moved tab lands as the kept one; the source gives it up.
+      expect(moved.results[0]).toEqual({ tabId: 'shown-tab', groupId: 'target-group' })
+      expect(tabsOf(moved.model, TO)).toEqual([
+        {
+          group: 'target-group',
+          tabs: ['target-tab=/target/a.ts', `shown-tab=${NEW_ID}`]
+        }
+      ])
+      expect(tabsOf(moved.model, WS)).toEqual([
+        { group: expect.any(String), tabs: [`${terminal}=${terminal}`] }
+      ])
+      expect(moved.model.workspaces[TO]!.editorFiles).toEqual([FILE])
+    }
+  )
+
+  it.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+    "folds a file's later moved tab into its first, as two restored splits move, layout-owner build",
     () => {
       const { ctx, model } = twoWorkspaces()
-      const shown = applyLayoutCommand(
-        model,
-        {
-          type: 'openEditorTab',
-          workspace: TO,
-          tabId: 'shown-tab',
-          fileId: NEW_ID,
-          contentType: 'editor',
-          groupId: 'target-group'
-        },
-        ctx
+      const split = build(
+        ctx,
+        [
+          {
+            type: 'openEditorTab',
+            workspace: WS,
+            tabId: 'split-copy',
+            fileId: PATH,
+            contentType: 'editor',
+            split: { besideGroupId: model.workspaces[WS]!.groups[0]!.id, direction: 'right' },
+            groupId: 'split-group'
+          }
+        ],
+        model
       )
-      if (!shown.ok) {
-        throw new Error(shown.code)
-      }
 
-      expect(applyLayoutCommand(shown.model, move(), ctx)).toEqual({
-        ok: false,
-        code: 'tab_exists'
-      })
+      const moved = build(
+        ctx,
+        [
+          move({
+            tabs: [
+              { tabId: PATH, newTabId: NEW_ID, newEntityId: NEW_ID },
+              { tabId: 'split-copy', newTabId: 'split-copy', newEntityId: NEW_ID }
+            ]
+          })
+        ],
+        split.model
+      )
+
+      expect(moved.results[0]).toEqual({ tabId: NEW_ID, groupId: 'target-group' })
+      expect(tabsOf(moved.model, TO)).toEqual([
+        { group: 'target-group', tabs: ['target-tab=/target/a.ts', `${NEW_ID}=${NEW_ID}`] }
+      ])
+      expect(moved.model.workspaces[WS]!.tabs.map((tab) => tab.id)).not.toContain('split-copy')
     }
   )
 

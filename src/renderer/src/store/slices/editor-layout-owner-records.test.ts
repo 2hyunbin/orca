@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { remapOpenEditorTabsForPathChange } from '@/lib/remap-open-editor-tabs-for-path-change'
 import type { AppState } from '@/store/types'
+import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { editorMoveOwnerFromContext, type EditorMoveOwner } from '@/lib/open-editor-move-owner'
 import { drawTabsFromMain, type TabsDrawnFromMain } from './tabs-drawn-from-main.test-fixture'
 import { contentRekeyOutcome } from '@/runtime/layout-owner-content-rekeys'
+import { hasPendingEntityTab } from '@/runtime/layout-owner-pending-tabs'
 
 // Main's answer to the window's layout commands, as a switch-on build sends them.
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) =>
@@ -246,6 +248,85 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('closing every editor, layout-owner bu
     ])
   })
 
+  it('cleans a file up once when it is closed again while its close is in flight', async () => {
+    const a = openEdit(WT, '/repo-a/a.ts', 'a.ts')
+    await main.settle()
+    useAppStore.getState().setEditorDraft(a, 'unsaved')
+    // A repeat close reaches main after the first emptied the workspace, which main refuses.
+    let closes = 0
+    layoutApplyTestTransport.answerWith(() =>
+      closes++ === 0 ? 'pending' : { ok: false, code: 'workspace_not_found' }
+    )
+
+    useAppStore.getState().closeFile(a)
+    useAppStore.getState().closeFile(a)
+    await main.settle()
+    layoutApplyTestTransport.answerWith('apply')
+    layoutApplyTestTransport.answerPending()
+    await main.settle()
+
+    const state = useAppStore.getState()
+    expect(editorTabsAndFiles()).toEqual([])
+    expect(state.openFiles).toEqual([])
+    expect(state.editorDrafts).toEqual({})
+    expect(state.recentlyClosedEditorTabsByWorktree[WT]?.map((entry) => entry.filePath)).toEqual([
+      '/repo-a/a.ts'
+    ])
+    expect(layoutApplyTestTransport.sentOfType('closeTabs')).toHaveLength(1)
+  })
+
+  it("cleans a file up when it is closed during a bulk close's close of its tab", async () => {
+    const keep = openEdit(WT, '/repo-a/keep.ts', 'keep.ts')
+    const a = openEdit(WT, '/repo-a/a.ts', 'a.ts')
+    await main.settle()
+    useAppStore.getState().setEditorDraft(a, 'unsaved')
+    const keepTab = useAppStore
+      .getState()
+      .unifiedTabsByWorktree[WT]?.find((tab) => tab.entityId === keep)
+    layoutApplyTestTransport.answerWith('pending')
+
+    // "Close others" closes a's tab with no file cleanup; a closeFile lands while it is in flight.
+    useAppStore.getState().closeOtherTabs(keepTab?.id ?? '')
+    useAppStore.getState().closeFile(a)
+    layoutApplyTestTransport.answerWith('apply')
+    layoutApplyTestTransport.answerPending()
+    await main.settle()
+
+    const state = useAppStore.getState()
+    expect(editorTabsAndFiles().map((tab) => tab.entity)).toEqual([keep])
+    expect(state.openFiles.map((file) => file.id)).toEqual([keep])
+    expect(state.editorDrafts).toEqual({})
+    expect(layoutApplyTestTransport.sentOfType('closeTabs')).toHaveLength(1)
+  })
+
+  it('settles an open whose selection threw: its waiters run and nothing stays pending', async () => {
+    const activateTab = useAppStore.getState().activateTab
+    useAppStore.setState({
+      activateTab: () => {
+        throw new Error('selection failed')
+      }
+    })
+    const shown: unknown[] = []
+    useAppStore.getState().openFileForLink(
+      {
+        filePath: '/repo-a/a.ts',
+        relativePath: 'a.ts',
+        worktreeId: WT,
+        runtimeEnvironmentId: null,
+        language: 'typescript',
+        mode: 'edit'
+      },
+      undefined,
+      null,
+      (result) => shown.push(result)
+    )
+    await main.settle()
+    useAppStore.setState({ activateTab })
+
+    expect(shown).toEqual([expect.objectContaining({ fileId: '/repo-a/a.ts' })])
+    expect(hasPendingEntityTab(WT, '/repo-a/a.ts')).toBe(false)
+  })
+
   it('keeps every file whose close main refused', async () => {
     const a = openEdit(WT, '/repo-a/a.ts', 'a.ts')
     await main.settle()
@@ -281,10 +362,14 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open files renamed on disk, layout-ow
     expect(result).toEqual({ ok: true })
     await main.settle()
     const commands = layoutApplyTestTransport.sent.slice(sentBefore)
-    expect(commands.map((command) => [command.type, command.workspace])).toEqual([
-      ['renameEditorFiles', WT],
-      ['renameEditorFiles', SIBLING]
-    ])
+    // One command: main renames both workspaces' tabs or neither.
+    expect(
+      commands.map((command) => [
+        command.type,
+        command.workspace,
+        command.type === 'renameEditorFiles' ? command.alsoIn?.map((entry) => entry.workspace) : []
+      ])
+    ).toEqual([['renameEditorFiles', WT, [SIBLING]]])
     expect(editorTabsAndFiles().map((tab) => tab.entity)).not.toContain(plain)
     for (const worktreeId of [WT, SIBLING]) {
       expect(mainView(worktreeId)).toEqual(windowView(worktreeId))
@@ -294,6 +379,35 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open files renamed on disk, layout-ow
     }
     expect(editorTabsAndFiles(WT).every((tab) => tab.hasFile)).toBe(true)
     expect(editorTabsAndFiles(SIBLING).every((tab) => tab.hasFile)).toBe(true)
+  })
+
+  it('changes neither workspace when main refuses the rename in one of them', async () => {
+    openEdit(WT, '/repo-a/src/a.ts', 'src/a.ts')
+    openEdit(SIBLING, '/repo-a/src/a.ts', 'src/a.ts')
+    await main.settle()
+    const before = useAppStore.getState()
+    const mainBefore = layoutApplyTestTransport.mainModel
+    const touchesSibling = (command: LayoutCommand): boolean =>
+      command.workspace === SIBLING ||
+      (command.type === 'renameEditorFiles' &&
+        (command.alsoIn ?? []).some((entry) => entry.workspace === SIBLING))
+    layoutApplyTestTransport.answerWith((command) =>
+      touchesSibling(command) ? { ok: false, code: 'tab_exists' } : 'apply'
+    )
+
+    remapOpenEditorTabsForPathChange({
+      fromPath: '/repo-a/src',
+      toPath: '/repo-a/lib',
+      worktreePath: '/repo-a',
+      worktreeId: WT,
+      owner: localMoveOwner(WT)
+    })
+
+    expect(await contentRekeyOutcome(before.openFiles.map((file) => file.id))).toBe(false)
+    await main.settle()
+    expect(layoutApplyTestTransport.mainModel).toEqual(mainBefore)
+    expect(useAppStore.getState().openFiles).toEqual(before.openFiles)
+    expect(useAppStore.getState().unifiedTabsByWorktree).toEqual(before.unifiedTabsByWorktree)
   })
 
   it('rekeys a dirty draft and the autosave gate in the same update as the frame', async () => {
@@ -370,6 +484,45 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)('open files renamed on disk, layout-ow
     expect(after.openFiles).toEqual(before.openFiles)
     expect(after.editorDrafts).toEqual({ [oldId]: 'unsaved' })
     expect(after.unifiedTabsByWorktree).toEqual(before.unifiedTabsByWorktree)
+  })
+
+  it('settles a rename whose content rekey threw, so the move does not wait forever', async () => {
+    openEdit(WT, '/repo-a/b.ts', 'b.ts')
+    await main.settle()
+    // A conflict review's selected file has no tab: main's answer rekeys it.
+    useAppStore.setState({
+      openFiles: [
+        ...useAppStore.getState().openFiles,
+        {
+          id: '/repo-a/src/c.ts',
+          filePath: '/repo-a/src/c.ts',
+          relativePath: 'src/c.ts',
+          worktreeId: WT,
+          language: 'typescript',
+          isDirty: false,
+          mode: 'edit'
+        }
+      ]
+    })
+    const unsubscribe = useAppStore.subscribe((state) => {
+      if (state.openFiles.some((file) => file.filePath === '/repo-a/lib/c.ts')) {
+        throw new Error('a subscriber threw')
+      }
+    })
+    remapOpenEditorTabsForPathChange({
+      fromPath: '/repo-a/src',
+      toPath: '/repo-a/lib',
+      worktreePath: '/repo-a',
+      worktreeId: WT,
+      owner: localMoveOwner(WT)
+    })
+    const outcomes: boolean[] = []
+    void contentRekeyOutcome(['/repo-a/src/c.ts']).then((ok) => outcomes.push(ok))
+
+    await main.settle()
+    unsubscribe()
+
+    expect(outcomes).toEqual([false])
   })
 
   it("gives a renamed view tab's published view the file's new path", async () => {
@@ -459,6 +612,58 @@ describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
       expect(layoutApplyTestTransport.mainModel!.workspaces[WT]?.tabs ?? []).toEqual([])
       expect(editorTabsAndFiles()).toEqual([])
       expect(useAppStore.getState().openFiles).toEqual([])
+    })
+  }
+)
+
+describe.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+  'a runtime-owned file the window opens, layout-owner build',
+  () => {
+    const FILE = '/repo-a/src/remote.ts'
+    const openRuntimeOwned = (onShown: (result: unknown) => void) =>
+      useAppStore.getState().openFileForLink(
+        {
+          filePath: FILE,
+          relativePath: 'src/remote.ts',
+          worktreeId: WT,
+          runtimeEnvironmentId: 'env-1',
+          language: 'typescript',
+          mode: 'edit'
+        },
+        undefined,
+        null,
+        onShown
+      )
+
+    it('keeps one id through frames, so its reveal runs and a rename reaches main', async () => {
+      const shown: unknown[] = []
+      openRuntimeOwned((result) => shown.push(result))
+      await main.settle()
+
+      const fileId = useAppStore.getState().openFiles[0]?.id
+      expect(shown).toEqual([expect.objectContaining({ fileId })])
+      expect(editorTabsAndFiles()).toEqual([{ kind: 'editor', entity: fileId, hasFile: true }])
+      expect(mainView(WT)).toEqual(windowView(WT))
+
+      remapOpenEditorTabsForPathChange({
+        fromPath: '/repo-a/src',
+        toPath: '/repo-a/lib',
+        worktreePath: '/repo-a',
+        worktreeId: WT,
+        owner: editorMoveOwnerFromContext(
+          { target: { kind: 'environment', environmentId: 'env-1' } },
+          WT
+        )
+      })
+      expect(await contentRekeyOutcome([fileId ?? ''])).toBe(true)
+      await main.settle()
+      expect(layoutApplyTestTransport.mainModel?.workspaces[WT]?.editorFiles).toEqual([
+        expect.objectContaining({ filePath: '/repo-a/lib/remote.ts' })
+      ])
+      expect(mainView(WT)).toEqual(windowView(WT))
+      expect(editorTabsAndFiles()).toEqual([
+        { kind: 'editor', entity: expect.stringContaining('remote.ts'), hasFile: true }
+      ])
     })
   }
 )
