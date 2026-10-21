@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { sendTerminalLiveControlAfterPendingFlush } from './terminal-live-control-send-order'
 import {
+  isTerminalLiveInputWithinByteLimit,
+  TERMINAL_LIVE_INPUT_MAX_BYTES
+} from './terminal-live-input'
+import {
   cancelTerminalLivePendingFlush,
   createTerminalLivePendingFlushState,
   queueTerminalLiveMirrorSend,
@@ -70,6 +74,41 @@ describe('terminal live pending flush state', () => {
 })
 
 describe('terminal live mirror send queue', () => {
+  it.each(['a', '😀'])(
+    'keeps coalesced %s input within the live sender byte limit',
+    async (glyph) => {
+      const state = createTerminalLivePendingFlushState()
+      const payloads: string[] = []
+      const received: string[] = []
+      let release = (_accepted: boolean): void => {}
+      const sender = async (_handle: string, payload: string): Promise<boolean> => {
+        payloads.push(payload)
+        if (payloads.length === 1) {
+          return new Promise<boolean>((resolve) => {
+            release = resolve
+          })
+        }
+        const accepted = isTerminalLiveInputWithinByteLimit(payload)
+        if (accepted) {
+          received.push(payload)
+        }
+        return accepted
+      }
+      const part = glyph.repeat(
+        TERMINAL_LIVE_INPUT_MAX_BYTES / 2 / new TextEncoder().encode(glyph).length
+      )
+      const first = queueTerminalLiveMirrorSend(state, 'terminal-1', 'held', sender)
+      const queued = Array.from({ length: 3 }, () =>
+        queueTerminalLiveMirrorSend(state, 'terminal-1', part, sender)
+      )
+      release(true)
+      await expect(Promise.all([first, ...queued])).resolves.toEqual([true, true, true, true])
+      expect(received.join('')).toBe(part.repeat(3))
+      expect(payloads).toHaveLength(3)
+      expect(payloads.every((payload) => isTerminalLiveInputWithinByteLimit(payload))).toBe(true)
+    }
+  )
+
   it('Given high RTT When more input queues Then pending bytes share one follow-up send', async () => {
     // Given
     const state = createTerminalLivePendingFlushState()

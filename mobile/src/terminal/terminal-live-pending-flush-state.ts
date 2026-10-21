@@ -7,6 +7,7 @@ type TerminalLivePendingRequest = {
 type TerminalLivePendingBatch = {
   readonly handle: string
   payload: string
+  byteLength: number
   readonly requests: TerminalLivePendingRequest[]
   readonly sender: TerminalLiveMirrorSender
 }
@@ -81,14 +82,21 @@ export function queueTerminalLiveMirrorSend(
   const request = new Promise<boolean>((resolve) => {
     resolveRequest = resolve
   })
+  const byteLength = getTerminalInputByteLength(payload)
   const pendingTail = state.pendingBatches.at(-1)
-  if (pendingTail?.handle === handle && pendingTail.sender === sender) {
+  if (
+    pendingTail?.handle === handle &&
+    pendingTail.sender === sender &&
+    pendingTail.byteLength + byteLength <= TERMINAL_LIVE_INPUT_MAX_BYTES
+  ) {
     pendingTail.payload += payload
+    pendingTail.byteLength += byteLength
     pendingTail.requests.push({ resolve: resolveRequest })
   } else {
     state.pendingBatches.push({
       handle,
       payload,
+      byteLength,
       requests: [{ resolve: resolveRequest }],
       sender
     })
@@ -106,3 +114,5 @@ export function queueTerminalLiveMirrorSend(
   }
   return request
 }
+import { getTerminalInputByteLength } from '../../../src/shared/terminal-input'
+import { TERMINAL_LIVE_INPUT_MAX_BYTES } from './terminal-live-input'
