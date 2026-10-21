@@ -234,6 +234,20 @@ describe("a new tab's first terminal, started by main in a layout-owner build", 
     expect(terminalCreateCalls()).toEqual([])
   })
 
+  // PR-3b deletes the predicate and must carry this shell to main's create (no UI makes one today).
+  it('keeps the window spawn for a tab with a shell that is not a Windows shell', async () => {
+    const store = storeWithWorktree()
+    const tab = store.getState().createTab(WORKTREE, undefined, '/bin/fish', {
+      id: TAB,
+      initialLeafId: LEAF
+    })
+    await settle()
+
+    expect(tab.shellOverride).toBe('/bin/fish')
+    expect(store.getState().terminalPaneStartsByPaneKey).toEqual({})
+    expect(terminalCreateCalls()).toEqual([])
+  })
+
   it('sends nothing to start with the build switch off', async () => {
     mocks.layoutOwnerIsMain = false
     const store = storeWithWorktree()

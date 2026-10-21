@@ -95,7 +95,8 @@ const load = perClientLoader(async () => ({
   paneOptions: await import('./terminal-pane-manager-options'),
   defaults: await import('@/lib/pane-manager/pane-terminal-options'),
   lifecycle: await import('./terminal-pane-lifecycle-primitives'),
-  workspaceStart: await loadWorkspaceStartModules()
+  workspaceStart: await loadWorkspaceStartModules(),
+  startInMain: await import('@/store/terminals/window-tab-start-in-main')
 }))
 
 /** Runs the case's real producer against a real store; returns the tab it opened. */
@@ -306,4 +307,34 @@ describe('window-tab producers: the pty:spawn request a real pane sends', () => 
       )
     }
   )
+})
+
+// L278 (temporary): main reads the project runtime from its own store and gave this folder's tab
+// no distro, where the window's spawn enters the repo's WSL distro (PR-1 regression).
+describe('a plain new tab in a folder borrowing a WSL project', () => {
+  afterEach(async () => {
+    await restoreTerminalTestGlobals()
+    vi.unstubAllGlobals()
+  })
+
+  it("keeps the window's own spawn, so it enters the borrowed distro", async () => {
+    const c = WINDOW_LAUNCH_CASES.find(
+      (candidate) => candidate.name === 'Windows folder containing a WSL-project repo'
+    )!
+    const modules = await load(c.client)
+    await installTerminalTestGlobals()
+    Object.assign(window.api.platform, { get: () => ({ platform: c.client, osRelease: '10' }) })
+    const store = modules.createStore()
+    holder.store = store
+    store.setState(
+      launchWorkspaceState(c.workspace, { ...getDefaultSettings('/home/alice'), ...c.settings })
+    )
+    const worktreeId = launchWorkspaceId(c.workspace)
+
+    const tab = store.getState().createTab(worktreeId)
+
+    expect(tab.shellOverride).toBe('wsl.exe')
+    expect(modules.startInMain.windowTabStartsInMain(store.getState(), tab)).toBe(false)
+    // Why: alone, this case pays the pane graph's first import.
+  }, 240_000)
 })
