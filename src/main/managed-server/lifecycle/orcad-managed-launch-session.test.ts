@@ -206,6 +206,13 @@ describe('restartManagedOrcadEnvironment terminal admission', () => {
     expect(closes()).toEqual(FENCED)
   })
 
+  it('leaves admission closed when the stop fails without saying whether it was sent', async () => {
+    mocks.census.mockResolvedValue(census(0))
+    mocks.stop.mockRejectedValue(new Error('SSH command timed out'))
+    await expect(restartManagedOrcadEnvironment('/u', 'env-1')).rejects.toThrow('timed out')
+    expect(closes()).toEqual(FENCED)
+  })
+
   it('stops nothing once the count may have outlived its fence', async () => {
     type Options = { closeAdmissionForMs?: number }
     mocks.census.mockImplementation(

@@ -29,24 +29,18 @@ export function updateTerminalCounts(
 }
 
 /**
- * Runs the stop the fenced count admitted; unless it `succeeded`, reopens admission on the server
- * that keeps serving. Best effort: a stop already begun holds admission until exit regardless.
+ * Runs the stop the fenced count admitted, and reopens admission only when its result proves the
+ * server keeps serving. A throw may hide a stop still on its way, so admission stays closed and
+ * lapses on its own.
  */
 export async function reopeningAdmissionUnless<T>(
-  succeeded: (result: T) => boolean,
+  stopMayHaveBeenSent: (result: T) => boolean,
   releaseIncumbentAdmission: () => Promise<void>,
   stop: () => Promise<T>
 ): Promise<T> {
-  const reopen = (): Promise<void> => releaseIncumbentAdmission().catch(() => {})
-  let result: T
-  try {
-    result = await stop()
-  } catch (error) {
-    await reopen()
-    throw error
-  }
-  if (!succeeded(result)) {
-    await reopen()
+  const result = await stop()
+  if (!stopMayHaveBeenSent(result)) {
+    await releaseIncumbentAdmission().catch(() => {})
   }
   return result
 }
