@@ -28,11 +28,12 @@ const schema = z.object({
 })
 export type ProviderLedgerEntry = z.infer<typeof schema>
 export type ProviderResource = NonNullable<ProviderLedgerEntry['resource']>
+export type ProviderResourceResult = 'released' | 'live' | 'unknown'
 export type ProviderLaunchRecord = {
   capture(budget?: ProviderCleanupBudget): Promise<void>
   members(): readonly ProviderGroupMember[]
   retire(): Promise<void>
-  verifyResource?(budget: ProviderCleanupBudget): Promise<boolean>
+  verifyResource?(budget: ProviderCleanupBudget): Promise<ProviderResourceResult>
   cleanup?(budget: ProviderCleanupBudget, action: () => Promise<void>): Promise<void>
 }
 
@@ -40,7 +41,7 @@ export type ProviderLedgerState = {
   entry: ProviderLedgerEntry
   tail: Promise<void>
   local?: boolean
-  flight?: Promise<void>
+  flight?: Promise<ProviderResourceResult | void>
 }
 const entries = new Map<string, ProviderLedgerState>()
 let namespace: string | undefined
@@ -49,12 +50,6 @@ let discovery: Promise<boolean> | undefined
 let mutationOwner = false
 let active = 0
 const available = new Set<() => void>()
-
-export class ProviderVerificationUnavailableError extends Error {
-  constructor() {
-    super('Orca could not verify previous Codex processes. Try again.')
-  }
-}
 
 export function setProviderRecoveryMutationOwner(acquired: boolean): void {
   mutationOwner = acquired
@@ -229,9 +224,9 @@ export async function publishProviderEntry(
 export function runProviderRecovery(
   state: Pick<ProviderLedgerState, 'tail' | 'flight'>,
   budget: ProviderCleanupBudget,
-  action: () => Promise<void>,
+  action: () => Promise<ProviderResourceResult | void>,
   issued?: (work: Promise<unknown>) => void
-): Promise<void> {
+): Promise<ProviderResourceResult | void> {
   state.flight ??= (async () => {
     while (active >= 4 && budget.active) {
       let wake = (): void => {}
@@ -246,11 +241,11 @@ export function runProviderRecovery(
       }
     }
     if (!budget.active) {
-      return
+      return 'unknown' as const
     }
     active++
     try {
-      await action()
+      return await action()
     } finally {
       active--
       for (const wake of available) {
@@ -261,7 +256,7 @@ export function runProviderRecovery(
     state.flight = undefined
   })
   issued?.(state.flight)
-  return budget.wait(state.flight, undefined)
+  return budget.wait(state.flight, 'unknown')
 }
 
 export const UNKNOWN_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000

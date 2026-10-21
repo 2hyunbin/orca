@@ -91,7 +91,7 @@ describe('startOrcadWithHost', () => {
       expect(budget.signal.aborted).toBe(false)
       expect(states[4]?.flight).toBeUndefined()
       gate.resolve()
-      await expect(first).resolves.toBe(true)
+      await expect(first).resolves.toBe('released')
       await stop
       expect(existsSync(join(root, ORCAD_LOCK_FILE_NAME))).toBe(false)
     } finally {

@@ -1,5 +1,4 @@
 import { spawnManagedProviderProcess } from '../provider-process/managed-provider-process'
-import { ProviderVerificationUnavailableError } from '../provider-process/provider-process-inventory'
 import type { CodexRateLimitResetOutcome, ProviderRateLimits } from '../../shared/rate-limit-types'
 import { isCodexAuthError } from '../../shared/codex-auth-errors'
 import { buildWslExecArgs, buildWslLoginShellCommand } from '../../shared/wsl-login-shell-command'
@@ -10,6 +9,7 @@ import { resolveCodexCommand } from '../codex-cli/command'
 // mocks '../codex-cli/command' does not have to restate this pure helper.
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import {
+  CodexHomeProcessError,
   resolveCodexHomeProcessLockKey,
   withCodexHomeProcessLock
 } from '../codex-cli/codex-home-process-lock'
@@ -241,7 +241,7 @@ export async function fetchCodexRateLimits(
       return abortedCodexRateLimitResult()
     }
     rpcFailure = codexUnavailable(
-      error instanceof ProviderVerificationUnavailableError ? error.message : 'RPC failed',
+      error instanceof CodexHomeProcessError ? error.message : 'RPC failed',
       'error'
     )
   }

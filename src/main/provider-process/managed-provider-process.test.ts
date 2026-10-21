@@ -284,21 +284,21 @@ it('keeps a known writer excluded after it moves out of its recorded group', asy
   vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
     capture: async () => {},
     retire: async () => {},
-    members: () => [{ pid: pid + 1, pgid: pid, startedAt: 'writer-start' }]
+    members: () => [{ pid: pid + 1, pgid: pid, startedAt: '2026-10-20T12:00:00.000Z' }]
   })
   const read = vi.spyOn(processRows, 'readPosixProcessRow').mockResolvedValue({
     pid: pid + 1,
     ppid: 1,
     pgid: pid + 1,
-    startedAt: 'writer-start',
+    startedAt: '2026-10-20T12:00:00.000Z',
     startResolution: 'clock-tick'
   })
   const managed = launch(fixture, 'darwin')
   fixture.child.emit('exit', 0, null)
   await managed.completion
-  await expect(managed.verifyWriters()).resolves.toBe(false)
+  await expect(managed.verifyWriters()).resolves.toBe('live')
   read.mockResolvedValue(null)
-  await expect(managed.verifyWriters()).resolves.toBe(true)
+  await expect(managed.verifyWriters()).resolves.toBe('released')
 })
 
 it('joins natural cleanup after an earlier unproven close before publishing completion', async () => {

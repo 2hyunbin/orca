@@ -2,6 +2,10 @@ import type * as FsPromisesModule from 'node:fs/promises'
 import * as files from 'node:fs/promises'
 import * as processRows from './provider-process-row-read'
 import * as ledger from './provider-process-ledger'
+import * as managedProcesses from './managed-provider-process'
+import * as auth from '../rate-limits/codex-auth-presence'
+import * as backend from '../rate-limits/codex-backend-usage-client'
+import { fetchCodexRateLimits } from '../rate-limits/codex-fetcher'
 import { ProviderCleanupBudget } from './provider-process-exit-deadline'
 import {
   providerLedgerStates,
@@ -19,7 +23,10 @@ import { getAppEnvironment, setAppEnvironment } from '../../shared/app-environme
 import { spawnManagedProviderProcess } from './managed-provider-process'
 import { readPosixProcessRow } from './provider-process-row-read'
 import { recoverProviderLaunches } from './provider-process-ledger'
-import { withCodexHomeProcessLock } from '../codex-cli/codex-home-process-lock'
+import {
+  resolveCodexHomeProcessLockKey,
+  withCodexHomeProcessLock
+} from '../codex-cli/codex-home-process-lock'
 
 vi.mock('node:fs/promises', async (original) => ({
   ...(await original<typeof FsPromisesModule>())
@@ -87,7 +94,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
       })
       expect(output).toContain('final-record\n')
       expect(await readPosixProcessRow(toolPid)).toBeNull()
-      expect(await managed.verifyWriters()).toBe(true)
+      expect(await managed.verifyWriters()).toBe('released')
       const reap = vi.fn(async () => 'exited' as const)
       await managed.close({ capture: async () => {}, reap, treeVerdict: 'exited' })
       expect(reap).toHaveBeenCalledOnce()
@@ -129,7 +136,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
     ])
     expect(one).toMatchObject({ root: 'exited', tree: 'exited' })
     expect(two).toEqual(one)
-    expect(writersGone).toBe(true)
+    expect(writersGone).toBe('released')
     expect(await managed.completion).toMatchObject({ signal: 'SIGKILL' })
   })
 
@@ -219,7 +226,7 @@ it.runIf(process.platform !== 'win32')(
       `open(${JSON.stringify(escapedFile)}, 'w').write('ready')`,
       'time.sleep(60)'
     ].join('\n')
-    const home = `direct-test-${randomUUID()}`
+    const home = resolveCodexHomeProcessLockKey(join(root, 'home'))
     const recorded = vi.spyOn(ledger, 'recordProviderLaunch')
     const managed = spawnManagedProviderProcess(
       {
@@ -241,8 +248,12 @@ it.runIf(process.platform !== 'win32')(
     await delay(1_100)
     const publication = Promise.withResolvers<void>()
     const slots = Promise.withResolvers<void>()
-    const issued: Promise<void>[] = []
+    const issued: Promise<unknown>[] = []
     const mkdir = vi.spyOn(files, 'mkdir')
+    const held = Promise.withResolvers<Awaited<ReturnType<typeof readPosixProcessRow>>>()
+    const original = processRows.readPosixProcessRow
+    let unavailable = false
+    let holding = false
     try {
       await recorded.mock.results[0]!.value.capture()
       expect(
@@ -251,13 +262,59 @@ it.runIf(process.platform !== 'win32')(
       managed.child.stdin.write('escape\n')
       await readWhenWritten(escapedFile)
       mkdir.mockImplementationOnce(() => publication.promise.then(() => undefined))
-      await managed.close()
+      expect(await managed.close()).toMatchObject({ root: 'exited', tree: 'exited' })
       await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
         'still using this account home'
       )
       await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
         'other'
       )
+      vi.spyOn(auth, 'probeCodexAuthPresence').mockResolvedValue('present')
+      const fallback = vi.spyOn(backend, 'fetchCodexRateLimitsViaBackend').mockResolvedValue(null)
+      const spawn = vi.spyOn(managedProcesses, 'spawnManagedProviderProcess')
+      const rows = vi
+        .spyOn(processRows, 'readPosixProcessRow')
+        .mockImplementation((pid, ...args) => {
+          if (pid === writerPid && holding) {
+            return held.promise
+          }
+          return pid === writerPid && unavailable
+            ? Promise.resolve('unverifiable' as const)
+            : original(pid, ...args)
+        })
+      const refusal = async (error: string) => {
+        const result = await fetchCodexRateLimits({ codexHomePath: home })
+        expect(result).toMatchObject({ status: 'error', error })
+        expect(spawn).not.toHaveBeenCalled()
+        await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
+          'other'
+        )
+        return result
+      }
+      await refusal(
+        'Codex is still using this account home. Try again after its previous command stops.'
+      )
+      unavailable = true
+      const message = 'Orca could not verify previous Codex processes. Try again.'
+      const unknown = await refusal(message)
+      const success = { ...unknown, status: 'ok' as const, error: null }
+      fallback.mockResolvedValueOnce(success)
+      await expect(fetchCodexRateLimits({ codexHomePath: home })).resolves.toEqual(success)
+      expect(spawn).not.toHaveBeenCalled()
+      const episode = providerLedgerStates().find(({ entry }) => entry.resource?.key === home)
+      const since = episode?.entry.unknownSince?.resource
+      const signals = vi.spyOn(process, 'kill')
+      holding = true
+      const started = Date.now()
+      await refusal(message)
+      expect(Date.now() - started).toBeLessThan(8_000)
+      holding = false
+      held.resolve('unverifiable')
+      await refusal(message)
+      expect(episode?.entry.unknownSince?.resource).toBe(since)
+      expect(episode?.entry.resource?.key).toBe(home)
+      expect(signals).not.toHaveBeenCalled()
+      rows.mockRestore()
       process.kill(writerPid, 'SIGKILL')
       await vi.waitFor(async () => expect(await readPosixProcessRow(writerPid)).toBeNull())
       issued.push(
@@ -274,6 +331,8 @@ it.runIf(process.platform !== 'win32')(
       await Promise.all(issued)
       publication.resolve()
     } finally {
+      holding = false
+      held.resolve('unverifiable')
       publication.resolve()
       slots.resolve()
       await Promise.all(issued)
@@ -286,6 +345,7 @@ it.runIf(process.platform !== 'win32')(
         /* Already gone. */
       }
       await managed.close()
+      vi.restoreAllMocks()
     }
   }
 )

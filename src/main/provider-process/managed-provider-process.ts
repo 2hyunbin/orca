@@ -6,7 +6,7 @@ import type { ProviderProcessLaunch } from './provider-process-launch'
 import { createProviderSpawnSpec } from './provider-process-launch'
 import { PROVIDER_GROUP_REAP_TIMEOUT_MS } from './provider-process-timing'
 import { recordProviderLaunch } from './provider-process-ledger'
-import { writerVerdict } from './provider-process-inventory'
+import { writerVerdict, type ProviderResourceResult } from './provider-process-inventory'
 import {
   observeProviderGroup,
   signalProviderGroup,
@@ -240,11 +240,11 @@ export function spawnManagedProviderProcess(
       void completion.then(listener)
     },
     async verifyWriters(budget) {
-      if (platform === 'win32') {
-        return rootVerdict() === 'exited'
-      }
       if (!child.pid) {
-        return observed?.processless ?? false
+        return observed?.processless ? 'released' : 'unknown'
+      }
+      if (platform === 'win32') {
+        return rootVerdict() === 'exited' ? 'released' : 'live'
       }
       if (budget && (!observed || !groupRetired || external.owed)) {
         const cleanup = async (): Promise<void> => {
@@ -253,7 +253,7 @@ export function spawnManagedProviderProcess(
         await budget.wait(group?.cleanup ? group.cleanup(budget, cleanup) : cleanup(), undefined)
       }
       if (!observed) {
-        return false
+        return 'live'
       }
       return verifyProviderWriters(group, budget)
     },
@@ -299,10 +299,10 @@ export function spawnManagedProviderProcess(
 async function verifyProviderWriters(
   record: ReturnType<typeof recordProviderLaunch> | undefined,
   budget = new ProviderCleanupBudget(Date.now() + 2_000)
-): Promise<boolean> {
+): Promise<ProviderResourceResult> {
   if (record?.verifyResource) {
-    return budget.wait(record.verifyResource(budget), false)
+    return budget.wait(record.verifyResource(budget), 'unknown')
   }
   const verdict = await budget.wait(writerVerdict(record?.members() ?? [], budget), 'unknown')
-  return verdict === 'exited' && budget.active
+  return !budget.active ? 'unknown' : verdict === 'exited' ? 'released' : verdict
 }

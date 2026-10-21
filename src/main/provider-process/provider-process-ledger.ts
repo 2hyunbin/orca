@@ -21,16 +21,21 @@ import {
   serializeProviderEntry,
   writerVerdict,
   deriveObligation,
-  ProviderVerificationUnavailableError,
   UNKNOWN_RETENTION_MS,
   type ProviderResource,
+  type ProviderResourceResult,
   type ProviderLaunchRecord,
   type ProviderLedgerState
 } from './provider-process-inventory'
 
-async function reapEntry(state: ProviderLedgerState, budget: ProviderCleanupBudget): Promise<void> {
-  return serializeProviderEntry(state, async () => {
+async function reapEntry(
+  state: ProviderLedgerState,
+  budget: ProviderCleanupBudget
+): Promise<ProviderResourceResult> {
+  let result: ProviderResourceResult = 'unknown'
+  await serializeProviderEntry(state, async () => {
     let entry = state.entry
+    let resource: ProviderResourceResult = 'released'
     const owner = await writerVerdict([entry.owner], budget)
     let complete = false
     if (owner === 'exited') {
@@ -98,11 +103,16 @@ async function reapEntry(state: ProviderLedgerState, budget: ProviderCleanupBudg
         return
       }
       deriveObligation(state, 'resource', complete || verdict === 'live' ? verdict : 'unknown')
+      resource = !entry.resource ? 'released' : verdict === 'live' ? 'live' : 'unknown'
+    }
+    if (budget.active) {
+      result = resource
     }
     if (!liveOwner && complete && budget.active) {
       await publishProviderEntry(state, budget)
     }
   })
+  return budget.active ? result : 'unknown'
 }
 
 /** Discovery hands over residual evidence; completion of a sweep never certifies a home empty. */
@@ -154,25 +164,23 @@ export function startProviderRecoveryTask(rootPid?: number) {
 export async function verifyRecoveredProviderResources(
   key: string,
   budget: ProviderCleanupBudget
-): Promise<boolean> {
+): Promise<ProviderResourceResult> {
   if (process.platform === 'win32') {
-    return true
+    return 'released'
   }
-  let verified = true
-  await Promise.all(
+  const results = await Promise.all(
     providerLedgerStates()
       .filter((state) => !state.local && state.entry.resource?.key === key)
-      .map(async (state) => {
-        await runProviderRecovery(state, budget, () => reapEntry(state, budget))
-        if (state.entry.resource?.key === key) {
-          if (state.entry.unknownSince?.resource !== undefined || !budget.active) {
-            throw new ProviderVerificationUnavailableError()
-          }
-          verified = false
-        }
-      })
+      .map(
+        async (state) =>
+          (await runProviderRecovery(state, budget, () => reapEntry(state, budget))) ?? 'unknown'
+      )
   )
-  return budget.active && verified
+  return !budget.active || results.includes('unknown')
+    ? 'unknown'
+    : results.includes('live')
+      ? 'live'
+      : 'released'
 }
 
 /** Recording is advisory: a filesystem failure cannot refuse an agent launch. */
@@ -256,14 +264,14 @@ export function recordProviderLaunch(
     async verifyResource(budget) {
       const verdict = await writerVerdict(members, budget)
       if (!budget.active) {
-        return false
+        return 'unknown'
       }
       if (state && resource) {
         const current = state
         deriveObligation(current, 'resource', verdict)
         released = !current.entry.resource
         void serializeProviderEntry(current, () => publishProviderEntry(current, budget))
-        return released
+        return released ? 'released' : verdict === 'live' ? 'live' : 'unknown'
       }
       if (verdict === 'live') {
         unknownSince = undefined
@@ -271,14 +279,16 @@ export function recordProviderLaunch(
       if (verdict === 'unknown') {
         unknownSince ??= Date.now()
         if (Date.now() - unknownSince < UNKNOWN_RETENTION_MS) {
-          return false
+          return 'unknown'
         }
         console.warn('[provider-process] abandoning unpersisted unknown resource obligation', token)
-        return true
+        return 'released'
       }
-      return verdict === 'exited'
+      return verdict === 'exited' ? 'released' : 'live'
     },
-    cleanup: (budget, action) => runProviderRecovery(state ?? uncaptured, budget, action),
+    cleanup: async (budget, action) => {
+      await runProviderRecovery(state ?? uncaptured, budget, action)
+    },
     members: () => members,
     retire: () => {
       retired = true

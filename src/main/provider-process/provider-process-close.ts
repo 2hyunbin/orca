@@ -1,6 +1,6 @@
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
 import type { ProviderProcessOutputOptions } from './provider-process-output'
-import type { ProviderResource } from './provider-process-inventory'
+import type { ProviderResource, ProviderResourceResult } from './provider-process-inventory'
 import type { ProviderCleanupBudget } from './provider-process-exit-deadline'
 import type { PipedChildProcess, SpawnedProcess } from '@orca/process-host/process-spec'
 import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
@@ -122,7 +122,7 @@ export type ManagedProviderProcess = {
   readonly completion: Promise<ProviderProcessExit>
   readonly settled: boolean
   onSettled(listener: (exit: ProviderProcessExit) => void): void
-  verifyWriters(budget?: ProviderCleanupBudget): Promise<boolean>
+  verifyWriters(budget?: ProviderCleanupBudget): Promise<ProviderResourceResult>
   /** The configured executable was missing at spawn. */
   readonly executableMissing: boolean
   /** The last 8 KiB of stderr, which the managed process drains so the child never blocks on it. */

@@ -1,7 +1,7 @@
 import { ProviderCleanupBudget } from '../provider-process/provider-process-exit-deadline'
 import {
   discoverProviderLaunches,
-  ProviderVerificationUnavailableError
+  type ProviderResourceResult
 } from '../provider-process/provider-process-inventory'
 import { verifyRecoveredProviderResources } from '../provider-process/provider-process-ledger'
 import { homedir } from 'node:os'
@@ -14,11 +14,24 @@ import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-p
 // so Orca's own spawns (quota probes, commit-message runs) serialize per home.
 // User terminal panes are intentionally not serialized here.
 
-const retainedWriters = new Map<string, Set<(budget: ProviderCleanupBudget) => Promise<boolean>>>()
+const retainedWriters = new Map<
+  string,
+  Set<(budget: ProviderCleanupBudget) => Promise<ProviderResourceResult>>
+>()
+
+export class CodexHomeProcessError extends Error {
+  constructor(result: 'live' | 'unknown') {
+    super(
+      result === 'live'
+        ? 'Codex is still using this account home. Try again after its previous command stops.'
+        : 'Orca could not verify previous Codex processes. Try again.'
+    )
+  }
+}
 
 export function retainCodexHomeWriter(
   key: string,
-  verify: (budget: ProviderCleanupBudget) => Promise<boolean>
+  verify: (budget: ProviderCleanupBudget) => Promise<ProviderResourceResult>
 ): void {
   let writers = retainedWriters.get(key)
   if (!writers) {
@@ -31,22 +44,26 @@ export function retainCodexHomeWriter(
 async function verifyCodexHomeWriters(key: string): Promise<void> {
   const discovered = await discoverProviderLaunches(new ProviderCleanupBudget(Date.now() + 2_000))
   if (!discovered) {
-    throw new ProviderVerificationUnavailableError()
+    throw new CodexHomeProcessError('unknown')
   }
   const budget = new ProviderCleanupBudget()
   const writers = retainedWriters.get(key) ?? new Set()
+  const results: ProviderResourceResult[] = []
   for (const verify of writers) {
-    if (budget.active && (await budget.wait(verify(budget), false))) {
+    const result = budget.active ? await budget.wait(verify(budget), 'unknown') : 'unknown'
+    results.push(result)
+    if (result === 'released') {
       writers.delete(verify)
     }
   }
-  if ((await verifyRecoveredProviderResources(key, budget)) && writers.size === 0) {
-    retainedWriters.delete(key)
-  } else {
-    throw new Error(
-      'Codex is still using this account home. Try again after its previous command stops.'
-    )
+  results.push(await verifyRecoveredProviderResources(key, budget))
+  if (results.includes('unknown')) {
+    throw new CodexHomeProcessError('unknown')
   }
+  if (results.includes('live')) {
+    throw new CodexHomeProcessError('live')
+  }
+  retainedWriters.delete(key)
 }
 
 const lockTails = new Map<string, Promise<unknown>>()
