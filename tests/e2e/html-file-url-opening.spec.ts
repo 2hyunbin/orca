@@ -63,15 +63,9 @@ test('opens HTML from Explorer as a preview and lets the user edit its source', 
   await expect(
     orcaPage.getByRole('button', { name: 'Open source file', exact: true })
   ).toBeVisible()
-  expect(
-    await orcaPage.evaluate(
-      (fileUrl) =>
-        Object.values(window.__store?.getState().browserPagesByWorkspace ?? {})
-          .flat()
-          .filter((page) => page.url === fileUrl).length,
-      url
-    )
-  ).toBe(1)
+  const previewTab = orcaPage.locator('[data-tab-id]').filter({ hasText: 'HTML default' })
+  await expect(previewTab).toHaveCount(1)
+  await expect(previewTab).toBeVisible()
 })
 
 for (const inputKind of ['file URL', 'absolute path', 'linked path'] as const) {
@@ -91,7 +85,7 @@ for (const inputKind of ['file URL', 'absolute path', 'linked path'] as const) {
     writeFileSync(filePath, '<title>Local file URL</title><h1>Local HTML rendered</h1>')
     const url = pathToFileURL(filePath).href
     await waitForSessionReady(orcaPage)
-    const worktreeId = await waitForActiveWorktree(orcaPage)
+    await waitForActiveWorktree(orcaPage)
     await orcaPage.getByRole('button', { name: 'New tab', exact: true }).first().click()
     const input = orcaPage.getByRole('combobox', {
       name: 'Search open tabs, history, files, URLs, agents…',
@@ -110,15 +104,9 @@ for (const inputKind of ['file URL', 'absolute path', 'linked path'] as const) {
         }, url)
       )
       .toBe('Local HTML rendered')
-    expect(
-      await orcaPage.evaluate(
-        ({ worktreeId, url }) =>
-          window.__store
-            ?.getState()
-            .browserTabsByWorktree[worktreeId]?.some((tab) => tab.url === url && !tab.docLocation),
-        { worktreeId, url }
-      )
-    ).toBe(true)
+    await expect(
+      orcaPage.getByRole('button', { name: 'Open source file', exact: true })
+    ).toBeVisible()
     await orcaPage.screenshot({ path: testInfo.outputPath('local-html-file-url.png') })
     await orcaPage.getByRole('button', { name: 'Open source file', exact: true }).click()
     const editor = orcaPage.locator('.monaco-editor').first()

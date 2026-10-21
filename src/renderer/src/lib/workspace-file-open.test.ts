@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { openWorkspaceFile } from './workspace-file-open'
+import { openWorkspaceFile, type WorkspaceFileOpenRequest } from './workspace-file-open'
 import type { GitStatusEntry } from '../../../shared/git-status-types'
 
 const mocks = vi.hoisted(() => {
@@ -9,11 +9,13 @@ const mocks = vi.hoisted(() => {
     plan: vi.fn(),
     open: vi.fn(),
     select: vi.fn(),
+    activate: vi.fn(),
     state: {
       activeWorktreeId: 'current',
       gitStatusByWorktree,
       openBranchDiff: vi.fn(),
       openDiff: vi.fn(),
+      openFileForLink: vi.fn(),
       openFile: vi.fn((file: { filePath: string }) => file.filePath)
     }
   }
@@ -27,6 +29,7 @@ vi.mock('./file-preview', () => ({
   getWorkspaceFilePreviewPlan: mocks.plan
 }))
 vi.mock('./workspace-surface-reveal', () => ({ selectWorkspaceSurface: mocks.select }))
+vi.mock('./worktree-activation', () => ({ activateAndRevealWorkspace: mocks.activate }))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -34,6 +37,11 @@ beforeEach(() => {
   mocks.resolve.mockReturnValue({ status: 'not-a-workspace-doc' })
   mocks.open.mockReturnValue({ status: 'browser-tab' })
   mocks.plan.mockReturnValue({ status: 'browser-tab' })
+  mocks.state.openFileForLink.mockReturnValue({
+    fileId: 'html-source',
+    viewStateId: 'html-view',
+    groupId: 'group-2'
+  })
 })
 
 const request = {
@@ -96,6 +104,69 @@ it('keeps a host-granted HTML artifact on its authorized editor path', () => {
   expect(mocks.state.openFile).toHaveBeenCalledWith(file, undefined)
   expect(mocks.open).not.toHaveBeenCalled()
 })
+
+it('keeps an external SSH HTML file on its owning editor path', () => {
+  const file = { ...sourceFile('/remote/report.html'), externalSshTargetId: 'ssh-target' }
+  expect(openWorkspaceFile({ kind: 'file', file })).toEqual({
+    surface: 'editor',
+    fileId: file.filePath
+  })
+  expect(mocks.state.openFile).toHaveBeenCalledWith(file, undefined)
+  expect(mocks.plan).not.toHaveBeenCalled()
+  expect(mocks.open).not.toHaveBeenCalled()
+})
+
+const htmlLink = {
+  kind: 'link',
+  file: {
+    filePath: '/repo/report.html',
+    relativePath: 'report.html',
+    worktreeId: 'folder:docs'
+  },
+  linkIntent: null,
+  position: { line: null, column: null },
+  isCurrentRequest: () => true,
+  executionHostId: 'runtime:host-1',
+  clientLocal: false
+} satisfies WorkspaceFileOpenRequest
+
+it('activates an HTML link workspace with its execution host before previewing', () => {
+  expect(openWorkspaceFile(htmlLink)).toEqual({ surface: 'preview' })
+  expect(mocks.activate).toHaveBeenCalledWith('folder:docs', {
+    providesInitialSurface: true,
+    executionHostId: 'runtime:host-1'
+  })
+  expect(mocks.activate.mock.invocationCallOrder[0]).toBeLessThan(
+    mocks.open.mock.invocationCallOrder[0]
+  )
+  expect(mocks.state.openFileForLink).not.toHaveBeenCalled()
+})
+
+it.each([
+  {
+    ...htmlLink,
+    linkIntent: {
+      workspaceId: 'folder:docs',
+      sourceTabId: 'source-tab',
+      hostId: 'runtime:host-1',
+      targetGroupId: 'group-2'
+    }
+  },
+  { ...htmlLink, file: { ...htmlLink.file, externalSshTargetId: 'ssh-target' } }
+] satisfies WorkspaceFileOpenRequest[])(
+  'opens HTML links with an explicit editor group or external SSH owner in the editor: %j',
+  (request) => {
+    expect(openWorkspaceFile(request)).toEqual({ surface: 'editor', fileId: 'html-source' })
+    expect(mocks.state.openFileForLink).toHaveBeenCalledWith(
+      expect.objectContaining(request.file),
+      { forceContentReload: true },
+      request.linkIntent,
+      expect.any(Function)
+    )
+    expect(mocks.plan).not.toHaveBeenCalled()
+    expect(mocks.open).not.toHaveBeenCalled()
+  }
+)
 
 it('falls back to the editor when the owning host cannot preview HTML', () => {
   mocks.plan.mockReturnValue({ status: 'unsupported', reason: 'no-channel' })

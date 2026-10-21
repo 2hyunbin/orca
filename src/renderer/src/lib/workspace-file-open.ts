@@ -18,7 +18,7 @@ import { selectWorkspaceSurface } from './workspace-surface-reveal'
 import { openLinkedFileInEditor } from './editor-file-link-open'
 import type { EditorOpenLinkIntent } from '@/store/slices/editor/types/editor-open-link-intent'
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import { activateAndRevealWorkspace, activateAndRevealWorktree } from './worktree-activation'
+import { activateAndRevealWorkspace } from './worktree-activation'
 
 type ChangeOpenRequest = {
   worktreeId: string
@@ -116,7 +116,9 @@ function defaultPreviewTarget(
   }
   switch (request.kind) {
     case 'file':
-      return request.file.mode === 'edit' && !request.file.terminalArtifactGrantId
+      return request.file.mode === 'edit' &&
+        !request.file.terminalArtifactGrantId &&
+        !request.file.externalSshTargetId
         ? {
             filePath,
             worktreeId: request.file.worktreeId,
@@ -124,7 +126,10 @@ function defaultPreviewTarget(
           }
         : null
     case 'link':
-      return request.position.line === null && !request.file.terminalArtifactGrantId
+      return request.position.line === null &&
+        !request.file.terminalArtifactGrantId &&
+        !request.file.externalSshTargetId &&
+        !request.linkIntent?.targetGroupId
         ? {
             filePath,
             worktreeId: request.file.worktreeId,
@@ -165,10 +170,10 @@ export function openWorkspaceFile(request: WorkspaceFileOpenRequest): WorkspaceF
     )
     if (plan.status !== 'unsupported') {
       if (request.kind === 'link') {
-        if (request.linkIntent?.targetGroupId) {
-          return { surface: 'refused' }
-        }
-        activateAndRevealWorktree(target.worktreeId, { providesInitialSurface: true })
+        activateAndRevealWorkspace(target.worktreeId, {
+          providesInitialSurface: true,
+          executionHostId: request.executionHostId
+        })
       }
       if (openFileInBrowserTab(target).status !== 'unsupported') {
         return { surface: 'preview' }
