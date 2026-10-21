@@ -7,7 +7,7 @@ on:
         description: Bounded comparison to run on the existing Windows slots.
         type: choice
         default: native-preparation
-        options: [native-preparation, windows-security, node-server-workers]
+        options: [native-preparation, windows-security, node-server-workers, node-server-cache]
       source_sha:
         description: Exact commit containing this benchmark and the Windows compiler candidate.
         required: true
@@ -26,13 +26,13 @@ env:
 jobs:
   compare:
     name: Native preparation comparison (${{ matrix.os }})
-    runs-on: ${{ inputs.comparison == 'node-server-workers' && 'orca-windows-11-arm64-8core' || matrix.os }}
+    runs-on: ${{ startsWith(inputs.comparison, 'node-server-') && 'orca-windows-11-arm64-8core' || matrix.os }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        os: ${{ fromJSON(inputs.comparison == 'node-server-workers' && '["windows-11-arm"]' || '["windows-2022","windows-11-arm"]') }}
+        os: ${{ fromJSON(startsWith(inputs.comparison, 'node-server-') && '["windows-11-arm"]' || '["windows-2022","windows-11-arm"]') }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -50,7 +50,7 @@ jobs:
       - uses: ./.github/actions/install-node-dependencies
         with:
           node-version: '24.21.0'
-          native-runtime: ${{ inputs.comparison == 'node-server-workers' && 'node' || 'none' }}
+          native-runtime: ${{ startsWith(inputs.comparison, 'node-server-') && 'node' || 'none' }}
           cache-pnpm-store: 'false'
           cache-pnpm-verification: 'false'
       - name: Compare isolated cold and same-build warm preparation
@@ -68,18 +68,19 @@ jobs:
           BENCHMARK_RUNNER: ${{ matrix.os }}
         run: node config/scripts/benchmark-windows-security-reuse.mjs
       - uses: ./.github/actions/prepare-orcad-prebuilds
-        if: inputs.comparison == 'node-server-workers'
+        id: server-prebuild
+        if: startsWith(inputs.comparison, 'node-server-')
         with:
           resolve-windows-cache: 'true'
           restore-windows-cache: 'true'
       - uses: ./.github/actions/prepare-windows-cli-launcher
-        if: inputs.comparison == 'node-server-workers'
+        if: startsWith(inputs.comparison, 'node-server-')
         with:
           arches: arm64
       - uses: ./.github/actions/build-mobile-web-bundle
-        if: inputs.comparison == 'node-server-workers'
+        if: startsWith(inputs.comparison, 'node-server-')
       - name: Build the qualified server candidate
-        if: inputs.comparison == 'node-server-workers'
+        if: startsWith(inputs.comparison, 'node-server-')
         run: pnpm build:orcad
         env:
           ORCA_REUSE_PREPARED_WINDOWS_SECURITY: 'true'
@@ -87,6 +88,43 @@ jobs:
         if: inputs.comparison == 'node-server-workers'
         shell: bash
         run: node config/scripts/benchmark-node-server-workers.mjs
+      - name: Qualify the cold server slot
+        if: inputs.comparison == 'node-server-cache'
+        run: pnpm test:node-server --artifact
+      - name: Save the qualified server slot
+        if: inputs.comparison == 'node-server-cache'
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ steps.server-prebuild.outputs.cache-path }}
+          key: ${{ steps.server-prebuild.outputs.cache-key }}
+      - name: Simulate the next app version
+        if: inputs.comparison == 'node-server-cache'
+        shell: bash
+        run: |
+          cp package.json "$RUNNER_TEMP/prebuild-cache-package.json"
+          node -e 'const fs = require("node:fs"); const p = JSON.parse(fs.readFileSync("package.json", "utf8")); p.version = "999.0.0"; fs.writeFileSync("package.json", JSON.stringify(p))'
+          rm -rf out/orcad-prebuilds
+      - uses: ./.github/actions/prepare-orcad-prebuilds
+        id: versioned-server-prebuild
+        if: inputs.comparison == 'node-server-cache'
+        with:
+          resolve-windows-cache: 'true'
+          restore-windows-cache: 'true'
+      - name: Require a validated cache hit across the version bump
+        if: inputs.comparison == 'node-server-cache'
+        shell: bash
+        env:
+          CACHE_HIT: ${{ steps.versioned-server-prebuild.outputs.cache-hit }}
+          COLD_KEY: ${{ steps.server-prebuild.outputs.cache-key }}
+          WARM_KEY: ${{ steps.versioned-server-prebuild.outputs.cache-key }}
+        run: |
+          cp "$RUNNER_TEMP/prebuild-cache-package.json" package.json
+          test "$CACHE_HIT" = true
+          test "$COLD_KEY" = "$WARM_KEY"
+          git diff --exit-code -- package.json
+      - name: Qualify the restored server slot
+        if: inputs.comparison == 'node-server-cache'
+        run: pnpm test:node-server --artifact
       - uses: actions/upload-artifact@v7
         if: always()
         with:
