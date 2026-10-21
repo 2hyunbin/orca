@@ -15,7 +15,7 @@
     "oldestDate": "2026-10-16",
     "interpretation": "Development edit traffic proxy, not production usage. Bounded first-parent checkout history; includes merged change names, ignores unmerged work, rename following and other branches. Not a full calendar-week or lifetime assessment. Refresh before each code PR."
   },
-  "cadence": "Continue the full tracker without a daily PR limit or stopping at wave boundaries. Merge one validated code PR at a time; adapt ordering to live work and review capacity. Prefer updates at merged PR milestones. No fixed completion date.",
+  "cadence": "Work over multiple days in merge-sized PRs. First milestone is the quiet-area wave; no fixed completion date. Later discovery can add PRs; ordering adapts to live work and review capacity.",
   "rules": {
     "noBarrels": "No new export * or export { ... } from another local module as a convenience API; no index.ts aggregation, folder imports relying on index resolution, or old-path forwarding modules. Import the concrete owner file directly. Existing re-export chains inside moved code must be reviewed and flattened for affected consumers when they only forward ownership; keep any contractually required external package export surface explicit and documented.",
     "scope": "One responsibility per PR; move code and relevant tests, update all callers atomically, and preserve behavior. Keep unrelated redesign, broad symbol renames, formatting and dependency upgrades out.",
@@ -103,8 +103,7 @@
     "gates": 7,
     "discoveryTasks": 9,
     "directoryReviews": 66,
-    "completedImplementationTasks": 0,
-    "completedTasks": 1
+    "completedImplementationTasks": 0
   },
   "forwarderAudit": {
     "productionModulesWithLocalReexports": 52,
@@ -2627,10 +2626,10 @@
       "wave": 0,
       "kind": "gate",
       "title": "Save the audit and tracker as the documentation PR",
-      "status": "verified",
+      "status": "in-progress",
       "owner": "nwparker",
-      "prUrl": "https://github.com/stablyai/orca/pull/31670",
-      "mergeCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
+      "prUrl": null,
+      "mergeCommit": null,
       "checks": [
         {
           "command": "node docs/audits/module-organization/generate-map.mjs --check",
@@ -2651,51 +2650,19 @@
           "command": "Inline Node coverage assertions against codebase-map.json",
           "result": "passed: 104 ordered tasks, 2,008 unique source actions, 2,004 collision-free destinations, matching baseline map hash",
           "commit": "0b82f88e9f2b6904f8ecf296b11d0581de4cfbb9"
-        },
-        {
-          "command": "node docs/audits/module-organization/generate-map.mjs --check",
-          "result": "passed after documentation commit, proving stable provenance",
-          "commit": "1c5723ff2aeea9cfc6121c117dcb1c8e7109c896"
-        },
-        {
-          "command": "node .agents/skills/refactor-audit/scripts/validate-merge.mjs 31670 \"$PWD\"",
-          "result": "passed: zero unexplained deletions, zero unrelated files",
-          "commit": "1c5723ff2aeea9cfc6121c117dcb1c8e7109c896"
-        },
-        {
-          "command": "GitHub PR Checks run 39680532648",
-          "result": "passed: repository guards, static analysis/typecheck, five full unit shards, relay integration, selection evidence and PR checks passed aggregate",
-          "commit": "1c5723ff2aeea9cfc6121c117dcb1c8e7109c896"
-        },
-        {
-          "command": "gh pr view 31670 --repo stablyai/orca --json state,mergeCommit,mergedAt; git fetch origin main",
-          "result": "passed: MERGED; fetched main includes documentation merge 88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "commit": "88aa3f27ce2fff93efe58366a059bf45b718ba89"
         }
       ],
       "startedAt": "2026-10-21T21:37:43.327Z",
-      "completedAt": "2026-10-21T21:54:41Z",
+      "completedAt": null,
       "sequenceAfter": [],
       "technicalDependencies": [],
       "dependencyReviewStatus": "reviewed-documentation-only",
-      "notes": "Merged documentation PR #31670 after both independent reviews, refactor-audit merge validation and all required CI passed. Verified the documentation is present on fetched main at 88aa3f27ce2fff93efe58366a059bf45b718ba89. Baseline map and activity evidence remain tied to 0b82f88e9f2b.",
+      "notes": "Publishing baseline assessment and execution plan. Baseline map and activity evidence remain tied to 0b82f88e9f2b; current origin/main is 14 commits ahead at 92ef7be3a6e. Code moves will refresh exact sources and callers after G00 merges.",
       "blockers": [],
       "acceptance": [
         "Review and commit the audit, tracker and narrow docs gitignore allowlist together.",
         "Verify JSON coverage, all table totals and direct-import rules; merge documentation PR before code-move work.",
         "Record the documentation PR URL and merge SHA."
-      ],
-      "reviews": [
-        {
-          "reviewer": "independent tracker reviewer",
-          "result": "approved",
-          "scope": "All source/destination coverage, 66 directory assignments, activity evidence, 52 forwarding-export AST records, local links and generator fix."
-        },
-        {
-          "reviewer": "independent generator reviewer",
-          "result": "approved after provenance fix",
-          "scope": "Generator correctness, source inventory/hash/counts and isolated commit/source-drift/measurement/provenance checks; fix separately reviewed."
-        }
       ]
     },
     {
@@ -2704,66 +2671,17 @@
       "wave": 1,
       "kind": "move-pr",
       "title": "Group Linear IPC handlers with direct registration imports",
-      "status": "in-progress",
-      "owner": "nwparker",
+      "status": "planned",
+      "owner": null,
       "prUrl": null,
       "mergeCommit": null,
-      "checks": [
-        {
-          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/ipc/linear/register-handlers.test.ts src/main/ipc/register-core-handlers/register-core-handlers.test.ts",
-          "result": "passed: 2 suites, 8 tests",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        },
-        {
-          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm tc:node",
-          "result": "passed: 17,338 files, zero type errors",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        },
-        {
-          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm run check:code-quality:changed",
-          "result": "passed: zero new findings across 10 code files",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        },
-        {
-          "command": "node config/scripts/check-import-boundaries.mjs",
-          "result": "passed: process-host and compatibility boundaries",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        },
-        {
-          "command": "pnpm check:ratchets",
-          "result": "passed: all 14 discovered ratchet scripts, no baseline changes",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        },
-        {
-          "command": "pnpm exec oxfmt --check <all 12 changed files>; git diff --check",
-          "result": "passed",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        },
-        {
-          "command": "Inline TypeScript AST declaration/literal/channel comparison against HEAD 88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "result": "passed: all six implementation modules retain byte-identical non-import declarations and identical literal multisets; 24 unique IPC channels; no forwarding exports",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        },
-        {
-          "command": "Inline discoverUnitFiles() assertions from config/scripts/ci-unit-files.mjs",
-          "result": "passed: moved suite discovered, deleted source path excluded",
-          "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-          "sourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
-        }
-      ],
-      "startedAt": "2026-10-21T21:55:49.685Z",
+      "checks": [],
+      "startedAt": null,
       "completedAt": null,
       "sequenceAfter": ["G00"],
-      "technicalDependencies": ["G00"],
-      "dependencyReviewStatus": "reviewed-on-merged-main",
-      "notes": "Preflight on merged main 88aa3f27ce2fff93efe58366a059bf45b718ba89: seven sources and registration consumer unchanged since baseline; no active PR overlap found in bounded candidate review. Move seven files, update core registration import and mock plus mobile source citation. Import project/custom-view queries directly from concrete backend owners and split mocks without changing identities. Keep historical ci-shard-timings.json evidence unchanged: current discovery finds moved suite and uses deterministic fallback for unknown durations. Preserve 24 IPC channels, declaration bodies and registration order. Initial review surface: seven moves, three outside code/comment files, two tracker documents. Baseline map reconciliation is scheduled at G01.",
+      "technicalDependencies": [],
+      "dependencyReviewStatus": "resolve-current-callers-during-preflight",
+      "notes": "Preserve exported registration symbols, IPC channel strings, request validation and registration order. Resolve any file-versus-directory entry ambiguity explicitly.",
       "blockers": [],
       "acceptance": ["Meet common PR completion criteria and record evidence"],
       "scopeId": "ipc-linear",
@@ -2830,17 +2748,7 @@
         "Find every importer, mock, re-export, runtime path string and build/script/CI reference for these files.",
         "Review active branch/PR activity when available; record coordination or resequencing in notes.",
         "Record exact commands and full changed-file estimate; split if review surface exceeds the size prompt."
-      ],
-      "preflightEvidence": {
-        "baseCommit": "88aa3f27ce2fff93efe58366a059bf45b718ba89",
-        "movedFiles": 7,
-        "outsideProductionCallers": 1,
-        "outsideTestCallers": 1,
-        "sourceCitations": 1,
-        "historicalTimingReferences": "Retained intentionally; generated historical observations, not live test selectors.",
-        "independentPreflightReviewer": "/root/tracker_review"
-      },
-      "validatedSourceSha256": "0f30db0858b7344f7c72c447e7316f73d5e7cb6b48b96e6b9f3e66a2056a20cb"
+      ]
     },
     {
       "id": "PR01",

@@ -4,18 +4,16 @@ Start with the small, quieter provider and backend areas, merge each PR, and bui
 
 The full plan accounts for all **2,008 files in the original 23 scopes**: **2,004 proposed relocations and four forwarding-module removals**. It breaks them into **88 provisional code PR batches**, with seven checkpoints and nine discovery tasks covering all 66 directories with more than 100 direct JS/TS files. These are review-sized planning units, not a PR quota or a promise to finish everything in a few days. Caller fanout and live development may require further splits; adjacent tasks can combine when they form one responsibility and remain easy to review. Record that adjustment before implementation and preserve file coverage.
 
-G00 merged as [PR #31670](https://github.com/stablyai/orca/pull/31670), with independent reviews and all CI gates passing. PR00 Linear IPC implementation is in progress. [execution-tracker.json](execution-tracker.json) is the authoritative structured tracker: it includes each batch's file actions, activity evidence, validation profile, export review, workflow predecessor, status, owner, PR URL, merge SHA and check records. Keep this checklist and the JSON in sync in each PR. Stable task IDs are local planning IDs, not GitHub PR numbers; never reuse an ID for unrelated work.
+Implementation has not started; G00 documentation publication is in progress. Every completion checkbox below is open. [execution-tracker.json](execution-tracker.json) is the authoritative structured tracker: it includes each batch's file actions, activity evidence, validation profile, export review, workflow predecessor, status, owner, PR URL, merge SHA and check records. Keep this checklist and the JSON in sync in each PR. Stable task IDs are local planning IDs, not GitHub PR numbers; never reuse an ID for unrelated work.
 
 ## Start here
 
-- [x] **G00 — Save and merge the documentation PR.** Merged [#31670](https://github.com/stablyai/orca/pull/31670) at `88aa3f27ce2fff93efe58366a059bf45b718ba89` after independent review and all CI gates passed. Includes the original report, data, generator, tracker and narrow `.gitignore` allowlist.
+- [ ] **G00 — Save and merge the documentation PR.** Include the original report, data, generator, this tracker and the narrow `.gitignore` allowlist. This makes the multi-day plan available on main.
 - [ ] **PR00 — Linear IPC, seven files.** Move the six implementation modules and their existing test into `src/main/ipc/linear/`; import `linear/register-handlers` directly from registration composition. No directory-index resolution and no forwarding file at the old path.
 - [ ] **PR01 — Jira IPC, ten files.** Apply the same pattern to Jira, preserving cancellation, site scope, channel names and handler registration order.
 - [ ] Continue through the quiet-area queue, then complete **G01** before taking on broader changes.
 
 Open one code-move PR at a time by default. Do not spend several days preparing a stack that will conflict with the rest of the team. Each merged PR should stand on its own, pass required checks and leave direct imports in their final form.
-
-Continue through the full tracker without a daily PR limit or stopping at wave boundaries. Prefer progress updates at merged PR milestones.
 
 ## How quieter work was selected
 
