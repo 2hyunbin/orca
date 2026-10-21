@@ -38,6 +38,7 @@ import {
 import { withEditorFileWriteLock } from './editor-file-write-lock'
 import { editorSaveWriterView } from './editor-save-writer-view'
 import { createEditorSaveSlots, type EditorSaveRequest } from './editor-save-slots'
+import { editorDiscardEpoch } from './editor-discard-epoch'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -110,11 +111,16 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       return 'failed'
     }
 
+    const nothingToWrite = trigger === 'autosave' ? 'failed' : 'written'
+    // Why: before the flush, which could republish discarded edits; no await follows before the write.
+    if (editorDiscardEpoch(recordKeyOf(request.fileId)) !== request.discardEpoch) {
+      return nothingToWrite
+    }
     flushPendingEditorBuffer(store.getState(), fileId, trigger === 'autosave')
-    // Why: edits saved by the save ahead, discarded or reloaded since the request leave nothing to write.
+    // Why: edits saved by the save ahead or reloaded since the request leave nothing to write.
     const isDirty = store.getState().openFiles.find((file) => file.id === fileId)?.isDirty === true
     if (!isDirty && request.requestedDirty && trigger !== 'overwrite') {
-      return trigger === 'autosave' ? 'failed' : 'written'
+      return nothingToWrite
     }
     const contentToSave = store.getState().editorDrafts[fileId] ?? request.fallbackContent
     if (
@@ -218,7 +224,14 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     const requestedDirty = store
       .getState()
       .openFiles.some((tab) => tab.id === file.id && tab.isDirty)
-    return slots.enqueue(key, { fileId: file.id, fallbackContent, trigger, requestedDirty })
+    const discardEpoch = editorDiscardEpoch(key)
+    return slots.enqueue(key, {
+      fileId: file.id,
+      fallbackContent,
+      trigger,
+      requestedDirty,
+      discardEpoch
+    })
   }
 
   const settleFileSaves = async (fileId: string): Promise<void> => {

@@ -2,7 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { requestEditorFileSave } from './editor-autosave'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
-import { discardEditorFileChangesAndClose } from './discard-editor-file-changes'
+import {
+  discardEditorBuffer,
+  discardEditorFileChangesAndClose
+} from './discard-editor-file-changes'
+import { registerPendingEditorFlush } from './editor-pending-flush'
 import { trackEditorBaselineRestamp } from './editor-save-disk-precondition'
 import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
 import {
@@ -135,5 +139,54 @@ describe("Don't Save against running and queued saves", () => {
 
     expect(disk.fs.writeFile).not.toHaveBeenCalled()
     expect(disk.files.has(PATH)).toBe(false)
+  })
+
+  it("a notebook republishing its retained cells after Don't Save writes nothing", async () => {
+    edit('a')
+    const release = holdNextWrite(disk)
+    const running = requestEditorFileSave({ fileId: PATH })
+    await vi.advanceTimersByTimeAsync(0)
+    edit('ab')
+    const queued = requestEditorFileSave({ fileId: PATH })
+    // Like a notebook's retained source drafts: every flush republishes the discarded cells.
+    const unregister = registerPendingEditorFlush(PATH, () => edit('cells'))
+    try {
+      const discard = discardEditorFileChangesAndClose(PATH)
+      release()
+      await Promise.all([running, queued, discard])
+      await vi.advanceTimersByTimeAsync(5000)
+    } finally {
+      unregister()
+    }
+
+    expect(written()).toEqual(['a'])
+  })
+
+  it.each([
+    ['a save', {}],
+    ['an Overwrite', { overwrite: true as const }]
+  ])('%s not yet writing stays void when a snapshot re-dirties the tab', async (_, extra) => {
+    edit('a')
+    const restamp = gate()
+    trackEditorBaselineRestamp(PATH, restamp.wait)
+    const save = requestEditorFileSave({ fileId: PATH, ...extra })
+    await vi.advanceTimersByTimeAsync(0)
+
+    const discard = discardEditorFileChangesAndClose(PATH)
+    // A remote snapshot restores the dirty flag after the discard.
+    store.getState().markFileDirty(PATH, true)
+    restamp.open()
+    await Promise.all([save, discard])
+
+    expect(disk.fs.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('a save asked for after the discard still writes', async () => {
+    edit('a')
+    await discardEditorBuffer(PATH)
+    edit('fresh')
+    await requestEditorFileSave({ fileId: PATH })
+
+    expect(disk.files.get(PATH)).toBe('fresh')
   })
 })

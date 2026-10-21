@@ -1,5 +1,9 @@
 import { useAppStore } from '@/store'
-import { isLastEditorBufferView } from '@/store/slices/editor/buffers/editor-buffer-views'
+import {
+  editorBufferIdOfView,
+  isLastEditorBufferView
+} from '@/store/slices/editor/buffers/editor-buffer-views'
+import { bumpEditorDiscardEpoch } from './editor-discard-epoch'
 import { requestEditorSaveQuiesce } from './editor-autosave'
 import { flushPendingEditorBuffer } from './editor-pending-flush'
 
@@ -15,7 +19,8 @@ export async function discardEditorBuffer(fileId: string): Promise<void> {
     console.warn('Pending edit flush failed before discard', error)
   }
   const state = useAppStore.getState()
-  // Why: clean before draining, so queued or not-yet-writing saves find nothing to write.
+  // Why: before draining; dirty state can be republished later, the epoch can't.
+  bumpEditorDiscardEpoch(editorBufferIdOfView(state, fileId))
   state.markFileDirty(fileId, false)
   // Why: a leftover draft makes closeFile keep a never-saved untitled placeholder on disk.
   state.clearEditorDraft(fileId)

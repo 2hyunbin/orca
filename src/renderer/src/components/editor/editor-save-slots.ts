@@ -6,6 +6,8 @@ export type EditorSaveRequest = {
   trigger: EditorSaveTrigger
   /** Dirty when asked: finding the tab clean later means its edits were saved or dropped. */
   requestedDirty: boolean
+  /** A discard since the request voids it, whatever the trigger. */
+  discardEpoch: number
 }
 
 type SaveSlot = {
@@ -38,6 +40,11 @@ export function createEditorSaveSlots(
     if (slot?.queued) {
       // Why: the queued save reads the latest text when it runs, so a later request joins it.
       const { request } = slot.queued
+      if (request.discardEpoch !== incoming.discardEpoch) {
+        // Why: a discard voided the queued request, so the newer one replaces it outright.
+        Object.assign(request, incoming)
+        return slot.queued.promise
+      }
       request.fallbackContent = incoming.fallbackContent
       request.requestedDirty ||= incoming.requestedDirty
       if (TRIGGER_RANK[incoming.trigger] > TRIGGER_RANK[request.trigger]) {
