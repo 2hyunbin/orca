@@ -91,7 +91,7 @@ export function isPaneSleepRecord(record: Pick<SleepingAgentSessionRecord, 'orig
 }
 
 /** Whether a worktree has a slept pane that only a host wake resumes: 'live'/'quit' records are
- *  not asleep (their panes restore themselves), and a tab-open-only record resumes with its tab. */
+ *  not asleep (their own pane resumes them), and a tab-open-only record resumes with its tab. */
 export function hasSleptAgentToWake(
   records: Record<string, SleepingAgentSessionRecord> | undefined,
   worktreeId: string
