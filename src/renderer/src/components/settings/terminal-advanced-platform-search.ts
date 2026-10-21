@@ -4,6 +4,14 @@ import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 
 export const getTerminalAdvancedSearchEntries = createLocalizedCatalog(() => [
   {
+    title: translate('settings.terminal.limit.label', 'Maximum running terminals'),
+    description: translate(
+      'settings.terminal.limit.description',
+      'Limits your running terminals across projects on this host.'
+    ),
+    keywords: ['terminal', 'limit', 'maximum', 'pty', 'capacity']
+  },
+  {
     title: translate('auto.components.settings.terminal.search.7674e758e1', 'Scrollback Rows'),
     description: translate(
       'auto.components.settings.terminal.search.f7d56b6281',
