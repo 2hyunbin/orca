@@ -42,7 +42,9 @@ export const RESERVE_WATCH_RULES = {
 // The fleet's non-drain 503s no instance's own lines account for. Unclamped per minute: the fleet
 // buckets by request minute and an instance's lines by 30 s, so a minute carries that skew and
 // only the sum over the judged minutes is judged, against the whole fleet line: no one
-// instance's stall explains it then. Its largest 3-minute sum in 10-20/21 was 38, against 90.
+// instance's stall explains it then. Its largest 3-minute sum in 10-20/21 was 38, against 90. An
+// instance answering 503s without logging its lines lands here and trips on purpose: a director
+// that stops logging is not the database stall the split lets through (10-21 07:55Z kept logging).
 export const UNATTRIBUTED_503S = 'unattributed'
 
 // Precedence: the first tripped rule names the verdict, so exact signals come before proxies. The
