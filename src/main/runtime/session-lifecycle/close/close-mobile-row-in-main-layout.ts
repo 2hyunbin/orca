@@ -11,6 +11,7 @@ import {
   type MainLayoutClose
 } from '../../session-tabs/main-layout-close-command'
 import type { ExplicitCloseStop } from '../../session-tabs/explicit-terminal-close-pty-stops'
+import { retireTerminalSurfacesFromSnapshot } from '../../mobile-session-terminal-retirement'
 
 export abstract class OrcaRuntimeWithCloseMobileRowInMainLayout extends OrcaRuntimeWithRefuseUnattributedMobileSessionTabClose {
   protected abstract stopExplicitlyClosedTabPtys(
@@ -36,7 +37,7 @@ export abstract class OrcaRuntimeWithCloseMobileRowInMainLayout extends OrcaRunt
     if (!surfaces?.ownsWorkspace(worktreeId)) {
       return null
     }
-    return closeInMainLayout(
+    const close = await closeInMainLayout(
       {
         panesOfTab: (id) => surfaces.panesOfTab(id),
         applyLayoutCommand: (command) => this.applyLayoutCommand(command),
@@ -56,5 +57,41 @@ export abstract class OrcaRuntimeWithCloseMobileRowInMainLayout extends OrcaRunt
           (options.reason === undefined || options.reason === 'user')
       }
     )
+    if (close) {
+      this.retireMainClosedRows(worktreeId, row.parentTabId, close.closesTab ? null : row.leafId)
+    }
+    return close
+  }
+
+  /**
+   * Drops the closed rows from the phones' snapshot now. A window's rows carry main's panes only
+   * when it next publishes, so until then a closed tab would still list (and its exiting SSH
+   * terminal's registration show it again). `leafId` null: every row of the tab.
+   */
+  private retireMainClosedRows(worktreeId: string, tabId: string, leafId: string | null): void {
+    let snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const rows = (snapshot?.tabs ?? []).filter(
+      (candidate): candidate is RuntimeMobileSessionTerminalTab =>
+        candidate.type === 'terminal' &&
+        candidate.parentTabId === tabId &&
+        (leafId === null || candidate.leafId === leafId)
+    )
+    for (const row of rows) {
+      const proof = snapshot && this.getMobileSessionTerminalRetirementProof(worktreeId, row)
+      const retired =
+        snapshot &&
+        retireTerminalSurfacesFromSnapshot({
+          snapshot,
+          ptyId: row.ptyId ?? row.parentLayout?.ptyIdsByLeafId?.[row.leafId] ?? '',
+          exactSurfaces: [{ parentTabId: tabId, leafId: row.leafId }],
+          exactOnly: true,
+          ...(proof ? { retirementProofs: [proof] } : {})
+        })
+      snapshot = retired ? retired.snapshot : snapshot
+    }
+    if (snapshot && rows.length > 0) {
+      this.storeMobileSessionSnapshot(worktreeId, snapshot)
+      this.notifyMobileSessionTabsChanged(worktreeId)
+    }
   }
 }

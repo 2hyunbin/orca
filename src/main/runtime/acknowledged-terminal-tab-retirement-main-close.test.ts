@@ -179,3 +179,21 @@ it('stops the visible and the dormant SSH terminal of the closed tab', async () 
   expect(kill.mock.calls).toEqual(expect.arrayContaining([[visible], [dormant]]))
   expect(f.hasTab()).toBe(false)
 })
+
+// Twin of terminal-retirement-async-durability.test.ts's acknowledged close: main's own close
+// answers only once its layout write is durable, as the window-era close waited for its retirement.
+it("answers the close only once main's layout write is durable", async () => {
+  const f = fixture(true)
+  await f.store.flushPendingOrThrowAsync()
+  const gate = f.authority.pause()
+  let answered = false
+  const closing = f.close().then((result) => {
+    answered = true
+    return result
+  })
+  await gate.started.promise
+  expect(answered).toBe(false)
+  gate.finish.resolve()
+  await expect(closing).resolves.toEqual({ closed: true })
+  expect(f.hasTab()).toBe(false)
+})
