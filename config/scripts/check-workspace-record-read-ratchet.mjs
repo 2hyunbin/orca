@@ -5,7 +5,8 @@ import { readTrackedSources, runCountRatchet } from './ratchet-baseline.mjs'
 // Ratchet on renderer reads of the workspace record fields outside their selector module. The
 // sidebar's records move to main's feed (sidebar design §2, §9), so a reader that touches the
 // store field directly would silently keep reading the old copy. Counts may only shrink.
-// A lower bound: destructuring and computed access are not seen. Writers stay in the baseline
+// A lower bound: destructuring and computed access are not seen; the compiler is the second
+// guard once the fields leave AppState. Writers stay in the baseline
 // until their cut moves them.
 
 const BASELINE_PATH = 'config/workspace-record-read-baseline.txt'
@@ -80,16 +81,15 @@ export function main(root = process.cwd(), arg = undefined) {
       unit: 'direct workspace record field read(s)',
       header: [
         '# Renderer reads of `worktreesByRepo` / `folderWorkspaces` / `detectedWorktreesByRepo`',
-        '# outside src/renderer/src/store/workspace-record-selectors.ts, as `<count> <file>`.',
+        '# outside src/renderer/src/store/workspace-record-selectors.ts, as `<count> <file> # <why>`.',
         '# This is a RATCHET: counts may only go DOWN. Read through the selectors instead.',
-        '# Remaining rows: store writers, and readers of a loosely typed state or a passed-in copy.',
+        '# `P5b-2 must clear` rows read store state through a loosely typed or optional field: once the',
+        '# fields leave the store they read undefined and silently fall back, so P5b-2 must move them.',
         '# Prune after a fix: pnpm check:workspace-record-read-ratchet --prune'
       ],
       collect: collectWorkspaceRecordReads,
       fix: [
         'Read workspace records through src/renderer/src/store/workspace-record-selectors.ts:',
-        '  selectWorkspace(state, key)                 one host-qualified workspace',
-        '  selectWorkspaces(state, filter)             a stable list by kind / repo / host',
         '  selectWorkspaceByHostTarget(state, target)  the owner of a HostWorktreeTarget',
         '  selectWorktreesByRepo / selectFolderWorkspaces / selectDetectedWorktreesByRepo',
         '                                              compatibility views of the old fields'

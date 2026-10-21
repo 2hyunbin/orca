@@ -1,18 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import {
-  composeWorktreeHostIdentity,
-  hostWorktreeTarget
-} from '../../../shared/worktree/host-qualified-identity'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import type { AppState } from './types'
 import { makeFolderWorkspace, makeWorktree } from './slices/worktrees-slice-test-fixtures'
 import {
   selectDetectedWorktreesByRepo,
   selectFolderWorkspaces,
-  selectWorkspace,
   selectWorkspaceByHostTarget,
-  selectWorkspaces,
-  selectWorktreeRowsByBareId,
   selectWorktreesByRepo
 } from './workspace-record-selectors'
 
@@ -39,69 +33,6 @@ describe('compatibility views', () => {
     expect(selectWorktreesByRepo(state)).toBe(state.worktreesByRepo)
     expect(selectFolderWorkspaces(state)).toBe(state.folderWorkspaces)
     expect(selectDetectedWorktreesByRepo(state)).toBe(state.detectedWorktreesByRepo)
-  })
-
-  it('lists every host twin for a bare id', () => {
-    expect(selectWorktreeRowsByBareId(makeState(), SHARED_ID)).toEqual([localRow, sshRow])
-  })
-})
-
-describe('selectWorkspace', () => {
-  it('keeps a same-id twin on another host apart', () => {
-    const state = makeState()
-    expect(selectWorkspace(state, composeWorktreeHostIdentity('local', SHARED_ID))).toBe(localRow)
-    expect(selectWorkspace(state, composeWorktreeHostIdentity('ssh:build-box', SHARED_ID))).toBe(
-      sshRow
-    )
-    expect(selectWorkspace(state, composeWorktreeHostIdentity('ssh:other', SHARED_ID))).toBe(
-      undefined
-    )
-  })
-
-  it('finds a folder workspace by its workspace key on its host', () => {
-    const row = selectWorkspace(
-      makeState(),
-      composeWorktreeHostIdentity('local', folderWorkspaceKey('folder-1'))
-    )
-    expect(row?.path).toBe(folder.folderPath)
-  })
-})
-
-describe('selectWorkspaces', () => {
-  it('returns one stable array per snapshot and filter', () => {
-    const state = makeState()
-    const first = selectWorkspaces(state, { hostId: 'local' })
-    expect(selectWorkspaces({ ...state }, { hostId: 'local' })).toBe(first)
-    expect(selectWorkspaces(state)).toBe(selectWorkspaces(state))
-    expect(first.map((row) => row.id)).toEqual([
-      SHARED_ID,
-      otherRepoRow.id,
-      folderWorkspaceKey('folder-1')
-    ])
-  })
-
-  it('rebuilds when either source changes', () => {
-    const state = makeState()
-    const before = selectWorkspaces(state)
-    expect(selectWorkspaces({ ...state, folderWorkspaces: [] })).not.toBe(before)
-    expect(selectWorkspaces({ ...state, worktreesByRepo: { 'repo-2': [otherRepoRow] } })).toEqual([
-      otherRepoRow,
-      selectWorkspaces(state, { kind: 'folder' })[0]
-    ])
-  })
-
-  it('filters by kind and repo', () => {
-    const state = makeState()
-    expect(selectWorkspaces(state, { kind: 'worktree', repoId: 'repo-1' })).toEqual([
-      localRow,
-      sshRow
-    ])
-    expect(selectWorkspaces(state, { kind: 'folder' }).map((row) => row.id)).toEqual([
-      folderWorkspaceKey('folder-1')
-    ])
-    expect(selectWorkspaces(state, { repoId: 'missing' })).toBe(
-      selectWorkspaces(state, { hostId: 'ssh:missing' })
-    )
   })
 })
 
