@@ -16,6 +16,7 @@ import {
 import { sendLayoutApply, type WindowLayoutCommand } from './layout-apply-send'
 import { mainLayoutFrameSender } from './main-loaded-layout-frames.test-fixture'
 import { SERVER_ROUTED_LAYOUT_COMMANDS } from './server-layout-apply'
+import { redrawServerLayoutWorkspace } from './server-layout-apply-routes'
 import {
   CAPABLE,
   ENV,
@@ -184,19 +185,64 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
     expect(handlers.asToday).not.toHaveBeenCalled()
   })
 
-  it('keeps today’s path for an intent off the list', async () => {
+  // A window's close tells main the window already stopped its terminals, which this desktop cannot
+  // do for a server's; closes, starts, sleeps and terminal names keep the RPCs that main applies.
+  it('keeps today’s path for closes, starts, sleeps and a terminal’s own name', async () => {
     const { store } = await drawnByServer()
     const offList: WindowLayoutCommand[] = [
       { type: 'renamePane', tabId: TAB_1, leafId: LEAF_ID, title: 'x' },
       { type: 'closeTabs', tabIds: [TAB_1] },
-      { type: 'splitPane', tabId: TAB_1, leafId: LEAF_ID, direction: 'vertical' }
+      { type: 'closeTabs', tabIds: [TAB_1], recordClose: 'user' },
+      { type: 'closePane', tabId: TAB_1, leafId: LEAF_ID },
+      { type: 'splitPane', tabId: TAB_1, leafId: LEAF_ID, direction: 'vertical' },
+      { type: 'createTerminalTab', tabId: TAB_1, leafId: LEAF_ID },
+      { type: 'sleep', tabId: TAB_1, paneKeys: [], records: [] },
+      { type: 'wake', tabId: TAB_1, paneKeys: ['k'] },
+      { type: 'renameTab', tabId: TAB_1, kind: 'custom', title: 'named' }
     ]
     for (const command of offList) {
-      expect(SERVER_ROUTED_LAYOUT_COMMANDS).not.toContain(command.type)
       expect(send(store, command).taken).toBe(false)
+    }
+    for (const type of ['closeTabs', 'closePane', 'splitPane', 'createTerminalTab', 'sleep']) {
+      expect(SERVER_ROUTED_LAYOUT_COMMANDS).not.toContain(type)
     }
     await settle()
     expect(hoisted.sent).toEqual([])
+  })
+
+  it.each<{ name: string; command: WindowLayoutCommand; sent: Record<string, unknown> }>([
+    {
+      name: 'a tab’s color',
+      command: { type: 'setTabProps', tabId: TAB_2, color: '#ff0000' },
+      sent: { type: 'setTabProps', tabId: 'bar-2', color: '#ff0000' }
+    },
+    {
+      name: 'a tab’s pin',
+      command: { type: 'setTabProps', tabId: TAB_1, isPinned: true },
+      sent: { type: 'setTabProps', tabId: 'bar-1', isPinned: true }
+    },
+    {
+      name: 'a tab’s chat pane',
+      command: { type: 'setChatPane', tabId: TAB_1, leafId: LEAF_ID },
+      sent: { type: 'setChatPane', tabId: 'bar-1', leafId: LEAF_ID }
+    },
+    {
+      name: 'an AI vault title',
+      command: { type: 'renameTab', tabId: TAB_2, kind: 'aiVault', title: null },
+      sent: { type: 'renameTab', tabId: 'bar-2', kind: 'aiVault', title: null }
+    }
+  ])('takes $name to the server’s main, which applies it as from its own window', async (each) => {
+    const { store } = await drawnByServer()
+    const { taken, handlers } = send(store, each.command)
+    await settle()
+    expect(taken).toBe(true)
+    expect(handlers.asToday).not.toHaveBeenCalled()
+    expect(hoisted.sent).toEqual([
+      {
+        target: { kind: 'environment', environmentId: ENV },
+        params: { command: { ...each.sent, workspace: WT } }
+      }
+    ])
   })
 
   it('keeps today’s path for a tab the server’s frames do not hold', async () => {
@@ -265,8 +311,43 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
     install(older)
     setServers(older, [{ ...CAPABLE, capable: false }])
     expect(streams.of(ENV).filter((open) => !open.closed)).toHaveLength(0)
-    expect(send(older, { type: 'equalizePanes', tabId: TAB_1 }).taken).toBe(false)
+    const today: WindowLayoutCommand[] = [
+      { type: 'equalizePanes', tabId: TAB_1 },
+      { type: 'setTabProps', tabId: TAB_1, color: '#ff0000' },
+      { type: 'setChatPane', tabId: TAB_1, leafId: LEAF_ID },
+      { type: 'renameTab', tabId: TAB_1, kind: 'aiVault', title: null },
+      { type: 'moveTab', tabId: TAB_1, toGroupId: HOST_GROUP, index: 1 }
+    ]
+    for (const command of today) {
+      expect(send(older, command).taken).toBe(false)
+    }
     expect(hoisted.sent).toEqual([])
+  })
+
+  // A desktop close the server refuses (a pinned tab): the window dropped it, the frames bring it back.
+  it('draws a tab the window closed again when its close is refused', async () => {
+    const { store } = await drawnByServer()
+    store.setState({
+      groupsByWorktree: {
+        ...store.getState().groupsByWorktree,
+        [WT]: (store.getState().groupsByWorktree[WT] ?? []).map((group) => ({
+          ...group,
+          tabOrder: [TAB_2]
+        }))
+      },
+      tabsByWorktree: {
+        ...store.getState().tabsByWorktree,
+        [WT]: (store.getState().tabsByWorktree[WT] ?? []).filter((tab) => tab.id !== TAB_1)
+      }
+    })
+    expect(orderOf(store)).toEqual([TAB_2])
+
+    expect(redrawServerLayoutWorkspace(ENV, WT)).toBe(true)
+    await settle()
+
+    expect(orderOf(store)).toEqual([TAB_1, TAB_2])
+    expect(store.getState().tabsByWorktree[WT]?.map((tab) => tab.id)).toContain(TAB_1)
+    expect(redrawServerLayoutWorkspace(ENV, 'repo::/elsewhere')).toBe(false)
   })
 
   it('lets a reply waiting on a server whose stream closes show at once', async () => {
