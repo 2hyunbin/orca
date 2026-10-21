@@ -11,7 +11,8 @@ import type { AgentJournalItemBody } from '../../../shared/agent-session-journal
 import type { JournalLifecycleIdentityMutationInput } from '../agent-session-journal/journal-lifecycle-mutation'
 import type {
   StructuredAgentSessionEventSink,
-  StructuredAgentSessionHistoryJournal
+  StructuredAgentSessionHistoryJournal,
+  StructuredAgentSessionSinkBarrier
 } from './structured-agent-session-event-sink'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type { StructuredAgentSessionTransitionJournal } from './structured-agent-session-transition'
@@ -72,7 +73,9 @@ export function createHistoryCatchUpBatch() {
 }
 
 export type HistoryCatchUpContext<View> = {
-  view: View
+  /** What the chat already holds, read once on first use: an agent that reads its own history first
+   *  touches the journal only when there is something to add. */
+  view: () => View
   history: StructuredAgentSessionHistoryJournal
   journal: StructuredAgentSessionTransitionJournal
   signal: AbortSignal
@@ -140,7 +143,8 @@ export async function runHistoryCatchUp<View>(input: {
       return 'skipped'
     }
     const epoch = history.epoch
-    const view = input.readView(history)
+    let planned: { view: View } | undefined
+    const view = (): View => (planned ??= { view: input.readView(history) }).view
     const plan = await input.prepare({
       view,
       history,
@@ -172,7 +176,7 @@ export async function runHistoryCatchUp<View>(input: {
             if (
               current.epoch !== epoch ||
               sink.journalHistory?.() !== history ||
-              !input.sameView(view, input.readView(history))
+              !input.sameView(view(), input.readView(history))
             ) {
               return []
             }
@@ -196,8 +200,12 @@ export async function runHistoryCatchUp<View>(input: {
       warn(admission.reason)
       return 'skipped'
     }
-    const committed = await sink.written?.()
-    if (committed?.ok === false) {
+    // The deadline bounds the commit too: a stalled barrier must not hold the provider's open.
+    const committed = await waitForPromiseWithSignal(
+      sink.written?.() ?? Promise.resolve<StructuredAgentSessionSinkBarrier>({ ok: true }),
+      controller.signal
+    )
+    if (!committed.ok) {
       warn('write-failed', committed.error)
       return 'skipped'
     }
