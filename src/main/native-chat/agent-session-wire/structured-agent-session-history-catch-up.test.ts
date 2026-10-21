@@ -1,21 +1,38 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import type { HistoryCatchUpPlan } from './structured-agent-session-history-catch-up'
 import { runHistoryCatchUp } from './structured-agent-session-history-catch-up'
 
 describe('history catch-up runner', () => {
-  it('gives up at the deadline when the commit never becomes durable', async () => {
+  afterEach(() => vi.useRealTimers())
+  function fixture() {
     let barriers = 0
-    const journal = { epoch: 'epoch-1', item: () => null, canonicalItemId: (key: string) => key }
-    const sink = {
+    const journal = {
+      epoch: 'epoch-1',
+      item: () => null,
+      itemBody: () => null,
+      canonicalItemId: (key: string) => key,
+      visitItems: vi.fn(),
+      visitItemsWithLinkage: vi.fn(),
+      receiptFor: () => null,
+      submissions: () => [],
+      historyOrigin: () => null
+    }
+    const append = vi.fn<NonNullable<StructuredAgentSessionEventSink['tryAppendTransition']>>(
+      () => ({ accepted: true })
+    )
+    const sink: StructuredAgentSessionEventSink = {
+      appendItem: vi.fn(),
+      appendTombstone: vi.fn(),
+      publish: vi.fn(),
       // The barrier before reading settles; the one after the commit never does.
       written: () => (barriers++ === 0 ? Promise.resolve({ ok: true }) : new Promise(() => {})),
       journalHistory: () => journal,
       journalItems: () => journal,
-      tryAppendTransition: () => ({ accepted: true })
-    } as unknown as StructuredAgentSessionEventSink
+      tryAppendTransition: append
+    }
     const logger = { warn: vi.fn(), error: vi.fn() }
-    const started = Date.now()
-    const outcome = await runHistoryCatchUp({
+    const input: Parameters<typeof runHistoryCatchUp<string>>[0] = {
       agentName: 'Test',
       scope: 'test-catch-up',
       sessionId: 'session-1',
@@ -24,13 +41,67 @@ describe('history catch-up runner', () => {
       logger,
       readView: () => 'view',
       sameView: (a, b) => a === b,
-      prepare: async () => ({ settlementId: 's', mutations: [], keys: [], reservedBytes: 1 })
-    })
+      prepare: async () => plan
+    }
+    return { input, append, journal, logger }
+  }
+  const plan: HistoryCatchUpPlan = {
+    settlementId: 's',
+    mutations: [{ kind: 'tombstone', identity: { provider: 'orca', clientMessageId: 'old' } }],
+    keys: [],
+    reservedBytes: 1
+  }
+  it('gives up at the deadline when the commit never becomes durable', async () => {
+    const { input, append, journal, logger } = fixture()
+    const started = Date.now()
+    const outcome = await runHistoryCatchUp(input)
     expect(outcome).toBe('skipped')
     expect(Date.now() - started).toBeLessThan(5_000)
     expect(logger.warn).toHaveBeenCalledWith(
       'Test chat did not catch up on turns made outside it',
       expect.objectContaining({ reason: 'import-skipped' })
     )
+    expect(append.mock.calls[0]?.[0].steps[0]?.resolve(journal)).toEqual([])
+  })
+  it('abandons stalled preparation at its deadline or parent cancellation without late admission', async () => {
+    vi.useFakeTimers()
+    for (const parent of [undefined, new AbortController()]) {
+      const late = Promise.withResolvers<HistoryCatchUpPlan | null>()
+      const { input, append } = fixture()
+      input.prepare = () => late.promise
+      const outcome = runHistoryCatchUp({ ...input, signal: parent?.signal })
+      await vi.advanceTimersByTimeAsync(parent ? 0 : 50)
+      parent?.abort()
+      expect(await outcome).toBe('skipped')
+      if (parent) {
+        late.reject(new Error('late source failure'))
+      } else {
+        late.resolve(plan)
+      }
+      await vi.advanceTimersByTimeAsync(0)
+      expect(append).not.toHaveBeenCalled()
+    }
+  })
+  it('checks absolute time after preparation even before timer delivery, including a no-op', async () => {
+    vi.useFakeTimers()
+    for (const prepared of [plan, null]) {
+      const { input, append } = fixture()
+      input.prepare = async () => {
+        vi.setSystemTime(Date.now() + 51)
+        return prepared
+      }
+      expect(await runHistoryCatchUp(input)).toBe('skipped')
+      expect(append).not.toHaveBeenCalled()
+    }
+  })
+  it('revokes an admitted resolver after an early failed barrier', async () => {
+    const { input, append, journal } = fixture()
+    input.sink.written = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true })
+      .mockResolvedValue({ ok: false, error: new Error('write failed') })
+    expect(await runHistoryCatchUp(input)).toBe('skipped')
+    const step = append.mock.calls[0]?.[0].steps[0]
+    expect(step?.resolve(journal)).toEqual([])
   })
 })
