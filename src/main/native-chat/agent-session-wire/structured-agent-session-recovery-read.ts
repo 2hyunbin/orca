@@ -10,7 +10,10 @@ import type {
 } from './structured-agent-session-host-types'
 
 type RecoverySession = { journal: Pick<StructuredAgentSessionHostSession['journal'], 'snapshot'> }
-type RecoveryDeps = Pick<StructuredAgentSessionHostDeps, 'resolveLaunchEnv'> & {
+type RecoveryDeps = Pick<
+  StructuredAgentSessionHostDeps,
+  'resolveLaunchEnv' | 'resolveWorkspacePath'
+> & {
   store: Pick<StructuredAgentSessionHostDeps['store'], 'getRecord'>
 }
 const contexts = new WeakMap<RecoverySession, RecoveryContextCache>()
@@ -62,7 +65,8 @@ export async function readStructuredSessionRecovery(
       ...overlay
     }
     const result = await structuredSessionRecoveryOptions(record, launchEnv, {
-      cache
+      cache,
+      resolveWorkspacePath: deps.resolveWorkspacePath
     })
     const current = await context.conversation(sessionId)
     return current === session && key === recoveryIdentity(session, deps, sessionId)

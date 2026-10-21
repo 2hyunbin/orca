@@ -126,12 +126,16 @@ it('leaves database-backed context to recent chat messages without locating or e
   record.provider = 'opencode'
   const store = vi.spyOn(OPENCODE_TRANSCRIPT_IMPORT, 'conversationStore')
   const locate = vi.spyOn(OPENCODE_TRANSCRIPT_IMPORT, 'findTranscript')
+  const resolveWorkspacePath = vi.fn(async () => '/workspace')
   try {
-    expect(await structuredSessionRecoveryOptions(record, {}, { cache: {} })).toEqual({
+    expect(
+      await structuredSessionRecoveryOptions(record, {}, { cache: {}, resolveWorkspacePath })
+    ).toEqual({
       canSwitchAccount: false
     })
     expect(store).not.toHaveBeenCalled()
     expect(locate).not.toHaveBeenCalled()
+    expect(resolveWorkspacePath).not.toHaveBeenCalled()
   } finally {
     store.mockRestore()
     locate.mockRestore()

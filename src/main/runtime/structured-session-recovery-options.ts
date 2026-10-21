@@ -3,6 +3,7 @@ import { isAbsolute, join } from 'node:path'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import { agentSessionProviderHandleChainHead } from '../../shared/agent-session-provider-handle'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
+import { agentSessionPinnedLaunchDirectory } from './agent-session-record-launch-directory'
 import { structuredAgentRuntimeMetadata } from './structured-agent-runtime-metadata'
 import type { StructuredAgentTranscriptImport } from '../native-chat/structured-agent-cli-conversations'
 
@@ -54,7 +55,10 @@ async function readableContext(
 export async function structuredSessionRecoveryOptions(
   record: AgentSessionRecord | null,
   launchEnv: NodeJS.ProcessEnv,
-  input: { cache: RecoveryContextCache }
+  input: {
+    cache: RecoveryContextCache
+    resolveWorkspacePath?: (workspaceId: string) => Promise<string>
+  }
 ): Promise<{ canSwitchAccount: boolean; transcriptPath?: string }> {
   const metadata = record && structuredAgentRuntimeMetadata(record.provider)
   const head = record && agentSessionProviderHandleChainHead(record.providerHandleChain)
@@ -73,7 +77,10 @@ export async function structuredSessionRecoveryOptions(
       accountHome: record.accountHome,
       store,
       providerSessionId: metadata.sessionHistory.rowSessionId(head),
-      workspaceCwd: record.launchDirectory ?? ''
+      workspaceCwd:
+        agentSessionPinnedLaunchDirectory(record) ??
+        (await input.resolveWorkspacePath?.(record.location.workspaceId)) ??
+        ''
     }
     const key = JSON.stringify([record.providerHandleChain, source])
     const transcriptPath = await readableContext(input.cache, key, store, importer, () =>
