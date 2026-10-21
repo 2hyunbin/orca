@@ -33,3 +33,25 @@ it('asks no host of a worktree with no saved session, and goes on past a change 
   expect(warn).toHaveBeenCalledOnce()
   warn.mockRestore()
 })
+
+it('goes on past a batch whose changes cannot be read', async () => {
+  const applied: string[] = []
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  const queue = createChatTabLayoutQueue({
+    sessionOf: () => null,
+    hostIdOf: () => 'local',
+    apply: async (command: ChatTabLayoutCommand) => {
+      applied.push(command.type === 'openAgentSessionTab' ? command.sessionId : 'close')
+      return { ok: true, result: {} }
+    }
+  })
+
+  queue(() => {
+    throw new Error('session store unreadable')
+  })
+  queue(() => [open('b')])
+  await vi.waitFor(() => expect(applied).toEqual(['b']))
+
+  expect(warn).toHaveBeenCalledOnce()
+  warn.mockRestore()
+})

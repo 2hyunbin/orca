@@ -40,8 +40,15 @@ export function createChatTabLayoutQueue(deps: {
   }
   return (changesNow) => {
     queue = queue.then(async () => {
-      for (const queued of changesNow()) {
-        // A change that fails is logged and the queue goes on: a later change must still land.
+      // A batch or change that fails is logged and the queue goes on: a later one must still land.
+      let changes: readonly QueuedChatTabChange[]
+      try {
+        changes = changesNow()
+      } catch (error) {
+        console.warn('[agent-session-tabs] reading chat tab changes failed:', error)
+        return
+      }
+      for (const queued of changes) {
         try {
           const command = commandNow(queued)
           const reply = command ? await deps.apply(command) : null
