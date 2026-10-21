@@ -343,7 +343,6 @@ export class StructuredAgentSessionHost {
   subscribe = (input: AgentSessionSubscribeInput) => this.backgroundTasks.subscribe(input)
 
   settleLateDispatch = this.mutations.settleLateDispatch
-  releaseUnansweredDispatches = this.mutations.releaseUnansweredDispatches
   /** What the live child holds changed with no row: every reader re-derives current work. */
   publishWorkChanged: (sessionId: string) => void = this.clientDelivery.publishGenerationEnded
 
