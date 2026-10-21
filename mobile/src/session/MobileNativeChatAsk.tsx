@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import { Check } from 'lucide-react-native'
 import type { AskAnswerSelection, AskPrompt } from '../../../src/shared/native-chat-ask'
-import { colors } from '../theme/mobile-theme'
-import { styles } from './mobile-native-chat-ask-styles'
+import { colors, radii, spacing, typography } from '../theme/mobile-theme'
+import { TEXT_INPUT_FONT_SIZE } from '../platform/text-input-font-size'
 import { MobileNativeChatCardHeaderAction } from './MobileNativeChatCardHeaderAction'
 import { useMobileNativeChatAskAutoAdvance } from './use-mobile-native-chat-ask-auto-advance'
 
@@ -33,8 +33,6 @@ export function MobileNativeChatAsk({
   onCollapse
 }: Props): React.JSX.Element {
   const [index, setIndex] = useState(0)
-  const [contentHeight, setContentHeight] = useState(0)
-  const [viewportHeight, setViewportHeight] = useState(0)
   const [selections, setSelections] = useState<number[][]>(() => prompt.questions.map(() => []))
   const [otherText, setOtherText] = useState<string[]>(() => prompt.questions.map(() => ''))
   const [submitting, setSubmitting] = useState(false)
@@ -154,13 +152,7 @@ export function MobileNativeChatAsk({
         </ScrollView>
       ) : null}
 
-      <ScrollView
-        style={styles.scroll}
-        keyboardShouldPersistTaps="always"
-        nestedScrollEnabled
-        onLayout={({ nativeEvent }) => setViewportHeight(nativeEvent.layout.height)}
-        onContentSizeChange={(_width, height) => setContentHeight(height)}
-      >
+      <ScrollView style={styles.scroll} keyboardShouldPersistTaps="always" nestedScrollEnabled>
         <View style={styles.questionRow}>
           <Text style={styles.questionText}>{q.question}</Text>
           <MobileNativeChatCardHeaderAction
@@ -205,11 +197,6 @@ export function MobileNativeChatAsk({
         ) : null}
       </ScrollView>
 
-      {contentHeight > viewportHeight && viewportHeight > 0 ? (
-        <Text style={styles.scrollHint}>
-          Scroll to see all {q.options.length} options and Other
-        </Text>
-      ) : null}
       <View style={styles.footer}>
         <Pressable
           style={styles.cancel}
@@ -292,3 +279,154 @@ function OptionRow({
     </Pressable>
   )
 }
+
+const styles = StyleSheet.create({
+  card: {
+    maxHeight: 380,
+    minHeight: 0,
+    flexShrink: 1,
+    backgroundColor: colors.bgPanel,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle
+  },
+  tabs: {
+    flexGrow: 0,
+    paddingTop: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle
+  },
+  tabsContent: {
+    paddingHorizontal: spacing.sm,
+    gap: spacing.xs,
+    alignItems: 'center'
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 36,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent'
+  },
+  tabActive: {
+    borderBottomColor: colors.statusGreen
+  },
+  tabText: {
+    color: colors.textSecondary,
+    fontSize: typography.metaSize,
+    fontWeight: '600'
+  },
+  tabTextActive: {
+    color: colors.textPrimary
+  },
+  scroll: {
+    paddingHorizontal: spacing.md,
+    minHeight: 0,
+    flexShrink: 1
+  },
+  questionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  questionText: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontSize: typography.bodySize + 1,
+    fontWeight: '600',
+    marginVertical: spacing.sm
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radii.card,
+    backgroundColor: colors.bgRaised,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    marginBottom: spacing.xs
+  },
+  optionSelected: {
+    borderColor: colors.statusGreen
+  },
+  check: {
+    width: 18,
+    height: 18,
+    borderWidth: 1.5,
+    borderColor: colors.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  checkCircle: {
+    borderRadius: 9
+  },
+  checkSquare: {
+    borderRadius: 4
+  },
+  checkOn: {
+    backgroundColor: colors.statusGreen,
+    borderColor: colors.statusGreen
+  },
+  optionBody: {
+    flex: 1,
+    gap: 2
+  },
+  optionLabel: {
+    color: colors.textPrimary,
+    fontSize: typography.bodySize,
+    fontWeight: '600'
+  },
+  optionDescription: {
+    color: colors.textSecondary,
+    fontSize: typography.metaSize
+  },
+  input: {
+    backgroundColor: colors.bgRaised,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    borderRadius: radii.card,
+    color: colors.textPrimary,
+    fontSize: TEXT_INPUT_FONT_SIZE,
+    padding: spacing.sm,
+    minHeight: 44,
+    marginBottom: spacing.xs
+  },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.md,
+    gap: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle
+  },
+  cancel: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm
+  },
+  cancelText: {
+    color: colors.textSecondary,
+    fontSize: typography.bodySize,
+    fontWeight: '600'
+  },
+  progress: {
+    color: colors.textMuted,
+    fontSize: typography.metaSize
+  },
+  next: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.button,
+    backgroundColor: colors.textPrimary
+  },
+  nextDisabled: {
+    backgroundColor: colors.bgRaised
+  },
+  nextText: {
+    color: colors.bgBase,
+    fontSize: typography.bodySize,
+    fontWeight: '700'
+  },
+  nextTextDisabled: {
+    color: colors.textMuted
+  }
+})

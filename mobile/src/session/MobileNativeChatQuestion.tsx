@@ -109,7 +109,13 @@ export function MobileNativeChatQuestion({
   )
 
   return (
-    <View style={styles.card}>
+    <ScrollView
+      testID="native-chat-question-card"
+      style={styles.card}
+      contentContainerStyle={styles.cardContent}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.header}>
         <CircleHelp size={15} color={colors.accentBlue} strokeWidth={2.2} />
         <Text style={styles.question}>{question.question}</Text>
@@ -122,13 +128,7 @@ export function MobileNativeChatQuestion({
       </View>
 
       {hasOptions ? (
-        <ScrollView
-          testID="native-chat-question-options"
-          style={styles.optionsScroll}
-          contentContainerStyle={styles.options}
-          nestedScrollEnabled
-          keyboardShouldPersistTaps="handled"
-        >
+        <View style={styles.options}>
           {optionRows.map(({ label, description, key }, optIndex) => {
             const isSelected = selectedOptionIndexes.includes(optIndex)
             return (
@@ -159,7 +159,7 @@ export function MobileNativeChatQuestion({
               </Pressable>
             )
           })}
-        </ScrollView>
+        </View>
       ) : null}
 
       {question.multiSelect && hasOptions ? (
@@ -214,7 +214,7 @@ export function MobileNativeChatQuestion({
           </Pressable>
         </View>
       ) : null}
-    </View>
+    </ScrollView>
   )
 }
 
@@ -222,14 +222,18 @@ const styles = StyleSheet.create({
   card: {
     marginHorizontal: spacing.lg,
     marginVertical: spacing.sm,
-    padding: spacing.md,
-    gap: spacing.sm,
+    maxHeight: 380,
+    flexGrow: 0,
     backgroundColor: colors.bgPanel,
     borderRadius: radii.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.borderSubtle,
     flexShrink: 1,
     minHeight: 0
+  },
+  cardContent: {
+    padding: spacing.md,
+    gap: spacing.sm
   },
   header: {
     flexDirection: 'row',
@@ -242,11 +246,6 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySize + 1,
     fontWeight: '600',
     lineHeight: typography.bodySize + 7
-  },
-  optionsScroll: {
-    maxHeight: 240,
-    minHeight: 0,
-    flexShrink: 1
   },
   options: {
     gap: spacing.xs
