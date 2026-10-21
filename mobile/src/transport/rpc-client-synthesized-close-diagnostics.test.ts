@@ -160,6 +160,36 @@ describe('synthesized close diagnostics', () => {
     }
   })
 
+  it('lets the next on-time failure replace a delayed deadline diagnosis', async () => {
+    let elapsed = 0
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => elapsed)
+    const entries: ConnectionLogEntry[] = []
+    const client = connect('ws://desktop.invalid', 'token', 'server-key', {
+      onLog: (entry) => entries.push(entry)
+    })
+    try {
+      elapsed = 164 * 60_000
+      await vi.advanceTimersByTimeAsync(12_000)
+      expect(entries.some((entry) => entry.code === 'suspended-dial')).toBe(true)
+      elapsed += 500
+      await vi.advanceTimersByTimeAsync(500)
+      expect(sockets).toHaveLength(2)
+      elapsed += 12_000
+      await vi.advanceTimersByTimeAsync(12_000)
+      expect(entries.filter((entry) => entry.code === 'connect-timeout')).toHaveLength(1)
+      expect(
+        diagnoseConnection({
+          endpoint: 'ws://desktop.invalid',
+          state: client.getState(),
+          entries
+        }).likelyCause
+      ).toContain('endpoint did not answer')
+    } finally {
+      client.close()
+      clock.mockRestore()
+    }
+  })
+
   it.each([3 * 60 * 60_000, -3 * 60 * 60_000])(
     'keeps an on-time connect timeout when the wall clock shifts by %i ms',
     async (wallShift) => {
