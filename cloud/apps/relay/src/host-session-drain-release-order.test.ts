@@ -85,6 +85,33 @@ describe('a zero-grace drain releases the host before telling it', () => {
       RELAY_CLOSE_CODE.DRAINING,
       'resolve configured director'
     )
+    const slow = vi
+      .mocked(console.warn)
+      .mock.calls.map(([line]) => String(line))
+      .filter((line) => line.includes('"orca_relay_host_drain_release_slow"'))
+    expect(slow).toHaveLength(1)
+    expect(slow[0]).not.toContain(h.identity.relayHostId)
+  })
+
+  it("starts the host's splice releases before its control release", async () => {
+    // The store runs one host's releases in the order they start, so waiting on the
+    // control release covers the splices the drain closed ahead of it.
+    const { h, key } = await connectedHost()
+    const order: string[] = []
+    vi.spyOn(h.assignments, 'releaseActivity').mockImplementation(async (_identity, id) => {
+      order.push(id)
+      return true
+    })
+    const session = h.registry.get(key)!
+    session.activeSplices.set('conn-a', () => {
+      session.activeSplices.delete('conn-a')
+      void h.assignments.releaseActivity(key, 'splice:conn-a')
+    })
+
+    h.registry.drain(0)
+    await vi.advanceTimersByTimeAsync(1)
+
+    expect(order).toEqual(['splice:conn-a', 'control:1'])
   })
 
   it('closes at once when the release fails, so a database outage never holds the host', async () => {

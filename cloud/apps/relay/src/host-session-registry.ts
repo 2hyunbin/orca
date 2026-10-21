@@ -189,18 +189,21 @@ function send(socket: WebSocket, type: string, message: object): void {
   socket.send(JSON.stringify({ type, ...message }))
 }
 
-// Resolves, never rejects, once `work` settles or `ms` passes; unref'd so it never holds exit.
-async function settledWithin(work: Promise<unknown>, ms: number): Promise<void> {
+// Whether `work` settled within `ms`; never rejects, and unref'd so it never holds exit.
+async function settledWithin(work: Promise<unknown>, ms: number): Promise<boolean> {
   let timer: ReturnType<typeof setTimeout> | undefined
-  const elapsed = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, ms)
+  const elapsed = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms)
     timer.unref?.()
   })
-  await Promise.race([work.then(noop, noop), elapsed])
+  const settled = await Promise.race([work.then(settledTrue, settledTrue), elapsed])
   clearTimeout(timer)
+  return settled
 }
 
-function noop(): void {}
+function settledTrue(): true {
+  return true
+}
 
 function readControlFrame(
   socket: WebSocket,
@@ -249,10 +252,10 @@ const preAuthEnded =
 const ACTIVATION_QUEUE_WAIT_MS = 30_000
 
 // A drained host redials the director the moment it is told, and a redial that meets this
-// cell's release still holding its assignment row is refused row_busy. From asia-east2 that
-// release holds the row ~1 s (c34/c35 drains, 2026-10); a release still running at 2 s means
-// a database in trouble, and waiting longer only keeps the host on a cell it must leave.
-export const DRAIN_RELEASE_BEFORE_CLOSE_MS = 2_000
+// cell's release still holding its assignment row is refused row_busy. From asia-east2 one
+// release holds the row ~1 s (c34/c35 drains, 2026-10), and a host's releases run one after
+// another, so 3 s covers a control plus one phone. Past that, it is told anyway.
+export const DRAIN_RELEASE_BEFORE_CLOSE_MS = 3_000
 
 // Why: this lease bounds how long a host lingers on a cell after a missed drain,
 // and rebinding it is the only passive rebalancing we have, so it has to stay
@@ -2405,7 +2408,21 @@ export class HostSessionRegistry {
       return
     }
     // The host redials on this close, so its row is released first; a stuck release still closes.
-    void settledWithin(Promise.all(releases), DRAIN_RELEASE_BEFORE_CLOSE_MS).then(close)
+    // The splice releases above are queued ahead of these, so they have landed too.
+    const startedAt = this.now()
+    void settledWithin(Promise.all(releases), DRAIN_RELEASE_BEFORE_CLOSE_MS).then((settled) => {
+      if (!settled) {
+        console.warn(
+          JSON.stringify({
+            event: 'orca_relay_host_drain_release_slow',
+            ...this.logIdentity(),
+            relayHostIdDigest: relayHostLogDigest(session.relayHostId),
+            waitedMs: this.now() - startedAt
+          })
+        )
+      }
+      close()
+    })
   }
 
   private reassertRegionalDrain(session: HostSession): void {
