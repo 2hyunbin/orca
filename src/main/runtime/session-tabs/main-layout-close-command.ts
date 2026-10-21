@@ -4,8 +4,11 @@
 
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import type { WindowLayoutCommand } from '../runtime-layout-apply'
-import { NO_STOP, type ExplicitCloseStop } from './explicit-terminal-close-pty-stops'
+// Type-only: the stops module sits late in the runtime's class chain, and this runs early in it.
+import type { ExplicitCloseStop } from './explicit-terminal-close-pty-stops'
 import { parseAppSshPtyId } from '../../../shared/ssh-pty-id'
+
+const NO_STOP: ExplicitCloseStop = { stopped: false }
 
 export type MainLayoutCloseHost = {
   /** Every pane of a tab main owns, in pane order. */
