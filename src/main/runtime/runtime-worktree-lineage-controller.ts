@@ -10,9 +10,11 @@ import {
 import { sharesResolvedWorktreeLineageBoundary } from '../../shared/resolved-worktree-lineage'
 import type { OrchestrationDb } from './orchestration/db'
 import type { RuntimeStore } from './runtime-store-contract'
-import { worktreeRowTarget } from '../persistence/host-qualified-worktree-meta'
+import {
+  readAllWorktreeMetaForHost,
+  worktreeRowTarget
+} from '../persistence/host-qualified-worktree-meta'
 import type { ResolvedWorktree } from './runtime-worktree-path-identity'
-import { readAllWorktreeMetaForHost } from '../persistence/host-qualified-worktree-meta'
 import { getRepoOwnedWorktreeMeta } from '../worktree-metadata-ownership'
 import { isWslMoveWorktreeBlocked } from '../persistence/moving-wsl-projects/wsl-move-background-backoff'
 import {
