@@ -1,14 +1,23 @@
 // Layout-owner builds: the terminal tabs and panes of every workspace main owns, read from main's
 // one layout projection (the layout stream's) rather than from the window's graph. A paired server's
-// workspaces (`runtime:<env>` partitions) are not here: the window still mirrors those.
+// workspaces (`runtime:<env>` partitions) are not here: the window still mirrors those. A local
+// workspace's tabs an older build left in such a partition are (#18202): their terminals are local.
 
-import { parseExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  parseExecutionHostId,
+  type ExecutionHostId
+} from '../../../../shared/execution-host'
 import type {
   RuntimeSyncedLeaf,
   RuntimeSyncedTab,
   RuntimeSyncWindowGraph
 } from '../../../../shared/runtime-types'
 import type { LoadedWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-load-types'
+import type {
+  LayoutTab,
+  WorkspaceLayout
+} from '../../../../shared/workspace-layout/workspace-layout-model'
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
 import { bindingOf } from '../../pane-start-statuses'
 import {
@@ -37,6 +46,7 @@ export class TerminalSurfaceIndex {
   private currentJson = ''
   /** The loaded partitions `current` was projected from: the projection's own cached objects. */
   private projectedFrom: (LoadedWorkspaceLayout | null)[] = []
+  private projectedHostIds: readonly ExecutionHostId[] = []
   private projectedHomes = ''
   private projectedTitles: boolean | null = null
   /** Workspace key → its home partition, as of the last projection. */
@@ -80,9 +90,7 @@ export class TerminalSurfaceIndex {
   /** Main's surfaces now: re-projected only when a partition the projection holds was rewritten. */
   surfaces(): MainTerminalSurfaces {
     const reads = this.deps.reads()
-    const hostIds = this.deps
-      .hostIds()
-      .filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
+    const hostIds = this.deps.hostIds()
     const loaded = hostIds.map((hostId) => reads?.readPartition(hostId) ?? null)
     const samePartitions =
       loaded.length === this.projectedFrom.length &&
@@ -112,6 +120,7 @@ export class TerminalSurfaceIndex {
     }
     this.projectedTitles = titles
     this.projectedFrom = loaded
+    this.projectedHostIds = hostIds
     this.projectedHomes = homes
     const next = this.project(hostIds, loaded)
     const json = JSON.stringify({
@@ -134,25 +143,20 @@ export class TerminalSurfaceIndex {
     const partitions: LoadedPartition[] = []
     const worktreeIds = new Set<string>()
     const paneFacts = new Map<string, { binding: string; sleeping: boolean }>()
-    hostIds.forEach((hostId, index) => {
-      const partition = loaded[index]
-      if (!partition) {
-        return
-      }
-      // Only the owning partition's copy counts; a stray copy elsewhere is not a second pane.
-      const workspaces = Object.fromEntries(
-        Object.entries(partition.layout.workspaces).filter(
-          ([key]) => this.routes.get(key) === hostId
-        )
-      )
+    const held = { tabIds: new Set<string>(), ptyIds: new Set<string>() }
+    const index = (partition: LoadedPartition, workspaces: Record<string, WorkspaceLayout>) => {
       for (const workspace of Object.values(workspaces)) {
         worktreeIds.add(workspace.worktreeId)
         for (const tab of workspace.tabs) {
           if (tab.kind !== 'terminal') {
             continue
           }
+          held.tabIds.add(tab.entityId)
           for (const leafId of collectLayoutLeafIdsInOrder(tab.panes.root)) {
             const leaf = workspace.leaves?.[leafId] ?? {}
+            if (leaf.ptyId) {
+              held.ptyIds.add(leaf.ptyId)
+            }
             paneFacts.set(`${tab.entityId}::${leafId}`, {
               binding: bindingOf(leaf),
               sleeping: leaf.sleeping !== undefined
@@ -161,7 +165,39 @@ export class TerminalSurfaceIndex {
         }
       }
       partitions.push({ ...partition, layout: { ...partition.layout, workspaces } })
+    }
+    const spills: [LoadedPartition, WorkspaceLayout][] = []
+    hostIds.forEach((hostId, at) => {
+      const partition = loaded[at]
+      if (!partition) {
+        return
+      }
+      if (parseExecutionHostId(hostId)?.kind === 'runtime') {
+        // A paired server's own workspaces stay the window's; only a local one's spilled rows count.
+        for (const [key, workspace] of Object.entries(partition.layout.workspaces)) {
+          if (this.routes.get(key) === LOCAL_EXECUTION_HOST_ID) {
+            spills.push([partition, workspace])
+          }
+        }
+        return
+      }
+      // Only the owning partition's copy counts; a stray copy elsewhere is not a second pane.
+      index(
+        partition,
+        Object.fromEntries(
+          Object.entries(partition.layout.workspaces).filter(
+            ([key]) => this.routes.get(key) === hostId
+          )
+        )
+      )
     })
+    // After every owner: a tab or terminal the local partition also holds is indexed once, there.
+    for (const [partition, workspace] of spills) {
+      const tabs = workspace.tabs.filter((tab) => spilledTerminalTab(workspace, tab, held))
+      if (tabs.length > 0) {
+        index(partition, { [workspace.worktreeId]: { ...workspace, tabs } })
+      }
+    }
     const { tabs, panes } = projectRuntimeSurfaces(partitions, this.deps.generatedTitlesEnabled())
     return {
       tabs: [...tabs.values()],
@@ -182,11 +218,8 @@ export class TerminalSurfaceIndex {
   /** A workspace main owns as today's `session.tabs` rows, from its owning partition's layout. */
   sessionTabsOf(worktreeId: string): ProjectedSessionTabs | null {
     this.surfaces()
-    const hostIds = this.deps
-      .hostIds()
-      .filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
     for (const [index, partition] of this.projectedFrom.entries()) {
-      const hostId = hostIds[index]
+      const hostId = this.projectedHostIds[index]
       for (const [key, workspace] of Object.entries(partition?.layout.workspaces ?? {})) {
         if (partition && workspace.worktreeId === worktreeId && this.routes.get(key) === hostId) {
           return projectSessionTabs(
@@ -249,4 +282,20 @@ export function composeMainTerminalSurfaces(
       })
     ]
   }
+}
+
+/** A local workspace's terminal tab left in a server's partition that no owner partition holds. */
+function spilledTerminalTab(
+  workspace: WorkspaceLayout,
+  tab: LayoutTab,
+  held: { tabIds: ReadonlySet<string>; ptyIds: ReadonlySet<string> }
+): boolean {
+  return (
+    tab.kind === 'terminal' &&
+    !held.tabIds.has(tab.entityId) &&
+    !collectLayoutLeafIdsInOrder(tab.panes.root).some((leafId) => {
+      const ptyId = workspace.leaves?.[leafId]?.ptyId
+      return ptyId !== undefined && held.ptyIds.has(ptyId)
+    })
+  )
 }
