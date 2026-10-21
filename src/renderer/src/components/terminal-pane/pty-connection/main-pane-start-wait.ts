@@ -10,9 +10,9 @@ import { resolveTerminalTabId } from './terminal-tab-id'
 
 const waiting = new WeakSet<ConnectPanePtySession>()
 
-/** The starts this gate covers; a sleeping, resuming or held pane keeps its restore path (C1c). */
+/** The starts this gate waits on; a sleeping or held pane starts on its first view (C1c). */
 const gated = (status: PaneStartStatus | undefined): boolean =>
-  status === 'starting' || status === 'failed'
+  status === 'starting' || status === 'resuming' || status === 'failed'
 
 /** Whether the pane waits on main's start; `connect` runs once main's start for it ends. */
 export function waitsForMainPaneStart(
@@ -69,7 +69,7 @@ export function waitsForMainPaneStart(
 }
 
 /** The terminal main bound the pane to, as the pane's restore id: the connect then attaches it. */
-function adoptMainBinding(
+export function adoptMainBinding(
   session: ConnectPanePtySession,
   state: ReturnType<typeof useAppStore.getState>
 ): void {

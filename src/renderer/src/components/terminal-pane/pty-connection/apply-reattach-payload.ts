@@ -14,6 +14,7 @@ import {
 
 import { restoredSnapshotPaintsPrintableContent } from '../restored-snapshot-coverage'
 import { ackPaintedColdRestore } from './painted-cold-restore-ack'
+import { mainStartsPane } from './main-pane-start-request'
 import { fitReattachedPaneToGrid, noteReattachAltFrameSkip } from './reattach-grid-fit'
 
 import type { ReattachPayloadContext } from './reattach-payload-context'
@@ -259,7 +260,10 @@ export function createReattachPayloadHandlers(
       session.writeReplayData(
         `${RESET_GRAPHIC_RENDITION}${ctx.connectResult.coldRestore.scrollback}`
       )
-      const preparedStartup = ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup()
+      // Why: main started the pane and its agent; the window only paints it.
+      const preparedStartup = mainStartsPane(session)
+        ? null
+        : (ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup())
       const didPrepareResume = session.applyColdRestoreAgentResumeStartup(preparedStartup)
       if (didPrepareResume) {
         if (ctx.connectResult.agentResumeUnavailable) {

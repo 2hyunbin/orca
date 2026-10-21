@@ -6,8 +6,10 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { HeldPaneReopenOutcome } from '../newer-daemon-hold-state'
 import { holdForNewerDaemon } from './newer-daemon-hold-pane'
 import { NEWER_DAEMON_HOLD_ERROR } from '../../../../../shared/newer-daemon-hold'
+import { PANE_NOT_LIVE_ERROR } from '../../../../../shared/pane-attach-only-view'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
+import { mainStartsPane } from './main-pane-start-request'
 
 import {
   awaitAgentStatusStartupSnapshot,
@@ -72,13 +74,20 @@ function connectDeferredSessionReattach(
       : window.api.pty.declarePendingPaneSerializer(session.cacheKey).catch(() => null)
 
   let expiredReattachError = false
+  let paneNotLive = false
   let paneOwnerUnverified = false
   let heldByNewerDaemon = false
-  const coldRestoreStartup = session.buildColdRestoreAgentResumeStartup()
+  // Why: main started this pane's agent; the window's attach never resumes it a second time.
+  const attachOnlyView = mainStartsPane(session)
+  const coldRestoreStartup = attachOnlyView ? null : session.buildColdRestoreAgentResumeStartup()
   const outputCallbacks = session.captureTransportOutputCallbacks(
     (message) => {
       if (isSshSessionGoneError(message)) {
         expiredReattachError = true
+        return
+      }
+      if (message.includes(PANE_NOT_LIVE_ERROR)) {
+        paneNotLive = true
         return
       }
       // Why local only: a paired host refuses for its own daemon, which this window cannot stop.
@@ -111,6 +120,7 @@ function connectDeferredSessionReattach(
     ...(coldRestoreStartup?.launchToken ? { launchToken: coldRestoreStartup.launchToken } : {}),
     ...(coldRestoreStartup?.agent ? { launchAgent: coldRestoreStartup.agent } : {}),
     ...(session.shouldDeclareHiddenAtSpawn() ? { initiallyHidden: true } : {}),
+    ...(attachOnlyView ? { attachOnlyView: true as const } : {}),
     callbacks: outputCallbacks.callbacks
   })
   const isCurrentReattach = (): boolean =>
@@ -164,6 +174,15 @@ function connectDeferredSessionReattach(
         }
         session.settlePaneAttachAttempt('failed')
         return NOT_REOPENED
+      }
+      if (!result && paneNotLive) {
+        session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
+        const gen = await preSignalPromise
+        if (typeof gen === 'number') {
+          void window.api.pty.clearPendingPaneSerializer(session.cacheKey, gen).catch(() => {})
+        }
+        // Why the binding stays: main's start reuses its id, which carries the terminal's history.
+        return isCurrentReattach() ? startFreshInstead() : NOT_REOPENED
       }
       if (!result && expiredReattachError) {
         session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)

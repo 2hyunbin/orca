@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { isTerminalLeafId } from '../stable-pane-id'
 import { TerminalPaneLayoutNodeSchema } from './session-tabs-schemas-params'
 import { TerminalOrphanGroupLayout } from './terminal-orphan-params'
-import { SleepCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
+import { SleepCommand, StartPaneCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
 import { RenameTabsCommand } from './workspace-layout-rename-tabs-params'
 import {
   ApplyDefaultTabsCommand,
@@ -341,6 +341,7 @@ export const LayoutApplyParams = z.object({
     RenameEditorFilesCommand,
     SleepCommand,
     WakeCommand,
+    StartPaneCommand,
     SetDefaultTabsAppliedCommand,
     ApplyDefaultTabsCommand
   ])
