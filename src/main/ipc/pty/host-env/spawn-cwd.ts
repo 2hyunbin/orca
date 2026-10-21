@@ -1,4 +1,3 @@
-import { statSync } from 'node:fs'
 import type { Store } from '../../../persistence'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { isWslUncPath } from '../../../../shared/wsl-paths'
@@ -10,6 +9,10 @@ import {
   assertFolderWorkspacePathUsable,
   getFolderWorkspacePathStatus
 } from '../../../project-groups/folder-workspace-path-status'
+import {
+  LocalFolderStatTimeoutError,
+  statLocalFolderWithDeadline
+} from '../../../local-folder-stat-deadline'
 import {
   isWslMoveWorkspaceBlocked,
   WslMoveProjectFencedError
@@ -70,14 +73,18 @@ export function resolvePtySpawnStartupCwd(
   })
 }
 
-export function localStartupCwdDirectoryExists(path: string): boolean {
-  // Why: Win32 statSync on \\wsl.localhost 9P shares can falsely report ENOENT; defer to the provider's WSL-aware validation.
+export async function localStartupCwdDirectoryExists(path: string): Promise<boolean> {
+  // Why: Win32 stat on \\wsl.localhost 9P shares can falsely report ENOENT; defer to the provider's WSL-aware validation.
   if (isWslUncPath(path)) {
     return true
   }
   try {
-    return statSync(path).isDirectory()
-  } catch {
+    return (await statLocalFolderWithDeadline(path)).isDirectory()
+  } catch (error) {
+    // Why: an unanswered folder is not a missing one, so it refuses the start instead of falling back.
+    if (error instanceof LocalFolderStatTimeoutError) {
+      assertFolderWorkspacePathUsable({ path, exists: false, reason: 'unavailable' })
+    }
     return false
   }
 }
