@@ -74,7 +74,8 @@ export async function catchUpPiSession(input: {
     logger: input.logger,
     readView: (history) => readPiHistoryJournalView(history, input.lineage),
     sameView: samePiHistoryJournalView,
-    prepare: async ({ view, journal, signal, deadline, check, warn }) => {
+    prepare: async ({ view: readView, journal, signal, deadline, check, warn }) => {
+      const view = readView()
       const read = async (since: string | null) => {
         check()
         const answer = await waitForPromiseWithSignal(
