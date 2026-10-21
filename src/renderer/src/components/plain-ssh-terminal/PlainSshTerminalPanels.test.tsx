@@ -64,8 +64,10 @@ beforeEach(() => {
   ack.mockReset()
   Object.defineProperty(window, 'ResizeObserver', {
     configurable: true,
+    // Full surface: a hovered header button's Tooltip positions itself with unobserve too.
     value: class {
       observe(): void {}
+      unobserve(): void {}
       disconnect(): void {}
     }
   })
