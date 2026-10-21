@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { emptyOrcadActivationRecord } from '../activation/orcad-activation-record'
-import { planOrcadUpdateForIntent } from './orcad-managed-update-decision'
+import {
+  admitOrcadRecordForIntent,
+  planOrcadUpdateForIntent
+} from './orcad-managed-update-decision'
 
 const rolledBack = {
   ...emptyOrcadActivationRecord(),
@@ -8,20 +11,32 @@ const rolledBack = {
   activeAppVersion: '1.4.0',
   rolledBackFrom: '1.5.0+ab'
 }
-const input = {
-  record: rolledBack,
-  candidateVersion: '1.5.0+ab',
-  appVersion: '1.5.0',
-  failedBefore: true
-}
+const newer = { ...emptyOrcadActivationRecord(), active: '2.0.0+cd', activeAppVersion: '2.0.0' }
+const input = { candidateVersion: '1.5.0+ab', appVersion: '1.5.0', failedBefore: true }
 
 describe('the three update intents', () => {
-  it('skips on a connect, and retries on an explicit Update or Force', () => {
-    expect(planOrcadUpdateForIntent('connect', input)).toEqual({
+  it('skips a build this host refused on a connect only', () => {
+    expect(planOrcadUpdateForIntent('connect', { ...input, record: rolledBack })).toEqual({
       action: 'skip',
       reason: 'rolled-back'
     })
-    expect(planOrcadUpdateForIntent('update', input)).toEqual({ action: 'update' })
-    expect(planOrcadUpdateForIntent('force', input)).toEqual({ action: 'update' })
+    expect(planOrcadUpdateForIntent('update', { ...input, record: rolledBack })).toEqual({
+      action: 'update'
+    })
+    expect(planOrcadUpdateForIntent('force', { ...input, record: rolledBack })).toEqual({
+      action: 'update'
+    })
+  })
+
+  it('keeps a newer host on Update, and lifts it only on Force', () => {
+    expect(planOrcadUpdateForIntent('update', { ...input, record: newer })).toEqual({
+      action: 'skip',
+      reason: 'host-newer'
+    })
+    expect(admitOrcadRecordForIntent('update', '1.5.0')(newer, '1.5.0+ab')).toMatch(
+      /Orca 2\.0\.0 last ran/
+    )
+    expect(admitOrcadRecordForIntent('force', '1.5.0')(newer, '1.5.0+ab')).toBeNull()
+    expect(admitOrcadRecordForIntent('update', '1.5.0')(rolledBack, '1.5.0+ab')).toBeNull()
   })
 })

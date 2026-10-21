@@ -9,6 +9,7 @@ import type { ServeReadiness } from '../server/serve-readiness'
 import type { WslHostDeferredUpdate } from '../../shared/wsl-host-types'
 import { recoverInterruptedOrcadActivation } from '../managed-server/activation/orcad-activation-recovery'
 import { readOrcadActivationRecord } from '../managed-server/activation/orcad-activation-record-store'
+import { readOrcadActivationTransaction } from '../managed-server/activation/orcad-activation-transaction-store'
 import { materializeOrcadArtifact } from '../orcad/orcad-artifact-materializer'
 import { OrcadHostUnsupportedError } from '../orcad/orcad-host-unavailable'
 import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
@@ -208,9 +209,10 @@ async function launchOverTransport(
   if (deployed.outcome === 'installed-not-activated') {
     const failure = wslOrcadDeferralFailure(deployed)
     recordWslOrcadUpdateFailure(failureHost, incumbentVersion, failure)
-    if (incumbentVersion && failure) {
+    const restored = incumbentVersion && failure ? await readRestoredRecord(incumbentVersion) : null
+    if (restored) {
       // The rejected candidate was undone, so serve the restored incumbent on this connect too.
-      const retried = await admit(await readOrcadActivationRecord(slot), 'connect')
+      const retried = await admit(restored, 'connect')
       if ('outcome' in retried) {
         return retried
       }
@@ -257,6 +259,15 @@ async function launchOverTransport(
     readiness
   })
   return readyLaunch({ fullVersion: deployed.fullVersion, readiness })
+
+  /** The record only once the incumbent is back and no journal awaits recovery; else null. */
+  async function readRestoredRecord(incumbent: string): Promise<OrcadActivationRecord | null> {
+    if (await readOrcadActivationTransaction(slot)) {
+      return null
+    }
+    const record = await readOrcadActivationRecord(slot)
+    return record.active === incumbent ? record : null
+  }
 
   async function readyLaunch(serving: {
     fullVersion: string

@@ -113,8 +113,8 @@ export async function admitWslOrcadLaunch(
 }
 
 /**
- * Keeps Force, the one explicit retry, on a connect that skipped this app's build. A newer host
- * gets none: nothing this app carries would update it.
+ * Keeps Update and Force offered on a connect that skipped this app's build for this host's own
+ * reasons. A newer host gets no hint: an Update keeps that skip, and nothing here updates it.
  */
 function skippedUpdateHint(
   plan: ManagedOrcadAutoUpdatePlan,

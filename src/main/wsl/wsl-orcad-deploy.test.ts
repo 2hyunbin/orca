@@ -23,7 +23,11 @@ const mocks = vi.hoisted(() => ({
   incumbent: vi.fn(),
   adoptRunning: vi.fn(),
   localVersion: vi.fn(),
-  readRecord: vi.fn()
+  readRecord: vi.fn(),
+  transaction: vi.fn()
+}))
+vi.mock('../managed-server/activation/orcad-activation-transaction-store', () => ({
+  readOrcadActivationTransaction: mocks.transaction
 }))
 vi.mock('../managed-server/activation/orcad-activation-record-store', () => ({
   readOrcadActivationRecord: mocks.readRecord
@@ -631,6 +635,34 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       expect(mocks.deploy.mock.calls[1][0]).toMatchObject({ force: false, census: LIVE })
       const { admitRecord } = mocks.deploy.mock.calls[1][0]
       expect(admitRecord({ ...activeOld, rolledBackFrom: '1.5.0+ab' }, '1.5.0+ab')).toBeNull()
+    })
+
+    it('reports the rejection as is when the incumbent was not restored', async () => {
+      mocks.deploy.mockResolvedValueOnce(rejected)
+      mocks.transaction.mockResolvedValueOnce({ transactionId: 't1' })
+      await expect(launch()).resolves.toMatchObject({
+        outcome: 'deferred',
+        code: 'orcad_candidate_readiness_rejected',
+        reason: rejected.reason
+      })
+      expect(mocks.adoptRunning).not.toHaveBeenCalled()
+    })
+
+    it('serves a newer host on Update rather than downgrading it, and only Force deploys', async () => {
+      withRecord(newer)
+      mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('2.0.0+cd', NEWER_READINESS))
+      await expect(launch(undefined, { intent: 'update' })).resolves.toMatchObject({
+        outcome: 'ready',
+        fullVersion: '2.0.0+cd'
+      })
+      expect(mocks.deploy).not.toHaveBeenCalled()
+      mocks.adoptRunning.mockResolvedValueOnce(null)
+      mocks.deploy.mockResolvedValue(policyRefused)
+      await launch(undefined, { intent: 'update' })
+      expect(mocks.deploy.mock.calls[0][0].admitRecord(newer, '1.5.0+ab')).toMatch(/last ran/)
+      await launch(undefined, { intent: 'force' })
+      expect(mocks.deploy.mock.calls[1][0]).toMatchObject({ force: true })
+      expect(mocks.deploy.mock.calls[1][0].admitRecord(newer, '1.5.0+ab')).toBeNull()
     })
 
     it('keeps retrying an update that only waited, or that a newer host refused', async () => {

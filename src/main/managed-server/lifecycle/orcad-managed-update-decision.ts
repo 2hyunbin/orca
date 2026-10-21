@@ -18,9 +18,10 @@ export type ManagedOrcadAutoUpdateSkip =
   | OrcadHostVersionRefusal
 
 /**
- * Why a host's orcad build may change, the same three for SSH and WSL: a connect applies the
- * skips below; an explicit Update retries what they skipped, still behind the terminal census;
- * Force also passes the census.
+ * Why a host's orcad build may change, the same three for SSH and WSL. A connect applies every
+ * skip. An explicit Update lifts only this host's own skips (rolled back, failed before), still
+ * behind the terminal census, so it never downgrades a host a newer Orca runs. Force lifts every
+ * skip and passes the census.
  */
 export type OrcadUpdateIntent = 'connect' | 'update' | 'force'
 
@@ -61,7 +62,33 @@ export function planOrcadUpdateForIntent(
   intent: OrcadUpdateIntent,
   input: Parameters<typeof planManagedOrcadAutoUpdate>[0]
 ): ManagedOrcadAutoUpdatePlan {
-  return intent === 'connect' ? planManagedOrcadAutoUpdate(input) : { action: 'update' }
+  if (intent === 'force') {
+    return { action: 'update' }
+  }
+  if (intent === 'connect') {
+    return planManagedOrcadAutoUpdate(input)
+  }
+  const { rolledBackFrom: _retried, ...record } = input.record
+  return planManagedOrcadAutoUpdate({ ...input, record, failedBefore: false })
+}
+
+/** The fenced activation's admission for an intent: why it refuses the record, or null. */
+export function admitOrcadRecordForIntent(
+  intent: OrcadUpdateIntent,
+  appVersion: string
+): (record: OrcadActivationRecord, candidateVersion: string) => string | null {
+  return (record, candidateVersion) =>
+    orcadUpdateSkipRefusal(
+      planOrcadUpdateForIntent(intent, {
+        record,
+        candidateVersion,
+        appVersion,
+        failedBefore: false
+      }),
+      record,
+      candidateVersion,
+      appVersion
+    )
 }
 
 /** Why a fenced activation refuses a build the plan skips; null when it may activate. */
@@ -76,7 +103,7 @@ export function orcadUpdateSkipRefusal(
   }
   return plan.reason === 'rolled-back'
     ? `This host's server rolled back from ${candidateVersion}, so a connect does not activate ` +
-        'it again; choose Update to retry it.'
+        'it again; choose Update or Force to retry it.'
     : `Orca ${record.activeAppVersion} last ran this host's server, newer than this ` +
         `Orca (${appVersion}). Update Orca to start it.`
 }
