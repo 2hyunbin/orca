@@ -4,20 +4,32 @@ import {
   type MobileNativeChatComposerFieldProps
 } from './mobile-native-chat-composer-field-skill'
 import { mobileNativeChatInputStyles as inputStyles } from './mobile-native-chat-input-styles'
+import { mobileNativeChatComposerStyles as composerStyles } from './mobile-native-chat-composer-styles'
 
 /** The composer's text field. Native: the skill is a styled span of the field's own text. */
 export function MobileNativeChatComposerField({
   value,
   skillToken,
-  style,
+  compact,
   ref,
   ...props
 }: MobileNativeChatComposerFieldProps) {
   if (!skillToken) {
-    return <TextInput ref={ref} value={value} style={[inputStyles.input, style]} {...props} />
+    return (
+      <TextInput
+        ref={ref}
+        value={value}
+        style={[inputStyles.input, compact && composerStyles.compactInput]}
+        {...props}
+      />
+    )
   }
   return (
-    <TextInput ref={ref} style={[inputStyles.input, style]} {...props}>
+    <TextInput
+      ref={ref}
+      style={[inputStyles.input, compact && composerStyles.compactInput]}
+      {...props}
+    >
       <Text style={styles.token}>{skillToken}</Text>
       {value.slice(skillToken.length)}
     </TextInput>

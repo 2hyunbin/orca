@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { StyleSheet, Text, TextInput, View } from 'react-native'
 import { colors } from '../theme/mobile-theme'
 import { mobileNativeChatInputStyles as inputStyles } from './mobile-native-chat-input-styles'
+import { mobileNativeChatComposerStyles as composerStyles } from './mobile-native-chat-composer-styles'
 import {
   mobileNativeChatComposerSkillStyles as skillStyles,
   type MobileNativeChatComposerFieldProps
@@ -28,7 +29,7 @@ function scrollTopOf(event: unknown): number {
 export function MobileNativeChatComposerField({
   value,
   skillToken,
-  style,
+  compact,
   ref,
   ...props
 }: MobileNativeChatComposerFieldProps) {
@@ -43,7 +44,7 @@ export function MobileNativeChatComposerField({
             aria-hidden
             style={[
               inputStyles.input,
-              style,
+              compact && composerStyles.compactInput,
               styles.copy,
               { transform: [{ translateY: -scrollTop }] }
             ]}
@@ -56,7 +57,11 @@ export function MobileNativeChatComposerField({
       <TextInput
         ref={ref}
         value={value}
-        style={[inputStyles.input, style, skillToken && clearText.field]}
+        style={[
+          inputStyles.input,
+          compact && composerStyles.compactInput,
+          skillToken && clearText.field
+        ]}
         // Only the copy reads it, and there is a copy only while a skill leads.
         onScroll={skillToken ? (event) => setScrollTop(scrollTopOf(event)) : undefined}
         {...props}

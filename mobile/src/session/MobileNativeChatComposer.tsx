@@ -231,7 +231,7 @@ export function MobileNativeChatComposer({
           </View>
           <View style={compact ? styles.compactField : undefined}>
             <MobileNativeChatComposerField
-              style={compact ? styles.compactInput : undefined}
+              compact={compact}
               ref={fieldRef}
               value={value}
               skillToken={menu.skillToken}
