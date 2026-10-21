@@ -1,17 +1,17 @@
 import { useState } from 'react'
 import { useRouter } from 'expo-router'
 import { HostProtocolGate } from '../components/HostProtocolGate'
-import { OverlayLoadingLayer } from '../components/overlay-scrim'
 import { MobileWebShellScreen } from '../mobile-web-shell/MobileWebShellScreen'
 import type { ShellOverlayLoad } from '../mobile-web-shell/shell-overlay-load'
 import { shellScreenRoute } from '../mobile-web-shell/shell-screen-route'
+import { NewWorkspaceLoadingDrawer } from './NewWorkspaceLoadingDrawer'
 import { OpenHostListInstead } from './open-host-list-instead'
 
 const LOADING: ShellOverlayLoad = { kind: 'loading', download: null }
 
 /**
  * The picked desktop's Create Workspace page in the shell, as an overlay: the page draws the drawer
- * over a transparent document, and one loading layer dims the screen beneath until it has.
+ * over a transparent document, and one short loading drawer stands in until it has.
  */
 export function NewWorkspaceOverlay({ hostId }: { hostId: string }) {
   const router = useRouter()
@@ -37,7 +37,7 @@ export function NewWorkspaceOverlay({ hostId }: { hostId: string }) {
         />
       </HostProtocolGate>
       {load.kind === 'loading' ? (
-        <OverlayLoadingLayer download={load.download} onDismiss={() => router.back()} />
+        <NewWorkspaceLoadingDrawer download={load.download} onCancel={() => router.back()} />
       ) : null}
     </>
   )

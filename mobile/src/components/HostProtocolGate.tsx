@@ -9,8 +9,8 @@ import { ProtocolBlockScreen } from './ProtocolBlockScreen'
 type Props = {
   hostId: string | undefined
   children: ReactNode
-  /** In place of the full-screen spinner, for a route drawn over another screen: once that route
-   *  is mounted it already dims what it is drawn over, so a later pending window covers nothing. */
+  /** In place of the full-screen spinner, for a route drawn over another screen, which a later
+   *  pending window then leaves uncovered too. */
   pending?: ReactNode
   /** In place of the block screen, for a route that hands a blocked host to the host list. */
   blocked?: ReactNode

@@ -397,7 +397,8 @@ export function MobileWebShellScreen({
       <OrcaMobileWebShellView
         key={state.sessionId}
         ref={bridge.viewRef}
-        style={styles.shellView}
+        // An overlay has no cover over the screen beneath: a fresh WebView draws opaque until the page paints.
+        style={[styles.shellView, overlay && pageFrame !== 'painted' && styles.unpaintedOverlay]}
         generationDirectory={state.generationDirectory}
         sessionId={state.sessionId}
         bridgeEnabled={bridge.bridgeEnabled}
@@ -447,6 +448,9 @@ const styles = StyleSheet.create({
   },
   shellView: {
     flex: 1
+  },
+  unpaintedOverlay: {
+    opacity: 0
   },
   centered: {
     flex: 1,

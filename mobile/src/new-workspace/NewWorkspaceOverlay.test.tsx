@@ -1,10 +1,9 @@
 import { createElement, useEffect, type ReactNode } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ShellOverlayLoad } from '../mobile-web-shell/shell-overlay-load'
-import type { OverlayDownload } from '../components/overlay-scrim'
+import type { ShellOverlayDownload, ShellOverlayLoad } from '../mobile-web-shell/shell-overlay-load'
 
-type OverlayLoadingLayerProps = { download: OverlayDownload | null; onDismiss: () => void }
+type LoadingDrawerProps = { download: ShellOverlayDownload | null; onCancel: () => void }
 
 const router = vi.hoisted(() => ({ back: vi.fn() }))
 const shell = vi.hoisted((): { report: ((load: ShellOverlayLoad) => void) | null } => ({
@@ -26,21 +25,21 @@ vi.mock('../mobile-web-shell/MobileWebShellScreen', () => ({
     return null
   }
 }))
-vi.mock('../components/overlay-scrim', async () => {
+vi.mock('./NewWorkspaceLoadingDrawer', async () => {
   const { createElement: element } = await import('react')
   return {
-    OverlayLoadingLayer: (props: OverlayLoadingLayerProps) => {
+    NewWorkspaceLoadingDrawer: (props: LoadingDrawerProps) => {
       useEffect(() => {
         layerMounts.count += 1
       }, [])
-      return element('OverlayLoadingLayer', props)
+      return element('NewWorkspaceLoadingDrawer', props)
     }
   }
 })
 
 import { NewWorkspaceOverlay } from './NewWorkspaceOverlay'
 
-describe("the New Workspace overlay's loading layer", () => {
+describe("the New Workspace overlay's loading drawer", () => {
   let renderer: ReactTestRenderer | null = null
 
   afterEach(() => {
@@ -52,10 +51,10 @@ describe("the New Workspace overlay's loading layer", () => {
   })
 
   function layer() {
-    return renderer!.root.findAll((node) => String(node.type) === 'OverlayLoadingLayer')[0]
+    return renderer!.root.findAll((node) => String(node.type) === 'NewWorkspaceLoadingDrawer')[0]
   }
 
-  it('stays one mounted layer from the first wait through the download until the page paints', () => {
+  it('stays one mounted drawer from the first wait through the download until the page paints', () => {
     act(() => {
       renderer = create(createElement(NewWorkspaceOverlay, { hostId: 'desk' }))
     })
@@ -71,12 +70,12 @@ describe("the New Workspace overlay's loading layer", () => {
     expect(layer()).toBeUndefined()
   })
 
-  it('leaves when the scrim is tapped mid-load', () => {
+  it('leaves when the load is cancelled', () => {
     act(() => {
       renderer = create(createElement(NewWorkspaceOverlay, { hostId: 'desk' }))
     })
 
-    act(() => layer().props.onDismiss())
+    act(() => layer().props.onCancel())
 
     expect(router.back).toHaveBeenCalledTimes(1)
   })

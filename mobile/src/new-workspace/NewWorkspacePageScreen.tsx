@@ -1,7 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useLocalSearchParams } from 'expo-router'
 import type { ExecutionHostId } from '../../../src/shared/execution-host'
-import { DimmedBackdropOfferContext } from '../components/drawer-backdrop-continuity'
 import { NewWorktreeModalController } from '../components/NewWorktreeModalController'
 import { hostNewWorktreeSessionRoute } from '../host-new-worktree-session-route'
 import { useHostWorktreeRows } from './use-host-worktree-rows'
@@ -26,31 +25,26 @@ export function NewWorkspacePageScreen() {
   const { hostCapabilities } = useHostProtocolGates()
   const worktrees = useHostWorktreeRows(client, connState === 'connected', hostId)
   const worktreePaths = useMemo(() => worktrees.map((worktree) => worktree.path), [worktrees])
-  const [dimmedBackdropOffered, setDimmedBackdropOffered] = useState(true)
-  const takeDimmedBackdrop = useCallback(() => setDimmedBackdropOffered(false), [])
 
   return (
-    // The overlay that opened this page has dimmed the screen with the same scrim until now.
-    <DimmedBackdropOfferContext.Provider value={dimmedBackdropOffered ? takeDimmedBackdrop : null}>
-      <NewWorktreeModalController
-        visible
-        client={client}
-        hostCapabilities={hostCapabilities}
-        hostId={hostId}
-        hostLabelById={NO_HOST_LABELS}
-        existingWorktreePaths={worktreePaths}
-        existingWorktrees={worktrees}
-        openExternalUrl={openExternalLink}
-        onCreated={(worktreeId, name, warning, executionHost) =>
-          router.replace(
-            workspaceRouteHref(
-              hostNewWorktreeSessionRoute(hostId, worktreeId, name, warning),
-              executionHost
-            )
+    <NewWorktreeModalController
+      visible
+      client={client}
+      hostCapabilities={hostCapabilities}
+      hostId={hostId}
+      hostLabelById={NO_HOST_LABELS}
+      existingWorktreePaths={worktreePaths}
+      existingWorktrees={worktrees}
+      openExternalUrl={openExternalLink}
+      onCreated={(worktreeId, name, warning, executionHost) =>
+        router.replace(
+          workspaceRouteHref(
+            hostNewWorktreeSessionRoute(hostId, worktreeId, name, warning),
+            executionHost
           )
-        }
-        onClose={() => router.back()}
-      />
-    </DimmedBackdropOfferContext.Provider>
+        )
+      }
+      onClose={() => router.back()}
+    />
   )
 }

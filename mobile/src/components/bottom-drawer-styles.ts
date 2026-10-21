@@ -1,6 +1,5 @@
 import { Platform, StyleSheet } from 'react-native'
 import { colors, spacing } from '../theme/mobile-theme'
-import { BOTTOM_DRAWER_BACKDROP_COLOR } from './bottom-drawer-constants'
 
 export const bottomDrawerStyles = StyleSheet.create({
   overlay: {
@@ -12,7 +11,7 @@ export const bottomDrawerStyles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: BOTTOM_DRAWER_BACKDROP_COLOR
+    backgroundColor: 'rgba(0,0,0,0.5)'
   },
   backdropPressable: {
     ...StyleSheet.absoluteFillObject

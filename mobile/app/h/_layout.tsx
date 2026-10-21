@@ -17,7 +17,6 @@ import { HostSidebarRevealContext } from '../../src/layout/host-sidebar-reveal'
 import { HostAreaServingContext } from '../../src/mobile-web-shell/host-area-serving'
 import { usePageOwnsHostArea } from '../../src/mobile-web-shell/page-owns-host-area'
 import { isOverlayPageRoute } from '../../src/new-workspace/overlay-page-route'
-import { OverlayScrim } from '../../src/components/overlay-scrim'
 
 // Keep at least this much room for the detail pane when resizing the sidebar.
 const MIN_DETAIL_WIDTH = 320
@@ -122,8 +121,8 @@ export default function HostGroupLayout() {
   return (
     <HostProtocolGate
       hostId={hostId}
-      // An overlay route keeps the screen it opened over in sight, dimmed while waiting.
-      {...(overlayRoute ? { pending: <OverlayScrim /> } : {})}
+      // An overlay route keeps the screen it opened over in sight while waiting.
+      {...(overlayRoute ? { pending: null } : {})}
     >
       <View style={[styles.row, overlayRoute && styles.transparent]}>
         {showSidebar && sidebarOpen ? (
