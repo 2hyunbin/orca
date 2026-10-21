@@ -49,27 +49,21 @@ export function sessionRowFilter(
     filter.values.push(filters.since)
   }
   if (filters.scopePaths && filters.scopePaths.length > 0) {
-    // Several scopes mean any of them; every other narrowing is ANDed on.
-    // A scope the caller could not key is a scope nothing is inside of.
-    const keys = new Set(filters.scopePaths.map(cwdKey).filter((key) => key !== null))
-    // Every scope unkeyable still means a scope, so it narrows to nothing;
-    // pushing no condition would widen the search to every session instead.
-    if (keys.size === 0) {
+    // Any scope matches; one that cannot be keyed matches nothing, and all-unkeyable must not widen to every session.
+    const keys = filters.scopePaths.map(cwdKey).filter((key) => key !== null)
+    if (keys.length === 0) {
       filter.conditions.push('0 = 1')
     } else {
-      const ranges = JSON.stringify([...keys].map(scopeRange))
       filter.conditions.push(SCOPE_CONDITION)
-      filter.values.push(ranges, ranges)
+      filter.values.push(JSON.stringify(keys.map(scopeRange)))
     }
   }
   return filter
 }
 
 /**
- * `key` itself, or anything below it. Why one JSON parameter and not an OR per
- * scope: a project keeps every worktree it ever had, and past ~500 scopes the
- * OR chain exceeds SQLite's expression depth of 1000 and the search throws.
- * Each arm is driven by `json_each` so every scope is still an index seek.
+ * `key` itself, or anything below it. One JSON parameter, not an OR per scope:
+ * ~500 OR arms exceed SQLite's expression depth of 1000 and the search throws.
  *
  * Why a half-open range and not `substr(key, 1, length(?)) = ?`: only `>=`/`<`
  * can seek `sessions_cwd_key`; the substr form scans it. The bound is the child
@@ -83,15 +77,14 @@ export function sessionRowFilter(
  * real child; `cwdKey` keeps it as `/` for exactly this reason.
  */
 const SCOPE_CONDITION = `id IN (
-  SELECT scoped.id FROM json_each(?) AS scope
-    JOIN sessions AS scoped ON scoped.${CWD} = json_extract(scope.value, '$[0]')
-  UNION ALL
-  SELECT scoped.id FROM json_each(?) AS scope
-    JOIN sessions AS scoped ON scoped.${CWD} >= json_extract(scope.value, '$[1]')
-      AND scoped.${CWD} < json_extract(scope.value, '$[2]')
+  SELECT scoped.id FROM json_each(?) AS scope JOIN sessions AS scoped
+    ON scoped.${CWD} = scope.value ->> 0
+    OR (scoped.${CWD} >= scope.value ->> 1 AND scoped.${CWD} < scope.value ->> 2)
 )`
 
-function scopeRange(key: string): [string, string, string] {
+function scopeRange(scopeKey: string): [string, string, string] {
+  // A bound key stores a lone surrogate as U+FFFD; JSON would decode it to other bytes.
+  const key = scopeKey.toWellFormed()
   const children = key.endsWith('/') ? key : `${key}/`
   return [key, children, nextAfterPrefix(children)]
 }
