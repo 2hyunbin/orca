@@ -226,6 +226,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
+    "@electron/osx-sign": "2.7.0",
     "@electron/rebuild": "^4.2.1",
     "@monaco-editor/react": "^4.7.0",
     "@noble/hashes": "1.8.0",
