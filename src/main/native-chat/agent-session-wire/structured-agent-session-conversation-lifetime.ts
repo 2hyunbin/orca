@@ -31,7 +31,8 @@ import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   stopWorkspaceSleepChat,
-  workspaceSleepStartAborts
+  workspaceSleepStartAborts,
+  type WorkspaceSleepCloseResult
 } from './structured-agent-session-workspace-sleep-stop'
 import type { StructuredAgentSessionExpiredStartup } from './structured-agent-session-startup-attempt'
 import {
@@ -122,7 +123,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     sessionId: string,
     workspaceId: string,
     executionHostId: ExecutionHostId
-  ): Promise<{ fence: number; stopped: boolean } | null> => {
+  ): Promise<WorkspaceSleepCloseResult | null> => {
     const matches = (): boolean => {
       const location = deps().store.getRecord(sessionId)?.location
       return location?.workspaceId === workspaceId && location.executionHostId === executionHostId
@@ -143,6 +144,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
         return null
       }
       const fence = record.lease.runtimeFence
+      const admittedSends = deps().store.admittedSendCount(sessionId)
       const session = sessions.get(sessionId)
       const child = session?.child
       const owned = deps().adapter.hasOwnedAcquisition?.(sessionId) === true
@@ -168,7 +170,11 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       )
       // Lease release advances the fence; preserve the value after this close for the caller's
       // final identity check against a later restart.
-      return { fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence, stopped }
+      return {
+        fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence,
+        stopped,
+        admittedSends
+      }
     })
     return starts.settle({ deps: deps(), sessions, sessionId }, await closed)
   }
@@ -233,7 +239,8 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     failStartingChild: (
       sessionId: string,
       failed: StructuredAgentSessionProviderChildIdentity,
-      error: unknown
+      error: unknown,
+      openMs: number
     ): Promise<void> =>
       serialize(sessionId, async () => {
         const session = sessions.get(sessionId)
@@ -242,6 +249,15 @@ export function createStructuredAgentSessionConversationLifetime(host: {
           return
         }
         const failure = providerStartupFailureFact(error)
+        // The journal keeps only the fact; the original error is otherwise lost.
+        deps().logger.warn('a provider could not finish starting', {
+          scope: 'provider-open-failed',
+          sessionId,
+          failure: failure.kind,
+          ...failure.requestTimeout,
+          openMs,
+          error
+        })
         try {
           await recordStructuredAgentSessionStartFailure(
             { journal: session.journal, fence: child.fence },
