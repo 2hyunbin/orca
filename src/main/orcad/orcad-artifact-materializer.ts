@@ -158,7 +158,7 @@ export async function assembleOrcadArtifact(args: {
 }
 
 function isExecutableArtifact(filename: string): boolean {
-  return /(?:^|\/)(?:rg|spawn-helper)$/.test(filename)
+  return /(?:^|\/)(?:rg|spawn-helper|orca-provider-exec)$/.test(filename)
 }
 
 function artifactSources(

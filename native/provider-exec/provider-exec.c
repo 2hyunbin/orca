@@ -139,11 +139,43 @@ static const char watcher[] =
   "done\n"
   "exec 4>&-\n"
   "exec \"$h\" crash \"$group\" \"$phase\" \"$deadline\"\n";
+static int same_file(const struct stat *a, const struct stat *b) {
+  return a->st_dev == b->st_dev && a->st_ino == b->st_ino;
+}
+static int private_file(int fd, const char *path) {
+  struct stat held, named;
+  return !fstat(fd, &held) && !lstat(path, &named) && same_file(&held, &named)
+    && S_ISREG(held.st_mode) && held.st_uid == geteuid() && held.st_nlink == 1
+    && !(held.st_mode & 077);
+}
+static int retire_copy(const char *candidate, const char *tombstone) {
+  int directory = open(candidate, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (directory < 0) return 3;
+  struct stat original, named, held, file;
+  int fd = openat(directory, "hold", O_RDWR | O_NOFOLLOW | O_CLOEXEC);
+  int result = 3;
+  if (fd >= 0 && !fstat(directory, &original) && original.st_uid == geteuid()
+      && !(original.st_mode & 077) && !fstat(fd, &held) && S_ISREG(held.st_mode)
+      && held.st_uid == geteuid() && !(held.st_mode & 077) && held.st_nlink == 1) {
+    if (flock(fd, LOCK_EX | LOCK_NB)) result = errno == EWOULDBLOCK ? 2 : 3;
+    else if (!lstat(candidate, &named) && same_file(&original, &named)
+        && !fstatat(directory, "hold", &file, AT_SYMLINK_NOFOLLOW) && same_file(&held, &file)
+        && lstat(tombstone, &named) && errno == ENOENT && !rename(candidate, tombstone)) {
+      puts("RETIRED"); result = 0;
+    }
+  }
+  if (fd >= 0) close(fd);
+  close(directory);
+  return result;
+}
 int main(int argc, char **argv) {
   if (argc < 2) return 64;
+  if (!strcmp(argv[1], "collect") && argc == 4) return retire_copy(argv[2], argv[3]);
   if (!strcmp(argv[1], "pin") || !strcmp(argv[1], "probe-lock")) {
+    if (argc != 3 || !private_file(6, argv[2])) return 3;
     int operation = !strcmp(argv[1], "pin") ? LOCK_SH : LOCK_EX;
     if (flock(6, operation | LOCK_NB)) return errno == EWOULDBLOCK ? 2 : 3;
+    if (!private_file(6, argv[2])) return 3;
     puts("LOCKED"); return 0;
   }
   if (!strcmp(argv[1], "op") && argc == 4) {

@@ -50,18 +50,25 @@ async function createResources() {
 const quietly = () => vi.spyOn(console, 'log').mockImplementation(() => {})
 
 describe('packaged orcad template', () => {
-  it('signs only darwin Mach-O payloads on macOS and reseals their new bytes', async () => {
+  it('signs darwin code before its bundles and reseals executable and resource signatures', async () => {
     quietly()
     const { resourcesDir, templateDir, ptyPath } = await createResources()
     const signed = []
     const signMacBinary = async (path) => {
       signed.push(path)
-      await appendFile(path, 'codesign-blob')
+      await (path.endsWith('.app')
+        ? writeFile(join(path, 'Contents/_CodeSignature/CodeResources'), 'new-seal')
+        : appendFile(path, 'codesign-blob'))
     }
 
     await finalizePackagedOrcadTemplate(resourcesDir, { platform: 'darwin', signMacBinary })
 
-    expect(signed).toEqual([ptyPath])
+    expect(signed).toEqual([
+      ptyPath,
+      ...['darwin-arm64', 'darwin-x64'].map((target) =>
+        join(templateDir, 'targets', target, 'provider-exec/Orca Provider Host.app')
+      )
+    ])
     expect(findOrcadTemplateMachOFiles(templateDir)).toEqual([`targets/darwin-arm64/${PTY}`])
   })
 

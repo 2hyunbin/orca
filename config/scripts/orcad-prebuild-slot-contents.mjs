@@ -12,6 +12,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
+import { orcadProviderExecArtifacts } from '../../src/shared/orcad-artifacts.ts'
+
 const require = createRequire(import.meta.url)
 
 export const MANIFEST_SCHEMA_VERSION = 2
@@ -246,7 +248,12 @@ export function findSlotProblems(manifest, prebuildsDir, requiredSlots) {
         }
       }
     }
-    for (const [file, expected] of Object.entries(entry.files ?? {})) {
+    for (const file of orcadProviderExecArtifacts(slot)) {
+      if (!entry.providerExec?.[file]) {
+        problems.push(`${slot}/${file}: not built`)
+      }
+    }
+    for (const [file, expected] of Object.entries({ ...entry.files, ...entry.providerExec })) {
       const path = join(prebuildsDir, slot, ...file.split('/'))
       if (!existsSync(path)) {
         problems.push(`${slot}/${file}: missing`)

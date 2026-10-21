@@ -134,7 +134,7 @@ export function executablePermissionsCommand(
   target: NodeRuntimeTarget
 ): string {
   const required = [orcadRipgrepArtifact(target), ...orcadNodePtyNativeArtifacts(target)]
-    .filter((artifact) => /\/(?:rg|spawn-helper)$/.test(artifact))
+    .filter((artifact) => /\/(?:rg|spawn-helper|orca-provider-exec)$/.test(artifact))
     .map((artifact) => joinRemotePath(host, directory, ...artifact.split('/')))
   const browsers = new Set(
     (['glibc', 'musl'] as const).map((libc) =>

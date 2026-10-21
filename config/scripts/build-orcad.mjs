@@ -50,6 +50,7 @@ import {
   ORCAD_SERVER_TARGET_FILENAME,
   ORCAD_VERSION_FILENAME,
   orcadNodePtySlotFiles,
+  orcadProviderExecArtifacts,
   orcadRipgrepArtifact
 } from '../../src/shared/orcad-artifacts.ts'
 import { computeOrcadFullVersion } from './orcad-artifact-version.mjs'
@@ -153,6 +154,14 @@ function stageNodePty(target) {
     mkdirSync(dirname(destination), { recursive: true })
     copyFileSync(join(PREBUILDS_DIR, target, ...file.split('/')), destination)
     if (file === 'spawn-helper') {
+      chmodSync(destination, 0o755)
+    }
+  }
+  for (const file of orcadProviderExecArtifacts(target)) {
+    const destination = join(OUT_DIR, file)
+    mkdirSync(dirname(destination), { recursive: true })
+    copyFileSync(join(PREBUILDS_DIR, target, file), destination)
+    if (file.endsWith('/orca-provider-exec')) {
       chmodSync(destination, 0o755)
     }
   }

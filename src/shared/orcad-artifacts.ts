@@ -99,6 +99,20 @@ export function orcadNodePtySlotFiles(target: string): string[] {
   return target.startsWith('darwin-') ? ['pty.node', 'spawn-helper'] : ['pty.node']
 }
 
+/** Owned native code is separate from node-pty's ABI-dependent payload. */
+export function orcadProviderExecArtifacts(target: string): string[] {
+  if (isWindowsTarget(target)) {
+    return []
+  }
+  return target.startsWith('darwin-')
+    ? [
+        'provider-exec/Orca Provider Host.app/Contents/Info.plist',
+        'provider-exec/Orca Provider Host.app/Contents/MacOS/orca-provider-exec',
+        'provider-exec/Orca Provider Host.app/Contents/_CodeSignature/CodeResources'
+      ]
+    : ['bin/orca-provider-exec']
+}
+
 export function orcadNodePtyNativeArtifacts(target: string): string[] {
   return orcadNodePtySlotFiles(target).map((file) => `${ORCAD_NODE_PTY_DIR}/build/Release/${file}`)
 }
@@ -280,7 +294,11 @@ export function orcadArtifactFilenames(
   const filenames = ORCAD_ARTIFACTS.filter((artifact) => !artifact.optional).map(
     (artifact) => artifact.filename
   )
-  filenames.push(...orcadNodePtyNativeArtifacts(target), orcadRipgrepArtifact(target))
+  filenames.push(
+    ...orcadNodePtyNativeArtifacts(target),
+    ...orcadProviderExecArtifacts(target),
+    orcadRipgrepArtifact(target)
+  )
   if (isWindowsTarget(target)) {
     filenames.push(
       ORCAD_WINDOWS_PROCESS_TREE_FILENAME,
