@@ -9,6 +9,7 @@ import { ORCAD_BUNDLED_LAUNCHER_ENV } from './orcad-bundled-runtime'
 import { resolveOrcadExitCode } from './orcad-exit-code'
 import { recordAgentSessionRuntimeEnd } from '../runtime/agent-session-runtime-end-record'
 import { ORCAD_SHUTDOWN_DEADLINE_MS } from './orcad-stop-deadlines'
+import { holdOrcadTerminalAdmissionUntilExit } from './orcad-stop-terminal-admission'
 import {
   acquireProfileStateRuntimeAdmission,
   type ProfileStateRuntimeAdmission
@@ -67,6 +68,7 @@ export function installOrcadShutdownSignals(
       return false
     }
     stopping = true
+    holdOrcadTerminalAdmissionUntilExit()
     exitCode = stoppedExitCode
     retractClean = onFailed
     setTimeout(() => {
