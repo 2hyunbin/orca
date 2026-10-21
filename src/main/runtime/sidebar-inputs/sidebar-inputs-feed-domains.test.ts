@@ -51,7 +51,13 @@ function repo(overrides: Partial<Repo> = {}): Repo {
 /** This host lists `r::/w/same` locally and over SSH; a paired server lists the same id. */
 function harness(hostFacts: Record<string, WorkspaceActivityFacts>) {
   const rowsRevision = new ProducerRevision()
-  const listings = { count: 0, fail: false }
+  const listings = {
+    count: 0,
+    fail: false,
+    hold: false,
+    onlyLocal: false,
+    releases: [] as (() => void)[]
+  }
   const repos = [repo(), repo({ connectionId: 'box' })]
   const serverRow = normalizePairedServerRow('runtime:env', {
     worktreeId: ID,
@@ -85,11 +91,15 @@ function harness(hostFacts: Record<string, WorkspaceActivityFacts>) {
         if (listings.fail) {
           throw new Error('listing failed')
         }
+        const hosts = listings.onlyLocal ? (['local'] as const) : (['local', 'ssh:box'] as const)
+        if (listings.hold) {
+          await new Promise<void>((resolve) => listings.releases.push(resolve))
+        }
         return {
           revision: rowsRevision.value,
           rows: Object.fromEntries(
             buildWorkspaceRows({
-              worktrees: [worktree('local'), worktree('ssh:box')],
+              worktrees: hosts.map(worktree),
               folderWorkspaces: [],
               repos,
               lineageById: {}
@@ -139,6 +149,22 @@ describe('the activity domain', () => {
     rowsRevision.bump()
     await Promise.all([read('activity'), read('workspaces')])
     expect(listings.count).toBe(2)
+  })
+
+  it('keeps a newer listing’s rows when an older one lands after it', async () => {
+    const busy = { ...IDLE_WORKSPACE_ACTIVITY, browser: true }
+    const { read, listings, rowsRevision } = harness({ [ID]: busy })
+    listings.hold = true
+    const older = read('activity')
+    listings.hold = false
+    rowsRevision.bump()
+    listings.onlyLocal = true
+    await read('activity')
+    listings.releases.forEach((release) => release())
+    await older
+    listings.fail = true
+    rowsRevision.bump()
+    expect(Object.keys(await read('activity'))).toEqual([`local|${ID}`, `runtime:env|${ID}`])
   })
 
   it('keys by the last rows listed while a listing fails', async () => {
