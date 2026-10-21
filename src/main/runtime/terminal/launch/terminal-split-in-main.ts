@@ -49,8 +49,12 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
         leafId: source.leafId,
         direction: opts.direction,
         newLeafId: opts.newLeafId
+      }).catch((writeError: unknown) => {
+        // The caller still hears why the start failed, not why showing it did.
+        console.warn('[terminal-split] could not keep a split that failed to start:', writeError)
+        return null
       })
-      if (reply.ok) {
+      if (reply?.ok) {
         this.paneStartStatuses?.set(
           makePaneKey(source.tabId, opts.newLeafId),
           paneStartFailure(error)
@@ -81,6 +85,12 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
     source: SplitPaneSource,
     opts: SplitPaneInMainOptions
   ): Promise<RuntimeTerminalSplit> {
+    const leafId =
+      opts.newLeafId && isTerminalLeafId(opts.newLeafId) ? opts.newLeafId : randomUUID()
+    // A named pane id another pane holds is refused: the start must not land in a live pane.
+    if (opts.newLeafId && this.holdsLeaf(source.worktreeId, leafId)) {
+      throw new Error('pane_exists')
+    }
     const controller = this.ptyController
     if (!controller?.spawn) {
       return this.keepSplitThatCannotStart(source, opts, new Error('runtime_unavailable'))
@@ -88,12 +98,6 @@ export abstract class OrcaRuntimeWithSplitPaneInMain extends OrcaRuntimeWithSpli
     const workspace = await this.resolveTerminalWorkspaceLaunchScope(
       `id:${source.worktreeId}`
     ).catch((error: unknown) => this.keepSplitThatCannotStart(source, opts, error))
-    const leafId =
-      opts.newLeafId && isTerminalLeafId(opts.newLeafId) ? opts.newLeafId : randomUUID()
-    // A named pane id another pane holds is refused: the start must not land in a live pane.
-    if (opts.newLeafId && this.holdsLeaf(source.worktreeId, leafId)) {
-      throw new Error('pane_exists')
-    }
     const preAllocatedHandle = this.createPreAllocatedTerminalHandle()
     const result = await spawnInAdmittedPane(this.store, controller, {
       ...resolvePtyFirstSize({ pane: opts.initialSize }),

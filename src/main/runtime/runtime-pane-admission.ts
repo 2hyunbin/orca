@@ -1,4 +1,5 @@
 import { toSshExecutionHostId } from '../../shared/execution-host'
+import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import type {
   TerminalPaneAdmission,
   TerminalPaneAdmissionOutcome
@@ -60,6 +61,14 @@ function admissionFor(args: AdmittedSpawnArgs): TerminalPaneAdmission {
         }
       : {})
   }
+}
+
+function paneStillWritten(
+  store: RuntimeStore | null | undefined,
+  args: AdmittedSpawnArgs
+): boolean {
+  const layout = store?.getWorkspaceSession?.(hostIdOf(args))?.terminalLayoutsByTabId?.[args.tabId]
+  return collectLeafIds(layout?.root).includes(args.leafId)
 }
 
 function hostIdOf(args: AdmittedSpawnArgs): string | undefined {
@@ -160,12 +169,11 @@ export async function spawnInAdmittedPane(
   } catch (error) {
     // A pane that stays (kept to show the failure, or one main already held) shows why; one
     // closed while it started is gone, so nothing is left to show.
-    const paneGone = error instanceof Error && error.message === 'terminal_split_source_not_found'
     if (
       startStatus &&
       admittedAs &&
-      !paneGone &&
-      (startStatus.keepOnFailure || admittedAs === 'exists')
+      (startStatus.keepOnFailure || admittedAs === 'exists') &&
+      paneStillWritten(store, args)
     ) {
       startStatus.sink.set(paneKey, paneStartFailure(error))
     } else {

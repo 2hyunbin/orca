@@ -267,4 +267,22 @@ describe('a split of a pane the window draws, in a layout-owner build', () => {
       reason: 'runtime_unavailable'
     })
   })
+
+  it('refuses a taken pane id before anything else, even when main cannot start', async () => {
+    const { runtime } = setup()
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => true,
+      getForegroundProcess: async () => null
+    })
+
+    await expect(
+      runtime.splitTerminalPane(
+        { worktreeId: TEST_WORKTREE_ID, tabId: TAB_ID, leafId: HEADLESS_LEAF_ID },
+        { direction: 'vertical', newLeafId: HEADLESS_LEAF_ID, keepPaneOnStartFailure: true }
+      )
+    ).rejects.toThrow('pane_exists')
+    // The live pane is not marked as a failed start.
+    expect(runtime.startStatusOf(makePaneKey(TAB_ID, HEADLESS_LEAF_ID))).toBeNull()
+  })
 })
