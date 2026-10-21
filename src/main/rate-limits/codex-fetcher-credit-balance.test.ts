@@ -1,3 +1,4 @@
+import type * as FsPromisesModule from 'node:fs/promises'
 import type * as ChildProcessModule from 'node:child_process'
 import type * as ProcessHostModule from '@orca/process-host'
 import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
@@ -21,7 +22,10 @@ vi.mock('node:child_process', async (original) => ({
   ...(await original<typeof ChildProcessModule>()),
   spawn: childSpawnMock
 }))
-vi.mock('node:fs/promises', () => ({ readFile: readFileMock }))
+vi.mock('node:fs/promises', async (original) => ({
+  ...(await original<typeof FsPromisesModule>()),
+  readFile: readFileMock
+}))
 vi.mock('../codex-cli/command', () => ({ resolveCodexCommand: () => 'codex' }))
 vi.mock('node-pty', () => ({ spawn: vi.fn() }))
 vi.mock('./codex-auth-presence', () => ({

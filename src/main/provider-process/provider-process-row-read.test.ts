@@ -9,7 +9,8 @@ describe('parseLinuxProcStat', () => {
       ppid: 41,
       pgid: 4242,
       startedAt: 'clock-tick:987654',
-      startResolution: 'clock-tick'
+      startResolution: 'clock-tick',
+      zombie: false
     })
   })
 

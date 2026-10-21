@@ -1,8 +1,11 @@
+import type { DescendantTreeVerdict } from '../pty-descendant-exit-verification'
+import type * as FsPromisesModule from 'node:fs/promises'
 import type * as ChildProcessModule from 'node:child_process'
 import type * as ProcessHostModule from '@orca/process-host'
 import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
 import type { ProcessSpec } from '@orca/process-host/process-spec'
 import { readPosixProcessRow } from '../provider-process/provider-process-row-read'
+import { recordProviderLaunch } from '../provider-process/provider-process-ledger'
 import { PassThrough } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
@@ -30,7 +33,8 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () => ({
   startCodexStateDbBackfillRecoveryInBackground: vi.fn()
 }))
 
-vi.mock('node:fs/promises', () => ({
+vi.mock('node:fs/promises', async (original) => ({
+  ...(await original<typeof FsPromisesModule>()),
   readFile: readFileMock
 }))
 
@@ -178,6 +182,7 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     })
 
     const resultPromise = fetchCodexRateLimits()
+    await vi.waitFor(() => expect(childSpawnMock).toHaveBeenCalledOnce())
     await vi.advanceTimersByTimeAsync(19_999)
     expect(rpcChild.kill).not.toHaveBeenCalled()
 
@@ -268,6 +273,62 @@ describe('fetchCodexRateLimits probe shutdown', () => {
     expect(childSpawnMock).toHaveBeenCalledTimes(2)
     await expect(second).resolves.toMatchObject({ status: 'ok' })
     await first
+  })
+
+  it('joins predecessor cleanup after early raw quota close while another home proceeds', async () => {
+    const originalPlatform = process.platform
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'darwin' })
+    const firstChild = makeRpcChild(),
+      nextChild = makeRpcChild(),
+      otherChild = makeRpcChild()
+    firstChild.pid = 9_999_991
+    nextChild.pid = 9_999_992
+    otherChild.pid = 9_999_993
+    firstChild.stdin.end = vi.fn()
+    const writer = { pid: 9_999_990, pgid: firstChild.pid, startedAt: 'captured-writer' }
+    vi.mocked(recordProviderLaunch).mockReturnValueOnce({
+      capture: async () => {},
+      retire: async () => {},
+      members: () => [writer]
+    })
+    let writerLive = true
+    const gate = Promise.withResolvers<DescendantTreeVerdict>()
+    const group = await import('../provider-process/provider-process-group')
+    vi.spyOn(group, 'observeProviderGroup').mockImplementation(async (pid) =>
+      pid === firstChild.pid ? gate.promise : 'exited'
+    )
+    vi.mocked(readPosixProcessRow).mockImplementation(async (pid) =>
+      pid === writer.pid && writerLive
+        ? { ...writer, ppid: 1, startResolution: 'clock-tick' }
+        : null
+    )
+    childSpawnMock
+      .mockReturnValueOnce(firstChild)
+      .mockReturnValueOnce(otherChild)
+      .mockReturnValueOnce(nextChild)
+    respondToRpcRateLimitRead(otherChild, { primary: { usedPercent: 3 } })
+    respondToRpcRateLimitRead(nextChild, { primary: { usedPercent: 4 } })
+    try {
+      const first = fetchCodexRateLimits({ codexHomePath: '/managed/early-close' })
+      await vi.advanceTimersByTimeAsync(0)
+      firstChild.exitCode = 1
+      firstChild.emit('exit', 1, null)
+      await vi.advanceTimersByTimeAsync(0)
+      await expect(first).resolves.toMatchObject({ status: 'error' })
+      const same = fetchCodexRateLimits({ codexHomePath: '/managed/early-close' })
+      const other = fetchCodexRateLimits({ codexHomePath: '/managed/early-close-other' })
+      await vi.advanceTimersByTimeAsync(1)
+      expect(childSpawnMock).toHaveBeenCalledTimes(2)
+      await expect(other).resolves.toMatchObject({ status: 'ok' })
+      writerLive = false
+      gate.resolve('exited')
+      await vi.advanceTimersByTimeAsync(1_000)
+      await expect(same).resolves.toMatchObject({ status: 'ok' })
+      expect(childSpawnMock).toHaveBeenCalledTimes(3)
+    } finally {
+      gate.resolve('exited')
+      Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform })
+    }
   })
 
   it('keeps the home lock through child errors until the failed probe exits', async () => {
@@ -433,11 +494,11 @@ vi.mock('@orca/process-host', async (original) => ({
 
 vi.mock('../provider-process/provider-process-ledger', async (original) => ({
   ...(await original<typeof ProviderLedgerModule>()),
-  recordProviderLaunch: () => ({
+  recordProviderLaunch: vi.fn(() => ({
     capture: async () => {},
     retire: async () => {},
     members: () => [{ pid: 9_999_999, pgid: 9_999_999, startedAt: 'fixture-start' }]
-  })
+  }))
 }))
 
 vi.mock('../provider-process/provider-process-row-read', () => ({ readPosixProcessRow: vi.fn() }))

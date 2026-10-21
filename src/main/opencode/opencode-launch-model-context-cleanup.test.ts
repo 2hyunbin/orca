@@ -1,3 +1,5 @@
+import * as ledger from '../provider-process/provider-process-ledger'
+import * as rows from '../provider-process/provider-process-row-read'
 import { setTimeout as realDelay } from 'node:timers/promises'
 import { z } from 'zod'
 import { ChildProcess } from 'node:child_process'
@@ -88,6 +90,18 @@ describe('OpenCode model probe termination evidence', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' })
     vi.mocked(readFetchResponseJsonWithinLimit).mockImplementation((response) => response.json())
     child = new ProbeChild()
+    vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
+      capture: async () => {},
+      retire: async () => {},
+      members: () => [{ pid: child.pid, pgid: child.pid, startedAt: 'fixture' }]
+    })
+    vi.spyOn(rows, 'readPosixProcessRow').mockImplementation(async () => ({
+      pid: child.pid,
+      pgid: child.pid,
+      ppid: process.pid,
+      startedAt: 'fixture',
+      startResolution: 'clock-tick'
+    }))
     closeDuringFetch = false
     groupAlive = true
     vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
@@ -160,6 +174,7 @@ describe('OpenCode model probe termination evidence', () => {
     expect(await probeOpenCodeLaunchModelContext(options)).toMatchObject({ primaryAgent: 'build' })
     expect(signalProcessTree).not.toHaveBeenCalled()
     expect(forceTerminateProcessTree).not.toHaveBeenCalled()
+    expect(vi.mocked(spawnProcess).mock.calls[0][0]).toMatchObject({ detached: true })
   })
 
   it('starts the configured POSIX server directly and accepts only observed group exit', async () => {

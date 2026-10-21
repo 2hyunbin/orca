@@ -3,7 +3,6 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SOURCE_CONTROL_GENERATION_TIMEOUT_MS } from './source-control-generation-limits'
 import { discoverModelsLocal } from './commit-message-model-discovery'
 import { cancelGenerateCommitMessageLocal } from './commit-message-text-generation'
 import { spawnSourceControlAgent } from './source-control-agent-launch'
@@ -109,7 +108,8 @@ describe('a managed agent one-shot that runs out of time', () => {
       })
 
     const first = request('/repo/first')
-    await vi.advanceTimersByTimeAsync(SOURCE_CONTROL_GENERATION_TIMEOUT_MS)
+    await vi.waitFor(() => expect(spawnAgent).toHaveBeenCalledOnce())
+    await vi.advanceTimersToNextTimerAsync()
     await expect(first).resolves.toMatchObject({
       success: false,
       error: expect.stringMatching(/timed out/)
@@ -146,7 +146,8 @@ describe('a managed Codex model discovery that runs out of time', () => {
       })
 
     const first = discover()
-    await vi.advanceTimersByTimeAsync(SOURCE_CONTROL_GENERATION_TIMEOUT_MS)
+    await vi.waitFor(() => expect(spawnAgent).toHaveBeenCalledOnce())
+    await vi.advanceTimersToNextTimerAsync()
     await expect(first).resolves.toMatchObject({
       success: false,
       error: expect.stringMatching(/timed out/)

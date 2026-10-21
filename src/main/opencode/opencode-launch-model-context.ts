@@ -107,6 +107,7 @@ export async function probeOpenCodeLaunchModelContext(options: {
     },
     {
       site: OPENCODE_PREFLIGHT_KILL_SITE,
+      windowsDetached: true,
       inheritedEnv: {
         ...options.env,
         OPENCODE_SERVER_USERNAME: 'opencode',

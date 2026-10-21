@@ -52,7 +52,7 @@ function fakeChild(exitsOn: NodeJS.Signals | null): FakeChild {
     if (child.exitCode !== null) {
       throw Object.assign(new Error('gone'), { code: 'ESRCH' })
     }
-    if (signal !== 0) {
+    if (typeof signal === 'string') {
       child.kill(signal)
     }
     return true

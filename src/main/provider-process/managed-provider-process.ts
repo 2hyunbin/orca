@@ -1,17 +1,22 @@
+export type { ProviderProcessExit, ManagedProviderProcess } from './provider-process-close'
 import { ProviderExternalTree } from './provider-external-tree'
-import type { PipedChildProcess, PipedProcessSpawner } from '@orca/process-host/process-spec'
 import { spawnProcess } from '@orca/process-host'
 import { RetryableProcessExitProof } from '@orca/process-host/retryable-process-exit-proof'
 import type { ProviderProcessLaunch } from './provider-process-launch'
 import { createProviderSpawnSpec } from './provider-process-launch'
 import { PROVIDER_GROUP_REAP_TIMEOUT_MS } from './provider-process-timing'
-import { recordProviderLaunch, verifyProviderWriters } from './provider-process-ledger'
+import { recordProviderLaunch } from './provider-process-ledger'
+import { verifyProviderWriters } from './provider-process-inventory'
 import {
   observeProviderGroup,
   signalProviderGroup,
   stopRecordedProviderGroup
 } from './provider-process-group'
-import { waitForProcessExitUntil } from './provider-process-exit-deadline'
+import { retainCodexHomeWriter } from '../codex-cli/codex-home-process-lock'
+import {
+  type ProviderCleanupBudget,
+  waitForProcessExitUntil
+} from './provider-process-exit-deadline'
 import {
   terminateProviderProcessTree,
   type ProviderProcessTeardownVerdict
@@ -21,55 +26,14 @@ import { isMissingProviderExecutable } from './provider-executable-missing'
 import {
   closeProviderProcess,
   rootOnlyProviderClosePolicy,
-  type ProviderProcessClosePolicy,
   type ProviderProcessCloseResult,
-  type ProviderProcessTree
+  type ManagedProviderProcessOptions,
+  type ProviderProcessTree,
+  type ProviderProcessExit,
+  type ManagedProviderProcess
 } from './provider-process-close'
 
-import { observeProviderOutput, type ProviderProcessOutputOptions } from './provider-process-output'
-
-export type ProviderProcessExit = {
-  code: number | null
-  signal: NodeJS.Signals | null
-  processless: boolean
-}
-
-type ManagedProviderProcessOptions = ProviderProcessOutputOptions & {
-  site: string
-  /** Defaults to the root-only policy; only a provider with its own reaper overrides it. */
-  policy?: (dedicatedGroup: boolean) => ProviderProcessClosePolicy
-  spawnImpl?: PipedProcessSpawner
-  platform?: NodeJS.Platform
-  inheritedEnv?: NodeJS.ProcessEnv
-  /** Defaults to "the root is gone". */
-  acceptClose?: (result: ProviderProcessCloseResult) => boolean
-}
-
-export type ManagedProviderProcess = {
-  child: PipedChildProcess
-  dedicatedGroup: boolean
-  /** The spawn failed before a process existed: absence is proven, but no exit was observed. */
-  readonly processless: boolean
-  /** `exited` covers a processless child too; use `rootExitObserved` for "a real process exited". */
-  readonly rootVerdict: DescendantTreeVerdict
-  /** A process that existed was seen to exit; never true for a processless child. */
-  readonly rootExitObserved: boolean
-  /** The last close that ran the ladder; the already-exited answer only when none did. */
-  readonly lastCloseResult: ProviderProcessCloseResult | null
-  readonly exitPromise: Promise<void>
-  readonly completion: Promise<ProviderProcessExit>
-  readonly settled: boolean
-  onSettled(listener: (exit: ProviderProcessExit) => void): void
-  verifyWriters(): Promise<boolean>
-  /** The configured executable was missing at spawn. */
-  readonly executableMissing: boolean
-  /** The last 8 KiB of stderr, which the managed process drains so the child never blocks on it. */
-  stderrTail(): string
-  onExit(listener: (exit: ProviderProcessExit) => void): void
-  terminateTree(): Promise<ProviderProcessTeardownVerdict>
-  attachTree(tree: ProviderProcessTree): void
-  close(tree?: ProviderProcessTree): Promise<ProviderProcessCloseResult>
-}
+import { observeProviderOutput } from './provider-process-output'
 
 /** One child owns its exit observation and every retry of an unconfirmed close. */
 export function spawnManagedProviderProcess(
@@ -80,10 +44,16 @@ export function spawnManagedProviderProcess(
   const closePolicy = options.policy ?? rootOnlyProviderClosePolicy
   const spec = createProviderSpawnSpec(launch, options.inheritedEnv ?? process.env, platform)
   const policy = closePolicy(platform !== 'win32')
-  const child = (options.spawnImpl ?? spawnProcess)({ ...spec, stdio: ['pipe', 'pipe', 'pipe'] })
+  const child = (options.spawnImpl ?? spawnProcess)({
+    ...spec,
+    ...(platform === 'win32' && options.windowsDetached ? { detached: true } : {}),
+    stdio: ['pipe', 'pipe', 'pipe']
+  })
   let groupRetired = false
   const group =
-    platform !== 'win32' && child.pid !== undefined ? recordProviderLaunch(child.pid) : undefined
+    platform !== 'win32' && child.pid !== undefined
+      ? recordProviderLaunch(child.pid, options.resource)
+      : undefined
   const listeners = new Set<(exit: ProviderProcessExit) => void>()
   let observed: ProviderProcessExit | null = null
   let spawnFailed = false
@@ -100,7 +70,9 @@ export function spawnManagedProviderProcess(
   const windowsExitProof = new RetryableProcessExitProof(
     options.acceptClose ?? ((result) => result.root === 'exited')
   )
-  let groupFlight: Promise<ProviderProcessCloseResult> | undefined
+  const groupProof = new RetryableProcessExitProof<ProviderProcessCloseResult>(
+    (result) => result.tree === 'exited'
+  )
   const external = new ProviderExternalTree()
   let naturalCleanup: Promise<DescendantTreeVerdict> | undefined
   let settled = false
@@ -109,7 +81,10 @@ export function spawnManagedProviderProcess(
     resolveCompletion = resolve
   })
   const reapExternal = (): Promise<DescendantTreeVerdict | null> => external.reap()
-  const close = (tree?: ProviderProcessTree): Promise<ProviderProcessCloseResult> => {
+  const close = (
+    tree?: ProviderProcessTree,
+    budget?: ProviderCleanupBudget
+  ): Promise<ProviderProcessCloseResult> => {
     if (tree) {
       external.current = tree
     }
@@ -131,20 +106,22 @@ export function spawnManagedProviderProcess(
         return lastCloseResult
       })
     }
-    groupFlight ??= (async () => {
+    const groupFlight = groupProof.run(async () => {
       if (!observed) {
-        if (policy.immediateTerm && child.pid) {
-          signalProviderGroup(child.pid, 'SIGTERM')
-        }
         void group?.capture()
-        await external.current?.capture()
+        await (budget
+          ? budget.wait(external.current?.capture() ?? Promise.resolve(), undefined)
+          : external.current?.capture())
         try {
           child.stdin.end()
         } catch {
           /* A broken pipe still owes cleanup. */
         }
         if (!policy.immediateTerm) {
-          await waitForProcessExitUntil(exitPromise, policy.gracefulExitMs)
+          await waitForProcessExitUntil(
+            exitPromise,
+            Math.min(policy.gracefulExitMs, budget?.remaining() ?? Infinity)
+          )
         }
         if (!observed) {
           void group?.capture()
@@ -152,36 +129,43 @@ export function spawnManagedProviderProcess(
       }
       let verdict: DescendantTreeVerdict = 'exited'
       const pid = child.pid
-      if (pid !== undefined && !observed?.processless) {
-        verdict = observed
-          ? await (naturalCleanup ??
-              observeProviderGroup(child.pid, PROVIDER_GROUP_REAP_TIMEOUT_MS))
-          : await (async () => {
-              if (!policy.immediateTerm) {
-                signalProviderGroup(pid, 'SIGTERM')
-              }
-              return stopRecordedProviderGroup(pid, group?.members() ?? [], undefined, true)
-            })()
+      if (pid !== undefined && !observed?.processless && !groupRetired) {
+        if (naturalCleanup) {
+          verdict = await (budget
+            ? budget.wait(naturalCleanup, 'unverifiable' as const)
+            : naturalCleanup)
+          naturalCleanup = undefined
+        } else {
+          await waitForProcessExitUntil(
+            group?.capture(budget) ?? Promise.resolve(),
+            Math.min(2_000, budget?.remaining() ?? Infinity)
+          )
+          verdict = await stopRecordedProviderGroup(
+            pid,
+            group?.members() ?? [],
+            async () => !groupRetired,
+            false,
+            budget
+          )
+        }
       }
-      await waitForProcessExitUntil(exitPromise, PROVIDER_GROUP_REAP_TIMEOUT_MS)
+      await waitForProcessExitUntil(
+        exitPromise,
+        Math.min(PROVIDER_GROUP_REAP_TIMEOUT_MS, budget?.remaining() ?? Infinity)
+      )
       if (verdict === 'exited') {
         groupRetired = true
         void group?.retire()
       }
       return { root: rootVerdict(), tree: verdict }
-    })()
+    })
     return (async () => {
       const previous = await groupFlight
-      const natural = observed ? await naturalCleanup : undefined
-      const result = natural === undefined ? previous : { ...previous, tree: natural }
-      if (natural === 'exited' && !groupRetired) {
-        groupRetired = true
-        void group?.retire()
-      }
+      const result = previous
       if (observed) {
         await drain()
       }
-      const external = platform === 'win32' ? null : await reapExternal()
+      const external = await (budget ? budget.wait(reapExternal(), null) : reapExternal())
       lastCloseResult =
         external === null
           ? { ...result, root: rootVerdict() }
@@ -247,7 +231,7 @@ export function spawnManagedProviderProcess(
   const terminateTree = (): Promise<ProviderProcessTeardownVerdict> =>
     terminateProviderProcessTree(child, { site: options.site, platform })
 
-  return {
+  const managed: ManagedProviderProcess = {
     child,
     dedicatedGroup: platform !== 'win32',
     exitPromise,
@@ -258,18 +242,23 @@ export function spawnManagedProviderProcess(
     onSettled(listener) {
       void completion.then(listener)
     },
-    async verifyWriters() {
+    async verifyWriters(budget) {
       if (platform === 'win32') {
         return rootVerdict() === 'exited'
       }
       if (!child.pid) {
         return observed?.processless ?? false
       }
-      const verified = await verifyProviderWriters(group, child.pid, groupRetired)
-      if (verified) {
-        groupRetired = true
-        void group?.retire()
+      if (budget) {
+        const cleanup = async (): Promise<void> => {
+          await close(undefined, budget)
+        }
+        await budget.wait(group?.cleanup ? group.cleanup(budget, cleanup) : cleanup(), undefined)
       }
+      if (!observed) {
+        return false
+      }
+      const verified = await verifyProviderWriters(group, child.pid, groupRetired, budget)
       return verified
     },
     get processless() {
@@ -304,4 +293,8 @@ export function spawnManagedProviderProcess(
     },
     close
   }
+  if (options.resource) {
+    retainCodexHomeWriter(options.resource.key, managed.verifyWriters)
+  }
+  return managed
 }

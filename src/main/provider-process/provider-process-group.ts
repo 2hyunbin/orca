@@ -1,3 +1,4 @@
+import type { ProviderCleanupBudget } from './provider-process-exit-deadline'
 import { readProcessStartTimeMs } from '../runtime/agent-session-process-identity-probe'
 import { setTimeout as delay } from 'node:timers/promises'
 import { captureDescendantSnapshot, hasUnambiguousStartTime } from '../pty-descendant-termination'
@@ -13,11 +14,21 @@ export type ProviderGroupMember = Pick<ProviderProcessRow, 'pid' | 'startedAt' |
 /** Only a live, directly parented root can add identities to an owned group. */
 export async function captureProviderGroup(
   pgid: number,
-  retryBirthSecond = true
+  retryBirthSecond = true,
+  budget?: ProviderCleanupBudget
 ): Promise<ProviderGroupMember[]> {
   const boundary = Date.now()
-  const root = await readPosixProcessRow(pgid)
-  if (!root || root === 'unverifiable' || root.ppid !== process.pid || root.pgid !== pgid) {
+  if (budget && !budget.active) {
+    return []
+  }
+  const root = await readPosixProcessRow(pgid, process.platform, budget)
+  if (
+    !root ||
+    root === 'unverifiable' ||
+    root.zombie ||
+    root.ppid !== process.pid ||
+    root.pgid !== pgid
+  ) {
     return []
   }
   if (root.startResolution === 'second' && !hasUnambiguousStartTime(root.startedAt, boundary)) {
@@ -25,16 +36,21 @@ export async function captureProviderGroup(
       return []
     }
     await delay(1_050 - (Date.now() % 1_000))
-    return captureProviderGroup(pgid, false)
+    return captureProviderGroup(pgid, false, budget)
   }
-  const snapshot = await captureDescendantSnapshot(pgid)
+  const snapshot = await captureDescendantSnapshot(pgid, {
+    timeoutMs: Math.min(2_000, budget?.remaining() ?? Infinity)
+  })
   const rows =
     snapshot?.rootPgid === pgid ? snapshot.descendants.filter((row) => row.pgid === pgid) : []
   const members = [root, ...rows]
   const qualified: ProviderGroupMember[] = []
   for (const member of members) {
-    const fresh = await readPosixProcessRow(member.pid)
-    if (!fresh || fresh === 'unverifiable' || fresh.pgid !== member.pgid) {
+    if (budget && !budget.active) {
+      break
+    }
+    const fresh = await readPosixProcessRow(member.pid, process.platform, budget)
+    if (!fresh || fresh === 'unverifiable' || fresh.zombie || fresh.pgid !== member.pgid) {
       continue
     }
     // ps snapshots and /proc ticks have different formats; compare each using its own reader.
@@ -56,10 +72,11 @@ export async function captureProviderGroup(
     if (fresh.startResolution === 'second' && !hasUnambiguousStartTime(fresh.startedAt, boundary)) {
       continue
     }
-    const stillRoot = await readPosixProcessRow(pgid)
+    const stillRoot = await readPosixProcessRow(pgid, process.platform, budget)
     if (
       !stillRoot ||
       stillRoot === 'unverifiable' ||
+      stillRoot.zombie ||
       stillRoot.startedAt !== root.startedAt ||
       stillRoot.ppid !== process.pid
     ) {
@@ -83,14 +100,19 @@ export function providerGroupVerdict(pgid: number): DescendantTreeVerdict {
 
 export async function matchProviderGroupMember(
   members: readonly ProviderGroupMember[],
-  pgid: number
+  pgid: number,
+  budget?: ProviderCleanupBudget
 ): Promise<boolean> {
   for (const member of members) {
-    const row = await readPosixProcessRow(member.pid)
+    if (budget && !budget.active) {
+      return false
+    }
+    const row = await readPosixProcessRow(member.pid, process.platform, budget)
     if (
       member.pgid === pgid &&
       row &&
       row !== 'unverifiable' &&
+      !row.zombie &&
       row.startedAt === member.startedAt &&
       row.pgid === pgid
     ) {
@@ -111,11 +133,12 @@ export function signalProviderGroup(pgid: number, signal: NodeJS.Signals): void 
 
 export async function observeProviderGroup(
   pgid: number,
-  timeoutMs: number
+  timeoutMs: number,
+  budget?: ProviderCleanupBudget
 ): Promise<DescendantTreeVerdict> {
-  const deadline = Date.now() + timeoutMs
+  const deadline = Math.min(Date.now() + timeoutMs, budget?.deadline ?? Infinity)
   let verdict = providerGroupVerdict(pgid)
-  while (verdict === 'live' && Date.now() < deadline) {
+  while ((!budget || budget.active) && verdict === 'live' && Date.now() < deadline) {
     await delay(Math.min(50, deadline - Date.now()))
     verdict = providerGroupVerdict(pgid)
   }
@@ -127,24 +150,36 @@ export async function stopRecordedProviderGroup(
   pgid: number,
   members: readonly ProviderGroupMember[],
   owns: () => Promise<boolean> = async () => true,
-  termSent = false
+  termSent = false,
+  budget?: ProviderCleanupBudget
 ): Promise<DescendantTreeVerdict> {
+  if (budget && !budget.active) {
+    return 'unverifiable'
+  }
   if (providerGroupVerdict(pgid) === 'exited') {
     return 'exited'
   }
   if (!termSent) {
-    if (!(await owns()) || !(await matchProviderGroupMember(members, pgid))) {
+    if (
+      !(await owns()) ||
+      !(await matchProviderGroupMember(members, pgid, budget)) ||
+      (budget && !budget.active)
+    ) {
       return 'unverifiable'
     }
     signalProviderGroup(pgid, 'SIGTERM')
   }
-  const verdict = await observeProviderGroup(pgid, PROVIDER_SIGTERM_GRACE_MS)
+  const verdict = await observeProviderGroup(pgid, PROVIDER_SIGTERM_GRACE_MS, budget)
   if (verdict === 'exited') {
     return verdict
   }
-  if (!(await owns()) || !(await matchProviderGroupMember(members, pgid))) {
+  if (
+    !(await owns()) ||
+    !(await matchProviderGroupMember(members, pgid, budget)) ||
+    (budget && !budget.active)
+  ) {
     return 'unverifiable'
   }
   signalProviderGroup(pgid, 'SIGKILL')
-  return observeProviderGroup(pgid, PROVIDER_GROUP_REAP_TIMEOUT_MS)
+  return observeProviderGroup(pgid, PROVIDER_GROUP_REAP_TIMEOUT_MS, budget)
 }

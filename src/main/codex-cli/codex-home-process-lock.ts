@@ -1,3 +1,6 @@
+import { ProviderCleanupBudget } from '../provider-process/provider-process-exit-deadline'
+import { discoverProviderLaunches } from '../provider-process/provider-process-inventory'
+import { verifyRecoveredProviderResources } from '../provider-process/provider-process-ledger'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
@@ -8,9 +11,12 @@ import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-p
 // so Orca's own spawns (quota probes, commit-message runs) serialize per home.
 // User terminal panes are intentionally not serialized here.
 
-const retainedWriters = new Map<string, Set<() => Promise<boolean>>>()
+const retainedWriters = new Map<string, Set<(budget: ProviderCleanupBudget) => Promise<boolean>>>()
 
-export function retainCodexHomeWriter(key: string, verify: () => Promise<boolean>): void {
+export function retainCodexHomeWriter(
+  key: string,
+  verify: (budget: ProviderCleanupBudget) => Promise<boolean>
+): void {
   let writers = retainedWriters.get(key)
   if (!writers) {
     writers = new Set()
@@ -20,16 +26,15 @@ export function retainCodexHomeWriter(key: string, verify: () => Promise<boolean
 }
 
 async function verifyCodexHomeWriters(key: string): Promise<void> {
-  const writers = retainedWriters.get(key)
-  if (!writers) {
-    return
-  }
+  const discovered = await discoverProviderLaunches(new ProviderCleanupBudget(Date.now() + 2_000))
+  const budget = new ProviderCleanupBudget()
+  const writers = retainedWriters.get(key) ?? new Set()
   for (const verify of writers) {
-    if (await verify()) {
+    if (budget.active && (await budget.wait(verify(budget), false))) {
       writers.delete(verify)
     }
   }
-  if (writers.size === 0) {
+  if (discovered && (await verifyRecoveredProviderResources(key, budget)) && writers.size === 0) {
     retainedWriters.delete(key)
   } else {
     throw new Error(

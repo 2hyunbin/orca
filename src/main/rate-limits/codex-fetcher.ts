@@ -10,7 +10,6 @@ import { resolveCodexCommand } from '../codex-cli/command'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import {
   resolveCodexHomeProcessLockKey,
-  retainCodexHomeWriter,
   withCodexHomeProcessLock
 } from '../codex-cli/codex-home-process-lock'
 import { isCodexStateDbBackfillPending } from '../codex/codex-state-db'
@@ -85,7 +84,10 @@ function requestCodexBackend(url: string, init: RequestInit): Promise<Response> 
   return getMainHttpClient().fetch(url, { ...init, credentials: 'omit' })
 }
 
-async function fetchViaRpc(options?: CodexRateLimitFetchOptions): Promise<ProviderRateLimits> {
+async function fetchViaRpc(
+  homeKey: string,
+  options?: CodexRateLimitFetchOptions
+): Promise<ProviderRateLimits> {
   if (options?.signal?.aborted) {
     return abortedCodexRateLimitResult()
   }
@@ -112,16 +114,14 @@ async function fetchViaRpc(options?: CodexRateLimitFetchOptions): Promise<Provid
     process.platform !== 'win32'
       ? spawnManagedProviderProcess(
           { command: spec.program, args: spec.args, cwd: spec.cwd },
-          { inheritedEnv: spec.env, site: 'codex-quota-probe' }
+          {
+            inheritedEnv: spec.env,
+            site: 'codex-quota-probe',
+            resource: { kind: 'codex-home', key: homeKey }
+          }
         )
       : null
   const child = managed?.child ?? spawnProcessOnWorkerThread(spec)
-  if (managed) {
-    retainCodexHomeWriter(
-      resolveCodexHomeProcessLockKey(options?.codexHomePath),
-      managed.verifyWriters
-    )
-  }
   return readCodexRateLimitsViaRpc({
     child,
     codexCommand,
@@ -222,10 +222,8 @@ export async function fetchCodexRateLimits(
 
   let rpcFailure: ProviderRateLimits
   try {
-    const rpcResult = await withCodexHomeProcessLock(
-      resolveCodexHomeProcessLockKey(options?.codexHomePath),
-      () => fetchViaRpc(options)
-    )
+    const homeKey = resolveCodexHomeProcessLockKey(options?.codexHomePath)
+    const rpcResult = await withCodexHomeProcessLock(homeKey, () => fetchViaRpc(homeKey, options))
     if (options?.signal?.aborted) {
       return abortedCodexRateLimitResult()
     }

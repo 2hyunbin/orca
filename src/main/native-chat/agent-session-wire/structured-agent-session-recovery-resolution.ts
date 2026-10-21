@@ -108,12 +108,12 @@ export async function cleanUpStructuredSessionOwner(
   if ((deps.platform ?? process.platform) === 'win32') {
     return
   }
-  await recoverProviderLaunches()
   const owner = record.lease.ownerProcess
   if (!owner || owner.hostId !== deps.store.hostId || record.lease.claimStatus === 'conflicted') {
     return
   }
-  if (await hasRecordedProviderLaunch(owner.pid)) {
+  await recoverProviderLaunches(owner.pid)
+  if (await hasRecordedProviderLaunch(owner.pid, owner.processStartTimeMs)) {
     return
   }
   if (!isProvenAliveProbe(await deps.probeRecord(record))) {

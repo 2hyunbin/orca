@@ -1,3 +1,8 @@
+import type * as FsPromisesModule from 'node:fs/promises'
+import * as files from 'node:fs/promises'
+import * as processRows from './provider-process-row-read'
+import { ProviderCleanupBudget } from './provider-process-exit-deadline'
+import { runProviderRecovery, setProviderRecoveryMutationOwner } from './provider-process-inventory'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,6 +18,10 @@ import {
   retainCodexHomeWriter,
   withCodexHomeProcessLock
 } from '../codex-cli/codex-home-process-lock'
+
+vi.mock('node:fs/promises', async (original) => ({
+  ...(await original<typeof FsPromisesModule>())
+}))
 
 const roots: string[] = []
 const children: ReturnType<typeof spawnProcess>[] = []
@@ -102,6 +111,7 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
       },
       {
         site: 'direct-close-test',
+        resource: { kind: 'codex-home', key: `direct-close-${randomUUID()}` },
         inheritedEnv: { ...process.env, NODE_OPTIONS: '--no-warnings', ELECTRON_RUN_AS_NODE: '1' }
       }
     )
@@ -110,9 +120,14 @@ describe.runIf(process.platform !== 'win32')('direct provider ownership', () => 
       managed.child.stdout.once('data', (chunk) => resolve(String(chunk)))
     )
     expect(JSON.parse(output)).toEqual({ options: '--no-warnings' })
-    const [one, two] = await Promise.all([managed.close(), managed.close()])
+    const [one, two, writersGone] = await Promise.all([
+      managed.close(),
+      managed.close(),
+      managed.verifyWriters(new ProviderCleanupBudget())
+    ])
     expect(one).toMatchObject({ root: 'exited', tree: 'exited' })
     expect(two).toEqual(one)
+    expect(writersGone).toBe(true)
     expect(await managed.completion).toMatchObject({ signal: 'SIGKILL' })
   })
 
@@ -246,3 +261,113 @@ it.runIf(process.platform !== 'win32')(
     }
   }
 )
+
+it.runIf(process.platform !== 'win32')(
+  'hands over old resource-only writers, retries unreadable inventory and discharges zombies without signals',
+  async () => {
+    const root = await folder()
+    const directory = join(root, 'provider-processes')
+    await mkdir(directory)
+    const token = randomUUID(),
+      home = `restart-${token}`,
+      path = join(directory, `${token}.json`)
+    const owner = { pid: 9_999_998, pgid: 9_999_998, startedAt: 'owner' }
+    const member = { pid: 9_999_999, pgid: 9_999_999, startedAt: 'writer' }
+    await writeFile(
+      path,
+      JSON.stringify({
+        version: 1,
+        origin: 'direct',
+        token,
+        directory,
+        createdAt: Date.now() - 8 * 86400000,
+        owner,
+        pgid: member.pgid,
+        members: [member],
+        groupRetired: true,
+        resource: { kind: 'codex-home', key: home },
+        unknownSince: { resource: Date.now() - 8 * 86400000 }
+      })
+    )
+    const saved = getAppEnvironment()
+    setAppEnvironment({
+      ...saved,
+      getPath: (key) => (key === 'userData' ? root : saved.getPath(key))
+    })
+    setProviderRecoveryMutationOwner(true)
+    const signal = vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw new Error('no signals permitted')
+    })
+    let state: 'live' | 'unknown' | 'zombie' = 'live'
+    const rows = vi.spyOn(processRows, 'readPosixProcessRow').mockImplementation(async (pid) =>
+      pid === owner.pid
+        ? null
+        : state === 'unknown'
+          ? 'unverifiable'
+          : {
+              ...member,
+              ppid: 1,
+              pgid: member.pgid + 1,
+              startResolution: 'clock-tick',
+              zombie: state === 'zombie'
+            }
+    )
+    const realRead = files.readFile
+    const read = vi
+      .spyOn(files, 'readFile')
+      .mockRejectedValueOnce(Object.assign(new Error('unreadable'), { code: 'EACCES' }))
+    try {
+      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
+        'still using'
+      )
+      read.mockRestore()
+      await recoverProviderLaunches()
+      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
+        'still using'
+      )
+      await expect(withCodexHomeProcessLock(`${home}-other`, async () => 'other')).resolves.toBe(
+        'other'
+      )
+      expect(JSON.parse(await realRead(path, 'utf8')).unknownSince.resource).toBeUndefined()
+      state = 'unknown'
+      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
+        'still using'
+      )
+      const anchor = JSON.parse(await realRead(path, 'utf8')).unknownSince.resource
+      await expect(withCodexHomeProcessLock(home, async () => 'unsafe')).rejects.toThrow(
+        'still using'
+      )
+      expect(JSON.parse(await realRead(path, 'utf8')).unknownSince.resource).toBe(anchor)
+      state = 'zombie'
+      await expect(withCodexHomeProcessLock(home, async () => 'safe')).resolves.toBe('safe')
+      await expect(realRead(path, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(signal).not.toHaveBeenCalled()
+    } finally {
+      rows.mockRestore()
+      signal.mockRestore()
+      read.mockRestore()
+      setProviderRecoveryMutationOwner(false)
+      setAppEnvironment(saved)
+    }
+  }
+)
+
+it('bounds shared recovery capacity and cancels queued cleanup without late work', async () => {
+  const gate = Promise.withResolvers<void>()
+  const started: number[] = []
+  const flights = Array.from({ length: 5 }, (_, index) =>
+    runProviderRecovery(
+      { tail: Promise.resolve() },
+      new ProviderCleanupBudget(Date.now() + 30),
+      async () => {
+        started.push(index)
+        await gate.promise
+      }
+    )
+  )
+  await Promise.all(flights)
+  expect(started).toEqual([0, 1, 2, 3])
+  gate.resolve()
+  await delay(10)
+  expect(started).toEqual([0, 1, 2, 3])
+})

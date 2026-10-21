@@ -1,3 +1,4 @@
+import type * as FsPromisesModule from 'node:fs/promises'
 import type * as ChildProcessModule from 'node:child_process'
 import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
 import { PassThrough } from 'node:stream'
@@ -40,7 +41,8 @@ vi.mock('@orca/process-host', async (importOriginal) => ({
     childSpawnMock(spec.program, spec.args ?? [], spec)
 }))
 
-vi.mock('node:fs/promises', () => ({
+vi.mock('node:fs/promises', async (original) => ({
+  ...(await original<typeof FsPromisesModule>()),
   readFile: readFileMock
 }))
 
@@ -99,6 +101,12 @@ function makeRpcChild() {
     return true
   })
   return child
+}
+
+function closeRpcChild(child: ReturnType<typeof makeRpcChild>): void {
+  child.exitCode = 0
+  child.emit('exit', 0, null)
+  child.emit('close')
 }
 
 function respondToRpcRateLimitRead(
@@ -233,14 +241,14 @@ describe('fetchCodexRateLimits', () => {
     childSpawnMock.mockReturnValue(rpcChild)
 
     const resultPromise = fetchCodexRateLimits()
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() => expect(childSpawnMock).toHaveBeenCalledOnce())
 
     const spawnCwd = childSpawnMock.mock.calls[0]?.[2]?.cwd as string
     expect(spawnCwd).toContain('rate-limit-pty-cwd')
     expect(spawnCwd).not.toBe('/')
     expect(spawnCwd).not.toMatch(/^[A-Za-z]:\\?$/)
 
-    rpcChild.emit('close')
+    closeRpcChild(rpcChild)
     await resultPromise
   })
 
@@ -271,7 +279,7 @@ describe('fetchCodexRateLimits', () => {
 
     const resultPromise = fetchCodexRateLimits()
     await vi.advanceTimersByTimeAsync(0)
-    rpcChild.emit('close')
+    closeRpcChild(rpcChild)
 
     await expect(resultPromise).resolves.toMatchObject({
       provider: 'codex',
@@ -295,7 +303,7 @@ describe('fetchCodexRateLimits', () => {
 
     const resultPromise = fetchCodexRateLimits()
     await vi.advanceTimersByTimeAsync(0)
-    rpcChild.emit('close')
+    closeRpcChild(rpcChild)
     await vi.advanceTimersByTimeAsync(0)
 
     await expect(resultPromise).resolves.toMatchObject({
@@ -775,7 +783,7 @@ describe('fetchCodexRateLimits', () => {
         codexHomePath: '\\\\wsl.localhost\\Ubuntu\\home\\alice\\.local\\share\\orca\\account\\home'
       })
       await vi.advanceTimersByTimeAsync(0)
-      rpcChild.emit('close')
+      closeRpcChild(rpcChild)
 
       await expect(resultPromise).resolves.toMatchObject({ status: 'error' })
       expect(fetch).toHaveBeenCalledTimes(1)

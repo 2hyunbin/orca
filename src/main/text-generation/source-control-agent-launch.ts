@@ -2,7 +2,6 @@ import { spawnProcess } from '@orca/process-host'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
 import { resolveCliCommand } from '../codex-cli/command'
 import { spawnManagedProviderProcess } from '../provider-process/managed-provider-process'
-import { retainCodexHomeWriter } from '../codex-cli/codex-home-process-lock'
 import { SOURCE_CONTROL_KILL_SITE } from './source-control-local-process'
 import { wslAwareSpawn } from '../git/runner'
 import type {
@@ -100,12 +99,11 @@ function spawnManagedAgent(
     },
     {
       inheritedEnv: withCliRuntimeOnPath(input.binary, spawnEnv),
-      site: SOURCE_CONTROL_KILL_SITE
+      site: SOURCE_CONTROL_KILL_SITE,
+      ...(input.codexHomeLockKey
+        ? { resource: { kind: 'codex-home', key: input.codexHomeLockKey } as const }
+        : {})
     }
   )
-  // Configured wrappers can refresh credentials in a child after their own exit.
-  if (input.codexHomeLockKey) {
-    retainCodexHomeWriter(input.codexHomeLockKey, managed.verifyWriters)
-  }
   return Object.assign(managed.child, { managed })
 }

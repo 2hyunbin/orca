@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   windowsTree: vi.fn(async () => {})
 }))
 vi.mock('../pty-descendant-termination', () => ({ captureDescendantSnapshot: mocks.capture }))
+vi.mock('node:timers/promises', () => ({
+  setTimeout: (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+}))
 vi.mock('../windows-process-tree-kill', () => ({ terminateWindowsProcessTree: mocks.windowsTree }))
 
 afterEach(() => {
@@ -319,10 +322,13 @@ it('joins natural cleanup after an earlier unproven close before publishing comp
   fixture.child.emit('exit', 0, null)
   await vi.advanceTimersByTimeAsync(0)
   expect(publish).not.toHaveBeenCalled()
-  natural.resolve('exited')
+  natural.resolve('unverifiable')
   await managed.completion
   expect(publish).toHaveBeenCalledOnce()
-  expect(managed.lastCloseResult).toEqual({ root: 'exited', tree: 'exited' })
+  expect(managed.lastCloseResult).toEqual({ root: 'exited', tree: 'unverifiable' })
+  vi.mocked(groups.stopRecordedProviderGroup).mockResolvedValueOnce('exited')
+  await expect(managed.close()).resolves.toEqual({ root: 'exited', tree: 'exited' })
+  expect(groups.signalProviderGroup).toHaveBeenCalledTimes(1)
 })
 
 it('joins a tree attached while final output drains before publishing completion', async () => {
@@ -349,4 +355,60 @@ it('joins a tree attached while final output drains before publishing completion
   cleanup.resolve('exited')
   await managed.completion
   expect(managed.settled).toBe(true)
+})
+
+// libuv queues several waitpid results before delivering callbacks; this drives the real close path.
+it('retries qualified cleanup when another pending exit callback starts close before root notification', async () => {
+  vi.useFakeTimers()
+  const first = fakeChild(9_999_998)
+  const fixture = fakeChild()
+  const pid = fixture.child.pid!
+  const members = [{ pid, pgid: pid, startedAt: 'original' }]
+  vi.spyOn(ledger, 'recordProviderLaunch').mockReturnValue({
+    capture: async () => {},
+    retire: async () => {},
+    members: () => members
+  })
+  let current = 'reused'
+  let absent = false
+  vi.spyOn(processRows, 'readPosixProcessRow').mockImplementation(async () => ({
+    pid,
+    pgid: pid,
+    ppid: process.pid,
+    startedAt: current,
+    startResolution: 'clock-tick'
+  }))
+  const signals: string[] = []
+  vi.spyOn(process, 'kill').mockImplementation((_pid, signal) => {
+    if (absent) {
+      throw Object.assign(new Error('gone'), { code: 'ESRCH' })
+    }
+    if (typeof signal === 'string') {
+      signals.push(signal)
+    }
+    if (signal === 'SIGKILL') {
+      absent = true
+    }
+    return true
+  })
+  const managed = launch(fixture, 'darwin')
+  let pending: Promise<unknown> | undefined
+  first.child.once('exit', () => {
+    pending = managed.close()
+  })
+  // Both kernel exits are pending; the earlier callback runs while this root has a different incarnation.
+  first.child.emit('exit', 0, null)
+  await vi.advanceTimersByTimeAsync(2_000)
+  await expect(pending).resolves.toMatchObject({ tree: 'unverifiable' })
+  expect(signals).toEqual([])
+  current = 'original'
+  const retry = Promise.all([managed.close(), managed.close()])
+  await vi.advanceTimersByTimeAsync(5_000)
+  await retry
+  expect(signals).toEqual(['SIGTERM', 'SIGKILL'])
+  fixture.child.emit('exit', 0, null)
+  await vi.advanceTimersByTimeAsync(1_000)
+  await managed.completion
+  await managed.close()
+  expect(signals).toEqual(['SIGTERM', 'SIGKILL'])
 })

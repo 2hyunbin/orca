@@ -1,3 +1,4 @@
+import type * as FsPromisesModule from 'node:fs/promises'
 import type * as ChildProcessModule from 'node:child_process'
 import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
 import { PassThrough } from 'node:stream'
@@ -31,7 +32,10 @@ vi.mock('@orca/process-host', async (importOriginal) => ({
   spawnProcess: (spec: { program: string; args?: readonly string[] }) =>
     childSpawnMock(spec.program, spec.args ?? [], spec)
 }))
-vi.mock('node:fs/promises', () => ({ readFile: readFileMock }))
+vi.mock('node:fs/promises', async (original) => ({
+  ...(await original<typeof FsPromisesModule>()),
+  readFile: readFileMock
+}))
 vi.mock('../codex-cli/command', () => ({ resolveCodexCommand: resolveCodexCommandMock }))
 vi.mock('node-pty', () => ({ spawn: ptySpawnMock }))
 vi.mock('../codex/codex-state-db', () => ({ isCodexStateDbBackfillPending: vi.fn(() => false) }))
@@ -98,13 +102,15 @@ describe('codex rate-limit spawn runtime pairing', () => {
     childSpawnMock.mockReturnValue(rpcChild)
 
     const resultPromise = fetchCodexRateLimits()
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() => expect(childSpawnMock).toHaveBeenCalledOnce())
 
     const spawnEnv = childSpawnMock.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv
     // Guards the argument choice: pairing anything but the resolved CLI silently
     // reverts the ABI fix (stablyai/orca#10932).
     expect(spawnEnv.PATH?.split(delimiter)[0]).toBe(bin)
 
+    rpcChild.exitCode = 0
+    rpcChild.emit('exit', 0, null)
     rpcChild.emit('close')
     await resultPromise
   })
@@ -121,13 +127,15 @@ describe('codex rate-limit spawn runtime pairing', () => {
       childSpawnMock.mockReturnValue(rpcChild)
 
       const resultPromise = fetchCodexRateLimits()
-      await vi.advanceTimersByTimeAsync(0)
+      await vi.waitFor(() => expect(childSpawnMock).toHaveBeenCalledOnce())
 
       const spawnCommand = childSpawnMock.mock.calls[0]?.[0] as string
       expect(spawnCommand).toBe(cli)
       const spawnEnv = childSpawnMock.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv
       expect((spawnEnv.Path ?? spawnEnv.PATH)?.split(';')[0]).toBe(bin)
 
+      rpcChild.exitCode = 0
+      rpcChild.emit('exit', 0, null)
       rpcChild.emit('close')
       await resultPromise
     } finally {
@@ -143,11 +151,13 @@ describe('codex rate-limit spawn runtime pairing', () => {
     childSpawnMock.mockReturnValue(rpcChild)
 
     const resultPromise = fetchCodexRateLimits()
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.waitFor(() => expect(childSpawnMock).toHaveBeenCalledOnce())
 
     const spawnEnv = childSpawnMock.mock.calls[0]?.[2]?.env as NodeJS.ProcessEnv
     expect(spawnEnv.PATH).toBe(process.env.PATH)
 
+    rpcChild.exitCode = 0
+    rpcChild.emit('exit', 0, null)
     rpcChild.emit('close')
     await resultPromise
   })
