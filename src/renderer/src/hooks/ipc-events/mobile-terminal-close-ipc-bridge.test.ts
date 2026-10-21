@@ -81,7 +81,7 @@ function setup(viewedSurface: 'editor' | 'terminal'): {
           return () => {}
         },
         onCloseTerminal: () => () => {},
-        onSleepWorktree: () => () => {},
+        onWorkspaceSleep: () => () => {},
         onResumeSleepingAgents: () => () => {}
       }
     }

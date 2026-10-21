@@ -105,7 +105,6 @@ function notifierWithRename(renameTerminal: RuntimeNotifier['renameTerminal']): 
     renameTerminal,
     focusTerminal: vi.fn(),
     closeTerminal: vi.fn(),
-    sleepWorktree: vi.fn(),
     terminalFitOverrideChanged: vi.fn(),
     terminalDriverChanged: vi.fn()
   }

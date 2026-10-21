@@ -122,7 +122,7 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
       // that explicitly instead of letting mobile assume the agents resumed.
       if (opts.clientKind === 'mobile') {
         if (this.getAvailableAuthoritativeWindow()) {
-          this.notifier?.resumeSleepingAgents?.(worktree.id)
+          await this.queueSleepingAgentWake(getRepoExecutionHostId(repo), worktree)
           sleepingAgentWake = 'requested'
         } else if (
           // Why: sleeping records are partitioned by execution host; reading

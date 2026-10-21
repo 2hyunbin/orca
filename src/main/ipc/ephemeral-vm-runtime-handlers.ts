@@ -14,8 +14,7 @@ import { releaseEphemeralVmRuntimeEnvironments } from '../ephemeral-vm-runtime-e
 import {
   cleanupEphemeralVmRuntime,
   resumeEphemeralVmRuntime,
-  stopEphemeralVmRuntimeCleanup,
-  suspendEphemeralVmRuntime
+  stopEphemeralVmRuntimeCleanup
 } from '../ephemeral-vm-runtime-service'
 import { removeEphemeralVmRuntimeSshTarget } from '../ephemeral-vm-runtime-ssh-cleanup'
 import {
@@ -24,12 +23,13 @@ import {
 } from '../ephemeral-vm-recipe-runner'
 import {
   connectRuntimeOwnedSshTarget,
-  disconnectRuntimeOwnedSshTarget,
   removeRuntimeOwnedSshTarget
 } from '../ephemeral-vm-runtime-ssh'
 import { getRuntimeRecipeContext } from './ephemeral-vm-recipe-context'
 import { invalidateRuntimeEnvironmentTransport } from './runtime-environments/runtime-environments'
 import { attachEphemeralVmRuntimeToWorkspace } from '../ephemeral-vm-runtime-attachment'
+import { suspendEphemeralVmWorkspace } from '../ephemeral-vm-workspace-suspend'
+import { setWorkspaceVmSuspend } from '../ephemeral-vm-workspace-suspend-slot'
 
 export type EphemeralVmCleanupCommandResult = {
   runtimeId: string
@@ -44,7 +44,6 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
   ipcMain.removeHandler('ephemeralVm:listRuntimes')
   ipcMain.removeHandler('ephemeralVm:cleanup')
   ipcMain.removeHandler('ephemeralVm:stopCleanup')
-  ipcMain.removeHandler('ephemeralVm:suspendWorkspace')
   ipcMain.removeHandler('ephemeralVm:resumeWorkspace')
   ipcMain.removeHandler('ephemeralVm:getCleanupCommand')
 
@@ -151,41 +150,8 @@ export function registerEphemeralVmRuntimeHandlers(store: Store): void {
     }
   )
 
-  ipcMain.handle(
-    'ephemeralVm:suspendWorkspace',
-    async (_event, args: { workspaceId: string }): Promise<EphemeralVmRuntimeRecord | null> => {
-      const userDataPath = app.getPath('userData')
-      const runtime = listEphemeralVmRuntimes(userDataPath).find(
-        (entry) =>
-          entry.workspaceId === args.workspaceId &&
-          entry.status !== 'cleaned' &&
-          entry.status !== 'cleanup_pending'
-      )
-      if (!runtime?.repoId) {
-        return null
-      }
-      const recipeContext = getRuntimeRecipeContext(store, userDataPath, runtime.id)
-      const result = await suspendEphemeralVmRuntime({
-        userDataPath,
-        repoPath: recipeContext.repo.repo.path,
-        recipe: recipeContext.recipe,
-        runtimeId: runtime.id
-      })
-      if (!result.ok) {
-        throw new Error(result.error)
-      }
-      // Only tear down SSH for a real suspend; a skipped suspend keeps the runtime
-      // 'running', so disconnecting would break the still-active session with no resume.
-      if (runtime.connectionMode === 'ssh' && !result.skipped) {
-        // Why: the suspend recipe already succeeded (VM is suspended), so a failed
-        // LOCAL relay teardown must NOT flip to 'suspend_failed' — that status is not
-        // resume-eligible (see resume gate below), which would strand the runtime
-        // unrecoverable. Keep 'suspended'; resume re-establishes the relay anyway.
-        await disconnectRuntimeOwnedSshTarget(runtime.sshTargetId).catch(() => undefined)
-      }
-      return result.runtime
-    }
-  )
+  // Sleep suspends a workspace's VM from main, after its chats stop.
+  setWorkspaceVmSuspend((workspaceId) => suspendEphemeralVmWorkspace(store, workspaceId))
 
   ipcMain.handle(
     'ephemeralVm:resumeWorkspace',

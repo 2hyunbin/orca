@@ -4,7 +4,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
 import { listEnvironments } from '../../shared/runtime-environment-store'
-import { upsertEphemeralVmRuntime } from '../../shared/ephemeral-vm-runtime-store'
+import {
+  listEphemeralVmRuntimes,
+  upsertEphemeralVmRuntime
+} from '../../shared/ephemeral-vm-runtime-store'
 
 const handlers = new Map<string, (_event: unknown, args: never) => unknown>()
 const {
@@ -46,6 +49,7 @@ vi.mock('./runtime-environments/runtime-environments', () => ({
 }))
 
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
+import { getWorkspaceVmSuspend } from '../ephemeral-vm-workspace-suspend-slot'
 
 const tempDirs: string[] = []
 
@@ -679,10 +683,10 @@ describe('registerEphemeralVmHandlers', () => {
     expect(runningResume).toEqual(expect.objectContaining({ status: 'running' }))
     expect(existsSync(join(repoPath, 'resume-mode.txt'))).toBe(false)
 
-    const suspended = await handlers.get('ephemeralVm:suspendWorkspace')?.(null, {
-      workspaceId: 'workspace-1'
-    } as never)
-    expect(suspended).toEqual(expect.objectContaining({ status: 'suspended' }))
+    await getWorkspaceVmSuspend()?.('workspace-1')
+    expect(listEphemeralVmRuntimes(userDataPath)).toEqual([
+      expect.objectContaining({ status: 'suspended' })
+    ])
     expect(readFileSync(join(repoPath, 'suspend-mode.txt'), 'utf8')).toBe('suspend')
 
     invalidateRuntimeEnvironmentTransportMock.mockImplementationOnce((environmentId: string) => {

@@ -1,16 +1,8 @@
 import { toast } from 'sonner'
 import { useAppStore } from '@/store'
-import { captureWorkspaceSelection, restoreWorkspaceSelection } from '@/lib/active-workspace-host'
-import {
-  clearWorktreeSleepIntent,
-  hasWorktreeSleepIntent,
-  markWorktreeSleepIntent,
-  withWorktreeSleepTeardown
-} from '@/lib/worktree-sleep-intent'
 import { translate } from '@/i18n/i18n'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import { preserveSidebarWorktreePosition } from './sleep-worktree-sidebar-position'
-import { stopWorkspaceChats, type WorkspaceChatStop } from './sleep-workspace-chat-stop'
+import { workspaceSleepTarget } from './workspace-sleep-target'
 
 /** One per host asked to stop the workspace's chats. */
 export type WorkspaceSleepResult = {
@@ -22,17 +14,9 @@ export type WorkspaceSleepResult = {
 }
 
 /**
- * Shared "sleep worktree" flow (close all panels to free memory / CPU)
- * used by WorktreeContextMenu and MemoryStatusSegment's per-row hover action.
- *
- * Why this is a module helper rather than inlined at each call site: the guard
- * that clears `activeWorktreeId` before tearing down terminals isn't optional
- * polish — shutting down the active worktree while its TerminalPane is still
- * visible causes a visible "reboot" flicker and can crash the pane (PTY exit
- * callbacks race against the live xterm instance). See the original comment
- * in WorktreeContextMenu's handleCloseTerminals for the full reasoning.
- * Centralizing the sequence here keeps that safety invariant in one place so
- * a new caller can't accidentally skip it.
+ * Shared "sleep worktree" flow (close all panels to free memory / CPU) used by the context menu,
+ * the twin dialog and the dashboard. Main runs the sleep on each workspace's hosts; this window
+ * follows main's notices (workspace-sleep-follower.ts) and shows the outcome here.
  */
 export async function runSleepWorktree(worktreeId: string): Promise<WorkspaceSleepResult[]> {
   return runSleepWorktrees([worktreeId])
@@ -121,115 +105,58 @@ export async function sleepWorktreesReportingFailures(
   if (worktreeIds.length === 0) {
     return { failedWorktreeIds: [], errors: [], results: [] }
   }
-  const {
-    activeWorktreeId,
-    setActiveWorktree,
-    shutdownWorktreeBrowsers,
-    shutdownWorktreeTerminals
-  } = useAppStore.getState()
-  const sleptActiveWorktreeId =
-    activeWorktreeId && worktreeIds.includes(activeWorktreeId) ? activeWorktreeId : null
-  const selectionBeforeSleep = captureWorkspaceSelection(useAppStore.getState())
-  if (sleptActiveWorktreeId) {
-    const restoreSidebarPosition = preserveSidebarWorktreePosition(sleptActiveWorktreeId)
-    // Why: clearing the active workspace can unmount TerminalPanes before
-    // shutdownWorktreeTerminals writes PTY suppressions; mark first so those
-    // exits do not stamp activity. Kept off the store so it cannot disturb the
-    // sidebar's scroll restoration.
-    markWorktreeSleepIntent(sleptActiveWorktreeId)
-    setActiveWorktree(null)
-    restoreSidebarPosition()
-  }
+  const state = useAppStore.getState()
   const errors: string[] = []
   const failedWorktreeIds = new Set<string>()
-  // Why apart from failedWorktreeIds: stopped terminals stay stopped when only a chat stop fails.
-  const chatFailedIds = new Set<string>()
-  const attempts = worktreeIds.map((worktreeId) => {
-    markWorktreeSleepIntent(worktreeId)
-    let chats: Promise<WorkspaceChatStop> = Promise.resolve({ receipts: [], failed: false })
-    // Browser cleanup and the authoritative terminal admission run before any batch wait.
-    const panels = withWorktreeSleepTeardown(worktreeId, async () => {
-      shutdownWorktreeBrowsers(worktreeId)
-      await shutdownWorktreeTerminals(worktreeId, {
-        keepIdentifiers: true,
-        onAdmitted: () => {
-          chats = stopWorkspaceChats(
-            useAppStore.getState(),
-            worktreeId,
-            options.markChatsAsleep
-          ).catch((error: unknown) => {
-            console.error('[sleep-worktree] native chat stop failed', { worktreeId, error })
-            return { receipts: [], failed: true }
-          })
-        }
-      })
-    }).then(
-      () => {
-        if (useAppStore.getState().activeWorktreeId === worktreeId) {
-          clearWorktreeSleepIntent(worktreeId)
-        }
-      },
-      (error: unknown) => {
-        console.error('[sleep-worktree] panel shutdown failed', { worktreeId, error })
-        failedWorktreeIds.add(worktreeId)
-        errors.push(describeSleepFailure(error))
-      }
-    )
-    return { worktreeId, settled: panels.then(() => chats) }
+  const targets = worktreeIds.flatMap((worktreeId) => {
+    const target = workspaceSleepTarget(state, worktreeId)
+    if ('refused' in target) {
+      // The window cannot name the host that runs these terminals; nothing is asked to stop.
+      failedWorktreeIds.add(worktreeId)
+      errors.push(describeSleepFailure(target.refused))
+      return []
+    }
+    return [target]
   })
+  const outcomes =
+    targets.length > 0
+      ? await window.api.worktrees
+          .sleep({ targets, markChatsAsleep: options.markChatsAsleep === true })
+          .catch((error: unknown) =>
+            targets.map(({ worktreeId }) => ({
+              worktreeId,
+              failure: error instanceof Error ? error.message : String(error),
+              chatFailed: false,
+              receipts: []
+            }))
+          )
+      : []
   const results: WorkspaceSleepResult[] = []
-  try {
-    // A VM may carry another workspace's host: settle the entire batch before suspending any.
-    const chatStops = await Promise.all(attempts.map(({ settled }) => settled))
-    for (const [index, { worktreeId }] of attempts.entries()) {
-      const { receipts, failed } = chatStops[index]
-      if (failed) {
-        chatFailedIds.add(worktreeId)
-        errors.push(describeChatStopFailure())
-      }
-      if (!failedWorktreeIds.has(worktreeId) && hasWorktreeSleepIntent(worktreeId)) {
-        try {
-          await withWorktreeSleepTeardown(worktreeId, async () => {
-            if (typeof window !== 'undefined' && window.api?.ephemeralVm?.suspendWorkspace) {
-              await window.api.ephemeralVm.suspendWorkspace({ workspaceId: worktreeId })
-            }
-          })
-          if (useAppStore.getState().activeWorktreeId === worktreeId) {
-            clearWorktreeSleepIntent(worktreeId)
-          }
-        } catch (error) {
-          console.error('[sleep-worktree] host suspension failed', { worktreeId, error })
-          failedWorktreeIds.add(worktreeId)
-          errors.push(describeSleepFailure(error))
-        }
-      }
-      results.push(
-        ...receipts.map((receipt) => ({ workspaceId: worktreeId, ...receipt, completed: false }))
-      )
+  for (const outcome of outcomes) {
+    if (outcome.failure !== undefined) {
+      console.error('[sleep-worktree] sleep failed', outcome)
+      failedWorktreeIds.add(outcome.worktreeId)
+      errors.push(describeSleepFailure(new Error(outcome.failure)))
+    } else if (outcome.chatFailed) {
+      errors.push(describeChatStopFailure())
     }
-  } finally {
-    // Why: a failed sleep leaves the workspace awake and retryable.
-    for (const worktreeId of failedWorktreeIds) {
-      clearWorktreeSleepIntent(worktreeId)
-    }
-    // Why still empty: a workspace the user picked during the sleep is theirs to keep.
-    if (
-      sleptActiveWorktreeId &&
-      failedWorktreeIds.has(sleptActiveWorktreeId) &&
-      useAppStore.getState().activeWorktreeId === null
-    ) {
-      restoreWorkspaceSelection(useAppStore.getState(), selectionBeforeSleep)
-    }
+    const completed = outcome.failure === undefined && !outcome.chatFailed
+    results.push(
+      ...outcome.receipts.map((receipt) => ({
+        workspaceId: outcome.worktreeId,
+        ...receipt,
+        completed
+      }))
+    )
   }
   return {
-    failedWorktreeIds: [...new Set([...failedWorktreeIds, ...chatFailedIds])],
+    failedWorktreeIds: [
+      ...new Set([
+        ...failedWorktreeIds,
+        ...outcomes.flatMap((outcome) => (outcome.chatFailed ? [outcome.worktreeId] : []))
+      ])
+    ],
     errors: [...new Set(errors)],
-    results: results.map((result) => ({
-      ...result,
-      completed:
-        !failedWorktreeIds.has(result.workspaceId) &&
-        !chatFailedIds.has(result.workspaceId) &&
-        hasWorktreeSleepIntent(result.workspaceId)
-    }))
+    results
   }
 }

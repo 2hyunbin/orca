@@ -29,6 +29,11 @@ import type {
   HydrateWorkspaceSessionOptions
 } from './terminal-contracts'
 
+/** Main's answer for a sleep it ran: every PTY stopped, or only `stoppedPtyIds` before it failed. */
+export type HostTerminalStop =
+  | { failed: false }
+  | { failed: true; stoppedPtyIds: readonly string[] }
+
 export type TerminalActions = {
   setTerminalStartupRestorationReady: (value: boolean) => void
   setRecentQuickCommandForGroup: (groupId: string, quickCommandId: string) => void
@@ -148,6 +153,8 @@ export type TerminalActions = {
       sleepingPaneKeys?: string[]
       expectedRuntimePtyIds?: string[]
       backendOwnsPtyTeardown?: boolean
+      /** Main stops these terminals itself: the window only guards and then commits its panes. */
+      hostStop?: Promise<HostTerminalStop>
       onAdmitted?: () => void
     }
   ) => Promise<void>

@@ -45,6 +45,8 @@ export const worktreesApi = {
 
   previewNestedRemoval: (args) => ipcRenderer.invoke('worktrees:previewNestedRemoval', args),
 
+  sleep: (request) => ipcRenderer.invoke('worktrees:sleep', request),
+
   remove: (args) => ipcRenderer.invoke('worktrees:remove', args),
 
   forgetLocal: (args) => ipcRenderer.invoke('worktrees:forgetLocal', args),

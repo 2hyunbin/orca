@@ -21,8 +21,10 @@ export type SidebarRetentionCandidates = {
 
 export type SidebarRetentionInputs = {
   showSleepingWorkspaces: () => boolean
-  /** The keys the workspaces domain lists this host's rows under; readers match retention on them. */
-  listRowKeys: () => Promise<readonly string[]>
+  /** The keys the workspaces domain lists this host's rows under; null before its first scan. */
+  rowKeys: () => readonly string[] | null
+  /** Calls `changed` whenever those rows may have changed; returns the detach. */
+  watchRowKeys: (changed: () => void) => () => void
   retentionCandidates: () => SidebarRetentionCandidates
 }
 
@@ -36,8 +38,8 @@ export class SidebarRetentionOwner {
   readonly revision = new ProducerRevision()
   private sessionId: string | null = null
   private disposed = false
-  // A listing started before a reset or a later one must not land.
-  private listingSeq = 0
+  private detachRows: (() => void) | null = null
+  private relistQueued = false
   // Both of a same-id pair on two hosts: the sweep and activity are by bare id.
   private keysById = new Map<string, string[]>()
   private retentionState = createSleepingSweepRetentionState()
@@ -67,14 +69,9 @@ export class SidebarRetentionOwner {
     this.retentionState = createSleepingSweepRetentionState()
     this.revision.bump()
     this.retentionPass()
+    // The rows' own revision, so a new row's host is known as soon as the rows list it.
+    this.detachRows ??= this.inputs.watchRowKeys(() => this.relist())
     this.relist()
-  }
-
-  /** A worktree or repo change: list again, so new rows' hosts are known. */
-  noteCatalogChange(): void {
-    if (this.running) {
-      this.relist()
-    }
   }
 
   noteActivityChange(): void {
@@ -88,7 +85,8 @@ export class SidebarRetentionOwner {
 
   dispose(): void {
     this.disposed = true
-    this.listingSeq += 1
+    this.detachRows?.()
+    this.detachRows = null
     this.clock.cancel(RETENTION_DEADLINE)
   }
 
@@ -97,16 +95,19 @@ export class SidebarRetentionOwner {
     return this.sessionId !== null && !this.disposed
   }
 
+  // A microtask: a revision listener hears the bump mid-change, so the rows are read after it.
   private relist(): void {
-    const seq = ++this.listingSeq
-    void this.inputs.listRowKeys().then(
-      (keys) => {
-        if (seq === this.listingSeq && this.running) {
-          this.applyListing(keys)
-        }
-      },
-      (error: unknown) => console.warn('[sidebar-retention] could not list rows', error)
-    )
+    if (this.relistQueued) {
+      return
+    }
+    this.relistQueued = true
+    queueMicrotask(() => {
+      this.relistQueued = false
+      const keys = this.running ? this.inputs.rowKeys() : null
+      if (keys) {
+        this.applyListing(keys)
+      }
+    })
   }
 
   private applyListing(keys: readonly string[]): void {

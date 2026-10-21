@@ -1,3 +1,4 @@
+import { subscribeWebWorkspaceSleep } from './web-workspace-sleep-notices'
 import type { AgentSessionAttachmentClipboardTarget } from '../../../../shared/agent-session-attachments'
 import { saveClipboardImageAsWebAgentSessionAttachment } from './web-agent-session-attachment-upload'
 import { createWebExplorerRootSync } from './web-explorer-root-sync'
@@ -283,9 +284,7 @@ export function createWebUiApi(): NonNullable<Partial<PreloadApi>['ui']> {
     onCloseTerminal: () => noopUnsubscribe,
     onTerminalTabCloseRequest: () => noopUnsubscribe,
     respondTerminalTabClose: () => {},
-    onSleepWorktree: () => noopUnsubscribe,
-    onWorktreeSleepRequest: () => noopUnsubscribe,
-    respondWorktreeSleep: () => {},
+    onWorkspaceSleep: subscribeWebWorkspaceSleep,
     // Why: paired web is a full renderer that wakes on activation; mobile wake is desktop-host-scoped and never reaches web.
     onResumeSleepingAgents: () => noopUnsubscribe,
     onTerminalZoom: () => noopUnsubscribe,

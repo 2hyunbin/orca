@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { ProducerRevision } from '../sidebar-inputs/producer-revision'
+import { worktreeIdentityKey } from '../../../shared/worktree/id'
+import { getWorktreeIdFromHostIdentity } from '../../../shared/worktree/host-qualified-identity'
 import type {
   WorkspaceLifecycleHint,
   WorkspaceLifecycleKind
@@ -220,6 +222,17 @@ export class WorkspaceLifecycleQueue {
 
   isPaused(key: string): boolean {
     return this.queues.get(key)?.paused != null
+  }
+
+  /** Whether any host's copy of this workspace waits for its host to confirm a command. */
+  isPausedFor(worktreeId: string): boolean {
+    const wanted = worktreeIdentityKey(worktreeId)
+    for (const [key, queue] of this.queues) {
+      if (queue.paused && getWorktreeIdFromHostIdentity(key) === wanted) {
+        return true
+      }
+    }
+    return false
   }
 
   private deletePending(key: string): boolean {

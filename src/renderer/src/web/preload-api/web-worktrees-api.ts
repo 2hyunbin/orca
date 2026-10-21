@@ -33,6 +33,7 @@ import {
   listAllRuntimeWorktrees
 } from './web-runtime-worktree-catalog'
 import { noopUnsubscribe } from './web-storage'
+import { emitWebWorkspaceSleep } from './web-workspace-sleep-notices'
 import { translate } from '@/i18n/i18n'
 
 export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees']> {
@@ -147,6 +148,24 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
         targetBranch,
         isCrossRepository
       }),
+    // Each workspace sleeps on the paired host, which runs its terminals, chats and VM.
+    sleep: async ({ targets }) =>
+      Promise.all(
+        targets.map(async ({ worktreeId }) => {
+          emitWebWorkspaceSleep({ worktreeId, phase: 'started' })
+          try {
+            await callRuntimeResult('worktree.sleep', {
+              worktree: toRuntimeWorktreeSelector(worktreeId)
+            })
+            emitWebWorkspaceSleep({ worktreeId, phase: 'ended', slept: true, stoppedPtyIds: null })
+            return { worktreeId, chatFailed: false, receipts: [] }
+          } catch (error) {
+            emitWebWorkspaceSleep({ worktreeId, phase: 'ended', slept: false, stoppedPtyIds: null })
+            const failure = error instanceof Error ? error.message : String(error)
+            return { worktreeId, failure, chatFailed: false, receipts: [] }
+          }
+        })
+      ),
     remove: async ({ worktreeId, hostId, force, allowUnverifiedPtyStop, skipArchive }) => {
       invalidateRuntimeWorktreeCaches()
       return callRuntimeResult<RemoveWorktreeResult>(

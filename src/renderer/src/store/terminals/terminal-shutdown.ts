@@ -1,7 +1,6 @@
 import { shutdownBufferCaptures } from '@/components/terminal-pane/shutdown-buffer-captures'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { toRuntimeWorktreeSelector } from '@/runtime/runtime-worktree-selector'
-import { requestRemoteWorktreeSleep } from '@/runtime/remote-worktree-sleep'
 import {
   collectHibernatedCompletionEvidenceForWorktree,
   collectSleepingAgentSessionRecordsForWorktree,
@@ -37,7 +36,8 @@ export function createTerminalShutdownActions(
         tabs.flatMap((tab) => get().ptyIdsByTabId[tab.id] ?? [])
       )
       const expectedRuntimePtyIds = sortedUniquePtyIds(opts?.expectedRuntimePtyIds)
-      const backendOwnsPtyTeardown = opts?.backendOwnsPtyTeardown === true
+      const hostStop = opts?.hostStop
+      const backendOwnsPtyTeardown = opts?.backendOwnsPtyTeardown === true || hostStop !== undefined
       const teardownOwner = resolveTerminalTeardownOwner(
         resolveTerminalPtyOwner(get(), worktreeId),
         rendererShutdownPtyIds
@@ -102,22 +102,29 @@ export function createTerminalShutdownActions(
         guards.unregisterHandlers()
         try {
           opts?.onAdmitted?.()
-          // Backend ownership is opt-in; the default owner RPC prevents remote PTY leaks.
-          if (runtimeEnvironmentId && !backendOwnsPtyTeardown) {
-            await (shutdownReason === 'manual-sleep'
-              ? requestRemoteWorktreeSleep({ environmentId: runtimeEnvironmentId, worktreeId })
-              : callRuntimeRpc(
-                  { kind: 'environment', environmentId: runtimeEnvironmentId },
-                  'terminal.stop',
-                  { worktree: toRuntimeWorktreeSelector(worktreeId) },
-                  { timeoutMs: 15_000 }
-                ))
-          }
-          // Renderer teardown waits for the owner RPC so failures leave bindings retryable.
-          const rendererStop = await guards.stopRendererPtys()
-          if (rendererStop.failure) {
-            guards.settlePartialRendererStop(rendererStop.stoppedPtyIds)
-            throw rendererStop.failure.reason
+          if (hostStop) {
+            // Main stops a sleep's terminals; its answer settles the guards installed above.
+            const stop = await hostStop
+            if (stop.failed) {
+              guards.settlePartialRendererStop([...stop.stoppedPtyIds])
+              throw new Error('host_terminal_stop_failed')
+            }
+          } else {
+            if (runtimeEnvironmentId && !backendOwnsPtyTeardown) {
+              // Backend ownership is opt-in; the owner RPC prevents remote PTY leaks.
+              await callRuntimeRpc(
+                { kind: 'environment', environmentId: runtimeEnvironmentId },
+                'terminal.stop',
+                { worktree: toRuntimeWorktreeSelector(worktreeId) },
+                { timeoutMs: 15_000 }
+              )
+            }
+            // Renderer teardown waits for the owner RPC so failures leave bindings retryable.
+            const rendererStop = await guards.stopRendererPtys()
+            if (rendererStop.failure) {
+              guards.settlePartialRendererStop(rendererStop.stoppedPtyIds)
+              throw rendererStop.failure.reason
+            }
           }
         } catch (error) {
           if (!guards.wasPartialRendererStopSettled()) {

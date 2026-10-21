@@ -91,20 +91,6 @@ export function deleteLifecycleKey(
     : `selector:${selector}`
 }
 
-/** `worktree.sleep`: a phone's or the CLI's sleep of the whole workspace. */
-export function queueWorktreeSleep(
-  runtime: LifecycleRuntime & {
-    sleepManagedWorktree: (selector: string) => Promise<{ worktreeId: string }>
-  },
-  selector: string
-): Promise<{ worktreeId: string }> {
-  return queueTerminalWorkspaceCommand(runtime, selector, {
-    kind: 'sleep',
-    run: () => runtime.sleepManagedWorktree(selector),
-    lostContact: sleepLostContact
-  })
-}
-
 /** `worktree.rm`: keyed by the caller's host and the selector's id, never resolved again. */
 export function queueWorkspaceDelete<T>(
   runtime: Pick<LifecycleRuntime, 'workspaceLifecycle'>,

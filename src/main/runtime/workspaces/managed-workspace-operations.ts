@@ -31,8 +31,28 @@ import {
   type WorkspacePortExecutionHostDeps
 } from '../../ports/workspace-port-execution-host'
 import { resolveWorktreeHostRouting } from '../worktree-launch-host-repo'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
-import { teardownStops } from '../owned-session-teardown-policy'
+import {
+  LOCAL_EXECUTION_HOST_ID,
+  toRuntimeExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
+import type {
+  WorkspaceSleepNotice,
+  WorkspaceSleepOutcome,
+  WorkspaceSleepRequest
+} from '../../../shared/workspace-sleep'
+import { sleepWorkspaces } from './workspace-sleep-execution'
+import { workspaceSleepDeps } from './workspace-sleep-runtime-deps'
+import {
+  queueTerminalWorkspaceCommand,
+  runWorkspaceLifecycleCommand,
+  workspaceLifecycleKey
+} from './workspace-lifecycle-commands'
+
+import { WorkspaceLifecycleQueue } from './workspace-lifecycle-queue'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
+
+const SELF = { kind: 'self' } as const
 
 export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce {
   protected abstract resolveTerminalWorkspaceLaunchTarget(
@@ -42,6 +62,9 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
   ): ReturnType<
     OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree['resolveTerminalWorkspaceLaunchTarget']
   >
+
+  // Switch point: only a build where main produces the sidebar's inputs queues lifecycle commands.
+  readonly workspaceLifecycle = ORCA_SIDEBAR_INPUTS_IS_MAIN ? new WorkspaceLifecycleQueue() : null
 
   listManagedWorktrees(
     repoSelector?: string,
@@ -218,21 +241,56 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
     worktreeSelector: string
   ): Promise<RuntimeWorktreeTerminalSleepResult>
 
+  /** Sleeps workspaces on their own hosts, each through its lifecycle queue; the window follows. */
+  sleepWorkspaces(request: WorkspaceSleepRequest): Promise<WorkspaceSleepOutcome[]> {
+    return sleepWorkspaces(
+      workspaceSleepDeps(this),
+      (target, command) =>
+        target.terminalHost.kind === 'environment'
+          ? runWorkspaceLifecycleCommand(
+              this.workspaceLifecycle,
+              workspaceLifecycleKey(
+                toRuntimeExecutionHostId(target.terminalHost.environmentId),
+                target.worktreeId
+              ),
+              command
+            )
+          : queueTerminalWorkspaceCommand(this, `id:${target.worktreeId}`, command),
+      request
+    )
+  }
+
+  /** `worktree.sleep` from a phone or the CLI: this host's own workspace, its chats included. */
   async sleepManagedWorktree(worktreeSelector: string): Promise<{ worktreeId: string }> {
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
-    // Why: sleep is renderer-initiated on desktop (it tears down tab state
-    // before killing PTYs). The notifier tells the renderer to run its own
-    // sleep flow so all cleanup happens in the correct order.
-    if (this.notifier) {
-      this.notifier.sleepWorktree(worktree.id)
-    } else if (teardownStops('sleep', 'pty')) {
-      // No renderer (headless serve, or the window is gone): the host sleeps its own terminals.
-      const slept = await this.sleepTerminalsForWorktree(worktreeSelector)
-      if (slept.postStopVerified !== true) {
-        // An unproven stop is never reported as asleep.
-        throw new Error(slept.postStopFailure ?? 'terminal_worktree_sleep_unverified')
-      }
+    const [slept] = await this.sleepWorkspaces({
+      targets: [{ worktreeId: worktree.id, terminalHost: SELF, chatHosts: [SELF] }],
+      markChatsAsleep: true
+    })
+    // An unproven stop is never reported as asleep.
+    if (slept?.failure) {
+      throw new Error(slept.failure)
     }
     return { worktreeId: worktree.id }
+  }
+
+  /** A phone's wake, queued: it waits out a sleep still running, and a delete cancels it. */
+  protected async queueSleepingAgentWake(
+    hostId: ExecutionHostId,
+    worktree: { readonly id: string }
+  ): Promise<void> {
+    if (!this.notifier?.resumeSleepingAgents) {
+      return
+    }
+    const worktreeId = worktree.id
+    await runWorkspaceLifecycleCommand(
+      this.workspaceLifecycle,
+      workspaceLifecycleKey(hostId, worktreeId),
+      { kind: 'wake', run: async () => this.notifier?.resumeSleepingAgents?.(worktreeId) }
+    )
+  }
+
+  notifyWorkspaceSleep(notice: WorkspaceSleepNotice): void {
+    this.notifier?.workspaceSleepChanged?.(notice)
   }
 }

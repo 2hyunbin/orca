@@ -29,6 +29,7 @@ vi.mock('./runtime-environments/runtime-environments', () => ({
 import type { Store } from '../persistence'
 import { listEphemeralVmRuntimes } from '../../shared/ephemeral-vm-runtime-store'
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
+import { getWorkspaceVmSuspend } from '../ephemeral-vm-workspace-suspend-slot'
 
 const tempDirs: string[] = []
 afterEach(() => {
@@ -115,7 +116,7 @@ it("reconnects a resumed VM's SSH host instead of asking for a pairing code", as
   expect(provisioned).toMatchObject({ ok: true, runtime: { id: runtime.id } })
   const runtimeId = runtime.id
   await handlers.get('ephemeralVm:attachWorkspace')?.(null, { runtimeId, workspaceId: 'ws-1' })
-  await handlers.get('ephemeralVm:suspendWorkspace')?.(null, { workspaceId: 'ws-1' })
+  await getWorkspaceVmSuspend()?.('ws-1')
   connect.mockClear()
 
   const resumed = await handlers.get('ephemeralVm:resumeWorkspace')?.(null, { workspaceId: 'ws-1' })
