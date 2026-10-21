@@ -43,7 +43,11 @@ export function buildQuickComposerStartup(input: QuickComposerStartupInput): Qui
           draft: draftPrompt,
           cmdOverrides: settings?.agentCmdOverrides ?? {},
           agentArgs: resolveTuiAgentLaunchArgs(agent, settings),
-          agentEnv: resolveTuiAgentLaunchEnv(agent, settings),
+          agentEnv: resolveTuiAgentLaunchEnv(
+            agent,
+            settings,
+            requireExecutionHostPlatform(input.launchHost)
+          ),
           platform: requireExecutionHostPlatform(input.launchHost),
           shell: input.shell ?? undefined,
           isRemote: input.isRemote
@@ -67,7 +71,11 @@ export function buildQuickComposerStartup(input: QuickComposerStartupInput): Qui
       prompt,
       cmdOverrides: settings?.agentCmdOverrides ?? {},
       agentArgs: resolveTuiAgentLaunchArgs(agent, settings),
-      agentEnv: resolveTuiAgentLaunchEnv(agent, settings),
+      agentEnv: resolveTuiAgentLaunchEnv(
+        agent,
+        settings,
+        requireExecutionHostPlatform(input.launchHost)
+      ),
       platform: requireExecutionHostPlatform(input.launchHost),
       shell: input.shell ?? undefined,
       isRemote: input.isRemote,

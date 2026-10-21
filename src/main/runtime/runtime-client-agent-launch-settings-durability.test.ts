@@ -1,3 +1,10 @@
+import { Store } from '../persistence/loading-store/store'
+import {
+  resolveTuiAgentLaunchArgs,
+  resolveTuiAgentLaunchEnv
+} from '../../shared/tui-agent-launch-defaults'
+import { newChatPermissionModeForSettings } from '../../shared/agent-chat-permission-mode'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   deferred,
@@ -24,6 +31,54 @@ vi.mock('../agent-hooks/managed-agent-hook-controls', () => ({
 }))
 
 describe('durable execution-host launch settings', () => {
+  it('persists host carrier edits and reloads the same terminal and new-chat intent', async () => {
+    const { store, readState } = await fixture()
+    const controller = new RuntimeClientSettingsController(store)
+    await controller.mutateAgentLaunch({ type: 'permission', choice: 'ask' })
+    await controller.mutateAgentLaunch({ type: 'permission', choice: 'auto' })
+    await controller.mutateAgentLaunch({
+      type: 'user-arguments',
+      agent: 'claude',
+      value: '--append-system-prompt --dangerously-skip-permissions'
+    })
+    await controller.mutateAgentLaunch({
+      type: 'user-arguments',
+      agent: 'codex',
+      value: '--config=sandbox_mode=read-only'
+    })
+    await controller.mutateAgentLaunch({
+      type: 'permission',
+      agent: 'goose',
+      choice: 'full-access'
+    })
+    await controller.update({
+      agentDefaultArgs: { ...controller.get().agentDefaultArgs, goose: '--model foo' }
+    })
+    await store.flushPendingOrThrowAsync()
+    const saved = readState()
+    const reloaded = new Store({
+      serializedState: JSON.stringify(saved),
+      dataFile: join(saved.settings.workspaceDir, 'permission-reload.json')
+    })
+    try {
+      const settings = reloaded.getSettings()
+      expect(resolveTuiAgentLaunchArgs('claude', settings)).toBe(
+        '--permission-mode auto --append-system-prompt --dangerously-skip-permissions'
+      )
+      expect(resolveTuiAgentLaunchArgs('codex', settings)).toBe('--config=sandbox_mode=read-only')
+      expect(resolveTuiAgentLaunchEnv('goose', settings)).toMatchObject({ GOOSE_MODE: 'auto' })
+      expect(newChatPermissionModeForSettings('claude', settings)).toBe('auto')
+      const loadedController = new RuntimeClientSettingsController(reloaded)
+      expect(loadedController.get().agentDefaultArgs.codex).toBe('--config=sandbox_mode=read-only')
+      for (const agent of ['antigravity', 'opencode', 'opencode2', 'omp']) {
+        expect(newChatPermissionModeForSettings(agent, reloaded.getSettings())).toBe('ask')
+        expect(resolveTuiAgentLaunchArgs(agent, reloaded.getSettings())).toBe('')
+      }
+    } finally {
+      await reloaded.freezeWritesAsync()
+    }
+  })
+
   it('withdraws cached plugin skills when saved launch arguments disable plugins', async () => {
     const { store } = await fixture()
     const controller = new RuntimeClientSettingsController(store)

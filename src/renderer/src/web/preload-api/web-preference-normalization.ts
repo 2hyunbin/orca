@@ -168,10 +168,13 @@ function migrateBrowserSavedAgentPermission(stored: Partial<GlobalSettings>) {
   if (hasTypedAgentPermission(stored) || (!stored.agentDefaultArgs && !stored.agentDefaultEnv)) {
     return {}
   }
-  return migrateAgentPermissionChoice({
-    agentDefaultArgs: { ...DEFAULT_TUI_AGENT_ARGS, ...stored.agentDefaultArgs },
-    agentDefaultEnv: { ...DEFAULT_TUI_AGENT_ENV, ...stored.agentDefaultEnv }
-  })
+  return migrateAgentPermissionChoice(
+    {
+      agentDefaultArgs: { ...DEFAULT_TUI_AGENT_ARGS, ...stored.agentDefaultArgs },
+      agentDefaultEnv: { ...DEFAULT_TUI_AGENT_ENV, ...stored.agentDefaultEnv }
+    },
+    null
+  )
 }
 
 export function mergeSettings(

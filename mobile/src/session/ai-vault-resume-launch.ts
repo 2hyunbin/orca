@@ -105,7 +105,7 @@ export function buildMobileAiVaultResumeLaunch(args: {
       platform: args.hostPlatform,
       shell,
       agentArgs: resolveTuiAgentLaunchArgs(args.session.agent, args.settings),
-      agentEnv: resolveTuiAgentLaunchEnv(args.session.agent, args.settings),
+      agentEnv: resolveTuiAgentLaunchEnv(args.session.agent, args.settings, args.hostPlatform),
       ...(args.session.agent === 'omp' && resumeFilePath
         ? { ompResumeFilePath: resumeFilePath }
         : {})

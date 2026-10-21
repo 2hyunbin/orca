@@ -137,7 +137,7 @@ export function buildAiVaultLocalResumeStartup(
       platform,
       shell: liveShell,
       agentArgs: args.agentArgs ?? resolveTuiAgentLaunchArgs(session.agent, settings),
-      agentEnv: resolveTuiAgentLaunchEnv(session.agent, settings),
+      agentEnv: resolveTuiAgentLaunchEnv(session.agent, settings, platform),
       resumeInLaunchCwd: true,
       ...(session.agent === 'omp' && resumeFilePath ? { ompResumeFilePath: resumeFilePath } : {})
     })
@@ -221,7 +221,7 @@ export function buildAiVaultForkStartup(
     platform,
     shell: liveShell,
     agentArgs: resolveTuiAgentLaunchArgs(session.agent, settings),
-    agentEnv: resolveTuiAgentLaunchEnv(session.agent, settings),
+    agentEnv: resolveTuiAgentLaunchEnv(session.agent, settings, platform),
     resumeInLaunchCwd: true,
     fork: true
   })

@@ -82,7 +82,7 @@ function LocalAgentLaunchSettings({
   }
   return (
     <AgentLaunchSettingsCatalog
-      settings={projectAgentLaunchSettings(settings)}
+      settings={projectAgentLaunchSettings(settings, window.api.platform.get().platform)}
       mutate={mutate}
       detectionTarget={LOCAL_DETECTION_TARGET}
       hostName={null}

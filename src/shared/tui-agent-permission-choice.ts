@@ -1,3 +1,4 @@
+import { agentChatPermissionModes } from './agent-chat-permission-support'
 import type { AgentChatPermissionMode } from './agent-chat-permission-mode'
 import { isTuiAgent, TUI_AGENT_CONFIG } from './tui-agent-config'
 import {
@@ -71,16 +72,17 @@ function supportsChoice(agent: TuiAgent, choice: AgentPermissionChoice): boolean
   return (
     choice === 'own' ||
     agentPermissionArgs(agent, choice) !== '' ||
-    Object.keys(agentPermissionEnv(agent, choice)).length > 0
+    Object.keys(agentPermissionEnv(agent, choice)).length > 0 ||
+    agentChatPermissionModes(agent)?.modes.includes(choice) === true
   )
 }
 
-/** `own` plus every mode this agent's terminal launch can state. */
+/** Modes supported by at least one of this agent's terminal or chat surfaces. */
 export function agentPermissionChoices(agent: TuiAgent): readonly AgentPermissionChoice[] {
   return AGENT_PERMISSION_CHOICES.filter((choice) => supportsChoice(agent, choice))
 }
 
-/** Agents with at least one mode beyond `own`, in catalog order. */
+/** Agents with at least one terminal or chat mode beyond `own`, in catalog order. */
 export const PERMISSION_CHOICE_AGENTS: readonly TuiAgent[] = Object.keys(TUI_AGENT_CONFIG).filter(
   (agent): agent is TuiAgent => isTuiAgent(agent) && agentPermissionChoices(agent).length > 1
 )
@@ -93,8 +95,7 @@ export function hasTypedAgentPermission(settings: AgentPermissionSettings | null
 }
 
 /**
- * The one read of an agent's permission. A choice the agent can't state resolves to `own`, so
- * Orca never claims a mode it doesn't pass.
+ * Reads stored intent. Each consuming surface applies its own supported-mode rules.
  */
 export function resolveAgentPermission(
   agent: TuiAgent,
@@ -102,11 +103,11 @@ export function resolveAgentPermission(
 ): { choice: AgentPermissionChoice; source: 'agent' | 'all' } {
   const override = settings?.agentPermissionOverrides?.[agent]
   if (isAgentPermissionChoice(override)) {
-    return { choice: supportsChoice(agent, override) ? override : 'own', source: 'agent' }
+    return { choice: override, source: 'agent' }
   }
   const fallback = settings?.agentPermissionDefault
   const choice = isAgentPermissionChoice(fallback) ? fallback : 'own'
-  return { choice: supportsChoice(agent, choice) ? choice : 'own', source: 'all' }
+  return { choice, source: 'all' }
 }
 
 export function normalizeAgentPermissionOverrides(
@@ -134,7 +135,7 @@ export function applyAllAgentsPermission(
   if (choice === 'auto') {
     for (const agent of PERMISSION_CHOICE_AGENTS) {
       const previous = resolveAgentPermission(agent, settings).choice
-      if (!supportsChoice(agent, 'auto') && previous !== 'own') {
+      if (!supportsChoice(agent, 'auto')) {
         overrides[agent] = previous
       }
     }

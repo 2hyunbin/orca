@@ -49,7 +49,7 @@ export function buildOnboardingFolderAgentStartup(
     prompt: '',
     cmdOverrides: settings.agentCmdOverrides ?? {},
     agentArgs: resolveTuiAgentLaunchArgs(agent, settings),
-    agentEnv: resolveTuiAgentLaunchEnv(agent, settings),
+    agentEnv: resolveTuiAgentLaunchEnv(agent, settings, host.platform),
     ...host,
     allowEmptyPromptLaunch: true
   })

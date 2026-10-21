@@ -55,7 +55,7 @@ export class RuntimeClientSettingsController {
     const settings = this.store.getSettings()
     // Why composed: paired clients (the phone's resume, legacy-host chat checks) read the flag in
     // this text as the permission, as every client before the stored choice did.
-    const launchProfile = composeAgentLaunchProfile(settings)
+    const launchProfile = composeAgentLaunchProfile(settings, process.platform)
     return {
       defaultTuiAgent: settings.defaultTuiAgent ?? null,
       newWorkspaceSetupOnly: false,
@@ -121,10 +121,14 @@ export class RuntimeClientSettingsController {
         ...updates,
         // An older client writes Arguments as it reads them, flag included.
         ...(updates.agentDefaultArgs !== undefined || updates.agentDefaultEnv !== undefined
-          ? legacyLaunchTextUpdates(beforeSettings, {
-              agentDefaultArgs: updates.agentDefaultArgs,
-              agentDefaultEnv: updates.agentDefaultEnv
-            })
+          ? legacyLaunchTextUpdates(
+              beforeSettings,
+              {
+                agentDefaultArgs: updates.agentDefaultArgs,
+                agentDefaultEnv: updates.agentDefaultEnv
+              },
+              process.platform
+            )
           : {}),
         ...(updates.nativeChatPermissionMode !== undefined
           ? { agentNativeChatPermissionModes: {} }
@@ -159,7 +163,7 @@ export class RuntimeClientSettingsController {
     if (!this.store?.getSettings) {
       throw new Error('runtime_unavailable')
     }
-    return projectAgentLaunchSettings(this.store.getSettings())
+    return projectAgentLaunchSettings(this.store.getSettings(), process.platform)
   }
 
   async mutateAgentLaunch(mutation: AgentLaunchSettingsMutation): Promise<AgentLaunchSettings> {
@@ -175,7 +179,7 @@ export class RuntimeClientSettingsController {
       const applied = store.getSettings()
       return {
         value: {
-          settings: projectAgentLaunchSettings(applied),
+          settings: projectAgentLaunchSettings(applied, process.platform),
           reconcileHooks:
             updates.disabledTuiAgents !== undefined &&
             !haveSameDisabledTuiAgents(before.disabledTuiAgents, applied.disabledTuiAgents)

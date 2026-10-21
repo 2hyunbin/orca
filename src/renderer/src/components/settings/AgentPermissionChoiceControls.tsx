@@ -1,4 +1,5 @@
 import { ChevronDown, X } from 'lucide-react'
+import type { AgentChatPermissionMode } from '../../../../shared/agent-chat-permission-mode'
 import type { AgentPermissionChoice } from '../../../../shared/tui-agent-permission-choice'
 import { translate } from '@/i18n/i18n'
 import { cn } from '@/lib/utils'
@@ -69,7 +70,7 @@ export function AllAgentsPermissionSetting({
             ? ownDescription()
             : translate(
                 'settings.agents.permissionChoiceDescription',
-                'Every agent, in terminals and new chats. Change one agent below.'
+                'Applies where each agent supports this mode. Change one agent below.'
               )}
         </p>
         {ownChoiceCount > 0 ? (
@@ -131,6 +132,8 @@ export type AgentPermissionChoiceRow = {
   choices: readonly AgentPermissionChoice[]
   choice: AgentPermissionChoice
   source: 'agent' | 'all'
+  terminalChoice?: AgentPermissionChoice
+  chatChoice?: AgentChatPermissionMode | null
   /** What this agent gets from the all-agents choice. */
   defaultChoice: AgentPermissionChoice
   onSelect: (choice: AgentPermissionChoice | 'default') => void
@@ -204,6 +207,15 @@ export function AgentPermissionMenu({
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+      {permission.terminalChoice === 'own' && permission.chatChoice ? (
+        <span className="text-xs text-muted-foreground">
+          {translate(
+            'settings.agents.permissionSurfaceDifference',
+            'Terminals use the agent’s own settings; new chats use {{mode}}.',
+            { mode: nativeChatPermissionModeLabel(permission.chatChoice) }
+          )}
+        </span>
+      ) : null}
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { agentPermissionHostPlatform, permissionEnvNameMatches } from './agent-permission-env'
 import type { SleepingAgentLaunchConfig } from './agent-session-resume'
 import type { GlobalSettings } from './global-settings-types'
 import { isTuiAgent } from './tui-agent-config'
@@ -53,8 +54,7 @@ export function hasUnsupportedTuiAgentArgs(agent: TuiAgent, value: unknown): boo
 /**
  * Whether the configured arguments carry this agent's permission-bypass flag.
  *
- * The Agent Permissions toggle has no storage of its own — it writes and reads this flag inside
- * the arguments string. Read the same argv the startup path builds so quoted prompt text and
+ * Legacy profiles carry the permission in Arguments. Read the startup argv so quoted text and
  * operands after `--` cannot authorize a structured session.
  */
 export function tuiAgentArgsBypassPermissions(
@@ -207,18 +207,24 @@ export function resolvedTuiAgentArgsBypassPermissions(
 /** The env a terminal launch of this agent gets; the user's own entries win over Orca's. */
 export function resolveTuiAgentLaunchEnv(
   agent: string,
-  settings: AgentLaunchProfileSettings | null | undefined
+  settings: AgentLaunchProfileSettings | null | undefined,
+  platform: NodeJS.Platform | null | undefined = agentPermissionHostPlatform()
 ): Record<string, string> {
   const configured = settings?.agentDefaultEnv
-  const own = configured && Object.hasOwn(configured, agent) ? { ...configured[agent] } : undefined
+  const value: unknown = configured && Object.getOwnPropertyDescriptor(configured, agent)?.value
+  const own =
+    value && typeof value === 'object'
+      ? normalizeTuiAgentEnvRecord({ [agent]: value })[agent]
+      : undefined
   if (!hasTypedAgentPermission(settings) || !isTuiAgent(agent)) {
     return own ?? getTuiAgentDefaultEnv(agent)
   }
   const user = own ?? {}
-  const userNames = new Set(Object.keys(user).map((name) => name.toLowerCase()))
   const added = Object.entries(
     agentPermissionEnv(agent, resolveAgentPermission(agent, settings).choice)
-  ).filter(([name]) => !userNames.has(name.toLowerCase()))
+  ).filter(
+    ([name]) => !Object.keys(user).some((key) => permissionEnvNameMatches(key, name, platform))
+  )
   return { ...Object.fromEntries(added), ...user }
 }
 
@@ -228,7 +234,8 @@ export function resolveTuiAgentLaunchEnv(
  * an older client never falls back to its own built-in default.
  */
 export function composeAgentLaunchProfile(
-  settings: AgentLaunchProfileSettings
+  settings: AgentLaunchProfileSettings,
+  platform: NodeJS.Platform | null | undefined = agentPermissionHostPlatform()
 ): Required<Pick<AgentLaunchProfileSettings, 'agentDefaultArgs' | 'agentDefaultEnv'>> {
   if (!hasTypedAgentPermission(settings)) {
     return {
@@ -251,7 +258,7 @@ export function composeAgentLaunchProfile(
       [...argAgents].map((agent) => [agent, resolveTuiAgentLaunchArgs(agent, settings)])
     ),
     agentDefaultEnv: Object.fromEntries(
-      [...envAgents].map((agent) => [agent, resolveTuiAgentLaunchEnv(agent, settings)])
+      [...envAgents].map((agent) => [agent, resolveTuiAgentLaunchEnv(agent, settings, platform)])
     )
   }
 }

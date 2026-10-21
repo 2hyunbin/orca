@@ -1,3 +1,4 @@
+import { useChatSettingsTypedPermissions } from '@/runtime/structured-agent-session-host-capability'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { translate } from '@/i18n/i18n'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -27,12 +28,15 @@ export function ChatBehaviorSetting({
   updateSettings,
   forceVisible = false
 }: ChatBehaviorSettingProps): React.JSX.Element | null {
+  const typedPermissions = useChatSettingsTypedPermissions()
   const query = useAppStore((state) => state.settingsSearchQuery)
   // A host without the capability ignores the preference; the switch would do nothing.
   const hostQueuesMessages = useStructuredAgentSessionHostQueuesMessages(STRUCTURED_CHAT_HOST)
   const entries = getChatBehaviorEntriesByKey()
   const rows = [
-    ...(settings.nativeChatPermissionMode !== undefined ? [getChatPermissionSearchEntry()] : []),
+    ...(settings.nativeChatPermissionMode !== undefined
+      ? [getChatPermissionSearchEntry(typedPermissions)]
+      : []),
     entries.resumeOnRestart,
     ...(hostQueuesMessages ? [entries.queueFollowUps] : []),
     entries.shellEnvironment

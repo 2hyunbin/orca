@@ -84,7 +84,7 @@ export function resolveAgentStartupPlanInputs(args: {
     agent,
     cmdOverrides: settings.agentCmdOverrides ?? {},
     agentArgs,
-    agentEnv: resolveTuiAgentLaunchEnv(agent, settings),
+    agentEnv: resolveTuiAgentLaunchEnv(agent, settings, platform),
     platform,
     shell,
     isRemote,

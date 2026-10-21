@@ -41,7 +41,7 @@ export function buildAntigravityReferenceStartup(args: {
       ...(args.commandOverride?.trim() ? { antigravity: args.commandOverride } : {})
     },
     agentArgs: resolveTuiAgentLaunchArgs('antigravity', args.settings),
-    agentEnv: resolveTuiAgentLaunchEnv('antigravity', args.settings)
+    agentEnv: resolveTuiAgentLaunchEnv('antigravity', args.settings, args.platform)
   })
   if (!plan) {
     return null

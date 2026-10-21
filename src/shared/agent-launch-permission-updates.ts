@@ -1,9 +1,15 @@
+import { agentPermissionHostPlatform, permissionEnvNameMatches } from './agent-permission-env'
 import type {
   AgentLaunchSettingsMutation,
   AgentLaunchSettingsSource
 } from './agent-launch-settings'
-import { normalizeTuiAgentArgsRecord, resolveTuiAgentLaunchArgs } from './tui-agent-launch-defaults'
 import {
+  normalizeTuiAgentArgsRecord,
+  resolveTuiAgentLaunchArgs,
+  resolveTuiAgentLaunchEnv
+} from './tui-agent-launch-defaults'
+import {
+  agentPermissionArgs,
   agentPermissionChoices,
   agentPermissionEnv,
   applyAgentPermissionOverrides,
@@ -92,7 +98,13 @@ export function legacyArgumentsUpdates(
       ...settings.agentDefaultArgs,
       [agent]: lifted.args
     }),
-    ...choiceUpdate(settings, agent, lifted.choice ?? 'own')
+    ...(lifted.choice
+      ? choiceUpdate(settings, agent, lifted.choice)
+      : agentPermissionArgs(agent, resolveAgentPermission(agent, settings).choice) &&
+          resolveTuiAgentLaunchArgs(agent, settings).trim() !==
+            (settings.agentDefaultArgs?.[agent]?.trim() ?? '')
+        ? choiceUpdate(settings, agent, 'own')
+        : {})
   }
 }
 
@@ -102,7 +114,8 @@ export function legacyArgumentsUpdates(
  */
 export function legacyLaunchTextUpdates(
   settings: AgentLaunchSettingsSource,
-  updates: Pick<AgentLaunchSettingsSource, 'agentDefaultArgs' | 'agentDefaultEnv'>
+  updates: Pick<AgentLaunchSettingsSource, 'agentDefaultArgs' | 'agentDefaultEnv'>,
+  platform: NodeJS.Platform | undefined = agentPermissionHostPlatform()
 ): AgentLaunchSettingsSource {
   if (!hasTypedAgentPermission(settings)) {
     return updates
@@ -110,12 +123,40 @@ export function legacyLaunchTextUpdates(
   let next: AgentLaunchSettingsSource = { ...settings }
   for (const [agent, value] of Object.entries(updates.agentDefaultArgs ?? {})) {
     if (isTuiAgent(agent) && typeof value === 'string') {
-      next = { ...next, ...legacyArgumentsUpdates(next, agent, value) }
+      const change = legacyArgumentsUpdates(settings, agent, value)
+      next = {
+        ...next,
+        ...change,
+        agentDefaultArgs: {
+          ...next.agentDefaultArgs,
+          [agent]: change.agentDefaultArgs?.[agent] ?? next.agentDefaultArgs?.[agent] ?? ''
+        },
+        agentPermissionOverrides: {
+          ...next.agentPermissionOverrides,
+          ...(change.agentPermissionOverrides?.[agent]
+            ? { [agent]: change.agentPermissionOverrides[agent] }
+            : {})
+        }
+      }
     }
   }
   for (const [agent, env] of Object.entries(updates.agentDefaultEnv ?? {})) {
     if (isTuiAgent(agent) && env) {
-      next = { ...next, ...legacyEnvUpdates(next, agent, env) }
+      const change = legacyEnvUpdates(settings, agent, env, platform)
+      next = {
+        ...next,
+        ...change,
+        agentDefaultEnv: {
+          ...next.agentDefaultEnv,
+          [agent]: change.agentDefaultEnv?.[agent] ?? next.agentDefaultEnv?.[agent] ?? {}
+        },
+        agentPermissionOverrides: {
+          ...next.agentPermissionOverrides,
+          ...(change.agentPermissionOverrides?.[agent]
+            ? { [agent]: change.agentPermissionOverrides[agent] }
+            : {})
+        }
+      }
     }
   }
   return {
@@ -129,12 +170,34 @@ export function legacyLaunchTextUpdates(
 export function legacyEnvUpdates(
   settings: AgentLaunchSettingsSource,
   agent: TuiAgent,
-  env: Record<string, string>
+  env: Record<string, string>,
+  platform: NodeJS.Platform | undefined = agentPermissionHostPlatform()
 ): AgentLaunchSettingsSource {
   if (!hasEnvPermission(agent)) {
     return { agentDefaultEnv: { ...settings.agentDefaultEnv, [agent]: env } }
   }
-  const lifted = liftAgentPermissionEnv(agent, env)
+  const previous = resolveTuiAgentLaunchEnv(agent, settings, platform)
+  const names = Object.keys(agentPermissionEnv(agent, 'full-access'))
+  const carrier = (value: Record<string, string>) =>
+    Object.entries(value)
+      .filter(([key]) => names.some((name) => permissionEnvNameMatches(key, name, platform)))
+      .sort(([a], [b]) => a.localeCompare(b))
+  if (JSON.stringify(carrier(previous)) === JSON.stringify(carrier(env))) {
+    const user = { ...env }
+    for (const [key] of carrier(env)) {
+      delete user[key]
+    }
+    return {
+      agentDefaultEnv: {
+        ...settings.agentDefaultEnv,
+        [agent]: {
+          ...user,
+          ...Object.fromEntries(carrier(settings.agentDefaultEnv?.[agent] ?? {}))
+        }
+      }
+    }
+  }
+  const lifted = liftAgentPermissionEnv(agent, env, platform)
   return {
     agentDefaultEnv: { ...settings.agentDefaultEnv, [agent]: lifted.env },
     ...choiceUpdate(settings, agent, lifted.choice ?? 'own')

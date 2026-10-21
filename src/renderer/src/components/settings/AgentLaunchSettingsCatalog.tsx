@@ -1,3 +1,7 @@
+import {
+  agentChatPermissionModes,
+  savedChatPermissionMode
+} from '../../../../shared/agent-chat-permission-mode'
 import { useMemo } from 'react'
 import { toast } from 'sonner'
 import type {
@@ -9,6 +13,7 @@ import { AUTO_TUI_AGENT_ARGS } from '../../../../shared/tui-agent-permissions'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import {
   agentPermissionArgs,
+  agentPermissionEnv,
   agentPermissionChoices,
   PERMISSION_CHOICE_AGENTS,
   resolveAgentPermission,
@@ -98,9 +103,19 @@ export function AgentLaunchSettingsCatalog({
       return undefined
     }
     const resolved = resolveAgentPermission(agent, permissionSettings)
+    const chatSupport = agentChatPermissionModes(agent)
     return {
       choices,
       ...resolved,
+      terminalChoice:
+        agentPermissionArgs(agent, resolved.choice) ||
+        Object.keys(agentPermissionEnv(agent, resolved.choice)).length
+          ? resolved.choice
+          : 'own',
+      chatChoice:
+        chatSupport && resolved.choice !== 'own'
+          ? savedChatPermissionMode(chatSupport, resolved.choice)
+          : null,
       defaultChoice: resolveAgentPermission(agent, {
         agentPermissionDefault: permissionSettings.agentPermissionDefault
       }).choice,
@@ -150,7 +165,7 @@ export function AgentLaunchSettingsCatalog({
     envOverride: !local
       ? {}
       : typed
-        ? { ...local.settings.agentDefaultEnv?.[agent.id] }
+        ? resolveTuiAgentLaunchEnv(agent.id, local.settings, window.api.platform.get().platform)
         : resolveTuiAgentLaunchEnv(agent.id, { agentDefaultEnv: local.settings.agentDefaultEnv }),
     permission: typed ? undefined : permissions.rows.get(agent.id),
     permissionChoice: choiceRow(agent.id),
@@ -165,11 +180,24 @@ export function AgentLaunchSettingsCatalog({
       typed
         ? saveUserArgs(agent.id, agent.label, value)
         : mutate({ type: 'arguments', agent: agent.id, value }),
-    onSaveEnv: (value) => {
-      if (local) {
-        local.updateSettings({
-          agentDefaultEnv: { ...local.settings.agentDefaultEnv, [agent.id]: value }
-        })
+    onSaveEnv: async (value) => {
+      if (!local) {
+        return
+      }
+      const previous = resolveTuiAgentLaunchEnv(
+        agent.id,
+        local.settings,
+        window.api.platform.get().platform
+      )
+      for (const name of new Set([...Object.keys(previous), ...Object.keys(value)])) {
+        if (previous[name] === value[name]) {
+          continue
+        }
+        await mutate(
+          Object.hasOwn(value, name)
+            ? { type: 'environment-set', agent: agent.id, name, value: value[name] }
+            : { type: 'environment-remove', agent: agent.id, name }
+        )
       }
     },
     ...(!local

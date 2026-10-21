@@ -12,7 +12,7 @@ import {
   resolveTuiAgentLaunchEnv
 } from './tui-agent-launch-defaults'
 import { applyAllAgentsPermission, resolveAgentPermission } from './tui-agent-permission-choice'
-import { migrateAgentPermissionChoice } from './tui-agent-permission-lift'
+import { agentArgsSetPermission, migrateAgentPermissionChoice } from './tui-agent-permission-lift'
 
 const legacy = (
   args: Record<string, string>,
@@ -34,7 +34,8 @@ describe('one-time move of permission flags out of Arguments', () => {
           grok: '--permission-mode plan'
         },
         { goose: { goose_mode: 'auto', OTHER: '1' } }
-      )
+      ),
+      'win32'
     )
     expect(migrated.agentPermissionDefault).toBe('full-access')
     expect(migrated.agentDefaultArgs).toMatchObject({
@@ -49,7 +50,10 @@ describe('one-time move of permission flags out of Arguments', () => {
     expect(migrated.agentPermissionOverrides).toEqual({
       codex: 'auto',
       gemini: 'own',
-      grok: 'own'
+      grok: 'own',
+      opencode: 'own',
+      opencode2: 'own',
+      omp: 'own'
     })
     // Terminals launch what they launched before the move.
     expect(resolveTuiAgentLaunchArgs('claude', migrated)).toBe(
@@ -86,8 +90,8 @@ describe('terminal launch composes the stored choice', () => {
     expect(resolveTuiAgentLaunchArgs('codex', typed)).toBe('--search')
     expect(resolveTuiAgentLaunchArgs('grok', typed)).toBe('--permission-mode plan')
     expect(resolveTuiAgentLaunchArgs('gemini', typed)).toBe('--yolo')
-    // An agent with no flag for a choice falls to its own settings rather than claiming it.
-    expect(resolveAgentPermission('gemini', { agentPermissionDefault: 'ask' }).choice).toBe('own')
+    // Stored intent survives; the terminal composes no unsupported recipe.
+    expect(resolveTuiAgentLaunchArgs('gemini', { agentPermissionDefault: 'ask' })).toBe('')
   })
 
   it('passes an older host’s published text through unchanged', () => {
@@ -147,5 +151,264 @@ describe('older clients against a host with the stored choice', () => {
     expect(newChatPermissionModeForSettings('codex', host)).toBe('auto')
     const own = { ...host, agentPermissionOverrides: { codex: 'own' as const } }
     expect(newChatPermissionModeForSettings('codex', own)).toBe('ask')
+  })
+})
+
+describe('permission carrier ownership across save, reload and consumers', () => {
+  it.each([
+    [
+      'claude',
+      '--model opus --permission-mode auto',
+      '--model opus',
+      '--permission-mode auto --model opus',
+      'auto',
+      true
+    ],
+    [
+      'claude',
+      '--permission-mode auto --model opus',
+      '--model opus',
+      '--permission-mode auto --model opus',
+      'auto',
+      true
+    ],
+    [
+      'claude',
+      '--append-system-prompt --dangerously-skip-permissions',
+      '--append-system-prompt --dangerously-skip-permissions',
+      '--permission-mode auto --append-system-prompt --dangerously-skip-permissions',
+      'auto',
+      false
+    ],
+    [
+      'claude',
+      '--tools Bash --dangerously-skip-permissions Read',
+      '--tools Bash --dangerously-skip-permissions Read',
+      '--tools Bash --dangerously-skip-permissions Read',
+      'auto',
+      true
+    ],
+    [
+      'claude',
+      '--unknown value --permission-mode auto',
+      '--unknown value --permission-mode auto',
+      '--unknown value --permission-mode auto',
+      'auto',
+      true
+    ],
+    [
+      'claude',
+      '--unknown value',
+      '--unknown value',
+      '--permission-mode auto --unknown value',
+      'auto',
+      false
+    ],
+    [
+      'claude',
+      '-- --dangerously-skip-permissions',
+      '-- --dangerously-skip-permissions',
+      '--permission-mode auto -- --dangerously-skip-permissions',
+      'auto',
+      false
+    ],
+    [
+      'claude',
+      '--append-system-prompt -- --permission-mode auto',
+      '--append-system-prompt --',
+      '--permission-mode auto --append-system-prompt --',
+      'auto',
+      true
+    ],
+    [
+      'claude',
+      'resume --permission-mode auto',
+      'resume --permission-mode auto',
+      'resume --permission-mode auto',
+      'auto',
+      true
+    ],
+    ['codex', '--yolo', '--yolo', '--yolo', 'auto', true],
+    ['codex', '--not-so-yolo', '--not-so-yolo', '--not-so-yolo', 'auto', true],
+    ['codex', '--approve-for-me', '', '--approve-for-me', 'auto', true],
+    ['codex', '-sread-only', '-sread-only', '-sread-only', 'auto', true],
+    ['codex', '-aon-request', '-aon-request', '-aon-request', 'auto', true],
+    [
+      'codex',
+      '-c sandbox_mode="read-only"',
+      '-c sandbox_mode="read-only"',
+      '-c sandbox_mode="read-only"',
+      'auto',
+      true
+    ],
+    [
+      'codex',
+      '--config approval_policy=on-request',
+      '--config approval_policy=on-request',
+      '--config approval_policy=on-request',
+      'auto',
+      true
+    ],
+    [
+      'codex',
+      '-capprovals_reviewer=auto_review',
+      '-capprovals_reviewer=auto_review',
+      '-capprovals_reviewer=auto_review',
+      'auto',
+      true
+    ],
+    [
+      'codex',
+      '--config=sandbox_workspace_write.network_access=true',
+      '--config=sandbox_workspace_write.network_access=true',
+      '--config=sandbox_workspace_write.network_access=true',
+      'auto',
+      true
+    ],
+    [
+      'codex',
+      '-c model_reasoning_effort=high',
+      '-c model_reasoning_effort=high',
+      '--approve-for-me -c model_reasoning_effort=high',
+      'auto',
+      false
+    ],
+    [
+      'codex',
+      `-c '"sandbox_mode"=read-only'`,
+      `-c '"sandbox_mode"=read-only'`,
+      `--approve-for-me -c '"sandbox_mode"=read-only'`,
+      'auto',
+      false
+    ],
+    ['grok', '--yolo', '--yolo', '--yolo', 'ask', true]
+  ] as const)('%s preserves ownership for %s', (agent, value, raw, launch, chat, carrier) => {
+    const before: AgentLaunchSettingsSource = {
+      agentPermissionDefault: agent === 'grok' ? 'ask' : 'auto'
+    }
+    const updates = agentLaunchSettingsMutationUpdates(
+      before,
+      { type: 'user-arguments', agent, value },
+      'linux'
+    )
+    const loaded = migrateAgentPermissionChoice(
+      JSON.parse(JSON.stringify({ ...before, ...updates })),
+      'linux'
+    )
+    expect(loaded.agentDefaultArgs[agent]).toBe(raw)
+    expect(resolveTuiAgentLaunchArgs(agent, loaded)).toBe(launch)
+    expect(projectAgentLaunchSettings(loaded).agentDefaultArgs[agent]).toBe(launch)
+    expect(newChatPermissionModeForSettings(agent, loaded)).toBe(chat)
+    expect(agentArgsSetPermission(agent, value)).toBe(carrier)
+  })
+
+  it.each(['linux', 'win32'] as const)(
+    'keeps Goose edits on their actual carrier on %s',
+    (platform) => {
+      const initial: AgentLaunchSettingsSource = {
+        agentPermissionDefault: 'full-access',
+        agentDefaultEnv: { goose: { OTHER: '1' } }
+      }
+      let host = {
+        ...initial,
+        ...agentLaunchSettingsMutationUpdates(
+          initial,
+          { type: 'arguments', agent: 'goose', value: '--model foo' },
+          platform
+        )
+      }
+      expect(resolveTuiAgentLaunchEnv('goose', host, platform)).toEqual({
+        GOOSE_MODE: 'auto',
+        OTHER: '1'
+      })
+      host = {
+        ...host,
+        ...agentLaunchSettingsMutationUpdates(
+          host,
+          { type: 'environment-set', agent: 'goose', name: 'OTHER', value: '2' },
+          platform
+        )
+      }
+      expect(resolveTuiAgentLaunchEnv('goose', host, platform)).toEqual({
+        GOOSE_MODE: 'auto',
+        OTHER: '2'
+      })
+      host = {
+        ...host,
+        ...agentLaunchSettingsMutationUpdates(
+          host,
+          {
+            type: 'environment-remove',
+            agent: 'goose',
+            name: platform === 'win32' ? 'goose_mode' : 'GOOSE_MODE'
+          },
+          platform
+        )
+      }
+      expect(resolveAgentPermission('goose', host).choice).toBe('own')
+      expect(resolveTuiAgentLaunchEnv('goose', host, platform)).toEqual({ OTHER: '2' })
+    }
+  )
+
+  it('uses host environment identity without guessing duplicate Windows values', () => {
+    const raw = legacy({}, { goose: { goose_mode: 'auto', KEEP: '1' } })
+    const posix = migrateAgentPermissionChoice(raw, 'linux')
+    expect(resolveTuiAgentLaunchEnv('goose', posix, 'linux')).toEqual({
+      goose_mode: 'auto',
+      KEEP: '1'
+    })
+    const explicit = { ...posix, agentPermissionOverrides: { goose: 'full-access' as const } }
+    expect(resolveTuiAgentLaunchEnv('goose', explicit, 'linux')).toEqual({
+      GOOSE_MODE: 'auto',
+      goose_mode: 'auto',
+      KEEP: '1'
+    })
+    const unknown = migrateAgentPermissionChoice(raw, null)
+    expect(unknown.agentDefaultEnv.goose).toEqual({ goose_mode: 'auto', KEEP: '1' })
+    const windows = migrateAgentPermissionChoice(raw, 'win32')
+    expect(resolveTuiAgentLaunchEnv('goose', windows, 'win32')).toEqual({
+      GOOSE_MODE: 'auto',
+      KEEP: '1'
+    })
+    const duplicate = migrateAgentPermissionChoice(
+      legacy({}, { goose: { GOOSE_MODE: 'auto', goose_mode: 'approve' } }),
+      'win32'
+    )
+    expect(resolveAgentPermission('goose', duplicate).choice).toBe('own')
+    expect(resolveTuiAgentLaunchEnv('goose', duplicate, 'win32')).toEqual({
+      GOOSE_MODE: 'auto',
+      goose_mode: 'approve'
+    })
+  })
+
+  it('preserves chat-only migration defaults, then seeds Ask and retains raw choices through Auto', () => {
+    const agents = ['antigravity', 'opencode', 'opencode2', 'omp'] as const
+    const upgraded = {
+      ...migrateAgentPermissionChoice(legacy({})),
+      nativeChatPermissionMode: 'ask' as const
+    }
+    for (const agent of ['opencode', 'opencode2', 'omp'] as const) {
+      expect(newChatPermissionModeForSettings(agent, upgraded)).toBe('ask')
+    }
+    const ask = { ...upgraded, ...applyAllAgentsPermission(upgraded, 'ask') }
+    for (const agent of agents) {
+      expect(resolveTuiAgentLaunchArgs(agent, ask)).toBe('')
+      expect(newChatPermissionModeForSettings(agent, ask)).toBe('ask')
+      const edited = {
+        ...ask,
+        ...agentLaunchSettingsMutationUpdates(
+          ask,
+          { type: 'arguments', agent, value: '--model foo' },
+          'linux'
+        )
+      }
+      expect(newChatPermissionModeForSettings(agent, edited)).toBe('ask')
+    }
+    const own = { ...ask, agentPermissionOverrides: { omp: 'own' as const } }
+    const auto = { ...own, ...applyAllAgentsPermission(own, 'auto') }
+    expect(resolveAgentPermission('omp', auto).choice).toBe('own')
+    for (const agent of ['antigravity', 'opencode', 'opencode2'] as const) {
+      expect(newChatPermissionModeForSettings(agent, auto)).toBe('ask')
+    }
   })
 })

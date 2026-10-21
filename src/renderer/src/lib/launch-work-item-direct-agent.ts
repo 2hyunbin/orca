@@ -46,7 +46,7 @@ export function buildDirectWorkItemAgentStartupPlan(args: {
     args.agentArgs === undefined
       ? resolveTuiAgentLaunchArgs(args.agent, args.settings)
       : args.agentArgs
-  const effectiveAgentEnv = resolveTuiAgentLaunchEnv(args.agent, args.settings)
+  const effectiveAgentEnv = resolveTuiAgentLaunchEnv(args.agent, args.settings, args.launchPlatform)
   const draftLaunchPlan =
     args.promptDelivery === 'submit-after-ready'
       ? null

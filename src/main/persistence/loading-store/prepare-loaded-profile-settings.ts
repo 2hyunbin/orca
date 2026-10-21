@@ -138,11 +138,14 @@ export function prepareLoadedProfileSettings(
   }
   const migratedDisabledTuiAgents = normalizeDisabledTuiAgents(parsed.settings?.disabledTuiAgents)
   const migratedAgentYoloDefaults = migrateAgentYoloDefaults(parsed.settings)
-  const migratedAgentPermission = migrateAgentPermissionChoice({
-    ...migratedAgentYoloDefaults,
-    agentPermissionDefault: parsed.settings?.agentPermissionDefault,
-    agentPermissionOverrides: parsed.settings?.agentPermissionOverrides
-  })
+  const migratedAgentPermission = migrateAgentPermissionChoice(
+    {
+      ...migratedAgentYoloDefaults,
+      agentPermissionDefault: parsed.settings?.agentPermissionDefault,
+      agentPermissionOverrides: parsed.settings?.agentPermissionOverrides
+    },
+    process.platform
+  )
   if (
     parsed.settings?.agentYoloDefaultsMigrated !== true ||
     !hasTypedAgentPermission(parsed.settings) ||
