@@ -96,21 +96,20 @@ export function updateManagedOrcadEnvironment(
   userDataPath: string,
   args: LifecycleArgs & { force?: boolean }
 ): Promise<OrcadManagedDeployResult> {
+  const intent = args.force ? 'force' : 'update'
   return withManagedOrcadLifecycle(userDataPath, args.selector, async (managed) => {
-    // An explicit Update is the retry a connect's failure memory withholds.
-    clearOrcadUpdateFailedThisLaunch({ kind: 'ssh', id: managed.deployment.sshTargetId })
-    return runManagedOrcadUpdate(
+    const admitRecord = admitOrcadRecordForIntent(intent, getAppEnvironment().getVersion())
+    const result = await runManagedOrcadUpdate(
       userDataPath,
       managed,
       await resolveLinkedOrcadContext(managed.environment, managed.deployment, args.signal),
-      {
-        ...args,
-        admitRecord: admitOrcadRecordForIntent(
-          args.force ? 'force' : 'update',
-          getAppEnvironment().getVersion()
-        )
-      }
+      { ...args, admitRecord }
     )
+    // Only a landed Update re-enables the connect's attempts; a failed retry stays remembered.
+    if (result.outcome !== 'deferred') {
+      clearOrcadUpdateFailedThisLaunch({ kind: 'ssh', id: managed.deployment.sshTargetId })
+    }
+    return result
   })
 }
 

@@ -150,6 +150,19 @@ describe('updateManagedOrcadEnvironment', () => {
     expect(status.deferredUpdate).toBeNull()
   })
 
+  it('keeps a connect from retrying a build an explicit Update also failed', async () => {
+    const host = { kind: 'ssh', id: 'ssh-1' } as const
+    recordOrcadUpdateFailedThisLaunch(host, { code: 'orcad_update_failed', reason: 'rejected' })
+    mocks.deploy.mockResolvedValueOnce({
+      outcome: 'installed-not-activated',
+      fullVersion: 'v3',
+      code: 'orcad_candidate_readiness_rejected',
+      reason: 'rejected again'
+    })
+    await updateManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    expect(orcadUpdateFailedThisLaunch(host)).toBe(true)
+  })
+
   it('refuses Update over a host a newer Orca runs, and lets Force take it', async () => {
     const newer = {
       ...harness.context().activationRecord,

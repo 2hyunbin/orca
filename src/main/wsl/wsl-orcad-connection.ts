@@ -12,7 +12,10 @@ import type { OrcadHostTransport } from '../ssh/orcad-host-transport'
 import type { OrcadTunnelIdentity } from '../managed-server/lifecycle/orcad-managed-tunnel-identity'
 import type { StartedPortForward } from '../ssh/port-forwarding/ssh-port-forward-provider'
 import type { WslDistroHolder } from './wsl-distro-holder'
-import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
+import {
+  wslConnectFailedStatus,
+  type WslOrcadConnectionStatus
+} from './wsl-orcad-connection-status'
 import { wslDistroHolderKey } from './wsl-distro-holder-record'
 import {
   defaultWslOrcadEnvironmentId,
@@ -74,9 +77,6 @@ export type WslOrcadConnectOptions = {
   /** What `onChange` reports while this connect runs and once it is ready (liveness recovery). */
   status?: WslOrcadConnectStatus
 }
-
-/** What a user-initiated connect asks of the host's update. */
-export type WslOrcadConnectIntent = Pick<WslOrcadConnectOptions, 'intent'>
 
 type WslOrcadConnectStatus = { pending: WslOrcadConnectionStatus; ready: WslOrcadConnectionStatus }
 
@@ -144,11 +144,9 @@ export class WslOrcadConnectionManager {
     const operation = this.connect(name, key, options, status).catch((error: unknown) => {
       // Liveness owns the status of its own reconnects; a superseded connect was closed.
       if (!options.status && !(error instanceof WslOrcadConnectionSupersededError)) {
-        this.dependencies.onChange?.(name, this.get(name), {
-          state: 'failed',
-          reason: errorMessage(error),
-          terminals: 'unverifiable'
-        })
+        const deferral = error instanceof WslOrcadLaunchDeferredError ? error.launch : null
+        const failed = wslConnectFailedStatus(errorMessage(error), deferral)
+        this.dependencies.onChange?.(name, this.get(name), failed)
       }
       throw error
     })

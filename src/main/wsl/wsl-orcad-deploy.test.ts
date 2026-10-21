@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   adoptRunning: vi.fn(),
   localVersion: vi.fn(),
   readRecord: vi.fn(),
-  transaction: vi.fn()
+  transaction: vi.fn(async (): Promise<unknown> => null)
 }))
 vi.mock('../managed-server/activation/orcad-activation-transaction-store', () => ({
   readOrcadActivationTransaction: mocks.transaction
@@ -644,6 +644,13 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
         outcome: 'deferred',
         code: 'orcad_candidate_readiness_rejected',
         reason: rejected.reason
+      })
+      // Nor when the host could not be read: that proves no restore.
+      mocks.deploy.mockResolvedValueOnce(rejected)
+      mocks.transaction.mockRejectedValueOnce(new Error('wsl.exe did not answer'))
+      await expect(launch(undefined, { intent: 'update' })).resolves.toMatchObject({
+        outcome: 'deferred',
+        code: 'orcad_candidate_readiness_rejected'
       })
       expect(mocks.adoptRunning).not.toHaveBeenCalled()
     })

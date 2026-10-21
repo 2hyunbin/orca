@@ -258,7 +258,7 @@ describe('WslOrcadConnectionManager', () => {
   })
 
   it('throws the deferral and starts no bridge', async () => {
-    const { manager, launches, children } = setup()
+    const { manager, launches, children, onChange } = setup()
     launches.push({
       outcome: 'deferred',
       distro: 'Ubuntu',
@@ -270,6 +270,20 @@ describe('WslOrcadConnectionManager', () => {
     await expect(manager.ensure('Ubuntu')).rejects.toBeInstanceOf(WslOrcadLaunchDeferredError)
     expect(children.commands).toHaveLength(0)
     expect(manager.get('Ubuntu')).toBeNull()
+    // Nothing serves, so the deferral is what offers Update or Force.
+    expect(onChange).toHaveBeenLastCalledWith(
+      'Ubuntu',
+      null,
+      expect.objectContaining({
+        state: 'failed',
+        deferredUpdate: {
+          candidateVersion: '2.0.0',
+          code: 'live_terminals',
+          reason: 'Terminals are running.',
+          forceable: true
+        }
+      })
+    )
   })
 
   it('refuses a foreign server behind the port and closes its bridge', async () => {

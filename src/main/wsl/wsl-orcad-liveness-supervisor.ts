@@ -8,8 +8,8 @@
  * WSL project or terminal needs it, otherwise once the background gate next sees it running.
  * Timers are monotonic, and a power resume re-verifies instead of trusting them.
  */
-import type { WslOrcadConnectIntent, WslOrcadConnection } from './wsl-orcad-connection'
-import type { WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
+import type { WslOrcadConnection } from './wsl-orcad-connection'
+import type { WslOrcadConnectIntent, WslOrcadConnectionStatus } from './wsl-orcad-connection-status'
 import { wslDistroHolderKey } from './wsl-distro-holder-record'
 import { recoverWslOrcad, type WslOrcadRecoveryReason } from './wsl-orcad-liveness-recovery'
 import {

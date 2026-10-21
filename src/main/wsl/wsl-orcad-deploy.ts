@@ -262,11 +262,12 @@ async function launchOverTransport(
 
   /** The record only once the incumbent is back and no journal awaits recovery; else null. */
   async function readRestoredRecord(incumbent: string): Promise<OrcadActivationRecord | null> {
-    if (await readOrcadActivationTransaction(slot)) {
+    // An unreadable host is not proof of a restore: keep the rejection as reported.
+    if (await readOrcadActivationTransaction(slot).catch(() => true)) {
       return null
     }
-    const record = await readOrcadActivationRecord(slot)
-    return record.active === incumbent ? record : null
+    const record = await readOrcadActivationRecord(slot).catch(() => null)
+    return record?.active === incumbent ? record : null
   }
 
   async function readyLaunch(serving: {
