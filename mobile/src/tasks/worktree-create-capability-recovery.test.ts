@@ -130,13 +130,13 @@ describe('capability probe recovery', () => {
       )
       await render(host.client)
       await act(async () => host.reconnect())
-      const oldReply = {
+      const oldReply: Awaited<ReturnType<typeof host.sendRequest>> = {
         id: 'old',
         ok: true,
         result: { capabilities: ['mobile.tasks.v1', 'worktree.create-idempotency.v1'] },
         _meta: { runtimeId: 'old' }
       }
-      const newReply = {
+      const newReply: Awaited<ReturnType<typeof host.sendRequest>> = {
         id: 'new',
         ok: true,
         result: { capabilities: [] },
