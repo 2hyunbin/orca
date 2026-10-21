@@ -11,7 +11,7 @@ import { afterWritesDrained } from './write-queue'
 
 const scopes: TerminalDocumentScope[] = []
 
-function createReplayHarness() {
+function createReplayHarness(measuredCell?: { width: number; height: number }) {
   const frames: FrameRequestCallback[] = []
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     frames.push(callback)
@@ -37,6 +37,9 @@ function createReplayHarness() {
       const documentTerminal = terminalDocumentDouble().terminal
       return {
         ...documentTerminal,
+        _core: measuredCell
+          ? { _renderService: { dimensions: { css: { cell: measuredCell } } } }
+          : undefined,
         get cols() {
           return terminal.cols
         },
@@ -430,6 +433,121 @@ describe('live output during pending replay', () => {
         reset ? 'RESET_199' : 'LIVE'
       )
       expect(harness.scope.pendingTerm).toBeNull()
+    }
+  )
+})
+
+describe('pending replay geometry', () => {
+  function changeGeometry(
+    harness: ReturnType<typeof createReplayHarness>,
+    type: string,
+    cols: number,
+    rows: number
+  ) {
+    if (type === 'set-font-scale') {
+      harness.scope.hostFrame = { width: cols * 8, height: rows * 15 }
+      handleMsg(harness.scope, { type, fontScale: 1.25 })
+      harness.flushFrames()
+    } else {
+      handleMsg(harness.scope, { type, cols, rows })
+    }
+  }
+
+  it.each(['resize', 'reflow', 'set-font-scale'])(
+    'uses the actual pending viewport after %s consumes its scrollback',
+    async (type) => {
+      const harness = createReplayHarness({ width: 8, height: 15 })
+      const snapshot = Array.from({ length: 30 }, (_, index) => `ROW_${index}`).join('\r\n')
+      harness.replay(false, 80, snapshot)
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(2)
+      harness.deferWrites(true)
+      harness.replay(true, 81, snapshot)
+      await harness.parse()
+      harness.scope.committedSurface!.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: -2, deltaMode: 1, bubbles: true, cancelable: true })
+      )
+      harness.flushFrames()
+      expect(harness.scope.term!.buffer.active.viewportY).toBe(4)
+
+      changeGeometry(harness, type, 81, 40)
+      expect(harness.scope.term!.buffer.active.baseY).toBe(0)
+      harness.deferWrites(false)
+      harness.replay(true, 82, snapshot)
+      await harness.drain()
+      harness.releaseWrites()
+      const buffer = harness.scope.committedTerm!.buffer.active
+      expect(buffer.viewportY).toBe(buffer.baseY)
+      expect(buffer.viewportY).toBe(6)
+      expect(buffer.getLine(buffer.viewportY)?.translateToString(true)).toBe('ROW_6')
+    }
+  )
+
+  it.each(['resize', 'reflow', 'set-font-scale'])(
+    'retains an unmaterialized pending gesture through a no-op %s',
+    async (type) => {
+      const harness = createReplayHarness({ width: 8, height: 15 })
+      harness.replay()
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(40)
+      harness.deferWrites(true)
+      harness.replay(true, 81)
+      await harness.parse()
+      harness.scope.committedSurface!.dispatchEvent(
+        new WheelEvent('wheel', { deltaY: -10, deltaMode: 1, bubbles: true, cancelable: true })
+      )
+      harness.flushFrames()
+      harness.replay(true, 82)
+      await harness.parse()
+
+      changeGeometry(harness, type, 82, 24)
+      harness.deferWrites(false)
+      harness.replay(true, 83)
+      await harness.drain()
+      harness.releaseWrites()
+      expect(harness.scope.committedTerm!.buffer.active.viewportY).toBe(166)
+    }
+  )
+
+  it.each(['resize', 'reflow', 'set-font-scale'])(
+    'retains committed inheritance through %s without a pending override',
+    async (type) => {
+      const harness = createReplayHarness({ width: 8, height: 15 })
+      harness.replay()
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(40)
+      harness.deferWrites(true)
+      harness.replay(true, 81)
+      await harness.parse()
+
+      changeGeometry(harness, type, 82, 40)
+      harness.deferWrites(false)
+      harness.replay(true, 83)
+      await harness.drain()
+      harness.releaseWrites()
+      expect(harness.scope.committedTerm!.buffer.active.viewportY).toBe(40)
+    }
+  )
+
+  it.each(['resize', 'reflow', 'set-font-scale'])(
+    'follows normal output after pending alternate-screen %s',
+    async (type) => {
+      const harness = createReplayHarness({ width: 8, height: 15 })
+      harness.replay()
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(40)
+      harness.deferWrites(true)
+      harness.replay(true, 81, '\x1b[?1049hALT')
+      await harness.parse()
+
+      changeGeometry(harness, type, 82, 40)
+      harness.deferWrites(false)
+      harness.replay(true, 83)
+      await harness.drain()
+      harness.releaseWrites()
+      const buffer = harness.scope.committedTerm!.buffer.active
+      expect(buffer.type).toBe('normal')
+      expect(buffer.viewportY).toBe(buffer.baseY)
     }
   )
 })

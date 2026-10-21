@@ -1,3 +1,4 @@
+import { resizeTerminalBuffer } from './terminal-buffer-resize'
 import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { MOBILE_TERMINAL_CARET_OPTIONS } from '../terminal-webview-html/theme'
 import { ESC } from './escape-introducers'
@@ -245,7 +246,7 @@ export function resize(scope: TerminalDocumentScope, cols: number, rows: number)
     return
   }
   scope.initRows = rows || scope.initRows
-  scope.term.resize(cols || scope.term.cols, rows || scope.term.rows)
+  resizeTerminalBuffer(scope, cols || scope.term.cols, rows || scope.term.rows)
   emitKeyboardAvoidanceMetrics(scope)
   applyFitScale(scope, 'resize-msg')
   notify(scope, { type: 'ready', cols: cols, rows: rows })
