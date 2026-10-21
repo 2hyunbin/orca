@@ -31,8 +31,6 @@ export type OrcadManagedDeployResult =
       outcome: 'created' | 'updated' | 'already-current'
       environment: PublicKnownRuntimeEnvironment
       activeVersion: string
-      /** Set when the restarted server names a host key other than the pinned one. */
-      hostKeyWarning?: string
     }
   | OrcadManagedDeferral
 
@@ -42,7 +40,6 @@ export type OrcadManagedRollbackResult =
       environment: PublicKnownRuntimeEnvironment
       activeVersion: string
       discarded: string[]
-      hostKeyWarning?: string
     }
   | { outcome: 'refused' | 'failed'; code: string; reason: string }
 
@@ -57,7 +54,6 @@ export type OrcadManagedRecoveryResult =
       resolution: 'committed' | 'restored-incumbent'
       activeVersion: string | null
       environment: PublicKnownRuntimeEnvironment
-      hostKeyWarning?: string
     }
   | OrcadManagedRefusal
 

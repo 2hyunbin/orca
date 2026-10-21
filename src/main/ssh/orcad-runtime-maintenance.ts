@@ -6,11 +6,11 @@
 import { getAppEnvironment } from '../../shared/app-environment'
 import { refreshManagedOrcadPairing } from '../../shared/runtime-environment-managed-orcad-store'
 import { assertRuntimeEnvironmentNotReconciling } from '../../shared/runtime-environment-reconciliation-record'
+import { resolveEnvironment } from '../../shared/runtime-environment-store'
 import {
   getPreferredPairingOffer,
   redactRuntimeEnvironment,
-  type KnownRuntimeEnvironment,
-  type PublicKnownRuntimeEnvironment
+  type KnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
 import type {
   OrcadManagedDeployResult,
@@ -49,7 +49,7 @@ import { collectManagedTerminalCensus } from './orcad-terminal-census-client'
 import { updateTerminalCounts } from './orcad-fenced-stop'
 import { findIncompleteManagedOrcadMigration } from '../managed-server/lifecycle/orcad-managed-migration-status'
 import { latestOrcadMigrationInto } from './orcad-migration-rollback-mark'
-import { orcadHostKeyChangeWarning, tunneledOrcadPairingCode } from './orcad-tunneled-pairing'
+import { tunneledOrcadPairingCode } from './orcad-tunneled-pairing'
 
 type LifecycleArgs = { selector: string; signal?: AbortSignal }
 
@@ -72,20 +72,19 @@ function refreshPairing(
   environment: KnownRuntimeEnvironment,
   readiness: ServeReadiness,
   localPort: number
-): { environment: PublicKnownRuntimeEnvironment; hostKeyWarning?: string } {
-  const warning = orcadHostKeyChangeWarning(readiness, getPreferredPairingOffer(environment))
-  if (warning) {
-    console.warn(`[ssh] ${environment.name}: ${warning}`)
-  }
-  const refreshed = refreshManagedOrcadPairing(
+): KnownRuntimeEnvironment {
+  return refreshManagedOrcadPairing(
     userDataPath,
     environment.id,
     // Why the enrolled grant: a restarted orcad offers a new device once this one has paired, and
-    // taking it would change who this desktop is to the host (as WSL's #29042 found).
-    tunneledOrcadPairingCode(readiness, localPort, getPreferredPairingOffer(environment))
+    // taking it would change who this desktop is to the host (as WSL's #29042 found). Re-read: the
+    // census may have repaired a refused pairing since `environment` was read.
+    tunneledOrcadPairingCode(
+      readiness,
+      localPort,
+      getPreferredPairingOffer(resolveEnvironment(userDataPath, environment.id))
+    )
   )
-  const redacted = redactRuntimeEnvironment(refreshed)
-  return warning ? { environment: redacted, hostKeyWarning: warning } : { environment: redacted }
 }
 
 /** A launched slot may bind another port than the forward in use, so forward anew. */
@@ -191,14 +190,14 @@ export async function runManagedOrcadUpdate(
     activeVersion: result.fullVersion,
     readiness
   })
-  const paired = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
+  const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
   if (started || result.outcome !== 'already-active') {
     await followLaunchedServerPort(userDataPath, environment.id)
   }
   return {
     outcome: result.outcome === 'already-active' ? 'already-current' : 'updated',
-    activeVersion: result.fullVersion,
-    ...paired
+    environment: redactRuntimeEnvironment(updated),
+    activeVersion: result.fullVersion
   }
 }
 
@@ -262,13 +261,13 @@ export function rollbackManagedOrcadEnvironment(
         { ...slot, remoteInstallDir: targetDir },
         { buildHash: targetBuildHash, fullVersion: result.target }
       )
-      const paired = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
+      const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
       await followLaunchedServerPort(userDataPath, environment.id)
       return {
         outcome: 'rolled-back',
+        environment: redactRuntimeEnvironment(updated),
         activeVersion: result.target,
-        discarded: result.discarded,
-        ...paired
+        discarded: result.discarded
       }
     }
   )
@@ -291,9 +290,9 @@ export function recoverManagedOrcadEnvironment(
       if (result.outcome !== 'recovered') {
         return result
       }
-      const paired = result.readiness
+      const updated = result.readiness
         ? refreshPairing(userDataPath, environment, result.readiness, deployment.localPort)
-        : { environment: redactRuntimeEnvironment(environment) }
+        : environment
       if (result.activeVersion) {
         await followLaunchedServerPort(userDataPath, environment.id)
       }
@@ -301,7 +300,7 @@ export function recoverManagedOrcadEnvironment(
         outcome: 'recovered',
         resolution: result.resolution,
         activeVersion: result.activeVersion,
-        ...paired
+        environment: redactRuntimeEnvironment(updated)
       }
     }
   )
