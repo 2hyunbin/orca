@@ -133,6 +133,8 @@ export function createClaudeTranscriptImportPlan(input: {
       const frame = { ...row, session_id: row.sessionId, parent_tool_use_id: null }
       const envelope = readClaudeMessageEnvelope(frame)
       const queued = row.type === 'attachment'
+      // The tail reader keeps only rows that carry one.
+      const uuid = String(row.uuid)
       if (!envelope && !queued) {
         return
       }
@@ -142,7 +144,7 @@ export function createClaudeTranscriptImportPlan(input: {
             agentJournalItemKey({
               provider: 'claude',
               sessionId: input.providerSessionId,
-              uuid: String(row.uuid)
+              uuid
             })
           ]
       if (keys.some(known)) {
@@ -153,13 +155,13 @@ export function createClaudeTranscriptImportPlan(input: {
       lastAt = observedAt ?? lastAt
       const prompt = queued || isPrompt(envelope)
       const decoded = prompt
-        ? decodeClaudeTranscriptLine(JSON.stringify(row), `${input.providerSessionId}:${row.uuid}`)
+        ? decodeClaudeTranscriptLine(JSON.stringify(row), `${input.providerSessionId}:${uuid}`)
         : null
       // A stop marker restates the chat's own interrupted turn, which its turn row already reads.
       if (prompt && (!decoded || decoded.role === 'system')) {
         return
       }
-      uuids.push(String(row.uuid))
+      uuids.push(uuid)
       if (!decoded) {
         translator.handle({
           type: 'message',
