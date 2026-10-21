@@ -18552,7 +18552,6 @@
         "cancel": "Cancel"
       },
       "plainSshTerminal": {
-        "buttonHint": "Opens an unmanaged SSH login to this host, so you can keep working while Orca can’t set up there. It isn’t an Orca workspace and isn’t restored.",
         "open": "Open plain SSH terminal",
         "unmanaged": "Plain SSH — unmanaged. Not an Orca workspace: agents and tabs here aren’t tracked, and this terminal isn’t restored. Closing it ends the SSH session.",
         "ended": "ssh exited with code {{code}}. Close this window when you’re done reading.",
@@ -18561,7 +18560,7 @@
         "close": "Close and end session",
         "unknownTarget": "This SSH host is no longer saved in Orca.",
         "notBlocked": "Orca can reach this host again, so use its terminals instead. Plain SSH is only for while Orca can’t set up on the host.",
-        "alreadyOpen": "A plain SSH terminal to this host is already open.",
+        "alreadyOpen": "Another Orca window already has a plain SSH terminal open to this host.",
         "endedBySignal": "ssh was stopped (signal {{signal}}). Close this window when you’re done reading.",
         "cancelled": "This plain SSH terminal was closed before it started."
       }

@@ -10,6 +10,7 @@ import { mayUserSshConfigClaimAlias } from '../../ssh/config/ssh-config-alias-cl
 import { getSshHostServerStatus } from '../../ssh/ssh-host-server-status'
 import { getSshTargetRegistryStore } from '../../ssh/targets/ssh-target-registry'
 import { findSystemSsh } from '../../ssh/system-transport/system-ssh-binary'
+import { ensureNodePtySpawnHelperExecutable } from '../../providers/local-pty-utils'
 import {
   closePlainSshTerminal,
   closePlainSshTerminalsOwnedBy,
@@ -24,7 +25,11 @@ const deps: PlainSshTerminalDeps = {
   isMoveBlocked: (targetId) => isSshHostMoveBlocked(getSshHostServerStatus(targetId)),
   findSsh: findSystemSsh,
   mayConfigClaimAlias: mayUserSshConfigClaimAlias,
-  loadPtySpawn: async () => (await import('node-pty')).spawn,
+  loadPtySpawn: async () => {
+    // Why: a packaged macOS build can lose node-pty's spawn-helper exec bit; the pane paths repair it too.
+    ensureNodePtySpawnHelperExecutable()
+    return (await import('node-pty')).spawn
+  },
   homeDir: homedir,
   platform: process.platform
 }

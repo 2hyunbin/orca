@@ -18,6 +18,8 @@ import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-pref
 import { TERMINAL_PASTE_MAX_BYTES } from '@/components/terminal-pane/terminal-paste-limits'
 import { installPreviewTerminalKeyHandler } from '@/components/dashboard-popout/preview-terminal-key-handler'
 import { installPreviewTerminalAppMenuClipboard } from '@/components/dashboard-popout/preview-terminal-app-menu-clipboard'
+import { installPreviewTerminalCompatibility } from '@/components/dashboard-popout/preview-terminal-compatibility'
+import { TerminalKittyKeyboardModeTracker } from '../../../../shared/terminal-kitty-keyboard-mode-tracker'
 import { removePlainSshPanel } from '@/ssh/plain-ssh-terminal-panels'
 
 export type PlainSshTerminalPhase =
@@ -104,6 +106,12 @@ export function PlainSshTerminalView({
     const fit = new FitAddon()
     terminal.loadAddon(fit)
     terminal.open(container)
+    // Why before any output: wide characters bake into the buffer at the widths active when written.
+    const disposeCompatibility = installPreviewTerminalCompatibility(terminal, {
+      getSettings: () => useAppStore.getState().settings
+    })
+    // The shortcut policy needs the keyboard protocol the remote TUI negotiated (xterm advertises it).
+    const kittyKeyboardModes = new TerminalKittyKeyboardModeTracker({ kittyKeyboard: true })
     terminalRef.current = terminal
     fitRef.current = fit
     fit.fit()
@@ -124,6 +132,7 @@ export function PlainSshTerminalView({
     }
     const handle = (event: PlainSshTerminalEvent): void => {
       if (event.kind === 'data') {
+        kittyKeyboardModes.scan(event.data)
         terminal.write(event.data)
         return
       }
@@ -196,7 +205,7 @@ export function PlainSshTerminalView({
         macOptionAsAlt: initial.macOptionAsAlt,
         keybindings: useAppStore.getState().keybindings,
         terminalInput: null,
-        getKittyKeyboardFlags: () => 0,
+        getKittyKeyboardFlags: () => kittyKeyboardModes.flags,
         terminalShortcutPolicy: useAppStore.getState().settings?.terminalShortcutPolicy
       })
     })
@@ -228,6 +237,7 @@ export function PlainSshTerminalView({
       resizeListener.dispose()
       disposeKeyHandler()
       disposeAppMenuClipboard()
+      disposeCompatibility()
       unsubscribe()
       if (sessionId) {
         api.close({ sessionId })

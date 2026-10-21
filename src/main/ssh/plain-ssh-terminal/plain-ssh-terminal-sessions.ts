@@ -74,15 +74,15 @@ function releaseSlot(targetId: string, slot: Slot): void {
 }
 
 function hangUp(session: Session, forceAfterMs: number): void {
-  if (session.hungUp) {
-    return
+  if (!session.hungUp) {
+    session.hungUp = true
+    try {
+      session.proc.kill()
+    } catch {
+      // Already gone; its exit cleans up.
+    }
   }
-  session.hungUp = true
-  try {
-    session.proc.kill()
-  } catch {
-    // Already gone; its exit cleans up.
-  }
+  // Why armed again when already hung up: quit's shorter deadline must apply to it too.
   const forceKill = setTimeout(() => {
     if (sessions.has(session.id)) {
       try {

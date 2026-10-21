@@ -49,6 +49,9 @@ vi.mock('@/components/dashboard-popout/preview-terminal-key-handler', () => ({
 vi.mock('@/components/dashboard-popout/preview-terminal-app-menu-clipboard', () => ({
   installPreviewTerminalAppMenuClipboard: () => () => {}
 }))
+vi.mock('@/components/dashboard-popout/preview-terminal-compatibility', () => ({
+  installPreviewTerminalCompatibility: () => () => {}
+}))
 
 const blocked: SshManagedServerStatus = {
   kind: 'relay',
