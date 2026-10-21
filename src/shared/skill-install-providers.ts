@@ -98,12 +98,6 @@ export const SKILL_INSTALL_PROVIDERS = Object.freeze([
     workspaceSegments: ['.codebuddy', 'skills']
   },
   {
-    id: 'qoder',
-    displayName: 'Qoder',
-    globalSegments: ['.qoder', 'skills'],
-    workspaceSegments: ['.qoder', 'skills']
-  },
-  {
     id: 'kiro',
     displayName: 'Kiro',
     globalSegments: ['.kiro', 'skills'],
@@ -244,6 +238,12 @@ export const SKILL_INSTALL_PROVIDERS = Object.freeze([
   {
     id: 'prime-agent',
     displayName: 'Prime Agent',
+    globalSegments: null,
+    workspaceSegments: null
+  },
+  {
+    id: 'qoder',
+    displayName: 'Qoder',
     globalSegments: null,
     workspaceSegments: null
   },
