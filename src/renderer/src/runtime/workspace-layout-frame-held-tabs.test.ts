@@ -318,8 +318,9 @@ describe('a tab the window drew, closed or moved, with a frame from before main 
   ])('removes a just-created terminal tab, stopping it, when main %s', async (_case, refuse) => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { store, sync, before } = await boot()
-    const tab = store.getState().createTab(GIT_KEY)
+    // Why: spied before the create, whose start mark publishes a new state after the tab's.
     const closeTab = vi.spyOn(store.getState(), 'closeTab')
+    const tab = store.getState().createTab(GIT_KEY)
     sendStaleFrame(before)
     await settle()
     expect(tabBar(store)).toContain(tab.id)

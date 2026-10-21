@@ -1,4 +1,4 @@
-import { getRepoExecutionHostId } from './execution-host'
+import { getRepoExecutionHostId, type ExecutionHostId } from './execution-host'
 import type { Repo } from './repo-types'
 
 declare const hostScopedRepoKeyBrand: unique symbol
@@ -17,8 +17,14 @@ export function getRepoHostIdentityForParts(repoId: string, hostId: string): Hos
 }
 
 /** One host's registration of a repo; the same repo id may be registered on several hosts. */
-export function getRepoHostIdentity(
-  repo: Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>
-): HostScopedRepoKey {
+export function getRepoHostIdentity(repo: RepoHostTarget): HostScopedRepoKey {
   return getRepoHostIdentityForParts(repo.id, getRepoExecutionHostId(repo))
+}
+
+/** The hosts registering `repoId`; two or more means same-id twins on different hosts. */
+export function getRepoRegistrationHostIds(
+  repos: readonly RepoHostTarget[],
+  repoId: string
+): Set<ExecutionHostId> {
+  return new Set(repos.filter((repo) => repo.id === repoId).map(getRepoExecutionHostId))
 }

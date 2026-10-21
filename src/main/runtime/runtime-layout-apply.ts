@@ -79,12 +79,22 @@ export async function applyWindowLayoutCommand(
   const holders = hostIds.filter((hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime')
   if (command.type === 'closeTabs') {
     // The window already confirmed, removed the tab and stopped its terminals: main forces the
-    // close, records it, and stops nothing (a terminal another tab shares must live on).
-    if (command.recordClose === 'user') {
-      const tabId = terminalIdOf(store, hostIds[0], command.workspace, command.tabIds[0])
-      markAgentLaunchesClosedByUser(command.workspace, { kind: 'tab', tabId })
+    // close, records it, and stops nothing (a terminal another tab shares must live on). A sender
+    // that asks main to refuse pinned tabs (the CLI, new phones) gets that refusal, not the force.
+    // Read before the close drops the tab's record.
+    const terminalTabId = terminalIdOf(store, hostIds[0], command.workspace, command.tabIds[0])
+    const reply = await store.applyLayoutCommand(
+      { ...command, force: command.refusePinned ? command.force === true : true },
+      holders
+    )
+    // Only a tab the close took: a refused (pinned) tab's launches still finish into it.
+    if (
+      command.recordClose === 'user' &&
+      reply.ok &&
+      reply.result.closed?.includes(command.tabIds[0])
+    ) {
+      markAgentLaunchesClosedByUser(command.workspace, { kind: 'tab', tabId: terminalTabId })
     }
-    const reply = await store.applyLayoutCommand({ ...command, force: true }, holders)
     // Why: a workspace main lacks has no partition record to write; the window already removed the tab.
     return reply.ok && reply.result.alreadyClosed
       ? { ok: false, code: 'workspace_not_found' }
