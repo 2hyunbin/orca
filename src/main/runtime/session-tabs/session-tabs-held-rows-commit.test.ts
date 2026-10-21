@@ -46,27 +46,36 @@ describe('held session.tabs rows across layout commits (switch on)', () => {
     vi.useRealTimers()
   })
 
-  it('a tab main closed keeps its group and place, and a write that changes no row pushes nothing', async () => {
-    const { runtime, store, setSession } = threeTabSurfaceRuntime()
-    await windowlessRows(runtime)
-    await moveAndSplitTabs(runtime)
+  /** Three tabs moved and split, then the CLI closes the first: kept until L255's hook drops it. */
+  async function closedFirstTab(): Promise<ReturnType<typeof threeTabSurfaceRuntime>> {
+    const harness = threeTabSurfaceRuntime()
+    await windowlessRows(harness.runtime)
+    await moveAndSplitTabs(harness.runtime)
     await vi.runAllTimersAsync()
-    expect(heldStrip(runtime)).toEqual(MOVED_STRIP)
-
-    await runtime.applyLayoutCommand({
+    expect(heldStrip(harness.runtime)).toEqual(MOVED_STRIP)
+    await harness.runtime.applyLayoutCommand({
       type: 'closeTabs',
       workspace: TEST_WORKTREE_ID,
       tabIds: [THIRD_TAB_ID],
       force: true
     })
     await vi.runAllTimersAsync()
-    // Kept until the dropped-leaf hook (ledger L255): where it stood, not in the active group.
-    expect(heldStrip(runtime)).toEqual(MOVED_STRIP)
+    return harness
+  }
 
+  it('a tab main closed keeps its group and place, not the active group', async () => {
+    const { runtime } = await closedFirstTab()
+
+    expect(heldStrip(runtime)).toEqual(MOVED_STRIP)
+  })
+
+  it('after it, a write that changes no row pushes nothing', async () => {
+    const { runtime, store, setSession } = await closedFirstTab()
     let pushes = 0
     runtime.onMobileSessionTabsChanged(() => {
       pushes += 1
     })
+
     setSession(store.getSession())
     await vi.runAllTimersAsync()
 
