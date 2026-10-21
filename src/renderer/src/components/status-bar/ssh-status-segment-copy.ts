@@ -22,7 +22,7 @@ export function moreSshHostsLabel(count: number): string {
   return count === 1
     ? translate(
         'auto.components.status.bar.SshStatusSegment.moreSshHosts_one',
-        '1 more SSH host. Search by name to find it.',
+        '{{count}} more SSH host. Search by name to find it.',
         { count }
       )
     : translate(

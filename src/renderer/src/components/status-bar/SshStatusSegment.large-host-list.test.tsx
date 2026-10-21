@@ -117,7 +117,7 @@ describe('the status menu with a very large imported SSH host list', () => {
     })
     expect(screen.getByText('node-13691')).toBeTruthy()
     expect(screen.queryByText('node-00000')).toBeNull()
-    // Live and busy hosts stay listed while searching.
+    // Connected hosts stay listed while searching; the reconnecting one does not match.
     expect(screen.getByText('node-09000')).toBeTruthy()
     expect(screen.queryByText(/more SSH hosts/)).toBeNull()
   })
@@ -142,6 +142,26 @@ describe('the status menu with a very large imported SSH host list', () => {
     expect(search.getAttribute('aria-activedescendant')).toBe(active.id)
     fireEvent.keyDown(search, { key: 'Enter' })
     await vi.waitFor(() => expect(connect).toHaveBeenCalledWith({ targetId: 'ssh-13691' }))
+    vi.unstubAllGlobals()
+  })
+
+  it('never lets Enter reach a failed host the search did not match', async () => {
+    const connect = vi.fn(async () => undefined)
+    vi.stubGlobal('api', { ssh: { connect } })
+    state.sshConnectionStates.set('ssh-5', connectionState('ssh-5', 'auth-failed'))
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(() => {})
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
+    const search = screen.getByRole('combobox', { name: 'Search SSH hosts…' })
+    fireEvent.change(search, { target: { value: 'node-13691' } })
+    expect(screen.queryByText('node-00005')).toBeNull()
+    fireEvent.keyDown(search, { key: 'ArrowDown' })
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+    fireEvent.keyDown(search, { key: 'Enter' })
+    await vi.waitFor(() => expect(connect).toHaveBeenCalledWith({ targetId: 'ssh-13691' }))
+    expect(connect).toHaveBeenCalledTimes(1)
+    scrollIntoView.mockRestore()
     vi.unstubAllGlobals()
   })
 

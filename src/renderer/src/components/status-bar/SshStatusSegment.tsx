@@ -141,7 +141,7 @@ export function SshStatusSegment({
     connected: connectedTargets,
     inactive: disconnectedTargets,
     hiddenIdleCount,
-    idleMatched
+    queryMatched
   } = splitSshStatusMenuRows(targets, { projectHostIds, query: hostQuery })
   // Why in the menu and not a Settings link: web clients connect hosts here but have no SSH pane.
   const showHostSearch = hostQuery !== '' || hiddenIdleCount > 0
@@ -320,7 +320,7 @@ export function SshStatusSegment({
           query={hostQuery}
           onQueryChange={setHostQuery}
           hiddenIdleCount={hiddenIdleCount}
-          idleMatched={idleMatched}
+          queryMatched={queryMatched}
           inputRef={hostSearchInputRef}
         />
         <DropdownMenuSeparator />

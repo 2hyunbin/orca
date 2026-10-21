@@ -31,14 +31,21 @@ describe('splitSshStatusMenuRows', () => {
     expect(rows.hiddenIdleCount).toBe(1)
   })
 
-  it('narrows idle hosts by a case-insensitive label match but keeps busy ones', () => {
+  it('narrows every not-connected host by a case-insensitive label match', () => {
     const rows = splitSshStatusMenuRows(
-      [target('web-1', 'disconnected'), target('db-1', 'disconnected'), target('db-2', 'error')],
+      [
+        target('web-1', 'disconnected'),
+        target('db-1', 'disconnected'),
+        target('db-2', 'error'),
+        target('web-2', 'auth-failed'),
+        target('db-3', 'connected')
+      ],
       { query: ' WEB ' }
     )
-    expect(rows.inactive.map((row) => row.id)).toEqual(['db-2', 'web-1'])
-    expect(rows.idleMatched).toBe(true)
-    expect(splitSshStatusMenuRows([target('a', 'disconnected')], { query: 'z' }).idleMatched).toBe(
+    expect(rows.connected.map((row) => row.id)).toEqual(['db-3'])
+    expect(rows.inactive.map((row) => row.id)).toEqual(['web-2', 'web-1'])
+    expect(rows.queryMatched).toBe(true)
+    expect(splitSshStatusMenuRows([target('a', 'disconnected')], { query: 'z' }).queryMatched).toBe(
       false
     )
   })

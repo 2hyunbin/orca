@@ -7,16 +7,17 @@ export type SshStatusMenuTarget = { id: string; label: string; status: SshConnec
 
 export type SshStatusMenuRows = {
   connected: SshStatusMenuTarget[]
-  /** In-progress or failed hosts, then idle ones matching the query, up to the limit. */
+  /** In-progress or failed hosts, then idle ones up to the limit; all match the query. */
   inactive: SshStatusMenuTarget[]
   /** Idle hosts matching the query that the limit left out. */
   hiddenIdleCount: number
-  /** Whether any idle host matched the query; always true for an empty query with idle hosts. */
-  idleMatched: boolean
+  /** Whether any not-connected host matched the query. */
+  queryMatched: boolean
 }
 
 /**
- * Live and busy hosts always get a row. Idle ones are narrowed by the menu's search and capped,
+ * Connected hosts always get a row; every other row matches the menu's search, so Enter in it can
+ * only reach a host the user typed. Busy hosts are uncapped; idle ones are capped,
  * hosts that own projects first so the cap keeps the machines the user works on rather than the
  * top of a generated config.
  */
@@ -37,10 +38,10 @@ export function splitSshStatusMenuRows(
   for (const target of targets) {
     if (target.status === 'connected') {
       connected.push(target)
-    } else if (target.status !== 'disconnected') {
-      active.push(target)
     } else if (needle !== '' && !target.label.toLowerCase().includes(needle)) {
       continue
+    } else if (target.status !== 'disconnected') {
+      active.push(target)
     } else if (projectHostIds?.has(target.id)) {
       idleWithProjects.push(target)
     } else {
@@ -53,6 +54,6 @@ export function splitSshStatusMenuRows(
     connected,
     inactive: [...active, ...shownIdle],
     hiddenIdleCount: idle.length - shownIdle.length,
-    idleMatched: idle.length > 0
+    queryMatched: active.length + idle.length > 0
   }
 }

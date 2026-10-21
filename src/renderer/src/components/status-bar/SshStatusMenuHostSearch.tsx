@@ -20,7 +20,7 @@ export function SshStatusMenuHostSearch({
   query,
   onQueryChange,
   hiddenIdleCount,
-  idleMatched,
+  queryMatched,
   inputRef
 }: {
   rows: readonly SshStatusMenuTarget[]
@@ -28,7 +28,7 @@ export function SshStatusMenuHostSearch({
   query: string
   onQueryChange: (query: string) => void
   hiddenIdleCount: number
-  idleMatched: boolean
+  queryMatched: boolean
   inputRef: RefObject<HTMLInputElement | null>
 }): React.JSX.Element {
   const listboxId = useId()
@@ -70,7 +70,15 @@ export function SshStatusMenuHostSearch({
                 event.stopPropagation()
                 const step = event.key === 'ArrowDown' ? 1 : -1
                 const current = Math.min(activeIndex, options.length - 1)
-                setActiveIndex(Math.max(0, Math.min(options.length - 1, current + step)))
+                const next = Math.max(0, Math.min(options.length - 1, current + step))
+                setActiveIndex(next)
+                // Why: focus stays in the input, so the menu won't scroll to the active row itself.
+                const nextOption = options[next]
+                if (nextOption) {
+                  event.currentTarget.ownerDocument
+                    .getElementById(optionId(nextOption.id))
+                    ?.scrollIntoView({ block: 'nearest' })
+                }
                 return
               }
               if (event.key === 'Enter') {
@@ -89,7 +97,7 @@ export function SshStatusMenuHostSearch({
             onPointerDown={(event) => event.stopPropagation()}
             placeholder={searchSshHostsLabel()}
             aria-label={searchSshHostsLabel()}
-            className="h-7 px-2 text-xs"
+            className="h-7"
           />
         </div>
       ) : null}
@@ -104,7 +112,7 @@ export function SshStatusMenuHostSearch({
         <div className="px-2 py-1.5 text-xs text-muted-foreground">
           {moreSshHostsLabel(hiddenIdleCount)}
         </div>
-      ) : query !== '' && !idleMatched ? (
+      ) : query !== '' && !queryMatched ? (
         <div className="px-2 py-1.5 text-xs text-muted-foreground">{noMatchingSshHostsLabel()}</div>
       ) : null}
     </>
