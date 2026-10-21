@@ -8,10 +8,7 @@ import {
   type MobilePushAgentState,
   type MobilePushRegistration
 } from '../../../shared/mobile-push-contract'
-import type {
-  MobileNotificationDispatchEvent,
-  MobileNotificationEvent
-} from '../runtime-mobile-notification-controller'
+import type { MobileNotificationEvent } from '../runtime-mobile-notification-controller'
 import type { PushGatewayClient, PushSendNotification } from './push-gateway-client'
 import { PushOutcomeCounters } from './push-outcome-counters'
 
@@ -34,33 +31,7 @@ type PushDispatcherOptions = {
   scheduleRetry?: (run: () => void, delayMs: number) => void
 }
 
-export function planSourceAgentRecipients(
-  registry: PushDispatcherRegistry,
-  terminal: boolean
-): string[] {
-  return activePushTargets(registry).flatMap(({ registration }) =>
-    registration.destinationDigest && (!terminal || registration.filter.hostAgentAlerts === true)
-      ? [registration.destinationDigest]
-      : []
-  )
-}
-
 type PushTarget = { deviceId: string; registration: MobilePushRegistration }
-
-function activePushTargets(registry: PushDispatcherRegistry): PushTarget[] {
-  const targets = new Map<string, PushTarget>()
-  for (const { deviceId, pushRegistration: registration } of registry.listDevices()) {
-    if (!registration || registration.expiresAt <= Date.now()) {
-      continue
-    }
-    const key = registration.destinationDigest ?? deviceId
-    // Re-pairing the same destination must not keep a second, contradictory delivery mode.
-    if ((targets.get(key)?.registration.expiresAt ?? 0) <= registration.expiresAt) {
-      targets.set(key, { deviceId, registration })
-    }
-  }
-  return [...targets.values()]
-}
 
 function clip(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/g, ' ').trim()
@@ -82,38 +53,13 @@ export function mapPushAgentState(
 
 function allowsPushDelivery(
   registration: MobilePushRegistration,
-  event: MobileNotificationDispatchEvent
+  event: MobileNotificationEvent
 ): boolean {
-  if (
-    event.desktopAllowed === false ||
-    (registration.filter.onlyWhenDesktopAway && event.desktopAway === false)
-  ) {
-    return false
-  }
-  const modern = !!registration.destinationDigest && registration.filter.sourceAgentAlerts === true
-  if (event.sourcePlan) {
-    if (!modern) {
-      return event.sourcePlan.kind === 'structured' && !event.sourcePlan.carrier
-    }
-    if (
-      event.sourcePlan.kind === 'terminal' &&
-      !event.sourcePlan.carrier &&
-      !registration.filter.hostAgentAlerts
-    ) {
-      return false
-    }
-    const direct = event.sourcePlan.direct.includes(registration.destinationDigest!)
-    return event.sourcePlan.carrier ? !direct : direct
-  }
-  if (event.hostAgentAlert) {
-    return false
-  }
-  if (event.executionHostAnnounces) {
-    return event.executionHost
-      ? !(event.sourceOwned && modern)
-      : !(modern && registration.filter.hostAgentAlerts)
-  }
-  return true
+  return (
+    event.type === 'notification' &&
+    event.desktopAllowed !== false &&
+    (!registration.filter.onlyWhenDesktopAway || event.desktopAway !== false)
+  )
 }
 
 export class PushDispatcher {
@@ -207,8 +153,13 @@ export class PushDispatcher {
     if (agentState === undefined) {
       return null
     }
-    const targets = activePushTargets(this.registry).flatMap(({ deviceId, registration }) => {
-      if (!allowsPushDelivery(registration, event)) {
+    const targets = this.registry.listDevices().flatMap((device) => {
+      const registration = device.pushRegistration
+      if (
+        !registration ||
+        registration.expiresAt <= Date.now() ||
+        !allowsPushDelivery(registration, event)
+      ) {
         return []
       }
       if (
@@ -216,13 +167,13 @@ export class PushDispatcher {
         !reserveNotificationCooldown(
           this.recentNotifications,
           // Keyed news is announced once by its producer, so only its own repeat may collapse it.
-          JSON.stringify([deviceId, event.attentionKey ?? event.worktreeId ?? 'global']),
+          JSON.stringify([device.deviceId, event.attentionKey ?? event.worktreeId ?? 'global']),
           event.emittedAt
         )
       ) {
         return []
       }
-      return [{ deviceId, registration }]
+      return [{ deviceId: device.deviceId, registration }]
     })
     if (targets.length === 0) {
       return null

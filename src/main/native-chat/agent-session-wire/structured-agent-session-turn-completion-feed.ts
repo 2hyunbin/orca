@@ -1,18 +1,7 @@
-// The host's answer to "a request just finished" and "the agent just asked the user something",
-// derived once per journal commit. A request is the one the status row reports: a turn, or a send
-// the agent or its start refused. A prompt is an approval or question item left pending; it
-// usually lands mid-turn, so it is its own edge rather than a kind of completion.
-//
-// WHY THE HOST DERIVES IT: a structured session runs on the execution host and keeps journalling
-// whether or not any renderer has a reader mounted. A client that derived completions itself would
-// see none for a backgrounded chat — which is the case this exists to serve.
-//
-// WHY IT IS LIVE-ONLY: nothing here is retained, replayed or queued. A subscriber learns what
-// finishes or asks while it is subscribed and nothing else. That is the deliberate opposite of the status
-// feed next door, which replays every session on subscribe: a status is state a late reader still
-// needs, a completion is an edge that has already passed. Keeping a queue would create a durable
-// obligation with nothing to retire it.
-
+// Live-only host attention edges; reattachment and journal replacement establish a silent baseline.
+import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
+import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
+import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type {
   AgentSessionTurnCompletion,
@@ -33,12 +22,13 @@ export type StructuredAgentSessionTurnCompletionSubscriber = {
   includePrompts?: boolean
   /** In-process only: pending prompts for delivery reconciliation, on restore and when one ends. */
   onState?: (state: StructuredAttentionState) => void
+  onTurnStarted?: (sessionId: string, cursor: AgentJournalCursor, sourceSequence: number) => void
 }
 
 type CompletionFeedCursor = { epoch: string; sequence: number }
 
 type CompletionFeedSession = {
-  journal: Pick<AgentSessionJournal, 'cursor'>
+  journal: Pick<AgentSessionJournal, 'cursor'> & Partial<Pick<AgentSessionJournal, 'snapshot'>>
   params: { location: AgentSessionRecord['location'] }
 }
 
@@ -58,6 +48,8 @@ type RequestMark = Pick<StructuredAgentSessionLatestRequest, 'kind' | 'id'>
  *  `prompts` the prompts already pending; absence of the whole entry — not an empty field — is
  *  what makes the first observation silent. */
 type SessionBaseline = CompletionFeedCursor & {
+  rootId?: string
+  sourceSequence: number
   settled: RequestMark | null
   prompts: ReadonlySet<string>
 }
@@ -126,7 +118,13 @@ export class StructuredAgentSessionTurnCompletionFeed {
     }
     if (!baseline || options?.historical) {
       // Baseline only. Whatever the session was already holding is history, not news.
-      this.baselines.set(sessionId, { ...cursor, settled: settledMark(request), prompts })
+      this.baselines.set(sessionId, {
+        ...cursor,
+        sourceSequence: cursor.sequence,
+        settled: settledMark(request),
+        prompts,
+        rootId: request?.kind === 'turn' ? request.id : undefined
+      })
       return
     }
     if (baseline.epoch !== cursor.epoch || cursor.sequence < baseline.sequence) {
@@ -135,10 +133,40 @@ export class StructuredAgentSessionTurnCompletionFeed {
       // newest settled row as a fresh completion.
       baseline.epoch = cursor.epoch
       baseline.sequence = cursor.sequence
+      baseline.sourceSequence = cursor.sequence
+      baseline.rootId = request?.kind === 'turn' ? request.id : undefined
       baseline.settled = settledMark(request)
       baseline.prompts = prompts
       return
     }
+    if (
+      request?.kind === 'turn' &&
+      request.turnState === 'running' &&
+      baseline.rootId !== request.id
+    ) {
+      const root = (journal ?? session.journal)
+        .snapshot?.()
+        .items.find(
+          (item) =>
+            isRootAgentJournalItem(item) &&
+            !item.recovered &&
+            readAgentJournalTurn(item.body)?.turnId === request.id
+        )
+      if (root && root.sequence > baseline.sequence) {
+        for (const subscriber of this.subscribers.values()) {
+          try {
+            subscriber.onTurnStarted?.(
+              sessionId,
+              { epoch: cursor.epoch, sequence: root.sequence },
+              baseline.sourceSequence
+            )
+          } catch {
+            /* Retirement cannot interrupt provider publication. */
+          }
+        }
+      }
+    }
+    baseline.rootId = request?.kind === 'turn' ? request.id : undefined
     baseline.sequence = cursor.sequence
     // An answered prompt leaves the set, so only a prompt not pending last commit is news.
     const raised = state.pendingPromptIds.find((id) => !baseline.prompts.has(id))

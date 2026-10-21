@@ -94,6 +94,7 @@ export function createAgentCompletionIdentityScope(
       return true
     }
     const eligibleWorkingBoundaryByLane = new Map(workingBoundaryByPane.get(paneKey))
+    eligibleWorkingBoundaryByLane.delete(lane)
     pendingStampedTailByPane.set(paneKey, {
       turnCompletedAt,
       originLane: lane,

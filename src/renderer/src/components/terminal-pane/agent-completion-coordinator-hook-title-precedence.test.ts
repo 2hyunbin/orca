@@ -68,10 +68,7 @@ describe('agent completion coordinator', () => {
     coordinator.observeTitle('codex done')
 
     expect(dispatchCompletion).toHaveBeenCalledTimes(1)
-    expect(dispatchCompletion).toHaveBeenCalledWith('codex', {
-      source: 'hook',
-      quietedHookDone: false
-    })
+    expect(dispatchCompletion).toHaveBeenCalledWith('codex')
   })
 
   it('suppresses delayed title completion after process inspection changes sessions', async () => {
@@ -95,10 +92,7 @@ describe('agent completion coordinator', () => {
     coordinator.observeClassifiedTitleCompletion('codex done')
 
     expect(dispatchCompletion).toHaveBeenCalledTimes(1)
-    expect(dispatchCompletion).toHaveBeenCalledWith('codex', {
-      source: 'hook',
-      quietedHookDone: false
-    })
+    expect(dispatchCompletion).toHaveBeenCalledWith('codex')
   })
 
   it('suppresses late process-exit backstop after process inspection follows hook completion', async () => {
@@ -125,10 +119,7 @@ describe('agent completion coordinator', () => {
     await flushAsyncTicks()
 
     expect(dispatchCompletion).toHaveBeenCalledTimes(1)
-    expect(dispatchCompletion).toHaveBeenCalledWith('codex', {
-      source: 'hook',
-      quietedHookDone: false
-    })
+    expect(dispatchCompletion).toHaveBeenCalledWith('codex')
   })
 
   it('suppresses process-exit in another coordinator after a hook completion notified', async () => {

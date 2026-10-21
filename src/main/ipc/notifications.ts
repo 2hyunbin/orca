@@ -99,8 +99,19 @@ export function registerNotificationHandlers(store: Store, runtime?: OrcaRuntime
       _event,
       ids: string[],
       paneKeys?: string[],
-      reads?: StructuredNotificationRead[]
+      reads?: StructuredNotificationRead[],
+      turnStarts?: { notificationId: string; executionHost?: string }[]
     ): NotificationDismissResult => {
+      if (Array.isArray(turnStarts)) {
+        runtime?.retireLiveNotifications(
+          turnStarts.filter(
+            (item) =>
+              item &&
+              typeof item.notificationId === 'string' &&
+              (item.executionHost === undefined || typeof item.executionHost === 'string')
+          )
+        )
+      }
       const uniqueIds = new Set(
         ids.filter(
           (id): id is string =>

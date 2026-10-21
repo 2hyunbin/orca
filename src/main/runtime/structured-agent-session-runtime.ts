@@ -337,9 +337,14 @@ async function installOnJournal(
         }
         const sessionId =
           event.type === 'prompt' ? event.prompt.sessionId : event.completion.sessionId
-        delivery.deliver(event, installed.readStatusSummary(sessionId))
+        delivery.deliver(
+          event,
+          installed.readStatusSummary(sessionId),
+          installed.phoneAlertCaller(event)
+        )
       },
-      onState: delivery.reconcile
+      onState: delivery.reconcile,
+      onTurnStarted: delivery.onTurnStarted
     })
   }
   setStructuredAgentSessionHost(host)

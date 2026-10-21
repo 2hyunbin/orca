@@ -2,18 +2,17 @@
 // registration each paired phone asked for, and the durable delete queue. Built
 // alongside DesktopRelayService but deliberately not gated on cloud sign-in: the
 // gateway authenticates with the host keypair, so accountless hosts push too.
-import { createHash, randomUUID } from 'node:crypto'
-import {
-  MOBILE_PUSH_LEASE_MS,
-  type MobilePushTestResult,
-  type MobilePushRegisterInput,
-  type MobilePushRegisterResult
+import { randomUUID } from 'node:crypto'
+import type {
+  MobilePushTestResult,
+  MobilePushRegisterInput,
+  MobilePushRegisterResult
 } from '../../../shared/mobile-push-contract'
 import { runKeyedSerializedOperation } from '../../cli/keyed-promise-queue'
 import type { DeviceRegistry } from '../device-registry'
 import type { OrcaRuntimeService } from '../orca-runtime'
 import type { OrcaRuntimeRpcServer } from '../runtime-rpc'
-import { PushDispatcher, planSourceAgentRecipients } from './push-dispatcher'
+import { PushDispatcher } from './push-dispatcher'
 import { PushGatewayClient } from './push-gateway-client'
 import { PushRegisterThrottle } from './push-register-throttle'
 import type { PushUnregisterOutbox } from './push-unregister-outbox'
@@ -38,7 +37,9 @@ type DesktopPushServiceOptions = {
 export class DesktopPushService {
   private readonly runtime: OrcaRuntimeService
   private readonly runtimeRpc: OrcaRuntimeRpcServer
+  private readonly registry: DeviceRegistry
   private readonly outbox: PushUnregisterOutbox
+  private readonly client: PushGatewayClient
   private readonly dispatcher: PushDispatcher
   private readonly registerThrottle: PushRegisterThrottle
   private readonly scheduleRetry: (run: () => void, delayMs: number) => void
@@ -52,11 +53,13 @@ export class DesktopPushService {
 
   private constructor(
     options: DesktopPushServiceOptions,
-    private readonly registry: DeviceRegistry,
-    private readonly client: PushGatewayClient
+    registry: DeviceRegistry,
+    client: PushGatewayClient
   ) {
     this.runtime = options.runtime
     this.runtimeRpc = options.runtimeRpc
+    this.registry = registry
+    this.client = client
     this.outbox = options.runtimeRpc.getPushUnregisterOutbox()
     this.dispatcher = new PushDispatcher({ client, registry })
     this.registerThrottle = options.registerThrottle ?? new PushRegisterThrottle()
@@ -78,10 +81,6 @@ export class DesktopPushService {
     const client =
       options.client ?? new PushGatewayClient({ gatewayUrl: options.gatewayUrl, keypair })
     return new DesktopPushService(options, registry, client)
-  }
-
-  planAgentAlert(event: { hostAgentAlert?: boolean }): string[] {
-    return planSourceAgentRecipients(this.registry, event.hostAgentAlert === true)
   }
 
   start(): void {
@@ -175,12 +174,8 @@ export class DesktopPushService {
     if (this.outbox.isUnreadable()) {
       return { registered: false, reason: 'registration_storage_failed' }
     }
-    // Re-enabling supersedes cleanup of a route still attached locally.
+    // A stable gateway ID must not inherit a delete from an earlier registration.
     for (const item of this.outbox.pending().filter((entry) => entry.deviceId === input.deviceId)) {
-      if (this.isRegistrationAttached(item.deviceId, item.registrationId)) {
-        this.outbox.remove(item.reqId)
-        continue
-      }
       if (!(await this.deleteQueued(item.reqId, item.registrationId))) {
         this.scheduleFlushRetry()
         return { registered: false, reason: 'gateway_unreachable' }
@@ -201,7 +196,8 @@ export class DesktopPushService {
     }
     const failure = this.storeRegistration(input, result.registrationId)
     if (failure) {
-      // Detached accepted routes need cleanup; attached routes must remain usable.
+      // Why: the gateway now holds a token this host will never push to. Queue its
+      // delete instead of leaking it until the phone happens to register again.
       this.outbox.enqueue({ registrationId: result.registrationId, deviceId: input.deviceId })
     }
     void this.flushUnregisterOutbox()
@@ -266,17 +262,8 @@ export class DesktopPushService {
     try {
       const stored = this.registry.setPushRegistration(input.deviceId, {
         registrationId,
-        ...(input.filter.sourceAgentAlerts
-          ? {
-              destinationDigest: createHash('sha256')
-                .update(
-                  JSON.stringify([input.platform, input.apnsEnvironment ?? null, input.token])
-                )
-                .digest('hex')
-            }
-          : {}),
         filter: input.filter,
-        expiresAt: Date.now() + MOBILE_PUSH_LEASE_MS
+        expiresAt: Date.now() + 7 * 24 * 60 * 60_000
       })
       // False means the device was removed or left mobile scope while the gateway
       // call was in flight.
@@ -298,7 +285,10 @@ export class DesktopPushService {
           item.deviceId,
           () => {
             // Failed local removal must not delete a still-attached gateway registration.
-            if (this.isRegistrationAttached(item.deviceId, item.registrationId)) {
+            if (
+              this.registry.getDevice(item.deviceId)?.pushRegistration?.registrationId ===
+              item.registrationId
+            ) {
               return Promise.resolve(false)
             }
             return this.deleteQueued(item.reqId, item.registrationId)
@@ -314,10 +304,6 @@ export class DesktopPushService {
       }
     }
     return retryable
-  }
-
-  private isRegistrationAttached(deviceId: string, registrationId: string): boolean {
-    return this.registry.getDevice(deviceId)?.pushRegistration?.registrationId === registrationId
   }
 
   private async deleteQueued(reqId: string, registrationId: string): Promise<boolean> {

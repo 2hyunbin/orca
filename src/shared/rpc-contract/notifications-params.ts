@@ -23,7 +23,6 @@ export const NotificationGetMissedSinceParams = z.object({
   lastSeenSeq: z.number().int().min(0, 'lastSeenSeq must be a non-negative integer'),
   epoch: z.string().optional(),
   includeDesktopSuppressed: z.boolean().optional(),
-  sourceEvents: z.boolean().optional(),
   deliveredPushes: z
     .array(
       z.object({
@@ -36,12 +35,9 @@ export const NotificationGetMissedSinceParams = z.object({
     .optional()
 })
 
-// Why not strict: an older desktop must drop a newer phone's keys, not refuse its registration.
 export const NotificationPushFilterParams = z.object({
   onlyWhenDesktopAway: z.boolean().optional(),
-  sound: z.boolean().optional(),
-  hostAgentAlerts: z.boolean().optional(),
-  sourceAgentAlerts: z.boolean().optional()
+  sound: z.boolean().optional()
 })
 
 export const NotificationRegisterPushParams = z
@@ -61,8 +57,5 @@ export const NotificationRegisterPushParams = z
   })
 
 export const NotificationsSubscribeParams = z
-  .object({
-    includeDesktopSuppressed: z.boolean().optional(),
-    sourceEvents: z.boolean().optional()
-  })
+  .object({ includeDesktopSuppressed: z.boolean().optional() })
   .optional()

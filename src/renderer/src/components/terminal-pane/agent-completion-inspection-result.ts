@@ -5,11 +5,11 @@ import { admitRemoteForegroundEvidence } from '../../../../shared/remote-foregro
 import { isClientOnlyUnverifiableInspection } from '../../../../shared/terminal-process-inspection'
 import { getRemoteRuntimeTerminalHandle } from '@/runtime/runtime-terminal-stream'
 import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-terminal-inspection'
-import type { AgentCompletionCoordinatorOptions } from '../../../../shared/agent-completion-coordinator-types'
+import type { AgentCompletionCoordinatorOptions } from './agent-completion-coordinator-types'
 import type {
   AgentCompletionIdentityScope,
   LastCompletionIdentity
-} from '../../../../shared/agent-completion-identity-store'
+} from './agent-completion-identity-store'
 import type { ProcessMonitorState } from './agent-completion-process-types'
 import { POLL_TIER_INTERVAL_MS } from './agent-completion-poll-cadence'
 

@@ -176,6 +176,15 @@ describe('MobileSocketWiring', () => {
     )
     transport.receive(ws, encrypt('{"id":"rpc-1","method":"status.get"}', sharedKey))
 
+    expect(wiring.isConnectedDesktop('device-1')).toBe(false)
+    const authenticated = onText.mock.calls[0]?.[0]
+    if (!authenticated) {
+      throw new Error('expected authenticated socket')
+    }
+    authenticated.clientCapabilities = ['browser.clientHost.v1']
+    expect(wiring.isConnectedDesktop('device-1')).toBe(true)
+    authenticated.clientCapabilities = ['session-tabs.close-intent.v1']
+
     // Socket bookkeeping keys on the device id; legacy rows keep their token as the client id.
     expect(transport.setClientId).toHaveBeenCalledWith(ws, 'device-1')
     expect(onText).toHaveBeenCalledOnce()
@@ -195,6 +204,7 @@ describe('MobileSocketWiring', () => {
     expect(onClose).toHaveBeenCalledWith(expect.objectContaining({ ws }), false)
     expect(wiring.channelCount).toBe(0)
     expect(wiring.connectionCount).toBe(0)
+    expect(wiring.isConnectedDesktop('device-1')).toBe(false)
   })
 
   it('reports other live sockets of the same device on close', () => {

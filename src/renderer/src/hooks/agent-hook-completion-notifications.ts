@@ -1,10 +1,12 @@
+import { createAgentHookNotificationRetirement } from './agent-hook-notification-retirement'
 import { useAppStore } from '@/store'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { createAgentCompletionCoordinator } from '@/components/terminal-pane/agent-completion-coordinator'
 import type {
   AgentCompletionCoordinator,
+  AgentCompletionDispatchMeta,
   AgentCompletionStatusSnapshot
-} from '../../../shared/agent-completion-coordinator-types'
+} from '@/components/terminal-pane/agent-completion-coordinator-types'
 import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-terminal-inspection'
 import { dispatchTerminalNotification } from '@/components/terminal-pane/use-notification-dispatch'
 import { collectLeafIdsInOrder } from '@/components/terminal-pane/layout-serialization'
@@ -22,9 +24,7 @@ type CoordinatorEntry = {
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
 type WorktreeTab = NonNullable<StoreSnapshot['tabsByWorktree']>[string][number]
-// Why: a paneKey resolves to a tab by id. Prebuilding this index once per prune
-// pass avoids re-flattening tabsByWorktree per coordinator (O(coordinators x
-// tabs)) when a liveness or notification-setting update requires a prune.
+// Index once per prune to avoid rescanning all tabs for every pane.
 type TabIndex = ReadonlyMap<string, WorktreeTab>
 type PaneCoordinatorLivenessSnapshot = Pick<
   StoreSnapshot,
@@ -232,7 +232,25 @@ function paneCanReceiveHookCompletion(paneKey: string, tabIndex?: TabIndex): boo
 }
 
 function createCoordinator(paneKey: string, worktreeId: string): AgentCompletionCoordinator {
-  return createAgentCompletionCoordinator({
+  const retirement = createAgentHookNotificationRetirement(() => getPtyIdForPaneKey(paneKey))
+  const dispatchNotification = (title: string, meta?: AgentCompletionDispatchMeta): void => {
+    if (
+      !retirement.accepts(meta?.agentStatus) ||
+      !isAgentTaskCompleteTrackingEnabled() ||
+      paneKeysRequiringFreshWorking.has(paneKey)
+    ) {
+      return
+    }
+    const alert = dispatchTerminalNotification(worktreeId, {
+      source: 'agent-task-complete',
+      agentCompletionSource: meta?.source ?? 'hook',
+      terminalTitle: title,
+      paneKey,
+      ...(meta?.agentStatus ? { agentStatusSnapshot: meta.agentStatus } : {})
+    })
+    retirement.record(alert, meta?.agentStatus)
+  }
+  const coordinator = createAgentCompletionCoordinator({
     paneKey,
     statusLane: 'hook',
     getPtyId: () => getPtyIdForPaneKey(paneKey),
@@ -241,34 +259,25 @@ function createCoordinator(paneKey: string, worktreeId: string): AgentCompletion
       hasChildProcesses: false
     }),
     dispatchHookLifecycle: (payload) => dispatchAgentHookTerminalLifecycle(paneKey, payload),
-    dispatchCompletion: (title, meta) => {
-      if (!isAgentTaskCompleteTrackingEnabled() || paneKeysRequiringFreshWorking.has(paneKey)) {
-        return
-      }
-      dispatchTerminalNotification(worktreeId, {
-        source: 'agent-task-complete',
-        terminalTitle: title,
-        paneKey,
-        ...(meta?.source ? { agentCompletionSource: meta.source } : {}),
-        ...(meta?.agentStatus ? { agentStatusSnapshot: meta.agentStatus } : {})
-      })
-    },
-    dispatchAttention: (title, meta) => {
-      if (!isAgentTaskCompleteTrackingEnabled() || paneKeysRequiringFreshWorking.has(paneKey)) {
-        return
-      }
-      // Why: native notification settings still label this channel as "agent
-      // task complete"; the snapshot state makes the banner read "needs input".
-      dispatchTerminalNotification(worktreeId, {
-        source: 'agent-task-complete',
-        terminalTitle: title,
-        paneKey,
-        agentCompletionSource: 'hook',
-        agentStatusSnapshot: meta.agentStatus
-      })
-    },
+    dispatchCompletion: dispatchNotification,
+    dispatchAttention: dispatchNotification,
     isLive: () => paneCanReceiveHookCompletion(paneKey)
   })
+  return {
+    ...coordinator,
+    seedHookStatus: (payload) => {
+      retirement.clear()
+      coordinator.seedHookStatus(payload)
+    },
+    observeHookStatus: (payload) => {
+      retirement.observe(payload)
+      coordinator.observeHookStatus(payload)
+    },
+    dispose: () => {
+      retirement.clear()
+      coordinator.dispose()
+    }
+  }
 }
 
 export function observeAgentHookCompletionForNotification({

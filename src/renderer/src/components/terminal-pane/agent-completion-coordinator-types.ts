@@ -1,12 +1,28 @@
-import type { ParsedAgentStatusPayload } from './agent-status-types'
-import type { RecognizedAgentProcess } from './agent-process-recognition'
-import type { TerminalProcessInspection as RuntimeTerminalProcessInspection } from './terminal-process-inspection'
+import type {
+  AgentStatusIpcPayload,
+  ParsedAgentStatusPayload
+} from '../../../../shared/agent-status-types'
+import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
+import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-terminal-inspection'
 
-export type AgentCompletionStatusSnapshot = ParsedAgentStatusPayload & {
-  stateStartedAt?: number
-  /** Renderer-local boundary used only to reject a delayed cross-host completion. */
-  localStateStartedAt?: number
-}
+export type AgentCompletionStatusSnapshot = ParsedAgentStatusPayload &
+  Partial<
+    Pick<
+      AgentStatusIpcPayload,
+      | 'runId'
+      | 'executionId'
+      | 'terminalHandle'
+      | 'connectionId'
+      | 'turnStartedAt'
+      | 'authorityRestartId'
+      | 'isReplay'
+      | 'restoredUnconfirmed'
+    >
+  > & {
+    stateStartedAt?: number
+    /** Renderer-local boundary used only to reject a delayed cross-host completion. */
+    localStateStartedAt?: number
+  }
 
 export type AgentCompletionDispatchMeta = {
   source: 'hook' | 'title' | 'process-exit'

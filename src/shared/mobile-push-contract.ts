@@ -15,23 +15,14 @@ export type MobilePushPlatform = (typeof MOBILE_PUSH_PLATFORMS)[number]
 export const MOBILE_PUSH_APNS_ENVIRONMENTS = ['sandbox', 'production'] as const
 export type MobilePushApnsEnvironment = (typeof MOBILE_PUSH_APNS_ENVIRONMENTS)[number]
 
-/** A host keeps a phone's push registration this long after the phone last renewed it. */
-export const MOBILE_PUSH_LEASE_MS = 7 * 24 * 60 * 60_000
-
 export type MobilePushFilter = {
   onlyWhenDesktopAway?: boolean
   sound?: boolean
-  /** This phone takes the host's own agent alerts from main instead of its window's copies. Set only
-   *  when no host it registered with would still forward them, so a mixed-version setup keeps today's path. */
-  hostAgentAlerts?: boolean
-  /** Uses canonical source events when this host carries another host’s alerts. */
-  sourceAgentAlerts?: boolean
 }
 
 /** Persisted on the paired DeviceEntry so a host restart can push without the phone re-registering. */
 export type MobilePushRegistration = {
   registrationId: string
-  destinationDigest?: string
   filter: MobilePushFilter
   expiresAt: number
 }
@@ -64,9 +55,7 @@ function parseFilter(value: unknown): MobilePushFilter | null {
   const filter = value as Partial<MobilePushFilter>
   if (
     (filter.onlyWhenDesktopAway !== undefined && typeof filter.onlyWhenDesktopAway !== 'boolean') ||
-    (filter.sound !== undefined && typeof filter.sound !== 'boolean') ||
-    (filter.hostAgentAlerts !== undefined && typeof filter.hostAgentAlerts !== 'boolean') ||
-    (filter.sourceAgentAlerts !== undefined && typeof filter.sourceAgentAlerts !== 'boolean')
+    (filter.sound !== undefined && typeof filter.sound !== 'boolean')
   ) {
     return null
   }
@@ -74,9 +63,7 @@ function parseFilter(value: unknown): MobilePushFilter | null {
     ...(typeof filter.onlyWhenDesktopAway === 'boolean'
       ? { onlyWhenDesktopAway: filter.onlyWhenDesktopAway }
       : {}),
-    ...(typeof filter.sound === 'boolean' ? { sound: filter.sound } : {}),
-    ...(filter.hostAgentAlerts === true ? { hostAgentAlerts: true } : {}),
-    ...(filter.sourceAgentAlerts === true ? { sourceAgentAlerts: true } : {})
+    ...(typeof filter.sound === 'boolean' ? { sound: filter.sound } : {})
   }
 }
 
@@ -103,10 +90,6 @@ export function parseMobilePushRegistration(value: unknown): MobilePushRegistrat
   return {
     registrationId: registration.registrationId,
     filter,
-    ...(typeof registration.destinationDigest === 'string' &&
-    /^[a-f0-9]{64}$/.test(registration.destinationDigest)
-      ? { destinationDigest: registration.destinationDigest }
-      : {}),
     expiresAt: registration.expiresAt
   }
 }

@@ -260,10 +260,6 @@ export const WORKSPACE_PORTS_HOST_SCOPED_RUNTIME_CAPABILITY =
 export const RUNTIME_SOURCE_FENCE_RUNTIME_CAPABILITY = 'runtime-source-fence.v1' as const
 // Hosts without this capability have no notifications.registerPush RPC.
 export const NOTIFICATIONS_REMOTE_PUSH_RUNTIME_CAPABILITY = 'notifications.remote-push.v1' as const
-// Hosts with this push their own terminal agents' hook news to their own phones from main, so a
-// paired desktop may skip forwarding it to a phone that registered with this host directly.
-export const NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY =
-  'notifications.source-agent-alerts.v1' as const
 
 export const ANTIGRAVITY_CONFIGURED_MODEL_RUNTIME_CAPABILITY =
   'git.antigravity-configured-model.v1' as const

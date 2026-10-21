@@ -29,9 +29,6 @@ export type RuntimeServiceCommandSurface = {
   releaseSubscriptionByRequest: RuntimeSubscriptionRegistry['releaseByRequest']
   onNotificationDispatched: RuntimeMobileNotificationController['onDispatched']
   getMobileNotificationListenerCount: RuntimeMobileNotificationController['getListenerCount']
-  setNotificationSourceHost: RuntimeMobileNotificationController['setSourceHost']
-  getCarriedSourceDeliveries: RuntimeMobileNotificationController['carriedSourceDeliveries']
-  carrySourceAgentAlert: RuntimeMobileNotificationController['carrySourceAlert']
   dispatchMobileNotification: RuntimeMobileNotificationController['dispatch']
   getMissedNotificationsSince: RuntimeMobileNotificationController['getMissedSince']
   configureNotificationDismissalStore: RuntimeMobileNotificationController['configureDismissalStore']
@@ -39,6 +36,8 @@ export type RuntimeServiceCommandSurface = {
   reconcileDismissedPushes: RuntimeMobileNotificationController['reconcileDismissedPushes']
   getMobileNotificationEpoch: RuntimeMobileNotificationController['getEpoch']
   dismissMobileNotification: RuntimeMobileNotificationController['dismiss']
+  setNotificationDesktopProof: (proof: (deviceId: string) => boolean) => void
+  retireLiveNotifications: RuntimeMobileNotificationController['retireLiveNotifications']
   retireStructuredAttention: RuntimeMobileNotificationController['retireStructuredAttention']
   reconcileStructuredPromptAttention: RuntimeMobileNotificationController['reconcileStructuredPromptAttention']
   dispatchPluginNotification: RuntimeMobileNotificationController['dispatchPlugin']
@@ -134,9 +133,6 @@ export function installRuntimeServiceCommandSurface(
     releaseSubscriptionByRequest: subscriptions.releaseByRequest.bind(subscriptions),
     onNotificationDispatched: notifications.onDispatched.bind(notifications),
     getMobileNotificationListenerCount: notifications.getListenerCount.bind(notifications),
-    setNotificationSourceHost: notifications.setSourceHost.bind(notifications),
-    getCarriedSourceDeliveries: notifications.carriedSourceDeliveries.bind(notifications),
-    carrySourceAgentAlert: notifications.carrySourceAlert.bind(notifications),
     dispatchMobileNotification: notifications.dispatch.bind(notifications),
     getMissedNotificationsSince: notifications.getMissedSince.bind(notifications),
     configureNotificationDismissalStore: notifications.configureDismissalStore.bind(notifications),
@@ -144,6 +140,10 @@ export function installRuntimeServiceCommandSurface(
     reconcileDismissedPushes: notifications.reconcileDismissedPushes.bind(notifications),
     getMobileNotificationEpoch: notifications.getEpoch.bind(notifications),
     dismissMobileNotification: notifications.dismiss.bind(notifications),
+    setNotificationDesktopProof: (proof) => {
+      notifications.isConnectedDesktop = proof
+    },
+    retireLiveNotifications: notifications.retireLiveNotifications.bind(notifications),
     retireStructuredAttention: notifications.retireStructuredAttention.bind(notifications),
     reconcileStructuredPromptAttention:
       notifications.reconcileStructuredPromptAttention.bind(notifications),

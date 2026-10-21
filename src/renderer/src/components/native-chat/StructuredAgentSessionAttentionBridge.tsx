@@ -1,3 +1,6 @@
+import { agentSessionAttentionKey } from '../../../../shared/agent-session-attention'
+import { isRootAgentJournalItem } from '../../../../shared/agent-session-journal-producer'
+import { readAgentJournalTurn } from '../../../../shared/agent-session-turn-record'
 import { useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -6,7 +9,10 @@ import {
   sameStructuredReadTarget,
   type StructuredSubjectRead
 } from '@/attention/agent-subject-read-actions'
-import { findStructuredAgentSessionReadOwner } from './structured-agent-session-read-owner'
+import {
+  findStructuredAgentSessionReadOwner,
+  getStructuredAgentSessionReadOwner
+} from './structured-agent-session-read-owner'
 import { structuredAttentionReadObservation } from './structured-attention-read-observation'
 import { useAppStore } from '@/store'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -57,6 +63,67 @@ function StructuredAgentSessionOwnedAttention({
   const feed = useMemo(() => getStructuredAgentSessionTurnCompletionFeed(target), [target])
   useEffect(() => feed.activate(), [feed])
   const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
+  useEffect(() => {
+    const owner = getStructuredAgentSessionReadOwner(tab.entityId, target)
+    const owed = new Map<string, AgentJournalCursor>()
+    const observe = (): void => {
+      const snapshot = owner.getSnapshot()
+      if (!snapshot.current) {
+        owed.clear()
+        return
+      }
+      const epoch = snapshot.state.cursor?.epoch
+      const root = snapshot.state.items.findLast(
+        (item) => isRootAgentJournalItem(item) && readAgentJournalTurn(item.body) !== null
+      )
+      const ids: { notificationId: string; executionHost?: string }[] = []
+      for (const [notificationId, cursor] of owed) {
+        if (cursor.epoch !== epoch) {
+          owed.delete(notificationId)
+        } else if (
+          root &&
+          !root.recovered &&
+          readAgentJournalTurn(root.body)?.state === 'running' &&
+          root.sequence > cursor.sequence
+        ) {
+          ids.push({
+            notificationId,
+            ...(target.kind === 'environment'
+              ? { executionHost: `runtime:${encodeURIComponent(target.environmentId)}` }
+              : {})
+          })
+          owed.delete(notificationId)
+        }
+      }
+      if (ids.length) {
+        void window.api?.notifications
+          ?.dismiss?.([], [], undefined, ids)
+          .catch((error: unknown) =>
+            console.warn('[structured-session-attention] turn retirement failed', error)
+          )
+      }
+    }
+    const stopOwner = owner.subscribe(observe)
+    const stopEdges = feed.subscribe((edge) => {
+      const payload = edge.type === 'prompt' ? edge.prompt : edge.completion
+      if (
+        payload.sessionId !== tab.entityId ||
+        !payload.journalCursor ||
+        !owner.getSnapshot().current
+      ) {
+        return
+      }
+      owed.set(agentSessionAttentionKey(edge), { ...payload.journalCursor })
+      if (owed.size > 20) {
+        owed.delete(owed.keys().next().value!)
+      }
+    })
+    return () => {
+      stopOwner()
+      stopEdges()
+      owed.clear()
+    }
+  }, [feed, tab.entityId, target])
   const readFrontier = useRef<StructuredSubjectRead | undefined>(undefined)
   // Where the newest edge this tab was handed sits in the journal: what lit its row.
   const surfaced = useRef<AgentJournalCursor | undefined>(undefined)

@@ -222,13 +222,12 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       }
       session.scheduleAgentTaskCompleteNotification(title, {
         allowDoneDetailAfterGrace: meta?.quietedHookDone,
-        ...(meta?.source ? { agentCompletionSource: meta.source } : {}),
+        ...(meta?.source === 'process-exit' ? { agentCompletionSource: meta.source } : {}),
         ...(meta?.agentStatus ? { agentStatusSnapshot: meta.agentStatus } : {})
       })
     },
     dispatchAttention: (title, meta) =>
       session.scheduleAgentTaskCompleteNotification(title, {
-        agentCompletionSource: 'hook',
         agentStatusSnapshot: meta.agentStatus
       }),
     shouldPollProcessCadence: () => {

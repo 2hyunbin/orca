@@ -1,5 +1,5 @@
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
-import type { AgentCompletionStatusSnapshot } from '../../../../shared/agent-completion-coordinator-types'
+import type { AgentCompletionStatusSnapshot } from './agent-completion-coordinator-types'
 
 export function isSupersededAgentCompletionSnapshot(
   storedAgentStatus: Pick<AgentStatusEntry, 'state' | 'stateStartedAt'> | undefined,

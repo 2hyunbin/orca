@@ -124,12 +124,6 @@ export class MobileNotificationDismissalStore {
     return this.flush()
   }
 
-  hasNotification(notificationId: string): boolean {
-    return this.entries.some(
-      (entry) => entry.notificationId === notificationId && entry.expiresAt > Date.now()
-    )
-  }
-
   liveDeliveries(prefix = ''): DeliveredNotificationRecord[] {
     const now = Date.now()
     return this.entries

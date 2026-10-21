@@ -16,7 +16,6 @@ import {
   type RemotePushHostRegistrations
 } from '../storage/preferences'
 import { addPushTokenListener, getDevicePushToken, type MobilePushToken } from './push-token'
-import { NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY } from '../../../src/shared/protocol-version'
 import {
   NOTIFICATIONS_REMOTE_PUSH_CAPABILITY,
   attachPushRegistration,
@@ -126,42 +125,6 @@ describe('push registration capability gating', () => {
     expect(stored.registeredHostIds).toEqual(['host-1'])
   })
 
-  it('takes host agent alerts only when every host it registered with announces its own', async () => {
-    const announcing = [
-      NOTIFICATIONS_REMOTE_PUSH_CAPABILITY,
-      NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY
-    ]
-    const desktop = makeClient(announcing)
-    const server = makeClient(announcing)
-    await setRemotePushEnabled(true)
-
-    attachPushRegistration('desktop', desktop.client)
-    await flush()
-    attachPushRegistration('server', server.client)
-    await flush()
-
-    const lastRegister = (sent: SentRequest[]): unknown =>
-      sent.findLast((request) => request.method === 'notifications.registerPush')?.params
-    expect(lastRegister(desktop.sent)).toMatchObject({
-      filter: { hostAgentAlerts: true, sourceAgentAlerts: true }
-    })
-    expect(lastRegister(server.sent)).toMatchObject({
-      filter: { hostAgentAlerts: true, sourceAgentAlerts: true }
-    })
-
-    // A host from before this change still forwards, so every host falls back to today's path.
-    attachPushRegistration(
-      'older-desktop',
-      makeClient([NOTIFICATIONS_REMOTE_PUSH_CAPABILITY]).client
-    )
-    await flush()
-    for (const sent of [desktop.sent, server.sent]) {
-      expect(lastRegister(sent)).toMatchObject({ filter: { onlyWhenDesktopAway: true } })
-      expect(lastRegister(sent)).not.toMatchObject({ filter: { hostAgentAlerts: true } })
-      expect(lastRegister(sent)).toMatchObject({ filter: { sourceAgentAlerts: true } })
-    }
-  })
-
   it('never calls registerPush on a host without the capability', async () => {
     const { client, sent } = makeClient(['some-other.v1'])
     await setRemotePushEnabled(true)
@@ -171,35 +134,6 @@ describe('push registration capability gating', () => {
 
     expect(methodsIn(sent)).toEqual(['status.get'])
     expect(stored.registeredHostIds).toEqual([])
-  })
-
-  it('retains an accepted source route when a renewal is refused without revoking it', async () => {
-    const capabilities = [
-      NOTIFICATIONS_REMOTE_PUSH_CAPABILITY,
-      NOTIFICATIONS_HOST_AGENT_ALERTS_RUNTIME_CAPABILITY
-    ]
-    const first = makeClient(capabilities)
-    await setRemotePushEnabled(true)
-    const detach = attachPushRegistration('source', first.client)
-    await flush()
-    detach()
-    const refused = makeClient(capabilities)
-    vi.mocked(refused.client.sendRequest).mockImplementation(async (method) => {
-      refused.sent.push({ method })
-      return method === 'status.get'
-        ? ok({ capabilities })
-        : ok({ registered: false, reason: 'gateway_rejected' })
-    })
-    attachPushRegistration('source', refused.client)
-    await flush()
-    expect(stored).toMatchObject({ registeredHostIds: ['source'], sourceAlertHostIds: ['source'] })
-    expect(methodsIn(refused.sent)).not.toContain('notifications.unregisterPush')
-    const carrier = makeClient(capabilities)
-    attachPushRegistration('carrier', carrier.client)
-    await flush()
-    expect(
-      carrier.sent.findLast((request) => request.method === 'notifications.registerPush')?.params
-    ).toMatchObject({ filter: { hostAgentAlerts: true, sourceAgentAlerts: true } })
   })
 
   it('reconciles disabled consent even without registration records', async () => {

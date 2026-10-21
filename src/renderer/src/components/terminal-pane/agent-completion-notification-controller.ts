@@ -2,12 +2,12 @@ import type {
   AgentCompletionCoordinatorOptions,
   AgentCompletionStatusSnapshot
 } from './agent-completion-coordinator-types'
-import type { RecognizedAgentProcess } from './agent-process-recognition'
+import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
 import type {
   AgentCompletionIdentityScope,
   LastCompletionIdentity
 } from './agent-completion-identity-store'
-import { isPiCompatibleAgentType } from './pi-agent-kind'
+import { isPiCompatibleAgentType } from '../../../../shared/pi-agent-kind'
 
 type CompletionSource = 'hook' | 'title' | 'process-exit'
 
@@ -36,10 +36,7 @@ type ProcessState = {
 }
 
 type CompletionControllerOptions = {
-  options: Pick<
-    AgentCompletionCoordinatorOptions,
-    'paneKey' | 'isLive' | 'dispatchCompletion' | 'dispatchAttention' | 'dispatchHookLifecycle'
-  >
+  options: AgentCompletionCoordinatorOptions
   state: CompletionState
   processState: ProcessState
   identityScope: AgentCompletionIdentityScope
@@ -213,9 +210,6 @@ export function createAgentCompletionNotificationController({
         quietedHookDone: false,
         agentStatus: optionsOverride.agentStatus
       })
-    } else if (source === 'hook') {
-      // The source tells delivery that the execution host's main also announces this turn.
-      options.dispatchCompletion(title, { source, quietedHookDone: false })
     } else {
       options.dispatchCompletion(title)
     }

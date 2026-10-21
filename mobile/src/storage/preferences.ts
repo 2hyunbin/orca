@@ -41,8 +41,6 @@ const REMOTE_PUSH_HOST_REGISTRATIONS_KEY = 'orca:remotePushHostRegistrations'
 export type RemotePushHostRegistrations = {
   readonly registeredHostIds: readonly string[]
   readonly pendingUnregisterHostIds: readonly string[]
-  /** Last successfully registered source-feed capability, not remote delivery ownership. */
-  readonly sourceAlertHostIds?: readonly string[]
 }
 
 const EMPTY_REMOTE_PUSH_HOST_REGISTRATIONS: RemotePushHostRegistrations = {
@@ -59,8 +57,7 @@ export async function loadRemotePushHostRegistrations(): Promise<RemotePushHostR
     const parsed = JSON.parse(raw) as Record<string, unknown>
     return {
       registeredHostIds: stringArray(parsed.registeredHostIds),
-      pendingUnregisterHostIds: stringArray(parsed.pendingUnregisterHostIds),
-      sourceAlertHostIds: stringArray(parsed.sourceAlertHostIds)
+      pendingUnregisterHostIds: stringArray(parsed.pendingUnregisterHostIds)
     }
   } catch {
     return EMPTY_REMOTE_PUSH_HOST_REGISTRATIONS

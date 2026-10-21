@@ -150,6 +150,46 @@ describe('agent hook completion notifications', () => {
 
   afterEach(() => vi.useRealTimers())
 
+  it('retires the forwarded alert on a later real start, while rebinding leaves it alone', async () => {
+    const dismiss = vi.fn(async () => ({ dismissed: 0 }))
+    vi.stubGlobal('window', { api: { notifications: { dismiss } } })
+    dispatchTerminalNotification.mockReturnValue({
+      notificationId: 'forwarded',
+      executionHost: 'runtime:host-b'
+    })
+    const { observeAgentHookCompletionForNotification: observe } =
+      await import('./agent-hook-completion-notifications')
+    const status = (
+      state: ParsedAgentStatusPayload['state'],
+      at: number,
+      start = 100,
+      runId = 'run-1'
+    ) => ({
+      ...hookStatus(state),
+      runId,
+      executionId: runId,
+      turnStartedAt: start,
+      stateStartedAt: at
+    })
+    try {
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('working', 100) })
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('blocked', 200) })
+      expect(dispatchTerminalNotification).toHaveBeenCalledOnce()
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('working', 300) })
+      expect(dismiss).not.toHaveBeenCalled()
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('working', 400, 400) })
+      expect(dismiss).toHaveBeenCalledWith([], [], undefined, [
+        { notificationId: 'forwarded', executionHost: 'runtime:host-b' }
+      ])
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('blocked', 500, 400) })
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('working', 600, 600, 'run-2') })
+      expect(dismiss).toHaveBeenCalledOnce()
+    } finally {
+      dispatchTerminalNotification.mockReset()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('keeps completion tracking active across desktop notification changes', async () => {
     mockStoreState.settings.notifications.agentTaskComplete = false
     const {

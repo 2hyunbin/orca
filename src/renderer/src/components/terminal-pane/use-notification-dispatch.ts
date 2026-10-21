@@ -1,3 +1,4 @@
+import type { LiveNotificationRetirement } from '../../../../shared/notification-settings-types'
 import {
   resolveTerminalNotificationOwner,
   type TerminalNotificationBinding
@@ -20,7 +21,7 @@ import { isSupersededAgentCompletionSnapshot } from './agent-completion-snapshot
 import type {
   AgentCompletionDispatchMeta,
   AgentCompletionStatusSnapshot
-} from '../../../../shared/agent-completion-coordinator-types'
+} from './agent-completion-coordinator-types'
 import { getNotificationWorkspaceLabels } from './terminal-notification-state'
 import { createTerminalAttentionSurface } from './terminal-attention-surface'
 import {
@@ -73,7 +74,7 @@ export type TerminalNotificationEvent = TerminalNotificationBinding & {
 export function dispatchTerminalNotification(
   worktreeId: string,
   event: TerminalNotificationEvent
-): void {
+): LiveNotificationRetirement | undefined {
   const state = useAppStore.getState()
   // Why: the completion title is the live identity. If it explicitly names an
   // agent, any snapshot from another agent is stale pane-reuse residue and must
@@ -168,20 +169,22 @@ export function dispatchTerminalNotification(
         })
       : null
 
-  // Hook-lane news is announced to phones by the execution host's main from the same hook rows;
-  // title, process-exit and bell alerts are known only here.
-  const hostAnnounces = event.agentCompletionSource === 'hook'
-
+  let announced: LiveNotificationRetirement | undefined
   const requestDelivery = (request: AgentAttentionDeliveryRequest): void => {
     const owner = resolveTerminalNotificationOwner(state, worktreeId, event)
     const executionHost = notificationExecutionHostForOwner(owner)
+    if (notificationId) {
+      announced = { notificationId, ...(executionHost ? { executionHost } : {}) }
+    }
     deliverAgentAttentionNotification(
       {
         source: event.source,
         ...(notificationId ? { notificationId } : {}),
         worktreeId: request.workspaceId,
         ...(executionHost ? { executionHost } : {}),
-        ...(hostAnnounces ? { executionHostAnnounces: true } : {}),
+        ...(event.agentCompletionSource === 'hook' && !executionHost
+          ? { mobileDeliveredByHost: true }
+          : {}),
         paneKey: request.subjectKey ?? undefined,
         ...getNotificationWorkspaceLabels(state, request.workspaceId, event.terminalTitle),
         notificationSourceId: notificationSourceForOwner(owner, state),
@@ -197,6 +200,7 @@ export function dispatchTerminalNotification(
     unread: state.markAgentAttentionUnread,
     requestDelivery
   })
+  return announced
 }
 
 export function useNotificationDispatch(

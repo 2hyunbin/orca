@@ -1,219 +1,182 @@
-// Share the window policy until host turn-end facts replace residual hook inference.
 import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
+import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import { isRecognizedAgentType } from '../../shared/agent-process-recognition'
-import { agentMainAgentVerdict } from '../../shared/agent-main-agent-verdict'
-import { buildAgentNotificationId } from '../../shared/agent-notification-id'
-import type { AgentStatusIpcPayload, AgentStatusState } from '../../shared/agent-status-types'
-import type {
-  NotificationDispatchRequest,
-  NotificationSettings
-} from '../../shared/notification-settings-types'
-import { createAgentCompletionHookObserver } from '../../shared/agent-completion-hook-observer'
 import {
-  createAgentCompletionNotificationController,
-  type CompletionState
-} from '../../shared/agent-completion-notification-controller'
-import { createAgentCompletionIdentityScope } from '../../shared/agent-completion-identity-store'
+  agentMainAgentVerdict,
+  agentTurnEndedOnPurpose
+} from '../../shared/agent-main-agent-verdict'
+import { buildAgentNotificationId } from '../../shared/agent-notification-id'
+import type {
+  NotificationSettings,
+  LiveNotificationRetirement
+} from '../../shared/notification-settings-types'
 import { buildNotificationOptions } from '../ipc/notification-options'
-import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
+import type { MobileNotificationDispatchEvent } from './runtime-mobile-notification-controller'
 import type { StructuredAttentionWorkspaceLabels } from './structured-agent-session-mobile-attention'
 
-// Match the window's quiet period for a turn that resumes immediately.
 export const HOST_HOOK_DONE_QUIET_MS = 1_500
 
-export type TerminalAgentMobileAttentionDeps = {
+type Deps = {
   readRow: (paneKey: string) => AgentStatusIpcPayload | null
   readNotificationSettings: () => NotificationSettings | undefined
-  readWorkspaceLabels: (workspaceId: string) => StructuredAttentionWorkspaceLabels
-  isWorkspaceMuted: (workspaceId: string) => boolean
+  readWorkspaceLabels: (id: string) => StructuredAttentionWorkspaceLabels
+  isWorkspaceMuted: (id: string) => boolean
   dispatch: (event: MobileNotificationDispatchEvent) => void
-  retire: (worktreeId: string, paneKey: string, before: number) => void
+  retire: (alerts: readonly LiveNotificationRetirement[]) => void
   now: () => number
 }
 
-export function createTerminalAgentMobileAttention(deps: TerminalAgentMobileAttentionDeps) {
-  const panes = new Map<string, ReturnType<typeof createPane>>()
-
-  const announce = (
-    worktreeId: string,
-    row: AgentStatusIpcPayload,
-    agentState: AgentStatusState,
-    notificationId: string
-  ): void => {
-    if (deps.isWorkspaceMuted(worktreeId)) {
-      return
+export function createTerminalAgentMobileAttention(deps: Deps) {
+  const panes = new Map<
+    string,
+    {
+      source: string
+      row: AgentStatusIpcPayload
+      alerts: { notificationId: string; at: number }[]
+      timer?: ReturnType<typeof setTimeout>
     }
-    const settings = deps.readNotificationSettings()
-    if (!settings) {
-      return
-    }
-    let labels: StructuredAttentionWorkspaceLabels = {}
-    try {
-      labels = deps.readWorkspaceLabels(worktreeId)
-    } catch {
-      // Missing labels must not block delivery.
-    }
-    const outcome = agentState === 'done' ? agentMainAgentVerdict(row) : null
-    const request: NotificationDispatchRequest = {
-      source: 'agent-task-complete',
-      worktreeId,
-      ...labels,
-      agentState,
-      ...(row.agentType ? { agentType: row.agentType } : {}),
-      ...(row.prompt ? { agentPrompt: row.prompt } : {}),
-      ...(row.toolName ? { agentToolName: row.toolName } : {}),
-      ...(row.toolInput ? { agentToolInput: row.toolInput } : {}),
-      ...(row.lastAssistantMessage ? { agentLastAssistantMessage: row.lastAssistantMessage } : {}),
-      ...(outcome ? { agentTurnOutcome: outcome } : {})
-    }
-    const { title, body } = buildNotificationOptions(
-      request,
-      getRuntimeDesktopSurface().translateNotification
-    )
-    const desktopAllowed = settings.enabled && settings.agentTaskComplete
-    deps.dispatch({
-      type: 'notification',
-      emittedAt: deps.now(),
-      source: 'agent-task-complete',
-      ...(!desktopAllowed ? { desktopAllowed: false } : {}),
-      title,
-      body,
-      worktreeId,
-      notificationId,
-      agentState,
-      hostAgentAlert: true
-    })
+  >()
+  const forget = (key: string): void => {
+    clearTimeout(panes.get(key)?.timer)
+    panes.delete(key)
   }
-
-  const createPane = (paneKey: string, worktreeId: string) => {
-    const identityScope = createAgentCompletionIdentityScope(paneKey, 'hook')
-    const state: CompletionState = {
-      currentTurn: 0,
-      workingStatusObserved: false,
-      requiresFreshWorking: false,
-      lastCompletionToken: null,
-      lastCompletionAt: 0,
-      lastCompletedTurn: null,
-      lastCompletionSource: null,
-      lastCompletionIdentity: null,
-      lastAttentionToken: null,
-      pendingHookDoneTimer: null,
-      pendingHookDoneTitle: null,
-      pendingHookDonePayload: null
-    }
-    const emit = (
-      snapshot: Parameters<
-        ReturnType<typeof createAgentCompletionHookObserver>['observeHookStatus']
-      >[0]
-    ) => {
-      const row = deps.readRow(paneKey)
-      const id = buildAgentNotificationId({
-        worktreeId,
-        paneKey,
-        stateStartedAt: snapshot.stateStartedAt
-      })
-      if (row && id) {
-        announce(worktreeId, { ...row, ...snapshot }, snapshot.state, id)
-      }
-    }
-    const notification = createAgentCompletionNotificationController({
-      options: {
-        paneKey,
-        isLive: () => panes.has(paneKey),
-        dispatchCompletion: (_title, meta) => {
-          const row = meta?.agentStatus ?? deps.readRow(paneKey)
-          if (row) {
-            emit(row)
-          }
-        },
-        dispatchAttention: (_title, meta) => emit(meta.agentStatus)
-      },
-      state,
-      identityScope,
-      processState: { processSession: 0, lastForegroundAgent: null, hasAgentRunEvidence: true }
-    })
-    const observer = createAgentCompletionHookObserver({
-      options: { paneKey },
-      state,
-      establishAgentEvidence: () => {},
-      recordPaneActivity: () => {},
-      dropPendingTitle: () => {},
-      clearPendingHookDone: notification.clearPendingHookDone,
-      dispatchAttention: notification.dispatchAttention,
-      dispatchCompletion: notification.dispatchCompletion,
-      scheduleHookDoneCompletion: notification.scheduleHookDoneCompletion,
-      doneShouldUseQuietWindow: notification.doneShouldUseQuietWindow,
-      hookCompletionIdentity: notification.hookCompletionIdentity,
-      hookCompletionAgentIdentity: notification.hookCompletionAgentIdentity,
-      completionIdentityFor: notification.completionIdentityFor,
-      openStampedTail: identityScope.openStampedTail,
-      rememberHandledTurnCompletedAt: identityScope.rememberTurnCompletedAt,
-      turnCompletedAtAlreadyHandled: identityScope.turnCompletedAtAlreadyHandled,
-      consumePendingStampedTailForAgent: identityScope.consumePendingStampedTailForAgent,
-      consumeStampedTailForCurrentCoordinator: identityScope.consumeStampedTail,
-      clearOriginStampedTail: identityScope.clearOriginStampedTail,
-      clearProcessExitCompletion: identityScope.clearProcessExitCompletion,
-      recordWorkingBoundary: identityScope.recordWorkingBoundary
-    })
-    return { worktreeId, state, observer, identityScope, notification }
-  }
-
   const observe = (change: AgentPaneChange): void => {
     if (change.kind === 'moved') {
       return
     }
-    const { paneKey } = change
-    const row = deps.readRow(paneKey)
-    const previous = panes.get(paneKey)
+    const row = deps.readRow(change.paneKey)
     if (
       !row ||
       !change.workspace ||
+      row.connectionId ||
       row.structuredHost ||
       row.programStatusOnly ||
       row.providerSessionOnly ||
       !isRecognizedAgentType(row.agentType)
     ) {
-      previous?.notification.clearPendingHookDone()
-      previous?.identityScope.dispose(false)
-      panes.delete(paneKey)
+      forget(change.paneKey)
       return
     }
     const worktreeId = row.worktreeId ?? change.workspace.worktreeId
-    // Live or replayed current facts can retire old news; unconfirmed hydration cannot.
-    if (row.state === 'working' && !row.restoredUnconfirmed) {
-      deps.retire(worktreeId, paneKey, Math.max(row.turnStartedAt ?? 0, row.stateStartedAt))
+    const source = JSON.stringify([
+      worktreeId,
+      row.terminalHandle,
+      row.runId,
+      row.executionId,
+      row.agentType
+    ])
+    let pane = panes.get(change.paneKey)
+    if (pane?.source !== source) {
+      forget(change.paneKey)
+      pane = undefined
     }
-    const pane = previous ?? createPane(paneKey, worktreeId)
-    panes.set(paneKey, pane)
-    const identity = pane.notification.hookCompletionIdentity(row)
-    const unseenReplay =
-      row.isReplay === true &&
-      previous !== undefined &&
-      ((row.state === 'working' && row.turnCompletedAt !== undefined) ||
-        (row.state === 'done' && identity !== pane.state.lastCompletionIdentity?.identity))
-    if (change.kind === 'seeded' && !unseenReplay) {
-      pane.state.lastCompletionIdentity = identity
-        ? { source: 'hook', identity, agentIdentity: row.agentType ?? null }
-        : null
-      if (row.turnCompletedAt !== undefined) {
-        pane.identityScope.rememberTurnCompletedAt(row.turnCompletedAt)
-      }
-      if (row.state === 'working' && !row.restoredUnconfirmed) {
-        pane.observer.seedHookStatus(row)
-      }
+    const previous = pane?.row
+    pane ??= { source, row, alerts: [] }
+    panes.set(change.paneKey, pane)
+    pane.row = row
+    if (change.kind === 'seeded' || row.isReplay || row.restoredUnconfirmed) {
+      clearTimeout(pane.timer)
+      pane.alerts = []
       return
     }
-    pane.observer.observeHookStatus(row)
+    const startedAt = row.turnStartedAt
+    if (
+      startedAt !== undefined &&
+      startedAt !== previous?.turnStartedAt &&
+      (row.runId || row.executionId)
+    ) {
+      const retired = pane.alerts.filter((alert) => startedAt > alert.at)
+      pane.alerts = pane.alerts.filter((alert) => !retired.includes(alert))
+      if (retired.length) {
+        deps.retire(retired)
+      }
+    }
+    const completed = row.state === 'done' || row.turnCompletedAt !== undefined
+    if (agentTurnEndedOnPurpose(row) || (row.state === 'working' && !completed)) {
+      clearTimeout(pane.timer)
+      return
+    }
+    if (
+      previous &&
+      row.state === previous.state &&
+      row.turnCompletedAt === previous.turnCompletedAt &&
+      row.stateStartedAt === previous.stateStartedAt
+    ) {
+      return
+    }
+    clearTimeout(pane.timer)
+    const agentState = completed ? 'done' : row.state
+    const stamp = row.turnCompletedAt ?? row.stateStartedAt
+    const notificationId = buildAgentNotificationId({
+      worktreeId,
+      paneKey: change.paneKey,
+      stateStartedAt: stamp
+    })
+    if (!notificationId || pane.alerts.some((alert) => alert.notificationId === notificationId)) {
+      return
+    }
+    const expected = pane
+    const announce = (): void => {
+      if (
+        panes.get(change.paneKey) !== expected ||
+        expected.row.state !== row.state ||
+        expected.row.turnCompletedAt !== row.turnCompletedAt ||
+        deps.isWorkspaceMuted(worktreeId)
+      ) {
+        return
+      }
+      const settings = deps.readNotificationSettings()
+      if (!settings) {
+        return
+      }
+      let labels: StructuredAttentionWorkspaceLabels = {}
+      try {
+        labels = deps.readWorkspaceLabels(worktreeId)
+      } catch {
+        /* Labels do not gate news. */
+      }
+      const outcome = completed ? agentMainAgentVerdict(row) : null
+      const { title, body } = buildNotificationOptions(
+        {
+          source: 'agent-task-complete',
+          worktreeId,
+          ...labels,
+          agentState,
+          agentType: row.agentType,
+          agentPrompt: row.prompt,
+          agentToolName: row.toolName,
+          agentToolInput: row.toolInput,
+          agentLastAssistantMessage: row.lastAssistantMessage,
+          ...(outcome ? { agentTurnOutcome: outcome } : {})
+        },
+        getRuntimeDesktopSurface().translateNotification
+      )
+      expected.alerts = [...expected.alerts, { notificationId, at: stamp }].slice(-20)
+      deps.dispatch({
+        type: 'notification',
+        emittedAt: deps.now(),
+        source: 'agent-task-complete',
+        title,
+        body,
+        worktreeId,
+        notificationId,
+        agentState,
+        ...(!settings.enabled || !settings.agentTaskComplete ? { desktopAllowed: false } : {})
+      })
+    }
+    if (completed) {
+      pane.timer = setTimeout(announce, HOST_HOOK_DONE_QUIET_MS)
+    } else {
+      announce()
+    }
   }
   return {
     observe,
     dispose: () => {
-      for (const pane of panes.values()) {
-        pane.notification.clearPendingHookDone()
-        pane.identityScope.dispose(false)
+      for (const key of panes.keys()) {
+        forget(key)
       }
-      panes.clear()
     }
   }
 }

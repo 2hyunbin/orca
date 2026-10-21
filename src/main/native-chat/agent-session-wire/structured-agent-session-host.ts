@@ -1,3 +1,4 @@
+import { structuredPhoneAlertCaller } from './structured-agent-session-phone-origin'
 import type { AgentSessionRewindParams } from '../../../shared/agent-session-rewind'
 import { rewindStructuredAgentSession } from './structured-agent-session-rewind'
 import { StructuredConversationCommandController } from './structured-conversation-command-controller'
@@ -357,6 +358,8 @@ export class StructuredAgentSessionHost {
 
   /** Turns that settle, and prompts raised, from now on. Live-only: nothing missed is replayed. */
   subscribeTurnCompletions = this.clientDelivery.subscribeTurnCompletions
+  phoneAlertCaller = structuredPhoneAlertCaller.bind(null, this.sessions, () => this.deps.store)
+
   readStatusSummary = this.clientDelivery.readStatusSummary
 
   /** Test rigs only: the collaborators the host builds itself, typed, for tests that drive them. */

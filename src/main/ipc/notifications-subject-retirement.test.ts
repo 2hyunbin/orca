@@ -75,6 +75,9 @@ function register(
       dispatchMobileNotification,
       dismissMobileNotification,
       retireStructuredAttention,
+      retireLiveNotifications: (
+        alerts: Parameters<RuntimeMobileNotificationController['retireLiveNotifications']>[0]
+      ) => controller?.retireLiveNotifications(alerts),
       reconcileStructuredPromptAttention
     } as never
   )
@@ -86,6 +89,38 @@ describe('notifications:dismiss by acknowledged subject', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-28T16:00:00Z'))
     resetNotificationDispatchMocks()
+  })
+
+  it('withdraws only the exact forwarded delivery through the existing dismiss bridge', () => {
+    const controller = new RuntimeMobileNotificationController()
+    const events: MobileNotificationEvent[] = []
+    controller.onDispatched((event) => events.push(event))
+    register({ suppressWhenFocused: false }, controller)
+    controller.dispatch({
+      type: 'notification',
+      source: 'agent-task-complete',
+      title: 'Done',
+      body: '',
+      notificationId: 'forwarded',
+      executionHost: 'runtime:host-b'
+    })
+    getDismissHandler()({}, [], [], undefined, [{ notificationId: 'forwarded' }])
+    expect(events).toHaveLength(1)
+    getDismissHandler()({}, [], [], undefined, [
+      { notificationId: 'forwarded', executionHost: 'runtime:host-b' }
+    ])
+    expect(events[1]).toMatchObject({
+      type: 'dismiss',
+      dismissedDelivery: {
+        notificationId: 'forwarded',
+        notificationEpoch: events[0]?.notificationEpoch,
+        notificationSeq: 1
+      }
+    })
+    getDismissHandler()({}, [], [], undefined, [
+      { notificationId: 'forwarded', executionHost: 'runtime:host-b' }
+    ])
+    expect(events).toHaveLength(2)
   })
 
   it('retires a shown banner by its subject alone, then forgets the subject', async () => {
