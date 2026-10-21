@@ -293,11 +293,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           title: pty?.title ?? launchOpts.title ?? null,
           ...this.getPtyExecutionHostMetadata(result.id),
           surface,
-          ...(result.pid ? { processId: result.pid } : {}),
-          ...(result.agentSessionEnsure
-            ? { agentSessionDisposition: result.agentSessionEnsure.disposition }
-            : {}),
-          ...(adoptedStablePane ? { isReattach: true as const } : {}),
+          ...dependencies.terminalSpawnResultFields(result, Boolean(adoptedStablePane)),
           ...(warning ? { warning } : {})
         }
       } finally {

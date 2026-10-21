@@ -5,6 +5,18 @@ import { isAgentStatusHooksEnabled } from '../../shared/agent-status-hooks-setti
 
 type RuntimeDeps = NonNullable<ConstructorParameters<typeof OrcaRuntimeService>[2]>
 
+export function bindAgentHookRuntimeAuthority(
+  server: AgentHookServer,
+  observedPaneIdentities: AgentStatusObservedPaneIdentities,
+  runtime: OrcaRuntimeService
+) {
+  server.setCliWriterExecutionMatcher(observedPaneIdentities, runtime)
+  server.setLaunchAuthorityVerifier(
+    (candidate, handle) => runtime.verifyAgentHookLaunchAuthority(candidate, handle),
+    (listener) => runtime.subscribeAgentLaunchAuthority(listener)
+  )
+}
+
 /** The hook-store bindings every runtime host (desktop, `orca serve`, orcad) gives its runtime. */
 export function agentHookRuntimeDeps(
   server: AgentHookServer,
