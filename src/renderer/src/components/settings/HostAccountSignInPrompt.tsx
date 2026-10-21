@@ -177,7 +177,7 @@ export function HostAccountSignInPrompt(props: {
           />
         </div>
       ) : null}
-      {url && prompt?.needsCode ? (
+      {url && status && prompt?.needsCode ? (
         // Why keyed: a code typed for one server's flow must never be sent to another's.
         <PastedCodeForm
           key={`${props.owner.kind === 'environment' ? props.owner.environmentId : ''}:${status.flowId}`}

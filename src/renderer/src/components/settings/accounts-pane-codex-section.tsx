@@ -11,7 +11,10 @@ import { getAccountsCodexSearchEntries } from './accounts-search'
 import { getCodexSystemDefaultSubtitle } from './accounts-pane-runtime'
 import type { AccountsPaneSectionModel } from './accounts-pane-types'
 import { renderCodexAccountRow } from './accounts-pane-codex-account-row'
-import { addCodexAccountOnHost } from '@/runtime/runtime-host-account-sign-in-client'
+import {
+  addCodexAccountOnHost,
+  runningHostAccountSignInOwner
+} from '@/runtime/runtime-host-account-sign-in-client'
 import { HostAccountSignInPrompt } from './HostAccountSignInPrompt'
 
 export function renderCodexAccountsSection(model: AccountsPaneSectionModel): React.JSX.Element {
@@ -175,14 +178,17 @@ export function renderCodexAccountsSection(model: AccountsPaneSectionModel): Rea
               }
               className="gap-1.5"
             >
-              {codexAction === 'adding' && !isRemoteAccountScope ? (
+              {codexAction === 'adding' ? (
                 <Loader2 className="size-3 animate-spin" />
               ) : (
                 <Plus className="size-3" />
               )}
               {translate('auto.components.settings.AccountsPane.b0e948a4f9', 'Add Account')}
             </Button>
-            {codexAction === 'adding' ? (
+            {/* Why: this desktop's own login only; a server sign-in has Cancel in its prompt. */}
+            {codexAction === 'adding' &&
+            !isRemoteAccountScope &&
+            !runningHostAccountSignInOwner('codex') ? (
               <Button
                 variant="ghost"
                 size="xs"
