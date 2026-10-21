@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildMobileImagePastePayload,
+  buildMobileTerminalImagePastePayload,
   computeMobileClipboardImageDownscale,
   MOBILE_CLIPBOARD_IMAGE_UPLOAD_CHUNK_BASE64_CHARS,
   normalizeMobileClipboardImageBase64,
@@ -156,6 +157,23 @@ describe('mobile clipboard image paste helpers', () => {
     expect(buildMobileImagePastePayload('/tmp/\x1b.png', 'claude')).toBe(
       '\x1b[200~/tmp/\u241b.png\x1b[201~'
     )
+  })
+
+  it('pastes the bare path into a terminal for Codex and for no identified agent', () => {
+    const bare = '\x1b[200~/tmp/or ca.png\x1b[201~'
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'codex')).toBe(bare)
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', null)).toBe(bare)
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', undefined)).toBe(bare)
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'unknown')).toBe(bare)
+    expect(buildMobileTerminalImagePastePayload('/tmp/\x1b.png', null)).toBe(
+      '\x1b[200~/tmp/\u241b.png\x1b[201~'
+    )
+  })
+
+  it('keeps file mentions for agents that need them', () => {
+    const mention = '\x1b[200~@"/tmp/or ca.png"\x1b[201~'
+    expect(buildMobileTerminalImagePastePayload('/tmp/or ca.png', 'opencode')).toBe(mention)
+    expect(buildMobileImagePastePayload('/tmp/or ca.png', null)).toBe(mention)
   })
 })
 

@@ -26,45 +26,48 @@ vi.mock('./mobile-clipboard-image', async (importOriginal) => ({
 }))
 
 describe('mobile clipboard image followed by typing', () => {
-  it.each(['omp', 'claude'])('separates a pasted image from subsequent %s input', async (agent) => {
-    const sendRequest = vi
-      .fn()
-      .mockResolvedValue({ ok: true, result: { send: { accepted: true } } })
-    const client: RpcClient = {
-      sendRequest,
-      subscribe: () => () => {},
-      updateTerminalSubscriptionViewport: vi.fn(),
-      getState: () => 'connected',
-      getReconnectAttempt: () => 0,
-      getLastConnectedAt: () => null,
-      onStateChange: () => () => {},
-      notifyForeground: vi.fn(),
-      close: vi.fn()
+  it.each(['omp', 'claude', 'codex', null, 'unknown'])(
+    'separates a pasted image from subsequent %s input',
+    async (agent) => {
+      const sendRequest = vi
+        .fn()
+        .mockResolvedValue({ ok: true, result: { send: { accepted: true } } })
+      const client: RpcClient = {
+        sendRequest,
+        subscribe: () => () => {},
+        updateTerminalSubscriptionViewport: vi.fn(),
+        getState: () => 'connected',
+        getReconnectAttempt: () => 0,
+        getLastConnectedAt: () => null,
+        onStateChange: () => () => {},
+        notifyForeground: vi.fn(),
+        close: vi.fn()
+      }
+      const paste = useMobileTerminalPaste({
+        agent,
+        activeHandle: 'term-1',
+        activeHandleRef: { current: 'term-1' },
+        activeSessionTabTypeRef: { current: 'terminal' },
+        canSend: true,
+        client,
+        clientRef: { current: client },
+        connState: 'connected',
+        connStateRef: { current: 'connected' },
+        deviceTokenRef: { current: null },
+        flushPendingLiveInputBeforeExternalSend: async () => true,
+        getActiveWorktreeConnectionId: async () => null,
+        onError: vi.fn(),
+        onSuccess: vi.fn(),
+        ptyModesRef: { current: new Map() },
+        refreshCanPaste: vi.fn(),
+        showToast: vi.fn()
+      })
+      await paste()
+      expect(sendRequest).toHaveBeenCalledWith('terminal.send', {
+        terminal: 'term-1',
+        text: `\x1b[200~${agent === 'omp' ? '@' : ''}/tmp/shot.png\x1b[201~ `,
+        enter: false
+      })
     }
-    const paste = useMobileTerminalPaste({
-      agent,
-      activeHandle: 'term-1',
-      activeHandleRef: { current: 'term-1' },
-      activeSessionTabTypeRef: { current: 'terminal' },
-      canSend: true,
-      client,
-      clientRef: { current: client },
-      connState: 'connected',
-      connStateRef: { current: 'connected' },
-      deviceTokenRef: { current: null },
-      flushPendingLiveInputBeforeExternalSend: async () => true,
-      getActiveWorktreeConnectionId: async () => null,
-      onError: vi.fn(),
-      onSuccess: vi.fn(),
-      ptyModesRef: { current: new Map() },
-      refreshCanPaste: vi.fn(),
-      showToast: vi.fn()
-    })
-    await paste()
-    expect(sendRequest).toHaveBeenCalledWith('terminal.send', {
-      terminal: 'term-1',
-      text: `\x1b[200~${agent === 'omp' ? '@' : ''}/tmp/shot.png\x1b[201~ `,
-      enter: false
-    })
-  })
+  )
 })
