@@ -12494,6 +12494,12 @@
           "cardDescription": "Created per workspace from an environment recipe.",
           "setUpRecipes": "Set up recipes"
         },
+        "ReleaseBuildPicker": {
+          "build": "Build",
+          "searchLabel": "Search builds",
+          "searchPlaceholder": "Search builds…",
+          "noMatches": "No matching builds."
+        },
         "ReleaseChannelSection": {
           "switchFailed": "Could not switch to that build.",
           "title": "Release channel",
