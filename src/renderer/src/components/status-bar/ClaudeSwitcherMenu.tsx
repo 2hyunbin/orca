@@ -12,7 +12,10 @@ import type { ProviderRateLimits } from '../../../../shared/rate-limit-types'
 import { defaultScopeHost } from '@/lib/default-creation-host'
 import { useActiveAccountOwner } from '@/runtime/use-worktree-runtime-target'
 import { runtimeTargetEnvironmentId } from '@/runtime/runtime-client-target'
-import { selectClaudeProviderAccount } from '@/runtime/runtime-provider-accounts-client'
+import {
+  selectClaudeProviderAccount,
+  emptyClaudeAccountsState
+} from '@/runtime/runtime-provider-accounts-client'
 import { toast } from 'sonner'
 import { getClaudeAccountErrorDescription } from '../settings/accounts-pane-action-errors'
 import { translate } from '@/i18n/i18n'
@@ -63,7 +66,7 @@ export function ClaudeSwitcherMenu({
   asSubmenu?: boolean
   triggerContent?: React.ReactNode
   chatAction?: ChatAccountAction
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const [open, setOpen] = useState(false)
   const [accountsExpanded, setAccountsExpanded] = useState(false)
   const [isSwitching, setIsSwitching] = useState(false)
@@ -98,11 +101,13 @@ export function ClaudeSwitcherMenu({
   )
   const claudeAccountSyncKey = useAppStore((s) => getClaudeAccountSyncKey(s.settings))
   const { accounts, setAccounts, accountsLoaded, loadAccounts, mountedRef } =
-    useProviderAccountList('claude', runtimeTarget, claudeAccountSyncKey, {
-      accounts: [],
-      activeAccountId: null,
-      activeAccountIdsByRuntime: { host: null, wsl: {} }
-    })
+    useProviderAccountList(
+      'claude',
+      runtimeTarget,
+      claudeAccountSyncKey,
+      emptyClaudeAccountsState(),
+      !!chatAction
+    )
   const accountState = resolveClaudeStatusAccountState(
     settings,
     accounts,
@@ -264,7 +269,6 @@ export function ClaudeSwitcherMenu({
   const selectedGroup = chatAction
     ? switchGroups.find((group) => group.runtimeTarget.runtime === 'host')
     : (switchGroups.find((group) => group.key === selectedRuntimeKey) ?? switchGroups[0])
-  const activeTarget = selectedGroup?.targets.find((target) => target.active)
 
   const accountControl = providerChatAccountControl(
     'claude',
@@ -274,7 +278,7 @@ export function ClaudeSwitcherMenu({
     isSwitching
   )
   if (accountControl?.add) {
-    return accountControl.button
+    return runtimeTarget.kind === 'local' ? accountControl.button : null
   }
 
   return (
@@ -315,7 +319,7 @@ export function ClaudeSwitcherMenu({
         }}
       >
         <span className="max-w-[180px] truncate text-[12px] text-foreground">
-          {activeTarget?.label ??
+          {selectedGroup?.targets.find((target) => target.active)?.label ??
             translate('auto.components.status.bar.StatusBar.c676918adc', 'System default')}
         </span>
         {accountsExpanded ? (

@@ -89,6 +89,25 @@ describe('AgentSessionContinuationDialog', () => {
     container.remove()
   })
 
+  it('cannot start with only the source agent available', async () => {
+    mocks.detectAgents.mockResolvedValue(['codex'])
+    await act(async () => {
+      root.render(
+        <AgentSessionContinuationDialog
+          open
+          request={{ ...request('wt'), avoidSourceAgent: true }}
+          onOpenChange={vi.fn()}
+        />
+      )
+    })
+    const start = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Start New Session'
+    )
+    expect(start?.disabled).toBe(true)
+    start?.click()
+    expect(mocks.launchContinuation).not.toHaveBeenCalled()
+  })
+
   it('clears a prior detection failure while detecting a new request', async () => {
     let resolveSecond: (agents: ['codex']) => void = () => {}
     mocks.detectAgents.mockRejectedValueOnce(new Error('offline')).mockReturnValueOnce(

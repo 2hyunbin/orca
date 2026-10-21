@@ -37,6 +37,7 @@ export type OpenCodeTranscriptDeps = {
       sessionId: string
       limit: number
       beforeMessageRowId?: number
+      contextExport?: true
       agent?: 'zcode'
     },
     signal?: AbortSignal
@@ -100,7 +101,8 @@ export async function readOpenCodeNativeChatTranscriptFull(
   sessionId: string,
   deps: OpenCodeTranscriptDeps = {},
   signal?: AbortSignal,
-  agent?: 'zcode'
+  agent?: 'zcode',
+  options?: { requireComplete?: boolean }
 ): Promise<ReadTranscriptResult> {
   // Pages arrive newest-window first; reverse windows, preserving message order.
   const pages: NativeChatMessage[][] = []
@@ -125,6 +127,7 @@ export async function readOpenCodeNativeChatTranscriptFull(
           sessionId,
           limit: 500,
           ...(cursor !== undefined ? { beforeMessageRowId: cursor } : {}),
+          ...(options?.requireComplete ? { contextExport: true as const } : {}),
           ...(agent ? { agent } : {})
         },
         signal
@@ -133,10 +136,28 @@ export async function readOpenCodeNativeChatTranscriptFull(
         if (cursor === undefined) {
           return { error: 'Transcript unavailable', notFound: true }
         }
+        if (options?.requireComplete) {
+          return { error: 'Transcript became unavailable while reading its history.' }
+        }
         break
       }
       if (pages.length === 0) {
         sourceEmpty = page.beforeMessageRowId === null && !page.hasMore
+      }
+      if (
+        options?.requireComplete &&
+        (page.items.some((item) =>
+          item.message.blocks.some(
+            (block) => block.type === 'text' && block.presentation === 'history-item-too-large'
+          )
+        ) ||
+          (page.hasMore &&
+            (page.beforeMessageRowId == null ||
+              !Number.isSafeInteger(page.beforeMessageRowId) ||
+              page.beforeMessageRowId <= 0 ||
+              (cursor !== undefined && page.beforeMessageRowId >= cursor))))
+      ) {
+        return { error: 'The saved conversation could not be read completely.' }
       }
       pages.push(page.items.map((item) => item.message))
       records += page.items.length

@@ -1,4 +1,13 @@
-import { createContext, useContext, useCallback, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react'
 import { MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
@@ -44,28 +53,58 @@ export function NativeChatUsageLimitActionsProvider({
   directory: NativeChatFileLinkContext | null
   messages: readonly NativeChatMessage[]
   view: NativeChatOrcaStopView
-  recovery: { readCurrent: boolean; canSwitchAccount: boolean | undefined }
+  recovery: {
+    readCurrent: boolean
+    canSwitchAccount: boolean | undefined
+    epoch?: string | null
+  }
   children: ReactNode
 }): React.JSX.Element {
   const loading = !recovery.readCurrent
   const canSwitchAccount = recovery.canSwitchAccount
   const active = view.usageLimitTurnItemId !== null
-  const disabled = loading
+  const intentKey = JSON.stringify([
+    executionHostIdForStructuredTarget(pane.target),
+    pane.sessionId,
+    pane.agent,
+    recovery.epoch,
+    view.usageLimitTurnItemId,
+    recovery.readCurrent,
+    pane.isVisible
+  ])
+  const intent = useRef<{ key: string; pending: boolean } | null>(null)
+  const [preparing, setPreparing] = useState<string | null>(null)
+  useLayoutEffect(() => {
+    const current = { key: intentKey, pending: false }
+    intent.current = current
+    setPreparing(null)
+    return () => {
+      if (intent.current === current) {
+        intent.current = null
+      }
+    }
+  }, [intentKey])
+  const disabled = loading || preparing === intentKey
   const chatTab = useAppStore((state) =>
     directory
       ? state.unifiedTabsByWorktree[directory.worktreeId]?.find((tab) => tab.id === pane.tabId)
       : undefined
   )
   const conversationName = useStructuredChatTabConversationName(chatTab)
-  const [request, setRequest] = useState<AgentSessionContinuationRequest | null>(null)
+  const [prepared, setPrepared] = useState<{
+    key: string
+    request: AgentSessionContinuationRequest
+  } | null>(null)
+  const request = prepared?.key === intentKey ? prepared.request : null
   const canHandOff =
     active &&
+    pane.isVisible &&
     directory &&
     isTuiAgent(pane.agent) &&
     directory.runtimeEnvironmentId ===
       (pane.target.kind === 'environment' ? pane.target.environmentId : null)
   let account: ReactNode = null
-  if (pane.agent === 'claude') {
+  if (pane.agent === 'claude' && active && pane.isVisible) {
     if (canSwitchAccount === undefined) {
       account = <ProviderAccountChatButton provider="claude" target={pane.target} disabled />
     } else if (canSwitchAccount) {
@@ -78,12 +117,16 @@ export function NativeChatUsageLimitActionsProvider({
           chatAction={{
             target: pane.target,
             canSwitch: async () => {
+              const current = intent.current
+              if (!current || !active) {
+                return false
+              }
               const result = await callStructuredAgentSession<AgentSessionOptionsResult>(
                 pane.target,
                 'agentSession.options',
                 { sessionId: pane.sessionId }
               )
-              return result.canSwitchAccount === true
+              return intent.current === current && result.canSwitchAccount === true
             }
           }}
         />
@@ -94,6 +137,12 @@ export function NativeChatUsageLimitActionsProvider({
     if (!canHandOff || !directory || !isTuiAgent(pane.agent)) {
       return
     }
+    const current = intent.current
+    if (!current || current.pending) {
+      return
+    }
+    current.pending = true
+    setPreparing(current.key)
     const options = await callStructuredAgentSession<AgentSessionOptionsResult>(
       pane.target,
       'agentSession.options',
@@ -102,6 +151,10 @@ export function NativeChatUsageLimitActionsProvider({
       console.warn('Could not read saved chat context for hand-off', error)
       return null
     })
+    if (intent.current !== current) {
+      return
+    }
+    setPreparing(null)
     const transcriptPath = options?.transcriptPath
     const source = {
       sourceKind: 'chat' as const,
@@ -116,15 +169,20 @@ export function NativeChatUsageLimitActionsProvider({
             .join('\n\n')
     }
     if (buildAgentSessionContinuationPrompt(source, 'focused')) {
-      setRequest({
-        source,
-        worktreeId: directory.worktreeId,
-        workspacePath: directory.worktreePath,
-        initialCwd: directory.worktreePath,
-        groupId: pane.groupId,
-        launchSource: 'native_chat',
-        avoidSourceAgent: true
+      setPrepared({
+        key: current.key,
+        request: {
+          source,
+          worktreeId: directory.worktreeId,
+          workspacePath: directory.worktreePath,
+          initialCwd: directory.worktreePath,
+          groupId: pane.groupId,
+          launchSource: 'native_chat',
+          avoidSourceAgent: true
+        }
       })
+    } else {
+      current.pending = false
     }
   }, [
     canHandOff,
@@ -152,9 +210,21 @@ export function NativeChatUsageLimitActionsProvider({
     }),
     [account, canHandOff, disabled, loading, openHandOff, pane.agent]
   )
+  const stopView = useMemo(
+    () => ({
+      ...view,
+      continueUsageLimit: (hadFocus: boolean) => {
+        intent.current = { key: intentKey, pending: false }
+        setPreparing(null)
+        setPrepared(null)
+        view.continueUsageLimit(hadFocus)
+      }
+    }),
+    [intentKey, view]
+  )
   return (
     <UsageLimitActionsContext.Provider value={actions}>
-      <NativeChatOrcaStopContext.Provider value={view}>
+      <NativeChatOrcaStopContext.Provider value={stopView}>
         {children}
       </NativeChatOrcaStopContext.Provider>
       {request ? (
@@ -163,7 +233,8 @@ export function NativeChatUsageLimitActionsProvider({
           request={request}
           onOpenChange={(open) => {
             if (!open) {
-              setRequest(null)
+              intent.current = { key: intentKey, pending: false }
+              setPrepared(null)
             }
           }}
         />

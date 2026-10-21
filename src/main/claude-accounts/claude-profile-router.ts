@@ -371,8 +371,8 @@ export class ClaudeProfileRouter {
     }
   }
 
-  async accountSelectionHomes(): Promise<string[]> {
-    return claudeProfileSelectionHomes(this, this.args.getSettings(), this.envReady)
+  async accountSelectionHomes(launchEnv: NodeJS.ProcessEnv = process.env): Promise<string[]> {
+    return claudeProfileSelectionHomes(this, this.args.getSettings(), this.envReady, launchEnv)
   }
 
   /** Every account folder on this host, selected or not. */

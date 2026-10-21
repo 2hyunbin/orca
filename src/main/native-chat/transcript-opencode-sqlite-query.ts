@@ -113,6 +113,7 @@ export function readOpenCodeTranscriptPage(args: {
   sessionId: string
   limit: number
   beforeMessageRowId?: number
+  contextExport?: true
   agent?: 'zcode'
 }): OpenCodeTranscriptPage | null {
   const db = openOpenCodeDatabaseReadonly(args.dbPath)
@@ -180,7 +181,14 @@ export function readOpenCodeTranscriptPage(args: {
       hasMore = rows.length > limit
       const selected = hasMore ? rows.slice(0, limit) : rows
       cursor = selected.at(-1)!.message_rowid
-      const mapped = mapMessageRows(db, args.sessionId, selected, rawBudget, args.agent)
+      const mapped = mapMessageRows(
+        db,
+        args.sessionId,
+        selected,
+        rawBudget,
+        args.agent,
+        args.contextExport
+      )
       pageBytes += Buffer.byteLength(JSON.stringify(mapped))
       if (pageBytes > 16 * 1024 * 1024) {
         throw new Error('OpenCode transcript page exceeds its byte limit')
@@ -231,7 +239,8 @@ function mapMessageRows(
   sessionId: string,
   rows: MessageRow[],
   rawBudget: { bytes: number },
-  agent?: 'zcode'
+  agent?: 'zcode',
+  contextExport?: true
 ): OpenCodeTranscriptItem[] {
   if (rows.length === 0) {
     return []
@@ -276,7 +285,9 @@ function mapMessageRows(
       },
       row.data === null
         ? [{ message_id: row.id, time_updated: row.time_updated, data: null }]
-        : partList
+        : partList,
+      [],
+      contextExport
     )
     const updated = partList.reduce(
       (max, row) => (row.time_updated > max ? row.time_updated : max),

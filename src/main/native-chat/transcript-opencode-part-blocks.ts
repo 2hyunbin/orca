@@ -21,9 +21,10 @@ export const OPENCODE_TRANSCRIPT_MAX_ROW_BYTES = 2 * 1024 * 1024
 export function opencodeMessages(
   message: Pick<NativeChatMessage, 'id' | 'role' | 'timestamp'>,
   partRows: OpenCodePartRow[],
-  additionalBlocks: NativeChatBlock[] = []
+  additionalBlocks: NativeChatBlock[] = [],
+  contextExport?: true
 ): NativeChatMessage[] {
-  const { blocks, reasoning, notices } = opencodeMessageContent(partRows)
+  const { blocks, reasoning, notices } = opencodeMessageContent(partRows, contextExport)
   blocks.push(...additionalBlocks)
   const messages: NativeChatMessage[] = []
   if (reasoning.length > 0) {
@@ -50,7 +51,10 @@ export function opencodeMessages(
   return messages
 }
 
-function opencodeMessageContent(partRows: OpenCodePartRow[]): {
+function opencodeMessageContent(
+  partRows: OpenCodePartRow[],
+  contextExport?: true
+): {
   blocks: NativeChatBlock[]
   reasoning: NativeChatBlock[]
   notices: NativeChatTextBlock[]
@@ -103,7 +107,7 @@ function opencodeMessageContent(partRows: OpenCodePartRow[]): {
         break
       }
       case 'file': {
-        const block = opencodeFileBlock(part)
+        const block = opencodeFileBlock(part, contextExport)
         if (block) {
           blocks.push(block)
         }
@@ -117,10 +121,17 @@ function opencodeMessageContent(partRows: OpenCodePartRow[]): {
   return { blocks, reasoning, notices }
 }
 
-function opencodeFileBlock(part: Record<string, unknown>): NativeChatImageRefBlock | null {
+function opencodeFileBlock(
+  part: Record<string, unknown>,
+  contextExport?: true
+): NativeChatImageRefBlock | NativeChatTextBlock | null {
   const mime = extractString(part.mime)
   if (!mime?.startsWith('image/')) {
-    return null
+    // Export retains file references the transcript renderer intentionally does not display.
+    const reference = [extractString(part.filename), mime, extractString(part.url)].filter(Boolean)
+    return contextExport && reference.length > 0
+      ? { type: 'text', text: `Attachment: ${reference.join(' — ')}` }
+      : null
   }
   const url = extractString(part.url)
   if (!url) {

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { NativeChatUsageLimitActionsProvider } from './NativeChatUsageLimitActions'
 import { NativeChatNoticeRow } from './NativeChatNoticeRow'
 import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
@@ -16,12 +16,14 @@ const mocks = vi.hoisted(() => ({
     transcriptPath: '/work/chat.jsonl'
   },
   follows: true,
+  watch: vi.fn(),
+  options: vi.fn(),
   snapshot: vi.fn(),
   select: vi.fn(),
   dialog: vi.fn()
 }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
-  callStructuredAgentSession: async () => mocks.readSnapshot
+  callStructuredAgentSession: mocks.options
 }))
 vi.mock('@/runtime/structured-conversation-name', () => ({
   useStructuredChatTabConversationName: () => 'My chat'
@@ -38,17 +40,39 @@ vi.mock('@/lib/windows-terminal-capabilities', () => ({
 }))
 vi.mock('@/runtime/runtime-provider-accounts-client', () => ({
   fetchProviderAccountsSnapshot: mocks.snapshot,
-  selectClaudeProviderAccount: mocks.select
+  watchProviderAccounts: mocks.watch,
+  selectClaudeProviderAccount: mocks.select,
+  emptyClaudeAccountsState: () => ({
+    accounts: [],
+    activeAccountId: null,
+    activeAccountIdsByRuntime: { host: null, wsl: {} }
+  })
 }))
 vi.mock('@/lib/claude-account-switch-sessions', () => ({
   handleRunningClaudeSessionsAfterSwitch: vi.fn()
 }))
 vi.mock('@/components/agent-session-continuation/AgentSessionContinuationDialog', () => ({
-  AgentSessionContinuationDialog: (props: unknown) => {
+  AgentSessionContinuationDialog: (props: { onOpenChange: (open: boolean) => void }) => {
     mocks.dialog(props)
-    return null
+    return <button onClick={() => props.onOpenChange(false)}>Cancel hand-off</button>
   }
 }))
+beforeEach(() => {
+  mocks.options.mockResolvedValue(mocks.readSnapshot)
+  mocks.watch.mockImplementation((target, handlers) => {
+    let closed = false
+    void mocks.snapshot(target).then((value: unknown) => {
+      if (!closed) {
+        handlers.onSnapshot(value)
+      }
+    })
+    return {
+      close: () => {
+        closed = true
+      }
+    }
+  })
+})
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
@@ -146,34 +170,34 @@ it('offers host-owned recovery actions for the current usage-limit cut', async (
       })
     )
     fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
-    await waitFor(() =>
-      expect(mocks.dialog).toHaveBeenCalledWith(
-        expect.objectContaining({
-          request: expect.objectContaining({
-            worktreeId: 'folder',
-            avoidSourceAgent: true,
-            launchSource: 'native_chat',
-            source: expect.objectContaining({
-              transcriptPath: '/work/chat.jsonl',
-              sourceAgent: 'claude',
-              sourceTitle: 'My chat'
-            })
-          })
-        })
-      )
-    )
+    await waitFor(() => expect(mocks.dialog).toHaveBeenCalled())
+    expect(mocks.dialog.mock.lastCall?.[0].request).toMatchObject({
+      worktreeId: 'folder',
+      avoidSourceAgent: true,
+      launchSource: 'native_chat',
+      source: { transcriptPath: '/work/chat.jsonl', sourceAgent: 'claude', sourceTitle: 'My chat' }
+    })
     view.rerender(row(target, false))
     expect(screen.queryByRole('button', { name: 'Continue Now' })).toBeNull()
     expect(screen.queryByText('Continue this chat without waiting:')).toBeNull()
     cleanup()
     mocks.snapshot.mockResolvedValue(snapshot(1))
     render(row(target))
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Account/ })).toBeNull())
+    const watcher = mocks.watch.mock.lastCall?.[1]
+    watcher.onSnapshot(snapshot(2))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Switch Account' })).toBeEnabled()
+    )
+    cleanup()
+    const local: RuntimeClientTarget = { kind: 'local' }
+    render(row(local))
     fireEvent.click(await screen.findByRole('button', { name: 'Add Account…' }))
     expect(openSettingsTarget).toHaveBeenCalledWith({
       pane: 'accounts',
       repoId: null,
       sectionId: 'accounts-claude',
-      hostScope: target
+      hostScope: local
     })
     cleanup()
     mocks.follows = false
@@ -186,4 +210,30 @@ it('offers host-owned recovery actions for the current usage-limit cut', async (
       openSettingsTarget: original.openSettingsTarget
     })
   }
+})
+
+it('admits one preparation and discards it after Continue supersedes the cut', async () => {
+  let answer: (value: typeof mocks.readSnapshot) => void = () => {}
+  mocks.options.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve
+      })
+  )
+  mocks.follows = false
+  const view = render(row())
+  const button = screen.getByRole('button', { name: 'Hand Off to Another Agent' })
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(mocks.options).toHaveBeenCalledTimes(1)
+  expect(button).toBeDisabled()
+  view.rerender(row({ kind: 'local' }, false))
+  answer(mocks.readSnapshot)
+  await waitFor(() => expect(mocks.dialog).not.toHaveBeenCalled())
+  view.rerender(row())
+  mocks.options.mockResolvedValue(mocks.readSnapshot)
+  fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
+  await screen.findByText('Cancel hand-off')
+  fireEvent.click(screen.getByText('Cancel hand-off'))
+  expect(screen.queryByText('Cancel hand-off')).toBeNull()
 })

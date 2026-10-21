@@ -4,7 +4,10 @@ import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import { CLAUDE_CLI_CONVERSATIONS } from '../claude/claude-cli-conversations'
-import { structuredSessionRecoveryOptions } from './structured-session-recovery-options'
+import {
+  structuredSessionRecoveryOptions,
+  type RecoveryContextCache
+} from './structured-session-recovery-options'
 
 const homes = vi.hoisted((): { paths: string[] } => ({ paths: [] }))
 vi.mock('../claude-accounts/claude-profile-installed-router', () => ({
@@ -37,10 +40,30 @@ it('offers switching only when the real transcript store is shared with every de
     const record = agentSessionRecordFixture()
     record.accountHome = { variable: 'CLAUDE_CONFIG_DIR', path: account }
     homes.paths = [system, account]
-    expect(await structuredSessionRecoveryOptions(record)).toMatchObject({
+    const cache: RecoveryContextCache = {}
+    const importer = CLAUDE_CLI_CONVERSATIONS.transcriptImport
+    if (!importer) {
+      throw new Error('Missing transcript importer')
+    }
+    const locate = vi.spyOn(importer, 'findTranscript')
+    const read = () =>
+      structuredSessionRecoveryOptions(record, {}, { cache, cutKey: 'cut', stateDirectory: root })
+    expect((await Promise.all([read(), read()]))[0]).toMatchObject({
       canSwitchAccount: true,
       transcriptPath: expect.any(String)
     })
+    expect(locate).toHaveBeenCalledTimes(1)
+    await read()
+    expect(locate).toHaveBeenCalledTimes(1)
+    homes.paths = [system, isolated]
+    expect((await read()).canSwitchAccount).toBe(false)
+    expect(locate).toHaveBeenCalledTimes(1)
+    await rm(transcript)
+    expect(await read()).toEqual({ canSwitchAccount: false })
+    await writeFile(transcript, '{}\n')
+    expect((await read()).transcriptPath).toBeTruthy()
+    locate.mockRestore()
+    homes.paths = [system, account]
     const privateTranscript = join(
       isolated,
       'projects',
@@ -49,15 +72,15 @@ it('offers switching only when the real transcript store is shared with every de
     )
     await writeFile(privateTranscript, '{}\n')
     record.accountHome = { variable: 'CLAUDE_CONFIG_DIR', path: isolated }
-    expect(await structuredSessionRecoveryOptions(record)).toEqual({
+    expect(await read()).toEqual({
       canSwitchAccount: false,
       transcriptPath: privateTranscript
     })
     record.accountHome = { variable: 'CLAUDE_CONFIG_DIR', path: account }
     homes.paths.push(isolated)
-    expect((await structuredSessionRecoveryOptions(record)).canSwitchAccount).toBe(false)
+    expect((await read()).canSwitchAccount).toBe(false)
     homes.paths = [system, join(root, 'unverified')]
-    expect((await structuredSessionRecoveryOptions(record)).canSwitchAccount).toBe(false)
+    expect((await read()).canSwitchAccount).toBe(false)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

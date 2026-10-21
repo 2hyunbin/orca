@@ -63,9 +63,12 @@ export function AgentSessionContinuationDialog({
   const agents = useMemo(
     () =>
       getAgentCatalog().filter(
-        (agent) => detectedAgents.includes(agent.id) && isTuiAgentEnabled(agent.id, disabledAgents)
+        (agent) =>
+          detectedAgents.includes(agent.id) &&
+          isTuiAgentEnabled(agent.id, disabledAgents) &&
+          (!request?.avoidSourceAgent || agent.id !== request.source.sourceAgent)
       ),
-    [detectedAgents, disabledAgents]
+    [detectedAgents, disabledAgents, request]
   )
   const hasFullContext = request ? hasFullAgentSessionContext(request.source) : false
 
@@ -126,7 +129,12 @@ export function AgentSessionContinuationDialog({
   }, [starting])
 
   const handleStart = async (): Promise<void> => {
-    if (!request || !selectedAgent || starting) {
+    if (
+      !request ||
+      !selectedAgent ||
+      !agents.some((agent) => agent.id === selectedAgent) ||
+      starting
+    ) {
       return
     }
     const prompt = buildAgentSessionContinuationPrompt(request.source, contextMode)
@@ -153,7 +161,7 @@ export function AgentSessionContinuationDialog({
   const sourceAgentLabel = request?.source.sourceAgent
     ? getAgentLabel(request.source.sourceAgent)
     : null
-  const startDisabled = detecting || starting || agents.length === 0 || !selectedAgent
+  const startDisabled = detecting || starting || !agents.some((agent) => agent.id === selectedAgent)
 
   return (
     <Dialog

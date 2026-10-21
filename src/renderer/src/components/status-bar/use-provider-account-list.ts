@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   fetchProviderAccountsSnapshot,
+  watchProviderAccounts,
   type ProviderAccountsSnapshot
 } from '@/runtime/runtime-provider-accounts-client'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -10,7 +11,8 @@ export function useProviderAccountList<Provider extends 'claude' | 'codex'>(
   provider: Provider,
   target: RuntimeClientTarget,
   syncKey: string,
-  initial: ProviderAccountsSnapshot[Provider]
+  initial: ProviderAccountsSnapshot[Provider],
+  observe = false
 ) {
   const [accounts, setAccounts] = useState(initial)
   const [accountsLoaded, setAccountsLoaded] = useState(false)
@@ -33,9 +35,24 @@ export function useProviderAccountList<Provider extends 'claude' | 'codex'>(
     }
   }, [provider, target])
   useEffect(() => {
+    if (observe && target.kind === 'environment') {
+      setAccountsLoaded(false)
+      const watcher = watchProviderAccounts(target, {
+        onSnapshot: (snapshot) => {
+          const known = !snapshot.failedProviders?.includes(provider)
+          setAccountsLoaded(known)
+          if (known) {
+            setAccounts(snapshot[provider])
+          }
+        },
+        onError: () => setAccountsLoaded(false),
+        onClosedAfterSnapshot: () => setAccountsLoaded(false)
+      })
+      return () => watcher.close()
+    }
     void loadAccounts().catch((error: unknown) => {
       console.error(`Failed to load ${provider} accounts:`, error)
     })
-  }, [loadAccounts, provider, syncKey])
+  }, [loadAccounts, observe, provider, syncKey, target])
   return { accounts, setAccounts, accountsLoaded, loadAccounts, mountedRef }
 }

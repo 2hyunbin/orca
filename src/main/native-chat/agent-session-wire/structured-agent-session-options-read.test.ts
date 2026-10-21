@@ -17,6 +17,11 @@ import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
 
 const SESSION = 'session-1'
+const journal = {
+  snapshot: () => ({ items: [], submissions: [] }),
+  threadGoal: () => null,
+  context: { floor: () => null }
+}
 
 function restingRecord(): AgentSessionRecord {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resting read and the catalog key touch only these fields.
@@ -46,7 +51,7 @@ describe('options at rest', () => {
     const starting = {
       child: { phase: 'starting' },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -80,7 +85,7 @@ describe('options at rest', () => {
     const conversation = () => ({
       child: live ? { fence: 7 } : null,
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal
     })
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -125,7 +130,7 @@ describe('options at rest', () => {
       const resting = {
         child: null,
         params: { provider: 'codex' },
-        journal: { threadGoal: () => null, context: { floor: () => null } }
+        journal
       }
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: options reads touch only these context members.
       const context = {
@@ -194,7 +199,12 @@ describe('live Codex option reads', () => {
     const live = {
       child,
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, contextUsage: () => null, context: { floor: () => null } }
+      journal: {
+        snapshot: () => ({ items: [], submissions: [] }),
+        threadGoal: () => null,
+        contextUsage: () => null,
+        context: { floor: () => null }
+      }
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {
@@ -232,7 +242,7 @@ describe('live Codex option reads', () => {
     const live = {
       child: { fence: 7 },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal
     }
     const failure = new Error('model/list unavailable')
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the failed read ends before touching the remaining context fields.
@@ -270,7 +280,7 @@ describe('live Codex option reads', () => {
     const live = {
       child: { fence: 7 },
       params: { provider: 'codex' },
-      journal: { threadGoal: () => null, context: { floor: () => null } }
+      journal
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
     const context = {

@@ -311,6 +311,7 @@ export async function readOpenCodeTranscriptPageViaWorker(
     sessionId: string
     limit: number
     beforeMessageRowId?: number
+    contextExport?: true
     agent?: 'zcode'
   },
   signal?: AbortSignal
