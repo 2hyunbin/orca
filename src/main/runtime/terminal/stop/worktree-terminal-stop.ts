@@ -27,8 +27,12 @@ import { describeMobileSessionTabCloseRefusal } from '../../mobile-session-tab-c
 import { clearClosedWorktreeResumeRecords } from './worktree-sleep-resume-records'
 import { anySleepKeyNames, hostSleepKey, resolveSleepScope } from './worktree-terminal-sleep-key'
 import type { WorktreeSleepScope } from './worktree-terminal-sleep-key'
+import { TerminalUpdateAdmission } from './terminal-update-admission'
 
 export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntimeWithResolveTerminalSplitSourceAuthority {
+  /** Closed by an update's last census until the stop; every spawn lease passes it. */
+  readonly terminalUpdateAdmission = new TerminalUpdateAdmission()
+
   protected abstract sleepResolvedWorktreeTerminals(
     worktree: ResolvedWorktree,
     scope: WorktreeSleepScope,
@@ -270,35 +274,41 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
     }
   }
 
-  /** `target` is the spawn's own workspace copy: the host whose provider runs it. */
+  /**
+   * `target` is the spawn's own workspace copy: the host whose provider runs it. `reattachSessionId`
+   * is the session the spawn may attach to, which an update's closed admission still lets through.
+   */
   async acquireWorktreeTerminalSpawn(
     target: HostWorktreeTarget | undefined,
-    opts: { refuseSleptWorktree?: boolean } = {}
+    opts: { refuseSleptWorktree?: boolean; reattachSessionId?: string } = {}
   ): Promise<() => void> {
-    if (!target) {
-      return () => {}
-    }
-    const worktreeId = target.id
-    const release = await this.acquireWorktreeTerminalMutation(worktreeId, 'shared')
-    const key = hostSleepKey(target.hostId, worktreeId)
-    const sleepState = this.terminalSleepStateByHostWorktree.get(key)
-    // Why: re-checked under the lock, since a sleep can commit while an automatic spawn waits for it.
-    if (sleepState && opts.refuseSleptWorktree) {
-      release()
-      throw new Error(WORKTREE_TERMINALS_SLEEPING_ERROR)
-    }
-    if (sleepState?.phase === 'sleeping' || sleepState?.phase === 'partial') {
-      this.terminalSleepStateByHostWorktree.delete(key)
-      this.emitClientEvent({
-        type: 'worktreeTerminalSleepState',
-        worktreeId: sleepState.worktreeId,
-        generation: sleepState.generation,
-        phase: 'woken',
-        ptyIds: sleepState.ptyIds,
-        terminalHandles: sleepState.terminalHandles
-      })
-    }
-    return release
+    // Admission first: the whole lease, lock wait included, is a spawn an update's census awaits.
+    return await this.terminalUpdateAdmission.hold(opts.reattachSessionId, async () => {
+      if (!target) {
+        return () => {}
+      }
+      const worktreeId = target.id
+      const release = await this.acquireWorktreeTerminalMutation(worktreeId, 'shared')
+      const key = hostSleepKey(target.hostId, worktreeId)
+      const sleepState = this.terminalSleepStateByHostWorktree.get(key)
+      // Why: re-checked under the lock, since a sleep can commit while an automatic spawn waits for it.
+      if (sleepState && opts.refuseSleptWorktree) {
+        release()
+        throw new Error(WORKTREE_TERMINALS_SLEEPING_ERROR)
+      }
+      if (sleepState?.phase === 'sleeping' || sleepState?.phase === 'partial') {
+        this.terminalSleepStateByHostWorktree.delete(key)
+        this.emitClientEvent({
+          type: 'worktreeTerminalSleepState',
+          worktreeId: sleepState.worktreeId,
+          generation: sleepState.generation,
+          phase: 'woken',
+          ptyIds: sleepState.ptyIds,
+          terminalHandles: sleepState.terminalHandles
+        })
+      }
+      return release
+    })
   }
 
   /** Whether the host itself has put (or is putting) this worktree's terminals to sleep. */

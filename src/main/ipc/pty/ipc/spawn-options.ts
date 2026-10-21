@@ -127,7 +127,8 @@ export async function buildPtyIpcSpawnOptions(
   ctx.releaseWorktreeSpawn = acquireWorktreeSpawn
     ? await acquireWorktreeSpawn.call(
         runtime,
-        spawnWorktreeTarget(args.worktreeId, args.connectionId)
+        spawnWorktreeTarget(args.worktreeId, args.connectionId),
+        { reattachSessionId: args.sessionId }
       )
     : undefined
   return null

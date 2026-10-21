@@ -67,7 +67,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForProject extends OrcaRuntime
 
   override async acquireWorktreeTerminalSpawn(
     target: HostWorktreeTarget | undefined,
-    opts: { refuseSleptWorktree?: boolean } = {}
+    opts: { refuseSleptWorktree?: boolean; reattachSessionId?: string } = {}
   ): Promise<() => void> {
     const release = await super.acquireWorktreeTerminalSpawn(target, opts)
     const repoId = target ? getRepoIdFromWorktreeId(target.id) : null

@@ -81,6 +81,11 @@ const UNVERIFIABLE_CENSUS: OrcadTerminalCensus = {
   daemonProtocolVersion: null
 }
 
+/** Once the recount closed it; a failed reopen only leaves the fence to lapse on its own. */
+async function reopenIncumbentAdmission(options: OrcadDeployOptions): Promise<void> {
+  await options.releaseIncumbentAdmission().catch(() => {})
+}
+
 function countedLockedRecord(options: OrcadDeployOptions, record: OrcadActivationRecord): boolean {
   const counted = options.censusRecord
   return (
@@ -191,6 +196,7 @@ export async function activateInstalledOrcad(
       ...(options.force !== undefined ? { force: options.force } : {})
     })
     if (recount.action === 'defer') {
+      await reopenIncumbentAdmission(options)
       return notActivated(recount.code, recount.reason)
     }
   }
@@ -204,7 +210,15 @@ export async function activateInstalledOrcad(
     snapshotDirName: orcadSnapshotDirName(fullVersion, startedAt.getTime()),
     now: startedAt
   })
-  await writeOrcadActivationTransaction(options, transaction)
+  try {
+    await writeOrcadActivationTransaction(options, transaction)
+  } catch (error) {
+    // Nothing stopped, so the incumbent keeps serving and must take terminals again.
+    if (incumbent) {
+      await reopenIncumbentAdmission(options)
+    }
+    throw error
+  }
   lock.retainOnError()
   // Past the first mutation a cancel would strand a stopped host, so the run finishes or rolls back.
   options = withoutAbortSignal(options)
