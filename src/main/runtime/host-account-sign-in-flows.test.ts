@@ -68,11 +68,11 @@ describe('HostAccountSignInFlows', () => {
     expect(() => flows.start('device-b', 'codex')).toThrow('already running on this host')
     await expect(flows.wait('device-b', flowId, 0)).rejects.toThrow('no longer active')
     expect(() => flows.submitCode('device-b', flowId, 'x')).toThrow('no longer active')
-    expect(() => flows.cancel('device-b', flowId)).toThrow('no longer active')
+    await expect(flows.cancel('device-b', flowId)).rejects.toThrow('no longer active')
     // The starter asking again rejoins its running flow instead of starting a second login.
     expect(flows.start('device-a', 'claude').flowId).toBe(flowId)
     expect(runner.run).toHaveBeenCalledOnce()
-    flows.cancel('device-a', flowId)
+    await flows.cancel('device-a', flowId)
   })
 
   it('cancels the login and reports cancelled, not the login’s own failure', async () => {
@@ -80,13 +80,49 @@ describe('HostAccountSignInFlows', () => {
     const flows = new HostAccountSignInFlows(runner.run, 'linux')
     const { flowId } = flows.start('device-a', 'claude')
     await vi.waitFor(() => expect(runner.run).toHaveBeenCalledOnce())
-    expect(flows.cancel('device-a', flowId).phase).toBe('cancelled')
+    expect((await flows.cancel('device-a', flowId)).phase).toBe('cancelled')
     expect(runner.channel().signal.aborted).toBe(true)
     await expect(runner.channel().nextCode()).rejects.toThrow()
-    await vi.waitFor(() => expect(flows.start('device-a', 'codex').phase).toBe('starting'))
+    expect(flows.start('device-a', 'codex').phase).toBe('starting')
     expect((await flows.wait('device-a', flowId, 0).catch((error) => error)).message).toMatch(
       'no longer active'
     )
+  })
+
+  it('reports the account a login added after it refused a late cancel', async () => {
+    const flows = new HostAccountSignInFlows(async (_provider, channel) => {
+      // Codex refuses a cancel once it has written the login, and registration finishes.
+      await new Promise((resolve) => channel.signal.addEventListener('abort', resolve))
+      return { claude: CLAUDE_STATE }
+    }, 'linux')
+    const { flowId } = flows.start('device-a', 'codex')
+    expect(await flows.cancel('device-a', flowId)).toMatchObject({
+      phase: 'signedIn',
+      claude: CLAUDE_STATE
+    })
+  })
+
+  it('says another account change stopped it when nobody here cancelled', async () => {
+    const flows = new HostAccountSignInFlows(async () => {
+      throw new Error('Codex sign-in was cancelled.')
+    }, 'linux')
+    const { flowId } = flows.start('device-a', 'codex')
+    expect(await flows.wait('device-a', flowId, 1)).toMatchObject({
+      phase: 'failed',
+      error: expect.stringContaining('An account change on this host')
+    })
+  })
+
+  it('ignores a published page that is not the provider’s own sign-in host', async () => {
+    const runner = controllableRunner()
+    const flows = new HostAccountSignInFlows(runner.run, 'linux')
+    const { flowId, revision } = flows.start('device-a', 'claude')
+    await vi.waitFor(() => expect(runner.run).toHaveBeenCalledOnce())
+    runner
+      .channel()
+      .onPrompt({ url: 'https://evil.test/?code=true', userCode: null, needsCode: true })
+    expect((await flows.wait('device-a', flowId, 0)).revision).toBe(revision)
+    await flows.cancel('device-a', flowId)
   })
 
   it('reports a failed login with its message, stripped of terminal escapes', async () => {

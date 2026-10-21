@@ -181,7 +181,10 @@ export function runClaudeCommandProcess(
     child.on(completionEvent, onDone)
     const stdin = options?.keepStdinOpen && !interactiveLogin ? child.stdin : null
     if (stdin && options?.onStdin) {
-      // Why the guard: a write after the login ended would throw EPIPE on a destroyed stream.
+      // Why: a code written as Claude exits fails with EPIPE, which unhandled would crash the host.
+      stdin.on('error', (error) =>
+        console.warn('[claude-accounts] Claude login stdin:', error.message)
+      )
       options.onStdin((text) => {
         if (!settled && !stdin.destroyed) {
           stdin.write(text)

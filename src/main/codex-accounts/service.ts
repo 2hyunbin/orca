@@ -306,8 +306,10 @@ export class CodexAccountService {
     if (deviceChannel?.signal.aborted) {
       throw new Error(CODEX_LOGIN_CANCELLED_MESSAGE)
     }
+    // Why its own handle: the shared field may name a later login by the time the flow is cancelled.
+    let cancelThisLogin: (() => boolean) | null = null
     const cancelForChannel = (): void => {
-      this.cancelPendingCodexLogin?.()
+      cancelThisLogin?.()
     }
     deviceChannel?.signal.addEventListener('abort', cancelForChannel, { once: true })
     try {
@@ -323,6 +325,7 @@ export class CodexAccountService {
         killProcessTree: killLoginProcessTree,
         setCancel: (cancel) => {
           this.cancelPendingCodexLogin = cancel
+          cancelThisLogin = cancel
         },
         onAuthUrl: (url) => this.setPendingLoginUrl(url),
         openWslAuthUrl: this.openWslLoginUrl,

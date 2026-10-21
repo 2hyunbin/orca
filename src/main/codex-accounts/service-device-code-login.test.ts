@@ -22,7 +22,7 @@ vi.mock('electron', () => ({
 beforeEach(() => installFakeAppEnvironment({ getPath: () => testState.userDataDir }))
 
 vi.mock('node:os', async () => {
-  const actual = await vi.importActual<typeof import('node:os')>('node:os') // eslint-disable-line @typescript-eslint/consistent-type-imports -- vi.importActual requires inline import()
+  const actual = await vi.importActual<typeof import('node:os')>('node:os') // oxlint-disable-line typescript/consistent-type-imports -- vi.importActual needs an inline import() type
   return {
     ...actual,
     homedir: () => testState.fakeHomeDir
@@ -77,8 +77,11 @@ describe.skipIf(process.platform === 'win32')('CodexAccountService device-code s
     const runtimeHome = createRuntimeHome()
     const { CodexAccountService } = await import('./service')
     const service = new CodexAccountService(
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: harness fakes implement the members this add path reads.
       createStore(createSettings()) as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: harness fakes implement the members this add path reads.
       createRateLimits() as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: harness fakes implement the members this add path reads.
       runtimeHome as never
     )
     const onPrompt = vi.fn(() => {

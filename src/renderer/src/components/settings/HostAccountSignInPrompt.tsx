@@ -7,7 +7,10 @@ import {
   submitHostAccountSignInCode,
   subscribeHostAccountSignIns
 } from '@/runtime/runtime-host-account-sign-in-client'
-import type { HostAccountSignInProvider } from '../../../../shared/host-account-sign-in-types'
+import {
+  isHostAccountSignInPage,
+  type HostAccountSignInProvider
+} from '../../../../shared/host-account-sign-in-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -96,8 +99,7 @@ export function HostAccountSignInPrompt(props: {
     return null
   }
   const prompt = status.phase === 'waiting' ? status.prompt : undefined
-  // Why https only: the server publishes this link, and this device opens it.
-  const url = prompt && prompt.url.startsWith('https://') ? prompt.url : null
+  const url = prompt && isHostAccountSignInPage(props.provider, prompt.url) ? prompt.url : null
   return (
     <div className="space-y-2 rounded-md border border-border/70 bg-muted/30 px-3 py-2">
       <p role="status" className="text-xs text-muted-foreground">

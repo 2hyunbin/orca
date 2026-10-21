@@ -49,3 +49,19 @@ export const HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES: ReadonlySet<HostAccountSignInP
   'failed',
   'cancelled'
 ])
+
+// Why a fixed list: the host publishes this page and the client opens it, so neither trusts the other.
+const SIGN_IN_PAGE_HOSTS: Record<HostAccountSignInProvider, ReadonlySet<string>> = {
+  claude: new Set(['claude.com', 'claude.ai']),
+  codex: new Set(['auth.openai.com'])
+}
+
+/** Whether `url` is an https page of the provider's own sign-in host. */
+export function isHostAccountSignInPage(provider: HostAccountSignInProvider, url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' && SIGN_IN_PAGE_HOSTS[provider].has(parsed.hostname)
+  } catch {
+    return false
+  }
+}

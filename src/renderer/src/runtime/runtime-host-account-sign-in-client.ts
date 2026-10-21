@@ -11,6 +11,7 @@ import { HOST_ACCOUNT_SIGN_IN_RUNTIME_CAPABILITY } from '../../../shared/account
 import { CODEX_LOGIN_CANCELLED_MESSAGE } from '../../../shared/codex-auth-errors'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { assertRuntimeEnvironmentCapability, callRuntimeRpc } from './runtime-rpc-client'
+import { captureRuntimeEnvironmentRequestRevision } from './runtime-environment-revision'
 
 type EnvironmentTarget = Extract<RuntimeClientTarget, { kind: 'environment' }>
 
@@ -24,8 +25,16 @@ const CANCELLED_MESSAGE: Record<HostAccountSignInProvider, string> = {
   codex: CODEX_LOGIN_CANCELLED_MESSAGE
 }
 
+/** A sign-in one server runs for this client, pinned to the pairing it started on. */
+type Session = {
+  owner: EnvironmentTarget
+  /** Why pinned: a re-paired id names another machine, which must never get this flow's code. */
+  pairingRevision: number | undefined
+  status: HostAccountSignInStatus
+}
+
 /** The sign-in each server runs for this client, per provider, while it is shown. */
-const shown = new Map<string, { owner: EnvironmentTarget; status: HostAccountSignInStatus }>()
+const shown = new Map<string, Session>()
 const listeners = new Set<() => void>()
 
 const keyOf = (owner: EnvironmentTarget, provider: HostAccountSignInProvider): string =>
@@ -37,24 +46,32 @@ function notify(): void {
   }
 }
 
-function publish(owner: EnvironmentTarget, status: HostAccountSignInStatus): void {
-  const key = keyOf(owner, status.provider)
-  const current = shown.get(key)?.status
-  // Why: a slow answer must not roll a newer status back.
-  if (current?.flowId === status.flowId && current.revision > status.revision) {
-    return
-  }
-  shown.set(key, { owner, status })
-  notify()
+function call(
+  session: Pick<Session, 'owner' | 'pairingRevision'>,
+  method: string,
+  params: unknown,
+  timeoutMs = CALL_TIMEOUT_MS
+): Promise<HostAccountSignInStatus> {
+  return callRuntimeRpc<HostAccountSignInStatus>(session.owner, method, params, {
+    timeoutMs,
+    expectedEnvironmentPairingRevision: session.pairingRevision
+  })
 }
 
-function clear(
-  owner: EnvironmentTarget,
-  provider: HostAccountSignInProvider,
-  flowId: string
-): void {
-  const key = keyOf(owner, provider)
-  if (shown.get(key)?.status.flowId === flowId) {
+function publish(session: Session, status: HostAccountSignInStatus): void {
+  // Why: a slow answer must not roll a newer status back, nor revive a flow that already ended.
+  if (shown.get(keyOf(session.owner, status.provider)) !== session) {
+    return
+  }
+  if (status.flowId === session.status.flowId && status.revision >= session.status.revision) {
+    session.status = status
+    notify()
+  }
+}
+
+function clear(session: Session): void {
+  const key = keyOf(session.owner, session.status.provider)
+  if (shown.get(key) === session) {
     shown.delete(key)
     notify()
   }
@@ -72,17 +89,14 @@ export function readHostAccountSignIn(
   return owner.kind === 'environment' ? (shown.get(keyOf(owner, provider))?.status ?? null) : null
 }
 
-async function waitForChange(
-  owner: EnvironmentTarget,
-  status: HostAccountSignInStatus
-): Promise<HostAccountSignInStatus> {
+async function waitForChange(session: Session): Promise<HostAccountSignInStatus> {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await callRuntimeRpc<HostAccountSignInStatus>(
-        owner,
+      return await call(
+        session,
         'accounts.hostSignInWait',
-        { flowId: status.flowId, afterRevision: status.revision },
-        { timeoutMs: WAIT_TIMEOUT_MS }
+        { flowId: session.status.flowId, afterRevision: session.status.revision },
+        WAIT_TIMEOUT_MS
       )
     } catch (error) {
       // Why retry: a dropped answer says nothing about the login, which keeps running on the host.
@@ -98,27 +112,34 @@ async function runHostAccountSignIn(
   owner: EnvironmentTarget,
   provider: HostAccountSignInProvider
 ): Promise<HostAccountSignInStatus> {
+  const pairing = {
+    owner,
+    pairingRevision: captureRuntimeEnvironmentRequestRevision(owner.environmentId)
+  }
   await assertRuntimeEnvironmentCapability(
     owner.environmentId,
     HOST_ACCOUNT_SIGN_IN_RUNTIME_CAPABILITY,
     'This server runs an older Orca that cannot add accounts from here. Update Orca on that server, or run `orca account add` in a terminal there.'
   )
-  let status = await callRuntimeRpc<HostAccountSignInStatus>(
-    owner,
-    'accounts.hostSignInStart',
-    { provider },
-    { timeoutMs: CALL_TIMEOUT_MS }
-  )
-  const { flowId } = status
-  publish(owner, status)
+  const session: Session = {
+    ...pairing,
+    status: await call(pairing, 'accounts.hostSignInStart', { provider })
+  }
+  shown.set(keyOf(owner, provider), session)
+  notify()
   try {
-    while (!HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES.has(status.phase)) {
-      status = await waitForChange(owner, status)
-      publish(owner, status)
+    while (!HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES.has(session.status.phase)) {
+      const next = await waitForChange(session)
+      publish(session, next)
+      // Why: the loop advances even when another session has taken this one's place on screen.
+      if (next.revision > session.status.revision) {
+        session.status = next
+      }
     }
   } finally {
-    clear(owner, provider, flowId)
+    clear(session)
   }
+  const { status } = session
   if (status.phase === 'signedIn') {
     return status
   }
@@ -156,17 +177,15 @@ export async function submitHostAccountSignInCode(
   provider: HostAccountSignInProvider,
   code: string
 ): Promise<void> {
-  const current = owner.kind === 'environment' ? shown.get(keyOf(owner, provider)) : undefined
-  if (!current) {
+  const session = owner.kind === 'environment' ? shown.get(keyOf(owner, provider)) : undefined
+  if (!session) {
     throw new Error('This sign-in is no longer active in this client.')
   }
-  const status = await callRuntimeRpc<HostAccountSignInStatus>(
-    current.owner,
-    'accounts.hostSignInSubmitCode',
-    { flowId: current.status.flowId, code },
-    { timeoutMs: CALL_TIMEOUT_MS }
-  )
-  publish(current.owner, status)
+  const status = await call(session, 'accounts.hostSignInSubmitCode', {
+    flowId: session.status.flowId,
+    code
+  })
+  publish(session, status)
 }
 
 /** True when there was a sign-in to cancel. */
@@ -174,16 +193,13 @@ export async function cancelHostAccountSignIn(
   owner: RuntimeClientTarget,
   provider: HostAccountSignInProvider
 ): Promise<boolean> {
-  const current = owner.kind === 'environment' ? shown.get(keyOf(owner, provider)) : undefined
-  if (!current) {
+  const session = owner.kind === 'environment' ? shown.get(keyOf(owner, provider)) : undefined
+  if (!session) {
     return false
   }
-  const status = await callRuntimeRpc<HostAccountSignInStatus>(
-    current.owner,
-    'accounts.hostSignInCancel',
-    { flowId: current.status.flowId },
-    { timeoutMs: CALL_TIMEOUT_MS }
-  )
-  publish(current.owner, status)
+  const status = await call(session, 'accounts.hostSignInCancel', {
+    flowId: session.status.flowId
+  })
+  publish(session, status)
   return true
 }

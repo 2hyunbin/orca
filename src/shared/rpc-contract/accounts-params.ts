@@ -117,5 +117,11 @@ export const HostAccountSignInWaitParams = z.object({
 export const HostAccountSignInFlowParams = z.object({ flowId: z.string().min(1).max(64) })
 
 export const HostAccountSignInCodeParams = HostAccountSignInFlowParams.extend({
-  code: z.string().trim().min(1, 'Paste the code from the sign-in page.').max(4_096)
+  code: z
+    .string()
+    .trim()
+    .min(1, 'Paste the code from the sign-in page.')
+    .max(4_096)
+    // Why: the code becomes one line on the login's stdin; a newline inside it would answer twice.
+    .regex(/^[^\s\p{Cc}]+$/u, 'That code has spaces or line breaks in it. Copy it again.')
 })

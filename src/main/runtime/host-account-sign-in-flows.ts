@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto'
+import { setTimeout as delay } from 'node:timers/promises'
 import { stripAnsiEscapeSequences } from '../../shared/ansi-escape-sequences'
+import { CODEX_LOGIN_CANCELLED_MESSAGE } from '../../shared/codex-auth-errors'
 import {
   HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES,
+  isHostAccountSignInPage,
   type HostAccountSignInChannel,
   type HostAccountSignInProvider,
   type HostAccountSignInStatus
@@ -11,8 +14,16 @@ import {
 const WAIT_MS = 20_000
 // Why: a client that stopped polling (closed, slept, lost its link) must not hold the account queue.
 const OWNER_SILENCE_MS = 90_000
+// Why bounded: a cancel answers with what it knows; the client keeps waiting for the real outcome.
+const CANCEL_WAIT_MS = 10_000
 const MAX_ERROR_CHARS = 600
 const NOT_ACTIVE = 'This sign-in is no longer active in this client.'
+const SILENT_OWNER = 'The device that started this sign-in stopped answering.'
+const SUPERSEDED = 'An account change on this host stopped the sign-in. Start it again.'
+const LOGIN_CANCELLED_MESSAGES = new Set([
+  'Claude sign-in was cancelled.',
+  CODEX_LOGIN_CANCELLED_MESSAGE
+])
 
 export type HostAccountSignInRunner = (
   provider: HostAccountSignInProvider,
@@ -23,6 +34,9 @@ type Flow = {
   owner: string
   status: HostAccountSignInStatus
   ended: AbortController
+  /** Why the flow was told to stop; the login's own outcome still decides how it settles. */
+  stop: 'cancelled' | 'silent' | null
+  done: Promise<void>
   code: PromiseWithResolvers<string>
   codeSent: boolean
   listeners: Set<() => void>
@@ -35,6 +49,8 @@ const settled = (flow: Flow): boolean => HOST_ACCOUNT_SIGN_IN_SETTLED_PHASES.has
  * Account sign-ins this host runs for a client on another device: one at a time per host, which
  * only the client that started it can read, answer or cancel. The login and its credentials stay
  * on this host; the client sees only the page to open and relays the code that page shows.
+ * A flow settles only when its login does, so a cancel the login refused (it had already signed
+ * in) still reports the account it added.
  */
 export class HostAccountSignInFlows {
   private active: Flow | null = null
@@ -54,12 +70,12 @@ export class HostAccountSignInFlows {
     }
     const current = this.active
     if (current) {
-      if (current.owner === owner && current.status.provider === provider && !settled(current)) {
+      if (current.owner === owner && current.status.provider === provider && !current.stop) {
         this.touch(current)
         return current.status
       }
       throw new Error(
-        current.owner === owner && settled(current)
+        current.owner === owner && current.stop
           ? 'The last sign-in is still stopping. Try again in a moment.'
           : 'Another account sign-in is already running on this host. Finish or cancel it first.'
       )
@@ -71,6 +87,8 @@ export class HostAccountSignInFlows {
       owner,
       status: { flowId: randomUUID(), provider, revision: 1, phase: 'starting' },
       ended: new AbortController(),
+      stop: null,
+      done: Promise.resolve(),
       code,
       codeSent: false,
       listeners: new Set(),
@@ -79,7 +97,7 @@ export class HostAccountSignInFlows {
     this.active = flow
     this.latest.set(owner, flow)
     this.touch(flow)
-    void this.runFlow(flow)
+    flow.done = this.runFlow(flow)
     return flow.status
   }
 
@@ -87,7 +105,11 @@ export class HostAccountSignInFlows {
     const channel: HostAccountSignInChannel = {
       signal: flow.ended.signal,
       onPrompt: (prompt) => {
-        if (flow.status.phase === 'starting') {
+        if (
+          flow.status.phase === 'starting' &&
+          !flow.stop &&
+          isHostAccountSignInPage(flow.status.provider, prompt.url)
+        ) {
           this.update(flow, { phase: 'waiting', prompt })
         }
       },
@@ -98,7 +120,12 @@ export class HostAccountSignInFlows {
       this.update(flow, { phase: 'signedIn', prompt: undefined, ...result })
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      this.update(flow, { phase: 'failed', prompt: undefined, error: trimError(message) })
+      this.update(
+        flow,
+        flow.stop === 'cancelled'
+          ? { phase: 'cancelled', prompt: undefined }
+          : { phase: 'failed', prompt: undefined, error: failureMessage(flow, message) }
+      )
     } finally {
       this.end(flow)
       if (this.active === flow) {
@@ -136,7 +163,7 @@ export class HostAccountSignInFlows {
   submitCode(owner: string, flowId: string, code: string): HostAccountSignInStatus {
     const flow = this.own(owner, flowId)
     this.touch(flow)
-    if (flow.status.phase !== 'waiting' || !flow.status.prompt?.needsCode) {
+    if (flow.status.phase !== 'waiting' || !flow.status.prompt?.needsCode || flow.stop) {
       throw new Error('This sign-in is not waiting for a code.')
     }
     if (flow.codeSent) {
@@ -148,11 +175,16 @@ export class HostAccountSignInFlows {
     return flow.status
   }
 
-  cancel(owner: string, flowId: string): HostAccountSignInStatus {
+  /** Stops the login, then answers with its outcome once it has one (or what it knows by then). */
+  async cancel(owner: string, flowId: string): Promise<HostAccountSignInStatus> {
     const flow = this.own(owner, flowId)
     if (!settled(flow)) {
-      this.update(flow, { phase: 'cancelled', prompt: undefined })
+      flow.stop ??= 'cancelled'
       this.end(flow)
+      const timeout = new AbortController()
+      await Promise.race([flow.done, delay(CANCEL_WAIT_MS, undefined, { signal: timeout.signal })])
+        .catch(() => {})
+        .finally(() => timeout.abort())
     }
     return flow.status
   }
@@ -166,19 +198,15 @@ export class HostAccountSignInFlows {
   }
 
   private touch(flow: Flow): void {
-    if (settled(flow)) {
+    if (settled(flow) || flow.stop) {
       return
     }
     if (flow.silence) {
       clearTimeout(flow.silence)
     }
     flow.silence = setTimeout(() => {
-      if (!settled(flow)) {
-        this.update(flow, {
-          phase: 'failed',
-          prompt: undefined,
-          error: 'The device that started this sign-in stopped answering.'
-        })
+      if (!settled(flow) && !flow.stop) {
+        flow.stop = 'silent'
         this.end(flow)
       }
     }, OWNER_SILENCE_MS)
@@ -194,7 +222,6 @@ export class HostAccountSignInFlows {
   }
 
   private update(flow: Flow, patch: Partial<HostAccountSignInStatus>): void {
-    // Why: once settled, the login's late news (its rejection after a cancel) must not rewrite it.
     if (settled(flow)) {
       return
     }
@@ -205,7 +232,15 @@ export class HostAccountSignInFlows {
   }
 }
 
-function trimError(raw: string): string {
+function failureMessage(flow: Flow, raw: string): string {
+  if (flow.stop === 'silent') {
+    return SILENT_OWNER
+  }
   const message = stripAnsiEscapeSequences(raw).trim()
+  // Why: nobody here cancelled, so the login's "cancelled" means an account action on this host
+  // superseded it, and the client would otherwise read it as its own cancel and say nothing.
+  if (LOGIN_CANCELLED_MESSAGES.has(message)) {
+    return SUPERSEDED
+  }
   return message.length > MAX_ERROR_CHARS ? `${message.slice(0, MAX_ERROR_CHARS)}…` : message
 }

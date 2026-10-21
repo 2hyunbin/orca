@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { OrcaRuntimeService } from '../../orca-runtime'
-import { eraseRpcMethods, isStreamingMethod } from '../core'
+import { eraseRpcMethods, isStreamingMethod, type RpcContext } from '../core'
 import { ACCOUNT_METHODS } from './accounts'
 import type {
   HostAccountSignInChannel,
@@ -98,11 +98,16 @@ describe('account RPC methods', () => {
         clientKind: 'runtime' as const,
         caller: { kind: 'paired-device' as const, deviceId: 'laptop' }
       }
-      const call = async (name: string, params: unknown, ctx: object = device) => {
+      const call = async (
+        name: string,
+        params: unknown,
+        ctx: Pick<RpcContext, 'caller' | 'clientKind'> = device
+      ) => {
         const found = method(name)
         if (isStreamingMethod(found)) {
           throw new Error(`${name} must be a request method`)
         }
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every host sign-in method answers with a HostAccountSignInStatus.
         return (await found.handler(found.params ? found.params.parse(params) : params, {
           runtime,
           ...ctx
