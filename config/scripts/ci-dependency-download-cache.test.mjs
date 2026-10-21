@@ -291,20 +291,13 @@ describe('CI dependency download caches', () => {
     ).jobs
     const warmer = platformJobs['warm-windows'].steps.find((step) => step.uses === installer)
     expect(action.inputs['cache-pnpm-store'].default).toBe('true')
-    const windowsContext = {
-      inputs: { fast_runners: true, build_template: true },
-      matrix: { os: 'windows-2022' },
-      runner: { os: 'Windows' }
-    }
-    expect(runInNewContext(persistence.with['cache-pnpm-store'].slice(3, -2), windowsContext)).toBe(
-      false
+    expect(persistence.with['cache-pnpm-store']).toBe(
+      "${{ !inputs.build_template && runner.os != 'Windows' }}"
     )
     expect(ssh.with['cache-pnpm-store']).toBe('false')
     expect(warmer.with['cache-pnpm-store']).toBe('false')
     expect(warmer.with['native-runtime']).toBe('node')
-    expect(
-      runInNewContext(persistence.with['cache-pnpm-store-lookup-only'].slice(3, -2), windowsContext)
-    ).toBe('true')
+    expect(persistence.with['cache-pnpm-store-lookup-only']).toBe('true')
     for (const job of [workflow('ci-cache-warmup').jobs.warm, platformJobs['warm-linux-runtime']]) {
       const install = job.steps.find((step) => step.uses?.includes('install-node-dependencies'))
       expect(install.with['cache-pnpm-store-lookup-only']).toBe('true')

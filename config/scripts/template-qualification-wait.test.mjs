@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
-import { runInNewContext } from 'node:vm'
 
 const { jobs } = parse(readFileSync('.github/workflows/node-server-tests.yml', 'utf8'))
 const step = jobs.desktop_template.steps.find(
@@ -88,23 +87,4 @@ describe('early template assembly qualification gate', () => {
       ]).result
     ).rejects.toThrow('Timed out')
   })
-})
-
-it('restores the download store only for fast Intel qualification', () => {
-  const install = jobs.persistence.steps.find((item) => item.id === 'dependencies')
-  for (const fast of [true, false]) {
-    for (const os of ['macos-15-intel', 'macos-15', 'windows-2022', 'ubuntu-22.04']) {
-      const context = {
-        inputs: { build_template: true, fast_runners: fast },
-        matrix: { os },
-        runner: { os: os.startsWith('macos') ? 'macOS' : 'Linux' }
-      }
-      expect(runInNewContext(install.with['cache-pnpm-store'].slice(3, -2), context)).toBe(
-        fast && os === 'macos-15-intel'
-      )
-      expect(
-        runInNewContext(install.with['cache-pnpm-store-lookup-only'].slice(3, -2), context)
-      ).toBe(fast && os === 'macos-15-intel' ? 'false' : 'true')
-    }
-  }
 })
