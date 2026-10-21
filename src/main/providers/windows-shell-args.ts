@@ -81,9 +81,8 @@ function getCmdShellArgStartupCommand(command?: string): string | null {
   if (!command || command.length > STARTUP_COMMAND_TEXT_MAX_CHARS) {
     return null
   }
-  // Why: node-pty's C-runtime argv escaping changes normal cmd quotes in `/K`
-  // delivery, while the interactive parser preserves them through stdin.
-  if (command.includes('"')) {
+  // Why: /K truncates multiline scripts, and node-pty argv escaping changes quotes; stdin preserves both.
+  if (command.includes('"') || /[\r\n]/.test(command)) {
     return null
   }
   const commandArg = `${CMD_UTF8_SETUP_COMMAND} & ${command}`
