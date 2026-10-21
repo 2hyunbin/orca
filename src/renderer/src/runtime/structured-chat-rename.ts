@@ -9,6 +9,7 @@ import {
   structuredAgentSessionTargetForTab,
   structuredAgentSessionTargetForHost,
   structuredAgentSessionOwnerForTab,
+  legacyStructuredChatRenameOwner,
   executionHostIdForStructuredTarget
 } from './structured-agent-session-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
@@ -70,7 +71,7 @@ export async function uploadLegacyStructuredChatRename(
   tab: Tab,
   alias: string
 ): Promise<boolean> {
-  const target = structuredAgentSessionTargetForHost(tab.executionHostId)
+  const target = structuredAgentSessionTargetForHost(legacyStructuredChatRenameOwner(get(), tab))
   if (!target || !(await supportsStructuredAgentSessionRename(target))) {
     return false
   }
@@ -84,7 +85,13 @@ export async function uploadLegacyStructuredChatRename(
     console.warn('[structured-chat-rename] legacy rename upload failed', error)
     return false
   }
-  return dropLegacyAlias(get, tab, alias, executionHostIdForStructuredTarget(target))
+  return dropLegacyAlias(
+    get,
+    tab,
+    alias,
+    executionHostIdForStructuredTarget(target),
+    legacyStructuredChatRenameOwner
+  )
 }
 
 /** Clears the tab's own name only if it is still the one the host just answered for. */
@@ -92,7 +99,8 @@ async function dropLegacyAlias(
   get: () => AppState,
   tab: Tab,
   alias: string | null,
-  owner: string
+  owner: string,
+  ownerForTab = structuredAgentSessionOwnerForTab
 ): Promise<boolean> {
   if (alias === null) {
     return true
@@ -107,7 +115,7 @@ async function dropLegacyAlias(
       current?.contentType === 'agent-session' &&
       current.entityId === tab.entityId &&
       current.customLabel === alias &&
-      structuredAgentSessionOwnerForTab(latest, current) === owner
+      ownerForTab(latest, current) === owner
     )
   }
   if (!matches()) {
