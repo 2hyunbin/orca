@@ -121,7 +121,10 @@ export function HostCombobox({
                     disabled={option.disabled}
                     onSelect={() => {
                       setOpen(false)
-                      onChange(option.id)
+                      // Why: like a Select, re-picking the current host is not a change.
+                      if (option.id !== value) {
+                        onChange(option.id)
+                      }
                     }}
                   >
                     {option.content ?? (
