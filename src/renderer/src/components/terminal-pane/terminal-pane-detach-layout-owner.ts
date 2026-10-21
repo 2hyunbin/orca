@@ -6,7 +6,8 @@ import type {
 
 /**
  * A layout-owner build's drag-out: main moves the pane under the desktop's move rules and names the
- * new tab. Today's move runs instead when main cannot act on it (a paired server's workspace, or a
+ * new tab; a paired server's workspace its frames draw goes to that server's main. Today's move
+ * runs instead when no main can act on it (a paired server's workspace its frames do not draw, or a
  * tab or pane main's copy lacks, such as a legacy tab whose tab-bar id differs from its terminal's).
  */
 export function moveLeafThroughLayoutOwner(
@@ -29,10 +30,20 @@ export function moveLeafThroughLayoutOwner(
         windowDetach: { ptyId: request.ptyId, ...(paneCwd ? { startupCwd: paneCwd } : {}) }
       },
       {
-        apply: (result) =>
+        apply: (result, origin) =>
           resolve(
             result.tabId
-              ? { status: 'moved', ptyId: result.ptyId ?? null, tabId: result.tabId }
+              ? {
+                  status: 'moved',
+                  // A server's main answers its own terminal id; the moved pane keeps the one
+                  // this desktop knows it by, and a terminal it started gets one from its frames.
+                  ptyId: origin.routed
+                    ? result.ptyId
+                      ? request.ptyId
+                      : null
+                    : (result.ptyId ?? null),
+                  tabId: result.tabId
+                }
               : { status: 'refused', reason: 'invalid_request' }
           ),
         asToday: fallBack,

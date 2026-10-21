@@ -71,6 +71,26 @@ describe('moveLeafThroughLayoutOwner', () => {
     expect(legacyMove).not.toHaveBeenCalled()
   })
 
+  it('keeps the desktop’s terminal id when a paired server’s main moved the pane', async () => {
+    const routed = { framesKey: 'env-1', routed: true }
+    const moving = moveLeafThroughLayoutOwner(request, { groupId: TARGET_GROUP_ID, index: 1 })
+    lastHandlers().apply({ tabId: 'tab-server', ptyId: 'server-pty-9' }, routed)
+    // The server's own id is never a binding here.
+    await expect(moving).resolves.toEqual({
+      status: 'moved',
+      ptyId: 'pty-right',
+      tabId: 'tab-server'
+    })
+
+    const unbound = moveLeafThroughLayoutOwner(
+      { ...request, ptyId: null },
+      { groupId: TARGET_GROUP_ID, index: undefined }
+    )
+    lastHandlers().apply({ tabId: 'tab-server', ptyId: 'server-pty-new' }, routed)
+    await expect(unbound).resolves.toEqual({ status: 'moved', ptyId: null, tabId: 'tab-server' })
+    expect(legacyMove).not.toHaveBeenCalled()
+  })
+
   it('moves as today when main lacks the pane, or a paired server owns the workspace', async () => {
     const lacking = moveLeafThroughLayoutOwner(request, {
       groupId: TARGET_GROUP_ID,
