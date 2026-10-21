@@ -28,6 +28,9 @@ jobs:
     name: Native preparation comparison (${{ matrix.os }})
     runs-on: ${{ startsWith(inputs.comparison, 'node-server-') && 'orca-windows-11-arm64-8core' || matrix.os }}
     timeout-minutes: 60
+    env:
+      JOBS: ${{ startsWith(inputs.comparison, 'node-server-') && 'max' || '' }}
+      TrackFileAccess: ${{ startsWith(inputs.comparison, 'node-server-') && 'false' || '' }}
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -87,6 +90,8 @@ jobs:
       - name: Compare qualification test workers
         if: inputs.comparison == 'node-server-workers'
         shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
         run: node config/scripts/benchmark-node-server-workers.mjs
       - name: Qualify the cold server slot
         if: inputs.comparison == 'node-server-cache'
