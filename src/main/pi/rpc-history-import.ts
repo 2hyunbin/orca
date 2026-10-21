@@ -1,25 +1,22 @@
-import { createHash } from 'node:crypto'
 import { z } from 'zod'
-import { agentSessionHostStatusBody } from '../../shared/agent-session-host-status-rows'
 import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalItemIdentity
 } from '../../shared/agent-session-journal-types'
 import {
-  CODEX_RESTORE_MAX_BYTES,
-  CODEX_RESTORE_MAX_OPERATIONS
-} from '../codex/codex-structured-journal-translation-restore'
-import {
   LEGACY_IMPORT_BLOCK_LIMITS,
   legacyItemBody
 } from '../native-chat/agent-session-journal/journal-legacy-import'
 import { decodePiSessionEntryLine } from '../native-chat/agent-session-journal/journal-pi-active-branch'
-import {
-  journalLifecycleItemMutation,
-  type JournalLifecycleMutationInput
-} from '../native-chat/agent-session-journal/journal-row-builders'
+import { journalLifecycleItemMutation } from '../native-chat/agent-session-journal/journal-row-builders'
 import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
+import {
+  continuedOutsideNotice,
+  continuedOutsideRecordId,
+  createHistoryCatchUpBatch,
+  type HistoryCatchUpPlan
+} from '../native-chat/agent-session-wire/structured-agent-session-history-catch-up'
 
 const piEntrySchema = z.looseObject({
   id: z.string().min(1),
@@ -100,7 +97,8 @@ export function piHistoryEntryIdentity(
 }
 
 /** Outside entries as journal rows, staged whole before anything is written; entries the journal
- *  already holds are left out first, so an earlier import never vetoes newer entries. */
+ *  already holds are left out first, so an earlier import never vetoes newer entries. Null when
+ *  nothing on the path shows as a row. */
 export function createPiHistoryImportPlan(input: {
   sessionFile: string
   journal: StructuredAgentSessionTransitionJournal
@@ -109,26 +107,13 @@ export function createPiHistoryImportPlan(input: {
   /** Only a chat that already shows something needs the divider. */
   divider: boolean
   check: () => void
-}) {
-  const mutations: JournalLifecycleMutationInput[] = []
-  const keys: string[] = []
-  let bytes = 0
-  const push = (
-    mutation: JournalLifecycleMutationInput & { identity: AgentJournalItemIdentity }
-  ) => {
-    input.check()
-    bytes += Buffer.byteLength(JSON.stringify(mutation), 'utf8') + 1
-    if (mutations.length >= CODEX_RESTORE_MAX_OPERATIONS || bytes > CODEX_RESTORE_MAX_BYTES) {
-      throw new Error('too-large')
-    }
-    mutations.push(mutation)
-    keys.push(agentJournalItemKey(mutation.identity))
-  }
+}): HistoryCatchUpPlan | null {
+  const batch = createHistoryCatchUpBatch()
   const entryIds: string[] = []
   for (const entry of input.path) {
+    input.check()
     const identity = piHistoryEntryIdentity(input.sessionFile, entry.id)
-    const key = agentJournalItemKey(identity)
-    if (input.journal.item(input.journal.canonicalItemId(key)) !== null) {
+    if (input.journal.item(input.journal.canonicalItemId(agentJournalItemKey(identity))) !== null) {
       continue
     }
     const message = decodePiSessionEntryLine(JSON.stringify(entry), entry.id)
@@ -137,18 +122,16 @@ export function createPiHistoryImportPlan(input: {
     }
     const body = legacyItemBody(message, LEGACY_IMPORT_BLOCK_LIMITS)
     if (entryIds.length === 0 && input.divider) {
-      push(
+      batch.push(
         journalLifecycleItemMutation(
           { turnScope: AGENT_JOURNAL_THREAD_SCOPE },
-          piHistoryEntryIdentity(input.sessionFile, `continued-outside:${entry.id}`),
-          agentSessionHostStatusBody(
-            input.rewound ? 'continued-outside-rewound' : 'continued-outside'
-          )
+          piHistoryEntryIdentity(input.sessionFile, continuedOutsideRecordId(entry.id)),
+          continuedOutsideNotice(input.rewound)
         )
       )
     }
     // Imported prompts are history, never sends delivery recovery could claim.
-    push(
+    batch.push(
       journalLifecycleItemMutation(
         {
           turnScope: AGENT_JOURNAL_THREAD_SCOPE,
@@ -160,14 +143,7 @@ export function createPiHistoryImportPlan(input: {
     )
     entryIds.push(entry.id)
   }
-  const digest = createHash('sha256')
-    .update(JSON.stringify([input.journal.epoch, input.sessionFile, entryIds]))
-    .digest('hex')
-  const settlementId = `pi-history-import:${digest}`
-  // Match the existing batch envelope charge, plus the transition's one publication byte.
-  const reservedBytes = Buffer.byteLength(JSON.stringify({ settlementId, mutations }), 'utf8') + 512
-  if (reservedBytes + 1 > CODEX_RESTORE_MAX_BYTES) {
-    throw new Error('too-large')
-  }
-  return { settlementId, mutations, keys, entryIds, reservedBytes }
+  return batch.size === 0
+    ? null
+    : batch.finish('pi-history-import', [input.journal.epoch, input.sessionFile, entryIds])
 }

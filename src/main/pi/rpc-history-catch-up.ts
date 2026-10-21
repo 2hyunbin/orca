@@ -2,12 +2,14 @@ import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import { JsonlRpcResponseError } from '../jsonl-rpc/peer'
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
+import { runHistoryCatchUp } from '../native-chat/agent-session-wire/structured-agent-session-history-catch-up'
 import {
   createPiHistoryImportPlan,
   piBranchInTree,
   piBranchSince,
   piEntriesAnswerSchema,
-  type PiEntriesAnswer
+  type PiEntriesAnswer,
+  type PiSessionEntry
 } from './rpc-history-import'
 import {
   readPiHistoryJournalView,
@@ -56,150 +58,78 @@ export async function catchUpPiSession(input: {
   logger: StructuredAgentSessionLogger
 }): Promise<PiHistoryCatchUp> {
   const carried: PiHistoryCatchUp = { claim: input.claim, current: false }
-  const controller = new AbortController()
-  const abort = () => controller.abort(input.signal.reason)
-  input.signal.addEventListener('abort', abort, { once: true })
-  if (input.signal.aborted) {
-    abort()
-  }
-  const timeoutMs = input.timeoutMs ?? PI_HISTORY_CATCH_UP_TIMEOUT_MS
-  const deadline = Date.now() + timeoutMs
-  const timer = setTimeout(() => controller.abort(new Error('catch-up-deadline')), timeoutMs)
-  const check = () => {
-    if (controller.signal.aborted || Date.now() >= deadline) {
-      throw new Error('catch-up-cancelled')
-    }
-    input.assertCurrent()
-  }
-  const warn = (reason: string, error?: unknown) =>
-    input.logger.warn('Pi chat did not catch up on turns made outside it', {
-      scope: 'pi-history-catch-up',
-      sessionId: input.sessionId,
-      reason,
-      ...(error === undefined ? {} : { error })
-    })
-  const read = async (since: string | null) => {
-    check()
-    const answer = await waitForPromiseWithSignal(
-      readPiEntries(input.connection, since, Math.max(1, deadline - Date.now())),
-      controller.signal
-    )
-    check()
-    return answer
-  }
-  const sink = input.sink
-  try {
-    check()
-    const written = await waitForPromiseWithSignal(
-      sink?.written?.() ?? Promise.resolve({ ok: true }),
-      controller.signal
-    )
-    check()
-    const history = sink?.journalHistory?.()
-    const journal = sink?.journalItems?.()
-    if (!sink?.tryAppendTransition || !history || !journal || !written.ok) {
-      return carried
-    }
-    const view = readPiHistoryJournalView(history, input.lineage)
-    const claim = usablePiHistoryClaim(input.claim, view)
-    const claimAt = (entry: string | null): PiHistoryCatchUp => {
-      const cursor = history.cursor()
-      return {
-        claim: entry === null ? null : { entry, epoch: cursor.epoch, sequence: cursor.sequence },
-        current: true
-      }
-    }
-    // The chat's own work after the claim and the terminal's share one suffix nothing can split.
-    // Without a claim, any Pi history the journal already shows (adopted, or an older build's
-    // turns) leaves nothing to split it by.
-    const known = view.ownWorkSequence > 0 || view.accounted.size > 0
-    if (claim ? view.ownWorkSequence > claim.sequence : known) {
-      return claimAt(await currentLeaf(input.sessionFile, read))
-    }
-    let answer = claim ? await readSince(read, claim.entry) : null
-    let branch = answer && claim ? piBranchSince(answer, claim.entry) : null
-    if (!branch) {
-      answer = await read(null)
-      const inTree = piBranchInTree(answer, claim?.entry ?? null)
-      if (inTree === 'unknown-claim') {
-        return claimAt(answer.leafId)
-      }
-      if (!inTree) {
-        warn('incomplete-history')
-        return carried
-      }
-      branch = inTree
-    }
-    const leaf = answer?.leafId ?? null
-    const plan = createPiHistoryImportPlan({
-      sessionFile: input.sessionFile,
-      journal,
-      path: branch.path.filter((entry) => !view.accounted.has(entry.id)),
-      rewound: branch.rewound,
-      divider: view.hasRows,
-      check
-    })
-    if (plan.mutations.length === 0) {
-      return claimAt(leaf)
-    }
-    let resolved = false
-    const admission = sink.tryAppendTransition({
-      lifecycle: true,
-      publish: true,
-      steps: [
-        {
-          kind: 'settlement',
-          settlementId: plan.settlementId,
-          reservedBytes: plan.reservedBytes,
-          resolve: (current) => {
-            try {
-              check()
-            } catch {
-              return []
-            }
-            if (
-              current.epoch !== view.epoch ||
-              sink.journalHistory?.() !== history ||
-              !samePiHistoryJournalView(view, readPiHistoryJournalView(history, input.lineage))
-            ) {
-              return []
-            }
-            if (plan.keys.some((key) => current.item(current.canonicalItemId(key)) !== null)) {
-              return []
-            }
-            // Canonical keys can also collide with one another through an existing submission alias.
-            if (
-              new Set(plan.keys.map((key) => current.canonicalItemId(key))).size !==
-              plan.keys.length
-            ) {
-              return []
-            }
-            resolved = true
-            return plan.mutations
-          }
-        }
-      ]
-    })
-    if (!admission.accepted) {
-      warn(admission.reason)
-      return carried
-    }
-    const committed = await sink.written?.()
-    if (committed?.ok === false) {
-      warn('write-failed', committed.error)
-      return carried
-    }
-    if (!resolved) {
-      warn('stale-history')
-      return carried
-    }
-    return claimAt(leaf)
-  } catch (error) {
-    warn('import-skipped', error)
+  if (!input.sink) {
     return carried
-  } finally {
-    clearTimeout(timer)
-    input.signal.removeEventListener('abort', abort)
+  }
+  // Set once Pi's current leaf is known; it stands only if nothing after it fails.
+  let leaf: { entry: string | null } | undefined
+  const outcome = await runHistoryCatchUp({
+    agentName: 'Pi',
+    scope: 'pi-history-catch-up',
+    sessionId: input.sessionId,
+    sink: input.sink,
+    signal: input.signal,
+    assertCurrent: input.assertCurrent,
+    timeoutMs: input.timeoutMs ?? PI_HISTORY_CATCH_UP_TIMEOUT_MS,
+    logger: input.logger,
+    readView: (history) => readPiHistoryJournalView(history, input.lineage),
+    sameView: samePiHistoryJournalView,
+    prepare: async ({ view, journal, signal, deadline, check, warn }) => {
+      const read = async (since: string | null) => {
+        check()
+        const answer = await waitForPromiseWithSignal(
+          readPiEntries(input.connection, since, Math.max(1, deadline - Date.now())),
+          signal
+        )
+        check()
+        return answer
+      }
+      const claim = usablePiHistoryClaim(input.claim, view)
+      // Without a claim, any Pi history the journal already shows (adopted, or an older build's
+      // turns) leaves nothing to split it by; with one, neither does the chat's own work after it.
+      const known = view.ownWorkSequence > 0 || view.accounted.size > 0
+      if (claim ? view.ownWorkSequence > claim.sequence : known) {
+        leaf = { entry: await currentLeaf(input.sessionFile, read) }
+        return null
+      }
+      let answer = claim ? await readSince(read, claim.entry) : null
+      let branch: { path: PiSessionEntry[]; rewound: boolean } | null =
+        answer && claim ? piBranchSince(answer, claim.entry) : null
+      if (!answer || !branch) {
+        answer = await read(null)
+        const inTree = piBranchInTree(answer, claim?.entry ?? null)
+        if (inTree === 'unknown-claim') {
+          leaf = { entry: answer.leafId }
+          return null
+        }
+        if (!inTree) {
+          warn('incomplete-history')
+          return null
+        }
+        branch = inTree
+      }
+      leaf = { entry: answer.leafId }
+      return createPiHistoryImportPlan({
+        sessionFile: input.sessionFile,
+        journal,
+        path: branch.path.filter((entry) => !view.accounted.has(entry.id)),
+        rewound: branch.rewound,
+        divider: view.hasRows,
+        check
+      })
+    }
+  })
+  const history = input.sink.journalHistory?.()
+  if (outcome === 'skipped' || !leaf || !history) {
+    return carried
+  }
+  const cursor = history.cursor()
+  return {
+    claim:
+      leaf.entry === null
+        ? null
+        : { entry: leaf.entry, epoch: cursor.epoch, sequence: cursor.sequence },
+    current: true
   }
 }
 
