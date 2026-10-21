@@ -89,7 +89,14 @@ export type LayoutCommand =
        */
       recordClose?: 'user' | 'cleanup'
     })
-  | (On & { type: 'moveTab'; tabId: string; toGroupId: string; index: number })
+  | (On & {
+      type: 'moveTab'
+      tabId: string
+      toGroupId: string
+      index: number
+      /** Right after this tab (null: first) when it is in the target group; else `index`. */
+      afterTabId?: string | null
+    })
   | (On & { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide })
   /** `ratios`, or from a window older than them, `groupLayout`: exactly one. */
   | (On & {

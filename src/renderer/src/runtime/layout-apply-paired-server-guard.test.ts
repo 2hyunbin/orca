@@ -60,7 +60,8 @@ const COMMANDS: WindowLayoutCommand[] = [
   { type: 'closePane', tabId: 't', leafId: 'l' },
   { type: 'closeTabs', tabIds: ['t'] },
   { type: 'renameTab', tabId: 't', kind: 'custom', title: 'x' },
-  { type: 'moveTab', tabId: 't', toGroupId: 'g', index: 0 },
+  // An anchored move too, so no server, old or new, is sent the anchor.
+  { type: 'moveTab', tabId: 't', toGroupId: 'g', index: 0, afterTabId: 's' },
   { type: 'createTerminalTab', tabId: 't', leafId: 'l' },
   { type: 'sleep', tabId: 't', paneKeys: ['t:l'], records: [] },
   { type: 'setDefaultTabsApplied' }
