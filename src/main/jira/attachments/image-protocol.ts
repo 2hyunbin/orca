@@ -1,6 +1,6 @@
 import { protocol } from 'electron'
-import { JIRA_IMAGE_SCHEME, jiraImageReference } from '../../shared/jira-attachment-image'
-import { readGrantedAttachmentImage } from './attachment-image-read'
+import { JIRA_IMAGE_SCHEME, jiraImageReference } from '../../../shared/jira-attachment-image'
+import { readGrantedAttachmentImage } from './image-read'
 
 export const JIRA_IMAGE_CUSTOM_SCHEME: Electron.CustomScheme = {
   scheme: JIRA_IMAGE_SCHEME,

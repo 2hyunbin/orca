@@ -1,20 +1,20 @@
-import { jiraRequestBinary, type JiraClientForSite } from './authenticated-request'
-import type { AttachmentMeta } from './attachment-meta'
-import { attachmentContentUrl } from './attachment-content-url'
+import { jiraRequestBinary, type JiraClientForSite } from '../authenticated-request'
+import type { AttachmentMeta } from './meta'
+import { attachmentContentUrl } from './content-url'
 import {
   loadAttachmentBytesWithCache,
   type AttachmentImageBytes,
   attachmentImagesEpoch,
   getCachedAttachmentBytes
-} from './attachment-image-cache'
+} from './image-cache'
 import {
   JIRA_IMAGE_MAX_BYTES,
   JIRA_IMAGE_MAX_PENDING_READS,
   isJiraImageMimeType
-} from '../../shared/jira-attachment-image'
-import { withJiraDeadline } from './jira-read-failure'
-import { PrioritySemaphore } from '../../shared/priority-semaphore'
-import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
+} from '../../../shared/jira-attachment-image'
+import { withJiraDeadline } from '../jira-read-failure'
+import { PrioritySemaphore } from '../../../shared/priority-semaphore'
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 
 const downloads = new PrioritySemaphore(3)
 const interests = new Map<string, { controller: AbortController; readers: number }>()

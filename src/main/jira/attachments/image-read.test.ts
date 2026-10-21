@@ -1,22 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { JiraClientForSite } from './authenticated-request'
-import { JIRA_IMAGE_MAX_PENDING_READS } from '../../shared/jira-attachment-image'
-import { readAttachmentImageBytes } from './attachment-image-bytes'
+import type { JiraClientForSite } from '../authenticated-request'
+import { JIRA_IMAGE_MAX_PENDING_READS } from '../../../shared/jira-attachment-image'
+import { readAttachmentImageBytes } from './image-bytes'
 import {
   registerAttachmentImageGrant,
   attachmentImageGrant,
   resetAttachmentImageGrantsForTest
-} from './attachment-image-grants'
-import { readGrantedAttachmentImage } from './attachment-image-read'
-import { handleJiraImageRequest } from './attachment-image-protocol'
-import { clearAttachmentImagesForSite, _resetAttachmentImageCache } from './attachment-image-cache'
+} from './image-grants'
+import { readGrantedAttachmentImage } from './image-read'
+import { handleJiraImageRequest } from './image-protocol'
+import { clearAttachmentImagesForSite, _resetAttachmentImageCache } from './image-cache'
 
 const { binary, clients } = vi.hoisted(() => ({ binary: vi.fn(), clients: vi.fn() }))
-vi.mock('./authenticated-request', () => ({
+vi.mock('../authenticated-request', () => ({
   apiBasePath: () => '/rest/api/3',
   jiraRequestBinary: binary
 }))
-vi.mock('./client', () => ({ getClients: clients }))
+vi.mock('../client', () => ({ getClients: clients }))
 vi.mock('electron', () => ({ protocol: { handle: vi.fn() } }))
 const client: JiraClientForSite = {
   site: { id: 'site', siteUrl: 'https://jira.test', email: '', accountId: '', displayName: '' },

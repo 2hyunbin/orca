@@ -1,7 +1,7 @@
-import { getClients } from './client'
-import { attachmentImageGrant, isAttachmentImageGrantCurrent } from './attachment-image-grants'
-import { readAttachmentImageBytes } from './attachment-image-bytes'
-import type { AttachmentImageBytes } from './attachment-image-cache'
+import { getClients } from '../client'
+import { attachmentImageGrant, isAttachmentImageGrantCurrent } from './image-grants'
+import { readAttachmentImageBytes } from './image-bytes'
+import type { AttachmentImageBytes } from './image-cache'
 
 export async function readGrantedAttachmentImage(
   reference: string,

@@ -1,7 +1,7 @@
-import type { JiraSite } from '../../shared/jira-types'
-import { apiBasePath } from './authenticated-request'
-import { isJiraGatewayBaseUrl } from './gateway-base-url'
-import type { AttachmentMeta } from './attachment-meta'
+import type { JiraSite } from '../../../shared/jira-types'
+import { apiBasePath } from '../authenticated-request'
+import { isJiraGatewayBaseUrl } from '../gateway-base-url'
+import type { AttachmentMeta } from './meta'
 
 export function attachmentContentUrl(site: JiraSite, meta: AttachmentMeta): URL | null {
   if (!meta.contentUrl && site.authType === 'server') {

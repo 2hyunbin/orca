@@ -1,14 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { JIRA_IMAGE_MAX_BYTES } from '../../shared/jira-attachment-image'
-import { loadIssueImageAttachments, createMediaMarkdownResolver } from './attachment-images'
-import { attachmentImageGrant, resetAttachmentImageGrantsForTest } from './attachment-image-grants'
-import { clearAttachmentImagesForSite, _resetAttachmentImageCache } from './attachment-image-cache'
-import type { JiraClientForSite } from './authenticated-request'
+import { JIRA_IMAGE_MAX_BYTES } from '../../../shared/jira-attachment-image'
+import { loadIssueImageAttachments, createMediaMarkdownResolver } from './images'
+import { attachmentImageGrant, resetAttachmentImageGrantsForTest } from './image-grants'
+import { clearAttachmentImagesForSite, _resetAttachmentImageCache } from './image-cache'
+import type { JiraClientForSite } from '../authenticated-request'
 
-vi.mock('./authenticated-request', () => ({
+const { JiraApiError: JiraApiErrorMock } = vi.hoisted(() => ({
+  JiraApiError: class extends Error {}
+}))
+
+vi.mock('../jira-api-error', () => ({ JiraApiError: JiraApiErrorMock }))
+
+vi.mock('../authenticated-request', () => ({
   apiBasePath: () => '/rest/api/3',
   jiraRequestBinary: vi.fn(),
-  JiraApiError: class extends Error {}
+  JiraApiError: JiraApiErrorMock
 }))
 const client: JiraClientForSite = {
   site: {
@@ -37,7 +43,7 @@ describe('lazy Jira image references', () => {
     vi.clearAllMocks()
   })
   it('keeps image bytes out of Markdown without downloading the attachment', async () => {
-    const { jiraRequestBinary } = await import('./authenticated-request')
+    const { jiraRequestBinary } = await import('../authenticated-request')
     const images = await loadIssueImageAttachments(client, metadata, ['1'], 'reference')
     const markdown = createMediaMarkdownResolver(images, ['1'])({ id: 'media-id', alt: 'shot.png' })
     expect(markdown).toMatch(/^!\[shot.png\]\(orca-jira-image:\/\/attachment\/[0-9a-f-]+\)$/)
@@ -64,7 +70,7 @@ describe('lazy Jira image references', () => {
 })
 
 it('discovers larger images by filename when rendered HTML has no attachment IDs', async () => {
-  const { collectIssueMediaRequest } = await import('./jira-issue-media')
+  const { collectIssueMediaRequest } = await import('../jira-issue-media')
   const raw = {
     key: 'JIRA-1',
     fields: {
@@ -85,7 +91,7 @@ it('discovers larger images by filename when rendered HTML has no attachment IDs
 })
 
 it('keeps the old per-image cap when an old client reuses a newer byte-cache entry', async () => {
-  const { loadAttachmentBytesWithCache } = await import('./attachment-image-cache')
+  const { loadAttachmentBytesWithCache } = await import('./image-cache')
   _resetAttachmentImageCache()
   await loadAttachmentBytesWithCache({
     siteId: client.site.id,

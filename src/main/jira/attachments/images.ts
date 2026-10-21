@@ -1,10 +1,11 @@
-import type { JiraClientForSite } from './authenticated-request'
-import { attachmentContentUrl } from './attachment-content-url'
-import { JiraApiError, jiraRequestBinary } from './authenticated-request'
-import type { JiraAdfMediaAttrs, JiraAdfMediaResolver } from './adf-markdown'
-import { escapeMarkdownAlt, unresolvedMediaPlaceholder } from './adf-markdown'
-import { escapeMarkdownLinkDestination } from './adf-media-destination'
-import { loadAttachmentDataUrlWithCache } from './attachment-image-cache'
+import type { JiraClientForSite } from '../authenticated-request'
+import { attachmentContentUrl } from './content-url'
+import { jiraRequestBinary } from '../authenticated-request'
+import { JiraApiError } from '../jira-api-error'
+import type { JiraAdfMediaAttrs, JiraAdfMediaResolver } from '../adf-markdown'
+import { escapeMarkdownAlt, unresolvedMediaPlaceholder } from '../adf-markdown'
+import { escapeMarkdownLinkDestination } from '../adf-media-destination'
+import { loadAttachmentDataUrlWithCache } from './image-cache'
 import {
   MAX_IMAGE_BYTES,
   MAX_IMAGES,
@@ -12,14 +13,14 @@ import {
   parseImageAttachmentMetas,
   isImageMimeType,
   type AttachmentMeta
-} from './attachment-meta'
-import { mapWithConcurrency } from '../../shared/map-with-concurrency'
+} from './meta'
+import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 import {
   JIRA_IMAGE_MAX_BYTES,
   JIRA_IMAGE_MAX_REFERENCES,
   type JiraMediaFormat
-} from '../../shared/jira-attachment-image'
-import { registerAttachmentImageGrant } from './attachment-image-grants'
+} from '../../../shared/jira-attachment-image'
+import { registerAttachmentImageGrant } from './image-grants'
 
 const DOWNLOAD_CONCURRENCY = 3
 

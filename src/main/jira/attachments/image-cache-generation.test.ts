@@ -4,7 +4,7 @@ import {
   clearAttachmentImagesForSite,
   getCachedAttachmentDataUrl,
   loadAttachmentDataUrlWithCache
-} from './attachment-image-cache'
+} from './image-cache'
 
 type Image = { dataUrl: string; byteSize: number } | null
 function deferredImage() {

@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { JiraClientForSite } from './authenticated-request'
+import type { JiraClientForSite } from '../authenticated-request'
 
 const { jiraRequestBinaryMock } = vi.hoisted(() => ({
   jiraRequestBinaryMock: vi.fn()
 }))
 
-vi.mock('./authenticated-request', () => ({
-  jiraRequestBinary: (...args: unknown[]) => jiraRequestBinaryMock(...args),
-  apiBasePath: (site: { authType?: string }) =>
-    site.authType === 'server' ? '/rest/api/2' : '/rest/api/3',
+const { JiraApiError: JiraApiErrorMock } = vi.hoisted(() => ({
   JiraApiError: class JiraApiError extends Error {
     status: number | null
     constructor(message: string, status: number | null = null) {
@@ -16,6 +13,15 @@ vi.mock('./authenticated-request', () => ({
       this.status = status
     }
   }
+}))
+
+vi.mock('../jira-api-error', () => ({ JiraApiError: JiraApiErrorMock }))
+
+vi.mock('../authenticated-request', () => ({
+  jiraRequestBinary: (...args: unknown[]) => jiraRequestBinaryMock(...args),
+  apiBasePath: (site: { authType?: string }) =>
+    site.authType === 'server' ? '/rest/api/2' : '/rest/api/3',
+  JiraApiError: JiraApiErrorMock
 }))
 
 function makeEntry(): JiraClientForSite {
@@ -34,12 +40,12 @@ function makeEntry(): JiraClientForSite {
 describe('attachment image helpers', () => {
   beforeEach(async () => {
     jiraRequestBinaryMock.mockReset()
-    const { _resetAttachmentImageCache } = await import('./attachment-image-cache')
+    const { _resetAttachmentImageCache } = await import('./image-cache')
     _resetAttachmentImageCache()
   })
 
   it('extracts attachment content ids from rendered HTML in order', async () => {
-    const { extractAttachmentContentIdsFromHtml } = await import('./attachment-discovery')
+    const { extractAttachmentContentIdsFromHtml } = await import('./discovery')
     const ids = extractAttachmentContentIdsFromHtml(`
       <p>intro</p>
       <img src="https://example.atlassian.net/rest/api/3/attachment/content/101" />
@@ -50,7 +56,7 @@ describe('attachment image helpers', () => {
   })
 
   it('extracts thumbnail attachment ids', async () => {
-    const { extractAttachmentContentIdsFromHtml } = await import('./attachment-discovery')
+    const { extractAttachmentContentIdsFromHtml } = await import('./discovery')
     expect(
       extractAttachmentContentIdsFromHtml(
         '<img src="https://example.atlassian.net/secure/thumbnail/10001/shot.png" />'
@@ -70,8 +76,7 @@ describe('attachment image helpers', () => {
       contentType: 'image/png'
     })
 
-    const { createMediaMarkdownResolver, loadIssueImageAttachments } =
-      await import('./attachment-images')
+    const { createMediaMarkdownResolver, loadIssueImageAttachments } = await import('./images')
 
     const images = await loadIssueImageAttachments(
       makeEntry(),
@@ -108,7 +113,7 @@ describe('attachment image helpers', () => {
   })
 
   it('pairs shared alt filenames to distinct attachments then falls through', async () => {
-    const { createMediaMarkdownResolver } = await import('./attachment-images')
+    const { createMediaMarkdownResolver } = await import('./images')
     const images = [
       {
         id: '1',
@@ -132,7 +137,7 @@ describe('attachment image helpers', () => {
   })
 
   it('does not re-emit an already consumed attachment for a third shared-alt node', async () => {
-    const { createMediaMarkdownResolver } = await import('./attachment-images')
+    const { createMediaMarkdownResolver } = await import('./images')
     const images = [
       {
         id: '1',
@@ -156,7 +161,7 @@ describe('attachment image helpers', () => {
   })
 
   it('escapes hostile external media URLs instead of injecting markdown', async () => {
-    const { createMediaMarkdownResolver } = await import('./attachment-images')
+    const { createMediaMarkdownResolver } = await import('./images')
     const resolve = createMediaMarkdownResolver([], [])
     const hostile = 'https://evil.example/x?a=1)![z](javascript:alert(1))'
     const out = resolve({ url: hostile, alt: 'Image' })
@@ -168,14 +173,14 @@ describe('attachment image helpers', () => {
   })
 
   it('returns placeholder for external URLs that remain hostile after encode', async () => {
-    const { createMediaMarkdownResolver } = await import('./attachment-images')
+    const { createMediaMarkdownResolver } = await import('./images')
     const resolve = createMediaMarkdownResolver([], [])
     // non-http rejected
     expect(resolve({ url: 'javascript:alert(1)', alt: 'x' })).toBe('*[x]*')
   })
 
   it('selects preferred ids via Option A filename fallback without sweeping all attachments', async () => {
-    const { selectPreferredAttachmentIds } = await import('./attachment-discovery')
+    const { selectPreferredAttachmentIds } = await import('./discovery')
     const attachments = [
       { id: '1', filename: 'a.png', mimeType: 'image/png', size: 1 },
       { id: '2', filename: 'b.png', mimeType: 'image/png', size: 1 },
@@ -200,7 +205,7 @@ describe('attachment image helpers', () => {
   })
 
   it('Option A unions multiple same-filename attachments for repeated alts', async () => {
-    const { selectPreferredAttachmentIds } = await import('./attachment-discovery')
+    const { selectPreferredAttachmentIds } = await import('./discovery')
     const attachments = [
       { id: '1', filename: 'image.png', mimeType: 'image/png', size: 1 },
       { id: '2', filename: 'image.png', mimeType: 'image/png', size: 1 }
@@ -226,7 +231,7 @@ describe('attachment image helpers', () => {
       data: Uint8Array.from([1]).buffer,
       contentType: 'image/png'
     })
-    const { loadIssueImageAttachments } = await import('./attachment-images')
+    const { loadIssueImageAttachments } = await import('./images')
     const attachments = Array.from({ length: 13 }, (_, index) => ({
       id: String(index + 1),
       filename: `${index + 1}.png`,
@@ -245,7 +250,7 @@ describe('attachment image helpers', () => {
   })
 
   it('does not download attachments when rendered content references none', async () => {
-    const { loadIssueImageAttachments } = await import('./attachment-images')
+    const { loadIssueImageAttachments } = await import('./images')
 
     await expect(
       loadIssueImageAttachments(
@@ -268,7 +273,7 @@ describe('attachment image helpers', () => {
       siteUrl: 'https://jira.example.com/jira',
       authType: 'server'
     }
-    const { loadIssueImageAttachments } = await import('./attachment-images')
+    const { loadIssueImageAttachments } = await import('./images')
 
     await loadIssueImageAttachments(
       entry,
@@ -291,7 +296,7 @@ describe('attachment image helpers', () => {
   })
 
   it('skips oversized and non-image attachments', async () => {
-    const { parseImageAttachmentMetas } = await import('./attachment-meta')
+    const { parseImageAttachmentMetas } = await import('./meta')
     expect(
       parseImageAttachmentMetas([
         { id: '1', filename: 'big.png', mimeType: 'image/png', size: 20 * 1024 * 1024 },
@@ -306,7 +311,7 @@ describe('attachment image helpers', () => {
       data: Uint8Array.from([1, 2, 3]).buffer,
       contentType: 'image/png'
     })
-    const { loadIssueImageAttachments } = await import('./attachment-images')
+    const { loadIssueImageAttachments } = await import('./images')
     const entry = makeEntry()
     const field = [{ id: '9', filename: 'c.png', mimeType: 'image/png', size: 3 }]
     await loadIssueImageAttachments(entry, field, ['9'])
@@ -322,7 +327,7 @@ describe('attachment image helpers', () => {
           resolveDownload = resolve
         })
     )
-    const { loadIssueImageAttachments } = await import('./attachment-images')
+    const { loadIssueImageAttachments } = await import('./images')
     const entry = makeEntry()
     const field = [{ id: '7', filename: 's.png', mimeType: 'image/png', size: 1 }]
     const p1 = loadIssueImageAttachments(entry, field, ['7'])
@@ -336,7 +341,7 @@ describe('attachment image helpers', () => {
 
   it('warns when media resolution is incomplete', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { warnIfMediaResolutionIncomplete } = await import('./attachment-discovery')
+    const { warnIfMediaResolutionIncomplete } = await import('./discovery')
     warnIfMediaResolutionIncomplete({
       siteId: 's',
       issueKey: 'ABC-1',

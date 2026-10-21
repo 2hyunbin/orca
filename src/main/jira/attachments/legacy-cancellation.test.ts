@@ -1,14 +1,20 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { readAttachmentImageBytes } from './attachment-image-bytes'
-import { loadIssueImageAttachments, type JiraImageAttachment } from './attachment-images'
-import * as cache from './attachment-image-cache'
-import type { JiraClientForSite } from './authenticated-request'
+import { readAttachmentImageBytes } from './image-bytes'
+import { loadIssueImageAttachments, type JiraImageAttachment } from './images'
+import * as cache from './image-cache'
+import type { JiraClientForSite } from '../authenticated-request'
 
 const { binary } = vi.hoisted(() => ({ binary: vi.fn() }))
-vi.mock('./authenticated-request', () => ({
+const { JiraApiError: JiraApiErrorMock } = vi.hoisted(() => ({
+  JiraApiError: class extends Error {}
+}))
+
+vi.mock('../jira-api-error', () => ({ JiraApiError: JiraApiErrorMock }))
+
+vi.mock('../authenticated-request', () => ({
   apiBasePath: () => '/rest/api/3',
   jiraRequestBinary: binary,
-  JiraApiError: class extends Error {}
+  JiraApiError: JiraApiErrorMock
 }))
 
 const client: JiraClientForSite = {

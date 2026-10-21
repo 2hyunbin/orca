@@ -1,5 +1,5 @@
-import type { JiraAdfMediaAttrs } from './adf-markdown'
-import { MAX_IMAGES, parseImageAttachmentMetas } from './attachment-meta'
+import type { JiraAdfMediaAttrs } from '../adf-markdown'
+import { MAX_IMAGES, parseImageAttachmentMetas } from './meta'
 
 /**
  * Pull attachment content IDs from Jira rendered HTML in document order.

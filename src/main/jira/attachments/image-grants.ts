@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
-import { JIRA_IMAGE_SCHEME } from '../../shared/jira-attachment-image'
-import { attachmentImagesEpoch } from './attachment-image-cache'
-import type { JiraClientForSite } from './authenticated-request'
-import type { AttachmentMeta } from './attachment-meta'
+import { JIRA_IMAGE_SCHEME } from '../../../shared/jira-attachment-image'
+import { attachmentImagesEpoch } from './image-cache'
+import type { JiraClientForSite } from '../authenticated-request'
+import type { AttachmentMeta } from './meta'
 
 const GRANT_TTL_MS = 30 * 60_000
 const MAX_GRANTS = 2048

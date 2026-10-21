@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay'
+import { MAX_TIMER_DELAY_MS } from '../../../shared/timer-delay'
 import {
   _getAttachmentImageCacheSize,
   _resetAttachmentImageCache,
@@ -7,7 +7,7 @@ import {
   getCachedAttachmentDataUrl,
   loadAttachmentDataUrlWithCache,
   setCachedAttachmentDataUrl
-} from './attachment-image-cache'
+} from './image-cache'
 
 describe('attachment image cache', () => {
   beforeEach(() => {
