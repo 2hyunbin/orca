@@ -59,6 +59,25 @@ export function isAgentCapabilitiesDone(state: AgentCapabilitiesState): boolean 
   )
 }
 
+// Upgrade eligibility keeps the pre-browser rules as the live checklist evolves.
+export function hasCompletedPreBrowserSetup(input: FeatureWallSetupProgressInput): boolean {
+  return (
+    Boolean(input.settings?.defaultTuiAgent) &&
+    input.settings?.defaultTuiAgent !== 'blank' &&
+    input.gitRepoCount >= 2 &&
+    input.settings?.notifications.enabled === true &&
+    input.settings.notifications.agentTaskComplete === true &&
+    hasFeatureInteraction(input.featureInteractions, 'terminal-pane-split') &&
+    countAvailableNonMainWorktrees(input.worktreesByRepo) >= 1 &&
+    input.hasConnectedTaskSource &&
+    input.browserUseSkillInstalled &&
+    input.computerUseSkillInstalled &&
+    (input.computerUsePermissionsReady || input.computerUseUnavailable === true) &&
+    input.orchestrationSkillInstalled &&
+    input.hasSetupScript
+  )
+}
+
 export function getFeatureWallSetupProgress(
   input: FeatureWallSetupProgressInput
 ): FeatureWallSetupProgress {
@@ -86,5 +105,15 @@ export function getFeatureWallSetupProgress(
     stepDone,
     coreDoneCount: FEATURE_WALL_SETUP_STEPS.filter((step) => stepDone[step.id]).length,
     coreTotal: FEATURE_WALL_SETUP_STEPS.length
+  }
+}
+
+export function getSetupGuideProgressSnapshot(input: FeatureWallSetupProgressInput): {
+  rawProgress: FeatureWallSetupProgress
+  preBrowserSetupComplete: boolean
+} {
+  return {
+    rawProgress: getFeatureWallSetupProgress(input),
+    preBrowserSetupComplete: hasCompletedPreBrowserSetup(input)
   }
 }
