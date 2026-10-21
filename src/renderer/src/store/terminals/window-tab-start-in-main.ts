@@ -132,7 +132,8 @@ export function startWindowTabInMain(
       const message = error instanceof Error ? error.message : String(error)
       if (message === 'host_not_owned') {
         // Main started nothing and does not hold the tab: the pane starts its own, as before.
-        if (startup) {
+        // Not for a tab the user closed meanwhile: nothing would ever take the startup back.
+        if (startup && store.getState().terminalLayoutsByTabId[tab.id]) {
           store.setState({
             pendingStartupByTabId: { ...store.getState().pendingStartupByTabId, [tab.id]: startup }
           })
