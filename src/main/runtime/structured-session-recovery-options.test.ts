@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, symlink, rm, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, it, vi } from 'vitest'
 import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
+import { OPENCODE_TRANSCRIPT_IMPORT } from '../opencode/opencode-transcript-import'
 import { CLAUDE_CLI_CONVERSATIONS } from '../claude/claude-cli-conversations'
 import {
   structuredSessionRecoveryOptions,
@@ -14,8 +15,9 @@ vi.mock('../claude-accounts/claude-profile-installed-router', () => ({
   getClaudeProfileRouter: () => ({ accountSelectionHomes: async () => homes.paths })
 }))
 vi.mock('./structured-agent-runtime-metadata', () => ({
-  structuredAgentRuntimeMetadata: () => ({
+  structuredAgentRuntimeMetadata: (provider: string) => ({
     ...CLAUDE_CLI_CONVERSATIONS,
+    ...(provider === 'opencode' ? { transcriptImport: OPENCODE_TRANSCRIPT_IMPORT } : {}),
     launchFollowsSelection: () => true
   })
 }))
@@ -46,8 +48,7 @@ it('offers switching only when the real transcript store is shared with every de
       throw new Error('Missing transcript importer')
     }
     const locate = vi.spyOn(importer, 'findTranscript')
-    const read = () =>
-      structuredSessionRecoveryOptions(record, {}, { cache, cutKey: 'cut', stateDirectory: root })
+    const read = () => structuredSessionRecoveryOptions(record, {}, { cache })
     expect((await Promise.all([read(), read()]))[0]).toMatchObject({
       canSwitchAccount: true,
       transcriptPath: expect.any(String)
@@ -74,7 +75,7 @@ it('offers switching only when the real transcript store is shared with every de
     record.accountHome = { variable: 'CLAUDE_CONFIG_DIR', path: isolated }
     expect(await read()).toEqual({
       canSwitchAccount: false,
-      transcriptPath: privateTranscript
+      transcriptPath: await realpath(privateTranscript)
     })
     record.accountHome = { variable: 'CLAUDE_CONFIG_DIR', path: account }
     homes.paths.push(isolated)
@@ -83,5 +84,22 @@ it('offers switching only when the real transcript store is shared with every de
     expect((await read()).canSwitchAccount).toBe(false)
   } finally {
     await rm(root, { recursive: true, force: true })
+  }
+})
+
+it('leaves database-backed context to recent chat messages without locating or exposing a database', async () => {
+  const record = agentSessionRecordFixture()
+  record.provider = 'opencode'
+  const store = vi.spyOn(OPENCODE_TRANSCRIPT_IMPORT, 'conversationStore')
+  const locate = vi.spyOn(OPENCODE_TRANSCRIPT_IMPORT, 'findTranscript')
+  try {
+    expect(await structuredSessionRecoveryOptions(record, {}, { cache: {} })).toEqual({
+      canSwitchAccount: false
+    })
+    expect(store).not.toHaveBeenCalled()
+    expect(locate).not.toHaveBeenCalled()
+  } finally {
+    store.mockRestore()
+    locate.mockRestore()
   }
 })

@@ -35,7 +35,8 @@ export function ProviderAccountChatButton({
                 pane: 'accounts',
                 repoId: null,
                 sectionId: `accounts-${provider}`,
-                hostScope: target
+                hostScope: target,
+                intent: 'native-accounts'
               })
               openSettingsPage()
             }

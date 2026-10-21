@@ -8,7 +8,6 @@ import {
   type AgentSessionAccountHome
 } from '../../shared/agent-session-account-home'
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
-import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import type { AiVaultAgent } from '../../shared/ai-vault-types'
 import { TUI_AGENT_CONFIG } from '../../shared/tui-agent-config'
 import { sessionIdFromFileName } from '../ai-vault/session-scanner-accumulator'
@@ -18,26 +17,10 @@ export type StructuredAgentTranscriptImportSettings = {
   codexManagedAccounts?: readonly { managedHomePath: string }[]
 }
 
-/** Identity stays attached to the located store until its provider prepares readable context. */
-export type StructuredAgentTranscriptSource = {
-  provider: AgentSessionRecord['provider']
-  handle: AgentSessionProviderHandleLink
-  accountHome: AgentSessionAccountHome
-  providerSessionId: string
-  workspaceCwd: string
-  store: string
-  transcriptPath: string
-}
-
 /** Finds a conversation the agent's CLI recorded, so a new chat can adopt it. */
 export type StructuredAgentTranscriptImport = {
-  readableContext:
-    | { kind: 'file' }
-    | {
-        kind: 'prepared'
-        version: (source: StructuredAgentTranscriptSource) => Promise<string | null>
-        prepare: (source: StructuredAgentTranscriptSource, path: string) => Promise<string | null>
-      }
+  /** Only native files can be read directly by a different agent. */
+  readableContext: { kind: 'file' } | { kind: 'container' }
   /** Recognised account homes, most-preferred first; the first that holds the transcript wins. */
   accountHomeCandidates: (input: {
     settings: StructuredAgentTranscriptImportSettings

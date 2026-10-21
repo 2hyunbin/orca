@@ -60,7 +60,7 @@ export function readOpenCode2TranscriptSignal(
   }
 }
 
-function messageItems(value: unknown, contextExport?: true): OpenCodeTranscriptItem[] {
+function messageItems(value: unknown): OpenCodeTranscriptItem[] {
   const row = asRecord(value)
   if (
     typeof row?.id !== 'string' ||
@@ -168,8 +168,7 @@ function messageItems(value: unknown, contextExport?: true): OpenCodeTranscriptI
       timestamp: row.time_created
     },
     parts,
-    blocks,
-    contextExport
+    blocks
   )
   const fingerprint = `${updatedAt}:${createHash('sha256').update(row.data).digest('hex')}`
   return messages.toReversed().map((message) => ({
@@ -185,7 +184,6 @@ export function readOpenCode2TranscriptPage(
     sessionId: string
     limit: number
     beforeMessageRowId?: number
-    contextExport?: true
   }
 ): OpenCodeTranscriptPage | null {
   if (!sessionExists(db, args.sessionId)) {
@@ -219,7 +217,7 @@ export function readOpenCode2TranscriptPage(
       if (++scannedRows > MAX_SCAN_ROWS || bytes > MAX_PAGE_BYTES) {
         throw new Error('OpenCode transcript page exceeds its read limit')
       }
-      const mapped = messageItems(value, args.contextExport)
+      const mapped = messageItems(value)
       cursor = row.cursor
       for (const item of mapped) {
         pageBytes += Buffer.byteLength(JSON.stringify(item))

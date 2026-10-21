@@ -1,8 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { readFile, readdir } from 'node:fs/promises'
-import { prepareOpenCodeReadableContext } from '../opencode/opencode-readable-context'
-import { agentSessionRecordFixture } from '../../shared/agent-session-record.test-fixture'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../shared/native-chat-types'
@@ -18,19 +15,6 @@ import { subscribeOpenCodeNativeChatTranscript } from './transcript-opencode-sub
 
 vi.mock('../managed-data-accounts/service', () => ({ getManagedDataAccountService: vi.fn() }))
 
-vi.mock('../ai-vault/session-scanner-opencode-sqlite-worker-spawn', () => ({
-  readOpenCodeTranscriptSignalViaWorker: async ({
-    dbPath,
-    sessionId
-  }: {
-    dbPath: string
-    sessionId: string
-  }) => readOpenCodeTranscriptSignal(dbPath, sessionId),
-  readOpenCodeTranscriptPageViaWorker: async (
-    args: Parameters<typeof readOpenCodeTranscriptPage>[0]
-  ) => readOpenCodeTranscriptPage(args)
-}))
-
 const fixtures: { db: Database.Database; root: string }[] = []
 afterEach(() => {
   for (const { db, root } of fixtures.splice(0)) {
@@ -45,23 +29,23 @@ function fixture(version: 'v1' | 'v2') {
   const db = new Database(path)
   fixtures.push({ db, root })
   if (version === 'v1') {
-    db.exec(`CREATE TABLE session (id TEXT PRIMARY KEY, directory TEXT);
+    db.exec(`CREATE TABLE session (id TEXT PRIMARY KEY);
       CREATE TABLE message (id TEXT, session_id TEXT, time_created INTEGER, time_updated INTEGER, data TEXT);
       CREATE TABLE part (id TEXT, message_id TEXT, session_id TEXT, time_updated INTEGER, data TEXT);
-      INSERT INTO session VALUES ('session', '/work'), ('other', '/work');`)
+      INSERT INTO session VALUES ('session');`)
   } else {
-    db.exec(`CREATE TABLE session_v2 (id TEXT PRIMARY KEY, directory TEXT);
+    db.exec(`CREATE TABLE session_v2 (id TEXT PRIMARY KEY);
       CREATE TABLE session_message (id TEXT, session_id TEXT, type TEXT, seq INTEGER,
         data TEXT, time_created INTEGER, time_updated INTEGER);
-      INSERT INTO session_v2 VALUES ('session', '/work'), ('other', '/work');`)
+      INSERT INTO session_v2 VALUES ('session');`)
   }
   let sequence = 0
-  const insert = (id: string, parts: unknown[], sessionId = 'session') => {
+  const insert = (id: string, parts: unknown[]) => {
     sequence += 7
     if (version === 'v1') {
       db.prepare('INSERT INTO message VALUES (?, ?, ?, ?, ?)').run(
         id,
-        sessionId,
+        'session',
         sequence,
         sequence,
         JSON.stringify({ role: 'assistant' })
@@ -70,7 +54,7 @@ function fixture(version: 'v1' | 'v2') {
         db.prepare('INSERT INTO part VALUES (?, ?, ?, ?, ?)').run(
           `${id}:${index}`,
           id,
-          sessionId,
+          'session',
           sequence,
           JSON.stringify(part)
         )
@@ -78,7 +62,7 @@ function fixture(version: 'v1' | 'v2') {
     } else {
       db.prepare('INSERT INTO session_message VALUES (?, ?, ?, ?, ?, ?, ?)').run(
         id,
-        sessionId,
+        'session',
         'assistant',
         sequence,
         JSON.stringify({ content: parts }),
@@ -88,7 +72,7 @@ function fixture(version: 'v1' | 'v2') {
     }
   }
   const prefix = version === 'v1' ? '' : 'opencode:'
-  return { db, path, root, insert, prefix }
+  return { db, path, insert, prefix }
 }
 
 const mixed = (answer = 'ANSWER_SENTINEL') => [
@@ -192,75 +176,20 @@ describe.each(['v1', 'v2'] as const)('%s semantic pagination', (version) => {
     ).toEqual(expected)
   })
 
-  it('exports exact complete history beyond the reader window into a persistent reusable file', async () => {
-    const { db, path, root, insert, prefix } = fixture(version)
+  it('reconstructs a full read beyond its 500-message window without losing a split row', async () => {
+    const { db, path, insert, prefix } = fixture(version)
     const expected: string[] = []
     db.exec('BEGIN')
     for (let index = 0; index < 260; index++) {
-      insert(String(index), mixed(`session message ${index}`))
+      insert(String(index), mixed())
       expected.push(`${prefix}${index}:reasoning`, `${prefix}${index}`)
     }
     db.exec('COMMIT')
-    insert('other', mixed('OTHER_SENTINEL'), 'other')
-    insert('tool', [
-      {
-        type: 'tool',
-        tool: 'bash',
-        name: 'bash',
-        state: {
-          status: 'completed',
-          output: 'TOOL_SENTINEL',
-          content: [{ type: 'text', text: 'TOOL_SENTINEL' }]
-        }
-      },
-      {
-        type: 'file',
-        mime: 'text/plain',
-        filename: 'attachment.txt',
-        url: 'file:///work/attachment.txt'
-      }
-    ])
-    expected.push(`${prefix}tool`)
     const result = await readOpenCodeNativeChatTranscriptFull('session', {
       resolveDbPath: async () => path,
       readPage: async (args) => readOpenCodeTranscriptPage(args)
     })
     expect('messages' in result && result.messages.map((message) => message.id)).toEqual(expected)
-    const record = agentSessionRecordFixture()
-    const source = {
-      provider: 'opencode',
-      handle: record.providerHandleChain[0],
-      accountHome: record.accountHome,
-      store: path,
-      transcriptPath: path,
-      workspaceCwd: '/work',
-      providerSessionId: 'session'
-    }
-    const output = join(root, 'scratch', 'context.json')
-    expect(await prepareOpenCodeReadableContext(source, output)).toBe(output)
-    // Preparation has no process-memory requirement and never creates one file per click.
-    expect(await prepareOpenCodeReadableContext(source, output)).toBe(output)
-    expect(await readdir(join(root, 'scratch'))).toEqual(['context.json'])
-    const text = await readFile(output, 'utf8')
-    for (const expected of [
-      'session message 0',
-      'session message 259',
-      'TOOL_SENTINEL',
-      'attachment.txt',
-      'text/plain',
-      'file:///work/attachment.txt'
-    ]) {
-      expect(text.includes(expected)).toBe(true)
-    }
-    expect(text.includes('OTHER_SENTINEL')).toBe(false)
-    expect(
-      await prepareOpenCodeReadableContext({ ...source, providerSessionId: 'missing' }, output)
-    ).toBeNull()
-    await expect(
-      prepareOpenCodeReadableContext({ ...source, workspaceCwd: '/elsewhere' }, output)
-    ).rejects.toThrow('another directory')
-    insert('oversized', [{ type: 'text', text: 'x'.repeat(3 * 1024 * 1024) }])
-    expect(await prepareOpenCodeReadableContext(source, output)).toBeNull()
   })
 
   it('keeps both presentations on streaming mutation and new rows', async () => {

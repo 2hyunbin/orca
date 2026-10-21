@@ -12,7 +12,6 @@ import type {
 type RecoverySession = { journal: Pick<StructuredAgentSessionHostSession['journal'], 'snapshot'> }
 type RecoveryDeps = Pick<StructuredAgentSessionHostDeps, 'resolveLaunchEnv'> & {
   store: Pick<StructuredAgentSessionHostDeps['store'], 'getRecord'>
-  journalDatabase: Pick<StructuredAgentSessionHostDeps['journalDatabase'], 'stateDirectory'>
 }
 const contexts = new WeakMap<RecoverySession, RecoveryContextCache>()
 
@@ -63,9 +62,7 @@ export async function readStructuredSessionRecovery(
       ...overlay
     }
     const result = await structuredSessionRecoveryOptions(record, launchEnv, {
-      cache,
-      cutKey: key,
-      stateDirectory: deps.journalDatabase.stateDirectory
+      cache
     })
     const current = await context.conversation(sessionId)
     return current === session && key === recoveryIdentity(session, deps, sessionId)

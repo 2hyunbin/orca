@@ -7,6 +7,8 @@ import { NativeChatNoticeRow } from './NativeChatNoticeRow'
 import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
+import { buildAgentSessionContinuationPrompt } from '@/lib/agent-session-continuation'
+import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 
@@ -82,7 +84,8 @@ afterEach(() => {
 function row(
   target: RuntimeClientTarget = { kind: 'local' },
   offered = true,
-  agent: AgentType = 'claude'
+  agent: AgentType = 'claude',
+  messages: readonly NativeChatMessage[] = []
 ) {
   const view: NativeChatOrcaStopView = {
     hostLabel: null,
@@ -111,7 +114,7 @@ function row(
           worktreePath: '/work',
           runtimeEnvironmentId: target.kind === 'environment' ? target.environmentId : null
         }}
-        messages={[]}
+        messages={messages}
       >
         <NativeChatNoticeRow
           agentName="Claude"
@@ -197,7 +200,8 @@ it('offers host-owned recovery actions for the current usage-limit cut', async (
       pane: 'accounts',
       repoId: null,
       sectionId: 'accounts-claude',
-      hostScope: local
+      hostScope: local,
+      intent: 'native-accounts'
     })
     cleanup()
     mocks.follows = false
@@ -236,4 +240,28 @@ it('admits one preparation and discards it after Continue supersedes the cut', a
   await screen.findByText('Cancel hand-off')
   fireEvent.click(screen.getByText('Cancel hand-off'))
   expect(screen.queryByText('Cancel hand-off')).toBeNull()
+})
+
+it('hands off database-backed chats using labelled recent messages when no native file exists', async () => {
+  mocks.options.mockResolvedValue({ canSwitchAccount: false })
+  render(
+    row({ kind: 'local' }, true, 'opencode', [
+      {
+        id: 'recent',
+        role: 'user',
+        timestamp: 1,
+        source: 'transcript',
+        blocks: [{ type: 'text', text: 'Keep the recent task context' }]
+      }
+    ])
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
+  await waitFor(() => expect(mocks.dialog).toHaveBeenCalled())
+  const source = mocks.dialog.mock.lastCall?.[0].request.source
+  expect(source.transcriptPath).toBeUndefined()
+  expect(buildAgentSessionContinuationPrompt(source, 'focused')).toContain(
+    'A saved session transcript was unavailable, so use these recent chat messages:'
+  )
+  expect(source.capturedText).toContain('user: Keep the recent task context')
+  expect(buildAgentSessionContinuationPrompt(source, 'full')).toBeNull()
 })

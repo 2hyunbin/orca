@@ -50,8 +50,7 @@ import { ProviderDetailsMenu } from './ProviderDetailsMenu'
 import { getClaudeAccountSyncKey } from './provider-account-sync-key'
 import { signInToClaudeAccount } from '@/lib/claude-account-sign-in'
 
-// Exported so its account-switch/reset logic is preserved for row drill-in even
-// though the footer now opens the consolidated UsageRosterPanel first.
+// Exported for account switching from chat rows; the footer opens UsageRosterPanel.
 export function ClaudeSwitcherMenu({
   claude,
   compact,
@@ -409,7 +408,7 @@ export function ClaudeSwitcherMenu({
             pane: 'accounts',
             repoId: null,
             sectionId: 'accounts-claude',
-            ...(chatAction ? { hostScope: chatAction.target } : {})
+            ...(chatAction ? { hostScope: chatAction.target, intent: 'native-accounts' } : {})
           })
           openSettingsPage()
         }}

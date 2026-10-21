@@ -8,22 +8,6 @@ import {
 vi.mock('../managed-data-accounts/service', () => ({ getManagedDataAccountService: vi.fn() }))
 
 describe('OpenCode full native read bounds', () => {
-  it.each([null, 2])('rejects incomplete pagination with cursor %s', async (cursor) => {
-    let calls = 0
-    const result = await readOpenCodeNativeChatTranscriptFull(
-      'session',
-      {
-        resolveDbPath: async () => 'pinned-db',
-        readPage: async () =>
-          calls++ ? null : { items: [], hasMore: true, beforeMessageRowId: cursor }
-      },
-      undefined,
-      undefined,
-      { requireComplete: true }
-    )
-    expect(result).toHaveProperty('error')
-    expect(result).not.toHaveProperty('messages')
-  })
   it('counts reasoning, answer and image bytes cumulatively across pages', async () => {
     let calls = 0
     const chunk = 'x'.repeat(1_000_000)

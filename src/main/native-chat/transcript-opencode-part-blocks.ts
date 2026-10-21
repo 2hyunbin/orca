@@ -21,10 +21,9 @@ export const OPENCODE_TRANSCRIPT_MAX_ROW_BYTES = 2 * 1024 * 1024
 export function opencodeMessages(
   message: Pick<NativeChatMessage, 'id' | 'role' | 'timestamp'>,
   partRows: OpenCodePartRow[],
-  additionalBlocks: NativeChatBlock[] = [],
-  contextExport?: true
+  additionalBlocks: NativeChatBlock[] = []
 ): NativeChatMessage[] {
-  const { blocks, reasoning, notices } = opencodeMessageContent(partRows, contextExport)
+  const { blocks, reasoning, notices } = opencodeMessageContent(partRows)
   blocks.push(...additionalBlocks)
   const messages: NativeChatMessage[] = []
   if (reasoning.length > 0) {
@@ -51,10 +50,7 @@ export function opencodeMessages(
   return messages
 }
 
-function opencodeMessageContent(
-  partRows: OpenCodePartRow[],
-  contextExport?: true
-): {
+function opencodeMessageContent(partRows: OpenCodePartRow[]): {
   blocks: NativeChatBlock[]
   reasoning: NativeChatBlock[]
   notices: NativeChatTextBlock[]
@@ -107,7 +103,7 @@ function opencodeMessageContent(
         break
       }
       case 'file': {
-        const block = opencodeFileBlock(part, contextExport)
+        const block = opencodeFileBlock(part)
         if (block) {
           blocks.push(block)
         }
@@ -121,17 +117,10 @@ function opencodeMessageContent(
   return { blocks, reasoning, notices }
 }
 
-function opencodeFileBlock(
-  part: Record<string, unknown>,
-  contextExport?: true
-): NativeChatImageRefBlock | NativeChatTextBlock | null {
+function opencodeFileBlock(part: Record<string, unknown>): NativeChatImageRefBlock | null {
   const mime = extractString(part.mime)
   if (!mime?.startsWith('image/')) {
-    // Export retains file references the transcript renderer intentionally does not display.
-    const reference = [extractString(part.filename), mime, extractString(part.url)].filter(Boolean)
-    return contextExport && reference.length > 0
-      ? { type: 'text', text: `Attachment: ${reference.join(' — ')}` }
-      : null
+    return null
   }
   const url = extractString(part.url)
   if (!url) {
