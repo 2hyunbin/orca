@@ -40,7 +40,7 @@ vi.mock('../codex/codex-state-db-backfill-recovery', () => ({
 import { fetchCodexRateLimits } from './codex-fetcher'
 
 function makeRpcChild(rateLimitResetCredits?: unknown) {
-  const child = new EventEmitter() as EventEmitter & {
+  type RpcChild = EventEmitter & {
     pid: number
     stdout: PassThrough
     stderr: PassThrough
@@ -48,10 +48,6 @@ function makeRpcChild(rateLimitResetCredits?: unknown) {
     kill: ReturnType<typeof vi.fn>
     exitCode: number | null
   }
-  child.pid = 9_999_999
-  child.stdout = new PassThrough()
-  child.stderr = new PassThrough()
-  child.exitCode = null
   // Why: like the real app-server, the fake dies on stdin EOF or a signal —
   // the graceful shutdown path resolves only once the child reports exit.
   const exitNow = (): void => {
@@ -59,11 +55,11 @@ function makeRpcChild(rateLimitResetCredits?: unknown) {
     child.emit('exit', 0, null)
     child.emit('close', 0, null)
   }
-  child.kill = vi.fn(() => {
+  const kill = vi.fn(() => {
     exitNow()
     return true
   })
-  child.stdin = Object.assign(new EventEmitter(), {
+  const stdin = Object.assign(new EventEmitter(), {
     end: vi.fn(exitNow),
     write: vi.fn((line: string) => {
       const message = JSON.parse(line) as { id?: number; method?: string }
@@ -95,6 +91,14 @@ function makeRpcChild(rateLimitResetCredits?: unknown) {
         }, 0)
       }
     })
+  })
+  const child: RpcChild = Object.assign(new EventEmitter(), {
+    pid: 9_999_999,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    stdin,
+    kill,
+    exitCode: null
   })
   return child
 }

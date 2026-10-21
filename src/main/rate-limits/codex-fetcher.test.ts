@@ -76,7 +76,7 @@ import { probeCodexAuthPresence } from './codex-auth-presence'
 import { CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS } from '../codex-cli/codex-read-only-app-server-args'
 
 function makeRpcChild() {
-  const child = new EventEmitter() as EventEmitter & {
+  type RpcChild = EventEmitter & {
     pid: number
     stdout: PassThrough
     stderr: PassThrough
@@ -84,9 +84,6 @@ function makeRpcChild() {
     kill: ReturnType<typeof vi.fn>
     exitCode: number | null
   }
-  child.pid = 9_999_999
-  child.stdout = new PassThrough()
-  child.stderr = new PassThrough()
   // Why: like the real app-server, the fake dies on stdin EOF or a signal —
   // the graceful shutdown path resolves only once the child reports exit.
   const exitNow = (): void => {
@@ -94,11 +91,18 @@ function makeRpcChild() {
     child.emit('exit', 0, null)
     child.emit('close', 0, null)
   }
-  child.stdin = Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn(exitNow) })
-  child.exitCode = null
-  child.kill = vi.fn(() => {
+  const stdin = Object.assign(new EventEmitter(), { write: vi.fn(), end: vi.fn(exitNow) })
+  const kill = vi.fn(() => {
     exitNow()
     return true
+  })
+  const child: RpcChild = Object.assign(new EventEmitter(), {
+    pid: 9_999_999,
+    stdout: new PassThrough(),
+    stderr: new PassThrough(),
+    stdin,
+    kill,
+    exitCode: null
   })
   return child
 }
