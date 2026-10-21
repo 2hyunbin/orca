@@ -8,10 +8,8 @@ import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout as PruneMobileSess
 import { OrcaRuntimeWithSyncWindowGraph } from '../session-graph/session-window-graph'
 import {
   mainTerminalSurfaces,
-  startedMainTerminalSurfaces,
   type MainTerminalSurfacesHost
 } from '../terminal/surface/main-terminal-surfaces'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { WorkspaceLayoutReads } from '../workspace-layout-stream'
 import type {
   RuntimeMobileSessionTabsResult,
@@ -180,9 +178,6 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
       const resolvedId =
         this.getExplicitSessionWorktreeIdSelector(worktreeSelector) ?? explicitWorktreeId
       this.restoreLivePairedRendererSessionOwnedMobileTerminals(resolvedId)
-      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-        startedMainTerminalSurfaces(this)?.mergeIntoHeldRows()
-      }
       return this.getMobileSessionTabsForWorktree(resolvedId, clientNavigationId, options)
     }
     const worktree = await this.resolveWorktreeSelector(worktreeSelector)
@@ -193,9 +188,6 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession(worktree.id)
     await this.refreshMobileSessionPtyRecords()
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(worktree.id)
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      startedMainTerminalSurfaces(this)?.mergeIntoHeldRows()
-    }
     return this.getMobileSessionTabsForWorktree(worktree.id, clientNavigationId, options)
   }
 
@@ -227,9 +219,6 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     this.hydrateHeadlessMobileSessionTabsFromWorkspaceSession()
     const ptyInventory = await this.refreshMobileSessionPtyInventory()
     this.restoreLivePairedRendererSessionOwnedMobileTerminals(null)
-    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      startedMainTerminalSurfaces(this)?.mergeIntoHeldRows()
-    }
     const snapshots = [...this.mobileSessionTabsByWorktree.values()].map((snapshot) =>
       this.projectMobileSessionTabsForClient(
         this.toMobileSessionTabsResult(snapshot),

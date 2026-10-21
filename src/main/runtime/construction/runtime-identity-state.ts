@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { preserveTerminalRetirementProofs } from '../mobile-session-terminal-retirement-proof'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
+import { headlessMobileSnapshotContentUnchanged } from '../mobile-session-snapshot-equality'
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { isTuiAgent } from '../../../shared/tui-agent-config'
 import type { RuntimeStore } from '../runtime-store-contract'
@@ -111,6 +114,19 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
     snapshot: RuntimeMobileSessionTabsSnapshot
   ): RuntimeMobileSessionTabsSnapshot {
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Every writer stores main's rows, so no push or list carries rows main's layout dropped.
+      const merged = startedMainTerminalSurfaces(this)?.withMainRows(snapshot) ?? snapshot
+      // A write main's layout wholly overrides (a rebuild from the saved session) changes nothing.
+      if (
+        existing &&
+        headlessMobileSnapshotContentUnchanged(existing, merged) &&
+        !headlessMobileSnapshotContentUnchanged(snapshot, merged)
+      ) {
+        return existing
+      }
+      snapshot = merged
+    }
     snapshot = preserveTerminalRetirementProofs(snapshot, existing)
     const snapshotVersion = existing
       ? Math.max(snapshot.snapshotVersion, existing.snapshotVersion + 1)

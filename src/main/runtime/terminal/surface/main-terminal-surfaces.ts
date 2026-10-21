@@ -38,7 +38,7 @@ export type MainTerminalSurfacesHost = {
   publish: (windowId: number, graph: RuntimeSyncWindowGraph) => void
   /** The session.tabs rows the runtime holds, by workspace. */
   heldRows: () => ReadonlyMap<string, RuntimeMobileSessionTabsSnapshot>
-  /** Stores a workspace's rows and tells its subscribers. */
+  /** Stores a workspace's rows and pushes them to its subscribers. */
   replaceHeldRows: (worktreeId: string, next: RuntimeMobileSessionTabsSnapshot) => void
 }
 
@@ -50,6 +50,7 @@ class MainSurfacePublisher {
   private installed: MainTerminalSurfaces | null = null
   private scheduled = false
   private forceNext = false
+  private mergeNext = false
 
   constructor(private readonly host: MainTerminalSurfacesHost) {
     this.index = new TerminalSurfaceIndex({
@@ -57,7 +58,7 @@ class MainSurfacePublisher {
       hostIds: () => host.store()?.getWorkspaceSessionHostIds?.() ?? [],
       homeHostId: host.homeHostId,
       generatedTitlesEnabled: () => host.store()?.getSettings?.().tabAutoGenerateTitle === true,
-      onChanged: () => this.schedule()
+      onChanged: () => this.schedule({ merge: true })
     })
   }
 
@@ -75,24 +76,24 @@ class MainSurfacePublisher {
       : composed
   }
 
-  /** A workspace main owns publishes main's terminal and editor rows; any other, the window's. */
-  private withMainRows(
-    published: RuntimeMobileSessionTabsSnapshot
-  ): RuntimeMobileSessionTabsSnapshot {
+  /** A workspace main owns lists main's terminal and editor rows; any other, the rows given. */
+  withMainRows(published: RuntimeMobileSessionTabsSnapshot): RuntimeMobileSessionTabsSnapshot {
     const projected = this.index.surfaces().worktreeIds.has(published.worktree)
       ? this.index.sessionTabsOf(published.worktree)
       : null
-    return projected ? withMainSessionTabRows(published, projected, this.host.exited) : published
+    return projected
+      ? withMainSessionTabRows(published, projected, this.host.exited, {
+          // With no window, a pane's saved title is main's; live titles resolve from the terminal.
+          windowTitles: this.host.readyGraphPublisher() !== HEADLESS_RUNTIME_WINDOW_ID
+        })
+      : published
   }
 
-  /** With no window, no publication carries main's layout into the rows held, so main merges it. */
-  mergeIntoHeldRows(): void {
-    if (this.host.readyGraphPublisher() !== HEADLESS_RUNTIME_WINDOW_ID) {
-      return
-    }
+  /** After a layout commit: the rows held for each workspace main owns follow its layout. */
+  private mergeIntoHeldRows(): void {
     for (const [worktreeId, held] of this.host.heldRows()) {
       const next = this.withMainRows(held)
-      if (!headlessMobileSnapshotContentUnchanged(held, next)) {
+      if (next !== held && !headlessMobileSnapshotContentUnchanged(held, next)) {
         this.host.replaceHeldRows(worktreeId, next)
       }
     }
@@ -187,18 +188,23 @@ class MainSurfacePublisher {
   }
 
   /** Deferred so a connected flip, noted inside syncWindowGraph's record update, cannot recurse into it. */
-  private schedule(opts: { force?: boolean } = {}): void {
+  private schedule(opts: { force?: boolean; merge?: boolean } = {}): void {
     this.forceNext ||= opts.force === true
+    // Only a layout commit changes main's rows; a terminal connecting changes none.
+    this.mergeNext ||= opts.merge === true
     if (this.scheduled) {
       return
     }
     this.scheduled = true
     queueMicrotask(() => {
-      const force = this.forceNext
+      const { forceNext: force, mergeNext: merge } = this
       this.scheduled = false
       this.forceNext = false
+      this.mergeNext = false
       this.republish({ force })
-      this.mergeIntoHeldRows()
+      if (merge) {
+        this.mergeIntoHeldRows()
+      }
     })
   }
 }
