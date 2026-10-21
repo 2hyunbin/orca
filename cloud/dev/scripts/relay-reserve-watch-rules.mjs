@@ -23,9 +23,9 @@ export const RESERVE_WATCH_RULES = {
       multiple: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.spikeMultiple,
       floorPerMinute: SHADOW_GATE_THRESHOLDS.nonDrain503Budget.spikeFloor
     },
-    // Between the two lines, two instances each over a fifth of the fleet line (five directors) for
-    // the same 3 minutes. 10-21 07:55Z: no instance held it, the stalled one fell to 5 in minute 3.
-    instances: { lineDivisor: 5, minOver: 2 }
+    // Between the two lines, two instances each over their even share of the fleet line for the
+    // same 3 minutes. 10-21 07:55Z: no instance held a fifth, the stalled one fell to 5 in minute 3.
+    instances: { minOver: 2 }
   },
   // The cell closes a demoted seat after 60 s (DEMOTION_CLOSE_MS); 30 s more covers a director's
   // map still holding the closed seat.
@@ -234,7 +234,7 @@ function judgeDirector503(read, state, at) {
   }
   if (!counts.every((count) => count > above)) return pass(detail)
   if (!read.instances?.ok) return unverifiable(read.instances?.error ?? 'no per-instance director 503s')
-  const instanceAbove = above / instances.lineDivisor
+  const instanceAbove = above / Math.max(read.instances.directors, instances.minOver)
   const over = Object.entries(read.instances.perMinute)
     .filter(([, byMinute]) => recent.every((minute) => (byMinute[minute] ?? 0) > instanceAbove))
     .map(([instance]) => instance)

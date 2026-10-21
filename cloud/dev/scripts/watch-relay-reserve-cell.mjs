@@ -195,12 +195,15 @@ export async function readDirector503Minutes(reader, { projectId, directorServic
   }
 }
 
-// One read's worth of 503 request-log lines; a sick-instance burst is ~400 in 10 minutes.
+// Raw 503 request-log lines in one 10-minute read; 10-20/21 peaked at 1,681. Past it only a
+// brownout over the broad line, which needs no split.
 export const DIRECTOR_503_LOG_LIMIT = 5_000
+// Platform 503s answered by no instance (none in 10-20/21) count as one instance of their own.
+const NO_INSTANCE = 'no-instance'
 
 // The same non-drain measure per director instance: the metric names no instance, so the 503s
-// come from Cloud Run's request log, less each instance's own scheduled 503s. A 503 no instance
-// answered stays in the fleet count only.
+// come from Cloud Run's request log, less each instance's own scheduled 503s. `directors` is how
+// many instances logged runtime metrics in the read.
 async function readDirector503ByInstance(reader, { projectId, directorService, span, metrics, keys }) {
   const read = await readLogEntries(reader, {
     filter: [
@@ -220,8 +223,7 @@ async function readDirector503ByInstance(reader, { projectId, directorService, s
   for (const entry of read.entries) {
     const at = Date.parse(entry.timestamp)
     if (!Number.isFinite(at)) return failedRead('director 503 request log line with an unparseable timestamp')
-    const instance = entry.labels?.instanceId
-    if (!instance) continue
+    const instance = entry.labels?.instanceId || NO_INSTANCE
     const perMinute = raw.get(instance) ?? {}
     perMinute[minuteKey(at)] = (perMinute[minuteKey(at)] ?? 0) + 1
     raw.set(instance, perMinute)
@@ -236,7 +238,8 @@ async function readDirector503ByInstance(reader, { projectId, directorService, s
     const { series } = withoutDrainDeferrals({ perMinute }, own, keys)
     perInstance[instance] = Object.fromEntries(keys.map((minute, index) => [minute, series[index]]))
   }
-  return { ok: true, perMinute: perInstance }
+  const directors = new Set(metrics.flatMap((part) => part.samples.map((sample) => sample.instanceId)).filter(Boolean)).size
+  return { ok: true, perMinute: perInstance, directors }
 }
 
 const CELL_METRICS_EVENT = 'orca_relay_runtime_metrics'
