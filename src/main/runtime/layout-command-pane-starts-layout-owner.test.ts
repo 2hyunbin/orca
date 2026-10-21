@@ -55,6 +55,8 @@ async function desktopRuntime(
   opts: {
     slept?: boolean
     session?: ReturnType<typeof makeWorkspaceSessionWithHeadlessTerminal>
+    /** False: the window's graph has not listed the workspace's tabs yet, as at a relaunch. */
+    activate?: boolean
   } = {}
 ) {
   const session =
@@ -84,10 +86,12 @@ async function desktopRuntime(
   runtime.markGraphReady(TEST_WINDOW_ID)
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the runtime reads only isDestroyed from the window mock.
   electronMocks.BrowserWindow.fromId.mockReturnValue({ isDestroyed: () => false } as never)
-  await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
-    notifyClients: false,
-    clientKind: 'runtime'
-  })
+  if (opts.activate !== false) {
+    await runtime.activateManagedWorktree(`id:${TEST_WORKTREE_ID}`, {
+      notifyClients: false,
+      clientKind: 'runtime'
+    })
+  }
   return { runtime, spawn, started, getSession: fixture.getSession, setSession: fixture.setSession }
 }
 
@@ -138,6 +142,18 @@ describe('a client’s startPane in the layout-owner build', () => {
     await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it('starts a pane the window views before its graph lists the tab', async () => {
+    const { runtime, spawn, started } = await desktopRuntime({ activate: false })
+    runtime.setStartStatus(PANE_KEY, 'sleeping')
+
+    await runtime.applyLayoutCommand({ ...startPane, paneKey: PANE_KEY })
+    await vi.waitFor(() => expect(spawn).toHaveBeenCalled())
+    started.resolve({ id: 'persisted-pty' })
+
+    await vi.waitFor(() => expect(runtime.isRestoredPaneBoundTo(PANE, 'persisted-pty')).toBe(true))
+    expect(runtime.startStatusOf(PANE_KEY)).not.toMatchObject({ status: 'failed' })
   })
 
   it('shows the pane starting in the frame its reply names', async () => {
