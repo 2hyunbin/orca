@@ -22,6 +22,7 @@ import { clientRaisesUnreadFlagItself } from '../../../shared/workspace-unread-r
 import type { RuntimeCapability } from '../../../shared/protocol-version'
 import { TerminalUseProducer } from './terminal-use-producer'
 import { createKeyedTrailingEdgeCoalescer } from '../keyed-trailing-edge-coalescer'
+import { wakeFolderRepoGitUpgradeWatch } from '../../ipc/folder-repo-git-upgrade-wake'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { anySleepKeyNames } from '../terminal/stop/worktree-terminal-sleep-key'
@@ -245,6 +246,8 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
     // so only paired clients re-list.
     if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
       if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
+        // An agent's `git init` in the folder upgrades it now, not on the idle poll.
+        wakeFolderRepoGitUpgradeWatch()
         this.invalidateResolvedWorktreeCache()
         this.notifyReposChangedForRemoteClients()
       } else {

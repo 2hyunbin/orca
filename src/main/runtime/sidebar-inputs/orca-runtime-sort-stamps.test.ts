@@ -11,6 +11,12 @@ import {
 } from '../../../shared/worktree/host-qualified-identity'
 
 vi.mock('../../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
+const gitUpgrade = vi.hoisted(() => ({ wakes: 0 }))
+vi.mock('../../ipc/folder-repo-git-upgrade-wake', () => ({
+  wakeFolderRepoGitUpgradeWatch: () => {
+    gitUpgrade.wakes += 1
+  }
+}))
 
 const WT = 'repo-1::/tmp/worktree-a'
 
@@ -24,7 +30,14 @@ function createHeadlessRuntime(
     [WT]: stored
   }
   const written = new Set<(domains: readonly string[] | undefined) => void>()
+  const folders: Record<string, { id: string; isUnread: boolean; lastActivityAt: number }> = {
+    'folder-1': { id: 'folder-1', isUnread: true, lastActivityAt: 0 }
+  }
   const store = {
+    getFolderWorkspace: (id: string) => folders[id],
+    updateFolderWorkspace: (id: string, updates: Partial<(typeof folders)[string]>) => {
+      folders[id] = { ...folders[id]!, ...updates }
+    },
     // An unstamped row's writes resolve their host from its repo's only registration.
     getRepos: () => [{ id: 'repo-1', connectionId: null }],
     getRepo: (id: string) => (id === 'repo-1' ? { id, connectionId: null } : undefined),
@@ -115,6 +128,21 @@ describe('host sort stamps on a headless runtime', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('wakes the folder git-upgrade watch on a folder stamp, which reaches paired clients only', () => {
+    const { runtime } = createHeadlessRuntime()
+    const reposChanged = vi.fn()
+    const notifier = { worktreesChanged: vi.fn(), reposChanged }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a stamp notice reaches only these members.
+    runtime.setNotifier(notifier as unknown as Parameters<OrcaRuntimeService['setNotifier']>[0])
+    const events: { type: string }[] = []
+    runtime.onClientEvent((event) => events.push(event), { consumesTerminalSideEffects: false })
+    const wakesBefore = gitUpgrade.wakes
+    runtime.sidebarFacts?.readAndHoldPhoneSession('folder:folder-1')
+    expect(gitUpgrade.wakes).toBe(wakesBefore + 1)
+    expect(events.filter((event) => event.type === 'reposChanged')).toHaveLength(1)
+    expect(reposChanged).not.toHaveBeenCalled()
   })
 
   it('stamps a bell the daemon reports for a parked terminal', () => {
