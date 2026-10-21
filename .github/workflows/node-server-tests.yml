@@ -236,7 +236,7 @@ jobs:
                 })
                 if (artifacts.some(artifact => artifact.name === 'orcad-mobile-web-bundle' && !artifact.expired)) return
               }
-              await new Promise(resolve => setTimeout(resolve, 5_000))
+              await new Promise(resolve => setTimeout(resolve, 15_000))
             }
             throw new Error('Timed out waiting for the qualified mobile bundle')
       - uses: actions/download-artifact@v8
@@ -643,7 +643,7 @@ jobs:
                 }
                 if (ready) return
               }
-              await new Promise(resolve => setTimeout(resolve, 5_000))
+              await new Promise(resolve => setTimeout(resolve, 15_000))
             }
             throw new Error('Timed out waiting for every template qualification lane')
 
