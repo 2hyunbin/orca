@@ -184,8 +184,6 @@ export function useMobileNativeChatController(args: {
     handleRef: activeHandleRef,
     deviceTokenRef,
     agentRef: activeChatAgentRef,
-    currentAsk: nativeChatAskPrompt,
-    currentAskStatus: nativeChatStatus,
     sessionId: activeChatSessionId,
     streamIdentity,
     onSendError
@@ -219,7 +217,7 @@ export function useMobileNativeChatController(args: {
     onSendError
   })
 
-  const structuredSend = useMobileStructuredNativeChatSendBridge({
+  const structuredNativeChatSend = useMobileStructuredNativeChatSendBridge({
     agent: activeChatResolution?.agent,
     sendStructured: structuredNativeChat.sendWithOutcome,
     captureSendOrigin,
@@ -328,9 +326,11 @@ export function useMobileNativeChatController(args: {
     nativeChatQueued: structuredNativeChat.queued,
     nativeChatBackgroundTasks: activeChatStructured ? structuredNativeChat.backgroundTasks : null,
     ...nativeChatFiles,
-    handleNativeChatSend: activeChatStructured ? structuredSend.send : handleNativeChatSend,
+    handleNativeChatSend: activeChatStructured
+      ? structuredNativeChatSend.send
+      : handleNativeChatSend,
     handleNativeChatSendWithOutcome: activeChatStructured
-      ? structuredSend.sendWithOutcome
+      ? structuredNativeChatSend.sendWithOutcome
       : handleNativeChatSendWithOutcome,
     readSeededLaunchDraft,
     nativeChatSessionOptions,

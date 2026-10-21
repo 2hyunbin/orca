@@ -46,11 +46,6 @@ export function sendNativeChatObservedWrites(
           if (isCancelled()) {
             return
           }
-          if (options.beforeWrite && !options.beforeWrite()) {
-            options.onDeliverySettled?.(false)
-            markSubmitted()
-            return
-          }
           void sendRuntimePtyInputVerified(ptyId, write.data, 'driving', writeOptions)
             .then((accepted) => {
               if (isCancelled()) {

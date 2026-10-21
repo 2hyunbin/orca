@@ -8,7 +8,6 @@ import {
   extractPendingAsk,
   nativeChatAskDismissKey,
   parseAskFromStatus,
-  parseAskFromToolInput,
   resolveNativeChatAsk
 } from './native-chat-ask'
 
@@ -169,6 +168,17 @@ describe('extractPendingAsk', () => {
 })
 
 describe('parseAskFromStatus', () => {
+  it('preserves OMP checkbox questions from live status and transcript history', () => {
+    const input = {
+      questions: [
+        { id: 'q1', question: 'Pick', multi: true, options: [{ label: 'A' }, { label: 'B' }] }
+      ]
+    }
+    const prompt = parseAskFromStatus(JSON.stringify(input), 'ask')
+    expect(prompt?.questions[0]?.multiSelect).toBe(true)
+    expect(extractPendingAsk([message('m1', [call('ask', input)])])).toEqual(prompt)
+  })
+
   it('preserves OpenCode question envelope multiple selection on live status and replay', () => {
     const input = {
       id: 'question',
@@ -222,19 +232,5 @@ describe('resolveNativeChatAsk', () => {
     expect(resolveNativeChatAsk({ liveAsk, messages: transcript, transcriptSettled: false })).toBe(
       liveAsk
     )
-  })
-})
-
-describe('parseAskFromToolInput OMP multi flag', () => {
-  it('treats OMP multi: true as a multi-select question', () => {
-    expect(
-      parseAskFromToolInput('ask', {
-        questions: [{ id: 'checks', question: 'Q', options: [{ label: 'A' }], multi: true }]
-      })
-    ).toEqual({
-      questions: [
-        { question: 'Q', header: undefined, multiSelect: true, options: [{ label: 'A' }] }
-      ]
-    })
   })
 })

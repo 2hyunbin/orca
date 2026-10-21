@@ -33,11 +33,13 @@ export function nativeChatRequiresLocalTranscript(agent: string | null | undefin
 export function shouldStepNativeChatAskAnswer(agent: string | null | undefined): boolean {
   const transcriptAgent = resolveNativeChatTranscriptAgent(agent)
   return (
-    transcriptAgent === 'claude' ||
-    transcriptAgent === 'codex' ||
-    transcriptAgent === 'opencode' ||
-    transcriptAgent === 'omp'
+    transcriptAgent === 'claude' || transcriptAgent === 'codex' || transcriptAgent === 'opencode'
   )
+}
+
+/** OMP's configurable keys and existing checkbox state cannot be replaced through PTY input. */
+export function nativeChatAskRequiresTerminal(agent: string | null | undefined): boolean {
+  return resolveNativeChatTranscriptAgent(agent) === 'omp'
 }
 
 export function resolveNativeChatTranscriptAgent(

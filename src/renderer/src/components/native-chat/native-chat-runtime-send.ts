@@ -212,11 +212,9 @@ export function submitNativeChatPrompt(ptyId: string): void {
 export function sendNativeChatAskAnswer(
   ptyId: string,
   groups: AskAnswerKeyGroup[],
-  onSettled?: (delivered: boolean) => void,
-  beforeWrite?: () => boolean
+  onSettled?: (delivered: boolean) => void
 ): NativeChatSendHandle {
   if (groups.length === 0) {
-    onSettled?.(false)
     return { cancel: () => {}, settleAfterMs: 0 }
   }
   return sendNativeChatObservedWrites(
@@ -227,7 +225,6 @@ export function sendNativeChatAskAnswer(
     })),
     {
       clearInput: '',
-      beforeWrite,
       stopOnUnconfirmed: !!onSettled,
       settleDelayMs: NATIVE_CHAT_SUBMIT_DELAY_MS,
       onDeliverySettled: onSettled

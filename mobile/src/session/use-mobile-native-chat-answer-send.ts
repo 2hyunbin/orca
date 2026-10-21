@@ -1,22 +1,12 @@
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react'
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type MutableRefObject
-} from 'react'
-import {
-  buildNativeChatAskAnswerKeys,
+  buildAskAnswerKeys,
+  buildCodexAskAnswerKeys,
   formatAskAnswer,
   hasAskAnswer,
-  nativeChatAskDismissKey,
   type AskAnswerSelection,
   type AskPrompt
 } from '../../../src/shared/native-chat-ask'
-import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
-import { nativeChatOmpPromptIdentity } from '../../../src/shared/native-chat-omp-prompt-identity'
-import { createOmpAnswerRetryFence } from '../../../src/shared/native-chat-omp-answer-retry-fence'
 import type { RpcClient } from '../transport/rpc-client'
 import { MOBILE_NATIVE_CHAT_QUESTION_STEP_MS } from './mobile-native-chat-answer-stepping'
 import {
@@ -29,12 +19,13 @@ import {
   releaseMobileNativeChatTerminalWrite
 } from './mobile-native-chat-terminal-write-lock'
 import {
+  nativeChatAskRequiresTerminal,
   resolveNativeChatTranscriptAgent,
   shouldStepNativeChatAskAnswer
 } from '../../../src/shared/native-chat-agent-support'
 
-/** Sends an ask-user answer to the active chat pane. Selector agents use their
- *  own keystrokes; other agents get pasted label text.
+/** Sends an ask-user answer to the active chat pane. Claude and Codex selectors
+ *  use their agent-specific keystrokes; other agents get pasted label text.
  *  Extracted from the session route to keep that file under its line cap and to
  *  own the pending-timer lifecycle in one place. */
 export type MobileNativeChatAnswerSend = {
@@ -72,8 +63,6 @@ export function useMobileNativeChatAnswerSend(args: {
   sessionId: string | null
   streamIdentity: string
   onSendError: (message: string) => void
-  currentAsk?: AskPrompt | null
-  currentAskStatus?: AgentStatusEntry | null
 }): MobileNativeChatAnswerSend {
   const {
     client,
@@ -83,15 +72,8 @@ export function useMobileNativeChatAnswerSend(args: {
     agentRef,
     sessionId,
     streamIdentity,
-    onSendError,
-    currentAsk,
-    currentAskStatus
+    onSendError
   } = args
-  const currentAskRef = useRef({ prompt: currentAsk, status: currentAskStatus })
-  useLayoutEffect(() => {
-    currentAskRef.current = { prompt: currentAsk, status: currentAskStatus }
-  }, [currentAsk, currentAskStatus])
-  const [attemptedOmpAsks] = useState(createOmpAnswerRetryFence)
   const generationRef = useRef(0)
   const activeRouteRef = useRef({ client, enabled, sessionId, streamIdentity })
   activeRouteRef.current = { client, enabled, sessionId, streamIdentity }
@@ -124,27 +106,17 @@ export function useMobileNativeChatAnswerSend(args: {
 
   const answerAsk = useCallback(
     async (prompt: AskPrompt, selections: AskAnswerSelection[]): Promise<boolean> => {
+      if (nativeChatAskRequiresTerminal(agentRef.current)) {
+        cancelPending()
+        onSendError('Answer this question in terminal view')
+        return false
+      }
       const handle = handleRef.current
       if (!client || !handle || !enabled) {
         onSendError('Answer not sent (disconnected)')
         return false
       }
       if (!hasAskAnswer(prompt, selections)) {
-        return false
-      }
-      const agent = agentRef.current
-      const omp = resolveNativeChatTranscriptAgent(agent) === 'omp'
-      const askKey = nativeChatAskDismissKey(prompt)
-      const ompPromptIdentity = nativeChatOmpPromptIdentity(currentAskRef.current.status, prompt)
-      const ompAttemptKey = JSON.stringify([
-        streamIdentity,
-        sessionId,
-        handle,
-        askKey,
-        currentAskRef.current.status?.turnStartedAt ?? currentAskRef.current.status?.stateStartedAt
-      ])
-      if (omp && attemptedOmpAsks.blocks(ompAttemptKey)) {
-        onSendError('Answer not sent — check terminal before retrying')
         return false
       }
       // One composed write sequence per terminal: an answer landing mid-flight
@@ -201,12 +173,7 @@ export function useMobileNativeChatAnswerSend(args: {
             activeRoute.sessionId !== sessionId ||
             activeRoute.streamIdentity !== streamIdentity ||
             handleRef.current !== handle ||
-            agentRef.current !== agent ||
-            (omp &&
-              (ompPromptIdentity === null ||
-                nativeChatOmpPromptIdentity(currentAskRef.current.status, prompt) !==
-                  ompPromptIdentity ||
-                nativeChatAskDismissKey(currentAskRef.current.prompt ?? null) !== askKey))
+            nativeChatAskRequiresTerminal(agentRef.current)
           ) {
             return false
           }
@@ -222,15 +189,9 @@ export function useMobileNativeChatAnswerSend(args: {
               : {})
           })
           if (outcome === 'unknown') {
-            if (omp) {
-              attemptedOmpAsks.record(ompAttemptKey)
-            }
             sawUnknownOutcome = true
           }
           if (outcome === 'accepted') {
-            if (omp) {
-              attemptedOmpAsks.record(ompAttemptKey)
-            }
             sawAcceptedGroup = true
           }
           return outcome === 'accepted'
@@ -270,7 +231,8 @@ export function useMobileNativeChatAnswerSend(args: {
           }
           return false
         }
-        // Selector keystrokes are paced so each step renders before the next lands.
+        // Grok commits pasted labels; Claude and Codex need their selector-specific
+        // keystrokes paced so each step renders before the next lands.
         if (!shouldStepNativeChatAskAnswer(agentRef.current)) {
           // This shape pastes the label into the composer and commits it, so an
           // orphaned image paste would be submitted along with the answer (#10228).
@@ -304,7 +266,10 @@ export function useMobileNativeChatAnswerSend(args: {
           const sent = (await sendTerminal(formatAskAnswer(prompt, selections), true)) || fail()
           return sent && writeTurnsRef.current.get(handle) === turn
         }
-        const groups = buildNativeChatAskAnswerKeys(agentRef.current, prompt, selections)
+        const groups =
+          resolveNativeChatTranscriptAgent(agentRef.current) === 'codex'
+            ? buildCodexAskAnswerKeys(prompt, selections)
+            : buildAskAnswerKeys(prompt, selections)
         for (let index = 0; index < groups.length; index += 1) {
           if (generationRef.current !== generation) {
             return false
@@ -344,7 +309,6 @@ export function useMobileNativeChatAnswerSend(args: {
     },
     [
       agentRef,
-      attemptedOmpAsks,
       enabled,
       cancelPending,
       client,

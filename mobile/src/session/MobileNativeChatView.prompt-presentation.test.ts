@@ -134,6 +134,25 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 describe('terminal prompt presentation with the production view, card and composer', () => {
+  it('forwards terminal navigation without answering or cancelling the question', async () => {
+    const onAnswerInTerminal = vi.fn()
+    const onAnswerAsk = vi.fn(async () => true)
+    const onCancelAsk = vi.fn(async () => true)
+    await render({
+      ask: { questions: [{ question: 'Pick', options: [{ label: 'A' }], multiSelect: false }] },
+      askRequiresTerminal: true,
+      onAnswerInTerminal,
+      onAnswerAsk,
+      onCancelAsk
+    })
+    const button = tree!.root.findByProps({ accessibilityLabel: 'Answer in terminal' })
+    act(() => button.props.onPress())
+    expect(onAnswerInTerminal).toHaveBeenCalledOnce()
+    expect(onAnswerAsk).not.toHaveBeenCalled()
+    expect(onCancelAsk).not.toHaveBeenCalled()
+    expect(tree!.root.findAll((node) => node.type === 'ChatAsk')).toHaveLength(0)
+  })
+
   it('accepted Deny hides exactly that occurrence and restores Send across reconnect', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: () => void) => setTimeout(callback, 0))
     const onRespondPermission = vi.fn(async () => true)

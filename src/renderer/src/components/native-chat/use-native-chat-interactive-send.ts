@@ -1,14 +1,16 @@
-import { useCallback, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import { useAppStore } from '../../store'
 import { sendRuntimePtyInput } from '@/runtime/runtime-terminal-inspection'
 import { sendRuntimePtyInputVerified } from '@/runtime/runtime-terminal-verified-input'
 import type { AgentType } from '../../../../shared/native-chat-types'
 import {
+  nativeChatAskRequiresTerminal,
   resolveNativeChatTranscriptAgent,
   shouldStepNativeChatAskAnswer
 } from '../../../../shared/native-chat-agent-support'
 import {
-  buildNativeChatAskAnswerKeys,
+  buildAskAnswerKeys,
+  buildCodexAskAnswerKeys,
   formatAskAnswer,
   hasAskAnswer,
   type AskAnswerSelection,
@@ -19,9 +21,6 @@ import {
   sendNativeChatMessage,
   type NativeChatSendHandle
 } from './native-chat-runtime-send'
-import { nativeChatAskDismissKey } from '../../../../shared/native-chat-ask'
-import { nativeChatOmpPromptIdentity } from '../../../../shared/native-chat-omp-prompt-identity'
-import { createOmpAnswerRetryFence } from '../../../../shared/native-chat-omp-answer-retry-fence'
 import { inferQuestionAnsweredFromCurrentStatus } from '../terminal-pane/agent-question-answered-inference'
 
 // ESC is the agent-TUI interrupt/cancel key over the PTY (matches how the
@@ -66,7 +65,6 @@ export function useNativeChatInteractiveSend(
   // unmount so a detached setTimeout chain can't keep writing PTY bytes after
   // the view is gone / the user switched away.
   const inFlightRef = useRef<NativeChatSendHandle | null>(null)
-  const [attemptedOmpAsks] = useState(createOmpAnswerRetryFence)
   const cancelInFlight = useCallback(() => {
     inFlightRef.current?.cancel()
     inFlightRef.current = null
@@ -101,13 +99,19 @@ export function useNativeChatInteractiveSend(
       selections: AskAnswerSelection[],
       onDeliverySettled?: (delivered: boolean) => void
     ): { settleAfterMs: number } => {
+      if (nativeChatAskRequiresTerminal(agent)) {
+        cancelInFlight()
+        onDeliverySettled?.(false)
+        return { settleAfterMs: 0 }
+      }
       if (!targetPtyId || !hasAskAnswer(prompt, selections)) {
         return { settleAfterMs: 0 }
       }
       // Cancel any prior in-flight answer before starting a new one.
       cancelInFlight()
-      // Selector TUIs ignore pasted labels; each agent's selector takes its own key sequence.
+      // Selector TUIs ignore pasted labels; Codex uses a different key sequence.
       const stepsAnswer = shouldStepNativeChatAskAnswer(agent)
+      const buildsCodexAnswer = resolveNativeChatTranscriptAgent(agent) === 'codex'
       // Why: pin the answered question's baseline BEFORE delivery. A late settle
       // callback (paced writes + remote acceptance can span seconds on SSH) must
       // not read the live status and mint a fresh baseline for a replacement
@@ -117,29 +121,6 @@ export function useNativeChatInteractiveSend(
       const questionStatusBaseline = stepsAnswer
         ? useAppStore.getState().agentStatusByPaneKey[paneKey]
         : undefined
-      const omp = resolveNativeChatTranscriptAgent(agent) === 'omp'
-      const askKey = nativeChatAskDismissKey(prompt)
-      const baselineKey = JSON.stringify([
-        targetPtyId,
-        askKey,
-        questionStatusBaseline?.turnStartedAt ?? questionStatusBaseline?.stateStartedAt
-      ])
-      if (omp && attemptedOmpAsks.blocks(baselineKey)) {
-        onDeliverySettled?.(false)
-        return { settleAfterMs: 0 }
-      }
-      const baselineIdentity = nativeChatOmpPromptIdentity(questionStatusBaseline, prompt)
-      const beforeWrite = (): boolean => {
-        const current = useAppStore.getState().agentStatusByPaneKey[paneKey]
-        if (
-          baselineIdentity === null ||
-          nativeChatOmpPromptIdentity(current, prompt) !== baselineIdentity
-        ) {
-          return false
-        }
-        attemptedOmpAsks.record(baselineKey)
-        return true
-      }
       let settledHandle: NativeChatSendHandle | null = null
       const onSettled = (delivered: boolean): void => {
         if (settledHandle && inFlightRef.current === settledHandle) {
@@ -163,9 +144,10 @@ export function useNativeChatInteractiveSend(
       const handle: NativeChatSendHandle = stepsAnswer
         ? sendNativeChatAskAnswer(
             targetPtyId,
-            buildNativeChatAskAnswerKeys(agent, prompt, selections),
-            onSettled,
-            ...(omp ? [beforeWrite] : [])
+            buildsCodexAnswer
+              ? buildCodexAskAnswerKeys(prompt, selections)
+              : buildAskAnswerKeys(prompt, selections),
+            onSettled
           )
         : sendNativeChatMessage(targetPtyId, formatAskAnswer(prompt, selections), {
             onDeliverySettled: onSettled
@@ -179,13 +161,16 @@ export function useNativeChatInteractiveSend(
         settleAfterMs: handle.settleAfterMs
       }
     },
-    [paneKey, targetPtyId, agent, attemptedOmpAsks, cancelInFlight]
+    [paneKey, targetPtyId, agent, cancelInFlight]
   )
 
   const cancelAsk = useCallback(() => {
     cancelInFlight()
+    if (nativeChatAskRequiresTerminal(agent)) {
+      return Promise.resolve(false)
+    }
     return sendRawVerified(ESC)
-  }, [cancelInFlight, sendRawVerified])
+  }, [agent, cancelInFlight, sendRawVerified])
 
   const cancel = useCallback(() => {
     cancelInFlight()
