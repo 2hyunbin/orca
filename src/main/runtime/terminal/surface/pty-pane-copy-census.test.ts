@@ -1,7 +1,7 @@
 // L80 census: production code touches a PTY record's pane copies only through paneOfPty's
 // window-owned branch and the switch-guarded writers. Type-aware, so a Pick, a union or a
-// destructure of the record is caught too; an Object.assign or spread onto a record is not (none
-// exist). Rerun: pnpm test <this file>.
+// destructure of the record is caught too; an Object.assign or spread onto a record is not
+// checked; the switch-on trap test is the backstop. Rerun: pnpm test <this file>.
 import path from 'node:path'
 import ts from 'typescript-api'
 import { describe, expect, it } from 'vitest'

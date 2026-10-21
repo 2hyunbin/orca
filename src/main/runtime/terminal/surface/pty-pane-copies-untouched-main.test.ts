@@ -122,6 +122,7 @@ describe('PTY record pane copies (switch on)', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: ptysById is the runtime's PTY registry; the test traps the records it keeps.
     const { ptysById } = runtime as unknown as { ptysById: Map<string, RuntimePtyWorktreeRecord> }
     const touched = trapPaneCopies(ptysById)
+    const published = vi.spyOn(runtime, 'syncWindowGraph')
 
     expect(runtime['paneOfPty'](ptysById.get('pty-a')!)).toMatchObject({
       tabId: SURFACE_TAB_ID,
@@ -139,6 +140,9 @@ describe('PTY record pane copies (switch on)', () => {
         tabId: SURFACE_TAB_ID
       })
     }
+    runtime.registerPty('pty-c', TEST_WORKTREE_ID)
+    // Answering is not publishing: no graph is installed until a window or the host sends one.
+    expect(published).not.toHaveBeenCalled()
     expect(touched).toEqual([])
   })
 })

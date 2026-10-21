@@ -37,7 +37,9 @@ export abstract class OrcaRuntimeWithCollectMobileVisibleGraphChangedWorktrees e
     )
   }
 
-  // Layout-owner builds ask main's index, which answers with or without a window's graph.
+  // Layout-owner builds ask main's index, which answers with or without a window's graph; with none
+  // it stays fresh because each layout write yields a new partition object and registration
+  // invalidates routing.
   protected paneOfPty(pty: PtyPaneSource | null | undefined): PtyPane {
     return paneOfPty(pty, (ptyId) =>
       mainTerminalSurfaces(this, () => this.mainTerminalSurfacesHost()).findPaneForPty(ptyId)
