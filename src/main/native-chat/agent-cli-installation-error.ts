@@ -5,6 +5,7 @@ import {
 } from '../../shared/agent-session-failure-copy'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { AgentSessionPreSpawnError } from './agent-session-wire/structured-agent-session-adapter'
+import { findInErrorChain } from '../provider-process/provider-error-chain'
 
 /** A chat launch refused before spawning: the agent's binary is older than its chats need. */
 export class AgentCliInstallationError extends AgentSessionPreSpawnError {
@@ -28,14 +29,9 @@ export class AgentCliInstallationError extends AgentSessionPreSpawnError {
 }
 
 export function agentCliInstallationProblemOf(
-  error: unknown,
-  depth = 0
+  error: unknown
 ): AgentCliInstallationProblem | undefined {
-  if (depth >= 6 || !(error instanceof Error)) {
-    return undefined
-  }
-  if (error instanceof AgentCliInstallationError) {
-    return error.installation
-  }
-  return agentCliInstallationProblemOf(error.cause, depth + 1)
+  return findInErrorChain(error, (inner) =>
+    inner instanceof AgentCliInstallationError ? inner.installation : undefined
+  )
 }
