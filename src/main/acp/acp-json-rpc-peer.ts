@@ -81,15 +81,15 @@ export class AcpJsonRpcPeer {
     input.on('end', this.onInputEnd)
     input.on('close', this.onInputEnd)
     input.on('error', this.onError)
-    output.on('close', this.onEnd)
-    output.on('finish', this.onEnd)
+    output.on('close', this.onError)
+    output.on('finish', this.onError)
     output.on('error', this.onError)
     if (
       (this.limits.closeOnInputEnd && (input.destroyed || input.readableEnded)) ||
       output.destroyed ||
       !output.writable
     ) {
-      this.onEnd()
+      this.onError()
     }
   }
 
@@ -177,6 +177,12 @@ export class AcpJsonRpcPeer {
     this.shutdown(error, true)
   }
 
+  /** Physical exit ends writable observation while final protocol output drains. */
+  disarmWritableEnd(): void {
+    this.output.removeListener('close', this.onError)
+    this.output.removeListener('finish', this.onError)
+  }
+
   private shutdown(error: Error, drainNotifications: boolean): void {
     if (this.terminalError && (!this.drainingNotifications || drainNotifications)) {
       return
@@ -192,8 +198,7 @@ export class AcpJsonRpcPeer {
     if (this.terminalError) {
       return
     }
-    this.output.removeListener('close', this.onEnd)
-    this.output.removeListener('finish', this.onEnd)
+    this.disarmWritableEnd()
     detachAcpStreamErrorHandler(this.output, this.onError)
     this.terminalError = error
     this.writer.close(error)
@@ -217,19 +222,16 @@ export class AcpJsonRpcPeer {
       this.close(error instanceof Error ? error : new Error(String(error)))
     }
   }
-  private readonly onEnd = (): void => {
-    if (this.limits.closeOnInputEnd) {
-      this.close()
-    }
-  }
   private readonly onInputEnd = (): void => {
     const tail = this.framer.takeTail()
     if (tail.trim()) {
       this.otherLine(tail)
     }
-    this.onEnd()
+    if (this.limits.closeOnInputEnd) {
+      this.close()
+    }
   }
-  private readonly onError = (error: Error): void => this.close(error)
+  private readonly onError = (error?: Error): void => this.close(error)
   private otherLine(line: string): void {
     this.handlers.onOtherLine?.(line)
     this.diagnose('Ignored ACP line: invalid-json')

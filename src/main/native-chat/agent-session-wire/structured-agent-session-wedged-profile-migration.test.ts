@@ -1,3 +1,4 @@
+import { mockRecordedOwnerProcess } from './structured-agent-session-owner-process.test-support'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 // The profiles already shipped into a dead end.
 //
@@ -183,6 +184,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await host?.flushAllStreamedEvents()
+  vi.restoreAllMocks()
   await rm(root, { recursive: true, force: true })
 })
 
@@ -458,6 +460,7 @@ describe('already-wedged profiles become usable on load', () => {
         wedgedRecord({ claimStatus: 'live', handoffStage: null, ownerProcess: DEAD_OWNER })
       )
       await seedRunningTurn()
+      mockRecordedOwnerProcess(DEAD_OWNER)
       let ownerAlive = ownerOutlivedRestart
       const stopOwnerProcess = vi.fn(() => {
         ownerAlive = false
@@ -502,6 +505,7 @@ describe('already-wedged profiles become usable on load', () => {
     await seedStore(
       wedgedRecord({ claimStatus: 'live', handoffStage: null, ownerProcess: DEAD_OWNER })
     )
+    mockRecordedOwnerProcess(DEAD_OWNER)
     const stopOwnerProcess = vi.fn()
     openHost({
       probeOwner: async () => ({ outcome: 'identity-matched', matchedOn: ['spawn-token'] }),

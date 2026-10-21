@@ -181,13 +181,13 @@ async function runAttachUnderAbort(
     : null
   // Each verdict commits in the store's own transaction, against the owner identity it probed.
   const unreconciled = await withAgentSessionCreatePhase('reconcile_leases', recordPhase, () =>
-    lock.wait(context.reconcileLeases(sessionId))
+    lock.wait(context.tasks.trackAttach(context.reconcileLeases(sessionId)))
   )
   if (unreconciled) {
     return refuseAgentSessionMutation(unreconciled)
   }
   await withAgentSessionCreatePhase('resolve_recovery', recordPhase, () =>
-    lock.wait(context.runtimeState.resolveRecovery(sessionId))
+    lock.wait(context.tasks.trackAttach(context.runtimeState.resolveRecovery(sessionId)))
   )
   const probe = await withAgentSessionCreatePhase('probe_owner', recordPhase, () =>
     lock.wait(context.runtimeState.probeOwner(sessionId))

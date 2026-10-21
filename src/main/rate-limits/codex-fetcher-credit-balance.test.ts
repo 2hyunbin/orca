@@ -1,7 +1,7 @@
+import '../provider-process/mock-provider-process-group.test-support'
 import type * as FsPromisesModule from 'node:fs/promises'
 import type * as ChildProcessModule from 'node:child_process'
 import type * as ProcessHostModule from '@orca/process-host'
-import type * as ProviderLedgerModule from '../provider-process/provider-process-ledger'
 import type { ProcessSpec } from '@orca/process-host/process-spec'
 import { PassThrough } from 'node:stream'
 import { EventEmitter } from 'node:events'
@@ -92,6 +92,9 @@ async function fetchWithRateLimits(rateLimits: unknown) {
   child.rateLimits = rateLimits
   childSpawnMock.mockReturnValue(child)
   const resultPromise = fetchCodexRateLimits()
+  await vi.waitFor(() =>
+    expect(child.stdin.write).toHaveBeenCalledWith(expect.stringContaining('initialize'))
+  )
   await vi.advanceTimersByTimeAsync(1)
   await vi.advanceTimersByTimeAsync(1)
   return resultPromise
@@ -164,13 +167,4 @@ describe('fetchCodexRateLimits credit balance', () => {
 vi.mock('@orca/process-host', async (original) => ({
   ...(await original<typeof ProcessHostModule>()),
   spawnProcess: (spec: ProcessSpec) => childSpawnMock(spec.program, spec.args ?? [], spec)
-}))
-
-vi.mock('../provider-process/provider-process-ledger', async (original) => ({
-  ...(await original<typeof ProviderLedgerModule>()),
-  recordProviderLaunch: () => ({
-    capture: async () => {},
-    retire: async () => {},
-    members: () => []
-  })
 }))

@@ -1,3 +1,4 @@
+import { mockRecordedOwnerProcess } from './structured-agent-session-owner-process.test-support'
 // Where a turn a crash cut short ends, when the provider wrote nothing while it worked.
 //
 // Claude reports a Bash call once when it starts and again only when it finishes, so a command
@@ -260,6 +261,7 @@ describe('a turn a crash cut short mid-tool', () => {
 
   it('ends at the pre-crash renewal when the child outlived Orca and recovery stopped it', async () => {
     // The orphan is alive at relaunch, but its output went nowhere: none of that is work shown.
+    mockRecordedOwnerProcess(store.getRecord(SESSION)?.lease.ownerProcess)
     let alive = true
     const probeOwner = async (): Promise<AgentSessionOwnerProbe> =>
       alive
@@ -422,6 +424,7 @@ describe('a turn a read reached before the reconcile proved its owner dead', () 
   })
 
   it('ends it at the last renewal although recovery stops a child that outlived Orca later', async () => {
+    mockRecordedOwnerProcess(store.getRecord(SESSION)?.lease.ownerProcess)
     let alive = true
     const probeOwner = async (): Promise<AgentSessionOwnerProbe> =>
       alive

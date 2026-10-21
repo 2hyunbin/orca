@@ -1,3 +1,4 @@
+import { mockRecordedOwnerProcess } from './structured-agent-session-owner-process.test-support'
 // A host that dies while its Codex child is still starting leaves a lease behind. The child's
 // identity is committed the moment it spawns, before the handshake, so the next host can stop that
 // exact process and start over instead of guessing whether anything is running.
@@ -42,6 +43,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await rm(root, { recursive: true, force: true })
 })
 
@@ -138,6 +140,7 @@ describe('a host that dies while its Codex child is starting', () => {
     const restarted = fakeCodex()
     await crash(first)
     const store = await openStore('relaunched')
+    mockRecordedOwnerProcess(store.getRecord(SESSION)?.lease.ownerProcess)
     const relaunched = host(
       'relaunched',
       store,

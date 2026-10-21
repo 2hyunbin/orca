@@ -139,7 +139,7 @@ export async function observeProviderGroup(
 ): Promise<DescendantTreeVerdict> {
   const deadline = Math.min(Date.now() + timeoutMs, budget?.deadline ?? Infinity)
   let verdict = providerGroupVerdict(pgid)
-  while ((!budget || budget.active) && verdict === 'live' && Date.now() < deadline) {
+  while ((!budget || budget.active) && verdict !== 'exited' && Date.now() < deadline) {
     await delay(Math.min(50, deadline - Date.now()))
     verdict = providerGroupVerdict(pgid)
   }

@@ -24,7 +24,7 @@ describe('Claude child root identity', () => {
     })
   })
 
-  it('keeps the descendant verdict alongside the POSIX root kill', async () => {
+  it('keeps the descendant verdict independent of the managed root owner', async () => {
     const child = { pid: 100, kill: vi.fn(() => true) }
     const terminateDescendants = vi.fn(async () => 'exited' as const)
     const tree = createClaudeChildTreeReaper(child, {
@@ -33,11 +33,10 @@ describe('Claude child root identity', () => {
       terminateDescendants
     })
 
-    // POSIX runs no bare-pid root operation: the handle kill lands and the
-    // verification still speaks.
+    // The descendant reaper cannot substitute a root signal for tree proof.
     await expect(tree.reap()).resolves.toBe('exited')
     expect(terminateDescendants).toHaveBeenCalled()
-    expect(child.kill).toHaveBeenCalledWith('SIGKILL')
+    expect(child.kill).not.toHaveBeenCalled()
   })
 
   it('rejects mixed old and recycled root rows instead of making the tree killable', async () => {
@@ -60,9 +59,8 @@ describe('Claude child root identity', () => {
     })
 
     await expect(tree.reap()).resolves.toBe('unverifiable')
-    // No admissible snapshot means no row may be signalled from its number, but
-    // the root still leaves through the handle Node owns.
+    // No admissible snapshot gives this reaper authority over any process.
     expect(terminateDescendants).not.toHaveBeenCalled()
-    expect(child.kill).toHaveBeenCalledWith('SIGKILL')
+    expect(child.kill).not.toHaveBeenCalled()
   })
 })

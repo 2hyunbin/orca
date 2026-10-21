@@ -1,3 +1,4 @@
+import '../provider-process/mock-provider-process-group.test-support'
 // The chat sign-in against a scripted Antigravity server.
 
 import { createServer } from 'node:http'
@@ -5,9 +6,12 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PassThrough } from 'node:stream'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
+import {
+  completeFakeSpawn,
+  createFakePipedChild
+} from '../../shared/__fixtures__/fake-spawned-child'
 import type { terminateProviderProcessTree } from '../provider-process/provider-process-teardown'
 import { createAcpAgentConnection, type AcpAgentConnection } from '../acp/acp-agent-connection'
 import { ANTIGRAVITY_LAUNCH_SPEC } from '../acp/acp-launch-specs'
@@ -50,7 +54,13 @@ const SESSION = 'a1b2c3d4-0000-4000-8000-000000000001'
 const DESKTOP = 'trusted-local:desktop'
 const PHONE: RpcCallerIdentity = { kind: 'paired-device', deviceId: 'phone' }
 const folders: string[] = []
+beforeEach(() => {
+  vi.spyOn(ANTIGRAVITY_LAUNCH_SPEC.launchGate, 'run')
+})
 afterEach(async () => {
+  await Promise.allSettled(
+    vi.mocked(ANTIGRAVITY_LAUNCH_SPEC.launchGate.run).mock.results.map((result) => result.value)
+  )
   vi.restoreAllMocks()
   await Promise.all(folders.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
@@ -65,7 +75,7 @@ function fakeServer(agent: AcpScriptedAgent, stderr = new PassThrough()) {
     stderr,
     kill: vi.fn(() => true)
   })
-  child.stdin.once('finish', () => child.emit('exit', 0, null))
+  child.stdin.once('finish', () => completeFakeSpawn(child))
   return child
 }
 
@@ -490,7 +500,7 @@ it('retains an unclosed sign-in child for both launch entry points until its exi
     await expect(prepareChat().then(spawnChat)).rejects.toThrow('could not be stopped')
     expect(close).toHaveBeenCalledTimes(3)
     close.mockImplementationOnce(async () => {
-      old.child.emit('exit', 0, null)
+      completeFakeSpawn(old.child)
       return true
     })
     spawnChat(await prepareChat())

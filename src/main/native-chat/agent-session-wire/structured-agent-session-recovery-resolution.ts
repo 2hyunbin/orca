@@ -100,16 +100,36 @@ export async function resolveStructuredSessionRecovery(
   }
 }
 
-/** Runs before adjudication can discard the only old-supervisor identity. */
+function recoverableOwner(
+  deps: Pick<StructuredSessionRecoveryResolutionDeps, 'store' | 'platform'>,
+  record: AgentSessionRecord
+) {
+  const owner = record.lease.ownerProcess
+  return (deps.platform ?? process.platform) !== 'win32' &&
+    owner?.hostId === deps.store.hostId &&
+    record.lease.claimStatus !== 'conflicted'
+    ? owner
+    : null
+}
+
+/** Recorded tools must recover before restart adjudication can erase their dead root. */
+export async function recoverRecordedStructuredSessionLaunches(
+  deps: Pick<StructuredSessionRecoveryResolutionDeps, 'store' | 'platform'>,
+  record: AgentSessionRecord
+): Promise<void> {
+  const owner = recoverableOwner(deps, record)
+  if (owner) {
+    await recoverProviderLaunches(owner.pid)
+  }
+}
+
+/** A retained legacy owner gets its full stop opportunity before recovery releases its claim. */
 export async function cleanUpStructuredSessionOwner(
   deps: StructuredSessionRecoveryResolutionDeps,
   record: AgentSessionRecord
 ): Promise<void> {
-  if ((deps.platform ?? process.platform) === 'win32') {
-    return
-  }
-  const owner = record.lease.ownerProcess
-  if (!owner || owner.hostId !== deps.store.hostId || record.lease.claimStatus === 'conflicted') {
+  const owner = recoverableOwner(deps, record)
+  if (!owner) {
     return
   }
   await recoverProviderLaunches(owner.pid)
@@ -154,7 +174,10 @@ export async function cleanUpStructuredSessionOwner(
   const delay =
     deps.delay ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
   stopLadder: for (const signal of ['SIGTERM', 'SIGKILL'] as const) {
-    if (!(await matches())) {
+    if (
+      !(await matches()) ||
+      !leaseStillNamesOwner(deps.store.getRecord(record.sessionId), record)
+    ) {
       break
     }
     stop(owner.pid, signal)

@@ -754,6 +754,7 @@ describe('restart', () => {
     await expect(host.attach(CALLER, ensureParams(held))).rejects.toThrow('probe exploded')
     const reattached = await host.attach(CALLER, ensureParams(await staleFenceFrom(held)))
     expect(reattached).toMatchObject({ ok: true })
+    // The failed first attempt was not latched; the retry adjudicates the saved owner again.
     expect(probe).toHaveBeenCalledTimes(2)
   })
 })

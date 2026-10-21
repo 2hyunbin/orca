@@ -196,11 +196,13 @@ async function runStart(
   // concluded about any owner a failed attempt left in `recovering`, so the eligibility below sees
   // the lease the resolver handed back. Both probe outside; each commits in the store's own
   // transaction, against the owner identity it probed.
-  const unreconciled = await lock.wait(context.reconcileLeases(sessionId))
+  const unreconciled = await lock.wait(
+    context.tasks.trackAttach(context.reconcileLeases(sessionId))
+  )
   if (unreconciled) {
     return { ok: false, refusal: unreconciled }
   }
-  await lock.wait(context.runtimeState.resolveRecovery(sessionId))
+  await lock.wait(context.tasks.trackAttach(context.runtimeState.resolveRecovery(sessionId)))
   const eligible = await lock.commit(async () => {
     // A start needs the lease released; a release the exit's own wind-down could not write is
     // re-derived from this host's proof of that exit, never refused on.

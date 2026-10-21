@@ -165,8 +165,13 @@ describe('ACP process-owning connection', () => {
     if (!frame) {
       throw new Error('prompt was not sent')
     }
+    const writableFinished = deferred<boolean>()
+    child.stdin.once('finish', () => writableFinished.resolve(connection.exited))
     child.stdin.end()
     child.emit('exit', 0, null)
+    expect(await writableFinished.promise).toBe(true)
+    expect(connection.closed).toBe(false)
+    expect(onExit).not.toHaveBeenCalled()
     agent.reply(frame, { stopReason: 'end_turn' })
     agent.notify('_x.ai/final', { done: true })
     child.stdout.end()

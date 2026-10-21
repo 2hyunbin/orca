@@ -1,4 +1,8 @@
-import { createFakePipedChild } from '../../shared/__fixtures__/fake-spawned-child'
+import '../provider-process/mock-provider-process-group.test-support'
+import {
+  completeFakeSpawn,
+  createFakePipedChild
+} from '../../shared/__fixtures__/fake-spawned-child'
 import { PassThrough } from 'node:stream'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -47,9 +51,8 @@ async function stoppingChild(reportsOutcome: boolean) {
     stdio: [agent.stdin, agent.stdout, stderr, null, null] satisfies PipedChildProcess['stdio']
   })
   const spawn = vi.fn<PipedProcessSpawner>(() => child)
-  // Teardown is simulated: no signal or process-table operation can reach the machine.
   teardown.mockImplementation(async () => {
-    child.emit('exit', 0, null)
+    completeFakeSpawn(child)
     return 'exited'
   })
   agent.on('initialize', (frame) =>
@@ -73,7 +76,7 @@ async function stoppingChild(reportsOutcome: boolean) {
     childWork.sink
   )
   cleanup.push(async () => {
-    child.emit('exit', 0, null)
+    completeFakeSpawn(child)
     await hosted.host.close(SESSION, 'user-close')
   })
   const pendingPrompt = deferred<FakeFrame>()
@@ -113,7 +116,7 @@ async function stoppingChild(reportsOutcome: boolean) {
     if (reportsOutcome) {
       setTimeout(() => agent.notify(finished.method, finished.params), finished.at - STOP_AT)
     }
-    setTimeout(() => child.emit('exit', 0, null), EXIT_AFTER_STOP_MS)
+    setTimeout(() => completeFakeSpawn(child), EXIT_AFTER_STOP_MS)
   })
   expect(await stop(hosted.host)).toMatchObject({ ok: true, value: { cancelled: true } })
   return { ...hosted, child, agent, original, rosters, finished, closeAt, childWork }
