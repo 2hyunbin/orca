@@ -1,5 +1,5 @@
 import { useAppStore } from '@/store'
-import { useDesktopSidebarFeed } from '@/lib/desktop-sidebar-feed'
+import { useDesktopSidebarFeedValue } from '@/lib/desktop-sidebar-feed'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { feedSleepOverride } from '../../../../shared/sidebar-list/workspace-sleep-verdict'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
@@ -100,10 +100,10 @@ export function selectIsSleepingWorktree(state: SleepStateInput, worktreeId: str
 // Switch point: main's feed says when a sleep is running (asleep at once) or went unconfirmed.
 const useMainSleepOverride: (worktreeId: string) => boolean | undefined =
   ORCA_SIDEBAR_INPUTS_IS_MAIN
-    ? (worktreeId) => {
-        const feed = useDesktopSidebarFeed()
-        return feed ? feedSleepOverride(feed.domains.inProgress, worktreeId) : undefined
-      }
+    ? (worktreeId) =>
+        useDesktopSidebarFeedValue((feed) =>
+          feed ? feedSleepOverride(feed.domains.inProgress, worktreeId) : undefined
+        )
     : () => undefined
 
 export function useIsSleepingWorktree(worktreeId: string): boolean {
