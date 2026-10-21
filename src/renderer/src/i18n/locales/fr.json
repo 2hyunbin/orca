@@ -315,6 +315,10 @@
       "readFailed": "Impossible de lire les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
       "saveFailed": "Impossible d’enregistrer les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
       "hostDefaults": "Paramètres par défaut des nouveaux agents sur l’hôte sélectionné.",
+      "defaultOpensAs": "Ouvrir {{value0}} en tant que",
+      "defaultOpensAsChat": "Chat",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "S’applique aux nouvelles sessions {{value0}} lancées depuis cet ordinateur, y compris sur les hôtes associés. Correspond à son interrupteur dans Fournisseurs.",
       "save": "Enregistrer",
       "clearDefault": "Effacer l'agent par défaut"
     },

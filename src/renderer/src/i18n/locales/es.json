@@ -211,6 +211,10 @@
       "readFailed": "No se pudo leer la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
       "saveFailed": "No se pudo guardar la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
       "hostDefaults": "Valores predeterminados para nuevos agentes en el host seleccionado.",
+      "defaultOpensAs": "Abrir {{value0}} como",
+      "defaultOpensAsChat": "Chat",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "Se aplica a las nuevas sesiones de {{value0}} iniciadas desde este equipo, incluso en hosts emparejados. Coincide con su interruptor en Proveedores.",
       "save": "Guardar",
       "clearDefault": "Borrar agente predeterminado"
     },
