@@ -117,6 +117,7 @@ jobs:
     timeout-minutes: 90
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
+      JOBS: ${{ inputs.fast_release && 'max' || '' }}
       NODE_OPTIONS: --max-old-space-size=4096
       CHANNEL: ${{ inputs.channel }}
       TAG: ${{ inputs.tag }}

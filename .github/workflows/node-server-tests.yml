@@ -156,6 +156,7 @@ jobs:
     timeout-minutes: 20
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
+      JOBS: ${{ inputs.fast_runners && 'max' || '' }}
     steps:
       - name: Parallelize Windows checkout
         if: inputs.fast_runners && runner.os == 'Windows'

@@ -263,6 +263,7 @@ jobs:
     # the job is killed mid-retry and no cleanup step runs at all.
     timeout-minutes: 150
     env:
+      JOBS: max
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
       # Why vet before checkout: everything after this step runs the checked-out
