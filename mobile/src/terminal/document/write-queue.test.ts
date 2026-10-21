@@ -1,8 +1,16 @@
 import { transformSync } from 'esbuild'
-import { describe, expect, it } from 'vitest'
+import { Script } from 'node:vm'
+import { describe, expect, it, vi } from 'vitest'
 import { createTerminalDocumentScope } from './document-scope'
 import * as escapeIntroducers from './escape-introducers'
 import { documentModuleSource } from './document-module-source.test-support'
+import {
+  TERMINAL_WRITE_SLICE_UNITS,
+  enqueueWrite,
+  enqueueWriteBoundary,
+  pumpWrites
+} from './write-queue'
+import { XTERM_ENGINE_JS } from '../terminal-webview-engine.generated'
 
 // Why: the two implementations are compared rather than asserted about, so both are evaluated. The
 // shipped one is the module's own source and the pre-change one is that source with the statement
@@ -126,7 +134,7 @@ function drain(queue: WriteQueueHarness): void {
 
 describe('terminal WebView write queue', () => {
   // Distinct contents per chunk: with one shared string the sum below would count the same
-  // 64 KB string 128 times and read identically even if nothing were released.
+  // string 128 times and read identically even if nothing were released.
   function distinctChunks(count: number, codeUnits: number): string[] {
     return Array.from({ length: count }, (_v, i) => {
       const marker = `chunk-${i}:`
@@ -137,7 +145,8 @@ describe('terminal WebView write queue', () => {
   // The measured quantity is a count of queue-reachable string code units, not heap bytes:
   // xterm may still hold the submitted chunk, so this proves only that the queue released it.
   it('retains one chunk instead of every dequeued chunk after 127 of 128 dequeues', () => {
-    const CHUNK_CODE_UNITS = 65_536
+    // One slice each, so the queue holds exactly the chunks it was handed.
+    const CHUNK_CODE_UNITS = TERMINAL_WRITE_SLICE_UNITS
     const CHUNK_COUNT = 128
     const chunks = distinctChunks(CHUNK_COUNT, CHUNK_CODE_UNITS)
     const measure = (source: string): number => {
@@ -184,6 +193,108 @@ describe('terminal WebView write queue', () => {
     // Pre-change: every consumed slot is still reachable. Shipped: only the pending ones.
     expect(previous.codeUnits).toBe(backlog * 64)
     expect(shipped.codeUnits).toBe((backlog - dequeues) * 64)
+  })
+
+  it('slices a large write in order without splitting a surrogate pair', () => {
+    const queue = createWriteQueue(WRITE_QUEUE_SOURCE)
+    // The emoji straddles the first slice boundary.
+    const input = 'a'.repeat(TERMINAL_WRITE_SLICE_UNITS - 1) + '\u{1f600}' + 'b'.repeat(32)
+    queue.enqueue(input)
+    drain(queue)
+
+    expect(queue.writes.join('')).toBe(input)
+    expect(queue.writes).toHaveLength(2)
+    expect(queue.writes.every((chunk) => chunk.length <= TERMINAL_WRITE_SLICE_UNITS)).toBe(true)
+    expect(queue.writes[1]?.codePointAt(0)).toBe(0x1f600)
+  })
+
+  it('hands xterm the text-presentation status dot below and above the slice limit', () => {
+    const queue = createWriteQueue(WRITE_QUEUE_SOURCE)
+    const large = 'a'.repeat(TERMINAL_WRITE_SLICE_UNITS)
+    queue.enqueue('\u23fa small')
+    queue.enqueue(`\u23fa ${large}`)
+    drain(queue)
+
+    expect(queue.writes[0]).toBe('\u23fa\ufe0e small')
+    expect(queue.writes.slice(1).join('')).toBe(`\u23fa\ufe0e ${large}`)
+  })
+
+  it('queues a write frame that carries no text instead of throwing', () => {
+    const queue = createWriteQueue(WRITE_QUEUE_SOURCE)
+    expect(() => queue.enqueue(undefined)).not.toThrow()
+    expect(queue.snapshot().slots).toEqual([undefined])
+  })
+
+  it('finishes every replay slice before a boundary and the following live write', () => {
+    const queue = createWriteQueue(WRITE_QUEUE_SOURCE)
+    const replay = 'replay'.repeat(TERMINAL_WRITE_SLICE_UNITS)
+    queue.enqueue(replay)
+    let replayAtBoundary = ''
+    queue.enqueueBoundary(() => {
+      replayAtBoundary = queue.writes.join('')
+    })
+    queue.enqueue('live')
+    drain(queue)
+    expect(replayAtBoundary).toBe(replay)
+    expect(queue.writes.join('')).toBe(replay + 'live')
+  })
+
+  it('preserves split CSI, OSC and Unicode with the shipped xterm parser', async () => {
+    vi.useFakeTimers()
+    const scope = createTerminalDocumentScope()
+    scope.ready = true
+    const result = { text: '', color: 0, maxWrite: 0, read: () => {} }
+    const window = {}
+    try {
+      new Script(`${XTERM_ENGINE_JS};
+        const terminal = new window.Terminal({ cols: 80, rows: 24 });
+        const write = terminal.write.bind(terminal);
+        terminal.write = function(data, done) {
+          result.maxWrite = Math.max(result.maxWrite, data.length);
+          write(data, done);
+        };
+        scope.term = terminal;
+        result.read = function() {
+          const line = terminal.buffer.active.getLine(0);
+          result.text = line.translateToString(true);
+          result.color = line.getCell(0).getFgColor();
+        };
+      `).runInNewContext({
+        window,
+        self: window,
+        document: {},
+        scope,
+        result,
+        navigator: { platform: 'Linux', userAgent: 'Chrome/74' },
+        structuredClone,
+        performance,
+        setTimeout,
+        clearTimeout,
+        queueMicrotask,
+        console,
+        URL
+      })
+      // CSI's final byte and OSC's terminator straddle separate 4096-unit slices.
+      const padding = '\x00'.repeat(TERMINAL_WRITE_SLICE_UNITS - 4)
+      enqueueWrite(
+        scope,
+        padding +
+          '\x1b[31mRED\x1b[0m' +
+          '\x1b]0;' +
+          't'.repeat(TERMINAL_WRITE_SLICE_UNITS - 13) +
+          '\x1b\\' +
+          '😀'
+      )
+      enqueueWriteBoundary(scope, result.read)
+      pumpWrites(scope, scope.terminalGeneration)
+      await vi.runAllTimersAsync()
+      expect(result.text).toBe('RED😀')
+      expect(result.color).toBe(1)
+      expect(result.maxWrite).toBeLessThanOrEqual(TERMINAL_WRITE_SLICE_UNITS)
+    } finally {
+      scope.term?.dispose()
+      vi.useRealTimers()
+    }
   })
 
   it('drains writes in FIFO order', () => {
