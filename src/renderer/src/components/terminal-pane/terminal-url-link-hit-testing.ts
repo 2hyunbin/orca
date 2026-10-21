@@ -1,3 +1,4 @@
+import { rangeForParsedLinkOnRow } from './terminal-link-row-range'
 import type { IBufferLine, IBufferRange, IDisposable, Terminal } from '@xterm/xterm'
 import type { HttpLinkSourceOwner } from '@/lib/http-link-routing'
 import { buildEdgeWrappedHttpLogicalLineCandidates } from './edge-wrapped-terminal-http-links'
@@ -11,6 +12,7 @@ import {
 import { getTerminalBufferPositionForMouseEvent } from './terminal-mouse-buffer-position'
 import { extractTerminalHttpLinks } from './terminal-http-url-extraction'
 import { buildWrappedLogicalLine, rangeForParsedFileLink } from './wrapped-terminal-link-ranges'
+import { terminalLogicalLinkHasOscLink } from './terminal-osc-link-cells'
 import { isTerminalLinkifierHoverActive } from '@/lib/pane-manager/terminal-linkifier-hover-reset'
 import {
   buildHttpLinkActions,
@@ -190,22 +192,29 @@ export function openHttpLinkAtBufferPosition(
   return true
 }
 
+export function buildTerminalHttpLogicalLines(
+  buffer: { getLine(y: number): IBufferLine | undefined },
+  bufferLineNumber: number
+) {
+  const nativeWrappedLogicalLine = buildWrappedLogicalLine(buffer, bufferLineNumber)
+  return dedupeLogicalLines([
+    ...(nativeWrappedLogicalLine && nativeWrappedLogicalLine.rows.length > 1
+      ? [nativeWrappedLogicalLine]
+      : []),
+    ...buildHardWrappedHttpLogicalLineCandidates(buffer, bufferLineNumber),
+    ...buildEdgeWrappedHttpLogicalLineCandidates(buffer, bufferLineNumber),
+    ...(nativeWrappedLogicalLine && nativeWrappedLogicalLine.rows.length === 1
+      ? [nativeWrappedLogicalLine]
+      : [])
+  ])
+}
+
 function findHttpLinkAtBufferPosition(
   buffer: { getLine(y: number): IBufferLine | undefined },
   position: { x: number; y: number },
   terminalColumns: number
 ): string | null {
-  const nativeWrappedLogicalLine = buildWrappedLogicalLine(buffer, position.y)
-  const logicalLines = dedupeLogicalLines([
-    ...(nativeWrappedLogicalLine && nativeWrappedLogicalLine.rows.length > 1
-      ? [nativeWrappedLogicalLine]
-      : []),
-    ...buildHardWrappedHttpLogicalLineCandidates(buffer, position.y),
-    ...buildEdgeWrappedHttpLogicalLineCandidates(buffer, position.y),
-    ...(nativeWrappedLogicalLine && nativeWrappedLogicalLine.rows.length === 1
-      ? [nativeWrappedLogicalLine]
-      : [])
-  ])
+  const logicalLines = buildTerminalHttpLogicalLines(buffer, position.y)
   if (logicalLines.length === 0) {
     return null
   }
@@ -213,7 +222,18 @@ function findHttpLinkAtBufferPosition(
   for (const logicalLine of logicalLines) {
     for (const parsed of extractTerminalHttpLinks(logicalLine.text)) {
       const range = rangeForParsedFileLink(logicalLine, parsed.startIndex, parsed.endIndex)
-      if (!range || !rangeContainsBufferPosition(range, position, terminalColumns)) {
+      const rowRange = rangeForParsedLinkOnRow(
+        logicalLine,
+        parsed.startIndex,
+        parsed.endIndex,
+        position.y
+      )
+      if (
+        !range ||
+        !rowRange ||
+        !rangeContainsBufferPosition(rowRange, position, terminalColumns) ||
+        terminalLogicalLinkHasOscLink(buffer, logicalLine, parsed.startIndex, parsed.endIndex)
+      ) {
         continue
       }
       return parsed.url

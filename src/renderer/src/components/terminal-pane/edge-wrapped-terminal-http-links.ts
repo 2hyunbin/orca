@@ -9,12 +9,15 @@ const VERTICAL_LAYOUT_FRAME_PATTERN = /[│┃║╎╏┆┇┊┋|]/
 const EMPTY_LABEL_ROW_PATTERN = /^[^\s:][^:]*:$/
 const LABEL_WITH_SPACING_ROW_PATTERN = /^[^\s:][^:]*:\s/
 
-function maxEdgeWrappedHttpRows(lineLength: number): number {
+function maxEdgeWrappedHttpRows(lineLength: number, padding: number): number {
   // Why: every continued row reaches the terminal edge, so even all-width-2
   // cells carry at least floor(columns / 2) characters per row; the URL length
   // limit then bounds the scan without truncating URLs on narrow terminals.
   // The +2 covers the start and tail rows, which may hold only a fragment.
-  const minCharsPerFullRow = Math.max(1, Math.floor(lineLength / 2))
+  const symmetricWidth = lineLength - padding * 2
+  // A symmetric content area must fit at least "http://" to contain a start row.
+  const contentWidth = symmetricWidth >= 7 ? symmetricWidth : lineLength - padding
+  const minCharsPerFullRow = Math.max(1, Math.floor(contentWidth / 2))
   return Math.ceil(TERMINAL_HTTP_URL_MAX_LENGTH / minCharsPerFullRow) + 2
 }
 
@@ -23,6 +26,7 @@ type TrimmedTranslatedLine = {
   sourceText: string
   columns: number[]
   lineLength: number
+  padding: number
 }
 
 function trimRightTranslatedLine(line: IBufferLine): TrimmedTranslatedLine | null {
@@ -38,12 +42,13 @@ function trimRightTranslatedLine(line: IBufferLine): TrimmedTranslatedLine | nul
     text: translated.text.slice(0, endIndex),
     sourceText: translated.text,
     columns: translated.columns.slice(0, endIndex + 1),
-    lineLength: line.length
+    lineLength: line.length,
+    padding: translated.text.match(/^ */)?.[0].length ?? 0
   }
 }
 
-function firstCellWidth(row: TrimmedTranslatedLine): number {
-  const firstColumn = row.columns[0]
+function firstCellWidth(row: TrimmedTranslatedLine, padding: number): number {
+  const firstColumn = row.columns[padding]
   if (firstColumn === undefined) {
     return 0
   }
@@ -78,25 +83,33 @@ function findHttpSchemeIndex(text: string): number {
 
 function rowsCanContinueAtTerminalEdge(
   row: WrappedLogicalLine['rows'][number],
-  nextRow: TrimmedTranslatedLine
+  nextRow: TrimmedTranslatedLine,
+  padding: number,
+  rightPadding: number
 ): boolean {
   // Why: a cursor-positioned label is not URL continuation evidence even when
   // the preceding URL happens to end at the terminal edge (#8832).
   const nextColumnAfterText = nextRow.columns.at(-1)
+  const nextRowText = nextRow.text.slice(padding)
   const nextRowReachesEdge =
-    nextColumnAfterText !== undefined && nextColumnAfterText >= nextRow.lineLength
+    nextColumnAfterText !== undefined && nextColumnAfterText >= nextRow.lineLength - rightPadding
   const isLabelRow =
-    LABEL_WITH_SPACING_ROW_PATTERN.test(nextRow.text) ||
-    ((EMPTY_LABEL_ROW_PATTERN.test(nextRow.text) || HTTP_STATUS_ROW_PATTERN.test(nextRow.text)) &&
+    LABEL_WITH_SPACING_ROW_PATTERN.test(nextRowText) ||
+    ((EMPTY_LABEL_ROW_PATTERN.test(nextRowText) || HTTP_STATUS_ROW_PATTERN.test(nextRowText)) &&
       !nextRowReachesEdge)
-  if (isLabelRow || HTTP_SCHEME_START_PATTERN.test(nextRow.text)) {
+  if (isLabelRow || HTTP_SCHEME_START_PATTERN.test(nextRowText) || nextRow.padding !== padding) {
     return false
   }
   const columnAfterText = row.columns.at(-1)
-  if (columnAfterText === undefined || columnAfterText < row.lineLength - 1) {
+  const rightEdge = row.lineLength - rightPadding
+  if (
+    columnAfterText === undefined ||
+    columnAfterText < rightEdge - 1 ||
+    columnAfterText > rightEdge
+  ) {
     return false
   }
-  return columnAfterText >= row.lineLength || firstCellWidth(nextRow) > 1
+  return columnAfterText >= rightEdge || firstCellWidth(nextRow, padding) > 1
 }
 
 export function buildEdgeWrappedHttpLogicalLineCandidates(
@@ -110,7 +123,11 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
   if (!currentLine) {
     return []
   }
-  const maxRows = maxEdgeWrappedHttpRows(currentLine.length)
+  const currentPadding = currentLine.translateToString(false).match(/^ */)?.[0].length ?? 0
+  if (currentPadding === currentLine.length) {
+    return []
+  }
+  const maxRows = maxEdgeWrappedHttpRows(currentLine.length, currentPadding)
 
   const candidates: WrappedLogicalLine[] = []
   const translatedLines = new Map<number, TrimmedTranslatedLine | null>()
@@ -125,9 +142,19 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
   }
   const minY = Math.max(0, currentY - maxRows + 1)
   for (let startY = currentY; startY >= minY; startY--) {
+    const startText = buffer.getLine(startY)?.translateToString(false)
+    const schemeIndex = startText ? findHttpSchemeIndex(startText) : -1
+    if (!startText || schemeIndex === -1 || VERTICAL_LAYOUT_FRAME_PATTERN.test(startText)) {
+      continue
+    }
     const start = getTranslatedLine(startY)
-    const schemeIndex = start ? findHttpSchemeIndex(start.text) : -1
-    if (!start || schemeIndex === -1 || VERTICAL_LAYOUT_FRAME_PATTERN.test(start.text)) {
+    if (!start) {
+      continue
+    }
+    const rightPadding = start.columns.at(-1) === start.lineLength ? 0 : start.padding
+    const continuationPadding =
+      rightPadding === 0 ? (getTranslatedLine(startY + 1)?.padding ?? 0) : start.padding
+    if (continuationPadding !== start.padding && continuationPadding !== 0) {
       continue
     }
 
@@ -145,11 +172,12 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
       if (
         rows.length > 0 &&
         !line.isWrapped &&
-        !rowsCanContinueAtTerminalEdge(rows.at(-1)!, translated)
+        !rowsCanContinueAtTerminalEdge(rows.at(-1)!, translated, continuationPadding, rightPadding)
       ) {
         break
       }
-      const fragmentStartIndex = rowY === startY ? schemeIndex : 0
+      const fragmentStartIndex =
+        rowY === startY ? schemeIndex : line.isWrapped ? 0 : continuationPadding
       const fragment = translated.text.slice(fragmentStartIndex)
       const whitespaceIndex = fragment.search(/\s/)
       const possibleUrlFragmentLength = whitespaceIndex === -1 ? fragment.length : whitespaceIndex
