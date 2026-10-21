@@ -440,6 +440,14 @@ describe('a committed paired close stays closed while its PTY lingers', () => {
     const closing = harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_A, {
       reason: 'user'
     })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main commits the close in its own layout; no relay ack is awaited.
+      await expect(closing).resolves.toMatchObject({ closed: true })
+      expect(harness.closeTerminalTab).not.toHaveBeenCalled()
+      harness.publishRendererSnapshot([TAB_B], 2)
+      expect(await listParentTabIds(harness.runtime)).toEqual([TAB_B])
+      return
+    }
     await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_A))
     await harness.retirePersistedTab(TAB_A)
     harness.relayAck.resolve()
@@ -457,6 +465,14 @@ describe('a committed paired close stays closed while its PTY lingers', () => {
     const closing = harness.runtime.closeMobileSessionTab(`id:${WORKTREE_ID}`, TAB_A, {
       reason: 'user'
     })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // #31571: main commits the close in its own layout; no relay ack is awaited.
+      await expect(closing).resolves.toMatchObject({ closed: true })
+      expect(harness.closeTerminalTab).not.toHaveBeenCalled()
+      harness.publishRendererSnapshot([TAB_B], 2)
+      expect(await listParentTabIds(harness.runtime)).toEqual([TAB_B])
+      return
+    }
     await vi.waitFor(() => expect(harness.closeTerminalTab).toHaveBeenCalledWith(TAB_A))
     // Production ordering: the renderer durably retires the tab and publishes
     // the pruned graph BEFORE replying to the relay. The kill it dispatched has
