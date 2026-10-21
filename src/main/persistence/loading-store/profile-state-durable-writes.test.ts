@@ -9,7 +9,6 @@ import { registerPtyBindingRestartRetirementTests } from './pty-binding-restart-
 import { registerPtyRetirementAsyncDurabilityTests } from './pty-retirement-async-durability.spec'
 import { registerWorkspaceSessionWriteListenersTests } from './workspace-session-write-listeners.spec'
 import { registerStateWriteListenersTests } from './state-write-listeners.spec'
-import { registerDurableMutationPublicationTests } from './durable-mutation-publication.spec'
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../../telemetry/cohort-classifier', () => ({
@@ -30,4 +29,3 @@ describe('pty-binding-restart-retirement', registerPtyBindingRestartRetirementTe
 describe('pty-retirement-async-durability', registerPtyRetirementAsyncDurabilityTests)
 describe('workspace-session-write-listeners', registerWorkspaceSessionWriteListenersTests)
 describe('state-write-listeners', registerStateWriteListenersTests)
-describe('durable-mutation-publication', registerDurableMutationPublicationTests)

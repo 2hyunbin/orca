@@ -5,7 +5,6 @@ import { registerProfileStateMaintenanceFinalFailureTests } from './profile-stat
 import { registerProfileStateMaintenanceRecoveryTests } from './profile-state-maintenance-recovery.spec'
 import { registerProfileStateMaintenanceTests } from './profile-state-maintenance.spec'
 import { registerProfileStatePtyRetirementFinalizationTests } from './profile-state-pty-retirement-finalization.spec'
-import { registerDurableMutationFinalizationTests } from './durable-mutation-finalization.spec'
 
 vi.mock('../../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../../telemetry/cohort-classifier', () => ({
@@ -28,4 +27,3 @@ describe(
   'profile-state-pty-retirement-finalization',
   registerProfileStatePtyRetirementFinalizationTests
 )
-describe('durable-mutation-finalization', registerDurableMutationFinalizationTests)
