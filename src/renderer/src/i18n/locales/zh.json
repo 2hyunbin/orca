@@ -1275,6 +1275,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "搜索主机…",
+        "noHostsMatch": "没有匹配的主机。",
+        "moreHosts_one": "还有 {{count}} 个主机，请按名称搜索。",
+        "moreHosts_other": "还有 {{count}} 个主机，请按名称搜索。"
+      },
       "CodexRestartChip": {
         "c72a5fb234": "重新启动",
         "9263e75f49": "Codex 正在使用之前的账户",
