@@ -19,6 +19,7 @@ import { translate } from '@/i18n/i18n'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { GitWorktreeInfo } from '../../../../shared/worktree/types'
 import type { WorktreeRemovalTarget } from '../../../../shared/worktree/removal'
+import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 export function DeleteNestedWorktreesDialog({
   target,
@@ -36,7 +37,7 @@ export function DeleteNestedWorktreesDialog({
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const request = useRef(0)
-  const worktreesByRepo = useAppStore((s) => (open ? s.worktreesByRepo : null))
+  const worktreesByRepo = useAppStore((s) => (open ? selectWorktreesByRepo(s) : null))
   // Why path containment: nested worktrees are the parent's rows on its host inside its folder.
   const unsavedTargets = useMemo(() => {
     const hostId = target.executionHostId ?? undefined

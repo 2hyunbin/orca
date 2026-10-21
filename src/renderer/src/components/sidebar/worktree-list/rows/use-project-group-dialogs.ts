@@ -10,6 +10,10 @@ import {
   getRepoExecutionHostId,
   type ExecutionHostId
 } from '../../../../../../shared/execution-host'
+import {
+  selectDetectedWorktreesByRepo,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
 
 export type ProjectGroupNameDialogState =
   | { type: 'create-from-repo'; repo: Repo }
@@ -166,8 +170,8 @@ export function useProjectGroupDialogs(args: {
   )
   const removeContainedProjects =
     deleteProjectCount > 0 && deleteDialog?.removeContainedProjects === true
-  const worktreesByRepo = useAppStore((s) => s.worktreesByRepo)
-  const detectedWorktreesByRepo = useAppStore((s) => s.detectedWorktreesByRepo)
+  const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
+  const detectedWorktreesByRepo = useAppStore((s) => selectDetectedWorktreesByRepo(s))
   const deleteUnsavedTargets = useMemo(
     () =>
       removeContainedProjects && deleteTargets
