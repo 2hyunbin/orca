@@ -10,6 +10,7 @@ import {
 import { isScreenSubmitShortcut } from '@/lib/screen-submit-shortcut'
 import { translate } from '@/i18n/i18n'
 import { sameGitHubOwnerRepo } from '@/components/github/IssueSourceIndicator'
+import { getRepoExecutionHostId } from '../../../../../shared/execution-host'
 import IssueSourceSelector from '@/components/github/IssueSourceSelector'
 import {
   Select,
@@ -78,7 +79,10 @@ export function TaskPageGitHubIssueDialog({
           {(() => {
             // Why: inline the resolved {owner}/{repo} slug as the source indicator; fall back to displayName when unresolved.
             const entry = newIssueTargetRepo
-              ? perRepoSourceState.find((s) => s.repoId === newIssueTargetRepo.id)
+              ? perRepoSourceState.find(
+                  (s) =>
+                    s.repoId === newIssueTargetRepo.id && s.repoPath === newIssueTargetRepo.path
+                )
               : undefined
             const issuesSlug = entry?.sources?.issues
               ? `${entry.sources.issues.owner}/${entry.sources.issues.repo}`
@@ -119,7 +123,8 @@ export function TaskPageGitHubIssueDialog({
                     void setIssueSourcePreference(
                       newIssueTargetRepo.id,
                       newIssueTargetRepo.path,
-                      next
+                      next,
+                      getRepoExecutionHostId(newIssueTargetRepo)
                     )
                   }}
                 />
