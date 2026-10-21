@@ -22,7 +22,9 @@ export async function resolveWslOrcadPairing(
     throw new OrcadManagedIdentityError(launch.port, identity.detail)
   }
   if (identity.verdict === 'unreachable') {
-    console.warn(`[wsl] Orca server in ${launch.distro} did not answer its bridge: ${identity.detail}`)
+    console.warn(
+      `[wsl] Orca server in ${launch.distro} did not answer its bridge: ${identity.detail}`
+    )
   }
   return pairingOffer
 }

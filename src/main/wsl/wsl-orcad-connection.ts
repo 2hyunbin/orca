@@ -228,18 +228,19 @@ export class WslOrcadConnectionManager {
       (current?.connection.environmentId === environmentId
         ? parsePairingCode(current.connection.pairingOffer)
         : null)
+    const pairingForPort = (port: number): Promise<string> =>
+      resolveWslOrcadPairing(launch, port, paired, this.dependencies.verifyIdentity)
     if (
       current &&
       current.connection.remotePort === launch.port &&
       current.connection.environmentId === environmentId
     ) {
-      const pairingOffer = await resolveWslOrcadPairing(
-        launch, current.connection.localPort, paired, this.dependencies.verifyIdentity
-      )
+      const pairingOffer = await pairingForPort(current.connection.localPort)
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
-      return this.refreshOffer(key, current, launch, pairingOffer, options.status ? status.ready : null)
+      const announce = options.status ? status.ready : null
+      return this.refreshOffer(key, current, launch, pairingOffer, announce)
     }
     // orcad moved ports (or this is the first connect): the old bridge dials a dead port.
     const preferredLocalPort = current?.connection.localPort ?? options.localPort ?? 0
@@ -259,9 +260,7 @@ export class WslOrcadConnectionManager {
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
-      const pairingOffer = await resolveWslOrcadPairing(
-        launch, forward.entry.localPort, paired, this.dependencies.verifyIdentity
-      )
+      const pairingOffer = await pairingForPort(forward.entry.localPort)
       if (this.generation(key) !== generation) {
         throw new WslOrcadConnectionSupersededError(distro)
       }
