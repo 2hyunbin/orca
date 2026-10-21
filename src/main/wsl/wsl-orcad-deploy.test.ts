@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   wake: vi.fn(),
   adopt: vi.fn(),
   incumbent: vi.fn(),
-  incumbentReadiness: vi.fn(),
+  adoptRunning: vi.fn(),
   localVersion: vi.fn(),
   readRecord: vi.fn()
 }))
@@ -30,6 +30,9 @@ vi.mock('../managed-server/install/remote-versioned-install', async (importOrigi
   readLocalFullVersion: mocks.localVersion
 }))
 vi.mock('./wsl-orcad-instance-adoption', () => ({ adoptUnrecordedWslOrcad: mocks.adopt }))
+vi.mock('../ssh/orcad-running-version-adoption', () => ({
+  adoptRunningOrcadVersion: mocks.adoptRunning
+}))
 
 vi.mock('../../shared/app-environment', () => ({
   getAppEnvironment: () => ({ getVersion: () => '1.5.0', getPath: () => '/user-data' })
@@ -102,7 +105,6 @@ function launch(kernel = '5.15.167.4-microsoft-standard-WSL2', options = {}) {
     createTransport: transport,
     readRegistryId: async () => '0283592d-be56-40d4-b935-3dc18c3aa007',
     readIncumbent: mocks.incumbent,
-    readIncumbentReadiness: mocks.incumbentReadiness,
     ...options
   })
 }
@@ -461,10 +463,16 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
       mocks.readRecord.mockResolvedValue(record)
     }
 
+    const adoptedAs = (version: string, readiness: typeof INCUMBENT_READINESS) => ({
+      version,
+      readiness,
+      reprobe: async () => readiness
+    })
+
     it('serves a newer build another Orca activated instead of deploying over it', async () => {
       withRecord(newer)
       mocks.deploy.mockResolvedValue(policyRefused)
-      mocks.incumbentReadiness.mockResolvedValueOnce(NEWER_READINESS)
+      mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('2.0.0+cd', NEWER_READINESS))
       await expect(launch()).resolves.toEqual({
         outcome: 'ready',
         distro: 'Ubuntu-24.04',
@@ -475,9 +483,15 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
         readiness: NEWER_READINESS,
         holder: 'spawned'
       })
+      expect(mocks.adoptRunning).toHaveBeenCalledWith(expect.anything(), newer, '1.5.0+ab')
       expect(mocks.deploy).not.toHaveBeenCalled()
       expect(mocks.incumbent).not.toHaveBeenCalled()
       expect(mocks.prune).not.toHaveBeenCalled()
+      expect(mocks.exec).toHaveBeenLastCalledWith(
+        expect.anything(),
+        "cat '/home/u/.orca-remote/orcad-2.0.0+cd/.orcad-pid' 2>/dev/null || true",
+        expect.anything()
+      )
     })
 
     it('does not re-activate the build this host rolled back from', async () => {
@@ -487,11 +501,36 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
         fullVersion: '1.5.0+ab',
         verdict: {}
       })
-      mocks.incumbentReadiness.mockResolvedValueOnce(INCUMBENT_READINESS)
+      mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('1.4.0+aa', INCUMBENT_READINESS))
       await expect(launch()).resolves.toMatchObject({
         outcome: 'ready',
         fullVersion: '1.4.0+aa',
         readiness: INCUMBENT_READINESS
+      })
+      expect(mocks.deploy).not.toHaveBeenCalled()
+    })
+
+    it('labels the launch with the build the adoption found serving, not the stale record', async () => {
+      withRecord(newer)
+      mocks.adoptRunning.mockResolvedValueOnce(adoptedAs('2.1.0+ef', NEWER_READINESS))
+      await expect(launch()).resolves.toMatchObject({ outcome: 'ready', fullVersion: '2.1.0+ef' })
+    })
+
+    it('defers while another run holds the host fence', async () => {
+      withRecord(newer)
+      mocks.adoptRunning.mockResolvedValueOnce({
+        outcome: 'deferred',
+        candidateVersion: '1.5.0+ab',
+        code: 'orcad_activation_fence_busy',
+        reason: 'busy'
+      })
+      await expect(launch()).resolves.toEqual({
+        outcome: 'deferred',
+        distro: 'Ubuntu-24.04',
+        candidateVersion: '1.5.0+ab',
+        code: 'orcad_activation_fence_busy',
+        reason: 'busy',
+        forceable: false
       })
       expect(mocks.deploy).not.toHaveBeenCalled()
     })
@@ -507,35 +546,29 @@ describe('deployAndLaunchWslOrcad across an app update (E1)', () => {
         outcome: 'ready',
         fullVersion: '1.5.0+ab'
       })
-      expect(mocks.incumbentReadiness).not.toHaveBeenCalled()
+      expect(mocks.adoptRunning).not.toHaveBeenCalled()
     })
 
-    it('does not label readiness with a build another client replaced meanwhile', async () => {
-      withRecord(newer)
-      mocks.readRecord.mockResolvedValueOnce({ ...newer, active: '2.1.0+ef' })
-      mocks.deploy.mockResolvedValueOnce(policyRefused)
-      mocks.incumbentReadiness.mockResolvedValueOnce(NEWER_READINESS)
-      await expect(launch()).resolves.toMatchObject({ outcome: 'deferred' })
-      expect(mocks.deploy).toHaveBeenCalledTimes(1)
-    })
-
-    it('refuses the rolled-back build under the fence when the incumbent was not proven', async () => {
+    it('refuses the rolled-back build under the fence when nothing could be adopted', async () => {
       const rolledBack = { ...activeOld, rolledBackFrom: '1.5.0+ab' }
       withRecord(rolledBack)
       mocks.deploy.mockResolvedValueOnce(policyRefused)
-      mocks.incumbentReadiness.mockResolvedValueOnce(null)
-      await launch()
+      mocks.adoptRunning.mockResolvedValueOnce(null)
+      await expect(launch()).resolves.toMatchObject({ outcome: 'deferred', forceable: true })
       const { admitRecord } = mocks.deploy.mock.calls[0][0]
       expect(admitRecord(rolledBack, '1.5.0+ab')).toMatch(/rolled back from 1\.5\.0\+ab/)
       expect(admitRecord(activeOld, '1.5.0+ab')).toBeNull()
+      expect(admitRecord(newer, '1.5.0+ab')).toMatch(/Orca 2\.0\.0 last ran/)
     })
 
-    it('falls back to the deploy gate when the newer build cannot be proven serving', async () => {
-      withRecord(newer)
-      mocks.deploy.mockResolvedValueOnce(policyRefused)
-      mocks.incumbentReadiness.mockResolvedValueOnce(null)
-      await expect(launch()).resolves.toMatchObject({ outcome: 'deferred', forceable: true })
-      expect(mocks.deploy).toHaveBeenCalledTimes(1)
+    it('updates an older host as before, without asking to adopt it', async () => {
+      mocks.deploy.mockResolvedValueOnce({
+        outcome: 'installed-and-activated',
+        fullVersion: '1.5.0+ab',
+        verdict: {}
+      })
+      await expect(launch()).resolves.toMatchObject({ outcome: 'ready', fullVersion: '1.5.0+ab' })
+      expect(mocks.adoptRunning).not.toHaveBeenCalled()
     })
   })
 

@@ -25,6 +25,7 @@ import { isWaitingOrcadUpdateDeferral } from '../managed-server/lifecycle/orcad-
 import { planManagedOrcadAutoUpdate } from '../managed-server/lifecycle/orcad-managed-update-decision'
 import { pruneManagedOrcadVersions } from '../managed-server/lifecycle/orcad-managed-version-gc'
 import { wakeAlreadyActiveOrcad } from '../ssh/orcad-already-active-wake'
+import { adoptRunningOrcadVersion } from '../ssh/orcad-running-version-adoption'
 import { resolveOrcadRemoteContext } from '../managed-server/install/orcad-remote-context'
 import { deployOrcad } from '../ssh/orcad-remote-deploy'
 import { ORCAD_PID_FILENAME } from '../managed-server/install/orcad-remote-host-support'
@@ -37,11 +38,7 @@ import { wslDistroHolderKey } from './wsl-distro-holder-record'
 import { readWslDistroRegistryIdShared } from './wsl-distro-registry-id'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { createWslOrcadHostTransport, type WslOrcadHostTransport } from './wsl-orcad-host-transport'
-import {
-  readWslOrcadIncumbent,
-  readWslOrcadIncumbentReadiness,
-  type WslOrcadIncumbent
-} from './wsl-orcad-incumbent'
+import { readWslOrcadIncumbent, type WslOrcadIncumbent } from './wsl-orcad-incumbent'
 import { adoptUnrecordedWslOrcad } from './wsl-orcad-instance-adoption'
 
 /** An update this app carries that the host may not take yet; the incumbent keeps serving. */
@@ -77,7 +74,6 @@ export type WslOrcadDeployOptions = {
   createTransport?: (target: WslOrcadHostTarget) => OrcadHostTransport & { dispose?(): void }
   readRegistryId?: (distro: string) => Promise<string | null>
   readIncumbent?: typeof readWslOrcadIncumbent
-  readIncumbentReadiness?: typeof readWslOrcadIncumbentReadiness
   /** The orcad template to deploy from; defaults to the packaged one (the C10 lane swaps it). */
   templateDir?: string
 }
@@ -156,24 +152,33 @@ async function launchOverTransport(
   const incumbentVersion = context.activationRecord.active
   const candidateVersion = readLocalFullVersion(localOrcadDir)
   if (incumbentVersion && !options.force) {
-    // Why SSH's rules: a newer build or the one just rolled back from must keep serving, not be
-    // deployed over. No failure memory here; a rejected WSL candidate shows up as `rolledBackFrom`.
+    // Why SSH's rules: a newer build or the one just rolled back from keeps serving, adopted as an
+    // SSH first deploy adopts it. No failure memory here; a rejected candidate sets `rolledBackFrom`.
     const plan = planManagedOrcadAutoUpdate({
       record: context.activationRecord,
       candidateVersion,
       appVersion,
       failedBefore: false
     })
-    if (plan.action === 'skip' && plan.reason !== 'current') {
-      const readiness = await (options.readIncumbentReadiness ?? readWslOrcadIncumbentReadiness)({
-        context,
-        slot
-      })
-      // Unproven, or another client activated a build meanwhile: the deploy's fenced admission
-      // applies this plan again, so it still cannot activate a skipped build.
-      if (readiness && (await readOrcadActivationRecord(slot)).active === incumbentVersion) {
-        return readyLaunch({ fullVersion: incumbentVersion, readiness })
+    // Null (nothing active any more): the deploy's fenced admission applies this plan again.
+    const adopted =
+      plan.action === 'skip' && plan.reason !== 'current'
+        ? await adoptRunningOrcadVersion(slot, context.activationRecord, candidateVersion)
+        : null
+    if (adopted && 'outcome' in adopted) {
+      // Another run holds the fence; a later connect adopts or deploys.
+      const { candidateVersion: version, code, reason, forceable } = adopted
+      return {
+        outcome: 'deferred',
+        distro: name,
+        candidateVersion: version,
+        code,
+        reason,
+        forceable: forceable === true
       }
+    }
+    if (adopted) {
+      return readyLaunch({ fullVersion: adopted.version, readiness: adopted.readiness })
     }
   }
   // Only an update asks the incumbent: the same version is a no-op deploy on every connect.
