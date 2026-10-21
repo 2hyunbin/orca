@@ -319,6 +319,28 @@ describe('permission carrier ownership across save, reload and consumers', () =>
     expect(agentArgsSetPermission(agent, value)).toBe(carrier)
   })
 
+  it.each(['--approval-mode auto_edit', '--approval-mode=plan', '-y'])(
+    'preserves Gemini literal %s under Full through save and reload',
+    (value) => {
+      const before: AgentLaunchSettingsSource = { agentPermissionDefault: 'full-access' }
+      const updates = agentLaunchSettingsMutationUpdates(
+        before,
+        { type: 'user-arguments', agent: 'gemini', value },
+        'linux'
+      )
+      const loaded = migrateAgentPermissionChoice(
+        JSON.parse(JSON.stringify({ ...before, ...updates })),
+        'linux'
+      )
+      expect(loaded.agentDefaultArgs.gemini).toBe(value)
+      expect(loaded.agentPermissionOverrides).toEqual({})
+      expect(resolveAgentPermission('gemini', loaded).choice).toBe('full-access')
+      expect(resolveTuiAgentLaunchArgs('gemini', loaded)).toBe(value)
+      expect(projectAgentLaunchSettings(loaded).agentDefaultArgs.gemini).toBe(value)
+      expect(agentArgsSetPermission('gemini', value)).toBe(true)
+    }
+  )
+
   it.each(['linux', 'win32'] as const)(
     'keeps Goose edits on their actual carrier on %s',
     (platform) => {
