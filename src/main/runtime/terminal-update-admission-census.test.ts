@@ -30,8 +30,8 @@ type CensusRequest = Omit<z.input<typeof OrcadTerminalCensusParamsSchema>, 'acti
 function census(runtime: InstanceType<typeof OrcaRuntimeService>, params: CensusRequest) {
   // Parsed as the server parses it, so a field the server does not know is dropped here too.
   const parsed = OrcadTerminalCensusParamsSchema.parse({ activatedAt: 1, ...params })
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler reads only `runtime` from its context.
-  return ORCAD_TERMINAL_CENSUS_METHODS[0]!.handler(parsed, { runtime } as never)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: entry 0 is the census method, whose params `parsed` is; its handler reads only `runtime` from its context.
+  return ORCAD_TERMINAL_CENSUS_METHODS[0]!.handler(parsed as never, { runtime } as never)
 }
 
 // What the SSH and WSL updates send as the last count before the stop.

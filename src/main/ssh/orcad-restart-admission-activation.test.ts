@@ -73,6 +73,7 @@ const update = (restartAdmission: OrcadRestartAdmissionPort, force?: boolean) =>
     target: 'linux-x64-glibc',
     census: IDLE,
     recountCensus: async () => IDLE,
+    releaseIncumbentAdmission: async () => {},
     restartAdmission,
     ...(force ? { force } : {})
   })
@@ -162,7 +163,8 @@ describe('an update over a serving incumbent', () => {
       localOrcadDir: '/local/out/orcad',
       target: 'linux-x64-glibc' as const,
       census,
-      recountCensus: async () => census
+      recountCensus: async () => census,
+      releaseIncumbentAdmission: async () => {}
     }
     await expect(deployOrcad(options)).resolves.toMatchObject({ code: 'orcad_update_legacy_host' })
     await expect(
