@@ -87,6 +87,10 @@ function mobileLiteralRpcMethods(): string[] {
     for (const match of source.matchAll(/subscribe\(\s*['"]([^'"]+)/g)) {
       methods.add(match[1]!)
     }
+    // A preamble is a request the transport sends on every session: (key, method, params).
+    for (const match of source.matchAll(/setSessionPreamble\(\s*['"][^'"]+['"],\s*['"]([^'"]+)/g)) {
+      methods.add(match[1]!)
+    }
     for (const match of source.matchAll(/method:\s*['"]([^'"]+)/g)) {
       const method = match[1]!
       if (method.includes('.')) {
