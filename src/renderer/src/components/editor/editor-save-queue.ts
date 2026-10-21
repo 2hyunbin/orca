@@ -11,6 +11,7 @@ import {
   type EditorFileSavedDetail
 } from './editor-autosave'
 import { flushPendingEditorBuffer, hasPendingEditorBufferChange } from './editor-pending-flush'
+import { createAutoSaveHolds } from './editor-autosave-holds'
 import { editorBufferIdOfView } from '@/store/slices/editor/buffers/editor-buffer-views'
 import {
   clearSelfWrite,
@@ -46,6 +47,8 @@ export type EditorSaveQueue = {
   quiesceFileSave: (fileId: string) => Promise<void>
   clearAutoSaveTimer: (fileId: string) => void
   bumpSaveGeneration: (fileId: string) => void
+  /** Pauses autosave of these files (hold keys), in every workspace, until the release runs. */
+  holdAutoSave: (keys: ReadonlySet<string>) => () => void
   syncAutoSave: () => void
   dispose: () => void
 }
@@ -86,6 +89,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     }
     autoSaveScheduledContent.delete(key)
   }
+
+  const holds = createAutoSaveHolds(store.getState, () => syncAutoSave())
 
   const clearAutoSaveTimer = (fileId: string): void => clearScheduledAutoSave(scheduleKeyOf(fileId))
 
@@ -138,7 +143,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         if (
           trigger === 'autosave' &&
           (isAutosaveSuspendedForFile(liveFile) ||
-            isEditorLargePasteInFlight(editorTabModelUri(state, liveFile)))
+            isEditorLargePasteInFlight(editorTabModelUri(state, liveFile)) ||
+            holds.isHeld(state, liveFile))
         ) {
           return 'failed'
         }
@@ -159,10 +165,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         const connectionId = fileContext.connectionId
         const precondition = editorSavePrecondition(liveFile, trigger)
         if (precondition.kind === 'blocked') {
-          // Why: a mobile refusal is reported to mobile; the desktop tab may not even be dirty.
-          if (trigger !== 'mobile') {
-            setModelExternalMutation(store.getState(), file.id, 'changed')
-          }
+          setModelExternalMutation(store.getState(), file.id, 'changed')
           return 'blocked-stale'
         }
         // Why: stamp before writing so useEditorExternalWatch ignores our own fs:changed echo (editor-self-write-registry).
@@ -191,13 +194,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         if (!writeResult.ok) {
           clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
           // Why: the banner (or deleted tombstone) explains the refusal and pauses autosave.
-          if (trigger !== 'mobile') {
-            setModelExternalMutation(
-              store.getState(),
-              file.id,
-              writeResult.diskConflict === 'missing' ? 'deleted' : 'changed'
-            )
-          }
+          setModelExternalMutation(
+            store.getState(),
+            file.id,
+            writeResult.diskConflict === 'missing' ? 'deleted' : 'changed'
+          )
           return 'blocked-stale'
         }
 
@@ -254,6 +255,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
   const syncAutoSave = (): void => {
     const state = store.getState()
+    holds.flagOverdue(state)
     const openFilesByKey = new Map(
       state.openFiles.map((file) => [keys.schedule(state, file.id), file])
     )
@@ -268,6 +270,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         canAutoSaveOpenFile(file) &&
         // Why: suspension holds until the user picks a side via the banner (or saves manually).
         !isAutosaveSuspendedForFile(file) &&
+        !holds.isHeld(state, file) &&
         draft !== undefined
       if (!shouldKeepTimer) {
         clearScheduledAutoSave(key)
@@ -286,7 +289,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
         !file.isDirty ||
         draft === undefined ||
         !canAutoSaveOpenFile(file) ||
-        isAutosaveSuspendedForFile(file)
+        isAutosaveSuspendedForFile(file) ||
+        holds.isHeld(state, file)
       ) {
         clearScheduledAutoSave(key)
         continue
@@ -317,6 +321,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     autoSaveScheduledContent.clear()
     saveQueue.clear()
     saveGeneration.clear()
+    holds.dispose()
   }
 
   return {
@@ -324,6 +329,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     quiesceFileSave,
     clearAutoSaveTimer,
     bumpSaveGeneration,
+    holdAutoSave: holds.hold,
     syncAutoSave,
     dispose
   }

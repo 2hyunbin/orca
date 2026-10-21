@@ -1275,6 +1275,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "ホストを検索…",
+        "noHostsMatch": "一致するホストはありません。",
+        "moreHosts_one": "ほかに {{count}} 台のホストがあります。名前で検索してください。",
+        "moreHosts_other": "ほかに {{count}} 台のホストがあります。名前で検索してください。"
+      },
       "CodexRestartChip": {
         "c72a5fb234": "再起動",
         "9263e75f49": "Codex は前のアカウントを使用しています",
@@ -3827,6 +3833,12 @@
             "connectedHostCount_one": "{{count}} 台のホスト",
             "connectedHostCount_other": "{{count}} 台のホスト",
             "connecting": "接続中…",
+            "searchSshHosts": "SSH ホストを検索…",
+            "noMatchingSshHosts": "一致する SSH ホストはありません。",
+            "moreSshHostMatches_one": "ほかに {{count}} 件一致しています。入力を続けて絞り込んでください。",
+            "moreSshHostMatches_other": "ほかに {{count}} 件一致しています。入力を続けて絞り込んでください。",
+            "moreSshHosts_one": "他 {{count}} 台の SSH ホストから検索…",
+            "moreSshHosts_other": "他 {{count}} 台の SSH ホストから検索…",
             "runtime_unavailable_transport_up": "Orca は利用できません",
             "runtime_workspace_window_closed": "ワークスペースウィンドウを閉じた"
           },
@@ -12545,7 +12557,6 @@
         "sshManagedHostRemove": {
           "description": "{{label}} では Orca が動作しています。[SSH ホスト上の Orca] で「停止…」を使ってホストから Orca を削除するか、ホストがもう存在しない場合は「登録を解除…」を使ってください。その後、この SSH ホストを削除できます。",
           "open": "SSH ホスト上の Orca を開く",
-          "descriptionServers": "Orca は {{label}} で動作しています。「リモート Orca サーバー」で {{label}} 上の Orca の ⋯ メニューを開き、「停止…」でホストから Orca を削除するか、ホストがもう存在しない場合は「削除…」を選んでください。その後、この SSH ホストを削除できます。",
           "openServers": "リモート Orca サーバーを開く"
         },
         "managedServers": {
@@ -12569,7 +12580,6 @@
             "confirmForget": "このデスクトップから登録を解除",
             "keepLinked": "リンクを維持",
             "forgetDescription": "ホストに接続せずに、このサーバーのリンクをここで解除します。ホストが復帰した場合、サーバーはまだそこで動作している可能性があります。",
-            "title": "{{host}} 上の Orca",
             "orcaVersion": "このホストの Orca: {{version}}",
             "stopOrcaDescription": "SSH ホスト上の Orca を停止し、この一覧から削除します。",
             "updateOrcaOnHost": "このホストの Orca を更新"
@@ -12914,9 +12924,6 @@
           "emptyDescription": "開発マシン、クラウドマシン、自宅のデスクトップをペアリングします。このコンピューターがスリープしても、セッションはそこで動き続けます。",
           "movePaused": "移行を一時停止中",
           "shareTitle": "このコンピューターを共有",
-          "shareDescriptionNamed": "ブラウザー、スマートフォン、別の Orca から {{name}} で作業できるようにします。",
-          "shareDescription": "ブラウザー、スマートフォン、別の Orca からこのコンピューターで作業できるようにします。",
-          "shareButton": "共有…",
           "done": "完了",
           "unreachableLead": "Orca はこのサーバーに接続できませんでした。",
           "updateFailedLead": "前回の更新は完了しませんでした。",
@@ -14306,8 +14313,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} のセッションは Orca では削除できません。",
             "resumeInNewNativeChat": "新しいチャットで再開",
             "resumeInNewCli": "新しいターミナルで再開",
-            "resumeInNewCliTooltipFork": "この会話を新しい CLI セッションにフォークします。",
-            "resumeInNewCliTooltipChat": "ネイティブチャットはそのまま残ります。"
+            "resumeInNewCliTooltipFork": "この会話のコピーを使って、新しいターミナル Agent のセッションを開始します。",
+            "resumeInNewCliTooltipChat": "このチャットは変更されません。"
           },
           "AiVaultSessionDeleteDialog": {
             "title": "このセッションを削除しますか?",
@@ -19110,8 +19117,8 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "ターミナル Agent に切り替える",
-          "switchToChatView": "チャット UI に切り替える",
+          "switchToTerminalView": "ターミナル Agent で続ける",
+          "switchToChatView": "チャット UI で続ける",
           "closeTabsToLeft": "左側のすべてのタブを閉じる"
         },
         "BrowserTab": {

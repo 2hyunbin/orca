@@ -113,7 +113,7 @@ describe('restored pane refused for a newer daemon', () => {
     startDeferredSessionReattach(session, 'restored-pty')
     await vi.waitFor(() => expect(isHeld()).toBe(true))
     nextConnect('reattach')
-    await reopenHeldTerminals()
+    await reopenHeldTerminals('tab:leaf')
     expect(transport.connect).toHaveBeenLastCalledWith(
       expect.objectContaining(
         ORCA_LAYOUT_OWNER_IS_MAIN
@@ -135,7 +135,7 @@ describe('restored pane refused for a newer daemon', () => {
     startDeferredSessionReattach(session, 'restored-pty')
     await vi.waitFor(() => expect(fixture.writeReplayData).toHaveBeenCalledWith('old output'))
     nextConnect('reattach')
-    await reopenHeldTerminals()
+    await reopenHeldTerminals('tab:leaf')
     expect(fixture.writeReplayData).toHaveBeenLastCalledWith('\x1b[0m\x1b[2J\x1b[3J\x1b[H')
   })
 
@@ -145,7 +145,7 @@ describe('restored pane refused for a newer daemon', () => {
     startDeferredSessionReattach(session, 'restored-pty')
     await vi.waitFor(() => expect(isHeld()).toBe(true))
     nextConnect('reattach')
-    await reopenHeldTerminals()
+    await reopenHeldTerminals('tab:leaf')
     expect(window.api.pty.readNewerDaemonHeldScreen).not.toHaveBeenCalled()
     expect(fixture.writeReplayData).not.toHaveBeenCalled()
   })
@@ -155,7 +155,7 @@ describe('restored pane refused for a newer daemon', () => {
     startDeferredSessionReattach(session, 'restored-pty')
     await vi.waitFor(() => expect(isHeld()).toBe(true))
     nextConnect('throw')
-    await reopenHeldTerminals()
+    await reopenHeldTerminals('tab:leaf')
     expect(fixture.startFreshColdRestoreAgentResume).toHaveBeenCalledOnce()
     expect(toast.success).toHaveBeenCalledWith('Reopened 1 terminal', windowResumedDescription)
   })
@@ -175,7 +175,7 @@ describe('restored pane refused for a newer daemon', () => {
     for (const teardown of fixture.waitTeardowns) {
       teardown()
     }
-    await reopenHeldTerminals()
+    await reopenHeldTerminals('tab:leaf')
     expect(transport.connect).toHaveBeenCalledTimes(1)
   })
 })

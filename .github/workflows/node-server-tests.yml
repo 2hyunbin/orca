@@ -137,6 +137,8 @@ jobs:
 
   persistence:
     needs: [changes, mobile_web_bundle]
+    permissions:
+      contents: read
     concurrency:
       group: node-server-persistence-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
@@ -352,15 +354,18 @@ jobs:
 
   linux_glibc_floor:
     needs: [changes, mobile_web_bundle]
+    permissions:
+      contents: read
     concurrency:
       group: node-server-linux_glibc_floor-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
     # Each Linux lane owns its inputs; the template still requires every lane to pass.
     if: >-
       ${{ !cancelled() &&
-      needs.mobile_web_bundle.result == 'success' &&
       needs.changes.outputs.should_run != 'false' &&
-      needs.changes.outputs.qualification != 'false' }}
+      needs.changes.outputs.qualification != 'false' &&
+      needs.mobile_web_bundle.result == 'success' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
       matrix:
@@ -482,14 +487,17 @@ jobs:
 
   linux_musl:
     needs: [changes, mobile_web_bundle]
+    permissions:
+      contents: read
     concurrency:
       group: node-server-linux_musl-${{ matrix.os }}-${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' && github.ref || github.run_id }}
       cancel-in-progress: ${{ github.event_name == 'push' && !inputs.build_template && inputs.ref == '' }}
     if: >-
       ${{ !cancelled() &&
-      needs.mobile_web_bundle.result == 'success' &&
       needs.changes.outputs.should_run != 'false' &&
-      needs.changes.outputs.qualification != 'false' }}
+      needs.changes.outputs.qualification != 'false' &&
+      needs.mobile_web_bundle.result == 'success' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft != true) }}
     strategy:
       fail-fast: false
       matrix:
@@ -507,21 +515,19 @@ jobs:
         id: pnpm-verification
         with:
           container-toolchain: 'true'
-      - uses: actions/download-artifact@v8
-        with:
-          name: orcad-mobile-web-bundle
-          path: out/mobile-web
-      - name: Verify native Alpine artifact and persistence
+      - name: Prepare native Alpine artifact
         env:
           VERIFICATION_CACHE_PATH: ${{ steps.pnpm-verification.outputs.path }}
         run: |
           touch "$VERIFICATION_CACHE_PATH"
+          mkdir -p out/mobile-web
           # Multi-arch index digest of the tag; re-resolve it whenever NODE_RUNTIME_PIN moves.
-          docker run --rm --init -i \
+          docker run --rm --init --detach --name orcad-alpine \
             -e ORCA_BACKGROUND_LAUNCH=1 \
             -v "$VERIFICATION_CACHE_PATH:/root/.cache/pnpm/lockfile-verified.jsonl" \
             -v "$GITHUB_WORKSPACE:/work" -w /work \
-            node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 sh -s <<'NODE_SERVER_QUALIFICATION'
+            node:24.21.0-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 sleep infinity
+          docker exec -i orcad-alpine sh -s <<'NODE_SERVER_PREPARATION'
           set -eu
           apk add --no-cache bash git libstdc++ python3 make g++
           git config --global --add safe.directory /work
@@ -530,9 +536,21 @@ jobs:
           pnpm build:orcad-prebuilds
           pnpm build:orcad-prebuilds --require-slots "$(node config/scripts/build-orcad-prebuilds.mjs --print-slot)"
           pnpm build:orcad-prebuilds --smoke
+          NODE_SERVER_PREPARATION
+      - uses: actions/download-artifact@v8
+        with:
+          name: orcad-mobile-web-bundle
+          path: out/mobile-web
+      - name: Verify native Alpine artifact and persistence
+        run: |
+          docker exec -i orcad-alpine sh -s <<'NODE_SERVER_QUALIFICATION'
+          set -eu
           pnpm build:orcad
           pnpm test:node-server --artifact
           NODE_SERVER_QUALIFICATION
+      - name: Clean up the Alpine qualification container
+        if: always()
+        run: docker rm --force orcad-alpine
       - name: Keep this runner's musl slot for the desktop template
         if: inputs.build_template
         uses: actions/upload-artifact@v7
@@ -545,12 +563,11 @@ jobs:
 
   # Design D2: the desktop ships every target's addons, merged from the lanes that qualified them.
   desktop_template:
-    needs: [persistence, mobile_web_bundle, linux_glibc_floor, linux_glibc217_compat, linux_musl]
-    if: >-
-      ${{ !cancelled() && inputs.build_template &&
-      needs.persistence.result == 'success' && needs.mobile_web_bundle.result == 'success' &&
-      needs.linux_glibc_floor.result == 'success' &&
-      needs.linux_glibc217_compat.result == 'success' && needs.linux_musl.result == 'success' }}
+    needs: changes
+    if: ${{ !cancelled() && inputs.build_template }}
+    permissions:
+      contents: read
+      actions: read
     runs-on: ${{ inputs.fast_runners && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
@@ -559,6 +576,45 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - uses: ./.github/actions/install-node-dependencies
+      - name: Wait for every template qualification lane
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const deadline = Date.now() + 25 * 60_000
+            const expected = {
+              persistence: 6,
+              mobile_web_bundle: 1,
+              linux_glibc_floor: 2,
+              linux_glibc217_compat: 1,
+              linux_musl: 2
+            }
+            while (Date.now() < deadline) {
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100
+              })
+              const assemblers = jobs.filter(job =>
+                job.name === 'desktop_template' || job.name.endsWith(' / desktop_template'))
+              if (assemblers.length > 1) throw new Error('Ambiguous desktop template qualification')
+              if (assemblers.length === 1) {
+                const prefix = assemblers[0].name.slice(0, -'desktop_template'.length)
+                let ready = true
+                for (const [name, count] of Object.entries(expected)) {
+                  const lanes = jobs.filter(job => job.name === `${prefix}${name}` ||
+                    job.name.startsWith(`${prefix}${name} (`))
+                  if (lanes.length > count) throw new Error(`Unexpected qualification lanes: ${name}`)
+                  for (const lane of lanes) {
+                    if (lane.status === 'completed' && lane.conclusion !== 'success') {
+                      throw new Error(`Template qualification did not succeed: ${lane.name} (${lane.conclusion})`)
+                    }
+                  }
+                  if (lanes.length !== count || lanes.some(lane => lane.status !== 'completed')) ready = false
+                }
+                if (ready) return
+              }
+              await new Promise(resolve => setTimeout(resolve, 15_000))
+            }
+            throw new Error('Timed out waiting for every template qualification lane')
+
       - name: Collect every lane's slot
         uses: actions/download-artifact@v8
         with:

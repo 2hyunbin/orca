@@ -94,6 +94,7 @@ jobs:
     needs: resolve-main
     permissions:
       contents: read
+      actions: read
     uses: ./.github/workflows/node-server-tests.yml
     with:
       ref: ${{ needs.resolve-main.outputs.head_sha }}
