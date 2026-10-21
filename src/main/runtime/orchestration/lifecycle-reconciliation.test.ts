@@ -559,10 +559,9 @@ describe('lifecycle reconciliation', () => {
         type: 'heartbeat',
         payload: JSON.stringify({ dispatchId })
       })
+    // Why: unreconciled rows stand in for heartbeats stored unread before arrival consumed them.
     const staleHeartbeat = insertHeartbeat(dispatch.id, 'term_worker')
     const otherHeartbeat = insertHeartbeat(otherDispatch.id, 'term_other')
-    reconcileLifecycleMessage(db, staleHeartbeat)
-    reconcileLifecycleMessage(db, otherHeartbeat)
     const done = db.insertMessage({
       runId: 'run_legacy_local',
       from: 'term_worker',

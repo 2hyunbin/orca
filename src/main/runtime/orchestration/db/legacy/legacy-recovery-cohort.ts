@@ -40,6 +40,8 @@ export function initializeLegacyRecoveryCohort(
        FROM messages m
        WHERE m.run_id = ? AND m.delivery_contract = 'legacy_direct' AND m.read = 1
          AND m.to_handle = ?
+         -- Why: heartbeats are consumed on arrival, so read never means a coordinator saw one.
+         AND m.type != 'heartbeat'
          AND EXISTS(
            SELECT 1 FROM dispatch_contexts d
            WHERE d.run_id = m.run_id

@@ -107,13 +107,11 @@ export function sendPointToPointMessage(args: {
 
     if (msg.type === 'worker_done' || msg.type === 'heartbeat') {
       const reconciled = reconcileLifecycleMessage(db, msg)
-      // Why: a suppressed message is already read, so skip waking a check waiter to an empty result.
-      if (reconciled.action === 'suppressed') {
-        return recordReceiptForPostCommitNudge(
-          recordMutationReceipt,
-          withSendWarnings({ message: exposeMessage(msg) }),
-          () => undefined
-        )
+      // Why: suppressed and recorded heartbeats are already read, so neither the send nor a retry may wake a waiter to an empty result.
+      if (reconciled.action === 'suppressed' || reconciled.action === 'heartbeat_recorded') {
+        const receipt = withSendWarnings({ message: exposeMessage(msg) })
+        recordMutationReceipt?.(receipt)
+        return { receipt, nudge: () => undefined }
       }
       if (reconciled.action === 'rejected') {
         const rejection = db.getMessageById(msg.id) ?? msg

@@ -167,7 +167,7 @@ function reconcileHeartbeatMessage(
 
   // Why: dispatchId-specific writes let the DB ignore late heartbeats for
   // completed/failed retries without masking a newer hung dispatch.
-  db.recordHeartbeat(dispatchId, msg.created_at)
+  db.consumeHeartbeatMessage(msg.id, dispatchId, msg.created_at)
   return { action: 'heartbeat_recorded', dispatchId }
 }
 
