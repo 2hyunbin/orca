@@ -25,7 +25,10 @@ import type { RuntimeFileCommandHost } from './file-command-host'
 
 type Host = Pick<RuntimeFileCommandHost, 'requireStore' | 'resolveRuntimeFileTarget'> & {
   getSession(worktreeId: string): WorkspaceSessionState | null | undefined
-  setSession(worktreeId: string, session: WorkspaceSessionState): void
+  updateSession(
+    worktreeId: string,
+    update: (session: WorkspaceSessionState) => WorkspaceSessionState
+  ): void
 }
 
 export class HeadlessMarkdownDocuments {
@@ -142,27 +145,24 @@ export class HeadlessMarkdownDocuments {
       if (verified.content !== content) {
         throw new Error('save_verification_failed')
       }
-      const session = this.host.getSession(worktreeId)
-      if (session) {
-        this.host.setSession(worktreeId, {
-          ...session,
-          openFilesByWorktree: {
-            ...session.openFilesByWorktree,
-            [worktreeId]: (session.openFilesByWorktree?.[worktreeId] ?? []).map((candidate) => {
-              if (
-                candidate.filePath !== current.filePath ||
-                candidate.runtimeEnvironmentId ||
-                candidate.externalSshTargetId ||
-                candidate.dirtyDraftContent !== current.dirtyDraftContent
-              ) {
-                return candidate
-              }
-              const { dirtyDraftContent: _draft, ...saved } = candidate
-              return { ...saved, lastKnownDiskSignature: getDiskBaselineSignature(content) }
-            })
-          }
-        })
-      }
+      this.host.updateSession(worktreeId, (session) => ({
+        ...session,
+        openFilesByWorktree: {
+          ...session.openFilesByWorktree,
+          [worktreeId]: (session.openFilesByWorktree?.[worktreeId] ?? []).map((candidate) => {
+            if (
+              candidate.filePath !== current.filePath ||
+              candidate.runtimeEnvironmentId ||
+              candidate.externalSshTargetId ||
+              candidate.dirtyDraftContent !== current.dirtyDraftContent
+            ) {
+              return candidate
+            }
+            const { dirtyDraftContent: _draft, ...saved } = candidate
+            return { ...saved, lastKnownDiskSignature: getDiskBaselineSignature(content) }
+          })
+        }
+      }))
       return { tabId, version: hashMarkdownContent(content), isDirty: false as const, content }
     })
   }
