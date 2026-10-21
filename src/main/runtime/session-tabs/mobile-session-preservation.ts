@@ -165,9 +165,14 @@ export abstract class OrcaRuntimeWithMergePreservedHeadlessMobileSessionTabs ext
       tabs.find((tab) => tab.isActive) ??
       tabs[0] ??
       null
+    const publicationBase = this.isHeadlessBuiltMobileSessionPublicationBase(
+      existing.publicationEpoch
+    )
+      ? existing
+      : { ...existing, publicationEpoch: `headless-hydrated:${Date.now().toString(36)}` }
     return {
       ...existing,
-      publicationEpoch: this.getMergedMobileSessionPublicationEpoch(existing, tabs),
+      publicationEpoch: this.getMergedMobileSessionPublicationEpoch(publicationBase, tabs),
       // Why: mint a fresh version or clients' same-epoch gate drops the prune frame.
       snapshotVersion: existing.snapshotVersion + 1,
       activeGroupId: existing.activeGroupId ?? getHeadlessMobileSessionGroupId(existing.worktree),
