@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { nativeChatShellForeground } from '../../renderer/src/components/native-chat/terminal-interface-presentation'
 import { AgentHookServer } from './server'
 import {
   TerminalInterfaceAuthority,
   type TerminalInterfaceTarget
 } from './server/terminal-interface-authority'
+import {
+  isAgentLaunchRunningIn,
+  trackRunningAgentLaunchPane
+} from '../agent-launch/agent-launch-pane-attachment'
 import { TerminalRunFactsRegister } from '../runtime/terminal-run-facts'
 import type { AgentHookEventPayload } from '../../shared/agent-hook-listener/listener-event'
 import type { TerminalProcessInspection } from '../../shared/terminal-process-inspection'
 
+vi.mock('@/store', () => ({ useAppStore: { getState: () => ({}) } }))
 vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: () => ({}) }))
 const probe = vi.hoisted(() => vi.fn(async () => 'exited' as const))
@@ -78,10 +84,17 @@ function driver(
   let inventory = [target]
   let result: TerminalProcessInspection | null = initialResult
   let pending: Promise<TerminalProcessInspection | null> | null = null
+  let failure = false
+  let blocked = () => false
   const changed = vi.fn()
   const stop = authority.install({
-    inventory: () => inventory,
-    inspect: async () => (pending ? await pending : result),
+    inventory: () => inventory.map((item) => ({ ...item, blocked: item.blocked || blocked() })),
+    inspect: async () => {
+      if (failure) {
+        throw new Error('unavailable')
+      }
+      return pending ? await pending : result
+    },
     changed
   })
   stops.push(stop)
@@ -93,6 +106,12 @@ function driver(
   })
   return {
     changed,
+    failure: (next: boolean) => {
+      failure = next
+    },
+    blocked: (next: () => boolean) => {
+      blocked = next
+    },
     result: (next: TerminalProcessInspection | null) => {
       result = next
     },
@@ -131,6 +150,149 @@ describe('execution-host terminal interface flow', () => {
       host.terminalInterfaces.input('pty', kind)
       expect(host.terminalInterfaces.snapshot()[0]?.state).toBe('shell')
     }
+  })
+
+  it('admits an original hook during the real deferred launch registry, then releases and retires without another receipt', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
+    const launch = trackRunningAgentLaunchPane({ worktreeId: target.binding.worktreeId, paneKey })
+    stops.push(() => launch.finish({ kind: 'proceed' }))
+    const host = new HookHost()
+    stops.push(() => host.stop())
+    const d = driver(host.terminalInterfaces)
+    d.blocked(() =>
+      isAgentLaunchRunningIn(target.binding.worktreeId, {
+        kind: 'pane',
+        tabId: 'tab',
+        leafId: '11111111-1111-4111-8111-111111111111'
+      })
+    )
+    host.accept({ payload: { agentType: 'claude', state: 'working', prompt: 'turn' } })
+    host.accept()
+    launch.agentBound()
+    let deliverPrompt!: () => void
+    const promptDelivery = new Promise<void>((done) => {
+      deliverPrompt = done
+    })
+    const finish = promptDelivery.then(() => launch.finish({ kind: 'proceed' }))
+    // Binding the actual agent does not finish the still-deferred prompt operation.
+    d.result(shell)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(host.terminalInterfaces.snapshot()[0]?.state).not.toBe('shell')
+    expect(host.getStatusSnapshot().some((row) => row.state === 'done')).toBe(true)
+    deliverPrompt()
+    await finish
+    d.result(alive)
+    await vi.advanceTimersByTimeAsync(1000)
+    d.result(shell)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(host.terminalInterfaces.snapshot()[0]).toMatchObject({ state: 'shell', basis: 'hook' })
+    expect(host.getStatusSnapshot().filter((row) => !row.providerSessionOnly)).toEqual([])
+  })
+
+  it('retains settled noncold release across unavailable probes after both input kinds, but applies affirmative contrary evidence and invalidates cold proof', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
+    const authority = new TerminalInterfaceAuthority()
+    const d = driver(authority)
+    authority.captureHook(
+      paneKey,
+      'handle'
+    )({ token: 'actual', current: () => true, mayRetire: async () => false, retire: vi.fn() })
+    d.result(shell)
+    await vi.advanceTimersByTimeAsync(3000)
+    const released = authority.snapshot()[0]
+    expect(released).toMatchObject({ state: 'shell', basis: 'hook' })
+    const unavailable = [
+      null,
+      { foregroundProcess: null, hasChildProcesses: false },
+      { ...shell, terminalInterface: { ...shell.terminalInterface!, shellForeground: false } },
+      { ...shell, terminalInterface: { ...shell.terminalInterface!, capturedAgeMs: 1001 } },
+      { ...shell, terminalInterface: { ...shell.terminalInterface!, capturedAgeMs: -1 } },
+      {
+        ...alive,
+        terminalInterface: {
+          shellForeground: false,
+          children: 'unverifiable' as const,
+          capturedAgeMs: 0
+        }
+      }
+    ]
+    const releasesChat = () =>
+      nativeChatShellForeground(
+        {
+          terminalInterfaceByPtyId: {
+            pty: { observation: authority.snapshot()[0], environmentId: null }
+          },
+          terminalLayoutsByTabId: {
+            tab: {
+              root: { type: 'leaf', leafId: paneKey.slice(4) },
+              activeLeafId: paneKey.slice(4),
+              expandedLeafId: null,
+              ptyIdsByLeafId: { [paneKey.slice(4)]: 'pty' }
+            }
+          }
+        },
+        paneKey
+      )
+    for (const kind of ['driving', 'launch'] as const) {
+      for (const result of unavailable) {
+        authority.input('pty', kind)
+        d.result(result)
+        await vi.advanceTimersByTimeAsync(3500)
+        expect(authority.snapshot()[0]).toEqual(released)
+        expect(releasesChat()).toBe(true)
+      }
+      d.failure(true)
+      authority.input('pty', kind)
+      await vi.advanceTimersByTimeAsync(3500)
+      expect(authority.snapshot()[0]).toEqual(released)
+      expect(releasesChat()).toBe(true)
+      d.failure(false)
+      let resolve!: (value: TerminalProcessInspection | null) => void
+      d.pending(
+        new Promise((done) => {
+          resolve = done
+        })
+      )
+      authority.input('pty', kind)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(authority.snapshot()[0]).toEqual(released)
+      expect(releasesChat()).toBe(true)
+      resolve(null)
+      d.pending(null)
+      await Promise.resolve()
+    }
+    d.result({
+      ...alive,
+      terminalInterface: { ...alive.terminalInterface!, shellForeground: true }
+    })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(releasesChat()).toBe(true) // Stopped children do not contradict foreground shell.
+    d.result(alive) // Full non-shell+children, despite an unrecognized Bash name and no new input.
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(authority.snapshot()[0]?.state).toBe('unverifiable')
+    expect(releasesChat()).toBe(false)
+    d.result({ ...alive, foregroundProcess: 'codex' })
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(authority.snapshot()[0]?.state).toBe('agent')
+    d.result(shell)
+    await vi.advanceTimersByTimeAsync(3000)
+    authority.captureHook(
+      paneKey,
+      'handle'
+    )({ token: 'new', current: () => true, mayRetire: async () => false, retire: vi.fn() })
+    expect(authority.snapshot()[0]).toMatchObject({ state: 'agent', basis: 'hook' })
+    // Fresh authority / restored-only entry has no retained actual provenance.
+    d.inventory([{ ...target, generation: 2 }])
+    d.result(shell)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(authority.snapshot()[0]?.basis).toBe('cold')
+    d.result(null)
+    authority.input('pty', 'driving')
+    await vi.advanceTimersByTimeAsync(3500)
+    expect(authority.snapshot()[0]?.state).toBe('unverifiable')
+    d.result(shell)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(authority.snapshot()[0]).toMatchObject({ state: 'shell', basis: 'cold' })
   })
 
   it('invalidates awaited proof before both driving and launch handoffs, and fences same-agent replacement, sleep and incarnation changes', async () => {

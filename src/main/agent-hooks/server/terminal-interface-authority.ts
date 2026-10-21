@@ -107,7 +107,7 @@ export class TerminalInterfaceAuthority {
         candidate.target.binding.incarnationId === binding.incarnationId &&
         (binding.generation === undefined || candidate.target.generation === binding.generation)
     )
-    if (!entry || entry.target.blocked || !owner.current()) {
+    if (!entry || !owner.current()) {
       return
     }
     entry.owner = owner
@@ -206,11 +206,7 @@ export class TerminalInterfaceAuthority {
         evidence.capturedAgeMs < 0 ||
         evidence.children === 'unverifiable'
       ) {
-        entry.shellSince = entry.emptySince = null
-        if (entry.qualified) {
-          this.publish(entry, 'unverifiable', 'process')
-        }
-        entry.due = performance.now() + 3000
+        this.unavailable(entry)
         return
       }
       entry.qualified = true
@@ -225,9 +221,12 @@ export class TerminalInterfaceAuthority {
         entry.executionLaunchToken = entry.target.launchToken
         entry.shellSince = entry.emptySince = null
         this.publish(entry, 'agent', 'process')
-      } else {
+      } else if (!evidence.shellForeground && evidence.children === 'children') {
         entry.shellSince = null
         this.publish(entry, 'unverifiable', 'process')
+      } else {
+        this.unavailable(entry)
+        return
       }
       if (evidence.children === 'no-children' && entry.owner?.current()) {
         entry.emptySince ??= performance.now()
@@ -252,16 +251,21 @@ export class TerminalInterfaceAuthority {
           : 15000)
     } catch {
       if (current()) {
-        entry.shellSince = entry.emptySince = null
-        if (entry.qualified) {
-          this.publish(entry, 'unverifiable', 'process')
-        }
-        entry.due = performance.now() + 3000
+        this.unavailable(entry)
       }
     } finally {
       entry.pending = false
       lease.running -= 1
     }
+  }
+
+  private unavailable(entry: Entry): void {
+    entry.shellSince = entry.emptySince = null
+    // Failed reads cannot revoke accepted execution facts; cold proof must remain fresh.
+    if (entry.qualified && (!entry.observation || entry.observation.basis === 'cold')) {
+      this.publish(entry, 'unverifiable', 'process')
+    }
+    entry.due = performance.now() + 3000
   }
 
   private publish(

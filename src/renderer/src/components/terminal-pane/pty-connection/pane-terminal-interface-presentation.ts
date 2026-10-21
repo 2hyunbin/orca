@@ -53,13 +53,24 @@ export function installPaneTerminalInterfacePresentation(session: ConnectPanePty
       )
     }
   })
-  const releaseEffects = useAppStore.subscribe((state, previous) => {
-    if (!terminalInterfaceReleasesChat(state, session.cacheKey)) {
+  let appliedBinding: string | null = null
+  const releaseEffects = useAppStore.subscribe((state) => {
+    const observation = readTerminalInterface(state, session.cacheKey)?.observation
+    const binding =
+      !session.disposed && observation && terminalInterfaceReleasesChat(state, session.cacheKey)
+        ? JSON.stringify([
+            observation.epoch,
+            observation.ptyId,
+            observation.incarnationId,
+            observation.terminalHandle
+          ])
+        : null
+    if (binding === appliedBinding) {
       return
     }
-    const observation = readTerminalInterface(state, session.cacheKey)?.observation
-    const before = readTerminalInterface(previous, session.cacheKey)?.observation
-    if (observation?.state === 'shell' && before?.state !== 'shell') {
+    // Title writes reenter this subscription; mark the current applicability first.
+    appliedBinding = binding
+    if (binding !== null) {
       session.clearStaleAgentTabTitleOnConfirmedShell()
       session.writeInputModeGround(CONFIRMED_SHELL_MODE_RESET)
     }

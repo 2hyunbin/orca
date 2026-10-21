@@ -50,8 +50,7 @@ export function mobileTerminalInterfaceReleasesChat(tab: MobileNativeChatTab): b
     observation &&
     tab.incarnationId === observation.incarnationId &&
     observation.state === 'shell' &&
-    observation.basis !== 'cold' &&
-    !tab.launchDraft
+    observation.basis !== 'cold'
   )
 }
 

@@ -1,3 +1,4 @@
+import { TerminalInterfaceAuthority } from '../../../../main/agent-hooks/server/terminal-interface-authority'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AppState } from '../../store/types'
 import type { TerminalInterfaceObservation } from '../../../../shared/terminal-interface-observation'
@@ -73,6 +74,58 @@ describe('terminal-interface paired replica', () => {
       'host'
     )
     expect(nativeChatShellForeground(useAppStore.getState(), paneKey)).toBe(false)
+  })
+
+  it('requires fresh cold proof after unavailable reads before a pending mount becomes applicable', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
+    const authority = new TerminalInterfaceAuthority()
+    let pending = true
+    let available = true
+    releases.push(
+      registerTerminalInterfacePresentation(observation.paneKey, {
+        ptyId: () => observation.ptyId,
+        incarnation: () => observation.incarnationId,
+        pending: () => pending,
+        cold: () => !pending
+      })
+    )
+    const stop = authority.install({
+      inventory: () => [
+        { binding: observation, generation: 1, launchToken: null, blocked: false, local: true }
+      ],
+      inspect: async () =>
+        available
+          ? {
+              foregroundProcess: 'bash',
+              hasChildProcesses: false,
+              terminalInterface: {
+                shellForeground: true,
+                children: 'no-children',
+                capturedAgeMs: 0
+              }
+            }
+          : null,
+      changed: () => {}
+    })
+    const project = () => applyTerminalInterfaceSnapshot(authority.snapshotEvent(), null)
+    try {
+      await vi.advanceTimersByTimeAsync(3000)
+      project()
+      expect(nativeChatShellForeground(useAppStore.getState(), observation.paneKey)).toBe(false)
+      available = false
+      authority.input(observation.ptyId, 'launch')
+      await vi.advanceTimersByTimeAsync(3500)
+      project()
+      pending = false
+      expect(nativeChatShellForeground(useAppStore.getState(), observation.paneKey)).toBe(false)
+      available = true
+      await vi.advanceTimersByTimeAsync(5000)
+      project()
+      expect(nativeChatShellForeground(useAppStore.getState(), observation.paneKey)).toBe(true)
+    } finally {
+      stop()
+      vi.useRealTimers()
+    }
   })
 
   it('permits only the bounded cold-restored local exception, and re-derives each existing expectation', () => {
