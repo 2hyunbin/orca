@@ -44,12 +44,15 @@ function ownDescription(): string {
 export function AllAgentsPermissionSetting({
   choice,
   withoutAutoChoice,
+  ownChoiceCount,
   onChange,
   onChangeWithoutAuto
 }: {
   choice: AgentPermissionChoice
   /** What the agents without Approve for me share; null when they differ. */
   withoutAutoChoice: AgentPermissionChoice | null
+  /** Agents set separately, which choosing a mode here resets. */
+  ownChoiceCount: number
   onChange: (choice: AgentPermissionChoice) => void
   onChangeWithoutAuto: (choice: AgentPermissionChoice) => void
 }): React.JSX.Element {
@@ -69,6 +72,14 @@ export function AllAgentsPermissionSetting({
                 'Every agent, in terminals and new chats. Change one agent below.'
               )}
         </p>
+        {ownChoiceCount > 0 ? (
+          <p className="text-xs text-muted-foreground">
+            {translate(
+              'settings.agents.permissionResetsOwnChoices',
+              'Choosing a mode here resets the agents marked as set separately.'
+            )}
+          </p>
+        ) : null}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1.5">
         <SettingsSegmentedControl<AgentPermissionChoice>
@@ -154,7 +165,7 @@ export function AgentPermissionMenu({
             aria-label={translate('settings.agents.rowPermissionsLabel', '{{agent}} permissions', {
               agent: label
             })}
-            className="max-w-full gap-1"
+            className="max-w-full"
           >
             <span className="truncate">
               {permission.source === 'all' ? `${followAll} · ${current}` : current}

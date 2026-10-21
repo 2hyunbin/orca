@@ -418,7 +418,8 @@
       "permissionWithoutAuto": "Agents without Approve for me",
       "permissionSameAsAll": "Same as all agents",
       "permissionChipRemove": "Remove {{flag}} and use {{agent}}'s own settings",
-      "permissionChipTooltip": "Added by Permissions. Remove it to use {{agent}}’s own settings."
+      "permissionChipTooltip": "Added by Permissions. Remove it to use {{agent}}’s own settings.",
+      "permissionResetsOwnChoices": "Choosing a mode here resets the agents marked as set separately."
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",

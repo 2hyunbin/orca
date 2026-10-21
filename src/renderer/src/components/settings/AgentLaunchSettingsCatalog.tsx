@@ -212,6 +212,7 @@ export function AgentLaunchSettingsCatalog({
               (agent) => !agentPermissionChoices(agent).includes('auto')
             ).map((agent) => resolveAgentPermission(agent, permissionSettings).choice)
           )}
+          ownChoiceCount={Object.keys(permissionSettings.agentPermissionOverrides ?? {}).length}
           onChange={(choice) => save({ type: 'permission', choice })}
           onChangeWithoutAuto={(choice) => save({ type: 'permission', choice, withoutAuto: true })}
         />

@@ -88,7 +88,7 @@ export function AgentDefaultArgsInput({
   defaultArgs: string
   argsOverride: string
   onSaveArgs: (value: string) => void | Promise<void>
-  /** The permission flag terminals add ahead of the text, drawn inside the box. */
+  /** The permission flag terminals add ahead of the text, drawn just before the box. */
   permissionChip?: React.ReactNode
   note?: string
 }): React.JSX.Element {
@@ -105,31 +105,29 @@ export function AgentDefaultArgsInput({
         {translate('auto.components.settings.AgentsPane.cfb3f35775', 'Arguments')}
       </span>
       <div className="flex items-center gap-2">
-        <div className="flex h-7 min-w-0 flex-1 items-center gap-1">
-          {permissionChip}
-          <Input
-            value={argsDraft}
-            readOnly={pending}
-            onChange={(event) => setArgsDraft(event.target.value)}
-            onBlur={commitArgs}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                commitArgs()
-                event.currentTarget.blur()
-              }
-              if (event.key === 'Escape') {
-                setArgsDraft(argsOverride)
-                event.currentTarget.blur()
-              }
-            }}
-            placeholder={
-              defaultArgs ||
-              translate('auto.components.settings.AgentsPane.6f99bf5dd0', 'No default arguments')
+        {permissionChip}
+        <Input
+          value={argsDraft}
+          readOnly={pending}
+          onChange={(event) => setArgsDraft(event.target.value)}
+          onBlur={commitArgs}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              commitArgs()
+              event.currentTarget.blur()
             }
-            spellCheck={false}
-            className="h-7 min-w-0 flex-1 font-mono text-xs"
-          />
-        </div>
+            if (event.key === 'Escape') {
+              setArgsDraft(argsOverride)
+              event.currentTarget.blur()
+            }
+          }}
+          placeholder={
+            defaultArgs ||
+            translate('auto.components.settings.AgentsPane.6f99bf5dd0', 'No default arguments')
+          }
+          spellCheck={false}
+          className="h-7 flex-1 font-mono text-xs"
+        />
         {argsOverride !== defaultArgs && (
           <Button
             type="button"
