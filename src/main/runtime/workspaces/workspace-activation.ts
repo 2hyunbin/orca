@@ -6,7 +6,7 @@ import {
   resolveRuntimeNavigationTarget
 } from '../../../shared/runtime-navigation'
 import { getRepoExecutionHostId } from '../../../shared/execution-host'
-import { isPaneSleepRecord } from '../../../shared/agent-session-resume'
+import { hasSleptAgentToWake } from '../../../shared/agent-session-resume'
 import type { Repo } from '../../../shared/repo-types'
 import type { TerminalWorkspaceLaunchScope } from '../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -129,16 +129,10 @@ export abstract class OrcaRuntimeWithActivateManagedWorktree extends OrcaRuntime
           // Why: sleeping records are partitioned by execution host; reading
           // only the local partition would miss slept agents on SSH-host
           // worktrees and skip the headless warning for them.
-          Object.values(
+          hasSleptAgentToWake(
             this.store?.getWorkspaceSession?.(getRepoExecutionHostId(repo))
-              .sleepingAgentSessionsByPaneKey ?? {}
-          ).some(
-            // Why: only slept panes need a wake ('live'/'quit' agents are not asleep), and a
-            // tab-open record resumes when its tab opens, headless or not.
-            (record) =>
-              record.worktreeId === worktree.id &&
-              isPaneSleepRecord(record) &&
-              record.restoreOnTabOpenOnly !== true
+              .sleepingAgentSessionsByPaneKey,
+            worktree.id
           )
         ) {
           // Why: headless is only degraded when this worktree actually has a
