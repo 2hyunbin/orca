@@ -58,6 +58,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
   sendLiveTerminalInputRef,
   setLiveInputCapture
 }: TerminalLivePendingInputFlushOptions<TTabType>): TerminalLivePendingInputFlush {
+  const mirrorRevisionRef = useRef(0)
   const heldCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingLiveInputFlushRef = useRef(createTerminalLivePendingFlushState())
   const heldLiveInputTextRef = useRef('')
@@ -74,6 +75,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
   }, [])
 
   const resetMirrorState = useCallback(() => {
+    mirrorRevisionRef.current += 1
     clearHeldCommitTimer()
     cancelTerminalLivePendingFlush(pendingLiveInputFlushRef.current)
     heldLiveInputTextRef.current = ''
@@ -124,6 +126,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
         return false
       }
 
+      mirrorRevisionRef.current += 1
       const step = computeTerminalLiveMirrorStep(sentLiveInputTextRef.current, fieldText, {
         commitHeld,
         composing
@@ -183,19 +186,21 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
   const flushPendingLiveInputText = useCallback(
     async (expectedHandle: string | null): Promise<boolean> => {
       const handle = pendingLiveInputHandleRef.current
-      if (!handle) {
-        return waitForPendingLiveInputFlush()
-      }
-      if (expectedHandle !== null && handle !== expectedHandle) {
+      if (handle && expectedHandle !== null && handle !== expectedHandle) {
         clearPendingLiveInputCommit()
-        return waitForPendingLiveInputFlush()
       }
 
       const heldText = heldLiveInputTextRef.current
-      const result =
-        heldText.length > 0
-          ? await runMirrorStep(handle, sentLiveInputTextRef.current + heldText, true)
-          : await waitForPendingLiveInputFlush()
+      const pending =
+        handle && heldText.length > 0
+          ? runMirrorStep(handle, sentLiveInputTextRef.current + heldText, true)
+          : waitForPendingLiveInputFlush()
+      const revision = mirrorRevisionRef.current
+      const result = await pending
+      // New edits or a reset supersede this flush and its follow-up external action.
+      if (mirrorRevisionRef.current !== revision) {
+        return false
+      }
 
       // Why: an explicit flush ends the field's editing session; the echoed PTY
       // text stays, so local mirror state must restart from empty.
@@ -208,6 +213,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
   // Queue preedit and click synchronously so the next keystroke follows the cursor move.
   const endLiveInputSessionThenSend = useCallback(
     (handle: string, bytes: string): Promise<boolean> => {
+      mirrorRevisionRef.current += 1
       const pendingHandle = pendingLiveInputHandleRef.current
       const flushState = pendingLiveInputFlushRef.current
       if (pendingHandle && pendingHandle !== handle) {
@@ -246,6 +252,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
 
   useEffect(() => {
     return () => {
+      mirrorRevisionRef.current += 1
       if (heldCommitTimerRef.current) {
         clearTimeout(heldCommitTimerRef.current)
         heldCommitTimerRef.current = null

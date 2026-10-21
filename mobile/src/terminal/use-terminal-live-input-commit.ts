@@ -108,24 +108,9 @@ export function useTerminalLiveInputCommit<TTabType extends string>({
   const flushPendingLiveInputBeforeExternalSend = useCallback(
     async (handle: string): Promise<boolean> => {
       advanceLiveInputInteractionGeneration()
-      const pendingHandle = pendingLiveInputHandleRef.current
-      if (pendingHandle && pendingHandle !== handle) {
-        clearPendingLiveInputCommit()
-        return waitForPendingLiveInputFlush()
-      }
-      // Why: external bytes (dictation/paste) land after the field's echo on the
-      // PTY; the field session must fully end or later diffs would erase them.
-      if (pendingHandle === handle) {
-        return flushPendingLiveInputText(handle)
-      }
-      return waitForPendingLiveInputFlush()
+      return flushPendingLiveInputText(handle)
     },
-    [
-      advanceLiveInputInteractionGeneration,
-      clearPendingLiveInputCommit,
-      flushPendingLiveInputText,
-      waitForPendingLiveInputFlush
-    ]
+    [advanceLiveInputInteractionGeneration, flushPendingLiveInputText]
   )
 
   // The mirror assumes the cursor follows its text, so a click starts a new editing session.
