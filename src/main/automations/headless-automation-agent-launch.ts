@@ -1,4 +1,4 @@
-import { getRepoExecutionHostId } from '../../shared/execution-host'
+import { getRepoExecutionHostId, toSshExecutionHostId } from '../../shared/execution-host'
 /**
  * A server-run automation's agent, started through the shared launch executor.
  *
@@ -51,10 +51,26 @@ export async function launchHeadlessAutomationAgent(
 ): Promise<HeadlessAutomationAgentLaunch> {
   const { automation, run, target } = request
   const agent = automation.agentId
+  const selectedTarget =
+    automation.workspaceMode === 'existing'
+      ? await runtime.resolveManagedTerminalWorkspaceTarget(
+          `id:${requireWorkspaceId(automation)}`,
+          getRepoExecutionHostId(target.repo),
+          false
+        )
+      : undefined
+  const selectedWorkspace = selectedTarget?.managedWorktree
+  if (automation.workspaceMode === 'existing' && !selectedWorkspace) {
+    throw new Error('The target workspace is no longer available.')
+  }
   // The startup plan trims the prompt for every agent; a blank one launches the agent bare.
   const text = automation.prompt?.trim()
   if (automation.reuseSession && automation.workspaceMode === 'existing' && text) {
-    const reused = await sendToReusableSession(runtime, { ...request, text })
+    const reused = await sendToReusableSession(
+      runtime,
+      { ...request, text },
+      selectedWorkspace?.displayName ?? null
+    )
     if (reused) {
       return reused
     }
@@ -114,10 +130,10 @@ export async function launchHeadlessAutomationAgent(
         throw new Error(TERMINAL_ONLY_MESSAGE)
       },
       createTerminalAgent: async ({ worktreeId, startupPrompt }) => {
-        const resolved = await runtime.showManagedTerminalWorkspace(
-          `id:${worktreeId}`,
-          getRepoExecutionHostId(target.repo)
-        )
+        const resolved = selectedWorkspace
+        if (!resolved) {
+          throw new Error('The target workspace is no longer available.')
+        }
         const launched = await runtime.launchAgentTerminal(
           `id:${worktreeId}`,
           {
@@ -126,7 +142,11 @@ export async function launchHeadlessAutomationAgent(
             title: run.title,
             ...(automation.extraAgentArgs ? { extraAgentArgs: automation.extraAgentArgs } : {})
           },
-          { worktree: resolved, repo: target.repo }
+          {
+            worktree: resolved,
+            repo: target.repo,
+            folderWorkspace: selectedTarget?.scope.folderWorkspace ?? undefined
+          }
         )
         terminal = launched
         workspace = { id: launched.worktreeId, displayName: resolved.displayName ?? null }
@@ -166,7 +186,8 @@ async function sendToReusableSession(
     runs: readonly AutomationRun[]
     text: string
     target: Extract<AutomationRunTargetResult, { ok: true }>
-  }
+  },
+  workspaceDisplayName: string | null
 ): Promise<HeadlessAutomationAgentLaunch | null> {
   const { automation, text } = request
   const worktreeId = requireWorkspaceId(automation)
@@ -174,6 +195,11 @@ async function sendToReusableSession(
     automationId: automation.id,
     agentId: automation.agentId,
     worktreeId,
+    target: {
+      hostId: getRepoExecutionHostId(request.target.repo),
+      repoId: request.target.repo.id,
+      path: request.target.repo.path
+    },
     currentRunId: request.run.id,
     runs: request.runs,
     agentStatusForPane: (paneKey) =>
@@ -183,7 +209,13 @@ async function sendToReusableSession(
         .toSorted((left, right) => right.receivedAt - left.receivedAt)[0],
     liveSession: (previous) => {
       const handle = runOwnHandle(runtime, previous)
-      return handle ? { handle, previous } : null
+      const live = handle ? runtime.resolveTerminalContext(handle) : null
+      const liveHostId = live?.connectionId ? toSshExecutionHostId(live.connectionId) : 'local'
+      return handle &&
+        live?.worktreeId === worktreeId &&
+        liveHostId === getRepoExecutionHostId(request.target.repo)
+        ? { handle, previous }
+        : null
     }
   })
   if (
@@ -200,13 +232,9 @@ async function sendToReusableSession(
   ) {
     return null
   }
-  const shown = await runtime.showManagedTerminalWorkspace(
-    `id:${worktreeId}`,
-    getRepoExecutionHostId(request.target.repo)
-  )
   return {
     workspaceId: worktreeId,
-    workspaceDisplayName: shown.displayName ?? null,
+    workspaceDisplayName,
     terminalHandle: session.handle,
     terminalSessionId: session.previous.terminalSessionId,
     terminalPaneKey: session.previous.terminalPaneKey,

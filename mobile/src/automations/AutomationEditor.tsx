@@ -45,6 +45,7 @@ export function AutomationEditor(props: {
   const [targets, setTargets] = useState<AutomationTargets | null>(null)
   const [agents, setAgents] = useState<MobileNewTabAgentOption[]>([])
   const [agentsLoading, setAgentsLoading] = useState(true)
+  const [agentError, setAgentError] = useState<string | null>(null)
   const [step, setStep] = useState(props.initialDraft ? 3 : 1)
   const [advanced, setAdvanced] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,7 +91,7 @@ export function AutomationEditor(props: {
         }
       })
       .catch((failure: unknown) => {
-        if (active) {
+        if (active && generation === props.client.getGeneration?.()) {
           setError(automationErrorMessage(failure))
         }
       })
@@ -102,11 +103,15 @@ export function AutomationEditor(props: {
   useEffect(() => {
     if (!setup || !props.connected) {
       setAgentsLoading(false)
+      setAgents([])
+      setAgentError(null)
       return
     }
     let active = true
     const generation = props.client.getGeneration?.()
     setAgentsLoading(true)
+    setAgents([])
+    setAgentError(null)
     void loadAutomationAgents(
       props.client,
       setup,
@@ -122,13 +127,13 @@ export function AutomationEditor(props: {
         )
       })
       .catch((failure: unknown) => {
-        if (active) {
+        if (active && generation === props.client.getGeneration?.()) {
           setAgents([])
-          setError(automationErrorMessage(failure))
+          setAgentError(automationErrorMessage(failure))
         }
       })
       .finally(() => {
-        if (active) {
+        if (active && generation === props.client.getGeneration?.()) {
           setAgentsLoading(false)
         }
       })
@@ -179,10 +184,10 @@ export function AutomationEditor(props: {
       <Text style={styles.meta}>
         {step} of 3 · {step === 1 ? 'Task' : step === 2 ? 'Schedule' : 'Review'}
       </Text>
-      {error ? (
+      {error || agentError ? (
         <View style={styles.stack}>
           <Text accessibilityRole="alert" style={styles.error}>
-            {error}
+            {error ?? agentError}
           </Text>
           {!targets ? (
             <AutomationButton
@@ -310,7 +315,7 @@ export function AutomationEditor(props: {
             }}
             disabled={disabled || agentsLoading}
           />
-          {!agentsLoading && agents.length === 0 && !props.current ? (
+          {!agentsLoading && !agentError && setup && agents.length === 0 && !props.current ? (
             <Text style={styles.meta}>Install and enable an agent on this host, then retry.</Text>
           ) : null}
           <AutomationButton

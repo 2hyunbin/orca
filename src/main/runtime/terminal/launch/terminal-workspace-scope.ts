@@ -41,6 +41,12 @@ import { WorktreeIdRequiresFullPathError } from '../../runtime-worktree-lineage-
 import { triggerTerminalSpawnPushTargetMaterialization } from '../../runtime-terminal-spawn-push-target-materialization'
 import { resolveCreatedWorktreeTerminalTarget } from '../../runtime-created-worktree-terminal-target'
 
+export type TerminalWorkspaceCreationEvidence = [
+  createdWorktree?: Worktree,
+  resolvedWorktree?: ResolvedWorktree,
+  resolvedFolder?: FolderWorkspace
+]
+
 // Why: folder and floating workspaces have no worktree row, so no parent, children or lineage.
 function withoutWorktreeLineage(worktree: Worktree): ResolvedWorktree {
   return {
@@ -121,18 +127,17 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
 
   async resolveTerminalWorkspaceLaunchScope(
     selector: string,
-    createdWorktree?: Worktree,
-    resolvedWorktree?: ResolvedWorktree
+    ...evidence: TerminalWorkspaceCreationEvidence
   ): Promise<TerminalWorkspaceLaunchScope> {
-    return (
-      await this.resolveTerminalWorkspaceLaunchTarget(selector, createdWorktree, resolvedWorktree)
-    ).scope
+    return (await this.resolveTerminalWorkspaceLaunchTarget(selector, ...evidence)).scope
   }
 
   protected async resolveTerminalWorkspaceLaunchTarget(
     selector: string,
     createdWorktree?: Worktree,
-    resolvedWorktree?: ResolvedWorktree
+    resolvedWorktree?: ResolvedWorktree,
+    resolvedFolder?: FolderWorkspace,
+    checkPath = true
   ): Promise<ResolvedTerminalWorkspaceLaunchTarget> {
     if (isFloatingWorkspaceSelector(selector)) {
       // Why no managed worktree: the floating sentinel has no repo or worktree record behind it.
@@ -148,7 +153,11 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
       }
     }
 
-    const folderScope = await this.resolveFolderWorkspaceLaunchScope(selector)
+    const folderScope = await this.resolveFolderWorkspaceLaunchScope(
+      selector,
+      resolvedFolder,
+      checkPath
+    )
     if (folderScope) {
       return {
         scope: folderScope,

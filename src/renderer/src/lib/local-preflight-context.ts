@@ -10,6 +10,7 @@ import {
 import { getRepoExecutionHostId, LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { Repo } from '../../../shared/repo-types'
 import type { Worktree } from '../../../shared/worktree/types'
+import type { ResolvedAgentBackgroundTarget } from './agent-background-session-contract'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { projectMatchesRepo } from '../../../shared/project-repo-match'
 import { getIndexedRepoMap } from '@/store/worktree-repo-index'
@@ -63,23 +64,26 @@ export function getLocalProjectExecutionRuntimeContext(
   state: LocalProjectRuntimeState,
   worktreeId?: string | null,
   appPlatform: NodeJS.Platform = getRendererAppPlatform(),
-  wslContext: LocalProjectRuntimeWslContext = {}
+  wslContext: LocalProjectRuntimeWslContext = {},
+  resolvedTarget?: ResolvedAgentBackgroundTarget
 ): ProjectExecutionRuntimeResolution | undefined {
   if (appPlatform !== 'win32' || worktreeId === FLOATING_TERMINAL_WORKTREE_ID) {
     return undefined
   }
-  const worktree = getLocalProjectRuntimeWorkspace(state, worktreeId)
+  const worktree = resolvedTarget?.worktree ?? getLocalProjectRuntimeWorkspace(state, worktreeId)
   if (
     !worktree &&
     parseWorkspaceKey(worktreeId ?? state.activeWorktreeId ?? '')?.type === 'folder'
   ) {
     return undefined
   }
-  const repo = getLocalRuntimeRepoForWorktree(state, worktree)
+  const repo = resolvedTarget?.repo ?? getLocalRuntimeRepoForWorktree(state, worktree)
   if (!isLocalRuntimeRepo(repo) || !isLocalRuntimeWorktree(worktree)) {
     return undefined
   }
-  const projectId = getLocalPreflightProjectId(state, worktreeId)
+  const projectId = resolvedTarget
+    ? (resolvedTarget.worktree.projectId ?? resolvedTarget.worktree.repoId)
+    : getLocalPreflightProjectId(state, worktreeId)
   const project = getLocalRuntimeProject(state, projectId, repo.id)
   const projectRuntimePreference = getWorkspaceRuntimePreference(
     project?.localWindowsRuntimePreference,
@@ -303,10 +307,7 @@ function getLocalRuntimeRepoForWorktree(
 function isLocalRuntimeRepo(
   repo?: Pick<Repo, 'connectionId' | 'executionHostId'> | null
 ): repo is Pick<Repo, 'id' | 'path' | 'connectionId' | 'executionHostId'> {
-  if (!repo) {
-    return false
-  }
-  return getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
+  return !!repo && getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
 }
 
 function isLocalRuntimeWorktree(worktree?: Pick<Worktree, 'hostId'> | null): boolean {

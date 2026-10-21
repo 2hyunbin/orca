@@ -23,6 +23,7 @@ import {
   normalizeHostPart,
   parseExecutionHostId,
   toSshExecutionHostId,
+  toRuntimeExecutionHostId,
   type ExecutionHostId
 } from './execution-host'
 
@@ -221,4 +222,48 @@ export function getFolderWorkspaceHostId(
     }
   }
   return matchingHostId ?? LOCAL_EXECUTION_HOST_ID
+}
+
+export function resolveQualifiedFolderWorkspace(
+  state: FolderWorkspaceHostState,
+  folderWorkspaceId: string,
+  requiredHostId: ExecutionHostId
+) {
+  const matches = state.folderWorkspaces.flatMap((workspace) => {
+    if (workspace.id !== folderWorkspaceId) {
+      return []
+    }
+    const groups = state.projectGroups.filter((group) => group.id === workspace.projectGroupId)
+    const owners = new Set(groups.map(getRepoExecutionHostId))
+    if (!workspace.executionHostId && !workspace.connectionId && owners.size > 1) {
+      throw new Error('worktree_execution_host_unresolved')
+    }
+    const selected = {
+      ...workspace,
+      executionHostId:
+        workspace.executionHostId ??
+        (workspace.connectionId
+          ? toSshExecutionHostId(workspace.connectionId)
+          : groups[0]?.executionHostId)
+    }
+    const host = resolveFolderWorkspaceHost(
+      { ...state, folderWorkspaces: [selected] },
+      workspace.id
+    )
+    const hostId =
+      host.kind === 'local'
+        ? LOCAL_EXECUTION_HOST_ID
+        : host.kind === 'ssh'
+          ? toSshExecutionHostId(host.targetId)
+          : host.kind === 'runtime'
+            ? toRuntimeExecutionHostId(host.environmentId)
+            : null
+    return hostId === requiredHostId
+      ? [{ workspace, hostId, connectionId: host.kind === 'ssh' ? host.targetId : null }]
+      : []
+  })
+  if (matches.length !== 1) {
+    throw new Error('worktree_execution_host_unresolved')
+  }
+  return matches[0]
 }

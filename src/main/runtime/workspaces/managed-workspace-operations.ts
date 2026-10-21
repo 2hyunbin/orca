@@ -1,3 +1,4 @@
+import { resolveQualifiedFolderWorkspace } from '../../../shared/folder-workspace-execution-host'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
 import { OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce } from '../session-tabs/structured-session-tab-restoration'
@@ -148,20 +149,47 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
    * no such record — callers that only need to address the workspace want the scope below instead.
    */
   async showManagedTerminalWorkspace(worktreeSelector: string, requiredHostId?: ExecutionHostId) {
-    const key = worktreeSelector.startsWith('id:') ? worktreeSelector.slice(3) : worktreeSelector
-    const resolved =
-      requiredHostId && parseWorkspaceKey(key)?.type !== 'folder'
-        ? await this.showManagedWorktree(worktreeSelector, requiredHostId)
-        : undefined
-    const target = await this.resolveTerminalWorkspaceLaunchTarget(
+    const target = await this.resolveManagedTerminalWorkspaceTarget(
       worktreeSelector,
-      undefined,
-      resolved
+      requiredHostId
     )
     if (!target.managedWorktree) {
       throw new Error('selector_not_found')
     }
     return target.managedWorktree
+  }
+
+  async resolveManagedTerminalWorkspaceTarget(
+    worktreeSelector: string,
+    requiredHostId?: ExecutionHostId,
+    checkPath = true
+  ) {
+    const key = worktreeSelector.startsWith('id:') ? worktreeSelector.slice(3) : worktreeSelector
+    const scope = parseWorkspaceKey(key)
+    const store = this.store
+    const folder =
+      requiredHostId && scope?.type === 'folder'
+        ? resolveQualifiedFolderWorkspace(
+            {
+              folderWorkspaces: store?.getFolderWorkspaces?.() ?? [],
+              projectGroups: store?.getProjectGroups?.() ?? [],
+              repos: store?.getRepos() ?? []
+            },
+            scope.folderWorkspaceId,
+            requiredHostId
+          )
+        : undefined
+    const resolved =
+      requiredHostId && scope?.type !== 'folder'
+        ? await this.showManagedWorktree(worktreeSelector, requiredHostId)
+        : undefined
+    return this.resolveTerminalWorkspaceLaunchTarget(
+      worktreeSelector,
+      undefined,
+      resolved,
+      folder ? { ...folder.workspace, executionHostId: folder.hostId } : undefined,
+      checkPath
+    )
   }
 
   /**

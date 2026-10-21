@@ -6,6 +6,7 @@ import { observeExistingAutomationSession } from '@/lib/automation-session-obser
 import { findReusableAutomationSession } from '@/lib/automation-session-reuse'
 import type { AutomationTerminalOwnership } from '@/lib/automation-terminal-ownership'
 import { useAppStore } from '@/store'
+import { getRepoExecutionHostId } from '../../../shared/execution-host'
 import { captureWorkspaceSelection, restoreWorkspaceSelection } from '@/lib/active-workspace-host'
 import type {
   AutomationDispatchRequest,
@@ -99,6 +100,12 @@ export async function handleAutomationDispatchRequest({
         automationId: automation.id,
         agentId: automation.agentId,
         worktreeId: worktree.id,
+        target: {
+          hostId: worktree.hostId ?? getRepoExecutionHostId(resolved.repo),
+          repoId: resolved.repo.id,
+          path: resolved.repo.path,
+          runtimeEnvironmentId: worktree.runtimeOwnerEnvironmentId
+        },
         currentRunId: run.id,
         // Why: the dispatch loop only ever executes for the desktop authority,
         // so its history read addresses the local runtime explicitly.
@@ -169,6 +176,7 @@ export async function handleAutomationDispatchRequest({
     const result = await launchAgentBackgroundSession({
       agent: automation.agentId,
       worktreeId: worktree.id,
+      resolvedTarget: { worktree, repo: resolved.repo },
       prompt: automation.prompt,
       ...(automation.extraAgentArgs ? { extraAgentArgs: automation.extraAgentArgs } : {}),
       launchSource: 'unknown',

@@ -159,6 +159,187 @@ async function mount(loseCreate: boolean | 'legacy' = false) {
 }
 
 describe('mobile automation navigation and setup', () => {
+  it.each(['success', 'failure'] as const)(
+    'keeps acquisition B authoritative after late A %s with copied target IDs',
+    async (late) => {
+      const targets = automationTargets()
+      const a = targets.setups[0]!
+      const b = { ...a, hostId: 'ssh:builder' as const }
+      inventory.targets.mockResolvedValue({
+        ...targets,
+        setups: [a, b],
+        workspaces: ['local', 'ssh:builder'].map((hostId) => ({
+          worktreeId: 'repo-1::/repo',
+          repoId: a.repoId,
+          path: a.path,
+          displayName: 'Copied workspace',
+          hostId
+        }))
+      })
+      const pendingA =
+        deferred<Awaited<ReturnType<typeof AutomationInventoryModule.loadAutomationAgents>>>()
+      const pendingB =
+        deferred<Awaited<ReturnType<typeof AutomationInventoryModule.loadAutomationAgents>>>()
+      inventory.agents.mockImplementation((_client, selected: typeof a) =>
+        selected.hostId === 'local' ? pendingA.promise : pendingB.promise
+      )
+      const port = automationClient(() => ({}))
+      await act(async () => {
+        tree = create(
+          createElement(AutomationEditor, {
+            client: port.client,
+            current: {
+              ...savedAutomation(),
+              workspaceId: 'repo-1::/repo',
+              runContext: {
+                kind: 'workspace-run',
+                projectId: a.projectId,
+                projectHostSetupId: a.id,
+                repoId: a.repoId,
+                hostId: a.hostId,
+                path: a.path
+              }
+            },
+            busy: false,
+            connected: true,
+            capabilities: [],
+            onCancel: vi.fn(),
+            onDraftChange: vi.fn(),
+            onSave: vi.fn()
+          })
+        )
+      })
+      const choice = (label: string) =>
+        root()
+          .findAllByType(AutomationChoice)
+          .find((node) => node.props.label === label)!
+      await act(async () => {
+        choice('Project and host setup').props.onSelect(automationSetupKey(b))
+      })
+      await act(async () => {
+        choice('Existing workspace').props.onSelect('repo-1::/repo')
+      })
+      expect(inventory.agents.mock.calls.map((call) => [call[1].hostId, call[2]])).toEqual([
+        ['local', 'repo-1::/repo'],
+        ['ssh:builder', undefined],
+        ['ssh:builder', 'repo-1::/repo']
+      ])
+      await act(async () => {
+        if (late === 'success') {
+          pendingA.resolve([{ agent: 'claude', label: 'Stale A' }])
+        } else {
+          pendingA.reject(new Error('stale A failed'))
+        }
+      })
+      expect(choice('Agent · detecting…').props.disabled).toBe(true)
+      expect(choice('Agent · detecting…').props.options).toEqual([
+        { value: 'codex', label: 'Codex (saved)' }
+      ])
+      expect(
+        root()
+          .findAllByType(AutomationButton)
+          .find((node) => node.props.label === 'Continue')?.props.disabled
+      ).toBe(true)
+      await act(async () => {
+        pendingB.resolve([{ agent: 'codex', label: 'Current B' }])
+      })
+      expect(choice('Agent').props.options).toEqual([{ value: 'codex', label: 'Current B' }])
+      expect(choice('Agent').props.disabled).toBe(false)
+      expect(
+        root().findAll(
+          (node) => String(node.type) === 'Text' && node.props.accessibilityRole === 'alert'
+        )
+      ).toHaveLength(0)
+      expect(choice('Project and host setup').props.value).toBe(automationSetupKey(b))
+    }
+  )
+
+  it('renders unserved SSH discovery truthfully without local probes or replacing a saved agent', async () => {
+    const actual = await vi.importActual<typeof AutomationInventoryModule>(
+      './automation-target-inventory'
+    )
+    inventory.agents.mockImplementation(actual.loadAutomationAgents)
+    const targets = automationTargets()
+    const ssh = { ...targets.setups[0]!, hostId: 'ssh:builder' as const }
+    inventory.targets.mockResolvedValue({ ...targets, setups: [ssh] })
+    const current = {
+      ...savedAutomation(),
+      agentId: 'claude' as const,
+      runContext: {
+        kind: 'workspace-run' as const,
+        projectId: ssh.projectId,
+        projectHostSetupId: ssh.id,
+        repoId: ssh.repoId,
+        path: ssh.path,
+        hostId: ssh.hostId
+      }
+    }
+    const port = automationClient(() => {
+      throw new Error('unexpected local probe')
+    })
+    const props = {
+      client: port.client,
+      current,
+      busy: false,
+      connected: true,
+      capabilities: [],
+      onCancel: vi.fn(),
+      onDraftChange: vi.fn(),
+      onSave: vi.fn()
+    }
+    await act(async () => {
+      tree = create(createElement(AutomationEditor, props))
+    })
+    expect(port.send).not.toHaveBeenCalled()
+    const labels = root()
+      .findAll((node) => String(node.type) === 'Text')
+      .map(text)
+      .join(' ')
+    expect(labels).toContain(
+      'Agent discovery is unavailable for this project host. Saved agent choices are preserved.'
+    )
+    expect(labels).not.toContain('Install and enable')
+    expect(
+      root()
+        .findAllByType(AutomationChoice)
+        .find((node) => node.props.label === 'Agent')?.props.options
+    ).toContainEqual({ value: 'claude', label: 'Claude (saved)' })
+    await act(async () => {
+      root()
+        .findAllByType(AutomationField)
+        .find((node) => node.props.label === 'Name')!
+        .props.onChange('Renamed SSH automation')
+    })
+    await press('Continue')
+    await press('Continue')
+    await press('Save changes')
+    expect(props.onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Renamed SSH automation',
+        agentId: 'claude',
+        extraAgentArgs: current.extraAgentArgs,
+        reuseSession: true
+      }),
+      expect.anything(),
+      expect.anything()
+    )
+    expect(port.send).not.toHaveBeenCalled()
+    await act(async () => {
+      tree?.unmount()
+      tree = null
+    })
+    await act(async () => {
+      tree = create(createElement(AutomationEditor, { ...props, current: undefined }))
+    })
+    const newLabels = root()
+      .findAll((node) => String(node.type) === 'Text')
+      .map(text)
+      .join(' ')
+    expect(newLabels).toContain('Agent discovery is unavailable for this project host.')
+    expect(newLabels).not.toContain('Install and enable')
+    expect(port.send).not.toHaveBeenCalled()
+  })
+
   it('hands the verified original pane to the served-page router and refuses a replacement PTY', async () => {
     const leaf = '11111111-1111-4111-8111-111111111111'
     const paneKey = `original-tab:${leaf}`

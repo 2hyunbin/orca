@@ -1,3 +1,4 @@
+import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { Repo } from '../../../../shared/repo-types'
 import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import { OrcaRuntimeWithCreateAgentSession } from '../../orca-runtime-create-agent-session'
@@ -156,7 +157,7 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
   async launchAgentTerminal(
     worktreeSelector: string,
     opts: { agent: TuiAgent; prompt: string; title?: string; extraAgentArgs?: string },
-    resolvedTarget?: { worktree: ResolvedWorktree; repo: Repo }
+    resolvedTarget?: { worktree: ResolvedWorktree; repo: Repo; folderWorkspace?: FolderWorkspace }
   ): Promise<RuntimeTerminalCreate> {
     const worktree =
       resolvedTarget?.worktree ?? (await this.resolveWorktreeSelector(worktreeSelector))
@@ -175,7 +176,8 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
       launchScope: await this.resolveTerminalWorkspaceLaunchScope(
         `id:${worktree.id}`,
         undefined,
-        worktree
+        worktree,
+        resolvedTarget?.folderWorkspace
       )
     })
     if (startup.launchRuntime instanceof Error) {
@@ -194,7 +196,8 @@ export abstract class OrcaRuntimeWithTerminalCreateDeduplication extends OrcaRun
         title: opts.title
       },
       undefined,
-      worktree
+      worktree,
+      resolvedTarget?.folderWorkspace
     )
     // Why: agents that read the prompt after they start get it typed in, not on argv.
     if (startup.followup) {

@@ -3,14 +3,19 @@ import { getRepoMainWorktreeId } from '../../../src/shared/worktree/id'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../src/shared/execution-host'
 import type { AutomationDestination } from '../../../src/shared/automation-owner-precondition'
 import { buildWorkspaceRunContext } from '../../../src/shared/task-source-context'
+import { isTuiAgent } from '../../../src/shared/tui-agent-config'
+import {
+  PREFLIGHT_HOST_QUALIFIED_RUNTIME_CAPABILITY,
+  PREFLIGHT_WORKSPACE_SCOPED_RUNTIME_CAPABILITY
+} from '../../../src/shared/preflight-runtime-capabilities'
+import { hostStatusProbe } from '../transport/host-status-probe-operations'
 import {
   newTabRepoListRead,
   preflightDetectAgentsRead,
-  preflightDetectRemoteAgentsRead
+  preflightRefreshAgentsRead
 } from '../session/mobile-session-read-operations'
 import { newTabSettingsRead } from '../transport/settings-read-operations'
 import { buildMobileNewTabAgentOptions } from '../session/mobile-new-tab-agent-options'
-import { loadMobileAgentLaunchContext } from '../session/mobile-new-tab-agent-loader'
 import type { RpcClient } from '../transport/rpc-client'
 import {
   automationWorkspacesRead,
@@ -33,7 +38,10 @@ const repoSchema = z.object({
   executionHostId: z.string().nullish()
 })
 const agentSettingsSchema = z.object({
-  defaultTuiAgent: z.unknown().optional(),
+  defaultTuiAgent: z
+    .unknown()
+    .transform((value) => (isTuiAgent(value) || value === 'blank' ? value : undefined))
+    .optional(),
   disabledTuiAgents: z.unknown().optional()
 })
 
@@ -52,32 +60,25 @@ export async function loadAutomationTargets(client: RpcClient, limit = 200) {
   })
   const projectRows = automationProjectsRead.interpret(projects).projects
   return {
-    setups: automationSetupsRead
-      .interpret(setups)
-      .setups.filter(
-        (setup) =>
-          setup.setupState === 'ready' &&
-          repoRows.some(
-            (repo) =>
-              repo.id === setup.repoId &&
-              repo.path === setup.path &&
-              getRepoExecutionHostId(repo) === setup.hostId
-          )
+    setups: automationSetupsRead.interpret(setups).setups.flatMap((setup) => {
+      const repo = repoRows.find(
+        (repo) =>
+          repo.id === setup.repoId &&
+          repo.path === setup.path &&
+          getRepoExecutionHostId(repo) === setup.hostId
       )
-      .map((setup) => ({
-        ...setup,
-        label:
-          projectRows.find((project) => project.id === setup.projectId)?.displayName ??
-          setup.displayName,
-        kind:
-          setup.kind ??
-          repoRows.find(
-            (repo) =>
-              repo.id === setup.repoId &&
-              repo.path === setup.path &&
-              getRepoExecutionHostId(repo) === setup.hostId
-          )?.kind
-      })),
+      return setup.setupState === 'ready' && repo
+        ? [
+            {
+              ...setup,
+              label:
+                projectRows.find((project) => project.id === setup.projectId)?.displayName ??
+                setup.displayName,
+              kind: setup.kind ?? repo.kind
+            }
+          ]
+        : []
+    }),
     workspaces: workspaceReply.worktrees.flatMap((raw) => {
       const row = z.object({ id: z.string() }).passthrough().safeParse(raw)
       const parsed = workspaceSchema.safeParse(
@@ -124,48 +125,66 @@ export function automationTargetContext(setup: AutomationSetup) {
   })
 }
 
+const agentAcquisitions = new WeakMap<RpcClient, Map<string, symbol>>()
+
 export async function loadAutomationAgents(
   client: RpcClient,
   setup: AutomationSetup,
-  workspaceId?: string
+  workspaceId?: string,
+  refresh = false
 ) {
   const host = parseExecutionHostId(setup.hostId)
-  if (workspaceId && host?.kind !== 'ssh') {
-    const context = await loadMobileAgentLaunchContext({
-      client,
-      worktreeId: workspaceId,
-      hostRefusesOtherRuntime: true
-    })
-    const settings = agentSettingsSchema.safeParse(context.settings)
-    return buildMobileNewTabAgentOptions(
-      { disabledTuiAgents: settings.success ? settings.data.disabledTuiAgents : undefined },
-      context.detectedAgents
+  if (host?.kind !== 'local') {
+    throw new Error(
+      'Agent discovery is unavailable for this project host. Saved agent choices are preserved.'
     )
   }
-  const detection =
-    host?.kind === 'ssh'
-      ? preflightDetectRemoteAgentsRead.request(client, { connectionId: host.targetId })
-      : preflightDetectAgentsRead.request(client, {
-          worktreeId: getRepoMainWorktreeId({ id: setup.repoId, path: setup.path })
-        })
-  const [settingsReply, detectedReply] = await Promise.all([
-    newTabSettingsRead.request(client),
-    detection
-  ])
-  const settings = agentSettingsSchema.safeParse(newTabSettingsRead.interpret(settingsReply)())
-  const detected =
-    host?.kind === 'ssh'
-      ? preflightDetectRemoteAgentsRead.interpret(detectedReply)
+  const key = JSON.stringify([automationSetupKey(setup), workspaceId])
+  const pending = agentAcquisitions.get(client) ?? new Map<string, symbol>()
+  agentAcquisitions.set(client, pending)
+  const token = Symbol()
+  pending.set(key, token)
+  const generation = client.getGeneration?.()
+  const requireCurrent = () => {
+    if (generation !== client.getGeneration?.() || pending.get(key) !== token) {
+      throw new Error('The host connection changed. Try again.')
+    }
+  }
+  try {
+    const status = hostStatusProbe.interpret(await hostStatusProbe.request(client))
+    requireCurrent()
+    const capabilities = status.accepted ? (status.value.capabilities ?? []) : []
+    const worktreeId = workspaceId ?? getRepoMainWorktreeId({ id: setup.repoId, path: setup.path })
+    const params = capabilities.includes(PREFLIGHT_HOST_QUALIFIED_RUNTIME_CAPABILITY)
+      ? { worktreeId, worktreeHostId: host.id }
+      : capabilities.includes(PREFLIGHT_WORKSPACE_SCOPED_RUNTIME_CAPABILITY)
+        ? { worktreeId }
+        : undefined
+    if (
+      !params &&
+      (!status.accepted || !status.value.hostPlatform || status.value.hostPlatform === 'win32')
+    ) {
+      throw new Error(
+        'This host cannot verify agents for this project. Update the host and try again.'
+      )
+    }
+    const [settingsReply, detectedReply] = await Promise.all([
+      newTabSettingsRead.request(client),
+      refresh
+        ? preflightRefreshAgentsRead.request(client, params)
+        : preflightDetectAgentsRead.request(client, params)
+    ])
+    requireCurrent()
+    const settings = agentSettingsSchema.safeParse(newTabSettingsRead.interpret(settingsReply)())
+    const detected = refresh
+      ? preflightRefreshAgentsRead.interpret(detectedReply).agents
       : preflightDetectAgentsRead.interpret(detectedReply)
-  const defaultAgent = settings.success ? settings.data.defaultTuiAgent : undefined
-  const available = buildMobileNewTabAgentOptions(
-    { disabledTuiAgents: settings.success ? settings.data.disabledTuiAgents : undefined },
-    detected
-  )
-  return [
-    ...available.filter((entry) => entry.agent === defaultAgent),
-    ...available.filter((entry) => entry.agent !== defaultAgent)
-  ]
+    return buildMobileNewTabAgentOptions(settings.success ? settings.data : undefined, detected)
+  } finally {
+    if (pending.get(key) === token) {
+      pending.delete(key)
+    }
+  }
 }
 
 export function automationSetupKey(

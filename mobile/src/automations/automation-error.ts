@@ -16,6 +16,14 @@ export function automationErrorMessage(error: unknown): string {
     return automationOwnerConflictMessage(conflict)
   }
   const message = error instanceof Error ? error.message : ''
+  if (
+    message === AUTOMATION_OUTCOME_UNKNOWN ||
+    message ===
+      'Agent discovery is unavailable for this project host. Saved agent choices are preserved.' ||
+    message === 'This host cannot verify agents for this project. Update the host and try again.'
+  ) {
+    return message
+  }
   if (/forbidden|method_not_found/.test(message)) {
     return 'Automations are unavailable on this host. Update Orca on that host and reconnect.'
   }

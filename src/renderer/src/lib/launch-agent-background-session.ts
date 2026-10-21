@@ -1,5 +1,4 @@
 import { useAppStore } from '@/store'
-import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { buildAgentStartupPlan } from '@/lib/tui-agent-startup'
 import type {
   LaunchAgentBackgroundSessionArgs,
@@ -10,7 +9,7 @@ import { scheduleAgentBackgroundDraft } from '@/lib/agent-background-draft-deliv
 import { requestBackgroundTerminalWorktreeMount } from '@/components/terminal/background-terminal-worktree-mount'
 import { resolveAgentStartupPlanInputs } from '../../../shared/agent-startup-plan-inputs'
 import { requireTuiAgentConfig } from '../../../shared/require-tui-agent-config'
-import { resolveAgentBackgroundLaunchHost } from '@/lib/agent-background-session-launch-host'
+import { resolveAgentBackgroundLaunchContext } from '@/lib/agent-background-session-launch-host'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import {
   registerEagerPtyBuffer,
@@ -19,7 +18,6 @@ import {
 } from '@/components/terminal-pane/pty-dispatcher'
 import { subscribeToPtyData } from '@/components/terminal-pane/pty-data-sidecar-subscriptions'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { retireProvider } from '@/lib/retire-unowned-background-terminal'
 import { createRuntimeAgentBackgroundTerminal } from '@/lib/runtime-agent-background-create'
 import { subscribeToRuntimeTerminalData } from '@/runtime/runtime-terminal-stream'
@@ -33,8 +31,8 @@ import {
   reserveAgentBackgroundSessionIdentity
 } from '@/lib/adopt-agent-background-session-tab'
 import { createBackgroundAgentStatusConsumer } from '@/lib/background-agent-status-consumer'
-import { isWslUncPath } from '../../../shared/wsl-paths'
 import { runtimeWaitExitCode, settleTabPtyBinding } from '@/lib/agent-background-session-exit'
+import { isWslUncPath } from '../../../shared/wsl-paths'
 
 export async function launchAgentBackgroundSession(
   args: LaunchAgentBackgroundSessionArgs
@@ -42,23 +40,22 @@ export async function launchAgentBackgroundSession(
   const { agent, worktreeId, prompt, launchSource, title, onData, onExit, onAgentStatus } = args
   const store = useAppStore.getState()
   // Folder workspaces exist only in getKnownWorktreeById (#2989).
-  const worktree = store.getKnownWorktreeById(worktreeId)
-  const repo = worktree ? store.repos.find((entry) => entry.id === worktree.repoId) : null
+  const worktree = args.resolvedTarget?.worktree ?? store.getKnownWorktreeById(worktreeId)
+  const repo =
+    args.resolvedTarget?.repo ??
+    (worktree ? store.repos.find((entry) => entry.id === worktree.repoId) : null)
   if (!worktree) {
     throw new Error('The target workspace is no longer available.')
   }
   // Folder launch ownership cannot be derived from a repo row (#2989).
-  const launchHost = resolveAgentBackgroundLaunchHost({
+  const { launchHost, runtimeTarget, executionFacts } = resolveAgentBackgroundLaunchContext({
     store,
     worktreeId,
     worktreePath: worktree.path,
-    repo
+    repo,
+    resolvedTarget: args.resolvedTarget
   })
   const { platform: launchPlatform, isRemote, isLocalHost } = launchHost
-  // Route by the worktree's owner host, not the focused runtime.
-  const runtimeTarget = runtimeTargetForOwnerEnvironment(
-    runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(store, worktreeId)
-  )
   if (hasExtraAgentArgs(args.extraAgentArgs) && runtimeTarget.kind === 'environment') {
     // Why: that server rebuilds the command from its own settings and would drop the extras.
     throw new Error("Extra arguments can't be applied to a paired server's workspace from here.")
@@ -188,6 +185,9 @@ export async function launchAgentBackgroundSession(
         launchToken,
         launchAgent: agent,
         connectionId: sshConnectionId,
+        ...(executionFacts?.projectRuntime
+          ? { projectRuntime: executionFacts.projectRuntime }
+          : {}),
         worktreeId,
         tabId: reservedTabId,
         leafId,
@@ -212,6 +212,7 @@ export async function launchAgentBackgroundSession(
       launchRegistration,
       runtimeTarget,
       runtimeTerminalHandle,
+      executionFacts,
       onRetire: () => {
         exitHandled = true
         store.clearAgentLaunchConfig(paneKey)

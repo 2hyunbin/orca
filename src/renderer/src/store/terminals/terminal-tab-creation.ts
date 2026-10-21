@@ -34,18 +34,7 @@ import {
   worktreeUsesWslPath
 } from './terminal-workspace-routing'
 import type { AppState } from '../types'
-type TabStartupCommand = TerminalSlice['pendingStartupByTabId'][string]
-
-function normalizeTabStartupCommand(startup: TabStartupCommand): TabStartupCommand {
-  // Why: launchToken is only meaningful for tracked launch-config reuse; plain startup commands must not mint a synthetic token.
-  const launchToken = startup.launchConfig
-    ? (startup.launchToken ?? createBrowserUuid())
-    : undefined
-  return {
-    ...startup,
-    ...(launchToken ? { launchToken } : {})
-  }
-}
+import { normalizeTabStartupCommand } from './terminal-startup-queues'
 
 export function createTerminalTabCreationActions(
   set: TerminalStoreSet,
@@ -101,23 +90,30 @@ export function createTerminalTabCreationActions(
         const defaultTitle = `Terminal ${nextOrdinal}`
         const quickCommandLabel = options?.quickCommandLabel?.trim()
         const startupCwd = options?.startupCwd
-        const remoteConnectionId = getRemoteConnectionIdForWorktree(s, worktreeId)
-        const isRemoteWorktree = Boolean(remoteConnectionId)
-        const isWslWorktree = worktreeUsesWslPath(s, worktreeId)
+        const facts = options?.executionFacts
+        const remoteConnectionId = facts
+          ? facts.connectionId
+          : getRemoteConnectionIdForWorktree(s, worktreeId)
+        const isRemoteWorktree = facts?.isRemote ?? Boolean(remoteConnectionId)
+        const isWslWorktree = facts?.isWsl ?? worktreeUsesWslPath(s, worktreeId)
         const createdShellOverride = resolveCreatedTabShellOverride(
           shellOverride,
           s.settings?.terminalWindowsShell,
           // Why: SSH PTYs ignore local Windows shell selection; a local shell icon would mislabel a remote terminal.
           isRemoteWorktree,
-          remoteConnectionId
-            ? ((s.sshConnectionStates.get(remoteConnectionId)
-                ?.remotePlatform as NodeJS.Platform | null) ?? null)
-            : null,
+          facts
+            ? facts.platform
+            : remoteConnectionId
+              ? ((s.sshConnectionStates.get(remoteConnectionId)
+                  ?.remotePlatform as NodeJS.Platform | null) ?? null)
+              : null,
           // Why: new terminals enter the worktree's repo-scoped WSL distro even when the global Windows shell is PowerShell/cmd.exe.
           isWslWorktree,
-          isRemoteWorktree || options?.forceHostRuntime
-            ? undefined
-            : getLocalProjectExecutionRuntimeContext(s, worktreeId)
+          facts
+            ? facts.projectRuntime
+            : isRemoteWorktree || options?.forceHostRuntime
+              ? undefined
+              : getLocalProjectExecutionRuntimeContext(s, worktreeId)
         )
         tab = {
           id,
@@ -207,6 +203,7 @@ export function createTerminalTabCreationActions(
           groupId: group.id,
           worktreeId,
           contentType: 'terminal' as const,
+          ...(facts ? { executionHostId: facts.hostId } : {}),
           label: tab.title,
           ...(tab.quickCommandLabel?.trim()
             ? { quickCommandLabel: tab.quickCommandLabel.trim() }

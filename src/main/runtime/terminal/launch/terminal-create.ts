@@ -1,4 +1,4 @@
-import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
+import type { TerminalWorkspaceCreationEvidence } from './terminal-workspace-scope'
 import { revealCreatedTerminal } from './terminal-create-reveal'
 import type { PaneSpawnOperation } from '../../../ipc/pty/pane/pane-spawn-operation'
 import { OrcaRuntimeWithTerminalCreateDeduplication } from './terminal-create-deduplication'
@@ -18,8 +18,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
     selector?: string,
     opts: dependencies.TerminalCreateOptions = {},
     // Internal creation evidence; RPC and preload callers never supply it.
-    created?: dependencies.Worktree,
-    resolved?: ResolvedWorktree
+    ...evidence: TerminalWorkspaceCreationEvidence
   ): Promise<dependencies.RuntimeTerminalCreate> {
     if (opts.startupAgent && selector === undefined) {
       throw new Error(`startupAgent ${opts.startupAgent} requires a workspace selector.`)
@@ -37,7 +36,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
       if (!ptyController?.spawn) {
         throw new Error('runtime_unavailable')
       }
-      const workspace = await this.resolveTerminalWorkspaceLaunchScope(selector, created, resolved)
+      const workspace = await this.resolveTerminalWorkspaceLaunchScope(selector, ...evidence)
       const launchOpts = await this.resolveAgentTerminalCreateOptions(workspace, opts)
       let cwd = this.resolveWorkspaceTerminalStartupCwd(workspace, launchOpts.cwd) ?? workspace.path
       const session = this.getWorkspaceSessionForWorktree(workspace.id)

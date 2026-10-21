@@ -41,7 +41,10 @@ function harness(options: { startupTerminal?: Record<string, unknown> | null } =
       worktreeId: 'wt-1',
       title: 'Nightly'
     })),
-    showManagedTerminalWorkspace: vi.fn(async () => ({ displayName: 'repo' })),
+    resolveManagedTerminalWorkspaceTarget: vi.fn(async () => ({
+      managedWorktree: { displayName: 'repo' },
+      scope: { folderWorkspace: null }
+    })),
     getAgentStatusRowsForPane: vi.fn((_paneKey: string) => [
       { state: 'done', agentType: 'claude', receivedAt: 2 }
     ]),
@@ -49,6 +52,12 @@ function harness(options: { startupTerminal?: Record<string, unknown> | null } =
       paneKey === 'tab-prev:leaf-1' ? 'term_prev' : null
     ),
     getTerminalPtyIdForHandle: vi.fn((_handle: string) => 'pty-prev'),
+    resolveTerminalContext: vi.fn(
+      (_handle: string): { worktreeId: string; connectionId: string | null } => ({
+        worktreeId: 'wt-1',
+        connectionId: null
+      })
+    ),
     deliverStartupFollowup: vi.fn(
       async (_handle: string, _followup: { expectedProcess: string; prompt: string }) => true
     )
@@ -116,6 +125,55 @@ function launch(
 }
 
 describe('headless automation agent launch', () => {
+  it('admits the selected workspace before writing, and vetoes historical or live host conflicts', async () => {
+    const runtime = harness()
+    const oldTarget = {
+      kind: 'workspace-run',
+      projectId: 'old-project',
+      projectHostSetupId: 'old-setup',
+      hostId: 'ssh:old',
+      repoId: 'repo-1',
+      path: '/repo'
+    } as const
+    await launch(runtime, { reuseSession: true }, [previousRun({ runContext: oldTarget })])
+    expect(deliverTerminalAgentLaunchPrompt).not.toHaveBeenCalled()
+    expect(runtime.launchAgentTerminal).toHaveBeenCalledTimes(1)
+    runtime.launchAgentTerminal.mockClear()
+    runtime.resolveTerminalContext.mockReturnValue({ worktreeId: 'wt-1', connectionId: 'old' })
+    await launch(runtime, { reuseSession: true }, [previousRun()])
+    expect(deliverTerminalAgentLaunchPrompt).not.toHaveBeenCalled()
+    expect(runtime.launchAgentTerminal).toHaveBeenCalledTimes(1)
+    runtime.launchAgentTerminal.mockClear()
+    runtime.resolveManagedTerminalWorkspaceTarget.mockRejectedValueOnce(
+      new Error('selector_not_found')
+    )
+    await expect(launch(runtime, { reuseSession: true }, [previousRun()])).rejects.toThrow(
+      'selector_not_found'
+    )
+    expect(deliverTerminalAgentLaunchPrompt).not.toHaveBeenCalled()
+    expect(runtime.launchAgentTerminal).not.toHaveBeenCalled()
+  })
+
+  it('reuses a proven local legacy pane and ignores logical setup replacement for the same physical target', async () => {
+    const runtime = harness()
+    for (const runContext of [
+      undefined,
+      {
+        kind: 'workspace-run',
+        projectId: 'replaced-project',
+        projectHostSetupId: 'replaced-setup',
+        hostId: 'local',
+        repoId: 'repo-1',
+        path: '/repo/'
+      } as const
+    ]) {
+      await launch(runtime, { reuseSession: true }, [previousRun({ runContext })])
+    }
+    expect(deliverTerminalAgentLaunchPrompt).toHaveBeenCalledTimes(2)
+    expect(runtime.launchAgentTerminal).not.toHaveBeenCalled()
+    expect(runtime.resolveManagedTerminalWorkspaceTarget).toHaveBeenCalledTimes(2)
+  })
+
   it('launches Hermes through the ordinary agent contract', async () => {
     const runtime = harness()
 

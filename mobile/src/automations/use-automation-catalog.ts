@@ -119,7 +119,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
   }, [client, server, refresh])
 
   async function perform<T>(
-    action: (port: RpcClient) => Promise<T>,
+    action: (port: RpcClient, current: () => boolean) => Promise<T>,
     accept: (value: T) => void
   ): Promise<void> {
     if (locked.current || !client || client.getState() !== 'connected') {
@@ -133,7 +133,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
     const current = () =>
       mounted.current && at === epoch.current && generation === client.getGeneration?.()
     try {
-      const value = await action(client)
+      const value = await action(client, current)
       if (current()) {
         accept(value)
       } else if (mounted.current) {

@@ -1,4 +1,5 @@
 import type { TerminalState } from './terminal-state'
+import type { TerminalCreationExecutionFacts } from './terminal-contracts'
 import type { Tab } from '../../../../shared/tab-types'
 import type { TabSplitTarget } from '../slices/tabs/tabs-slice-contract'
 import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -63,6 +64,7 @@ export type TerminalActions = {
     options?: {
       pendingActivationSpawn?: boolean
       initialPtyId?: string
+      executionFacts?: TerminalCreationExecutionFacts
       /** Stable leaf identity: an already-live pane's, or a host launch's pane before its process. */
       initialLeafId?: string
       /** Published atomically with the tab so its first mount cannot spawn a bare shell. */

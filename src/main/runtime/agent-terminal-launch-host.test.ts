@@ -96,7 +96,8 @@ describe('launchAgentTerminal execution host', () => {
       `id:${worktree.id}`,
       expect.any(Object),
       undefined,
-      worktree
+      worktree,
+      undefined
     )
   })
 

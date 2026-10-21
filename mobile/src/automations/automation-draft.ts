@@ -1,3 +1,4 @@
+import { assertAutomationExtraAgentArgs } from '../../../src/shared/automation-extra-agent-args-record'
 import type { TuiAgent } from '../../../src/shared/tui-agent'
 import type { RpcSendParams } from '../transport/rpc-params-contract'
 import type { MobileAutomation } from './automation-reply-schema'
@@ -63,6 +64,18 @@ export function validateAutomationDraft(
   if (draft.workspaceMode === 'existing' && !draft.workspaceId) {
     return 'Choose an existing workspace.'
   }
+  if (
+    !saved ||
+    draft.agentId !== saved.agentId ||
+    draft.extraAgentArgs !== (saved.extraAgentArgs ?? '') ||
+    draft.reuseSession !== (saved.reuseSession ?? false)
+  ) {
+    try {
+      assertAutomationExtraAgentArgs({ ...draft, agentId: draft.agentId })
+    } catch (failure) {
+      return failure instanceof Error ? failure.message : 'Check the extra agent arguments.'
+    }
+  }
   if (step < 2) {
     return null
   }
@@ -124,22 +137,10 @@ export function automationDraftPatch(
   draft: AutomationDraft,
   original: AutomationDraft
 ): UpdateFields {
-  const fields = editableFields(draft)
-  const before = editableFields(original)
+  const fields: Record<string, unknown> = editableFields(draft)
+  const before: Record<string, unknown> = editableFields(original)
   const patch: UpdateFields = {}
-  for (const key of [
-    'name',
-    'prompt',
-    'agentId',
-    'rrule',
-    'timezone',
-    'baseBranch',
-    'setupDecision',
-    'reuseSession',
-    'extraAgentArgs',
-    'precheck',
-    'missedRunGraceMinutes'
-  ] as const) {
+  for (const key of new Set([...Object.keys(before), ...Object.keys(fields)])) {
     if (fields[key] !== before[key]) {
       if (
         key === 'precheck' &&
@@ -162,6 +163,7 @@ export function automationCreateParams(
   if (!setup || !draft.agentId) {
     throw new Error('Choose a project and agent on this host.')
   }
+  assertAutomationExtraAgentArgs({ ...draft, agentId: draft.agentId })
   const workspace = targets.workspaces.find(
     (entry) => entry.worktreeId === draft.workspaceId && workspaceMatchesSetup(entry, setup)
   )

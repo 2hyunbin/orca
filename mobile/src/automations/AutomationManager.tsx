@@ -187,7 +187,7 @@ export function AutomationManager(props: {
   function save(draft: AutomationDraft, original: AutomationDraft, targets: AutomationTargets) {
     const editing = view.kind === 'editor' ? view.row : undefined
     void catalog.perform(
-      async (client) => {
+      async (client, current) => {
         if (editing) {
           const params = automationUpdateParams(editing.automation.id, draft, original, targets)
           const result = automationUpdateWrite.interpret(
@@ -207,7 +207,7 @@ export function AutomationManager(props: {
               : editing.item
           }
         }
-        await createAttempt.submit(client, draft, targets, catalog.capabilities)
+        await createAttempt.submit(client, draft, targets, catalog.capabilities, current)
         return null
       },
       (saved) => {

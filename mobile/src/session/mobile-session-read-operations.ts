@@ -1,5 +1,6 @@
 import { bindDeferredRpcOperation, defineRpcOperation } from '../transport/rpc-operation'
 import { rpcResultVariant } from '../transport/rpc-operation-result-reader'
+import { z } from 'zod'
 import {
   detectedAgentsSchema,
   markdownTabDocumentSchema,
@@ -87,6 +88,25 @@ export const preflightDetectAgentsRead = bindDeferredRpcOperation(
     acceptance: 'require-result-or-throw-message',
     barrier: 'after-caller-barrier',
     read: rpcResultVariant('detected-agents', detectedAgentsSchema)
+  })
+)
+
+export const preflightRefreshAgentsRead = bindDeferredRpcOperation(
+  defineRpcOperation({
+    name: 'preflight.refresh-agents',
+    method: 'preflight.refreshAgents',
+    acceptance: 'require-result-or-throw-message',
+    barrier: 'after-caller-barrier',
+    read: rpcResultVariant(
+      'refreshed-agents',
+      z.object({
+        agents: detectedAgentsSchema,
+        addedPathSegments: z.array(z.string()),
+        shellHydrationOk: z.boolean(),
+        pathSource: z.string(),
+        pathFailureReason: z.string()
+      })
+    )
   })
 )
 

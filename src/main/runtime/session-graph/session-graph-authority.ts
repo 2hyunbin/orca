@@ -1,3 +1,5 @@
+import { parseExecutionHostId } from '../../../shared/execution-host'
+import { WORKSPACE_ON_OTHER_RUNTIME } from '../../../shared/protocol-version'
 import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktreeMethods } from '../terminal/launch/terminal-workspace-scope'
 import { OrcaRuntimeWithHasTerminalsForWorktree } from './session-graph-reload-lifecycle'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
@@ -6,6 +8,7 @@ import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-s
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import {
   assertFolderWorkspacePathUsable,
+  getFolderWorkspacePathStatusForPath,
   getFolderWorkspacePathStatus,
   inferFolderWorkspacePathConnection
 } from '../../project-groups/folder-workspace-path-status'
@@ -118,24 +121,48 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
   }
 
   protected async resolveFolderWorkspaceLaunchScope(
-    selector: string
+    selector: string,
+    resolvedFolder?: FolderWorkspace,
+    checkPath = true
   ): Promise<(TerminalWorkspaceLaunchScope & { folderWorkspace: FolderWorkspace }) | null> {
-    const workspace = this.resolveFolderWorkspaceSelector(selector)
+    const workspace = resolvedFolder ?? this.resolveFolderWorkspaceSelector(selector)
     if (!workspace) {
       return null
     }
     if (!this.store) {
       throw new Error('runtime_unavailable')
     }
-    const status = await getFolderWorkspacePathStatus(this.store, {
-      scope: 'folder-workspace',
-      folderWorkspaceId: workspace.id
-    })
-    assertFolderWorkspacePathUsable(status)
+    const host = parseExecutionHostId(workspace.executionHostId)
+    if (resolvedFolder && host?.kind === 'runtime' && checkPath) {
+      throw new Error(WORKSPACE_ON_OTHER_RUNTIME)
+    }
+    const connectionId = !resolvedFolder
+      ? null
+      : host?.kind === 'ssh'
+        ? host.targetId
+        : host?.kind === 'local'
+          ? null
+          : this.resolveFolderWorkspaceConnectionId(workspace)
+    if (checkPath) {
+      const status = resolvedFolder
+        ? await getFolderWorkspacePathStatusForPath({
+            folderPath: workspace.folderPath,
+            connectionId,
+            projectGroups: [],
+            repos: []
+          })
+        : await getFolderWorkspacePathStatus(this.store, {
+            scope: 'folder-workspace',
+            folderWorkspaceId: workspace.id
+          })
+      assertFolderWorkspacePathUsable(status)
+    }
     return {
       id: folderWorkspaceKey(workspace.id),
       path: workspace.folderPath,
-      connectionId: this.resolveFolderWorkspaceConnectionId(workspace),
+      connectionId: resolvedFolder
+        ? connectionId
+        : this.resolveFolderWorkspaceConnectionId(workspace),
       repo: null,
       folderWorkspace: workspace
     }

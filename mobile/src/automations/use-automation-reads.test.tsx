@@ -5,6 +5,11 @@ import { useAutomationCatalog } from './use-automation-catalog'
 import { useAutomationRuns, type AutomationRunScope } from './use-automation-runs'
 import { automationClient, deferred, savedAutomation, savedRun } from './automation-test-fixtures'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
+import { useAutomationCreateAttempt } from './use-automation-create-attempt'
+import { newAutomationDraft, validateAutomationDraft } from './automation-draft'
+import { automationTargets } from './automation-test-fixtures'
+import { AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY } from '../../../src/shared/automation-runtime-capabilities'
+import { AUTOMATION_OUTCOME_UNKNOWN } from './automation-error'
 
 vi.mock('react-native', () => ({
   AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) }
@@ -24,6 +29,115 @@ function latest<T>(read: () => T | null) {
 }
 
 describe('host-owned automation reads', () => {
+  it.each([false, true])(
+    'allows correction only before possible application (keyed=%s)',
+    async (keyed) => {
+      const port = automationClient(() => ({ automation: savedAutomation() }))
+      let state: ReturnType<typeof useAutomationCreateAttempt> | null = null
+      function Probe() {
+        state = useAutomationCreateAttempt([], true, vi.fn())
+        return null
+      }
+      await act(async () => {
+        tree = create(createElement(Probe))
+      })
+      const targets = automationTargets()
+      const setup = targets.setups[0]!
+      const draft = {
+        ...newAutomationDraft(),
+        name: 'Review',
+        prompt: 'Submitted A',
+        agentId: 'codex' as const,
+        setupId: JSON.stringify([setup.hostId, setup.id, setup.repoId, setup.path]),
+        extraAgentArgs: '--not-a-real-option'
+      }
+      const submit = (next = draft) =>
+        latest(() => state).submit(
+          port.client,
+          next,
+          targets,
+          keyed ? [AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY] : [],
+          () => true
+        )
+      expect(validateAutomationDraft(draft, 1)).toBeTruthy()
+      await expect(submit()).rejects.toThrow()
+      expect(port.send).not.toHaveBeenCalled()
+      draft.extraAgentArgs = '--model gpt-5'
+      expect(validateAutomationDraft(draft, 1)).toBeNull()
+      port.send.mockRejectedValueOnce(new Error('disconnected before write'))
+      await expect(submit()).rejects.toThrow('disconnected before write')
+      port.send.mockResolvedValueOnce({
+        id: 'reply',
+        ok: false,
+        error: { code: 'forbidden', message: 'Admission refused' }
+      })
+      await expect(submit({ ...draft, prompt: 'Corrected before send' })).rejects.toThrow()
+      await submit({ ...draft, prompt: 'Accepted C' })
+      expect(port.send).toHaveBeenCalledTimes(3)
+      expect(port.send.mock.calls.at(-1)?.[1]).toMatchObject({
+        prompt: 'Accepted C',
+        extraAgentArgs: '--model gpt-5',
+        ...(keyed ? { creationKey: expect.any(String) } : {})
+      })
+    }
+  )
+
+  it.each(['timeout', 'runtime_error', 'unreadable'] as const)(
+    'retains the original command after %s, even when its retry never sends',
+    async (failure) => {
+      const port = automationClient(() => ({}))
+      let state: ReturnType<typeof useAutomationCreateAttempt> | null = null
+      function Probe() {
+        state = useAutomationCreateAttempt([], true, vi.fn())
+        return null
+      }
+      await act(async () => {
+        tree = create(createElement(Probe))
+      })
+      const setup = automationTargets().setups[0]!
+      const draft = {
+        ...newAutomationDraft(),
+        name: 'Review',
+        prompt: 'Submitted A',
+        agentId: 'codex' as const,
+        setupId: JSON.stringify([setup.hostId, setup.id, setup.repoId, setup.path])
+      }
+      const submit = (prompt: string) =>
+        latest(() => state).submit(
+          port.client,
+          { ...draft, prompt },
+          automationTargets(),
+          [AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY],
+          () => true
+        )
+      if (failure === 'timeout') {
+        port.send.mockRejectedValueOnce(markRpcDeliveryUnknown(new Error('sent timeout')))
+      } else if (failure === 'runtime_error') {
+        port.send.mockResolvedValueOnce({
+          id: 'reply',
+          ok: false,
+          error: { code: 'runtime_error', message: 'flush failed after write' }
+        })
+      }
+      await expect(submit('Submitted A')).rejects.toThrow(AUTOMATION_OUTCOME_UNKNOWN)
+      port.send.mockRejectedValueOnce(new Error('retry never sent'))
+      await expect(submit('Edited B')).rejects.toThrow(AUTOMATION_OUTCOME_UNKNOWN)
+      port.send.mockResolvedValueOnce({
+        id: 'reply',
+        ok: false,
+        error: { code: 'forbidden', message: 'retry refused' }
+      })
+      await expect(submit('Edited C')).rejects.toThrow(AUTOMATION_OUTCOME_UNKNOWN)
+      expect(port.send.mock.calls[1]?.[1]).toEqual(port.send.mock.calls[0]?.[1])
+      expect(port.send.mock.calls[2]?.[1]).toEqual(port.send.mock.calls[0]?.[1])
+      expect(port.send.mock.calls[0]?.[1]).toMatchObject({
+        prompt: 'Submitted A',
+        creationKey: expect.any(String),
+        dtstart: expect.any(Number)
+      })
+    }
+  )
+
   it('observes old loaded/selected identities through failures, reconnect and captured scopes', async () => {
     let runs = Array.from({ length: 65 }, (_, i) => ({
       ...savedRun(`r-${i}`),

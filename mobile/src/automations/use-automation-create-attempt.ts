@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY } from '../../../src/shared/automation-runtime-capabilities'
 import { randomV4Uuid } from '../platform/random-v4-uuid'
+import { isRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
+import type { RpcResponse } from '../transport/types'
 import type { RpcClient } from '../transport/rpc-client'
 import type { MobileAutomationRow } from './automation-reply-schema'
 import { automationCreateWrite } from './automation-operations'
@@ -44,25 +46,10 @@ export function useAutomationCreateAttempt(
     const current = latestDraft.current ?? submitted.draft
     const baseline = newAutomationDraft(saved.automation)
     const changes: Partial<AutomationDraft> = {}
-    for (const key of [
-      'name',
-      'prompt',
-      'agentId',
-      'setupId',
-      'workspaceId',
-      'workspaceMode',
-      'rrule',
-      'timezone',
-      'baseBranch',
-      'setupDecision',
-      'reuseSession',
-      'extraAgentArgs',
-      'precheckCommand',
-      'precheckTimeout',
-      'grace'
-    ] as const) {
-      if (current[key] !== submitted.draft[key]) {
-        Object.assign(changes, { [key]: current[key] })
+    const submittedEntries = new Map(Object.entries(submitted.draft))
+    for (const [key, value] of Object.entries(current)) {
+      if (value !== submittedEntries.get(key)) {
+        Object.assign(changes, { [key]: value })
       }
     }
     attempt.current = null
@@ -78,11 +65,13 @@ export function useAutomationCreateAttempt(
       client: RpcClient,
       draft: AutomationDraft,
       targets: AutomationTargets,
-      capabilities: readonly string[]
+      capabilities: readonly string[],
+      current: () => boolean
     ) => {
       if (attempt.current && !attempt.current.params.creationKey) {
         throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
       }
+      const firstSubmission = attempt.current === null
       const submitted: SubmittedAutomationCreate = attempt.current ?? {
         params: automationCreateParams(
           draft,
@@ -94,12 +83,37 @@ export function useAutomationCreateAttempt(
         draft: { ...draft }
       }
       attempt.current = submitted
-      const result = automationCreateWrite.interpret(
-        await automationCreateWrite.request(client, submitted.params, {
+      const generation = client.getGeneration?.()
+      const sameAttempt = () =>
+        attempt.current === submitted && current() && generation === client.getGeneration?.()
+      let response: RpcResponse
+      try {
+        response = await automationCreateWrite.request(client, submitted.params, {
           failWhenDisconnected: true
         })
-      )
-      submitted.replyId = result.automation.id
+      } catch (failure) {
+        if (firstSubmission && !isRpcDeliveryUnknown(failure) && sameAttempt()) {
+          attempt.current = null
+          throw failure
+        }
+        throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
+      }
+      if (!sameAttempt()) {
+        throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
+      }
+      if (
+        firstSubmission &&
+        !response.ok &&
+        ['forbidden', 'method_not_found', 'method_not_supported'].includes(response.error.code)
+      ) {
+        attempt.current = null
+        automationCreateWrite.interpret(response)
+      }
+      try {
+        submitted.replyId = automationCreateWrite.interpret(response).automation.id
+      } catch {
+        throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
+      }
     }
   }
 }

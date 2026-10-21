@@ -7,6 +7,7 @@ import { createBrowserUuid } from '@/lib/browser-uuid'
 import { retireProvider, retireUnownedTerminal } from '@/lib/retire-unowned-background-terminal'
 import { isTerminalTabPresent } from '@/store/slices/terminal-tab-retirement'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import type { TerminalCreationExecutionFacts } from '@/store/terminals/terminal-contracts'
 
 type Store = ReturnType<typeof useAppStore.getState>
 type RegisterArgs = Parameters<Store['registerAgentLaunchConfig']>
@@ -64,6 +65,7 @@ export async function adoptAgentBackgroundSessionTab(args: {
   launchRegistration: NonNullable<RegisterArgs[2]>
   runtimeTarget: RuntimeClientTarget
   runtimeTerminalHandle: string | null
+  executionFacts?: TerminalCreationExecutionFacts
   onRetire: () => void
   title?: string
 }): Promise<{
@@ -75,7 +77,7 @@ export async function adoptAgentBackgroundSessionTab(args: {
   // The worktree can disappear while its PTY spawn is pending.
   if (
     await retireUnownedTerminal({
-      owner: { worktreeId: args.worktreeId },
+      owner: { worktreeId: args.worktreeId, hostId: args.executionFacts?.hostId },
       ptyId,
       runtimeTarget: args.runtimeTarget,
       runtimeTerminalHandle: args.runtimeTerminalHandle,
@@ -98,6 +100,7 @@ export async function adoptAgentBackgroundSessionTab(args: {
   const tab = store.createTab(args.worktreeId, undefined, undefined, {
     id: reservedTabId,
     initialPtyId: ptyId,
+    executionFacts: args.executionFacts,
     activate: false,
     recordInteraction: false,
     // Switch point: main records the tab under the pane id its terminal already runs as.
