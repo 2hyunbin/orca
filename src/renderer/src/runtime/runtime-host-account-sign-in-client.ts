@@ -209,6 +209,18 @@ function runHostAccountSignIn(
   return done
 }
 
+/** The server this client is signing `provider` in on, wherever Settings now points. */
+export function runningHostAccountSignInOwner(
+  provider: HostAccountSignInProvider
+): EnvironmentTarget | null {
+  for (const attempt of attempts.values()) {
+    if (attempt.provider === provider) {
+      return attempt.owner
+    }
+  }
+  return null
+}
+
 export function subscribeHostAccountSignIns(listener: () => void): () => void {
   listeners.add(listener)
   return () => listeners.delete(listener)

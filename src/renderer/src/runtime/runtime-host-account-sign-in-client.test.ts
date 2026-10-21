@@ -34,7 +34,8 @@ import {
   addCodexAccountOnHost,
   cancelHostAccountSignIn,
   readHostAccountSignIn,
-  retryLostAnswers
+  retryLostAnswers,
+  runningHostAccountSignInOwner
 } from './runtime-host-account-sign-in-client'
 
 const OWNER = { kind: 'environment', environmentId: 'server' } as const
@@ -91,6 +92,21 @@ describe('host account sign-in client', () => {
     start.resolve(status({}))
     await expect(adding).rejects.toThrow('Codex sign-in was cancelled.')
     expect(rpc.calls.map((call) => call.method)).toContain('accounts.hostSignInCancel')
+  })
+
+  it('names the server a sign-in runs on, so Cancel reaches it after the picker moves', async () => {
+    const start = Promise.withResolvers<HostAccountSignInStatus>()
+    rpc.answer = (method) =>
+      method === 'accounts.hostSignInStart'
+        ? start.promise
+        : status({ revision: 2, phase: 'signedIn', codex: CODEX })
+    expect(runningHostAccountSignInOwner('codex')).toBeNull()
+    const adding = addCodexAccountOnHost(OWNER)
+    expect(runningHostAccountSignInOwner('codex')).toEqual(OWNER)
+    expect(runningHostAccountSignInOwner('claude')).toBeNull()
+    start.resolve(status({}))
+    await adding
+    expect(runningHostAccountSignInOwner('codex')).toBeNull()
   })
 
   it('joins the running sign-in when Add is clicked again', async () => {

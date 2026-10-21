@@ -3,8 +3,10 @@ import { Check, Copy, ExternalLink } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { useClipboardTextCopyFeedback } from '@/hooks/use-clipboard-text-copy-feedback'
 import {
+  cancelHostAccountSignIn,
   isLostHostAnswer,
   readHostAccountSignIn,
+  runningHostAccountSignInOwner,
   submitHostAccountSignInCode,
   subscribeHostAccountSignIns
 } from '@/runtime/runtime-host-account-sign-in-client'
@@ -18,7 +20,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 
 /** A Cancel the server could not be told about yet; the sign-in keeps asking it to stop. */
-export function showHostCancelFailure(error: unknown): void {
+function showHostCancelFailure(error: unknown): void {
   // Why only lost answers: a refusal means the flow already ended, which the pane shows itself.
   if (!isLostHostAnswer(error)) {
     return
@@ -29,6 +31,20 @@ export function showHostCancelFailure(error: unknown): void {
       description: error instanceof Error ? error.message : String(error)
     }
   )
+}
+
+/**
+ * Cancels this client's sign-in for `provider`: the server's, wherever Settings now points, or the
+ * desktop's own when no server sign-in runs.
+ */
+export function cancelAccountSignIn(
+  provider: HostAccountSignInProvider,
+  cancelLocal: () => Promise<unknown>
+): Promise<unknown> {
+  const owner = runningHostAccountSignInOwner(provider)
+  return owner
+    ? cancelHostAccountSignIn(owner, provider).catch(showHostCancelFailure)
+    : cancelLocal()
 }
 
 function CopyButton(props: { text: string; label: string }): React.JSX.Element {
@@ -160,7 +176,12 @@ export function HostAccountSignInPrompt(props: {
         </div>
       ) : null}
       {url && prompt?.needsCode ? (
-        <PastedCodeForm owner={props.owner} provider={props.provider} />
+        // Why keyed: a code typed for one server's flow must never be sent to another's.
+        <PastedCodeForm
+          key={`${props.owner.kind === 'environment' ? props.owner.environmentId : ''}:${status.flowId}`}
+          owner={props.owner}
+          provider={props.provider}
+        />
       ) : null}
     </div>
   )
