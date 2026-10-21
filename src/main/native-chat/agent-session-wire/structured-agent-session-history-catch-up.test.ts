@@ -5,14 +5,27 @@ import { runHistoryCatchUp } from './structured-agent-session-history-catch-up'
 describe('history catch-up runner', () => {
   it('gives up at the deadline when the commit never becomes durable', async () => {
     let barriers = 0
-    const journal = { epoch: 'epoch-1', item: () => null, canonicalItemId: (key: string) => key }
-    const sink = {
+    const journal = {
+      epoch: 'epoch-1',
+      item: () => null,
+      itemBody: () => null,
+      canonicalItemId: (key: string) => key,
+      visitItems: vi.fn(),
+      visitItemsWithLinkage: vi.fn(),
+      receiptFor: () => null,
+      submissions: () => [],
+      historyOrigin: () => null
+    }
+    const sink: StructuredAgentSessionEventSink = {
+      appendItem: vi.fn(),
+      appendTombstone: vi.fn(),
+      publish: vi.fn(),
       // The barrier before reading settles; the one after the commit never does.
       written: () => (barriers++ === 0 ? Promise.resolve({ ok: true }) : new Promise(() => {})),
       journalHistory: () => journal,
       journalItems: () => journal,
       tryAppendTransition: () => ({ accepted: true })
-    } as unknown as StructuredAgentSessionEventSink
+    }
     const logger = { warn: vi.fn(), error: vi.fn() }
     const started = Date.now()
     const outcome = await runHistoryCatchUp({
