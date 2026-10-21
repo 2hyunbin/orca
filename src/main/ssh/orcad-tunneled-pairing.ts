@@ -29,3 +29,19 @@ export function tunneledOrcadPairingCode(
   endpoint.port = String(localPort)
   return encodePairingOffer({ ...offer, endpoint: endpoint.toString() })
 }
+
+/**
+ * Why a restarted server's own offer is still read: it names the host key now, and a key other
+ * than the pinned one means every later connect is refused, which only re-adding the server fixes.
+ */
+export function orcadHostKeyChangeWarning(
+  readiness: ServeReadiness,
+  pinned: PairingOffer
+): string | null {
+  const published = readiness.pairing.available
+    ? parsePairingCode(readiness.pairing.url)?.publicKeyB64
+    : undefined
+  return published && published !== pinned.publicKeyB64
+    ? 'This server now publishes a host key other than the one this desktop trusts, so Orca will refuse to connect to it. If you expected the change, remove the server and add it again.'
+    : null
+}

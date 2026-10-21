@@ -119,6 +119,10 @@ function isSettled<TResult extends Outcome, TSettled extends TResult['outcome']>
   return settled.some((outcome) => outcome === result.outcome)
 }
 
+function withHostKeyWarning(result: { hostKeyWarning?: string }, message: string): string {
+  return result.hostKeyWarning ? `${message}\nWarning: ${result.hostKeyWarning}` : message
+}
+
 export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
   'environment status': async (context) => {
     const response = await callManagedServer<OrcadManagedRuntimeStatus>(
@@ -139,9 +143,12 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
       return
     }
     report(response, context.json, ['created', 'updated', 'already-current'], (result) =>
-      result.outcome === 'already-current'
-        ? `Already on ${result.activeVersion}.`
-        : `Updated ${result.environment.name} to ${result.activeVersion}.`
+      withHostKeyWarning(
+        result,
+        result.outcome === 'already-current'
+          ? `Already on ${result.activeVersion}.`
+          : `Updated ${result.environment.name} to ${result.activeVersion}.`
+      )
     )
   },
   'environment rollback': async (context) => {
@@ -153,11 +160,11 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
     if (!response) {
       return
     }
-    report(
-      response,
-      context.json,
-      ['rolled-back'],
-      (result) => `Rolled ${result.environment.name} back to ${result.activeVersion}.`
+    report(response, context.json, ['rolled-back'], (result) =>
+      withHostKeyWarning(
+        result,
+        `Rolled ${result.environment.name} back to ${result.activeVersion}.`
+      )
     )
   },
   'environment recover': async (context) => {
@@ -180,7 +187,10 @@ export const MANAGED_SERVER_HANDLERS: Record<string, CommandHandler> = {
       ['recovered', 'none'],
       (result) =>
         result.outcome === 'recovered'
-          ? `Recovered ${result.environment.name} (${result.resolution}); active version ${result.activeVersion ?? 'none'}.`
+          ? withHostKeyWarning(
+              result,
+              `Recovered ${result.environment.name} (${result.resolution}); active version ${result.activeVersion ?? 'none'}.`
+            )
           : 'Nothing to recover.',
       (result) =>
         !acceptChangedState && 'code' in result && result.code === ORCAD_RECOVERY_CHANGED_STATE_CODE

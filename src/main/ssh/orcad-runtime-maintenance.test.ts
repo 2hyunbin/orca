@@ -1,4 +1,5 @@
 import { rmSync } from 'node:fs'
+import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listEnvironments } from '../../shared/runtime-environment-store'
 import { ORCAD_UPDATE_ADMISSION_FENCE_MS } from '../../shared/orcad-terminal-census'
@@ -237,6 +238,39 @@ describe('updateManagedOrcadEnvironment', () => {
     await expect(
       updateManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
     ).resolves.toMatchObject({ outcome: 'updated', activeVersion: 'v3' })
+  })
+
+  it('warns, rather than reporting a plain update, when the server now names another host key', async () => {
+    const base = managedReadiness()
+    if (!base.pairing.available) {
+      throw new Error('fixture readiness publishes a pairing offer')
+    }
+    const rekeyed = {
+      ...base,
+      pairing: {
+        ...base.pairing,
+        url: encodePairingOffer({
+          v: PAIRING_OFFER_VERSION,
+          endpoint: 'ws://127.0.0.1:6768',
+          deviceToken: 'startup-offer-token',
+          publicKeyB64: 'another-key'
+        })
+      }
+    }
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mocks.deploy.mockResolvedValueOnce({ outcome: 'installed-and-activated', fullVersion: 'v3' })
+    mocks.probe.mockResolvedValueOnce(rekeyed)
+    await expect(
+      updateManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    ).resolves.toMatchObject({
+      outcome: 'updated',
+      hostKeyWarning: expect.stringMatching(/host key other than the one this desktop trusts/)
+    })
+    // The pinned key is kept: the warning, not a silent re-pin, is how the change surfaces.
+    expectEnrolledPairing()
+    mocks.deploy.mockResolvedValueOnce({ outcome: 'installed-and-activated', fullVersion: 'v3' })
+    const same = await updateManagedOrcadEnvironment(harness.userDataPath, { selector: 'Managed' })
+    expect(same).not.toHaveProperty('hostKeyWarning')
   })
 
   it('keeps the enrolled grant when the updated server offers a new device', async () => {

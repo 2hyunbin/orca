@@ -214,6 +214,7 @@ export class WslOrcadConnectionManager {
       environmentId,
       label,
       intent: options.intent,
+      pairedOffer: this.dependencies.getPairingOffer?.(environmentId) ?? null,
       signal: options.signal,
       holder: this.dependencies.holder,
       createTransport: () => transport

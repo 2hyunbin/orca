@@ -9,7 +9,8 @@ import { assertRuntimeEnvironmentNotReconciling } from '../../shared/runtime-env
 import {
   getPreferredPairingOffer,
   redactRuntimeEnvironment,
-  type KnownRuntimeEnvironment
+  type KnownRuntimeEnvironment,
+  type PublicKnownRuntimeEnvironment
 } from '../../shared/runtime-environments'
 import type {
   OrcadManagedDeployResult,
@@ -48,7 +49,7 @@ import { collectManagedTerminalCensus } from './orcad-terminal-census-client'
 import { updateTerminalCounts } from './orcad-fenced-stop'
 import { findIncompleteManagedOrcadMigration } from '../managed-server/lifecycle/orcad-managed-migration-status'
 import { latestOrcadMigrationInto } from './orcad-migration-rollback-mark'
-import { tunneledOrcadPairingCode } from './orcad-tunneled-pairing'
+import { orcadHostKeyChangeWarning, tunneledOrcadPairingCode } from './orcad-tunneled-pairing'
 
 type LifecycleArgs = { selector: string; signal?: AbortSignal }
 
@@ -71,14 +72,20 @@ function refreshPairing(
   environment: KnownRuntimeEnvironment,
   readiness: ServeReadiness,
   localPort: number
-): KnownRuntimeEnvironment {
-  return refreshManagedOrcadPairing(
+): { environment: PublicKnownRuntimeEnvironment; hostKeyWarning?: string } {
+  const warning = orcadHostKeyChangeWarning(readiness, getPreferredPairingOffer(environment))
+  if (warning) {
+    console.warn(`[ssh] ${environment.name}: ${warning}`)
+  }
+  const refreshed = refreshManagedOrcadPairing(
     userDataPath,
     environment.id,
     // Why the enrolled grant: a restarted orcad offers a new device once this one has paired, and
     // taking it would change who this desktop is to the host (as WSL's #29042 found).
     tunneledOrcadPairingCode(readiness, localPort, getPreferredPairingOffer(environment))
   )
+  const redacted = redactRuntimeEnvironment(refreshed)
+  return warning ? { environment: redacted, hostKeyWarning: warning } : { environment: redacted }
 }
 
 /** A launched slot may bind another port than the forward in use, so forward anew. */
@@ -184,14 +191,14 @@ export async function runManagedOrcadUpdate(
     activeVersion: result.fullVersion,
     readiness
   })
-  const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
+  const paired = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
   if (started || result.outcome !== 'already-active') {
     await followLaunchedServerPort(userDataPath, environment.id)
   }
   return {
     outcome: result.outcome === 'already-active' ? 'already-current' : 'updated',
-    environment: redactRuntimeEnvironment(updated),
-    activeVersion: result.fullVersion
+    activeVersion: result.fullVersion,
+    ...paired
   }
 }
 
@@ -255,13 +262,13 @@ export function rollbackManagedOrcadEnvironment(
         { ...slot, remoteInstallDir: targetDir },
         { buildHash: targetBuildHash, fullVersion: result.target }
       )
-      const updated = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
+      const paired = refreshPairing(userDataPath, environment, readiness, deployment.localPort)
       await followLaunchedServerPort(userDataPath, environment.id)
       return {
         outcome: 'rolled-back',
-        environment: redactRuntimeEnvironment(updated),
         activeVersion: result.target,
-        discarded: result.discarded
+        discarded: result.discarded,
+        ...paired
       }
     }
   )
@@ -284,9 +291,9 @@ export function recoverManagedOrcadEnvironment(
       if (result.outcome !== 'recovered') {
         return result
       }
-      const updated = result.readiness
+      const paired = result.readiness
         ? refreshPairing(userDataPath, environment, result.readiness, deployment.localPort)
-        : environment
+        : { environment: redactRuntimeEnvironment(environment) }
       if (result.activeVersion) {
         await followLaunchedServerPort(userDataPath, environment.id)
       }
@@ -294,7 +301,7 @@ export function recoverManagedOrcadEnvironment(
         outcome: 'recovered',
         resolution: result.resolution,
         activeVersion: result.activeVersion,
-        environment: redactRuntimeEnvironment(updated)
+        ...paired
       }
     }
   )
