@@ -1,7 +1,8 @@
 import {
   ORCAD_UPDATE_ADMISSION_FENCE_MS,
   ORCAD_UPDATE_ADMISSION_STOP_BY_MS,
-  type OrcadTerminalCensus
+  type OrcadTerminalCensus,
+  UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
 } from '../../shared/orcad-terminal-census'
 import type { OrcadTerminalCensusRequestOptions } from './orcad-terminal-census-client'
 
@@ -27,12 +28,6 @@ export function updateTerminalCounts(
       await count({ closeAdmissionForMs: 0 })
     }
   }
-}
-
-const UNVERIFIABLE: OrcadTerminalCensus = {
-  liveSessions: null,
-  startedSinceActivation: null,
-  daemonProtocolVersion: null
 }
 
 /** One update, rollback or restart stopping its incumbent behind the terminal admission fence. */
@@ -64,7 +59,9 @@ export async function runFencedStop<Stopped, Refused>(
   // Before the count goes out, so the deadline errs early against the server's fence.
   const stopBy = fence.now() + ORCAD_UPDATE_ADMISSION_STOP_BY_MS
   const reopen = (): Promise<void> => fence.releaseIncumbentAdmission().catch(() => {})
-  const refusal = fence.refuse(await fence.recountCensus().catch(() => UNVERIFIABLE))
+  const refusal = fence.refuse(
+    await fence.recountCensus().catch(() => UNVERIFIABLE_ORCAD_TERMINAL_CENSUS)
+  )
   if (refusal !== null) {
     await reopen()
     return { refused: refusal }
