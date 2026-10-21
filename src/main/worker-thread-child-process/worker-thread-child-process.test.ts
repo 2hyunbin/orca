@@ -1,12 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MessageChannel, Worker, type MessagePort } from 'node:worker_threads'
 import { runProcess } from '@orca/process-host'
-import { build } from 'esbuild'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   IDLE_TEARDOWN_MS,
@@ -14,6 +11,7 @@ import {
   type WorkerThreadChildProcess
 } from './worker-thread-child-process'
 import { serveWorkerThreadChildProcesses } from './worker-thread-child-process-server'
+import { createWorkerThreadChildProcessTestEntry } from './worker-thread-child-process-worker.test-fixtures'
 
 // Both halves joined by a real MessageChannel, so every event crosses structured
 // clone exactly as it does between the main thread and the worker.
@@ -274,22 +272,14 @@ describe('WorkerThreadChildProcessHost over a message channel', () => {
 describe('WorkerThreadChildProcessHost on a real worker thread', () => {
   let directory = ''
   let entryPath = ''
+  let dispose: (() => Promise<void>) | undefined
 
   beforeAll(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'orca-worker-child-'))
-    entryPath = join(directory, 'worker-thread-child-process-entry.cjs')
-    await build({
-      entryPoints: [join(__dirname, 'worker-thread-child-process-entry.ts')],
-      outfile: entryPath,
-      bundle: true,
-      platform: 'node',
-      format: 'cjs',
-      logLevel: 'silent'
-    })
+    ;({ directory, entryPath, dispose } = await createWorkerThreadChildProcessTestEntry())
   }, 60_000)
 
   afterAll(async () => {
-    await rm(directory, { recursive: true, force: true })
+    await dispose?.()
   })
 
   it.each([
