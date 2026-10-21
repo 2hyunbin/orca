@@ -16,7 +16,7 @@ import type { ImportedWorktreesCardCandidate, Row } from './row-types'
  */
 export function emitPinnedGroup(
   pinnedSectionWorktrees: Worktree[],
-  repoMap: Map<string, Repo>,
+  repoOf: (worktree: Worktree) => Repo | undefined,
   defaultHostId: ExecutionHostId,
   collapsedGroups: Set<string>,
   renderedNaturalAnchorRepoIds: ReadonlySet<string>,
@@ -35,7 +35,7 @@ export function emitPinnedGroup(
   const pinnedRepoOrder: string[] = []
   const seenPinnedRepoIds = new Set<string>()
   for (const worktree of pinnedSectionWorktrees) {
-    const hostId = getWorktreeExecutionHostId(worktree, repoMap.get(worktree.repoId), defaultHostId)
+    const hostId = getWorktreeExecutionHostId(worktree, repoOf(worktree), defaultHostId)
     hostWorktreeCounts.set(hostId, (hostWorktreeCounts.get(hostId) ?? 0) + 1)
     const hostIds = hostWorktreeIds.get(hostId) ?? []
     hostIds.push(worktree.id)
@@ -72,7 +72,7 @@ export function emitPinnedGroup(
   }
 
   const firstItemIndex = result.length
-  appendWorktreeRows(result, repoMap, occurrencePlan, {
+  appendWorktreeRows(result, repoOf, occurrencePlan, {
     collapsedGroups,
     groupDepth: 0,
     sectionKey: PINNED_GROUP_KEY,

@@ -66,7 +66,7 @@ export function buildNewExternalWorktreesInboxRow(
 
 export function appendWorktreeRows(
   result: Row[],
-  repoMap: Map<string, Repo>,
+  repoOf: (worktree: Worktree) => Repo | undefined,
   plan: WorktreeOccurrencePlan<Worktree>,
   options: {
     collapsedGroups: Set<string>
@@ -88,7 +88,7 @@ export function appendWorktreeRows(
       rowKey: occurrence.key,
       sectionKey: occurrence.sectionKey,
       worktree,
-      repo: repoMap.get(worktree.repoId),
+      repo: repoOf(worktree),
       depth: occurrence.depth,
       groupDepth: options.groupDepth,
       isLastLineageChild: occurrence.isLastChild,

@@ -17,6 +17,8 @@ import { readSidebarProjectCatalog } from './sidebar-project-catalog'
 import { buildPairedServerReviewFacts } from '../../../shared/sidebar-list/workspace-review-facts'
 import { buildPairedServerActivityFacts } from '../../../shared/sidebar-list/paired-server-activity-facts'
 import { parseExecutionHostId } from '../../../shared/execution-host'
+import { keyWorkspaceActivityByRow } from '../../../shared/sidebar-list/workspace-activity-facts'
+import type { WorkspaceRow } from '../../../shared/sidebar-list/workspace-rows'
 
 /** This host's store and connection registries, read the way sidebarInputs.desktopFacts reads them. */
 export function readRuntimeDesktopSidebarFacts(store: RuntimeStore): DesktopSidebarFacts {
@@ -70,20 +72,37 @@ export function sidebarInputsFeedDomains(
     }
     return store
   }
+  // One listing per rows revision: the workspaces domain publishes it and keys this host's activity.
+  let listing: { revision: number; rows: Promise<Record<string, WorkspaceRow>> } | null = null
+  const listRows = (): Promise<Record<string, WorkspaceRow>> => {
+    const revision = workspaceRows.revision.value
+    if (listing?.revision !== revision) {
+      const rows = workspaceRows.snapshot().then((snapshot) => snapshot.rows)
+      const pending = { revision, rows }
+      listing = pending
+      rows.catch(() => {
+        if (listing === pending) {
+          listing = null
+        }
+      })
+    }
+    return listing.rows
+  }
   return [
     {
       name: 'activity',
-      read: () => ({
-        // A paired server's rows too; this host's own rows win an id both list.
+      read: async () => ({
+        // This host's session tabs and agents are by bare id, so a same-id pair it lists share them.
+        ...keyWorkspaceActivityByRow(facts.getWorkspaceActivityFacts().facts, await listRows()),
         ...buildPairedServerActivityFacts(
           pairedServerRows.snapshot().servers,
           (hostId) => sources.store()?.getWorkspaceSession?.(hostId) ?? null
-        ),
-        ...facts.getWorkspaceActivityFacts().facts
+        )
       }),
       watch: (changed) => {
         const detaches = [
           facts.workspaceActivityFacts.revision.onChange(changed),
+          workspaceRows.revision.onChange(changed),
           pairedServerRows.revision.onChange(changed),
           // This desktop's saved session for a paired server holds its browser and chat tabs there.
           sources.store()?.onWorkspaceSessionWritten?.((hostId) => {
@@ -110,7 +129,7 @@ export function sidebarInputsFeedDomains(
     },
     {
       name: 'workspaces',
-      read: async () => (await workspaceRows.snapshot()).rows,
+      read: listRows,
       watch: (changed) => workspaceRows.revision.onChange(changed)
     },
     {
@@ -181,12 +200,12 @@ export function sidebarInputsFeedDomains(
     {
       name: 'review',
       read: async () => ({
-        // A paired server's rows by the window's cache too; this host's own rows win an id both list.
+        ...(await facts.getWorkspaceReviewFacts()).facts,
+        // A paired server's rows by the window's cache too.
         ...buildPairedServerReviewFacts(
           pairedServerRows.snapshot().servers,
           requireStore().getGitHubCache().pr
-        ),
-        ...(await facts.getWorkspaceReviewFacts()).facts
+        )
       }),
       // The window's PR cache saves announce no change.
       watch: watchCatalog,

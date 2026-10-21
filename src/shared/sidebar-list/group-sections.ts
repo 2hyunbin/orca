@@ -34,6 +34,8 @@ export type SectionAppendContext = {
   collapsedGroups: Set<string>
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
   repoMap: Map<string, Repo>
+  /** A workspace's own registration; repoMap keeps one per repo id. */
+  repoOf: (worktree: Worktree) => Repo | undefined
   defaultHostId: ExecutionHostId
   hostLabelById: ReadonlyMap<string, string> | undefined
   projectIndex: ProjectGroupingIndex | null
@@ -56,6 +58,7 @@ export function appendOrderedGroups(
     collapsedGroups,
     workspaceStatuses,
     repoMap,
+    repoOf,
     defaultHostId,
     hostLabelById,
     projectIndex,
@@ -178,7 +181,7 @@ export function appendOrderedGroups(
         groupBy === 'repo'
           ? getMixedHostContextLabels(group, repoMap, projectIndex, hostLabelById)
           : undefined
-      appendWorktreeRows(result, repoMap, occurrencePlan, {
+      appendWorktreeRows(result, repoOf, occurrencePlan, {
         collapsedGroups,
         groupDepth: projectGroupDepth,
         sectionKey: key,

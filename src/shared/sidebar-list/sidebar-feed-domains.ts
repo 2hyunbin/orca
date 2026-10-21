@@ -18,15 +18,20 @@ import {
 } from './workspace-review-facts'
 import { WorkspaceRowsSnapshotSchema, type WorkspaceRow } from './workspace-rows'
 import {
+  parseWorktreeHostIdentity,
+  type HostScopedWorktreeKey
+} from '../worktree/host-qualified-identity'
+import {
   ProjectSectionCatalogSchema,
   type ServedProjectSections
 } from '../project-section-catalog-schema'
 
 /** One installed feed, typed per domain; an entity this build cannot parse is left out. */
 export type SidebarFeedDomains = {
-  workspaces: ReadonlyMap<string, WorkspaceRow>
-  activity: ReadonlyMap<string, WorkspaceActivityFacts>
-  review: ReadonlyMap<string, WorkspaceReviewFact>
+  /** Workspace facts are keyed by row identity: the same id on two hosts is two workspaces. */
+  workspaces: ReadonlyMap<HostScopedWorktreeKey, WorkspaceRow>
+  activity: ReadonlyMap<HostScopedWorktreeKey, WorkspaceActivityFacts>
+  review: ReadonlyMap<HostScopedWorktreeKey, WorkspaceReviewFact>
   creations: ReadonlyMap<string, WorkspaceCreation>
   pairedServerHosts: ReadonlyMap<
     string,
@@ -39,7 +44,21 @@ export type SidebarFeedDomains = {
   desktop: DesktopSidebarFacts | null
   /** Every host's repos, project groups and projects, in header order; null from a host that predates it. */
   projectCatalog: ServedProjectSections | null
-  retention: SidebarRetention | null
+  /** Retained rows by identity; an entry that is not one (a bare id) keeps nothing. */
+  retention: SidebarFeedRetention | null
+}
+
+export type SidebarFeedRetention = Omit<SidebarRetention, 'retainedIds'> & {
+  retainedIds: readonly HostScopedWorktreeKey[]
+}
+
+function readRetention(retention: SidebarRetention | null): SidebarFeedRetention | null {
+  return retention
+    ? {
+        ...retention,
+        retainedIds: retention.retainedIds.flatMap((id) => parseWorktreeHostIdentity(id) ?? [])
+      }
+    : null
 }
 
 const entitySchemas = {
@@ -55,20 +74,36 @@ const entitySchemas = {
   repoIcons: z.string()
 }
 
-function readDomain<Schema extends z.ZodType>(
+function readKeyedDomain<Schema extends z.ZodType, Key extends string>(
   installed: InstalledSidebarInputs,
   name: string,
-  schema: Schema
-): Map<string, z.infer<Schema>> {
-  const entities = new Map<string, z.infer<Schema>>()
-  for (const [key, value] of installed.domains.get(name) ?? []) {
+  schema: Schema,
+  keyOf: (key: string) => Key | null
+): Map<Key, z.infer<Schema>> {
+  const entities = new Map<Key, z.infer<Schema>>()
+  for (const [rawKey, value] of installed.domains.get(name) ?? []) {
+    const key = keyOf(rawKey)
     const parsed = schema.safeParse(value)
-    if (parsed.success) {
+    if (key !== null && parsed.success) {
       entities.set(key, parsed.data)
     }
   }
   return entities
 }
+
+const readDomain = <Schema extends z.ZodType>(
+  installed: InstalledSidebarInputs,
+  name: string,
+  schema: Schema
+): Map<string, z.infer<Schema>> => readKeyedDomain(installed, name, schema, (key) => key)
+
+// A key that is not a row identity (a bare id) is not one of this build's workspace entities.
+const readWorkspaceDomain = <Schema extends z.ZodType>(
+  installed: InstalledSidebarInputs,
+  name: string,
+  schema: Schema
+): Map<HostScopedWorktreeKey, z.infer<Schema>> =>
+  readKeyedDomain(installed, name, schema, parseWorktreeHostIdentity)
 
 /** An install and what was read off it, for the next read to reuse. */
 export type SidebarFeedRead = { installed: InstalledSidebarInputs; domains: SidebarFeedDomains }
@@ -99,10 +134,12 @@ export function readSidebarFeedDomains(
   return {
     workspaces:
       unchanged('workspaces')?.workspaces ??
-      readDomain(installed, 'workspaces', entitySchemas.workspaces),
+      readWorkspaceDomain(installed, 'workspaces', entitySchemas.workspaces),
     activity:
-      unchanged('activity')?.activity ?? readDomain(installed, 'activity', entitySchemas.activity),
-    review: unchanged('review')?.review ?? readDomain(installed, 'review', entitySchemas.review),
+      unchanged('activity')?.activity ??
+      readWorkspaceDomain(installed, 'activity', entitySchemas.activity),
+    review:
+      unchanged('review')?.review ?? readWorkspaceDomain(installed, 'review', entitySchemas.review),
     creations:
       unchanged('creations')?.creations ??
       readDomain(installed, 'creations', entitySchemas.creations),
@@ -117,6 +154,6 @@ export function readSidebarFeedDomains(
       readDomain(installed, 'repoIcons', entitySchemas.repoIcons),
     desktop: desktop.success ? desktop.data : null,
     projectCatalog,
-    retention: temporal.success ? temporal.data.retention : null
+    retention: temporal.success ? readRetention(temporal.data.retention) : null
   }
 }
