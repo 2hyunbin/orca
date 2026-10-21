@@ -6,7 +6,8 @@ import { writeTerminalLiveInputText } from './terminal-live-input-text-write'
 import {
   buildTerminalLiveMirrorPayload,
   computeTerminalLiveMirrorStep,
-  TERMINAL_LIVE_HELD_PREEDIT_COMMIT_DELAY_MS
+  TERMINAL_LIVE_HELD_PREEDIT_COMMIT_DELAY_MS,
+  type TerminalLiveMirrorStep
 } from './terminal-live-preedit-mirror'
 import {
   cancelTerminalLivePendingFlush,
@@ -97,6 +98,17 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
     [sendLiveTerminalInputRef]
   )
 
+  const buildMirrorPayload = useCallback(
+    (handle: string, step: TerminalLiveMirrorStep): string => {
+      const appendText =
+        buildLivePasteText && getTerminalInputByteLength(step.appendText) > 1024
+          ? buildLivePasteText(handle, step.appendText)
+          : step.appendText
+      return buildTerminalLiveMirrorPayload({ ...step, appendText })
+    },
+    [buildLivePasteText]
+  )
+
   const runMirrorStep = useCallback<RunTerminalLiveMirrorStep>(
     async (handle, fieldText, commitHeld, composing) => {
       if (
@@ -134,11 +146,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
         }, TERMINAL_LIVE_HELD_PREEDIT_COMMIT_DELAY_MS)
       }
 
-      const appendText =
-        buildLivePasteText && getTerminalInputByteLength(step.appendText) > 1024
-          ? buildLivePasteText(handle, step.appendText)
-          : step.appendText
-      const payload = buildTerminalLiveMirrorPayload({ ...step, appendText })
+      const payload = buildMirrorPayload(handle, step)
       if (payload.length === 0) {
         return waitForPendingLiveInputFlush()
       }
@@ -152,7 +160,7 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
     [
       activeHandleRef,
       activeSessionTabTypeRef,
-      buildLivePasteText,
+      buildMirrorPayload,
       clearHeldCommitTimer,
       liveInputTerminalHandlesRef,
       resetMirrorState,
@@ -207,7 +215,8 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
         cancelTerminalLivePendingFlush(flushState)
       } else if (pendingHandle === handle && heldLiveInputTextRef.current.length > 0) {
         const sentText = sentLiveInputTextRef.current
-        const payload = buildTerminalLiveMirrorPayload(
+        const payload = buildMirrorPayload(
+          handle,
           computeTerminalLiveMirrorStep(sentText, sentText + heldLiveInputTextRef.current, {
             commitHeld: true
           })
@@ -226,7 +235,13 @@ export function useTerminalLivePendingInputFlush<TTabType extends string>({
       writeTerminalLiveInputText(liveInputRef, '')
       return sent
     },
-    [clearHeldCommitTimer, liveInputRef, sendQueuedMirrorPayload, setLiveInputCapture]
+    [
+      buildMirrorPayload,
+      clearHeldCommitTimer,
+      liveInputRef,
+      sendQueuedMirrorPayload,
+      setLiveInputCapture
+    ]
   )
 
   useEffect(() => {

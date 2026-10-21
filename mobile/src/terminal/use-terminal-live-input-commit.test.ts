@@ -152,6 +152,26 @@ describe('terminal live input commit hook', () => {
     expect(sent).toEqual([`\x1b[200~${text}\x1b[201~`, '!', '\r'])
   })
 
+  it('frames held unreported paste before an immediate click and starts the next mirror clean', async () => {
+    vi.useFakeTimers()
+    const { handlers, sent, captures, unmount } = createTerminalLiveInputCommitHarness({
+      pasteModes
+    })
+    const text = 'é'.repeat(600)
+    try {
+      changeLiveInput(handlers, text)
+      expect(sent).toEqual([])
+      await handlers.sendLiveInputClick('terminal-a', 'CLICK')
+      expect(sent).toEqual([`\x1b[200~${text}\x1b[201~`, 'CLICK'])
+      expect(captures.at(-1)).toBe('')
+      changeLiveInput(handlers, 'x', false)
+      await vi.advanceTimersByTimeAsync(TERMINAL_LIVE_HELD_PREEDIT_COMMIT_DELAY_MS * 2)
+      expect(sent).toEqual([`\x1b[200~${text}\x1b[201~`, 'CLICK', 'x'])
+    } finally {
+      unmount()
+    }
+  })
+
   it('keeps mirror deletion controls outside the pasted replacement frame', async () => {
     const { handlers, sent } = createTerminalLiveInputCommitHarness({ pasteModes })
     changeLiveInput(handlers, 'abc', false)
