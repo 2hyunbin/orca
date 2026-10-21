@@ -10,6 +10,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { placedSplitRoot } from '../terminal-topology/terminal-pane-placement-graft'
 import { tabRowPtyIdAfterLeafBinding } from './terminal-tab-pty-ownership'
 import type { PersistPtyBindingArgs } from './pty-binding-persistence'
+import { unbindReusedTerminalId } from './reused-terminal-id-unbind'
 
 export function applyPtyBinding(
   args: PersistPtyBindingArgs,
@@ -44,6 +45,10 @@ export function applyPtyBinding(
     session.terminalPtyIncarnationsByPaneKey = args.incarnationId
       ? { ...session.terminalPtyIncarnationsByPaneKey, [paneKey]: args.incarnationId }
       : otherIncarnations
+  }
+  // Switch point: a reused local id leaves the saved pane of the process that had it (P2, L80).
+  if (ORCA_LAYOUT_OWNER_IS_MAIN && args.incarnationId) {
+    unbindReusedTerminalId(session, { ...args, incarnationId: args.incarnationId })
   }
   if (args.incarnationId && session.terminalSurfaceTombstonesByPaneKey?.[paneKey]) {
     session.terminalSurfaceTombstonesByPaneKey = {

@@ -7,6 +7,7 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { getConnectionExecutionHostId } from '../../shared/execution-host'
 import { getPtyExecutionHost } from '../../shared/terminal-execution-host'
 import { asProfileSessionStore, storeOf } from './profile-session-store.test-fixture'
+import { unbindReusedTerminalId } from '../persistence/loading-store/reused-terminal-id-unbind'
 
 export { boundSessionOf, forgetInstalledPaneSession } from './profile-session-store.test-fixture'
 
@@ -17,6 +18,8 @@ export type BoundPane = {
   ptyId: string
   /** The new tab's view mode, as the creating client saved it. */
   viewMode?: 'chat' | 'terminal'
+  /** The process the spawn commit stamps on the pane. */
+  incarnationId?: string
 }
 
 function containsLeaf(node: unknown, leafId: string): boolean {
@@ -29,11 +32,27 @@ function containsLeaf(node: unknown, leafId: string): boolean {
         containsLeaf(Reflect.get(node, 'second'), leafId)
 }
 
+/** The pane's incarnation stamped, and a reused id unbound from older panes, as the commit does. */
+function stampedSession(
+  session: WorkspaceSessionState,
+  pane: BoundPane,
+  incarnationId: string
+): WorkspaceSessionState {
+  const next = structuredClone(session)
+  unbindReusedTerminalId(next, { ...pane, incarnationId })
+  next.terminalPtyIncarnationsByPaneKey = {
+    ...next.terminalPtyIncarnationsByPaneKey,
+    [`${pane.tabId}:${pane.leafId}`]: incarnationId
+  }
+  return next
+}
+
 /** The session with the pane bound to its terminal: the tab and leaf added when missing. */
 export function withBoundPane(
-  session: WorkspaceSessionState,
+  given: WorkspaceSessionState,
   pane: BoundPane
 ): WorkspaceSessionState {
+  const session = pane.incarnationId ? stampedSession(given, pane, pane.incarnationId) : given
   const tabs = session.tabsByWorktree[pane.worktreeId] ?? []
   const hasTab = tabs.some((tab) => tab.id === pane.tabId)
   const layout = session.terminalLayoutsByTabId[pane.tabId]
@@ -141,7 +160,14 @@ export function registerBoundPty(
   connectionId: string | null,
   binding: { tabId: string; leafId: string } & Record<string, unknown>
 ): void {
-  bindPaneFirst(runtime, { worktreeId, tabId: binding.tabId, leafId: binding.leafId, ptyId })
+  const { incarnationId } = binding
+  bindPaneFirst(runtime, {
+    worktreeId,
+    tabId: binding.tabId,
+    leafId: binding.leafId,
+    ptyId,
+    ...(typeof incarnationId === 'string' ? { incarnationId } : {})
+  })
   runtime.registerPty(ptyId, worktreeId, connectionId, binding)
 }
 
