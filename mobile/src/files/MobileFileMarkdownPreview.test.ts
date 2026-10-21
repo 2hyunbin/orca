@@ -163,6 +163,21 @@ describe('MobileFileMarkdownPreview', () => {
     expect(writeText.mock.calls).toEqual([[source], [source]])
   })
 
+  it('opens file links from the rendered document', async () => {
+    const onOpenFile = vi.fn()
+    renderer = await renderPreview({
+      relativePath: 'docs/notes.md',
+      content: '[Details](details.md)',
+      truncated: false,
+      byteLength: 21,
+      onOpenFile
+    })
+    await act(async () => {
+      renderer?.root.findByType('MobileMarkdown').props.onOpenFile('details.md')
+    })
+    expect(onOpenFile).toHaveBeenCalledWith('details.md')
+  })
+
   it('resets the selected mode for a new file or line target without remounting the preview', async () => {
     const baseProps: PreviewProps = {
       relativePath: 'notes/first.md',

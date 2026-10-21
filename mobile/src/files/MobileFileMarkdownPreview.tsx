@@ -20,6 +20,7 @@ type Props = {
   client?: MobileFilePreviewRpcSender | null
   worktreeId?: string
   initialLine?: number
+  onOpenFile?: (pathText: string) => void
 }
 
 export function MobileFileMarkdownPreview({
@@ -29,7 +30,8 @@ export function MobileFileMarkdownPreview({
   byteLength,
   initialLine,
   client,
-  worktreeId
+  worktreeId,
+  onOpenFile
 }: Props) {
   const [mode, setMode] = useState<'preview' | 'source'>(() => (initialLine ? 'source' : 'preview'))
   const [previousRelativePath, setPreviousRelativePath] = useState(relativePath)
@@ -85,6 +87,7 @@ export function MobileFileMarkdownPreview({
           {truncated ? <MobileFilePreviewTruncatedNote byteLength={byteLength} /> : null}
           <MobileMarkdown
             content={content}
+            onOpenFile={onOpenFile}
             renderImage={
               worktreeId
                 ? (href, alt) => (

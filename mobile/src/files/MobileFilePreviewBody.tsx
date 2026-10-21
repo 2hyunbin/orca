@@ -24,6 +24,7 @@ type Props = {
   imageHeight: number
   onDraftChange: (content: string) => void
   onImageError: () => void
+  onOpenFile?: (pathText: string) => void
   /** Null where the only retry is a re-dial this document cannot make. */
   onRetry: (() => void) | null
 }
@@ -91,6 +92,7 @@ export function MobileFilePreviewBody({ preview, ...options }: Props) {
         truncated={preview.truncated}
         byteLength={preview.byteLength}
         initialLine={options.lineColumn?.line}
+        onOpenFile={options.onOpenFile}
       />
     )
   }
