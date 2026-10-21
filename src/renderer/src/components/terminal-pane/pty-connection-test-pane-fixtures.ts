@@ -41,6 +41,7 @@ export type MockTransport = {
   claimViewport: ReturnType<typeof vi.fn>
   setOutputPaused?: ReturnType<typeof vi.fn>
   resize: ReturnType<typeof vi.fn>
+  isConnected?: ReturnType<typeof vi.fn>
   getPtyId: ReturnType<typeof vi.fn>
   getConnectionId: ReturnType<typeof vi.fn>
   serializeBuffer?: ReturnType<typeof vi.fn>
@@ -66,6 +67,7 @@ export function createMockTransport(initialPtyId: string | null = null): MockTra
     sendInput: vi.fn(() => true),
     claimViewport: vi.fn(() => true),
     resize: vi.fn(() => true),
+    isConnected: vi.fn(() => ptyId !== null),
     getPtyId: vi.fn(() => ptyId),
     getConnectionId: vi.fn(() => null),
     serializeBuffer: undefined

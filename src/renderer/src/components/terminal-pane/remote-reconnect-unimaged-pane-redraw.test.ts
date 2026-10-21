@@ -86,7 +86,6 @@ async function connectVisibleRemotePane(
 ): Promise<ReconnectedPane> {
   const { connectPanePty } = await import('./pty-connection')
   const transport = createMockTransport(REMOTE_PTY_ID)
-  Object.assign(transport, { isConnected: vi.fn(() => true) })
   transport.serializeBuffer = vi.fn()
   transport.serializeBufferOutcome = vi.fn(
     typeof outcome === 'function' ? outcome : async () => outcome

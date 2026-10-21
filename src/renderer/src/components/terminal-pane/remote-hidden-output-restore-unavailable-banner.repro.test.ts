@@ -67,6 +67,7 @@ type MockTransport = {
   sendInputAccepted?: ReturnType<typeof vi.fn>
   claimViewport: ReturnType<typeof vi.fn>
   resize: ReturnType<typeof vi.fn>
+  isConnected?: ReturnType<typeof vi.fn>
   getPtyId: ReturnType<typeof vi.fn>
   getConnectionId: ReturnType<typeof vi.fn>
   serializeBuffer?: ReturnType<typeof vi.fn>
@@ -182,6 +183,7 @@ function createMockTransport(initialPtyId: string | null = null): MockTransport 
     sendInput: vi.fn(() => true),
     claimViewport: vi.fn(() => true),
     resize: vi.fn(() => true),
+    isConnected: vi.fn(() => ptyId !== null),
     getPtyId: vi.fn(() => ptyId),
     getConnectionId: vi.fn(() => null),
     serializeBuffer: undefined
