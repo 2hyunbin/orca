@@ -160,6 +160,8 @@ export type TerminalDocumentState = {
   surface: HTMLElement | null
   /** `surface-swap`: the terminal of a hidden replacement surface that has not committed. */
   pendingTerm: TerminalDocumentTerminal | null
+  /** Pending replay anchor; null inherits the committed surface until a gesture or reset. */
+  pendingReplayScrollAnchorRows: number | null
   /** `surface-swap`: the terminal the committed surface is showing. */
   committedTerm: TerminalDocumentTerminal | null
   /** `terminal-init`: the terminal built before ready, until the first init reuses it. */
@@ -306,6 +308,7 @@ function createTerminalDocumentState(): TerminalDocumentState {
     wheelAccumDeltaY: 0,
     surface: null,
     pendingTerm: null,
+    pendingReplayScrollAnchorRows: null,
     committedTerm: null,
     provisionalTerm: null,
     committedSurface: null,

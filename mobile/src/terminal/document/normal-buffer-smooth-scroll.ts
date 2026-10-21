@@ -3,6 +3,21 @@ import { updateScrollIndicator } from './viewport-transform'
 import type { TerminalDocumentScope } from './document-scope'
 import { scheduleDocumentFrame } from './document-frame-registry'
 
+export function scrollNormalBufferLines(scope: TerminalDocumentScope, lines: number) {
+  const terminal = scope.term
+  if (!terminal) {
+    return
+  }
+  const beforeY = terminal.buffer.active.viewportY
+  terminal.scrollLines(lines)
+  if (terminal === scope.pendingTerm && terminal.buffer.active.viewportY !== beforeY) {
+    scope.pendingReplayScrollAnchorRows = Math.max(
+      0,
+      terminal.buffer.active.baseY - terminal.buffer.active.viewportY
+    )
+  }
+}
+
 export function clampNormalScrollLines(scope: TerminalDocumentScope, lines: number) {
   if (!scope.term || !scope.term.buffer || !scope.term.buffer.active || lines === 0) {
     return 0
@@ -42,7 +57,7 @@ export function applyNormalBufferScrollDelta(scope: TerminalDocumentScope, delta
   if (lines !== 0) {
     const applied = clampNormalScrollLines(scope, lines)
     if (applied !== 0) {
-      scope.term.scrollLines(applied)
+      scrollNormalBufferLines(scope, applied)
       // Why: xterm's renderer is row-based. Buffer touch pixels and only
       // commit whole rows so TUI canvas layers do not shimmer between
       // fractional transforms and xterm repaints.

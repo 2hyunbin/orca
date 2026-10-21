@@ -85,6 +85,11 @@ function createReplayHarness() {
     replay,
     drain,
     snapshot,
+    flushFrames: () => {
+      for (const frame of frames.splice(0)) {
+        frame(0)
+      }
+    },
     parse: () => new Promise<void>((resolve) => terminals.at(-1)!.write('', resolve)),
     deferWrites: (defer: boolean) => {
       deferWrites = defer
@@ -213,6 +218,26 @@ describe('mobile terminal replay reading position', () => {
     expect(buffer.getLine(0)?.translateToString(true)).toBe(content)
   })
 
+  it('follows bottom after a parsed pending alternate screen is replaced by normal output', async () => {
+    const harness = createReplayHarness()
+    harness.replay()
+    await harness.drain()
+    harness.terminals[0]!.scrollToLine(40)
+    harness.deferWrites(true)
+    harness.replay(true, 81, '\x1b[?1049h\x1b[HTUI_CONTENT')
+    await harness.parse()
+    expect(harness.scope.pendingTerm!.buffer.active.type).toBe('alternate')
+    harness.replay(true, 82)
+    await harness.parse()
+    harness.deferWrites(false)
+    harness.replay(true, 83)
+    await harness.drain()
+    harness.releaseWrites()
+    const buffer = harness.scope.committedTerm!.buffer.active
+    expect(buffer.type).toBe('normal')
+    expect(buffer.viewportY).toBe(buffer.baseY)
+  })
+
   it('does not revive the cleared reading position on a later replay', async () => {
     const harness = createReplayHarness()
     harness.replay()
@@ -247,23 +272,37 @@ describe('mobile terminal replay reading position', () => {
     expect(harness.scope.scheduledFrames).toEqual([])
   })
 
-  it('does not resurrect an anchor cleared while a replay was pending', async () => {
-    const harness = createReplayHarness()
-    harness.replay()
-    await harness.drain()
-    harness.terminals[0]!.scrollToLine(40)
-    harness.deferWrites(true)
-    harness.replay(true, 81)
-    await harness.parse()
-    handleMsg(harness.scope, { type: 'clear' })
-    harness.deferWrites(false)
-    harness.replay(true, 82)
-    await harness.drain()
-    harness.releaseWrites()
+  it.each([false, true])(
+    'does not resurrect an anchor cleared while a replay was pending (wheel=%s)',
+    async (wheel) => {
+      const harness = createReplayHarness()
+      harness.replay()
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(40)
+      harness.deferWrites(true)
+      harness.replay(true, 81)
+      await harness.parse()
+      if (wheel) {
+        harness.scope.committedSurface!.dispatchEvent(
+          new WheelEvent('wheel', {
+            deltaY: -10,
+            deltaMode: 1,
+            bubbles: true,
+            cancelable: true
+          })
+        )
+        harness.flushFrames()
+      }
+      handleMsg(harness.scope, { type: 'clear' })
+      harness.deferWrites(false)
+      harness.replay(true, 82)
+      await harness.drain()
+      harness.releaseWrites()
 
-    const buffer = harness.scope.committedTerm!.buffer.active
-    expect(buffer.viewportY).toBe(buffer.baseY)
-  })
+      const buffer = harness.scope.committedTerm!.buffer.active
+      expect(buffer.viewportY).toBe(buffer.baseY)
+    }
+  )
 
   it('keeps only the last of eight replacements and honors its non-preserving reset', async () => {
     const harness = createReplayHarness()
@@ -306,4 +345,47 @@ describe('mobile terminal replay reading position', () => {
     expect(buffer.viewportY).toBe(buffer.baseY)
     expect(buffer.getLine(buffer.length - 1)?.translateToString(true)).toBe('ROW_199')
   })
+})
+
+describe('pending replay scroll policy', () => {
+  it.each([
+    { preservePending: true, wheelDeltas: [], expectedViewport: 40 },
+    { preservePending: false, wheelDeltas: [], expectedViewport: 176 },
+    { preservePending: true, wheelDeltas: [-10], expectedViewport: 166 },
+    { preservePending: false, wheelDeltas: [-10], expectedViewport: 166 },
+    { preservePending: true, wheelDeltas: [-10, 10], expectedViewport: 176 },
+    { preservePending: false, wheelDeltas: [-10, 10], expectedViewport: 176 },
+    { preservePending: true, wheelDeltas: [10], expectedViewport: 40 }
+  ])(
+    'honors pending preserve=$preservePending and wheels=$wheelDeltas through repeated replay',
+    async ({ preservePending, wheelDeltas, expectedViewport }) => {
+      const harness = createReplayHarness()
+      harness.replay()
+      await harness.drain()
+      harness.terminals[0]!.scrollToLine(40)
+      harness.deferWrites(true)
+      harness.replay(preservePending, 81)
+      await harness.parse()
+      for (const deltaY of wheelDeltas) {
+        harness.scope.committedSurface!.dispatchEvent(
+          new WheelEvent('wheel', {
+            deltaY,
+            deltaMode: 1,
+            bubbles: true,
+            cancelable: true
+          })
+        )
+        harness.flushFrames()
+      }
+      harness.replay(true, 82)
+      await harness.parse()
+      harness.deferWrites(false)
+      harness.replay(true, 83)
+      await harness.drain()
+      harness.releaseWrites()
+      expect(harness.scope.committedTerm!.buffer.active.viewportY).toBe(expectedViewport)
+      expect(harness.scope.pendingTerm).toBeNull()
+      expect(document.querySelectorAll('#terminal-container > div')).toHaveLength(1)
+    }
+  )
 })

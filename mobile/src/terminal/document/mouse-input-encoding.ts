@@ -1,6 +1,7 @@
 import { notify } from './host-notify'
 import type { TerminalDocumentScope } from './document-scope'
 import { ESC } from './escape-introducers'
+import { scrollNormalBufferLines } from './normal-buffer-smooth-scroll'
 import { viewportToMouseReportCell } from './mouse-report-cell'
 
 export function isAlternateBufferActive(scope: TerminalDocumentScope) {
@@ -235,7 +236,7 @@ export function routeScrollLines(
   const mouseTrackingMode = getMouseTrackingMode(scope)
   const alternateBufferActive = isAlternateBufferActive(scope)
   if (isWheelEncodingUnproven(scope, mouseTrackingMode)) {
-    scope.term.scrollLines(lines)
+    scrollNormalBufferLines(scope, lines)
     return
   }
   if (isWheelMouseTrackingMode(mouseTrackingMode)) {
@@ -264,5 +265,5 @@ export function routeScrollLines(
     }
     return
   }
-  scope.term.scrollLines(lines)
+  scrollNormalBufferLines(scope, lines)
 }
