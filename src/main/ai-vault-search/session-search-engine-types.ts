@@ -1,5 +1,6 @@
 import type { AiVaultAgent } from '../../shared/ai-vault-types'
 import type { TranscriptMessageRole } from '../ai-vault/session-transcript-consumers'
+import type { AiVaultSearchEligibleSessions } from '../../shared/ai-vault-search-eligible-sessions'
 
 // ENGINE types, deliberately not in src/shared: nothing here is a wire type.
 // PR 5 owns the public contract and lifts what a caller may actually receive;
@@ -47,6 +48,7 @@ export type SessionSearchFilters = {
 
 export type SessionSearchRequest = {
   query: string
+  eligibleSessions?: AiVaultSearchEligibleSessions
   /** Default `all`. */
   scope?: SessionSearchScope
   limit?: number

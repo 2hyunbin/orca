@@ -33,6 +33,25 @@ async function fixture() {
 }
 
 describe('real index to public service adapter', () => {
+  it('acknowledges host-applied eligibility only when requested', async () => {
+    const { db, service } = await fixture()
+    addSyntheticSession(db, { id: 1 })
+    addSyntheticSession(db, { id: 2 })
+    const generic = await service.search({ query: 'needle' })
+    expect(generic).not.toHaveProperty('eligibleSessionsApplied')
+    const scoped = await service.search({
+      query: 'needle',
+      eligibleSessions: {
+        providers: [{ agent: 'claude', sessionId: '1' }],
+        prompts: []
+      }
+    })
+    expect(AiVaultSearchResponseSchema.parse(scoped)).toMatchObject({
+      kind: 'results',
+      eligibleSessionsApplied: true,
+      hits: [{ sessionId: '1' }]
+    })
+  })
   it('pages a real store, maps evidence and diagnostics, and rejects stale or malformed cursors', async () => {
     const { db, store, service } = await fixture()
     addSyntheticSession(db, { id: 1 })

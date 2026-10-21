@@ -13,6 +13,51 @@ import {
 
 test.use({ minimumSeededWorktreeCount: 1 })
 
+test('Cmd+J keeps remaining results selectable after the selected row closes', async ({
+  orcaPage,
+  electronApp
+}) => {
+  await waitForSessionReady(orcaPage)
+  await waitForActiveWorktree(orcaPage)
+  await waitForStartupWorktreeRefresh(orcaPage)
+  await deferTranscriptResponse(electronApp)
+  await seedTranscriptPalette(orcaPage)
+  const palette = orcaPage.getByRole('dialog', { name: 'Jump to...' })
+  const input = palette.locator('[cmdk-input]')
+  await input.fill('refresh')
+  await expect(palette.locator('[cmdk-item][data-value*="workspace-tab"]')).toHaveCount(50)
+  await input.press('ArrowDown')
+  await input.press('ArrowDown')
+  const selected = palette.locator('[cmdk-item][data-selected="true"]')
+  const current = await selected.getAttribute('data-value')
+  const tabId = current?.match(/transcript-fixture-\d+$/u)?.[0]
+  expect(tabId).toBeTruthy()
+  await orcaPage.evaluate((tabId) => {
+    const store = window.__store!
+    const state = store.getState()
+    store.setState({
+      unifiedTabsByWorktree: Object.fromEntries(
+        Object.entries(state.unifiedTabsByWorktree).map(([key, tabs]) => [
+          key,
+          tabs.filter((tab) => tab.entityId !== tabId)
+        ])
+      ),
+      tabsByWorktree: Object.fromEntries(
+        Object.entries(state.tabsByWorktree).map(([key, tabs]) => [
+          key,
+          tabs.filter((tab) => tab.id !== tabId)
+        ])
+      )
+    })
+  }, tabId)
+  await expect(palette.locator(`[cmdk-item][data-value$="${tabId}"]`)).toHaveCount(0)
+  // Accept cmdk's upstream reset without carrying a dependency patch.
+  const rows = palette.locator('[cmdk-item]')
+  await expect(rows.first()).toHaveAttribute('data-selected', 'true')
+  await input.press('ArrowDown')
+  await expect(rows.nth(1)).toHaveAttribute('data-selected', 'true')
+})
+
 for (const gesture of ['ArrowDown', 'Control+n', 'Control+j', 'hover', 'scroll'] as const) {
   test(`Cmd+J preserves observed rectangles and pointer targets after ${gesture} while late hits enter a full cap`, async ({
     orcaPage,
@@ -222,9 +267,13 @@ test('Cmd+J budgets density and renderer work at the 100-candidate bound', async
   const palette = orcaPage.locator('[role="dialog"]')
   await orcaPage.evaluate(() => {
     const store = window.__store!
+    const settings = store.getState().settings
+    if (!settings) {
+      throw new Error('Missing hydrated settings')
+    }
     store.setState({
       settings: {
-        ...store.getState().settings,
+        ...settings,
         aiVaultSearch: { enabled: false, historyDays: null }
       }
     })
@@ -292,9 +341,13 @@ test('Cmd+J budgets density and renderer work at the 100-candidate bound', async
       }
     })
     const store = window.__store!
+    const settings = store.getState().settings
+    if (!settings) {
+      throw new Error('Missing hydrated settings')
+    }
     store.setState({
       settings: {
-        ...store.getState().settings,
+        ...settings,
         aiVaultSearch: { enabled: true, historyDays: null }
       }
     })

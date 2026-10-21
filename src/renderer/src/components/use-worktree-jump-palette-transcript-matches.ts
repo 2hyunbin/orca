@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { resolveWorktreeFilterHostId } from '@/components/cmd-j/palette-filter-options'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { SESSION_SEARCH_LIMIT_MAX } from '../../../shared/ai-vault-search-limit'
 import { resolveAiVaultSearchSettings } from '../../../shared/ai-vault-search-settings'
@@ -16,6 +17,12 @@ import type { PaletteTranscriptSnippet } from './worktree-jump-palette-model'
 import type { WorktreeJumpPaletteLocalState } from './use-worktree-jump-palette-local-state'
 import type { WorktreeJumpPaletteStoreState } from './use-worktree-jump-palette-store-state'
 import type { AiVaultSearchHit } from '../../../shared/ai-vault-search-types'
+import type { WorktreeJumpPaletteFilter } from './use-worktree-jump-palette-filter'
+import {
+  paletteTranscriptEligibility,
+  paletteTranscriptPaneState
+} from './cmd-j/palette-transcript-eligibility'
+import { eligibleSessionsKey } from '../../../shared/ai-vault-search-eligible-sessions'
 import {
   classifyPaletteTranscriptProof,
   preparePaletteTranscriptProofQuery
@@ -34,8 +41,11 @@ type TranscriptMatchesInput = Pick<
   | 'sleepingAgentSessionsByPaneKey'
   | 'tabsByWorktree'
   | 'terminalLayoutsByTabId'
+  | 'workspaces'
+  | 'unifiedTabsByWorktree'
 > &
-  Pick<WorktreeJumpPaletteLocalState, 'deferredQuery' | 'query' | 'filter'>
+  Pick<WorktreeJumpPaletteLocalState, 'deferredQuery' | 'query' | 'filter'> &
+  Pick<WorktreeJumpPaletteFilter, 'filterModel' | 'filterPredicate'>
 
 /** This desktop's evidence, invalidated on raw input before deferred work commits. */
 export function useWorktreeJumpPaletteTranscriptMatches({
@@ -46,6 +56,10 @@ export function useWorktreeJumpPaletteTranscriptMatches({
   sleepingAgentSessionsByPaneKey,
   tabsByWorktree,
   terminalLayoutsByTabId,
+  workspaces,
+  unifiedTabsByWorktree,
+  filterModel,
+  filterPredicate,
   deferredQuery,
   query,
   filter
@@ -56,36 +70,68 @@ export function useWorktreeJumpPaletteTranscriptMatches({
     visible &&
     query.trim().length > 0 &&
     !aiVaultSearchNeedsLocalConsent(LOCAL_EXECUTION_HOST_ID, policy.enabled)
+  const paneState = useMemo(() => {
+    const localWorkspaces = workspaces.filter(
+      (workspace) =>
+        !workspace.runtimeOwnerEnvironmentId &&
+        (!filterPredicate || filterPredicate.matchesWorktree(workspace)) &&
+        resolveWorktreeFilterHostId(workspace, filterModel.repoById, LOCAL_EXECUTION_HOST_ID) ===
+          LOCAL_EXECUTION_HOST_ID
+    )
+    return paletteTranscriptPaneState(
+      {
+        agentStatusByPaneKey,
+        retainedAgentsByPaneKey,
+        sleepingAgentSessionsByPaneKey,
+        tabsByWorktree,
+        terminalLayoutsByTabId
+      },
+      localWorkspaces,
+      unifiedTabsByWorktree
+    )
+  }, [
+    agentStatusByPaneKey,
+    retainedAgentsByPaneKey,
+    sleepingAgentSessionsByPaneKey,
+    tabsByWorktree,
+    terminalLayoutsByTabId,
+    workspaces,
+    unifiedTabsByWorktree,
+    filterModel,
+    filterPredicate
+  ])
+  const eligibleSessions = useMemo(() => paletteTranscriptEligibility(paneState), [paneState])
+  const eligibilityKey =
+    eligibleSessions === null ? 'invalid' : eligibleSessionsKey(eligibleSessions)
   const request = useMemo(
     () =>
-      transcriptSearchEnabled && deferredQuery === query
-        ? { query: query.trim(), limit: SESSION_SEARCH_LIMIT_MAX }
+      transcriptSearchEnabled &&
+      deferredQuery === query &&
+      eligibleSessions &&
+      (eligibleSessions.providers.length > 0 || eligibleSessions.prompts.length > 0)
+        ? { query: query.trim(), limit: SESSION_SEARCH_LIMIT_MAX, eligibleSessions }
         : null,
-    [transcriptSearchEnabled, deferredQuery, query]
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- status timestamps do not change search eligibility.
+    [transcriptSearchEnabled, deferredQuery, query, eligibilityKey]
   )
-  const { hits } = useAiVaultSearch(
+  const { hits, response, loading } = useAiVaultSearch(
     request,
     LOCAL_EXECUTION_HOST_ID,
     transcriptGenerationKey,
     TRANSCRIPT_MATCH_DEBOUNCE_MS
   )
-  const paneState = useMemo(
-    () => ({
-      agentStatusByPaneKey,
-      retainedAgentsByPaneKey,
-      sleepingAgentSessionsByPaneKey,
-      tabsByWorktree,
-      terminalLayoutsByTabId
-    }),
-    [
-      agentStatusByPaneKey,
-      retainedAgentsByPaneKey,
-      sleepingAgentSessionsByPaneKey,
-      tabsByWorktree,
-      terminalLayoutsByTabId
-    ]
-  )
-  const stableHits = hits.length ? hits : NO_HITS
+  // Older hosts may silently drop an optional request field; keep their title results only.
+  const acknowledgedHits =
+    request && response?.kind === 'results' && response.eligibleSessionsApplied && hits.length
+      ? hits
+      : NO_HITS
+  const [settled, setSettled] = useState({ key: transcriptGenerationKey, hits: NO_HITS })
+  if (settled.key !== transcriptGenerationKey || (!loading && settled.hits !== acknowledgedHits)) {
+    setSettled({ key: transcriptGenerationKey, hits: acknowledgedHits })
+  }
+  // Eligibility refreshes keep surviving destinations visible through the debounce.
+  const stableHits =
+    loading && settled.key === transcriptGenerationKey ? settled.hits : acknowledgedHits
   const proofWindows = useMemo(() => {
     const requirements = preparePaletteTranscriptProofQuery(query)
     return new Map(

@@ -6,6 +6,7 @@ import {
   AI_VAULT_SEARCH_SORTS
 } from './ai-vault-types'
 import { AiVaultSearchScopeIdentitySchema } from './ai-vault-search-scope'
+import { AiVaultSearchEligibleSessionsSchema } from './ai-vault-search-eligible-sessions'
 
 export const AiVaultSearchFiltersSchema = z.object({
   agents: z.array(z.enum(AI_VAULT_AGENTS)).optional(),
@@ -28,6 +29,8 @@ export const AiVaultSearchRequestSchema = z
     supportsJcodeHistory: z.boolean().optional(),
     /** Scope by identity, resolved into paths by whichever host answers. */
     within: AiVaultSearchScopeIdentitySchema.optional(),
+    /** Applied by the answering host before retrieval limits and fork folding. */
+    eligibleSessions: AiVaultSearchEligibleSessionsSchema.optional(),
     debug: z.boolean().optional()
   })
   // Two scopes in one request have no defined intersection, and guessing one
@@ -134,7 +137,8 @@ export const AiVaultSearchResponseSchema = z.discriminatedUnion('kind', [
     truncated: AiVaultSearchTruncationSchema,
     durationMs: z.number().nonnegative(),
     debug: AiVaultSearchDebugSchema.optional(),
-    hosts: z.array(AiVaultSearchHostOutcomeSchema).optional()
+    hosts: z.array(AiVaultSearchHostOutcomeSchema).optional(),
+    eligibleSessionsApplied: z.literal(true).optional()
   }),
   z.object({
     kind: z.literal('stale-cursor'),

@@ -40,6 +40,7 @@ import { ensureSessionSearchQuerySchema } from './session-search-query-schema'
 import { EMPTY_SNIPPET, sessionSearchSnippet } from './session-search-snippet'
 import { sessionSourcePresence } from './session-search-source-presence'
 import { sessionSearchOriginalExcerpt } from './session-search-original-excerpt'
+import { registerSessionSearchPromptEligibility } from './session-search-eligible-sessions'
 
 /**
  * Sessions retrieved before ranking cuts the page.
@@ -87,6 +88,7 @@ export class SessionSearchEngine {
     // watching before anything this engine will be asked to page over is
     // written, and so retrieval below prepares against tables that exist.
     ensureSessionSearchQuerySchema(this.db)
+    registerSessionSearchPromptEligibility(this.db)
     this.retrieval = new SessionSearchRetrieval(this.db)
   }
 
@@ -105,10 +107,16 @@ export class SessionSearchEngine {
     // that no tokenizer can match and that a caller cannot echo back.
     const capped = sliceAtCodeUnitLimit(request.query, SESSION_SEARCH_QUERY_MAX_LENGTH)
     const split = splitAiVaultSearchQuery(capped)
+    const filter = sessionRowFilter(
+      request.filters ?? {},
+      this.options.retentionCutoffMs ?? null,
+      request.eligibleSessions
+    )
     const retrievalScope: RetrievalScope = {
       scope,
       sort,
-      filter: sessionRowFilter(request.filters ?? {}, this.options.retentionCutoffMs ?? null),
+      filter,
+      ...(request.eligibleSessions ? { repairFilter: filter } : {}),
       matchesOperators: operatorPredicate(split),
       candidateLimit: this.candidateLimit
     }

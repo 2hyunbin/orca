@@ -50,6 +50,8 @@ export type RetrievalScope = {
   scope: SessionSearchScope
   sort: 'relevance' | 'newest'
   filter: SessionRowFilter
+  /** Eligibility also governs spelling decisions; absent preserves legacy repair scope. */
+  repairFilter?: SessionRowFilter
   /**
    * `repo:` / `path:`, which SQL cannot express. Applied over retrieved rows;
    * see session-search-row-filter for why it cannot be pushed down.
@@ -119,7 +121,7 @@ export class SessionSearchRetrieval {
     if (exact) {
       return { ...exact, plan, incomplete, sessions }
     }
-    const repaired = this.repair(plan, scope.scope)
+    const repaired = this.repair(plan, scope.scope, scope.repairFilter)
     const effective = repaired ?? plan
     const literal = repaired ? this.phraseThenAnd(repaired, match) : null
     const found = literal ?? {
@@ -197,7 +199,8 @@ export class SessionSearchRetrieval {
 
   private repair(
     plan: SessionSearchQueryPlan,
-    scope: SessionSearchScope
+    scope: SessionSearchScope,
+    filter?: SessionRowFilter
   ): SessionSearchQueryPlan | null {
     const typoRepair = this.typoRepair
     let changed = false
@@ -212,7 +215,7 @@ export class SessionSearchRetrieval {
       }
       // Repaired inside the scope the search will run in, so a spelling only
       // tool output carries neither suppresses a repair nor becomes one.
-      const fix = typoRepair.correct(token, scope)
+      const fix = typoRepair.correct(token, scope, filter)
       if (fix && fix !== token.toLowerCase()) {
         changed = true
         return fix

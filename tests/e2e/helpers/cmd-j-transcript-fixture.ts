@@ -65,6 +65,9 @@ export async function seedTranscriptPalette(
     ({ worktree, tabs, terminals, agentStatus, layouts, group }) => {
       const store = window.__store!
       const state = store.getState()
+      if (!state.settings) {
+        throw new Error('Missing hydrated settings')
+      }
       store.setState({
         settings: { ...state.settings, aiVaultSearch: { enabled: true, historyDays: null } },
         filterRepoIds: [],
@@ -147,6 +150,7 @@ export async function deferTranscriptResponse(
     },
     {
       kind: 'results',
+      eligibleSessionsApplied: true,
       hits,
       page: { cursor: null, hasMore: false },
       generation: 7,

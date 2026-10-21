@@ -75,7 +75,8 @@ export function useWorktreeJumpPaletteController({
   })
   const transcriptMatches = useWorktreeJumpPaletteTranscriptMatches({
     ...storeState,
-    ...localState
+    ...localState,
+    ...filter
   })
   const observedPrefix = useWorktreeJumpPaletteObservedPrefix({
     generationKey: JSON.stringify([

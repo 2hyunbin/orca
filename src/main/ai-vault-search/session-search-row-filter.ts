@@ -1,5 +1,6 @@
 import { cwdKey } from './session-search-file-records'
 import type { SessionSearchFilters } from './session-search-engine-types'
+import type { AiVaultSearchEligibleSessions } from '../../shared/ai-vault-search-eligible-sessions'
 
 /** SQL fragments for the `sessions` WHERE clause; every condition is ANDed. */
 export type SessionRowFilter = {
@@ -33,7 +34,8 @@ const CWD = 'cwd_key'
  */
 export function sessionRowFilter(
   filters: SessionSearchFilters,
-  cutoffMs: number | null = null
+  cutoffMs: number | null = null,
+  eligibleSessions?: AiVaultSearchEligibleSessions
 ): SessionRowFilter {
   const filter: SessionRowFilter = { conditions: [], values: [] }
   if (cutoffMs !== null) {
@@ -57,6 +59,23 @@ export function sessionRowFilter(
       filter.conditions.push(SCOPE_CONDITION)
       filter.values.push(JSON.stringify(keys.map(scopeRange)))
     }
+  }
+  if (eligibleSessions) {
+    const alternatives: string[] = []
+    if (eligibleSessions.providers.length) {
+      alternatives.push(`(agent, session_id) IN
+        (SELECT json_extract(value, '$.agent'), json_extract(value, '$.sessionId') FROM json_each(?))`)
+      filter.values.push(JSON.stringify(eligibleSessions.providers))
+    }
+    if (eligibleSessions.prompts.length) {
+      alternatives.push(`(agent IN (SELECT json_extract(value, '$.agent') FROM json_each(?))
+        AND orca_session_prompt_eligible(agent, title, ?) = 1)`)
+      filter.values.push(
+        JSON.stringify(eligibleSessions.prompts),
+        JSON.stringify({ providers: [], prompts: eligibleSessions.prompts })
+      )
+    }
+    filter.conditions.push(alternatives.length ? `(${alternatives.join(' OR ')})` : '0 = 1')
   }
   return filter
 }

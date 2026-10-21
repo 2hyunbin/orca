@@ -9,6 +9,10 @@ import {
   selectOriginalExcerpt,
   sessionSearchOriginalExcerpt
 } from './session-search-original-excerpt'
+import {
+  paletteTranscriptLiteralOccurrences,
+  preparePaletteTranscriptProofQuery
+} from '../../shared/palette-transcript-literal'
 
 let harness: SessionSearchHarness | null = null
 afterEach(async () => {
@@ -35,6 +39,36 @@ it('prefers compact distinct anchors to an early common word', () => {
   expect(original).toContain('we fixed token refresh race here')
   expect(text).toContain(original)
 })
+
+it.each([
+  ['config', 'The configuration was discussed.', 'The config value was fixed here.'],
+  [
+    '"token refresh race"',
+    'The tokenRefreshRacer was discussed.',
+    'We fixed the token refresh race here.'
+  ],
+  ['config', 'The configurationValue was discussed.', 'The config value was fixed here.'],
+  ['café', 'The cafe\u0301teria was discussed.', 'We fixed the cafe\u0301 issue here.'],
+  ['refresh', 'The prerefreshpost was discussed.', 'We fixed tokenRefresh here.']
+])(
+  'selects provable literal context for %s over an earlier partial anchor',
+  async (query, impostor, literal) => {
+    harness = await openSessionSearchHarness('ss-original-literal')
+    const text = `${impostor} ${'padding '.repeat(100)}${literal} ${'context '.repeat(100)}`
+    addSyntheticSession(harness.db, { id: 1, text })
+    const evidence = harness.engine.search({ query }).hits[0]?.evidence
+    expect(evidence?.originalExcerpt?.text).toContain(literal)
+    const requirements = preparePaletteTranscriptProofQuery(query)
+    expect(
+      new Set(
+        paletteTranscriptLiteralOccurrences(
+          evidence?.originalExcerpt?.text ?? '',
+          requirements
+        ).map((occurrence) => occurrence.group)
+      ).size
+    ).toBe(requirements.length)
+  }
+)
 
 it('keeps shadow-only evidence original, including literal marks and ellipses', async () => {
   harness = await openSessionSearchHarness('ss-original-shadow')

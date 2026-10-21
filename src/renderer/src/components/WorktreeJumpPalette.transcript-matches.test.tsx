@@ -107,7 +107,7 @@ function hit(sessionId: string, snippet: string): AiVaultSearchHit {
 }
 
 function answer(hits: AiVaultSearchHit[]): void {
-  searchSessions.mockResolvedValue({ ...searchResults(), hits })
+  searchSessions.mockResolvedValue({ ...searchResults(), hits, eligibleSessionsApplied: true })
 }
 
 function paneState(): Partial<AppState> {
@@ -219,7 +219,18 @@ describe('WorktreeJumpPalette transcript matches', () => {
     await settleSearch()
 
     expect(searchSessions).toHaveBeenCalledExactlyOnceWith(
-      { query: 'zebra', limit: 100, cursor: undefined },
+      {
+        query: 'zebra',
+        limit: 100,
+        cursor: undefined,
+        eligibleSessions: {
+          providers: [
+            { agent: 'claude', sessionId: 's-alpha' },
+            { agent: 'claude', sessionId: 's-beta' }
+          ],
+          prompts: []
+        }
+      },
       'local'
     )
     expect(tabRowIds()).toEqual(['tab-alpha'])
@@ -233,6 +244,18 @@ describe('WorktreeJumpPalette transcript matches', () => {
     await settleSearch()
 
     expect(tabRowIds()).toEqual(['tab-alpha'])
+  })
+
+  it('uses title matches only when an older host cannot acknowledge eligibility', async () => {
+    searchSessions.mockResolvedValue({
+      ...searchResults(),
+      hits: [hit('s-alpha', 'a [[Beta]] here')]
+    })
+    await renderPalette(true)
+    await type('Beta')
+    await settleSearch()
+    expect(tabRowIds()).toEqual(['tab-beta'])
+    expect(snippets().filter(Boolean)).toEqual([])
   })
 
   it('shows a chat matched by title and transcript once, with the snippet', async () => {

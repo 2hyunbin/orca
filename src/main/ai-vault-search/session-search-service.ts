@@ -84,6 +84,7 @@ export function createSessionSearchService({
           generation: result.generation,
           truncated: { ...result.truncated, freshness: false },
           durationMs: result.durationMs,
+          ...(request.eligibleSessions ? { eligibleSessionsApplied: true as const } : {}),
           ...(request.debug
             ? {
                 debug: {
