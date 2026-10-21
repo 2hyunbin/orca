@@ -223,7 +223,7 @@ import Foundation
     precondition(directives.filter { $0.contains("unsafe-inline") } == ["style-src 'self' 'unsafe-inline'"])
     precondition(!header.contains("unsafe-eval"))
     // Only images and bundled fonts can use embedded data URLs.
-    precondition(directives.filter { $0.contains("data:") } == ["img-src 'self' data: blob: https:", "font-src data:"])
+    precondition(directives.filter { $0.contains("data:") } == ["img-src 'self' data: blob: https:", "font-src 'self' data:"])
     precondition(directives.filter { $0.contains("blob:") } == ["img-src 'self' data: blob: https:", "media-src blob:"])
     // Same shape for `https:`: images and nothing else. `http:` is not a substring of `https:`, so
     // this still refuses a cleartext source anywhere in the header.

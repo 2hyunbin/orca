@@ -41,7 +41,7 @@ class MobileWebShellCspTest {
     assertFalse(MOBILE_WEB_SHELL_CSP.contains("unsafe-eval"))
     // Only images and bundled fonts can use embedded data URLs.
     assertEquals(
-      listOf("img-src 'self' data: blob: https:", "font-src data:"),
+      listOf("img-src 'self' data: blob: https:", "font-src 'self' data:"),
       directives.filter { it.contains("data:") }
     )
     assertEquals(
