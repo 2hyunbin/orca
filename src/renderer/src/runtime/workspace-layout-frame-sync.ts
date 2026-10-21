@@ -26,6 +26,7 @@ import type { TerminalTabTitleUpdate } from '@/store/slices/terminal-tab-title-b
 import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
 import { liveTitleUpdates } from './workspace-layout-frame-changes'
 import { terminalLayoutsWithFramePaneTrees } from './workspace-layout-frame-pane-trees'
+import { showFramePaneStarts } from './workspace-layout-frame-pane-starts'
 import {
   layoutFrameFlushPatch,
   type LayoutFrameBuildHolds,
@@ -93,6 +94,7 @@ export function openWorkspaceLayoutFrameSync(
   /** Workspaces whose pane trees the store may still lack: a build ran for them, or a tab the
    *  window's own command held skipped one. */
   let paneTreeKeys = new Set<string>()
+  const paneStartsShown = new Map<string, ReadonlySet<string>>()
 
   /** The moved tabs' selections this flush's writes took. */
   let selectionsTaken: MovedTabSelection[] = []
@@ -203,6 +205,7 @@ export function openWorkspaceLayoutFrameSync(
     if (titleUpdates.length > 0) {
       store.getState().updateTabTitles(titleUpdates)
     }
+    showFramePaneStarts(store, changed, cache, paneStartsShown)
     for (const key of [...fullBuilt, ...workspaceBuilt]) {
       shown.add(key)
       // Against the store, not the frame: a held tab's tree may lag the pane trees drawn since.
