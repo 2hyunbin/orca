@@ -1,8 +1,10 @@
-import { useChatSettingsTypedPermissions } from '@/runtime/structured-agent-session-host-capability'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { translate } from '@/i18n/i18n'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
-import { useStructuredAgentSessionHostQueuesMessages } from '@/runtime/structured-agent-session-host-capability'
+import {
+  useChatSettingsTypedPermissions,
+  useStructuredAgentSessionHostQueuesMessages
+} from '@/runtime/structured-agent-session-host-capability'
 import { useAppStore } from '../../store'
 import { Card, CardContent } from '../ui/card'
 import { ChatPermissionSetting } from './ChatPermissionSetting'
