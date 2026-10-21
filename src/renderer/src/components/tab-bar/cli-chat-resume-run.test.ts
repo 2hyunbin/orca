@@ -73,6 +73,8 @@ import { buildHydratedTabState } from '@/store/slices/tabs-hydration'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { useAppStore } from '@/store'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import { runCliChatResume } from './cli-chat-resume-run'
 import {
   resetStructuredAgentLaunchRegistryForTests,
@@ -428,6 +430,22 @@ describe('CLI identity resume through the existing launch owner', () => {
       expect(tabs().find((tab) => tab.entityId === sessionId)?.groupId).toBe(other.groupId)
     }
   )
+
+  // Main's publish of a window's create places nothing switch-on, so the resume's own open must.
+  it('opens a resumed chat once, through main, after the tab before its hidden slot', async () => {
+    const [, , browser] = await seedTabs()
+    await runCliChatResume(SOURCE)
+    await main?.settle()
+    const sessionId: string = mocks.call.mock.calls[0][2].envelope.sessionId
+    const slotId = `structured-agent-session-${sessionId}`
+    expect(tabs().find((tab) => tab.entityId === sessionId)?.id).toBe(slotId)
+    expect(useAppStore.getState().groupsByWorktree['wt-1'][0].tabOrder.at(-1)).toBe(slotId)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      expect(layoutApplyTestTransport.sentOfType('openAgentSessionTab')).toEqual([
+        expect.objectContaining({ tabId: slotId, sessionId, afterTabId: browser.id })
+      ])
+    }
+  })
 
   it.each([false, true])(
     'keeps overlapping requests in their canonical order (second finishes first: %s)',
