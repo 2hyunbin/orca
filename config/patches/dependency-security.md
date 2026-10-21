@@ -16,12 +16,18 @@ tools. The formatting patch applies to desktop and mobile; mobile's older
 sprintf-js 1.0.3 is first upgraded to 1.1.3. Mobile carries the RSA patch.
 Mobile patch files stay inside its independent workspace for standalone builds.
 
-`config/scripts/dependency-security-patches.test.mjs` installs the actual patches
-through pnpm, exercises deeply nested patterns and direct AST inputs, checks
-both formatting entries with excessive precision, and rejects a signed malformed
-DigestInfo while accepting a valid signature. Normal patterns and formatting
+`config/scripts/dependency-security-patches.test.mjs` exercises the installed
+desktop packages with deeply nested patterns, direct AST inputs, and excessive
+precision in both formatting entries. The mobile regression in
+`mobile/scripts/dependency-security-patches.test.ts` checks the installed Expo
+dependency and rejects a signed malformed DigestInfo while accepting a valid
+signature. Both suites use the packages installed from the workspace lockfiles;
+they do not run installs or access the registry. Normal patterns and formatting
 retain their previous behavior. Excessive brace patterns now fail explicitly;
 out-of-range numeric precision is clamped instead of throwing a RangeError.
 
 Published fixes are used for Hono, Markdown-it, Vite, Vitest, and path-to-regexp.
 No development dependency is omitted from the audit.
+
+The node-forge patch follows [upstream PR #1152](https://github.com/digitalbazaar/forge/pull/1152).
+Remove it when an upstream release includes that fix.
