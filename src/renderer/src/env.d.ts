@@ -50,10 +50,54 @@ declare module 'monaco-editor/esm/vs/base/common/uri.js' {
   export class URI {
     static file(path: string): URI
     static parse(value: string): URI
+    static from(components: { scheme: string; authority?: string; path?: string }): URI
     readonly scheme: string
+    readonly authority: string
+    readonly path: string
+    readonly fragment: string
     readonly fsPath: string
+    with(change: { path?: string; fragment?: string }): URI
     toString(skipEncoding?: boolean): string
   }
+}
+
+// Test-only: the model-URI tests drive Monaco's TypeScript worker and snippet resolver directly.
+declare module 'monaco-editor/esm/vs/language/typescript/tsWorker.js' {
+  import type { URI } from 'monaco-editor/esm/vs/base/common/uri.js'
+  export class TypeScriptWorker {
+    constructor(
+      context: { getMirrorModels(): { uri: URI; version: number; getValue(): string }[] },
+      createData: {
+        compilerOptions: Record<string, unknown>
+        extraLibs: Record<string, unknown>
+        inlayHintsOptions: Record<string, unknown>
+      }
+    )
+    getScriptKind(fileName: string): number
+    getDefinitionAtPosition(
+      fileName: string,
+      position: number
+    ): Promise<readonly { fileName: string }[] | undefined>
+  }
+}
+
+declare module 'monaco-editor/esm/vs/language/typescript/lib/typescriptServices.js' {
+  export const ScriptKind: { readonly TSX: number }
+}
+
+declare module 'monaco-editor/esm/vs/editor/contrib/snippet/browser/snippetVariables.js' {
+  export class ModelBasedVariableResolver {
+    constructor(labelService: unknown, model: unknown)
+    resolve(variable: { name: string }): string | undefined
+  }
+}
+
+declare module 'monaco-editor/esm/vs/editor/standalone/browser/standaloneServices.js' {
+  export const StandaloneServices: { get(serviceId: unknown): unknown }
+}
+
+declare module 'monaco-editor/esm/vs/platform/label/common/label.js' {
+  export const ILabelService: unknown
 }
 
 declare module 'monaco-editor/esm/vs/base/common/async.js' {
