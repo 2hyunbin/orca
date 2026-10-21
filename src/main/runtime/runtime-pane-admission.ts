@@ -1,3 +1,4 @@
+import { PaneOwnerContentionError } from '../ipc/pty/pane/pane-spawn-operation'
 import { toSshExecutionHostId } from '../../shared/execution-host'
 import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import type {
@@ -127,7 +128,7 @@ export async function startInAdmittedPane<T>(
   try {
     return { outcome, result: await start(outcome) }
   } catch (error) {
-    if (outcome === 'admitted' && !keepOnFailure) {
+    if (outcome === 'admitted' && !keepOnFailure && !(error instanceof PaneOwnerContentionError)) {
       await withdrawAdmittedPane(store, admission, hostId)
     }
     throw error
@@ -146,6 +147,10 @@ export async function spawnInAdmittedPane(
   { startStatus, ...args }: AdmittedSpawnArgs & PaneStartArgs
 ): ReturnType<Spawn> {
   const { groupId: _groupId, afterTabId: _afterTabId, ...spawnArgs } = args
+  if (args.paneSpawnOperation?.mustExist) {
+    // SAFETY: Callers require spawn; a reconnect into its own pane takes no admission or status.
+    return controller.spawn!(spawnArgs)
+  }
   const paneKey = `${args.tabId}:${args.leafId}`
   let admittedAs: TerminalPaneAdmissionOutcome | undefined
   startStatus?.sink.set(paneKey, { status: 'starting' })
