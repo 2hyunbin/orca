@@ -3510,7 +3510,6 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "Abrir en el navegador",
-            "9dd880bd56": "Cerrar todas las pestañas a la derecha",
             "1611a1324b": "Cerrar",
             "5d6e89891f": "Duplicar pestaña",
             "966feb9ad5": "Dividir a la derecha",
@@ -3527,7 +3526,6 @@
             "52ce4f4605": "Copiar ruta relativa",
             "5b85754786": "Copiar ruta",
             "bfd5797ef4": "Abrir vista previa de Markdown",
-            "e5ff31ccaf": "Cerrar todas las pestañas a la derecha",
             "ba1369dd24": "Cerrar todas las pestañas del editor",
             "1ba8492c5b": "Cerrar",
             "68cc610e7f": "Renombrar",
@@ -3560,7 +3558,6 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "Color de pestaña",
             "2f697b3c31": "Cambiar título",
-            "c1ee099c7e": "Cerrar todas las pestañas a la derecha",
             "8d16f9cd30": "Cerrar otras",
             "89359a36f7": "Cerrar",
             "21132389e9": "Dividir a la derecha",
@@ -19079,16 +19076,13 @@
       "bar": {
         "SortableTabContextMenu": {
           "switchToTerminalView": "Continuar con el agente de terminal",
-          "switchToChatView": "Continuar en la interfaz de chat",
-          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
+          "switchToChatView": "Continuar en la interfaz de chat"
         },
         "BrowserTab": {
-          "closeOthers": "Cerrar otras",
-          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
+          "closeOthers": "Cerrar otras"
         },
         "EditorFileTabContextMenu": {
-          "closeOthers": "Cerrar otras",
-          "closeTabsToLeft": "Cerrar todas las pestañas a la izquierda"
+          "closeOthers": "Cerrar otras"
         },
         "CopyTabIdMenuItem": {
           "copied": "ID de pestaña copiado",
