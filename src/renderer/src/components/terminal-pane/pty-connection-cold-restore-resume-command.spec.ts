@@ -5,7 +5,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import {
   expectNoWindowStart,
   mainLayoutApplyTransport
-} from './pty-connection-test-main-pane-start'
+} from './pty-connection-test-main-pane-start-fixtures'
 import { flushAsyncTicks } from './pty-connection-test-async'
 import { UUID_RE } from './pty-connection-test-constants'
 import { temporarilySetNavigatorUserAgent } from './pty-connection-test-dom'

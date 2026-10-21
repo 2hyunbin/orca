@@ -23,7 +23,7 @@ import {
   expectWindowStartAskedMain,
   mainLayoutApplyTransport,
   mainStartsPaneAs
-} from './pty-connection-test-main-pane-start'
+} from './pty-connection-test-main-pane-start-fixtures'
 
 vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 // Main's answer to the window's layout commands, as a switch-on build sends them.

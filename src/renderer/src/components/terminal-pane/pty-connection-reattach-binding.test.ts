@@ -8,7 +8,7 @@ import {
   expectWindowStartAskedMain,
   mainLayoutApplyTransport,
   mainStartsPaneAs
-} from './pty-connection-test-main-pane-start'
+} from './pty-connection-test-main-pane-start-fixtures'
 import {
   LEAF_1,
   LEAF_2,

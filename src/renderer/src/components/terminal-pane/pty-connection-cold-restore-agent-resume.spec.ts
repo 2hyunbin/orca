@@ -5,7 +5,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import {
   expectWindowPaintsColdRestoreOnly,
   mainLayoutApplyTransport
-} from './pty-connection-test-main-pane-start'
+} from './pty-connection-test-main-pane-start-fixtures'
 import { RESET_GRAPHIC_RENDITION } from '../../../../shared/terminal-mode-reset-profiles'
 import { flushAsyncTicks } from './pty-connection-test-async'
 import { UUID_RE } from './pty-connection-test-constants'

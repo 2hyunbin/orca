@@ -5,7 +5,7 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import {
   expectWindowStartAskedMain,
   mainLayoutApplyTransport
-} from './pty-connection-test-main-pane-start'
+} from './pty-connection-test-main-pane-start-fixtures'
 import { flushAsyncTicks } from './pty-connection-test-async'
 import { createMockTransport, createPane, createManager } from './pty-connection-test-pane-fixtures'
 import { buildPaneConnectionDeps } from './pty-connection-test-deps'

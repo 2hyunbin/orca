@@ -9,7 +9,7 @@ import {
   expectWindowStartAskedMain,
   mainLayoutApplyTransport,
   mainStartsPaneAs
-} from './pty-connection-test-main-pane-start'
+} from './pty-connection-test-main-pane-start-fixtures'
 import { expectMainFrameClosesExitedSplitPaneOnce } from './pty-connection-test-exited-split-pane-close'
 import {
   LEAF_1,
