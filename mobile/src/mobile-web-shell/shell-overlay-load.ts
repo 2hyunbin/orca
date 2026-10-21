@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useLayoutEffect } from 'react'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 import type { ShellPageFrame } from './shell-page-frame'
 
@@ -26,7 +26,8 @@ export function useReportedShellOverlayLoad(
   const painted = pageFrame === 'painted'
   const receivedBytes = state.kind === 'fetching' ? state.receivedBytes : null
   const totalBytes = state.kind === 'fetching' ? state.totalBytes : 0
-  useEffect(() => {
+  // Before paint, so the caller's view swaps in the same frame the WebView is shown.
+  useLayoutEffect(() => {
     if (onLoad === undefined) {
       return
     }

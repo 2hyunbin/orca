@@ -8,7 +8,7 @@ import type { HostProfile } from '../transport/types'
 
 /**
  * Home's "Create Workspace On" picker, inside the overlay so the drawer that follows opens from the
- * same window. A pick starts the load at once, so its scrim is up while the picker slides away.
+ * same window. A pick starts the load at once, so the loading drawer opens as the picker leaves.
  */
 export function NewWorkspaceHostPicker({
   hostIds,

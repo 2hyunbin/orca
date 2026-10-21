@@ -11,7 +11,7 @@ const LOADING: ShellOverlayLoad = { kind: 'loading', download: null }
 
 /**
  * The picked desktop's Create Workspace page in the shell, as an overlay: the page draws the drawer
- * over a transparent document, and one short loading drawer stands in until it has.
+ * over a transparent document, and one short loading drawer stands in until it has painted.
  */
 export function NewWorkspaceOverlay({ hostId }: { hostId: string }) {
   const router = useRouter()
@@ -36,9 +36,11 @@ export function NewWorkspaceOverlay({ hostId }: { hostId: string }) {
           onOverlayLoad={setLoad}
         />
       </HostProtocolGate>
-      {load.kind === 'loading' ? (
-        <NewWorkspaceLoadingDrawer download={load.download} onCancel={() => router.back()} />
-      ) : null}
+      <NewWorkspaceLoadingDrawer
+        visible={load.kind === 'loading'}
+        download={load.kind === 'loading' ? load.download : null}
+        onCancel={() => router.back()}
+      />
     </>
   )
 }

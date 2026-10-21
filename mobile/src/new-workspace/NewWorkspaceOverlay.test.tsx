@@ -3,7 +3,11 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ShellOverlayDownload, ShellOverlayLoad } from '../mobile-web-shell/shell-overlay-load'
 
-type LoadingDrawerProps = { download: ShellOverlayDownload | null; onCancel: () => void }
+type LoadingDrawerProps = {
+  visible: boolean
+  download: ShellOverlayDownload | null
+  onCancel: () => void
+}
 
 const router = vi.hoisted(() => ({ back: vi.fn() }))
 const shell = vi.hoisted((): { report: ((load: ShellOverlayLoad) => void) | null } => ({
@@ -58,7 +62,7 @@ describe("the New Workspace overlay's loading drawer", () => {
     act(() => {
       renderer = create(createElement(NewWorkspaceOverlay, { hostId: 'desk' }))
     })
-    expect(layer().props.download).toBeNull()
+    expect(layer().props).toMatchObject({ visible: true, download: null })
 
     act(() => shell.report!({ kind: 'loading', download: { receivedBytes: 1, totalBytes: 8 } }))
     expect(layer().props.download).toEqual({ receivedBytes: 1, totalBytes: 8 })
@@ -67,7 +71,8 @@ describe("the New Workspace overlay's loading drawer", () => {
     expect(layerMounts.count).toBe(1)
 
     act(() => shell.report!({ kind: 'painted' }))
-    expect(layer()).toBeUndefined()
+    expect(layer().props.visible).toBe(false)
+    expect(layerMounts.count).toBe(1)
   })
 
   it('leaves when the load is cancelled', () => {

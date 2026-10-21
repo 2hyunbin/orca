@@ -1,5 +1,15 @@
-import { useState } from 'react'
-import { ActivityIndicator, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
+import { useEffect, useState } from 'react'
+import {
+  ActivityIndicator,
+  Animated,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions
+} from 'react-native'
+import { BOTTOM_DRAWER_SHOW_DURATION_MS } from '../components/bottom-drawer-constants'
 import { bottomDrawerStyles } from '../components/bottom-drawer-styles'
 import { useResponsiveLayout } from '../layout/responsive-layout'
 import { useWindowSafeAreaInsets } from '../layout/side-safe-area'
@@ -9,19 +19,25 @@ import { colors, spacing, typography } from '../theme/mobile-theme'
 const CANCEL_DRAG_DISTANCE = 40
 
 /**
- * A short drawer at the bottom while the page's Create Workspace drawer loads, in the shared
- * drawer chrome: a spinner, or the download while there is one. The page's drawer slides up in
- * its place. Nothing dims the screen above; a tap there or a drag down cancels.
+ * A short drawer while the page's Create Workspace drawer loads: a spinner, or the download while
+ * there is one. It opens and dims as the shared drawer does, but in the screen's own window: a
+ * native Modal over the loading WebView stalls the page behind it. Gone in the frame the page
+ * paints, whose own drawer and backdrop take over. A tap on the backdrop, a drag down or Back
+ * cancels.
  */
 export function NewWorkspaceLoadingDrawer({
+  visible,
   download,
   onCancel
 }: {
+  visible: boolean
   download: ShellOverlayDownload | null
   onCancel: () => void
 }) {
   const insets = useWindowSafeAreaInsets()
   const { isWideLayout, modalMaxWidth } = useResponsiveLayout()
+  const { height: screenHeight } = useWindowDimensions()
+  const [progress] = useState(() => new Animated.Value(0))
   const [dragToCancel] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
@@ -32,9 +48,33 @@ export function NewWorkspaceLoadingDrawer({
       }
     })
   )
+  useEffect(() => {
+    if (!visible) {
+      progress.setValue(0)
+      return
+    }
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: BOTTOM_DRAWER_SHOW_DURATION_MS,
+      useNativeDriver: true
+    })
+    animation.start()
+    return () => animation.stop()
+  }, [progress, visible])
+  const slide = progress.interpolate({ inputRange: [0, 1], outputRange: [screenHeight, 0] })
   return (
-    <View style={StyleSheet.absoluteFill} testID="new-workspace-loading-drawer">
-      <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="Cancel" />
+    <View
+      style={StyleSheet.absoluteFill}
+      pointerEvents={visible ? 'auto' : 'none'}
+      testID="new-workspace-loading-drawer"
+    >
+      <Animated.View style={[bottomDrawerStyles.backdrop, { opacity: progress }]}>
+        <Pressable
+          style={bottomDrawerStyles.backdropPressable}
+          onPress={onCancel}
+          accessibilityLabel="Cancel"
+        />
+      </Animated.View>
       <View
         style={[
           bottomDrawerStyles.anchor,
@@ -43,13 +83,14 @@ export function NewWorkspaceLoadingDrawer({
         ]}
         pointerEvents="box-none"
       >
-        <View
+        <Animated.View
           style={[
             bottomDrawerStyles.drawer,
             {
               width: '100%',
               maxWidth: isWideLayout ? modalMaxWidth : undefined,
-              paddingBottom: insets.bottom + spacing.lg
+              paddingBottom: insets.bottom + spacing.lg,
+              transform: [{ translateY: slide }]
             }
           ]}
           {...dragToCancel.panHandlers}
@@ -64,7 +105,7 @@ export function NewWorkspaceLoadingDrawer({
               <DownloadProgress download={download} />
             )}
           </View>
-        </View>
+        </Animated.View>
       </View>
     </View>
   )

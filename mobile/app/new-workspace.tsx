@@ -12,7 +12,6 @@ export default function NewWorkspaceOverlayRoute() {
   const [hostId, setHostId] = useState(offered.length === 1 ? offered[0] : null)
   return (
     <>
-      {/* Kept mounted past the pick so it slides away over the load that pick started. */}
       {offered.length === 1 ? null : (
         <NewWorkspaceHostPicker hostIds={offered} onPick={setHostId} />
       )}
