@@ -7,6 +7,7 @@ import { composeWorktreeHostIdentity } from '../../../shared/worktree/host-quali
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
 import type { RuntimeStore } from '../runtime-store-contract'
+import type { GlobalSettings } from '../../../shared/global-settings-types'
 import { runtimeVisibleFolderWorkspaces } from '../runtime-visible-catalog'
 import type {
   ResolvedWorktreeRepoScans,
@@ -25,9 +26,21 @@ const VISIBILITY_SETTINGS = [
   'workspaceDirHistory'
 ] as const
 
-function visibilitySettingsKey(store: RuntimeStore): string {
+// The settings that change what git lists: the store invalidates the scan cache with no catalog event.
+const SCAN_SETTINGS = ['localWindowsRuntimeDefault'] as const
+
+function settingsKey(store: RuntimeStore, keys: readonly (keyof GlobalSettings)[]): string {
   const settings = store.getSettings()
-  return JSON.stringify(VISIBILITY_SETTINGS.map((key) => settings[key] ?? null))
+  return JSON.stringify(keys.map((key) => settings[key] ?? null))
+}
+
+// A partial test store may have no settings; it then has nothing to change.
+function scanSettingsKey(store: RuntimeStore | null): string | null {
+  return typeof store?.getSettings === 'function' ? settingsKey(store, SCAN_SETTINGS) : null
+}
+
+function visibilitySettingsKey(store: RuntimeStore): string {
+  return settingsKey(store, VISIBILITY_SETTINGS)
 }
 
 export type WorkspaceRowsSources = {
@@ -64,10 +77,12 @@ export class WorkspaceRowsProducer {
   // What the last join's visibility filter read; null until a join or settings save.
   private visibilityKey: string | null = null
   private joined: Joined | null = null
+  private scanSettingsKey: string | null
   private readonly askedRepoKeys = new Set<string>()
   private readonly scans: CachedScan<ResolvedWorktreeRepoScans>
 
   constructor(private readonly sources: WorkspaceRowsSources) {
+    this.scanSettingsKey = scanSettingsKey(sources.store)
     this.scans = new CachedScan({
       label: 'workspace-rows',
       scan: () => sources.scan(),
@@ -88,9 +103,14 @@ export class WorkspaceRowsProducer {
       const metadata =
         domains === undefined ||
         WORKTREE_METADATA_DOMAINS.some((domain) => domains.includes(domain))
-      if (metadata || (domains.includes('settings') && this.visibilitySettingsChanged())) {
+      const settings = domains !== undefined && domains.includes('settings')
+      if (metadata || (settings && this.visibilitySettingsChanged())) {
         // Urgent, and no rescan: metadata joins at read, so the write publishes now from the cache.
         this.revision.bump({ urgent: true })
+      }
+      if (settings && this.scanSettingsChanged()) {
+        this.revision.bump()
+        this.scans.request()
       }
     })
   }
@@ -100,6 +120,12 @@ export class WorkspaceRowsProducer {
     const previous = this.visibilityKey
     this.visibilityKey = this.sources.store ? visibilitySettingsKey(this.sources.store) : null
     return previous !== null && previous !== this.visibilityKey
+  }
+
+  private scanSettingsChanged(): boolean {
+    const previous = this.scanSettingsKey
+    this.scanSettingsKey = scanSettingsKey(this.sources.store)
+    return previous !== this.scanSettingsKey
   }
 
   /** Settles once a scan this producer can serve from has applied. Never rejects. */

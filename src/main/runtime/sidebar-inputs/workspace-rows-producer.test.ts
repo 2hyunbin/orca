@@ -421,4 +421,18 @@ describe('WorkspaceRowsProducer', () => {
     expect(scans()).toBe(before)
     detach()
   })
+
+  it('rescans when the Windows runtime default changes, which announces no catalog event', async () => {
+    const { rows, writeSettings, scans } = setup()
+    const detach = rows.revision.onChange(() => {})
+    await rows.settled()
+    const before = scans()
+    writeSettings({ compactWorktreeCards: true })
+    await rows.settled()
+    expect(scans()).toBe(before)
+    writeSettings({ localWindowsRuntimeDefault: { kind: 'wsl', distro: 'Ubuntu' } })
+    await rows.settled()
+    expect(scans()).toBe(before + 1)
+    detach()
+  })
 })
