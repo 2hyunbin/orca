@@ -1,5 +1,5 @@
 import { markRuntimeOwnedHiddenRendererPty } from '../../pty-hidden-delivery-gate'
-import { visibleRendererPtys } from '../delivery/visibility-state'
+import { attachingRendererViewPtys, visibleRendererPtys } from '../delivery/visibility-state'
 import { closeStartupQueryAuthorityForPty } from '../provider/registry'
 import type { RuntimePtySpawnState } from './spawn-state'
 
@@ -35,8 +35,9 @@ export function commitRuntimeSpawnHiddenDelivery(ctx: RuntimePtySpawnState): voi
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     return
   }
-  // Why: a view that mounted visible during spawn already unmarked; re-marking would drop its output.
-  if (visibleRendererPtys.has(id)) {
+  // Why: a view that mounted visible during spawn already unmarked, or is attaching to it now;
+  // marking would drop its output and ask it for a second restore.
+  if (visibleRendererPtys.has(id) || attachingRendererViewPtys.has(id)) {
     releaseRuntimeSpawnPreSpawnHiddenMark(ctx)
     ctx.deps.syncPtyBackgroundedDelivery?.(id, 'spawn')
     return

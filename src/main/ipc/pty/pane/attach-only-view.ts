@@ -7,6 +7,7 @@ import {
   isRuntimeOwnedHiddenRendererPty,
   markRuntimeOwnedHiddenRendererPty
 } from '../../pty-hidden-delivery-gate'
+import { attachingRendererViewPtys } from '../delivery/visibility-state'
 import type {
   IPtyProvider,
   PtySpawnOptions,
@@ -42,19 +43,21 @@ export function attachOnlyViewOf(args: { attachOnlyView?: unknown }): true | und
 }
 
 /**
- * Layout-owner build: main started the pane hidden, dropping its output. A visible view unmarks it
- * before attaching, so its attach snapshot holds every dropped byte and the view paints once.
+ * Layout-owner build: main starts the pane hidden, dropping its output until a view attaches. A
+ * visible view keeps main's start from hiding it, and unmarks one already hidden before attaching,
+ * so its attach snapshot holds every dropped byte and the view paints once.
  */
 export async function attachViewAfterHiddenStart<T extends object>(
   ptyId: string,
   setHidden: (id: string, hidden: boolean) => void,
   attach: () => Promise<T>
 ): Promise<T> {
-  if (!isRuntimeOwnedHiddenRendererPty(ptyId)) {
-    return attach()
-  }
+  const hiddenByMain = isRuntimeOwnedHiddenRendererPty(ptyId)
   const episode = hiddenRendererPtyDropEpisode(ptyId)
-  setHidden(ptyId, false)
+  if (hiddenByMain) {
+    setHidden(ptyId, false)
+  }
+  attachingRendererViewPtys.add(ptyId)
   let attached: T
   try {
     attached = await attach()
@@ -65,9 +68,12 @@ export async function attachViewAfterHiddenStart<T extends object>(
       markRuntimeOwnedHiddenRendererPty(ptyId)
     }
     throw error
+  } finally {
+    attachingRendererViewPtys.delete(ptyId)
   }
   // Why a snapshot of the same id: a local attach carries none, and another id's drops may postdate it.
   if (
+    hiddenByMain &&
     'id' in attached &&
     attached.id === ptyId &&
     'snapshot' in attached &&
