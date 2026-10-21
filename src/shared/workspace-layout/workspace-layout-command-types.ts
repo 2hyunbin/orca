@@ -377,7 +377,12 @@ export type LayoutContext = {
   now: () => number
   /** True while a start of this pane is in flight; such a pane is not started again. */
   isStarting?: (leafId: string) => boolean
+  /** Why panes this commit drops are closed: only a live edit's drops run the dropped-leaf step.
+   *  Absent (load, restore, peer merge, moves) records nothing. */
+  droppedLeafReason?: DroppedLeafReason
 }
+
+export type DroppedLeafReason = 'live-edit'
 
 export type LayoutApplyResult<Model> =
   | {
