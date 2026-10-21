@@ -121,6 +121,22 @@ function pinAsUser(tabId: string): void {
   )
 }
 
+/** The tab bar's rename and colour: main's commands with the switch on. */
+function labelAsUser(tabId: string, label: string, color: string): void {
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    useAppStore.getState().setTabCustomLabel(tabId, label)
+    useAppStore.getState().setUnifiedTabColor(tabId, color)
+    return
+  }
+  const asToday = { apply: () => {}, asToday: () => {} }
+  sendLayoutCommandToOwner(
+    'wt-1',
+    { type: 'renameTab', tabId, kind: 'custom', title: label },
+    asToday
+  )
+  sendLayoutCommandToOwner('wt-1', { type: 'setTabProps', tabId, color }, asToday)
+}
+
 function openChat(requestedSurface?: 'chat') {
   let complete!: (value: AgentTerminalLaunchCompletion) => void
   const completion = new Promise<AgentTerminalLaunchCompletion>((resolve) => {
@@ -217,8 +233,7 @@ describe('a provisional structured chat tab', () => {
     if (pinnedSource) {
       pinAsUser(chat.id)
       pinAsUser(sibling.id)
-      useAppStore.getState().setTabCustomLabel(chat.id, 'My work')
-      useAppStore.getState().setUnifiedTabColor(chat.id, '#ff0000')
+      labelAsUser(chat.id, 'My work', '#ff0000')
     }
     useAppStore.getState().moveUnifiedTabToGroup(chat.id, groupId)
     useAppStore.getState().reorderUnifiedTabs(groupId, [chat.id, sibling.id])

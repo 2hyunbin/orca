@@ -10,6 +10,8 @@ import type { StructuredAgentLaunchSettlement } from '@/lib/structured-agent-lau
 import type { ProvisionalLaunchArgs } from './structured-agent-session-provisional-tab'
 import { insertUnifiedTabAfterAnchor } from './unified-tab-anchor-insertion'
 import { useAppStore } from '@/store'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import {
   notifyHostDeclined,
   openDeclinedStructuredLaunchTerminal,
@@ -125,15 +127,7 @@ export async function openTerminalForDeclinedChat(
     notifyHostDeclined(args.plan.agent)
     return settlement
   }
-  state.moveUnifiedTabToGroup(replacement.id, current.groupId, {
-    activate: false,
-    recordInteraction: false
-  })
-  if (Boolean(current.isPinned) !== Boolean(replacement.isPinned)) {
-    const setPinned = current.isPinned ? state.pinTab : state.unpinTab
-    setPinned(replacement.id, { recordInteraction: false })
-  }
-  insertUnifiedTabAfterAnchor(worktreeId, replacement.id, current.id)
+  await placeReplacementAfterSource(worktreeId, replacement, current)
   const placed = useAppStore.getState()
   const group = (placed.groupsByWorktree[worktreeId] ?? []).find((g) => g.id === current.groupId)
   if (
@@ -157,13 +151,73 @@ export async function openTerminalForDeclinedChat(
   if (current.color !== null) {
     placed.setTabColor(replacement.entityId, current.color, { recordInteraction: false })
   }
-  placed.closeUnifiedTab(tab.id, { recordInteraction: false })
-  if (foreground) {
+  const showReplacement = (): void => {
     useAppStore.getState().setActiveTab(replacement.entityId)
     useAppStore.getState().activateTab(replacement.id)
     useAppStore.getState().setActiveTabType('terminal', worktreeId)
     focusTerminalTabSurface(replacement.id)
   }
+  // Switch-on, main's close lands later and shows the group's active tab: make it the terminal.
+  const showsFirst = foreground && ORCA_LAYOUT_OWNER_IS_MAIN
+  if (showsFirst) {
+    showReplacement()
+  }
+  placed.closeUnifiedTab(tab.id, { recordInteraction: false })
+  if (foreground && !showsFirst) {
+    showReplacement()
+  }
   notifyHostDeclined(args.plan.agent)
   return { kind: 'terminal' }
+}
+
+/** The terminal goes right after the declined chat, pinned as the chat is. */
+function placeReplacementAfterSource(
+  worktreeId: string,
+  replacement: Tab,
+  source: Tab
+): Promise<void> {
+  const placeHere = (): void => {
+    const state = useAppStore.getState()
+    state.moveUnifiedTabToGroup(replacement.id, source.groupId, {
+      activate: false,
+      recordInteraction: false
+    })
+    if (Boolean(source.isPinned) !== Boolean(replacement.isPinned)) {
+      const setPinned = source.isPinned ? state.pinTab : state.unpinTab
+      setPinned(replacement.id, { recordInteraction: false })
+    }
+    insertUnifiedTabAfterAnchor(worktreeId, replacement.id, source.id)
+  }
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    placeHere()
+    return Promise.resolve()
+  }
+  // Switch point: main places and pins the tab in one step; a pin sent alone would re-sort it.
+  const order = (useAppStore.getState().groupsByWorktree[worktreeId] ?? [])
+    .find((group) => group.id === source.groupId)
+    ?.tabOrder.filter((id) => id !== replacement.id)
+  return new Promise((resolve) => {
+    const sent = sendLayoutCommandToOwner(
+      worktreeId,
+      {
+        type: 'moveTab',
+        tabId: replacement.id,
+        toGroupId: source.groupId,
+        index: (order?.indexOf(source.id) ?? -1) + 1,
+        isPinned: Boolean(source.isPinned)
+      },
+      {
+        apply: () => resolve(),
+        asToday: () => {
+          placeHere()
+          resolve()
+        },
+        refused: () => resolve()
+      }
+    )
+    if (!sent) {
+      placeHere()
+      resolve()
+    }
+  })
 }
