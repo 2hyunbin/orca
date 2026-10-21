@@ -129,7 +129,7 @@ describe('a chat permission mode', () => {
     }
     const catalog = createAgentModelCatalogService({
       store: new AgentModelCatalogStore(),
-      getRecord: (id) => rig.store.getRecord(id),
+      getRecord: (id) => rig.store.getRecord(id) ?? undefined,
       drivesRecord: () => true,
       recordWorkspacePath: async () => rig.root,
       resolveAccountHome: async () => ({ variable: 'CODEX_HOME', path: '/account' }),
