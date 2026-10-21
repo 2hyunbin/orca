@@ -144,7 +144,7 @@ export function valueDifferences(
   actual: RecordedValue,
   path = ''
 ): Omit<RecordingDifference, 'checkpoint' | 'field'>[] {
-  if (canonicalJson(expected) === canonicalJson(actual)) {
+  if (expected === actual) {
     return []
   }
   if (
@@ -201,7 +201,7 @@ export function recordingDifferences(
     for (const field of OBSERVATION_FIELDS) {
       const left = checkpoint.observation[field]
       const right = found.observation[field]
-      if (canonicalJson(left) === canonicalJson(right)) {
+      if (!complete && canonicalJson(left) === canonicalJson(right)) {
         continue
       }
       for (const at of complete ? valueDifferences(left, right) : [firstDifference(left, right)]) {

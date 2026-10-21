@@ -165,6 +165,9 @@ describe('the fields that diverged', () => {
       { path: '.c[1]', expectedPresent: true, actualPresent: false },
       { path: '.d', expected: {}, actual: [] }
     ])
+    expect(divergingFields(recording({ state: Array(1) }), recording({ state: [] }))).toEqual([
+      'state.length'
+    ])
   })
 
   it('attributes a real malformed exchange without excusing valid wire changes beside it', async () => {
