@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { committingSpawn } from '../bind-first-pane.test-fixture'
 import {
   AGENT_PROMPT_BRACKETED_PASTE_END,
   AGENT_PROMPT_BRACKETED_PASTE_START,
@@ -367,7 +368,7 @@ describe('OrcaRuntimeService', () => {
     const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-adopted' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn: vi.fn().mockResolvedValue({ id: 'pty-bg' }),
+      spawn: vi.fn(committingSpawn(runtime, async () => ({ id: 'pty-bg' }))),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -410,7 +411,7 @@ describe('OrcaRuntimeService', () => {
     const revealTerminalSession = vi.fn().mockResolvedValue({ tabId: 'tab-adopted' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn: vi.fn().mockResolvedValue({ id: 'pty-bg' }),
+      spawn: vi.fn(committingSpawn(runtime, async () => ({ id: 'pty-bg' }))),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -540,7 +541,7 @@ describe('OrcaRuntimeService', () => {
   it('renames background terminal handles without requiring a visible tab', async () => {
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn: vi.fn().mockResolvedValue({ id: 'pty-bg' }),
+      spawn: vi.fn(committingSpawn(runtime, async () => ({ id: 'pty-bg' }))),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null

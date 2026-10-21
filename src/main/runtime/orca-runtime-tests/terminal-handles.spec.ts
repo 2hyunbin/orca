@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { registerBoundPty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, makePaneKey } from '../orca-runtime-test-mocks.spec'
 import type {
   RuntimeClientEvent,
@@ -360,7 +361,7 @@ describe('OrcaRuntimeService', () => {
     const tabId = 'tab-recover'
     const runtime = createRuntimeWithSshLease('pty-expired', tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty('pty-expired', TEST_WORKTREE_ID, null, {
+    registerBoundPty(runtime, 'pty-expired', TEST_WORKTREE_ID, null, {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -417,7 +418,7 @@ describe('OrcaRuntimeService', () => {
     const runtime = new OrcaRuntimeService(store)
     const tabId = 'tab-live'
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty('pty-live', TEST_WORKTREE_ID, null, {
+    registerBoundPty(runtime, 'pty-live', TEST_WORKTREE_ID, null, {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -437,13 +438,13 @@ describe('OrcaRuntimeService', () => {
     const runtime = new OrcaRuntimeService(store)
     const tabId = 'tab-cas'
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty('pty-old', TEST_WORKTREE_ID, null, {
+    registerBoundPty(runtime, 'pty-old', TEST_WORKTREE_ID, null, {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
     const oldHandle = runtime.resolveTerminalPane(paneKey, TEST_WORKTREE_ID).handle
     runtime.onPtyExit('pty-old', 0)
-    runtime.registerPty('pty-new', TEST_WORKTREE_ID, null, {
+    registerBoundPty(runtime, 'pty-new', TEST_WORKTREE_ID, null, {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -460,7 +461,7 @@ describe('OrcaRuntimeService', () => {
     const tabId = 'tab-concurrent'
     const runtime = createRuntimeWithSshLease('pty-expired', tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty('pty-expired', TEST_WORKTREE_ID, null, {
+    registerBoundPty(runtime, 'pty-expired', TEST_WORKTREE_ID, null, {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -493,7 +494,7 @@ describe('OrcaRuntimeService', () => {
     const tabId = 'tab-retry'
     const runtime = createRuntimeWithSshLease('pty-expired', tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty('pty-expired', TEST_WORKTREE_ID, null, {
+    registerBoundPty(runtime, 'pty-expired', TEST_WORKTREE_ID, null, {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -528,7 +529,7 @@ describe('OrcaRuntimeService', () => {
     const appPtyId = 'ssh:ssh-target@@pty-terminated'
     const runtime = createRuntimeWithSshLease(appPtyId, tabId, 'terminated')
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
+    registerBoundPty(runtime, appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -551,7 +552,7 @@ describe('OrcaRuntimeService', () => {
     const appPtyId = 'ssh:ssh-target@@pty-3'
     const runtime = createRuntimeWithSshLease(appPtyId, tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
+    registerBoundPty(runtime, appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -589,7 +590,7 @@ describe('OrcaRuntimeService', () => {
       supersededBy: 'pty-6'
     })
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
+    registerBoundPty(runtime, appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -610,7 +611,7 @@ describe('OrcaRuntimeService', () => {
       relayIdRecycled: true
     })
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
+    registerBoundPty(runtime, appPtyId, TEST_WORKTREE_ID, 'ssh-target', {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -637,7 +638,7 @@ describe('OrcaRuntimeService', () => {
     const ptyId = 'ssh:ssh-target@@pty-3'
     const runtime = createRuntimeWithSshLease(ptyId, tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(ptyId, TEST_WORKTREE_ID, 'ssh-target', {
+    registerBoundPty(runtime, ptyId, TEST_WORKTREE_ID, 'ssh-target', {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })
@@ -669,7 +670,7 @@ describe('OrcaRuntimeService', () => {
     const ptyId = 'ssh:ssh-target@@pty-4'
     const runtime = createRuntimeWithSshLease(ptyId, tabId)
     const paneKey = makePaneKey(tabId, HEADLESS_LEAF_ID)
-    runtime.registerPty(ptyId, TEST_WORKTREE_ID, 'ssh-target', {
+    registerBoundPty(runtime, ptyId, TEST_WORKTREE_ID, 'ssh-target', {
       tabId,
       leafId: HEADLESS_LEAF_ID
     })

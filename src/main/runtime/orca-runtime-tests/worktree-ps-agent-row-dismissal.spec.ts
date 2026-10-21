@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { bindPaneFirst } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import { TEST_WORKTREE_ID, store } from '../orca-runtime-test-fixtures.spec'
 import { makeAgentStatusStoreWiring } from '../agent-status-store-wiring.test-fixture'
@@ -248,6 +249,12 @@ describe('worktree ps follows a dismissal out of the agent-status store', () => 
   it('keeps runtime-owned legacy OSC rows in worktree.ps and mobile projections', async () => {
     const statusWiring = makeAgentStatusStoreWiring()
     const runtime = new OrcaRuntimeService(store, undefined, statusWiring.deps)
+    bindPaneFirst(runtime, {
+      worktreeId: TEST_WORKTREE_ID,
+      tabId: 'legacy-tab',
+      leafId: 'pane:7',
+      ptyId: 'legacy-pty'
+    })
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [

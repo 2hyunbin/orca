@@ -87,7 +87,8 @@ describe('OrcaRuntimeService', () => {
       {
         ...store,
         getWorkspaceSession: (hostId?: string | null) =>
-          hostId === `ssh:${targetId}` ? sshSession : getDefaultWorkspaceSession()
+          hostId === `ssh:${targetId}` ? sshSession : getDefaultWorkspaceSession(),
+        getWorkspaceSessionHostIds: () => ['local', `ssh:${targetId}`]
       },
       undefined,
       {

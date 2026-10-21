@@ -1,5 +1,6 @@
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { describe, expect, it, vi } from 'vitest'
+import { committingSpawn, registerBoundPty } from '../bind-first-pane.test-fixture'
 import {
   MOCK_GIT_WORKTREES,
   OrcaRuntimeService,
@@ -326,7 +327,7 @@ describe('OrcaRuntimeService', () => {
   ])('places a runtime-owned terminal $label', async (testCase) => {
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn: vi.fn().mockResolvedValue({ id: 'pty-created-after-split' }),
+      spawn: vi.fn(committingSpawn(runtime, async () => ({ id: 'pty-created-after-split' }))),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -495,7 +496,7 @@ describe('OrcaRuntimeService', () => {
     }
     webContents.send.mockImplementation((_channel: string, payload: { requestId: string }) => {
       expect(setBackgroundThrottling).toHaveBeenCalledWith(false)
-      runtime.registerPty('pty-paired-headed', TEST_WORKTREE_ID, null, {
+      registerBoundPty(runtime, 'pty-paired-headed', TEST_WORKTREE_ID, null, {
         tabId: 'tab-paired-headed',
         leafId
       })
@@ -763,7 +764,7 @@ describe('OrcaRuntimeService', () => {
     let spawnIndex = 0
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn: vi.fn(async () => ({ id: `pty-headless-${++spawnIndex}` })),
+      spawn: vi.fn(committingSpawn(runtime, async () => ({ id: `pty-headless-${++spawnIndex}` }))),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -791,7 +792,7 @@ describe('OrcaRuntimeService', () => {
     let spawnIndex = 0
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn: vi.fn(async () => ({ id: `pty-headless-${++spawnIndex}` })),
+      spawn: vi.fn(committingSpawn(runtime, async () => ({ id: `pty-headless-${++spawnIndex}` }))),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null

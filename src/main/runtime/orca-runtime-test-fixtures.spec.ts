@@ -1,5 +1,6 @@
 import { withDurableRuntimeStore, withRuntimePaneAdmission } from './runtime-durable-store-fixture'
-import { expect, vi } from 'vitest'
+import { afterEach, expect, vi } from 'vitest'
+import { forgetInstalledPaneSession } from './bind-first-pane.test-fixture'
 import { createHash } from 'node:crypto'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
 import { OrcaRuntimeService } from './orca-runtime'
@@ -592,6 +593,8 @@ function makeRuntimeStoreWithWorkspaceSession(
       getWorkspaceSession: (hostId?: string) =>
         hostId === undefined || hostId === ownerHostId ? session : getDefaultWorkspaceSession(),
       setWorkspaceSession: vi.fn(setSession),
+      // As a profile store: the partitions it holds, which main's layout index reads.
+      getWorkspaceSessionHostIds: () => [ownerHostId],
       // Main's `layout.apply` on this partition, as the Store applies it (switch-on writes).
       applyLayoutCommand: vi.fn(async (command: LayoutCommand, hostIds?: readonly string[]) => {
         const change = applyCommandToSession(
@@ -669,6 +672,9 @@ function makeWorkspaceSessionWithHeadlessTerminal(
     ...overrides
   }
 }
+
+// Layout-owner tests bind panes into the shared store; each test starts without them.
+afterEach(() => forgetInstalledPaneSession(store))
 
 computeWorktreePathMock.mockImplementation(
   (

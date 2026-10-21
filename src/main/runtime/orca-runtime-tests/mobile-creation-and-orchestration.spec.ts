@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { bindPaneFirst, registerBoundPty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, electronMocks, ipcMain } from '../orca-runtime-test-mocks.spec'
 import {
   TEST_WORKTREE_ID,
@@ -33,7 +34,10 @@ describe('OrcaRuntimeService', () => {
       const send = vi.fn((_channel: string, payload: { requestId: string }) => {
         // Why: mirrors the spawn IPC handler — a command-carrying spawn records
         // its launch command right after registering the PTY.
-        runtime.registerPty('pty-carried', TEST_WORKTREE_ID, null, { tabId: 'tab-carried', leafId })
+        registerBoundPty(runtime, 'pty-carried', TEST_WORKTREE_ID, null, {
+          tabId: 'tab-carried',
+          leafId
+        })
         runtime.noteTerminalSpawnCommand('pty-carried', 'codex')
         ipcMain.emit(
           'terminal:tabCreateReply',
@@ -146,7 +150,7 @@ describe('OrcaRuntimeService', () => {
       ).toBe(false)
 
       // The renderer's own PTY spawn registers with the binding and rescues it.
-      runtime.registerPty('pty-guard', TEST_WORKTREE_ID, null, {
+      registerBoundPty(runtime, 'pty-guard', TEST_WORKTREE_ID, null, {
         tabId: 'tab-guard',
         leafId
       })
@@ -204,6 +208,12 @@ describe('OrcaRuntimeService', () => {
       await vi.advanceTimersByTimeAsync(50)
 
       // Identity arrives via leaf graph-sync, NOT registerPty, so no rescue fires and the surface is never published.
+      bindPaneFirst(runtime, {
+        worktreeId: TEST_WORKTREE_ID,
+        tabId: 'tab-catch',
+        leafId,
+        ptyId: 'pty-catch'
+      })
       runtime.syncWindowGraph(1, {
         tabs: [],
         leaves: [

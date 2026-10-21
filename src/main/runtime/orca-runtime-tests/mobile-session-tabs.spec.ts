@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { bindPaneFirst } from '../bind-first-pane.test-fixture'
 import {
   OrcaRuntimeService,
   electronMocks,
@@ -265,6 +266,12 @@ describe('OrcaRuntimeService', () => {
     })
     const leftLeafId = '11111111-1111-4111-8111-111111111111'
     const rightLeafId = '22222222-2222-4222-8222-222222222222'
+    for (const [leafId, ptyId] of [
+      [leftLeafId, 'pty-left'],
+      [rightLeafId, 'pty-right']
+    ]) {
+      bindPaneFirst(runtime, { worktreeId: TEST_WORKTREE_ID, tabId: 'tab-1', leafId, ptyId })
+    }
     runtime.attachWindow(1)
     runtime.syncWindowGraph(1, {
       tabs: [

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { committingSpawn, registerBoundPty } from '../bind-first-pane.test-fixture'
 import {
   OrcaRuntimeService,
   electronMocks,
@@ -316,7 +317,7 @@ describe('OrcaRuntimeService', () => {
           ]
         }
       })
-      parked.runtime.registerPty('other-pty', TEST_WORKTREE_ID, null, {
+      registerBoundPty(parked.runtime, 'other-pty', TEST_WORKTREE_ID, null, {
         tabId: 'other-tab',
         leafId: HEADLESS_SECOND_LEAF_ID
       })
@@ -711,7 +712,7 @@ describe('OrcaRuntimeService', () => {
     const spawn = vi.fn().mockImplementation(async () => ({ id: `headless-pty-${++nextPty}` }))
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn,
+      spawn: committingSpawn(runtime, spawn),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -762,7 +763,7 @@ describe('OrcaRuntimeService', () => {
     const spawn = vi.fn().mockResolvedValue({ id: 'headless-pty-solo' })
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn,
+      spawn: committingSpawn(runtime, spawn),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -785,7 +786,7 @@ describe('OrcaRuntimeService', () => {
     const spawn = vi.fn().mockImplementation(async () => ({ id: `attached-pty-${++nextPty}` }))
     const runtime = new OrcaRuntimeService(store)
     runtime.setPtyController({
-      spawn,
+      spawn: committingSpawn(runtime, spawn),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null

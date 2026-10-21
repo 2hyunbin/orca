@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { bindPaneFirst } from '../bind-first-pane.test-fixture'
 import {
   MOCK_GIT_WORKTREES,
   OrcaRuntimeService,
@@ -573,6 +574,12 @@ describe('OrcaRuntimeService', () => {
         await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1))
 
         // A live shell backs the tab but its leaf id isn't a terminal UUID, so no pane key registers (stalled renderer publication).
+        bindPaneFirst(runtime, {
+          worktreeId: TEST_WORKTREE_ID,
+          tabId: 'tab-stall',
+          leafId: 'pane:1',
+          ptyId: 'pty-stall'
+        })
         runtime.syncWindowGraph(1, {
           tabs: [],
           leaves: [

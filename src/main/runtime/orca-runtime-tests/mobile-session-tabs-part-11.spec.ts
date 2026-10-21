@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { committingSpawn } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import type { WorkspaceSessionState } from '../orca-runtime-test-mocks.spec'
 import {
@@ -601,7 +602,7 @@ describe('OrcaRuntimeService', () => {
       })
     } as never)
     runtime.setPtyController({
-      spawn,
+      spawn: committingSpawn(runtime, spawn),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -636,7 +637,7 @@ describe('OrcaRuntimeService', () => {
       })
     } as never)
     runtime.setPtyController({
-      spawn,
+      spawn: committingSpawn(runtime, spawn),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null

@@ -1,5 +1,6 @@
 import { settledWriteStub } from '../../providers/settled-pty-write-stub'
 import { describe, expect, it, vi } from 'vitest'
+import { bindPaneFirst } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import {
   InMemoryOrchestrationMessages,
@@ -138,6 +139,12 @@ describe('OrcaRuntimeService', () => {
       // parsePaneKey(pty.paneKey).leafId to the republished leafId, and a non-UUID
       // id falls back to `tabId:paneRuntimeId`, so it is always fenced after exit.
       const leafId = '11111111-1111-1111-8111-111111111111'
+      bindPaneFirst(runtime, {
+        worktreeId: TEST_WORKTREE_ID,
+        tabId: 'tab-1',
+        leafId,
+        ptyId: 'pty-1'
+      })
       const syncUuidLeaf = (): void => {
         runtime.attachWindow(1)
         runtime.syncWindowGraph(1, {

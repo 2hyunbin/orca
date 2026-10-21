@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { bindPaneFirst, committingSpawn } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, electronMocks, ipcMain } from '../orca-runtime-test-mocks.spec'
 import {
   HEADLESS_LEAF_ID,
@@ -63,7 +64,7 @@ describe('OrcaRuntimeService', () => {
         })
       } as never)
       runtime.setPtyController({
-        spawn,
+        spawn: committingSpawn(runtime, spawn),
         write: () => true,
         kill: () => true,
         getForegroundProcess: async () => null
@@ -109,7 +110,7 @@ describe('OrcaRuntimeService', () => {
         })
       } as never)
       runtime.setPtyController({
-        spawn,
+        spawn: committingSpawn(runtime, spawn),
         write: () => true,
         kill: () => true,
         getForegroundProcess: async () => null
@@ -156,7 +157,7 @@ describe('OrcaRuntimeService', () => {
         })
       } as never)
       runtime.setPtyController({
-        spawn,
+        spawn: committingSpawn(runtime, spawn),
         write: () => true,
         kill: () => true,
         getForegroundProcess: async () => null
@@ -188,7 +189,7 @@ describe('OrcaRuntimeService', () => {
       })
     } as never)
     runtime.setPtyController({
-      spawn,
+      spawn: committingSpawn(runtime, spawn),
       write: () => true,
       kill: () => true,
       getForegroundProcess: async () => null
@@ -296,6 +297,12 @@ describe('OrcaRuntimeService', () => {
         { sender: { send: vi.fn() } },
         { requestId: payload.requestId, error: 'spoofed renderer reply' }
       )
+      bindPaneFirst(runtime, {
+        worktreeId: TEST_WORKTREE_ID,
+        tabId: 'tab-renderer',
+        leafId: HEADLESS_LEAF_ID,
+        ptyId: 'pty-renderer'
+      })
       runtime.syncWindowGraph(1, {
         tabs: [],
         leaves: [
