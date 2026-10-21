@@ -3516,7 +3516,6 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "在浏览器中打开",
-            "9dd880bd56": "关闭右侧的所有选项卡",
             "1611a1324b": "关闭",
             "5d6e89891f": "复制选项卡",
             "966feb9ad5": "向右拆分",
@@ -3533,7 +3532,6 @@
             "52ce4f4605": "复制相对路径",
             "5b85754786": "复制路径",
             "bfd5797ef4": "打开 Markdown 预览",
-            "e5ff31ccaf": "关闭右侧的所有选项卡",
             "ba1369dd24": "关闭所有编辑器选项卡",
             "1ba8492c5b": "关闭",
             "68cc610e7f": "重命名",
@@ -3566,7 +3564,6 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "标签颜色",
             "2f697b3c31": "更改标题",
-            "c1ee099c7e": "关闭右侧的所有选项卡",
             "8d16f9cd30": "关闭其他",
             "89359a36f7": "关闭",
             "21132389e9": "向右拆分",
@@ -18837,6 +18834,8 @@
         "plan": "计划",
         "historyRepaired": "此聊天的部分历史记录无法加载。",
         "historyItemTooLarge": "聊天的这一部分过大，无法显示。",
+        "continuedOutside": "已在此聊天之外继续。",
+        "continuedOutsideRewound": "已在此聊天之外继续。上方较早的回复已不在此对话的历史记录中。",
         "stoppedBeforeStart": "已手动停止",
         "dismiss": "关闭",
         "copyError": "复制错误",
@@ -19083,16 +19082,13 @@
       "bar": {
         "SortableTabContextMenu": {
           "switchToTerminalView": "使用终端智能体继续",
-          "switchToChatView": "在聊天界面中继续",
-          "closeTabsToLeft": "关闭左侧的所有选项卡"
+          "switchToChatView": "在聊天界面中继续"
         },
         "BrowserTab": {
-          "closeOthers": "关闭其他",
-          "closeTabsToLeft": "关闭左侧的所有选项卡"
+          "closeOthers": "关闭其他"
         },
         "EditorFileTabContextMenu": {
-          "closeOthers": "关闭其他",
-          "closeTabsToLeft": "关闭左侧的所有选项卡"
+          "closeOthers": "关闭其他"
         },
         "CopyTabIdMenuItem": {
           "copied": "已复制标签页 ID",

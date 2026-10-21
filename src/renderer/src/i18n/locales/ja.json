@@ -3516,7 +3516,6 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "ブラウザで開く",
-            "9dd880bd56": "右側のすべてのタブを閉じる",
             "1611a1324b": "閉じる",
             "5d6e89891f": "タブの複製",
             "966feb9ad5": "右に分割",
@@ -3533,7 +3532,6 @@
             "52ce4f4605": "相対パスをコピー",
             "5b85754786": "パスのコピー",
             "bfd5797ef4": "Markdown プレビューを開く",
-            "e5ff31ccaf": "右側のすべてのタブを閉じる",
             "ba1369dd24": "すべてのエディターのタブを閉じる",
             "1ba8492c5b": "閉じる",
             "68cc610e7f": "名前を変更する",
@@ -3566,7 +3564,6 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "タブの色",
             "2f697b3c31": "タイトルの変更",
-            "c1ee099c7e": "右側のすべてのタブを閉じる",
             "8d16f9cd30": "その他を閉じる",
             "89359a36f7": "閉じる",
             "21132389e9": "右に分割",
@@ -18872,6 +18869,8 @@
         "plan": "プラン",
         "historyRepaired": "このチャットの履歴の一部を読み込めませんでした。",
         "historyItemTooLarge": "チャットのこの部分は大きすぎるため表示できません。",
+        "continuedOutside": "このチャットの外で続けられました。",
+        "continuedOutsideRewound": "このチャットの外で続けられました。上の以前の返信は、この会話の履歴にはもうありません。",
         "stoppedBeforeStart": "手動で停止しました",
         "dismiss": "閉じる",
         "copyError": "エラーをコピー",
@@ -19118,16 +19117,13 @@
       "bar": {
         "SortableTabContextMenu": {
           "switchToTerminalView": "ターミナル Agent で続ける",
-          "switchToChatView": "チャット UI で続ける",
-          "closeTabsToLeft": "左側のすべてのタブを閉じる"
+          "switchToChatView": "チャット UI で続ける"
         },
         "BrowserTab": {
-          "closeOthers": "その他を閉じる",
-          "closeTabsToLeft": "左側のすべてのタブを閉じる"
+          "closeOthers": "その他を閉じる"
         },
         "EditorFileTabContextMenu": {
-          "closeOthers": "その他を閉じる",
-          "closeTabsToLeft": "左側のすべてのタブを閉じる"
+          "closeOthers": "その他を閉じる"
         },
         "CopyTabIdMenuItem": {
           "copied": "タブ ID をコピーしました",
