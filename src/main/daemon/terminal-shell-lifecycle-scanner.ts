@@ -136,6 +136,7 @@ export class TerminalShellLifecycleScanner {
           )
           return false
         }
+        return true
       },
       () => {
         this.revoke()
