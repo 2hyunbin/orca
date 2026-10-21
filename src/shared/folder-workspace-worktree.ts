@@ -41,7 +41,7 @@ export function getFolderWorkspaceWorktreeHostId(
 
 export function getFolderWorkspaceHostIdentity(
   workspace: Pick<FolderWorkspace, 'id' | 'executionHostId' | 'connectionId'>
-): string {
+) {
   return composeWorktreeHostIdentity(
     getFolderWorkspaceWorktreeHostId(workspace),
     folderWorkspaceKey(workspace.id)

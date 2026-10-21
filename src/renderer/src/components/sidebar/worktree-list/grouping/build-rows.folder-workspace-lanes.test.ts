@@ -1,11 +1,12 @@
 import { folderWorkspaceToWorktree } from '../../../../../../shared/folder-workspace-worktree'
 import { computeVisibleWorktrees } from '../../compute-visible-worktrees'
-import { getWorktreeLineageGroupKey } from '../../../../../../shared/sidebar-list/group-keys'
-import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import { describe, expect, it } from 'vitest'
 import { buildRows } from './build-rows.test-fixture'
 import { getFolderWorkspaceLaneKey } from '../../../../../../shared/sidebar-list/folder-workspace-lanes'
-import { getPRLaneKey } from '../../../../../../shared/sidebar-list/group-keys'
+import {
+  getPRLaneKey,
+  getWorktreeLineageGroupKey
+} from '../../../../../../shared/sidebar-list/group-keys'
 import { getPRGroupKey } from './pr-group-key'
 import { getRenderRowKey } from '../listing/render-row'
 import type { Row, WorktreeGroupBy } from '../../../../../../shared/sidebar-list/row-types'
@@ -52,7 +53,6 @@ const GROUPED_REPO: Repo = { ...repo, projectGroupId: GROUP.id }
 
 function buildSidebarRows(options: {
   groupBy: WorktreeGroupBy
-  lineageById?: Record<string, WorktreeLineage>
   nestLineage?: boolean
   folderWorkspaces?: readonly FolderWorkspace[]
   projectGroups?: readonly ProjectGroup[]
@@ -69,7 +69,7 @@ function buildSidebarRows(options: {
     undefined,
     undefined,
     'manual',
-    options.lineageById ?? {},
+    {},
     new Map(worktrees.map((entry) => [entry.id, entry])),
     options.nestLineage ?? false,
     undefined,

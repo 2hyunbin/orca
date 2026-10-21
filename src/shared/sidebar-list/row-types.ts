@@ -45,7 +45,6 @@ export type GroupHeaderRow = {
 
 export type WorktreeRow = {
   occurrence?: WorktreeOccurrence<Worktree>
-  lineageCollapsed?: boolean
   type: 'item'
   rowKey: string
   sectionKey: string
