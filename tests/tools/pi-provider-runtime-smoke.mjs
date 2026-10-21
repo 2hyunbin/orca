@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { once } from 'node:events'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { spawn } from 'node:child_process'
+import { createInterface } from 'node:readline'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -111,6 +113,60 @@ try {
   assert.equal(results[1].code, 0, results[1].stderr)
   assert.match(results[1].stdout, /fixture-generated-commit/)
   assert.equal(results[1].requests, 1)
+  // The Pi catch-up's contract: entries keep stable ids, and `since` returns what was appended after
+  // one of them, or refuses an id the session doesn't have.
+  const sessionFile = join(scratch, 'catch-up.jsonl')
+  const rpc = spawn(process.execPath, [piCli, '--mode', 'rpc', '--session', sessionFile], {
+    cwd: scratch,
+    env: {
+      PATH: process.env.PATH,
+      SystemRoot: process.env.SystemRoot,
+      WINDIR: process.env.WINDIR,
+      HOME: scratch,
+      USERPROFILE: scratch,
+      ORCA_BACKGROUND_LAUNCH: '1',
+      PI_CODING_AGENT_DIR: dir
+    },
+    stdio: ['pipe', 'pipe', 'inherit']
+  })
+  const replies = new Map()
+  let settled
+  const settledOnce = new Promise((resolve) => (settled = resolve))
+  createInterface({ input: rpc.stdout }).on('line', (line) => {
+    const record = JSON.parse(line)
+    if (record.type === 'response' && replies.has(record.id)) {
+      replies.get(record.id)(record)
+    } else if (record.type === 'agent_settled' || record.type === 'agent_end') {
+      settled()
+    }
+  })
+  let next = 0
+  const ask = (type, params = {}) =>
+    new Promise((resolve) => {
+      const id = `smoke-${++next}`
+      replies.set(id, resolve)
+      rpc.stdin.write(`${JSON.stringify({ ...params, type, id })}\n`)
+    })
+  try {
+    assert.equal((await ask('prompt', { message: 'hello' })).success, true)
+    await settledOnce
+    const all = await ask('get_entries')
+    assert.equal(all.success, true, all.error)
+    const ids = all.data.entries.map((entry) => entry.id)
+    assert.ok(ids.length >= 2 && ids.every((id) => typeof id === 'string' && id.length > 0))
+    assert.equal(all.data.leafId, ids.at(-1))
+    const since = await ask('get_entries', { since: ids[0] })
+    assert.deepEqual(
+      since.data.entries.map((entry) => entry.id),
+      ids.slice(1)
+    )
+    const unknown = await ask('get_entries', { since: 'not-an-entry' })
+    assert.equal(unknown.success, false)
+    assert.match(unknown.error, /Entry not found/)
+    results.push({ variant: 'rpc-get-entries', entries: ids.length })
+  } finally {
+    rpc.kill()
+  }
   console.log(
     JSON.stringify(
       {
