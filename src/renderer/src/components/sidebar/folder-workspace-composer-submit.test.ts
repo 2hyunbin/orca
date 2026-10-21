@@ -725,7 +725,7 @@ describe('submitFolderWorkspaceCreate native-chat launch draft', () => {
   })
 
   it.each([false, true])(
-    'projects real folder startup through pending handle, cold binding and actual release (draft=%s)',
+    'publishes real folder startup through unbound and bound mobile snapshots (draft=%s)',
     async (withDraft) => {
       await submitFolderWorkspaceCreate({
         projectGroup: makeProjectGroup(),

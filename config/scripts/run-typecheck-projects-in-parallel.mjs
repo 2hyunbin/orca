@@ -16,8 +16,6 @@ export const TYPECHECK_PROJECTS = [
   { config: 'config/tsconfig.node.json', heapGib: 7 },
   { config: 'config/tsconfig.tc.web.json', heapGib: 6 },
   { config: 'config/tsconfig.tc.cli.json', heapGib: 2 },
-  // Cross-layer flow fixtures need both ambient environments; reserve a standalone native batch.
-  { config: 'config/tsconfig.terminal-interface.test.json', heapGib: 11 },
   // Root projects exclude workspace package tests; each runs with its package's compiler.
   { config: 'src/packages/process-host/tsconfig.test.json', heapGib: 1 }
 ]

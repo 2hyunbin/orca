@@ -1,4 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import { projectIpcPtyConnectResult } from '../ipc-pty-connect-result'
+import type { PtyConnectResult } from '../pty-transport-types'
+import { bindStartFreshSpawn } from './fresh-spawn-start'
 import { useAppStore } from '@/store'
 import { installPaneTerminalInterfacePresentation } from './pane-terminal-interface-presentation'
 import { clearStaleAgentTabTitleOnConfirmedShell } from './confirmed-shell-agent-title'
@@ -6,7 +9,9 @@ import { armRestartReplacement, consumeRestartReplacement } from './restart-repl
 import {
   applyTerminalInterfaceSnapshot,
   nativeChatShellForeground,
-  refreshTerminalInterfacePresentation
+  refreshTerminalInterfacePresentation,
+  readTerminalInterface,
+  terminalInterfaceReleasesChat
 } from '../../native-chat/terminal-interface-presentation'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { TerminalInterfaceObservation } from '../../../../../shared/terminal-interface-observation'
@@ -151,4 +156,110 @@ it('reconciles the mounted applicable binding once, including pending clearance,
   publish({ epoch: 'new-authority', revision: 3, ptyId, incarnationId: incarnation })
   await Promise.resolve()
   expect(ground).toHaveBeenCalledTimes(5)
+})
+
+it('carries real IPC projection identity into the mounted session and releases only the matching shell lifetime', async () => {
+  vi.stubGlobal('window', {
+    api: { pty: { declarePendingPaneSerializer: async () => null } }
+  })
+  try {
+    const branches: Partial<PtyConnectResult>[] = [
+      {},
+      { launchAgent: 'codex' },
+      { launchConfig: { agentCommand: 'codex', agentArgs: '', agentEnv: {} } },
+      { isReattach: true, snapshot: 'history', snapshotSeq: 8 },
+      { coldRestore: { scrollback: 'history', cwd: '/workspace' } },
+      { sessionExpired: true },
+      { startupCwdFallback: { kind: 'worktree', cwd: '/workspace' } },
+      { agentResumeUnavailable: true }
+    ]
+    for (const branch of branches) {
+      for (const incarnationId of ['birth', 'previous-birth', undefined]) {
+        const response = { id: 'pty', ...branch, ...(incarnationId ? { incarnationId } : {}) }
+        const projected = projectIpcPtyConnectResult(response)
+        if (!incarnationId && Object.keys(branch).length === 0) {
+          expect(projected).toBe('pty')
+        }
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: supplies every member read by the real fresh-spawn and presentation installers; other terminal subsystems are inert.
+        const session = {
+          cacheKey: paneKey,
+          pendingSpawnKey: paneKey,
+          disposed: false,
+          remotePtyIncarnationId: 'predecessor',
+          authoritativeReattachGeneration: 0,
+          transportStreamGeneration: 1,
+          activePanePtyBinding: 'pty',
+          spawnedFreshPtyId: 'pty',
+          startupInjectTimer: null,
+          transportConnectInFlightSince: null,
+          pane: { terminal: { write: vi.fn() } },
+          transport: { getPtyId: () => 'pty', connect: async () => projected },
+          deps: {
+            worktreeId: 'folder:one',
+            tabId: 'tab',
+            isVisibleRef: { current: false },
+            isPtyShutdownPending: () => false
+          },
+          clearPaneMode2031State: vi.fn(),
+          clearHiddenOutputRestoreState: vi.fn(),
+          resetFreshSpawnFollowOutput: vi.fn(),
+          writeInputModeGround: vi.fn(),
+          prepareFreshShellViewportForSpawn: vi.fn(),
+          shouldDeclareHiddenAtSpawn: () => false,
+          captureTransportOutputCallbacks: () => ({ generation: 1, callbacks: {} }),
+          finishReattachLiveDataDeferral: vi.fn(),
+          handleReattachResult: async () => true,
+          registerEffectiveLaunchConfig: vi.fn(),
+          showSessionRestoredBanner: vi.fn(),
+          clearSleepingRecordAfterColdRestoreSpawn: vi.fn(),
+          reconcilePtySizeAfterSpawn: vi.fn(),
+          registerPaneSerializerFor: vi.fn(),
+          clearStaleAgentTabTitleOnConfirmedShell: vi.fn()
+        } as unknown as ConnectPanePtySession
+        useAppStore.setState({ terminalInterfaceByPtyId: {} })
+        installPaneTerminalInterfacePresentation(session)
+        try {
+          bindStartFreshSpawn(session)
+          expect(await session.startFreshSpawn()).toBe('pty')
+          await Promise.resolve()
+          expect(session.remotePtyIncarnationId).toBe(incarnationId ?? null)
+          applyTerminalInterfaceSnapshot(
+            {
+              type: 'terminalInterfaces',
+              epoch: 'ipc-handoff',
+              revision: 1,
+              observations: [
+                {
+                  ptyId: 'pty',
+                  incarnationId: 'birth',
+                  paneKey,
+                  terminalHandle: 'handle',
+                  worktreeId: 'folder:one',
+                  epoch: 'ipc-handoff',
+                  revision: 1,
+                  inputRevision: 0,
+                  executionLaunchToken: null,
+                  owner: null,
+                  state: 'shell',
+                  basis: 'process'
+                }
+              ]
+            },
+            null
+          )
+          expect(readTerminalInterface(useAppStore.getState(), paneKey) !== null).toBe(
+            incarnationId === 'birth'
+          )
+          expect(terminalInterfaceReleasesChat(useAppStore.getState(), paneKey)).toBe(
+            incarnationId === 'birth'
+          )
+        } finally {
+          session.disposed = true
+          session.unregisterTerminalInterfacePresentation?.()
+        }
+      }
+    }
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })

@@ -1,10 +1,6 @@
 {
   "extends": "./tsconfig.web.json",
   "exclude": [
-    "../src/renderer/src/components/native-chat/terminal-interface-replica-flow.test.ts",
-    "../src/renderer/src/lib/terminal-interface-startup-flow.test-support.ts",
-    "../src/renderer/src/lib/launch-agent-in-new-tab.test.ts",
-    "../src/renderer/src/components/sidebar/folder-workspace-composer-submit.test.ts",
     "../src/shared/**/*.test.ts",
     "../src/shared/**/*.test.tsx",
     "../src/shared/**/*.spec.ts",

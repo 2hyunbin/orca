@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { nativeChatShellForeground } from '../../renderer/src/components/native-chat/terminal-interface-presentation'
 import { AgentHookServer } from './server'
 import {
   TerminalInterfaceAuthority,
@@ -219,23 +218,7 @@ describe('execution-host terminal interface flow', () => {
         }
       }
     ]
-    const releasesChat = () =>
-      nativeChatShellForeground(
-        {
-          terminalInterfaceByPtyId: {
-            pty: { observation: authority.snapshot()[0], environmentId: null }
-          },
-          terminalLayoutsByTabId: {
-            tab: {
-              root: { type: 'leaf', leafId: paneKey.slice(4) },
-              activeLeafId: paneKey.slice(4),
-              expandedLeafId: null,
-              ptyIdsByLeafId: { [paneKey.slice(4)]: 'pty' }
-            }
-          }
-        },
-        paneKey
-      )
+    const releasesChat = () => authority.read('pty', 'birth')?.state === 'shell'
     for (const kind of ['driving', 'launch'] as const) {
       for (const result of unavailable) {
         authority.input('pty', kind)

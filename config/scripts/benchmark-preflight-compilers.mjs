@@ -10,8 +10,7 @@ import {
   TYPECHECK_PROJECTS,
   admissibleHeapGib,
   planTypecheckBatches,
-  resolveProjectCompiler,
-  typecheckBatches
+  resolveProjectCompiler
 } from './run-typecheck-projects-in-parallel.mjs'
 
 const parityOnly = process.argv.slice(2).includes('--parity-only')
@@ -42,14 +41,14 @@ const report = {
 }
 const save = () =>
   writeFileSync(path.join(output, `${reportName}.json`), `${JSON.stringify(report, null, 2)}\n`)
-const command = (program, args, label, arm) =>
+const command = (program, args, label) =>
   measurePreflightCommand({
     program,
     args,
     label,
     root,
     output,
-    env: arm === 'native' ? { ...env, GOMEMLIMIT: '11GiB' } : env,
+    env,
     ...(process.platform === 'win32' ? { timeoutMs: 900_000 } : {})
   })
 const version = await command(bun, ['--version'], 'bun-version')
@@ -97,12 +96,7 @@ async function suite(arm, state, pair, comparison) {
     arm === 'native'
       ? nativeBatches
       : arm === 'bun-pair'
-        ? typecheckBatches(TYPECHECK_PROJECTS, {
-            compiler: 'bun',
-            bunConcurrency: 2,
-            memoryBytes: totalmem(),
-            parallelism: availableParallelism()
-          })
+        ? [TYPECHECK_PROJECTS.slice(0, 2), TYPECHECK_PROJECTS.slice(2)]
         : TYPECHECK_PROJECTS.map((project) => [project])
   const start = performance.now()
   const projects = []
@@ -116,8 +110,7 @@ async function suite(arm, state, pair, comparison) {
             ...(await command(
               program,
               args,
-              `${comparison}-${pair}-${arm}-${state}-${path.basename(config)}`,
-              arm
+              `${comparison}-${pair}-${arm}-${state}-${path.basename(config)}`
             ))
           }
         })
@@ -187,7 +180,6 @@ const probeRoots = new Map([
   ['config/tsconfig.node.json', 'src/main'],
   ['config/tsconfig.tc.web.json', 'src/renderer/src'],
   ['config/tsconfig.tc.cli.json', 'src/cli'],
-  ['config/tsconfig.terminal-interface.test.json', 'src/shared'],
   ['src/packages/process-host/tsconfig.test.json', 'src/packages/process-host/src']
 ])
 for (const { config } of TYPECHECK_PROJECTS) {
@@ -210,7 +202,7 @@ for (const { config } of TYPECHECK_PROJECTS) {
     )
     for (const arm of ['native', 'bun']) {
       const [program, args] = invocation(config, arm)
-      const result = await command(program, args, `probe-${path.basename(config)}-${arm}`, arm)
+      const result = await command(program, args, `probe-${path.basename(config)}-${arm}`)
       report.parity.push({ config, arm, ...result })
       save()
       if (
@@ -235,7 +227,7 @@ for (const { config } of TYPECHECK_PROJECTS) {
   }
   for (const arm of ['native', 'bun']) {
     const [program, args] = invocation(config, arm, ['--listFilesOnly'])
-    const result = await command(program, args, `files-${path.basename(config)}-${arm}`, arm)
+    const result = await command(program, args, `files-${path.basename(config)}-${arm}`)
     if (result.code !== 0) {
       throw new Error(`Could not enumerate ${arm} ${config}: ${result.stderr}`)
     }
