@@ -20,6 +20,7 @@ import {
 } from '@/lib/pane-spawn-deferral-drain'
 import {
   canResumeHostAutomaticRestores,
+  observeHostAutomaticRestorePause,
   resumeHostAutomaticRestores
 } from '@/runtime/resume-host-automatic-restores'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
@@ -122,15 +123,21 @@ function providerSessionQueuedInAnotherTab(
 /** Adds "Resume automatic restores" once the pane's host proves it can clear the pause. */
 function offerHostResume(
   session: ConnectPanePtySession,
-  deferral: { reason: SpawnDeferralReason; resume: () => void }
+  deferral: { reason: SpawnDeferralReason; resume: () => void },
+  visibleAtSpawn: boolean
 ): void {
   const environmentId: string | null = session.runtimeEnvironmentId ?? null
-  void canResumeHostAutomaticRestores(environmentId).then((supported) => {
-    if (!supported || getPaneSpawnDeferral(session.cacheKey)?.resume !== deferral.resume) {
+  void canResumeHostAutomaticRestores(environmentId).then(async (supported) => {
+    const current = getPaneSpawnDeferral(session.cacheKey)
+    if (current?.resume !== deferral.resume) {
+      return
+    }
+    if (!supported) {
+      setPaneSpawnDeferral(session.cacheKey, { ...current, observedPauseReason: null })
       return
     }
     setPaneSpawnDeferral(session.cacheKey, {
-      ...deferral,
+      ...current,
       resumeAutomaticRestores: () => {
         void resumeHostAutomaticRestores(environmentId)
           .catch((error: unknown) => {
@@ -140,6 +147,14 @@ function offerHostResume(
           .finally(() => deferral.resume())
       }
     })
+    if (!visibleAtSpawn) {
+      return
+    }
+    const observedPauseReason = await observeHostAutomaticRestorePause(environmentId)
+    const observed = getPaneSpawnDeferral(session.cacheKey)
+    if (observed?.resume === deferral.resume) {
+      setPaneSpawnDeferral(session.cacheKey, { ...observed, observedPauseReason })
+    }
   })
 }
 
@@ -165,7 +180,7 @@ export function installSpawnDeferredSleep(session: ConnectPanePtySession): void 
     setPaneSpawnDeferral(session.cacheKey, deferral)
     if (reason === 'paused') {
       // Why no background retry: a crash pause is cleared by the user, not by waiting.
-      offerHostResume(session, deferral)
+      offerHostResume(session, deferral, visibleAtSpawn)
     } else {
       queueDeferredRestoreRetry(
         session.cacheKey,

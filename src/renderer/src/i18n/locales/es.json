@@ -3463,7 +3463,13 @@
             "workspaceGone": "Su espacio de trabajo ya no está disponible."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "Las restauraciones automáticas están en pausa en el equipo que ejecuta esta sesión.",
+            "pausedDetail": "Esta sesión no se reabrió automáticamente.",
+            "uncleanPauseDetail": "El equipo que ejecuta esta sesión informó de que la reapertura automática se había pausado después de que el servicio de terminal de Orca se detuviera inesperadamente.",
+            "growthPauseDetail": "El equipo que ejecuta esta sesión informó de que la reapertura automática se había pausado tras un rápido aumento de los programas en ejecución.",
+            "manualPauseDetail": "El equipo que ejecuta esta sesión informó de que la reapertura automática se había pausado manualmente.",
+            "unavailablePauseDetail": "El motivo de la pausa no está disponible.",
+            "resumeGuidance": "Usa Reanudar para abrir esta sesión.",
+            "automaticResumeGuidance": "Usa Reanudar las restauraciones automáticas para volver a activar la reapertura automática en ese equipo.",
             "liveCapDetail": "Orca ha alcanzado su límite para reabrir sesiones en el equipo que ejecuta esta sesión.",
             "pressureDetail": "El equipo que ejecuta esta sesión está bajo mucha carga.",
             "deadlineDetail": "El equipo que ejecuta esta sesión estaba ocupado reabriendo otras terminales.",

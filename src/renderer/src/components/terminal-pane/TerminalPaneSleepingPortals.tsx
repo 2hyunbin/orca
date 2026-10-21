@@ -19,6 +19,7 @@ function SleepingPanePortal({
   return createPortal(
     <TerminalSleepingPaneOverlay
       reason={deferral.reason}
+      observedPauseReason={deferral.observedPauseReason}
       onResume={deferral.resume}
       onResumeAutomaticRestores={deferral.resumeAutomaticRestores}
     />,

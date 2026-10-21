@@ -3468,7 +3468,13 @@
             "workspaceGone": "其工作区已不可用。"
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "运行此会话的计算机上的自动恢复已暂停。",
+            "pausedDetail": "此会话未自动重新打开。",
+            "uncleanPauseDetail": "运行此会话的计算机报告，Orca 的终端服务意外停止后，自动重新打开已暂停。",
+            "growthPauseDetail": "运行此会话的计算机报告，运行中的程序数量快速增长后，自动重新打开已暂停。",
+            "manualPauseDetail": "运行此会话的计算机报告，自动重新打开已被手动暂停。",
+            "unavailablePauseDetail": "无法获取暂停原因。",
+            "resumeGuidance": "使用“恢复”打开此会话。",
+            "automaticResumeGuidance": "使用“继续自动恢复”重新开启该计算机上的自动重新打开。",
             "liveCapDetail": "Orca 已达到在运行此会话的计算机上重新打开会话的上限。",
             "pressureDetail": "运行此会话的计算机负载过高。",
             "deadlineDetail": "运行此会话的计算机当时正忙于重新打开其他终端。",

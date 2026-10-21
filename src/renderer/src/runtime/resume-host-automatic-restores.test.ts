@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { callRuntimeRpc, runtimeEnvironmentSupportsCapability } = vi.hoisted(() => ({
-  callRuntimeRpc: vi.fn(async () => ({})),
+  callRuntimeRpc: vi.fn(async (): Promise<unknown> => ({})),
   runtimeEnvironmentSupportsCapability: vi.fn()
 }))
 
@@ -12,6 +12,7 @@ vi.mock('./runtime-rpc-client', () => ({
 
 import {
   canResumeHostAutomaticRestores,
+  observeHostAutomaticRestorePause,
   resumeHostAutomaticRestores
 } from './resume-host-automatic-restores'
 
@@ -47,5 +48,36 @@ describe('host automatic-restore resume', () => {
       { kind: 'local' },
       'runtime.automaticWork.resume'
     )
+  })
+
+  it('reads only the owning host and treats unavailable or unfamiliar reports honestly', async () => {
+    for (const mode of [
+      { kind: 'paused', reason: 'unclean_host_death' },
+      { kind: 'paused', reason: 'pressure' },
+      { kind: 'paused', reason: 'operator' }
+    ]) {
+      callRuntimeRpc.mockResolvedValueOnce({ automaticWork: { mode } })
+      await expect(observeHostAutomaticRestorePause('env-1')).resolves.toBe(mode.reason)
+    }
+    for (const automaticWork of [
+      null,
+      {},
+      { mode: { kind: 'normal' } },
+      { mode: { kind: 'future' } },
+      { mode: { kind: 'paused', reason: 'future' } }
+    ]) {
+      callRuntimeRpc.mockResolvedValueOnce({ automaticWork })
+      await expect(observeHostAutomaticRestorePause('env-1')).resolves.toBeNull()
+    }
+    callRuntimeRpc.mockRejectedValueOnce(new Error('offline'))
+    await expect(observeHostAutomaticRestorePause('env-1')).resolves.toBeNull()
+    for (const call of callRuntimeRpc.mock.calls) {
+      expect(call).toEqual([
+        { kind: 'environment', environmentId: 'env-1' },
+        'runtime.automaticWork.status',
+        undefined,
+        { timeoutMs: 10_000 }
+      ])
+    }
   })
 })

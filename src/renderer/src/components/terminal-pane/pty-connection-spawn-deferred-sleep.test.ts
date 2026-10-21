@@ -73,13 +73,21 @@ vi.mock('sonner', () => ({
   }
 }))
 
-const { canResumeHostAutomaticRestores, resumeHostAutomaticRestores } = vi.hoisted(() => ({
+const {
+  canResumeHostAutomaticRestores,
+  observeHostAutomaticRestorePause,
+  resumeHostAutomaticRestores
+} = vi.hoisted(() => ({
   canResumeHostAutomaticRestores: vi.fn(async () => true),
+  observeHostAutomaticRestorePause: vi.fn(
+    async (_environmentId: string | null): Promise<'pressure' | null> => null
+  ),
   resumeHostAutomaticRestores: vi.fn(async () => {})
 }))
 
 vi.mock('@/runtime/resume-host-automatic-restores', () => ({
   canResumeHostAutomaticRestores,
+  observeHostAutomaticRestorePause,
   resumeHostAutomaticRestores
 }))
 
@@ -183,6 +191,8 @@ describe('connectPanePty: a restore the host kept asleep', () => {
   beforeEach(async () => {
     vi.resetModules()
     vi.clearAllMocks()
+    canResumeHostAutomaticRestores.mockResolvedValue(true)
+    observeHostAutomaticRestorePause.mockReset().mockResolvedValue(null)
     transportFactoryQueue = []
     drain.queued.clear()
     createdTransportOptions = []
@@ -225,6 +235,7 @@ describe('connectPanePty: a restore the host kept asleep', () => {
       expect.objectContaining({ resumeSpawnIntent: 'automatic-restore' })
     ])
     expect(getPaneSpawnDeferral(paneKey)?.reason).toBe('live_cap')
+    expect(observeHostAutomaticRestorePause).not.toHaveBeenCalled()
     expect(mockStoreState.sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
       paneKey,
       agent: 'claude',
@@ -448,15 +459,23 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     binding.dispose()
   })
 
-  it('offers to clear a crash pause on the host, then resumes the pane', async () => {
+  it('observes only a visible pause without holding either action or overwriting a later attempt', async () => {
     const { connectPanePty } = await import('./pty-connection')
     const { getPaneSpawnDeferral } = await import('@/lib/pane-spawn-deferral-registry')
     const transport = deferringTransport('paused')
     transportFactoryQueue.push(transport)
     const pane = createPane(1)
     const paneKey = makePaneKey('tab-1', pane.leafId)
+    let settle: (value: 'pressure' | null) => void = () => {}
+    canResumeHostAutomaticRestores.mockResolvedValueOnce(false)
+    observeHostAutomaticRestorePause.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          settle = resolve
+        })
+    )
     const deps = createDeps({
-      isVisibleRef: { current: true },
+      isVisibleRef: { current: false },
       startup: {
         command: "claude '--resume' 'provider-session-1'",
         launchAgent: 'claude',
@@ -467,18 +486,31 @@ describe('connectPanePty: a restore the host kept asleep', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared pane fixtures stand in for the xterm-backed pane, manager and deps connectPanePty reads, as in the sibling connectPanePty specs.
     const binding = connectPanePty(pane as never, createManager(1) as never, deps as never)
     await flushAsyncTicks(20)
+    expect(getPaneSpawnDeferral(paneKey)?.observedPauseReason).toBeNull()
+    expect(getPaneSpawnDeferral(paneKey)?.resumeAutomaticRestores).toBeUndefined()
+    expect(observeHostAutomaticRestorePause).not.toHaveBeenCalled()
 
-    expect(canResumeHostAutomaticRestores).toHaveBeenCalledWith(null)
-    // A crash pause waits for the user; nothing retries it in the background.
-    expect(drain.queued.has(paneKey)).toBe(false)
-    const offer = getPaneSpawnDeferral(paneKey)?.resumeAutomaticRestores
-    expect(offer).toBeTypeOf('function')
-    transport.connect.mockImplementation(async () => 'resumed-pty')
-    offer?.()
+    deps.isVisibleRef.current = true
+    binding.noteVisibilityResume()
     await flushAsyncTicks(20)
+    expect(observeHostAutomaticRestorePause).toHaveBeenCalledWith(null)
+    expect(drain.queued.has(paneKey)).toBe(false)
+    expect(getPaneSpawnDeferral(paneKey)?.resumeAutomaticRestores).toBeTypeOf('function')
+    expect(getPaneSpawnDeferral(paneKey)?.observedPauseReason).toBeUndefined()
+    observeHostAutomaticRestorePause.mockResolvedValueOnce('pressure')
+    getPaneSpawnDeferral(paneKey)?.resume()
+    await flushAsyncTicks(20)
+    const current = getPaneSpawnDeferral(paneKey)
+    expect(current?.observedPauseReason).toBe('pressure')
+    expect(current?.resumeAutomaticRestores).toBeTypeOf('function')
+    settle(null)
+    await flushAsyncTicks(5)
+    expect(getPaneSpawnDeferral(paneKey)).toBe(current)
 
+    transport.connect.mockImplementation(async () => 'resumed-pty')
+    current?.resumeAutomaticRestores?.()
+    await flushAsyncTicks(20)
     expect(resumeHostAutomaticRestores).toHaveBeenCalledWith(null)
-    expect(freshSpawns(transport)).toHaveLength(2)
     expect(getPaneSpawnDeferral(paneKey)).toBeUndefined()
     binding.dispose()
   })

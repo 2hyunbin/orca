@@ -3731,7 +3731,13 @@
             "workspaceGone": "Its workspace is no longer available."
           },
           "TerminalSleepingPaneOverlay": {
-            "pausedDetail": "Automatic restores are paused on the computer running this session.",
+            "pausedDetail": "This session did not reopen automatically.",
+            "uncleanPauseDetail": "The computer running this session reported that automatic reopening was paused after Orca’s terminal service stopped unexpectedly.",
+            "growthPauseDetail": "The computer running this session reported that automatic reopening was paused after rapid growth in running programs.",
+            "manualPauseDetail": "The computer running this session reported that automatic reopening was paused manually.",
+            "unavailablePauseDetail": "The pause reason isn't available.",
+            "resumeGuidance": "Use Resume to open this session.",
+            "automaticResumeGuidance": "Use Resume automatic restores to turn automatic reopening back on for that computer.",
             "liveCapDetail": "Orca has reached its limit for reopening sessions on the computer running this session.",
             "pressureDetail": "The computer running this session is under heavy load.",
             "deadlineDetail": "The computer running this session was busy reopening other terminals.",

@@ -13,17 +13,43 @@ vi.mock('@/i18n/i18n', () => ({
 afterEach(cleanup)
 
 describe('TerminalSleepingPaneOverlay', () => {
-  it('explains why the session did not reopen and how to continue', () => {
-    render(<TerminalSleepingPaneOverlay reason="paused" onResume={vi.fn()} />)
+  it.each([
+    [undefined, undefined],
+    [null, "The pause reason isn't available."],
+    ['unclean_host_death', 'after Orca’s terminal service stopped unexpectedly.'],
+    ['pressure', 'after rapid growth in running programs.'],
+    ['operator', 'was paused manually.']
+  ] as const)(
+    'explains the reported pause %s without inventing a cause while pending',
+    (observedPauseReason, detail) => {
+      render(
+        <TerminalSleepingPaneOverlay
+          reason="paused"
+          observedPauseReason={observedPauseReason}
+          onResume={vi.fn()}
+        />
+      )
 
-    expect(screen.getByText('Resume your session')).toBeInTheDocument()
-    expect(
-      screen.getByText('Automatic restores are paused on the computer running this session.')
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText(/Your conversation is saved. Resume whenever you’re ready./)
-    ).toBeInTheDocument()
-  })
+      expect(screen.getByText('Resume your session')).toBeInTheDocument()
+      expect(screen.getByText('This session did not reopen automatically.')).toBeInTheDocument()
+      expect(screen.getByText('Use Resume to open this session.')).toBeInTheDocument()
+      expect(screen.queryByText(/Use Resume automatic restores/)).toBeNull()
+      if (detail) {
+        expect(screen.getByText((text) => text.endsWith(detail))).toHaveAttribute(
+          'aria-hidden',
+          'false'
+        )
+      } else {
+        expect(screen.getByText("The pause reason isn't available.")).toHaveAttribute(
+          'aria-hidden',
+          'true'
+        )
+      }
+      expect(
+        screen.getByText(/Your conversation is saved. Resume whenever you’re ready./)
+      ).toBeInTheDocument()
+    }
+  )
 
   it('resumes once from the button and from anywhere on the pane', async () => {
     const onResume = vi.fn()
@@ -56,6 +82,11 @@ describe('TerminalSleepingPaneOverlay', () => {
       />
     )
     await user.click(screen.getByRole('button', { name: 'Resume automatic restores' }))
+    expect(
+      screen.getByText(
+        'Use Resume automatic restores to turn automatic reopening back on for that computer.'
+      )
+    ).toBeInTheDocument()
     expect(onResumeAutomaticRestores).toHaveBeenCalledOnce()
     expect(onResume).not.toHaveBeenCalled()
   })

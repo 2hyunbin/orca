@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { SpawnDeferralReason } from '../../../shared/host-spawn-admission'
+import type { AutomaticRestorePauseReason } from '@/runtime/resume-host-automatic-restores'
 
 export type PaneSpawnDeferral = {
   reason: SpawnDeferralReason
@@ -8,6 +9,8 @@ export type PaneSpawnDeferral = {
   resuming?: true
   /** Offered only for a pause on a host that can clear it. */
   resumeAutomaticRestores?: () => void
+  /** Undefined while pending; null when no recognized host report is available. */
+  observedPauseReason?: AutomaticRestorePauseReason | null
 }
 
 // Why module state: the pane session is imperative and outlives renders; overlays only read it.
