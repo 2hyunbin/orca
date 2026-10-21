@@ -494,6 +494,7 @@ describe('hydrateBrowserSession remote page handle seeding', () => {
       getWorktreeSelector: () => WT,
       getCurrentUrl: () => deps.currentUrl,
       readStoredHandle: () => store.getState().remoteBrowserPageHandlesByPageId['page-1'] ?? null,
+      getHostPageIdCandidates: () => ['page-1'],
       writeStoredHandle: (handle) => store.getState().setRemoteBrowserPageHandle('page-1', handle),
       removeStoredHandle: (remotePageId) =>
         store.getState().removeRemoteBrowserPageHandle('page-1', remotePageId),
@@ -559,8 +560,10 @@ describe('hydrateBrowserSession remote page handle seeding', () => {
     } as never)
 
     expect(closeMissingRemotePage).not.toHaveBeenCalled()
-    expect(callRpc.mock.calls.map(([, method]) => method)).toEqual(['browser.tabCreate'])
-    expect(callRpc.mock.calls[0]?.[2]).toMatchObject({ url: 'https://example.com/saved' })
+    // Switch-on asks the host for an existing page first (browser.tabList); it has none here.
+    const created = callRpc.mock.calls.filter(([, method]) => method !== 'browser.tabList')
+    expect(created.map(([, method]) => method)).toEqual(['browser.tabCreate'])
+    expect(created[0]?.[2]).toMatchObject({ url: 'https://example.com/saved' })
     expect(resolved).toBe('remote-page-2')
   })
 })

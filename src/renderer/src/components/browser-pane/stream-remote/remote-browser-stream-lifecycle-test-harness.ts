@@ -171,6 +171,7 @@ export function createHarness() {
     getWorktreeSelector: () => 'worktree:wt-1',
     getCurrentUrl: () => 'https://example.test/',
     readStoredHandle: () => storedHandle,
+    getHostPageIdCandidates: () => [identity.tabId, 'workspace-1'],
     writeStoredHandle: (handle) => {
       storedHandle = handle
     },

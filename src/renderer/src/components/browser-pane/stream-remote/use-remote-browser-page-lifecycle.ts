@@ -61,6 +61,7 @@ export function useRemoteBrowserPageLifecycle({
   const mountedRef = useRef(true)
   const isActiveRef = useRef(isActive)
   const currentBrowserTabIdRef = useRef(browserTab.id)
+  const currentBrowserWorkspaceIdRef = useRef(browserTab.workspaceId)
   const currentBrowserTabUrlRef = useRef(browserTab.url)
   const runtimeWorktree = useMemo(() => toRuntimeWorktreeSelector(worktreeId), [worktreeId])
   const runtimeWorktreeRef = useRef(runtimeWorktree)
@@ -74,11 +75,19 @@ export function useRemoteBrowserPageLifecycle({
 
   useLayoutEffect(() => {
     currentBrowserTabIdRef.current = browserTab.id
+    currentBrowserWorkspaceIdRef.current = browserTab.workspaceId
     currentBrowserTabUrlRef.current = browserTab.url
     activeRuntimeEnvironmentIdRef.current = activeRuntimeEnvironmentId
     isActiveRef.current = isActive
     runtimeWorktreeRef.current = runtimeWorktree
-  }, [activeRuntimeEnvironmentId, browserTab.id, browserTab.url, isActive, runtimeWorktree])
+  }, [
+    activeRuntimeEnvironmentId,
+    browserTab.id,
+    browserTab.workspaceId,
+    browserTab.url,
+    isActive,
+    runtimeWorktree
+  ])
 
   if (!lifecycleRef.current) {
     lifecycleRef.current = new RemoteBrowserStreamLifecycle({
@@ -96,6 +105,10 @@ export function useRemoteBrowserPageLifecycle({
       readStoredHandle: () =>
         useAppStore.getState().remoteBrowserPageHandlesByPageId[currentBrowserTabIdRef.current] ??
         null,
+      // A host names its own tab by its page, and a frame-drawn row may carry a minted page id.
+      getHostPageIdCandidates: () => [
+        ...new Set([currentBrowserTabIdRef.current, currentBrowserWorkspaceIdRef.current])
+      ],
       writeStoredHandle: (handle) =>
         useAppStore.getState().setRemoteBrowserPageHandle(currentBrowserTabIdRef.current, handle),
       removeStoredHandle: (remotePageId) => {
