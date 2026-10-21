@@ -56,4 +56,13 @@ describe('discard hold keys on a Windows client', () => {
     expect(key).not.toBe('a')
     expect(key).toBe(editorFileHoldKey(state, tab('b', 'c:/repo/a.ts', local)))
   })
+
+  it('keeps the two WSL share aliases apart (main compares WSL writes at write time)', () => {
+    const local = { worktreeId: 'wt-1' }
+    const key = editorFileHoldKey(state, tab('a', '\\\\wsl$\\Ubuntu\\repo\\a.ts', local))
+    expect(key).not.toBe('a')
+    expect(key).not.toBe(
+      editorFileHoldKey(state, tab('b', '\\\\wsl.localhost\\Ubuntu\\repo\\a.ts', local))
+    )
+  })
 })
