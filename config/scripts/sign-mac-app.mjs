@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module'
 
-export function signAdhocMacApp(options, { sign, retry }) {
+export function signMacApp(options, { sign, retry }) {
   // A custom signer bypasses electron-builder's retry wrapper.
   return retry(() => sign({ ...options, batchCodesignCalls: true }), {
     retries: 3,
@@ -15,7 +15,7 @@ export default async function sign(options) {
   const require = createRequire(builderRequire.resolve('app-builder-lib'))
   const { retry } = require('builder-util')
   const started = performance.now()
-  await signAdhocMacApp(options, { sign: signApplication, retry })
+  await signMacApp(options, { sign: signApplication, retry })
   console.log(
     `[mac-sign] batched signing completed in ${Math.round(performance.now() - started)}ms`
   )

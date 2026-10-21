@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import { resolve } from 'node:path'
 import { expect, it } from 'vitest'
-import { signAdhocMacApp } from './sign-adhoc-mac-app.mjs'
+import { signMacApp } from './sign-mac-app.mjs'
 
 const require = createRequire(import.meta.url)
 const builderRequire = createRequire(require.resolve('electron-builder'))
@@ -24,7 +24,7 @@ it('preserves file-specific signing policy and retries with fresh options', asyn
     preAutoEntitlements: false
   }
   let policy
-  const result = await signAdhocMacApp(options, {
+  const result = await signMacApp(options, {
     async retry(task, retryOptions) {
       policy = retryOptions
       try {
@@ -61,7 +61,7 @@ it('preserves file-specific signing policy and retries with fresh options', asyn
 it('propagates signing failure after the retry policy is exhausted', async () => {
   const failure = new Error('signature verification failed')
   await expect(
-    signAdhocMacApp(
+    signMacApp(
       {},
       {
         retry: (task) => task(),
@@ -80,32 +80,39 @@ it.each([
   { ORCA_MAC_HOURLY: '1' },
   { ORCA_MAC_DAILY: '1' },
   { ORCA_WIN_ADHOC: '1' }
-])('only selects the batched signer for adhoc macOS builds: %j', async (env) => {
-  const configPath = resolve('config/electron-builder.config.cjs')
-  const saved = { ...process.env }
-  try {
-    for (const name of Object.keys(process.env)) {
-      if (name.startsWith('ORCA_')) {
-        delete process.env[name]
+])(
+  'uses batched signing and strict verification for every macOS release channel: %j',
+  async (env) => {
+    const configPath = resolve('config/electron-builder.config.cjs')
+    const saved = { ...process.env }
+    try {
+      for (const name of Object.keys(process.env)) {
+        if (name.startsWith('ORCA_')) {
+          delete process.env[name]
+        }
       }
+      Object.assign(process.env, env)
+      delete require.cache[configPath]
+      const config = require(configPath)
+      if (
+        ['ORCA_MAC_ADHOC', 'ORCA_MAC_RELEASE', 'ORCA_MAC_HOURLY', 'ORCA_MAC_DAILY'].some(
+          (name) => env[name] === '1'
+        )
+      ) {
+        expect(config.mac.sign).toBe(resolve('config/scripts/sign-mac-app.mjs'))
+        const hook = await resolveFunction(undefined, config.mac.sign, 'sign', process.cwd())
+        expect(typeof hook).toBe('function')
+        expect(hook.name).toBe('sign')
+        expect(config.mac.signIgnore).toContain('/orcad-template/')
+        expect(config.forceCodeSigning).toBe(true)
+        expect(config.mac.hardenedRuntime).toBe(true)
+        expect(config.mac.notarize).toBe(true)
+      } else {
+        expect(config.mac.sign).toBeUndefined()
+      }
+    } finally {
+      process.env = saved
+      delete require.cache[configPath]
     }
-    Object.assign(process.env, env)
-    delete require.cache[configPath]
-    const config = require(configPath)
-    if (env.ORCA_MAC_ADHOC === '1') {
-      expect(config.mac.sign).toBe(resolve('config/scripts/sign-adhoc-mac-app.mjs'))
-      const hook = await resolveFunction(undefined, config.mac.sign, 'sign', process.cwd())
-      expect(typeof hook).toBe('function')
-      expect(hook.name).toBe('sign')
-      expect(config.mac.signIgnore).toContain('/orcad-template/')
-      expect(config.forceCodeSigning).toBe(true)
-      expect(config.mac.hardenedRuntime).toBe(true)
-      expect(config.mac.notarize).toBe(true)
-    } else {
-      expect(config.mac.sign).toBeUndefined()
-    }
-  } finally {
-    process.env = saved
-    delete require.cache[configPath]
   }
-})
+)

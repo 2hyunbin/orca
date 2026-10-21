@@ -3936,6 +3936,12 @@
             "connectedHostCount_one": "{{count}} hôte",
             "connectedHostCount_other": "{{count}} hôtes",
             "connecting": "Connexion…",
+            "searchSshHosts": "Rechercher des hôtes SSH…",
+            "noMatchingSshHosts": "Aucun hôte SSH ne correspond.",
+            "moreSshHostMatches_one": "{{count}} autre résultat. Continuez à taper pour affiner.",
+            "moreSshHostMatches_other": "{{count}} autres résultats. Continuez à taper pour affiner.",
+            "moreSshHosts_one": "Trouver {{count}} autre hôte SSH…",
+            "moreSshHosts_other": "Chercher parmi {{count}} autres hôtes SSH…",
             "runtime_unavailable_transport_up": "Orque indisponible"
           },
           "StatusBar": {
