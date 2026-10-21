@@ -114,6 +114,8 @@ export function beginStructuredAgentSessionTabClose(args: {
   provisional: boolean
   layoutOwner: StructuredLaunchSlotOwner
   onError?: (error: unknown) => void
+  /** Main dropped the tab before the host answered: a host that kept the chat shows it again. */
+  reopen?: () => void
 }): void {
   if (args.provisional) {
     markStructuredAgentSessionLaunchCancelled(
@@ -145,6 +147,7 @@ export function beginStructuredAgentSessionTabClose(args: {
     if (!hostTabClosed) {
       // The host may still have the chat: let its list show it again.
       clearWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId)
+      args.reopen?.()
     }
     // Why: this machine's host emits its removal frame before the close answers, so only a failure
     // needs a read; a paired server's frames travel apart from its answer, so, as for its terminal

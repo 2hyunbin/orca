@@ -328,6 +328,8 @@ describe('in-flight structured session close', () => {
   async function setup(options: { hostFailsClose?: boolean } = {}) {
     let closeRequest: ((request: CloseRequest) => void) | undefined
     const pendingResponses = new Map<string, (error?: string) => void>()
+    // A failing close answers when the test says, so its frame can be read first.
+    const failingCloses: (() => void)[] = []
     const runtime = new OrcaRuntimeService()
     bridge.runtime = runtime
     vi.stubGlobal('api', {
@@ -351,7 +353,7 @@ describe('in-flight structured session close', () => {
         closeSessionTab: (tabId: string, worktreeId: string) =>
           new Promise<void>((resolve, reject) => {
             if (options.hostFailsClose) {
-              reject(new Error('window relay failed'))
+              failingCloses.push(() => reject(new Error('window relay failed')))
               return
             }
             const requestId = `close-${++nextRequest}`
@@ -399,7 +401,11 @@ describe('in-flight structured session close', () => {
 
     const strip = (): string[] =>
       (useAppStore.getState().groupsByWorktree[WORKTREE] ?? []).flatMap((group) => group.tabOrder)
-    return { runtime, strip, hostSessionCloses }
+    const failHostCloses = async (): Promise<void> => {
+      await vi.waitFor(() => expect(failingCloses.length).toBeGreaterThan(0))
+      failingCloses.splice(0).forEach((fail) => fail())
+    }
+    return { runtime, strip, hostSessionCloses, failHostCloses }
   }
 
   const initialStoreState = useAppStore.getState()
@@ -474,11 +480,12 @@ describe('in-flight structured session close', () => {
     })
 
     it('shows the chat again when the host could not close it', async () => {
-      const { strip } = await setup({ hostFailsClose: true })
+      const { strip, failHostCloses } = await setup({ hostFailsClose: true })
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
       useAppStore.getState().closeUnifiedTab(tabIdOf('chat-b'))
       await main?.settle()
       expect(strip()).toEqual([tabIdOf('chat-a'), tabIdOf('chat-c')])
+      await failHostCloses()
 
       // The host still has the chat, so once the close fails the window re-reads and shows it.
       await vi.waitFor(() => expect(strip()).toContain(tabIdOf('chat-b')))

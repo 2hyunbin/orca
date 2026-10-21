@@ -27,6 +27,8 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-sw
 import { closeContentTabThroughLayoutOwner } from './content-tab-close-through-layout-owner'
 import { isEditorTabContentType } from '../editor/tabs/editor-tab-content-type'
 import type { AppState } from '../../types'
+import type { TuiAgent } from '../../../../../shared/tui-agent'
+import { LOCAL_EXECUTION_HOST_ID } from '../../../../../shared/execution-host'
 
 export function createTabsCloseActions(
   set: TabsSliceSet,
@@ -75,7 +77,11 @@ export function createTabsCloseActions(
             worktreeId,
             sessionId: tab.entityId,
             provisional,
-            layoutOwner: state
+            layoutOwner: state,
+            // Switch point: main's frames draw this machine's chats, so main opens it again.
+            ...(ORCA_LAYOUT_OWNER_IS_MAIN && target.kind === 'local' && tab.agentSessionAgent
+              ? { reopen: reopenChatTab(worktreeId, tab.entityId, tab.agentSessionAgent) }
+              : {})
           })
         } else {
           // Closing still removes the tab; no host can be named to stop its chat on.
@@ -292,4 +298,19 @@ export function landOnEmptiedWorktree(
   }
   set((current) => emptiedWorktreeLandingPatch(current, worktreeId))
   return true
+}
+
+/** Main opens the chat where it opens any chat this host lists: a host-kept chat comes back. */
+function reopenChatTab(worktreeId: string, sessionId: string, agent: TuiAgent): () => void {
+  return () =>
+    void import('@/lib/structured-agent-session-launch-surface').then(
+      ({ openStructuredAgentSessionProvisionalTab }) =>
+        openStructuredAgentSessionProvisionalTab({
+          worktreeId,
+          executionHostId: LOCAL_EXECUTION_HOST_ID,
+          sessionId,
+          agent,
+          activate: false
+        })
+    )
 }
