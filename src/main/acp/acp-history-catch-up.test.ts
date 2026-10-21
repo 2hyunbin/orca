@@ -12,13 +12,24 @@ import {
   AGENT,
   closeProviderTimelineRigs,
   NAMESPACE,
-  SESSION
+  SESSION,
+  providerItemId
 } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
 import type { AcpDialect } from './acp-dialects/acp-dialect'
 import { GROK_ACP_DIALECT } from './acp-dialects/grok-dialect'
 import { OPENCODE_ACP_DIALECT } from './acp-dialects/opencode-dialect'
+import { agentJournalTurnBody, readAgentJournalTurn } from '../../shared/agent-session-turn-record'
+import { acpNamedTextKey } from './acp-turn-messages'
+import { isHistoricalProviderTimelineItem } from '../native-chat/agent-session-timeline/provider-timeline-history'
+import { StructuredAgentSessionCurrentWork } from '../native-chat/agent-session-wire/structured-agent-session-current-work'
+import { hasUnfinishedStructuredAgentSessionWork } from '../native-chat/agent-session-wire/structured-agent-session-unfinished-work'
+import { planStructuredAgentSessionDeadGeneration } from '../native-chat/agent-session-wire/structured-agent-session-dead-generation-settlement'
 import { catchUpAcpHistory } from './acp-history-catch-up'
-import type { AcpHistoryTurnIdentity } from './acp-history-replay'
+import {
+  AcpLoadHistory,
+  type AcpLoadHistoryFrame,
+  type AcpHistoryTurnIdentity
+} from './acp-history-replay'
 import { asReattachHistory } from './acp-structured-session'
 import {
   openAcpFixtureRig,
@@ -57,8 +68,7 @@ async function setup(dialect: AcpDialect, identity: AcpHistoryTurnIdentity) {
       agent: AGENT,
       providerSessionId: NAMESPACE,
       dialect,
-      assertCurrent: () => {},
-      now: () => 5_000
+      assertCurrent: () => {}
     })
   return { fixture, catchUp }
 }
@@ -90,6 +100,26 @@ async function chatSend(
     { fence: 1, turnScope: { kind: 'thread' } }
   )
 }
+
+function replayUpdate(
+  sessionUpdate: string,
+  rest: Record<string, unknown> = {}
+): AcpLoadHistoryFrame {
+  return {
+    method: 'session/update',
+    params: { sessionId: NAMESPACE, update: { sessionUpdate, ...rest } }
+  }
+}
+const userReplay = (id: string, text = 'repeat') =>
+  replayUpdate('user_message_chunk', {
+    messageId: id,
+    content: { type: 'text', text }
+  })
+const answerReplay = (text: string, id = 'answer') =>
+  replayUpdate('agent_message_chunk', {
+    messageId: id,
+    content: { type: 'text', text }
+  })
 
 describe('ACP history catch-up', () => {
   it('adds an OpenCode turn made outside the chat once, completing it on a later open', async () => {
@@ -126,7 +156,7 @@ describe('ACP history catch-up', () => {
     expect(await fixture.rig.rows()).toEqual(complete)
   })
 
-  it("never repeats an OpenCode send of the chat's own that failed before any reply", async () => {
+  it('retains unproven visible replay after an OpenCode native failure', async () => {
     const { fixture, catchUp } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
     const frames = await recording('opencode-v2-reopen-outside')
     const prompt = frames.find((frame) => frame.message.method === 'session/prompt')
@@ -138,6 +168,7 @@ describe('ACP history catch-up', () => {
     await catchUp(loadReplay(frames, 'C'))
     const rows = await fixture.rig.rows()
     expect(userTexts(rows)).toEqual([
+      'Reply with exactly the word ONE.',
       'Reply with exactly the word ONE.',
       expect.stringContaining('TWO-TOOL')
     ])
@@ -184,5 +215,265 @@ describe('ACP history catch-up', () => {
       'completed',
       'completed'
     ])
+  })
+  it('refreshes same-key bodies after restart without inventing execution ownership or a new divider', async () => {
+    const { fixture, catchUp } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
+    const { rig } = fixture
+    await chatSend(fixture, 'native', 'my native prompt')
+    rig.assembler.apply({
+      type: 'input.accepted',
+      clientMessageId: 'native',
+      requestedAt: 1000,
+      join: { turn: 'native-turn' }
+    })
+    rig.assembler.apply({ type: 'turn.open', turn: 'native-turn', at: 1000 })
+    rig.assembler.apply({ type: 'turn.end', turn: 'native-turn', state: 'completed', at: 1100 })
+    const nativeBefore = await rig.rows()
+    const source = 'external-'.repeat(40)
+    const tool = replayUpdate('tool_call', {
+      toolCallId: 'tool',
+      name: 'shell',
+      title: 'shell',
+      kind: 'execute',
+      status: 'in_progress',
+      rawInput: { command: 'sleep 40' }
+    })
+    const partial = [userReplay(source), answerReplay('prefix'), tool]
+    await catchUp(partial)
+    const imported = await rig.rows()
+    const historical = imported.filter((item) =>
+      isHistoricalProviderTimelineItem(item, (key) => rig.journal.item(key))
+    )
+    expect(historical).toHaveLength(4)
+    const container = historical.map((item) => readAgentJournalTurn(item.body)).find(Boolean)
+    expect(container).toMatchObject({ state: 'completed' })
+    expect(container).not.toHaveProperty('outcome')
+    expect(container).not.toHaveProperty('completedAt')
+    expect(container).not.toHaveProperty('startedAt')
+    const observedTool = historical.find((item) => item.body.kind === 'tool-call')!
+    expect(observedTool.body).toMatchObject({ state: 'running' })
+    expect(
+      new StructuredAgentSessionCurrentWork(rig.journal, 1).isCurrentItem(observedTool.itemId)
+    ).toBe(false)
+    expect(hasUnfinishedStructuredAgentSessionWork(rig.journal)).toBe(false)
+    expect(
+      planStructuredAgentSessionDeadGeneration({
+        journal: rig.journal,
+        sessionId: SESSION,
+        fence: 1,
+        settlementId: 'exit',
+        verdict: { state: 'interrupted' },
+        pendingSubmissionReason: 'ended'
+      }).mutations
+    ).toEqual([])
+    rig.assembler.apply({ type: 'session.ended', verdict: { state: 'interrupted' }, endedAt: 9000 })
+    await fixture.restart()
+    expect((await rig.row(observedTool.itemId))?.body).toEqual(observedTool.body)
+    const completed = replayUpdate('tool_call_update', {
+      toolCallId: 'tool',
+      status: 'completed',
+      rawOutput: 'done',
+      content: [{ type: 'content', content: { type: 'text', text: 'done' } }]
+    })
+    const full = [
+      userReplay(source),
+      answerReplay('prefix and full tail'),
+      tool,
+      completed,
+      answerReplay('second', 'answer-2')
+    ]
+    await catchUp(full)
+    const complete = await rig.rows()
+    expect(complete.slice(0, nativeBefore.length)).toEqual(nativeBefore)
+    const revised = complete.find((row) => row.itemId === observedTool.itemId)!
+    expect(revised.body).toMatchObject({ state: 'completed' })
+    expect(revised.sequence).toBe(observedTool.sequence)
+    expect(revised.revision).toBe(observedTool.revision + 1)
+    expect(
+      complete
+        .filter((row) => row.body.kind === 'message' && row.body.role === 'assistant')
+        .map((row) => row.body)
+    ).toMatchObject([
+      { blocks: [{ text: 'prefix and full tail' }] },
+      { blocks: [{ text: 'second' }] }
+    ])
+    expect(dividers(complete)).toHaveLength(1)
+    await catchUp(full)
+    expect(await rig.rows()).toEqual(complete)
+    const reopened = await rig.reopenJournal()
+    expect(
+      isHistoricalProviderTimelineItem(reopened.item(observedTool.itemId)!, (key) =>
+        reopened.item(key)
+      )
+    ).toBe(true)
+    expect(isHistoricalProviderTimelineItem(nativeBefore[0]!, (key) => reopened.item(key))).toBe(
+      false
+    )
+  })
+
+  it('keeps same-text outside answers and reasoning while deduplicating exact native output', async () => {
+    const { fixture, catchUp } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
+    const { rig } = fixture
+    await chatSend(fixture, 'native', 'repeat')
+    rig.assembler.apply({
+      type: 'input.accepted',
+      clientMessageId: 'native',
+      requestedAt: 1000,
+      join: { turn: 'native-turn' }
+    })
+    rig.assembler.apply({ type: 'turn.open', turn: 'native-turn', at: 1000 })
+    rig.assembler.apply({
+      type: 'text.delta',
+      item: { id: acpNamedTextKey('native-answer', 'assistant') },
+      channel: 'assistant',
+      text: 'native answer',
+      join: { thread: NAMESPACE, turn: 'native-turn' }
+    })
+    rig.assembler.flush()
+    rig.assembler.apply({ type: 'turn.end', turn: 'native-turn', state: 'completed', at: 1100 })
+    const native = await rig.rows()
+    const reasoning = replayUpdate('agent_thought_chunk', {
+      messageId: 'thought:reasoning:0',
+      content: { type: 'text', text: 'outside reasoning' }
+    })
+    await catchUp([
+      userReplay('native-provider-id'),
+      answerReplay('native answer', 'native-answer'),
+      userReplay('outside'),
+      answerReplay('outside answer'),
+      userReplay('outside-thought'),
+      reasoning
+    ])
+    const rows = await rig.rows()
+    expect(rows.slice(0, native.length)).toEqual(native)
+    expect(userTexts(rows)).toEqual(['repeat', 'repeat', 'repeat'])
+    expect(
+      rows.filter((row) => row.body.kind === 'message' && row.body.role === 'reasoning')
+    ).toHaveLength(1)
+    expect(dividers(rows)).toHaveLength(1)
+    expect(
+      rows.filter(
+        (row) =>
+          row.itemId ===
+          providerItemId('item', acpNamedTextKey('native-answer', 'assistant'), {
+            thread: NAMESPACE
+          })
+      )
+    ).toHaveLength(1)
+    await chatSend(fixture, 'other', 'other')
+    rig.assembler.apply({
+      type: 'input.accepted',
+      clientMessageId: 'other',
+      requestedAt: 2000,
+      join: { turn: 'other' }
+    })
+    rig.assembler.apply({ type: 'turn.open', turn: 'other', at: 2000 })
+    rig.assembler.apply({
+      type: 'text.delta',
+      item: { id: acpNamedTextKey('other-answer', 'assistant') },
+      channel: 'assistant',
+      text: 'other answer',
+      join: { thread: NAMESPACE, turn: 'other' }
+    })
+    rig.assembler.flush()
+    rig.assembler.apply({ type: 'turn.end', turn: 'other', state: 'completed', at: 2100 })
+    const beforeConflict = await rig.rows()
+    await catchUp([
+      userReplay('conflict'),
+      answerReplay('native answer', 'native-answer'),
+      answerReplay('other answer', 'other-answer')
+    ])
+    expect(await rig.rows()).toEqual(beforeConflict)
+  })
+
+  it('uses Grok handover proof without claiming a never-handed-over queued send', async () => {
+    const { fixture, catchUp } = await setup(GROK_ACP_DIALECT, 'prompt-id')
+    const { journal } = fixture.rig
+    for (const id of ['handed', 'queued']) {
+      await journal.appendSubmission({
+        clientMessageId: id,
+        payloadFingerprint: id,
+        fence: 1,
+        handoverRecorded: true,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'repeat' }] }
+      })
+    }
+    await journal.resolveDispatch({ clientMessageId: 'handed', fence: 1, state: 'pending' })
+    const submissions = journal.submissions()
+    const replay = ['handed', 'queued'].flatMap((id) => [
+      userReplay(id),
+      {
+        method: 'session/update',
+        params: {
+          sessionId: NAMESPACE,
+          _meta: { promptId: `prompt:${id}` },
+          update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: id } }
+        }
+      }
+    ])
+    await catchUp(replay)
+    expect(journal.submissions()).toEqual(submissions)
+    expect(userTexts(await fixture.rig.rows())).toEqual(['repeat', 'repeat', 'repeat'])
+    expect(journal.receiptFor('queued')).toBeNull()
+    expect(journal.submission('queued')?.dispatchState).toBe('pending')
+    expect(journal.submission('queued')?.handedOverAt).toBeUndefined()
+  })
+  it.each(['queued-only', 'ownership-revision'] as const)(
+    'captures immutable coverage before concurrent %s',
+    async (scenario) => {
+      const { fixture, catchUp } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
+      const { rig } = fixture
+      const replay = [userReplay('outside'), answerReplay('prefix')]
+      await catchUp(replay)
+      const turn = (await rig.rows()).find((item) => item.body.kind === 'turn')!
+      const append = rig.eventSink.tryAppendTransition!
+      let intervened = false
+      rig.eventSink.tryAppendTransition = (transition) => {
+        if (!intervened) {
+          intervened = true
+          if (scenario === 'queued-only') {
+            void rig.journal.appendSubmission({
+              clientMessageId: 'queued',
+              payloadFingerprint: 'queued',
+              fence: 1,
+              handoverRecorded: true,
+              body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'next' }] }
+            })
+          } else {
+            void rig.journal.appendItem(
+              parseAgentJournalItemKey(turn.itemId)!,
+              agentJournalTurnBody({
+                ...readAgentJournalTurn(turn.body)!,
+                userItemId: 'orca:concurrent-owner'
+              }),
+              { fence: 1, turnScope: { kind: 'thread' } }
+            )
+          }
+        }
+        return append(transition)
+      }
+      await catchUp([userReplay('outside'), answerReplay('full')])
+      expect(intervened).toBe(true)
+      const answer = (await rig.rows()).find(
+        (item) => item.body.kind === 'message' && item.body.role === 'assistant'
+      )
+      expect(answer?.body).toMatchObject({
+        blocks: [{ text: scenario === 'queued-only' ? 'full' : 'prefix' }]
+      })
+      if (scenario === 'queued-only') {
+        expect(rig.journal.submission('queued')?.handedOverAt).toBeUndefined()
+      }
+    }
+  )
+  it('bounds replay by UTF-8 bytes before staging', () => {
+    const history = new AcpLoadHistory(NAMESPACE)
+    history.keep('session/update', {
+      sessionId: NAMESPACE,
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: '🙂'.repeat(4 * 1024 * 1024) }
+      }
+    })
+    expect(history.frames()).toBeNull()
   })
 })

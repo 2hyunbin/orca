@@ -1,3 +1,4 @@
+import { providerTimelineExecutionItems } from '../agent-session-timeline/provider-timeline-history'
 // What a gone child generation left unfinished in the journal, and whether its exit interrupted it.
 
 import type { AgentJournalRenderItem } from '../../../shared/agent-session-journal-types'
@@ -26,7 +27,7 @@ export function captureUnfinishedStructuredAgentSessionWork(
   journal: DeadGenerationJournal
 ): StructuredAgentSessionUnfinishedWork {
   return {
-    items: journal.snapshot().items.filter(isUnfinishedItem),
+    items: providerTimelineExecutionItems(journal.snapshot().items).filter(isUnfinishedItem),
     hadUnsettledSubmissions: hasUnsettledSubmission(journal)
   }
 }
@@ -40,7 +41,8 @@ export function hasUnfinishedStructuredAgentSessionWork(
   return (
     work.hadUnsettledSubmissions ||
     work.items.length > 0 ||
-    watchedExitRevisions(journal.snapshot().items, exit, journal).length > 0
+    watchedExitRevisions(providerTimelineExecutionItems(journal.snapshot().items), exit, journal)
+      .length > 0
   )
 }
 
@@ -51,7 +53,7 @@ export function unfinishedStructuredAgentSessionWorkWasInterrupted(
   exit?: StructuredAgentSessionWatchedExit,
   heldSends?: ReadonlySet<string>
 ): boolean {
-  const currentSnapshot = journal.snapshot()
+  const currentItemsSnapshot = providerTimelineExecutionItems(journal.snapshot().items)
   if (
     journal
       .submissions?.()
@@ -62,16 +64,16 @@ export function unfinishedStructuredAgentSessionWorkWasInterrupted(
           !isQueuedAgentJournalSubmission(send) &&
           (send.dispatchState === 'pending' || send.dispatchState === 'unknown')
       ) ||
-    currentSnapshot.items.some(isInProgressStructuredAgentSessionItem)
+    currentItemsSnapshot.some(isInProgressStructuredAgentSessionItem)
   ) {
     return true
   }
   // A turn the exited child left `unverifiable` (its stream closed first) was running when it went.
-  if (watchedExitRevisions(currentSnapshot.items, exit, journal).length > 0) {
+  if (watchedExitRevisions(currentItemsSnapshot, exit, journal).length > 0) {
     return true
   }
   if (
-    currentSnapshot.items.some((item) => {
+    currentItemsSnapshot.some((item) => {
       const turn = readAgentJournalTurn(item.body)
       return turn?.state === 'interrupted' && turn.completedAt === observedExitAt
     })
@@ -82,7 +84,7 @@ export function unfinishedStructuredAgentSessionWorkWasInterrupted(
   if (inProgressBefore.length === 0) {
     return false
   }
-  const currentItems = new Map(currentSnapshot.items.map((item) => [item.itemId, item]))
+  const currentItems = new Map(currentItemsSnapshot.map((item) => [item.itemId, item]))
   const runningTurns = inProgressBefore.filter(
     (item) => readAgentJournalTurn(item.body)?.state === 'running'
   )

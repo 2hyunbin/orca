@@ -1,8 +1,4 @@
-// The history an ACP agent replays when it reopens a conversation, read back as whole turns. A
-// turn starts at a person's message: its chunks (text first, then attachments) share that
-// message, and everything after them until the next person's message is the turn's work. The id
-// each turn gets is the agent's own: OpenCode's saved user message id, or Grok's prompt id, which
-// for a turn Orca sent is the id Orca gave it.
+// Replay grouping uses provider message/turn IDs and preserves source arrival order.
 
 import { z } from 'zod'
 import type { NativeChatBlock } from '../../shared/native-chat-types'
@@ -25,7 +21,7 @@ export class AcpLoadHistory {
     if (!this.kept || sessionSchema.safeParse(params).data?.sessionId !== this.providerSessionId) {
       return
     }
-    this.bytes += JSON.stringify(params).length
+    this.bytes += Buffer.byteLength(JSON.stringify(params), 'utf8')
     this.kept.push({ method, params })
     if (this.kept.length > LOAD_HISTORY_MAX_FRAMES || this.bytes > LOAD_HISTORY_MAX_BYTES) {
       this.kept = null
@@ -46,14 +42,13 @@ export type AcpHistoryTurn = {
   turn: string | null
   /** The person's message, in the order its chunks came. */
   user: NativeChatBlock[]
+  textOnly: boolean
   /** The turn's own frames after the person's message, no longer marked as replay. */
   frames: AcpLoadHistoryFrame[]
   /** Every message id the replay gave this turn (OpenCode): the person's and the agent's. */
   messageIds: string[]
   /** When the agent recorded the person's message (Grok), on the agent host's clock. */
   startedAt: number | null
-  /** The agent's own end of the turn was replayed. */
-  ended: boolean
 }
 
 /** A replayed turn under the agent's own id. */
@@ -86,12 +81,7 @@ const contentSchema = z.discriminatedUnion('type', [
 /** OpenCode names reasoning `<message id>:reasoning:<n>`; the message is what its store keys. */
 const REASONING_SUFFIX = /:reasoning:\d+$/
 
-function userBlock(content: unknown): NativeChatBlock | null {
-  const parsed = contentSchema.safeParse(content)
-  if (!parsed.success) {
-    return null
-  }
-  const block = parsed.data
+function userBlock(block: z.infer<typeof contentSchema>): NativeChatBlock {
   switch (block.type) {
     case 'text':
       return { type: 'text', text: block.text }
@@ -118,7 +108,8 @@ function unmarked(frame: AcpLoadHistoryFrame): AcpLoadHistoryFrame {
 /** The replay's turns in the agent's order. Throws when one turn names two prompt ids. */
 export function acpHistoryTurns(
   frames: readonly AcpLoadHistoryFrame[],
-  identity: AcpHistoryTurnIdentity
+  identity: AcpHistoryTurnIdentity,
+  check: () => void = () => {}
 ): AcpHistoryTurn[] {
   const turns: (AcpHistoryTurn & { userKey: string | number | undefined })[] = []
   let current: (AcpHistoryTurn & { userKey: string | number | undefined }) | null = null
@@ -132,6 +123,7 @@ export function acpHistoryTurns(
     turn.turn = id
   }
   for (const frame of frames) {
+    check()
     const parsed = frameSchema.safeParse(frame.params)
     if (!parsed.success) {
       current?.frames.push(unmarked(frame))
@@ -144,10 +136,10 @@ export function acpHistoryTurns(
         current = {
           turn: null,
           user: [],
+          textOnly: true,
           frames: [],
           messageIds: [],
           startedAt: meta?.agentTimestampMs ?? null,
-          ended: false,
           userKey
         }
         turns.push(current)
@@ -155,7 +147,11 @@ export function acpHistoryTurns(
           nameTurn(current, update.messageId)
         }
       }
-      const block = userBlock(update.content)
+      const raw = contentSchema.safeParse(update.content)
+      if (!raw.success || raw.data.type !== 'text') {
+        current.textOnly = false
+      }
+      const block = raw.success ? userBlock(raw.data) : null
       if (block) {
         current.user.push(block)
       }
@@ -165,7 +161,6 @@ export function acpHistoryTurns(
         nameTurn(current, meta?.promptId)
         if (update.sessionUpdate === 'turn_completed') {
           nameTurn(current, update.prompt_id)
-          current.ended = true
         }
       }
     } else {
@@ -179,4 +174,8 @@ export function acpHistoryTurns(
     }
   }
   return turns.map(({ userKey: _userKey, ...turn }) => turn)
+}
+
+export function acpHistoryFrameTime(frame: AcpLoadHistoryFrame): number | null {
+  return frameSchema.safeParse(frame.params).data?._meta?.agentTimestampMs ?? null
 }

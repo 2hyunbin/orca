@@ -1,13 +1,18 @@
 // A replayed turn written as the chat's lane writes a live one: the same translator and assembler,
 // so its rows carry exactly the keys and bodies a live turn would have, into a staging overlay.
 
+import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
 import type { AgentType } from '../../shared/agent-status-types'
 import { createProviderTimelineAssembler } from '../native-chat/agent-session-timeline/provider-timeline-assembler'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
-import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
+import { agentJournalTurnBody, readAgentJournalTurn } from '../../shared/agent-session-turn-record'
 import type { AcpDialect } from './acp-dialects/acp-dialect'
-import type { AcpHistoryJournalOverlay } from './acp-history-journal-overlay'
-import type { AcpHistoryTurnIdentity, AcpIdentifiedHistoryTurn } from './acp-history-replay'
+import { AcpHistoryJournalOverlay, type AcpHistoryItem } from './acp-history-journal-overlay'
+import {
+  acpHistoryFrameTime,
+  type AcpHistoryTurnIdentity,
+  type AcpIdentifiedHistoryTurn
+} from './acp-history-replay'
 import { AcpTimelineTranslator } from './acp-timeline-translator'
 
 /** The chat a replay belongs to. */
@@ -19,30 +24,27 @@ export type AcpHistoryScope = {
   dialect: AcpDialect
   /** How the agent names each turn it replays. */
   identity: AcpHistoryTurnIdentity
-  now: () => number
 }
 
-/** History has no live prompt: a turn opens under the agent's own id, and one the agent's frames
- *  left open ends with the replay, which is all of it there is. */
 class AcpHistoryTranslator extends AcpTimelineTranslator {
   openHistoryTurn(turn: string, at: number): ProviderTimelineEvent[] {
     return this.start(turn, at)
-  }
-
-  endHistoryTurn(turn: string, at: number): ProviderTimelineEvent[] {
-    return this.activeTurn === turn ? this.endTurn(turn, 'end_turn', at, undefined, undefined) : []
   }
 }
 
 /** Each turn gets its own translator and assembler, so its rows are keyed the same on every open. */
 export function translateHistoryTurn(
   scope: AcpHistoryScope,
-  overlay: AcpHistoryJournalOverlay,
-  turn: AcpIdentifiedHistoryTurn
-): void {
+  turn: AcpIdentifiedHistoryTurn,
+  check: () => void = () => {}
+): AcpHistoryItem[] {
+  const overlay = new AcpHistoryJournalOverlay('history-snapshot')
   const translator = new AcpHistoryTranslator({
     sessionId: scope.providerSessionId,
-    dialect: scope.dialect
+    dialect: scope.dialect,
+    onTextDropped: () => {
+      throw new Error('history-text-dropped')
+    }
   })
   const assembler = createProviderTimelineAssembler({
     sink: overlay.sink,
@@ -52,45 +54,53 @@ export function translateHistoryTurn(
     namespace: scope.providerSessionId,
     schedule: () => () => {}
   })
-  const at = turn.startedAt ?? scope.now()
+  const at = turn.startedAt ?? 0
   const apply = (events: readonly ProviderTimelineEvent[]) => {
     for (const event of events) {
-      if (!assembler.apply(event).admission.accepted) {
+      const result = assembler.apply(event)
+      if (!result.admission.accepted || (result.dropped && result.dropped !== 'turn-duplicate')) {
         throw new Error('history-not-admitted')
       }
     }
   }
   try {
     apply(translator.openHistoryTurn(turn.turn, at))
-    if (turn.user.length > 0) {
-      apply([
-        {
-          type: 'item.update',
-          item: `user:${turn.turn}`,
-          body: { kind: 'message', role: 'user', blocks: turn.user },
-          join: { thread: scope.providerSessionId, turn: turn.turn }
-        }
-      ])
-    }
+    apply([
+      {
+        type: 'item.update',
+        item: `user:${turn.turn}`,
+        body: { kind: 'message', role: 'user', blocks: turn.user },
+        join: { thread: scope.providerSessionId, turn: turn.turn }
+      }
+    ])
     for (const frame of turn.frames) {
-      apply(translator.notification(frame.method, frame.params, at))
+      check()
+      apply(translator.notification(frame.method, frame.params, acpHistoryFrameTime(frame) ?? at))
     }
-    apply(translator.endHistoryTurn(turn.turn, at))
     assembler.flush()
+    const created = overlay.created()
+    const opener = created.find((item) => item.body.kind === 'message' && item.body.role === 'user')
+    if (!opener) {
+      throw new Error('no-history-opener')
+    }
+    return created.map((mutation) => {
+      const lifecycle = readAgentJournalTurn(mutation.body)
+      if (!lifecycle) {
+        return mutation
+      }
+      const { startedAt, ...body } = lifecycle
+      return {
+        ...mutation,
+        body: agentJournalTurnBody({
+          ...body,
+          userItemId: agentJournalItemKey(opener.identity),
+          ...(turn.startedAt === null ? {} : { startedAt }),
+          ...(lifecycle.state === 'running' ? { state: 'completed' as const } : {})
+        })
+      }
+    })
   } finally {
     assembler.dispose()
     translator.dispose()
-  }
-}
-
-/** A journal with no rows, for writing a turn whole whatever the chat already holds. */
-export function emptyJournal(epoch: string): StructuredAgentSessionTransitionJournal {
-  return {
-    epoch,
-    canonicalItemId: (itemId) => itemId,
-    item: () => null,
-    itemBody: () => null,
-    visitItems: () => {},
-    visitItemsWithLinkage: () => {}
   }
 }

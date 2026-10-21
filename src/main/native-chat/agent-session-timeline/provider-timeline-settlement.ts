@@ -1,3 +1,4 @@
+import { isHistoricalProviderTimelineItem } from './provider-timeline-history'
 // What a turn's end or the session's end settles, read from the journal when the settlement runs.
 //
 // The same mechanism, and the same terminal bodies, as the dead-generation settlement after a
@@ -86,6 +87,10 @@ export function providerTimelineSettlement(
   const mutations: JournalLifecycleMutationInput[] = []
   journal.visitItemsWithLinkage((itemId, _sequence, body, attribution) => {
     const turnScope = attribution.turnScope ?? AGENT_JOURNAL_THREAD_SCOPE
+    const historical = scope === 'session' && journal.item(itemId)
+    if (historical && isHistoricalProviderTimelineItem(historical, (key) => journal.item(key))) {
+      return
+    }
     const covered =
       scope === 'session' ||
       (turnScope.kind === 'turn' && turnScope.turnItemId === scope.turnItemId)
@@ -121,7 +126,8 @@ export function runningProviderTimelineTurns(
   journal.visitItems((itemId, _sequence, body) => {
     const identity =
       readAgentJournalTurn(body)?.state === 'running' ? parseAgentJournalItemKey(itemId) : null
-    if (identity) {
+    const item = journal.item(itemId)
+    if (identity && item && !isHistoricalProviderTimelineItem(item, (key) => journal.item(key))) {
       running.push({ identity, itemId })
     }
   })

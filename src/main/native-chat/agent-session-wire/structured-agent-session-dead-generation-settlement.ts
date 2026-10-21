@@ -1,3 +1,4 @@
+import { providerTimelineExecutionItems } from '../agent-session-timeline/provider-timeline-history'
 import {
   agentSessionFailureFact,
   MAX_PROVIDER_DIAGNOSTIC_CHARS,
@@ -105,7 +106,7 @@ export function planStructuredAgentSessionDeadGeneration(
       unrun ? { rejection: unrun } : { reason: input.pendingSubmissionReason }
     )
   ]
-  const allItems = input.journal.snapshot().items
+  const allItems = providerTimelineExecutionItems(input.journal.snapshot().items)
   const items = allItems.filter((item) => owns(input.journal.itemFence(item.itemId)))
   const proven = watchedExitRevisions(items, input.exit, input.journal)
   const mutations: JournalLifecycleMutationInput[] = []

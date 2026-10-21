@@ -30,11 +30,18 @@ export function continuedOutsideNotice(rewound: boolean): AgentJournalItemBody {
   return agentSessionHostStatusBody(rewound ? 'continued-outside-rewound' : 'continued-outside')
 }
 
+export type HistoryCatchUpTarget = {
+  key: string
+  canonicalItemId: string
+  revision: number | null
+}
+
 export type HistoryCatchUpPlan = {
   settlementId: string
   mutations: JournalLifecycleIdentityMutationInput[]
   keys: string[]
   reservedBytes: number
+  targets?: readonly HistoryCatchUpTarget[]
 }
 
 /** Rows staged in memory against the batch budget; nothing reaches the sink until the plan is whole. */
@@ -58,8 +65,13 @@ export function createHistoryCatchUpBatch() {
       keys.push(agentJournalItemKey(mutation.identity))
     },
     /** `digestOf` names what was imported, so the same import settles under one id. */
-    finish(settlementPrefix: string, digestOf: unknown): HistoryCatchUpPlan {
-      const digest = createHash('sha256').update(JSON.stringify(digestOf)).digest('hex')
+    finish(
+      settlementPrefix: string,
+      digestOf: unknown,
+      targets?: readonly HistoryCatchUpTarget[]
+    ): HistoryCatchUpPlan {
+      const content = targets ? [digestOf, targets, mutations] : digestOf
+      const digest = createHash('sha256').update(JSON.stringify(content)).digest('hex')
       const settlementId = `${settlementPrefix}:${digest}`
       // Match the existing batch envelope charge, plus the transition's one publication byte.
       const reservedBytes =
@@ -67,7 +79,13 @@ export function createHistoryCatchUpBatch() {
       if (reservedBytes + 1 > HISTORY_CATCH_UP_MAX_BYTES) {
         throw new Error('too-large')
       }
-      return { settlementId, mutations, keys: [...keys], reservedBytes }
+      return {
+        settlementId,
+        mutations,
+        keys: [...keys],
+        reservedBytes,
+        ...(targets ? { targets } : {})
+      }
     }
   }
 }
@@ -180,15 +198,21 @@ export async function runHistoryCatchUp<View>(input: {
             ) {
               return []
             }
-            if (plan.keys.some((key) => current.item(current.canonicalItemId(key)) !== null)) {
+            if (plan.targets && plan.targets.length !== plan.keys.length) {
               return []
             }
-            // Canonical keys can also collide with one another through an existing submission alias.
-            if (
-              new Set(plan.keys.map((key) => current.canonicalItemId(key))).size !==
-              plan.keys.length
-            ) {
-              return []
+            const seen = new Set<string>()
+            for (const [index, key] of plan.keys.entries()) {
+              const canonical = current.canonicalItemId(key)
+              const target = plan.targets?.[index]
+              if (
+                seen.has(canonical) ||
+                (target && (target.key !== key || target.canonicalItemId !== canonical)) ||
+                (current.item(canonical)?.revision ?? null) !== (target?.revision ?? null)
+              ) {
+                return []
+              }
+              seen.add(canonical)
             }
             resolved = true
             return plan.mutations

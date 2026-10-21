@@ -121,7 +121,6 @@ export async function initializeAcpStructuredSession(
       providerSessionId: started.sessionId,
       dialect: spec.dialect,
       assertCurrent: assertStarting,
-      now,
       ...(deps.logger ? { logger: deps.logger } : {})
     })
     assertStarting()

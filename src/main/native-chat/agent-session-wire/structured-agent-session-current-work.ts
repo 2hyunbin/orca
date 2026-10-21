@@ -1,3 +1,4 @@
+import { isHistoricalProviderTimelineItem } from '../agent-session-timeline/provider-timeline-history'
 import { currentRequestsProjection } from './agent-session-current-requests'
 // The host's one operational projection of a chat's current work: the live generation's running
 // turn, the prompts it raised that still wait on the person, the sends it owes, and the queued
@@ -209,6 +210,10 @@ export class StructuredAgentSessionCurrentWork {
   /** Whether the live generation's execution produced this item. */
   isCurrentItem(itemId: string): boolean {
     if (this.liveFence === null) {
+      return false
+    }
+    const item = this.journal.item(itemId)
+    if (item && isHistoricalProviderTimelineItem(item, (key) => this.journal.item(key))) {
       return false
     }
     const provenance = this.journal.itemFence(itemId)

@@ -1,3 +1,4 @@
+import { providerTimelineExecutionItems } from '../agent-session-timeline/provider-timeline-history'
 // What a generation that can no longer write left unfinished, settled from the journal, the
 // lease's death evidence and the runtimes this one replaced each time it is asked. Either proof ends
 // a turn interrupted; anything else is `unverifiable`, until a proof naming its owner revises it. Working subagents and background
@@ -96,7 +97,9 @@ export function planStaleStructuredAgentSessionState(
   const { journal, below } = input
   const ended = (fence: number | undefined) =>
     below === undefined || (fence !== undefined && fence < below)
-  const items = journal.snapshot().items.filter((item) => ended(journal.itemFence(item.itemId)))
+  const items = providerTimelineExecutionItems(journal.snapshot().items).filter((item) =>
+    ended(journal.itemFence(item.itemId))
+  )
   const dispatches =
     below === undefined
       ? []
