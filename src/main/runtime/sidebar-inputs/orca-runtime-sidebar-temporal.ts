@@ -241,6 +241,17 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
 
   // Metadata only: clients re-list the record, and the cached git scans stay.
   private notifySortStampsChanged(worktreeId: string): void {
+    // Switch point: this host's window takes the stamps off its sidebar feed (sidebar-feed-sort-stamps.ts),
+    // so only paired clients re-list.
+    if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+      if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
+        this.invalidateResolvedWorktreeCache()
+        this.notifyReposChangedForRemoteClients()
+      } else {
+        this.notifyWorktreesChangedForRemoteClients(getRepoIdFromWorktreeId(worktreeId))
+      }
+      return
+    }
     if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
       this.notifyFolderWorkspaceChanged()
       return

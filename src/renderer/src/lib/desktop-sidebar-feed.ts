@@ -96,8 +96,9 @@ export function refreshDesktopSidebarFeed(): number {
 }
 
 /** Follows main from the first mount for the window's life: main serves this window until it closes
- *  either way, and a list that remounts must not first draw rows main changed while it was hidden. */
-function start(): void {
+ *  either way, and a list that remounts must not first draw rows main changed while it was hidden.
+ *  A reader that needs the feed with no list mounted starts it too. */
+export function followDesktopSidebarFeed(): void {
   if (started) {
     return
   }
@@ -115,6 +116,6 @@ function subscribe(listener: () => void): () => void {
 
 /** Null until main's first install lands. Only an ORCA_SIDEBAR_INPUTS=main window reads this. */
 export function useDesktopSidebarFeed(): DesktopSidebarFeed | null {
-  useEffect(start, [])
+  useEffect(followDesktopSidebarFeed, [])
   return useSyncExternalStore(subscribe, () => feed)
 }

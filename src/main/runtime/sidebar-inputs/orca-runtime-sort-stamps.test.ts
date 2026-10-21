@@ -94,6 +94,29 @@ describe('host sort stamps on a headless runtime', () => {
     }
   })
 
+  it('announces a stamp to paired clients only: the host window reads it off its feed', () => {
+    vi.useFakeTimers({ now: 56_000 })
+    try {
+      const { runtime } = createHeadlessRuntime()
+      const worktreesChanged = vi.fn()
+      const reposChanged = vi.fn()
+      const notifier = { worktreesChanged, reposChanged }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a stamp notice reaches only these members.
+      runtime.setNotifier(notifier as unknown as Parameters<OrcaRuntimeService['setNotifier']>[0])
+      const events: { type: string }[] = []
+      runtime.onClientEvent((event) => events.push(event), { consumesTerminalSideEffects: false })
+      runtime.onPtyData('pty-1', '\x1b]0;⠂ Working\x07', 1)
+      vi.advanceTimersByTime(250)
+      expect(events.filter((event) => event.type === 'worktreesChanged')).toEqual([
+        expect.objectContaining({ type: 'worktreesChanged', repoId: 'repo-1' })
+      ])
+      expect(worktreesChanged).not.toHaveBeenCalled()
+      expect(reposChanged).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('stamps a bell the daemon reports for a parked terminal', () => {
     vi.useFakeTimers({ now: 60_000 })
     try {
