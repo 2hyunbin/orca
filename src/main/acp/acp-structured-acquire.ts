@@ -59,6 +59,7 @@ export async function acquireAcpStructuredSession(input: {
   const { acquire, deps, generation } = input
   const { spec } = deps
   const agentName = acpAgentName(spec.agent)
+  const logger = deps.logger ?? createStructuredAgentSessionLogger()
   const sessionId = acquire.identity.sessionId
   const now = deps.now ?? Date.now
   const events = acquire.events
@@ -209,7 +210,7 @@ export async function acquireAcpStructuredSession(input: {
       now,
       childStops: () => session?.childStops ?? NO_ACP_CHILD_STOPS,
       ...acpLaneChildWorkDelivery(deps, sessionId, events),
-      logger: deps.logger ?? createStructuredAgentSessionLogger(),
+      logger,
       onInputAccepted: (clientMessageId) => {
         if (isAcpReadySession(session)) {
           session.turns?.accept(clientMessageId)
@@ -220,7 +221,16 @@ export async function acquireAcpStructuredSession(input: {
     slot.lane = lane
     slot.reattaching = attaching
     // What the agent replays is kept for catch-up, never written as it arrives.
-    slot.history = attaching && spec.historyCatchUp ? new AcpLoadHistory(providerSessionId) : null
+    slot.history =
+      attaching && spec.historyCatchUp
+        ? new AcpLoadHistory(providerSessionId, () =>
+            logger.warn(`${agentName} chat did not catch up on turns made outside it`, {
+              scope: 'acp-history-catch-up',
+              sessionId,
+              reason: 'replay-too-large'
+            })
+          )
+        : null
     if (attaching) {
       lane.translator.beginLoad()
     }

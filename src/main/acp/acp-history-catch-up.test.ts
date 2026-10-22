@@ -785,7 +785,8 @@ describe('ACP history catch-up', () => {
     }
   )
   it('bounds replay by UTF-8 bytes before staging', () => {
-    const history = new AcpLoadHistory(NAMESPACE)
+    const onOverflow = vi.fn()
+    const history = new AcpLoadHistory(NAMESPACE, onOverflow)
     history.keep('session/update', {
       sessionId: NAMESPACE,
       update: {
@@ -794,5 +795,7 @@ describe('ACP history catch-up', () => {
       }
     })
     expect(history.frames()).toBeNull()
+    history.keep('session/update', { sessionId: NAMESPACE })
+    expect(onOverflow).toHaveBeenCalledOnce()
   })
 })

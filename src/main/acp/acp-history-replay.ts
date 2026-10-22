@@ -15,7 +15,10 @@ export class AcpLoadHistory {
   private kept: AcpLoadHistoryFrame[] | null = []
   private bytes = 0
 
-  constructor(private readonly providerSessionId: string) {}
+  constructor(
+    private readonly providerSessionId: string,
+    private readonly onOverflow?: () => void
+  ) {}
 
   keep(method: string, params: unknown): void {
     if (!this.kept || sessionSchema.safeParse(params).data?.sessionId !== this.providerSessionId) {
@@ -25,6 +28,7 @@ export class AcpLoadHistory {
     this.kept.push({ method, params })
     if (this.kept.length > LOAD_HISTORY_MAX_FRAMES || this.bytes > LOAD_HISTORY_MAX_BYTES) {
       this.kept = null
+      this.onOverflow?.()
     }
   }
 
