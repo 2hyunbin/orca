@@ -8493,7 +8493,7 @@
           "reassurance": "É executado em cada host, acessado pela sua própria conexão SSH. Seu código e seus arquivos permanecem onde estão. Apenas a lista de projetos, abas e terminais do Orca é movida para o host."
         },
         "sshHostServer": {
-          "sourceChanged": "Uma versão anterior do Orca alterou os projetos deste host. Mova essas alterações para o servidor Orca deste host ou mantenha a versão do servidor para conectar novamente.",
+          "sourceChanged": "Este computador tem projetos ou pastas deste host que o servidor Orca dele ainda não tem, muitas vezes adicionados por uma versão anterior do Orca. Mova-os para o servidor Orca deste host ou mantenha a versão do servidor para conectar novamente.",
           "deploying": "Configurando Orca em {{host}}…",
           "converting": "Movendo para o Orca em {{host}}…",
           "connecting": "Conectando ao Orca em {{host}}…",

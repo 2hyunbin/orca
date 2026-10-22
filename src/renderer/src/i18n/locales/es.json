@@ -12666,7 +12666,7 @@
           "reassurance": "Se ejecuta en cada host y se accede a través de tu propia conexión SSH. Tu código y tus archivos se quedan donde están. Solo la lista de proyectos, pestañas y terminales de Orca pasa al host."
         },
         "sshHostServer": {
-          "sourceChanged": "Una versión anterior de Orca cambió los proyectos de este host. Mueve esos cambios al servidor de Orca de este host o conserva la versión del servidor para volver a conectarte.",
+          "sourceChanged": "Este equipo tiene proyectos o carpetas de este host que su servidor de Orca aún no tiene, a menudo añadidos por una versión anterior de Orca. Muévelos al servidor de Orca de este host o conserva la versión del servidor para volver a conectarte.",
           "deploying": "Configurando Orca en {{host}}…",
           "converting": "Pasando a Orca en {{host}}…",
           "connecting": "Conectando con Orca en {{host}}…",

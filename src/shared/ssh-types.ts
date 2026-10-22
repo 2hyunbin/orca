@@ -116,7 +116,7 @@ export type SshTarget = {
   managedServerUpdateFailure?: { reason: string; appVersion: string }
   orcadFence?: {
     environmentId: string
-    /** An older build changed the retained source rows: the host stays on the relay until moved again. */
+    /** The retained source holds projects no move took: the host is unserved until moved again. */
     sourceChangedAt?: string
   }
 }

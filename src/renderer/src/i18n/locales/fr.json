@@ -12779,7 +12779,7 @@
           "reassurance": "S’exécute sur chaque hôte, accessible via votre propre connexion SSH. Votre code et vos fichiers restent où ils sont. Seule la liste des projets, onglets et terminaux d’Orca passe sur l’hôte."
         },
         "sshHostServer": {
-          "sourceChanged": "Une version plus ancienne d’Orca a modifié les projets de cet hôte. Déplacez ces modifications vers le serveur Orca de cet hôte, ou conservez la version du serveur, pour vous reconnecter.",
+          "sourceChanged": "Cet ordinateur contient des projets ou dossiers de cet hôte que son serveur Orca n’a pas encore, souvent ajoutés par une version plus ancienne d’Orca. Déplacez-les vers le serveur Orca de cet hôte, ou conservez la version du serveur, pour vous reconnecter.",
           "deploying": "Configuration d’Orca sur {{host}}…",
           "converting": "Passage à Orca sur {{host}}…",
           "connecting": "Connexion à Orca sur {{host}}…",
