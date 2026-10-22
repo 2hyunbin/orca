@@ -107,8 +107,8 @@ export function useAgentPaneThreads(args: {
         : EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT,
     [runtimeEnvironments, runtimeStatusByEnvironmentId]
   )
-  // Why project: the unified tab map is rewritten on every tab focus; the projection keeps
-  // its identity (and each tab's) unless a field this pipeline reads actually changed.
+  // Terminal tabs retain semantic identity across focus writes; native chats keep current
+  // original objects so the shared naming projection can resolve their host-saved names.
   const tabProjectionRef = useRef<{
     raw: AppState['unifiedTabsByWorktree'] | null
     projected: ActivityTabProjection | null

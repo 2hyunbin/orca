@@ -27,9 +27,8 @@ export type ActivityTabContext = { worktreeId: string; tab: TerminalTab }
 export type ActivityEventOwner = { worktree: Worktree; repo: Repo | null; knownWorktree: boolean }
 export type ActivityTabHostIndex = Map<string, Map<string, ExecutionHostId | null>>
 
-// Why memoized on the source object: the pane build cache compares `tab` by identity, so a
-// fresh derived object per rebuild would miss the cache for every agent-session and
-// missing-tab row. Upstream keeps the source identity stable while its fields are unchanged.
+// Current original native tabs key both naming and this presentation cache; repeated reads
+// of the same source/name preserve the derived identity used by the pane build cache.
 const agentSessionTerminalTabs = new WeakMap<Tab, { name: string | null; tab: TerminalTab }>()
 const attributedTabContexts = new WeakMap<AgentStatusEntry, ActivityTabContext | null>()
 

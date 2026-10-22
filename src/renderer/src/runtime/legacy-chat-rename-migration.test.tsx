@@ -27,6 +27,7 @@ import {
   getStructuredChatTabNames
 } from './structured-chat-name-observation'
 import { useLiveDashboardSnapshot } from '@/components/dashboard/useLiveDashboardSnapshot'
+import { useAgentPaneThreads } from '@/components/activity/use-agent-pane-threads'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { fetchWorkspaceSessionWithRuntimeHostOwners } from '@/lib/workspace-session-host-hydration'
@@ -321,9 +322,20 @@ it('shares qualified current names with live dashboard and attachments without a
     />
   )
   const dashboard = renderHook(useLiveDashboardSnapshot)
+  const activity = renderHook(() =>
+    useAgentPaneThreads({
+      query: '',
+      readFilter: 'all',
+      groupBy: 'none',
+      selectedPaneKey: null
+    })
+  )
+  const activityTitle = () =>
+    activity.result.current.allThreads.find((row) => row.tab.id === tab.id)?.paneTitle
   const shown = () =>
     dashboard.result.current.cards.find((card) => card.tabId === tab.id)?.conversationName
   expect(shown()).toBe('Same')
+  expect(activityTitle()).toBe('Same')
   expect(view.container.textContent).toContain('Same')
   expect(mock.activates).toHaveBeenCalledTimes(1)
   act(() => useAppStore.setState({ agentStatusEpoch: 1 }))
@@ -331,11 +343,13 @@ it('shares qualified current names with live dashboard and attachments without a
   act(() => useAppStore.setState({ activeWorkspaceExecutionHostId: 'local' }))
   expect(getStructuredChatTabNames()).not.toBe(before)
   expect(getStructuredChatTabNames().get(tab)?.owner).toBe('local')
+  expect(activityTitle()).toBe('Same')
   act(() => {
     mock.snapshot = new Map([[tab.entityId, name(tab, 'Local renamed')]])
     mock.listeners.forEach((notify) => notify())
   })
   expect(shown()).toBe('Local renamed')
+  expect(activityTitle()).toBe('Local renamed')
   const local = getStructuredChatTabNames()
   act(() => {
     mock.paired = new Map([[tab.entityId, name(tab, 'Unrelated')]])
@@ -344,14 +358,17 @@ it('shares qualified current names with live dashboard and attachments without a
   expect(getStructuredChatTabNames().get(tab)).toEqual(local.get(tab))
   expect(view.container.textContent).toContain('Unrelated')
   expect(shown()).toBe('Local renamed')
+  expect(activityTitle()).toBe('Local renamed')
   act(() => useAppStore.setState({ activeWorktreeId: 'elsewhere' }))
   expect(getStructuredChatTabNames().get(tab)?.owner).toBeNull()
   expect(shown()).toBe('Codex Chat')
+  expect(activityTitle()).toBe('Codex Chat')
   const replacement = { ...tab }
   act(() => useAppStore.setState({ unifiedTabsByWorktree: { [tab.worktreeId]: [replacement] } }))
   expect(getStructuredChatTabNames().has(tab)).toBe(false)
   expect(getStructuredChatTabNames().has(replacement)).toBe(true)
   dashboard.unmount()
+  activity.unmount()
   view.unmount()
   expect(mock.deactivates).toHaveBeenCalledTimes(2)
   stop()
