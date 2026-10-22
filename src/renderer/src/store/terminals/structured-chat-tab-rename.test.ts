@@ -247,7 +247,10 @@ describe('renaming a structured chat tab', () => {
         ]
       })
       const windowActions = createTerminalTabAppearanceActions(store.setState, store.getState)
-      const mainActions = routeTerminalTabChangesThroughLayoutOwner(windowActions, store.getState)
+      const mainActions = routeTerminalTabChangesThroughLayoutOwner(
+        { ...store.getState(), ...windowActions },
+        store.getState
+      )
       const actions = entry === 'main' ? mainActions : windowActions
       const otherActions = entry === 'main' ? windowActions : mainActions
       const current = () => store.getState().unifiedTabsByWorktree[folder.id][0]!

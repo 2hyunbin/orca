@@ -7,6 +7,12 @@ import {
 import type { Tab } from '../../../shared/tab-types'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
+import type { AppState } from '@/store/types'
+import {
+  selectDetectedWorktreesByRepo,
+  selectFolderWorkspaces,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
 import { isTwinWorkspace, namedHostForOwnerRef, resolveOwner } from '@/lib/resolve-owner'
 import { authorityKey } from '../../../shared/host-authority'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from './local-structured-session-owner'
@@ -87,14 +93,12 @@ export function legacyStructuredChatRenameOwner(
 }
 
 /** Catalog inputs independent of the user's current workspace selection. */
-export function structuredAgentSessionCatalogOwnerInputs(
-  state: WorktreeRuntimeOwnerState
-): unknown[] {
+export function structuredAgentSessionCatalogOwnerInputs(state: AppState): unknown[] {
   return [
     state.repos,
-    state.worktreesByRepo,
-    state.detectedWorktreesByRepo,
-    state.folderWorkspaces,
+    selectWorktreesByRepo(state),
+    selectDetectedWorktreesByRepo(state),
+    selectFolderWorkspaces(state),
     state.projectGroups,
     state.runtimeEnvironments,
     state.runtimeEnvironmentCatalogHydrated
@@ -102,10 +106,10 @@ export function structuredAgentSessionCatalogOwnerInputs(
 }
 
 /** Inputs to the legacy workspace-owner resolver, compared before scanning chat tabs. */
-export function structuredAgentSessionOwnerInputs(state: WorktreeRuntimeOwnerState): unknown[] {
+export function structuredAgentSessionOwnerInputs(state: AppState): unknown[] {
   return [
     ...structuredAgentSessionCatalogOwnerInputs(state),
-    state.settings?.activeRuntimeEnvironmentId,
+    state.settings,
     state.restoredRuntimeHostIdByWorkspaceSessionKey,
     state.removedRuntimeEnvironmentIds,
     state.activeWorktreeId,

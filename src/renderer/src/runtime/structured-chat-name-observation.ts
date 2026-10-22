@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { shallow } from 'zustand/shallow'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { useAppStore } from '@/store'
 import { getStructuredAgentSessionTabs } from '@/components/native-chat/structured-agent-session-tabs'
 import {
@@ -15,12 +16,12 @@ import {
 const listeners = new Set<() => void>()
 let snapshot: StructuredChatTabNames = new Map()
 let inputs: unknown[] = []
-let nameMaps = new Map<string, unknown>()
+let nameMaps = new Map<ExecutionHostId, unknown>()
 let stopObserving: (() => void) | undefined
 export function getStructuredChatTabNames(): StructuredChatTabNames {
   const state = useAppStore.getState()
   const nextInputs = [state.unifiedTabsByWorktree, ...structuredAgentSessionOwnerInputs(state)]
-  const nextMaps = new Map<string, unknown>()
+  const nextMaps = new Map<ExecutionHostId, unknown>()
   for (const owner of nameMaps.keys()) {
     const target = structuredAgentSessionTargetForHost(owner)
     if (target) {
@@ -66,7 +67,7 @@ export function getStructuredChatTabNames(): StructuredChatTabNames {
 }
 
 function observe(): () => void {
-  const feeds = new Map<string, () => void>()
+  const feeds = new Map<ExecutionHostId, () => void>()
   let published = getStructuredChatTabNames()
   const notice = () => {
     const next = getStructuredChatTabNames()

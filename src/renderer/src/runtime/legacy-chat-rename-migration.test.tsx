@@ -2,6 +2,9 @@
 import { act, cleanup, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../shared/tab-types'
+import type { ExecutionHostId } from '../../../shared/execution-host'
+import { createGlobalSettingsFixture } from '../../../shared/global-settings-test-fixture'
+import { brandEphemeralSetupTerminalWorktreeId } from '../../../shared/ephemeral-setup-terminal-worktree-id'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import type * as LayoutRouting from '@/store/terminals/tab-change-through-layout-owner'
 import {
@@ -98,7 +101,7 @@ const chat = (extra: Partial<Tab> = {}): Tab =>
     label: 'Codex Chat',
     ...extra
   })
-function loadChat(tab: Tab, owner: string) {
+function loadChat(tab: Tab, owner: ExecutionHostId) {
   const stored = addWorkspace(emptySession(), tab.worktreeId, [
     {
       id: 'group',
@@ -362,6 +365,45 @@ it('shares qualified current names with live dashboard and attachments without a
   expect(mock.activates).toHaveBeenCalledTimes(2)
 })
 
+it('updates an unstamped setup chat name when settings replace its fallback owner', () => {
+  const tab = chat({ worktreeId: brandEphemeralSetupTerminalWorktreeId('rename-observer') })
+  seed(tab)
+  const settings = createGlobalSettingsFixture({ activeRuntimeEnvironmentId: null })
+  useAppStore.setState({
+    settings,
+    runtimeEnvironments: [
+      {
+        id: 'paired',
+        name: 'paired',
+        createdAt: 1,
+        updatedAt: 1,
+        lastUsedAt: null,
+        runtimeId: null,
+        endpoints: [{ id: 'ws-paired', kind: 'websocket', label: 'WebSocket', endpoint: 'ws://x' }],
+        preferredEndpointId: 'ws-paired'
+      }
+    ]
+  })
+  mock.snapshot.set(tab.entityId, name(tab, 'Local name'))
+  mock.paired.set(tab.entityId, name(tab, 'Paired name'))
+  expect(getStructuredChatTabNames().get(tab)).toMatchObject({
+    owner: 'local',
+    savedName: 'Local name'
+  })
+  const changed = vi.fn()
+  stops.push(subscribeStructuredChatTabNames(changed))
+
+  useAppStore.setState({ settings: { ...settings, activeRuntimeEnvironmentId: 'paired' } })
+
+  expect(changed).toHaveBeenCalledTimes(1)
+  expect(getStructuredChatTabNames().get(tab)).toMatchObject({
+    owner: 'runtime:paired',
+    savedName: 'Paired name'
+  })
+  expect(settings.activeRuntimeEnvironmentId).toBeNull()
+  expect(mock.rpc).not.toHaveBeenCalled()
+})
+
 it('traces legacy runtime storage movement, action routing and switch-away before inventory', async () => {
   const tab = chat({ worktreeId: 'folder:twin', customLabel: 'Legacy paired' })
   seedTwin(tab)
@@ -510,6 +552,7 @@ it('traces a local legacy alias through foreign same-ID inventory and authoritat
     snapshotVersion: 1,
     activeTabId: tab.id,
     activeTabType: 'agent-session',
+    activeGroupId: tab.groupId,
     tabs: [
       {
         type: 'agent-session',
