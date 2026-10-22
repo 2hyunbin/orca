@@ -101,10 +101,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('@electron-toolkit/utils', () => ({
-  is: { dev: true }
-}))
-
 vi.mock('../tray/system-tray', () => ({
   destroySystemTray: destroySystemTrayMock,
   rebuildSystemTrayMenu: rebuildSystemTrayMenuMock
