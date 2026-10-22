@@ -68,7 +68,7 @@ describe("a phone's layout change on a windowless server (switch on)", () => {
     ).toEqual(strip)
   })
 
-  it('splits a chat tab, which main does not hold, as today and without an error', async () => {
+  it("refuses a split of a row main's layout does not hold, sending nothing (#31925)", async () => {
     const { runtime } = await headlessRuntime()
     runtime.projectStructuredAgentSessionTab({
       workspaceId: TEST_WORKTREE_ID,
@@ -85,7 +85,7 @@ describe("a phone's layout change on a windowless server (switch on)", () => {
         targetGroupId: SAVED_GROUP_ID,
         splitDirection: 'right'
       })
-    ).resolves.toEqual({ moved: true })
+    ).rejects.toThrow('tab_not_found')
 
     expect(apply).not.toHaveBeenCalled()
     expect((await runtime.listMobileSessionTabs(WORKTREE)).tabs.map((row) => row.id)).toContain(
