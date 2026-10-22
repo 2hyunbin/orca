@@ -382,7 +382,7 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
             updatedAt: 1
           }
         }
-      } as StoreState
+      }
 
       const pane = createPane(1)
       const manager = createManager(1)
