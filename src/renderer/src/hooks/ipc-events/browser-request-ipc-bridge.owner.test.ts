@@ -120,6 +120,19 @@ describe('browser requests from this desktop follow the workspace owner (#22275)
     expect(mocks.replyTabCreate).toHaveBeenCalledWith({ requestId: 'r1', browserPageId: 'ws-new' })
   })
 
+  it("answers with the new tab's page before main's frame draws it (layout-owner build)", () => {
+    mocks.getState.mockReturnValue(storeState(LOCAL_WT))
+    mocks.createBrowserTab.mockImplementation(() => ({ id: 'ws-new', activePageId: 'page-new' }))
+
+    mocks.createListener?.({ requestId: 'r4', worktreeId: LOCAL_WT, url: 'about:blank' })
+
+    // Not the workspace id: a paired client matches the reply against the page it asked for.
+    expect(mocks.replyTabCreate).toHaveBeenCalledWith({
+      requestId: 'r4',
+      browserPageId: 'page-new'
+    })
+  })
+
   it("renders a page named in a managed host's workspace on this desktop (#29145)", () => {
     mocks.getState.mockReturnValue(storeState(LOCAL_WT))
 
