@@ -136,9 +136,10 @@ export async function launchHeadlessAutomationAgent(
       createStructuredSession: () => {
         throw new Error(TERMINAL_ONLY_MESSAGE)
       },
-      createTerminalAgent: async ({ worktreeId, startupPrompt }) => {
+      createTerminalAgent: async ({ worktreeId, startupPrompt, sequenceTerminalCommand }) => {
         const launched = await runtime.launchAgentTerminal(`id:${worktreeId}`, {
           agent,
+          ...(sequenceTerminalCommand ? { sequenceTerminalCommand } : {}),
           prompt: startupPrompt ?? '',
           title: run.title,
           ...(automation.extraAgentArgs ? { extraAgentArgs: automation.extraAgentArgs } : {})

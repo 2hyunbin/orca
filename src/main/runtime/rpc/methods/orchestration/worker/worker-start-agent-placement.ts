@@ -221,12 +221,13 @@ function workerSurfaceFactory(
         fence: session.fence
       }
     },
-    createTerminalAgent: async ({ worktreeId }) => {
+    createTerminalAgent: async ({ worktreeId, sequenceTerminalCommand }) => {
       recordSurfaceStage(worktreeId)
       const terminal = await createExistingWorktreeWorkerTerminal({
         runtime: args.runtime,
         worktreeId,
         agent,
+        ...(sequenceTerminalCommand ? { sequenceTerminalCommand } : {}),
         ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
         taskId: args.taskId,
         effects: args.effects

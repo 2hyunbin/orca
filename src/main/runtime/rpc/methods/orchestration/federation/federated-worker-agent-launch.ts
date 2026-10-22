@@ -129,11 +129,12 @@ export async function launchFederatedWorkerAgent(args: {
       createStructuredSession: () => {
         throw new Error(TERMINAL_ONLY_MESSAGE)
       },
-      createTerminalAgent: async ({ worktreeId }) => {
+      createTerminalAgent: async ({ worktreeId, sequenceTerminalCommand }) => {
         const terminal = await runtime.createTerminal(`id:${worktreeId}`, {
           // Why: agent ids are not shell commands (`cursor` is the desktop app,
           // its CLI is `cursor-agent`); resolve through the TUI agent config.
           startupAgent: agent,
+          ...(sequenceTerminalCommand ? { sequenceTerminalCommand } : {}),
           launchSource: 'orchestration',
           ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
           title: `worker-${params.taskId}`,
