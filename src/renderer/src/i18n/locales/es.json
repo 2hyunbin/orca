@@ -4744,9 +4744,7 @@
           "updateMany": "Actualizar skills",
           "description": "Actualiza {{value0}} para que los Agents sigan las instrucciones actuales de esta versión de Orca."
         },
-        "SkillFreshnessRow": {
-          "statusUpdateAvailable": "Actualización disponible"
-        },
+        "SkillFreshnessRow": {},
         "SkillFreshnessUpdateDialog": {
           "title": "Actualizar skills",
           "checking": "Comprobando las skills de Orca instaladas…",
@@ -4763,9 +4761,15 @@
           "updateActionOne": "Update 1 skill",
           "updateActionMany": "Update {{value0}} skills",
           "done": "Done",
-          "finished": "Skills actualizadas",
           "finishedWithProblems": "Algunas skills requieren atención",
-          "repair": "Una actualización anterior se interrumpió. Actualiza para repararla."
+          "repair": "Una actualización anterior se interrumpió. Actualiza para repararla.",
+          "hideLocations": "Ocultar ubicaciones",
+          "showLocations": "Mostrar todas las ubicaciones",
+          "upToDateMany": "{{value0}} skills están actualizadas.",
+          "upToDateOne": "{{value0}} está actualizada.",
+          "updatedLeftAlone": "{{value0}} · {{value1}} sin cambios",
+          "updatedMany": "Se actualizaron {{value0}} skills",
+          "updatedOne": "Se actualizó 1 skill"
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "Actualización disponible",
@@ -4778,11 +4782,7 @@
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {
-          "oneLocation": "1 ubicación",
-          "manyLocations": "{{value0}} ubicaciones",
-          "leftAlone": "Sin cambios",
-          "replace": "Reemplazar",
-          "replaceHint": "Reemplazar mueve esa copia a una copia de seguridad y pone la de Orca en su lugar."
+          "replaceWithOrca": "Reemplazar por la copia de Orca (guarda una copia de seguridad)"
         },
         "host": {
           "local": "Esta máquina",
@@ -5161,9 +5161,7 @@
         },
         "skillPlanOpCopy": {
           "busy": "Otra instalación de skill aún está terminando aquí",
-          "changed": "Cambió después de que lo revisaras",
           "edited": "Modificaste esta copia",
-          "failed": "Error: {{value0}}",
           "install": "Instalar",
           "installFor": "Instalar para {{value0}}",
           "installed": "Instalada",
@@ -5174,17 +5172,15 @@
           "linked": "Enlazada",
           "needsAttention": "Requiere atención",
           "other": "Otra skill ya usa este nombre",
-          "outcomeWithLeftAlone": "{{value0}} · {{value1}} sin cambios: {{value2}}",
           "replace": "Se reemplazará",
-          "replaced": "Reemplazada",
-          "restore": "Necesita reparación",
-          "restored": "Restaurada",
           "sharedNotCurrent": "La copia compartida que usa esta carpeta no es la de Orca",
-          "skipped": "Omitida",
           "unwritable": "Orca no puede escribir en esta carpeta",
           "update": "Se actualizará",
           "updated": "Actualizada",
-          "write": "Se instalará"
+          "write": "Se instalará",
+          "keepLink": "Enlace, sin cambios",
+          "repair": "Se reparará",
+          "sharedFolder": "Carpeta compartida"
         }
       },
       "sidebar": {

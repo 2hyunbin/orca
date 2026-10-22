@@ -12678,13 +12678,17 @@
           "checkNow": "Verificar novamente",
           "done": "Concluído",
           "close": "Fechar",
-          "finished": "Skills atualizadas",
           "finishedWithProblems": "Algumas skills precisam de atenção",
-          "repair": "Uma atualização anterior foi interrompida. Atualize para repará-la."
+          "repair": "Uma atualização anterior foi interrompida. Atualize para repará-la.",
+          "hideLocations": "Ocultar locais",
+          "showLocations": "Mostrar todos os locais",
+          "upToDateMany": "{{value0}} skills estão atualizadas.",
+          "upToDateOne": "{{value0}} está atualizada.",
+          "updatedLeftAlone": "{{value0}} · {{value1}} mantida(s) como está",
+          "updatedMany": "{{value0}} skills atualizadas",
+          "updatedOne": "1 skill atualizada"
         },
-        "SkillFreshnessRow": {
-          "statusUpdateAvailable": "Atualização disponível"
-        },
+        "SkillFreshnessRow": {},
         "SkillShareReviewContent": {
           "e3caf6baeb": "Revogar este link bloqueia o acesso futuro. Isso não remove cópias já instaladas nas máquinas dos destinatários.",
           "6d6233a3a4": "Copiar link",
@@ -13069,11 +13073,7 @@
           "unlisted": "Não listado — apenas pessoas com o link podem abri-lo."
         },
         "SkillUpdateRow": {
-          "oneLocation": "1 local",
-          "manyLocations": "{{value0}} locais",
-          "leftAlone": "Mantida como está",
-          "replace": "Substituir",
-          "replaceHint": "Substituir move essa cópia para um backup e coloca a cópia do Orca no lugar."
+          "replaceWithOrca": "Substituir pela cópia do Orca (mantém um backup)"
         },
         "SkillCard": {
           "d25a1b8ae6": "Compartilhar skill",
@@ -13118,9 +13118,7 @@
         },
         "skillPlanOpCopy": {
           "busy": "Outra instalação de skill ainda está terminando aqui",
-          "changed": "Mudou depois que você revisou",
           "edited": "Você alterou esta cópia",
-          "failed": "Falhou: {{value0}}",
           "install": "Instalar",
           "installFor": "Instalar para {{value0}}",
           "installed": "Instalada",
@@ -13131,17 +13129,15 @@
           "linked": "Vinculada",
           "needsAttention": "Precisa de atenção",
           "other": "Outra skill já usa este nome",
-          "outcomeWithLeftAlone": "{{value0}} · {{value1}} mantida(s) como está: {{value2}}",
           "replace": "Será substituída",
-          "replaced": "Substituída",
-          "restore": "Precisa de reparo",
-          "restored": "Restaurada",
           "sharedNotCurrent": "A cópia compartilhada usada por esta pasta não é a do Orca",
-          "skipped": "Ignorada",
           "unwritable": "O Orca não consegue gravar nesta pasta",
           "update": "Será atualizada",
           "updated": "Atualizada",
-          "write": "Será instalada"
+          "write": "Será instalada",
+          "keepLink": "Link, sem alterações",
+          "repair": "Será reparada",
+          "sharedFolder": "Pasta compartilhada"
         }
       },
       "automations": {

@@ -1,120 +1,90 @@
+import { isBundledSkillLeaveReason } from '../../../../shared/bundled-skill-plan'
 import type {
-  BundledSkillLeaveReason,
-  BundledSkillOp,
-  BundledSkillOpOutcome
-} from '../../../../shared/bundled-skill-plan'
-import {
-  isBundledSkillLeaveReason,
-  isBundledSkillOpKind
-} from '../../../../shared/bundled-skill-plan'
+  BundledSkillLocation,
+  BundledSkillLocationState
+} from '../../../../shared/bundled-skill-locations'
 import type {
-  BundledSkillOutcomeSummary,
-  BundledSkillOutcomeText
+  BundledSkillOutcomeText,
+  BundledSkillPlanState
 } from '../../../../shared/bundled-skill-summary'
 import { SKILL_INSTALL_PROVIDERS } from '../../../../shared/skill-install-providers'
 import { translate } from '@/i18n/i18n'
 
-export function leaveReasonText(reason: string | undefined): string {
+export function leaveReasonText(reason: string | null | undefined): string {
   if (!reason || !isBundledSkillLeaveReason(reason)) {
     return translate('auto.components.skills.skillPlanOpCopy.leftAsIs', 'Left as it is')
   }
-  const texts: Record<BundledSkillLeaveReason, () => string> = {
-    edited: () =>
-      translate('auto.components.skills.skillPlanOpCopy.edited', "You've changed this copy"),
-    other: () =>
-      translate(
+  switch (reason) {
+    case 'edited':
+      return translate('auto.components.skills.skillPlanOpCopy.edited', "You've changed this copy")
+    case 'other':
+      return translate(
         'auto.components.skills.skillPlanOpCopy.other',
         'A different skill already uses this name'
-      ),
-    unwritable: () =>
-      translate(
+      )
+    case 'unwritable':
+      return translate(
         'auto.components.skills.skillPlanOpCopy.unwritable',
         "Orca can't write to this folder"
-      ),
-    busy: () =>
-      translate(
+      )
+    case 'busy':
+      return translate(
         'auto.components.skills.skillPlanOpCopy.busy',
         'Another skill install is still finishing here'
-      ),
-    'shared-not-current': () =>
-      translate(
+      )
+    case 'shared-not-current':
+      return translate(
         'auto.components.skills.skillPlanOpCopy.sharedNotCurrent',
         'The shared copy this folder uses is not Orca’s'
       )
   }
-  return texts[reason]()
 }
 
-function leftAlone(reason: string | undefined): string {
-  return translate('auto.components.skills.skillPlanOpCopy.leftAlone', 'Left alone: {{value0}}', {
-    value0: leaveReasonText(reason)
-  })
-}
-
-/** What Update will do at one location, before it runs. */
-export function planOpLabel(op: Pick<BundledSkillOp, 'kind' | 'reason'>): string {
-  if (!isBundledSkillOpKind(op.kind)) {
-    return translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
+/** "Shared folder", or the agents that read this folder. */
+export function locationPlaceLabel(location: BundledSkillLocation): string {
+  if (location.place.kind === 'shared') {
+    return translate('auto.components.skills.skillPlanOpCopy.sharedFolder', 'Shared folder')
   }
-  switch (op.kind) {
-    case 'keep':
-      return translate('auto.components.skills.skillPlanOpCopy.keep', 'No change')
-    case 'write':
-    case 'copy':
-      return translate('auto.components.skills.skillPlanOpCopy.write', 'Will install')
+  return location.place.names.join(', ') || location.displayPath
+}
+
+/** What Update does at one location, for the "Show all locations" table. */
+export function locationStateText(location: BundledSkillLocation): string {
+  const texts: Record<BundledSkillLocationState, () => string> = {
+    update: () => translate('auto.components.skills.skillPlanOpCopy.update', 'Will update'),
+    repair: () => translate('auto.components.skills.skillPlanOpCopy.repair', 'Will repair'),
+    install: () => translate('auto.components.skills.skillPlanOpCopy.write', 'Will install'),
+    link: () => translate('auto.components.skills.skillPlanOpCopy.link', 'Will link'),
+    replace: () => translate('auto.components.skills.skillPlanOpCopy.replace', 'Will replace'),
+    keep: () => translate('auto.components.skills.skillPlanOpCopy.keep', 'No change'),
+    'keep-link': () =>
+      translate('auto.components.skills.skillPlanOpCopy.keepLink', 'Link, no change'),
+    leave: () =>
+      translate('auto.components.skills.skillPlanOpCopy.leftAlone', 'Left alone: {{value0}}', {
+        value0: leaveReasonText(location.reason)
+      }),
+    unknown: () =>
+      translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
+  }
+  return texts[location.state]()
+}
+
+/** The skill row's line before Update runs; null when only its locations need saying. */
+export function skillPlanHeadline(state: BundledSkillPlanState): string | null {
+  switch (state) {
     case 'update':
       return translate('auto.components.skills.skillPlanOpCopy.update', 'Will update')
-    case 'link':
-      return translate('auto.components.skills.skillPlanOpCopy.link', 'Will link')
-    case 'replace':
-      return translate('auto.components.skills.skillPlanOpCopy.replace', 'Will replace')
-    case 'restore':
-      return translate('auto.components.skills.skillPlanOpCopy.restore', 'Needs repair')
-    case 'leave':
-      return leftAlone(op.reason)
+    case 'repair':
+      return translate('auto.components.skills.skillPlanOpCopy.repair', 'Will repair')
+    case 'install':
+      return translate('auto.components.skills.skillPlanOpCopy.write', 'Will install')
+    case 'attention':
+    case 'current':
+      return null
   }
 }
 
-/** What Update did at one location. */
-export function opOutcomeLabel(outcome: BundledSkillOpOutcome): string {
-  switch (outcome.status) {
-    case 'changed':
-      return translate(
-        'auto.components.skills.skillPlanOpCopy.changed',
-        'Changed since you reviewed it'
-      )
-    case 'skipped':
-      return translate('auto.components.skills.skillPlanOpCopy.skipped', 'Skipped')
-    case 'failed':
-      return translate('auto.components.skills.skillPlanOpCopy.failed', 'Failed: {{value0}}', {
-        value0: outcome.error ?? 'unknown'
-      })
-    case 'done':
-      break
-  }
-  if (!isBundledSkillOpKind(outcome.kind)) {
-    return translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
-  }
-  switch (outcome.kind) {
-    case 'keep':
-      return translate('auto.components.skills.skillPlanOpCopy.keep', 'No change')
-    case 'write':
-    case 'copy':
-      return translate('auto.components.skills.skillPlanOpCopy.installed', 'Installed')
-    case 'update':
-      return translate('auto.components.skills.skillPlanOpCopy.updated', 'Updated')
-    case 'link':
-      return translate('auto.components.skills.skillPlanOpCopy.linked', 'Linked')
-    case 'replace':
-      return translate('auto.components.skills.skillPlanOpCopy.replaced', 'Replaced')
-    case 'restore':
-      return translate('auto.components.skills.skillPlanOpCopy.restored', 'Restored')
-    case 'leave':
-      return leftAlone(outcome.reason)
-  }
-}
-
-function outcomeText(text: BundledSkillOutcomeText): string {
+export function skillOutcomeText(text: BundledSkillOutcomeText): string {
   switch (text) {
     case 'Updated':
       return translate('auto.components.skills.skillPlanOpCopy.updated', 'Updated')
@@ -127,20 +97,6 @@ function outcomeText(text: BundledSkillOutcomeText): string {
     case 'Needs attention':
       return translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
   }
-}
-
-/** e.g. "Updated · 1 left alone: You've changed this copy". */
-export function skillOutcomeLine(summary: BundledSkillOutcomeSummary): string {
-  const text = outcomeText(summary.text)
-  if (summary.leftAlone.length === 0) {
-    return text
-  }
-  const reasons = [...new Set(summary.leftAlone.map((left) => leaveReasonText(left.code ?? '')))]
-  return translate(
-    'auto.components.skills.skillPlanOpCopy.outcomeWithLeftAlone',
-    '{{value0}} · {{value1}} left alone: {{value2}}',
-    { value0: text, value1: summary.leftAlone.length, value2: reasons.join('; ') }
-  )
 }
 
 export function agentNames(agents: readonly string[]): string {

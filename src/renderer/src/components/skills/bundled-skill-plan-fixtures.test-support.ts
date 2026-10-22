@@ -32,7 +32,7 @@ export function planOf(
   entries: readonly BundledSkillPlanEntry[],
   planDigest = 'b'.repeat(64)
 ): BundledSkillPlan {
-  return { scope: 'global', skills: entries, planDigest }
+  return { scope: 'global', homeDirectory: '/home/u', skills: entries, planDigest }
 }
 
 export function sharedEntry(

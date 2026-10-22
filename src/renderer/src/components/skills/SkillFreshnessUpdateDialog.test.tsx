@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act, useState, type ReactNode } from 'react'
+import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
@@ -52,7 +52,7 @@ vi.mock('@/hooks/useInstalledAgentSkills', () => ({
   notifyInstalledAgentSkillsChanged: mocks.notifyChanged
 }))
 
-// Radix Dialog/Collapsible internals are exercised in Electron QA; here the content matters.
+// Radix Dialog internals are exercised in Electron QA; here the content matters.
 vi.mock('@/components/ui/dialog', () => ({
   Dialog: ({ open, children }: { open: boolean; children?: ReactNode }) =>
     open ? <div data-dialog-open="true">{children}</div> : null,
@@ -60,23 +60,6 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogFooter: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   DialogHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   DialogTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>
-}))
-
-vi.mock('@/components/ui/collapsible', () => ({
-  Collapsible: ({
-    children,
-    defaultOpen = false,
-    ...rest
-  }: { children?: ReactNode; defaultOpen?: boolean } & Record<string, unknown>) => {
-    const [open] = useState(defaultOpen)
-    return (
-      <div {...rest} data-collapsible-open={String(open)}>
-        {children}
-      </div>
-    )
-  },
-  CollapsibleTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  CollapsibleContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>
 }))
 
 type Deferred<T> = { promise: Promise<T>; resolve: (value: T) => void }
@@ -197,31 +180,32 @@ afterEach(() => {
 })
 
 describe('SkillFreshnessUpdateDialog', () => {
-  it('lists each skill with what Update does at every location', () => {
+  it('lists only skills with something to do, and every location on request', () => {
     mocks.plan = planOf([
       planEntry('orca-cli', [
         planOp('update', '/home/u/.agents/skills/orca-cli'),
-        planOp('keep', '/home/u/.cursor/skills/orca-cli')
+        planOp('keep', '/home/u/.claude/skills/orca-cli', {
+          observed: { kind: 'link', target: '../../.agents/skills/orca-cli' }
+        })
       ]),
-      planEntry('orchestration', [
-        planOp('keep', '/home/u/.agents/skills/orchestration'),
-        planOp('link', '/home/u/.claude/skills/orchestration')
-      ])
+      sharedEntry('orchestration', 'keep'),
+      sharedEntry('orca-linear', 'keep')
     ])
     render()
 
-    const text = container.textContent ?? ''
-    expect(text).toContain('1 update available')
-    expect(container.querySelector('[data-skill-row="orca-cli"]')?.textContent).toContain(
-      'Will update'
+    expect(container.textContent).toContain('1 update available')
+    expect(container.querySelector('[data-skill-row="orca-cli"]')?.textContent).toBe(
+      'orca-cliWill update'
     )
-    expect(container.querySelector('[data-skill-row="orca-cli"]')?.textContent).toContain(
-      'No change'
-    )
-    expect(container.querySelector('[data-skill-row="orchestration"]')?.textContent).toContain(
-      'Will link'
-    )
+    expect(container.querySelector('[data-skill-row="orchestration"]')).toBeNull()
+    expect(container.textContent).toContain('2 skills are up to date.')
     expect(button('Update 1 skill').disabled).toBe(false)
+
+    click(button('Show all locations'))
+    const row = container.querySelector('[data-skill-row="orca-cli"]')?.textContent ?? ''
+    expect(row).toContain('Shared folder~/.agents/skills/orca-cliWill update')
+    expect(row).toContain('Claude Code~/.claude/skills/orca-cliLink, no change')
+    expect(container.querySelector('[data-skill-row="orchestration"]')).not.toBeNull()
   })
 
   it('labels a link-only plan as installing for the agent, not an update', () => {
@@ -237,13 +221,13 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(button('Install for Claude Code').disabled).toBe(false)
   })
 
-  it('shows the reason a copy is left alone outside the disclosure', () => {
+  it('names a copy left alone by its agent, with its Replace choice', () => {
     mocks.plan = editedPlan()
     render()
 
     const row = container.querySelector('[data-skill-row="orca-cli"]')
-    expect(row?.getAttribute('data-collapsible-open')).toBe('true')
-    expect(row?.textContent).toContain("Left alone: You've changed this copy")
+    expect(row?.textContent).toContain("Claude Code: You've changed this copy")
+    expect(row?.textContent).toContain("Replace with Orca's copy (keeps a backup)")
   })
 
   it('re-plans with force when Replace is toggled and executes that plan', async () => {
@@ -285,10 +269,10 @@ describe('SkillFreshnessUpdateDialog', () => {
       planDigest: plan.planDigest,
       force: []
     })
-    expect(container.textContent).toContain('Skills updated')
-    expect(container.querySelector('[data-skill-row="orca-cli"]')?.textContent).toContain(
-      "Updated · 1 left alone: You've changed this copy"
-    )
+    expect(container.textContent).toContain('Updated 1 skill · 1 left alone')
+    const row = container.querySelector('[data-skill-row="orca-cli"]')?.textContent ?? ''
+    expect(row).toContain('Updated')
+    expect(row).toContain("Claude Code: You've changed this copy")
     expect(mocks.notifyChanged).toHaveBeenCalled()
     expect(button('Done')).toBeTruthy()
   })

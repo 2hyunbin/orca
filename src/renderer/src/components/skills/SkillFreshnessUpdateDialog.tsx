@@ -1,7 +1,19 @@
 import { useRef, useState, useSyncExternalStore } from 'react'
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react'
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  RefreshCw
+} from 'lucide-react'
 import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
-import { summarizeBundledSkillPlan } from '../../../../shared/bundled-skill-summary'
+import {
+  summarizeBundledSkillPlan,
+  type BundledSkillOutcomeSummary,
+  type BundledSkillPlanState,
+  type BundledSkillPlanSkillSummary
+} from '../../../../shared/bundled-skill-summary'
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
@@ -31,6 +43,46 @@ import {
 } from './skill-freshness-update-dialog'
 import { useReviewedSkillPlan } from './use-reviewed-skill-plan'
 
+// Why: what Update changes reads first, then what it leaves for the user.
+const ROW_ORDER: readonly BundledSkillPlanState[] = [
+  'repair',
+  'update',
+  'install',
+  'attention',
+  'current'
+]
+
+/** A finished run lists what it changed and what it left; untouched skills stay off. */
+function resultShowsRow(outcome: BundledSkillOutcomeSummary | undefined): boolean {
+  return Boolean(outcome && (outcome.text !== 'No change' || outcome.leftAlone.length > 0))
+}
+
+function UpToDateLine({
+  skills
+}: {
+  skills: readonly BundledSkillPlanSkillSummary[]
+}): React.JSX.Element | null {
+  const upToDate = skills.filter((skill) => skill.upToDate)
+  if (upToDate.length === 0) {
+    return null
+  }
+  return (
+    <p className="text-xs text-muted-foreground">
+      {upToDate.length === 1
+        ? translate(
+            'auto.components.skills.SkillFreshnessUpdateDialog.upToDateOne',
+            '{{value0}} is up to date.',
+            { value0: upToDate[0].name }
+          )
+        : translate(
+            'auto.components.skills.SkillFreshnessUpdateDialog.upToDateMany',
+            '{{value0}} skills are up to date.',
+            { value0: upToDate.length }
+          )}
+    </p>
+  )
+}
+
 function RunHeadline({ run }: { run: SkillUpdateRun }): React.JSX.Element | null {
   if (run.state === 'running') {
     return (
@@ -44,10 +96,28 @@ function RunHeadline({ run }: { run: SkillUpdateRun }): React.JSX.Element | null
     )
   }
   if (run.state === 'done' && run.summary.ok) {
+    const { changedCount, leftAloneCount } = run.summary
+    const updated =
+      changedCount === 1
+        ? translate(
+            'auto.components.skills.SkillFreshnessUpdateDialog.updatedOne',
+            'Updated 1 skill'
+          )
+        : translate(
+            'auto.components.skills.SkillFreshnessUpdateDialog.updatedMany',
+            'Updated {{value0}} skills',
+            { value0: changedCount }
+          )
     return (
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <CheckCircle2 className="size-4 text-emerald-600 dark:text-emerald-400" />
-        {translate('auto.components.skills.SkillFreshnessUpdateDialog.finished', 'Skills updated')}
+        <CheckCircle2 className="size-4 text-status-success" />
+        {leftAloneCount > 0
+          ? translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.updatedLeftAlone',
+              '{{value0}} · {{value1}} left alone',
+              { value0: updated, value1: leftAloneCount }
+            )
+          : updated}
       </div>
     )
   }
@@ -101,12 +171,21 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     lastPlanRef.current = reviewed.plan
   }
   const shownPlan = reviewed.plan ?? lastPlanRef.current
+  const shownSummary = shownPlan ? summarizeBundledSkillPlan(shownPlan) : null
+  const [showLocations, setShowLocations] = useState(false)
   const isRunning = run.state === 'running'
   const showResult = run.state === 'done' || run.state === 'error'
   const outcomes = new Map(
-    run.state === 'done' ? run.result.skills.map((outcome) => [outcome.name, outcome]) : []
+    run.state === 'done' ? run.summary.skills.map((outcome) => [outcome.name, outcome]) : []
   )
   const phase: SkillRowPhase = isRunning ? 'pending' : showResult ? 'result' : 'plan'
+  // Why: a result re-plans every skill as current, so it orders by what the run did instead.
+  const rowRank = (skill: BundledSkillPlanSkillSummary): number =>
+    phase === 'result'
+      ? outcomes.get(skill.name)?.text === 'No change'
+        ? 1
+        : 0
+      : ROW_ORDER.indexOf(skill.state)
   const livePlan = reviewed.plan
   const canUpdate =
     !isRunning &&
@@ -122,6 +201,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     // Why: closing never cancels; the status-bar segment carries a running update.
     consumeSkillFreshnessUpdateDialogRequest()
     setForce([])
+    setShowLocations(false)
     if (run.state === 'idle') {
       lastPlanRef.current = null
     }
@@ -154,10 +234,15 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
 
   const replace = {
     isReplaced: (path: string) => force.includes(path),
-    onReplaceChange: (path: string, next: boolean) =>
+    onReplaceChange: (path: string, next: boolean) => {
+      // Why: a choice made on the result starts a new review of the re-planned skills.
+      if (showResult) {
+        acknowledgeSkillUpdateRun(LOCAL_SKILL_UPDATE_TARGET)
+      }
       setForce((previous) =>
         next ? [...new Set([...previous, path])].sort() : previous.filter((item) => item !== path)
       )
+    }
   }
 
   const error = reviewed.error ?? state.error
@@ -182,40 +267,80 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
           <SummaryHeadline plan={livePlan} />
         )}
 
-        {shownPlan && shownPlan.skills.length > 0 ? (
+        {shownSummary && shownSummary.skills.length > 0 ? (
           <div className="min-w-0 border-t border-border/60">
             <TooltipProvider>
-              {shownPlan.skills.map((entry) => (
-                <SkillUpdateRow
-                  key={entry.name}
-                  entry={entry}
-                  phase={phase}
-                  outcome={outcomes.get(entry.name)}
-                  replace={phase === 'plan' ? replace : undefined}
-                />
-              ))}
+              {[...shownSummary.skills]
+                .sort((left, right) => rowRank(left) - rowRank(right))
+                .filter((skill) =>
+                  phase === 'result'
+                    ? resultShowsRow(outcomes.get(skill.name))
+                    : showLocations || !skill.upToDate
+                )
+                .map((skill) => (
+                  <SkillUpdateRow
+                    key={skill.name}
+                    skill={skill}
+                    phase={phase}
+                    outcome={outcomes.get(skill.name)}
+                    replace={replace}
+                    showLocations={showLocations && phase !== 'result'}
+                  />
+                ))}
             </TooltipProvider>
+            {phase === 'plan' ? (
+              <div className="flex flex-col items-start gap-1 pt-2.5">
+                {!showLocations ? <UpToDateLine skills={shownSummary.skills} /> : null}
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="-ml-2"
+                  onClick={() => setShowLocations((previous) => !previous)}
+                >
+                  {showLocations
+                    ? translate(
+                        'auto.components.skills.SkillFreshnessUpdateDialog.hideLocations',
+                        'Hide locations'
+                      )
+                    : translate(
+                        'auto.components.skills.SkillFreshnessUpdateDialog.showLocations',
+                        'Show all locations'
+                      )}
+                  {showLocations ? <ChevronUp /> : <ChevronDown />}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
         <DialogFooter className="sm:justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={isRunning || state.loading}
-            onClick={handleRecheck}
-          >
-            <RefreshCw className={state.loading ? 'animate-spin' : undefined} />
-            {translate('auto.components.skills.SkillFreshnessUpdateDialog.checkNow', 'Re-check')}
-          </Button>
+          {showResult ? (
+            <span />
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={isRunning || state.loading}
+              onClick={handleRecheck}
+            >
+              <RefreshCw className={state.loading ? 'animate-spin' : undefined} />
+              {translate('auto.components.skills.SkillFreshnessUpdateDialog.checkNow', 'Re-check')}
+            </Button>
+          )}
           <div className="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" onClick={() => handleOpenChange(false)}>
+            <Button
+              type="button"
+              variant={showResult ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleOpenChange(false)}
+            >
               {showResult
                 ? translate('auto.components.skills.SkillFreshnessUpdateDialog.done', 'Done')
                 : translate('auto.components.skills.SkillFreshnessUpdateDialog.close', 'Close')}
             </Button>
-            {!showResult && shownPlan && summarizeBundledSkillPlan(shownPlan).hasWork ? (
+            {!showResult && shownSummary?.hasWork && shownPlan ? (
               <Button type="button" size="sm" disabled={!canUpdate} onClick={handleUpdate}>
                 {isRunning
                   ? translate(

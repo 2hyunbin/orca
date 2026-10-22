@@ -4951,9 +4951,7 @@
           "updateOne": "Update skill",
           "updateMany": "Update skills"
         },
-        "SkillFreshnessRow": {
-          "statusUpdateAvailable": "Update available"
-        },
+        "SkillFreshnessRow": {},
         "SkillFreshnessUpdateDialog": {
           "title": "Update skills",
           "checking": "Checking installed Orca skills…",
@@ -4970,17 +4968,19 @@
           "checkNow": "Re-check",
           "done": "Done",
           "close": "Close",
-          "finished": "Skills updated",
           "finishedWithProblems": "Some skills need attention",
-          "repair": "An earlier update was interrupted. Update to repair it."
+          "repair": "An earlier update was interrupted. Update to repair it.",
+          "hideLocations": "Hide locations",
+          "showLocations": "Show all locations",
+          "upToDateMany": "{{value0}} skills are up to date.",
+          "upToDateOne": "{{value0}} is up to date.",
+          "updatedLeftAlone": "{{value0}} · {{value1}} left alone",
+          "updatedMany": "Updated {{value0}} skills",
+          "updatedOne": "Updated 1 skill"
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {
-          "oneLocation": "1 location",
-          "manyLocations": "{{value0}} locations",
-          "leftAlone": "Left alone",
-          "replace": "Replace",
-          "replaceHint": "Replace moves that copy to a backup, then puts Orca’s copy in its place."
+          "replaceWithOrca": "Replace with Orca's copy (keeps a backup)"
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "Update available",
@@ -5453,9 +5453,7 @@
         },
         "skillPlanOpCopy": {
           "busy": "Another skill install is still finishing here",
-          "changed": "Changed since you reviewed it",
           "edited": "You've changed this copy",
-          "failed": "Failed: {{value0}}",
           "install": "Install",
           "installFor": "Install for {{value0}}",
           "installed": "Installed",
@@ -5466,17 +5464,15 @@
           "linked": "Linked",
           "needsAttention": "Needs attention",
           "other": "A different skill already uses this name",
-          "outcomeWithLeftAlone": "{{value0}} · {{value1}} left alone: {{value2}}",
           "replace": "Will replace",
-          "replaced": "Replaced",
-          "restore": "Needs repair",
-          "restored": "Restored",
           "sharedNotCurrent": "The shared copy this folder uses is not Orca’s",
-          "skipped": "Skipped",
           "unwritable": "Orca can't write to this folder",
           "update": "Will update",
           "updated": "Updated",
-          "write": "Will install"
+          "write": "Will install",
+          "keepLink": "Link, no change",
+          "repair": "Will repair",
+          "sharedFolder": "Shared folder"
         }
       },
       "sidebar": {

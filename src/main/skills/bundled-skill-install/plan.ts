@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { lstat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import type {
   BundledSkillCleanup,
@@ -8,12 +7,8 @@ import type {
   BundledSkillPlan,
   BundledSkillPlanEntry
 } from '../../../shared/bundled-skill-plan'
-import { skillDeleteJournalPath } from '../skill-delete/recovery'
-import { skillInstallReceiptPath } from '../skill-install-provenance'
-import { skillInstallJournalPath } from '../skill-install-recovery'
-import { skillPlacementJournalPath } from '../skill-placement-recovery-journal'
-import { skillRemovalJournalPath } from '../skill-remove-recovery'
 import type { BundledSkillSource } from './bundled-skill-sources'
+import { hasCloudReceipt, hasPendingCloudTransaction, stateKeysFor } from './cloud-state'
 import {
   bundledSkillTextDigest,
   classifyBundledSkillPath,
@@ -76,38 +71,6 @@ export function sameBundledSkillObserved(
   right: BundledSkillObserved
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
-}
-
-async function anyFileExists(paths: readonly string[]): Promise<boolean> {
-  const found = await Promise.all(
-    paths.map((path) =>
-      lstat(path).then(
-        () => true,
-        () => false
-      )
-    )
-  )
-  return found.includes(true)
-}
-
-/** Cloud installs key state on the realpath'd destination, so check both spellings. */
-function stateKeysFor(path: string, realPath: string): string[] {
-  return [...new Set([resolve(path), realPath])]
-}
-
-function hasPendingCloudTransaction(stateDirectory: string, keys: readonly string[]) {
-  return anyFileExists(
-    keys.flatMap((key) => [
-      skillInstallJournalPath(stateDirectory, key),
-      skillPlacementJournalPath(stateDirectory, key),
-      skillRemovalJournalPath(stateDirectory, key),
-      skillDeleteJournalPath(stateDirectory, key)
-    ])
-  )
-}
-
-function hasCloudReceipt(stateDirectory: string, keys: readonly string[]) {
-  return anyFileExists(keys.map((key) => skillInstallReceiptPath(stateDirectory, key)))
 }
 
 async function linkPointsAt(
@@ -282,23 +245,34 @@ async function planSkill(
     realPath: join(sharedRoot.realPath, source.name),
     current: WRITES_SHARED_CURRENT.has(sharedTarget.op.kind)
   }
-  const planned = [sharedTarget]
-  for (const root of agentRoots) {
-    planned.push(await planTarget(context, root, shared))
+  const planAgents = async (target: SharedTarget) => {
+    const agents: PlannedTarget[] = []
+    for (const root of agentRoots) {
+      agents.push(await planTarget(context, root, target))
+    }
+    return agents
   }
+  let agents = await planAgents(shared)
   if (!input.installedOnly) {
-    return { name: source.name, digest: context.digest, ops: planned.map((target) => target.op) }
+    return {
+      name: source.name,
+      digest: context.digest,
+      ops: [sharedTarget, ...agents].map((target) => target.op)
+    }
   }
-  if (!planned.some((target) => target.holdsOrcaCopy)) {
+  if (![sharedTarget, ...agents].some((target) => target.holdsOrcaCopy)) {
     return null
   }
-  // Why the shared slot can stay: an agent's existing link points at it, so writing it repairs
-  // that link rather than adding the skill somewhere new.
-  const linkedToShared = planned
-    .slice(1)
-    .some((target) => target.op.kind === 'keep' && target.op.observed.kind === 'link')
-  const ops = planned
-    .filter((target, index) => isPresent(target.op) || (index === 0 && linkedToShared))
+  // Why: an empty shared slot is written only to repair an agent's existing link to it; any
+  // other plan (a Replace among them) must not add the skill there, so it plans without it.
+  const keepShared =
+    isPresent(sharedTarget.op) ||
+    agents.some((target) => target.op.kind === 'keep' && target.op.observed.kind === 'link')
+  if (!keepShared && shared.current) {
+    agents = await planAgents({ ...shared, current: false })
+  }
+  const ops = [...(keepShared ? [sharedTarget] : []), ...agents]
+    .filter((target, index) => isPresent(target.op) || (keepShared && index === 0))
     .map((target) => target.op)
   return { name: source.name, digest: context.digest, ops }
 }
@@ -333,7 +307,12 @@ export async function buildBundledSkillPlan(
     }
   }
   return {
-    plan: { scope: input.destination.scope, skills, planDigest: bundledSkillDigestOf(skills) },
+    plan: {
+      scope: input.destination.scope,
+      homeDirectory: input.destination.homeDirectory,
+      skills,
+      planDigest: bundledSkillDigestOf(skills)
+    },
     roots
   }
 }

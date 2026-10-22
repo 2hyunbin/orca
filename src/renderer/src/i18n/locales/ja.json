@@ -4749,9 +4749,7 @@
           "updateMany": "スキルを更新",
           "description": "Agent がこのバージョンの Orca の最新の手順に従うように、{{value0}} を更新してください。"
         },
-        "SkillFreshnessRow": {
-          "statusUpdateAvailable": "更新があります"
-        },
+        "SkillFreshnessRow": {},
         "SkillFreshnessUpdateDialog": {
           "title": "スキルを更新",
           "checking": "インストール済みの Orca スキルを確認中…",
@@ -4768,9 +4766,15 @@
           "updateActionOne": "1 件のスキルを更新",
           "updateActionMany": "{{value0}} 件のスキルを更新",
           "done": "完了",
-          "finished": "スキルを更新しました",
           "finishedWithProblems": "一部のスキルに対応が必要です",
-          "repair": "以前の更新が中断されました。更新すると修復されます。"
+          "repair": "以前の更新が中断されました。更新すると修復されます。",
+          "hideLocations": "場所を隠す",
+          "showLocations": "すべての場所を表示",
+          "upToDateMany": "{{value0}} 個のスキルは最新です。",
+          "upToDateOne": "{{value0}} は最新です。",
+          "updatedLeftAlone": "{{value0}} · {{value1}} 件はそのまま",
+          "updatedMany": "{{value0}} 個のスキルを更新しました",
+          "updatedOne": "1 個のスキルを更新しました"
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "更新があります",
@@ -4783,11 +4787,7 @@
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {
-          "oneLocation": "1 件の場所",
-          "manyLocations": "{{value0}} 件の場所",
-          "leftAlone": "そのまま",
-          "replace": "置き換える",
-          "replaceHint": "置き換えると、そのコピーをバックアップに移動してから Orca のコピーを配置します。"
+          "replaceWithOrca": "Orca のコピーに置き換える（バックアップを保持）"
         },
         "host": {
           "local": "このマシン",
@@ -5166,9 +5166,7 @@
         },
         "skillPlanOpCopy": {
           "busy": "別のスキルのインストールがまだ完了していません",
-          "changed": "確認後に変更されました",
           "edited": "このコピーは変更されています",
-          "failed": "失敗: {{value0}}",
           "install": "インストール",
           "installFor": "{{value0}} にインストール",
           "installed": "インストール済み",
@@ -5179,17 +5177,15 @@
           "linked": "リンク済み",
           "needsAttention": "対応が必要",
           "other": "別のスキルがすでにこの名前を使っています",
-          "outcomeWithLeftAlone": "{{value0}} · {{value1}} 件はそのまま: {{value2}}",
           "replace": "置き換えます",
-          "replaced": "置き換え済み",
-          "restore": "修復が必要",
-          "restored": "復元済み",
           "sharedNotCurrent": "このフォルダーが使う共有コピーは Orca のものではありません",
-          "skipped": "スキップ",
           "unwritable": "Orca はこのフォルダーに書き込めません",
           "update": "更新します",
           "updated": "更新済み",
-          "write": "インストールします"
+          "write": "インストールします",
+          "keepLink": "リンク、変更なし",
+          "repair": "修復します",
+          "sharedFolder": "共有フォルダー"
         }
       },
       "sidebar": {

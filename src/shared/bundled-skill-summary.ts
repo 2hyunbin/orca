@@ -10,6 +10,7 @@ import {
   type BundledSkillPlanEntry
 } from './bundled-skill-plan'
 import type { SkillInstallProviderId } from './skill-install-providers'
+import { bundledSkillLocation, type BundledSkillLocation } from './bundled-skill-locations'
 
 /** Ordered by precedence: a skill shows its highest state. */
 export type BundledSkillPlanState = 'current' | 'attention' | 'install' | 'update' | 'repair'
@@ -76,14 +77,28 @@ export type BundledSkillPlanSummary = {
   badge: 'update' | 'repair' | null
   /** Whether running the plan would change anything. */
   hasWork: boolean
-  skills: { name: string; state: BundledSkillPlanState }[]
+  skills: BundledSkillPlanSkillSummary[]
+}
+
+export type BundledSkillPlanSkillSummary = {
+  name: string
+  state: BundledSkillPlanState
+  /** One per planned location, labelled by agent; the dialog's rows and location table. */
+  locations: BundledSkillLocation[]
+  /** Everything here is current and nothing is left alone, so it collapses into one line. */
+  upToDate: boolean
 }
 
 export function summarizeBundledSkillPlan(plan: BundledSkillPlan): BundledSkillPlanSummary {
-  const skills = plan.skills.map((entry) => ({
-    name: entry.name,
-    state: bundledSkillPlanState(entry)
-  }))
+  const skills = plan.skills.map((entry): BundledSkillPlanSkillSummary => {
+    const state = bundledSkillPlanState(entry)
+    return {
+      name: entry.name,
+      state,
+      locations: entry.ops.map((op) => bundledSkillLocation(op, plan.homeDirectory)),
+      upToDate: state === 'current' && entry.ops.every((op) => op.kind === 'keep')
+    }
+  })
   const states = new Set(skills.map((skill) => skill.state))
   const global = plan.scope === 'global'
   return {
@@ -211,6 +226,9 @@ export type BundledSkillResultSummary = {
   ok: boolean
   /** The CLI's exit code: 1 only when an op failed or found the disk changed. */
   exitCode: 0 | 1
+  /** Skills the run changed: "Updated N skills · M left alone". */
+  changedCount: number
+  leftAloneCount: number
   skills: BundledSkillOutcomeSummary[]
 }
 
@@ -218,5 +236,13 @@ export function summarizeBundledSkillOutcomes(
   result: BundledSkillInstallResult
 ): BundledSkillResultSummary {
   const ok = !result.skills.some(hasProblem)
-  return { ok, exitCode: ok ? 0 : 1, skills: result.skills.map(summarizeBundledSkillOutcome) }
+  const skills = result.skills.map(summarizeBundledSkillOutcome)
+  return {
+    ok,
+    exitCode: ok ? 0 : 1,
+    changedCount: skills.filter((skill) => ['Updated', 'Installed', 'Linked'].includes(skill.text))
+      .length,
+    leftAloneCount: skills.reduce((count, skill) => count + skill.leftAlone.length, 0),
+    skills
+  }
 }

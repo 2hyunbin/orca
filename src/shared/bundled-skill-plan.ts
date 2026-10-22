@@ -88,6 +88,8 @@ export type BundledSkillPlanEntry = {
 
 export type BundledSkillPlan = {
   scope: 'global' | 'workspace'
+  /** The planned host's home, so surfaces can show `~` paths; not part of the digest. */
+  homeDirectory: string
   skills: readonly BundledSkillPlanEntry[]
   /** Canonical digest of `skills`; execute applies only a plan that still hashes to it. */
   planDigest: string

@@ -1,21 +1,16 @@
 // @vitest-environment happy-dom
 
-import { act, type ReactNode } from 'react'
+import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { BundledSkillOutcome } from '../../../../shared/bundled-skill-plan'
+import type { BundledSkillOp, BundledSkillOutcome } from '../../../../shared/bundled-skill-plan'
+import {
+  summarizeBundledSkillOutcome,
+  summarizeBundledSkillPlan
+} from '../../../../shared/bundled-skill-summary'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { SkillUpdateRow } from './SkillUpdateRow'
-import { planEntry, planOp } from './bundled-skill-plan-fixtures.test-support'
-
-// Why: Radix unmounts closed content; render it so every location's label can be asserted.
-vi.mock('@/components/ui/collapsible', () => ({
-  Collapsible: ({ children, ...rest }: { children?: ReactNode } & Record<string, unknown>) => {
-    const { defaultOpen: _defaultOpen, ...attributes } = rest
-    return <div {...attributes}>{children}</div>
-  },
-  CollapsibleTrigger: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  CollapsibleContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>
-}))
+import { planEntry, planOf, planOp } from './bundled-skill-plan-fixtures.test-support'
 
 let root: Root | null = null
 let container: HTMLDivElement | null = null
@@ -25,7 +20,7 @@ async function render(element: React.JSX.Element): Promise<HTMLDivElement> {
   document.body.appendChild(container)
   root = createRoot(container)
   await act(async () => {
-    root?.render(element)
+    root?.render(<TooltipProvider>{element}</TooltipProvider>)
   })
   return container
 }
@@ -42,57 +37,41 @@ afterEach(async () => {
 const SHARED = '/home/u/.agents/skills/orca-cli'
 const CLAUDE = '/home/u/.claude/skills/orca-cli'
 
+function skillOf(ops: BundledSkillOp[]) {
+  return summarizeBundledSkillPlan(planOf([planEntry('orca-cli', ops)])).skills[0]
+}
+
+function row(view: HTMLElement): string {
+  return view.querySelector('[data-skill-row="orca-cli"]')?.textContent ?? ''
+}
+
 describe('SkillUpdateRow', () => {
-  it('badges an update and labels each location', async () => {
-    const view = await render(
-      <SkillUpdateRow
-        entry={planEntry('orca-cli', [planOp('update', SHARED), planOp('link', CLAUDE)])}
-        phase="plan"
-      />
-    )
-    expect(view.textContent).toContain('Update available')
-    expect(view.textContent).toContain('Will update')
-    expect(view.textContent).toContain('Will link')
-    expect(view.textContent).toContain('2 locations')
+  it('says what Update does, and lists locations only on request', async () => {
+    const skill = skillOf([planOp('update', SHARED), planOp('keep', CLAUDE)])
+    expect(
+      row(await render(<SkillUpdateRow skill={skill} phase="plan" showLocations={false} />))
+    ).toBe('orca-cliWill update')
+    await act(async () => root?.unmount())
+    const shown = row(await render(<SkillUpdateRow skill={skill} phase="plan" showLocations />))
+    expect(shown).toContain('Shared folder~/.agents/skills/orca-cliWill update')
+    expect(shown).toContain('Claude Code~/.claude/skills/orca-cliNo change')
   })
 
-  it('badges link-only work as installing for that agent', async () => {
-    const view = await render(
-      <SkillUpdateRow
-        entry={planEntry('orca-cli', [planOp('keep', SHARED), planOp('link', CLAUDE)])}
-        phase="plan"
-      />
-    )
-    expect(view.textContent).toContain('Install for Claude Code')
-    expect(view.textContent).not.toContain('Update available')
-  })
-
-  it('names someone else’s same-named skill without flagging the row', async () => {
-    const view = await render(
-      <SkillUpdateRow
-        entry={planEntry('orca-cli', [
-          planOp('keep', SHARED),
-          planOp('leave', CLAUDE, { reason: 'other', replaceable: true })
-        ])}
-        phase="plan"
-      />
-    )
-    expect(view.textContent).toContain('Left alone: A different skill already uses this name')
-    expect(view.querySelector('[data-skill-row]')?.getAttribute('data-state-label')).toBe('current')
-  })
-
-  it('offers Replace only for a replaceable copy and reports the choice', async () => {
+  it('names a copy left alone by agent and offers Replace only where it is allowed', async () => {
     const onReplaceChange = vi.fn()
     const view = await render(
       <SkillUpdateRow
-        entry={planEntry('orca-cli', [
-          planOp('update', SHARED),
+        skill={skillOf([
+          planOp('leave', SHARED, { reason: 'unwritable', replaceable: false }),
           planOp('leave', CLAUDE, { reason: 'edited', replaceable: true })
         ])}
         phase="plan"
+        showLocations={false}
         replace={{ isReplaced: () => false, onReplaceChange }}
       />
     )
+    expect(row(view)).toContain("Shared folder: Orca can't write to this folder")
+    expect(row(view)).toContain("Claude Code: You've changed this copy")
     const checkboxes = view.querySelectorAll('[role="checkbox"]')
     expect(checkboxes).toHaveLength(1)
     await act(async () => {
@@ -101,39 +80,26 @@ describe('SkillUpdateRow', () => {
     expect(onReplaceChange).toHaveBeenCalledWith(CLAUDE, true)
   })
 
-  it('offers no Replace for a folder Orca cannot write', async () => {
-    const view = await render(
-      <SkillUpdateRow
-        entry={planEntry('orca-cli', [
-          planOp('leave', SHARED, { reason: 'unwritable', replaceable: false })
-        ])}
-        phase="plan"
-        replace={{ isReplaced: () => false, onReplaceChange: vi.fn() }}
-      />
-    )
-    expect(view.querySelector('[role="checkbox"]')).toBeNull()
-    expect(view.textContent).toContain("Orca can't write to this folder")
-  })
-
-  it('reports each location’s outcome after the run', async () => {
+  it('shows the outcome after a run, keeping what was left alone', async () => {
     const outcome: BundledSkillOutcome = {
       name: 'orca-cli',
       status: 'ran',
       ops: [
         { path: SHARED, kind: 'update', status: 'done' },
-        { path: CLAUDE, kind: 'link', status: 'failed', error: 'EACCES' }
+        { path: CLAUDE, kind: 'leave', status: 'done', reason: 'edited' }
       ]
     }
     const view = await render(
       <SkillUpdateRow
-        entry={planEntry('orca-cli', [planOp('update', SHARED), planOp('link', CLAUDE)])}
+        skill={skillOf([
+          planOp('keep', SHARED),
+          planOp('leave', CLAUDE, { reason: 'edited', replaceable: true })
+        ])}
         phase="result"
-        outcome={outcome}
+        outcome={summarizeBundledSkillOutcome(outcome)}
+        showLocations={false}
       />
     )
-    expect(view.textContent).toContain('Needs attention')
-    expect(view.textContent).toContain('Updated')
-    expect(view.textContent).toContain('Failed: EACCES')
-    expect(view.textContent).not.toContain('Update available')
+    expect(row(view)).toBe("orca-cliUpdatedClaude Code: You've changed this copy")
   })
 })

@@ -4749,9 +4749,7 @@
           "updateMany": "更新技能",
           "description": "更新 {{value0}}，让智能体遵循此版本 Orca 的最新说明。"
         },
-        "SkillFreshnessRow": {
-          "statusUpdateAvailable": "有更新"
-        },
+        "SkillFreshnessRow": {},
         "SkillFreshnessUpdateDialog": {
           "title": "更新技能",
           "checking": "正在检查已安装的 Orca 技能…",
@@ -4768,9 +4766,15 @@
           "updateActionOne": "Update 1 skill",
           "updateActionMany": "Update {{value0}} skills",
           "done": "Done",
-          "finished": "技能已更新",
           "finishedWithProblems": "部分技能需要处理",
-          "repair": "之前的更新被中断。更新即可修复。"
+          "repair": "之前的更新被中断。更新即可修复。",
+          "hideLocations": "隐藏位置",
+          "showLocations": "显示所有位置",
+          "upToDateMany": "{{value0}} 个技能已是最新。",
+          "upToDateOne": "{{value0}} 已是最新。",
+          "updatedLeftAlone": "{{value0}} · {{value1}} 处保持不变",
+          "updatedMany": "已更新 {{value0}} 个技能",
+          "updatedOne": "已更新 1 个技能"
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "有可用更新",
@@ -4783,11 +4787,7 @@
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {
-          "oneLocation": "1 个位置",
-          "manyLocations": "{{value0}} 个位置",
-          "leftAlone": "保持不变",
-          "replace": "替换",
-          "replaceHint": "替换会先将该副本移到备份，再放入 Orca 的副本。"
+          "replaceWithOrca": "替换为 Orca 的副本（保留备份）"
         },
         "host": {
           "local": "此机器",
@@ -5166,9 +5166,7 @@
         },
         "skillPlanOpCopy": {
           "busy": "另一个技能安装仍在此处进行",
-          "changed": "在你查看后已更改",
           "edited": "你已修改此副本",
-          "failed": "失败：{{value0}}",
           "install": "安装",
           "installFor": "为 {{value0}} 安装",
           "installed": "已安装",
@@ -5179,17 +5177,15 @@
           "linked": "已链接",
           "needsAttention": "需要处理",
           "other": "另一个技能已使用此名称",
-          "outcomeWithLeftAlone": "{{value0}} · {{value1}} 处保持不变：{{value2}}",
           "replace": "将替换",
-          "replaced": "已替换",
-          "restore": "需要修复",
-          "restored": "已恢复",
           "sharedNotCurrent": "此文件夹使用的共享副本不是 Orca 的",
-          "skipped": "已跳过",
           "unwritable": "Orca 无法写入此文件夹",
           "update": "将更新",
           "updated": "已更新",
-          "write": "将安装"
+          "write": "将安装",
+          "keepLink": "链接，无变化",
+          "repair": "将修复",
+          "sharedFolder": "共享文件夹"
         }
       },
       "sidebar": {

@@ -64,6 +64,17 @@ describe('installedOnly', () => {
     expect(await snapshot(home.shared)).toBe(`dir[SKILL.md]:${NEW_TEXT}`)
   })
 
+  it('replaces an edited Claude-only copy in place, without adding a shared copy', async () => {
+    const home = await makeSkillHome()
+    await writeCopy(home.claude, EDITED_TEXT)
+    const input = { ...serviceInput(home, { force: [home.claude] }), installedOnly: true }
+    const { plan } = await previewAndInstall(input)
+    expect(opsOf(plan)).toEqual([[home.claude, 'replace', undefined]])
+    expect(plan.skills[0].ops[0].content).toBe('files')
+    expect(await snapshot(home.claude)).toBe(`dir[SKILL.md]:${NEW_TEXT}`)
+    expect(await snapshot(home.shared)).toBe('missing')
+  })
+
   it("writes the shared copy when an agent's existing link points at it", async () => {
     const home = await makeSkillHome()
     await writeCopy(home.cursor, OLD_TEXT)

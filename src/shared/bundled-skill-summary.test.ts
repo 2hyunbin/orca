@@ -27,6 +27,7 @@ function plan(
 ): BundledSkillPlan {
   return {
     scope,
+    homeDirectory: '/home/u',
     planDigest: 'digest',
     skills: ops.map((skillOps, index) => ({
       name: `s${index}`,
