@@ -34,6 +34,7 @@ export function ChatBehaviorSetting({
   const rows = [
     ...(settings.nativeChatPermissionMode !== undefined ? [getChatPermissionSearchEntry()] : []),
     entries.resumeOnRestart,
+    entries.autoContinueAfterUsageLimit,
     ...(hostQueuesMessages ? [entries.queueFollowUps] : []),
     entries.shellEnvironment
   ]
@@ -42,6 +43,7 @@ export function ChatBehaviorSetting({
   }
   const resumeOnRestartEnabled = settings.nativeChatResumeWorkOnRestart === true
   const queueFollowUpsEnabled = settings.nativeChatQueueFollowUps !== false
+  const autoContinueEnabled = settings.nativeChatAutoContinueAfterUsageLimit === true
   return (
     <section id="chat-behavior" className="space-y-3">
       <SettingsSubsectionHeader title={getChatBehaviorTitle()} />
@@ -69,6 +71,25 @@ export function ChatBehaviorSetting({
                 )}
                 onChange={() =>
                   updateSettings({ nativeChatResumeWorkOnRestart: !resumeOnRestartEnabled })
+                }
+              />
+            </SearchableSetting>
+            <SearchableSetting
+              {...entries.autoContinueAfterUsageLimit}
+              id={entries.autoContinueAfterUsageLimit.targetSectionId}
+              forceVisible={forceVisible}
+              className="max-w-none"
+            >
+              <SettingsSwitchRow
+                label={entries.autoContinueAfterUsageLimit.title}
+                description={entries.autoContinueAfterUsageLimit.description}
+                checked={autoContinueEnabled}
+                ariaLabel={translate(
+                  'components.settings.nativeChat.usageLimitContinueToggleLabel',
+                  'Toggle continuing chats when a usage limit resets'
+                )}
+                onChange={() =>
+                  updateSettings({ nativeChatAutoContinueAfterUsageLimit: !autoContinueEnabled })
                 }
               />
             </SearchableSetting>

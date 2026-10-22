@@ -18835,6 +18835,12 @@
         "switchAccount": "Cambiar de cuenta",
         "addAccount": "Añadir cuenta…",
         "accountUnavailable": "Este chat no se puede mover a otra cuenta. Transfiérelo a otro agente."
+      },
+      "usageLimitAutoContinue": {
+        "openSetting": "Continuar automáticamente cuando se restablezcan los límites",
+        "cancelled": "Orca no continuará este chat automáticamente.",
+        "scheduled": "Orca continuará este chat a las {{time}}.",
+        "cancel": "No continuar"
       }
     },
     "tab": {
@@ -19173,7 +19179,12 @@
         "queueSearchSteer": "dirigir",
         "shellEnvSearchVariables": "variables de entorno",
         "shellEnvSearchPath": "PATH",
-        "shellEnvSearchProxy": "proxy"
+        "shellEnvSearchProxy": "proxy",
+        "usageLimitContinueTitle": "Continuar los chats automáticamente cuando se restablezca un límite de uso",
+        "usageLimitContinueCopy": "Orca envía \"Continue where you left off.\" cuando se restablece el límite. Se aplica a todos los chats con una hora de restablecimiento conocida.",
+        "usageLimitContinueSearchLimit": "límite de uso",
+        "usageLimitContinueSearchReset": "restablecer",
+        "usageLimitContinueToggleLabel": "Activar o desactivar la continuación de chats al restablecerse un límite de uso"
       },
       "TerminalInteraction": {
         "copyTrimsGutter": "Recortar margen al copiar",
