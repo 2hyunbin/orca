@@ -9,6 +9,10 @@ import {
   makeWorkspaceSessionWithHeadlessTerminal
 } from '../orca-runtime-test-fixtures.spec'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
+import type { LayoutCommand } from '../../../shared/workspace-layout/workspace-layout-command-types'
+import { applyCommandToSession } from '../../persistence/terminal-topology/terminal-pane-admission'
+import { resolveHostId } from '../../persistence/loading-store/session-host-partitions'
 
 // #29968: on a host with no window a chat tab lives only in the runtime's snapshot; rebuilding that
 // snapshot from the saved terminals and editors must not drop it.
@@ -74,28 +78,36 @@ function sessionWithTerminalAndEditor(): WorkspaceSessionState {
  */
 function headlessRuntimeWithChat({ asProfileStore = false } = {}) {
   const harness = makeRuntimeStoreWithWorkspaceSession(sessionWithTerminalAndEditor())
-  const written = new Set<(hostId: string | null) => void>()
-  const notify = <T>(result: T): T => {
-    written.forEach((listener) => listener('local'))
-    return result
+  const written = new Set<(hostId: ExecutionHostId | null) => void>()
+  const setSession = (next: WorkspaceSessionState): void => {
+    harness.setSession(next)
+    written.forEach((listener) => listener(LOCAL_EXECUTION_HOST_ID))
   }
-  const { runtimeStore: store } = harness
   const runtime = new OrcaRuntimeService(
     asProfileStore
       ? {
-          ...store,
+          ...harness.runtimeStore,
           getWorkspaceSessionHostIds: () => ['local'],
-          onWorkspaceSessionWritten: (listener: (hostId: string | null) => void) => {
+          onWorkspaceSessionWritten: (listener: (hostId: ExecutionHostId | null) => void) => {
             written.add(listener)
-            return () => written.delete(listener)
+            return () => {
+              written.delete(listener)
+            }
           },
-          setWorkspaceSession: vi.fn((...args: Parameters<typeof store.setWorkspaceSession>) =>
-            notify(store.setWorkspaceSession(...args))
-          ),
-          applyLayoutCommand: async (...args: Parameters<typeof store.applyLayoutCommand>) =>
-            notify(await store.applyLayoutCommand(...args))
+          setWorkspaceSession: setSession,
+          applyLayoutCommand: async (command: LayoutCommand, hostIds?: readonly string[]) => {
+            const change = applyCommandToSession(
+              resolveHostId(hostIds?.[0] ?? 'local'),
+              harness.getSession(),
+              command
+            )
+            if (change.session) {
+              setSession(change.session)
+            }
+            return change.value
+          }
         }
-      : store
+      : harness.runtimeStore
   )
   runtime.setPtyController({
     write: () => true,
