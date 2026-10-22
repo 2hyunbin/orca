@@ -19,10 +19,7 @@ beforeEach(() => {
   useAppStore.setState(useAppStore.getInitialState(), true)
   rpc.mockReset()
 })
-function source(
-  ptyId: string | undefined = PTY_ID,
-  executionHostId: 'local' | 'runtime:paired' = 'local'
-) {
+function source(ptyId: string | undefined, executionHostId: 'local' | 'runtime:paired' = 'local') {
   return {
     workspaceId: WORKTREE_ID,
     tabId: TAB_ID,
@@ -131,7 +128,7 @@ it.each(['row', 'incarnation', 'pty', 'workspace', 'leaf', 'host'] as const)(
     useAppStore.setState({
       terminalPtyIncarnationsByPaneKey: { [`${TAB_ID}:${LEAF_ID}`]: INCARNATION_ID }
     })
-    expect(await captureSourceTerminal(source())).toBeNull()
+    expect(await captureSourceTerminal(source(PTY_ID))).toBeNull()
   }
 )
 
@@ -162,4 +159,16 @@ it('keeps remote proxy and host PTY namespaces distinct, and refuses absent or c
   terminal.handle = 'different'
   expect(await captureSourceTerminal(source(proxy, 'runtime:paired'))).toBeNull()
   expect(rpc).toHaveBeenCalledTimes(2)
+})
+
+it('requires a real row/leaf for the new missing-binding exception while retaining existing nonnull-source admission', async () => {
+  const harness = createHarness({ registerPtyBacked: true, publishMobileSurface: true })
+  const terminal = harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
+  rpc.mockResolvedValue({ terminal })
+  expect(await captureSourceTerminal(source(undefined))).toBeNull()
+  expect(await captureSourceTerminal(source(PTY_ID))).toMatchObject({ handle: terminal.handle })
+  const proxy = toRemoteRuntimePtyId(terminal.handle, 'paired')
+  expect(await captureSourceTerminal(source(proxy, 'runtime:paired'))).toMatchObject({
+    handle: terminal.handle
+  })
 })

@@ -53,10 +53,12 @@ export async function captureSourceTerminal(source: CliChatResumeSource) {
     const original = terminal.presentation?.identity
     const authority = parseHostAuthorityKey(source.executionHostId)
     if (
-      !renderer ||
-      !renderer.hasLeaf ||
+      (!owner && source.ptyId === undefined && !renderer?.hasLeaf) ||
       !original ||
       !terminal.incarnationId ||
+      original.worktreeId !== source.workspaceId ||
+      original.tabId !== source.tabId ||
+      original.leafId !== leafId ||
       (terminal.executionHostId != null && terminal.executionHostId !== authority?.at) ||
       original.ptyId !== terminal.ptyId ||
       original.incarnationId !== terminal.incarnationId
@@ -65,14 +67,12 @@ export async function captureSourceTerminal(source: CliChatResumeSource) {
     }
     const matches = owner
       ? terminal.handle === owner.terminal &&
-        renderer.ptyId === source.ptyId &&
-        renderer.worktreeId === original.worktreeId &&
-        renderer.tabId === original.tabId &&
-        renderer.leafId === original.leafId &&
-        renderer.createdAt === original.createdAt &&
-        renderer.generation === original.generation &&
-        original.hasLeaf &&
-        (renderer.incarnationId === null || renderer.incarnationId === original.incarnationId)
+        (renderer === null ||
+          ((renderer.ptyId === null || renderer.ptyId === source.ptyId) &&
+            renderer.createdAt === original.createdAt &&
+            renderer.generation === original.generation &&
+            (!renderer.hasLeaf || original.hasLeaf) &&
+            (renderer.incarnationId === null || renderer.incarnationId === original.incarnationId)))
       : (source.ptyId === undefined || terminal.ptyId === source.ptyId) &&
         isRetainedTerminalSurfaceIdentity(original, renderer)
     return matches
