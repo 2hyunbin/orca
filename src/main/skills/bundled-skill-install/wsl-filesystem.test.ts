@@ -23,7 +23,7 @@ vi.mock('../../wsl/wsl-runner', () => ({
   })
 }))
 
-const { createWslBundledSkillFilesystem } = await import('./wsl-filesystem')
+const { createWslBundledSkillFilesystem, WSL_WRITE_CHUNK_CHARS } = await import('./wsl-filesystem')
 
 const unc = (guestPath: string): string => toWindowsWslUncPath(guestPath, DISTRO)
 
@@ -89,6 +89,20 @@ describe('createWslBundledSkillFilesystem', () => {
     expect(await readFile(join(stage, 'SKILL.md'), 'utf8')).toBe(text)
     expect((await lstat(stage)).mode & 0o777).toBe(0o755)
     expect((await lstat(join(stage, 'SKILL.md'))).mode & 0o777).toBe(0o644)
+  })
+
+  it('writes a file larger than one command line in chunks, byte for byte', async () => {
+    const stage = join(home.home, '.agents', 'skills', '.big.orca-stage-1')
+    const text = `---\nname: big\n---\n${'Café ’ — line\n'.repeat(4000)}`
+
+    await filesystem.writeFolder(unc(stage), [{ path: 'SKILL.md', text }])
+
+    expect(await readFile(join(stage, 'SKILL.md'), 'utf8')).toBe(text)
+    expect((await lstat(join(stage, 'SKILL.md'))).mode & 0o777).toBe(0o644)
+    expect(runs.length).toBeGreaterThan(2)
+    for (const run of runs) {
+      expect(run.args.join('').length).toBeLessThanOrEqual(WSL_WRITE_CHUNK_CHARS + 1024)
+    }
   })
 
   it('links relative to the real parent and never tightens the agent folder', async () => {

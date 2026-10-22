@@ -81,6 +81,25 @@ const WRITE_FOLDER_SCRIPT = [
   'sync -f "$dir" 2>/dev/null || sync'
 ].join('\n')
 
+// Appends one base64 chunk; the first chunk creates the file, so no write ever spans argv limits.
+const APPEND_FILE_SCRIPT = [
+  'set -eu',
+  'file=$1',
+  'if [ "$2" = new ]; then',
+  '  mkdir -p -m 755 -- "$(dirname -- "$file")"',
+  '  [ ! -e "$file" ] || exit 44',
+  '  : > "$file"',
+  '  chmod 644 "$file"',
+  'fi',
+  `printf '%s' "$3" | base64 -d >> "$file"`
+].join('\n')
+
+/**
+ * Base64 characters per `wsl.exe` call, far under the Windows command-line limit (32K, of
+ * which the runner budgets 30K); a multiple of 4 so each chunk decodes on its own.
+ */
+export const WSL_WRITE_CHUNK_CHARS = 16_000
+
 const ENSURE_DIRECTORY_SCRIPT = ['set -eu', 'mkdir -p -- "$1"'].join('\n')
 
 // Why no chmod: the cloud installer's alias script makes the parent 0700, which would change
@@ -259,10 +278,31 @@ export function createWslBundledSkillFilesystem(input: {
     canWrite: async (directory) =>
       (await run(CAN_WRITE_SCRIPT, [toGuest(directory)])).trim() === 'yes',
     writeFolder: async (path, files) => {
-      await run(WRITE_FOLDER_SCRIPT, [
-        guarded.requireAllowed(path),
-        ...files.flatMap((file) => [file.path, Buffer.from(file.text, 'utf8').toString('base64')])
-      ])
+      const guestPath = guarded.requireAllowed(path)
+      const encoded = files.map((file) => ({
+        path: file.path,
+        base64: Buffer.from(file.text, 'utf8').toString('base64')
+      }))
+      if (encoded.reduce((total, file) => total + file.base64.length, 0) <= WSL_WRITE_CHUNK_CHARS) {
+        await run(WRITE_FOLDER_SCRIPT, [
+          guestPath,
+          ...encoded.flatMap((file) => [file.path, file.base64])
+        ])
+        return
+      }
+      // Why chunks: argv is the only payload channel, and a large file must not fail the spawn.
+      await run(WRITE_FOLDER_SCRIPT, [guestPath])
+      for (const file of encoded) {
+        for (let offset = 0; offset === 0 || offset < file.base64.length;) {
+          const chunk = file.base64.slice(offset, offset + WSL_WRITE_CHUNK_CHARS)
+          await run(APPEND_FILE_SCRIPT, [
+            posix.join(guestPath, file.path),
+            offset === 0 ? 'new' : 'append',
+            chunk
+          ])
+          offset += WSL_WRITE_CHUNK_CHARS
+        }
+      }
     },
     ensureDirectory: async (path) => {
       // Why a child: swap ensures the backups root itself, which the strict guard refuses.
