@@ -13572,9 +13572,9 @@
           },
           "SearchFilters": {
             "01e4671ccf": "e.g. *.min.js, dist/**",
-            "0a6412a895": "Files to exclude",
+            "0a6412a895": "files to exclude",
             "8a77efcbd1": "e.g. *.ts, src/**",
-            "a69ee1bd0e": "Files to include"
+            "a69ee1bd0e": "files to include"
           },
           "SearchHeader": {
             "6234a5ef85": "Use Regular Expression",
@@ -20643,7 +20643,7 @@
   "fileSearch": {
     "failed": "Search failed. Try again.",
     "filters": {
-      "label": "Search filters",
+      "toggle": "Toggle search details",
       "active": "{{count}} active"
     },
     "noResults": "No results. Try another search or adjust your filters."

@@ -1,5 +1,7 @@
 import React from 'react'
-import { ChevronRight } from 'lucide-react'
+import { Ellipsis } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { translate } from '@/i18n/i18n'
@@ -25,23 +27,42 @@ export function SearchFilters({
     Number(Boolean(includePattern.trim())) + Number(Boolean(excludePattern.trim()))
 
   return (
-    <Collapsible defaultOpen={activeCount > 0} data-ignore-file-explorer-keys="true">
-      <CollapsibleTrigger variant="compact">
-        <ChevronRight className="size-3 shrink-0 transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none" />
-        <span>{translate('fileSearch.filters.label', 'Search filters')}</span>
+    <Collapsible
+      defaultOpen={activeCount > 0}
+      className="relative min-h-6"
+      data-ignore-file-explorer-keys="true"
+    >
+      <div className="absolute right-0 top-0 z-10 flex h-6 items-center gap-1">
         {activeCount > 0 && (
-          <span className="ml-auto rounded-sm bg-accent px-1.5 text-2xs tabular-nums text-accent-foreground">
+          <span className="text-2xs tabular-nums text-muted-foreground">
             {translate('fileSearch.filters.active', '{{count}} active', { count: activeCount })}
           </span>
         )}
-      </CollapsibleTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                aria-label={translate('fileSearch.filters.toggle', 'Toggle search details')}
+              >
+                <Ellipsis />
+              </Button>
+            </CollapsibleTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={4}>
+            {translate('fileSearch.filters.toggle', 'Toggle search details')}
+          </TooltipContent>
+        </Tooltip>
+      </div>
       <CollapsibleContent animation="height">
         <div className="space-y-2 pb-2 pt-1">
           <label className="flex flex-col gap-1">
-            <span className="text-2xs text-muted-foreground">
+            <span className="pr-20 text-2xs text-muted-foreground">
               {translate(
                 'auto.components.right.sidebar.SearchFilters.a69ee1bd0e',
-                'Files to include'
+                'files to include'
               )}
             </span>
             <Input
@@ -62,7 +83,7 @@ export function SearchFilters({
             <span className="text-2xs text-muted-foreground">
               {translate(
                 'auto.components.right.sidebar.SearchFilters.0a6412a895',
-                'Files to exclude'
+                'files to exclude'
               )}
             </span>
             <Input

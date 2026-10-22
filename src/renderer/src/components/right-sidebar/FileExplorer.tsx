@@ -323,17 +323,15 @@ function FileExplorerFiles(): React.JSX.Element {
             >
               <SearchQueryRow {...searchPanel.queryRowProps} />
             </div>
+            <div
+              className={cn(
+                explorerView !== 'search' && 'pointer-events-none invisible h-0 overflow-hidden'
+              )}
+            >
+              <SearchFilters key={activeWorktreeId} {...searchPanel.filtersProps} />
+            </div>
           </div>
         </FileExplorerQueryStrip>
-        <div
-          className={cn(
-            'border-b border-border px-2 py-1',
-            explorerView !== 'search' &&
-              'pointer-events-none invisible h-0 overflow-hidden border-b-0 p-0'
-          )}
-        >
-          <SearchFilters key={activeWorktreeId} {...searchPanel.filtersProps} />
-        </div>
         {/* Why: the Files and Contents views share one body slot; layering them
            avoids remounting heavy virtualized panes while preserving full height. */}
         <div className="relative min-h-0 flex-1 overflow-hidden">
