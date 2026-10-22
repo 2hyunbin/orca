@@ -36,6 +36,10 @@ const { chmodSync, mkdirSync, writeFileSync } = require('node:fs')
 const { join } = require('node:path')
 const args = process.argv.slice(2)
 if (args[0] === 'audit') process.exit(Number(process.env.TEST_AUDIT_STATUS))
+if (args[0] === 'rebuild') {
+  writeFileSync(process.env.PNPM_TEST_EXEC_MARKER, 'rebuilt')
+  process.exit(0)
+}
 if (!args.includes('--ignore-scripts') || !args.includes('--save-exact') || !args.includes('pnpm@12.14.0')) process.exit(9)
 const root = args[args.indexOf('--prefix') + 1]
 const bin = join(root, 'node_modules', '.bin')

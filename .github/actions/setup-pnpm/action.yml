@@ -44,6 +44,7 @@ runs:
           if (!entry || entry.integrity !== actual) throw new Error('Installed pnpm does not match packageManager integrity')
         }
         NODE
+        npm rebuild --prefix "$bootstrap_dir" pnpm
         actual_version="$("$bootstrap_dir/node_modules/.bin/pnpm" --version)"
         test "$actual_version" = "$pnpm_version"
         printf '%s\n' "$bootstrap_dir/node_modules/.bin" >> "$GITHUB_PATH"
