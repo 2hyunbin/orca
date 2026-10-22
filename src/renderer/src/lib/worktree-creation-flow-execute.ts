@@ -51,11 +51,8 @@ export async function executeWorktreeCreation(
   let result: CreateWorktreeResult
   try {
     const provisionedRoot = getProvisionedRootCreateOptions(preparedRequest)
-    if (
-      structuredLaunch &&
-      !provisionedRoot &&
-      (await createWorktreeThroughHost(creationId, preparedRequest))
-    ) {
+    const throughHost = structuredLaunch && !provisionedRoot
+    if (throughHost && (await createWorktreeThroughHost(creationId, preparedRequest))) {
       return
     }
     const backendStartup =
