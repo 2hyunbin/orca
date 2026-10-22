@@ -269,7 +269,7 @@ export function TaskPageJiraIssueDialog({
                     <label className="text-[11px] font-medium text-muted-foreground">
                       {field.name}
                     </label>
-                    {isJiraScalarUserCreateField(field) ? (
+                    {isJiraScalarUserCreateField(field) && !field.allowedValues?.length ? (
                       model.jiraTaskSourceContext ? (
                         <TaskPageJiraIssueUserField
                           key={JSON.stringify([

@@ -19455,7 +19455,8 @@
     "jiraUserPicker": {
       "select": "选择{{value0}}",
       "search": "搜索用户",
-      "empty": "没有找到用户"
+      "empty": "没有找到用户",
+      "useKnownId": "使用已知用户 ID“{{value0}}”"
     },
     "status": {
       "bar": {

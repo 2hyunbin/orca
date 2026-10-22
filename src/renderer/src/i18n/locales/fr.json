@@ -19567,7 +19567,8 @@
     "jiraUserPicker": {
       "select": "Sélectionnez {{value0}}",
       "search": "Rechercher des utilisateurs",
-      "empty": "Aucun utilisateur trouvé"
+      "empty": "Aucun utilisateur trouvé",
+      "useKnownId": "Utiliser l’identifiant utilisateur connu « {{value0}} »"
     },
     "terminalPane": {
       "TerminalContextMenu": {

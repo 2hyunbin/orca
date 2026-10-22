@@ -56,7 +56,8 @@ export function JiraUserPicker({
   disabled,
   label,
   fixedOptions,
-  searchUsers
+  searchUsers,
+  allowKnownUserId
 }: {
   providerSettings: RuntimeJiraSettings
   siteId?: string | null
@@ -69,11 +70,13 @@ export function JiraUserPicker({
   fixedOptions?: JiraUserPickerFixedOption[]
   /** Replaces the site-wide user search, e.g. with a project-scoped assignable search. Must be referentially stable. */
   searchUsers?: (query: string) => Promise<JiraUser[]>
+  allowKnownUserId?: boolean
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [users, setUsers] = useState<JiraUser[]>([])
   const [loading, setLoading] = useState(false)
+  const knownUserId = query.trim()
 
   useEffect(() => {
     if (!open) {
@@ -153,6 +156,20 @@ export function JiraUserPicker({
             {option.label}
           </button>
         ))}
+        {allowKnownUserId && knownUserId ? (
+          <button
+            type="button"
+            onClick={() => {
+              onSelect({ accountId: knownUserId, displayName: knownUserId })
+              setOpen(false)
+            }}
+            className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent"
+          >
+            {translate('components.jiraUserPicker.useKnownId', 'Use known user ID "{{value0}}"', {
+              value0: knownUserId
+            })}
+          </button>
+        ) : null}
         {users.length === 0 && !loading ? (
           <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
             {translate('components.jiraUserPicker.empty', 'No users found')}

@@ -18726,7 +18726,8 @@
     "jiraUserPicker": {
       "select": "Select {{value0}}",
       "search": "Search users",
-      "empty": "No users found"
+      "empty": "No users found",
+      "useKnownId": "Use known user ID \"{{value0}}\""
     },
     "native-chat": {
       "install": {

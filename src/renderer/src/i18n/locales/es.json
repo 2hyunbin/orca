@@ -19484,7 +19484,8 @@
     "jiraUserPicker": {
       "select": "Seleccione {{value0}}",
       "search": "Buscar usuarios",
-      "empty": "No se encontraron usuarios"
+      "empty": "No se encontraron usuarios",
+      "useKnownId": "Usar el ID de usuario conocido \"{{value0}}\""
     },
     "status": {
       "bar": {

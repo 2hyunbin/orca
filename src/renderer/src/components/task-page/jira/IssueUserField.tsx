@@ -31,6 +31,7 @@ export function TaskPageJiraIssueUserField({
       }}
       disabled={disabled}
       label={label}
+      allowKnownUserId
     />
   )
 }
