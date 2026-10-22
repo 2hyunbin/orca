@@ -77,6 +77,8 @@ export function attachResumeCheck(
 /**
  * After the view attached `ptyId`: shows the banner of main's start of that terminal, once. Read
  * at the attach: main's outcome rides the frame that binds the terminal, which the attach follows.
+ * Why that holds: main flushes the frame before the spawn reply, both cross the same webContents
+ * IPC, and the frame applies in a microtask before the attach's reply settles.
  */
 export function showMainPaneResumeOutcome(session: ConnectPanePtySession, ptyId: string): void {
   if (!mainStartsPane(session)) {

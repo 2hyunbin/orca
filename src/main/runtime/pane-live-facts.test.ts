@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { spawnInAdmittedPane } from './runtime-pane-admission'
+import { PaneOwnerContentionError } from '../ipc/pty/pane/pane-spawn-operation'
 import type { RuntimeStore } from './runtime-store-contract'
 import { bindingOf } from './pane-live-facts'
 import {
@@ -113,10 +114,12 @@ describe("main's start records a resume outcome only when it wakes the pane's re
     register: PaneResumeOutcomes,
     resumesSleepingRecord: boolean,
     boundGeneration?: number,
-    bind?: () => void
+    bind?: () => void,
+    { bumps = true }: { bumps?: boolean } = {}
   ) {
     const sink = new PaneStartStatuses(() => {})
-    const store = { getPtyBindingGeneration: () => boundGeneration }
+    let generation = boundGeneration
+    const store = { getPtyBindingGeneration: () => generation }
     await spawnInAdmittedPane(
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a reconnect's start reads only the pane's bind generation.
       store as unknown as RuntimeStore,
@@ -128,6 +131,9 @@ describe("main's start records a resume outcome only when it wakes the pane's re
             args.onResumeOutcome?.('pty-1', 'restored')
             // The pane's bind is written after the report, as the spawn commit does.
             bind?.()
+            if (bumps) {
+              generation = (boundGeneration ?? 0) + 1
+            }
             return { id: 'pty-1' }
           }
         )
@@ -173,6 +179,24 @@ describe("main's start records a resume outcome only when it wakes the pane's re
       })
     ).rejects.toThrow('terminal_split_source_not_found')
     expect(register.peek(PANE_KEY)).toBeNull()
+  })
+
+  it('keeps the outcome on the binding the pane shows when its bind wrote nothing new', async () => {
+    // An SSH relay's same-id reattach matches the stored binding, so no generation is bumped.
+    const { register } = outcomes()
+    await start(register, true, 3, undefined, { bumps: false })
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 3 }))).toBe('restored')
+  })
+
+  it("leaves the winner's outcome when another owner won the pane", async () => {
+    const { register } = outcomes()
+    await expect(
+      start(register, true, 2, () => {
+        register.set(PANE_KEY, 'restored', { ptyId: 'pty-winner' })
+        throw new PaneOwnerContentionError()
+      })
+    ).rejects.toBeInstanceOf(PaneOwnerContentionError)
+    expect(register.peek(PANE_KEY)).toBe('restored')
   })
 
   it("ends the pane's earlier outcome when a later start begins", async () => {
