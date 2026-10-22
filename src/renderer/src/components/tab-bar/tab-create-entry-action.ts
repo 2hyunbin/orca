@@ -7,16 +7,12 @@ import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-typ
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import {
-  buildSearchUrl,
   DEFAULT_SEARCH_ENGINE,
   type SearchEngine,
   type SearchUrlOptions
 } from '../../../../shared/browser-url'
 import type { RuntimeFileListState } from '../quick-open-file-list'
-import {
-  openWorkspaceBrowserTab,
-  type OpenWorkspaceBrowserTabRequest
-} from '@/lib/workspace-browser-tab-open'
+import { openWorkspaceBrowserTab } from '@/lib/workspace-browser-tab-open'
 import {
   classifyTabEntryQuery,
   TAB_ENTRY_ABSOLUTE_PATH_REMOTE_BLOCKED_MESSAGE,
@@ -24,6 +20,7 @@ import {
   type TabEntryOptionsContext
 } from './tab-create-entry-classifier'
 import { openAbsoluteTabEntryFile } from './tab-create-entry-absolute-file'
+import { getNetworkTabRequest, isNetworkTabEntry } from './tab-create-entry-browser-request'
 import {
   getTabEntryAllowAbsolutePaths,
   getTabEntryFileOperationContext
@@ -154,37 +151,6 @@ async function openExistingFile(args: {
     },
     { preview: false, targetGroupId: args.groupId }
   )
-}
-
-type NetworkTabEntryClassification = Extract<
-  TabEntryActionClassification,
-  { kind: 'explicit-url' | 'host-url' | 'search' }
->
-
-function isNetworkTabEntry(
-  classification: TabEntryActionClassification
-): classification is NetworkTabEntryClassification {
-  return (
-    classification.kind === 'explicit-url' ||
-    classification.kind === 'host-url' ||
-    classification.kind === 'search'
-  )
-}
-
-function getNetworkTabRequest(
-  classification: NetworkTabEntryClassification,
-  { worktreeId, groupId }: Pick<TabCreateEntryArgs, 'worktreeId' | 'groupId'>,
-  searchUrlOptions?: SearchUrlOptions
-): OpenWorkspaceBrowserTabRequest {
-  const target = { workspaceId: worktreeId, targetGroupId: groupId }
-  if (classification.kind === 'search') {
-    return {
-      ...target,
-      url: buildSearchUrl(classification.query, classification.engine, searchUrlOptions),
-      intent: { kind: 'search', engine: classification.engine }
-    }
-  }
-  return { ...target, url: classification.url, intent: { kind: 'url' } }
 }
 
 export async function openTabEntryWithOperations({
