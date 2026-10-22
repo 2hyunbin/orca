@@ -99,6 +99,26 @@ describe('AgentSessionResumeClaims', () => {
     expect(claims.claim(SESSION, 'tab:b')).toBeNull()
   })
 
+  it.each(['pending', 'bound', 'lost reply'])(
+    'keeps overlapping %s opens held during lazy report checks',
+    (state) => {
+      let reported = false
+      const { claims } = makeClaims(() => reported)
+      claims.claim(SESSION, 'tab:a')?.bind('pty-1')
+      const second = claims.claim(SESSION, 'tab:a', 'second')
+      if (state === 'bound') {
+        second?.bind('pty-2')
+      }
+      if (state === 'lost reply') {
+        second?.settleFailure(true, new Error('reply lost'))
+      }
+      reported = true
+      expect(claims.claim(SESSION, 'tab:b')).toBeNull()
+      reported = false
+      expect(claims.claim(SESSION, 'tab:b')).toBeNull()
+    }
+  )
+
   it('ends a hold once the hook store reports it in its pane', () => {
     let reported = false
     const { claims, exits } = makeClaims(() => reported)

@@ -53,8 +53,8 @@ export class AgentSessionResumeClaims {
     }
   ) {}
 
-  /** Null while another pane's resume of this conversation is unsettled. */
   /**
+   * Null while another pane's resume of this conversation is unsettled.
    * `request`: names one create, which every retry of it reconciles rather than spawning anew, so
    * a retry's bound PTY also accounts for an earlier attempt whose reply was lost.
    */
@@ -86,9 +86,7 @@ export class AgentSessionResumeClaims {
     this.stopWatchingReports ??=
       this.lifecycle.watchReports?.(() => {
         for (const held of this.holds) {
-          // Why one bound spawn only: the report names a pane, not a spawn, so it cannot cover a
-          // second overlapping open's spawn that has not reported yet.
-          if (held.unsettled === 0 && held.ptys.size === 1 && this.lifecycle.reported(held)) {
+          if (this.reportCoversHold(held)) {
             this.end(held)
           }
         }
@@ -105,13 +103,18 @@ export class AgentSessionResumeClaims {
         continue
       }
       // Why here too: a host without report notifications ends holds only at the next claim.
-      if (this.lifecycle.reported(hold)) {
+      if (this.reportCoversHold(hold)) {
         this.end(hold)
         continue
       }
       return hold
     }
     return undefined
+  }
+
+  private reportCoversHold(hold: Hold): boolean {
+    // A pane report cannot account for a second overlapping spawn or a lost reply.
+    return hold.unsettled === 0 && hold.ptys.size === 1 && this.lifecycle.reported(hold)
   }
 
   private end(hold: Hold): void {
