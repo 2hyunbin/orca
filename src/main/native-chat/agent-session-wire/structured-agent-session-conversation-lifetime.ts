@@ -20,19 +20,13 @@ import {
   type StructuredAgentSessionLifetimeContext,
   type StructuredAgentSessionStopEnding
 } from './structured-agent-session-host-lifetime'
-import type {
-  StructuredAgentSessionHostSession,
-  StructuredAgentSessionProviderChildIdentity
-} from './structured-agent-session-host-types'
+import type * as hostTypes from './structured-agent-session-host-types'
 import { StructuredAgentSessionIdleSweep } from './structured-agent-session-idle-sweep'
 import { AGENT_SESSION_NOT_ATTACHED } from './structured-agent-session-mutation-admission'
 import { deferredStructuredAgentSessionLogger } from './structured-agent-session-logger'
 import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { ExecutionHostId } from '../../../shared/execution-host'
-import {
-  stopWorkspaceSleepChat,
-  workspaceSleepStartAborts
-} from './structured-agent-session-workspace-sleep-stop'
+import * as sleep from './structured-agent-session-workspace-sleep-stop'
 import type { StructuredAgentSessionExpiredStartup } from './structured-agent-session-startup-attempt'
 import {
   providerStartupFailureFact,
@@ -52,7 +46,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
   sessions: StructuredAgentSessionConversations
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   /** PR 1's one open function, for a caller inside the session's serialize. */
-  open: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
+  open: (sessionId: string) => Promise<hostTypes.StructuredAgentSessionHostSession | null>
   deliveryActive: (sessionId: string) => boolean
   /** The handle closed: `listed` keeps the chat's row in the agent-status store for its tab. */
   closeStatus: (sessionId: string, options: { listed: boolean }) => void
@@ -116,12 +110,12 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     sessionId: string,
     workspaceId: string,
     executionHostId: ExecutionHostId
-  ): Promise<{ fence: number; stopped: boolean } | null> => {
+  ): Promise<sleep.WorkspaceSleepCloseResult | null> => {
     const matches = (): boolean => {
       const location = deps().store.getRecord(sessionId)?.location
       return location?.workspaceId === workspaceId && location.executionHostId === executionHostId
     }
-    const starts = workspaceSleepStartAborts(() => host.context().runtimeState, sessionId)
+    const starts = sleep.workspaceSleepStartAborts(() => host.context().runtimeState, sessionId)
     // Pending creates do not yet have a record; their queued close waits for founding to finish.
     if (matches()) {
       starts.abort()
@@ -137,13 +131,14 @@ export function createStructuredAgentSessionConversationLifetime(host: {
         return null
       }
       const fence = record.lease.runtimeFence
+      const admittedSends = deps().store.admittedSendCount(sessionId)
       const session = sessions.get(sessionId)
       const child = session?.child
       const owned = deps().adapter.hasOwnedAcquisition?.(sessionId) === true
       const stopped = await holdStopClose(
         sessionId,
         () =>
-          stopWorkspaceSleepChat({
+          sleep.stopWorkspaceSleepChat({
             deps: deps(),
             sessions,
             stopAgent,
@@ -162,7 +157,11 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       )
       // Lease release advances the fence; preserve the value after this close for the caller's
       // final identity check against a later restart.
-      return { fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence, stopped }
+      return {
+        fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence,
+        stopped,
+        admittedSends
+      }
     })
     return starts.settle({ deps: deps(), sessions, sessionId }, await closed)
   }
@@ -199,7 +198,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
 
   const stopStartingChild = (
     sessionId: string,
-    expired: StructuredAgentSessionProviderChildIdentity | null
+    expired: hostTypes.StructuredAgentSessionProviderChildIdentity | null
   ): void => {
     void serialize(sessionId, async () => {
       const child = sessions.get(sessionId)?.child
@@ -229,7 +228,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     stopStartingChild,
     failStartingChild: (
       sessionId: string,
-      failed: StructuredAgentSessionProviderChildIdentity,
+      failed: hostTypes.StructuredAgentSessionProviderChildIdentity,
       error: unknown,
       openMs: number
     ): Promise<void> =>
@@ -287,7 +286,9 @@ export function createStructuredAgentSessionConversationLifetime(host: {
      * touches the lease or starts a child. Use the result before the next `await`: a close can
      * drop it after.
      */
-    conversation: async (sessionId: string): Promise<StructuredAgentSessionHostSession> => {
+    conversation: async (
+      sessionId: string
+    ): Promise<hostTypes.StructuredAgentSessionHostSession> => {
       const open = sessions.get(sessionId)
       if (open) {
         readRefusals.forget(sessionId)
@@ -330,16 +331,14 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     /** Idle admission and proven-exit stop share the session queue. */
     switchToTerminal: (id: string): Promise<void> =>
       serialize(id, () =>
-        switchAdmission.stopIdleStructuredAgentSessionForSwitch(
-          {
-            session: sessions.get(id),
-            delivering: host.deliveryActive(id),
-            idleSweep
-          },
-          () => holdStopClose(id, () => stopAgent(id, { cause: 'user-close' })),
-          deps(),
-          id
-        )
+        switchAdmission.stopIdleStructuredAgentSessionForSwitch({
+          session: sessions.get(id),
+          delivering: host.deliveryActive(id),
+          idleSweep,
+          stop: () => holdStopClose(id, () => stopAgent(id, { cause: 'user-close' })),
+          deps: deps(),
+          sessionId: id
+        })
       )
   }
 }

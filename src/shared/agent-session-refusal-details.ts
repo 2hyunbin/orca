@@ -9,6 +9,10 @@
 import type { AgentSessionAccountKind } from './agent-session-availability'
 import type { AgentJournalResolution } from './agent-session-journal-types'
 import {
+  readAgentCliInstallationProblem,
+  type AgentCliInstallationProblem
+} from './agent-cli-installation-problem'
+import {
   readCodexInstallationProblem,
   type CodexInstallationProblem
 } from './codex-cli-installation'
@@ -182,6 +186,8 @@ type AgentSessionRefusalFactsByCode = {
     argumentProblem?: AgentSessionArgumentProblem
     /** The chat's agent a `stopFailed` Stop could not stop. */
     agent?: TuiAgent
+    agentInstallation?: AgentCliInstallationProblem
+    /** Codex's binary problem as builds before `agentInstallation` send and read it. */
     codexInstallation?: CodexInstallationProblem
   }
   agent_session_operation_unknown: RewindFacts
@@ -309,6 +315,10 @@ export function readAgentSessionRefusalDetails<C extends AgentSessionWireRefusal
     code === 'agent_session_operation_invalid'
       ? readAgentSessionArgumentProblem(value.argumentProblem)
       : undefined
+  const agentInstallation =
+    code === 'agent_session_operation_invalid'
+      ? readAgentCliInstallationProblem(value.agentInstallation)
+      : undefined
   const codexInstallation =
     code === 'agent_session_operation_invalid'
       ? readCodexInstallationProblem(value.codexInstallation)
@@ -338,6 +348,7 @@ export function readAgentSessionRefusalDetails<C extends AgentSessionWireRefusal
     isNamedAgent(value.agent)
       ? { agent: value.agent }
       : {}),
+    ...(agentInstallation ? { agentInstallation } : {}),
     ...(codexInstallation ? { codexInstallation } : {})
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the reason was checked against `code`'s list and only the facts `code` lists (plus the verdict every code may carry) were kept.

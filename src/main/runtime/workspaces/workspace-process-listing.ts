@@ -299,6 +299,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         )
       },
       ...(this.structuredAgentStatusSinkFn ? { statusSink: this.structuredAgentStatusSinkFn } : {}),
+      conversationNaming: nameChat,
       // A closed chat settles the Dispatch it was working, as a closed terminal does.
       onSessionTabHidden: (sessionId) => this.onStructuredSessionTabHidden(sessionId),
       assertNoTerminalWriter: (record) => this.assertStructuredChatAcquireAdmissible(record),

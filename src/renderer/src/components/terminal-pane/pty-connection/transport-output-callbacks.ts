@@ -4,6 +4,7 @@ import {
 } from './terminal-launch-result-policy'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 import type { TerminalAttachmentLaunchResult } from '../../../../../shared/terminal-attachment-launch-result'
+import { isPaneOwnerRefusal } from './pane-owner-recovery'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
 import { createTerminalStartupTiming } from '../terminal-startup-timing'
 import type { PtyReplayDataMeta, PtyTransportRecoveryState } from '../pty-transport-types'
@@ -14,6 +15,7 @@ import type { ConnectPanePtySession } from './connect-pane-pty-session'
 
 /** Per-generation transport output callbacks and the hidden-output restore state they reset. */
 export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySession): void {
+  const ownerErrors = new Set<string>()
   session.captureTransportOutputCallbacks = (
     onError: (message: string) => void,
     startup: PtyPaneStartup,
@@ -66,6 +68,10 @@ export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySessi
         },
         onConnect: (): void => {
           if (isCurrent()) {
+            for (const message of ownerErrors) {
+              session.deps.onPtyErrorClearedRef?.current?.(session.pane.id, message)
+            }
+            ownerErrors.clear()
             session.startupTiming?.mark('connected')
             session.reportRemoteRendererSerializerReady()
             // Re-derive the pause bit after a rebind; visibility can change while no PTY is bound.
@@ -93,6 +99,11 @@ export function bindCaptureTransportOutputCallbacks(session: ConnectPanePtySessi
         },
         onError: (message: string): void => {
           if (isCurrent()) {
+            for (const line of message.split('\n')) {
+              if (isPaneOwnerRefusal(line)) {
+                ownerErrors.add(line)
+              }
+            }
             session.startupTiming?.finish('error')
             onError(message)
           }

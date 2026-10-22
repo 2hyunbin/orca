@@ -1,3 +1,4 @@
+import type { PaneSpawnOperation } from '../ipc/pty/pane/pane-spawn-operation'
 import type { AgentLaunchRuntime } from '../../shared/agent-launch-runtime'
 import type {
   AutomaticWorkResumeOutcome,
@@ -37,6 +38,8 @@ export type RuntimePtyController = {
     leafId: string
   }): () => void
   adoptStablePane?(opts: {
+    signal?: AbortSignal
+    spawnFresh?: (operation: PaneSpawnOperation) => Promise<PtySpawnResult>
     cols: number
     rows: number
     cwd?: string
@@ -98,6 +101,7 @@ export type RuntimePtyController = {
     signal?: AbortSignal
     refuseSleptWorktree?: boolean
     onPtySpawnCommitted?: () => void
+    paneSpawnOperation?: PaneSpawnOperation
     adoptedStablePane?: {
       result: PtySpawnResult
       owner: {
@@ -112,6 +116,7 @@ export type RuntimePtyController = {
   }): Promise<
     PtySpawnResult & {
       stablePaneOwner?: { handle: string; tabId: string; leafId: string }
+      savedStartupCwd?: string
     }
   >
   /** The local terminal owner's automatic-restore state; null when it has no fork gate. */

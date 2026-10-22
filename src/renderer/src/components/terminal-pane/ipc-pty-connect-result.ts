@@ -41,6 +41,9 @@ export function projectIpcPtyConnectResult(
       coldRestore: spawnResult.coldRestore,
       replay: spawnResult.replay,
       pendingEscapeTailAnsi: spawnResult.pendingEscapeTailAnsi,
+      ...(spawnResult.startupCwdFallback
+        ? { startupCwdFallback: spawnResult.startupCwdFallback }
+        : {}),
       ...(spawnResult.agentResumeUnavailable ? { agentResumeUnavailable: true as const } : {}),
       ...(spawnResult.agentResumeRefused
         ? { agentResumeRefused: spawnResult.agentResumeRefused }

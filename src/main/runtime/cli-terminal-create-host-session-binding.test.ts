@@ -94,6 +94,15 @@ it.each(['refused', 'adopted', 'stable-adopted', 'ensure-adopted', 'fresh-unavai
       tabId: 'owner-tab',
       leafId: '11111111-1111-4111-8111-111111111111'
     }
+    if (adopted) {
+      // The lower adopter registers its owner before returning the result.
+      runtime.registerPty('effective-pty', ownerSurface.worktreeId, null, {
+        tabId: ownerSurface.tabId,
+        leafId: ownerSurface.leafId,
+        incarnationId: 'physical-i1',
+        terminalHandle: ownerSurface.terminalHandle
+      })
+    }
     const coldRestore = { scrollback: 'checkpoint A', cwd: '/tmp/wt-cli', cols: 80, rows: 24 }
     spawn.mockResolvedValue({
       id: 'effective-pty',
@@ -175,6 +184,7 @@ it.each(['refused', 'adopted', 'stable-adopted', 'ensure-adopted', 'fresh-unavai
       tabId: expect.any(String),
       paneKey: expect.any(String),
       ptyId: 'effective-pty',
+      savedStartupCwd: '/tmp/wt-cli',
       worktreeId: 'repo-1::/tmp/wt-cli',
       title: kind === 'fresh-unavailable' ? 'Rejected C' : null,
       launchConfig: kind === 'refused' ? undefined : config,

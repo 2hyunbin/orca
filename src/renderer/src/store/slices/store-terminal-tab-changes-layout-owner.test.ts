@@ -20,7 +20,13 @@ const mocks = vi.hoisted(() => ({
     async (
       _target: unknown,
       _method: string,
-      _params: { command: { viewMode?: string; title?: unknown; renames?: { title: unknown }[] } }
+      _params: {
+        command: {
+          viewMode?: string
+          title?: unknown
+          renames?: { tabId: string; title: string | null }[]
+        }
+      }
     ): Promise<Reply> => ({ ok: true, result: {} })
   )
 }))
@@ -49,7 +55,7 @@ createStoreCascadesMockApi()
 const WORKTREE = 'repo1::/path/wt'
 const LEAF = '11111111-1111-4111-8111-111111111111'
 
-function storeWithTab(options: { launchAgent?: 'claude' } = {}) {
+async function storeWithTab(options: { launchAgent?: 'claude' } = {}) {
   const store = createTestStore()
   seedStore(store, {
     settings: { ...getDefaultSettings('/tmp'), tabAutoGenerateTitle: true },
@@ -60,6 +66,8 @@ function storeWithTab(options: { launchAgent?: 'claude' } = {}) {
     ...options
   })
   const tabBarId = store.getState().unifiedTabsByWorktree[WORKTREE]![0]!.id
+  // Why: main's terminal.create follows the create's layout.apply reply; settle both first.
+  await answered()
   mocks.callRuntimeRpc.mockClear()
   return { store, tabId: tab.id, tabBarId }
 }
@@ -72,6 +80,40 @@ const sentViewModes = () => sent().map((params) => params.command.viewMode)
 const row = (store: ReturnType<typeof createTestStore>) =>
   store.getState().tabsByWorktree[WORKTREE]![0]!
 
+/** Draws each generated title main was sent, as main's frame would (frames are not modelled). */
+function mainFrameDrawsTitles(store: ReturnType<typeof createTestStore>): void {
+  const titles = new Map<string, string | null>()
+  for (const params of sent()) {
+    for (const { tabId, title } of params.command.renames ?? []) {
+      titles.set(tabId, title)
+    }
+  }
+  const state = store.getState()
+  const entityOf = new Map(
+    Object.values(state.unifiedTabsByWorktree)
+      .flat()
+      .map((tab) => [tab.id, tab.entityId])
+  )
+  const drawn = new Map([...titles].map(([tabId, title]) => [entityOf.get(tabId), title]))
+  store.setState({
+    tabsByWorktree: Object.fromEntries(
+      Object.entries(state.tabsByWorktree).map(([key, rows]) => [
+        key,
+        rows.map((row) =>
+          drawn.has(row.id) ? { ...row, generatedTitle: drawn.get(row.id) ?? undefined } : row
+        )
+      ])
+    )
+  })
+}
+
+/** Main's answers and their handlers have run; main's frame, which draws the change, is not modelled. */
+const answered = async (): Promise<void> => {
+  for (let turn = 0; turn < 5; turn += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+}
+
 beforeEach(() => {
   mocks.layoutOwnerIsMain = true
   mocks.callRuntimeRpc.mockReset()
@@ -81,8 +123,8 @@ beforeEach(() => {
 })
 
 describe('a terminal tab’s own changes in a layout-owner build', () => {
-  it('renames in main first by tab-bar id, then the window shows the title', async () => {
-    const { store, tabId, tabBarId } = storeWithTab()
+  it('renames in main by tab-bar id, and leaves showing the title to main’s frame', async () => {
+    const { store, tabId, tabBarId } = await storeWithTab()
 
     store.getState().setTabCustomTitle(tabId, 'Build')
 
@@ -97,12 +139,12 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
+    await answered()
     expect(row(store).customTitle).toBeFalsy()
-    await vi.waitFor(() => expect(row(store).customTitle).toBe('Build'))
   })
 
   it('leaves the window’s color as it is when main refuses', async () => {
-    const { store, tabId, tabBarId } = storeWithTab()
+    const { store, tabId, tabBarId } = await storeWithTab()
     mocks.callRuntimeRpc.mockResolvedValue({ ok: false, code: 'invalid_params' })
 
     store.getState().setTabColor(tabId, '#f00')
@@ -115,7 +157,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
   })
 
   it('sends an agent’s generated title as main’s rename', async () => {
-    const { store, tabId, tabBarId } = storeWithTab()
+    const { store, tabId, tabBarId } = await storeWithTab()
 
     store
       .getState()
@@ -130,11 +172,13 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBeTruthy())
+    await answered()
+    // Main's frame draws the title; the window writes none.
+    expect(row(store).generatedTitle).toBeUndefined()
   })
 
   it('sends one agent title while main has not answered the first, as the window keeps it', async () => {
-    const { store, tabId } = storeWithTab()
+    const { store, tabId } = await storeWithTab()
     const second = makePaneKey(tabId, '22222222-2222-4222-8222-222222222222')
     const titles = () => sent().flatMap((params) => params.command.renames!.map((r) => r.title))
 
@@ -143,18 +187,22 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
 
     expect(titles()).toHaveLength(1)
     const [first] = titles()
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBe(first))
+    await answered()
+    expect(row(store).generatedTitle).toBeUndefined()
+    mainFrameDrawsTitles(store)
+    expect(row(store).generatedTitle).toBe(first)
 
     store.getState().setGeneratedTabTitleFromAgentPrompt(second, 'write tests', {
       replaceExistingGeneratedTitle: true
     })
     const replaced = titles()[1]
     expect(replaced).not.toEqual(first)
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBe(replaced))
+    await answered()
+    expect(row(store).generatedTitle).toBe(first)
   })
 
   it('forgets an ended launch agent in main, and sends nothing for a tab without one', async () => {
-    const launched = storeWithTab({ launchAgent: 'claude' })
+    const launched = await storeWithTab({ launchAgent: 'claude' })
     launched.store.getState().clearTabLaunchAgent(launched.tabId)
 
     expect(sent()).toEqual([
@@ -167,28 +215,30 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
-    await vi.waitFor(() => expect(row(launched.store).launchAgent).toBeUndefined())
+    await answered()
+    // Main's frame drops the agent; the window does not.
+    expect(row(launched.store).launchAgent).toBe('claude')
 
-    const plain = storeWithTab()
+    const plain = await storeWithTab()
     plain.store.getState().clearTabLaunchAgent(plain.tabId)
     plain.store.getState().setAiVaultTabTitle(plain.tabId, null)
     expect(sent()).toEqual([])
   })
 
-  it('switches the view in main first, and a toggle names the mode it switches to', async () => {
-    const { store, tabBarId } = storeWithTab()
+  it('switches the view in main, and a toggle names the mode it switches to', async () => {
+    const { store, tabBarId } = await storeWithTab()
 
     store.getState().toggleTabViewMode(tabBarId)
 
     expect(sent()).toEqual([
       { command: { type: 'setTabProps', workspace: WORKTREE, tabId: tabBarId, viewMode: 'chat' } }
     ])
+    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledOnce())
     expect(row(store).viewMode).toBeUndefined()
-    await vi.waitFor(() => expect(row(store).viewMode).toBe('chat'))
   })
 
   it('flips a second toggle sent before main answers the first, as the window would', async () => {
-    const { store, tabBarId } = storeWithTab()
+    const { store, tabBarId } = await storeWithTab()
 
     store.getState().toggleTabViewMode(tabBarId)
     store.getState().toggleTabViewMode(tabBarId)
@@ -199,22 +249,22 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
       ['terminal', 'chat'],
       ['chat', 'terminal']
     ])
-    expect(row(store).viewMode).toBe('terminal')
+    expect(row(store).viewMode).toBeUndefined()
   })
 
   it('toggles from the mode last set while main has not answered it', async () => {
-    const { store, tabBarId } = storeWithTab()
+    const { store, tabBarId } = await storeWithTab()
 
     store.getState().setTabViewMode(tabBarId, 'chat')
     store.getState().toggleTabViewMode(tabBarId)
 
     expect(sentViewModes()).toEqual(['chat', 'terminal'])
     await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(1))
-    expect(row(store).viewMode).toBe('terminal')
+    expect(row(store).viewMode).toBeUndefined()
   })
 
   it('toggles from the shown mode again once main refuses the pending one', async () => {
-    const { store, tabBarId } = storeWithTab()
+    const { store, tabBarId } = await storeWithTab()
     mocks.callRuntimeRpc.mockResolvedValueOnce({ ok: false, code: 'invalid_params' })
 
     store.getState().toggleTabViewMode(tabBarId)
@@ -227,11 +277,11 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     store.getState().toggleTabViewMode(tabBarId)
 
     expect(sentViewModes()).toEqual(['chat', 'chat'])
-    await vi.waitFor(() => expect(row(store).viewMode).toBe('chat'))
-    expect(mocks.toggled).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(mocks.toggled).toHaveBeenCalledTimes(1))
+    expect(row(store).viewMode).toBeUndefined()
   })
 
-  it('gives each tab of an agent-title batch its title once main has it, and a paired server’s tab at once', async () => {
+  it('sends an agent-title batch’s local titles to main, whose frame draws them, and shows a paired server’s tab at once', async () => {
     const store = createTestStore()
     const remote = 'repo2::/path/remote'
     seedStore(
@@ -248,6 +298,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
       .getState()
       .createTab(WORKTREE, undefined, undefined, { initialLeafId: LEAF })
     const paired = store.getState().createTab(remote, undefined, undefined, { initialLeafId: LEAF })
+    await answered()
     mocks.callRuntimeRpc.mockClear()
     let answer: (reply: { ok: boolean; result: object }) => void = () => {}
     mocks.callRuntimeRpc.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
@@ -271,11 +322,13 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(title(remote)).toBeTruthy()
     expect(title(WORKTREE)).toBeUndefined()
     answer({ ok: true, result: {} })
-    await vi.waitFor(() => expect(title(WORKTREE)).toBeTruthy())
+    await answered()
+    // Main's frame draws the local tab's title; the window writes none.
+    expect(title(WORKTREE)).toBeUndefined()
     expect(sent()).toHaveLength(1)
   })
 
-  it('sends a batch’s titles of several workspaces as one rename, and shows those main gave', async () => {
+  it('sends a batch’s titles of several workspaces as one rename, and writes none itself', async () => {
     const store = createTestStore()
     const other = 'repo1::/path/other'
     seedStore(store, {
@@ -295,6 +348,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
       store.getState().unifiedTabsByWorktree[worktreeId]![0]!.id
     const title = (worktreeId: string) =>
       store.getState().tabsByWorktree[worktreeId]![0]!.generatedTitle
+    await answered()
     mocks.callRuntimeRpc.mockClear()
     mocks.callRuntimeRpc.mockResolvedValueOnce({
       ok: true,
@@ -323,9 +377,11 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
         }
       }
     ])
-    await vi.waitFor(() => expect(title(WORKTREE)).toBeTruthy())
+    await answered()
     unsubscribe()
-    expect(publications).toBe(1)
+    // Main's frame draws the title it gave; the window writes neither.
+    expect(publications).toBe(0)
+    expect(title(WORKTREE)).toBeUndefined()
     expect(title(other)).toBeUndefined()
     expect(console.warn).toHaveBeenCalledWith('[layout-owner] renameTabs refused:', 'tab_not_found')
     // Settled: the refused tab's next title is sent again.
@@ -334,7 +390,7 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
   })
 
   it('shows no title when the batch’s call fails, and sends the tab’s next title again', async () => {
-    const { store, tabId } = storeWithTab()
+    const { store, tabId } = await storeWithTab()
     mocks.callRuntimeRpc.mockRejectedValueOnce(new Error('main is gone'))
     const update = { paneKey: makePaneKey(tabId, LEAF), prompt: 'Refactor the auth middleware' }
 
@@ -350,7 +406,6 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(row(store).generatedTitle).toBeFalsy()
     store.getState().setGeneratedTabTitlesFromAgentPrompts([update])
     expect(sent()).toHaveLength(2)
-    await vi.waitFor(() => expect(row(store).generatedTitle).toBeTruthy())
   })
 
   it('acts as today at once for a paired server’s workspace', () => {
@@ -368,9 +423,9 @@ describe('a terminal tab’s own changes in a layout-owner build', () => {
     expect(row(store).customTitle).toBe('Build')
   })
 
-  it('acts as today with the switch off', () => {
+  it('acts as today with the switch off', async () => {
     mocks.layoutOwnerIsMain = false
-    const { store, tabId } = storeWithTab()
+    const { store, tabId } = await storeWithTab()
 
     store.getState().setTabCustomTitle(tabId, 'Build')
 

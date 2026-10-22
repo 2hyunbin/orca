@@ -28,13 +28,13 @@ import { TAB_LABEL_WIDTH_CLASSES } from './tab-width-rules'
 import { useTabStripSlotProps } from './use-tab-strip-slot-props'
 import { useTabStripPointerActivation } from './tab-strip-pointer-activation'
 import { TerminalTabLeadingIcon } from './TerminalTabLeadingIcon'
-import {
-  isTerminalTabActivityLive,
-  terminalTabHasUnreadActivity
-} from './terminal-tab-activity-status'
+import * as tabActivity from './terminal-tab-activity-status'
 import { useTerminalTabActivity } from './use-terminal-tab-activity'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import type { NativeChatTabSession } from './tab-session-history-switch'
+import type { StructuredChatTabNamingFailure } from '@/runtime/structured-conversation-name'
+import { useNativeChatNamingFailure } from './use-native-chat-naming-failure'
+import { NativeChatNamingErrorBlock, NativeChatNamingFailedDialog } from './NativeChatNamingFailure'
 
 /** What the strip draws for a terminal or native chat tab; never a source of agent identity. */
 type SortableTabModel = Pick<
@@ -76,6 +76,8 @@ export type SortableTabProps = {
   canSplitTerminal?: boolean
   /** Set only for a native chat tab. */
   nativeChat?: NativeChatTabSession
+  /** A native chat whose generated name failed, unless the user named the tab. */
+  namingFailure?: StructuredChatTabNamingFailure | null
 }
 
 export default function SortableTab({
@@ -106,11 +108,13 @@ export default function SortableTab({
   isChatView = false,
   onToggleViewMode,
   canSplitTerminal = true,
-  nativeChat
+  nativeChat,
+  namingFailure
 }: SortableTabProps): React.JSX.Element {
+  const naming = useNativeChatNamingFailure(namingFailure)
   // Why: agent-completion unread exists even with terminal-attention off; collapse both sources to one primitive so unrelated tabs don't re-render.
   const hasUnreadActivity = useAppStore((s) =>
-    terminalTabHasUnreadActivity({
+    tabActivity.terminalTabHasUnreadActivity({
       terminalTabId: tab.id,
       unreadTerminalTabs: s.unreadTerminalTabs,
       unreadAgentCompletionPanes: s.unreadAgentCompletionPanes
@@ -155,7 +159,7 @@ export default function SortableTab({
   })
   // Why: a live working/needs-input state is newer than a prior-turn unread, so it owns the icon until the turn ends.
   const showUnreadActivity =
-    hasUnreadActivity && !isEditing && !isTerminalTabActivityLive(activityStatus)
+    hasUnreadActivity && !isEditing && !tabActivity.isTerminalTabActivityLive(activityStatus)
 
   useEffect(() => {
     const closeMenu = (): void => setMenuOpen(false)
@@ -359,10 +363,13 @@ export default function SortableTab({
       <div
         {...slotProps}
         onContextMenuCapture={(event) => {
-          event.preventDefault()
-          window.dispatchEvent(new Event(CLOSE_ALL_CONTEXT_MENUS_EVENT))
-          setMenuPoint({ x: event.clientX, y: event.clientY })
-          setMenuOpen(true)
+          // The hover card is portalled: React still routes its events through this slot.
+          if (event.target instanceof Node && event.currentTarget.contains(event.target)) {
+            event.preventDefault()
+            window.dispatchEvent(new Event(CLOSE_ALL_CONTEXT_MENUS_EVENT))
+            setMenuPoint({ x: event.clientX, y: event.clientY })
+            setMenuOpen(true)
+          }
         }}
       >
         {isEditing || menuOpen ? (
@@ -388,6 +395,7 @@ export default function SortableTab({
                 progress={programProgress}
               />
             }
+            alert={naming ? <NativeChatNamingErrorBlock naming={naming} /> : undefined}
           >
             {tabRoot}
           </TabHoverCard>
@@ -423,6 +431,7 @@ export default function SortableTab({
         canSplitTerminal={canSplitTerminal}
         nativeChat={nativeChat}
       />
+      {naming ? <NativeChatNamingFailedDialog naming={naming} chatName={displayTitle} /> : null}
     </>
   )
 }

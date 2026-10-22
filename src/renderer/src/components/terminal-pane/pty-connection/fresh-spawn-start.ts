@@ -1,4 +1,5 @@
 import { applyTerminalLaunchResult } from './terminal-launch-result-policy'
+import { armPaneOwnerRetry, isPaneOwnerRefusal } from './pane-owner-recovery'
 import type { SpawnDeferralReason } from '../../../../../shared/host-spawn-admission'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { useAppStore } from '@/store'
@@ -96,8 +97,12 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
     session.transportConnectInFlightSince = Date.now()
     session.pendingSpawnDeferral = null
     const visibleAtSpawn = session.deps.isVisibleRef.current === true
+    let ownerRefused = false
     const outputCallbacks = session.captureTransportOutputCallbacks(
-      session.reportError,
+      (message: string) => {
+        ownerRefused ||= isPaneOwnerRefusal(message)
+        session.reportError(message)
+      },
       toProcessExitStartup(coldRestoreOverride ?? effectiveStartup),
       coldRestoreOverride ?? effectiveStartup
     )
@@ -280,7 +285,11 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
         session.finishReattachLiveDataDeferral(Boolean(resolvedPtyId), outputCallbacks.generation)
         return resolvedPtyId
       })
-      .catch(async () => {
+      .catch(async (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        if (!ownerRefused && isPaneOwnerRefusal(message)) {
+          outputCallbacks.callbacks.onError(message)
+        }
         releaseDeferredCwdFence()
         session.finishReattachLiveDataDeferral(false, outputCallbacks.generation)
         if (
@@ -313,9 +322,17 @@ export function bindStartFreshSpawn(session: ConnectPanePtySession): void {
       queueMicrotask(() => {
         if (
           session.disposed ||
+          outputCallbacks.generation !== session.transportStreamGeneration ||
           session.transport.getPtyId() ||
           pendingSpawnByPaneKey.has(session.pendingSpawnKey)
         ) {
+          return
+        }
+        if (ownerRefused) {
+          armPaneOwnerRetry(session, outputCallbacks.generation, () =>
+            session.startFreshSpawn(startupOverride, options)
+          )
+          session.settlePaneAttachAttempt?.('failed')
           return
         }
         if (session.deferredSpawn) {

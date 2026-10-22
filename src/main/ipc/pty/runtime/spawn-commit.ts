@@ -1,4 +1,14 @@
 import { retireChatForAdmittedTerminalLaunch } from '../../../runtime/session-tabs/structured-session-terminal-launch-retirement'
+import { completeRuntimeSpawnResponse } from './spawn-commit-response'
+import type { Store } from '../../../persistence'
+import type { PersistPtyBindingArgs } from '../../../persistence/loading-store/pty-binding-persistence'
+import { ptyBindingIsRefused } from '../../../persistence/loading-store/pty-binding-refusals'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
+import {
+  isAbsentBindingReplay,
+  PaneOwnerContentionError,
+  type AbsentPaneBinding
+} from '../pane/pane-spawn-operation'
 import { isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import { ptySizes } from '../delivery/visibility-state'
 import { commitRuntimePtySize } from './spawn-commit-pty-size'
@@ -18,16 +28,17 @@ import { seedTerminalRestoreRecordsFromSpawnResult } from '../pane/agent-session
 import { seedResumeLaunchIdentityFromSpawn } from '../pane/resume-launch-identity'
 import { seedHeadlessTerminalFromSpawnResult } from '../pane/terminal-spawn-restore'
 import { recordPtySpawnTelemetry } from '../pane/spawn-telemetry'
-import { persistAdmittedStablePaneBinding } from '../pane/stable-owner'
 import {
   isNativeWindowsLocalPtySpawn,
   markNativeWindowsConptyPty
 } from '../../../runtime/terminal-model-query-authority'
+import { toSshExecutionHostId } from '../../../../shared/execution-host'
 import { createTerminalSessionStateSaveFailureMessage } from '../../../../shared/terminal-session-state-save-failure'
 import { resolvePaneSpawnReservation } from '../pane/spawn-reservation'
 import { admitProviderReattachLaunchIdentity } from '../pane/launch-authority'
 import { spawnCommitBindingOrigin } from '../../../persistence/loading-store/pty-binding-span'
 import type { RuntimePtySpawnState } from './spawn-state'
+import { startupCwdFallbackOutcome } from '../spawn-startup-target'
 import { commitPtyWithOpenCodePromptIntent } from '../../../opencode/opencode-startup-prompt-owner'
 import {
   admitPtySpawnOwnership,
@@ -42,6 +53,10 @@ export async function commitRuntimePtySpawn(ctx: RuntimePtySpawnState) {
 async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
   const args = ctx.args
   admitPtySpawnOwnership(ctx.deps.runtime, ctx.result)
+  const startupCwdFallback = startupCwdFallbackOutcome(ctx.startupCwdFallback, ctx.result)
+  // Fallback may follow an access error; only proven absence authorizes changing the saved folder.
+  const correctStartupCwd = startupCwdFallback ? ctx.correctStartupCwd : undefined
+  const savedStartupCwd = correctStartupCwd ?? ctx.requestedCwd
   const providerReattachLaunchIdentity = admitProviderReattachLaunchIdentity(ctx.result)
   if (
     isNativeWindowsLocalPtySpawn({
@@ -55,23 +70,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
   // Seed before the first disk await so live output appends to the restored history.
   seedHeadlessTerminalFromSpawnResult(ctx.deps.runtime, ctx.result, ctx.spawnIdentityPaneKey)
   seedTerminalRestoreRecordsFromSpawnResult(ctx.deps.runtime, ctx.result)
-  try {
-    ctx.stablePaneBindingPersisted = await persistAdmittedStablePaneBinding({
-      store: ctx.hostSessionBinding?.store,
-      owner: ctx.stablePaneOwner,
-      result: ctx.result,
-      worktreeId: ctx.hostSessionBinding?.worktreeId,
-      startupCwd: ctx.cwd
-    })
-  } catch (error) {
-    if (error instanceof Error && error.message === 'terminal_pane_owner_changed') {
-      throw error
-    }
-    console.error('[pty] failed to persist runtime PTY binding after attach:', error)
-    throw Object.assign(new Error(createTerminalSessionStateSaveFailureMessage(error)), {
-      agentSessionOperationOutcome: 'unknown' as const
-    })
-  }
+
   if (ctx.result.agentSessionEnsure?.disposition === 'adopted') {
     // Why: an adoption is an attach to a live owner by definition, but an adopted reply can omit
     // isReattach; derive it once so the size commit and the reservation agree.
@@ -80,6 +79,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     const rejectedRegistration = registerPersistedPtySpawn(
       ctx.deps.runtime,
       ctx.hostSessionBinding?.store ?? ctx.deps.store,
+      ctx.pendingRegistrationClaim,
       ctx.result.id,
       owner.surface.worktreeId,
       null,
@@ -122,7 +122,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     )
     return adoptedResult
   }
-  if (ctx.hostSessionBinding && !ctx.stablePaneBindingPersisted) {
+  if (ctx.hostSessionBinding) {
     try {
       const { store, worktreeId, tabId, leafId, expectedSourceBinding, placement } =
         ctx.hostSessionBinding
@@ -134,19 +134,28 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         // The runtime wrote the pane before spawning; a pane gone by now was closed meanwhile.
         mayCreate: false,
         ...(ctx.result.incarnationId ? { incarnationId: ctx.result.incarnationId } : {}),
-        ...(ctx.cwd ? { startupCwd: ctx.cwd } : {}),
+        ...(savedStartupCwd ? { startupCwd: savedStartupCwd } : {}),
+        ...(correctStartupCwd ? { correctStartupCwd } : {}),
         ...(expectedSourceBinding ? { expectedSourceBinding } : {}),
         ...(placement ? { placement } : {}),
         origin: spawnCommitBindingOrigin(ctx.result, expectedSourceBinding)
       }
-      const persisted = await store.persistPtyBinding(binding)
+      const persisted = await persistFreshPaneBinding(
+        store,
+        binding,
+        args.connectionId,
+        args.paneSpawnOperation?.absentOwner
+      )
       if (persisted === false) {
         throw new Error('terminal_split_source_not_found')
       }
     } catch (err) {
       console.error('[pty] failed to persist runtime PTY binding after spawn:', err)
       await discardUnpersistedPtySpawn(ctx.provider, ctx.result, ctx.deps.runtime)
-      if (err instanceof Error && err.message === 'terminal_split_source_not_found') {
+      if (
+        err instanceof PaneOwnerContentionError ||
+        (err instanceof Error && err.message === 'terminal_split_source_not_found')
+      ) {
         throw err
       }
       throw Object.assign(new Error(createTerminalSessionStateSaveFailureMessage(err)), {
@@ -158,6 +167,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     const rejectedRegistration = registerPersistedPtySpawn(
       ctx.deps.runtime,
       ctx.hostSessionBinding?.store ?? ctx.deps.store,
+      ctx.pendingRegistrationClaim,
       ctx.result.id,
       args.worktreeId,
       null,
@@ -181,7 +191,11 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
     }
   } else {
     // Why: non-worktree PTYs have no later surface-registration phase to clear admission intent.
-    ctx.deps.runtime?.cancelPendingPtyRegistration?.(ctx.result.id, ctx.result.incarnationId)
+    ctx.deps.runtime?.cancelPendingPtyRegistration?.(
+      ctx.result.id,
+      ctx.result.incarnationId,
+      ctx.pendingRegistrationClaim
+    )
   }
   // Why after registration: a spawn discarded for a failed save or rejected for exiting during
   // start must not record facts or end a stop.
@@ -265,29 +279,40 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         ? { launchEnv: ctx.env }
         : {})
   })
-  const response = {
-    ...ctx.result,
-    ...(ctx.result.incarnationId ? { incarnationId: ctx.result.incarnationId } : {}),
-    ...(ctx.stablePaneOwner && (ctx.stablePaneOwner.handle || args.preAllocatedHandle)
-      ? {
-          stablePaneOwner: {
-            handle: ctx.stablePaneOwner.handle ?? args.preAllocatedHandle!,
-            tabId: ctx.stablePaneOwner.tabId,
-            leafId: ctx.stablePaneOwner.leafId
-          }
-        }
-      : {}),
-    ...(ctx.result.agentSessionEnsure ? { agentSessionEnsure: ctx.result.agentSessionEnsure } : {})
-  }
-  resolvePaneSpawnReservation(ctx.paneSpawnReservationKey, ctx.paneSpawnReservation, {
-    ...ctx.result,
-    ...(typeof ctx.result.snapshotKittyKeyboardFlags === 'number' &&
-    ctx.reconciledSnapshotSeq !== null &&
-    ctx.snapshotKittyFlagsCoverReconciledSeq
-      ? { snapshotSeq: ctx.reconciledSnapshotSeq }
-      : { snapshotKittyKeyboardFlags: undefined }),
-    isReattach: true
-  })
+  const response = completeRuntimeSpawnResponse(ctx)
   await retireChatForAdmittedTerminalLaunch(ctx.deps.runtime, args, response)
   return response
+}
+
+/** Runs inside the existing durable mutation, after source/topology checks and before any bind. */
+export async function persistFreshPaneBinding(
+  store: Store,
+  binding: PersistPtyBindingArgs,
+  connectionId?: string | null,
+  absentOwner?: AbsentPaneBinding
+): Promise<boolean> {
+  let targetChanged = false
+  const hostId = connectionId ? toSshExecutionHostId(connectionId) : undefined
+  const persisted = await store.persistPtyBinding(() => {
+    const session = store.getWorkspaceSession(hostId)
+    const paneKey = makePaneKey(binding.tabId, binding.leafId)
+    if (ptyBindingIsRefused(binding, session, binding.worktreeId, paneKey, [])) {
+      return binding
+    }
+    const bound = session.terminalLayoutsByTabId[binding.tabId]?.ptyIdsByLeafId?.[binding.leafId]
+    const stamp = session.terminalPtyIncarnationsByPaneKey?.[paneKey]
+    if (
+      bound &&
+      (bound !== binding.ptyId || stamp !== binding.incarnationId) &&
+      !isAbsentBindingReplay(absentOwner, bound, stamp)
+    ) {
+      targetChanged = true
+      return null
+    }
+    return binding
+  }, hostId)
+  if (targetChanged) {
+    throw new PaneOwnerContentionError()
+  }
+  return persisted
 }

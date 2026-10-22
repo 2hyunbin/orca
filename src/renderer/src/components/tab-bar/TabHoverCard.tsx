@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { ReactNode, SyntheticEvent } from 'react'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -7,12 +7,14 @@ function TabHoverCardBody({
   icon,
   programName,
   description,
-  action
+  action,
+  alert
 }: {
   title: string
   icon: ReactNode
   programName: string
   description?: string
+  alert?: ReactNode
   action?: ReactNode
 }): React.JSX.Element {
   return (
@@ -29,6 +31,7 @@ function TabHoverCardBody({
         </span>
         <span className="min-w-0 break-all">{programName}</span>
       </div>
+      {alert}
       {action}
     </div>
   )
@@ -44,6 +47,7 @@ export function TabHoverCard({
   icon: ReactNode
   programName: string
   description?: string
+  alert?: ReactNode
   action?: ReactNode
 }): React.JSX.Element {
   if (body.action) {
@@ -56,14 +60,20 @@ export function TabHoverCard({
           align="start"
           sideOffset={0}
           data-tab-hover-card="true"
+          onContextMenu={stopTabStripEvent}
+          onPointerDown={stopTabStripEvent}
+          onMouseDown={stopTabStripEvent}
+          onClick={stopTabStripEvent}
+          onDoubleClick={stopTabStripEvent}
         >
           <TabHoverCardBody {...body} />
         </HoverCardContent>
       </HoverCard>
     )
   }
+  const interactive = body.alert !== undefined && body.alert !== null
   return (
-    <Tooltip>
+    <Tooltip disableHoverableContent={!interactive}>
       <TooltipTrigger
         asChild
         onFocus={(event) => {
@@ -76,15 +86,24 @@ export function TabHoverCard({
         {children}
       </TooltipTrigger>
       <TooltipContent
-        variant="tab-preview"
+        variant={interactive ? 'tab-preview-interactive' : 'tab-preview'}
         showArrow={false}
         side="bottom"
         align="start"
         sideOffset={0}
         data-tab-hover-card="true"
+        onContextMenu={stopTabStripEvent}
+        onPointerDown={stopTabStripEvent}
+        onMouseDown={stopTabStripEvent}
+        onClick={stopTabStripEvent}
+        onDoubleClick={stopTabStripEvent}
       >
         <TabHoverCardBody {...body} />
       </TooltipContent>
     </Tooltip>
   )
+}
+
+function stopTabStripEvent(event: SyntheticEvent): void {
+  event.stopPropagation()
 }

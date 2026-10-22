@@ -1,10 +1,7 @@
 import { OrcaRuntimeWithResolveMobileSessionTerminalCommand } from './mobile-terminal-startup'
 import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type {
-  AgentProviderSessionMetadata,
-  SleepingAgentLaunchConfig
-} from '../../../../shared/agent-session-resume'
+import type * as AgentSessionResume from '../../../../shared/agent-session-resume'
 import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
 import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
 import type {
@@ -45,8 +42,8 @@ export type OwnedMobileTerminalCreateOptions = {
   afterDesktopTabId?: string
   presentation?: RuntimeTerminalPresentation
   supportsSplitGroupPlacement?: boolean
-  launchConfig?: SleepingAgentLaunchConfig
-  resumeProviderSession?: AgentProviderSessionMetadata
+  launchConfig?: AgentSessionResume.SleepingAgentLaunchConfig
+  resumeProviderSession?: AgentSessionResume.AgentProviderSessionMetadata
   resumeOrigin?: 'saved' | 'switch'
   spawnIntent?: SpawnIntent
   launchRuntime?: AgentLaunchRuntime
@@ -58,7 +55,7 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
   private readonly ownedMobileDispatchRecipes = new Map<
     string,
     {
-      launchConfig?: SleepingAgentLaunchConfig
+      launchConfig?: AgentSessionResume.SleepingAgentLaunchConfig
       launchAgent?: TuiAgent
       connectionId: string | null
       recordedAt: number
@@ -243,7 +240,10 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
       ptyId: livePty.pty.ptyId,
       incarnationId: livePty.pty.incarnationId,
       title: terminal.title ?? livePty.pty.title ?? 'Terminal',
-      ...(cwd ? { startupCwd: cwd } : {}),
+      // Omit only a proven root correction; an unverifiable fallback keeps its saved request.
+      ...((terminal.savedStartupCwd ?? cwd) && (terminal.savedStartupCwd ?? cwd) !== workspace.path
+        ? { startupCwd: terminal.savedStartupCwd ?? cwd }
+        : {}),
       ...(livePty.pty.launchAgent ? { launchAgent: livePty.pty.launchAgent } : {}),
       ...(!terminal.agentResumeRefused && opts.viewMode ? { viewMode: opts.viewMode } : {}),
       parentLayout,
@@ -306,7 +306,8 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
     return {
       tab: created,
       publicationEpoch: result.publicationEpoch,
-      snapshotVersion: result.snapshotVersion
+      snapshotVersion: result.snapshotVersion,
+      ...(terminal.startupCwdFallback ? { startupCwdFallback: 'workspace-root' as const } : {})
     }
   }
 }

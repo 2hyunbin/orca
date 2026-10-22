@@ -12,29 +12,27 @@ import type {
 
 /** In the chat's ordered step: refuses unless nothing is running, starting, queued or owed, then
  *  admits, stops through close's body, and proves the agent gone before anything starts elsewhere. */
-export async function stopIdleStructuredAgentSessionForSwitch(
-  idle: {
-    session: StructuredAgentSessionHostSession | undefined
-    delivering: boolean
-    idleSweep: {
-      owesWork: (sessionId: string, session: StructuredAgentSessionHostSession) => boolean
-    }
-  },
-  stop: () => Promise<unknown>,
-  deps: StructuredAgentSessionHostDeps,
+export async function stopIdleStructuredAgentSessionForSwitch(input: {
+  session: StructuredAgentSessionHostSession | undefined
+  delivering: boolean
+  idleSweep: {
+    owesWork: (sessionId: string, session: StructuredAgentSessionHostSession) => boolean
+  }
+  stop: () => Promise<unknown>
+  deps: StructuredAgentSessionHostDeps
   sessionId: string
-): Promise<void> {
-  const { session } = idle
+}): Promise<void> {
+  const { session, deps, sessionId, stop } = input
   const currentRecord = deps.store.getRecord(sessionId)
   const owesWork = deps.hasOwedSwitchWork ?? deps.hasOpenDispatch
   if (
-    idle.delivering ||
+    input.delivering ||
     (currentRecord !== null && owesWork?.(currentRecord) === true) ||
     (session !== undefined &&
       (session.child?.phase === 'starting' ||
         session.journal.submissions().some(isQueuedAgentJournalSubmission) ||
         (session.child !== null &&
-          idle.idleSweep.owesWork(session.params.envelope.sessionId, session))))
+          input.idleSweep.owesWork(session.params.envelope.sessionId, session))))
   ) {
     throw agentSessionRefusalError('agent_session_operation_invalid', { reason: 'turnActive' })
   }
