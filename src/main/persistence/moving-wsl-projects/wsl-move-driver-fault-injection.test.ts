@@ -38,7 +38,10 @@ vi.mock('../../telemetry/cohort-classifier', () => ({
 }))
 
 // The journal's writes and removals are kill points too; the hook is set per test.
-const journalKill = vi.hoisted(() => ({ at: null as ((name: string) => void) | null }))
+const journalKill = vi.hoisted(() => {
+  const hook: { at: ((name: string) => void) | null } = { at: null }
+  return hook
+})
 vi.mock('./wsl-move-cutover-journal', async (importOriginal) => {
   const actual = await importOriginal<typeof Journal>()
   const around = <A extends unknown[]>(
