@@ -156,13 +156,9 @@ function mergeNativeChatSkills(
     if (!safeName) {
       continue
     }
-    const namedSkills = byName.get(safeName)
-    const namedSkill = { ...skill, name: safeName }
-    if (namedSkills) {
-      namedSkills.push(namedSkill)
-    } else {
-      byName.set(safeName, [namedSkill])
-    }
+    const namedSkills = byName.get(safeName) ?? []
+    namedSkills.push({ ...skill, name: safeName })
+    byName.set(safeName, namedSkills)
   }
   const discovered = new Map(
     [...byName.entries()].map(([name, namedSkills]) => [
