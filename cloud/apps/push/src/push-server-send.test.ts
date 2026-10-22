@@ -1,6 +1,6 @@
 import { PushNotificationSchema } from '@orca-cloud/push-contract'
 import { PUSH_LIMITS } from '@orca-cloud/push-contract'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPushHostKeypair } from './host-challenge-answering.test-fixture.js'
 import {
   APNS_TOKEN,
@@ -70,6 +70,30 @@ describe('push gateway send route', () => {
     expect(await listed.json()).toEqual({
       devices: [{ registrationId, deviceId: 'device-1', platform: 'android', dead: true }]
     })
+  })
+
+  it('queues accepted sends until the periodic worker polls', async () => {
+    const token = await harness.signIn(createPushHostKeypair(32))
+    const registrationId = await harness.registerAndroid(token)
+    vi.useFakeTimers()
+    harness.server.worker.start()
+    try {
+      const queued = await harness.post(
+        '/v1/send',
+        { v: 1, registrationIds: [registrationId], notification: notification() },
+        token
+      )
+      expect(await queued.json()).toEqual({ results: [{ registrationId, status: 'queued' }] })
+      expect(harness.fcmRequests).toHaveLength(0)
+      await vi.advanceTimersByTimeAsync(999)
+      expect(harness.fcmRequests).toHaveLength(0)
+      await vi.advanceTimersByTimeAsync(1)
+      await harness.server.worker.runDue()
+      expect(harness.fcmRequests).toHaveLength(1)
+    } finally {
+      await harness.server.worker.stop()
+      vi.useRealTimers()
+    }
   })
 
   it('leaves a live registration alone when the provider reports a transient failure', async () => {

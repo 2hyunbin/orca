@@ -1,4 +1,3 @@
-import { setImmediate } from 'node:timers/promises'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { PushNotification } from '@orca-cloud/push-contract'
 import { DurablePushStore } from './durable-push-store.js'
@@ -121,9 +120,8 @@ it('keeps untrackable bells and per-phone deliveries individually replaceable', 
   ).toMatchObject({ orca: { notificationId: 'note-2', notificationSeq: 2 } })
 })
 
-it('preserves provider retry delay when waking a restarted worker', async () => {
+it('persists provider retry delay and resumes it through a new worker', async () => {
   const h = await fixture()
-  vi.useFakeTimers()
   h.send.mockResolvedValueOnce({
     status: 'error',
     reason: 'busy',
@@ -135,13 +133,10 @@ it('preserves provider retry delay when waking a restarted worker', async () => 
   expect(h.send).toHaveBeenCalledOnce()
   await h.worker.stop()
   const restarted = new DurablePushWorker(h.store, h.dispatcher, { now: h.now, onRetry: h.onRetry })
-  restarted.start()
   h.advance(9999)
-  restarted.wake()
   await restarted.runDue()
   expect(h.send).toHaveBeenCalledOnce()
   h.advance(1)
-  restarted.wake()
   await restarted.runDue()
   expect(h.send).toHaveBeenCalledTimes(2)
   expect(h.send.mock.calls.map(([delivery]) => delivery.expiresAt)).toEqual([1_300_000, 1_300_000])
@@ -181,7 +176,6 @@ it('rechecks the device before a persisted retry and does not send after unregis
 
 it('joins active work on shutdown and leaves unclaimed work for the next instance', async () => {
   const h = await fixture()
-  vi.useFakeTimers()
   let finish!: (outcome: PushProviderOutcome) => void
   let started!: () => void
   const entered = new Promise<void>((resolve) => {
@@ -194,12 +188,9 @@ it('joins active work on shutdown and leaves unclaimed work for the next instanc
     })
   })
   await h.accept(note(1))
-  h.worker.start()
-  h.worker.wake()
   const pending = h.worker.runDue()
   await entered
   await h.accept(note(2))
-  h.worker.wake()
   let stopped = false
   const stopping = h.worker.stop().then(() => {
     stopped = true
@@ -210,10 +201,7 @@ it('joins active work on shutdown and leaves unclaimed work for the next instanc
   await Promise.all([pending, stopping])
   expect(stopped).toBe(true)
   expect(h.send).toHaveBeenCalledOnce()
-  expect(vi.getTimerCount()).toBe(0)
   const resumed = new DurablePushWorker(h.store, h.dispatcher, { now: h.now })
-  resumed.start()
-  await vi.advanceTimersByTimeAsync(1000)
   await resumed.runDue()
   expect(h.send).toHaveBeenCalledTimes(2)
   await resumed.stop()
@@ -233,67 +221,90 @@ it('runs due work on its timer and releases the timer on stop', async () => {
   expect(vi.getTimerCount()).toBe(0)
 })
 
-it('wakes only while started and keeps the durability poll', async () => {
+it('completes shutdown even when the active poll rejects', async () => {
   const h = await fixture()
-  vi.useFakeTimers()
-  const claim = vi.spyOn(h.store, 'claim')
-  await h.accept(note(1))
-  h.worker.wake()
-  expect(claim).not.toHaveBeenCalled()
-  h.worker.start()
-  h.worker.wake()
-  expect(claim).toHaveBeenCalled()
+  const release = Promise.withResolvers<void>()
+  const failure = new Error('database unavailable')
+  const claim = vi.spyOn(h.store, 'claim').mockImplementation(async () => {
+    await release.promise
+    throw failure
+  })
+  const pending = h.worker.runDue().catch((error: unknown) => error)
+  const stopping = h.worker.stop()
+  release.resolve()
+  await expect(stopping).resolves.toBeUndefined()
+  await expect(pending).resolves.toBe(failure)
   await h.worker.runDue()
-  expect(h.send).toHaveBeenCalledOnce()
-  expect(vi.getTimerCount()).toBe(1)
-  await h.worker.stop()
-  const calls = claim.mock.calls.length
-  await h.accept(note(2))
-  h.worker.wake()
-  await vi.advanceTimersByTimeAsync(2000)
-  expect(claim).toHaveBeenCalledTimes(calls)
-  expect(await h.store.pendingCount(h.registrationId)).toBe(1)
-  expect(vi.getTimerCount()).toBe(0)
+  expect(claim).toHaveBeenCalledTimes(WORKER_DRAINS)
 })
 
-it('coalesces wakes arriving after every active drain found an empty queue', async () => {
+it('joins the active poll without topping up idle drains', async () => {
   const h = await fixture()
   vi.useFakeTimers()
   const entered = Promise.withResolvers<void>()
-  const release = Promise.withResolvers<void>()
-  const claim = h.store.claim.bind(h.store)
-  let empty = 0
-  let holding = true
-  vi.spyOn(h.store, 'claim').mockImplementation(async () => {
-    const delivery = await claim()
-    if (!delivery && holding) {
-      if (++empty === WORKER_DRAINS) entered.resolve()
-      await release.promise
-    }
-    return delivery
+  const release = Promise.withResolvers<PushProviderOutcome>()
+  h.send.mockImplementationOnce(() => {
+    entered.resolve()
+    return release.promise
   })
+  const claim = vi.spyOn(h.store, 'claim')
+  await h.accept(note(1))
   h.worker.start()
-  const startedAt = Date.now()
-  const pending = h.worker.runDue()
+  await vi.advanceTimersByTimeAsync(1000)
+  await entered.promise
   try {
-    await entered.promise
-    await h.accept(note(1))
-    for (let count = 0; count < 10; count++) h.worker.wake()
-    expect(h.store.claim).toHaveBeenCalledTimes(WORKER_DRAINS)
-    holding = false
-    release.resolve()
-    await pending
-    await vi.waitFor(() => expect(h.send).toHaveBeenCalledOnce())
-    await vi.waitFor(() => expect(h.store.claim).toHaveBeenCalledTimes(WORKER_DRAINS + 2))
-    expect(Date.now() - startedAt).toBeLessThan(1000)
-    expect(h.send.mock.calls[0]?.[0].orca.notificationSeq).toBe(1)
+    expect(claim).toHaveBeenCalledTimes(WORKER_DRAINS)
+    await h.accept(note(2))
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(claim).toHaveBeenCalledTimes(WORKER_DRAINS)
+    expect(h.send).toHaveBeenCalledOnce()
   } finally {
-    holding = false
-    release.resolve()
+    release.resolve({ status: 'sent' })
+    await h.worker.runDue()
   }
+  expect(h.send).toHaveBeenCalledTimes(2)
+  await h.worker.stop()
+  await h.accept(note(3))
+  const stoppedClaims = claim.mock.calls.length
+  await vi.advanceTimersByTimeAsync(2000)
+  await h.worker.runDue()
+  expect(claim).toHaveBeenCalledTimes(stoppedClaims)
+  expect(await h.store.pendingCount(h.registrationId)).toBe(1)
 })
 
-it('bounds claims by sends plus drains for a burst and a trickle of wakes', async () => {
+it('waits for every drain after a claim fails and recovers on the next poll', async () => {
+  const h = await fixture()
+  vi.useFakeTimers()
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<PushProviderOutcome>()
+  h.send.mockImplementationOnce(() => {
+    entered.resolve()
+    return release.promise
+  })
+  const claim = vi.spyOn(h.store, 'claim').mockRejectedValueOnce(new Error('database unavailable'))
+  await h.accept(note(1))
+  h.worker.start()
+  await vi.advanceTimersByTimeAsync(1000)
+  await entered.promise
+  try {
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(claim).toHaveBeenCalledTimes(WORKER_DRAINS)
+    expect(console.warn).not.toHaveBeenCalled()
+  } finally {
+    release.resolve({ status: 'sent' })
+    await vi.advanceTimersByTimeAsync(0)
+  }
+  expect(console.warn).toHaveBeenCalledWith(JSON.stringify({ event: 'orca_push_worker_failed' }))
+  await h.accept(note(2))
+  await vi.advanceTimersByTimeAsync(1000)
+  await h.worker.runDue()
+  expect(h.send).toHaveBeenCalledTimes(2)
+  expect(await h.store.pendingCount(h.registrationId)).toBe(0)
+  await h.worker.stop()
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+it('bounds concurrent deliveries and leaves work past the drain budget for the next poll', async () => {
   const h = await fixture()
   const registrations: string[] = []
   for (let index = 0; index < 50; index++) {
@@ -306,55 +317,36 @@ it('bounds claims by sends plus drains for a burst and a trickle of wakes', asyn
     if (!device.ok) throw new Error('registration failed')
     registrations.push(device.registrationId)
   }
-  const claim = vi.spyOn(h.store, 'claim')
-  const sendOne = async (index: number) => {
-    const status = await h.store.accept(
-      `host-${index % 50}`,
-      registrations[index % 50]!,
-      note(index + 1)
-    )
-    expect(status).toBe('queued')
-    h.worker.wake()
+  const count = WORKER_DRAINS * 25 + 10
+  for (let index = 0; index < count; index++) {
+    expect(
+      await h.store.accept(`host-${index % 50}`, registrations[index % 50]!, note(index + 1))
+    ).toBe('queued')
   }
-  // Fake timers hold the poll, so only wakes claim.
-  vi.useFakeTimers()
-  h.worker.start()
-  const settle = async () => {
-    for (let ticks = 0; ticks < 1000; ticks++) await setImmediate()
+  const entered = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  let active = 0
+  let peak = 0
+  h.send.mockImplementation(async () => {
+    active++
+    peak = Math.max(peak, active)
+    if (active === WORKER_DRAINS) entered.resolve()
+    await release.promise
+    active--
+    return { status: 'sent' }
+  })
+  const pending = h.worker.runDue()
+  await entered.promise
+  try {
+    expect(h.send).toHaveBeenCalledTimes(WORKER_DRAINS)
+    expect(peak).toBe(WORKER_DRAINS)
+  } finally {
+    release.resolve()
+    await pending
   }
-  await Promise.all(Array.from({ length: 1000 }, (_, index) => sendOne(index)))
-  await settle()
-  // Each drain stops after 25 sends, so the poll finishes a large burst.
-  let polls = 0
-  while (h.send.mock.calls.length < 1000 && polls < 10) {
-    await vi.advanceTimersByTimeAsync(1000)
-    await settle()
-    polls++
-  }
-  expect(h.send).toHaveBeenCalledTimes(1000)
-  expect(claim.mock.calls.length).toBeLessThanOrEqual(1000 + WORKER_DRAINS * (polls + 2))
-  claim.mockClear()
-  // Before one-drain wakes, each idle send started every drain: ~13 claims per send.
-  for (let index = 1000; index < 1020; index++) {
-    await sendOne(index)
-    await settle()
-  }
-  expect(h.send).toHaveBeenCalledTimes(1020)
-  expect(claim).toHaveBeenCalledTimes(40)
-}, 60_000)
-
-it('recovers from a failed automatic wake without leaving another timer', async () => {
-  const h = await fixture()
-  vi.useFakeTimers()
-  vi.spyOn(h.store, 'claim').mockRejectedValueOnce(new Error('database unavailable'))
-  h.worker.start()
-  h.worker.wake()
-  await vi.waitFor(() =>
-    expect(console.warn).toHaveBeenCalledWith(JSON.stringify({ event: 'orca_push_worker_failed' }))
-  )
-  await h.accept(note(1))
-  h.worker.wake()
-  await vi.waitFor(() => expect(h.send).toHaveBeenCalledOnce())
-  await h.worker.stop()
-  expect(vi.getTimerCount()).toBe(0)
+  expect(h.send).toHaveBeenCalledTimes(WORKER_DRAINS * 25)
+  await h.worker.runDue()
+  expect(h.send).toHaveBeenCalledTimes(count)
+  expect(peak).toBe(WORKER_DRAINS)
+  expect(active).toBe(0)
 })
