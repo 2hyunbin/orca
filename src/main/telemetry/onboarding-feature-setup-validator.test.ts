@@ -44,7 +44,7 @@ describe('onboarding feature setup telemetry validation', () => {
         feature: 'browser_use',
         selected: false,
         path: '/Users/alice/project'
-      } as never).ok
+      }).ok
     ).toBe(false)
     expect(
       validate('onboarding_feature_setup_run', {
@@ -57,7 +57,7 @@ describe('onboarding feature setup telemetry validation', () => {
         skill_install_result: 'Installed · 1 left alone',
         computer_use_permissions_opened: false,
         warning_count: 0
-      } as never).ok
+      }).ok
     ).toBe(false)
   })
 
@@ -73,7 +73,7 @@ describe('onboarding feature setup telemetry validation', () => {
         skill_install_result: 'installed',
         computer_use_permissions_opened: false,
         warning_count: 0
-      } as never).ok
+      }).ok
     ).toBe(false)
   })
 })
