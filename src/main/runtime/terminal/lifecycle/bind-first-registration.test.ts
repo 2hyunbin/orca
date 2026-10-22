@@ -13,6 +13,7 @@ const { TEST_WORKTREE_ID, TEST_WORKTREE_PATH } =
   await import('../../orca-runtime-test-fixtures.spec')
 const { surfaceRuntime } = await import('../surface/terminal-surface-replies.test-fixture')
 const { spawnInAdmittedPane } = await import('../../runtime-pane-admission')
+const { leaveSpawnsUncommitted } = await import('../../bind-first-pane.test-fixture')
 const { PaneStartStatuses } = await import('../../pane-start-statuses')
 const { bindingOf } = await import('../../pane-live-facts')
 
@@ -31,7 +32,7 @@ function createOn(bindsFirst: boolean) {
     }
     return register(ptyId, worktreeId, connectionId, binding)
   }
-  runtime.setPtyController({
+  const controller = {
     spawn: vi.fn(async (args: SpawnArgs) => {
       if (bindsFirst) {
         // As the PTY host's spawn commit: it binds the pane before the spawn answers.
@@ -50,7 +51,9 @@ function createOn(bindsFirst: boolean) {
     getForegroundProcess: async () => null,
     listProcesses: async () =>
       ['pty-a', 'pty-b', 'pty-new'].map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'sh' }))
-  })
+  }
+  // The suites' stand-in spawn commit binds first; this test drives a spawn that does not.
+  runtime.setPtyController(bindsFirst ? controller : leaveSpawnsUncommitted(controller))
   return { runtime, answeredAtRegistration }
 }
 

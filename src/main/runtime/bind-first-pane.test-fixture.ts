@@ -247,6 +247,15 @@ type PtyControllerRuntimePrototype = {
   setPtyController: (this: OrcaRuntimeService, controller: RuntimePtyController | null) => void
 }
 
+// Controllers a test keeps from the stand-in commit, to drive a path that registers unbound.
+const uncommittedControllers = new WeakSet<RuntimePtyController>()
+
+/** Keeps commitFakeSpawnsInRuntimeTests from binding this controller's spawns. */
+export function leaveSpawnsUncommitted(controller: RuntimePtyController): RuntimePtyController {
+  uncommittedControllers.add(controller)
+  return controller
+}
+
 /**
  * Gives every fake PTY controller a suite installs the real controller's spawn commit, which binds
  * the pane before the runtime registers it. A spawn already committing binds the same pane again.
@@ -255,7 +264,7 @@ export function commitFakeSpawnsInRuntimeTests(prototype: PtyControllerRuntimePr
   const setPtyController = prototype.setPtyController
   prototype.setPtyController = function (controller) {
     // No spawn, nothing to commit: the suite's own object, so its methods see themselves as `this`.
-    if (typeof controller?.spawn !== 'function') {
+    if (typeof controller?.spawn !== 'function' || uncommittedControllers.has(controller)) {
       setPtyController.call(this, controller)
       return
     }

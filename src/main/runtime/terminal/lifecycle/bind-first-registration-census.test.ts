@@ -11,20 +11,16 @@ const ROOT = path.resolve(__dirname, '../../../../..')
 /** Create path → the registration site and the binding write that precedes it in the same function. */
 const CREATE_PATHS = [
   {
-    path: 'window spawn (agent launch from a window included)',
-    file: 'src/main/ipc/pty/ipc/spawn-commit.ts',
-    bindsWith: 'persistPtyIpcSpawnCommit('
+    // Both start lanes (window spawn, agent launch included, and runtime spawn) commit here.
+    path: 'spawn commit, a new terminal',
+    file: 'src/main/ipc/pty/spawn-commit-assembly.ts',
+    bindsWith: 'savePtySpawnPaneBinding('
   },
   {
     // An adoption attaches to a live owner whose pane already binds it; nothing is written.
-    path: 'runtime spawn commit, an adopted live owner',
-    file: 'src/main/ipc/pty/runtime/spawn-commit.ts',
-    bindsWith: "disposition === 'adopted'"
-  },
-  {
-    path: 'runtime spawn commit, a new terminal',
-    file: 'src/main/ipc/pty/runtime/spawn-commit.ts',
-    bindsWith: 'persistFreshPaneBinding('
+    path: 'spawn commit, an adopted live owner',
+    file: 'src/main/ipc/pty/spawn-commit-assembly.ts',
+    bindsWith: 'adopted.owner'
   },
   {
     path: 'pane adoption of a live session',
