@@ -9,7 +9,7 @@ import type { AgentModelCatalogConfiguredChoice } from './agent-model-catalog-en
 
 export type AgentModelCatalogRecord = Pick<
   AgentSessionRecord,
-  'sessionId' | 'provider' | 'accountHome' | 'location' | 'launchDirectory'
+  'sessionId' | 'provider' | 'providerHandleChain' | 'accountHome' | 'location' | 'launchDirectory'
 >
 
 /** What a workspace changes about a catalog read: its folder's own catalog, and its default. */

@@ -16,8 +16,10 @@ import type { StructuredAgentSessionLiveOptions } from './structured-agent-sessi
 import { describe, expect, it, vi } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentJournalItemBody } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionProviderHandleLink } from '../../../shared/agent-session-provider-handle'
-import type { AgentSessionRewindRecord } from '../../../shared/agent-session-rewind'
+import {
+  claudeProviderHandle,
+  codexProviderHandle
+} from '../../../shared/agent-session-provider-handle-encoding'
 import type { AgentSessionModelOption } from '../../../shared/agent-session-wire'
 import { createAgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
 import {
@@ -42,10 +44,10 @@ import {
 
 const SESSION = 'session-1'
 
-type RestingFacts = Pick<Partial<AgentSessionRecord>, 'options' | 'provider'> & {
-  providerHandleChain?: Pick<AgentSessionProviderHandleLink, 'origin'>[]
-  rewind?: Pick<AgentSessionRewindRecord, 'phase'>
-}
+type RestingFacts = Pick<
+  Partial<AgentSessionRecord>,
+  'options' | 'provider' | 'providerHandleChain' | 'rewind'
+>
 
 function restingJournal(items: AgentJournalItemBody[] = [], wroteBeforeOpen = false) {
   return {
@@ -250,7 +252,15 @@ describe('options at rest', () => {
 })
 
 describe('a chat at rest, read by the host', () => {
-  const created: RestingFacts['providerHandleChain'] = [{ origin: 'created' }]
+  const created = [
+    {
+      origin: 'created',
+      linkId: 'link-1',
+      mintedAtFence: 1,
+      observedAt: 1,
+      handle: codexProviderHandle('provider-session-1')
+    }
+  ] satisfies AgentSessionRecord['providerHandleChain']
   const turn: AgentJournalItemBody = { kind: 'turn', turnId: 'turn-1', state: 'completed' }
   const fast = [{ value: 'priority', label: 'Fast' }]
   const flex = [...fast, { value: 'flex', label: 'Flex' }]
@@ -299,10 +309,30 @@ describe('a chat at rest, read by the host', () => {
 
   it.each<[string, RestingFacts, AgentJournalItemBody[], boolean, string[]]>([
     ['started here names its default as its own', {}, [], false, []],
-    ['taken from history', { providerHandleChain: [{ origin: 'adopted' }] }, [], true, ['model']],
+    [
+      'taken from history',
+      { providerHandleChain: [{ ...created[0]!, origin: 'adopted' }] },
+      [],
+      true,
+      ['model']
+    ],
     // A context clear hides the turn from the newest-turn read, not from history.
     ['with a turn before a context clear', {}, [turn], true, ['model']],
-    ['after a rewind', { rewind: { phase: 'completed' } }, [], true, ['model']],
+    [
+      'after a rewind',
+      {
+        rewind: {
+          phase: 'completed',
+          operationId: 'rewind-1',
+          callerKey: 'caller-1',
+          itemId: 'item-1',
+          expectedEpoch: 'epoch-1'
+        }
+      },
+      [],
+      true,
+      ['model']
+    ],
     // A journal founded afresh proves nothing for a chat whose agent already ran.
     ['whose journal went missing', { providerHandleChain: created }, [], false, ['model']]
   ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
@@ -394,7 +424,16 @@ describe('a chat at rest, read by the host', () => {
     )
     expect(structuredAgentSessionSendSelection(state)).toEqual(model ? { model } : undefined)
     const resumed = await readAtRest(
-      { provider: 'claude', providerHandleChain: [{ origin: 'adopted' }] },
+      {
+        provider: 'claude',
+        providerHandleChain: [
+          {
+            ...created[0]!,
+            origin: 'adopted',
+            handle: claudeProviderHandle('provider-session-1', null)
+          }
+        ]
+      },
       [],
       true,
       installed,

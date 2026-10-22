@@ -116,6 +116,7 @@ it.each(['success', 'budget'] as const)(
     const service = createAgentModelCatalogService({
       store: new AgentModelCatalogStore(),
       getRecord: () => undefined,
+      getConversation: () => undefined,
       drivesRecord: () => true,
       resolveAccountHome: async () => home,
       probes: { claude: scoped }

@@ -203,7 +203,7 @@ describe('same-conversation clear', () => {
     expect(store.listVisibleSessionIds()).toEqual([HOST_TEST_SESSION])
     expect(store.getSessionTabId(HOST_TEST_SESSION)).toBe(tab)
     expect(cleared.providerHandleChain).toEqual([])
-    const ownership = listStructuredProviderSessionOwnership(store.listRecords())
+    const ownership = listStructuredProviderSessionOwnership(store.listConversations())
     expect(ownership).toEqual([])
     expect(
       findConflictingStructuredAdoption({
