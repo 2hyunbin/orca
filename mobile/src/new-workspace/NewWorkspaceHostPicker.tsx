@@ -7,7 +7,7 @@ import { loadHostCatalog } from '../transport/host-store'
 import type { HostProfile } from '../transport/types'
 
 /**
- * Home's "Create Workspace On" picker, inside the overlay so the drawer that follows opens from the
+ * Home's "Create workspace on" picker, inside the overlay so the drawer that follows opens from the
  * same window. A pick starts the load at once, so the loading drawer opens as the picker leaves.
  */
 export function NewWorkspaceHostPicker({
@@ -31,7 +31,7 @@ export function NewWorkspaceHostPicker({
   }, [nothingToPick, router])
   return (
     <PickerModal
-      title="Create Workspace On"
+      title="Create workspace on"
       visible={hosts !== null && !nothingToPick && open}
       options={hostPickerOptions(hosts ?? [])}
       selected=""
