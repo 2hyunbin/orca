@@ -74,6 +74,35 @@ describe('terminal live pending flush state', () => {
 })
 
 describe('terminal live mirror send queue', () => {
+  it('settles queued input when the sender throws before returning a promise', async () => {
+    const state = createTerminalLivePendingFlushState()
+    const writes: string[] = []
+    const results: Array<boolean | null> = [null, null]
+    const sender = (_handle: string, payload: string): Promise<boolean> => {
+      writes.push(payload)
+      if (writes.length === 1) {
+        throw new Error('transport unavailable')
+      }
+      return Promise.resolve(true)
+    }
+    void queueTerminalLiveMirrorSend(state, 'terminal-1', 'first', sender).then((sent) => {
+      results[0] = sent
+    })
+    void queueTerminalLiveMirrorSend(state, 'terminal-1', 'second', sender).then((sent) => {
+      results[1] = sent
+    })
+
+    await waitForTerminalLivePendingFlush(state)
+
+    expect(results).toEqual([false, true])
+    expect(writes).toEqual(['first', 'second'])
+    expect(state.activeRequests).toEqual([])
+    expect(state.pendingBatches).toEqual([])
+    await expect(queueTerminalLiveMirrorSend(state, 'terminal-1', 'fresh', sender)).resolves.toBe(
+      true
+    )
+  })
+
   it.each(['a', '😀'])(
     'keeps coalesced %s input within the live sender byte limit',
     async (glyph) => {

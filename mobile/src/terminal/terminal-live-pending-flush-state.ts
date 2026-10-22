@@ -59,7 +59,13 @@ async function drainTerminalLiveMirrorSends(
     }
 
     state.activeRequests = batch.requests
-    const sent = await batch.sender(batch.handle, batch.payload).catch(() => false)
+    let delivery: Promise<boolean>
+    try {
+      delivery = batch.sender(batch.handle, batch.payload)
+    } catch {
+      delivery = Promise.resolve(false)
+    }
+    const sent = await delivery.catch(() => false)
     if (state.generation !== generation) {
       return false
     }
