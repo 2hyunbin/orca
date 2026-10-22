@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Repo } from '../../../shared/repo-types'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import { OrcaRuntimeService } from '../orca-runtime'
@@ -15,10 +15,6 @@ function catalogEventsFor(repo: Repo): RuntimeClientEvent[] {
 }
 
 const baseRepo: Repo = { id: 'r', path: '/r', displayName: 'r', badgeColor: 'blue', addedAt: 1 }
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
 
 describe('notifyWorktreeCatalogChangedForRemoteClients', () => {
   it('tells remote clients about a local repo', () => {
