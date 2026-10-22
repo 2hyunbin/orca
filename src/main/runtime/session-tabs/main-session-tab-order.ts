@@ -53,7 +53,7 @@ export function withMainTabOrder(
         ? byWritten
         : Math.max(indexOf(projected.activeGroupId), 0)
   // A written row in a group main does not hold joins the active group: groups are main's.
-  const groups = withStrayIn(placedGroups, placement.stray, activeIndex)
+  const groups = withStrayIn(placedGroups, placement, activeIndex)
   const tabGroups = groups.filter((group) => group.tabOrder.length > 0)
   const position = new Map(tabGroups.flatMap((group) => group.tabOrder).map((id, at) => [id, at]))
   const tabs = written.tabs

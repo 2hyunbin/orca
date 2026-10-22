@@ -34,33 +34,38 @@ export function withWindowOnlyIds(
 /**
  * Main's groups, each with the side-only order ids (orderIdOf) the side's group of the same id
  * lists, where they stood there. Ids in a group main lacks, or in no group (in `sideOrder`), come
- * back as `stray` for the caller's active group.
+ * back as `stray` for the caller's active group, with the side's whole order to place them by.
  */
 export function placeInMainGroups(
   mainGroups: readonly Group[],
   sideGroups: readonly Group[],
   sideOnly: ReadonlySet<string>,
   sideOrder: readonly string[] = []
-): { groups: Group[]; stray: string[] } {
+): { groups: Group[]; stray: string[]; order: string[] } {
   const side = new Map(sideGroups.map((group) => [group.id, group]))
   const groups = mainGroups.map((group) => ({
     ...group,
     tabOrder: withWindowOnlyIds(group.tabOrder, side.get(group.id)?.tabOrder ?? [], sideOnly)
   }))
   const placed = new Set(groups.flatMap((group) => group.tabOrder))
-  const stray = [
-    ...new Set([...sideGroups.flatMap((group) => group.tabOrder), ...sideOrder])
-  ].filter((id) => sideOnly.has(id) && !placed.has(id))
-  return { groups, stray }
+  const order = [...new Set([...sideGroups.flatMap((group) => group.tabOrder), ...sideOrder])]
+  const stray = order.filter((id) => sideOnly.has(id) && !placed.has(id))
+  return { groups, stray, order }
 }
 
-/** The groups with the stray ids appended to the one at `index`; unchanged when it is absent. */
-export function withStrayIn(groups: Group[], stray: readonly string[], index: number): Group[] {
+/**
+ * The groups with the stray ids in the one at `index`, each after the id it follows in the side's
+ * `order` (a rebuild's group main lacks keeps a chat first); unchanged when that group is absent.
+ */
+export function withStrayIn(
+  groups: Group[],
+  { stray, order }: { stray: readonly string[]; order: readonly string[] },
+  index: number
+): Group[] {
   const target = groups[index]
   if (!target || stray.length === 0) {
     return groups
   }
-  return groups.map((group, at) =>
-    at === index ? { ...target, tabOrder: [...target.tabOrder, ...stray] } : group
-  )
+  const tabOrder = withWindowOnlyIds(target.tabOrder, order, new Set(stray))
+  return groups.map((group, at) => (at === index ? { ...target, tabOrder } : group))
 }
