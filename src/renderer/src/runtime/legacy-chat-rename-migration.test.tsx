@@ -17,7 +17,7 @@ import { makeFolderWorkspace } from '@/store/slices/worktrees-slice-test-fixture
 import { WorkspaceAttachmentOrigins } from '@/components/sidebar/WorkspaceAttachmentOrigins'
 import { useAppStore } from '@/store'
 import { installLegacyChatRenameMigration } from './legacy-chat-rename-migration'
-import { renameStructuredChatTab, uploadLegacyStructuredChatRename } from './structured-chat-rename'
+import { uploadLegacyStructuredChatRename } from './structured-chat-rename'
 import { readStructuredChatTabName } from './structured-chat-tab-name'
 import {
   subscribeStructuredChatTabNames,
@@ -456,13 +456,13 @@ it('traces legacy runtime storage movement, action routing and switch-away befor
   })
   expect(mock.rpc).not.toHaveBeenCalled()
   mock.paired.set(tab.entityId, name(tab, 'Explicit name'))
-  await renameStructuredChatTab(
-    useAppStore.getState,
-    current(),
-    'Explicit name',
-    undefined,
-    vi.fn()
-  )
+  useAppStore.getState().setTabCustomTitle(current().id, '  Explicit name  ')
+  // Navigation happens before the dynamic rename import resumes, with inventory still absent.
+  useAppStore.setState({
+    activeWorktreeId: 'elsewhere',
+    activeWorkspaceExecutionHostId: 'runtime:a'
+  })
+  await waitFor(() => expect(current().customLabel).toBe('Explicit name'))
   expect(mock.rpc).toHaveBeenCalledExactlyOnceWith(
     { kind: 'environment', environmentId: 'b' },
     'agentSession.rename',
@@ -471,7 +471,32 @@ it('traces legacy runtime storage movement, action routing and switch-away befor
       name: 'Explicit name'
     }
   )
-  expect(current().customLabel).toBeNull()
+  expect(current().executionHostId).toBeUndefined()
+  expect(readStructuredChatTabName(current(), useAppStore.getState())).toBe('Explicit name')
+  await persistWorkspaceSessionByHost(
+    api,
+    { ...reloaded.session, ...buildPersistedUnifiedTabSessionData(useAppStore.getState()) },
+    useAppStore.getState()
+  )
+  const renamed = await fetchWorkspaceSessionWithRuntimeHostOwners(
+    api,
+    [],
+    ['runtime:a', 'runtime:b']
+  )
+  useAppStore.getState().hydrateWorkspaceSession(renamed.session, renamed)
+  useAppStore.getState().hydrateTabsSession(renamed.session)
+  useAppStore.setState({ activeWorktreeId: 'elsewhere' })
+  expect(current().executionHostId).toBeUndefined()
+  expect(readStructuredChatTabName(current(), useAppStore.getState())).toBe('Explicit name')
+  expect(mock.rpc).toHaveBeenCalledTimes(1)
+  // The existing migration retires the copy once catalog ownership is proved.
+  useAppStore.setState({ folderWorkspaces: [{ ...folder, executionHostId: 'runtime:b' }] })
+  await waitFor(() => expect(current().customLabel).toBeNull())
+  expect(mock.rpc).toHaveBeenLastCalledWith(
+    { kind: 'environment', environmentId: 'b' },
+    'agentSession.rename',
+    { sessionId: tab.entityId, name: 'Explicit name', legacyAlias: true }
+  )
   expect(readStructuredChatTabName(current(), useAppStore.getState())).toBe('Explicit name')
 })
 

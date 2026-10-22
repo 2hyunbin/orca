@@ -13,6 +13,7 @@ import {
 } from './tab-change-through-layout-owner'
 import { findRenamableUnifiedTab } from './renamable-unified-tab'
 import { sendGeneratedTabTitles } from '@/runtime/generated-tab-titles-send'
+import { captureStructuredChatRename } from '@/runtime/structured-chat-rename-action'
 
 type RoutedActions = Pick<
   TerminalSlice,
@@ -148,9 +149,12 @@ export function routeTerminalTabChangesThroughLayoutOwner(
         renameOnTab()
         return
       }
-      void import('@/runtime/structured-chat-rename').then(({ renameStructuredChatTab }) =>
-        renameStructuredChatTab(get, chat, title, opts, renameOnTab)
-      )
+      const action = captureStructuredChatRename(get, chat)
+      void import('@/runtime/structured-chat-rename')
+        .then(({ renameStructuredChatTab }) =>
+          renameStructuredChatTab(get, chat, title, opts, renameOnTab, action)
+        )
+        .finally(action.finish)
     },
     setTabColor: (tabId, color, opts) =>
       route(

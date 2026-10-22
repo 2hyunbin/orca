@@ -4,9 +4,15 @@ import { createTestStore, makeWorktree, seedStore } from '../slices/store-test-h
 import { layoutApplyTestTransport } from '@/runtime/layout-apply-test-transport.test-fixture'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type * as SessionClient from '@/runtime/structured-agent-session-client'
+import { routeTerminalTabChangesThroughLayoutOwner } from './terminal-tab-layout-owner-actions'
+import { makeFolderWorkspace } from '../slices/worktrees-slice-test-fixtures'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 
 const { hostRename, hostSavesNames } = vi.hoisted(() => ({
-  hostRename: vi.fn(async (_params: unknown) => ({ name: 'Flaky retry test', applied: true })),
+  hostRename: vi.fn(async (_params: unknown, _target?: RuntimeClientTarget) => ({
+    name: 'Flaky retry test',
+    applied: true
+  })),
   hostSavesNames: vi.fn(async () => true)
 }))
 
@@ -19,7 +25,9 @@ vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
   return {
     ...client,
     callRuntimeRpc: (...args: Parameters<typeof client.callRuntimeRpc>) =>
-      args[1] === 'agentSession.rename' ? hostRename(args[2]) : client.callRuntimeRpc(...args)
+      args[1] === 'agentSession.rename'
+        ? hostRename(args[2], args[0])
+        : client.callRuntimeRpc(...args)
   }
 })
 
@@ -144,6 +152,7 @@ describe('recoloring a structured chat tab', () => {
 describe('renaming a structured chat tab', () => {
   beforeEach(() => {
     hostRename.mockClear()
+    hostRename.mockResolvedValue({ name: 'Flaky retry test', applied: true })
     hostSavesNames.mockResolvedValue(true)
   })
 
@@ -151,14 +160,107 @@ describe('renaming a structured chat tab', () => {
     const store = storeWithStructuredTab()
     store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, '  Flaky retry test ')
     await vi.waitFor(() =>
-      expect(hostRename).toHaveBeenCalledWith({ sessionId: 'codex-1', name: 'Flaky retry test' })
+      expect(hostRename).toHaveBeenCalledWith(
+        { sessionId: 'codex-1', name: 'Flaky retry test' },
+        { kind: 'local' }
+      )
     )
     await layoutApplyTestTransport.settle()
     expect(labelOf(store)).toBeNull()
     expect(layoutApplyTestTransport.sent).not.toContainEqual(
       expect.objectContaining({ type: 'renameTab', tabId: STRUCTURED_TAB_ID })
     )
+    store.getState().setTabCustomLabel(STRUCTURED_TAB_ID, 'Old local alias')
+    store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, 'Updated local name')
+    await vi.waitFor(() =>
+      expect(hostRename).toHaveBeenLastCalledWith(
+        { sessionId: 'codex-1', name: 'Updated local name' },
+        { kind: 'local' }
+      )
+    )
+    await layoutApplyTestTransport.settle()
+    await vi.waitFor(() => expect(labelOf(store)).toBeNull())
   })
+
+  it.each(['window', 'main'] as const)(
+    'captures an alias-free twin before the %s entry imports, and preserves newer intent',
+    async (entry) => {
+      const store = storeWithStructuredTab()
+      const folder = makeFolderWorkspace({ id: 'twin' })
+      const tab = { ...structuredTab(), worktreeId: folder.id }
+      store.setState({
+        unifiedTabsByWorktree: { [folder.id]: [tab] },
+        activeWorktreeId: folder.id,
+        activeWorkspaceExecutionHostId: 'runtime:b',
+        folderWorkspaces: [
+          { ...folder, executionHostId: 'runtime:a' },
+          { ...folder, executionHostId: 'runtime:b' }
+        ]
+      })
+      const actions =
+        entry === 'main'
+          ? routeTerminalTabChangesThroughLayoutOwner(store.getState(), store.getState)
+          : store.getState()
+      const current = () => store.getState().unifiedTabsByWorktree[folder.id][0]!
+      actions.setTabCustomTitle(tab.id, '  First  ')
+      store.setState({ activeWorktreeId: 'elsewhere', activeWorkspaceExecutionHostId: 'runtime:a' })
+      await vi.waitFor(() => expect(current().customLabel).toBe('First'))
+      expect(hostRename).toHaveBeenLastCalledWith(
+        { sessionId: tab.entityId, name: 'First' },
+        { kind: 'environment', environmentId: 'b' }
+      )
+      expect(current().executionHostId).toBeUndefined()
+
+      store.setState({ activeWorktreeId: folder.id, activeWorkspaceExecutionHostId: 'runtime:b' })
+      let complete = () => {}
+      hostRename.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            complete = () => resolve({ name: 'Older', applied: true })
+          })
+      )
+      actions.setTabCustomTitle(tab.id, 'Older')
+      await vi.waitFor(() =>
+        expect(hostRename).toHaveBeenLastCalledWith(
+          { sessionId: tab.entityId, name: 'Older' },
+          { kind: 'environment', environmentId: 'b' }
+        )
+      )
+      const error = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      hostRename.mockRejectedValueOnce(new Error('Save refused'))
+      actions.setTabCustomTitle(tab.id, 'Not saved')
+      await vi.waitFor(() => expect(error).toHaveBeenCalled())
+      expect(current().customLabel).toBe('First')
+      error.mockRestore()
+      complete()
+      await layoutApplyTestTransport.settle()
+      expect(current().customLabel).toBe('First')
+      actions.setTabCustomTitle(tab.id, 'Newer')
+      await vi.waitFor(() => expect(current().customLabel).toBe('Newer'))
+
+      hostRename.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            complete = () => resolve({ name: 'Stale', applied: true })
+          })
+      )
+      actions.setTabCustomTitle(tab.id, 'Stale')
+      await vi.waitFor(() =>
+        expect(hostRename).toHaveBeenLastCalledWith(
+          { sessionId: tab.entityId, name: 'Stale' },
+          { kind: 'environment', environmentId: 'b' }
+        )
+      )
+      const replacement = { ...current(), customLabel: 'Replacement' }
+      store.setState({ unifiedTabsByWorktree: { [folder.id]: [replacement] } })
+      complete()
+      await layoutApplyTestTransport.settle()
+      expect(current()).toBe(replacement)
+
+      actions.setTabCustomTitle(tab.id, 'After replacement')
+      await vi.waitFor(() => expect(current().customLabel).toBe('After replacement'))
+    }
+  )
 
   it('keeps the name on the tab for a host too old to save it, and clears it when emptied', async () => {
     hostSavesNames.mockResolvedValue(false)

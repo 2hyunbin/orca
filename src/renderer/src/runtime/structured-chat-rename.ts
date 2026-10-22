@@ -6,7 +6,6 @@ import { normalizeAgentSessionConversationName } from '../../../shared/agent-ses
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { supportsStructuredAgentSessionRename } from './structured-agent-session-client'
 import {
-  structuredAgentSessionTargetForTab,
   structuredAgentSessionTargetForHost,
   structuredAgentSessionOwnerForTab,
   legacyStructuredChatRenameOwner,
@@ -14,6 +13,7 @@ import {
 } from './structured-agent-session-owner'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { sendTabChangeToLayoutOwner } from '@/store/terminals/tab-change-through-layout-owner'
+import { captureStructuredChatRename } from './structured-chat-rename-action'
 
 type RenameResult = { name: string | null; applied: boolean }
 
@@ -27,11 +27,35 @@ export async function renameStructuredChatTab(
   tab: Tab,
   title: string | null,
   opts: { recordInteraction?: boolean } | undefined,
-  keepOnTab: () => void
+  keepOnTab: () => void,
+  action = captureStructuredChatRename(get, tab)
 ): Promise<void> {
-  const target = structuredAgentSessionTargetForTab(get(), tab)
+  try {
+    await submitRename(get, tab, title, opts, keepOnTab, action)
+  } finally {
+    action.finish()
+  }
+}
+
+async function submitRename(
+  get: () => AppState,
+  tab: Tab,
+  title: string | null,
+  opts: { recordInteraction?: boolean } | undefined,
+  keepOnTab: () => void,
+  action: ReturnType<typeof captureStructuredChatRename>
+): Promise<void> {
+  if (!action.current()) {
+    return
+  }
+  const { target } = action
   if (!target || !(await supportsStructuredAgentSessionRename(target))) {
-    keepOnTab()
+    if (action.current()) {
+      keepOnTab()
+    }
+    return
+  }
+  if (!action.current()) {
     return
   }
   const name = normalizeAgentSessionConversationName(title)
@@ -53,11 +77,20 @@ export async function renameStructuredChatTab(
     toast.error(translate('components.tab.bar.chatRename.failed', "Couldn't rename this chat"))
     return
   }
+  if (!action.current()) {
+    return
+  }
+  if (action.retainAlias) {
+    get().setTabCustomLabel(tab.id, name, { recordInteraction: false })
+    return
+  }
   await dropLegacyAlias(
     get,
     tab,
     tab.customLabel ?? null,
-    executionHostIdForStructuredTarget(target)
+    executionHostIdForStructuredTarget(target),
+    structuredAgentSessionOwnerForTab,
+    action.current
   )
 }
 
@@ -100,7 +133,8 @@ async function dropLegacyAlias(
   tab: Tab,
   alias: string | null,
   owner: string,
-  ownerForTab = structuredAgentSessionOwnerForTab
+  ownerForTab = structuredAgentSessionOwnerForTab,
+  isCurrent = () => true
 ): Promise<boolean> {
   if (alias === null) {
     return true
@@ -112,6 +146,7 @@ async function dropLegacyAlias(
       (entry) => entry.id === tab.id
     )
     return (
+      isCurrent() &&
       current?.contentType === 'agent-session' &&
       current.entityId === tab.entityId &&
       current.customLabel === alias &&
