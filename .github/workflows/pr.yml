@@ -1386,7 +1386,7 @@ jobs:
         run: |
           $files = node config/scripts/pr-package-test-paths.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node config/scripts/run-vitest.mjs run --config config/vitest.config.ts @files
+          node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts @files
 
       # Why its own step: the CPU burners that make taskkill slow would starve
       # every other test file sharing the runner.
