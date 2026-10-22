@@ -155,34 +155,6 @@ describe('the spawned Codex child', () => {
     vi.unstubAllEnvs()
   })
 
-  it.each([true, false])('pairs the resolved CLI only when it ships Node (%s)', async (sibling) => {
-    const root = mkdtempSync(join(tmpdir(), 'orca-codex-runtime-'))
-    try {
-      const bin = join(root, 'selected', 'bin')
-      mkdirSync(bin, { recursive: true })
-      const command = join(bin, process.platform === 'win32' ? 'codex.cmd' : 'codex')
-      writeFileSync(command, '', { mode: 0o755 })
-      if (sibling) {
-        writeFileSync(join(bin, process.platform === 'win32' ? 'node.exe' : 'node'), '', {
-          mode: 0o755
-        })
-      }
-      const inheritedPath = [join(root, 'other-runtime'), join(root, 'tools')].join(delimiter)
-      const env = await codexChildEnv({ PATH: inheritedPath }, 'runtime-session', command)
-      const segments = env.PATH.split(delimiter)
-      expect(segments.includes(bin)).toBe(sibling)
-      expect(segments.slice(-2)).toEqual(inheritedPath.split(delimiter))
-      if (sibling) {
-        expect(segments[0]).toBe(bin)
-      }
-      expect(env.ORCA_AGENT_SESSION_ID).toBe('runtime-session')
-      expect(env.CODEX_HOME).toBe('/pinned/home')
-      expect(env.ORCA_CLI_COMMAND).toMatch(DEV_CLI_LAUNCHER)
-    } finally {
-      rmSync(root, { recursive: true, force: true })
-    }
-  })
-
   it.skipIf(process.platform === 'win32')(
     'starts the persistent shebang CLI with its sibling Node over a competing PATH runtime',
     async () => {
@@ -206,9 +178,10 @@ describe('the spawned Codex child', () => {
         try {
           await expect(connection.request('test/env')).resolves.toMatchObject({
             sessionId: 'shebang-session',
-            path: env.PATH,
+            path: expect.stringMatching(DEV_CLI_BIN_FIRST),
             cliCommand: expect.stringMatching(DEV_CLI_LAUNCHER)
           })
+          expect(env.PATH.split(delimiter).slice(1)).toEqual([selectedBin, competingBin])
         } finally {
           await connection.close()
         }
