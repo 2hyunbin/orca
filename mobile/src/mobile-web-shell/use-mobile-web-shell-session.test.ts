@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { createElement, Suspense } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MOBILE_WEB_BUNDLE_CAPABILITY } from '../../../src/shared/mobile-web-bundle/mobile-web-bundle-capability'
@@ -216,6 +216,7 @@ type Mounted = {
   tree: ReactTestRenderer
   retry: () => void
   fail: () => void
+  freeze: (value: boolean) => void
   rerender: () => void
   states: () => readonly MobileWebShellSessionState[]
   /** Whether the page had spoken, as every render of the hook reported it. */
@@ -273,9 +274,20 @@ async function mount(store: GenerationStore): Promise<Mounted> {
     handle.handshakes.push(session.pageReady)
     return null
   }
+  let frozen = false
+  const parked = new Promise<void>(() => {})
+  function Freezer() {
+    if (frozen) {
+      throw parked
+    }
+    return null
+  }
+  function Layer() {
+    return createElement(Suspense, { fallback: null }, createElement(Probe), createElement(Freezer))
+  }
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
   await act(async () => {
-    rendered.tree = create(createElement(Probe))
+    rendered.tree = create(createElement(Layer))
   })
   const tree = rendered.tree
   if (tree === null) {
@@ -285,7 +297,11 @@ async function mount(store: GenerationStore): Promise<Mounted> {
     tree,
     retry: () => handle.retry(),
     fail: () => handle.fail(),
-    rerender: () => tree.update(createElement(Probe)),
+    freeze: (value) => {
+      frozen = value
+      tree.update(createElement(Layer))
+    },
+    rerender: () => tree.update(createElement(Layer)),
     states: () => handle.states,
     handshakes: () => handle.handshakes,
     documentStarted: () => handle.documentStarted(),
@@ -809,6 +825,25 @@ it('keeps ownership after retrying the same generation before a later update ret
   await act(async () => mounted.retry())
   expect(mounted.states().at(-1)).toMatchObject({ kind: 'ready', buildId: first.buildId })
   await store.commitGeneration(await store.stageGeneration(key, ownedBundle(2)))
+  expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(true)
+  await act(async () => mounted.tree.unmount())
+  await store.readUpdateFailures()
+  expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(false)
+})
+
+it('keeps a hidden shell’s lazy chunks owned through Suspense hide and reveal', async () => {
+  const fileSystem = createFakeGenerationFileSystem()
+  const store = createGenerationStore({ fileSystem })
+  const key = deriveHostCacheKey(HOST_ID)
+  const original = ownedBundle(1)
+  doubles.manifest = original.manifest
+  const first = await store.commitGeneration(await store.stageGeneration(key, original))
+  const mounted = await mount(store)
+  await act(async () => mounted.freeze(true))
+  await store.commitGeneration(await store.stageGeneration(key, ownedBundle(2)))
+  expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(true)
+  await act(async () => mounted.freeze(false))
+  await store.commitGeneration(await store.stageGeneration(key, ownedBundle(3)))
   expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(true)
   await act(async () => mounted.tree.unmount())
   await store.readUpdateFailures()

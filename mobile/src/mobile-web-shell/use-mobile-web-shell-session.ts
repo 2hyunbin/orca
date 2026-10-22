@@ -255,6 +255,14 @@ export function useMobileWebShellSession(args: {
     }
   }, [runEffect])
 
+  useEffect(
+    () => () => {
+      mountedOwnerRef.current?.release()
+      mountedOwnerRef.current = null
+    },
+    []
+  )
+
   useEffect(() => {
     // A new host is a new session: the old one's latches, cache handle and in-flight work all go.
     invalidate()
@@ -323,16 +331,16 @@ export function useMobileWebShellSession(args: {
       return
     }
     mountedOwnerRef.current = owner
-    return () => {
-      owner.release()
-      if (mountedOwnerRef.current === owner) {
-        mountedOwnerRef.current = null
-      }
-    }
   }, [mountedDirectory])
 
   useEffect(() => {
     const current = sessionRef.current
+    const mounted = mountedOwnerRef.current
+    const directory = current.state.kind === 'ready' ? current.state.generationDirectory : null
+    if (directory === null && mounted !== null) {
+      mounted.release()
+      mountedOwnerRef.current = null
+    }
     const inFlight =
       current.state.kind === 'checking' ||
       current.state.kind === 'fetching' ||
