@@ -1,3 +1,4 @@
+import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import type { ComputerUsePermissionStatusResult } from '../../../../shared/computer-use-permissions-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
@@ -103,4 +104,18 @@ export function getComputerUsePermissionSetupState(
       status.permissions.every((permission) => permission.status !== 'not-granted'),
     unavailable: status !== null && status.helperUnavailableReason !== null
   }
+}
+
+/** The git repos the setup-script probe checks, the active one first. */
+export function orderGitReposActiveFirst(
+  repos: readonly Repo[],
+  activeRepoId: string | null
+): Repo[] {
+  const gitRepos = repos.filter(isGitRepoKind)
+  const activeRepo = activeRepoId
+    ? (gitRepos.find((repo) => repo.id === activeRepoId) ?? null)
+    : null
+  return activeRepo
+    ? [activeRepo, ...gitRepos.filter((repo) => repo.id !== activeRepo.id)]
+    : gitRepos
 }

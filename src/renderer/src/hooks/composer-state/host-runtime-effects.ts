@@ -29,7 +29,8 @@ type HostRuntimeEffectsInput = Pick<
 import { useEffect, useCallback } from 'react'
 import { filterEnabledTuiAgents, isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import { getAgentCatalog } from '@/lib/agent-catalog'
-import { selectRepos, useAppStore } from '@/store'
+import { useAppStore } from '@/store'
+import { selectRepos } from '@/store/project-catalog-selectors'
 import { isSshConnectInProgress } from '@/lib/new-workspace-ssh-gate'
 import {
   connectRepoSshConnection,
