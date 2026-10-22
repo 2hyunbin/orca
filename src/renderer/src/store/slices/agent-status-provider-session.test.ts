@@ -244,6 +244,51 @@ describe('recordAgentProviderSession', () => {
     })
   })
 
+  it('keeps saved launch flags on the record across a second sleep and wake', () => {
+    const store = createTestStore()
+    store.setState({
+      tabsByWorktree: { 'wt-1': [makeTab({ id: 'tab-1', worktreeId: 'wt-1' })] }
+    } as Partial<AppState>)
+    const paneKey = 'tab-1:leaf-1'
+    const launchConfig = {
+      agentArgs: '--dangerously-skip-permissions',
+      agentEnv: { CLAUDE_PROFILE: 'work' }
+    }
+    const providerSession = { key: 'session_id' as const, id: 'claude-session-1' }
+    const runAndSleep = (launchToken: string, wakesFromSleep: boolean) => {
+      store.getState().registerAgentLaunchConfig(paneKey, launchConfig, {
+        agentType: 'claude',
+        launchToken,
+        tabId: 'tab-1',
+        leafId: 'leaf-1'
+      })
+      if (wakesFromSleep) {
+        // The pane's spawn consumes the sleeping record it woke from.
+        store.getState().clearSleepingAgentSession(paneKey)
+      }
+      store
+        .getState()
+        .recordAgentProviderSession(
+          paneKey,
+          'claude',
+          providerSession,
+          { updatedAt: 20 },
+          { tabId: 'tab-1', worktreeId: 'wt-1', connectionId: null },
+          { launchToken }
+        )
+      store.getState().captureSleepingAgentSessionsByWorktree('wt-1', [paneKey])
+      store.getState().dropAgentStatusByWorktree('wt-1', {
+        shutdownReason: 'manual-sleep',
+        sleepingPaneKeys: [paneKey]
+      })
+      return store.getState().sleepingAgentSessionsByPaneKey[paneKey]
+    }
+
+    expect(runAndSleep('launch-1', false)?.launchConfig).toEqual(launchConfig)
+    expect(runAndSleep('wake-1', true)?.launchConfig).toEqual(launchConfig)
+    expect(runAndSleep('wake-2', true)?.launchConfig).toEqual(launchConfig)
+  })
+
   it('keeps the activity cutoff and manual-unread stamp across a heartbeat for the same pane', () => {
     const store = createTestStore()
     store.setState({
