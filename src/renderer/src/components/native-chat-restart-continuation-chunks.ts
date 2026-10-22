@@ -1,10 +1,10 @@
 import type { ResumeFailure } from './native-chat-resume-on-restart-grouping'
-import type { HostOfferRead } from './native-chat-restart-host-offer'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { createRuntimeRpcAbortError } from '@/runtime/abortable-runtime-environment-call'
 import {
   failedFrom,
+  type HostOfferRead,
   type HostOfferPayload,
   type NativeChatRestartOffer
 } from './native-chat-restart-host-offer'

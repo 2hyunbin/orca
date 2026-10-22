@@ -2,6 +2,7 @@
 import { act } from 'react'
 import { toast } from 'sonner'
 import { useAppStore } from '../store'
+import { getDefaultSettings } from '../../../shared/constants'
 import {
   useNativeChatTargetRestartResuming,
   useNativeChatRestartRuntimes
@@ -21,7 +22,7 @@ import {
   type RestartRpc,
   type ResumeStatusStream
 } from './native-chat-resume-modal.test-support'
-import { NativeChatResumeRuntimeModal } from './NativeChatResumeOnRestartModal'
+import { NativeChatResumeRuntimeModal } from './NativeChatResumeRuntimeModal'
 import {
   createNativeChatRestartStore,
   type NativeChatRestartStore
@@ -487,7 +488,11 @@ it.each(['available', 'unavailable', 'other-desktop'])(
       return reply.promise
     })
     useAppStore.setState({
-      settings: { ...useAppStore.getState().settings, experimentalNativeChat: false },
+      settings: {
+        ...getDefaultSettings(''),
+        ...useAppStore.getState().settings,
+        experimentalNativeChat: false
+      },
       runtimeEnvironments: [
         {
           id: 'ssh',

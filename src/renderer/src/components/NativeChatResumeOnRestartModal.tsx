@@ -1,8 +1,5 @@
-import { NativeChatResumeRuntimeModal } from './NativeChatResumeRuntimeModal'
-export { NativeChatResumeRuntimeModal } from './NativeChatResumeRuntimeModal'
 import { NativeChatResumeDialogHeader } from './NativeChatResumeDialogHeader'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useNativeChatRestartOfferEnabled } from './native-chat-restart-offer-gate'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
 import { Dialog, DialogContent, DialogFooter } from './ui/dialog'
@@ -23,13 +20,11 @@ import {
   type ResumeFailure
 } from './native-chat-resume-on-restart-grouping'
 import {
-  localNativeChatRestartStore,
   useNativeChatRestartOffer,
   useNativeChatRestartResuming,
   useNativeChatRestartRun,
   type NativeChatRestartStore
 } from './native-chat-resume-on-restart-store'
-import { useNativeChatRestartRuntimes } from './native-chat-restart-runtimes'
 import { useResumeRunPanel } from './NativeChatResumeRunPanel'
 import { resumeRunFailures } from './native-chat-resume-run-view'
 import { NativeChatResumeAutoNote } from './NativeChatResumeAutoNote'
@@ -69,24 +64,6 @@ function selectedByDefault(failure: ResumeFailure | undefined): boolean {
   }
   const guidance = resumeFailureGuidance(failure)
   return guidance.primary === 'retry' || guidance.secondary === 'retry'
-}
-
-export function NativeChatResumeOnRestartModal(): React.JSX.Element {
-  const enabled = useNativeChatRestartOfferEnabled()
-  const runtimes = useNativeChatRestartRuntimes()
-  return (
-    <>
-      <NativeChatResumeRuntimeModal store={localNativeChatRestartStore} offerEnabled={enabled} />
-      {runtimes.map(({ environment, store }) => (
-        <NativeChatResumeRuntimeModal
-          key={environment.id}
-          store={store}
-          machineName={environment.name}
-          offerEnabled
-        />
-      ))}
-    </>
-  )
 }
 
 export function NativeChatResumeOccurrenceModal({
