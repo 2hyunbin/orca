@@ -8,7 +8,7 @@ const STATES = new Set([
   'CLOSED',
   'LISTEN',
   'SYN_SENT',
-  'SYN_RECEIVED',
+  'SYN_RCVD',
   'ESTABLISHED',
   'CLOSE_WAIT',
   'FIN_WAIT_1',

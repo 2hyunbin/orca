@@ -1,4 +1,4 @@
-import type { WorkspacePortScanResult } from '../../../shared/workspace-ports'
+import type { WorkspacePort, WorkspacePortScanResult } from '../../../shared/workspace-ports'
 
 /**
  * Host a per-host scan key points at. `unknown` is kept distinct from `local` so
@@ -39,6 +39,24 @@ export function workspacePortHostForScanKey(scanKey: string): WorkspacePortHostR
     scanKey.length - SCAN_KEY_SUFFIX.length
   )
   return environmentId ? { kind: 'environment', environmentId } : { kind: 'unknown' }
+}
+
+/** Recover an aggregate row's source host without asserting process or workspace ownership. */
+export function workspacePortHostForRow(
+  port: WorkspacePort,
+  scansByKey: Record<string, WorkspacePortScanResult>
+): WorkspacePortHostRef {
+  const entries = Object.entries(scansByKey)
+  for (const [key, scan] of entries) {
+    if (
+      scan.ports.some(
+        (source) => port.id === (entries.length > 1 ? `${key}:${source.id}` : source.id)
+      )
+    ) {
+      return workspacePortHostForScanKey(key)
+    }
+  }
+  return { kind: 'unknown' }
 }
 
 /**

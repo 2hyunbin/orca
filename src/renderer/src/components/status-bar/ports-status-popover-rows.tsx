@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react'
+import React, { useCallback, useMemo } from 'react'
 import { Copy, ExternalLink, FolderOpen, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
 } from '@/lib/workspace-port-actions'
 import type { WorkspacePortGroup } from '@/lib/workspace-port-groups'
 import { useLocalhostLabelRouteForPort } from '@/lib/workspace-port-localhost-label-selector'
+import { workspacePortHostForRow } from '@/lib/workspace-port-host-availability'
 import { useWorktreeRuntimeTarget } from '@/runtime/use-worktree-runtime-target'
 import { useAppStore } from '@/store'
 import type { WorkspacePort } from '../../../../shared/workspace-ports'
@@ -83,9 +84,17 @@ export function PortRow({
   const replaceWorkspacePortScans = useAppStore((s) => s.replaceWorkspacePortScans)
   const setWorkspacePortScanRefreshing = useAppStore((s) => s.setWorkspacePortScanRefreshing)
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
-  const runtimeTarget = useWorktreeRuntimeTarget(
-    port.kind === 'workspace' ? port.owner.worktreeId : activeWorktreeId
+  const scansByKey = useAppStore((s) => s.workspacePortScansByKey)
+  const ownerTarget = useWorktreeRuntimeTarget(
+    port.kind === 'workspace' ? port.owner.worktreeId : null
   )
+  const runtimeTarget = useMemo(() => {
+    if (port.kind === 'workspace') {
+      return ownerTarget
+    }
+    const host = workspacePortHostForRow(port, scansByKey)
+    return host.kind === 'unknown' ? null : host
+  }, [ownerTarget, port, scansByKey])
   const processLabel = port.processName ?? (port.pid ? `PID ${port.pid}` : 'Unknown process')
   const canStop = canStopWorkspacePort(port)
   const openBrowserLabel = translate(

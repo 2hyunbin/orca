@@ -3,7 +3,7 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WorkspacePort } from '../../../../shared/workspace-ports'
+import type { WorkspacePort, WorkspacePortScanResult } from '../../../../shared/workspace-ports'
 
 const {
   activateAndRevealWorktreeMock,
@@ -11,8 +11,10 @@ const {
   openUrlMock,
   recordFeatureInteractionMock,
   setRemoteBrowserPageHandleMock,
+  callRuntimeRpcMock,
   storeState
 } = vi.hoisted(() => {
+  const workspacePortScansByKey: Record<string, WorkspacePortScanResult> = {}
   const state = {
     settings: { openLinksInApp: true },
     createBrowserTab: vi.fn(),
@@ -20,7 +22,7 @@ const {
     replaceWorkspacePortScans: vi.fn(),
     setWorkspacePortScanRefreshing: vi.fn(),
     recordFeatureInteraction: vi.fn(),
-    workspacePortScansByKey: {}
+    workspacePortScansByKey
   }
   return {
     activateAndRevealWorktreeMock: vi.fn(),
@@ -28,6 +30,7 @@ const {
     openUrlMock: vi.fn(),
     recordFeatureInteractionMock: state.recordFeatureInteraction,
     setRemoteBrowserPageHandleMock: state.setRemoteBrowserPageHandle,
+    callRuntimeRpcMock: vi.fn(),
     storeState: state
   }
 })
@@ -44,9 +47,15 @@ vi.mock('@/lib/worktree-activation', () => ({
   activateAndRevealWorktree: activateAndRevealWorktreeMock
 }))
 
-vi.mock('@/lib/worktree-runtime-owner', () => ({ getExecutionHostIdForWorktree: () => 'local' }))
+vi.mock('@/lib/worktree-runtime-owner', () => ({
+  getExecutionHostIdForWorktree: (_state: unknown, id: string | null) =>
+    id === 'repo-b::/repo-b' ? 'runtime:host-b' : 'local'
+}))
 
-vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: vi.fn() }))
+vi.mock('@/runtime/runtime-rpc-client', () => ({
+  callRuntimeRpc: callRuntimeRpcMock,
+  assertRuntimeEnvironmentCapability: vi.fn().mockResolvedValue(undefined)
+}))
 vi.mock('@/runtime/runtime-rpc-result', () => ({
   RuntimeRpcCallError: class RuntimeRpcCallError extends Error {
     code?: string
@@ -71,6 +80,8 @@ vi.mock('sonner', () => ({
 }))
 
 import { PortRow } from './ports-status-popover-rows'
+import { mergeWorkspacePortScans } from '@/lib/workspace-port-actions'
+import { toast } from 'sonner'
 
 const externalPort: WorkspacePort = {
   id: '127.0.0.1:63468:1234',
@@ -106,6 +117,12 @@ describe('status bar port row open routing', () => {
     recordFeatureInteractionMock.mockClear()
     setRemoteBrowserPageHandleMock.mockClear()
     activateAndRevealWorktreeMock.mockClear()
+    callRuntimeRpcMock.mockReset()
+    callRuntimeRpcMock.mockResolvedValue({ browserPageId: 'remote-page' })
+    vi.mocked(toast.error).mockClear()
+    storeState.workspacePortScansByKey = {
+      'local:all': { platform: 'darwin', scannedAt: 0, ports: [externalPort] }
+    }
   })
 
   afterEach(() => {
@@ -115,12 +132,15 @@ describe('status bar port row open routing', () => {
     container.remove()
   })
 
-  function renderPortRow(): HTMLButtonElement {
+  function renderPortRow(
+    port: WorkspacePort = externalPort,
+    activeWorktreeId: string | null = null
+  ): HTMLButtonElement {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
     act(() => {
-      root.render(<PortRow port={externalPort} activeWorktreeId={null} external />)
+      root.render(<PortRow port={port} activeWorktreeId={activeWorktreeId} external />)
     })
     const openButton = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Open in Browser"]'
@@ -176,5 +196,71 @@ describe('status bar port row open routing', () => {
     expect(recordFeatureInteractionMock).toHaveBeenCalledWith('ports')
     expect(openUrlMock).not.toHaveBeenCalled()
     expect(createBrowserTabMock).not.toHaveBeenCalled()
+  })
+
+  it('opens an ownerless host-B row on B while host A is active, without granting Stop or falling back on failure', async () => {
+    const owned: WorkspacePort = {
+      ...externalPort,
+      kind: 'workspace',
+      owner: {
+        worktreeId: 'repo-b::/repo-b',
+        repoId: 'repo-b',
+        displayName: 'B',
+        path: '/repo-b',
+        confidence: 'cwd'
+      }
+    }
+    const scans = (port: WorkspacePort): Record<string, WorkspacePortScanResult> => ({
+      'local:all': { platform: 'darwin', scannedAt: 0, ports: [externalPort] },
+      'environment:host-b:all': { platform: 'darwin', scannedAt: 1, ports: [port] }
+    })
+    storeState.workspacePortScansByKey = scans(owned)
+    const ownedRow = mergeWorkspacePortScans(storeState.workspacePortScansByKey)?.ports.find(
+      (port) => port.kind === 'workspace'
+    )
+    if (!ownedRow) {
+      throw new Error('expected host-B workspace row')
+    }
+    const openButton = renderPortRow(ownedRow, 'repo-a::/repo-a')
+    await act(async () => openButton.click())
+    expect(callRuntimeRpcMock).toHaveBeenLastCalledWith(
+      { kind: 'environment', environmentId: 'host-b' },
+      'browser.tabCreate',
+      { worktree: 'id:repo-b::/repo-b', url: 'http://127.0.0.1:63468' },
+      { timeoutMs: 30_000 }
+    )
+
+    const ownerless: WorkspacePort = { ...externalPort, pid: undefined, processName: undefined }
+    storeState.workspacePortScansByKey = scans(ownerless)
+    const row = mergeWorkspacePortScans(storeState.workspacePortScansByKey)?.ports.find((port) =>
+      port.id.startsWith('environment:host-b:all:')
+    )
+    if (!row) {
+      throw new Error('expected ownerless host-B row')
+    }
+    act(() => root.render(<PortRow port={row} activeWorktreeId="repo-a::/repo-a" external />))
+    expect(
+      container.querySelector<HTMLButtonElement>('button[aria-label="Stop Process"]')?.disabled
+    ).toBe(true)
+    await act(async () => openButton.click())
+    expect(callRuntimeRpcMock).toHaveBeenLastCalledWith(
+      { kind: 'environment', environmentId: 'host-b' },
+      'browser.tabCreate',
+      { url: 'http://127.0.0.1:63468' },
+      { timeoutMs: 30_000 }
+    )
+    expect(row).not.toHaveProperty('owner')
+    expect(setRemoteBrowserPageHandleMock).toHaveBeenLastCalledWith(expect.any(String), {
+      environmentId: 'host-b',
+      remotePageId: 'remote-page'
+    })
+    const createdTabs = createBrowserTabMock.mock.calls.length
+    callRuntimeRpcMock.mockRejectedValueOnce(new Error('host B disconnected'))
+    await act(async () => openButton.click())
+    expect(toast.error).toHaveBeenCalledWith('Failed to open browser', {
+      description: 'host B disconnected'
+    })
+    expect(createBrowserTabMock).toHaveBeenCalledTimes(createdTabs)
+    expect(openUrlMock).not.toHaveBeenCalled()
   })
 })

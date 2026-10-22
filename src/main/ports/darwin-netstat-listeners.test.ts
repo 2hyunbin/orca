@@ -36,6 +36,14 @@ describe('Darwin numeric long netstat contract', () => {
     expect(parseDarwinNetstatListeners(HEADER + row(`${real.slice(0, 39)}.3000`))).toEqual([])
   })
 
+  it('keeps listeners when Darwin reports an incoming handshake as SYN_RCVD', () => {
+    expect(
+      parseDarwinNetstatListeners(
+        `${HEADER}${row('127.0.0.1.3000', 'LISTEN', 'tcp4')}tcp4 0 0 192.0.2.1.443 192.0.2.2.50000 SYN_RCVD\n`
+      )
+    ).toEqual([{ host: '127.0.0.1', port: 3000 }])
+  })
+
   it('drains many nonlisteners across arbitrary chunks without retaining their dump', () => {
     const parser = new DarwinNetstatListeners()
     parser.write(HEADER.slice(0, 27))

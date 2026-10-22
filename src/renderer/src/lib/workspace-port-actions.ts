@@ -159,7 +159,12 @@ export async function openWorkspacePortInBrowser(args: {
       const remotePage = await callRuntimeRpc<{ browserPageId: string }>(
         args.runtimeTarget,
         'browser.tabCreate',
-        { worktree: toRuntimeWorktreeSelector(worktreeId), url },
+        {
+          ...(args.port.kind === 'workspace'
+            ? { worktree: toRuntimeWorktreeSelector(worktreeId) }
+            : {}),
+          url
+        },
         { timeoutMs: 30_000 }
       )
       const browserPageId = createBrowserUuid()

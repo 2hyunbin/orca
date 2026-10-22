@@ -1,6 +1,7 @@
 import { execFile, type ChildProcess } from 'node:child_process'
 import { closeSync } from 'node:fs'
 import { spawnProcess } from '@orca/process-host'
+import { LSOF_NONBLOCKING_ARGS } from '../../shared/lsof-nonblocking-args'
 import { DarwinNetstatListeners } from './darwin-netstat-listeners'
 import { openDarwinPortScanLock } from './darwin-port-scan-lock'
 import {
@@ -121,6 +122,22 @@ function detachChild(child: ChildProcess): void {
   child.unref()
 }
 
+function isCompletedCwdLsof(command: string, args: string[], stdout: string): boolean {
+  const pidList = args[5]
+  if (command !== '/usr/sbin/lsof' || !pidList || !/^[1-9]\d*(?:,[1-9]\d*)*$/.test(pidList)) {
+    return false
+  }
+  const expected = ['-O', ...LSOF_NONBLOCKING_ARGS, '-a', '-p', pidList, '-d', 'cwd', '-Fn']
+  if (args.length !== expected.length || !expected.every((arg, index) => arg === args[index])) {
+    return false
+  }
+  if (!/^(?:p[1-9]\d*\nfcwd\nn\/[^\n]*\n)*$/.test(stdout)) {
+    return false
+  }
+  const requested = new Set(pidList.split(','))
+  return Array.from(stdout.matchAll(/^p(\d+)$/gm)).every((match) => requested.has(match[1]))
+}
+
 async function runDarwinPortScanCommand(
   command: string,
   args: string[],
@@ -205,7 +222,9 @@ async function runDarwinPortScanCommand(
       }
       try {
         const emptyLsof = command === '/usr/sbin/lsof' && code === 1 && stdout === ''
-        if (signal || stderr || (code !== 0 && !emptyLsof)) {
+        // A vanished selected PID makes lsof exit 1 after printing the surviving cwd records.
+        const completedCwd = code === 1 && isCompletedCwdLsof(command, args, stdout)
+        if (signal || stderr || (code !== 0 && !emptyLsof && !completedCwd)) {
           throw new Error('Port scan observation is unavailable.')
         }
         if (
