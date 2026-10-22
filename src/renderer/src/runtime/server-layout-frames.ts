@@ -16,9 +16,19 @@ import {
   runtimeHostConnectionStateForEntry
 } from './runtime-host-connection-state'
 import { createServerLayoutFrameTranslator } from './server-layout-frame-ids'
+import {
+  selectDetectedWorktreesByRepo,
+  selectWorktreesByRepo
+} from '@/store/workspace-record-selectors'
+import {
+  DESKTOP_CREATED_SERVER_TAB_HOLDS,
+  forgetPublishedServerTabs,
+  pruneDesktopCreatedServerTabs
+} from '@/lib/desktop-created-server-tabs'
 import { serverHeldPanes, showServerLayoutHeldPanes } from './server-held-panes'
 import { createServerViewReport, onServerControlConnected } from './server-layout-view-report'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
+import { provideServerLayoutApplyRoutes } from './server-layout-apply-routes'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
 import {
   isFrameDrawnServerWorkspace,
@@ -139,8 +149,16 @@ function openServerFrames(
       const ours = draws(state)
       return (key) => gated.has(key) && ours(key)
     },
+    heldTabs: DESKTOP_CREATED_SERVER_TAB_HOLDS,
     translate: (frame) => {
       const translated = translator.translate(frame)
+      // A tab this desktop created that the server now lists is the server's from here on.
+      for (const key of translator.keys()) {
+        forgetPublishedServerTabs(
+          key,
+          (translator.serverLayout(key)?.tabs ?? []).flatMap((tab) => [tab.id, tab.entityId])
+        )
+      }
       live ||= frame.type === 'snapshot'
       if (frame.type === 'snapshot') {
         viewReport.reset()
@@ -184,10 +202,22 @@ function openServerFrames(
       sync.receive(frame)
     }
   })
+  // Layout intents for a workspace these frames draw go to this server's main (H5c).
+  const stopRoutes = provideServerLayoutApplyRoutes(environmentId, (worktreeId) =>
+    live && gated.has(worktreeId)
+      ? {
+          environmentId,
+          serverTabId: (desktopTabId) => translator.serverTabId(worktreeId, desktopTabId),
+          desktopTabId: (serverTabId) => translator.desktopTabId(worktreeId, serverTabId),
+          redraw: () => sync.redraw([worktreeId])
+        }
+      : null
+  )
   sync.start()
   return {
     gated: () => gated,
     close: (returnWorkspaces) => {
+      stopRoutes()
       stopRouting()
       stopHandles()
       stopControlWatch()
@@ -204,6 +234,8 @@ function openServerFrames(
 /** Opens one stream per reachable server advertising the capability; reopens on a new runtime or
  *  pairing, and closes when the server is removed or stops advertising it. */
 export function installServerLayoutFrames(store: FramesStore): () => void {
+  // Before any frame: a held tab the restored session no longer has must not come back.
+  pruneDesktopCreatedServerTabs(store.getState())
   const open = new Map<string, { identity: string; frames: ServerFrames }>()
   let inputs: unknown[] = []
   const reconcile = (state: AppState): void => {
@@ -265,8 +297,8 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
 function routingInputs(state: AppState): unknown[] {
   return [
     state.repos,
-    state.worktreesByRepo,
-    state.detectedWorktreesByRepo,
+    selectWorktreesByRepo(state),
+    selectDetectedWorktreesByRepo(state),
     state.projectGroups,
     state.restoredRuntimeHostIdByWorkspaceSessionKey,
     state.runtimeEnvironments,
