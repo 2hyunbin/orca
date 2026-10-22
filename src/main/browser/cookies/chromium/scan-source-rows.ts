@@ -1,20 +1,23 @@
-import type { BrowserCookieImportResult } from '../../shared/browser-workspace-types'
+import type { BrowserCookieImportResult } from '../../../../shared/browser-workspace-types'
 import {
   isGoogleSourceBoundCookie,
   isNonTransplantableCookieDomain,
   normalizeCookieImportDomain,
   importedDomainScope
-} from './browser-cookie-import-policy'
-import { prepareStagedCookiesForImport } from './browser-cookie-staged-import'
-import { chromiumTimestampToUnix, buildChromiumCookieInsertParams } from './browser-cookie-sqlite'
-import { databaseSameSite } from './browser-cookie-validation'
+} from '../../browser-cookie-import-policy'
+import { prepareStagedCookiesForImport } from '../../browser-cookie-staged-import'
+import {
+  chromiumTimestampToUnix,
+  buildChromiumCookieInsertParams
+} from '../../browser-cookie-sqlite'
+import { databaseSameSite } from '../../browser-cookie-validation'
 import {
   buildUndecryptableWarning,
   cookieEncryptionVersion,
   decryptCookieValueRaw
-} from './browser-cookie-decryption'
-import { diag } from './browser-cookie-import-diagnostics'
-import type { ChromiumImportContext } from './browser-cookie-chromium-types'
+} from '../../browser-cookie-decryption'
+import { diag } from '../../browser-cookie-import-diagnostics'
+import type { ChromiumImportContext } from './import-context'
 
 /**
  * Decrypts and validates source rows without touching the target cookie jar.
