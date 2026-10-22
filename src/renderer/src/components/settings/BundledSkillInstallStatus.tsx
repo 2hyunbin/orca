@@ -1,3 +1,4 @@
+import { bundledSkillSetupResultHeadline } from './bundled-skill-setup-copy'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '../ui/button'
 import { skillInstallResultLine } from '../skills/skill-plan-op-copy'
@@ -34,7 +35,17 @@ export function BundledSkillInstallStatus(props: {
     )
   }
   const problem = bundledSkillInstallNeedsAttention(state)
-  const message = state.kind === 'failed' ? state.message : skillInstallResultLine(state.summary)
+  const message =
+    state.kind === 'failed'
+      ? state.message
+      : skillInstallResultLine(
+          state.summary,
+          state.changes &&
+            state.summary.ok &&
+            !state.summary.skills.some((skill) => skill.text === 'Needs attention')
+            ? bundledSkillSetupResultHeadline(state.changes)
+            : undefined
+        )
   return (
     <div className={cn('flex flex-wrap items-start gap-2', props.className)}>
       <p

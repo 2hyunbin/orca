@@ -1,3 +1,8 @@
+import {
+  useBundledSkillInstallAction,
+  type BundledSkillInstallActionState
+} from '@/hooks/use-bundled-skill-install-action'
+import { bundledSkillSetupActionLabel } from '../settings/bundled-skill-setup-copy'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { FeatureSetupInlineTerminal } from '../onboarding/FeatureSetupInlineTerminal'
 import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
@@ -19,6 +24,7 @@ import {
   DEFAULT_ONBOARDING_FEATURE_SETUP_SELECTION,
   hasSelectedOnboardingFeatureSetup,
   onboardingFeatureSetupRunTelemetry,
+  onboardingFeatureSetupSkillNames,
   runOnboardingFeatureSetup,
   type OnboardingFeatureSetupId,
   type OnboardingFeatureSetupSelection
@@ -55,6 +61,13 @@ export function AgentCapabilitiesSetupAction(props: {
   const legacyWsl = activeRuntime.agentRuntime?.runtime === 'wsl'
   const skillInstall = useBundledSkillInstall()
   const installSkills = skillInstall.install
+  const installAction = useBundledSkillInstallAction(
+    onboardingFeatureSetupSkillNames(featureSetup),
+    {
+      enabled: !legacyWsl && hasSelectedOnboardingFeatureSetup(featureSetup),
+      refreshKey: skillInstall.state.kind
+    }
+  )
   useEffect(() => {
     onBrowserUseSkillInstalledChange(readiness.browserUseSkillInstalled)
   }, [onBrowserUseSkillInstalledChange, readiness.browserUseSkillInstalled])
@@ -110,7 +123,10 @@ export function AgentCapabilitiesSetupAction(props: {
         setWslSetup({ command, runtime: activeRuntime })
         return
       }
-      const installState = await installSkills(result.skillNames)
+      const installState = await installSkills(
+        result.skillNames,
+        installAction.kind === 'replace' ? installAction.paths : undefined
+      )
       const telemetry =
         installState && onboardingFeatureSetupRunTelemetry(featureSetup, result, installState)
       if (telemetry) {
@@ -139,6 +155,7 @@ export function AgentCapabilitiesSetupAction(props: {
     activeRuntime,
     featureSetup,
     installSkills,
+    installAction,
     legacyWsl,
     recordFeatureInteraction,
     setupBusyLabel
@@ -153,6 +170,7 @@ export function AgentCapabilitiesSetupAction(props: {
         <AgentCapabilitySetupControls
           featureSetup={featureSetup}
           onFeatureSetupChange={handleFeatureSetupChange}
+          installAction={legacyWsl ? undefined : installAction}
           skillInstall={
             legacyWsl
               ? { ...skillInstall, ready: !activeRuntime.installDisabledReason }
@@ -230,6 +248,7 @@ function AgentCapabilitySetupControls(props: {
   featureSetup: OnboardingFeatureSetupSelection
   onFeatureSetupChange: (value: OnboardingFeatureSetupSelection) => void
   skillInstall: BundledSkillInstall
+  installAction?: BundledSkillInstallActionState
   setupBusyLabel: string | null
   onStartFeatureSetup: () => void
   allReady: boolean
@@ -240,7 +259,9 @@ function AgentCapabilitySetupControls(props: {
   const showSetupAction =
     installState.kind !== 'unsupported' && !bundledSkillInstallNeedsAttention(installState)
   // Why: a disabled install button is noise once everything is set up.
-  const showAllReady = props.allReady && !hasSelectedFeatures && !props.setupBusyLabel
+  const showAllReady =
+    (props.installAction?.kind === 'none' || (props.allReady && !hasSelectedFeatures)) &&
+    !props.setupBusyLabel
 
   return (
     <>
@@ -252,10 +273,7 @@ function AgentCapabilitySetupControls(props: {
       {showSetupAction && showAllReady ? (
         <p className="mt-6 flex items-center gap-1.5 text-sm text-muted-foreground">
           <Check className="size-4" />
-          {translate(
-            'auto.components.feature.wall.AgentCapabilitiesSetupAction.allInstalled',
-            'All skills installed'
-          )}
+          {translate('auto.components.skills.skillPlanOpCopy.installed', 'Installed')}
         </p>
       ) : showSetupAction ? (
         <div className="mt-6 flex items-center">
@@ -264,7 +282,10 @@ function AgentCapabilitySetupControls(props: {
             variant="default"
             className="shrink-0"
             disabled={
-              !hasSelectedFeatures || Boolean(props.setupBusyLabel) || !props.skillInstall.ready
+              !hasSelectedFeatures ||
+              Boolean(props.setupBusyLabel) ||
+              !props.skillInstall.ready ||
+              props.installAction?.kind === 'loading'
             }
             onClick={props.onStartFeatureSetup}
           >
@@ -274,10 +295,17 @@ function AgentCapabilitySetupControls(props: {
               <Download className="size-4" />
             )}
             {props.setupBusyLabel ??
-              translate(
-                'auto.components.feature.wall.AgentCapabilitiesSetupAction.installSkills',
-                'Install skills'
-              )}
+              (props.installAction?.kind === 'replace'
+                ? translate(
+                    'auto.components.settings.AgentSkillSetupPanel.replaceWithOrcaCopy',
+                    "Replace with Orca's copy"
+                  )
+                : props.installAction?.kind === 'run' && props.installAction.changes
+                  ? bundledSkillSetupActionLabel(props.installAction.changes)
+                  : translate(
+                      'auto.components.feature.wall.AgentCapabilitiesSetupAction.installSkills',
+                      'Install skills'
+                    ))}
           </Button>
         </div>
       ) : null}

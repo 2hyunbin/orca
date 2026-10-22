@@ -7221,13 +7221,7 @@
           "c47127f222": "WSL 기본값",
           "0c9f3cf9da": "Orca가 글로벌 agent 스킬을 확인하고 설치하는 위치를 선택합니다.",
           "f00d6aa9b5": "이 컴퓨터에서는 WSL을 사용할 수 없습니다.",
-          "7c776ff9d8": "wsl",
-          "3728a94fb6": "WSL 셸 명령에 주의가 필요함",
-          "refreshCliRegistration": "CLI 등록 상태를 새로 고친 후 다시 시도하세요.",
-          "0ed08febc5": "WSL 셸 명령을 등록하지 못했습니다.",
-          "775a4cfbb8": "WSL 셸 명령 등록을 사용할 수 없습니다.",
-          "fc0fcf72fd": "스킬 설정 전 WSL 쉘 명령어를 등록하세요.",
-          "windowsPathUnknown": "WSL 셸 명령의 PATH를 확인할 수 없습니다"
+          "7c776ff9d8": "wsl"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "소스 제어 AI를 사용자 정의하지 않은 리포지토리에서 사용됩니다.",
@@ -12944,6 +12938,12 @@
           "2914abcfa2": "오케스트레이션 스킬 설치",
           "1bdce1911e": "오케스트레이션 스킬 설치 명령 복사",
           "239bf9132b": "설치 명령을 복사했습니다."
+        },
+        "bundledSkillSetupCopy": {
+          "installForAgent": "{{value0}}에 설치",
+          "installForMore": "추가 에이전트 {{value0}}개에 설치",
+          "installedForAgent": "{{value0}}에 설치됨",
+          "installedForMore": "추가 에이전트 {{value0}}개에 설치됨"
         }
       },
       "right": {
@@ -15101,7 +15101,6 @@
             "e9eb197e12": "열린 컴퓨터 사용 권한",
             "c605f51f2b": "기능 설정 준비 완료",
             "1aa657d8f4": "일부 기능 설정에 주의가 필요합니다.",
-            "allInstalled": "모든 스킬 설치됨",
             "installSkills": "스킬 설치"
           },
           "AiCommitPrSettingsCard": {

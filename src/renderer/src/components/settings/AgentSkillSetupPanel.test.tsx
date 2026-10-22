@@ -201,7 +201,7 @@ describe('AgentSkillSetupPanel', () => {
   it('hides only re-check when installed re-checks are disabled', async () => {
     await renderInteractivePanel({ installed: true, showRecheckWhenInstalled: false })
 
-    expect(findButton('Update')).toBeDefined()
+    expect(findButton('Install')).toBeDefined()
     expect(container?.textContent).not.toContain('Re-check')
   })
 
@@ -292,6 +292,9 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('updates the installed name when it differs from the install name', async () => {
+    const plan = planOf([sharedEntry('linear-tickets', 'update')])
+    mocks.plan.mockResolvedValue({ kind: 'plan', plan })
+    mocks.execute.mockResolvedValue(doneResult(plan))
     await renderInteractivePanel({
       installed: true,
       skillNames: ['orca-linear'],
@@ -312,7 +315,7 @@ describe('AgentSkillSetupPanel', () => {
     await renderInteractivePanel({ installed: true })
     expect(container?.textContent).not.toContain('Update')
 
-    mocks.plan.mockResolvedValueOnce({ kind: 'plan', plan: replaced })
+    mocks.plan.mockResolvedValue({ kind: 'plan', plan: replaced })
     mocks.execute.mockResolvedValueOnce(doneResult(replaced))
     await clickButton("Replace with Orca's copy")
 
@@ -334,9 +337,9 @@ describe('AgentSkillSetupPanel', () => {
     mocks.execute.mockResolvedValueOnce(doneResult(plan))
     await renderInteractivePanel()
 
-    await clickButton('Install')
+    await clickButton("Replace with Orca's copy")
 
-    expect(container?.textContent).toContain("No change · 1 left alone: You've changed this copy")
+    expect(container?.textContent).toContain("Installed · 1 left alone: You've changed this copy")
     expect(container?.textContent).not.toContain('Needs attention')
   })
 
@@ -351,12 +354,12 @@ describe('AgentSkillSetupPanel', () => {
 
     expect(container?.textContent).toContain('Needs attention')
     await clickButton('Retry')
-    expect(mocks.plan).toHaveBeenCalledTimes(2)
+    expect(mocks.execute).toHaveBeenCalledTimes(2)
     expect(container?.textContent).not.toContain('Needs attention')
   })
 
   it('reports a known thrown install error in plain words', async () => {
-    mocks.plan.mockRejectedValueOnce(
+    mocks.plan.mockRejectedValue(
       new Error(
         "Error invoking remote method 'skills:bundledPlan': Error: skill-install-wsl-unavailable"
       )
@@ -383,7 +386,7 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('shows Retry in place of Install after a failure', async () => {
-    mocks.plan.mockRejectedValueOnce(new Error('skill-install-home-unavailable'))
+    mocks.plan.mockRejectedValue(new Error('skill-install-home-unavailable'))
     await renderInteractivePanel()
 
     await clickButton('Install')
@@ -396,7 +399,7 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('keeps each host its own result', async () => {
-    mocks.plan.mockRejectedValueOnce(new Error('skill-install-home-unavailable'))
+    mocks.plan.mockRejectedValue(new Error('skill-install-home-unavailable'))
     await renderInteractivePanel()
     await clickButton('Install')
     expect(container?.textContent).toContain('Needs attention')
@@ -442,7 +445,8 @@ describe('AgentSkillSetupPanel', () => {
 
     await clickButton('Install')
 
-    expect(mocks.plan).not.toHaveBeenCalled()
+    expect(mocks.execute).not.toHaveBeenCalled()
+    expect(mocks.plan).toHaveBeenCalledTimes(1)
   })
 
   it('installs for an SSH workspace once its managed server is the target', async () => {
@@ -459,7 +463,7 @@ describe('AgentSkillSetupPanel', () => {
 
   it('asks to connect an SSH host no server serves yet, writing nothing here', async () => {
     mocks.target = { kind: 'ssh', targetId: 'box' }
-    mocks.plan.mockResolvedValueOnce({ kind: 'unsupported', reason: 'connect-host' })
+    mocks.plan.mockResolvedValue({ kind: 'unsupported', reason: 'connect-host' })
     await renderInteractivePanel()
 
     await clickButton('Install')
@@ -473,8 +477,8 @@ describe('AgentSkillSetupPanel', () => {
     mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }
     const target = { kind: 'environment', environmentId: 'selected-host' } as const
     await renderInteractivePanel({ target, installed: true })
-    expect(mocks.plan).toHaveBeenCalledWith(target, { names: ['orca-cli'] }, { background: true })
-    await clickButton('Update')
+    expect(mocks.plan).toHaveBeenCalledWith(target, { names: ['orca-cli'] })
+    await clickButton('Install')
     expect(mocks.execute).toHaveBeenCalledWith(target, WRITE_PLAN.planDigest, {
       names: ['orca-cli']
     })
@@ -501,7 +505,7 @@ describe('AgentSkillSetupPanel', () => {
   })
 
   it('asks for a newer Orca on a server without the installer, writing nothing here', async () => {
-    mocks.plan.mockResolvedValueOnce({ kind: 'unsupported', reason: 'update-server' })
+    mocks.plan.mockResolvedValue({ kind: 'unsupported', reason: 'update-server' })
     mocks.target = { kind: 'environment', environmentId: 'old' }
     const onRecheck = vi.fn(async () => {})
     await renderInteractivePanel({ onRecheck })

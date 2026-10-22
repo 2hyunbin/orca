@@ -7221,13 +7221,7 @@
           "c47127f222": "WSL のデフォルト",
           "0c9f3cf9da": "Orca がグローバル Agent スキルをチェックしてインストールする場所を選択します。",
           "f00d6aa9b5": "このマシンでは WSL を利用できません。",
-          "7c776ff9d8": "wsl",
-          "3728a94fb6": "WSL シェルコマンドには注意が必要です",
-          "refreshCliRegistration": "CLI の登録状態を更新してから、もう一度お試しください。",
-          "0ed08febc5": "WSL シェルコマンドの登録に失敗しました。",
-          "775a4cfbb8": "WSL シェルコマンドの登録は利用できません",
-          "fc0fcf72fd": "スキルセットアップ前に WSL シェルコマンドを登録してください。",
-          "windowsPathUnknown": "WSL のシェルコマンド PATH を確認できませんでした"
+          "7c776ff9d8": "wsl"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "ソース管理 AI をカスタマイズしていないリポジトリによって使用されます。",
@@ -12944,6 +12938,12 @@
           "2914abcfa2": "オーケストレーションスキルをインストールする",
           "1bdce1911e": "オーケストレーションスキルのインストールコマンドのコピー",
           "239bf9132b": "インストールコマンドをコピーしました。"
+        },
+        "bundledSkillSetupCopy": {
+          "installForAgent": "{{value0}} にインストール",
+          "installForMore": "さらに {{value0}} 個のAgentにインストール",
+          "installedForAgent": "{{value0}} にインストール済み",
+          "installedForMore": "さらに {{value0}} 個のAgentにインストール済み"
         }
       },
       "right": {
@@ -15101,7 +15101,6 @@
             "e9eb197e12": "開かれたコンピュータ操作許可",
             "c605f51f2b": "機能セットアップの準備完了",
             "1aa657d8f4": "一部の機能の設定には注意が必要です",
-            "allInstalled": "すべてのスキルがインストール済み",
             "installSkills": "スキルをインストール"
           },
           "AiCommitPrSettingsCard": {

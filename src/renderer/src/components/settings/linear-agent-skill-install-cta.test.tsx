@@ -2,12 +2,14 @@
 
 import { act, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
+import type { ProjectAgentSkillRuntime } from '@/lib/project-skill-runtime'
 import type { DiscoveredSkill } from '../../../../shared/skills'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '../ui/tooltip'
 import { LinearAgentSkillInstallCta } from './linear-agent-skill-install-cta'
 
 const mocks = vi.hoisted(() => ({
+  agentRuntime: ((): ProjectAgentSkillRuntime | undefined => undefined)(),
   skillState: {
     installed: false,
     loading: false,
@@ -34,7 +36,10 @@ vi.mock('@/runtime/runtime-bundled-skills-client', () => ({
 }))
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
-  useActiveProjectSkillRuntime: () => ({ bundledSkillTarget: { kind: 'local' } })
+  useActiveProjectSkillRuntime: () => ({
+    bundledSkillTarget: mocks.agentRuntime?.runtime === 'wsl' ? null : { kind: 'local' },
+    agentRuntime: mocks.agentRuntime
+  })
 }))
 
 let root: Root | null = null
@@ -82,6 +87,7 @@ async function renderCta(
 describe('LinearAgentSkillInstallCta', () => {
   beforeEach(() => {
     mocks.skillState.installed = false
+    mocks.agentRuntime = undefined
     mocks.skillState.loading = false
     mocks.skillState.error = null
     mocks.skillState.skills = []
@@ -167,6 +173,35 @@ describe('LinearAgentSkillInstallCta', () => {
 
     expect(rendered.textContent).toContain(
       'This installs host setup; remote agent environments may need separate setup.'
+    )
+  })
+
+  it('keeps the resolved WSL project on the old command flow', async () => {
+    mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }
+    const rendered = await renderCta()
+    expect(rendered.textContent).toContain(
+      `npx skills@1.7.2 add https://github.com/stablyai/orca/tree/${'0'.repeat(40)} --skill orca-linear --global`
+    )
+    expect(rendered.textContent).not.toContain('Install skill')
+    expect(mocks.plan).not.toHaveBeenCalled()
+    expect(mocks.useInstalledAgentSkillNames).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ discoveryTarget: { runtime: 'wsl', wslDistro: 'Debian' } })
+    )
+  })
+
+  it('uses project host discovery even when legacy global settings still prefer WSL', async () => {
+    mocks.agentRuntime = { runtime: 'host', label: 'Windows' }
+    await renderCta({
+      settings: {
+        localAgentRuntime: 'wsl',
+        localAgentWslDistro: 'Ubuntu',
+        terminalWindowsShell: 'wsl.exe'
+      }
+    })
+    expect(mocks.useInstalledAgentSkillNames).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ discoveryTarget: undefined })
     )
   })
 

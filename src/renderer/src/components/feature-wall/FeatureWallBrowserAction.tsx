@@ -1,3 +1,6 @@
+import { useBundledSkillInstallAction } from '@/hooks/use-bundled-skill-install-action'
+import { bundledSkillSetupActionLabel } from '../settings/bundled-skill-setup-copy'
+import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { FeatureSetupInlineTerminal } from '../onboarding/FeatureSetupInlineTerminal'
 import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
@@ -110,6 +113,10 @@ function BrowserSkillInstallButton(): React.JSX.Element {
   const legacyWsl = activeRuntime.agentRuntime?.runtime === 'wsl'
   const skillInstall = useBundledSkillInstall()
   const installSkills = skillInstall.install
+  const installAction = useBundledSkillInstallAction([ORCA_CLI_SKILL_NAME], {
+    enabled: !legacyWsl,
+    refreshKey: skillInstall.state.kind
+  })
 
   const handleInstall = useCallback(async () => {
     if (busy) {
@@ -126,7 +133,10 @@ function BrowserSkillInstallButton(): React.JSX.Element {
         setWslSetup({ command, runtime: activeRuntime })
         return
       }
-      const installState = await installSkills(result.skillNames)
+      const installState = await installSkills(
+        result.skillNames,
+        installAction.kind === 'replace' ? installAction.paths : undefined
+      )
       const telemetry =
         installState &&
         onboardingFeatureSetupRunTelemetry(BROWSER_ONLY_FEATURE_SETUP, result, installState)
@@ -173,7 +183,7 @@ function BrowserSkillInstallButton(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
-  }, [activeRuntime, busy, installSkills, legacyWsl, recordFeatureInteraction])
+  }, [activeRuntime, busy, installAction, installSkills, legacyWsl, recordFeatureInteraction])
 
   // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
   if (wslSetup) {
@@ -188,24 +198,46 @@ function BrowserSkillInstallButton(): React.JSX.Element {
     return <BundledSkillInstallStatus install={skillInstall} className="w-full" />
   }
 
+  if (!legacyWsl && installAction.kind === 'none') {
+    if (skillInstall.state.kind === 'done') {
+      return <BundledSkillInstallStatus install={skillInstall} />
+    }
+    return (
+      <p className="text-xs text-muted-foreground">
+        {translate('auto.components.skills.skillPlanOpCopy.installed', 'Installed')}
+      </p>
+    )
+  }
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className="w-fit gap-2"
-      disabled={
-        busy || (legacyWsl ? Boolean(activeRuntime.installDisabledReason) : !skillInstall.ready)
-      }
-      onClick={() => void handleInstall()}
-    >
-      {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
-      {busy
-        ? translate(
-            'auto.components.feature.wall.FeatureWallBrowserAction.5f97caf76b',
-            'Installing…'
-          )
-        : translate('auto.components.skills.SkillInstallDialog.39acb9e8f4', 'Install skill')}
-    </Button>
+    <>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="w-fit gap-2"
+        disabled={
+          (!legacyWsl && installAction.kind === 'loading') ||
+          busy ||
+          (legacyWsl ? Boolean(activeRuntime.installDisabledReason) : !skillInstall.ready)
+        }
+        onClick={() => void handleInstall()}
+      >
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+        {busy
+          ? translate(
+              'auto.components.feature.wall.FeatureWallBrowserAction.5f97caf76b',
+              'Installing…'
+            )
+          : installAction.kind === 'replace'
+            ? translate(
+                'auto.components.settings.AgentSkillSetupPanel.replaceWithOrcaCopy',
+                "Replace with Orca's copy"
+              )
+            : installAction.kind === 'run' && installAction.changes
+              ? bundledSkillSetupActionLabel(installAction.changes)
+              : translate('auto.components.skills.SkillInstallDialog.39acb9e8f4', 'Install skill')}
+      </Button>
+      <BundledSkillInstallStatus install={skillInstall} />
+    </>
   )
 }

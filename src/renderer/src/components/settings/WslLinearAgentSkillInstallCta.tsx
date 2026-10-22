@@ -9,13 +9,12 @@ import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkillNames
 } from '@/hooks/useInstalledAgentSkills'
+import { LINEAR_AGENT_SKILL_NAMES, ORCA_LINEAR_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import {
-  LINEAR_AGENT_SKILL_NAMES,
   ORCA_LINEAR_SKILL_INSTALL_COMMAND,
-  ORCA_LINEAR_SKILL_NAME
+  buildAgentFeatureSkillInstallCommand
 } from '@/lib/agent-feature-install-commands'
 import { getLinearAgentSkillUpdateTarget } from '@/lib/linear-agent-skill-update-target'
-import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
 import type { LocalAgentRuntime } from './CliSkillRuntimeSetup'
 import { cn } from '@/lib/utils'
 import { getLinearAgentSkillSetupInlineRuntimeCopy } from '../sidebar/linear-agent-skill-setup-copy'

@@ -7221,13 +7221,7 @@
           "c47127f222": "WSL 默认值",
           "0c9f3cf9da": "选择 Orca 检查和安装全局智能体技能的位置。",
           "f00d6aa9b5": "WSL 在此计算机上不可用。",
-          "7c776ff9d8": "wsl",
-          "3728a94fb6": "WSL shell命令需要注意的地方",
-          "refreshCliRegistration": "请刷新 CLI 注册状态后重试。",
-          "0ed08febc5": "无法注册 WSL shell 命令。",
-          "775a4cfbb8": "WSL shell 命令注册不可用",
-          "fc0fcf72fd": "在技​​能设置之前注册 WSL shell 命令。",
-          "windowsPathUnknown": "无法检查 WSL shell 命令 PATH"
+          "7c776ff9d8": "wsl"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "由未自定义源代码控制 AI 的存储库使用。",
@@ -12944,6 +12938,12 @@
           "2914abcfa2": "安装编排技能",
           "1bdce1911e": "复制编排技能安装命令",
           "239bf9132b": "复制安装命令。"
+        },
+        "bundledSkillSetupCopy": {
+          "installForAgent": "为 {{value0}} 安装",
+          "installForMore": "为另外 {{value0}} 个代理安装",
+          "installedForAgent": "已为 {{value0}} 安装",
+          "installedForMore": "已为另外 {{value0}} 个代理安装"
         }
       },
       "right": {
@@ -15101,7 +15101,6 @@
             "e9eb197e12": "打开计算机使用权限",
             "c605f51f2b": "能力设置就绪",
             "1aa657d8f4": "一些能力设置需要注意",
-            "allInstalled": "所有技能均已安装",
             "installSkills": "安装技能"
           },
           "AiCommitPrSettingsCard": {

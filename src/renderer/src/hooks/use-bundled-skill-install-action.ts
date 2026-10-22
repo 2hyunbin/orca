@@ -1,3 +1,7 @@
+import {
+  bundledSkillSetupChanges,
+  type BundledSkillSetupChanges
+} from '@/components/settings/bundled-skill-setup-copy'
 import { useEffect, useState } from 'react'
 import {
   bundledSkillInstallAction,
@@ -8,9 +12,9 @@ import { planBundledSkillsOnTarget } from '@/runtime/runtime-bundled-skills-clie
 import { INSTALLED_AGENT_SKILLS_CHANGED_EVENT } from './installed-agent-skills-change-event'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
 
-/** `unknown`: the host could not plan (an old server, or a stopped WSL distro). */
+/** `unknown`: the owning host could not plan, including servers that need an update. */
 export type BundledSkillInstallActionState =
-  | BundledSkillInstallAction
+  | (BundledSkillInstallAction & { changes?: BundledSkillSetupChanges })
   | { kind: 'loading' }
   | { kind: 'unknown' }
 
@@ -41,22 +45,32 @@ export function useBundledSkillInstallAction(
       return
     }
     let ignore = false
-    // Why background: a check nobody clicked must not boot a stopped WSL distro.
-    planBundledSkillsOnTarget(target, { names: namesKey.split(',') }, { background: true }).then(
-      (planned) => {
-        if (!ignore) {
-          setAnswer({
-            key: planKey,
-            action: planned.kind === 'plan' ? bundledSkillInstallAction(planned.plan) : UNKNOWN
-          })
+    void (async () => {
+      try {
+        const request = { names: namesKey.split(',') }
+        let planned = await planBundledSkillsOnTarget(target, request)
+        let action: BundledSkillInstallActionState = UNKNOWN
+        if (planned.kind === 'plan') {
+          const candidate = bundledSkillInstallAction(planned.plan)
+          if (candidate.kind === 'replace') {
+            planned = await planBundledSkillsOnTarget(target, {
+              ...request,
+              force: candidate.paths
+            })
+          }
+          if (planned.kind === 'plan') {
+            action = { ...candidate, changes: bundledSkillSetupChanges(planned.plan) }
+          }
         }
-      },
-      () => {
+        if (!ignore) {
+          setAnswer({ key: planKey, action })
+        }
+      } catch {
         if (!ignore) {
           setAnswer({ key: planKey, action: UNKNOWN })
         }
       }
-    )
+    })()
     return () => {
       ignore = true
     }

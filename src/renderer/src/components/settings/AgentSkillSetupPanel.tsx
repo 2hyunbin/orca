@@ -1,3 +1,4 @@
+import { bundledSkillSetupActionLabel } from './bundled-skill-setup-copy'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
 import { buildSkillCommandForRuntime } from './CliSkillRuntimeSetup'
@@ -62,12 +63,12 @@ function BundledAgentSkillSetupPanel({
   const installing = state.kind === 'installing'
   const failed = bundledSkillInstallNeedsAttention(state)
   const activeSkillNames = installed ? (installedSkillNames ?? skillNames) : skillNames
-  // Why only once installed: before that Install always has work; after, the plan says.
   const action = useBundledSkillInstallAction(activeSkillNames, {
-    enabled: installed && showInstallWhenInstalled,
+    enabled: !installed || showInstallWhenInstalled,
     refreshKey: state.kind,
     target
   })
+  const effectivelyInstalled = installed || action.kind === 'none'
   const installedButton: 'update' | 'replace' | null =
     action.kind === 'run' || action.kind === 'unknown'
       ? 'update'
@@ -85,22 +86,21 @@ function BundledAgentSkillSetupPanel({
       } catch {
         return
       }
-      await install(
-        activeSkillNames,
-        installed && action.kind === 'replace' ? action.paths : undefined
-      )
+      await install(activeSkillNames, action.kind === 'replace' ? action.paths : undefined)
     })()
   }
 
   const actionRow = (
     <div className="mt-3 flex flex-wrap items-center gap-2">
-      {(!installed || (showInstallWhenInstalled && installedButton)) && !failed ? (
+      {action.kind !== 'none' &&
+      (!installed || (showInstallWhenInstalled && installedButton)) &&
+      !failed ? (
         <Button
           type="button"
           variant={installVariant}
           size="sm"
           onClick={startInstall}
-          disabled={installDisabled || installing || !ready}
+          disabled={installDisabled || installing || !ready || action.kind === 'loading'}
         >
           {installing ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -109,14 +109,16 @@ function BundledAgentSkillSetupPanel({
           )}
           {installing
             ? translate('auto.components.settings.AgentSkillSetupPanel.installing', 'Installing...')
-            : !installed
-              ? resolvedInstallLabel
-              : installedButton === 'replace'
-                ? translate(
-                    'auto.components.settings.AgentSkillSetupPanel.replaceWithOrcaCopy',
-                    "Replace with Orca's copy"
-                  )
-                : resolvedInstalledInstallLabel}
+            : installedButton === 'replace'
+              ? translate(
+                  'auto.components.settings.AgentSkillSetupPanel.replaceWithOrcaCopy',
+                  "Replace with Orca's copy"
+                )
+              : action.kind === 'run' && action.changes
+                ? bundledSkillSetupActionLabel(action.changes)
+                : installed
+                  ? resolvedInstalledInstallLabel
+                  : resolvedInstallLabel}
         </Button>
       ) : null}
       {!installed || showRecheckWhenInstalled ? (
@@ -191,7 +193,7 @@ function BundledAgentSkillSetupPanel({
                       'Checking...'
                     )}
                   </IntegrationStatusPill>
-                ) : installed ? (
+                ) : effectivelyInstalled ? (
                   freshnessSkillName ? (
                     <SkillFreshnessStatusPill skillName={freshnessSkillName} />
                   ) : (
@@ -220,6 +222,11 @@ function BundledAgentSkillSetupPanel({
             <p className="text-[13px] leading-snug text-muted-foreground">{description}</p>
           ) : null}
           {actionRow}
+          {hideHeader && action.kind === 'none' && state.kind === 'idle' ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {translate('auto.components.skills.skillPlanOpCopy.installed', 'Installed')}
+            </p>
+          ) : null}
           <BundledSkillInstallStatus install={skillInstall} className="mt-2" />
           {actionHint ? <div className="mt-2">{actionHint}</div> : null}
         </div>

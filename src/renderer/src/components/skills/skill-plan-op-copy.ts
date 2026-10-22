@@ -113,11 +113,14 @@ const RESULT_HEADLINE_ORDER: readonly BundledSkillOutcomeText[] = [
 ]
 
 /** A setup screen's Install result, e.g. "Installed · 1 left alone: You've changed this copy". */
-export function skillInstallResultLine(summary: BundledSkillResultSummary): string {
+export function skillInstallResultLine(
+  summary: BundledSkillResultSummary,
+  resultHeadline?: string
+): string {
   const texts = new Set(summary.skills.map((skill) => skill.text))
-  const headline = skillOutcomeText(
-    RESULT_HEADLINE_ORDER.find((text) => texts.has(text)) ?? 'No change'
-  )
+  const headline =
+    resultHeadline ??
+    skillOutcomeText(RESULT_HEADLINE_ORDER.find((text) => texts.has(text)) ?? 'No change')
   const leftAlone = summary.skills.flatMap((skill) => skill.leftAlone)
   if (leftAlone.length === 0) {
     return headline

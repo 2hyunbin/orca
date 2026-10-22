@@ -1,3 +1,7 @@
+import {
+  bundledSkillSetupChanges,
+  type BundledSkillSetupChanges
+} from '@/components/settings/bundled-skill-setup-copy'
 import { useCallback, useRef, useState } from 'react'
 import {
   summarizeBundledSkillOutcomes,
@@ -18,7 +22,7 @@ import { useMountedRef } from './useMountedRef'
 export type BundledSkillInstallState =
   | { kind: 'idle' }
   | { kind: 'installing' }
-  | { kind: 'done'; summary: BundledSkillResultSummary }
+  | { kind: 'done'; summary: BundledSkillResultSummary; changes?: BundledSkillSetupChanges }
   /** An older server ("Update Orca on the server"), or an SSH host no server serves yet. */
   | { kind: 'unsupported'; reason: BundledSkillUnsupportedReason }
   /** The request itself failed; nothing says what reached the disk. */
@@ -46,7 +50,7 @@ export function bundledSkillInstallNeedsAttention(state: BundledSkillInstallStat
 
 /**
  * Installs Orca's bundled skills for every detected agent on the host Update skills plans:
- * this machine, its WSL distro, or the paired server or SSH host (never this machine for it).
+ * this machine or the paired server or SSH host (never this machine for it).
  */
 export function useBundledSkillInstall(
   options: { onFinished?: () => void; target?: BundledSkillTarget | null } = {}
@@ -86,15 +90,20 @@ export function useBundledSkillInstall(
       let next: BundledSkillInstallState
       try {
         const planned = await planBundledSkillsOnTarget(target, request)
-        next =
-          planned.kind === 'unsupported'
-            ? { kind: 'unsupported', reason: planned.reason }
-            : {
-                kind: 'done',
-                summary: summarizeBundledSkillOutcomes(
-                  await executeBundledSkillsOnTarget(target, planned.plan.planDigest, request)
-                )
-              }
+        if (planned.kind === 'unsupported') {
+          next = { kind: 'unsupported', reason: planned.reason }
+        } else {
+          const result = await executeBundledSkillsOnTarget(
+            target,
+            planned.plan.planDigest,
+            request
+          )
+          next = {
+            kind: 'done',
+            summary: summarizeBundledSkillOutcomes(result),
+            changes: bundledSkillSetupChanges(planned.plan, result)
+          }
+        }
       } catch (error) {
         next = { kind: 'failed', message: bundledSkillInstallErrorMessage(error) }
       } finally {

@@ -7231,13 +7231,7 @@
           "c47127f222": "WSL predeterminado",
           "0c9f3cf9da": "Elige dónde Orca comprueba e instala agent skills globales.",
           "f00d6aa9b5": "WSL no está disponible en esta máquina.",
-          "7c776ff9d8": "wsl",
-          "3728a94fb6": "El comando de shell de WSL necesita atención",
-          "refreshCliRegistration": "Actualiza el estado de registro de la CLI e inténtalo de nuevo.",
-          "0ed08febc5": "No se pudo registrar el comando de shell de WSL.",
-          "775a4cfbb8": "El registro del comando de shell de WSL no está disponible",
-          "fc0fcf72fd": "Registra el comando de shell de WSL antes de configurar el skill.",
-          "windowsPathUnknown": "WSL shell command PATH could not be checked"
+          "7c776ff9d8": "wsl"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "Usado por repositorios que no han personalizado Source Control AI.",
@@ -12939,6 +12933,12 @@
           "2914abcfa2": "Instalar skill de orquestación",
           "1bdce1911e": "Copiar comando de instalación del skill de orquestación",
           "239bf9132b": "Comando de instalación copiado."
+        },
+        "bundledSkillSetupCopy": {
+          "installForAgent": "Instalar para {{value0}}",
+          "installForMore": "Instalar para {{value0}} agentes más",
+          "installedForAgent": "Instalado para {{value0}}",
+          "installedForMore": "Instalado para {{value0}} agentes más"
         }
       },
       "right": {
@@ -15096,7 +15096,6 @@
             "e9eb197e12": "Permisos de uso de computadora abiertos",
             "c605f51f2b": "Configuración de capacidades lista",
             "1aa657d8f4": "La configuración de algunas capacidades necesita atención",
-            "allInstalled": "Todas las skills instaladas",
             "installSkills": "Instalar skills"
           },
           "AiCommitPrSettingsCard": {
