@@ -6,8 +6,16 @@ import { DeliveryReceipts } from './external-conversation-delivery-receipts'
 import {
   ExternalConversationIndex,
   writeLink,
-  type ExternalConversationLinkStore
+  type ExternalConversationLinkStore,
+  type LinkedConversation
 } from './external-conversation-links'
+import {
+  bindPane,
+  deliverFollowUp,
+  waitWhileAgentAsks,
+  type FollowUpTerminal,
+  type PaneInputState
+} from './external-conversation-send'
 import {
   launchConversation,
   runtimeConversationLauncher,
@@ -18,14 +26,18 @@ import {
   conversationId,
   refused,
   type ConversationKey,
-  type ConversationStart
+  type ConversationStart,
+  type Delivery
 } from './external-conversation-types'
 
-/** What the seam drives on its host. */
-export type ExternalConversationHost = { launcher: ConversationLauncher }
+/** What the seam drives on its host: the launch path and the linked terminals. */
+export type ExternalConversationHost = {
+  launcher: ConversationLauncher
+  terminal: FollowUpTerminal
+}
 
 export function runtimeConversationHost(runtime: OrcaRuntimeService): ExternalConversationHost {
-  return { launcher: runtimeConversationLauncher(runtime) }
+  return { launcher: runtimeConversationLauncher(runtime), terminal: runtime }
 }
 
 export type ExternalConversationSeamDeps = {
@@ -47,6 +59,9 @@ export class ExternalConversationSeam {
   private readonly index: ExternalConversationIndex
   private readonly receipts = new DeliveryReceipts()
   private readonly chain = new ConversationChain()
+  private readonly paneInput: PaneInputState = { claims: new Set(), stale: new Map() }
+  /** Conversations this period started, so a second start for one shares its creation. */
+  private readonly startedHere = new Set<string>()
   private readonly releaseInvalidations: () => void
 
   constructor(private readonly deps: ExternalConversationSeamDeps) {
@@ -83,9 +98,12 @@ export class ExternalConversationSeam {
           if (!admitConnectorAgent(this.deps.readSettings(), agent)) {
             return refused('unsupported_agent')
           }
-          if (this.index.lookup(key)) {
-            // Concurrent starts share the creation; only the first carried its prompt.
-            return { outcome: 'unknown', reason: 'launch_outcome_unknown' }
+          const linked = this.index.lookup(key)
+          if (linked) {
+            // A link from before this period cannot say what became of its launch.
+            return this.startedHere.has(id)
+              ? this.deliver(host.terminal, key, linked, deliveryId, input.prompt)
+              : { outcome: 'unknown', reason: 'launch_outcome_unknown' }
           }
           try {
             return await launchConversation(
@@ -99,6 +117,7 @@ export class ExternalConversationSeam {
                   createdAt: Date.now()
                 })
                 this.index.invalidate()
+                this.startedHere.add(id)
               }
             )
           } finally {
@@ -110,6 +129,56 @@ export class ExternalConversationSeam {
       conversation: key,
       initial
     }))
+  }
+
+  send(
+    host: ExternalConversationHost,
+    key: ConversationKey,
+    deliveryId: string,
+    text: string
+  ): Promise<Delivery> {
+    const id = conversationId(key)
+    const delivery = this.receipts.run(
+      receiptId(key, deliveryId),
+      JSON.stringify(['send', text]),
+      () =>
+        this.chain.enqueue(id, async () => {
+          if (this.signal.aborted) {
+            return refused('connectors_disabled')
+          }
+          const linked = this.index.lookup(key)
+          if (!linked) {
+            throw new Error('external_conversation_not_found')
+          }
+          return this.deliver(host.terminal, key, linked, deliveryId, text)
+        })
+    )
+    return delivery ?? Promise.resolve(refused('delivery_id_reused'))
+  }
+
+  private async deliver(
+    terminal: FollowUpTerminal,
+    key: ConversationKey,
+    { link }: LinkedConversation,
+    deliveryId: string,
+    text: string
+  ): Promise<Delivery> {
+    const pane = bindPane(terminal, link.paneKey)
+    if (!pane) {
+      return refused('agent_not_reachable')
+    }
+    const held = await waitWhileAgentAsks(terminal, pane, this.signal)
+    if (held !== 'ready') {
+      this.chain.settleWaiting(conversationId(key), held)
+      return refused(held)
+    }
+    return deliverFollowUp(terminal, this.paneInput, {
+      pane,
+      agent: link.agent,
+      text,
+      requestId: receiptId(key, deliveryId),
+      signal: this.signal
+    })
   }
 }
 

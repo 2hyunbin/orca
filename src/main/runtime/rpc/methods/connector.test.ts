@@ -16,7 +16,8 @@ describe('connector RPC methods', () => {
         prompt: 'hi',
         target: { kind: 'existing', worktree: 'id:wt' }
       }
-    ]
+    ],
+    ['connector.send', { ...CONVERSATION, text: 'hi' }]
   ])('%s is refused while the host has connectors off', async (method, params) => {
     const runtime = { getRuntimeId: () => 'test-runtime', getExternalConversationSeam: () => null }
     const dispatcher = new RpcDispatcher({

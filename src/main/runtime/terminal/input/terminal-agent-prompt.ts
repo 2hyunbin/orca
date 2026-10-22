@@ -31,6 +31,12 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
     pasteIngestMs: number
   ): { arm: () => void; wait: () => Promise<void>; dispose: () => void } | null
 
+  /** This writer's own refusal predicate, read-only: the agent is asking for permission. */
+  isAgentPromptBlocked(handle: string): boolean {
+    const ptyId = this.getLivePtyForHandle(handle)?.pty.ptyId
+    return ptyId !== undefined && this.getAgentPromptActivity(handle, ptyId).status === 'permission'
+  }
+
   protected async writeTerminalAgentPrompt(
     handle: string,
     ptyId: string,
