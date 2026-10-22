@@ -461,7 +461,7 @@ describe('PTY SSH lease lifecycle', () => {
         })
         expect(
           mainWindow.webContents.send.mock.calls.filter((call) => call[0] === 'pty:exit')
-        ).toEqual([['pty:exit', { id: 'local-pty', code: 0 }]])
+        ).toEqual([['pty:exit', { id: 'local-pty', code: 0, hostId: 'local' }]])
       })
       it('controller stopAndWait skips the synthetic exit when the provider emitted one', async () => {
         vi.useFakeTimers()
@@ -516,7 +516,7 @@ describe('PTY SSH lease lifecycle', () => {
         })
         expect(
           mainWindow.webContents.send.mock.calls.filter((call) => call[0] === 'pty:exit')
-        ).toEqual([['pty:exit', { id: 'local-pty', code: 0 }]])
+        ).toEqual([['pty:exit', { id: 'local-pty', code: 0, hostId: 'local' }]])
       })
       it('classifies host reversible-stop exits for the attached renderer', async () => {
         vi.useFakeTimers()
@@ -569,7 +569,9 @@ describe('PTY SSH lease lifecycle', () => {
 
         expect(
           mainWindow.webContents.send.mock.calls.filter((call) => call[0] === 'pty:exit')
-        ).toEqual([['pty:exit', { id: 'local-pty', code: 0, preserveRendererBinding: true }]])
+        ).toEqual([
+          ['pty:exit', { id: 'local-pty', code: 0, hostId: 'local', preserveRendererBinding: true }]
+        ])
       })
       it('splits the teardown budget so the liveness RPC gets only what shutdown left', async () => {
         // Why: sequential RPCs must share one absolute deadline; otherwise both get

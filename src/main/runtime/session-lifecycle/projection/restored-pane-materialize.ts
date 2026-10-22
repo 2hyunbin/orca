@@ -2,7 +2,7 @@
 // wake of a slept workspace, and, in the layout-owner build, every trigger that is not a desktop
 // window's own restore.
 
-import type { OrcaRuntimeWithApplyMobileSessionTabNavigation as MobileSessionNavigation } from './apply-mobile-session-tab-navigation'
+import type { OrcaRuntimeWithAgentSessionResumeOwnership as AgentSessionResume } from './agent-session-resume-ownership'
 import type {
   MobileTerminalCommand,
   MobileTerminalResumeCommand
@@ -37,11 +37,11 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     agent: TuiAgent | undefined
   ): AgentLaunchRuntime
   protected abstract resolvePaneOwnedResumeStartup(
-    ...args: Parameters<MobileSessionNavigation['resolvePaneOwnedResumeStartup']>
-  ): ReturnType<MobileSessionNavigation['resolvePaneOwnedResumeStartup']>
+    ...args: Parameters<AgentSessionResume['resolvePaneOwnedResumeStartup']>
+  ): ReturnType<AgentSessionResume['resolvePaneOwnedResumeStartup']>
   protected abstract commitWorkspaceSessionEdit(
-    ...args: Parameters<MobileSessionNavigation['commitWorkspaceSessionEdit']>
-  ): ReturnType<MobileSessionNavigation['commitWorkspaceSessionEdit']>
+    ...args: Parameters<AgentSessionResume['commitWorkspaceSessionEdit']>
+  ): ReturnType<AgentSessionResume['commitWorkspaceSessionEdit']>
 
   abstract subscribeWorkspaceLayouts(
     listener: Parameters<WorkspaceLayoutStream['subscribe']>[0]
@@ -194,6 +194,8 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
         ? this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey?.[paneKey]
         : undefined
     let agentStartup: MobileTerminalCommand | MobileTerminalResumeCommand = resumeStartup ?? {}
+    const resumeClaim =
+      resumeStartup && 'resumeClaim' in resumeStartup ? resumeStartup.resumeClaim : null
     if (resumeStartup === undefined && tab.launchAgent) {
       let workspace
       try {
@@ -210,6 +212,7 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
         }
       }
     }
+    let dispatched = false
     try {
       const created = await this.createRuntimeOwnedMobileSessionTerminal(
         worktreeId,
@@ -236,7 +239,13 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
             : {}),
           launchRuntime: agentStartup.launchRuntime,
           targetGroupId,
-          ...(automatic ? { refuseSleptWorktree: true } : {})
+          onPtySpawnDispatched: () => {
+            dispatched = true
+          },
+          ...(resumeClaim ? { onPtyCreated: resumeClaim.bind } : {}),
+          ...(automatic ? { refuseSleptWorktree: true } : {}),
+          // Switch point: only a start from the pane's own record shows the window's banner.
+          ...(resumedRecord ? { resumesSleepingRecord: true as const } : {})
         }
       )
       // Switch point: under main the resumed agent runs, so its record must not read as a sleep.
@@ -250,6 +259,7 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
       }
       return created
     } catch (err) {
+      resumeClaim?.settleFailure(dispatched, err)
       if (
         !(automatic && isWorktreeTerminalsSleepingError(err)) &&
         sessionId &&

@@ -32,7 +32,7 @@ export const PAIRING_REPAIR_WINDOW_MS = 10 * 60_000
 // Why remembered briefly: every reconnecting pane would otherwise re-read the host over SSH.
 export const PAIRING_REPAIR_FAILURE_HOLD_MS = 15_000
 
-export type ManagedOrcadHostAccess = { target: OrcadHostTarget; connection: OrcadHostTransport }
+type ManagedOrcadHostAccess = { target: OrcadHostTarget; connection: OrcadHostTransport }
 
 /** SSH reaches the host over SSH; WSL through its distro, the trust root of its own pairing. */
 export type ManagedOrcadPairingRepairDeps<
