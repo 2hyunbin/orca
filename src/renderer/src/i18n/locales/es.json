@@ -16287,6 +16287,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "Se descartó lo que escribiste recientemente en esta vista porque el archivo cambió en otra vista."
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "El contenido pegado es demasiado grande.",
           "stopped": "El pegado grande se detuvo antes de terminar.",
@@ -19361,7 +19364,11 @@
           "discarded_other": "Se descartarán las ediciones sin guardar de {{count}} archivos:",
           "moreFiles": "y {{value}} más",
           "blocked_one": "Guarda o cierra antes {{count}} archivo sin guardar en {{name}}",
-          "blocked_other": "Guarda o cierra antes {{count}} archivos sin guardar en {{name}}"
+          "blocked_other": "Guarda o cierra antes {{count}} archivos sin guardar en {{name}}",
+          "closedToast_one": "Se cerró {{count}} archivo con ediciones sin guardar de {{workspace}}",
+          "closedToast_other": "Se cerraron {{count}} archivos con ediciones sin guardar de {{workspace}}",
+          "reopen": "Reabrir",
+          "reopenFailed": "No se pudieron reabrir algunos archivos. Abre un espacio de trabajo e intenta Reabrir de nuevo."
         }
       }
     },

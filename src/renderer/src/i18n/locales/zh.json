@@ -16292,6 +16292,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "文件已在另一个视图中更改，因此你在此视图中最近输入的内容已被丢弃。"
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "粘贴内容过大。",
           "stopped": "大浆糊还没完成就停了。",
@@ -19373,7 +19376,11 @@
           "discarded_other": "{{count}} 个文件中未保存的编辑将被放弃：",
           "moreFiles": "及另外 {{value}} 个",
           "blocked_one": "请先保存或关闭 {{name}} 中 {{count}} 个未保存的文件",
-          "blocked_other": "请先保存或关闭 {{name}} 中 {{count}} 个未保存的文件"
+          "blocked_other": "请先保存或关闭 {{name}} 中 {{count}} 个未保存的文件",
+          "closedToast_one": "已关闭 {{workspace}} 中 {{count}} 个有未保存编辑的文件",
+          "closedToast_other": "已关闭 {{workspace}} 中 {{count}} 个有未保存编辑的文件",
+          "reopen": "重新打开",
+          "reopenFailed": "部分文件无法重新打开。请打开工作区，然后再次尝试“重新打开”。"
         }
       }
     },
