@@ -19,11 +19,11 @@ import { serverEditorFileId } from './server-layout-frame-ids'
 
 /**
  * The intents a server's main applies from a paired desktop exactly as from its own window: tab and
- * group placement, pane sizes and moves, a tab's props and non-terminal names, a tab's chat pane,
- * and editor opens. Never a close (closeTabs, closePane): main takes a window's close as already
- * stopped and stops nothing, while this desktop cannot stop a server's terminals; nor a start
- * (createTerminalTab, splitPane), sleep or wake, which need main's terminal side. Their RPCs reach
- * that main instead.
+ * group placement, pane sizes and moves (into a new tab too), a tab's props and non-terminal names,
+ * a tab's chat pane, the workspace's default-tabs mark, and editor opens. Never a close (closeTabs,
+ * closePane): main takes a window's close as already stopped and stops nothing, while this desktop
+ * cannot stop a server's terminals; nor a start (createTerminalTab, splitPane), sleep or wake, which
+ * need main's terminal side. Their RPCs reach that main instead.
  */
 export const SERVER_ROUTED_LAYOUT_COMMANDS = [
   'moveTab',
@@ -35,6 +35,8 @@ export const SERVER_ROUTED_LAYOUT_COMMANDS = [
   'setTabProps',
   'setChatPane',
   'renameTab',
+  'movePaneToNewTab',
+  'setDefaultTabsApplied',
   'openEditorTab'
 ] as const satisfies readonly WindowLayoutCommand['type'][]
 
@@ -83,8 +85,8 @@ export function serverLayoutApplyFor(
   if (!route) {
     return null
   }
-  if (command.type === 'setGroupRatios') {
-    // Group ids are the server's own: frames carry them unchanged.
+  if (command.type === 'setGroupRatios' || command.type === 'setDefaultTabsApplied') {
+    // Group ids are the server's own: frames carry them unchanged; the mark names no tab.
     return { route, command }
   }
   if (command.type === 'openEditorTab') {
@@ -102,7 +104,13 @@ export function serverLayoutApplyFor(
       command: order ? serverMove(command, tabId, route, order) : anchored(command, tabId, route)
     }
   }
-  return { route, command: { ...command, tabId } }
+  // The desktop's terminal id is not the server's; that main names the moved terminal itself.
+  return command.type === 'movePaneToNewTab'
+    ? {
+        route,
+        command: { ...command, tabId, windowDetach: { ...command.windowDetach, ptyId: null } }
+      }
+    : { route, command: { ...command, tabId } }
 }
 
 type EditorOpen = Extract<WindowLayoutCommand, { type: 'openEditorTab' }>
