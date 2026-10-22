@@ -1,6 +1,6 @@
 FROM node:24.22.1-alpine@sha256:feb76650b7195319268c59cb2d419c732d6c499b13bf5296f16ab59eb1f0a4f3 AS build
 WORKDIR /app
-RUN corepack enable
+RUN npm install --global pnpm@12.14.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/push-contract/package.json packages/push-contract/package.json
 COPY packages/postgres-schema/package.json packages/postgres-schema/package.json
@@ -15,7 +15,7 @@ FROM node:24.22.1-alpine@sha256:feb76650b7195319268c59cb2d419c732d6c499b13bf5296
 ENV NODE_ENV=production
 ENV PORT=8080
 WORKDIR /app
-RUN corepack enable
+RUN npm install --global pnpm@12.14.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/push-contract/package.json packages/push-contract/package.json
 COPY packages/postgres-schema/package.json packages/postgres-schema/package.json
