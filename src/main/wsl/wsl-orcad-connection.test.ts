@@ -8,11 +8,13 @@ import { startEchoServer } from '../managed-server/lifecycle/orcad-stdio-bridge-
 import { fakeWslBridgeChildren, posixOrcadStdioBridge } from './wsl-orcad-bridge-test-child'
 import {
   WslOrcadConnectionManager,
-  WslOrcadConnectionSupersededError,
-  WslOrcadLaunchDeferredError,
   type WslOrcadConnection,
   type WslOrcadConnectionDependencies
 } from './wsl-orcad-connection'
+import {
+  WslOrcadConnectionSupersededError,
+  WslOrcadLaunchDeferredError
+} from './wsl-orcad-connection-errors'
 import type { WslOrcadLaunch } from './wsl-orcad-deploy'
 import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
 import { listenWslOrcadStdioBridge } from './wsl-orcad-stdio-bridge'
