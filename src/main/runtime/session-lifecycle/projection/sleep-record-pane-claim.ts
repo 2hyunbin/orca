@@ -5,12 +5,12 @@ import {
 } from '../../../../shared/agent-session-resume'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
-/** A running agent's sleep record, which the window's worktree wake relaunches in a fresh tab. */
-export function isWindowWakeSleepRecord(record: SleepingAgentSessionRecord): boolean {
+/** An older window capture of a still-running agent, which no pane has claimed yet. */
+export function isUnclaimedRunningSleepRecord(record: SleepingAgentSessionRecord): boolean {
   return record.origin === 'worktree-sleep' && record.state !== 'done'
 }
 
-/** The host's own pane-owned capture form (#11598), which no window wake relaunches. */
+/** The host's own pane-owned capture form (#11598), which no wake resumes a second time. */
 function paneOwnedForm(record: SleepingAgentSessionRecord): SleepingAgentSessionRecord {
   return { ...record, state: 'done', restoreOnTabOpenOnly: true }
 }
@@ -30,14 +30,12 @@ type SessionEdit = (
 ) => Promise<void>
 
 /**
- * Durably hands a window-wake record to the pane about to resume it, before the spawn, unless a
- * window now owns its wake: a window attaching mid-spawn then cannot relaunch it as a second writer,
- * and a PTY lost later (or a failed spawn) still resumes the pane with its recorded flags on the
- * next open. False when nothing was claimed; the pane then opens a plain shell.
+ * Durably hands a running agent's record to the pane about to resume it, before the spawn: a PTY
+ * lost later (or a failed spawn) still resumes the pane with its recorded flags on the next open.
+ * False when another resume took it first; the pane then opens a plain shell.
  */
-export async function claimWindowWakeRecordForPane(
+export async function claimSleepRecordForPane(
   commit: SessionEdit,
-  windowOwnsWake: () => boolean,
   record: SleepingAgentSessionRecord
 ): Promise<boolean> {
   const claimed = paneOwnedForm(record)
@@ -51,7 +49,7 @@ export async function claimWindowWakeRecordForPane(
         owned = true
         return null
       }
-      if (!stored || !sameRecord(stored, record) || windowOwnsWake()) {
+      if (!stored || !sameRecord(stored, record)) {
         return null
       }
       owned = true

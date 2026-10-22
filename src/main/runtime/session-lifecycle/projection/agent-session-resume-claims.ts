@@ -65,7 +65,7 @@ export class AgentSessionResumeClaims {
   ): AgentSessionResumeClaim | null {
     const held = this.find(session)
     if (held) {
-      // Why: overlapping opens of one pane resume alongside each other (claimWindowWakeRecordForPane).
+      // Why: overlapping opens of one pane resume alongside each other (claimSleepRecordForPane).
       if (held.paneKey !== paneKey) {
         return null
       }

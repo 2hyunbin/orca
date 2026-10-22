@@ -1,7 +1,11 @@
-import { callRuntimeRpc } from './runtime-rpc-client'
-import { RuntimeRpcCallError } from './runtime-rpc-result'
-import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import type { RuntimeWorktreeTerminalSleepResult } from '../../../shared/runtime-types'
+
+/** One RPC to the paired server; rejects with the server's error `code` on a refusal. */
+export type RemoteWorkspaceCall = (
+  method: string,
+  params: unknown,
+  timeoutMs: number
+) => Promise<unknown>
 
 type RemoteTerminalListResult = {
   terminals: {
@@ -25,7 +29,7 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
 }
 
-function assertVerifiedSleepResult(
+export function assertVerifiedSleepResult(
   value: unknown
 ): asserts value is RuntimeWorktreeTerminalSleepResult & { postStopVerified: true } {
   if (
@@ -88,7 +92,7 @@ function hasLiveListedTerminal(value: unknown): boolean | null {
 }
 
 async function waitForLegacySleepConvergence(
-  environmentId: string,
+  call: RemoteWorkspaceCall,
   worktreeSelector: string,
   deadline: number
 ): Promise<void> {
@@ -103,8 +107,7 @@ async function waitForLegacySleepConvergence(
     }
     try {
       const listTimeoutMs = legacySleepRpcTimeout(deadline)
-      const result = await callRuntimeRpc(
-        { kind: 'environment', environmentId },
+      const result = await call(
         'terminal.list',
         {
           worktree: worktreeSelector,
@@ -112,7 +115,7 @@ async function waitForLegacySleepConvergence(
           requireFreshPtyLiveness: true,
           includeVisualLayouts: false
         },
-        { timeoutMs: listTimeoutMs }
+        listTimeoutMs
       )
       const hasLiveTerminal = hasLiveListedTerminal(result)
       if (hasLiveTerminal === false) {
@@ -120,12 +123,7 @@ async function waitForLegacySleepConvergence(
       }
       if (hasLiveTerminal === true) {
         // Why: a fresh legacy list can hydrate a PTY the first graph-based stop did not know about; stop again after discovery.
-        await callRuntimeRpc(
-          { kind: 'environment', environmentId },
-          'terminal.stop',
-          { worktree: worktreeSelector },
-          { timeoutMs: legacySleepRpcTimeout(deadline) }
-        )
+        await call('terminal.stop', { worktree: worktreeSelector }, legacySleepRpcTimeout(deadline))
         lastFailure = null
       } else {
         lastFailure = new Error('terminal_list_invalid_response')
@@ -149,33 +147,30 @@ function legacySleepRpcTimeout(
   return Math.min(maxTimeoutMs, remainingMs)
 }
 
-export async function requestRemoteWorktreeSleep(args: {
-  environmentId: string
+/** A paired server's terminal sleep, verified; an older server without `terminal.sleep` is stopped
+ *  and polled until no terminal is live. Returns the server's own PTY handles it stopped. */
+export async function requestRemoteWorktreeSleep(
+  call: RemoteWorkspaceCall,
   worktreeId: string
-}): Promise<void> {
-  const worktreeSelector = toRuntimeWorktreeSelector(args.worktreeId)
+): Promise<string[]> {
+  const worktreeSelector = `id:${worktreeId}`
   try {
-    const result = await callRuntimeRpc(
-      { kind: 'environment', environmentId: args.environmentId },
-      'terminal.sleep',
-      { worktree: worktreeSelector },
-      { timeoutMs: 15_000 }
-    )
+    const result = await call('terminal.sleep', { worktree: worktreeSelector }, 15_000)
     assertVerifiedSleepResult(result)
-    return
+    return result.stoppedPtyIds
   } catch (error) {
-    if (!(error instanceof RuntimeRpcCallError) || error.code !== 'method_not_found') {
+    if (!isRecord(error) || error.code !== 'method_not_found') {
       throw error
     }
   }
 
   // Why: previous runtimes lack host-authoritative discover/stop/verify; fresh polling prevents legacy stop acknowledgement from becoming a false sleeping commit.
   const legacyDeadline = Date.now() + LEGACY_SLEEP_TIMEOUT_MS
-  await callRuntimeRpc(
-    { kind: 'environment', environmentId: args.environmentId },
+  await call(
     'terminal.stop',
     { worktree: worktreeSelector },
-    { timeoutMs: legacySleepRpcTimeout(legacyDeadline, LEGACY_SLEEP_TIMEOUT_MS) }
+    legacySleepRpcTimeout(legacyDeadline, LEGACY_SLEEP_TIMEOUT_MS)
   )
-  await waitForLegacySleepConvergence(args.environmentId, worktreeSelector, legacyDeadline)
+  await waitForLegacySleepConvergence(call, worktreeSelector, legacyDeadline)
+  return []
 }

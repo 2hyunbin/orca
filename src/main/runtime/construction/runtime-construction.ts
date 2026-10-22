@@ -17,6 +17,7 @@ import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-
 import { OrcaRuntimeWithLinearCommands } from '../integrations/linear/linear-commands'
 
 import type { RuntimeStore } from '../runtime-store-contract'
+import type { WorkspaceSleepPlatform } from '../workspaces/workspace-sleep-platform'
 import type { StatsCollector } from '../../stats/collector'
 
 import type { PrepareClaudeAuth } from '../../ipc/pty/host-env/types'
@@ -95,6 +96,8 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
   protected abstract ensureNativeWindowsConptyDa1Override(ptyId: string): void
 
   protected readonly prepareClaudeAuth?: PrepareClaudeAuth
+
+  readonly workspaceSleepPlatform: WorkspaceSleepPlatform | null
 
   protected readonly getAgentStatusSnapshotForPaneFn:
     | ((paneKey: string) => AgentStatusIpcPayload[])
@@ -198,6 +201,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       this.store?.setMobileClientTabSelections?.(state)
     })
     this.orchestrationEnvironmentTransport = deps?.orchestrationEnvironmentTransport ?? null
+    this.workspaceSleepPlatform = deps?.workspaceSleepPlatform ?? null
     this.orchestrationFederation = new RuntimeOrchestrationFederation(
       runtime,
       this.orchestrationEnvironmentTransport

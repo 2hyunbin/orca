@@ -242,33 +242,34 @@ describe('resumeAgentSessionInWorkspace', () => {
     expect(command).toMatch(/--permission-mode'? '?plan/)
     // Why: the explicit resume command must spawn in the runtime it was quoted for (Windows/WSL).
     expect(spawn.mock.calls[0]?.[0]).toHaveProperty('launchRuntime')
-    // Why: a window wake relaunches a running record, never a pane-owned one.
+    // Why: the record is claimed pane-owned before the spawn, so no other wake resumes it again.
     expect(storedRecord(fixture)).toMatchObject(PANE_OWNED)
   })
 
-  it('refuses without spawning when a window is already attached', async () => {
+  // Why: main is the only executor of a workspace-sleep wake, so a window never refuses it.
+  it('resumes and claims the record with a window already attached', async () => {
     const fixture = makeSleptWorkspace()
     const { spawn, attachWindow, resume } = makeRuntime(fixture)
     attachWindow()
 
-    await expect(resume()).resolves.toEqual({ ok: false, reason: 'window_owns_wake' })
-    expect(spawn).not.toHaveBeenCalled()
-    expect(storedRecord(fixture)).toMatchObject({ state: 'working' })
+    await expect(resume()).resolves.toMatchObject({ ok: true, ptyId: 'resumed-pty' })
+    expect(resumeSpawns(spawn)).toBe(1)
+    expect(storedRecord(fixture)).toMatchObject(PANE_OWNED)
   })
 
-  it('refuses without spawning when a window attaches while the workspace resolves', async () => {
+  it('resumes when a window attaches while the workspace resolves', async () => {
     const fixture = makeSleptWorkspace()
     const { spawn, attachWindow, resume } = makeRuntime(fixture)
 
     const pending = resume()
     attachWindow()
 
-    await expect(pending).resolves.toEqual({ ok: false, reason: 'window_owns_wake' })
-    expect(spawn).not.toHaveBeenCalled()
-    expect(storedRecord(fixture)).toMatchObject({ state: 'working' })
+    await expect(pending).resolves.toMatchObject({ ok: true })
+    expect(resumeSpawns(spawn)).toBe(1)
+    expect(storedRecord(fixture)).toMatchObject(PANE_OWNED)
   })
 
-  it('refuses without spawning when a window attaches during the duplicate-holder check', async () => {
+  it('resumes when a window attaches during the duplicate-holder check', async () => {
     const fixture = makeSleptWorkspace()
     let attach = (): void => {}
     const { spawn, attachWindow, resume } = makeRuntime(fixture, {
@@ -280,11 +281,11 @@ describe('resumeAgentSessionInWorkspace', () => {
     })
     attach = attachWindow
 
-    await expect(resume()).resolves.toEqual({ ok: false, reason: 'window_owns_wake' })
-    expect(spawn).not.toHaveBeenCalled()
+    await expect(resume()).resolves.toMatchObject({ ok: true })
+    expect(resumeSpawns(spawn)).toBe(1)
   })
 
-  it('refuses without spawning when a window attaches before the record claim commits', async () => {
+  it('resumes when a window attaches before the record claim commits', async () => {
     const fixture = makeSleptWorkspace()
     const { spawn, attachWindow, resume } = makeRuntime(fixture)
     const store = fixture.runtimeStore
@@ -299,9 +300,9 @@ describe('resumeAgentSessionInWorkspace', () => {
       }
     })
 
-    await expect(resume()).resolves.toEqual({ ok: false, reason: 'window_owns_wake' })
-    expect(spawn).not.toHaveBeenCalled()
-    expect(storedRecord(fixture)).toMatchObject({ state: 'working' })
+    await expect(resume()).resolves.toMatchObject({ ok: true })
+    expect(resumeSpawns(spawn)).toBe(1)
+    expect(storedRecord(fixture)).toMatchObject(PANE_OWNED)
   })
 
   it('keeps the record pane-owned when a window attaches during the spawn', async () => {

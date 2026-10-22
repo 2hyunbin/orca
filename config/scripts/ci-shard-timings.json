@@ -8113,7 +8113,7 @@
       "src/renderer/src/components/settings/repository-host-setup-options.test.ts": 268,
       "src/renderer/src/components/settings/repository-icon-github.test.ts": 49,
       "src/renderer/src/components/settings/repository-source-control-ai-global-ux.test.ts": 389,
-      "src/renderer/src/components/settings/repository-source-control-ai-persist-queue.test.ts": 86,
+      "src/renderer/src/components/settings/repository/source-control/repository-source-control-ai-persist-queue.test.ts": 86,
       "src/renderer/src/components/settings/runtime-server-row-unverifiable-host.test.tsx": 1776,
       "src/renderer/src/components/settings/runtime-server-workflow-sections.test.tsx": 300,
       "src/renderer/src/components/settings/session-history-status-copy.test.ts": 243,

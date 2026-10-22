@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SleepingAgentSessionRecord } from '../../../../shared/agent-session-resume'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
-import { markResumedRecordLive } from './window-wake-sleep-record'
+import { markResumedRecordLive } from './sleep-record-pane-claim'
 
 const PANE_KEY = 'tab-1:leaf-1'
 const RESUMED: SleepingAgentSessionRecord = {
