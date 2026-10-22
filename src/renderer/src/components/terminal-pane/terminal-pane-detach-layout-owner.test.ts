@@ -117,7 +117,6 @@ describe('moveLeafThroughLayoutOwner', () => {
       ptyId: 'remote-new',
       tabId: 'tab-server'
     })
-    useAppStore.setState({ terminalLayoutsByTabId: {} })
   })
 
   it('moves as today when main lacks the pane, or a paired server owns the workspace', async () => {
