@@ -54,11 +54,10 @@ export function orcadMigrationConflictGuidance(error: unknown): string | null {
         `desktop and connect again. (${code})`
       )
     default:
-      // Why no other step: for these kinds no desktop-side action is known to clear the conflict.
       return (
         'This host’s Orca server already holds different saved state for something this desktop ' +
         'is moving, so nothing was moved and this desktop keeps its projects. Retrying won’t clear ' +
-        `it. To keep working on the host meanwhile, choose Open plain SSH terminal. (${code})`
+        `it. (${code})`
       )
   }
 }

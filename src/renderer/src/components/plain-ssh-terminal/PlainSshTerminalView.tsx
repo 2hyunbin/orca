@@ -315,7 +315,9 @@ export function PlainSshTerminalView({
   }, [hidden])
 
   // Why the theme's background: fit leaves a remainder of pixels beside the grid that must not show the card.
-  const background = resolveThemeColors(settings, systemPrefersDark).theme?.background
+  const themeBackground = resolveThemeColors(settings, systemPrefersDark).theme?.background
+  // A translucent theme is painted once by xterm already; painting it again would darken the grid.
+  const background = themeBackground?.startsWith('rgba') ? undefined : themeBackground
   return (
     <div
       ref={containerRef}

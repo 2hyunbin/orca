@@ -12,13 +12,14 @@ const NO_DESKTOP_STEP = [
 ]
 
 describe('orcad migration conflict guidance', () => {
-  it('points every conflict retrying can’t clear at the plain SSH terminal, naming the code', () => {
+  // Why no UI words here: this text also reaches clients that have no plain SSH terminal.
+  it('names the code for every conflict retrying can’t clear, and no client-only action', () => {
     for (const kind of NO_DESKTOP_STEP) {
       const text = orcadMigrationConflictGuidance(
         new Error(`orcad_migration_${kind}_conflict:ui:workspaceHostScope`)
       )
       expect(text).toContain('Retrying won’t clear it.')
-      expect(text).toContain('choose Open plain SSH terminal')
+      expect(text).not.toContain('plain SSH')
       expect(text).toContain(`orcad_migration_${kind}_conflict`)
     }
   })
