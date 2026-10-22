@@ -14,7 +14,6 @@ import type { TerminalStoreGet, TerminalStoreSet } from '../store/terminals/term
 import { applyLocalStructuredSessionTabSnapshots } from './local-structured-session-tabs-sync/snapshot-apply'
 import { LOCAL_STRUCTURED_SESSION_OWNER } from './local-structured-session-owner'
 import { isWebSessionCloseIntentPending } from './web-session-close-intent'
-import { resolveWebSessionVisibleTabId } from './web-session-focus-intent'
 import { framesDrawWorkspace } from './workspace-layout-frame-drawn-workspaces'
 import { applyWebSessionTabsStorePatch } from './web-session-tabs-sync/store-patch'
 import {
@@ -166,15 +165,6 @@ export function materializeWorkspaceInitialSurface(
             recordInteraction: false
           }
         ).id
-      }
-      if (
-        current.activeWorktreeId === snapshot.worktree &&
-        !resolveWebSessionVisibleTabId(current, snapshot.worktree)
-      ) {
-        staged = {
-          ...staged,
-          activeTabId: staged.activeTabIdByWorktree[snapshot.worktree] ?? null
-        }
       }
       return staged
     },

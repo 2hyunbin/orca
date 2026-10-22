@@ -116,14 +116,45 @@ describe('initial topology before ancillary terminal delivery', () => {
     expect(state.activeWorktreeId).toBe(OTHER)
   })
 
-  it.each(['chat', 'terminal'] as const)('fills an empty visible workspace with its %s', (mode) => {
-    useAppStore.setState({ activeWorktreeId: WORKTREE, activeTabId: null })
-    deliver(topology(mode))
-    const state = useAppStore.getState()
-    expect(state.activeTabId).toBe(resolveWebSessionVisibleTabId(state, WORKTREE))
-    expect(state.activeTabId).not.toBe(ANCILLARY)
-    expect(state.activeTabType).toBe(mode === 'chat' ? 'agent-session' : 'terminal')
-  })
+  it.each(['chat', 'terminal'] as const)(
+    'selects the %s, never Setup, in an empty visible workspace',
+    (mode) => {
+      useAppStore.setState({
+        activeWorktreeId: WORKTREE,
+        activeTabId: null,
+        activeTabIdByWorktree: { [OTHER]: 'other-tab' }
+      })
+      const committed: { visible: string | null; remembered: string | null | undefined }[] = []
+      const stop = useAppStore.subscribe((state) => {
+        committed.push({
+          visible: resolveWebSessionVisibleTabId(state, WORKTREE),
+          remembered: state.activeTabIdByWorktree[WORKTREE]
+        })
+      })
+      deliver(topology(mode))
+      stop()
+      const state = useAppStore.getState()
+      const tabs = state.unifiedTabsByWorktree[WORKTREE]!
+      const agent = tabs.find((tab) => tab.entityId === (mode === 'chat' ? SESSION : AGENT))!
+      const setup = tabs.find((tab) => tab.entityId === ANCILLARY)!
+      expect(state.activeTabIdByWorktree[WORKTREE]).toBe(agent.id)
+      expect(resolveWebSessionVisibleTabId(state, WORKTREE)).toBe(agent.id)
+      expect(state.activeTabType).toBe(mode === 'chat' ? 'agent-session' : 'terminal')
+      if (mode === 'terminal') {
+        // The window's terminal repair restores the remembered tab only if it names a terminal.
+        expect(state.tabsByWorktree[WORKTREE]!.map((tab) => tab.id)).toContain(
+          state.activeTabIdByWorktree[WORKTREE]
+        )
+      }
+      expect(state.activeWorktreeId).toBe(WORKTREE)
+      expect(state.activeTabIdByWorktree[OTHER]).toBe('other-tab')
+      expect(committed.length).toBeGreaterThan(0)
+      for (const commit of committed) {
+        expect([commit.visible, commit.remembered]).not.toContain(setup.id)
+        expect([commit.visible, commit.remembered]).not.toContain(ANCILLARY)
+      }
+    }
+  )
 
   it.each(['chat', 'terminal'] as const)(
     'initializes the %s before ancillary selection and keeps later choices through replay',
