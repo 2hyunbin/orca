@@ -2,7 +2,10 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { retireTerminalPresentation } from '@/components/terminal-pane/terminal-presentation-retirement'
-import type { TerminalTabCloseRequest } from '../../src/shared/terminal-tab-close'
+import type {
+  TerminalTabCloseRequest,
+  TerminalTabCloseResponse
+} from '../../src/shared/terminal-tab-close'
 import type { WorkspaceSessionState } from '../../src/shared/workspace-session-state-types'
 import { registerMobileAndTerminalCloseIpcBridge } from '@/hooks/ipc-events/mobile-terminal-close-ipc-bridge'
 import { mountedOwner } from '@/components/terminal-pane/terminal-presentation-retirement.test-fixture'
@@ -74,9 +77,10 @@ it.each([false, true])(
       terminalLayoutsByTabId: session.terminalLayoutsByTabId
     })
     const source = harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
-    if (!source.presentation) {
+    if (!source.presentation || !source.incarnationId) {
       throw new Error('Expected original')
     }
+    const { presentation, incarnationId } = source
     const owner = mountedOwner(false, {
       tabId: TAB_ID,
       worktreeId: WORKTREE_ID,
@@ -87,7 +91,13 @@ it.each([false, true])(
       throw new Error('terminal dispose failed')
     })
     let request: ((value: TerminalTabCloseRequest) => void) | undefined
-    const respond = vi.fn()
+    let rejectReceipt = (_error: Error): void => {}
+    const receipt = new Promise<void>((_resolve, reject) => {
+      rejectReceipt = reject
+    })
+    const respond = vi.fn((response: TerminalTabCloseResponse) => {
+      rejectReceipt(new Error(response.error ?? 'Unexpected success'))
+    })
     const set = vi.fn(async (_state: WorkspaceSessionState) => {
       expect(owner.manager.destroy).toHaveBeenCalledOnce()
       expect(useAppStore.getState().terminalLayoutsByTabId[TAB_ID]).toBeUndefined()
@@ -119,13 +129,23 @@ it.each([false, true])(
     if (!request) {
       throw new Error('Expected IPC listener')
     }
-    try {
-      request({
+    const dispatch = request
+    harness.setVerifiedStopResult(true)
+    harness.setCloseTerminalTabAction(() => {
+      dispatch({
         requestId: 'close',
         tabId: TAB_ID,
         localPtyTeardownOwnedExternally: true,
-        originalSurface: source.presentation.identity
+        originalSurface: presentation.identity
       })
+      return receipt
+    })
+    try {
+      await expect(
+        harness.runtime.closeTerminal(source.handle, incarnationId, presentation)
+      ).rejects.toThrow('terminal_tab_close_failed')
+      expect(harness.flushOrThrow).not.toHaveBeenCalled()
+      expect(harness.getSession().closedTerminalTabTombstonesByTabId?.[TAB_ID]).toBeUndefined()
       await vi.waitFor(() =>
         expect(respond).toHaveBeenCalledExactlyOnceWith({
           requestId: 'close',
