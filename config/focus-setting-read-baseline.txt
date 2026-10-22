@@ -251,7 +251,7 @@
 1 src/renderer/src/lib/runtime-session-mirror-targets.ts
 1 src/renderer/src/lib/single-runtime-legacy-owner.ts
 1 src/renderer/src/lib/terminal-close-route.ts
-5 src/renderer/src/lib/terminal-worktree-route.ts # resolveTerminalPtyOwner: teardown, close and PTY identity read spawn's attribution (round 3 F8), which retired the deprecated resolver's readers
+4 src/renderer/src/lib/terminal-worktree-route.ts # resolveTerminalPtyOwner: teardown, close and PTY identity read spawn's attribution (round 3 F8), which retired the deprecated resolver's readers
 3 src/renderer/src/lib/unread-badge-count-selector.ts
 1 src/renderer/src/lib/web-runtime-worktree-terminal-after-wake.ts
 4 src/renderer/src/lib/workspace-browser-tab-open.ts
