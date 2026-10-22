@@ -200,6 +200,7 @@ function createRuleState() {
     appStoreHooks: new Set(),
     shallowHooks: new Set(),
     namedSelectors: new Map(),
+    weakMaps: new Set(),
     deferredCalls: []
   }
 }
@@ -271,6 +272,16 @@ function deferredSelectorRule(inspect) {
     },
     VariableDeclaration(node) {
       recordNamedSelector(node, state)
+      if (isModuleScope(node)) {
+        for (const entry of node.declarations) {
+          if (
+            entry.init?.type === 'NewExpression' &&
+            identifierName(entry.init.callee) === 'WeakMap'
+          ) {
+            state.weakMaps.add(identifierName(entry.id))
+          }
+        }
+      }
     },
     CallExpression(node) {
       if (isAppStoreCall(node, state)) {
@@ -359,6 +370,165 @@ function noNestedFreshUnderShallowRule() {
   })
 }
 
+/** Small state maps and imported helpers are deliberately outside this rule's scope. */
+const SCANNED_MAPS = new Set([
+  'tabsByWorktree',
+  'unifiedTabsByWorktree',
+  'groupsByWorktree',
+  'browserTabsByWorktree',
+  'browserPagesByWorkspace',
+  'layoutByWorktree',
+  'terminalLayoutsByTabId',
+  'worktreesByRepo'
+])
+
+/** Walk one function body, including conditional branches, without descending into closures. */
+function walkBody(node, visit) {
+  if (!node || typeof node !== 'object' || FUNCTION_NODES.has(node.type)) {
+    return
+  }
+  visit(node)
+  for (const [key, child] of Object.entries(node)) {
+    if (key === 'parent') {
+      continue
+    }
+    if (Array.isArray(child)) {
+      child.forEach((entry) => walkBody(entry, visit))
+    } else {
+      walkBody(child, visit)
+    }
+  }
+}
+
+function parameterNames(parameter) {
+  const names = new Set()
+  walkBody(parameter, (node) => {
+    if (
+      node.type === 'Identifier' &&
+      !(node.parent?.type === 'Property' && node.parent.key === node && !node.parent.computed)
+    ) {
+      names.add(node.name)
+    }
+  })
+  return names
+}
+
+function noStateIgnoringSelectorRule() {
+  return deferredSelectorRule(({ selector }) => {
+    if (!selector) {
+      return null
+    }
+    const names = parameterNames(selector.params[0])
+    let referenced = false
+    // References inside nested callbacks still depend on the selector's snapshot.
+    const visit = (node) => {
+      if (!node || typeof node !== 'object') {
+        return
+      }
+      if (
+        node.type === 'Identifier' &&
+        names.has(node.name) &&
+        !(
+          node.parent?.type === 'MemberExpression' &&
+          node.parent.property === node &&
+          !node.parent.computed
+        ) &&
+        !(node.parent?.type === 'Property' && node.parent.key === node && !node.parent.computed)
+      ) {
+        referenced = true
+      }
+      for (const [key, child] of Object.entries(node)) {
+        if (key === 'parent') {
+          continue
+        }
+        if (Array.isArray(child)) {
+          child.forEach(visit)
+        } else {
+          visit(child)
+        }
+      }
+    }
+    visit(selector.body)
+    return referenced
+      ? null
+      : {
+          node: selector,
+          message:
+            'This store selector ignores its state; read the supplied snapshot instead of doing state-independent work on every write.'
+        }
+  })
+}
+
+function scansTabMap(selector, state, depth = 0) {
+  const aliases = new Set()
+  const isMap = (node) => SCANNED_MAPS.has(propertyName(node)) || aliases.has(identifierName(node))
+  let scan = null
+  let cached = false
+  const helpers = []
+  walkBody(selector.body, (node) => {
+    if (node.type === 'VariableDeclarator' && isMap(node.init)) {
+      aliases.add(identifierName(node.id))
+    }
+    if (
+      node.type === 'BinaryExpression' &&
+      ['===', '!=='].includes(node.operator) &&
+      (isMap(node.left) || isMap(node.right))
+    ) {
+      cached = true
+    }
+    if (node.type === 'CallExpression') {
+      const method = propertyName(node.callee)
+      if (
+        method === 'get' &&
+        state.weakMaps.has(identifierName(node.callee.object)) &&
+        node.arguments.some(isMap)
+      ) {
+        cached = true
+      }
+      if (
+        identifierName(node.callee.object) === 'Object' &&
+        ['keys', 'values', 'entries'].includes(method) &&
+        isMap(node.arguments[0])
+      ) {
+        scan ??= node
+      }
+      const helper = state.namedSelectors.get(identifierName(node.callee))
+      if (helper) {
+        helpers.push(helper)
+      }
+    }
+    if (node.type === 'ForInStatement' && isMap(node.right)) {
+      scan ??= node
+    }
+  })
+  if (cached) {
+    return null
+  }
+  if (scan || depth === 1) {
+    return scan
+  }
+  for (const helper of helpers) {
+    const found = scansTabMap(helper, state, depth + 1)
+    if (found) {
+      return found
+    }
+  }
+  return null
+}
+
+function noTabMapScanInSelectorRule() {
+  return deferredSelectorRule(({ selector, state }) => {
+    const scan = selector && scansTabMap(selector, state)
+    return scan
+      ? {
+          node: scan,
+          message:
+            'Do not enumerate tabsByWorktree, unifiedTabsByWorktree, groupsByWorktree, browserTabsByWorktree, browserPagesByWorkspace, layoutByWorktree, terminalLayoutsByTabId, or worktreesByRepo on every selector run; cache an index by map identity.'
+        }
+      : null
+  })
+}
+
 function bindContext(createVisitors) {
   return (context) => {
     const visitors = createVisitors()
@@ -372,6 +542,8 @@ function bindContext(createVisitors) {
 export default {
   meta: { name: 'app-store-performance' },
   rules: {
+    'no-state-ignoring-selector': { create: bindContext(noStateIgnoringSelectorRule) },
+    'no-tab-map-scan-in-selector': { create: bindContext(noTabMapScanInSelectorRule) },
     'require-selector': { create: bindContext(requireSelectorRule) },
     'no-identity-selector': { create: bindContext(noIdentitySelectorRule) },
     'no-fresh-selector-result': { create: bindContext(noFreshSelectorResultRule) },

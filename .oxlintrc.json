@@ -36,6 +36,8 @@
   },
   "rules": {
     "sort-comparator-performance/no-repeated-collator": "warn",
+    "app-store-performance/no-state-ignoring-selector": "error",
+    "app-store-performance/no-tab-map-scan-in-selector": "error",
     "app-store-performance/require-selector": "error",
     "app-store-performance/no-identity-selector": "error",
     "app-store-performance/no-fresh-selector-result": "error",

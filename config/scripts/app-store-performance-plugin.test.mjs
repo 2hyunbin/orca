@@ -10,6 +10,8 @@ function lintSources(sources) {
     pluginPath,
     sources,
     rules: {
+      'app-store-performance/no-state-ignoring-selector': 'warn',
+      'app-store-performance/no-tab-map-scan-in-selector': 'warn',
       'app-store-performance/require-selector': 'warn',
       'app-store-performance/no-identity-selector': 'warn',
       'app-store-performance/no-fresh-selector-result': 'warn',
@@ -75,6 +77,60 @@ const sources = {
       const Delegating = () => useAppStore((state) => buildRows(state))
       const NestedDelegating = () => useAppStore(useShallow((state) => ({ ids: buildRows(state) })))
     `,
+  ignoringState: `
+    import { useAppStore } from '@/store'
+    import { useShallow } from 'zustand/react/shallow'
+    const selectConstant = (state) => constant
+    const Zero = () => useAppStore(() => readCurrent())
+    const Unused = () => useAppStore(useShallow((state) => constant))
+    const Named = () => useAppStore(selectConstant)
+  `,
+  scanningMaps: `
+    import { useAppStore } from '@/store'
+    const findChatTab = (state, sessionId, owner) => {
+      const tabsByWorktree = state.unifiedTabsByWorktree
+      for (const worktreeId in tabsByWorktree) {
+        const tab = structuredChatTabBySessionId(tabsByWorktree, worktreeId, sessionId)
+        if (tab && ownerForTab(state, tab) === owner) return tab
+        const qualified = tab && tabsByWorktree[worktreeId]?.find(candidate => ownerForTab(state, candidate) === owner)
+        if (qualified) return qualified
+      }
+      return undefined
+    }
+    const Sender = () => useAppStore(state => local && sessionId ? findChatTab(state, sessionId, owner) : undefined)
+    const Direct = () => useAppStore(state => Object.values(state.tabsByWorktree))
+    const Keys = () => useAppStore(state => Object.keys(state.worktreesByRepo).length)
+    const Aliased = () => useAppStore(state => {
+      const m = state.groupsByWorktree
+      if (enabled) for (const key in m) inspect(key)
+      return state.activeId
+    })
+  `,
+  cachedMaps: `
+    import { useAppStore } from '@/store'
+    const cache = new WeakMap()
+    const cached = state => {
+      const map = state.unifiedTabsByWorktree
+      const hit = cache.get(map)
+      if (hit) return hit
+      const value = Object.values(map)
+      cache.set(map, value)
+      return value
+    }
+    let previous, value
+    const identityCached = state => {
+      if (previous !== state.tabsByWorktree) {
+        value = Object.entries(state.tabsByWorktree)
+        previous = state.tabsByWorktree
+      }
+      return value
+    }
+    const Weak = () => useAppStore(state => cached(state))
+    const Identity = () => useAppStore(state => identityCached(state))
+    const Snapshot = () => useAppStore(({ active }) => active)
+    const Callback = () => useAppStore(state => lookup(() => state.active))
+    const External = () => useAppStore(state => importedIndex(state))
+  `,
   cachedHelpers: `
       import { useAppStore } from '@/store'
       import { useShallow } from 'zustand/react/shallow'
@@ -159,5 +215,25 @@ describe('app store performance Oxlint plugin', () => {
     const diagnostics = diagnosticsBySource.get(sources.cachedHelpers)
 
     expect(diagnostics).toEqual([])
+  })
+})
+
+describe('per-write selector work', () => {
+  it('reports inline, shallow, and named state-ignoring selectors', () => {
+    expect(diagnosticsBySource.get(sources.ignoringState).map(({ code }) => code)).toEqual([
+      'app-store-performance(no-state-ignoring-selector)',
+      'app-store-performance(no-state-ignoring-selector)',
+      'app-store-performance(no-state-ignoring-selector)'
+    ])
+  })
+  it('follows conditional sender helpers and local collection aliases', () => {
+    expect(
+      diagnosticsBySource
+        .get(sources.scanningMaps)
+        .filter(({ code }) => code === 'app-store-performance(no-tab-map-scan-in-selector)')
+    ).toHaveLength(4)
+  })
+  it('allows same-file WeakMap and identity-guard caches', () => {
+    expect(diagnosticsBySource.get(sources.cachedMaps)).toEqual([])
   })
 })
