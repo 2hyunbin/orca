@@ -82,7 +82,7 @@ describe('agent model catalog service', () => {
     })
   })
 
-  it('probes as for no record when this build cannot start the record as it is pinned', async () => {
+  it('keeps an unsupported pinned record unknown without probing another account', async () => {
     const store = new AgentModelCatalogStore()
     const probe = vi.fn(async (_home: AgentSessionAccountHome) => listing('gpt-a'))
     // A Codex record pinning Claude's variable: its path is not a Codex home to probe under.
@@ -96,13 +96,13 @@ describe('agent model catalog service', () => {
       probes: { grok: probe }
     })
 
-    await service.read({ agent: 'grok', sessionId: 'session-1' })
+    expect(
+      await service.read({ agent: 'grok', sessionId: 'session-1', waitForListing: true })
+    ).toEqual({ origin: 'unknown' })
 
     expect(drivesRecord).toHaveBeenCalledWith(pinned)
-    await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
-    expect(probe).toHaveBeenCalledExactlyOnceWith(GROK_HOME('/homes/selected'), {
-      signal: expect.any(AbortSignal)
-    })
+    expect(probe).not.toHaveBeenCalled()
+    service.stop()
   })
 
   it('an account switch with no record reads and prewarms the NEW account, never the old entry', async () => {

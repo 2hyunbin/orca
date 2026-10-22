@@ -1,6 +1,7 @@
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { describe, expect, it, vi } from 'vitest'
 
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
   agentModelCatalogFingerprintForRecord,
@@ -439,4 +440,111 @@ describe('one account, one catalog key', () => {
     const read = await service.read({ agent: 'grok', waitForListing: true })
     expect(read.origin !== 'unknown' && read.models.map((model) => model.id)).toEqual(['gpt-live'])
   })
+})
+
+it('keeps old producers from publishing rows, defaults or failure expiry after retirement and stop', async () => {
+  const store = new AgentModelCatalogStore()
+  const record = agentSessionRecordFixture({
+    sessionId: 'source-chat',
+    provider: 'opencode2',
+    accountHome: HOME('OPENCODE_HOME', '/account'),
+    location: {
+      executionHostId: 'local',
+      wslDistro: null,
+      workspaceId: 'folder',
+      workspaceKind: 'folder'
+    }
+  })
+  const folder = deferred<string | null>()
+  const defaults = deferred<boolean>()
+  const lookup = vi.fn(async () => folder.promise)
+  const defaultLookup = vi.fn(async () => defaults.promise)
+  const service = createAgentModelCatalogService({
+    store,
+    getRecord: () => record,
+    drivesRecord: () => true,
+    resolveAccountHome: async () => record.accountHome,
+    recordWorkspacePath: lookup,
+    workspaceMayOverrideDefaultModel: defaultLookup,
+    listsInChatFolder: new Set(['opencode2'])
+  })
+  const oldSource = service.captureSource(record)
+  service.recordLiveListing(
+    record.sessionId,
+    { ...listing('old'), configuredDefault: { modelId: 'old' } },
+    oldSource
+  )
+  service.providerStarted(record, oldSource)
+  await vi.waitFor(() => expect(lookup).toHaveBeenCalled())
+  store.expireAgent(record.provider)
+  const key = agentModelCatalogFingerprintForRecord(record, '/project')
+  const current = store.recordSuccess(key, record.provider, listing('current'), 'discovery')
+  store.recordFailure(key, 'current failure', record.provider)
+  const save = vi.fn()
+  await store.attachPersistence({ load: async () => [], save, flush: async () => {} })
+  folder.resolve('/project')
+  await vi.waitFor(() => expect(lookup).toHaveBeenCalledTimes(2))
+  // Receipt after retirement cannot grant the old child a new launch identity.
+  service.recordLiveListing(record.sessionId, listing('late-receipt'), oldSource)
+  await Promise.resolve()
+  expect(store.get(key)).toBe(current)
+  expect(store.failureDetail(key)).toBe('current failure')
+  expect(save).not.toHaveBeenCalled()
+  const source = service.captureSource(record)
+  service.recordLiveListing(
+    record.sessionId,
+    { ...listing('valid'), configuredDefault: { modelId: 'valid' } },
+    source
+  )
+  await vi.waitFor(() => expect(defaultLookup).toHaveBeenCalledTimes(1))
+  const beforeStop = store.get(key)
+  save.mockClear()
+  service.stop()
+  defaults.resolve(false)
+  await Promise.resolve()
+  await Promise.resolve()
+  expect(store.get(key)).toBe(beforeStop)
+  expect(store.get(key)?.configured).toBeNull()
+  expect(save).not.toHaveBeenCalled()
+})
+
+it('withholds a known retired Pi invocation until a current live producer lists', async () => {
+  const store = new AgentModelCatalogStore()
+  const record = agentSessionRecordFixture({
+    sessionId: 'pi-chat',
+    provider: 'pi',
+    accountHome: HOME('PI_CODING_AGENT_DIR', '/pi')
+  })
+  const key = agentModelCatalogFingerprintForRecord(record)
+  store.recordSuccess(key, record.provider, listing('command-a'), 'discovery')
+  const listingPending = deferred<AgentModelCatalogSuccess>()
+  const probe = vi.fn(() => listingPending.promise)
+  const service = createAgentModelCatalogService({
+    store,
+    getRecord: () => record,
+    drivesRecord: () => true,
+    resolveAccountHome: async () => record.accountHome,
+    probes: { pi: probe }
+  })
+  const old = service.captureSource(record)
+  store.expireAgent('pi')
+  void service.demand({ agent: 'pi', sessionId: record.sessionId })
+  await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(1))
+  expect(service.snapshot({ agent: 'pi', sessionId: record.sessionId, savedOnly: true })).toEqual({
+    origin: 'unknown'
+  })
+  service.recordLiveListing(record.sessionId, listing('old-child'), old)
+  expect(service.snapshot({ agent: 'pi', sessionId: record.sessionId, savedOnly: true })).toEqual({
+    origin: 'unknown'
+  })
+  service.recordLiveListing(
+    record.sessionId,
+    listing('current-child'),
+    service.captureSource(record)
+  )
+  expect(
+    service.snapshot({ agent: 'pi', sessionId: record.sessionId, savedOnly: true })
+  ).toMatchObject({ models: [{ id: 'current-child' }] })
+  service.stop()
+  listingPending.resolve(listing('stopped'))
 })

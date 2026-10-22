@@ -1,5 +1,8 @@
 import {
   evictAgentModelCatalogEntries,
+  createAgentModelCatalogEntryFactory,
+  retireAgentModelCatalogObservations,
+  agentModelCatalogLaunchAgents,
   agentModelCatalogEntryIsStale,
   pruneAgentModelCatalogPartialAttempts
 } from './agent-model-catalog-entry-lifetime'
@@ -7,7 +10,6 @@ import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
 export type { AgentModelCatalogProbe } from './agent-model-catalog-discovery'
 import type { AgentModelCatalogPersistence } from './agent-model-catalog-persistence'
 import {
-  agentModelCatalogEntryWithSuccess,
   agentModelCatalogListingKey,
   entryWithConfiguredDefault,
   type AgentModelCatalogConfiguredChoice,
@@ -69,6 +71,7 @@ export class AgentModelCatalogStore {
   private readonly dueEntries = new Set<string>()
   private readonly partialAttempts = new Map<string, { agent: string; at: number }>()
   private readonly retirementRevisions = new Map<string, number>()
+  private readonly retiredObservations = new Set<string>()
   private nextListingOrder = 0
   private persistence: AgentModelCatalogPersistence | null = null
   private readonly now: () => number
@@ -107,14 +110,14 @@ export class AgentModelCatalogStore {
     return entry
   }
 
+  /** A known superseded invocation cannot be certified by resolving its old base key again. */
+  observation(fingerprint: string): AgentModelCatalogEntry | null {
+    return this.retiredObservations.has(fingerprint) ? null : this.get(fingerprint)
+  }
+
   /** Whether any account's catalog of `agent` is saved here. */
   hasEntryForAgent(agent: string): boolean {
-    for (const entry of this.entries.values()) {
-      if (entry.agent === agent) {
-        return true
-      }
-    }
-    return false
+    return [...this.entries.values()].some((entry) => entry.agent === agent)
   }
 
   /** Only a discovery ages: live saves never postpone the next account-level listing. */
@@ -135,7 +138,9 @@ export class AgentModelCatalogStore {
   }
 
   retirementRevision(agent: string): number {
-    return this.retirementRevisions.get(agent) ?? 0
+    const revision = this.retirementRevisions.get(agent) ?? 0
+    this.retirementRevisions.set(agent, revision)
+    return revision
   }
 
   private retireListings(agent: string): void {
@@ -146,6 +151,12 @@ export class AgentModelCatalogStore {
       this.listingWaiters,
       agent
     )
+  }
+
+  expireLaunchScopes(): void {
+    for (const agent of agentModelCatalogLaunchAgents(this.retirementRevisions, this.entries)) {
+      this.expireAgent(agent)
+    }
   }
 
   expireFailures(agent: string): void {
@@ -160,17 +171,14 @@ export class AgentModelCatalogStore {
   /** The agent's command or launch env changed: each of its catalogs and held reasons is due. */
   expireAgent(agent: string): void {
     this.retireListings(agent)
-    for (const entry of this.entries.values()) {
-      if (entry.agent === agent) {
-        this.dueEntries.add(entry.fingerprint)
-      }
-    }
+    retireAgentModelCatalogObservations(
+      this.entries,
+      this.dueEntries,
+      this.retiredObservations,
+      this.partialAttempts,
+      agent
+    )
     this.failures.expireAgent(agent)
-    for (const [key, attempt] of this.partialAttempts) {
-      if (attempt.agent === agent) {
-        this.partialAttempts.delete(key)
-      }
-    }
   }
 
   /** The one ingestion step every listing goes through, whoever listed it. */
@@ -185,20 +193,11 @@ export class AgentModelCatalogStore {
     return entry
   }
 
-  private entryFromSuccess(
-    fingerprint: string,
-    agent: string,
-    success: AgentModelCatalogSuccess,
-    source: AgentModelCatalogSource
-  ): AgentModelCatalogEntry | null {
-    return agentModelCatalogEntryWithSuccess(
-      this.entries.get(fingerprint),
-      { agent, fingerprint },
-      success,
-      source,
-      this.now()
-    )
-  }
+  private readonly entryFromSuccess = createAgentModelCatalogEntryFactory(
+    this.entries,
+    this.retiredObservations,
+    () => this.now()
+  )
 
   /** Records which model and effort the account's own config resolves to, for an agent whose
    *  listing names none; null forgets a default that config no longer resolves to. Superseded by
@@ -231,6 +230,7 @@ export class AgentModelCatalogStore {
       }
       return null
     }
+    this.retiredObservations.delete(fingerprint)
     const previous = this.entries.get(fingerprint)
     this.entries.delete(fingerprint)
     this.entries.set(fingerprint, entry)
@@ -355,7 +355,8 @@ export class AgentModelCatalogStore {
       this.entries,
       this.dueEntries,
       this.partialAttempts,
-      AGENT_MODEL_CATALOG_MAX_ENTRIES
+      AGENT_MODEL_CATALOG_MAX_ENTRIES,
+      this.retiredObservations
     )
   }
 }

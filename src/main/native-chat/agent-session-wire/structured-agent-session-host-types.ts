@@ -80,6 +80,8 @@ export type StructuredAgentSessionProviderChild = StructuredAgentSessionProvider
   /** The permission mode it was launched with, in memory only; absent for an agent with none. */
   readonly permissionMode?: AgentChatPermissionMode
   /** The adapter's `heldSends` for this conversation, read at each decision. */
+  /** The launch source that may publish observations for this child. */
+  readonly catalogSource?: () => boolean
   readonly heldSends?: () => ReadonlySet<string> | undefined
   readonly exitObservation?: DeferredStructuredAgentSessionEventSink['exitObservation']
   close?: StructuredAgentSessionChildClose

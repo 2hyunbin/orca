@@ -148,7 +148,7 @@ export function applyNativeChatSessionOptionPicks(args: {
   return persisted
 }
 
-/** Applies a host-owned pick delta; legacy inventory retirement requests have no effect. */
+/** Applies a host-owned delta; null means no future launch default needs retirement. */
 export function applyNativeChatSessionOptionSettingsMutation(
   persisted: PersistedNativeChatSessionOptions | null | undefined,
   mutation: NativeChatSessionOptionSettingsMutation
@@ -160,8 +160,11 @@ export function applyNativeChatSessionOptionSettingsMutation(
       picks: mutation.picks
     })
   }
-  // Older clients still send this mutation; a listing cannot erase a literal saved pick.
-  return null
+  const modelId = persisted?.[mutation.agent]?.model
+  if (!modelId || mutation.availableModelIds.includes(modelId)) {
+    return null
+  }
+  return clearNativeChatSessionOptionModel(persisted, mutation.agent)
 }
 
 /** Explicitly clears a model while retaining its per-model values for a later reselect. */

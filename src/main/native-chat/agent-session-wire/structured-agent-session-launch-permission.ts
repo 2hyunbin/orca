@@ -16,14 +16,15 @@ async function listedAutoModeSupport(
   catalog: StructuredAgentSessionHostDeps['modelCatalog'],
   record: AgentSessionRecord
 ): Promise<boolean> {
-  const listing = await catalog
-    ?.read({
-      agent: record.provider,
-      sessionId: record.sessionId,
-      savedOnly: true,
-      inSessionWorkspace: true
-    })
-    .catch(() => null)
+  const params = {
+    agent: record.provider,
+    sessionId: record.sessionId,
+    savedOnly: true,
+    inSessionWorkspace: true as const
+  }
+  const listing = await (catalog?.prepareSaved?.(params) ?? catalog?.read(params))?.catch(
+    () => null
+  )
   return (
     listing !== null &&
     listing !== undefined &&

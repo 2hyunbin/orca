@@ -6,6 +6,8 @@ import {
 } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
 import { AgentSessionAcquisitionRootExitObservedError } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { GENERIC_ACP_DIALECT } from './acp-dialects/acp-dialect'
+import { OPENCODE_ACP_DIALECT } from './acp-dialects/opencode-dialect'
+import { OMP_ACP_DIALECT } from './acp-dialects/omp-dialect'
 import { STRUCTURED_CHILD_ENV_TO_DELETE } from '../runtime/structured-session-child-env'
 import { AGENT_HOOK_RUNTIME_ENV_KEYS } from '../ipc/pty/host-env/spawn-env-keys'
 import {
@@ -179,6 +181,61 @@ describe('ACP structured session adapter: turns', () => {
       current: { model: 'grok-4.6', effort: 'low' }
     })
   })
+
+  it.each([
+    ['composite', OPENCODE_ACP_DIALECT, 2],
+    ['independent', OMP_ACP_DIALECT, 1]
+  ] as const)(
+    'keeps applied model proof consistent with the %s dialect effort writer',
+    async (_name, dialect, modelWrites) => {
+      const rig = await openAcpAdapterRig({ spec: { ...GROK, dialect } })
+      await rig.acquire()
+      const inputs = [
+        { model: 'openai/gpt-5/high' },
+        { effort: 'low' },
+        { model: 'openai/gpt-5/high' }
+      ]
+      for (const [index, executionOptions] of inputs.entries()) {
+        await rig.adapter.dispatch({
+          sessionId: SESSION,
+          fence: 1,
+          clientMessageId: `variant-${index}`,
+          body: hello,
+          executionOptions
+        })
+        const prompt = await rig.frame('session/prompt', index)
+        rig.child().agent.notify('session/update', chunk(`prompt:variant-${index}`, 'Reply'))
+        rig.child().agent.reply(prompt, { stopReason: 'end_turn' })
+        await waitFor(async () => {
+          const turns = (await rig.rig.rows()).flatMap(
+            (row) => readAgentJournalTurn(row.body) ?? []
+          )
+          expect(turns.filter((turn) => turn.state === 'completed')).toHaveLength(index + 1)
+        })
+      }
+      const controls = rig
+        .child()
+        .agent.frames.filter((frame) => frame.method === 'session/set_config_option')
+      expect(
+        controls.filter(
+          (frame) =>
+            typeof frame.params === 'object' &&
+            frame.params !== null &&
+            'configId' in frame.params &&
+            frame.params.configId === 'model'
+        )
+      ).toHaveLength(modelWrites)
+      expect(
+        controls.filter(
+          (frame) =>
+            typeof frame.params === 'object' &&
+            frame.params !== null &&
+            'configId' in frame.params &&
+            frame.params.configId === 'reasoning_effort'
+        )
+      ).toHaveLength(1)
+    }
+  )
 
   it('passes unlisted literal controls and inherits omitted fields on the next prompt', async () => {
     const rig = await openAcpAdapterRig()

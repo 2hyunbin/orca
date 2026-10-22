@@ -31,7 +31,10 @@ export type AgentModelCatalogServiceDeps = AgentModelCatalogWorkspaceDeps & {
 export type AgentModelCatalogService = {
   snapshot: (params: AgentModelCatalogReadParams) => AgentSessionModelCatalogResult
   demand: (params: AgentModelCatalogReadParams) => Promise<void>
-  retireContext: () => void
+  /** Explicitly resolves saved scope without listing or refreshing the environment. */
+  prepareSaved: (params: AgentModelCatalogReadParams) => Promise<AgentSessionModelCatalogResult>
+  captureSource: (record: AgentSessionRecord) => () => boolean
+  retireContext: (workspaceId?: string) => void
   peek: (sessionId: string, verifiedOnly?: boolean) => AgentModelCatalogEntry | null
   read: (params: AgentModelCatalogReadParams) => Promise<AgentSessionModelCatalogResult>
   /** Incoming listing ids, checking only a launch-added row against the pinned account. */
@@ -40,7 +43,11 @@ export type AgentModelCatalogService = {
     listing: AgentModelCatalogLiveListing
   ) => Promise<string[]>
   /** Saves a session's listing and newly learned menus so the next chat starts warm. */
-  recordLiveListing: (sessionId: string, listing: AgentModelCatalogLiveListing) => void
+  recordLiveListing: (
+    sessionId: string,
+    listing: AgentModelCatalogLiveListing,
+    source?: () => boolean
+  ) => void
   /** Lists, in the background, every agent the user has used here (a saved catalog or a chat)
    *  whose catalog for the account a new chat would pin is missing or old, so a picker never meets
    *  a cold catalog. Resolves once those listings settle. */
@@ -48,7 +55,7 @@ export type AgentModelCatalogService = {
   /** The host is going away: start no listing, and stop the ones running. */
   stop: () => void
   /** A chat under this record's account proved its start: a held reason is re-checked sooner. */
-  providerStarted: (record: AgentSessionRecord) => void
+  providerStarted: (record: AgentSessionRecord, source?: () => boolean) => void
 }
 
 export type AgentModelCatalogReadParams = {

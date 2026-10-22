@@ -37,6 +37,8 @@ describe('the host catalog lifetime', () => {
     const service = {
       snapshot: vi.fn(() => ({ origin: 'unknown' as const })),
       demand: vi.fn(async () => {}),
+      prepareSaved: vi.fn(async () => ({ origin: 'unknown' as const })),
+      captureSource: () => () => true,
       retireContext: vi.fn(),
       peek: () => null,
       read: vi.fn(async () => ({ origin: 'unknown' as const })),

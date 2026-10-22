@@ -13,6 +13,10 @@ import type { AgentSessionModelCatalogResult } from '../../../../shared/agent-se
 import { agentSessionRecordFixture } from '../../../../shared/agent-session-record.test-fixture'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import {
+  agentModelCatalogFingerprintForRecord,
+  agentModelCatalogScopeFingerprint
+} from '../../../native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
+import {
   call,
   clearStructuredHostStub,
   hostStub,
@@ -179,6 +183,77 @@ describe('agentSession.modelCatalog', () => {
   it('passes a saved-only read through to the catalog', async () => {
     await call('agentSession.modelCatalog', { agent: 'grok', savedOnly: true }, STRUCTURED_CLIENT)
     expect(read).toHaveBeenCalledWith({ agent: 'grok', savedOnly: true })
+  })
+
+  it('answers cold saved-only without resolution and reuses prepared memory for another equivalent chat', async () => {
+    const pinned = { ...agentSessionRecordFixture(), provider: 'claude' }
+    const key = agentModelCatalogScopeFingerprint(
+      agentModelCatalogFingerprintForRecord(pinned),
+      '/project',
+      'saved-launch'
+    )
+    const seed = new AgentModelCatalogStore()
+    const saved = seed.recordSuccess(
+      key,
+      'claude',
+      {
+        origin: 'probe',
+        complete: true,
+        models: [{ id: 'saved', label: 'Saved', isDefault: false, efforts: [] }]
+      },
+      'discovery'
+    )!
+    const store = new AgentModelCatalogStore()
+    await store.attachPersistence({
+      load: async () => [saved],
+      save: () => {},
+      flush: async () => {}
+    })
+    const folder = vi.fn(async () => '/project')
+    const run = vi.fn(() => new Promise<never>(() => {}))
+    const resolve = vi.fn(async () => ({ identity: 'saved-launch', run }))
+    const catalog = createAgentModelCatalogService({
+      store,
+      getRecord: (id) => ({ ...pinned, sessionId: id }),
+      drivesRecord: () => true,
+      resolveAccountHome: vi.fn(() => new Promise<never>(() => {})),
+      recordWorkspacePath: folder,
+      probes: { claude: Object.assign(run, { resolve }) }
+    })
+    setStructuredAgentSessionHost(
+      Object.assign(hostStub(), {
+        sessionAgent: () => 'claude',
+        deps: {
+          modelCatalog: catalog,
+          store: { getRecord: (id: string) => ({ ...pinned, sessionId: id }) },
+          adapter: {}
+        }
+      })
+    )
+    try {
+      const cold = await call(
+        'agentSession.modelCatalog',
+        { agent: 'claude', sessionId: 'session-cold-a', savedOnly: true },
+        STRUCTURED_CLIENT
+      )
+      expect(cold.ok, JSON.stringify(cold)).toBe(true)
+      expect(cold).toMatchObject({ result: { origin: 'unknown' } })
+      expect(folder).not.toHaveBeenCalled()
+      expect(resolve).not.toHaveBeenCalled()
+      await catalog.prepareSaved({ agent: 'claude', sessionId: 'session-cold-a' })
+      const calls = resolve.mock.calls.length
+      expect(
+        await call(
+          'agentSession.modelCatalog',
+          { agent: 'claude', sessionId: 'session-cold-b', savedOnly: true },
+          STRUCTURED_CLIENT
+        )
+      ).toMatchObject({ ok: true, result: { models: [{ id: 'saved' }] } })
+      expect(resolve).toHaveBeenCalledTimes(calls)
+      expect(run).not.toHaveBeenCalled()
+    } finally {
+      catalog.stop()
+    }
   })
 })
 

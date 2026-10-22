@@ -174,6 +174,7 @@ export type ClaudeSession = {
   fastModeReportedMutation?: number
   fastModeState?: AgentSessionFastModeState
   fastModeDisabledReason?: string
+  fastModeDisabledMutation?: number
   fastModePerSessionOptIn?: boolean
   /** `optionMutationSequence` when `reportedOptions.model` was last observed, so a
    *  write still awaiting its first turn outranks the report it will replace. */

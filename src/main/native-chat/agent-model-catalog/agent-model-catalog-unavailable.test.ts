@@ -72,7 +72,10 @@ function rig(initialProbe: AgentModelCatalogProbe = signedOut) {
     service,
     chat,
     /** Lets the probe's verdict land. */
-    probed: () => store.refresh(FINGERPRINT, 'grok', probe, () => probe(ACCOUNT_HOME)),
+    probed: async () => {
+      await service.prepareSaved({ agent: 'grok' })
+      await store.refresh(FINGERPRINT, 'grok', probe, () => probe(ACCOUNT_HOME))
+    },
     answerWith: (next: AgentModelCatalogProbe) => (answer = next),
     pastTtl: () => (now += AGENT_MODEL_CATALOG_FAILURE_TTL_MS)
   }
@@ -166,7 +169,7 @@ describe('a chat that starts under the account', () => {
     expect(await service.read({ agent: 'grok', waitForListing: true })).not.toHaveProperty(
       'unavailable'
     )
-    expect(probe).toHaveBeenCalledTimes(2)
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(2))
   })
 })
 
@@ -203,10 +206,10 @@ describe('a catalog read that finds a held reason', () => {
     answerWith(() => signIn.promise)
 
     const plain = await service.read({ agent: 'grok' })
-    expect(plain).toMatchObject({ origin: 'live-session', listingInProgress: true })
+    expect(plain).toMatchObject({ origin: 'live-session' })
     expect(plain.unavailable).toEqual(SIGNED_OUT)
     const waited = service.read({ agent: 'grok', waitForListing: true })
-    expect(probe).toHaveBeenCalledTimes(2)
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(2))
 
     signIn.resolve(listing('gpt-probe', 'probe'))
     const answer = await waited

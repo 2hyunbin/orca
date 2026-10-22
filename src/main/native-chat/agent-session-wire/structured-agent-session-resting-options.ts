@@ -70,7 +70,13 @@ export async function readStructuredAgentSessionOptionsAtRest(
     !folderDefault &&
     scoped.origin !== 'unknown' &&
     !reader.readsWithoutModel
-      ? await readCatalog(false)
+      ? (await deps.modelCatalog?.prepareSaved?.({
+          agent: record.provider,
+          sessionId,
+          legacyOptionsDisplay: true,
+          ...(independentAgentModelCatalog(record.provider) ? { workspacePath: null } : {})
+        }),
+        await readCatalog(false))
       : scoped
   // With no catalog for the account, the list a running child of this agent falls back to.
   const listed = catalog.origin === 'unknown' ? (rules?.fallbackModels() ?? null) : catalog.models

@@ -86,12 +86,14 @@ export function observeClaudeFastModeFacts(session: ClaudeSession, value: unknow
   }
   if (facts.disabledReason) {
     session.fastModeDisabledReason = facts.disabledReason
+    session.fastModeDisabledMutation = session.optionMutationSequence
   } else if (facts.state || facts.disabledReasonReported) {
     // The child omits the reason entirely when nothing blocks Fast — it never sends a
     // null — so a frame that reports state without one is the only all-clear there is.
     // Requiring the key back would latch the first reason for the session's life and
     // retire the control for good: a model switch away and back never restores it.
     delete session.fastModeDisabledReason
+    delete session.fastModeDisabledMutation
   }
 }
 

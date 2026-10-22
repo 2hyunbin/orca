@@ -545,3 +545,44 @@ it('expires a waiting sign-in quietly and releases its launch gate', async () =>
     vi.useRealTimers()
   }
 })
+
+it('drops checking-session models when cancellation wins while start is pending', async () => {
+  const started = deferred<Awaited<ReturnType<AcpAgentConnection['start']>>>()
+  const enter = vi.fn()
+  const run = await signInAgainst(() => helperOutput(GOOGLE_LINK), {
+    configure: (connection) => {
+      vi.spyOn(connection, 'start').mockImplementation(() => {
+        enter()
+        return started.promise
+      })
+    }
+  })
+  await stateAfter(run.flowId, 'starting')
+  run.finishBrowser()
+  await vi.waitFor(() => expect(enter).toHaveBeenCalledTimes(1))
+  const cancelling = cancelAntigravityChatSignIn(DESKTOP, run.flowId)
+  started.resolve({
+    kind: 'new',
+    sessionId: SESSION,
+    response: {
+      sessionId: SESSION,
+      configOptions: [
+        {
+          id: 'model',
+          name: 'Model',
+          category: 'model',
+          type: 'select',
+          currentValue: 'late',
+          options: [{ value: 'late', name: 'Late' }]
+        }
+      ]
+    }
+  })
+  expect((await cancelling)?.phase).toBe('cancelled')
+  const key = agentModelCatalogFingerprint({
+    agent: 'antigravity',
+    accountHome: { variable: 'GEMINI_HOME', path: run.folder },
+    wslDistro: null
+  })
+  expect(agentModelCatalogStore.get(key)).toBeNull()
+})

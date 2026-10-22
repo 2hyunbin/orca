@@ -18,7 +18,7 @@ import type { ConnectAcpAgent } from '../acp/acp-structured-connection'
 import { resolveAcpLaunchInvocation } from '../acp/acp-structured-launch-resolution'
 import { prepareAcpLaunch } from '../acp/acp-structured-launch-preparation'
 import { AcpAgentError, AcpConnectionClosedError } from '../acp/acp-errors'
-import { saveSignInModels } from './antigravity-sign-in-models'
+import { captureSignInModelPublisher } from './antigravity-sign-in-models'
 import { isAgentSessionPreSpawnError } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { structuredAgentHostLaunchSources } from '../runtime/structured-agent-launch-support'
 import {
@@ -165,6 +165,10 @@ async function signIn(current: Flow, host: AntigravityChatSignInHost): Promise<v
   const spec: AcpLaunchSpec = ANTIGRAVITY_LAUNCH_SPEC
   const { signal } = current.ended
   const closed = (): void => signal.throwIfAborted()
+  const publishModels = captureSignInModelPublisher(
+    spec,
+    () => active === current && running(current) && !signal.aborted
+  )
   const { accountHome, env, commandSettings, dataDirectory } = await host.launchSources()
   const deps = { spec, dataDirectory, connect: host.connect ?? createAcpAgentConnection }
   const resolve = () =>
@@ -220,7 +224,7 @@ async function signIn(current: Flow, host: AntigravityChatSignInHost): Promise<v
       })
       owned.sessionId = started.sessionId
       current.pending = undefined
-      saveSignInModels(spec, accountHome, started)
+      publishModels(accountHome, started, !connection.exited)
     } finally {
       signal.removeEventListener('abort', stop)
       await closeAntigravitySignInOwner(home, server)

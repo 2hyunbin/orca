@@ -28,7 +28,18 @@ export function expireAgentModelCatalogFailuresForSettings(
 }
 
 // The settings that pick the binary and environment an agent's probe and chats launch with.
-type AgentLaunchSettings = Partial<Pick<GlobalSettings, 'agentCmdOverrides' | 'agentDefaultEnv'>>
+type AgentLaunchSettings = Partial<
+  Pick<
+    GlobalSettings,
+    | 'agentCmdOverrides'
+    | 'agentDefaultEnv'
+    | 'agentDefaultArgs'
+    | 'nativeChatInheritShellEnvironment'
+    | 'nativeChatShellEnvironmentVariables'
+    | 'terminalWindowsShell'
+    | 'terminalWindowsPowerShellImplementation'
+  >
+>
 
 function launchKeys(settings: AgentLaunchSettings): Map<string, string> {
   const commands = new Map<string, string | undefined>(
@@ -38,9 +49,16 @@ function launchKeys(settings: AgentLaunchSettings): Map<string, string> {
     Object.entries(settings.agentDefaultEnv ?? {})
   )
   const keys = new Map<string, string>()
-  for (const agent of new Set([...commands.keys(), ...envs.keys()])) {
+  for (const agent of new Set([
+    ...commands.keys(),
+    ...envs.keys(),
+    ...Object.keys(settings.agentDefaultArgs ?? {})
+  ])) {
     const env = Object.entries(envs.get(agent) ?? {}).sort(([a], [b]) => a.localeCompare(b))
-    keys.set(agent, JSON.stringify([commands.get(agent) ?? null, env]))
+    keys.set(
+      agent,
+      JSON.stringify([commands.get(agent) ?? null, env, settings.agentDefaultArgs?.[agent]])
+    )
   }
   return keys
 }
@@ -60,22 +78,23 @@ export function agentsWithChangedLaunchSettings(
 /** A settings listener that expires the catalogs a change made stale: an account change expires
  *  the agent's held reasons; a command or env change also marks its catalogs due for a listing. */
 export function createAgentModelCatalogSettingsExpiry(
-  store: Pick<AgentModelCatalogStore, 'expireFailures' | 'expireAgent'>,
+  store: Pick<AgentModelCatalogStore, 'expireFailures' | 'expireAgent' | 'expireLaunchScopes'>,
   initial: AgentLaunchSettings
 ): (updates: Partial<GlobalSettings>, settings: AgentLaunchSettings) => void {
-  let launch: AgentLaunchSettings = {
-    agentCmdOverrides: initial.agentCmdOverrides,
-    agentDefaultEnv: initial.agentDefaultEnv
-  }
+  let launch = initial
   return (updates, settings) => {
     expireAgentModelCatalogFailuresForSettings(store, updates)
-    if (!('agentCmdOverrides' in updates) && !('agentDefaultEnv' in updates)) {
-      return
+    const environment = (value: AgentLaunchSettings): string =>
+      JSON.stringify([
+        value.nativeChatInheritShellEnvironment,
+        value.nativeChatShellEnvironmentVariables,
+        value.terminalWindowsShell,
+        value.terminalWindowsPowerShellImplementation
+      ])
+    if (environment(launch) !== environment(settings)) {
+      store.expireLaunchScopes()
     }
-    const next = {
-      agentCmdOverrides: settings.agentCmdOverrides,
-      agentDefaultEnv: settings.agentDefaultEnv
-    }
+    const next = settings
     for (const agent of agentsWithChangedLaunchSettings(launch, next)) {
       store.expireAgent(agent)
     }

@@ -21,7 +21,7 @@ import type {
   AgentSessionMutationResult
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionAttachParams } from './structured-agent-session-attach'
-import { performAttach, type AttachFlowInput } from './structured-agent-session-attach-flow'
+import { performAttach } from './structured-agent-session-attach-flow'
 import { endStructuredAgentSessionReleasedChild } from './structured-agent-session-attach-failure'
 import { stampFailedCreateOwnerVerdict } from './structured-agent-session-failed-create-refusal'
 import {
@@ -31,7 +31,11 @@ import {
 import { refuseAgentSessionMutation } from './structured-agent-session-mutation-admission'
 import { settleStaleStructuredAgentSessionState } from './structured-agent-session-dead-generation-settlement'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
-import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
+import type {
+  StructuredAgentSessionAttachContext,
+  StructuredAgentSessionAttachOptions
+} from './structured-agent-session-attach-context'
+export type { StructuredAgentSessionAttachOptions } from './structured-agent-session-attach-context'
 import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import {
@@ -48,26 +52,6 @@ import {
   heldStructuredAgentSessionAttachLock,
   type StructuredAgentSessionAttachLock
 } from './structured-agent-session-attach-lock'
-
-export type StructuredAgentSessionAttachOptions = {
-  hostLaunchDirectory?: string
-  /** The saved list a new chat's options are admitted against, for the folder its picker read. */
-  catalogModels?: AttachFlowInput['models']
-  recordPhase?: AgentSessionCreatePhaseRecorder
-  onAcquisitionFailed?: AttachFlowInput['onAcquisitionFailed']
-  /** The queued message a start is for; see `StructuredAgentSessionProviderChild.startedFor`. */
-  startedFor?: string
-  startupOptions?: Readonly<Record<string, string>>
-  /** A close, an admitted Stop or quit aborted this attach: its refusal is that abort's. */
-  onAborted?: () => void
-  /** The startup limit aborted this attach's acquire: it failed, nobody stopped it. */
-  onStartupExpired?: () => void
-  /** An agent start's: its steps run outside the session's serialize and commit under it. */
-  lock?: StructuredAgentSessionAttachLock
-  startupAttemptId?: string
-  /** The attach made its child the session's. */
-  onPublished?: () => void
-}
 
 /** The attach an agent start runs under its own lock (`structured-agent-session-start-flight`);
  *  `attachStructuredAgentSession` runs the same steps inside one `serialize`, for a client. */
@@ -213,6 +197,7 @@ async function runAttachUnderAbort(
   const attempt: {
     candidate: AttachCandidate | null
     committed: boolean
+    catalogSource?: () => boolean
     startup: StructuredAgentSessionStartupAttempt | null
     bound: BoundAttach | null
     rewind: StructuredRewindRecoveryEvidence
@@ -252,6 +237,10 @@ async function runAttachUnderAbort(
       lock,
       ...(options.startupAttemptId ? { startupAttemptId: options.startupAttemptId } : {}),
       onStartupAttempt: (startup) => {
+        const record = context.deps.store.getRecord(sessionId)
+        attempt.catalogSource = record
+          ? context.deps.modelCatalog?.captureSource?.(record)
+          : undefined
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
       },

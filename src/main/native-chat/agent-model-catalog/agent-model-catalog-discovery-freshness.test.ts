@@ -91,6 +91,7 @@ describe('a live listing beside the account-level discovery', () => {
       listingInProgress: true
     })
     run.saveLive()
+    await vi.waitFor(() => expect(run.probes).toHaveBeenCalledTimes(1))
     settle(discovery('grok-4'))
     await vi.waitFor(() =>
       expect(run.store.get(agentModelCatalogFingerprintForRecord(RECORD))?.discovered).not.toBe(
@@ -111,7 +112,7 @@ describe('a live listing beside the account-level discovery', () => {
     run.saveLive()
     // A live listing alone names no default and does not count as fresh, so a read lists the account.
     await run.catalog.read({ agent: 'grok' })
-    expect(run.probes).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(run.probes).toHaveBeenCalledTimes(1))
     await vi.waitFor(async () => expect(await run.defaultOf()).toBe('grok-4'))
   })
 
@@ -129,7 +130,7 @@ describe('a live listing beside the account-level discovery', () => {
     }
     expect(run.store.shouldRefresh(agentModelCatalogFingerprintForRecord(RECORD))).toBe(true)
     await run.catalog.read({ agent: 'grok' })
-    expect(run.probes).toHaveBeenCalledTimes(2)
+    await vi.waitFor(() => expect(run.probes).toHaveBeenCalledTimes(2))
     await vi.waitFor(async () => expect(await run.defaultOf()).toBe('grok-3-mini'))
   })
 

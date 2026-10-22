@@ -78,7 +78,8 @@ export async function recordConfiguredDefault(
   deps: AgentModelCatalogWorkspaceDeps,
   record: AgentSessionRecord,
   fingerprint: string,
-  choice: AgentModelCatalogConfiguredChoice | null
+  choice: AgentModelCatalogConfiguredChoice | null,
+  current: () => boolean
 ): Promise<void> {
   const accountHome = record.accountHome
   if (!deps.workspaceMayOverrideDefaultModel) {
@@ -95,5 +96,7 @@ export async function recordConfiguredDefault(
   ) {
     return
   }
-  deps.store.recordConfiguredDefault(fingerprint, choice)
+  if (current()) {
+    deps.store.recordConfiguredDefault(fingerprint, choice)
+  }
 }

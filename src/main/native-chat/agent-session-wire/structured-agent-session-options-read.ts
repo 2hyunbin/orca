@@ -47,13 +47,14 @@ export async function readStructuredAgentSessionOptions(
     }
     const prepared = adapter.prepareReadOptions?.({ sessionId, fence: child.fence })
     if (prepared) {
-      return { kind: 'prepared' as const, child, prepared }
+      return { kind: 'prepared' as const, child, session, prepared }
     }
     if (!adapter.readOptions) {
       throw new Error('structured_agent_session_options_unsupported')
     }
     return {
       kind: 'live' as const,
+      session,
       child,
       options: await adapter.readOptions({ sessionId, fence: child.fence })
     }
@@ -90,7 +91,15 @@ export async function readStructuredAgentSessionOptions(
       const listedModelIds = context.deps.modelCatalog
         ? await context.deps.modelCatalog.retainedLiveModelIds(sessionId, catalogListing)
         : retainedAgentModelCatalogModels(undefined, catalogListing).map((model) => model.id)
-      saveStructuredAgentSessionListing(context, sessionId, catalogListing)
+      saveStructuredAgentSessionListing(
+        context,
+        sessionId,
+        catalogListing,
+        () =>
+          started.kind !== 'rest' &&
+          started.child.catalogSource?.() !== false &&
+          started.session.child === started.child
+      )
       options = { ...answer, listedModelIds }
     }
   } else {

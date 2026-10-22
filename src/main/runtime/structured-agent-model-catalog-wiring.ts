@@ -104,7 +104,6 @@ export async function modelCatalogHostDeps(input: {
  *  its install lists everything anyway. */
 export function prewarmStructuredAgentModelCatalogs(): void {
   const catalog = getStructuredAgentSessionHost()?.deps.modelCatalog
-  catalog?.retireContext()
   void catalog?.prewarm()
 }
 

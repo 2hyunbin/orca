@@ -32,6 +32,21 @@ export function isClaudeStructuredOptionKey(key: string): boolean {
   return CLAUDE_STRUCTURED_OPTION_KEYS.has(key)
 }
 
+/** Native writers can replace more than their named input; uncertain writes retire that proof. */
+export function beginClaudeInputWrite(session: ClaudeSession, key: string, value?: string): number {
+  const affected =
+    key === 'model'
+      ? ['model', 'effort', 'fastMode']
+      : key === 'fastMode' && value === 'true'
+        ? ['model', 'effort', 'fastMode']
+        : [key]
+  for (const input of affected) {
+    session.appliedInputOptions.delete(input)
+    session.confirmedOptions.delete(input)
+  }
+  return beginClaudeOptionMutation(session, key)
+}
+
 /** A client's write to a live session. */
 export function setClaudeStructuredSessionOption(
   session: ClaudeSession,
@@ -78,17 +93,17 @@ export async function setClaudeStructuredOption(
       )
     }
   }
-  session.appliedInputOptions.delete(input.key)
-  if (input.key === 'model') {
-    session.appliedInputOptions.delete('effort')
-  }
-  const mutationSequence = beginClaudeOptionMutation(session, input.key)
+  const mutationSequence = beginClaudeInputWrite(session, input.key, input.value)
   // Read with the fence bump, so a write that lands after an earlier one's bookkeeping compares against it.
   const held = session.options.get(input.key)
   try {
     await apply()
     if (mutationSequence === session.optionMutationSequence) {
       session.appliedInputOptions.set(input.key, input.value)
+      if (input.key === 'model' && session.fastModeDisabledMutation !== mutationSequence) {
+        delete session.fastModeDisabledReason
+        delete session.fastModeDisabledMutation
+      }
     }
     // Ahead of the fence checks: the child applied this write even if a newer one supersedes its bookkeeping.
     if (input.key === 'model' && input.value !== held) {

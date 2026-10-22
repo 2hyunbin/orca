@@ -77,6 +77,8 @@ export type AcpCompactionReply = { outcome: 'skipped' | 'failed'; detail: string
 
 /** Hooks interpret extensions; lifecycle and row identity stay shared. */
 export type AcpDialect = {
+  /** Effort replaces part of the native composite model selection. */
+  effortChangesModel?: true
   subagentStop?: {
     /** Missing required target: proves the route exists without addressing any child. */
     probe: { method: string; params: unknown }

@@ -221,40 +221,47 @@ it('observes a bound scope immediately while another account and default writer 
   }
 })
 
-it('retires pending resolution and old ingestion across change away and back', async () => {
-  const initial = Promise.withResolvers<AgentSessionAccountHome>()
-  const stale = Promise.withResolvers<AgentModelCatalogSuccess>()
-  let resolving = true
-  const store = new AgentModelCatalogStore()
-  const probe = vi.fn(() => stale.promise)
-  const service = createAgentModelCatalogService({
-    store,
-    getRecord: () => undefined,
-    drivesRecord: () => true,
-    resolveAccountHome: () => (resolving ? initial.promise : Promise.resolve(HOME)),
-    probes: { grok: probe }
-  })
-  try {
-    const first = service.demand({ agent: 'grok' })
-    service.retireContext()
-    service.retireContext()
-    initial.resolve(HOME)
-    await first
-    expect(probe).not.toHaveBeenCalled()
-    resolving = false
-    const old = service.demand({ agent: 'grok' })
-    await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
-    service.retireContext()
-    store.recordFailure(FINGERPRINT, 'new account failure', 'grok')
-    stale.resolve(listing('retired'))
-    await old
-    expect(store.get(FINGERPRINT)).toBeNull()
-    expect(store.failureDetail(FINGERPRINT)).toBe('new account failure')
-    expect(service.snapshot({ agent: 'grok', savedOnly: true })).toEqual({ origin: 'unknown' })
-  } finally {
-    service.stop()
+it.each(['success', 'failure'] as const)(
+  'retires pending resolution and old %s ingestion across change away and back',
+  async (outcome) => {
+    const initial = Promise.withResolvers<AgentSessionAccountHome>()
+    const stale = Promise.withResolvers<AgentModelCatalogSuccess>()
+    let resolving = true
+    const store = new AgentModelCatalogStore()
+    const probe = vi.fn(() => stale.promise)
+    const service = createAgentModelCatalogService({
+      store,
+      getRecord: () => undefined,
+      drivesRecord: () => true,
+      resolveAccountHome: () => (resolving ? initial.promise : Promise.resolve(HOME)),
+      probes: { grok: probe }
+    })
+    try {
+      const first = service.demand({ agent: 'grok' })
+      service.retireContext()
+      service.retireContext()
+      initial.resolve(HOME)
+      await first
+      expect(probe).not.toHaveBeenCalled()
+      resolving = false
+      const old = service.demand({ agent: 'grok' })
+      await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
+      service.retireContext()
+      store.recordFailure(FINGERPRINT, 'new account failure', 'grok')
+      if (outcome === 'success') {
+        stale.resolve(listing('retired'))
+      } else {
+        stale.reject(new AgentModelCatalogUnavailableError(SIGNED_OUT))
+      }
+      await old
+      expect(store.get(FINGERPRINT)).toBeNull()
+      expect(store.failureDetail(FINGERPRINT)).toBe('new account failure')
+      expect(service.snapshot({ agent: 'grok', savedOnly: true })).toEqual({ origin: 'unknown' })
+    } finally {
+      service.stop()
+    }
   }
-})
+)
 
 it('starts a new listing instead of joining a retired workspace invocation', async () => {
   const stale = Promise.withResolvers<AgentModelCatalogSuccess>()

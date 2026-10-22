@@ -1,5 +1,6 @@
 import type { ClaudeAccountService } from '../claude-accounts/service'
 import { retireAtRestCommandContext } from '../native-chat/agent-session-wire/at-rest-command-context'
+import { agentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { hasAppEnvironment } from '../../shared/app-environment'
 import { getManagedDataAccountService } from '../managed-data-accounts/service'
 import type {
@@ -98,6 +99,7 @@ export class RuntimeAccountController {
     const previous = this.hostLaunchEnv
     this.hostLaunchEnv = launchEnv
     if (JSON.stringify(previous) !== JSON.stringify(launchEnv)) {
+      agentModelCatalogStore.expireLaunchScopes()
       retireAtRestCommandContext()
     }
     try {
@@ -118,6 +120,7 @@ export class RuntimeAccountController {
       const previous = this.hostLaunchEnv
       this.hostLaunchEnv = saved
       if (JSON.stringify(previous) !== JSON.stringify(saved)) {
+        agentModelCatalogStore.expireLaunchScopes()
         retireAtRestCommandContext()
       }
     }

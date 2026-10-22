@@ -32,6 +32,12 @@ import { GROK_CONFIG_OPTIONS } from '../../acp/acp-structured-adapter.test-suppo
 import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.generated'
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
+import { agentModelCatalogFingerprintForRecord } from '../agent-model-catalog/agent-model-catalog-fingerprint'
+import {
+  saveStructuredAgentSessionStartReadbackListing,
+  type StructuredAgentSessionStartListingContext
+} from './structured-agent-session-start-listing'
 import { recordAgentSessionRanOptions } from '../../runtime/agent-session-record-options'
 import {
   claudeAndCodexAgents,
@@ -671,5 +677,97 @@ describe('a chat at rest, read by the host', () => {
     listing.resolve()
     expect((await reading).current).not.toHaveProperty('model')
     expect(apply).not.toHaveBeenCalled()
+  })
+
+  it('fences a live read and newly received startup report to their actual child through folder awaits', async () => {
+    const record = agentSessionRecordFixture({ sessionId: SESSION, provider: 'opencode2' })
+    const folder = Promise.withResolvers<string | null>()
+    const lookup = vi.fn(() => folder.promise)
+    const store = new AgentModelCatalogStore()
+    const catalog = createAgentModelCatalogService({
+      store,
+      getRecord: () => record,
+      drivesRecord: () => true,
+      resolveAccountHome: async () => record.accountHome,
+      recordWorkspacePath: lookup,
+      listsInChatFolder: new Set(['opencode2'])
+    })
+    const queue = new StructuredAgentSessionTaskQueue()
+    const child = (generation: string, fence: number) => ({
+      generation,
+      fence,
+      phase: 'ready' as const,
+      catalogSource: catalog.captureSource(record)
+    })
+    const live = {
+      child: child('old', 7),
+      params: { provider: record.provider },
+      journal: restingJournal()
+    }
+    const sessions = new Map([[SESSION, live]])
+    let model = 'old'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the real read and startup publisher use only these context members.
+    const context = {
+      deps: {
+        adapter: {
+          readOptions: async () =>
+            withLiveCatalogListing({
+              models: [{ id: model, label: model, isDefault: false, efforts: [] }],
+              current: { model }
+            })
+        },
+        agents: NO_STRUCTURED_AGENTS,
+        store: { getRecord: () => record },
+        modelCatalog: catalog,
+        logger: { warn: vi.fn() }
+      },
+      sessions,
+      serialize: (sessionId: string, task: () => Promise<unknown>) =>
+        queue.serialize(sessionId, task),
+      openConversation: async () => live,
+      conversation: async () => live
+    } as unknown as StructuredAgentSessionMutationContext &
+      StructuredAgentSessionStartListingContext
+    const read = () =>
+      readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+    try {
+      await read()
+      await vi.waitFor(() => expect(lookup).toHaveBeenCalled())
+      await queue.serialize(SESSION, async () => {
+        store.expireAgent(record.provider)
+        live.child = child('new', 8)
+        model = 'current'
+      })
+      await read()
+      // The old child's first receipt after replacement cannot acquire the new child's authority.
+      await saveStructuredAgentSessionStartReadbackListing(
+        context,
+        {
+          sessionId: SESSION,
+          acquisitionGeneration: 'old',
+          fence: 7
+        },
+        { models: [{ id: 'late', label: 'Late', isDefault: true, efforts: [] }] }
+      )
+      folder.resolve('/project')
+      const key = agentModelCatalogFingerprintForRecord(record, '/project')
+      await vi.waitFor(() =>
+        expect(store.get(key)?.models.map((row) => row.id)).toEqual(['current'])
+      )
+      const current = store.get(key)
+      await saveStructuredAgentSessionStartReadbackListing(
+        context,
+        {
+          sessionId: SESSION,
+          acquisitionGeneration: 'old',
+          fence: 7
+        },
+        { models: [{ id: 'late-again', label: 'Late', isDefault: true, efforts: [] }] }
+      )
+      expect(store.get(key)).toBe(current)
+    } finally {
+      folder.resolve('/project')
+      catalog.stop()
+    }
   })
 })

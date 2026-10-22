@@ -80,7 +80,8 @@ describe('Claude accepted message choices', () => {
         )
       ).toEqual([
         { subtype: 'set_model', params: { model: 'custom[1m]' } },
-        { subtype: 'apply_flag_settings', params: { settings: { effortLevel: 'low' } } }
+        { subtype: 'apply_flag_settings', params: { settings: { effortLevel: 'low' } } },
+        { subtype: 'apply_flag_settings', params: { settings: { fastMode: false } } }
       ])
       const failure = new Error('control refused')
       connection.setModel = async () => {

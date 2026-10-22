@@ -335,3 +335,21 @@ describe('structured agent session options', () => {
     expect(canSetStructuredAgentSessionOption(standard, 'serviceTier', 'priority')).toBe(true)
   })
 })
+
+it('separates typed literal readiness from an empty or refreshing catalog', () => {
+  const state = createStructuredAgentSessionOptionState('codex')
+  const snapshot = structuredAgentSessionOptionSnapshot(state)
+  expect(canSetStructuredAgentSessionOption(state, 'model', 'unlisted', snapshot, false)).toBe(
+    false
+  )
+  expect(canSetStructuredAgentSessionOption(state, 'model', 'unlisted', snapshot, true)).toBe(true)
+  expect(
+    canSetStructuredAgentSessionOption(
+      { ...state, listingInProgress: true },
+      'effort',
+      'high',
+      snapshot,
+      true
+    )
+  ).toBe(true)
+})

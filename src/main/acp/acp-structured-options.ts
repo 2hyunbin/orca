@@ -57,7 +57,10 @@ function isSelect(option: SessionConfigOption): option is SelectOption {
 
 export class AcpStructuredOptions {
   constructor(
-    private readonly dialect: Pick<AcpDialect, 'modelEfforts' | 'withheldCommands'> = {}
+    private readonly dialect: Pick<
+      AcpDialect,
+      'modelEfforts' | 'withheldCommands' | 'effortChangesModel'
+    > = {}
   ) {}
 
   private configOptions: SessionConfigOption[] = []
@@ -68,6 +71,16 @@ export class AcpStructuredOptions {
   readonly picked = new Set<string>()
   readonly appliedInput = new Map<string, string>()
   writeRevision = 0
+
+  invalidateInput(key: string): void {
+    this.appliedInput.delete(key)
+    if (key === 'model') {
+      this.appliedInput.delete('effort')
+    }
+    if (key === 'effort' && this.dialect.effortChangesModel) {
+      this.appliedInput.delete('model')
+    }
+  }
 
   /** The session state a new, load or resume response reported. */
   adoptSession(
@@ -253,10 +266,7 @@ export function writeAcpSessionOption(
     return Promise.reject(abortSignalReason(signal))
   }
   const revision = ++options.writeRevision
-  options.appliedInput.delete(bound.key)
-  if (bound.key === 'model') {
-    options.appliedInput.delete('effort')
-  }
+  options.invalidateInput(bound.key)
   const adopt = (apply: () => void): void => {
     if (options.writeRevision !== revision) {
       throw new Error(`${agent} option write was superseded`)

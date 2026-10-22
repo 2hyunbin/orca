@@ -57,6 +57,7 @@ export async function publishAttachedChild(
     attempt: {
       candidate: AttachCandidate | null
       committed: boolean
+      catalogSource?: () => boolean
       startup: StructuredAgentSessionStartupAttempt | null
       rewind: StructuredRewindRecoveryEvidence
     }
@@ -83,6 +84,7 @@ export async function publishAttachedChild(
           generation: acquisitionGeneration,
           fence,
           phase: 'starting' as const,
+          catalogSource: attempt.catalogSource,
           heldSends: () => context.deps.adapter.heldSends?.(sessionId),
           exitObservation: eventSink.exitObservation,
           ...(startedFor === undefined ? {} : { startedFor }),
@@ -129,7 +131,13 @@ export async function publishAttachedChild(
       candidate.child
     )
     if (candidate.child.phase === 'ready') {
-      noteStructuredAgentSessionProviderStarted(context.deps, sessionId)
+      noteStructuredAgentSessionProviderStarted(
+        context.deps,
+        sessionId,
+        () =>
+          context.sessions.get(sessionId)?.child === candidate.child &&
+          candidate.child.catalogSource?.() !== false
+      )
     } else {
       context.openProviderChild?.(sessionId, candidate.child)
     }

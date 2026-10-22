@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { setClaudeStructuredOption } from './claude-structured-options'
+import { applyClaudeMessageOptions } from './claude-structured-message-options'
+import { resetClaudeRetiredModel } from './claude-structured-retired-model'
 import type { ClaudeSession } from './claude-structured-session-state'
 import { ClaudeControlRequestTimeoutError } from './claude-agent-sdk-control-requests'
 import { ClaudeBackgroundTaskTracker } from './claude-background-task-tracker'
@@ -418,5 +420,54 @@ describe('Claude structured option write under the request deadline', () => {
     await expect(
       setClaudeStructuredOption(session, { key: 'model', value: 'sonnet' }, 10)
     ).rejects.toBeInstanceOf(ClaudeControlRequestTimeoutError)
+  })
+})
+
+describe('Claude applied inputs across native writer effects', () => {
+  it('retires old-model Fast refusal and reissues explicit inputs after promotion, reset and failure', async () => {
+    const setModel = vi.fn<ClaudeSession['connection']['setModel']>().mockResolvedValue(undefined)
+    const session = sessionFor(setModel)
+    const flags = vi
+      .fn<ClaudeSession['connection']['applyFlagSettings']>()
+      .mockResolvedValue(undefined)
+    session.connection.applyFlagSettings = flags
+    session.connection.getSettings = () => new Promise(() => {})
+    session.fastModeDisabledReason = 'model_not_allowed'
+    await applyClaudeMessageOptions(
+      session,
+      { model: 'opus[1m]', effort: 'high', fastMode: 'true' },
+      undefined
+    )
+    expect(flags.mock.calls.map(([settings]) => settings)).toEqual([
+      { effortLevel: 'high' },
+      { fastMode: true }
+    ])
+    expect(session.fastModeDisabledReason).toBeUndefined()
+    // Fast can promote the native model; the next supplied model/effort must reach their controls.
+    await applyClaudeMessageOptions(session, { model: 'opus[1m]', effort: 'high' }, undefined)
+    expect(setModel).toHaveBeenCalledTimes(2)
+    expect(flags.mock.calls.filter(([settings]) => settings.effortLevel === 'high')).toHaveLength(2)
+    resetClaudeRetiredModel(session, {}, 'chat', 'opus[1m]')
+    await vi.waitFor(() =>
+      expect(setModel).toHaveBeenLastCalledWith(undefined, { timeoutMs: undefined })
+    )
+    await applyClaudeMessageOptions(session, { effort: 'high' }, undefined)
+    expect(flags.mock.calls.filter(([settings]) => settings.effortLevel === 'high')).toHaveLength(3)
+    flags.mockRejectedValueOnce(new Error('native effort failure'))
+    await expect(applyClaudeMessageOptions(session, { effort: 'low' }, undefined)).rejects.toThrow(
+      'native effort failure'
+    )
+    await applyClaudeMessageOptions(session, { effort: 'low' }, undefined)
+    expect(flags.mock.calls.filter(([settings]) => settings.effortLevel === 'low')).toHaveLength(2)
+    const count = setModel.mock.calls.length + flags.mock.calls.length
+    await applyClaudeMessageOptions(session, {}, undefined)
+    expect(setModel.mock.calls.length + flags.mock.calls.length).toBe(count)
+    setModel.mockImplementationOnce(async () => {
+      observeClaudeFastModeFacts(session, { fast_mode_disabled_reason: 'model_not_allowed' })
+    })
+    await applyClaudeMessageOptions(session, { model: 'haiku' }, undefined)
+    await expect(
+      applyClaudeMessageOptions(session, { fastMode: 'true' }, undefined)
+    ).rejects.toThrow('Fast mode is unavailable')
   })
 })

@@ -12,12 +12,22 @@ import {
   restTestSend,
   type RestTestRig
 } from './structured-agent-session-rest-test-rig'
-import { hostTestOperationId } from './structured-agent-session-host-test-data'
+import {
+  hostTestAttachParams,
+  hostTestOperationId,
+  HOST_TEST_THREAD
+} from './structured-agent-session-host-test-data'
 import * as loginShell from '../../startup/login-shell-environment'
 import { createStructuredAgentEnvironmentResolvers } from '../../runtime/structured-agent-shell-environment'
 import { codexModelCatalogDiscovery } from '../../runtime/structured-agent-model-catalog-discovery'
 import { createAgentModelCatalogService } from '../agent-model-catalog/agent-model-catalog-service'
 import { AgentModelCatalogStore } from '../agent-model-catalog/agent-model-catalog-store'
+import {
+  agentModelCatalogFingerprint,
+  agentModelCatalogScopeFingerprint
+} from '../agent-model-catalog/agent-model-catalog-fingerprint'
+import { claudeProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { retireAtRestCommandContext } from './at-rest-command-context'
 
 describe('a chat permission mode', () => {
   let rig: RestTestRig
@@ -54,6 +64,94 @@ describe('a chat permission mode', () => {
       expect.objectContaining({ permissionMode: 'ask' })
     )
     expect((await rig.host.readOptions(SESSION)).current.permissionMode).toBe('ask')
+  })
+
+  it('acquires cold saved Auto and keeps that child after an unrelated folder retires', async () => {
+    const home = { variable: 'CLAUDE_CONFIG_DIR', path: '/saved-auto-account' }
+    const key = agentModelCatalogScopeFingerprint(
+      agentModelCatalogFingerprint({ agent: 'claude', accountHome: home, wslDistro: null }),
+      '/project',
+      'saved-launch'
+    )
+    const seed = new AgentModelCatalogStore()
+    const saved = seed.recordSuccess(
+      key,
+      'claude',
+      {
+        origin: 'probe',
+        models: [
+          { id: 'opus', label: 'Opus', isDefault: true, efforts: [], supportsAutoMode: true }
+        ]
+      },
+      'discovery'
+    )!
+    const store = new AgentModelCatalogStore()
+    await store.attachPersistence({
+      load: async () => [saved],
+      save: () => {},
+      flush: async () => {}
+    })
+    const pending = Promise.withResolvers<never>()
+    const run = vi.fn(() => pending.promise)
+    const resolve = vi.fn(async () => ({ identity: 'saved-launch', run }))
+    const probe = Object.assign(vi.fn(run), { resolve })
+    const catalog = createAgentModelCatalogService({
+      store,
+      getRecord: (id) => rig.store.getRecord(id) ?? undefined,
+      drivesRecord: () => true,
+      recordWorkspacePath: async () => '/project',
+      resolveAccountHome: async () => home,
+      probes: { claude: probe }
+    })
+    const acquire = rig.adapter.acquire.getMockImplementation()!
+    rig.adapter.acquire.mockImplementation(async (input) => {
+      const acquired = await acquire(input)
+      return {
+        ...acquired,
+        link: { ...acquired.link, handle: claudeProviderHandle(HOST_TEST_THREAD, null) }
+      }
+    })
+    rig.adapter.dispatch.mockResolvedValue({
+      state: 'accepted',
+      providerIdentity: { provider: 'claude', sessionId: HOST_TEST_THREAD, uuid: 'reply' }
+    })
+    try {
+      await rig.restart({ modelCatalog: catalog })
+      const attached = await rig.host.attach(
+        CALLER,
+        hostTestAttachParams(null, {
+          provider: 'claude',
+          agent: 'claude',
+          accountHome: home,
+          providerHandle: { kind: 'claude', sessionId: HOST_TEST_THREAD, leafUuid: null },
+          options: { model: 'opus', permissionMode: 'auto' }
+        })
+      )
+      expect(attached.ok, JSON.stringify(attached)).toBe(true)
+      expect(rig.adapter.acquire).toHaveBeenCalledTimes(1)
+      expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
+        expect.objectContaining({ permissionMode: 'auto' })
+      )
+      expect(resolve).toHaveBeenCalledWith(home, '/project', true)
+      expect(run).not.toHaveBeenCalled()
+      await rig.host.send(CALLER, restTestSend('first', fence()))
+      await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(1))
+      void catalog.demand({ agent: 'claude', sessionId: SESSION, inSessionWorkspace: true })
+      await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1))
+      rig.adapter.closeSession.mockClear()
+      const resolutions = resolve.mock.calls.length
+      retireAtRestCommandContext('unrelated-folder')
+      expect((await rig.host.send(CALLER, restTestSend('after retirement', fence()))).ok).toBe(true)
+      await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(2))
+      expect(rig.adapter.closeSession).not.toHaveBeenCalled()
+      expect(rig.adapter.acquire).toHaveBeenCalledTimes(1)
+      expect(resolve).toHaveBeenCalledTimes(resolutions)
+      expect(rig.host.collaboratorsForTests().sessions.get(SESSION)?.child?.permissionMode).toBe(
+        'auto'
+      )
+    } finally {
+      catalog.stop()
+    }
   })
 
   it('writes a pick to the record only, with the agent running', async () => {
