@@ -47,6 +47,7 @@ jobs:
       xterm_patch_sync: ${{ steps.readiness.outputs.reused != 'true' && steps.filter.outputs.xterm_patch_sync }}
       shell_contracts: ${{ steps.readiness.outputs.reused != 'true' && steps.filter.outputs.shell_contracts }}
       test: ${{ steps.readiness.outputs.reused != 'true' && steps.filter.outputs.test }}
+      relay_integration: ${{ steps.filter.outputs.relay_integration }}
       orcad_browser: ${{ steps.readiness.outputs.reused != 'true' && steps.filter.outputs.orcad_browser }}
       cross-version-wire: ${{ steps.readiness.outputs.reused != 'true' && steps.filter.outputs.cross-version-wire }}
       managed_hook_node18: ${{ steps.readiness.outputs.reused != 'true' && steps.filter.outputs.managed_hook_node18 }}
@@ -897,6 +898,7 @@ jobs:
       phase_diagnostics: true
       shards: ${{ needs.preflight.outputs.shards }}
       run_shards: ${{ needs.code_paths.outputs.mobile_ci_tools != 'true' }}
+      run_relay_integration: ${{ needs.code_paths.outputs.relay_integration != 'false' || needs.code_paths.outputs.orcad_browser == 'true' }}
       browser_contract: ${{ needs.code_paths.outputs.orcad_browser == 'true' }}
 
   # Why a sibling and not part of the test workflow: it is advisory, so it must not delay the

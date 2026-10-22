@@ -560,6 +560,11 @@ export function classifyPrJobs(
   return {
     should_run: shouldRun,
     mobile_ci_tools: mobileCiTools,
+    // Relay contracts exercise host/cloud code; any input outside the renderer keeps them.
+    relay_integration:
+      shouldRun &&
+      (forceAll ||
+        changedFiles.some((file) => !file.startsWith('src/renderer/') && !isDocsOnlyPath(file))),
     native_cache_changed: shouldRun && (emptyDiff || changedFiles.some(isNativeCacheInputPath)),
     mobile_dependencies:
       (shouldRun || jobs.static_analysis) && needsMobileDependencies(changedFiles),
