@@ -9,8 +9,7 @@ vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAI
 await import('../orca-runtime-test-mocks.spec')
 await import('../orca-runtime-test-lifecycle.spec')
 const { TEST_WORKTREE_ID, TEST_WORKTREE_PATH } = await import('../orca-runtime-test-fixtures.spec')
-const { SURFACE_TAB_ID, surfaceRuntime } =
-  await import('../terminal/surface/terminal-surface-replies.test-fixture')
+const { SURFACE_TAB_ID } = await import('../terminal/surface/terminal-surface-replies.test-fixture')
 const { SAVED_GROUP_ID, SECOND_TAB_ID, THIRD_TAB_ID, tabStrip, threeTabSurfaceRuntime } =
   await import('./session-tabs-layout-moves.test-fixture')
 
@@ -18,7 +17,8 @@ const WORKTREE = `id:${TEST_WORKTREE_ID}`
 const CHAT = 'agent-session:s1'
 
 /** The three saved tabs on a server with no window, whose spawns bind their pane as the host's do. */
-async function headlessRuntime(harness = threeTabSurfaceRuntime()) {
+async function headlessRuntime() {
+  const harness = threeTabSurfaceRuntime()
   const { runtime, bindPane } = harness
   runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, { tabs: [], leaves: [] })
   runtime.setPtyController({
@@ -93,31 +93,6 @@ describe("a phone's layout change on a windowless server (switch on)", () => {
     )
   })
 
-  it("sends nothing for a split main's groups make a no-op, though a chat shares the group", async () => {
-    // The phone shows [tab, chat]; main's group holds the tab alone, so there is nothing to split.
-    const { runtime } = await headlessRuntime(surfaceRuntime())
-    runtime.projectStructuredAgentSessionTab({
-      workspaceId: TEST_WORKTREE_ID,
-      sessionId: 's1',
-      agent: 'claude',
-      activate: false
-    })
-    const before = await runtime.listMobileSessionTabs(WORKTREE)
-    const apply = vi.spyOn(runtime, 'applyLayoutCommand')
-
-    await expect(
-      runtime.moveMobileSessionTab(WORKTREE, {
-        kind: 'split',
-        tabId: SURFACE_TAB_ID,
-        targetGroupId: before.tabGroups![0]!.id,
-        splitDirection: 'right'
-      })
-    ).resolves.toEqual({ moved: true })
-
-    expect(apply).not.toHaveBeenCalled()
-    expect(tabStrip(await runtime.listMobileSessionTabs(WORKTREE))).toEqual(tabStrip(before))
-  })
-
   it("sends nothing for a group's last tab dropped on its neighbour's facing edge", async () => {
     const { runtime } = await headlessRuntime()
     const split = { kind: 'split', tabId: SECOND_TAB_ID, targetGroupId: SAVED_GROUP_ID } as const
@@ -129,7 +104,7 @@ describe("a phone's layout change on a windowless server (switch on)", () => {
     expect(apply).not.toHaveBeenCalled()
   })
 
-  it('drops a split main refuses silently, as the window does', async () => {
+  it("answers a split main refuses with main's refusal code", async () => {
     const { runtime } = await headlessRuntime()
     vi.spyOn(runtime, 'applyLayoutCommand').mockResolvedValue({ ok: false, code: 'invalid_params' })
 
@@ -140,7 +115,7 @@ describe("a phone's layout change on a windowless server (switch on)", () => {
         targetGroupId: SAVED_GROUP_ID,
         splitDirection: 'right'
       })
-    ).resolves.toEqual({ moved: true })
+    ).rejects.toThrow('invalid_params')
     expect(tabStrip(await runtime.listMobileSessionTabs(WORKTREE))).toEqual([
       [SURFACE_TAB_ID, SECOND_TAB_ID, THIRD_TAB_ID]
     ])

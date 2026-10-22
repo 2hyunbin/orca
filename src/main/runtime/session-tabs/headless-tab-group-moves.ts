@@ -10,20 +10,12 @@ import {
   buildHeadlessTabGroupSplit
 } from '../../../shared/workspace-layout/tab-group-moves'
 import { randomUUID } from 'node:crypto'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import { orderIdOf } from './main-session-tab-group-placement'
-import { isPaneColumnSplitDropNoOp } from '../../../shared/workspace-layout/pane-column-split-drop-no-op'
-import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
-import type { WindowLayoutCommand } from '../runtime-layout-apply'
-import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import { withSelectedTabs } from '../headless-tab-group-selection'
 import type { TabGroupLayoutNode } from '../../../shared/tab-types'
 import type { OrcaRuntimeWithPersistHeadlessTerminalTitle } from '../workspaces/workspace-file-session-targets'
 import type { OrcaRuntimeWithPruneMobileSessionTabGroupLayout } from '../session-lifecycle/projection/prune-mobile-session-tab-group-layout'
 
 export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabProperties {
-  abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
-
   protected abstract resolveMobileSessionHostTabId(
     ...args: Parameters<
       OrcaRuntimeWithPersistHeadlessTerminalTitle['resolveMobileSessionHostTabId']
@@ -46,13 +38,9 @@ export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabPropert
     worktreeId: string,
     snapshot: RuntimeMobileSessionTabsSnapshot,
     move: RuntimeMobileSessionTabMove
-  ): RuntimeMobileSessionTabMoveResult | Promise<RuntimeMobileSessionTabMoveResult> {
+  ): RuntimeMobileSessionTabMoveResult {
     if (move.kind === 'split') {
-      // Switch point: a tab main's layout holds is main's to split; any other row splits as today.
-      return (
-        (ORCA_LAYOUT_OWNER_IS_MAIN && this.splitInMainLayout(worktreeId, snapshot, move)) ||
-        this.splitHeadlessMobileSessionTabGroup(worktreeId, snapshot, move)
-      )
+      return this.splitHeadlessMobileSessionTabGroup(worktreeId, snapshot, move)
     }
     if (move.kind === 'move-to-group') {
       return this.moveHeadlessMobileSessionTabToGroup(worktreeId, snapshot, move)
@@ -140,67 +128,6 @@ export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabPropert
     this.persistHeadlessTabGroups(worktreeId, groups, split.layout)
     this.storeMobileSessionSnapshot(worktreeId, nextSnapshot)
     this.emitMobileSessionTabsSnapshot(nextSnapshot)
-    return { moved: true }
-  }
-
-  /**
-   * Layout-owner build: a phone's split of a tab main's groups hold, as the window's drop sends it:
-   * main's `splitGroup`, nothing for a drop that changes nothing, and a refusal dropped silently.
-   * Null for a row main's layout does not hold (a chat or browser tab) or a group it lacks.
-   */
-  private splitInMainLayout(
-    worktreeId: string,
-    snapshot: RuntimeMobileSessionTabsSnapshot,
-    move: Extract<RuntimeMobileSessionTabMove, { kind: 'split' }>
-  ): Promise<RuntimeMobileSessionTabMoveResult> | null {
-    const main = startedMainTerminalSurfaces(this)?.sessionTabsOf(worktreeId)
-    const tabId = this.resolveMobileSessionHostTabId(snapshot, move.tabId)
-    const source = main?.tabGroups?.find((group) => !!tabId && group.tabOrder.includes(tabId))
-    if (!main || !tabId || !source || !main.tabGroups?.some((g) => g.id === move.targetGroupId)) {
-      return null
-    }
-    const noOp = isPaneColumnSplitDropNoOp({
-      sourceGroupId: source.id,
-      targetGroupId: move.targetGroupId,
-      splitDirection: move.splitDirection,
-      sourceTabCount: source.tabOrder.length,
-      layout: main.tabGroupLayout ?? undefined
-    })
-    return noOp
-      ? Promise.resolve({ moved: true })
-      : this.applySplitInMainLayout(worktreeId, tabId, move)
-  }
-
-  private async applySplitInMainLayout(
-    worktreeId: string,
-    tabId: string,
-    move: Extract<RuntimeMobileSessionTabMove, { kind: 'split' }>
-  ): Promise<RuntimeMobileSessionTabMoveResult> {
-    const reply = await this.applyLayoutCommand({
-      type: 'splitGroup',
-      workspace: worktreeId,
-      tabId,
-      besideGroupId: move.targetGroupId,
-      direction: move.splitDirection
-    })
-    if (!reply.ok) {
-      console.warn('[layout-owner] phone split refused', reply.code)
-    }
-    const held = this.mobileSessionTabsByWorktree.get(worktreeId)
-    const rows = held?.tabs.filter((row) => orderIdOf(row) === tabId) ?? []
-    const moved = rows.find((row) => row.isActive) ?? rows[0]
-    // As the window's drop: the moved tab is selected, in the group it landed in.
-    if (reply.ok && held && moved) {
-      const stored = this.storeMobileSessionSnapshot(worktreeId, {
-        ...held,
-        snapshotVersion: held.snapshotVersion + 1,
-        activeGroupId: reply.result.groupId ?? held.activeGroupId,
-        activeTabId: moved.id,
-        activeTabType: moved.type,
-        tabs: held.tabs.map((row) => ({ ...row, isActive: row.id === moved.id }))
-      })
-      this.emitMobileSessionTabsSnapshot(stored)
-    }
     return { moved: true }
   }
 

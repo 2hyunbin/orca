@@ -12,6 +12,8 @@ import { resolveSessionTabRow } from '../../../shared/workspace-layout/old-clien
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
 import type { WorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-model'
+import type { CommandOf } from '../../../shared/workspace-layout/workspace-layout-command-types'
+import { isPaneColumnSplitDropNoOp } from '../../../shared/workspace-layout/pane-column-split-drop-no-op'
 
 export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithMainLayoutRenames {
   protected abstract toMobileSessionTabsResult(
@@ -64,11 +66,58 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
       if (command.type !== 'moveTab' && command.type !== 'splitGroup') {
         throw new Error('invalid_params')
       }
+      if (command.type === 'splitGroup' && isSplitNoOp(workspace, command)) {
+        continue
+      }
       const reply = await this.applyLayoutCommand(command)
       if (!reply.ok) {
         throw new Error(reply.code === 'group_not_found' ? 'target_group_not_found' : reply.code)
       }
+      if (command.type === 'splitGroup' && reply.result.groupId) {
+        this.selectSplitTab(worktreeId, workspace, command.tabId, reply.result.groupId)
+      }
     }
     return { moved: true }
   }
+
+  /** As the window's drop: the split tab is selected, and its new group is the active one. */
+  private selectSplitTab(
+    worktreeId: string,
+    workspace: WorkspaceLayout,
+    tabId: string,
+    groupId: string
+  ): void {
+    const held = this.mobileSessionTabsByWorktree.get(worktreeId)
+    const rows = held?.tabs.filter(
+      (row) => resolveSessionTabRow(workspace, row.id)?.tab.id === tabId
+    )
+    const moved = rows?.find((row) => row.isActive) ?? rows?.[0]
+    if (!held || !moved) {
+      return
+    }
+    const stored = this.storeMobileSessionSnapshot(worktreeId, {
+      ...held,
+      snapshotVersion: held.snapshotVersion + 1,
+      activeGroupId: groupId,
+      activeTabId: moved.id,
+      activeTabType: moved.type,
+      tabs: held.tabs.map((row) => ({ ...row, isActive: row.id === moved.id }))
+    })
+    this.emitMobileSessionTabsSnapshot(stored)
+  }
+}
+
+/** The window's no-op split (a group's last tab dropped on itself or its neighbour's facing edge). */
+function isSplitNoOp(workspace: WorkspaceLayout, command: CommandOf<'splitGroup'>): boolean {
+  const source = workspace.groups.find((group) => group.tabOrder.includes(command.tabId))
+  return (
+    !!source &&
+    isPaneColumnSplitDropNoOp({
+      sourceGroupId: source.id,
+      targetGroupId: command.besideGroupId,
+      splitDirection: command.direction,
+      sourceTabCount: source.tabOrder.length,
+      layout: workspace.groupLayout
+    })
+  )
 }
