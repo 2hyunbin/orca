@@ -118,7 +118,7 @@ export class StructuredAgentSessionUsageLimitContinue {
       record !== null &&
       record.location.executionHostId === this.deps.host.store.hostId &&
       !this.deps.host.usageLimitAutoContinue?.isWorkspaceAsleep(record.location.workspaceId) &&
-      this.deps.host.store.listVisibleSessionIds().includes(id) &&
+      this.deps.host.store.getSessionTabId(id) !== null &&
       !(
         record.usageLimitContinueCancel?.turnItemId === cut.turnItemId &&
         record.usageLimitContinueCancel.resetsAt === cut.resetsAt

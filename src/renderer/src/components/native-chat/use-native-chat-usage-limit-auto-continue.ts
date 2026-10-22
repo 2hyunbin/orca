@@ -46,7 +46,13 @@ export function useNativeChatUsageLimitAutoContinue(
     resetsAt: state.resetsAt,
     cancelDisabled: cancelling,
     cancel: () => {
-      if (cancelling) {
+      const current = feed.getSnapshot().get(sessionId)?.usageLimitContinue
+      if (
+        cancelling ||
+        current?.state !== 'scheduled' ||
+        current.turnItemId !== state.turnItemId ||
+        current.resetsAt !== state.resetsAt
+      ) {
         return
       }
       setCancelling(true)

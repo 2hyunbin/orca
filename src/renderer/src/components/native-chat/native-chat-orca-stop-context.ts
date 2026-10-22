@@ -15,6 +15,7 @@ export type NativeChatOrcaStopView = {
   /** The turn a usage limit ended whose row carries Continue right now, if any. */
   usageLimitTurnItemId: string | null
   usageLimitAutoContinue?: NativeChatUsageLimitAutoContinueState | null
+  onUsageLimitHandOffStarted?: () => void
   usageLimitContinueDisabled?: boolean
   continueUsageLimit: (hadFocus?: boolean) => void
 }
