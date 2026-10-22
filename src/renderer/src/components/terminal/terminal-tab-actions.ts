@@ -182,7 +182,10 @@ export function closeTerminalTab(
             publicationEpoch,
             terminalHandle: lifecycleTerminalHandle
           }
-        : {})
+        : // Why: `force` here is a confirmed pinned close (this window's prompt or a phone's).
+          options?.force
+          ? { force: true }
+          : {})
     })
     options?.onClosed?.()
     return
