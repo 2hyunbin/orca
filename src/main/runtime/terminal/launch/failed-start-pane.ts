@@ -5,7 +5,12 @@ import { isHibernationDoneRecord } from '../../../../shared/hibernation-done-rec
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
-import { PaneResumeOutcomes, PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
+import {
+  PaneResumeOutcomes,
+  PaneStartStatuses,
+  paneStartFailure,
+  type PaneFactSources
+} from '../../pane-start-statuses'
 import type { LayoutCommandRunOptions, WindowLayoutCommand } from '../../runtime-layout-apply'
 import {
   runLayoutPaneStarts,
@@ -92,6 +97,15 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
         runLayoutPaneStarts({ type: command.type, workspace }, effects, (pane) =>
           this.ensureRestoredPaneStarted(pane)
         )
+    }
+  }
+
+  /** The live start facts main lays over each published pane. */
+  protected paneFactSources(): PaneFactSources {
+    return {
+      paneStartFact: (paneKey, binding) => this.paneStartStatuses?.get(paneKey, binding) ?? null,
+      paneResumeOutcome: (paneKey, binding) =>
+        this.paneResumeOutcomes?.get(paneKey, binding) ?? null
     }
   }
 
