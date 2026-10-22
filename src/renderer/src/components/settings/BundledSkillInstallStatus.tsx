@@ -1,7 +1,6 @@
-import { bundledSkillSetupResultHeadline } from './bundled-skill-setup-copy'
 import { RefreshCw } from 'lucide-react'
 import { Button } from '../ui/button'
-import { skillInstallResultLine } from '../skills/skill-plan-op-copy'
+import { skillInstallResultLine } from './bundled-skill-setup-result-copy'
 import {
   bundledSkillInstallNeedsAttention,
   type BundledSkillInstall
@@ -14,17 +13,16 @@ export function BundledSkillInstallStatus(props: {
   install: Pick<BundledSkillInstall, 'state' | 'retry'>
   buttonSize?: 'xs' | 'sm'
   className?: string
-  attention?: { retry: () => void }
+  attention?: { retry: () => void; message?: string }
 }): React.JSX.Element | null {
   const previewAttention =
     props.attention && (props.install.state.kind === 'idle' || props.install.state.kind === 'done')
   const state = previewAttention
     ? {
         kind: 'failed' as const,
-        message: translate(
-          'auto.components.skills.skillPlanOpCopy.needsAttention',
-          'Needs attention'
-        )
+        message:
+          props.attention?.message ??
+          translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
       }
     : props.install.state
   const retry = previewAttention ? props.attention?.retry : props.install.retry
@@ -48,16 +46,7 @@ export function BundledSkillInstallStatus(props: {
   }
   const problem = bundledSkillInstallNeedsAttention(state)
   const message =
-    state.kind === 'failed'
-      ? state.message
-      : skillInstallResultLine(
-          state.summary,
-          state.changes &&
-            state.summary.ok &&
-            !state.summary.skills.some((skill) => skill.text === 'Needs attention')
-            ? bundledSkillSetupResultHeadline(state.changes)
-            : undefined
-        )
+    state.kind === 'failed' ? state.message : skillInstallResultLine(state.summary, state.changes)
   return (
     <div className={cn('flex flex-wrap items-start gap-2', props.className)}>
       <p

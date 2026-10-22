@@ -58,6 +58,7 @@ function operations(
       ? [
           planOp('leave', `/home/u/.factory/skills/${name}`, {
             reason: 'edited',
+            agents: ['droid'],
             replaceable: true
           })
         ]
@@ -174,7 +175,7 @@ it('keeps the edited-copy suffix after the mixed result', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Update' }))
   expect(
     await screen.findByText(
-      "Updated · Installed for Cursor · 1 left alone: You've changed this copy"
+      'Updated · Installed for Cursor · Not updated in Droid: you edited this copy'
     )
   ).toBeDefined()
 })

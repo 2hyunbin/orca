@@ -1,3 +1,4 @@
+import { bundledSkillSetupAttentionMessage } from '@/components/settings/bundled-skill-setup-result-copy'
 import {
   bundledSkillSetupChanges,
   type BundledSkillSetupChanges
@@ -19,7 +20,6 @@ import {
 import { notifyInstalledAgentSkillsChanged } from './installed-agent-skill-discovery'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
 import { useMountedRef } from './useMountedRef'
-import { translate } from '@/i18n/i18n'
 
 export type BundledSkillInstallState =
   | { kind: 'idle' }
@@ -104,10 +104,7 @@ export function useBundledSkillInstall(
         ) {
           next = {
             kind: 'failed',
-            message: translate(
-              'auto.components.skills.skillPlanOpCopy.needsAttention',
-              'Needs attention'
-            )
+            message: bundledSkillSetupAttentionMessage(planned.plan)
           }
         } else {
           const result = await executeBundledSkillsOnTarget(

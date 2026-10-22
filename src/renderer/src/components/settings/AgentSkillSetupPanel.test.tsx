@@ -342,7 +342,7 @@ describe('AgentSkillSetupPanel', () => {
       names: ['orca-cli'],
       force: [path]
     })
-    expect(container?.textContent).toContain('Updated')
+    expect(container?.textContent).toContain('Replaced · Your copy was saved as a backup')
   })
 
   it('says why an edited copy was left alone, without calling it a failure', async () => {
@@ -353,7 +353,9 @@ describe('AgentSkillSetupPanel', () => {
 
     await clickButton("Replace with Orca's copy")
 
-    expect(container?.textContent).toContain("Installed · 1 left alone: You've changed this copy")
+    expect(container?.textContent).toContain(
+      'Installed · Not updated in Shared folder: you edited this copy'
+    )
     expect(container?.textContent).not.toContain('Needs attention')
   })
 

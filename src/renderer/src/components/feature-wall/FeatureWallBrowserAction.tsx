@@ -204,7 +204,9 @@ function BrowserSkillInstallButton(): React.JSX.Element {
       <BundledSkillInstallStatus
         install={skillInstall}
         attention={
-          installAction.kind === 'attention' ? { retry: () => void handleInstall() } : undefined
+          installAction.kind === 'attention'
+            ? { retry: () => void handleInstall(), message: installAction.attentionMessage }
+            : undefined
         }
         className="w-full"
       />

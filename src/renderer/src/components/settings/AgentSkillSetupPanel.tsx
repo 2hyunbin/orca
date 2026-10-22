@@ -229,7 +229,11 @@ function BundledAgentSkillSetupPanel({
           ) : null}
           <BundledSkillInstallStatus
             install={skillInstall}
-            attention={action.kind === 'attention' ? { retry: startInstall } : undefined}
+            attention={
+              action.kind === 'attention'
+                ? { retry: startInstall, message: action.attentionMessage }
+                : undefined
+            }
             className="mt-2"
           />
           {actionHint ? <div className="mt-2">{actionHint}</div> : null}

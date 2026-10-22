@@ -320,7 +320,7 @@ function AgentCapabilitySetupControls(props: {
         install={props.skillInstall}
         attention={
           props.installAction?.kind === 'attention'
-            ? { retry: props.onStartFeatureSetup }
+            ? { retry: props.onStartFeatureSetup, message: props.installAction.attentionMessage }
             : undefined
         }
         className="mt-4"

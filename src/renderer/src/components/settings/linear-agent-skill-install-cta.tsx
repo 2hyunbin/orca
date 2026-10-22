@@ -172,7 +172,11 @@ function BundledLinearAgentSkillInstallCta({
           )}
           <BundledSkillInstallStatus
             install={skillInstall}
-            attention={needsAttention ? { retry: () => void install([skillName]) } : undefined}
+            attention={
+              needsAttention
+                ? { retry: () => void install([skillName]), message: action.attentionMessage }
+                : undefined
+            }
             buttonSize="xs"
           />
           {remote || agentRuntime.runtime === 'wsl' ? (

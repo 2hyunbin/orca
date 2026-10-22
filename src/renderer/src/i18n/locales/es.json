@@ -5204,8 +5204,7 @@
           "write": "Instalar",
           "keepLink": "Enlace, sin cambios",
           "repair": "Reparar",
-          "sharedFolder": "Carpeta compartida",
-          "resultLeftAlone": "{{value0}} · {{value1}} sin cambios: {{value2}}"
+          "sharedFolder": "Carpeta compartida"
         }
       },
       "sidebar": {
@@ -12939,7 +12938,17 @@
           "installForAgent": "Instalar para {{value0}}",
           "installForMore": "Instalar para {{value0}} agentes más",
           "installedForAgent": "Instalado para {{value0}}",
-          "installedForMore": "Instalado para {{value0}} agentes más"
+          "installedForMore": "Instalado para {{value0}} agentes más",
+          "replacedWithBackup": "Reemplazada · Se guardó una copia de seguridad de tu versión",
+          "attentionUnwritable": "Requiere atención · Orca no puede escribir en {{folder}}",
+          "attentionBusy": "Requiere atención · Otra instalación de habilidades aún está terminando aquí",
+          "attentionUnreadable": "Requiere atención · Orca no puede leer todos los archivos de esta copia",
+          "attentionEdited": "Requiere atención · Editaste esta copia",
+          "attentionOther": "Requiere atención · Otra habilidad ya usa este nombre",
+          "attentionSharedNotCurrent": "Requiere atención · La copia compartida que usa esta carpeta no es de Orca",
+          "editedCopies": "editaste estas copias",
+          "resultNotUpdatedPlaces": "{{result}} · No se actualizó en {{places}} ubicaciones: {{reason}}",
+          "resultNotUpdatedAgent": "{{result}} · No se actualizó en {{agent}}: {{reason}}"
         }
       },
       "right": {

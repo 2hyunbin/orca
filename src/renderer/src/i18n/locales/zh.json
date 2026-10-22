@@ -5209,8 +5209,7 @@
           "write": "安装",
           "keepLink": "链接，无变化",
           "repair": "修复",
-          "sharedFolder": "共享文件夹",
-          "resultLeftAlone": "{{value0}} · {{value1}} 处保持不变：{{value2}}"
+          "sharedFolder": "共享文件夹"
         }
       },
       "sidebar": {
@@ -12944,7 +12943,17 @@
           "installForAgent": "为 {{value0}} 安装",
           "installForMore": "为另外 {{value0}} 个代理安装",
           "installedForAgent": "已为 {{value0}} 安装",
-          "installedForMore": "已为另外 {{value0}} 个代理安装"
+          "installedForMore": "已为另外 {{value0}} 个代理安装",
+          "replacedWithBackup": "已替换 · 你的副本已保存为备份",
+          "attentionUnwritable": "需要处理 · Orca 无法写入 {{folder}}",
+          "attentionBusy": "需要处理 · 此处的另一个技能安装仍未完成",
+          "attentionUnreadable": "需要处理 · Orca 无法读取此副本中的所有文件",
+          "attentionEdited": "需要处理 · 你编辑过此副本",
+          "attentionOther": "需要处理 · 另一个技能已使用此名称",
+          "attentionSharedNotCurrent": "需要处理 · 此文件夹使用的共享副本不是 Orca 的副本",
+          "editedCopies": "你编辑过这些副本",
+          "resultNotUpdatedPlaces": "{{result}} · {{places}} 个位置未更新：{{reason}}",
+          "resultNotUpdatedAgent": "{{result}} · {{agent}} 中未更新：{{reason}}"
         }
       },
       "right": {

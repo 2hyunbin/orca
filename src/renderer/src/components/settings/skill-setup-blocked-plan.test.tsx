@@ -142,7 +142,9 @@ for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {
         fireEvent.click(await screen.findByRole('button', { name: "Replace with Orca's copy" }))
 
         expect(await screen.findByRole('button', { name: 'Retry' })).toBeDefined()
-        expect(screen.getAllByText('Needs attention').length).toBeGreaterThan(0)
+        expect(
+          screen.getByText("Needs attention · Orca can't read every file in this copy")
+        ).toBeDefined()
         expect(screen.queryByRole('button', { name: "Replace with Orca's copy" })).toBeNull()
         expect(mocks.plan).toHaveBeenCalledWith(TARGET, {
           names: [name],
@@ -178,7 +180,9 @@ for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {
 
       fireEvent.click(await screen.findByRole('button', { name: "Replace with Orca's copy" }))
 
-      expect(await screen.findByText('Updated', { exact: true })).toBeDefined()
+      expect(
+        await screen.findByText('Replaced · Your copy was saved as a backup', { exact: true })
+      ).toBeDefined()
       expect(mocks.execute).toHaveBeenCalledExactlyOnceWith(TARGET, replacement.planDigest, {
         names: [name],
         force: [path]
@@ -219,7 +223,13 @@ for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {
         renderSurface(surface)
 
         const retry = await screen.findByRole('button', { name: 'Retry' })
-        expect(screen.getAllByText('Needs attention').length).toBeGreaterThan(0)
+        expect(
+          screen.getByText(
+            reason === 'unwritable'
+              ? `Needs attention · Orca can't write to ~/.agents/skills/${name}`
+              : 'Needs attention · Another skill install is still finishing here'
+          )
+        ).toBeDefined()
         expect(screen.queryByText('Installed', { exact: true })).toBeNull()
         expect(screen.queryByRole('button', { name: /^Install/ })).toBeNull()
         fireEvent.click(retry)

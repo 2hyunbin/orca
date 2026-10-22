@@ -5517,8 +5517,7 @@
           "write": "Install",
           "keepLink": "Link, no change",
           "repair": "Repair",
-          "sharedFolder": "Shared folder",
-          "resultLeftAlone": "{{value0}} · {{value1}} left alone: {{value2}}"
+          "sharedFolder": "Shared folder"
         }
       },
       "sidebar": {
@@ -13276,7 +13275,17 @@
           "installForAgent": "Install for {{value0}}",
           "installForMore": "Install for {{value0}} more agents",
           "installedForAgent": "Installed for {{value0}}",
-          "installedForMore": "Installed for {{value0}} more agents"
+          "installedForMore": "Installed for {{value0}} more agents",
+          "replacedWithBackup": "Replaced · Your copy was saved as a backup",
+          "attentionUnwritable": "Needs attention · Orca can't write to {{folder}}",
+          "attentionBusy": "Needs attention · Another skill install is still finishing here",
+          "attentionUnreadable": "Needs attention · Orca can't read every file in this copy",
+          "attentionEdited": "Needs attention · You edited this copy",
+          "attentionOther": "Needs attention · A different skill already uses this name",
+          "attentionSharedNotCurrent": "Needs attention · The shared copy this folder uses is not Orca’s",
+          "editedCopies": "you edited these copies",
+          "resultNotUpdatedPlaces": "{{result}} · Not updated in {{places}} places: {{reason}}",
+          "resultNotUpdatedAgent": "{{result}} · Not updated in {{agent}}: {{reason}}"
         }
       },
       "right": {

@@ -5317,8 +5317,7 @@
           "write": "Installer",
           "keepLink": "Lien, aucun changement",
           "repair": "Réparer",
-          "sharedFolder": "Dossier partagé",
-          "resultLeftAlone": "{{value0}} · {{value1}} laissé(s) tel(s) quel(s) : {{value2}}"
+          "sharedFolder": "Dossier partagé"
         }
       },
       "sidebar": {
@@ -13052,7 +13051,17 @@
           "installForAgent": "Installer pour {{value0}}",
           "installForMore": "Installer pour {{value0}} agents supplémentaires",
           "installedForAgent": "Installé pour {{value0}}",
-          "installedForMore": "Installé pour {{value0}} agents supplémentaires"
+          "installedForMore": "Installé pour {{value0}} agents supplémentaires",
+          "replacedWithBackup": "Remplacée · Votre copie a été sauvegardée",
+          "attentionUnwritable": "Attention requise · Orca ne peut pas écrire dans {{folder}}",
+          "attentionBusy": "Attention requise · Une autre installation de compétence est encore en cours ici",
+          "attentionUnreadable": "Attention requise · Orca ne peut pas lire tous les fichiers de cette copie",
+          "attentionEdited": "Attention requise · Vous avez modifié cette copie",
+          "attentionOther": "Attention requise · Une autre compétence utilise déjà ce nom",
+          "attentionSharedNotCurrent": "Attention requise · La copie partagée utilisée par ce dossier n’est pas celle d’Orca",
+          "editedCopies": "vous avez modifié ces copies",
+          "resultNotUpdatedPlaces": "{{result}} · Non mise à jour dans {{places}} emplacements : {{reason}}",
+          "resultNotUpdatedAgent": "{{result}} · Non mise à jour pour {{agent}} : {{reason}}"
         }
       },
       "right": {

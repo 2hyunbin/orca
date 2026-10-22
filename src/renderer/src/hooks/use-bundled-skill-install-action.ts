@@ -1,3 +1,4 @@
+import { bundledSkillSetupAttentionMessage } from '@/components/settings/bundled-skill-setup-result-copy'
 import {
   bundledSkillSetupChanges,
   type BundledSkillSetupChanges
@@ -14,7 +15,7 @@ import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
 
 /** `unknown`: the owning host could not plan, including servers that need an update. */
 export type BundledSkillInstallActionState =
-  | (BundledSkillInstallAction & { changes?: BundledSkillSetupChanges })
+  | (BundledSkillInstallAction & { changes?: BundledSkillSetupChanges; attentionMessage?: string })
   | { kind: 'loading' }
   | { kind: 'unknown' }
 
@@ -53,7 +54,8 @@ export function useBundledSkillInstallAction(
         if (planned.kind === 'plan') {
           action = {
             ...bundledSkillInstallAction(planned.plan),
-            changes: bundledSkillSetupChanges(planned.plan)
+            changes: bundledSkillSetupChanges(planned.plan),
+            attentionMessage: bundledSkillSetupAttentionMessage(planned.plan)
           }
         }
         if (!ignore) {

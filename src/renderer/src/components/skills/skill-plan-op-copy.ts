@@ -10,8 +10,7 @@ import {
   bundledSkillInstallAgents,
   summarizeBundledSkillPlan,
   type BundledSkillOutcomeText,
-  type BundledSkillPlanState,
-  type BundledSkillResultSummary
+  type BundledSkillPlanState
 } from '../../../../shared/bundled-skill-summary'
 import { SKILL_INSTALL_PROVIDERS } from '../../../../shared/skill-install-providers'
 import { translate } from '@/i18n/i18n'
@@ -111,37 +110,6 @@ export function skillOutcomeText(text: BundledSkillOutcomeText): string {
     case 'Needs attention':
       return translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
   }
-}
-
-const RESULT_HEADLINE_ORDER: readonly BundledSkillOutcomeText[] = [
-  'Needs attention',
-  'Updated',
-  'Installed',
-  'Linked'
-]
-
-/** A setup screen's Install result, e.g. "Installed · 1 left alone: You've changed this copy". */
-export function skillInstallResultLine(
-  summary: BundledSkillResultSummary,
-  resultHeadline?: string
-): string {
-  const texts = new Set(summary.skills.map((skill) => skill.text))
-  const headline =
-    resultHeadline ??
-    skillOutcomeText(RESULT_HEADLINE_ORDER.find((text) => texts.has(text)) ?? 'No change')
-  const leftAlone = summary.skills.flatMap((skill) => skill.leftAlone)
-  if (leftAlone.length === 0) {
-    return headline
-  }
-  return translate(
-    'auto.components.skills.skillPlanOpCopy.resultLeftAlone',
-    '{{value0}} · {{value1}} left alone: {{value2}}',
-    {
-      value0: headline,
-      value1: leftAlone.length,
-      value2: [...new Set(leftAlone.map((left) => leaveReasonText(left.code)))].join('; ')
-    }
-  )
 }
 
 export function agentNames(agents: readonly string[]): string {

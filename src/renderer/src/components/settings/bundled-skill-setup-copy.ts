@@ -2,6 +2,10 @@ import type {
   BundledSkillInstallResult,
   BundledSkillPlan
 } from '../../../../shared/bundled-skill-plan'
+import {
+  bundledSkillLocation,
+  type BundledSkillLocation
+} from '../../../../shared/bundled-skill-locations'
 import { bundledSkillInstallAgents } from '../../../../shared/bundled-skill-summary'
 import { agentNames } from '../skills/skill-plan-op-copy'
 import { translate } from '@/i18n/i18n'
@@ -9,6 +13,8 @@ import { translate } from '@/i18n/i18n'
 export type BundledSkillSetupChanges = {
   agents: string[]
   updates: boolean
+  replaced: boolean
+  notUpdated: BundledSkillLocation[]
 }
 
 /** Results count only operations that actually finished on the planned machine. */
@@ -33,6 +39,12 @@ export function bundledSkillSetupChanges(
   }))
   return {
     agents: bundledSkillInstallAgents(entries),
+    replaced: entries.some((entry) => entry.ops.some((op) => op.kind === 'replace')),
+    notUpdated: entries.flatMap((entry) =>
+      entry.ops
+        .filter((op) => op.kind === 'leave')
+        .map((op) => bundledSkillLocation(op, plan.homeDirectory))
+    ),
     updates: entries.some((entry) =>
       entry.ops.some((op) => ['update', 'replace', 'restore'].includes(op.kind))
     )
@@ -75,7 +87,12 @@ export function bundledSkillSetupResultHeadline(changes: BundledSkillSetupChange
             { value0: agentNames(changes.agents) }
           )
         : null
-  const updated = translate('auto.components.skills.skillPlanOpCopy.updated', 'Updated')
+  const updated = changes.replaced
+    ? translate(
+        'auto.components.settings.bundledSkillSetupCopy.replacedWithBackup',
+        'Replaced · Your copy was saved as a backup'
+      )
+    : translate('auto.components.skills.skillPlanOpCopy.updated', 'Updated')
   return changes.updates
     ? installed
       ? `${updated} · ${installed}`
