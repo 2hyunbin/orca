@@ -1,6 +1,8 @@
 import { withDurableRuntimeStore, withRuntimePaneAdmission } from './runtime-durable-store-fixture'
-import { afterEach, expect, vi } from 'vitest'
+import { afterEach, beforeEach, expect, vi } from 'vitest'
 import { forgetInstalledPaneSession } from './bind-first-pane.test-fixture'
+import { announceSessionWrites } from './profile-session-store.test-fixture'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { createHash } from 'node:crypto'
 import { HeadlessEmulator } from '../daemon/headless-emulator'
 import { OrcaRuntimeService } from './orca-runtime'
@@ -673,7 +675,13 @@ function makeWorkspaceSessionWithHeadlessTerminal(
   }
 }
 
-// Layout-owner tests bind panes into the shared store; each test starts without them.
+// Layout-owner tests bind panes into the shared store, which announces its writes as a profile
+// Store does; each test starts without them.
+beforeEach(() => {
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    announceSessionWrites(store)
+  }
+})
 afterEach(() => forgetInstalledPaneSession(store))
 
 computeWorktreePathMock.mockImplementation(

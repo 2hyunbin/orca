@@ -1,5 +1,6 @@
 // A fake runtime store made to answer as a profile Store does for main's layout: sessions
-// partitioned by execution host, the host list, and `layout.apply` on the routed partition.
+// partitioned by execution host, the host list, `layout.apply` on the routed partition, and a
+// write notice for every session write.
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { LayoutCommand } from '../../shared/workspace-layout/workspace-layout-command-types'
@@ -13,13 +14,48 @@ export type SessionStore = {
   setWorkspaceSession?: (session: WorkspaceSessionState, hostId?: string) => void
   getWorkspaceSessionHostIds?: () => readonly string[]
   applyLayoutCommand?: (command: LayoutCommand, hostIds?: readonly string[]) => Promise<unknown>
-}
+} & Pick<RuntimeStore, 'onWorkspaceSessionWritten'>
+
+type WriteListener = Parameters<NonNullable<RuntimeStore['onWorkspaceSessionWritten']>>[0]
 
 // The partitions a store without its own host list has had panes bound in.
 const boundHostIdsByStore = new WeakMap<SessionStore, Set<string>>()
 
 const installedSessionStores = new WeakSet<SessionStore>()
 const installedLayoutApplies = new WeakSet<SessionStore>()
+const writeListenersByStore = new WeakMap<SessionStore, Set<WriteListener>>()
+
+/**
+ * As the profile Store does, every session write asProfileSessionStore installs (direct or by a
+ * layout command) tells the store's write listeners, which is what runs main's merge after a
+ * commit. Install it before the runtime's first graph: main subscribes then.
+ */
+export function announceSessionWrites(store: SessionStore & Pick<RuntimeStore, 'getRepos'>): void {
+  if (store.onWorkspaceSessionWritten) {
+    return
+  }
+  const listeners = new Set<WriteListener>()
+  writeListenersByStore.set(store, listeners)
+  const subscribe: SessionStore['onWorkspaceSessionWritten'] = (listener) => {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  }
+  // Not enumerable: a test's `{ ...store }` copy keeps its own writes and so must not inherit it.
+  Object.defineProperty(store, 'onWorkspaceSessionWritten', {
+    value: subscribe,
+    configurable: true,
+    writable: true,
+    enumerable: false
+  })
+}
+
+function announceWrite(store: SessionStore, hostId: string | undefined): void {
+  for (const listener of writeListenersByStore.get(store) ?? []) {
+    listener(resolveHostId(hostId))
+  }
+}
 
 /** Drops the in-memory session bindPaneFirst gave a store shared across tests, so none leaks. */
 export function forgetInstalledPaneSession(
@@ -27,6 +63,9 @@ export function forgetInstalledPaneSession(
 ): void {
   if (installedLayoutApplies.delete(store)) {
     delete store.applyLayoutCommand
+  }
+  if (writeListenersByStore.delete(store)) {
+    delete store.onWorkspaceSessionWritten
   }
   if (!installedSessionStores.delete(store)) {
     return
@@ -61,6 +100,7 @@ export function asProfileSessionStore(
       sessions.get(host) ?? getDefaultWorkspaceSession()
     store.setWorkspaceSession = (next, host = 'local') => {
       sessions.set(host, next)
+      announceWrite(store, host)
     }
   }
   if (!store.getWorkspaceSessionHostIds) {

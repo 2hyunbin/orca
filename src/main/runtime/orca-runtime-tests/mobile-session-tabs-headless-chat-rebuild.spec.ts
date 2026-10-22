@@ -69,9 +69,15 @@ function sessionWithTerminalAndEditor(): WorkspaceSessionState {
   })
 }
 
-function headlessRuntimeWithChat() {
+// listsPartitions: the store names its session partitions, as a profile store does, so main's
+// layout index projects the workspace (layout-owner builds).
+function headlessRuntimeWithChat({ listsPartitions = false } = {}) {
   const harness = makeRuntimeStoreWithWorkspaceSession(sessionWithTerminalAndEditor())
-  const runtime = new OrcaRuntimeService(harness.runtimeStore)
+  const runtime = new OrcaRuntimeService(
+    listsPartitions
+      ? { ...harness.runtimeStore, getWorkspaceSessionHostIds: () => ['local'] }
+      : harness.runtimeStore
+  )
   runtime.setPtyController({
     write: () => true,
     kill: () => true,
@@ -128,7 +134,7 @@ describe('a chat tab on a host with no window', () => {
   ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
     'lists tabs to phones in the order desktop clients draw after a rebuild',
     async () => {
-      const runtime = headlessRuntimeWithChat()
+      const runtime = headlessRuntimeWithChat({ listsPartitions: true })
       await openChat(runtime)
       const groupId = (await runtime.listMobileSessionTabs(WORKTREE)).tabGroups?.[0]?.id ?? ''
       await runtime.moveMobileSessionTab(WORKTREE, {
