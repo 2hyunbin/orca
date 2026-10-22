@@ -13,9 +13,9 @@ import type { PairedServerRowsProducer } from './paired-server-rows-producer'
 import type { WorkspaceLifecycleQueue } from '../workspaces/workspace-lifecycle-queue'
 import type { WorkspaceRowsProducer } from './workspace-rows-producer'
 import type { RepoIconDataUrls } from './repo-icon-data-urls'
-import type { SidebarInputsFeedDomain } from './sidebar-inputs-feed'
+import type { SidebarInputsFeedChange, SidebarInputsFeedDomain } from './sidebar-inputs-feed'
 import { readDesktopSidebarFacts } from './desktop-sidebar-facts'
-import { readSidebarProjectCatalog } from './sidebar-project-catalog'
+import { readSidebarCatalogRecords, readSidebarProjectCatalog } from './sidebar-project-catalog'
 import {
   buildPairedServerReviewFacts,
   buildWorkspaceReviewFacts
@@ -93,6 +93,25 @@ export function sidebarInputsFeedDomains(
       },
       { consumesTerminalSideEffects: false }
     )
+  // A catalog write is a request a reader shows only once main publishes it.
+  const watchCatalogWrites = (
+    changed: (change?: SidebarInputsFeedChange) => void
+  ): (() => void) => {
+    const changedNow = (): void => changed(urgent)
+    const detaches = [
+      watchCatalog(changedNow),
+      pairedServerRows.revision.onChange(() => changed()),
+      // Manual repo order and project order live in the UI state.
+      sources.store()?.onUIChanged?.(changedNow),
+      // Catalog writes are full saves, and some (a project rename) announce no event.
+      sources.store()?.onStateWritten?.((domains) => {
+        if (domains === undefined) {
+          changedNow()
+        }
+      })
+    ]
+    return () => detaches.forEach((detach) => detach?.())
+  }
   const requireStore = (): RuntimeStore => {
     const store = sources.store()
     if (!store) {
@@ -232,29 +251,22 @@ export function sidebarInputsFeedDomains(
       // Each field its own entity, so a reader holds the catalog only once it is whole.
       name: 'projectCatalog',
       read: () => readSidebarProjectCatalog(requireStore(), pairedServerRows.catalogs()),
-      watch: (changed) => {
-        // A catalog write is a request the sidebar shows only once main publishes it.
-        const changedNow = (): void => changed(urgent)
-        const detaches = [
-          watchCatalog(changedNow),
-          pairedServerRows.revision.onChange(changed),
-          // Manual repo order and project order live in the UI state.
-          sources.store()?.onUIChanged?.(changedNow),
-          // Catalog writes are full saves, and some (a project rename) announce no event.
-          sources.store()?.onStateWritten?.((domains) => {
-            if (domains === undefined) {
-              changedNow()
-            }
-          })
-        ]
-        return () => detaches.forEach((detach) => detach?.())
-      }
+      watch: watchCatalogWrites
+    },
+    {
+      // The full rows behind projectCatalog, which the desktop window reads instead of its own copy.
+      name: 'catalogRecords',
+      read: () => readSidebarCatalogRecords(requireStore(), pairedServerRows.catalogs()),
+      watch: watchCatalogWrites
     },
     {
       // Ids only: a reader fetches the images through sidebarInputs.repoIcons.
       name: 'repoIcons',
       read: () => sources.repoIcons.idsByRepo(),
-      watch: watchCatalog
+      watch: (changed) => {
+        const detaches = [watchCatalog(changed), pairedServerRows.revision.onChange(changed)]
+        return () => detaches.forEach((detach) => detach())
+      }
     },
     {
       name: 'review',

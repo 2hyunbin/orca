@@ -49,15 +49,20 @@ export function onDesktopSidebarFeedInstalled(
   return () => installListeners.delete(listener)
 }
 
+/** The last install, or null before main's first. */
+export function readDesktopSidebarFeed(): DesktopSidebarFeed | null {
+  return feed
+}
+
 /** Reads again now, so the next install reflects every write main has answered so far. */
 export function refreshDesktopSidebarFeed(): number {
   // Nothing is read yet; the first mount's first read is the earliest that shows the write.
   return reader ? reader.refresh() : 1
 }
 
-/** Follows main from the first mount for the window's life: main serves this window until it closes
+/** Follows main from the first caller for the window's life: main serves this window until it closes
  *  either way, and a list that remounts must not first draw rows main changed while it was hidden. */
-function start(): void {
+export function startDesktopSidebarFeed(): void {
   if (reader) {
     return
   }
@@ -74,6 +79,6 @@ function subscribe(listener: () => void): () => void {
 
 /** Null until main's first install lands. Only an ORCA_SIDEBAR_INPUTS=main window reads this. */
 export function useDesktopSidebarFeed(): DesktopSidebarFeed | null {
-  useEffect(start, [])
+  useEffect(startDesktopSidebarFeed, [])
   return useSyncExternalStore(subscribe, () => feed)
 }

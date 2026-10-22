@@ -63,6 +63,7 @@ function domains(overrides: Partial<SidebarFeedDomains>): SidebarFeedDomains {
     repoIcons: new Map(),
     desktop: null,
     projectCatalog: null,
+    catalogRecords: null,
     retention: null,
     ...overrides
   }

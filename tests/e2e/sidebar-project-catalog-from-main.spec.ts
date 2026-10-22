@@ -191,6 +191,12 @@ test('project and group create, rename, reorder, move and delete show from main'
   registerPostElectronShutdownCleanup
 }, testInfo) => {
   test.setTimeout(180_000)
+  const droppedWrites: string[] = []
+  orcaPage.on('console', (message) => {
+    if (message.text().startsWith('[catalog] dropped')) {
+      droppedWrites.push(message.text())
+    }
+  })
   await waitForSessionReady(orcaPage)
   const repoPaths = [await createRepo(), await createRepo()]
   registerPostElectronShutdownCleanup(async () => {
@@ -268,6 +274,7 @@ test('project and group create, rename, reorder, move and delete show from main'
   )
 
   console.log(`[catalog-timing] ${JSON.stringify(timings)}`)
+  console.log(`[catalog-dropped-writes] ${JSON.stringify(droppedWrites, null, 1)}`)
   await testInfo.attach('catalog-timings.json', {
     body: JSON.stringify(timings, null, 2),
     contentType: 'application/json'

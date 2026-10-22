@@ -6,6 +6,7 @@ import { splitRepoReorderByHost } from '../slices/repo-reorder-host-split'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import type { RepoSlice } from './repo-state'
+import { awaitMainProjectCatalogWrite } from '@/lib/main-project-catalog'
 
 export function createRepoOrderingActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -77,6 +78,8 @@ export function createRepoOrderingActions(
         if (results.some((result) => result.status === 'rejected')) {
           await get().fetchReposForAllHosts()
         }
+        // The order shows once main publishes it; its manual order is the one the window holds.
+        await awaitMainProjectCatalogWrite()
       } catch (err) {
         console.error('Failed to reorder repos:', err)
         await get().fetchReposForAllHosts()

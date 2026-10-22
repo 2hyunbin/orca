@@ -7,6 +7,7 @@ import type { RepoSlice } from '../repos/repo-state'
 import { getProjectSetupRuntimeTarget } from './project-host-routing'
 import { mergeUpdatedProjectCompatibilityProject } from '../../../../shared/project-compatibility-merge'
 import { normalizeProjectRow } from '../../../../shared/project-catalog-row-normalization'
+import { awaitMainProjectCatalogWrite } from '@/lib/main-project-catalog'
 
 export function createProjectUpdateActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -34,6 +35,8 @@ export function createProjectUpdateActions(
         // Why: the merge spreads updatedProject.sourceRepoIds, which throws if the host sent a non-array.
         const normalizedProject = normalizeProjectRow(updatedProject)
         const runtimePreferenceChanged = 'localWindowsRuntimePreference' in updates
+        // The catalog part shows once main publishes it; this window holds only main's.
+        await awaitMainProjectCatalogWrite()
         set((state) => ({
           projects: state.projects.map((project) =>
             project.id === projectId

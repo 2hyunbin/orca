@@ -16,6 +16,8 @@ import { createRepoRemovalActions } from '../repos/repo-removal'
 import { createProjectUpdateActions } from '../projects/project-update'
 import { createRepoUpdateActions } from '../repos/repo-update'
 import { createRepoOrderingActions } from '../repos/repo-ordering'
+import { createMainCatalogFetchActions } from '../repos/main-catalog-fetch-actions'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 
 export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, get) => {
   const repoCatalogActions = createRepoCatalogActions(set, get)
@@ -33,6 +35,10 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
   const projectUpdate = createProjectUpdateActions(set, get)
   const repoUpdate = createRepoUpdateActions(set, get)
   const repoOrdering = createRepoOrderingActions(set, get)
+  // Switch point: a window that holds main's catalog reads no catalog of its own.
+  const mainCatalogFetches = ORCA_SIDEBAR_INPUTS_IS_MAIN
+    ? createMainCatalogFetchActions(set, get)
+    : null
   return {
     repos: [],
     projects: [],
@@ -84,6 +90,7 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
     updateProject: projectUpdate.updateProject,
     updateRepo: repoUpdate.updateRepo,
     setActiveRepo: repoOrdering.setActiveRepo,
-    reorderRepos: repoOrdering.reorderRepos
+    reorderRepos: repoOrdering.reorderRepos,
+    ...mainCatalogFetches
   }
 }

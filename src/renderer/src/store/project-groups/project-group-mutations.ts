@@ -22,20 +22,8 @@ import type { ProjectRemovalFailure, RepoSlice } from '../repos/repo-state'
 import { mergeProjectCompatibilityForHostRepoChange } from '../repos/repo-catalog-identity'
 import { applyProjectGroupDeleteCascade } from './project-group-removal-state'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
-import { toast } from 'sonner'
-import { translate } from '@/i18n/i18n'
-
-function notifyProjectGroupOnOtherHost(): void {
-  toast.error(
-    translate('auto.store.slices.repos.moveToGroupOtherHost', 'Could not move project to group'),
-    {
-      description: translate(
-        'auto.store.slices.repos.moveToGroupOtherHostDesc',
-        'The computer this project runs on does not have this group. A project can only join groups saved on its own computer.'
-      )
-    }
-  )
-}
+import { notifyProjectGroupOnOtherHost } from './project-group-move-notice'
+import { mainCatalogShows } from './project-group-catalog-acknowledgement'
 
 export function createProjectGroupMutationActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -72,6 +60,7 @@ export function createProjectGroupMutationActions(
               ).group
         const ownedGroup = adoptFromEndpoint(target, { kind: 'projectGroup', row: group })
         const ownerHostId = getProjectGroupHostId(ownedGroup)
+        await mainCatalogShows.group(ownedGroup, ownerHostId)
         set((s) => {
           // An overlapping catalog refresh may have already inserted a newer copy.
           if (
@@ -117,6 +106,7 @@ export function createProjectGroupMutationActions(
           return false
         }
         const ownedGroup = adoptFromEndpoint(target, { kind: 'projectGroup', row: updated })
+        await mainCatalogShows.group(ownedGroup, ownerHostId)
         set((s) => ({
           projectGroups: s.projectGroups.map((group) =>
             projectGroupMatchesOwnerHost(group, groupId, ownerHostId) ? ownedGroup : group
@@ -152,6 +142,7 @@ export function createProjectGroupMutationActions(
         if (!deleted) {
           return false
         }
+        await mainCatalogShows.groupGone(groupId, ownerHostId)
         set((s) => applyProjectGroupDeleteCascade(s, groupId, ownerHostId))
         return true
       } catch (err) {
@@ -287,6 +278,7 @@ export function createProjectGroupMutationActions(
         }
         const ownedMoved = adoptFromEndpoint(target, { kind: 'repo', row: moved })
         const movedHostId = getRepoExecutionHostId(ownedMoved)
+        await mainCatalogShows.move(ownedMoved)
         set((s) => {
           const nextRepos = s.repos.map((candidate) =>
             isSameRepoRow(candidate, repo) ? ownedMoved : candidate
