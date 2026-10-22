@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { OrcaRuntimeService, electronMocks } from '../orca-runtime-test-mocks.spec'
 import type { SleepingAgentSessionRecord } from '../orca-runtime-test-mocks.spec'
 import {
@@ -634,3 +635,31 @@ describe('resumeAgentSessionInWorkspace claim lifetime', () => {
     })
   })
 })
+
+it.runIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
+  'hands a numbered-record resume claim to the stable pane hook',
+  async () => {
+    const fixture = makeSleptWorkspace()
+    const record = storedRecord(fixture)
+    if (!record) {
+      throw new Error('missing sleep record')
+    }
+    fixture.setSession({
+      ...fixture.getSession(),
+      sleepingAgentSessionsByPaneKey: {
+        'host-tab:1': { ...record, paneKey: 'host-tab:1', state: 'done' }
+      }
+    })
+    let rows: AgentStatusIpcPayload[] = []
+    let spawned = 0
+    const { resume, openOldPane, spawn } = makeRuntime(fixture, {
+      rows: () => rows,
+      checkHookAgentPresence: async () => 'exited',
+      spawn: async () => ({ id: `numbered-resume-${++spawned}` })
+    })
+    await openOldPane()
+    expect(resumeSpawns(spawn)).toBe(1)
+    rows = [sessionRow(PANE_KEY, Date.now() + 1)]
+    await expect(resume()).resolves.toMatchObject({ ok: true })
+  }
+)

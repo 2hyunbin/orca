@@ -3,6 +3,7 @@
 
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { findPaneSleepingRecord } from './pane-sleeping-record'
+import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { OrcaRuntimeWithApplyMobileSessionTabNavigation } from './apply-mobile-session-tab-navigation'
 import type { RuntimeMobileSessionTerminalTab } from '../../../../shared/runtime-types'
 import {
@@ -109,7 +110,7 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     // another resumer has since moved past.
     const resumeClaim = sharedWithAnotherPane
       ? null
-      : this.agentSessionResumeClaims.claim(record, record.paneKey)
+      : this.agentSessionResumeClaims.claim(record, makePaneKey(tab.parentTabId, tab.leafId))
     if (!resumeClaim) {
       return {}
     }
