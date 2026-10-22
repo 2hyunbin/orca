@@ -62,9 +62,9 @@ describe("a phone's layout change on a windowless server (switch on)", () => {
     expect(listed.activeGroupId).toBe(listed.tabGroups?.[1]?.id)
     expect(listed.activeTabId?.startsWith(`${SECOND_TAB_ID}::`)).toBe(true)
     // Main's own layout holds the split, so every later write of the rows keeps it.
-    expect(store.getSession().tabGroups[TEST_WORKTREE_ID]?.map((group) => group.tabOrder)).toEqual(
-      strip
-    )
+    expect(
+      store.getSession().tabGroups?.[TEST_WORKTREE_ID]?.map((group) => group.tabOrder)
+    ).toEqual(strip)
   })
 
   it.each([

@@ -38,7 +38,7 @@ class SessionTabRuntime extends OrcaRuntimeService {
   move(
     model: RuntimeMobileSessionTabsSnapshot,
     move: RuntimeMobileSessionTabMove
-  ): RuntimeMobileSessionTabMoveResult {
+  ): RuntimeMobileSessionTabMoveResult | Promise<RuntimeMobileSessionTabMoveResult> {
     return this.moveHeadlessMobileSessionTab(model.worktree, model, move)
   }
 
