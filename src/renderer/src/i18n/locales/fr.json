@@ -14595,6 +14595,7 @@
             "sourceActionsUnavailable": "La source de la transcription n'est pas disponible."
           },
           "AiVaultScanProgressStrip": {
+            "agentChecked": "{{agent}} : {{settled}} sur {{total}} éléments potentiels de l’historique vérifiés",
             "fileCount_one": "{{value0}} fichier",
             "fileCount_other": "{{value0}} fichiers",
             "databaseCount_one": "{{value0}} base de données",
