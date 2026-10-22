@@ -188,12 +188,20 @@ describe('the fields that diverged', () => {
     const pair = pairs[0]!
     try {
       const nativeReply = native.client.sendRequest('status.get', {})
+      const nativeWorktrees = native.client.sendRequest('worktree.ps', { limit: 10000 })
       const bridgeReply = bridge.client
         .sendRequest('status.get', {})
+        .catch((error: unknown) => error)
+      const bridgeWorktrees = bridge.client
+        .sendRequest('worktree.ps', { limit: 10000 })
         .catch((error: unknown) => error)
       await pair.flush()
       native.complete('status.get#1', {}, { ok: true })
       bridge.complete('status.get#1', {}, { ok: true })
+      const worktreeParams = { limit: 10000, supportsWorktreeVisibilitySourceDefaults: true }
+      native.complete('worktree.ps#1', worktreeParams, { ok: true })
+      bridge.complete('worktree.ps#1', worktreeParams, { ok: true })
+      await Promise.all([nativeWorktrees, bridgeWorktrees])
       const [reply, error] = await Promise.all([nativeReply, bridgeReply])
       await pair.flush()
       const message = 'The host sent a reply this app could not read (status.get)'
@@ -212,6 +220,7 @@ describe('the fields that diverged', () => {
       const injected = {
         ...scenario([
           { complete: 'status.get#1', params: {}, reply: { ok: true } },
+          { complete: 'worktree.ps#1', params: worktreeParams, reply: { ok: true } },
           { checkpoint: 'only' }
         ]),
         operation: 'aiVault.history-scan'

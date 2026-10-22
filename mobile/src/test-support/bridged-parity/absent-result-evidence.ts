@@ -2,6 +2,7 @@ import { BridgeReplyRefusedError } from '../../mobile-web-shell/bridge/bridge-rp
 import { readBridgeHostMessage } from '../../mobile-web-shell/bridge/bridge-envelope'
 import type { BridgePortPair } from '../../mobile-web-shell/bridge/bridge-port-pair-test-harness'
 import type { RpcClient } from '../../transport/rpc-client'
+import { projectMobileRpcRequestParams } from '../../transport/mobile-rpc-request-projection'
 import {
   checkpointKeys,
   checkpointListDifference,
@@ -126,7 +127,7 @@ export function absentResultExplainsResiduals(
             !request.found ||
             typeof request.id !== 'string' ||
             physical.method !== method ||
-            !sameParams(request.params, step.params)
+            !sameParams(projectMobileRpcRequestParams(method, request.params), step.params)
           ) {
             return false
           }

@@ -131,6 +131,20 @@ describe('classifying one diverging golden', () => {
     )
   })
 
+  it('keeps an explicit legacy membership label distinct from strict certification', () => {
+    const mixed = {
+      ...base,
+      divergingFields: ['sender[0].ordinal', 'payloads[1].json']
+    }
+    expect(classifyBridgedParity(mixed)).toBe('unclassified')
+    expect(
+      classifyBridgedParity({
+        ...mixed,
+        legacyBaseline: { firstField: 'sender[0].ordinal', scriptsAbsentResultReply: true }
+      })
+    ).toBe('write-ordinal')
+  })
+
   it('refuses to name a golden that diverged in no field at all', () => {
     expect(classifyBridgedParity(base)).toBe('unclassified')
   })

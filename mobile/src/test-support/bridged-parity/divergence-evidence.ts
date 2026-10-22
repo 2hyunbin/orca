@@ -80,12 +80,15 @@ export function recordingWithoutRpcMeta(recording: Recording): Recording {
  * the two runs did not even reach the same checkpoints. All of them, not the first: a rule that
  * needs to know whether *every* field that moved is an ordinal cannot be given only one.
  */
-export function divergingFields(expected: Recording, actual: Recording): string[] {
+export function divergingFields(expected: Recording, actual: Recording, complete = true): string[] {
   const list = checkpointListDifference(expected, actual)
+  if (!complete && (list.missing.length || list.extra.length || list.reordered)) {
+    return ['checkpoints']
+  }
   return [
     ...(expected.scenario === actual.scenario ? [] : ['scenario']),
     ...(list.missing.length || list.extra.length || list.reordered ? ['checkpoints'] : []),
-    ...recordingDifferences(expected, actual, true).map(({ field, path }) => `${field}${path}`)
+    ...recordingDifferences(expected, actual, complete).map(({ field, path }) => `${field}${path}`)
   ]
 }
 
