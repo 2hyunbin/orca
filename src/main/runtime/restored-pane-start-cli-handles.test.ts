@@ -60,9 +60,12 @@ async function restoredPane() {
       }
     })
   }
+  // The host lists what it runs, the started terminal included: a pane main owns vouches for none.
+  const running = new Set<string>(Object.values(SURFACE_PTYS))
   const spawn = vi.fn(async () => {
     const result = await started.promise
     bindThirdPane(result.id)
+    running.add(result.id)
     return result
   })
   const write = vi.fn(() => true)
@@ -73,7 +76,7 @@ async function restoredPane() {
     stopAndWait: async () => true,
     getForegroundProcess: async () => null,
     listProcesses: async () =>
-      Object.values(SURFACE_PTYS).map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'sh' }))
+      [...running].map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'sh' }))
   })
   await new Promise((resolve) => setTimeout(resolve, 0))
   const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)

@@ -11,7 +11,7 @@ const {
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } = await import('./orca-runtime-test-fixtures.spec')
-const { committingSpawn } = await import('./bind-first-pane.test-fixture')
+const { bindPaneFirst, committingSpawn } = await import('./bind-first-pane.test-fixture')
 const { applyWorktreeSleepResumeRecords, captureWorktreeSleepResumeRecords } =
   await import('./terminal/stop/worktree-sleep-resume-records')
 
@@ -71,8 +71,10 @@ function makeRuntime(initialVerdict: Verdict, holderVerdict: Verdict = null) {
   const reportAgent = (): void => {
     rows = [row]
   }
-  // The session resumed by hand in another pane whose shell outlived it.
+  // The session resumed by hand in another pane whose shell outlived it; main's layout holds it.
   const reportHolder = (): void => {
+    const [tabId = '', leafId = ''] = HOLDER_PANE_KEY.split(':')
+    bindPaneFirst(runtime, { worktreeId: TEST_WORKTREE_ID, tabId, leafId, ptyId: 'holder-pty' })
     rows = [{ ...row, paneKey: HOLDER_PANE_KEY, tabId: 'holder-tab' }]
   }
   const setVerdict = (next: Verdict): void => {
