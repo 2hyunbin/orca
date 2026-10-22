@@ -73,43 +73,64 @@ describe('hydrateBrowserSession', () => {
 
   // L280: in a layout-owner build main's layout load gives a tabless record its tab, so the window
   // mints none of its own (an id main could not resolve); a window-owned build repairs it here.
-  it('leaves a tabless browser record to main in a layout-owner build, else gives it a tab', () => {
-    const store = createTestStore()
-    const validWt = 'repo1::/path/wt1'
-    store.setState({
-      repos: [
-        { id: 'repo1', path: '/repo1', displayName: 'Repo 1', badgeColor: '#000', addedAt: 0 }
-      ],
-      worktreesByRepo: {
-        repo1: [makeWorktree({ id: validWt, repoId: 'repo1', path: '/path/wt1' })]
-      },
-      activeWorktreeId: validWt
-    })
+  // A directly dialed SSH workspace is main's too (its layout loads under its `ssh:` host).
+  it.each([
+    ['local', {}, undefined],
+    [
+      'directly dialed SSH',
+      { connectionId: 'box', executionHostId: 'ssh:box' as const },
+      'ssh:box' as const
+    ]
+  ])(
+    'leaves a tabless browser record to main in a layout-owner build, else gives it a tab (%s)',
+    (_name, repoHost, hostId) => {
+      const store = createTestStore()
+      const validWt = 'repo1::/path/wt1'
+      store.setState({
+        repos: [
+          {
+            id: 'repo1',
+            path: '/repo1',
+            displayName: 'Repo 1',
+            badgeColor: '#000',
+            addedAt: 0,
+            ...repoHost
+          }
+        ],
+        worktreesByRepo: {
+          repo1: [makeWorktree({ id: validWt, repoId: 'repo1', path: '/path/wt1', hostId })]
+        },
+        activeWorktreeId: validWt
+      })
 
-    store.getState().hydrateBrowserSession({
-      activeRepoId: 'repo1',
-      activeWorktreeId: validWt,
-      activeTabId: null,
-      tabsByWorktree: {},
-      terminalLayoutsByTabId: {},
-      browserTabsByWorktree: {
-        [validWt]: [
-          makeBrowserTab({ id: 'browser-1', worktreeId: validWt, url: 'https://example.com' })
-        ]
-      }
-    })
+      store.getState().hydrateBrowserSession({
+        activeRepoId: 'repo1',
+        activeWorktreeId: validWt,
+        activeTabId: null,
+        tabsByWorktree: {},
+        terminalLayoutsByTabId: {},
+        browserTabsByWorktree: {
+          [validWt]: [
+            makeBrowserTab({ id: 'browser-1', worktreeId: validWt, url: 'https://example.com' })
+          ]
+        }
+      })
 
-    const browserTabs = (store.getState().unifiedTabsByWorktree[validWt] ?? []).filter(
-      (tab) => tab.contentType === 'browser'
-    )
-    expect(browserTabs.map((tab) => tab.entityId)).toEqual(
-      ORCA_LAYOUT_OWNER_IS_MAIN ? [] : ['browser-1']
-    )
-  })
+      const browserTabs = (store.getState().unifiedTabsByWorktree[validWt] ?? []).filter(
+        (tab) => tab.contentType === 'browser'
+      )
+      expect(browserTabs.map((tab) => tab.entityId)).toEqual(
+        ORCA_LAYOUT_OWNER_IS_MAIN ? [] : ['browser-1']
+      )
+    }
+  )
 
   // Main repairs only the workspaces it is asked about (sendLayoutApply's owner test); a paired
   // server's workspace keeps today's window repair in every build.
-  it("still gives a paired server's tabless browser record a tab", () => {
+  it.each([
+    ['workspace', {}],
+    ['SSH workspace', { connectionId: 'vm1' }]
+  ])("still gives a paired server's tabless browser record a tab (%s)", (_name, sshTarget) => {
     const store = createTestStore()
     const serverWt = 'repo1::/srv/wt1'
     store.setState({
@@ -120,7 +141,8 @@ describe('hydrateBrowserSession', () => {
           displayName: 'Server repo',
           badgeColor: '#000',
           addedAt: 0,
-          executionHostId: 'runtime:env-1'
+          executionHostId: 'runtime:env-1',
+          ...sshTarget
         }
       ],
       worktreesByRepo: {
