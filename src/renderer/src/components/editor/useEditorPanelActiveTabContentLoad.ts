@@ -1,5 +1,8 @@
-import { useEffect, type MutableRefObject } from 'react'
-import { conflictOverviewView } from '@/store/slices/editor/buffers/editor-buffer-conflict-overview'
+import { useEffect, useMemo, type MutableRefObject } from 'react'
+import {
+  conflictOverviewView,
+  conflictOverviewViewsKey
+} from '@/store/slices/editor/buffers/editor-buffer-conflict-overview'
 import type { OpenFile } from '@/store/slices/editor'
 import { joinPath } from '@/lib/path'
 import { useAppStore } from '@/store'
@@ -58,6 +61,22 @@ export function useEditorPanelActiveTabContentLoad({
     activeFile,
     activeFile ? fileContents[activeFile.id] : undefined,
     isVisible
+  )
+  // Why: an overview file's view can open, close, re-key or rejoin anywhere; reload under its new id.
+  const overviewPaths = useMemo(
+    () =>
+      activeFile?.mode === 'conflict-review' && !selectedConflictReviewFile
+        ? (activeFile.conflictReview?.entries ?? []).map((entry) =>
+            joinPath(activeFile.filePath, entry.path)
+          )
+        : [],
+    [activeFile, selectedConflictReviewFile]
+  )
+  const overviewWorktreeId = activeFile?.worktreeId ?? ''
+  const overviewViewsKey = useAppStore((state) =>
+    overviewPaths.length === 0
+      ? ''
+      : conflictOverviewViewsKey(state, overviewWorktreeId, overviewPaths)
   )
   const needsFileRead = (fileId: string): boolean => {
     const cached = fileContents[fileId]
@@ -143,6 +162,7 @@ export function useEditorPanelActiveTabContentLoad({
     selectedConflictReviewFile?.id,
     isChangesMode,
     isVisible,
-    gitStatusEntries
+    gitStatusEntries,
+    overviewViewsKey
   ])
 }

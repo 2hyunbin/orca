@@ -42,24 +42,35 @@ export function createEditorPanelDraftSelector(
           ])
         )
   let previousDrafts: AppState['editorDrafts'] | null = null
+  let previousOpenFiles: EditorDraftState['openFiles'] | null = null
+  let previousViews: EditorDraftState['editorBufferViews'] | null = null
   let previousSelection = EMPTY_EDITOR_PANEL_DRAFTS
 
   return (state) => {
     // Why: every Zustand write reruns the selector. The slice identity guard
-    // keeps unrelated terminal/status traffic allocation-free.
-    if (previousDrafts === state.editorDrafts) {
+    // keeps unrelated terminal/status traffic allocation-free; overview ids
+    // also move with the tabs and record views they resolve through.
+    if (
+      previousDrafts === state.editorDrafts &&
+      (overviewPaths.length === 0 ||
+        (previousOpenFiles === state.openFiles && previousViews === state.editorBufferViews))
+    ) {
       return previousSelection
     }
     previousDrafts = state.editorDrafts
+    previousOpenFiles = state.openFiles
+    previousViews = state.editorBufferViews
 
     const ids = selectedFileIds(state)
-    const changed = ids.some((fileId) => {
-      const draft = state.editorDrafts[fileId]
-      return (
-        draft !== previousSelection[fileId] ||
-        (draft === undefined && Object.hasOwn(previousSelection, fileId))
-      )
-    })
+    const idSet = new Set(ids)
+    const changed =
+      ids.some((fileId) => {
+        const draft = state.editorDrafts[fileId]
+        return (
+          draft !== previousSelection[fileId] ||
+          (draft === undefined && Object.hasOwn(previousSelection, fileId))
+        )
+      }) || Object.keys(previousSelection).some((fileId) => !idSet.has(fileId))
     if (!changed) {
       return previousSelection
     }

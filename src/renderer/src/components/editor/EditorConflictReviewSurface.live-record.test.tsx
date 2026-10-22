@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StoreApi } from 'zustand'
 import type { AppState } from '@/store'
-import type { OpenFile } from '@/store/slices/editor'
+import type { OpenFile, PendingEditorReveal } from '@/store/slices/editor'
 import type { GitStatusEntry } from '../../../../shared/git-status-types'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import { createEditorStore } from './editor-autosave-controller-test-fixture'
@@ -18,12 +18,16 @@ type MonacoProps = {
   filePath: string
   content: string
   readOnly?: boolean
+  worktreeId?: string
+  passiveMirror?: boolean
+  revealLine?: number
   onContentChange: (content: string) => void
   onSave: (content: string) => void
 }
 
 const storeRef = vi.hoisted((): { current: StoreApi<AppState> | null } => ({ current: null }))
 const monacoMounts = vi.hoisted((): { current: MonacoProps[] } => ({ current: [] }))
+const retries = vi.hoisted((): { current: (() => void)[] } => ({ current: [] }))
 
 vi.mock('@/store', () => {
   const getState = () => storeRef.current!.getState()
@@ -37,6 +41,12 @@ vi.mock('./editor-lazy-views', () => ({
   ImageViewer: () => null,
   MonacoEditor: (props: MonacoProps) => {
     monacoMounts.current.push(props)
+    return null
+  }
+}))
+vi.mock('./EditorFileLoadErrorView', () => ({
+  EditorFileLoadErrorView: ({ onRetry }: { onRetry: () => void }) => {
+    retries.current.push(onRetry)
     return null
   }
 }))
@@ -94,14 +104,29 @@ function setup(): { store: StoreApi<AppState>; view: OpenFile; review: OpenFile 
   return { store, view, review }
 }
 
+type RenderOptions = {
+  loadError?: string
+  pendingEditorReveal?: PendingEditorReveal | null
+  reloadContent?: (file: OpenFile) => void
+}
+
 /** Renders the overview as the panel does: drafts through the panel's draft selector. */
-function render(store: StoreApi<AppState>, review: OpenFile, diskText: string): MonacoProps {
+function render(
+  store: StoreApi<AppState>,
+  review: OpenFile,
+  diskText: string,
+  options: RenderOptions = {}
+): MonacoProps {
   const editBuffers = createEditorPanelDraftSelector(review)(store.getState())
   const viewIds = store.getState().openFiles.map((file) => file.id)
   const fileContents = Object.fromEntries(
-    [...viewIds, PATH].map((id) => [id, { content: diskText, isBinary: false }])
+    [...viewIds, PATH].map((id) => [
+      id,
+      { content: diskText, isBinary: false, loadError: options.loadError }
+    ])
   )
   monacoMounts.current = []
+  retries.current = []
   act(() => {
     root!.render(
       createElement(EditorConflictReviewSurface, {
@@ -111,15 +136,19 @@ function render(store: StoreApi<AppState>, review: OpenFile, diskText: string): 
         editBuffers,
         openFiles: store.getState().openFiles,
         worktreeEntries: [ENTRY],
-        pendingEditorReveal: null,
+        pendingEditorReveal: options.pendingEditorReveal ?? null,
         getConflictNavigation: () => undefined,
         handleContentChangeForFile: (file, content) =>
           store.getState().setEditorDraft(file.id, content),
         handleSaveForFile: async () => true,
-        reloadContent: () => {}
+        reloadContent: options.reloadContent ?? (() => {})
       })
     )
   })
+  if (options.loadError) {
+    expect(retries.current).toHaveLength(1)
+    return monacoMounts.current[0]
+  }
   expect(monacoMounts.current).toHaveLength(1)
   return monacoMounts.current[0]
 }
@@ -201,5 +230,23 @@ describe('conflict-review overview as a live read-only view of the record', () =
     const overview = render(store, review, 'disk')
     expect(overview.fileId).toBe(PATH)
     expect(overview.content).toBe('disk')
+  })
+
+  it("retries a failed read through the borrowed view's own workspace", () => {
+    const { store, view, review } = setup()
+    const reloadContent = vi.fn()
+    render(store, review, 'disk', { loadError: 'denied', reloadContent })
+    retries.current[0]()
+    expect(reloadContent).toHaveBeenCalledWith(view)
+  })
+
+  it("mounts as a passive mirror: the view's workspace, no cursor tracking, no reveals", () => {
+    const { store, view, review } = setup()
+    const overview = render(store, review, 'disk', {
+      pendingEditorReveal: { fileId: view.id, filePath: PATH, line: 9, column: 1, matchLength: 0 }
+    })
+    expect(overview.worktreeId).toBe('wt-1')
+    expect(overview.passiveMirror).toBe(true)
+    expect(overview.revealLine).toBeUndefined()
   })
 })
