@@ -20,10 +20,6 @@ import { structuredWorkerTerminalRefusal } from '../../structured-worker-termina
 import { randomUUID } from 'node:crypto'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 
-export type LiveTerminalPty = ReturnType<
-  OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
->
-
 export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPtyRecordForPaneKey {
   protected abstract bindPtyIncarnationHandle(
     retained: PtyIncarnationHandleRecord,

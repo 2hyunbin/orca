@@ -19,7 +19,7 @@ import type {
   WorkspaceLayout
 } from '../../../../shared/workspace-layout/workspace-layout-model'
 import { collectLayoutLeafIdsInOrder } from '../../../../shared/workspace-layout/terminal-pane-tree'
-import { bindingOf } from '../../pane-start-statuses'
+import { bindingOf } from '../../pane-live-facts'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { getPtyExecutionHost } from '../../../../shared/terminal-execution-host'

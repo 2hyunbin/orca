@@ -7,12 +7,12 @@ import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import { hashMarkdownContent } from '../../shared/mobile-markdown-document'
-import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import type { RuntimeMobileSessionMarkdownTab } from '../../shared/runtime-types'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
 import { FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY } from '../../shared/protocol-version'
 import {
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
+  FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD
 } from '../../shared/file-write-disk-precondition'
 import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
@@ -97,7 +97,8 @@ async function runtimeOnHost(
 
 const CURRENT_SERVER = [
   FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY,
-  FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY
+  FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
+  FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY
 ]
 /** A server from before #30605: it advertises no disk check and serves no `files.writeIfUnchanged`. */
 const PRE_DISK_CHECK_SERVER = [FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY]
@@ -270,6 +271,42 @@ describe("a phone's Markdown tab on a paired server's workspace", () => {
     expect(serverCalls).not.toContain('files.write')
     expect(serverCalls).not.toContain(FILE_WRITE_IF_UNCHANGED_METHOD)
     expect(await readFile(readme, 'utf8')).toBe('# Changed on the server\n')
+  })
+
+  it('saves on a server too old to check the disk when its changed disk already holds the text', async () => {
+    const { desktop, call, serverCalls } = await desktopOnServer('local', PRE_DISK_CHECK_SERVER)
+    const forward = call.getMockImplementation()!
+    call.mockImplementation(async (environmentId, method, params, ...rest) => {
+      if (method === 'status.get') {
+        await writeFile(readme, '# Phone\n')
+      }
+      return forward(environmentId, method, params, ...rest)
+    })
+
+    await expect(
+      desktop.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).resolves.toMatchObject({ content: '# Phone\n', isDirty: false })
+    expect(serverCalls).toEqual(['files.read', 'status.get', 'files.read'])
+  })
+
+  it('sends a phone save straight to a v1 server guard, without reading first', async () => {
+    const { desktop, serverCalls } = await desktopOnServer('local', [
+      FILE_MUTATION_OWNERSHIP_RUNTIME_CAPABILITY,
+      FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY
+    ])
+    await desktop.saveMobileMarkdownTab(
+      `id:${TEST_WORKTREE_ID}`,
+      readme,
+      hashMarkdownContent('# Notes\n'),
+      '# Phone\n'
+    )
+    expect(serverCalls).toEqual(['files.read', 'status.get', 'files.writeIfUnchanged'])
+    expect(await readFile(readme, 'utf8')).toBe('# Phone\n')
   })
 
   it('refuses a save whose server was re-paired after its first read, writing nothing', async () => {
@@ -562,91 +599,79 @@ describe("a phone's Markdown tab with a desktop window attached", () => {
     })
   })
 
-  // L268 (fixed by #31667): with the switch on, main's row merge drops the window's untitled flag.
-  ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
-    'reads an untitled tab read-only and never saves it',
-    async () => {
-      const runtime = runtimeWithWindowTabs([windowTab({ isUntitled: true, isDirty: true })])
-      // The phone lists the workspace before it reads a tab.
-      await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+  it('reads an untitled tab read-only and never saves it', async () => {
+    const runtime = runtimeWithWindowTabs([windowTab({ isUntitled: true, isDirty: true })])
+    // The phone lists the workspace before it reads a tab.
+    await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
 
-      await expect(
-        runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, readme)
-      ).resolves.toMatchObject({
-        content: '# Notes\n',
-        isDirty: true,
-        editable: false,
-        readOnlyReason: 'unsupported_untitled'
-      })
-      await expect(
-        runtime.saveMobileMarkdownTab(
-          `id:${TEST_WORKTREE_ID}`,
-          readme,
-          hashMarkdownContent('# Notes\n'),
-          '# Phone\n'
-        )
-      ).rejects.toThrow('unsupported_untitled')
-      expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
-    }
-  )
-
-  // L268 (fixed by #31667): with the switch on, main's row merge drops the window's untitled flag.
-  ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
-    'never makes the file of an untitled tab that has none on disk',
-    async () => {
-      const untitled = join(root, 'untitled.md')
-      const runtime = runtimeWithWindowTabs(
-        [
-          windowTab({
-            id: untitled,
-            filePath: untitled,
-            relativePath: 'untitled.md',
-            sourceFilePath: untitled,
-            sourceRelativePath: 'untitled.md',
-            isUntitled: true,
-            isDirty: true
-          })
-        ],
-        sessionWithFile(untitled, 'untitled.md')
+    await expect(
+      runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, readme)
+    ).resolves.toMatchObject({
+      content: '# Notes\n',
+      isDirty: true,
+      editable: false,
+      readOnlyReason: 'unsupported_untitled'
+    })
+    await expect(
+      runtime.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
       )
+    ).rejects.toThrow('unsupported_untitled')
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
+  })
 
-      await expect(
-        runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled)
-      ).rejects.toThrow('ENOENT')
-      await expect(
-        runtime.saveMobileMarkdownTab(
-          `id:${TEST_WORKTREE_ID}`,
-          untitled,
-          hashMarkdownContent(''),
-          '# Phone\n'
-        )
-      ).rejects.toThrow('unsupported_untitled')
-      expect(existsSync(untitled)).toBe(false)
-    }
-  )
-  // L268 (fixed by #31667): with the switch on, main's row merge drops the window's untitled flag.
-  ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
-    'keeps an SSH-hosted untitled tab read-only, refusing the save before reaching the host',
-    async () => {
-      const runtime = runtimeWithWindowTabs(
-        [windowTab({ isUntitled: true, isDirty: true })],
-        sessionWithReadme(),
-        'ssh:ssh-1'
+  it('never makes the file of an untitled tab that has none on disk', async () => {
+    const untitled = join(root, 'untitled.md')
+    const runtime = runtimeWithWindowTabs(
+      [
+        windowTab({
+          id: untitled,
+          filePath: untitled,
+          relativePath: 'untitled.md',
+          sourceFilePath: untitled,
+          sourceRelativePath: 'untitled.md',
+          isUntitled: true,
+          isDirty: true
+        })
+      ],
+      sessionWithFile(untitled, 'untitled.md')
+    )
+
+    await expect(runtime.readMobileMarkdownTab(`id:${TEST_WORKTREE_ID}`, untitled)).rejects.toThrow(
+      'ENOENT'
+    )
+    await expect(
+      runtime.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        untitled,
+        hashMarkdownContent(''),
+        '# Phone\n'
       )
+    ).rejects.toThrow('unsupported_untitled')
+    expect(existsSync(untitled)).toBe(false)
+  })
+  it('keeps an SSH-hosted untitled tab read-only, refusing the save before reaching the host', async () => {
+    const runtime = runtimeWithWindowTabs(
+      [windowTab({ isUntitled: true, isDirty: true })],
+      sessionWithReadme(),
+      'ssh:ssh-1'
+    )
 
-      const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
-      expect(listed.tabs.find((tab) => tab.id === readme)).toMatchObject({ isUntitled: true })
-      await expect(
-        runtime.saveMobileMarkdownTab(
-          `id:${TEST_WORKTREE_ID}`,
-          readme,
-          hashMarkdownContent('# Notes\n'),
-          '# Phone\n'
-        )
-      ).rejects.toThrow('unsupported_untitled')
-      expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
-    }
-  )
+    const listed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+    expect(listed.tabs.find((tab) => tab.id === readme)).toMatchObject({ isUntitled: true })
+    await expect(
+      runtime.saveMobileMarkdownTab(
+        `id:${TEST_WORKTREE_ID}`,
+        readme,
+        hashMarkdownContent('# Notes\n'),
+        '# Phone\n'
+      )
+    ).rejects.toThrow('unsupported_untitled')
+    expect(await readFile(readme, 'utf8')).toBe('# Notes\n')
+  })
 })
 
 describe("a phone's Markdown tab with no window, on a desktop's untitled document", () => {

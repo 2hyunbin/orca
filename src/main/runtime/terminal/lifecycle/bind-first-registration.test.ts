@@ -13,7 +13,8 @@ const { TEST_WORKTREE_ID, TEST_WORKTREE_PATH } =
   await import('../../orca-runtime-test-fixtures.spec')
 const { surfaceRuntime } = await import('../surface/terminal-surface-replies.test-fixture')
 const { spawnInAdmittedPane } = await import('../../runtime-pane-admission')
-const { bindingOf, PaneStartStatuses } = await import('../../pane-start-statuses')
+const { PaneStartStatuses } = await import('../../pane-start-statuses')
+const { bindingOf } = await import('../../pane-live-facts')
 
 type SpawnArgs = { worktreeId?: string; tabId?: string; leafId?: string }
 

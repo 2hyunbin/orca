@@ -1,7 +1,7 @@
 import type { RuntimeHeadlessTabProperties as HeadlessTabPropertiesMethods } from './headless-tab-properties'
 import type { RuntimeHeadlessTabGroups as HeadlessTabGroupsMethods } from './headless-tab-group-moves'
 import type { OrcaRuntimeWithPersistHeadlessTerminalTitle as PersistHeadlessTerminalTitleMethods } from '../workspaces/workspace-file-session-targets'
-import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
+import { OrcaRuntimeWithMainLayoutTabMoves } from './main-layout-session-tab-move'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type {
   RuntimeMobileSessionTabMove,
@@ -19,7 +19,7 @@ import type { RuntimeTerminalRename } from '../../../shared/runtime-terminal-con
 import type { RuntimeSessionTabCloseReason } from '../../../shared/runtime-session-contracts'
 import { liveTerminalsOfTab } from '../session-lifecycle/close/closed-tab-terminal'
 
-export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithMainLayoutRenames {
+export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithMainLayoutTabMoves {
   protected abstract applyHeadlessSessionTabPropsToSnapshot(
     ...args: Parameters<HeadlessTabPropertiesMethods['applyHeadlessSessionTabPropsToSnapshot']>
   ): ReturnType<HeadlessTabPropertiesMethods['applyHeadlessSessionTabPropsToSnapshot']>
@@ -175,6 +175,10 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
     const snapshot = this.mobileSessionTabsByWorktree.get(worktreeId)
     if (!snapshot) {
       throw new Error('tab_not_found')
+    }
+    const movedInMain = await this.moveTabInMainLayout(worktreeId, snapshot, move)
+    if (movedInMain) {
+      return movedInMain
     }
     if (!this.notifier?.moveSessionTab) {
       return this.moveHeadlessMobileSessionTab(worktreeId, snapshot, move)
