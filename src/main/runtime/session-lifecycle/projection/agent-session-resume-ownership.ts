@@ -1,9 +1,10 @@
 // Who may resume a recorded agent conversation into a pane: the ownership checks and the in-flight
 // claim shared by a pane opening over its own record and a targeted resume into a fresh pane.
 
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { findPaneSleepingRecord } from './pane-sleeping-record'
 import { OrcaRuntimeWithApplyMobileSessionTabNavigation } from './apply-mobile-session-tab-navigation'
 import type { RuntimeMobileSessionTerminalTab } from '../../../../shared/runtime-types'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {
   agentProviderSessionsEqual,
   type SleepingAgentSessionRecord
@@ -21,7 +22,6 @@ import {
   type AgentSessionResumeHold,
   type ResumedAgentSession
 } from './agent-session-resume-claims'
-import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
 /** A pane's resume launch, holding the conversation until the pane's spawn binds or releases it. */
 export type PaneResumeStartup = MobileTerminalResumeCommand & {
@@ -69,11 +69,14 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     // Why: an originless record predates capture origins and carries no proof of which pane or
     // host wrote it, so it is left (record kept) for the window's legacy cleanup (#29303).
     // A host with no window right now has no window wake, so the pane owns the record and claims it.
+    // Switch point: a layout-owner window never wakes a pane itself, so main owns every wake.
     return (
       record.origin === 'live' ||
       record.origin === 'quit' ||
       (record.origin === 'worktree-sleep' &&
-        (record.state === 'done' || !this.getAvailableAuthoritativeWindow()))
+        (record.state === 'done' ||
+          ORCA_LAYOUT_OWNER_IS_MAIN ||
+          !this.getAvailableAuthoritativeWindow()))
     )
   }
 
@@ -94,9 +97,11 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     // Why: nothing here spends the record, so a session another pane also records could be
     // resumed twice (two writers on one transcript), as could one already live in another pane.
     const records = this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey
-    const sharedWithAnotherPane = Object.values(records ?? {}).some(
-      (other) =>
+    const aliases = this.findPaneSleepingAgentRecord(worktreeId, tab)?.aliases ?? []
+    const sharedWithAnotherPane = Object.entries(records ?? {}).some(
+      ([paneKey, other]) =>
         other !== record &&
+        !aliases.includes(paneKey) &&
         other.agent === record.agent &&
         agentProviderSessionsEqual(record.agent, other.providerSession, record.providerSession)
     )
@@ -148,7 +153,8 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     return claimWindowWakeRecordForPane(
       (edit) => this.commitWorkspaceSessionEdit(hostId, edit),
       // Why: a window that attached during the caller's awaits now owns this record's wake.
-      () => Boolean(this.getAvailableAuthoritativeWindow()),
+      // Switch point: a layout-owner window never starts a terminal, so main owns every wake.
+      () => !ORCA_LAYOUT_OWNER_IS_MAIN && Boolean(this.getAvailableAuthoritativeWindow()),
       record
     )
   }
@@ -212,10 +218,10 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     worktreeId: string,
     tab: RuntimeMobileSessionTerminalTab
   ): SleepingAgentSessionRecord | null {
-    const record =
-      this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey?.[
-        makePaneKey(tab.parentTabId, tab.leafId)
-      ]
-    return record && worktreeIdsEqual(record.worktreeId, worktreeId) ? record : null
+    return this.findPaneSleepingAgentRecord(worktreeId, tab)?.record ?? null
+  }
+
+  private findPaneSleepingAgentRecord(worktreeId: string, tab: RuntimeMobileSessionTerminalTab) {
+    return findPaneSleepingRecord(this.getWorkspaceSessionForWorktree(worktreeId), worktreeId, tab)
   }
 }
