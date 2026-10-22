@@ -62,8 +62,8 @@ function RunHeadline({ run }: { run: SkillUpdateRun }): React.JSX.Element | null
         <CheckCircle2 className="size-4 text-status-success" />
         {leftAloneCount > 0
           ? translate(
-              'auto.components.skills.SkillFreshnessUpdateDialog.updatedNotUpdated',
-              '{{value0}} · {{value1}} not updated',
+              'auto.components.skills.SkillFreshnessUpdateDialog.updatedSkipped',
+              '{{value0}} · {{value1}} skipped',
               { value0: updated, value1: leftAloneCount }
             )
           : updated}
@@ -299,6 +299,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
           <SkillUpdateRows
             skills={shownSummary.skills}
             unforcedPlan={state.plan}
+            hasWork={shownSummary.hasWork}
             phase={phase}
             outcomes={runOutcomes(run)}
             replace={replace}

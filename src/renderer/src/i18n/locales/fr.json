@@ -4039,9 +4039,9 @@
             "successOne": "{{value0}} mis à jour",
             "successMany": "Skills de {{value0}} mis à jour",
             "successAria": "Skills mis à jour. Cliquez pour ouvrir les détails.",
-            "attentionAria": "Certains skills n’ont pas été mis à jour. Cliquez pour voir les détails.",
+            "attentionAria": "Certaines mises à jour de skills ont été ignorées. Cliquez pour ouvrir les détails.",
             "attentionLabel": "Skills à vérifier",
-            "attentionTooltip": "Certains skills n’ont pas été mis à jour — cliquez pour voir les détails"
+            "attentionTooltip": "Certaines mises à jour de skills ont été ignorées — cliquez pour voir les détails"
           },
           "UpdateStatusSegment": {
             "5cd13105a3": "Échec de la mise à jour. Cliquez pour déplier.",
@@ -4784,7 +4784,6 @@
           "updateOne": "1 mise à jour disponible",
           "updateMany": "{{value0}} mises à jour disponibles",
           "success": "Tous les skills Orca installés sont à jour.",
-          "attention": "Tout le reste est à jour",
           "progressAria": "Mise à jour des skills",
           "errorTitle": "La mise à jour ne s'est pas terminée",
           "updating": "Mise à jour…",
@@ -4799,9 +4798,12 @@
           "showFolders": "Afficher les dossiers",
           "upToDateMany": "{{value0}} skills sont à jour.",
           "upToDateOne": "{{value0}} est à jour.",
-          "updatedNotUpdated": "{{value0}} · {{value1}} non mis à jour",
           "updatedMany": "{{value0}} skills mis à jour",
-          "updatedOne": "1 skill mis à jour"
+          "updatedOne": "1 skill mis à jour",
+          "updatedSkipped": "{{value0}} · {{value1}} ignorées",
+          "currentOne": "1 skill est à jour",
+          "currentMany": "{{value0}} skills sont à jour",
+          "noUpdates": "Aucune mise à jour disponible"
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {
@@ -5277,29 +5279,32 @@
           "retainedSource": "Le skill lui-même reste à {{path}}."
         },
         "skillPlanOpCopy": {
-          "busy": "une autre installation de skill se termine encore ici",
-          "edited": "vous avez modifié cette copie",
+          "busy": "Une autre installation est toujours en cours",
+          "edited": "Skill modifié en dehors d’Orca",
           "install": "Installer",
           "installFor": "Installer pour {{value0}}",
           "installed": "Installé",
           "keep": "Aucun changement",
-          "notUpdated": "Non mis à jour : {{value0}}",
-          "leftAsIs": "cette copie a été conservée telle quelle",
+          "leftAsIs": "Cette copie a été conservée telle quelle",
           "link": "Lier",
           "linked": "Lié",
           "needsAttention": "Demande votre attention",
-          "other": "un autre skill utilise déjà ce nom",
+          "other": "Un autre skill utilise ce nom",
           "replace": "Remplacer",
           "replacedWithBackup": "Remplacé · Votre copie a été sauvegardée",
-          "sharedNotCurrent": "la copie partagée utilisée par ce dossier n’est pas celle d’Orca",
+          "sharedNotCurrent": "La copie partagée n’est pas celle d’Orca",
           "unwritable": "Orca ne peut pas écrire dans ce dossier",
-          "unreadable": "Orca ne peut pas lire tous les fichiers de cette copie",
+          "unreadable": "Orca ne peut pas lire tous les fichiers",
           "update": "Mettre à jour",
           "updated": "Mis à jour",
           "write": "Installer",
           "keepLink": "Lien, aucun changement",
           "repair": "Réparer",
-          "sharedFolder": "Dossier partagé"
+          "sharedFolder": "Dossier partagé",
+          "updateSkipped": "Mise à jour ignorée : {{value0}}",
+          "updateAvailable": "Mise à jour disponible",
+          "repairAvailable": "Réparation disponible",
+          "installAvailable": "Installation disponible"
         }
       },
       "sidebar": {

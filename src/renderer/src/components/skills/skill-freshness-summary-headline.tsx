@@ -58,13 +58,25 @@ export function SummaryHeadline({ plan }: { plan: BundledSkillPlan | null }): Re
   if (
     summary.skills.some((skill) => skill.locations.some((location) => location.state === 'leave'))
   ) {
+    const current = summary.skills.filter((skill) => skill.upToDate).length
     return (
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
-        {translate(
-          'auto.components.skills.SkillFreshnessUpdateDialog.attention',
-          'Everything else is up to date'
-        )}
+        {current > 0 ? <CheckCircle2 className="size-4 text-status-success" /> : null}
+        {current === 0
+          ? translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.noUpdates',
+              'No updates available'
+            )
+          : current === 1
+            ? translate(
+                'auto.components.skills.SkillFreshnessUpdateDialog.currentOne',
+                '1 skill is up to date'
+              )
+            : translate(
+                'auto.components.skills.SkillFreshnessUpdateDialog.currentMany',
+                '{{value0}} skills are up to date',
+                { value0: current }
+              )}
       </div>
     )
   }

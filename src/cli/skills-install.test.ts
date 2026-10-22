@@ -168,7 +168,7 @@ describe('orca skills install/update', () => {
   it('never installs a skill on update; install adds it', async () => {
     const text = await run(['update', '--skill', NAME, '--agent', 'claude'])
 
-    expect(text).toContain(`${NAME}: not installed, so not updated.`)
+    expect(text).toContain(`${NAME}: not installed, so skipped.`)
     expect(await lstat(paths.shared).catch(() => null)).toBeNull()
 
     await run(['install', '--skill', NAME, '--agent', 'claude'])
@@ -180,9 +180,9 @@ describe('orca skills install/update', () => {
     await writeCopy(paths.shared, EDITED_TEXT)
 
     const left = await run(['update', '--skill', NAME, '--agent', 'universal'])
-    expect(left).toContain('Not updated: you edited this copy')
-    expect(left).toContain('1 not updated: you edited this copy')
-    expect(left).toContain('Rerun with --force to replace a copy that was not updated')
+    expect(left).toContain('Update skipped: Skill edited outside Orca')
+    expect(left).toContain('1 skipped: Skill edited outside Orca')
+    expect(left).toContain('Rerun with --force to replace a copy that was skipped')
     expect(left).not.toContain('left alone')
     expect(process.exitCode).toBe(0)
     expect(await skillText(paths.shared)).toBe(EDITED_TEXT)

@@ -4202,9 +4202,9 @@
             "successOne": "{{value0}} を更新しました",
             "successMany": "{{value0}} 件のスキルを更新しました",
             "successAria": "スキルを更新しました。クリックすると詳細を開きます。",
-            "attentionAria": "一部のスキルは更新されませんでした。クリックして詳細を開きます。",
+            "attentionAria": "一部のスキルの更新はスキップされました。クリックして詳細を開きます。",
             "attentionLabel": "スキルに対応が必要",
-            "attentionTooltip": "一部のスキルは更新されませんでした — クリックして詳細を表示"
+            "attentionTooltip": "一部のスキルの更新はスキップされました — クリックして詳細を表示"
           },
           "RuntimeHostStatusRow": {
             "previous_connection_closed": "以前の接続が閉じられました",
@@ -4761,7 +4761,6 @@
           "updateOne": "1 件の更新があります",
           "updateMany": "{{value0}} 件の更新があります",
           "success": "インストール済みの Orca スキルはすべて最新です。",
-          "attention": "それ以外はすべて最新です",
           "checkNow": "再確認",
           "close": "閉じる",
           "progressAria": "スキルを更新しています",
@@ -4776,9 +4775,12 @@
           "showFolders": "フォルダーを表示",
           "upToDateMany": "{{value0}} 個のスキルは最新です。",
           "upToDateOne": "{{value0}} は最新です。",
-          "updatedNotUpdated": "{{value0}} · {{value1}} 件は未更新",
           "updatedMany": "{{value0}} 個のスキルを更新しました",
-          "updatedOne": "1 個のスキルを更新しました"
+          "updatedOne": "1 個のスキルを更新しました",
+          "updatedSkipped": "{{value0}} · {{value1}} 件をスキップ",
+          "currentOne": "1 個のスキルは最新です",
+          "currentMany": "{{value0}} 個のスキルは最新です",
+          "noUpdates": "利用可能な更新はありません"
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "更新があります",
@@ -5169,29 +5171,32 @@
           "retainedSource": "スキル自体は{{path}}のままです。"
         },
         "skillPlanOpCopy": {
-          "busy": "別のスキルのインストールがまだここで完了していないため",
-          "edited": "このコピーを編集したため",
+          "busy": "別のインストールがまだ実行中です",
+          "edited": "スキルが Orca の外部で編集されています",
           "install": "インストール",
           "installFor": "{{value0}} にインストール",
           "installed": "インストール済み",
           "keep": "変更なし",
-          "notUpdated": "未更新: {{value0}}",
           "leftAsIs": "このコピーはそのまま保持されました",
           "link": "リンク",
           "linked": "リンク済み",
           "needsAttention": "対応が必要",
-          "other": "別のスキルがすでにこの名前を使っているため",
+          "other": "別のスキルがこの名前を使用しています",
           "replace": "置き換え",
           "replacedWithBackup": "置き換えました · 元のコピーはバックアップとして保存されました",
-          "sharedNotCurrent": "このフォルダーが使う共有コピーは Orca のものではないため",
+          "sharedNotCurrent": "共有コピーは Orca のものではありません",
           "unwritable": "Orca はこのフォルダーに書き込めません",
-          "unreadable": "Orca はこのコピーの一部のファイルを読み取れません",
+          "unreadable": "Orca はすべてのファイルを読み取れません",
           "update": "更新",
           "updated": "更新済み",
           "write": "インストール",
           "keepLink": "リンク、変更なし",
           "repair": "修復",
-          "sharedFolder": "共有フォルダー"
+          "sharedFolder": "共有フォルダー",
+          "updateSkipped": "更新をスキップ: {{value0}}",
+          "updateAvailable": "更新があります",
+          "repairAvailable": "修復できます",
+          "installAvailable": "インストールできます"
         }
       },
       "sidebar": {

@@ -20,16 +20,16 @@ export function leaveReasonText(reason: string | null | undefined): string {
   if (!reason || !isBundledSkillLeaveReason(reason)) {
     return translate(
       'auto.components.skills.skillPlanOpCopy.leftAsIs',
-      'this copy was kept as it is'
+      'This copy was kept as it is'
     )
   }
   switch (reason) {
     case 'edited':
-      return translate('auto.components.skills.skillPlanOpCopy.edited', 'you edited this copy')
+      return translate('auto.components.skills.skillPlanOpCopy.edited', 'Skill edited outside Orca')
     case 'other':
       return translate(
         'auto.components.skills.skillPlanOpCopy.other',
-        'a different skill already uses this name'
+        'A different skill uses this name'
       )
     case 'unwritable':
       return translate(
@@ -39,17 +39,17 @@ export function leaveReasonText(reason: string | null | undefined): string {
     case 'unreadable':
       return translate(
         'auto.components.skills.skillPlanOpCopy.unreadable',
-        "Orca can't read every file in this copy"
+        "Orca can't read every file"
       )
     case 'busy':
       return translate(
         'auto.components.skills.skillPlanOpCopy.busy',
-        'another skill install is still finishing here'
+        'Another install is still running'
       )
     case 'shared-not-current':
       return translate(
         'auto.components.skills.skillPlanOpCopy.sharedNotCurrent',
-        'the shared copy this folder uses is not Orca’s'
+        "The shared copy isn't Orca's"
       )
   }
 }
@@ -74,9 +74,13 @@ export function locationStateText(location: BundledSkillLocation): string {
     'keep-link': () =>
       translate('auto.components.skills.skillPlanOpCopy.keepLink', 'Link, no change'),
     leave: () =>
-      translate('auto.components.skills.skillPlanOpCopy.notUpdated', 'Not updated: {{value0}}', {
-        value0: leaveReasonText(location.reason)
-      }),
+      translate(
+        'auto.components.skills.skillPlanOpCopy.updateSkipped',
+        'Update skipped: {{value0}}',
+        {
+          value0: leaveReasonText(location.reason)
+        }
+      ),
     unknown: () =>
       translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
   }
@@ -87,11 +91,14 @@ export function locationStateText(location: BundledSkillLocation): string {
 export function skillPlanHeadline(state: BundledSkillPlanState): string | null {
   switch (state) {
     case 'update':
-      return translate('auto.components.skills.skillPlanOpCopy.update', 'Update')
+      return translate('auto.components.skills.skillPlanOpCopy.updateAvailable', 'Update available')
     case 'repair':
-      return translate('auto.components.skills.skillPlanOpCopy.repair', 'Repair')
+      return translate('auto.components.skills.skillPlanOpCopy.repairAvailable', 'Repair available')
     case 'install':
-      return translate('auto.components.skills.skillPlanOpCopy.write', 'Install')
+      return translate(
+        'auto.components.skills.skillPlanOpCopy.installAvailable',
+        'Install available'
+      )
     case 'attention':
     case 'current':
       return null

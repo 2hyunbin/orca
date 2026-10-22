@@ -4202,9 +4202,9 @@
             "successOne": "Updated {{value0}}",
             "successMany": "Updated {{value0}} skills",
             "successAria": "Skills updated. Click to open details.",
-            "attentionAria": "일부 스킬이 업데이트되지 않았습니다. 클릭하여 세부 정보를 엽니다.",
+            "attentionAria": "일부 스킬 업데이트를 건너뛰었습니다. 클릭하여 세부 정보를 여세요.",
             "attentionLabel": "스킬 확인 필요",
-            "attentionTooltip": "일부 스킬이 업데이트되지 않았습니다 — 클릭하여 세부 정보 보기"
+            "attentionTooltip": "일부 스킬 업데이트를 건너뛰었습니다 — 클릭하여 세부 정보 보기"
           },
           "RuntimeHostStatusRow": {
             "previous_connection_closed": "이전 연결이 종료되었습니다.",
@@ -4761,7 +4761,6 @@
           "updateOne": "스킬 1개를 안전하게 업데이트할 수 있습니다",
           "updateMany": "스킬 {{value0}}개를 안전하게 업데이트할 수 있습니다",
           "success": "설치된 Orca 스킬이 모두 최신 상태입니다.",
-          "attention": "나머지는 모두 최신 상태입니다",
           "checkNow": "지금 확인",
           "close": "닫기",
           "progressAria": "Updating skills",
@@ -4776,9 +4775,12 @@
           "showFolders": "폴더 보기",
           "upToDateMany": "스킬 {{value0}}개가 최신 상태입니다.",
           "upToDateOne": "{{value0}}은(는) 최신 상태입니다.",
-          "updatedNotUpdated": "{{value0}} · {{value1}}개 업데이트 안 됨",
           "updatedMany": "스킬 {{value0}}개를 업데이트했습니다",
-          "updatedOne": "스킬 1개를 업데이트했습니다"
+          "updatedOne": "스킬 1개를 업데이트했습니다",
+          "updatedSkipped": "{{value0}} · {{value1}}개 건너뜀",
+          "currentOne": "스킬 1개가 최신 상태입니다",
+          "currentMany": "스킬 {{value0}}개가 최신 상태입니다",
+          "noUpdates": "사용 가능한 업데이트가 없습니다"
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "업데이트 가능",
@@ -5169,29 +5171,32 @@
           "retainedSource": "스킬 자체는 {{path}}에 유지됩니다."
         },
         "skillPlanOpCopy": {
-          "busy": "다른 스킬 설치가 아직 이곳에서 진행 중입니다",
-          "edited": "이 사본을 수정했습니다",
+          "busy": "다른 설치가 아직 진행 중입니다",
+          "edited": "Orca 외부에서 스킬이 수정되었습니다",
           "install": "설치",
           "installFor": "{{value0}}에 설치",
           "installed": "설치됨",
           "keep": "변경 없음",
-          "notUpdated": "업데이트 안 됨: {{value0}}",
           "leftAsIs": "이 사본은 원래 상태로 유지되었습니다",
           "link": "연결",
           "linked": "연결됨",
           "needsAttention": "확인 필요",
-          "other": "다른 스킬이 이미 이 이름을 사용합니다",
+          "other": "다른 스킬이 이 이름을 사용합니다",
           "replace": "교체",
           "replacedWithBackup": "교체됨 · 기존 사본이 백업으로 저장되었습니다",
-          "sharedNotCurrent": "이 폴더가 사용하는 공유 사본은 Orca의 것이 아닙니다",
+          "sharedNotCurrent": "공유 사본이 Orca의 것이 아닙니다",
           "unwritable": "Orca가 이 폴더에 쓸 수 없습니다",
-          "unreadable": "Orca가 이 사본의 일부 파일을 읽을 수 없습니다",
+          "unreadable": "Orca가 모든 파일을 읽을 수 없습니다",
           "update": "업데이트",
           "updated": "업데이트됨",
           "write": "설치",
           "keepLink": "링크, 변경 없음",
           "repair": "복구",
-          "sharedFolder": "공유 폴더"
+          "sharedFolder": "공유 폴더",
+          "updateSkipped": "업데이트 건너뜀: {{value0}}",
+          "updateAvailable": "업데이트 가능",
+          "repairAvailable": "복구 가능",
+          "installAvailable": "설치 가능"
         }
       },
       "sidebar": {
