@@ -2,15 +2,18 @@ import { randomUUID } from 'node:crypto'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { AgentLaunchWorkspaceFactory } from './agent-launch-surface-factories'
+import type { readAgentLaunchModeSettings } from './agent-launch-mode'
 
 export type InitialSurfaceLaunch = NonNullable<
   RuntimeMobileSessionTabsResult['initialSurfaceLaunch']
 >
 
-const liveLaunches = new WeakMap<object, Map<string, InitialSurfaceLaunch>>()
+type CreatedWorkspaceLaunchOwner = Parameters<typeof readAgentLaunchModeSettings>[0]
+
+const liveLaunches = new WeakMap<CreatedWorkspaceLaunchOwner, Map<string, InitialSurfaceLaunch>>()
 
 export function beginCreatedWorkspaceLaunch(
-  runtime: object,
+  runtime: CreatedWorkspaceLaunchOwner,
   agent: TuiAgent
 ): {
   onWorkspaceCreated: (worktreeId: string) => void
@@ -47,7 +50,7 @@ export function beginCreatedWorkspaceLaunch(
 }
 
 export function readCreatedWorkspaceLaunch(
-  runtime: object,
+  runtime: CreatedWorkspaceLaunchOwner,
   worktreeId: string
 ): InitialSurfaceLaunch | undefined {
   return liveLaunches.get(runtime)?.get(worktreeId)
@@ -65,7 +68,7 @@ export async function recoverCreatedWorkspace(
 }
 
 export function initialChatSelection<T extends { workspaceId: string; activate: boolean }>(
-  runtime: object,
+  runtime: CreatedWorkspaceLaunchOwner,
   input: T,
   snapshots: ReadonlyMap<string, Pick<RuntimeMobileSessionTabsResult, 'tabs' | 'activeTabId'>>
 ): T {
