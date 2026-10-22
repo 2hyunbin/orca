@@ -155,7 +155,11 @@ function createHarness() {
     spawn,
     write: () => true,
     kill: vi.fn(() => true),
-    stopAndWait: vi.fn(async () => true),
+    // As the PTY host's stop: a confirmed stop has delivered the terminal's exit first.
+    stopAndWait: vi.fn(async (ptyId: string) => {
+      runtime.onPtyExit(ptyId, 0)
+      return true
+    }),
     listProcesses: vi.fn(async () => []),
     getForegroundProcess: async () => null
   } as never)

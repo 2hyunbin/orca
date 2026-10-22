@@ -17,6 +17,10 @@ const SOURCE_LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const SOURCE_PTY_ID = 'pty-source'
 const SPLIT_PTY_ID = 'pty-split'
 const SPLIT_INCARNATION_ID = 'pty-split-inc'
+// Switch-on, main stamps the source's pane with its terminal's incarnation, so they start equal.
+const SOURCE_STAMPED_BEFORE = ORCA_LAYOUT_OWNER_IS_MAIN
+  ? { sourceIncarnationId: 'persisted-before' }
+  : {}
 // Switch-on, a source main's layout no longer holds has no pane, so its handle is stale first.
 const UNOWNED_SOURCE_ERROR = ORCA_LAYOUT_OWNER_IS_MAIN
   ? 'terminal_handle_stale'
@@ -507,7 +511,8 @@ describe('remote runtime terminal split authority', () => {
     const harness = createHarness(true, {
       deferSpawn: true,
       includePairedSnapshot: false,
-      stopAndWaitResult: true
+      stopAndWaitResult: true,
+      ...SOURCE_STAMPED_BEFORE
     })
     harness.replacePersistedSourceIncarnation('persisted-before')
 
@@ -539,7 +544,8 @@ describe('remote runtime terminal split authority', () => {
     const harness = createHarness(true, {
       deferSpawn: true,
       includePairedSnapshot: false,
-      stopAndWaitResult: false
+      stopAndWaitResult: false,
+      ...SOURCE_STAMPED_BEFORE
     })
     harness.kill.mockImplementation(() => {
       throw new Error('kill failed')

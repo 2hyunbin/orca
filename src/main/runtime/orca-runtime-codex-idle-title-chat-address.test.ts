@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from './orca-runtime'
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { committingSpawn } from './bind-first-pane.test-fixture'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -52,11 +54,18 @@ async function codexPaneAfterOutput(
   /** The host's verdict when a title drops the agent marker, as the hook server reports it. */
   presence: 'live' | 'exited' = 'live'
 ): Promise<unknown> {
-  const runtime = new OrcaRuntimeService(null, undefined, {
-    getAgentStatusSnapshot: () => rows,
-    getAgentProviderSessionRowsForPane: () => rows,
-    checkHookAgentPresence: async () => presence
-  })
+  // Switch-on, main binds the pane in its layout before the terminal registers, so it needs a store.
+  const runtime = new OrcaRuntimeService(
+    ORCA_LAYOUT_OWNER_IS_MAIN
+      ? ({ getSettings: () => ({}), getRepos: () => [], getRepo: () => undefined } as never)
+      : null,
+    undefined,
+    {
+      getAgentStatusSnapshot: () => rows,
+      getAgentProviderSessionRowsForPane: () => rows,
+      checkHookAgentPresence: async () => presence
+    }
+  )
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: OrcaRuntimeService defines this protected method; the spy only stubs workspace resolution.
   const internals = runtime as unknown as {
     resolveTerminalWorkspaceLaunchScope: (selector: string) => Promise<unknown>
@@ -69,7 +78,8 @@ async function codexPaneAfterOutput(
     folderWorkspace: null
   })
   runtime.setPtyController({
-    spawn: vi.fn().mockResolvedValue({ id: PTY_ID }),
+    // As the PTY host's spawn commit: the pane is bound before its terminal registers.
+    spawn: vi.fn(committingSpawn(runtime, async () => ({ id: PTY_ID }))),
     write: () => true,
     kill: () => true,
     getForegroundProcess: async () => null
