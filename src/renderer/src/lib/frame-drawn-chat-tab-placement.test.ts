@@ -87,9 +87,12 @@ describe('a chat opened in a frame-drawn server workspace (L270)', () => {
     })
   })
 
-  it('sends no place while the server takes no layout intents for the workspace', async () => {
+  it('names the group alone while the server takes no layout intents for the workspace', async () => {
     mocks.routed = false
-    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toBe(intent.params)
+    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toEqual({
+      ...params,
+      tabPlacement: { groupId: 'g-2' }
+    })
   })
 
   it('names the group alone when no server tab comes before the chat', async () => {

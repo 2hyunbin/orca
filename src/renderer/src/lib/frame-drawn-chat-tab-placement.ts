@@ -46,13 +46,16 @@ function chatTabPlacement(
   const group = useAppStore
     .getState()
     .groupsByWorktree[worktreeId]?.find((entry) => entry.tabOrder.includes(tabId))
-  if (!route || !group) {
+  if (!group) {
     return undefined
   }
-  const afterTabId = group.tabOrder
-    .slice(0, group.tabOrder.indexOf(tabId))
-    .map((id) => route.serverTabId(id))
-    .findLast((id) => id !== null)
+  // No route while a reconnected stream awaits its snapshot: the group alone (frames keep its id).
+  const afterTabId = route
+    ? group.tabOrder
+        .slice(0, group.tabOrder.indexOf(tabId))
+        .map((id) => route.serverTabId(id))
+        .findLast((id) => id !== null)
+    : undefined
   return { groupId: group.id, ...(afterTabId ? { afterTabId } : {}) }
 }
 
