@@ -69,6 +69,8 @@ export type WslMoveDriverDeps = {
   readCatalog: () => WslMoveCatalogRows
   /** Null when the distro has no connected host. */
   connectHost: (distro: string) => Promise<WslMoveHost | null>
+  /** From the distro registrations: false only when it is proven gone; null when unreadable. */
+  isDistroRegistered: (distro: string) => Promise<boolean | null>
   exportManifest: WslMoveManifestExporter
   /** Busy, working, automation and dispatch facts for the scope, from their owning stores. */
   gateInputs: (scope: WslMoveTerminalScope) => Promise<WslMoveGateInputs>

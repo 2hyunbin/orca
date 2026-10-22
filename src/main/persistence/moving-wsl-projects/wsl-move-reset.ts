@@ -41,7 +41,10 @@ export function assertWslMoveCommitRequestAllowed(cutover: Pick<WslMoveCutover, 
 }
 
 export type WslMoveResetResult =
-  | { outcome: 'reset'; evidence: 'no-record' | 'commit-never-requested' | 'catalog-absent' }
+  | {
+      outcome: 'reset'
+      evidence: 'no-record' | 'commit-never-requested' | 'catalog-absent' | 'distro-unregistered'
+    }
   | { outcome: 'committed'; cutover: WslMoveCutover }
   | { outcome: 'unverifiable'; reason: string }
 
@@ -49,6 +52,11 @@ export type WslMoveResetContext = {
   userDataPath: string
   /** The WSL host's catalog; null while it is unreachable. */
   destination: OrcadMigrationDestinationCatalog | null
+  /**
+   * The distro is proven unregistered: its disk, and any commit on it, is gone. A rename looks the
+   * same by name; then the renamed host keeps a copy and the desktop gets its rows back (R38).
+   */
+  destinationUnregistered?: boolean
   now?: () => Date
 }
 
@@ -72,7 +80,7 @@ export async function resetWslMoveToZero(
   }
   const commitMayExist = cutover.phase === WSL_MOVE_COMMIT_REQUEST_PHASE
   const release = (
-    evidence: 'commit-never-requested' | 'catalog-absent',
+    evidence: 'commit-never-requested' | 'catalog-absent' | 'distro-unregistered',
     hostConfirmedAbsent = false
   ): WslMoveResetResult => {
     if (!hostConfirmedAbsent && phaseIndex(cutover.phase) >= STAGE_MAY_EXIST_FROM) {
@@ -82,6 +90,9 @@ export async function resetWslMoveToZero(
     return { outcome: 'reset', evidence }
   }
   if (!context.destination) {
+    if (context.destinationUnregistered) {
+      return release('distro-unregistered', true)
+    }
     return commitMayExist
       ? { outcome: 'unverifiable', reason: 'destination_unreachable' }
       : release('commit-never-requested')
@@ -192,7 +203,9 @@ export type WslMoveStartupRecovery = {
  */
 export async function recoverInterruptedWslMoves(
   userDataPath: string,
-  warn: (message: string) => void = (message) => console.warn(message)
+  warn: (message: string) => void = (message) => console.warn(message),
+  /** Asked only for a move that may have committed; one whose distro is gone resets too. */
+  isDistroRegistered?: (distro: string) => Promise<boolean | null>
 ): Promise<WslMoveStartupRecovery> {
   const result: WslMoveStartupRecovery = { reset: [], waitingForHost: [] }
   if (!wslHostsGateOpen()) {
@@ -210,8 +223,12 @@ export async function recoverInterruptedWslMoves(
   }
   for (const cutover of inFlight) {
     try {
+      const destinationUnregistered =
+        cutover.phase === WSL_MOVE_COMMIT_REQUEST_PHASE && isDistroRegistered
+          ? (await isDistroRegistered(cutover.manifest.source.distro).catch(() => null)) === false
+          : false
       const outcome = await resetWslMoveToZero(
-        { userDataPath, destination: null },
+        { userDataPath, destination: null, destinationUnregistered },
         cutover.migrationId
       )
       if (outcome.outcome === 'reset') {

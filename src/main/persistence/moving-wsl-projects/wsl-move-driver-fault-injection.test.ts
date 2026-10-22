@@ -6,36 +6,22 @@
  * back at zero or fully moved, never in between; a second restart changes nothing; and a move
  * reset to zero can be run again from scratch.
  */
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../../shared/wsl-host-internal-gate'
-import { wslMoveJournalKey } from '../../../shared/wsl-move/wsl-move-cutover'
-import { createStore, testState } from '../../persistence-test-harness'
-import type { Store } from '../loading-store/store'
+import { testState } from '../../persistence-test-harness'
 import {
-  createWslMoveWorld,
-  type WslMoveWorld
-} from '../__fixtures__/wsl-mover/wsl-move-driver-world'
-import {
-  createWslMoveKillSwitch,
-  createWslMoveStoreHost,
-  passWslMoveKillPoint,
-  type WslMoveKillSwitch
-} from '../__fixtures__/wsl-mover/wsl-move-store-host'
+  createWslMoveKillRig,
+  removeWslMoveRigDirs,
+  restartWslMoveRig,
+  WSL_MOVE_RIG_REQUEST as request,
+  wslMoveRigOutcome as outcomeOf,
+  wslMoveRigRetentionStore as retentionStore,
+  type WslMoveRig,
+  type WslMoveRigOutcome as Outcome
+} from '../__fixtures__/wsl-mover/wsl-move-kill-rig'
 import type * as Journal from './wsl-move-cutover-journal'
-import { listWslMoveCutoverChain, listWslMoveCutovers } from './wsl-move-cutover-journal'
-import { runWslMoveDesktopRewritePass } from './wsl-move-desktop-rewrite'
-import {
-  registerWslMoveDesktopRewriteStore,
-  resetWslMoveDesktopRewriteStoresForTests,
-  setWslMoveDesktopRewriteRegistryCompleteForTests
-} from './wsl-move-desktop-rewrite-stores'
+import { resetWslMoveDesktopRewriteStoresForTests } from './wsl-move-desktop-rewrite-stores'
 import { moveProjectsToWslHost } from './wsl-move-driver'
-import { resolveWslMoveFence } from './wsl-move-fence'
-import { listWslMoveOwedHostAborts, settleWslMoveOwedHostAborts } from './wsl-move-owed-host-aborts'
-import { recoverInterruptedWslMoves, resetWslMoveToZero } from './wsl-move-reset'
 import { runWslMoveRetentionPass } from './wsl-move-retention'
 
 vi.mock('electron', () => ({
@@ -80,136 +66,12 @@ vi.mock('./wsl-move-cutover-journal', async (importOriginal) => {
   }
 })
 
-const STORE_IDS = ['main-profile', 'renderer-ui', 'browser'] as const
-const request = { distro: 'Ubuntu' }
+let rig: WslMoveRig
 
-/** `zero-abort-owed`: the desktop is at zero; the host's leftover stage goes on its next contact. */
-type Outcome = 'back-at-zero' | 'zero-abort-owed' | 'fully-moved' | 'waiting-for-host' | 'stuck'
-
-type Rig = {
-  userDataPath: string
-  kill: WslMoveKillSwitch
-  world: WslMoveWorld
-  host: Store
-  rewritten: Map<string, number>
-}
-
-let rig: Rig
-const dirs: string[] = []
-
-function tempDir(prefix: string): string {
-  const dir = mkdtempSync(join(tmpdir(), prefix))
-  dirs.push(dir)
-  return dir
-}
-
-function newRig(): Rig {
-  resetWslMoveDesktopRewriteStoresForTests()
-  setWslMoveDesktopRewriteRegistryCompleteForTests(true)
-  testState.dir = tempDir('wsl-move-host-')
-  const userDataPath = tempDir('wsl-move-desktop-')
-  const kill = createWslMoveKillSwitch()
-  const world = createWslMoveWorld(userDataPath)
-  const next: Rig = { userDataPath, kill, world, host: createStore(), rewritten: new Map() }
-  const at = (name: string): void => passWslMoveKillPoint(kill, name)
-  journalKill.at = at
-  const host = createWslMoveStoreHost({ store: () => next.host, kill })
-  world.deps.connectHost = async () => {
-    at('connect')
-    return host
-  }
-  const { quiesce } = world.deps
-  world.deps.quiesce = {
-    sleepWorkspaces: async (ids) => (at('sleep'), quiesce.sleepWorkspaces(ids)),
-    livePtyIds: quiesce.livePtyIds,
-    captureRestoreHints: async (panes, distro) => (
-      at('restore-hints'),
-      quiesce.captureRestoreHints(panes, distro)
-    ),
-    proveExited: async (scope) => (at('prove-exited'), quiesce.proveExited(scope))
-  }
-  for (const id of STORE_IDS) {
-    registerWslMoveDesktopRewriteStore({
-      id,
-      side: 'main',
-      run: () => {
-        at(`store:${id}:run`)
-        next.rewritten.set(id, 1)
-      },
-      flush: () => at(`store:${id}:flush`)
-    })
-  }
+function newRig(): WslMoveRig {
+  const next = createWslMoveKillRig()
+  journalKill.at = next.at
   return next
-}
-
-const retentionStore = (r: Rig) => ({
-  getRepos: () => r.world.repos,
-  getFolderWorkspaces: () => [],
-  setWslMoveRetainedMarks: () => 1,
-  flushPendingOrThrowAsync: async () => {}
-})
-
-/** Startup, then the user's next move attempt reaching the host (which settles the old one). */
-async function restart(r: Rig, options: { hostUp: boolean; orcadRestarted: boolean }) {
-  r.kill.dead = false
-  if (options.orcadRestarted) {
-    await r.host.flushPendingOrThrowAsync().catch(() => {})
-    r.host = createStore()
-  }
-  await recoverInterruptedWslMoves(r.userDataPath, () => {})
-  await runWslMoveDesktopRewritePass({ userDataPath: r.userDataPath, warn: () => {} })
-  if (options.hostUp) {
-    // What the next move's prepare does once it reaches the host, before it stages anything.
-    const key = wslMoveJournalKey('Ubuntu')
-    const host = await r.world.deps.connectHost('Ubuntu')
-    if (host) {
-      await settleWslMoveOwedHostAborts(r.userDataPath, key, host.catalog)
-    }
-    const head = listWslMoveCutoverChain(r.userDataPath, key).at(-1)
-    if (head) {
-      await resetWslMoveToZero(
-        { userDataPath: r.userDataPath, destination: host?.catalog ?? null },
-        head.migrationId
-      )
-      await r.world.deps.finishOnDesktop()
-    }
-  }
-  await runWslMoveRetentionPass({ userDataPath: r.userDataPath, store: retentionStore(r) })
-}
-
-function outcomeOf(r: Rig): Outcome {
-  const records = listWslMoveCutovers(r.userDataPath)
-  const fence = resolveWslMoveFence(r.userDataPath)
-  const onHost = r.host.getRepos().some((repo) => repo.id === 'repo-1')
-  if (records.length === 0) {
-    const staged = r.host.hasStagedOrcadMigrationCatalog()
-    const owed = listWslMoveOwedHostAborts(r.userDataPath).length > 0
-    const clean =
-      !onHost &&
-      (!staged || owed) &&
-      fence.fenced.repoIds.size === 0 &&
-      fence.hidden.repoIds.size === 0 &&
-      fence.sessionFrozen.repoIds.size === 0 &&
-      r.rewritten.size === 0
-    if (!clean) {
-      return 'stuck'
-    }
-    return owed ? 'zero-abort-owed' : 'back-at-zero'
-  }
-  const [record] = records
-  if (records.length === 1 && record.phase === 'retained') {
-    const allOnce = STORE_IDS.every((id) => r.rewritten.get(id) === 1)
-    return allOnce &&
-      onHost &&
-      fence.hidden.repoIds.has('repo-1') &&
-      fence.fenced.repoIds.size === 0
-      ? 'fully-moved'
-      : 'stuck'
-  }
-  if (records.length === 1 && record.phase === 'blobs-transferred') {
-    return 'waiting-for-host'
-  }
-  return 'stuck'
 }
 
 beforeEach(() => {
@@ -224,12 +86,10 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllEnvs()
   resetWslMoveDesktopRewriteStoresForTests()
-  for (const dir of dirs.splice(0)) {
-    rmSync(dir, { recursive: true, force: true })
-  }
+  removeWslMoveRigDirs()
 })
 
-async function killedMove(r: Rig, killAt: string): Promise<void> {
+async function killedMove(r: WslMoveRig, killAt: string): Promise<void> {
   r.kill.killAt = killAt
   await moveProjectsToWslHost(r.world.deps, request).catch(() => {})
   // Retention runs on the journal change after the move, in the same process.
@@ -267,12 +127,12 @@ describe('WSL move driver fault injection (real host store)', () => {
       for (const killAt of points) {
         const r = newRig()
         await killedMove(r, killAt)
-        await restart(r, { hostUp: false, orcadRestarted })
+        await restartWslMoveRig(r, { hostUp: false, orcadRestarted })
         const hostDown = outcomeOf(r)
-        await restart(r, { hostUp: true, orcadRestarted })
+        await restartWslMoveRig(r, { hostUp: true, orcadRestarted })
         const hostUp = outcomeOf(r)
         matrix[killAt] = { hostDown, hostUp }
-        await restart(r, { hostUp: true, orcadRestarted })
+        await restartWslMoveRig(r, { hostUp: true, orcadRestarted })
         expect(outcomeOf(r), `${killAt}: a second restart changes nothing`).toBe(hostUp)
         if (hostUp === 'back-at-zero') {
           const again = await moveProjectsToWslHost(r.world.deps, request)

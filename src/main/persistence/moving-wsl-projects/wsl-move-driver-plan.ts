@@ -104,6 +104,35 @@ async function settleInterruptedWslMove(
   return null
 }
 
+/**
+ * A move left waiting on a host whose distro is now unregistered can never hear back: the commit,
+ * if any, went with the distro's disk. Back to zero, so the projects are usable here again (R38).
+ */
+async function resetForUnregisteredDistro(
+  deps: WslMoveDriverDeps,
+  request: WslMoveRequest
+): Promise<boolean> {
+  const head = listWslMoveCutoverChain(deps.userDataPath, wslMoveJournalKey(request.distro)).at(-1)
+  if (
+    !head ||
+    WSL_MOVE_CUTOVER_PHASES.indexOf(head.phase) >=
+      WSL_MOVE_CUTOVER_PHASES.indexOf('destination-committed') ||
+    (await deps.isDistroRegistered(request.distro).catch(() => null)) !== false
+  ) {
+    return false
+  }
+  const reset = await resetWslMoveToZero(
+    {
+      userDataPath: deps.userDataPath,
+      destination: null,
+      destinationUnregistered: true,
+      now: deps.now
+    },
+    head.migrationId
+  )
+  return reset.outcome === 'reset'
+}
+
 /** Fixed id and clock, so a re-export of unchanged state signs the same digest. */
 export function exportRequestOf(
   prepared: Pick<WslMovePrepared, 'plan' | 'host'>,
@@ -136,6 +165,9 @@ export async function prepareWslMove(
   }
   const host = await deps.connectHost(request.distro)
   if (!host) {
+    if (settleInterrupted && (await resetForUnregisteredDistro(deps, request))) {
+      return refusal('wsl_move_host_unavailable', { detail: 'distro_unregistered' })
+    }
     return refusal('wsl_move_host_unavailable')
   }
   if (wslMoveHostReadiness(host.capabilities) !== 'ready') {

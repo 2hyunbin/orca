@@ -24,6 +24,8 @@ export type WslMoveKillSwitch = {
   /** True from the kill until the test restarts the process. */
   dead: boolean
   points: string[]
+  /** Runs at each point before the kill check: something else happening mid-move. */
+  onPoint?: (name: string) => void
 }
 
 export function createWslMoveKillSwitch(): WslMoveKillSwitch {
@@ -35,6 +37,7 @@ export function passWslMoveKillPoint(kill: WslMoveKillSwitch, name: string): voi
     throw new WslMoveKilled(`dead at ${name}`)
   }
   kill.points.push(name)
+  kill.onPoint?.(name)
   if (kill.killAt === name) {
     kill.killAt = null
     kill.dead = true
@@ -57,12 +60,19 @@ export type WslMoveStoreHostOptions = {
   prefix?: string
   environmentId?: string
   name?: string
+  /** False once the distro is unregistered: every call fails like a vanished host. */
+  available?: () => boolean
 }
 
 export function createWslMoveStoreHost(options: WslMoveStoreHostOptions): WslMoveHost {
   const { store, kill } = options
   const prefix = options.prefix ?? ''
-  const at = (name: string): void => passWslMoveKillPoint(kill, `${prefix}${name}`)
+  const at = (name: string): void => {
+    passWslMoveKillPoint(kill, `${prefix}${name}`)
+    if (options.available && !options.available()) {
+      throw new Error('wsl_distro_not_registered')
+    }
+  }
   // Like the RPC layer: a mutation answers only once it is on disk.
   const mutate = async <T>(name: string, apply: () => T): Promise<T> => {
     at(`${name}:before`)
