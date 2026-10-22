@@ -20,6 +20,7 @@ export function findReusableAutomationSession(args: {
   agentId: TuiAgent
   worktreeId: string
   target: AutomationSessionTarget
+  physicalTarget?: Pick<AutomationSessionTarget, 'hostId' | 'runtimeEnvironmentId'>
   currentRunId: string
   runs: AutomationRun[]
   state: Pick<
@@ -27,7 +28,7 @@ export function findReusableAutomationSession(args: {
     'agentStatusByPaneKey' | 'ptyIdsByTabId' | 'terminalLayoutsByTabId' | 'unifiedTabsByWorktree'
   >
 }): ReusableAutomationSession | null {
-  const { state, ...selection } = args
+  const { state, physicalTarget = args.target, ...selection } = args
   const terminalTabs = new Map(
     (state.unifiedTabsByWorktree[args.worktreeId] ?? [])
       .filter((tab) => tab.contentType === 'terminal')
@@ -43,12 +44,12 @@ export function findReusableAutomationSession(args: {
       if (
         !parsed ||
         !tab ||
-        (tab.executionHostId && tab.executionHostId !== args.target.hostId) ||
-        ((ptyHost ?? 'local') !== args.target.hostId &&
+        (tab.executionHostId && tab.executionHostId !== physicalTarget.hostId) ||
+        ((ptyHost ?? 'local') !== physicalTarget.hostId &&
           !(
-            args.target.runtimeEnvironmentId &&
-            ptyHost === toRuntimeExecutionHostId(args.target.runtimeEnvironmentId) &&
-            tab.executionHostId === args.target.hostId
+            physicalTarget.runtimeEnvironmentId &&
+            ptyHost === toRuntimeExecutionHostId(physicalTarget.runtimeEnvironmentId) &&
+            tab.executionHostId === physicalTarget.hostId
           )) ||
         !isRunPtyLiveInPane(state, parsed.tabId, parsed.leafId, run.terminalPtyId)
       ) {

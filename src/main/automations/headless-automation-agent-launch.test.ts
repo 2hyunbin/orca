@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ExecutionHostId } from '../../shared/execution-host'
 import type { AutomationRun } from '../../shared/automations-types'
 import { launchHeadlessAutomationAgent } from './headless-automation-agent-launch'
 
@@ -16,7 +17,12 @@ beforeEach(() => {
 
 const CHAT_DEFAULT_ON = { experimentalNativeChat: true }
 
-function harness(options: { startupTerminal?: Record<string, unknown> | null } = {}) {
+function harness(
+  options: {
+    startupTerminal?: Record<string, unknown> | null
+    workspaceHostId?: ExecutionHostId
+  } = {}
+) {
   const runtime = {
     requireStore: () => ({ getSettings: () => CHAT_DEFAULT_ON }),
     getStructuredAgentSessionCreateSupport: vi.fn(async () => ({ supported: true })),
@@ -42,7 +48,10 @@ function harness(options: { startupTerminal?: Record<string, unknown> | null } =
       title: 'Nightly'
     })),
     resolveManagedTerminalWorkspaceTarget: vi.fn(async () => ({
-      managedWorktree: { displayName: 'repo' },
+      managedWorktree: {
+        displayName: 'repo',
+        ...(options.workspaceHostId ? { hostId: options.workspaceHostId } : {})
+      },
       scope: { folderWorkspace: null }
     })),
     getAgentStatusRowsForPane: vi.fn((_paneKey: string) => [
@@ -172,6 +181,35 @@ describe('headless automation agent launch', () => {
     expect(deliverTerminalAgentLaunchPrompt).toHaveBeenCalledTimes(2)
     expect(runtime.launchAgentTerminal).not.toHaveBeenCalled()
     expect(runtime.resolveManagedTerminalWorkspaceTarget).toHaveBeenCalledTimes(2)
+  })
+
+  it('reuses a pinned SSH folder with local project history without fresh transport acquisition', async () => {
+    const runtime = harness({ workspaceHostId: 'ssh:prod' })
+    runtime.resolveTerminalContext.mockReturnValue({
+      worktreeId: 'folder:fw-1',
+      connectionId: 'prod'
+    })
+    const runContext = {
+      kind: 'workspace-run',
+      projectId: 'project',
+      projectHostSetupId: 'setup',
+      hostId: 'local',
+      repoId: 'repo-1',
+      path: '/repo'
+    } as const
+    const result = await launch(
+      runtime,
+      { workspaceId: 'folder:fw-1', reuseSession: true, runContext },
+      [previousRun({ workspaceId: 'folder:fw-1', runContext })]
+    )
+    expect(runtime.resolveManagedTerminalWorkspaceTarget).toHaveBeenCalledWith(
+      'id:folder:fw-1',
+      undefined,
+      false
+    )
+    expect(deliverTerminalAgentLaunchPrompt).toHaveBeenCalledOnce()
+    expect(runtime.launchAgentTerminal).not.toHaveBeenCalled()
+    expect(result.terminalHandle).toBe('term_prev')
   })
 
   it('launches Hermes through the ordinary agent contract', async () => {

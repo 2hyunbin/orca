@@ -1,3 +1,4 @@
+import { getRepoSshConnectionId } from '../../../shared/execution-host'
 import type { Repo } from '../../../shared/repo-types'
 import { findAutomationRepoForWrite } from '../../../shared/automation-repo-target'
 import { randomUUID } from 'node:crypto'
@@ -29,6 +30,7 @@ import {
 } from '../../../shared/automation-owner-precondition'
 import {
   getAutomationContextsForRepo,
+  automationContextAfterUpdate,
   getAutomationSchedulerOwner,
   normalizeAutomationSessionReuse,
   normalizeAutomationSetupDecisionForWorkspaceMode
@@ -78,7 +80,10 @@ export function createAutomation(
   const workspaceSshPin = automationWorkspaceSshPin(operations.state, workspaceId)
   const executionTarget = deriveAutomationExecutionTargetForCreate({
     repo,
-    sshTargetGeneration: sshTargetGenerationForConnection(operations.state, repo?.connectionId),
+    sshTargetGeneration: sshTargetGenerationForConnection(
+      operations.state,
+      repo ? getRepoSshConnectionId(repo) : undefined
+    ),
     workspaceSshPin
   })
   if (options?.destination) {
@@ -200,18 +205,18 @@ export function updateAutomation(
     // Why the wire object is ignored: contexts are the storing authority's own
     // registry speaking. A move restates them from that registry, anything else
     // keeps the stored value; an explicit null still clears.
-    runContext:
-      definedUpdates.runContext === null
-        ? null
-        : selectorMoveRequested
-          ? (contexts.runContext ?? definedUpdates.runContext ?? null)
-          : (current.runContext ?? contexts.runContext),
-    sourceContext:
-      definedUpdates.sourceContext === null
-        ? null
-        : selectorMoveRequested
-          ? (contexts.sourceContext ?? definedUpdates.sourceContext ?? null)
-          : (current.sourceContext ?? contexts.sourceContext),
+    runContext: automationContextAfterUpdate(
+      current.runContext,
+      definedUpdates.runContext,
+      contexts.runContext,
+      selectorMoveRequested
+    ),
+    sourceContext: automationContextAfterUpdate(
+      current.sourceContext,
+      definedUpdates.sourceContext,
+      contexts.sourceContext,
+      selectorMoveRequested
+    ),
     schedulerOwner,
     workspaceMode,
     workspaceId:
@@ -259,7 +264,10 @@ export function updateAutomation(
     current,
     repo,
     selectorMoveRequested,
-    sshTargetGeneration: sshTargetGenerationForConnection(operations.state, repo?.connectionId),
+    sshTargetGeneration: sshTargetGenerationForConnection(
+      operations.state,
+      repo ? getRepoSshConnectionId(repo) : undefined
+    ),
     workspaceSshPin,
     workspaceSshPinMoved
   })

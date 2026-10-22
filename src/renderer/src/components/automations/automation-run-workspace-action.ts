@@ -56,7 +56,7 @@ export function createAutomationRunWorkspaceAction({ store, list }: AutomationsP
         toast.error(runViewState.statusLabel)
         return
       }
-      if (!activateAndRevealWorktree(run.workspaceId)) {
+      if (!activateAndRevealWorktree(run.workspaceId, { executionHostId: runWorktree.hostId })) {
         toast.error(workspaceUnavailableMessage())
         return
       }
@@ -69,14 +69,14 @@ export function createAutomationRunWorkspaceAction({ store, list }: AutomationsP
         terminalTarget.tabId,
         buildAutomationRunOpenLayout({ target: terminalTarget, currentLayout })
       )
-      if (activateAndRevealWorktree(run.workspaceId)) {
+      if (activateAndRevealWorktree(run.workspaceId, { executionHostId: runWorktree.hostId })) {
         appStore.setActiveTab(terminalTarget.tabId)
         appStore.setActiveTabType('terminal', run.workspaceId)
         activateTerminalTabOnOwner(run.workspaceId, terminalTarget.tabId, terminalTarget.leafId)
         return
       }
     }
-    if (!activateAndRevealWorktree(run.workspaceId)) {
+    if (!activateAndRevealWorktree(run.workspaceId, { executionHostId: runWorktree.hostId })) {
       toast.error(workspaceUnavailableMessage())
       return
     }

@@ -1,3 +1,5 @@
+import { MIXED_FOLDER, MIXED_GROUP } from '../../shared/folder-workspace-host-routing.test-fixture'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
 import { describe, expect, it, vi } from 'vitest'
 import {
   statSyncMock,
@@ -153,6 +155,72 @@ describe('registerPtyHandlers', () => {
       removal.release()
     }
   })
+  it.each([false, true])(
+    'keeps the selected folder through real IPC/runtime admission and cwd fallback (%s)',
+    async (reverse) => {
+      const local = {
+        ...MIXED_FOLDER,
+        id: 'dup',
+        executionHostId: 'local' as const,
+        folderPath: '/selected'
+      }
+      const remote = { ...local, executionHostId: 'ssh:prod' as const, folderPath: '/foreign' }
+      let folders = reverse ? [local, remote] : [remote, local]
+      const store = {
+        getRepos: () => [],
+        getProjectGroups: () => [MIXED_GROUP],
+        getFolderWorkspaces: () => folders,
+        getFolderWorkspace: () => folders[0],
+        getWorkspaceSession: getDefaultWorkspaceSession
+      }
+      const runtime = {
+        preAllocateHandleForPty: vi.fn(),
+        setPtyController: vi.fn(),
+        registerPty: vi.fn(),
+        onPtySpawned: vi.fn(),
+        onPtyExit: vi.fn(),
+        onPtyData: vi.fn()
+      }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: registration/spawn reads these runtime and store members; no durable pane binding is requested.
+      registerPtyHandlers(
+        mainWindow as never,
+        runtime as never,
+        undefined,
+        undefined,
+        undefined,
+        store as never
+      )
+      const controller = runtime.setPtyController.mock.calls[0]?.[0]
+      const spawn = (cwd: string) =>
+        handlers.get('pty:spawn')!(null, {
+          cols: 80,
+          rows: 24,
+          cwd,
+          worktreeId: 'folder:dup',
+          cwdFallback: 'worktree',
+          connectionId: null
+        })
+      await spawn('.')
+      expect(spawnMock.mock.calls.at(-1)?.[2]).toMatchObject({ cwd: '/selected' })
+      await controller.spawn({
+        cols: 80,
+        rows: 24,
+        cwd: '.',
+        worktreeId: 'folder:dup',
+        connectionId: null,
+        env: {}
+      })
+      expect(spawnMock.mock.calls.at(-1)?.[2]).toMatchObject({ cwd: '/selected' })
+      folders = [remote]
+      spawnMock.mockClear()
+      await expect(spawn('.')).rejects.toThrow('worktree_execution_host_unresolved')
+      expect(spawnMock).not.toHaveBeenCalled()
+      folders = [local, { ...local }]
+      await expect(spawn('.')).rejects.toThrow('worktree_execution_host_unresolved')
+      expect(spawnMock).not.toHaveBeenCalled()
+    }
+  )
+
   it('falls back to the worktree root when a saved local cwd no longer exists', async () => {
     registerPtyHandlers(mainWindow as never)
     // Why: issue #7239 reproduced in a Japanese-named worktree; the fallback must return the selected worktree path verbatim.

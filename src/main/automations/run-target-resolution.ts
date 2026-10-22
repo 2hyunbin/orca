@@ -27,6 +27,8 @@ export type AutomationRunTargetResult =
  * gone with a host that was replaced.
  */
 const CAPTURED_HOST_REFUSALS: Record<AutomationCapturedHostIssue, string> = {
+  [AUTOMATION_ORPHAN_ISSUES.malformed]:
+    'The automation host identity is incomplete. Edit the automation and reselect its host before running it.',
   [AUTOMATION_ORPHAN_ISSUES.targetMissing]:
     'The automation host is no longer registered, so this automation has nowhere to run.',
   [AUTOMATION_ORPHAN_ISSUES.targetReplaced]:

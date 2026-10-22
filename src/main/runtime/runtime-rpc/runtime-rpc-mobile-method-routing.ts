@@ -165,6 +165,7 @@ export const EXECUTION_HOST_METHODS = [
   'repo.searchRefs',
   'repo.sparsePresets',
   'repo.update',
+  'settings.getAgentLaunch',
   // SSH targets belong to the host that holds them; untargeted calls stay the Mac's own, as on the desktop.
   'ssh.connect',
   'ssh.getState',
@@ -209,6 +210,7 @@ export const EXECUTION_HOST_METHODS = [
   'worktree.activate',
   'worktree.create',
   'worktree.forceDeleteBranch',
+  'worktree.list',
   'worktree.listRetiredNames',
   'worktree.prefetchCreateBase',
   'worktree.ps',

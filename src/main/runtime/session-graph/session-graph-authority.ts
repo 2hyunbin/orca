@@ -1,4 +1,9 @@
-import { parseExecutionHostId } from '../../../shared/execution-host'
+import { resolveQualifiedFolderWorkspaceResult } from '../../../shared/folder-workspace-execution-host'
+import {
+  getRepoExecutionHostId,
+  getRepoSshConnectionId,
+  parseExecutionHostId
+} from '../../../shared/execution-host'
 import { WORKSPACE_ON_OTHER_RUNTIME } from '../../../shared/protocol-version'
 import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktreeMethods } from '../terminal/launch/terminal-workspace-scope'
 import { OrcaRuntimeWithHasTerminalsForWorktree } from './session-graph-reload-lifecycle'
@@ -8,8 +13,7 @@ import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-s
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import {
   assertFolderWorkspacePathUsable,
-  getFolderWorkspacePathStatusForPath,
-  getFolderWorkspacePathStatus,
+  getResolvedFolderWorkspacePathStatus,
   inferFolderWorkspacePathConnection
 } from '../../project-groups/folder-workspace-path-status'
 import type { TerminalWorkspaceLaunchScope } from '../runtime-legacy-worker-terminal-recovery-types'
@@ -136,33 +140,16 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
     if (resolvedFolder && host?.kind === 'runtime' && checkPath) {
       throw new Error(WORKSPACE_ON_OTHER_RUNTIME)
     }
-    const connectionId = !resolvedFolder
-      ? null
-      : host?.kind === 'ssh'
-        ? host.targetId
-        : host?.kind === 'local'
-          ? null
-          : this.resolveFolderWorkspaceConnectionId(workspace)
+    const connectionId = getRepoSshConnectionId(workspace)
     if (checkPath) {
-      const status = resolvedFolder
-        ? await getFolderWorkspacePathStatusForPath({
-            folderPath: workspace.folderPath,
-            connectionId,
-            projectGroups: [],
-            repos: []
-          })
-        : await getFolderWorkspacePathStatus(this.store, {
-            scope: 'folder-workspace',
-            folderWorkspaceId: workspace.id
-          })
-      assertFolderWorkspacePathUsable(status)
+      assertFolderWorkspacePathUsable(
+        await getResolvedFolderWorkspacePathStatus(workspace, getRepoExecutionHostId(workspace))
+      )
     }
     return {
       id: folderWorkspaceKey(workspace.id),
       path: workspace.folderPath,
-      connectionId: resolvedFolder
-        ? connectionId
-        : this.resolveFolderWorkspaceConnectionId(workspace),
+      connectionId,
       repo: null,
       folderWorkspace: workspace
     }
@@ -174,20 +161,34 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
     if (parsed?.type !== 'folder') {
       return null
     }
-    const workspace = this.store
-      ?.getFolderWorkspaces?.()
-      .find((entry) => entry.id === parsed.folderWorkspaceId)
-    if (!workspace) {
-      throw new Error('selector_not_found')
+    const result = resolveQualifiedFolderWorkspaceResult(
+      {
+        folderWorkspaces: this.store?.getFolderWorkspaces?.() ?? [],
+        projectGroups: this.store?.getProjectGroups?.() ?? [],
+        repos: this.store?.getRepos() ?? []
+      },
+      parsed.folderWorkspaceId
+    )
+    if (result.kind !== 'selected') {
+      throw new Error(result.kind === 'missing' ? 'selector_not_found' : 'selector_ambiguous')
     }
-    return workspace
+    const selected = result.value
+    return {
+      ...selected.workspace,
+      executionHostId: selected.hostId,
+      connectionId: selected.connectionId
+    }
   }
 
   protected async resolveEmulatorWorkspaceId(selector: string): Promise<string> {
-    const folderWorkspace = this.resolveFolderWorkspaceSelector(selector)
-    return folderWorkspace
-      ? folderWorkspaceKey(folderWorkspace.id)
-      : (await this.resolveWorktreeSelector(selector)).id
+    const parsed = parseWorkspaceKey(selector.startsWith('id:') ? selector.slice(3) : selector)
+    if (parsed?.type === 'folder') {
+      if (!this.store?.getFolderWorkspaces?.().some((row) => row.id === parsed.folderWorkspaceId)) {
+        throw new Error('selector_not_found')
+      }
+      return folderWorkspaceKey(parsed.folderWorkspaceId)
+    }
+    return (await this.resolveWorktreeSelector(selector)).id
   }
 
   protected async resolveBrowserWorkspace(selector: string): Promise<ResolvedWorktree> {

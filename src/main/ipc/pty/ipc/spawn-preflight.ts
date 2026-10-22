@@ -31,7 +31,11 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
     ctx.deps.transitionSpawnHiddenRendererPtyDeliveryState(ctx.preSpawnHiddenMarkId, true)
   }
   if (!ctx.earlyStablePaneOwner) {
-    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
+    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(
+      args.worktreeId,
+      args.sessionId,
+      args.connectionId
+    )
     if (admission) {
       await admission
     }
@@ -40,7 +44,11 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
   ctx.preAdoptedStablePane = null
   ctx.spawnTiming.mark('stable_adoption')
   if (ctx.earlyStablePaneOwner && !ctx.preAdoptedStablePane) {
-    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
+    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(
+      args.worktreeId,
+      args.sessionId,
+      args.connectionId
+    )
     if (admission) {
       await admission
     }
@@ -83,7 +91,8 @@ export async function preparePtyIpcSpawnPreflight(ctx: PtyIpcSpawnState): Promis
     projectRuntimeSource: { kind: 'sent', projectRuntime: args.projectRuntime },
     preAdopted: ctx.preAdoptedStablePane !== null,
     getSettings: ctx.deps.getSettings,
-    resolveStartupCwd: ctx.deps.resolvePtySpawnStartupCwd
+    resolveStartupCwd: (id, cwd, fallback) =>
+      ctx.deps.resolvePtySpawnStartupCwd(id, cwd, fallback, args.connectionId)
   })
   ctx.cwd = target.cwd
   ctx.prevalidatedCwd = target.prevalidatedCwd

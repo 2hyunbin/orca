@@ -52,7 +52,8 @@ export function AutomationManager(props: {
       setView(
         initialDraft ? { kind: 'editor', row: saved, initialDraft } : { kind: 'detail', row: saved }
       )
-    }
+    },
+    catalog.isCurrentSnapshot
   )
   const disabled = !catalog.connected || catalog.busy
   const row =

@@ -168,7 +168,7 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
     const scope = parseWorkspaceKey(key)
     const store = this.store
     const folder =
-      requiredHostId && scope?.type === 'folder'
+      scope?.type === 'folder'
         ? resolveQualifiedFolderWorkspace(
             {
               folderWorkspaces: store?.getFolderWorkspaces?.() ?? [],
@@ -187,7 +187,9 @@ export abstract class OrcaRuntimeWithListManagedWorktrees extends OrcaRuntimeWit
       worktreeSelector,
       undefined,
       resolved,
-      folder ? { ...folder.workspace, executionHostId: folder.hostId } : undefined,
+      folder
+        ? { ...folder.workspace, executionHostId: folder.hostId, connectionId: folder.connectionId }
+        : undefined,
       checkPath
     )
   }

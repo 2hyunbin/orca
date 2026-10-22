@@ -19,7 +19,7 @@ describe('selected automation discovery and explicit refresh', () => {
       if (method === 'status.get') {
         return { hostPlatform: 'linux', capabilities: [capability] }
       }
-      if (method === 'settings.get') {
+      if (method === 'settings.getAgentLaunch') {
         return { settings: { defaultTuiAgent: 'pi', disabledTuiAgents: ['claude'] } }
       }
       if (method === 'preflight.detectAgents') {
@@ -43,7 +43,7 @@ describe('selected automation discovery and explicit refresh', () => {
       if (method === 'status.get') {
         return { capabilities: [qualified], hostPlatform: 'win32' }
       }
-      if (method === 'settings.get') {
+      if (method === 'settings.getAgentLaunch') {
         return { settings: {} }
       }
       if (method === 'preflight.refreshAgents') {
@@ -69,6 +69,30 @@ describe('selected automation discovery and explicit refresh', () => {
     }
   })
 
+  it.each(['unsupported', 'malformed'] as const)(
+    'keeps discovery unavailable when selected agent settings are %s',
+    async (failure) => {
+      const port = automationClient((method) => {
+        if (method === 'status.get') {
+          return { capabilities: [qualified] }
+        }
+        if (method === 'settings.getAgentLaunch') {
+          if (failure === 'unsupported') {
+            throw new Error('method_not_supported')
+          }
+          return { settings: { disabledTuiAgents: 'codex' } }
+        }
+        if (method === 'preflight.detectAgents') {
+          return ['codex']
+        }
+        throw new Error(method)
+      })
+      await expect(loadAutomationAgents(port.client, setup)).rejects.toThrow()
+      expect(port.send).toHaveBeenCalledWith('settings.getAgentLaunch', undefined)
+      expect(port.send.mock.calls.some(([method]) => method === 'settings.get')).toBe(false)
+    }
+  )
+
   it('fences before a generation-changing status reply and never probes SSH or unverified old Windows', async () => {
     const status = deferred<unknown>()
     const port = automationClient(() => status.promise)
@@ -93,7 +117,7 @@ describe('selected automation discovery and explicit refresh', () => {
       if (method === 'status.get') {
         return { capabilities: [qualified] }
       }
-      if (method === 'settings.get') {
+      if (method === 'settings.getAgentLaunch') {
         return { settings: {} }
       }
       if (method === 'preflight.detectAgents') {

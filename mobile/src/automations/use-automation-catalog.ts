@@ -16,6 +16,9 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
   const [busy, setBusy] = useState(false)
   const [connected, setConnected] = useState(client?.getState() === 'connected')
   const [revision, setRevision] = useState(0)
+  const latestClient = useRef(client)
+  latestClient.current = client
+  const snapshotCurrent = useRef<() => boolean>(() => false)
   const epoch = useRef(0)
   const readId = useRef(0)
   const locked = useRef(false)
@@ -32,6 +35,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
       const generation = client.getGeneration?.()
       const current = () =>
         mounted.current &&
+        latestClient.current === client &&
         at === epoch.current &&
         generation === client.getGeneration?.() &&
         id === readId.current
@@ -45,6 +49,11 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
         }
         const parsed = automationListRead.interpret(list)
         const host = hostStatusProbe.interpret(status)
+        snapshotCurrent.current = () =>
+          mounted.current &&
+          latestClient.current === client &&
+          at === epoch.current &&
+          generation === client.getGeneration?.()
         setRows(parsed)
         setCapabilities(host.accepted ? (host.value.capabilities ?? []) : [])
         setLoaded(true)
@@ -131,7 +140,10 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
     const at = epoch.current
     const generation = client.getGeneration?.()
     const current = () =>
-      mounted.current && at === epoch.current && generation === client.getGeneration?.()
+      mounted.current &&
+      latestClient.current === client &&
+      at === epoch.current &&
+      generation === client.getGeneration?.()
     try {
       const value = await action(client, current)
       if (current()) {
@@ -141,7 +153,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
       }
     } catch (failure) {
       if (mounted.current) {
-        setActionError(automationErrorMessage(failure))
+        setActionError(current() ? automationErrorMessage(failure) : AUTOMATION_OUTCOME_UNKNOWN)
       }
     } finally {
       locked.current = false
@@ -161,6 +173,7 @@ export function useAutomationCatalog(client: RpcClient | null, server: boolean) 
     busy,
     connected,
     revision,
+    isCurrentSnapshot: () => snapshotCurrent.current(),
     refresh,
     perform
   }

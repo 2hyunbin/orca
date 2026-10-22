@@ -1,3 +1,4 @@
+import type { Automation } from './automations-types'
 import type { Repo } from './repo-types'
 import type { WorkspaceRunContext } from './task-source-context'
 import { getRepoExecutionHostId, parseExecutionHostId } from './execution-host'
@@ -35,5 +36,25 @@ export function findAutomationRepoForWrite(
       ? { hostId: getRepoExecutionHostId(resolvedRepo), path: resolvedRepo.path }
       : context,
     !resolvedRepo && incomingRuntimeAlias
+  )
+}
+
+export function automationRequiresHostReselection(
+  automation: Automation,
+  repos: readonly Repo[]
+): boolean {
+  const repo = findAutomationRepo(
+    repos,
+    automation.runContext?.repoId ?? automation.projectId,
+    automation.runContext
+  )
+  return (
+    automation.executionTargetType === 'local' &&
+    automation.executionTargetId === 'local' &&
+    automation.executionTargetGeneration === undefined &&
+    !!automation.runContext &&
+    !!repo &&
+    !repo.connectionId?.trim() &&
+    parseExecutionHostId(repo.executionHostId)?.kind === 'ssh'
   )
 }

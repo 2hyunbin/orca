@@ -1,5 +1,4 @@
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
-import { UNRESOLVED_OWNER_HOST_ID } from '../../../../../shared/execution-host'
 import { reportWorkerTerminalUserInput } from '@/lib/worker-terminal-takeover-report'
 import { useAppStore } from '@/store'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
@@ -15,7 +14,6 @@ import {
 } from '@/lib/pane-manager/windows-pty-compatibility'
 import { createCommandCodeOutputStatusDetector } from '../../../../../shared/command-code-output-status'
 import { readInFlightCommandCodeTurn } from '../parked-terminal-command-status'
-import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import { CLIENT_PLATFORM } from '@/lib/new-workspace'
 import { resolveAgentStatusTerminalTitle } from '@/lib/agent-status-terminal-title'
 import {
@@ -46,9 +44,7 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
   // enables ConPTY synchronized-output protection, which strips an agent's
   // transient cursor-show (?25h) and leaves the cursor invisible. The execution
   // host is the authoritative signal: only a 'local' host is a local native PTY.
-  session.executionHostId = session.terminalOwnerUnresolved
-    ? UNRESOLVED_OWNER_HOST_ID
-    : getExecutionHostIdForWorktree(session.state, session.deps.worktreeId)
+  session.executionHostId = session.ownerContext.executionHostId
   session.isNativeWindowsConpty = isLocalNativeWindowsConpty({
     userAgent: navigator.userAgent,
     connectionId: null,
@@ -107,11 +103,22 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
     ? getCachedWindowsTerminalCapabilities()
     : null
   session.projectRuntime =
-    !session.tab?.forceHostRuntime && session.runtimeEnvironmentId === null
-      ? getLocalProjectExecutionRuntimeContext(session.state, session.deps.worktreeId, undefined, {
-          wslAvailable: session.localWindowsTerminalCapabilities?.wslAvailable,
-          availableWslDistros: session.localWindowsTerminalCapabilities?.wslDistros ?? null
-        })
+    !session.tab?.forceHostRuntime &&
+    session.runtimeEnvironmentId === null &&
+    (!session.ownerContext.selectedHost ||
+      (session.ownerContext.worktree && session.ownerContext.repo))
+      ? getLocalProjectExecutionRuntimeContext(
+          session.state,
+          session.deps.worktreeId,
+          undefined,
+          {
+            wslAvailable: session.localWindowsTerminalCapabilities?.wslAvailable,
+            availableWslDistros: session.localWindowsTerminalCapabilities?.wslDistros ?? null
+          },
+          session.ownerContext.worktree && session.ownerContext.repo
+            ? { worktree: session.ownerContext.worktree, repo: session.ownerContext.repo }
+            : undefined
+        )
       : undefined
   session.shouldOwnAgentStatusInRenderer = session.runtimeEnvironmentId !== null
   // Why: the host also mirrors agent status for this pane through tabs.

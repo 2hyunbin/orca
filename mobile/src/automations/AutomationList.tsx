@@ -52,7 +52,7 @@ export function AutomationList(props: {
                   accessibilityLabel={`Run ${automation.name} on schedule`}
                   value={automation.enabled}
                   onValueChange={(enabled) => props.onToggle(row, enabled)}
-                  disabled={props.disabled || item.selector.kind === 'orphan'}
+                  disabled={props.disabled}
                 />
               </View>
               <Text style={styles.meta}>

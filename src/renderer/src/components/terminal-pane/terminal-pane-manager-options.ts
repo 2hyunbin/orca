@@ -16,8 +16,7 @@ import { buildFontFamily } from '@/lib/monospace-font-family'
 import { buildWindowsPtyCompatibilityOptions } from '@/lib/pane-manager/windows-pty-compatibility'
 import { buildTerminalKeyboardProtocolOptions } from '@/lib/pane-manager/terminal-keyboard-protocol'
 import { resolvePaneKeyboardProtocolAgent } from './terminal-keyboard-protocol-pane-agent'
-import { getConnectionId } from '@/lib/connection-context'
-import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
+import { resolveTerminalPaneOwnerContext } from './terminal-pane-owner-context'
 import { scheduleRuntimeGraphSync } from '@/runtime/sync-runtime-graph'
 import { acquireWebviewsDragPassthrough } from '../browser-pane/host-guest/webview-registry'
 import { handleTerminalWebLinkClick } from './terminal-web-link-click'
@@ -139,13 +138,20 @@ export function createTerminalPaneManagerOptions(
         ptyDeps.startup,
         currentTab?.launchAgent
       )
+      const layout = storeState.terminalLayoutsByTabId[tabId]
+      const owner = resolveTerminalPaneOwnerContext(
+        storeState,
+        worktreeId,
+        tabId,
+        layout?.activeLeafId ? layout.ptyIdsByLeafId?.[layout.activeLeafId] : null
+      )
       const ptyBackendContext = {
         userAgent: navigator.userAgent,
         osRelease: platformInfo?.osRelease,
-        connectionId: getConnectionId(worktreeId),
+        connectionId: owner.connectionId,
         cwd: context.startupCwd,
         shellOverride: currentTab?.shellOverride,
-        executionHostId: getExecutionHostIdForWorktree(storeState, worktreeId),
+        executionHostId: owner.executionHostId,
         tuiAgent: knownTuiAgent
       }
       return {

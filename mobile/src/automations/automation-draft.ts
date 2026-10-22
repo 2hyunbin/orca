@@ -14,6 +14,7 @@ import { isValidAutomationSchedule } from '../../../src/shared/automation-schedu
 import { MAX_AUTOMATION_PRECHECK_TIMEOUT_SECONDS } from '../../../src/shared/automation-precheck'
 
 export type AutomationDraft = {
+  targetEdited?: boolean
   name: string
   prompt: string
   agentId: TuiAgent | null
@@ -206,6 +207,7 @@ export function automationUpdateParams(
 ): Pick<RpcSendParams<'automation.update'>, 'id' | 'updates' | 'destination'> {
   const updates = automationDraftPatch(draft, original)
   if (
+    !draft.targetEdited &&
     draft.setupId === original.setupId &&
     draft.workspaceMode === original.workspaceMode &&
     draft.workspaceId === original.workspaceId

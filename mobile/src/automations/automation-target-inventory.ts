@@ -3,7 +3,6 @@ import { getRepoMainWorktreeId } from '../../../src/shared/worktree/id'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../src/shared/execution-host'
 import type { AutomationDestination } from '../../../src/shared/automation-owner-precondition'
 import { buildWorkspaceRunContext } from '../../../src/shared/task-source-context'
-import { isTuiAgent } from '../../../src/shared/tui-agent-config'
 import {
   PREFLIGHT_HOST_QUALIFIED_RUNTIME_CAPABILITY,
   PREFLIGHT_WORKSPACE_SCOPED_RUNTIME_CAPABILITY
@@ -14,7 +13,7 @@ import {
   preflightDetectAgentsRead,
   preflightRefreshAgentsRead
 } from '../session/mobile-session-read-operations'
-import { newTabSettingsRead } from '../transport/settings-read-operations'
+import { automationAgentSettingsRead } from './automation-operations'
 import { buildMobileNewTabAgentOptions } from '../session/mobile-new-tab-agent-options'
 import type { RpcClient } from '../transport/rpc-client'
 import {
@@ -36,13 +35,6 @@ const repoSchema = z.object({
   kind: z.string().optional(),
   connectionId: z.string().nullish(),
   executionHostId: z.string().nullish()
-})
-const agentSettingsSchema = z.object({
-  defaultTuiAgent: z
-    .unknown()
-    .transform((value) => (isTuiAgent(value) || value === 'blank' ? value : undefined))
-    .optional(),
-  disabledTuiAgents: z.unknown().optional()
 })
 
 export async function loadAutomationTargets(client: RpcClient, limit = 200) {
@@ -169,17 +161,17 @@ export async function loadAutomationAgents(
       )
     }
     const [settingsReply, detectedReply] = await Promise.all([
-      newTabSettingsRead.request(client),
+      automationAgentSettingsRead.request(client),
       refresh
         ? preflightRefreshAgentsRead.request(client, params)
         : preflightDetectAgentsRead.request(client, params)
     ])
     requireCurrent()
-    const settings = agentSettingsSchema.safeParse(newTabSettingsRead.interpret(settingsReply)())
+    const settings = automationAgentSettingsRead.interpret(settingsReply).settings
     const detected = refresh
       ? preflightRefreshAgentsRead.interpret(detectedReply).agents
       : preflightDetectAgentsRead.interpret(detectedReply)
-    return buildMobileNewTabAgentOptions(settings.success ? settings.data : undefined, detected)
+    return buildMobileNewTabAgentOptions(settings, detected)
   } finally {
     if (pending.get(key) === token) {
       pending.delete(key)

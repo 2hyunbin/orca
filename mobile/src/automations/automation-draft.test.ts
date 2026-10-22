@@ -31,10 +31,12 @@ describe('mobile automation host contracts', () => {
         return { setups }
       }
       if (method === 'repo.list') {
-        return [
-          { id: base.repoId, displayName: 'Local', path: base.path },
-          { id: base.repoId, displayName: 'SSH', path: base.path, connectionId: 'builder' }
-        ]
+        return {
+          repos: [
+            { id: base.repoId, displayName: 'Local', path: base.path },
+            { id: base.repoId, displayName: 'SSH', path: base.path, connectionId: 'builder' }
+          ]
+        }
       }
       if (method === 'ssh.listTargetSummaries') {
         return { targets: [{ id: 'builder', label: 'Builder', generation: 7 }] }

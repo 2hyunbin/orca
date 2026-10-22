@@ -265,3 +265,18 @@ export function stampLegacyAutomationRunContext(
   operations.flush()
   return true
 }
+
+export function automationContextAfterUpdate<T>(
+  saved: T | null | undefined,
+  update: T | null | undefined,
+  registry: T | null | undefined,
+  retargeted: boolean
+): T | null | undefined {
+  return update === null
+    ? null
+    : retargeted
+      ? (registry ?? update ?? null)
+      : saved === undefined
+        ? registry
+        : saved
+}

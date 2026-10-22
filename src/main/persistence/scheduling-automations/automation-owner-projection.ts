@@ -1,4 +1,8 @@
-import { findAutomationRepo } from '../../../shared/automation-repo-target'
+import { getRepoSshConnectionId } from '../../../shared/execution-host'
+import {
+  automationRequiresHostReselection,
+  findAutomationRepo
+} from '../../../shared/automation-repo-target'
 import type { Automation, AutomationRun } from '../../../shared/automations-types'
 import type { PersistedState } from '../../../shared/persisted-state-types'
 import {
@@ -114,11 +118,14 @@ export function automationProjectionContext(
   )
   return {
     storageAuthority,
+    requiresHostReselection: (automation) =>
+      resolveAutomationWorkspaceHost(folderWorkspaceHostState(state), automation.workspaceId)
+        .kind === 'unpinned' && automationRequiresHostReselection(automation, state.repos),
     sshTargetGeneration: (targetId) => sshTargetGenerationForConnection(state, targetId),
     sshTargetIdForGeneration: (generation) => targetIdByGeneration.get(generation),
     repoConnectionId: (repoId, automation) => {
       const repo = findAutomationRepo(state.repos, repoId, automation?.runContext)
-      return repo ? repo.connectionId?.trim() || null : undefined
+      return repo ? getRepoSshConnectionId(repo) : undefined
     },
     workspaceHost: (automation) =>
       resolveAutomationWorkspaceHost(folderWorkspaceHostState(state), automation.workspaceId),

@@ -1,3 +1,5 @@
+import { RpcDispatcher } from './runtime/rpc/dispatcher'
+import { AUTOMATION_METHODS } from './runtime/rpc/methods/automations'
 import { mergeWorktree } from './ipc/worktree-metadata-merge'
 import { getRepoExecutionHostId } from '../shared/execution-host'
 import './runtime/rpc/unused-default-rpc-methods.test-fixture'
@@ -95,6 +97,25 @@ describe('legacy automation on a repo id two hosts share', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
+  it('preserves explicit null contexts across an unrelated saved edit and restart', async () => {
+    seed([localRow], legacyAutomation({ runContext: null, sourceContext: null }))
+    let store = createStore()
+    store.updateAutomation('legacy-1', { name: 'Renamed', enabled: false })
+    expect(storedAutomation(store)).toMatchObject({
+      runContext: null,
+      sourceContext: null,
+      enabled: false
+    })
+    await closeTestStores()
+    store = createStore()
+    expect(storedAutomation(store)).toMatchObject({
+      runContext: null,
+      sourceContext: null,
+      name: 'Renamed',
+      enabled: false
+    })
+  })
+
   it('does not guess a host for the record at load', () => {
     seed([localRow, sshRow], legacyAutomation())
     const store = createStore()
@@ -173,11 +194,19 @@ describe('legacy automation on a repo id two hosts share', () => {
     })
   })
   it.each(
-    [false, true].flatMap((samePath) => [false, true].map((reversed) => ({ samePath, reversed })))
+    [false, true].flatMap((samePath) =>
+      [false, true].flatMap((reversed) =>
+        [false, true].map((canonical) => ({ samePath, reversed, canonical }))
+      )
+    )
   )(
-    'keeps selected targets through runtime, storage, owner, restart and dispatch ($samePath/$reversed)',
-    async ({ samePath, reversed }) => {
-      const remote = { ...sshRow, path: samePath ? localRow.path : sshRow.path }
+    'keeps selected targets through runtime, storage, owner, restart and dispatch ($samePath/$reversed/$canonical)',
+    async ({ samePath, reversed, canonical }) => {
+      const remote = {
+        ...sshRow,
+        path: samePath ? localRow.path : sshRow.path,
+        ...(canonical ? { connectionId: undefined, executionHostId: 'ssh:ssh-1' as const } : {})
+      }
       seed(reversed ? [remote, localRow] : [localRow, remote], legacyAutomation())
       let store = createStore()
       const runtime = new OrcaRuntimeService(store)
@@ -240,7 +269,7 @@ describe('legacy automation on a repo id two hosts share', () => {
       expect(resolved).toMatchObject({
         ok: true,
         cwd: remote.path,
-        repo: { connectionId: 'ssh-1' }
+        repo: { id: 'twin' }
       })
       if (!resolved.ok) {
         throw new Error(resolved.error)
@@ -311,4 +340,122 @@ describe('legacy automation on a repo id two hosts share', () => {
       }
     }
   )
+  it('keeps incomplete saved identity manageable until explicit same-target adoption through RPC and reload', async () => {
+    const now = Date.now()
+    const remote = { ...sshRow, connectionId: undefined, executionHostId: 'ssh:ssh-1' as const }
+    seed([remote], legacyAutomation())
+    let store = createStore()
+    const setup = store.getProjectHostSetups()[0]
+    const runContext = {
+      kind: 'workspace-run' as const,
+      projectId: setup.projectId,
+      projectHostSetupId: setup.id,
+      repoId: remote.id,
+      hostId: setup.hostId,
+      path: remote.path
+    }
+    await closeTestStores()
+    seed(
+      [remote],
+      legacyAutomation({
+        runContext,
+        rrule: '* * * * *',
+        dtstart: now - 120000,
+        nextRunAt: now - 60000,
+        precheck: { command: 'must never run', timeoutSeconds: 1 }
+      })
+    )
+    store = createStore()
+    const runtime = new OrcaRuntimeService(store)
+    const dispatcher = new RpcDispatcher({ runtime, methods: AUTOMATION_METHODS })
+    const service = new AutomationService(store, { tickMs: 60000 })
+    runtime.setAutomationService(service)
+    const send = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the service reads only send/isDestroyed.
+    service.setWebContents({ isDestroyed: () => false, send } as never)
+    try {
+      const orphan = store.automationOwnerPrecondition('legacy-1')
+      expect(orphan).toMatchObject({ selector: { kind: 'orphan' } })
+      expect(storedAutomation(store)).toMatchObject({ executionTargetType: 'local', enabled: true })
+      expect(storedAutomation(store).executionTargetGeneration).toBeUndefined()
+      const read = await dispatcher.dispatch({
+        id: 'read',
+        authToken: 'test',
+        method: 'automation.show',
+        params: { id: 'legacy-1', expectedOwner: orphan }
+      })
+      expect(read).toMatchObject({ ok: true })
+      const unchanged = { ...storedAutomation(store) }
+      const edit = await dispatcher.dispatch({
+        id: 'edit',
+        authToken: 'test',
+        method: 'automation.update',
+        params: { id: 'legacy-1', expectedOwner: orphan, updates: { name: 'Renamed' } }
+      })
+      expect(edit).toMatchObject({ ok: true })
+      expect(storedAutomation(store)).toMatchObject({
+        executionTargetType: unchanged.executionTargetType,
+        executionTargetId: unchanged.executionTargetId,
+        runContext,
+        enabled: true
+      })
+      expect(storedAutomation(store).executionTargetGeneration).toBeUndefined()
+      const manual = await service.runNow('legacy-1')
+      expect(manual).toMatchObject({
+        status: 'skipped_unavailable',
+        error: expect.stringContaining('reselect')
+      })
+      service.setRendererReady()
+      await vi.waitFor(() =>
+        expect(
+          store.listAutomationRuns('legacy-1').some((run) => run.trigger === 'scheduled')
+        ).toBe(true)
+      )
+      const scheduled = store
+        .listAutomationRuns('legacy-1')
+        .find((run) => run.trigger === 'scheduled')
+      if (!scheduled) {
+        throw new Error('Missing due run')
+      }
+      expect(scheduled.status).toBe('skipped_unavailable')
+      expect(await service.runPrecheck('legacy-1', scheduled.id)).toMatchObject({
+        error: expect.stringContaining('reselect')
+      })
+      expect(send).not.toHaveBeenCalled()
+      const target = store.getSshTargets()[0]
+      const adopted = await dispatcher.dispatch({
+        id: 'adopt',
+        authToken: 'test',
+        method: 'automation.update',
+        params: {
+          id: 'legacy-1',
+          expectedOwner: orphan,
+          updates: { repo: 'id:twin', runContext },
+          destination: {
+            selector: { kind: 'ssh', targetId: target.id, targetGeneration: target.generation }
+          }
+        }
+      })
+      expect(adopted).toMatchObject({ ok: true })
+      expect(storedAutomation(store)).toMatchObject({
+        executionTargetType: 'ssh',
+        executionTargetId: target.id,
+        executionTargetGeneration: target.generation,
+        runContext,
+        name: 'Renamed',
+        enabled: true
+      })
+      await closeTestStores()
+      store = createStore()
+      expect(store.automationOwnerPrecondition('legacy-1')).toEqual({
+        selector: { kind: 'ssh', targetId: target.id, targetGeneration: target.generation }
+      })
+      expect(resolveAutomationRunTarget(store, storedAutomation(store))).toMatchObject({
+        ok: true,
+        repo: { id: remote.id, path: remote.path, executionHostId: remote.executionHostId }
+      })
+    } finally {
+      service.stop()
+    }
+  })
 })

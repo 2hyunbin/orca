@@ -98,6 +98,15 @@ function makeStore(
   return store
 }
 
+class FolderConsumerRuntime extends OrcaRuntimeService {
+  browserWorkspace(selector: string) {
+    return this.resolveBrowserWorkspace(selector)
+  }
+  emulatorWorkspace(selector: string) {
+    return this.resolveEmulatorWorkspaceId(selector)
+  }
+}
+
 describe('orchestration worker workspace resolution', () => {
   const tempPaths: string[] = []
 
@@ -273,8 +282,60 @@ describe('orchestration worker workspace resolution', () => {
     )
 
     await expect(runtime.showManagedTerminalWorkspace('folder:folder-1')).rejects.toThrow(
-      'folder_workspace_connection_ambiguous'
+      'worktree_execution_host_unresolved'
     )
     expect(scanLocalRepoWorktreesForResolution).not.toHaveBeenCalled()
   })
+
+  it.each([false, true])(
+    'keeps physical folder refusal separate from emulator identity (reversed=%s)',
+    async (reversed) => {
+      const folderPath = await mkdtemp(join(tmpdir(), 'orca-worker-folder-consumers-'))
+      tempPaths.push(folderPath)
+      const group = { id: 'group-1', name: 'Group', parentPath: folderPath } as ProjectGroup
+      const folders: FolderWorkspace[] = [
+        {
+          id: 'folder-1',
+          projectGroupId: group.id,
+          name: 'Folder',
+          folderPath,
+          linkedTask: null,
+          comment: '',
+          isArchived: false,
+          isUnread: false,
+          isPinned: false,
+          sortOrder: 0,
+          lastActivityAt: 1,
+          createdAt: 1,
+          updatedAt: 1
+        }
+      ]
+      const repos: Repo[] = [
+        { id: 'local', executionHostId: 'local' as const },
+        { id: 'remote', executionHostId: 'ssh:remote' as const }
+      ].map((repo) => ({
+        ...repo,
+        path: folderPath,
+        projectGroupId: group.id,
+        displayName: repo.id,
+        badgeColor: 'blue',
+        addedAt: 1
+      }))
+      const runtime = new FolderConsumerRuntime(
+        makeStore({
+          repos: reversed ? repos.toReversed() : repos,
+          folderWorkspaces: folders
+        }) as never
+      )
+      const selector = 'id:folder:folder-1'
+      await expect(runtime.resolveRuntimeFileTarget(selector)).rejects.toThrow('selector_ambiguous')
+      await expect(runtime.browserWorkspace(selector)).rejects.toThrow('selector_ambiguous')
+      await expect(runtime.emulatorWorkspace(selector)).resolves.toBe('folder:folder-1')
+      folders.splice(0)
+      await expect(runtime.resolveRuntimeFileTarget(selector)).rejects.toThrow('selector_not_found')
+      await expect(runtime.browserWorkspace(selector)).rejects.toThrow('selector_not_found')
+      await expect(runtime.emulatorWorkspace(selector)).rejects.toThrow('selector_not_found')
+      expect(scanLocalRepoWorktreesForResolution).not.toHaveBeenCalled()
+    }
+  )
 })

@@ -448,7 +448,12 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
   })
 
   it('answers a targeted desktop-owned call on the desktop, exactly as the untargeted one', async () => {
-    const { desktop } = await startTopology()
+    const { host, desktop } = await startTopology()
+    vi.spyOn(host.runtime, 'getClientAgentLaunchSettings').mockReturnValue({
+      ...host.runtime.getClientAgentLaunchSettings(),
+      defaultTuiAgent: 'pi',
+      disabledTuiAgents: ['claude']
+    })
     const phone = await connectPhone(desktop.server, 'iPhone')
     const opensBefore = passthroughOpens.count
 
@@ -458,6 +463,16 @@ describe('mobile desktop relay: phone -> desktop -> server', () => {
     expect(isOk(targeted)).toBe(true)
     expect(targeted.result).toEqual((await phone.next('settings:untargeted')).result)
     expect(passthroughOpens.count).toBe(opensBefore)
+    phone.send('automation:policy', 'settings.getAgentLaunch', {})
+    expect(await phone.next('automation:policy')).toMatchObject({
+      ok: true,
+      result: { settings: { defaultTuiAgent: 'pi', disabledTuiAgents: ['claude'] } }
+    })
+    phone.send('automation:workspaces', 'worktree.list', {})
+    expect(await phone.next('automation:workspaces')).toMatchObject({
+      ok: true,
+      result: { worktrees: expect.any(Array) }
+    })
     // An execution-host method under the same target still relays.
     phone.send('list', 'terminal.list', {})
     expect(isOk(await phone.next('list'))).toBe(true)

@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AutomationManager } from './AutomationManager'
 import { AutomationButton, AutomationChoice, AutomationField } from './AutomationControls'
 import { AutomationRunList } from './AutomationRunList'
-import { AutomationRunDetails } from './AutomationRunDetails'
 import { automationSetupKey } from './automation-target-inventory'
 import type * as AutomationInventoryModule from './automation-target-inventory'
 import { MobileSegmentedControl } from '../components/MobileSegmentedControl'
@@ -159,6 +158,80 @@ async function mount(loseCreate: boolean | 'legacy' = false) {
 }
 
 describe('mobile automation navigation and setup', () => {
+  it('preserves edited target values through same selections and away/back adoption', async () => {
+    const targets = automationTargets()
+    const setup = targets.setups[0]!
+    const other = { ...setup, id: 'other-setup', repoId: 'other-repo', path: '/other' }
+    targets.setups.push(other)
+    targets.workspaces.push({ ...targets.workspaces[0]!, worktreeId: 'workspace-2' })
+    inventory.targets.mockResolvedValue(targets)
+    const current = { ...savedAutomation(), agentId: 'claude' as const, reuseSession: false }
+    const save = vi.fn()
+    const port = automationClient(() => ({}))
+    await act(async () => {
+      tree = create(
+        createElement(AutomationEditor, {
+          client: port.client,
+          current,
+          connected: true,
+          busy: false,
+          capabilities: [],
+          onCancel: vi.fn(),
+          onDraftChange: vi.fn(),
+          onSave: save
+        })
+      )
+    })
+    const choice = (label: string) =>
+      root()
+        .findAllByType(AutomationChoice)
+        .find((node) => node.props.label === label)!
+    await press('Advanced options')
+    await act(async () => {
+      choice('Agent').props.onSelect('codex')
+      root()
+        .findAll(
+          (node) =>
+            node.props.accessibilityLabel === 'Reuse agent session' &&
+            String(node.type) === 'Switch'
+        )[0]!
+        .props.onValueChange(true)
+    })
+    for (const [label, same, away] of [
+      ['Project and host setup', automationSetupKey(setup), automationSetupKey(other)],
+      ['Workspace', 'existing', 'new_per_run'],
+      ['Existing workspace', 'workspace-1', 'workspace-2']
+    ]) {
+      await act(async () => {
+        choice(label!).props.onSelect(same)
+      })
+      await act(async () => {
+        choice(label!).props.onSelect(away)
+      })
+      await act(async () => {
+        choice(label!).props.onSelect(same)
+      })
+    }
+    expect(choice('Agent').props.value).toBe('codex')
+    expect(choice('Existing workspace').props.value).toBe('workspace-1')
+    await press('Continue')
+    await press('Continue')
+    await press('Save changes')
+    const [draft, original] = save.mock.calls[0]!
+    expect(draft).toMatchObject({
+      agentId: 'codex',
+      reuseSession: true,
+      workspaceId: 'workspace-1',
+      targetEdited: true,
+      rrule: current.rrule,
+      timezone: current.timezone
+    })
+    expect(automationUpdateParams(current.id, draft, original, targets)).toMatchObject({
+      destination: { selector: { kind: 'self' } },
+      updates: { agentId: 'codex', reuseSession: true, workspace: 'id:workspace-1' }
+    })
+  })
+
   it.each(['success', 'failure'] as const)(
     'keeps acquisition B authoritative after late A %s with copied target IDs',
     async (late) => {
@@ -352,9 +425,26 @@ describe('mobile automation navigation and setup', () => {
     let ptyId = 'original-pty'
     const port = automationClient(() => ({
       terminals: [
-        { handle: 'active', tabId: 'active-tab', leafId: leaf, ptyId: 'active-pty' },
-        { handle: 'original', tabId: 'original-tab', leafId: leaf, ptyId }
-      ]
+        {
+          handle: 'active',
+          worktreeId: run.workspaceId,
+          connected: true,
+          tabId: 'active-tab',
+          leafId: leaf,
+          ptyId: 'active-pty'
+        },
+        {
+          handle: 'original',
+          worktreeId: run.workspaceId,
+          connected: true,
+          tabId: 'original-tab',
+          leafId: leaf,
+          ptyId
+        }
+      ],
+      totalCount: 2,
+      truncated: false,
+      hostScope: { hostIds: ['local'], omittedHostIds: [] }
     }))
     const history = {
       runs: [run],

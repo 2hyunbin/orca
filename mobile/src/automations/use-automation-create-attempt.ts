@@ -17,13 +17,15 @@ import type { AutomationTargets } from './automation-target-inventory'
 type SubmittedAutomationCreate = {
   params: ReturnType<typeof automationCreateParams>
   draft: AutomationDraft
+  affirmed?: boolean
   replyId?: string
 }
 
 export function useAutomationCreateAttempt(
   rows: readonly MobileAutomationRow[],
   creating: boolean,
-  onReconcile: (row: MobileAutomationRow, initialDraft?: AutomationDraft) => void
+  onReconcile: (row: MobileAutomationRow, initialDraft?: AutomationDraft) => void,
+  isCurrentSnapshot: () => boolean
 ) {
   const attempt = useRef<SubmittedAutomationCreate | null>(null)
   const latestDraft = useRef<AutomationDraft | null>(null)
@@ -32,7 +34,7 @@ export function useAutomationCreateAttempt(
   }, [])
   useEffect(() => {
     const submitted = attempt.current
-    if (!submitted || !creating) {
+    if (!submitted || !creating || !isCurrentSnapshot()) {
       return
     }
     const saved = rows.find((entry) =>
@@ -48,13 +50,14 @@ export function useAutomationCreateAttempt(
     const changes: Partial<AutomationDraft> = {}
     const submittedEntries = new Map(Object.entries(submitted.draft))
     for (const [key, value] of Object.entries(current)) {
-      if (value !== submittedEntries.get(key)) {
+      if (key !== 'targetEdited' && value !== submittedEntries.get(key)) {
         Object.assign(changes, { [key]: value })
       }
     }
+    submitted.affirmed = true
     attempt.current = null
     onReconcile(saved, Object.keys(changes).length ? { ...baseline, ...changes } : undefined)
-  }, [rows, creating, onReconcile])
+  }, [rows, creating, onReconcile, isCurrentSnapshot])
   return {
     observeDraft,
     reset: () => {
@@ -68,6 +71,9 @@ export function useAutomationCreateAttempt(
       capabilities: readonly string[],
       current: () => boolean
     ) => {
+      if (attempt.current?.affirmed) {
+        return
+      }
       if (attempt.current && !attempt.current.params.creationKey) {
         throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
       }
@@ -84,22 +90,28 @@ export function useAutomationCreateAttempt(
       }
       attempt.current = submitted
       const generation = client.getGeneration?.()
-      const sameAttempt = () =>
-        attempt.current === submitted && current() && generation === client.getGeneration?.()
+      const sameAuthority = () => current() && generation === client.getGeneration?.()
+      const sameAttempt = () => attempt.current === submitted && sameAuthority()
       let response: RpcResponse
       try {
         response = await automationCreateWrite.request(client, submitted.params, {
           failWhenDisconnected: true
         })
       } catch (failure) {
+        if (submitted.affirmed && sameAuthority()) {
+          return
+        }
         if (firstSubmission && !isRpcDeliveryUnknown(failure) && sameAttempt()) {
           attempt.current = null
           throw failure
         }
         throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
       }
-      if (!sameAttempt()) {
+      if (!sameAuthority()) {
         throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
+      }
+      if (submitted.affirmed) {
+        return
       }
       if (
         firstSubmission &&
@@ -111,6 +123,7 @@ export function useAutomationCreateAttempt(
       }
       try {
         submitted.replyId = automationCreateWrite.interpret(response).automation.id
+        submitted.affirmed = true
       } catch {
         throw new Error(AUTOMATION_OUTCOME_UNKNOWN)
       }

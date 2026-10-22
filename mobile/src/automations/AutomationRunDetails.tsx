@@ -28,29 +28,50 @@ export function AutomationRunDetails(props: {
   const [error, setError] = useState<string | null>(null)
   const router = useRouteHandoff()
   const mounted = useRef(false)
+  const epoch = useRef(0)
+  const latest = useRef(props)
+  latest.current = props
   useEffect(() => {
     mounted.current = true
+    const changed = () => {
+      epoch.current++
+      setOpening(false)
+    }
+    changed()
+    const stop = props.client?.onStateChange(changed)
     return () => {
       mounted.current = false
+      epoch.current++
+      stop?.()
     }
-  }, [])
+  }, [props.client, props.hostId, props.executionHost])
   async function openAgent() {
     if (!props.client || opening) {
       return
     }
     setOpening(true)
+    setError(null)
     const client = props.client
     const generation = client.getGeneration?.()
+    const at = epoch.current
+    const current = () =>
+      mounted.current &&
+      at === epoch.current &&
+      client === latest.current.client &&
+      props.hostId === latest.current.hostId &&
+      props.executionHost === latest.current.executionHost &&
+      generation === client.getGeneration?.() &&
+      client.getState() === 'connected'
     try {
       const found = await canOpenAutomationRunAgent(client, run)
-      if (
-        !mounted.current ||
-        generation !== client.getGeneration?.() ||
-        client.getState() !== 'connected'
-      ) {
+      if (!current()) {
         return
       }
-      if (!found || !run.workspaceId || !run.terminalPaneKey) {
+      if (found === 'unverifiable') {
+        setError('Could not verify the original agent pane. Reconnect and try again.')
+        return
+      }
+      if (found !== 'available' || !run.workspaceId || !run.terminalPaneKey) {
         setError(
           'The original agent pane is no longer available to open. Saved output remains here.'
         )
@@ -68,11 +89,11 @@ export function AutomationRunDetails(props: {
         )
       )
     } catch {
-      if (mounted.current) {
+      if (current()) {
         setError('Could not verify the original agent pane. Reconnect and try again.')
       }
     } finally {
-      if (mounted.current) {
+      if (current()) {
         setOpening(false)
       }
     }
@@ -106,6 +127,7 @@ export function AutomationRunDetails(props: {
             run.workspaceDisplayName ?? run.runContext?.path ?? run.workspaceId ?? 'Not created'
           }
         />
+        <AutomationMetadata label="Project host" value={run.runContext?.hostId ?? 'Not recorded'} />
         <AutomationMetadata label="Run" value={run.id} />
       </View>
       {run.error ? <Text style={styles.error}>{run.error}</Text> : null}

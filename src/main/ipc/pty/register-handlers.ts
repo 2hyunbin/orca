@@ -217,13 +217,17 @@ export function registerPtyHandlers(
 
   const assertWorkspaceAcceptsNewPty = (
     worktreeId: string | undefined,
-    sessionId?: string
-  ): Promise<void> | void => assertWorkspaceAcceptsNewPtyImpl(store, worktreeId, sessionId)
+    sessionId?: string,
+    connectionId?: string | null
+  ): Promise<void> | void =>
+    assertWorkspaceAcceptsNewPtyImpl(store, worktreeId, sessionId, connectionId)
   const resolvePtySpawnStartupCwd = (
     worktreeId: string | undefined,
     cwd: string | undefined,
-    missingDirFallback?: TerminalStartupCwdMissingDirFallback
-  ): string | undefined => resolvePtySpawnStartupCwdImpl(store, worktreeId, cwd, missingDirFallback)
+    missingDirFallback?: TerminalStartupCwdMissingDirFallback,
+    connectionId?: string | null
+  ): string | undefined =>
+    resolvePtySpawnStartupCwdImpl(store, worktreeId, cwd, missingDirFallback, connectionId)
   const prepareCodexResumeHomeBound = (
     args: Parameters<typeof prepareCodexResumeHome>[1]
   ): ReturnType<typeof prepareCodexResumeHome> =>

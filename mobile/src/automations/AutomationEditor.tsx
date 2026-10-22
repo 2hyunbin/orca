@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAutomationTargetDrafts } from './use-automation-target-drafts'
 import { Text, View } from 'react-native'
 import type { RpcClient } from '../transport/rpc-client'
 import type { MobileAutomation } from './automation-reply-schema'
@@ -41,6 +42,7 @@ export function AutomationEditor(props: {
 }) {
   const [draft, setDraft] = useState(() => props.initialDraft ?? newAutomationDraft(props.current))
   const original = useRef(newAutomationDraft(props.current))
+  const selectTargetDraft = useAutomationTargetDrafts()
   const initialized = useRef(false)
   const [targets, setTargets] = useState<AutomationTargets | null>(null)
   const [agents, setAgents] = useState<MobileNewTabAgentOption[]>([])
@@ -154,7 +156,19 @@ export function AutomationEditor(props: {
     })
   }
   function change(patch: Partial<AutomationDraft>) {
-    setDraft((current) => ({ ...current, ...patch }))
+    setDraft((current) => ({
+      ...current,
+      ...patch,
+      ...('setupId' in patch || 'workspaceMode' in patch || 'workspaceId' in patch
+        ? { targetEdited: true }
+        : {})
+    }))
+    setError(null)
+  }
+  function changeTarget(patch: Partial<AutomationDraft>) {
+    setDraft((current) => {
+      return selectTargetDraft(current, patch)
+    })
     setError(null)
   }
   function next() {
@@ -238,7 +252,7 @@ export function AutomationEditor(props: {
             disabled={disabled || !targets}
             onSelect={(setupId) => {
               const target = targets?.setups.find((entry) => automationSetupKey(entry) === setupId)
-              change({
+              changeTarget({
                 setupId,
                 workspaceId: '',
                 workspaceMode: target?.kind === 'folder' ? 'existing' : draft.workspaceMode,
@@ -258,7 +272,7 @@ export function AutomationEditor(props: {
               },
               { value: 'existing', label: 'Use an existing workspace' }
             ]}
-            onSelect={(workspaceMode) => change({ workspaceMode, reuseSession: false })}
+            onSelect={(workspaceMode) => changeTarget({ workspaceMode, reuseSession: false })}
             disabled={disabled}
           />
           {draft.workspaceMode === 'existing' ? (
@@ -284,7 +298,7 @@ export function AutomationEditor(props: {
                   : [])
               ]}
               onSelect={(workspaceId) =>
-                change({ workspaceId, agentId: props.current?.agentId ?? null })
+                changeTarget({ workspaceId, agentId: props.current?.agentId ?? null })
               }
               disabled={disabled || !targets}
             />

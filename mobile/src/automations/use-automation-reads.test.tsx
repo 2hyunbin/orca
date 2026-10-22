@@ -29,13 +29,115 @@ function latest<T>(read: () => T | null) {
 }
 
 describe('host-owned automation reads', () => {
+  it.each(['success', 'unreadable', 'post-write-error'] as const)(
+    'keeps list affirmation after the original create returns %s',
+    async (outcome) => {
+      const reply = deferred<unknown>()
+      let listed: ReturnType<typeof savedAutomation>[] = []
+      const port = automationClient((method) => {
+        if (method === 'status.get') {
+          return { capabilities: [AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY] }
+        }
+        if (method === 'automation.create') {
+          return reply.promise
+        }
+        return {
+          automations: listed,
+          items: listed.map((a) => ({ automationId: a.id, selector: { kind: 'self' } }))
+        }
+      })
+      const reconciled = vi.fn()
+      let state: {
+        catalog: ReturnType<typeof useAutomationCatalog>
+        attempt: ReturnType<typeof useAutomationCreateAttempt>
+      } | null = null
+      function Probe() {
+        const catalog = useAutomationCatalog(port.client, false)
+        const attempt = useAutomationCreateAttempt(
+          catalog.rows,
+          true,
+          reconciled,
+          catalog.isCurrentSnapshot
+        )
+        state = { catalog, attempt }
+        return null
+      }
+      await act(async () => {
+        tree = create(createElement(Probe))
+      })
+      const read = () => latest(() => state)
+      const targets = automationTargets()
+      const setup = targets.setups[0]!
+      const draft = {
+        ...newAutomationDraft(),
+        name: 'Review',
+        prompt: 'Submitted A',
+        agentId: 'codex' as const,
+        setupId: JSON.stringify([setup.hostId, setup.id, setup.repoId, setup.path])
+      }
+      let pending: Promise<void> | undefined
+      await act(async () => {
+        read().attempt.observeDraft(draft)
+        pending = read().catalog.perform(
+          (client, current) =>
+            read().attempt.submit(
+              client,
+              draft,
+              targets,
+              [AUTOMATION_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY],
+              current
+            ),
+          () => {}
+        )
+      })
+      const params = port.send.mock.calls.find(([method]) => method === 'automation.create')?.[1]
+      if (!params || typeof params !== 'object' || !('creationKey' in params)) {
+        throw new Error('missing command')
+      }
+      listed = [
+        {
+          ...savedAutomation(),
+          creationKey: String(params.creationKey),
+          name: 'Host name',
+          prompt: 'Submitted A',
+          enabled: false
+        }
+      ]
+      await act(async () => {
+        read().attempt.observeDraft({ ...draft, prompt: 'Edited B' })
+        port.event({ type: 'automationsChanged' })
+      })
+      expect(reconciled).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ automation: expect.objectContaining({ enabled: false }) }),
+        expect.objectContaining({ name: 'Host name', prompt: 'Edited B' })
+      )
+      await act(async () => {
+        if (outcome === 'post-write-error') {
+          reply.reject(markRpcDeliveryUnknown(new Error('post-write connection loss')))
+        } else {
+          reply.resolve(outcome === 'success' ? { automation: listed[0] } : {})
+        }
+        await pending
+      })
+      expect(read().catalog.error).toBeNull()
+      expect(read().catalog.busy).toBe(false)
+      expect(reconciled).toHaveBeenCalledTimes(1)
+      expect(
+        port.send.mock.calls.filter(([method]) => method === 'automation.create')
+      ).toHaveLength(1)
+      expect(
+        port.send.mock.calls.filter(([method]) => method === 'automation.update')
+      ).toHaveLength(0)
+    }
+  )
+
   it.each([false, true])(
     'allows correction only before possible application (keyed=%s)',
     async (keyed) => {
       const port = automationClient(() => ({ automation: savedAutomation() }))
       let state: ReturnType<typeof useAutomationCreateAttempt> | null = null
       function Probe() {
-        state = useAutomationCreateAttempt([], true, vi.fn())
+        state = useAutomationCreateAttempt([], true, vi.fn(), () => true)
         return null
       }
       await act(async () => {
@@ -88,7 +190,7 @@ describe('host-owned automation reads', () => {
       const port = automationClient(() => ({}))
       let state: ReturnType<typeof useAutomationCreateAttempt> | null = null
       function Probe() {
-        state = useAutomationCreateAttempt([], true, vi.fn())
+        state = useAutomationCreateAttempt([], true, vi.fn(), () => true)
         return null
       }
       await act(async () => {

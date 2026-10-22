@@ -29,7 +29,11 @@ export async function prepareRuntimePtySpawn(
 ): Promise<PtySpawnResult | null> {
   const args = ctx.args
   if (!ctx.preAdoptedStablePane) {
-    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(args.worktreeId, args.sessionId)
+    const admission = ctx.deps.assertWorkspaceAcceptsNewPty(
+      args.worktreeId,
+      args.sessionId,
+      args.connectionId
+    )
     if (admission) {
       await admission
     }
@@ -70,7 +74,8 @@ export async function prepareRuntimePtySpawn(
     projectRuntimeSource: { kind: 'store', store: ctx.deps.store },
     preAdopted: ctx.preAdoptedStablePane !== null,
     getSettings: ctx.deps.getSettings,
-    resolveStartupCwd: ctx.deps.resolvePtySpawnStartupCwd
+    resolveStartupCwd: (id, cwd, fallback) =>
+      ctx.deps.resolvePtySpawnStartupCwd(id, cwd, fallback, args.connectionId)
   })
   ctx.cwd = target.cwd
   ctx.requestedCwd = target.requestedCwd

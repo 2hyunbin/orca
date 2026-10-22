@@ -108,12 +108,14 @@ export type PtySpawnIpcDeps = PtySpawnCodexResumeDeps & {
   adoptStablePane: (args: AdoptStablePaneArgs) => Promise<AdoptStablePaneResult | null>
   assertWorkspaceAcceptsNewPty: (
     worktreeId: string | undefined,
-    sessionId?: string
+    sessionId?: string,
+    connectionId?: string | null
   ) => Promise<void> | void
   resolvePtySpawnStartupCwd: (
     worktreeId: string | undefined,
     cwd: string | undefined,
-    missingDirFallback?: TerminalStartupCwdMissingDirFallback
+    missingDirFallback?: TerminalStartupCwdMissingDirFallback,
+    connectionId?: string | null
   ) => string | undefined
   transitionSpawnHiddenRendererPtyDeliveryState: (id: string, hidden: boolean) => void
   trustedTerminalHandleEnv: Set<string>

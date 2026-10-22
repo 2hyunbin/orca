@@ -27,7 +27,7 @@ export function AutomationDetail(props: {
           accessibilityLabel={`Run ${automation.name} on schedule`}
           value={automation.enabled}
           onValueChange={props.onToggle}
-          disabled={props.disabled || orphan}
+          disabled={props.disabled}
         />
       </View>
       {item.selector.kind === 'orphan' ? (
@@ -73,7 +73,7 @@ export function AutomationDetail(props: {
             disabled={props.disabled || orphan}
           />
         </View>
-        <AutomationButton label="Edit" onPress={props.onEdit} disabled={props.disabled || orphan} />
+        <AutomationButton label="Edit" onPress={props.onEdit} disabled={props.disabled} />
       </View>
       <AutomationButton label="View all runs" onPress={props.onRuns} />
       <AutomationButton

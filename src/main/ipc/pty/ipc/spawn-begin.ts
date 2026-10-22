@@ -97,7 +97,12 @@ export async function beginPtyIpcSpawn(
       )
     : new Map<string, CodexPaneHomeRoute | null>()
   ctx.spawnTiming = createPtySpawnTiming()
-  ctx.cwd = ctx.deps.resolvePtySpawnStartupCwd(args.worktreeId, args.cwd)
+  ctx.cwd = ctx.deps.resolvePtySpawnStartupCwd(
+    args.worktreeId,
+    args.cwd,
+    undefined,
+    args.connectionId
+  )
 
   const earlyReservationKey = resolveEarlyPaneSpawnReservationKey(args)
   // Why: a replacing spawn reserved its pane before stopping the owner; joining itself would deadlock.

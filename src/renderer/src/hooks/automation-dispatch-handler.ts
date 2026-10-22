@@ -14,6 +14,7 @@ import type {
 } from '../../../shared/automations-types'
 import { createAutomationDispatchCompletion } from './automation-dispatch-completion'
 import {
+  connectAutomationDispatchWorkspace,
   prepareAutomationDispatchWorkspace,
   resolveAutomationDispatchWorkspace
 } from './automation-dispatch-workspace'
@@ -101,9 +102,13 @@ export async function handleAutomationDispatchRequest({
         agentId: automation.agentId,
         worktreeId: worktree.id,
         target: {
-          hostId: worktree.hostId ?? getRepoExecutionHostId(resolved.repo),
+          hostId: getRepoExecutionHostId(resolved.repo),
           repoId: resolved.repo.id,
           path: resolved.repo.path,
+          runtimeEnvironmentId: worktree.runtimeOwnerEnvironmentId
+        },
+        physicalTarget: {
+          hostId: worktree.hostId ?? getRepoExecutionHostId(resolved.repo),
           runtimeEnvironmentId: worktree.runtimeOwnerEnvironmentId
         },
         currentRunId: run.id,
@@ -172,6 +177,16 @@ export async function handleAutomationDispatchRequest({
           }
         }
       }
+    }
+    if (
+      automation.workspaceMode === 'existing' &&
+      !(await connectAutomationDispatchWorkspace({
+        run,
+        context: resolved.context,
+        markDispatchResult
+      }))
+    ) {
+      return
     }
     const result = await launchAgentBackgroundSession({
       agent: automation.agentId,

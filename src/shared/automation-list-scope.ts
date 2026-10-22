@@ -73,6 +73,7 @@ export type AutomationWorkspaceHost =
 export type AutomationProjectionContext = {
   /** The process that owns this store; runtime scheduling markers are local only on a runtime. */
   storageAuthority?: 'desktop' | 'runtime'
+  requiresHostReselection?: (automation: Automation) => boolean
   /** Current registration generation of a saved SSH target; undefined once it is gone. */
   sshTargetGeneration: (targetId: string) => number | undefined
   /** `undefined` = the repo is gone; `null` = a local repo; a string = its SSH connection. */
@@ -183,12 +184,14 @@ export type AutomationCapturedHostIssue =
   | typeof AUTOMATION_ORPHAN_ISSUES.targetMissing
   | typeof AUTOMATION_ORPHAN_ISSUES.targetReplaced
   | typeof AUTOMATION_ORPHAN_ISSUES.workspaceHostAmbiguous
+  | typeof AUTOMATION_ORPHAN_ISSUES.malformed
 
 // Keyed by the union, not a list of it: a list stays valid when the union grows, so a
 // fourth diagnosis would compile while never reaching dispatch. This makes omitting it here
 // the compile error, not just omitting its message.
 const CAPTURED_HOST_ISSUES: Record<AutomationCapturedHostIssue, true> = {
   [AUTOMATION_ORPHAN_ISSUES.targetMissing]: true,
+  [AUTOMATION_ORPHAN_ISSUES.malformed]: true,
   [AUTOMATION_ORPHAN_ISSUES.targetReplaced]: true,
   // No single owner is as unrunnable as no owner: dispatching would pick a host the user never chose.
   [AUTOMATION_ORPHAN_ISSUES.workspaceHostAmbiguous]: true
@@ -215,6 +218,12 @@ export function automationCapturedHostIssue(
 ): AutomationCapturedHostIssue | null {
   const selector = projectAutomationSelector(automation, context)
   if (selector.kind !== 'orphan') {
+    return null
+  }
+  if (
+    selector.issue === AUTOMATION_ORPHAN_ISSUES.malformed &&
+    !context.requiresHostReselection?.(automation)
+  ) {
     return null
   }
   return isCapturedHostIssue(selector.issue) ? selector.issue : null

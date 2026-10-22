@@ -1,3 +1,4 @@
+import { parseWorkspaceKey } from '../../shared/workspace-scope'
 import { getRepoExecutionHostId, toSshExecutionHostId } from '../../shared/execution-host'
 /**
  * A server-run automation's agent, started through the shared launch executor.
@@ -55,7 +56,9 @@ export async function launchHeadlessAutomationAgent(
     automation.workspaceMode === 'existing'
       ? await runtime.resolveManagedTerminalWorkspaceTarget(
           `id:${requireWorkspaceId(automation)}`,
-          getRepoExecutionHostId(target.repo),
+          parseWorkspaceKey(automation.workspaceId ?? '')?.type === 'folder'
+            ? undefined
+            : getRepoExecutionHostId(target.repo),
           false
         )
       : undefined
@@ -69,7 +72,8 @@ export async function launchHeadlessAutomationAgent(
     const reused = await sendToReusableSession(
       runtime,
       { ...request, text },
-      selectedWorkspace?.displayName ?? null
+      selectedWorkspace?.displayName ?? null,
+      selectedWorkspace?.hostId ?? getRepoExecutionHostId(target.repo)
     )
     if (reused) {
       return reused
@@ -187,7 +191,8 @@ async function sendToReusableSession(
     text: string
     target: Extract<AutomationRunTargetResult, { ok: true }>
   },
-  workspaceDisplayName: string | null
+  workspaceDisplayName: string | null,
+  physicalHostId: string
 ): Promise<HeadlessAutomationAgentLaunch | null> {
   const { automation, text } = request
   const worktreeId = requireWorkspaceId(automation)
@@ -211,9 +216,7 @@ async function sendToReusableSession(
       const handle = runOwnHandle(runtime, previous)
       const live = handle ? runtime.resolveTerminalContext(handle) : null
       const liveHostId = live?.connectionId ? toSshExecutionHostId(live.connectionId) : 'local'
-      return handle &&
-        live?.worktreeId === worktreeId &&
-        liveHostId === getRepoExecutionHostId(request.target.repo)
+      return handle && live?.worktreeId === worktreeId && liveHostId === physicalHostId
         ? { handle, previous }
         : null
     }

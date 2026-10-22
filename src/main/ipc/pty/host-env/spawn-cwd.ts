@@ -1,3 +1,8 @@
+import {
+  resolveQualifiedFolderWorkspace,
+  resolveQualifiedFolderWorkspaceResult
+} from '../../../../shared/folder-workspace-execution-host'
+import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
 import { stat } from 'node:fs/promises'
 import type { Store } from '../../../persistence'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
@@ -8,7 +13,7 @@ import {
 } from '../../../../shared/terminal-startup-cwd'
 import {
   assertFolderWorkspacePathUsable,
-  getFolderWorkspacePathStatus
+  getResolvedFolderWorkspacePathStatus
 } from '../../../project-groups/folder-workspace-path-status'
 import {
   isWslMoveWorkspaceBlocked,
@@ -23,14 +28,15 @@ import { listLiveDaemonPtyIds } from '../../../daemon/daemon-provider-state'
 export function assertWorkspaceAcceptsNewPty(
   store: Store | undefined,
   worktreeId: string | undefined,
-  sessionId?: string
+  sessionId?: string,
+  connectionId?: string | null
 ): Promise<void> | void {
   if (isWslMoveWorkspaceBlocked(store, worktreeId)) {
     return assertReattachesLiveSession(sessionId).then(() =>
-      assertFolderWorkspacePtyPathUsable(store, worktreeId)
+      assertFolderWorkspacePtyPathUsable(store, worktreeId, connectionId)
     )
   }
-  return assertFolderWorkspacePtyPathUsable(store, worktreeId)
+  return assertFolderWorkspacePtyPathUsable(store, worktreeId, connectionId)
 }
 
 async function assertReattachesLiveSession(sessionId: string | undefined): Promise<void> {
@@ -43,31 +49,58 @@ async function assertReattachesLiveSession(sessionId: string | undefined): Promi
 
 export function assertFolderWorkspacePtyPathUsable(
   store: Store | undefined,
-  worktreeId: string | undefined
+  worktreeId: string | undefined,
+  connectionId?: string | null
 ): Promise<void> | void {
   const workspaceScope = typeof worktreeId === 'string' ? parseWorkspaceKey(worktreeId) : null
   if (!store || workspaceScope?.type !== 'folder') {
     return
   }
-  return getFolderWorkspacePathStatus(store, {
-    scope: 'folder-workspace',
-    folderWorkspaceId: workspaceScope.folderWorkspaceId
-  }).then(assertFolderWorkspacePathUsable)
+  const selected = resolveSpawnFolder(store, workspaceScope.folderWorkspaceId, connectionId)
+  return getResolvedFolderWorkspacePathStatus(selected.workspace, selected.hostId).then(
+    assertFolderWorkspacePathUsable
+  )
 }
 
 export function resolvePtySpawnStartupCwd(
   store: Store | undefined,
   worktreeId: string | undefined,
   cwd: string | undefined,
-  missingDirFallback?: TerminalStartupCwdMissingDirFallback
+  missingDirFallback?: TerminalStartupCwdMissingDirFallback,
+  connectionId?: string | null
 ): string | undefined {
   return resolveTerminalStartupCwdForWorkspace({
     workspaceId: worktreeId,
     requestedCwd: cwd,
     missingDirFallback,
     resolveFolderWorkspacePath: (folderWorkspaceId) =>
-      store?.getFolderWorkspace(folderWorkspaceId)?.folderPath
+      store
+        ? (() => {
+            const result = resolveQualifiedFolderWorkspaceResult(
+              {
+                folderWorkspaces: store.getFolderWorkspaces(),
+                projectGroups: store.getProjectGroups(),
+                repos: store.getRepos()
+              },
+              folderWorkspaceId,
+              getConnectionExecutionHostId(connectionId)
+            )
+            return result.kind === 'selected' ? result.value.workspace.folderPath : undefined
+          })()
+        : undefined
   })
+}
+
+function resolveSpawnFolder(store: Store, id: string, connectionId?: string | null) {
+  return resolveQualifiedFolderWorkspace(
+    {
+      folderWorkspaces: store.getFolderWorkspaces(),
+      projectGroups: store.getProjectGroups(),
+      repos: store.getRepos()
+    },
+    id,
+    getConnectionExecutionHostId(connectionId)
+  )
 }
 
 export async function localStartupCwdDirectoryExists(path: string): Promise<boolean> {
