@@ -1,10 +1,26 @@
 import { resolve } from 'node:path'
 import { runProcessSync } from '@orca/process-host'
+import {
+  checkBunVersion,
+  probeBunVersion,
+  readPinnedBunVersion,
+  resolvePinnedBunExecutable
+} from './pinned-bun-executable.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
+const pinnedBun = resolvePinnedBunExecutable(root, runProcessSync)
+const bunCheck = pinnedBun
+  ? { ok: true }
+  : checkBunVersion(probeBunVersion('bun', root, runProcessSync), readPinnedBunVersion(root))
+if (bunCheck.message) {
+  console.error(bunCheck.message)
+}
+if (!bunCheck.ok) {
+  process.exit(1)
+}
 try {
   const result = runProcessSync({
-    program: 'bun',
+    program: pinnedBun ?? 'bun',
     args: ['--bun', resolve(root, 'node_modules/vitest/vitest.mjs'), ...process.argv.slice(2)],
     cwd: root,
     env: {
