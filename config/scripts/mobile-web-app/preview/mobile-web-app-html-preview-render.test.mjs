@@ -23,8 +23,8 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as esbuild from 'esbuild'
 import { chromium, webkit } from 'playwright-core'
-import { lucideBarrelPlugin } from './build-mobile-web-app-bundle.mjs'
-import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
+import { lucideBarrelPlugin } from '../../build-mobile-web-app-bundle.mjs'
+import { mobileWebAppDependenciesPresent } from '../../mobile-web-app-bundle-dependencies.mjs'
 import {
   createBundleServer,
   readShellCsp,
@@ -40,7 +40,7 @@ import {
 } from './mobile-web-app-preview-artifact-fixture.mjs'
 import { waitForRecordedNavigation } from './mobile-web-app-preview-frame-readiness.mjs'
 
-const mobileDir = fileURLToPath(new URL('../../mobile', import.meta.url))
+const mobileDir = fileURLToPath(new URL('../../../../mobile', import.meta.url))
 
 /** Where the preview sits once mounted, which is what the pixel oracle samples. */
 const FRAME_PROBE = { x: 60, y: 200, width: 4, height: 4 }

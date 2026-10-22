@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { chromium } from 'playwright-core'
-import { buildMobileWebAppBundle } from './build-mobile-web-app-bundle.mjs'
-import { mobileWebAppDependenciesPresent } from './mobile-web-app-bundle-dependencies.mjs'
+import { buildMobileWebAppBundle } from '../../build-mobile-web-app-bundle.mjs'
+import { mobileWebAppDependenciesPresent } from '../../mobile-web-app-bundle-dependencies.mjs'
 import {
   createBundleServer,
   installShellDouble,
@@ -12,7 +12,7 @@ import {
   readBridgeProtocolVersion,
   readShellCsp
 } from './mobile-web-app-render-harness.mjs'
-import { MOBILE_WEB_PAGE_ROUTES } from './mobile-web-page-routes.mjs'
+import { MOBILE_WEB_PAGE_ROUTES } from '../../mobile-web-page-routes.mjs'
 
 // Two gray VP9 frames generated with ffmpeg, without audio or user content.
 const WEBM =

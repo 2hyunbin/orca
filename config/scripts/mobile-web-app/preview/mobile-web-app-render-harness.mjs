@@ -1,10 +1,10 @@
 import { createServer } from 'node:http'
 import { readFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
-import { contentTypeForExtension } from './mobile-web-bundle-manifest.mjs'
+import { contentTypeForExtension } from '../../mobile-web-bundle-manifest.mjs'
 import { fileURLToPath } from 'node:url'
 
-export const projectDir = fileURLToPath(new URL('../..', import.meta.url))
+export const projectDir = fileURLToPath(new URL('../../../..', import.meta.url))
 
 /**
  * Both CSP constants are a list of quoted directives with `//` comments between them, and those
