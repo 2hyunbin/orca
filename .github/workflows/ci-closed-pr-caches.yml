@@ -39,7 +39,6 @@ jobs:
               ['release-ref-validation', 'release-ref-validation.yml'],
               ['docs-pr', 'docs.yml'],
               ['cloud-verify-refs/pull', 'cloud-verify.yml', '/merge'],
-              ['pnpm-verification-pilot', 'ci-pnpm-verification-pilot.yml'],
               ['win-orcad-serve-switch-e2e', 'win-orcad-serve-switch-e2e.yml'],
               ['pi-provider-runtime', 'pi-provider-runtime.yml'],
               ['coding-plan-contract', 'zcode-credential-contract.yml', '-credentials'],
