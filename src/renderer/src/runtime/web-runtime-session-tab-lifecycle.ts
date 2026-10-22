@@ -6,19 +6,19 @@ import type {
 import { useAppStore } from '../store'
 import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
 import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
-import { isUndeliveredCloseFailure } from './web-runtime-session-undelivered-close'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   clearWebSessionCloseIntent,
   makeWebSessionCloseIntentDurable,
   recordWebSessionCloseIntent
 } from './web-session-close-intent'
-import {
-  holdWebSessionCloseForReplay,
-  settleWebSessionCloseReplay,
-  type WebSessionCloseReplay
-} from './web-session-close-replay'
+import { settleWebSessionCloseReplay, type WebSessionCloseReplay } from './web-session-close-replay'
 import { appPairedTerminalTabCloseIntentStore } from './paired-terminal-tab-close-intent-store'
+import {
+  holdUndeliveredUserClose,
+  isUndeliveredCloseFailure,
+  scheduleWebSessionCloseReplayRelist
+} from './web-session-undelivered-close'
 import {
   clearWebSessionFocusIntent,
   clearWebSessionFocusIntentIfMatches,
@@ -35,6 +35,7 @@ import {
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
 import { isServerFrameDrawnWorkspace } from './web-session-tabs-sync/frame-drawn-server-workspaces'
 import { redrawServerLayoutWorkspace } from './server-layout-apply-routes'
+import { userTabCloseParams } from './web-session-user-tab-close-params'
 
 export async function activateWebRuntimeSessionTab(args: {
   worktreeId: string
@@ -87,33 +88,12 @@ export async function closeWebRuntimeSessionTab(args: {
   terminalHandle?: string | null
   /** A replay's pairing; the call is refused if the environment was re-paired since. */
   expectedPairingRevision?: number
+  /** The user confirmed closing a pinned tab; sent only to hosts that honour it. */
+  force?: boolean
+  /** A held close re-sent, not a fresh click; marked so only to hosts that accept the mark. */
+  replay?: true
 }): Promise<WebRuntimeSessionTabCloseOutcome> {
   return callWebRuntimeSessionTabMethod('session.tabs.close', args)
-}
-
-/** Keeps a user close the host never received, hiding the tab until a replay reaches the host. */
-function holdUndeliveredUserClose(
-  intentOwner: ReturnType<typeof captureWebSessionIntentOwner>,
-  worktreeId: string,
-  hostTabIds: readonly string[]
-): void {
-  holdWebSessionCloseForReplay(
-    appPairedTerminalTabCloseIntentStore,
-    intentOwner,
-    worktreeId,
-    hostTabIds
-  )
-  scheduleWebSessionCloseReplayRelist(intentOwner.environmentId, worktreeId)
-}
-
-const WEB_SESSION_CLOSE_REPLAY_RETRY_DELAY_MS = 5_000
-
-// Why a re-list: subscriptions are change-driven, so an idle worktree may never publish the
-// snapshot that makes the next attempt due. The re-list's receipt does.
-function scheduleWebSessionCloseReplayRelist(environmentId: string, worktreeId: string): void {
-  setTimeout(() => {
-    void refreshWebRuntimeSessionTabsSnapshot(environmentId, worktreeId)
-  }, WEB_SESSION_CLOSE_REPLAY_RETRY_DELAY_MS)
 }
 
 /** Sends again the user closes a host snapshot proved reachable; see `takeDueWebSessionCloseReplays`. */
@@ -132,9 +112,11 @@ export async function replayWebSessionTabCloses(
       tabId: replay.hostTabIds[0],
       environmentId,
       reason: 'user',
+      replay: true,
       ...(replay.owner.pairingRevision !== undefined
         ? { expectedPairingRevision: replay.owner.pairingRevision }
-        : {})
+        : {}),
+      ...(replay.force ? { force: true } : {})
     })
     const settled = settleWebSessionCloseReplay(
       appPairedTerminalTabCloseIntentStore,
@@ -176,14 +158,19 @@ async function callWebRuntimeSessionTabMethod(
     leafId?: string | null
     expectedCurrentLocalTabId?: string | null
     expectedPairingRevision?: number
+    force?: boolean
+    replay?: true
   }
 ): Promise<WebRuntimeSessionTabCloseOutcome> {
   const environmentId = resolveTabEnvironmentId(args.environmentId)
   if (!environmentId || !isWebRuntimeSessionActive(environmentId)) {
     if (environmentId && method === 'session.tabs.close' && args.reason === 'user') {
-      holdUndeliveredUserClose(captureWebSessionIntentOwner(environmentId), args.worktreeId, [
-        toHostSessionTabId(args.tabId)
-      ])
+      holdUndeliveredUserClose(
+        captureWebSessionIntentOwner(environmentId),
+        args.worktreeId,
+        [toHostSessionTabId(args.tabId)],
+        args.force
+      )
     }
     return 'failed'
   }
@@ -246,6 +233,8 @@ async function callWebRuntimeSessionTabMethod(
         args.expectedCurrentLocalTabId
       )
     }
+    const userCloseParams =
+      isClose && !isLifecycleClose ? await userTabCloseParams(environmentId, args) : {}
     const response = await callEnvironment({
       // Why: old hosts cannot route this additive method, so a generation
       // cutover fails closed before their destructive legacy close handler.
@@ -271,7 +260,7 @@ async function callWebRuntimeSessionTabMethod(
               terminal: args.terminalHandle
             }
           : isClose
-            ? { reason: args.reason }
+            ? userCloseParams
             : {})
       },
       timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
@@ -322,7 +311,8 @@ async function callWebRuntimeSessionTabMethod(
       holdUndeliveredUserClose(
         intentOwner,
         args.worktreeId,
-        frameDrawn ? [closeHostTabId] : [...closeIntentTabIds].toReversed()
+        frameDrawn ? [closeHostTabId] : [...closeIntentTabIds].toReversed(),
+        args.force
       )
     } else {
       for (const hostTabId of closeIntentTabIds) {

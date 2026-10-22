@@ -26,8 +26,6 @@ function createIdempotentOrcadCleanup(cleanup: () => Promise<void>): () => Promi
   }
 }
 
-export { ORCAD_SHUTDOWN_DEADLINE_MS }
-
 /**
  * True when this call began the stop; false when another source already owns it.
  * `stoppedExitCode` is the code a completed stop exits with; a fatal fault passes non-zero.
