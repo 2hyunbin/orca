@@ -26,13 +26,40 @@ import {
   type SidebarFeedWorkspace
 } from './sidebar-feed-worktrees'
 import { sortWorktreesByStamps, type SortBy } from './smart-sort'
+import type { PairedServerWorkspaceRow } from './paired-server-rows'
+import type { WorkspaceRow } from './workspace-rows'
+
+// By row object: a feed snapshot keeps an unchanged row's object, so only a changed row is read again.
+type FeedRow = WorkspaceRow | PairedServerWorkspaceRow
+const workspaceByRow = new WeakMap<
+  FeedRow,
+  { identity: string | undefined; read: SidebarFeedWorkspace | null }
+>()
+
+/** `identity`: the key a host's own row is listed under; a paired server's row carries its own. */
+function readRemembered(
+  row: FeedRow,
+  read: () => SidebarFeedWorkspace | null,
+  identity?: string
+): SidebarFeedWorkspace | null {
+  const remembered = workspaceByRow.get(row)
+  if (remembered && remembered.identity === identity) {
+    return remembered.read
+  }
+  const next = read()
+  workspaceByRow.set(row, { identity, read: next })
+  return next
+}
 
 function readFeedWorkspaces(domains: SidebarFeedDomains): SidebarFeedWorkspace[] {
   return [
     ...[...domains.workspaces].flatMap(
-      ([identity, row]) => readFeedWorkspaceRow(identity, row) ?? []
+      ([identity, row]) =>
+        readRemembered(row, () => readFeedWorkspaceRow(identity, row), identity) ?? []
     ),
-    ...[...domains.pairedServerRows.values()].flatMap((row) => readFeedPairedServerRow(row) ?? [])
+    ...[...domains.pairedServerRows.values()].flatMap(
+      (row) => readRemembered(row, () => readFeedPairedServerRow(row)) ?? []
+    )
   ]
 }
 
