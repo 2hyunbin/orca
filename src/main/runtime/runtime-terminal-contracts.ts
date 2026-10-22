@@ -302,4 +302,12 @@ export type RuntimeAgentPromptWriteOptions = Omit<RuntimeTerminalWriteOptions, '
   observationTimeoutMs?: number
   requestId?: string
   onInputAccepted?: (send: RuntimeTerminalSend) => void
+  /** `wait` holds the write while the agent asks for permission instead of refusing it with
+   *  `agent_prompt_blocked`; an answer, a process exit or binding change, or `signal` ends the hold. */
+  onPermission?: 'refuse' | 'wait'
+  /** The binding the caller admitted (`getTerminalPromptRequestBinding`); a different process is
+   *  refused with `terminal_handle_stale` instead of receiving the text. */
+  expectedBinding?: AgentPromptExpectedBinding
 }
+
+export type AgentPromptExpectedBinding = { ptyId: string; processIncarnation: string }
