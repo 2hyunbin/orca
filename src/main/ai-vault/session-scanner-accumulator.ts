@@ -29,7 +29,7 @@ import {
   type TranscriptSessionIdentity
 } from './session-transcript-consumers'
 import {
-  boundedText,
+  transcriptMessageFromText,
   transcriptMessageRole,
   transcriptMessagesFromContent
 } from './session-transcript-message-content'
@@ -283,13 +283,12 @@ function publishTranscriptMessage(
   timestamp: unknown
 ): void {
   const messageRole = transcriptMessageRole(role)
-  const messageText = text === null ? null : boundedText(text)
-  if (messageRole && messageText) {
-    accumulator.messages.push({
-      role: messageRole,
-      text: messageText,
-      timestamp: timestampIso(timestamp)
-    })
+  const message =
+    messageRole && text !== null
+      ? transcriptMessageFromText(messageRole, text, timestampIso(timestamp))
+      : null
+  if (message) {
+    accumulator.messages.push(message)
   }
 }
 

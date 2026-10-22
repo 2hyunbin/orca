@@ -104,9 +104,14 @@ it('bounds joins for a large multi-block turn and keeps its later tool messages'
     spy.mockRestore()
   }
   expect(messages).toEqual([
-    { role: 'assistant', text: 'x'.repeat(MESSAGE_LIMIT), timestamp: AT },
+    { role: 'assistant', text: 'x'.repeat(MESSAGE_LIMIT), timestamp: AT, textTruncated: true },
     { role: 'tool', text: 'Read: after-large-text', timestamp: AT },
-    { role: 'tool', text: `header\n${'x'.repeat(MESSAGE_LIMIT - 7)}`, timestamp: AT },
+    {
+      role: 'tool',
+      text: `header\n${'x'.repeat(MESSAGE_LIMIT - 7)}`,
+      timestamp: AT,
+      textTruncated: true
+    },
     { role: 'tool', text: 'Bash: pwd', timestamp: AT },
     { role: 'tool', text: 'finished', timestamp: AT }
   ])
@@ -176,7 +181,7 @@ it('matches the previous tool-result collector at newline and surrogate boundari
           { type: 'tool_result', content: 'finished' }
         ],
         AT
-      )
+      ).map(({ role, text, timestamp }) => ({ role, text, timestamp }))
     ).toEqual([
       ...(text ? [{ role: 'tool', text, timestamp: AT }] : []),
       { role: 'tool', text: 'Read: after', timestamp: AT },
@@ -198,9 +203,13 @@ it('matches join-then-bound at newline and raw surrogate boundaries', () => {
   ]
   for (const parts of partsCases) {
     const text = boundedText(parts.join('\n'))
-    expect(transcriptMessagesFromContent('user', parts, AT)).toEqual(
-      text ? [{ role: 'user', text, timestamp: AT }] : []
-    )
+    expect(
+      transcriptMessagesFromContent('user', parts, AT).map(({ role, text, timestamp }) => ({
+        role,
+        text,
+        timestamp
+      }))
+    ).toEqual(text ? [{ role: 'user', text, timestamp: AT }] : [])
   }
 })
 
@@ -229,7 +238,7 @@ it('matches the previous join-then-bound output across generated block mixtures'
         role,
         [...content, { type: 'tool_use', name: 'Bash', input: { command: 'pwd' } }],
         AT
-      )
+      ).map(({ role, text, timestamp }) => ({ role, text, timestamp }))
     ).toEqual([
       ...(text && (role === 'user' || role === 'assistant' || role === 'tool')
         ? [{ role, text, timestamp: AT }]

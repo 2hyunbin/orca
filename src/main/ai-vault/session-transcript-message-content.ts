@@ -13,13 +13,14 @@ const TEXT_BLOCK_TYPES = new Set(['text', 'input_text', 'output_text', 'thinking
 const TOOL_INPUT_KEYS = ['command', 'cmd', 'file_path', 'path', 'pattern', 'query', 'description']
 
 type PreviewRole = AiVaultSessionPreviewMessage['role']
+type TranscriptText = { text: string | null; textTruncated: boolean }
 
 /** Only conversational roles reach consumers; system/unknown turns are noise. */
 export function transcriptMessageRole(role: PreviewRole): TranscriptMessageRole | null {
   return role === 'user' || role === 'assistant' || role === 'tool' ? role : null
 }
 
-export function toolCallText(name: unknown, input: unknown): string | null {
+export function toolCallContent(name: unknown, input: unknown): TranscriptText {
   const toolName = typeof name === 'string' && name.trim() ? name.trim() : null
   const inputRecord = asRecord(input)
   let argument: string | null = null
@@ -35,37 +36,39 @@ export function toolCallText(name: unknown, input: unknown): string | null {
     argument = input
   }
   if (!toolName && !argument) {
-    return null
+    return { text: null, textTruncated: false }
   }
   const bounded = argument ? sliceAtCodeUnitLimit(argument, TOOL_ARGUMENT_SCAN_LIMIT) : null
-  return toolName && bounded ? `${toolName}: ${bounded}` : (toolName ?? bounded)
+  return {
+    text: toolName && bounded ? `${toolName}: ${bounded}` : (toolName ?? bounded),
+    textTruncated: argument !== null && bounded !== null && bounded.length < argument.length
+  }
 }
 
 /** Flattens a tool_result body (a string, or an array of text blocks). */
-function toolResultText(content: unknown): string | null {
+function toolResultText(content: unknown): TranscriptText {
   if (typeof content === 'string') {
-    return content.trim() ? content : null
+    return { text: content.trim() ? content : null, textTruncated: false }
   }
   if (!Array.isArray(content)) {
-    return null
+    return { text: null, textTruncated: false }
   }
   const parts: string[] = []
   let length = 0
-  for (const item of content) {
+  let omitted = false
+  for (const [index, item] of content.entries()) {
     const text = typeof item === 'string' ? item : asRecord(item)?.text
     if (typeof text === 'string' && text) {
       parts.push(text)
       length += text.length
       if (length >= TRANSCRIPT_MESSAGE_TEXT_LIMIT) {
+        omitted = index + 1 < content.length
         break
       }
     }
   }
-  if (length + parts.length - 1 > TRANSCRIPT_MESSAGE_TEXT_LIMIT) {
-    return boundedJoinedText(parts)
-  }
-  const joined = parts.join('\n')
-  return joined.trim() ? joined : null
+  const joined = boundedJoinedText(parts)
+  return { ...joined, textTruncated: omitted || joined.textTruncated }
 }
 
 /**
@@ -82,8 +85,8 @@ export function transcriptMessagesFromContent(
   const messages: TranscriptMessage[] = []
   const textRole = transcriptMessageRole(role)
   if (typeof content === 'string') {
-    const text = boundedText(content)
-    return text && textRole ? [{ role: textRole, text, timestamp }] : []
+    const message = textRole ? transcriptMessageFromText(textRole, content, timestamp) : null
+    return message ? [message] : []
   }
   const blocks = Array.isArray(content) ? content : content != null ? [content] : []
   const textParts: string[] = []
@@ -99,7 +102,7 @@ export function transcriptMessagesFromContent(
     // Codex 0.153+ item_completed blocks are typed `Text`; the set is lowercase.
     const type = typeof item.type === 'string' ? item.type.toLowerCase() : null
     if (type === 'tool_use') {
-      pushMessage(messages, 'tool', toolCallText(item.name, item.input), timestamp)
+      pushMessage(messages, 'tool', toolCallContent(item.name, item.input), timestamp)
       continue
     }
     if (type === 'tool_result') {
@@ -116,17 +119,23 @@ export function transcriptMessagesFromContent(
   }
   if (textRole && textParts.length > 0) {
     // The record's own words lead; its tool blocks follow in transcript order.
-    const text = boundedJoinedText(textParts)
-    if (text) {
-      messages.unshift({ role: textRole, text, timestamp })
+    const content = boundedJoinedText(textParts)
+    const message = content.text
+      ? transcriptMessageFromText(textRole, content.text, timestamp, content.textTruncated)
+      : null
+    if (message) {
+      messages.unshift(message)
     }
   }
   return messages
 }
 
-function boundedJoinedText(parts: readonly string[]): string | null {
+function boundedJoinedText(parts: readonly string[]): TranscriptText {
+  const length =
+    parts.reduce((total, part) => total + part.length, 0) + Math.max(0, parts.length - 1)
   if (parts.length === 1) {
-    return boundedText(parts[0])
+    const text = boundedText(parts[0])
+    return { text, textTruncated: text !== null && text.length < length }
   }
   const prefixes: string[] = []
   // One extra code unit preserves truncation at a trailing high surrogate.
@@ -142,19 +151,40 @@ function boundedJoinedText(parts: readonly string[]): string | null {
       break
     }
   }
-  return boundedText(prefixes.join('\n'))
+  const text = boundedText(prefixes.join('\n'))
+  return { text, textTruncated: text !== null && text.length < length }
 }
 
 function pushMessage(
   messages: TranscriptMessage[],
   role: TranscriptMessageRole,
-  text: string | null,
+  content: TranscriptText,
   timestamp: string | null
 ): void {
-  const bounded = text === null ? null : boundedText(text)
-  if (bounded) {
-    messages.push({ role, text: bounded, timestamp })
+  const message =
+    content.text === null
+      ? null
+      : transcriptMessageFromText(role, content.text, timestamp, content.textTruncated)
+  if (message) {
+    messages.push(message)
   }
+}
+
+export function transcriptMessageFromText(
+  role: TranscriptMessageRole,
+  value: string,
+  timestamp: string | null,
+  textTruncated = false
+): TranscriptMessage | null {
+  const text = boundedText(value)
+  return text
+    ? {
+        role,
+        text,
+        timestamp,
+        ...(textTruncated || text.length < value.length ? { textTruncated: true as const } : {})
+      }
+    : null
 }
 
 export function boundedText(value: string): string | null {
