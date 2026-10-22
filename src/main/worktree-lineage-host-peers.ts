@@ -1,5 +1,7 @@
 import type { Worktree } from '../shared/worktree/types'
 import type { Repo } from '../shared/repo-types'
+import type { WorktreeMeta } from '../shared/worktree/meta-types'
+import type { WorktreeLineage } from '../shared/worktree/lineage-types'
 import { getRepoExecutionHostId } from '../shared/execution-host'
 import { getRepoIdFromWorktreeId, splitWorktreeId } from '../shared/worktree/id'
 import { isFolderRepo } from '../shared/repo-kind'
@@ -9,7 +11,7 @@ import {
   getSavedWorktreeLineage,
   worktreeLineageFromWorkspaceLineage
 } from '../shared/resolved-worktree-lineage'
-import { peekWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
+import { readAllWorktreeMetaForHost } from './persistence/host-qualified-worktree-meta'
 import { areWorktreePathsEqual } from './git/worktree-path-comparison'
 import { mergeWorktree } from './ipc/worktree-metadata-merge'
 import { resolveRepoOwnershipEvidence } from './ipc/worktrees/listing/worktree-host-ownership'
@@ -26,26 +28,28 @@ type HostPeerStore = Pick<
   RuntimeStore,
   | 'getRepos'
   | 'getAllWorktreeMeta'
-  | 'peekWorktreeMetaForHost'
+  | 'getAllWorktreeMetaForHost'
   | 'getAllWorktreeLineage'
-  | 'getAllWorkspaceLineage'
+  | 'getWorkspaceLineage'
+  | 'getWorktreeMeta'
 >
 
 /** Saved intent is independent of the base publication's resolved fields. */
 export function withSavedWorktreeLineage<T extends Worktree>(
   store: HostPeerStore,
   repo: Repo,
-  rows: readonly T[]
+  rows: readonly T[],
+  lineageById: Readonly<Record<string, WorktreeLineage>> = store.getAllWorktreeLineage?.() ?? {},
+  raw?: Readonly<Record<string, WorktreeMeta>>
 ) {
-  const lineageById = store.getAllWorktreeLineage?.() ?? {}
-  const raw = store.getAllWorktreeMeta?.() ?? {}
-  const workspaceEdges = store.getAllWorkspaceLineage?.() ?? {}
   return rows.map((row) => {
     const key = row.id.startsWith('folder:') ? row.id : worktreeWorkspaceKey(row.id)
-    const workspaceEdge = workspaceEdges[key]
+    const workspaceEdge = lineageById[row.id] ? undefined : store.getWorkspaceLineage?.(key)
     const ownEdge =
       lineageById[row.id] ??
       (workspaceEdge ? worktreeLineageFromWorkspaceLineage(workspaceEdge) : undefined)
+    const owner = raw === undefined && ownEdge ? store.getWorktreeMeta?.(row.id) : undefined
+    const metadata = raw ?? (owner ? { [row.id]: owner } : undefined)
     const savedLineage =
       getSavedWorktreeLineage(
         {
@@ -55,7 +59,7 @@ export function withSavedWorktreeLineage<T extends Worktree>(
           lineage: ownEdge ?? null
         },
         lineageById,
-        raw
+        metadata
       ) ?? null
     return { ...row, savedLineage }
   })
@@ -65,13 +69,13 @@ export function withSavedWorktreeLineage<T extends Worktree>(
 export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   store: HostPeerStore,
   repo: Repo,
-  input: readonly T[]
+  input: readonly T[],
+  rawMetadata?: Readonly<Record<string, WorktreeMeta>>
 ) {
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
-  const raw = store.getAllWorktreeMeta?.() ?? {}
-  const rows = withSavedWorktreeLineage(store, repo, input)
+  const rows = withSavedWorktreeLineage(store, repo, input, lineageById, rawMetadata)
   const project = (peers: readonly Worktree[] = []) =>
-    projectResolvedWorktreeLineage(rows, lineageById, peers, raw, 'publication')
+    projectResolvedWorktreeLineage(rows, lineageById, peers, rawMetadata, 'publication')
   if (rows.length === 0) {
     return project()
   }
@@ -91,6 +95,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
     owners.push(candidate)
     reposById.set(candidate.id, owners)
   }
+  const metaById = readAllWorktreeMetaForHost(store, hostId)
   const peers: Worktree[] = []
   for (const id of relatedIds) {
     if (ownIds.has(id) || getRepoIdFromWorktreeId(id) === repo.id) {
@@ -102,7 +107,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
       const owner = evidence[index]
       return owner?.status === 'owned' && owner.hostId === hostId
     })
-    const meta = peekWorktreeMetaForHost(store, id, hostId)
+    const meta = metaById[id]
     if (
       evidence.some((owner) => owner.status !== 'owned') ||
       hostOwners.length !== 1 ||

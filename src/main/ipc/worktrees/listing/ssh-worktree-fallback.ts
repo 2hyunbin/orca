@@ -10,10 +10,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { GitWorktreeInfo, DetectedWorktree, Worktree } from '../../../../shared/worktree/types'
 import type { Store } from '../../../persistence/loading-store/store'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
-import {
-  readAllWorktreeMetaForHost,
-  readWorktreeMetaForRepo
-} from '../../../persistence/host-qualified-worktree-meta'
+import { readWorktreeMetaForRepo } from '../../../persistence/host-qualified-worktree-meta'
 import { hostWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import { getRepoOwnedWorktreeMeta } from '../../../worktree-metadata-ownership'
 import {
@@ -103,7 +100,8 @@ export function synthesizeSshGitWorktree(
 export function listDisconnectedSshWorktrees(
   store: Store,
   repo: Repo,
-  metaIndex: SshWorktreeMetaIndex
+  metaIndex: SshWorktreeMetaIndex,
+  options: { attachSavedLineage?: boolean } = {}
 ): Worktree[] {
   const byWorktreeId = new Map<string, Worktree>()
   const expectedHostId = getRepoExecutionHostId(repo)
@@ -139,7 +137,8 @@ export function listDisconnectedSshWorktrees(
     byWorktreeId.delete(worktree.id)
     byWorktreeId.set(worktree.id, worktree)
   }
-  return withSavedWorktreeLineage(store, repo, [...byWorktreeId.values()])
+  const rows = [...byWorktreeId.values()]
+  return options.attachSavedLineage === false ? rows : withSavedWorktreeLineage(store, repo, rows)
 }
 
 export function buildDetectedGitWorktrees(
@@ -162,11 +161,7 @@ export function buildDetectedGitWorktrees(
     resolveCustomWorktreeVisibilitySources(repo, settings.worktreeVisibilityDefaults),
     resolveConfiguredWorktreeBasePaths(repo)
   )
-  const allMeta =
-    allMetaOverride ??
-    (typeof store.getAllWorktreeMeta === 'function'
-      ? readAllWorktreeMetaForHost(store, getRepoExecutionHostId(repo))
-      : undefined)
+  const allMeta = allMetaOverride ?? store.getAllWorktreeMeta?.()
   const repoOwnerCount = store.getRepos().filter((candidate) => candidate.id === repo.id).length
   const detected = liveWorktrees.map((gitWorktree) => {
     const worktreeId = `${repo.id}::${gitWorktree.path}`
@@ -211,7 +206,12 @@ export function buildDetectedGitWorktrees(
       worktreeVisibilitySourceMatcher
     })
   })
-  return projectWorktreeLineageWithHostPeers(store, repo, detected)
+  return projectWorktreeLineageWithHostPeers(
+    store,
+    repo,
+    detected,
+    allMetaOverride === undefined ? allMeta : undefined
+  )
 }
 
 export function stampAndMergeVisibleDetectedWorktree(
@@ -221,7 +221,8 @@ export function stampAndMergeVisibleDetectedWorktree(
   allMetaOverride?: Record<string, WorktreeMeta>
 ) {
   const meta = resolveWorktreeMetaWithDiscoveryBackfill(store, repo, detected.id, allMetaOverride)
-  return withSavedWorktreeLineage(store, repo, [
-    mergeWorktree(repo.id, detected, meta, repo.displayName)
-  ])[0]
+  return {
+    ...mergeWorktree(repo.id, detected, meta, repo.displayName),
+    savedLineage: detected.savedLineage
+  }
 }

@@ -16,12 +16,22 @@ import {
   testState,
   writeDataFile
 } from './persistence-test-harness'
-import {
-  peekWorktreeMetaForHost,
-  getAllWorktreeMetaForHost
-} from './persistence/loading-store/worktree-identity-metadata'
+import { getAllWorktreeMetaForHost } from './persistence/loading-store/worktree-identity-metadata'
 import { mergeWorktreeMetaForWrite } from './persistence/loading-store/worktree-meta-write-normalization'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
+import { projectWorktreeLineageWithHostPeers } from './worktree-lineage-host-peers'
+import {
+  createSshWorktreeMetaIndex,
+  listDisconnectedSshWorktrees
+} from './ipc/worktrees/listing/ssh-worktree-fallback'
+import { buildDisconnectedDetectedWorktrees } from './ipc/worktrees/listing/folder-workspace-catalog'
+import { mergeWorktree } from './ipc/worktree-metadata-merge'
+import {
+  getFolderWorkspaceRootId,
+  mergeFolderWorkspace
+} from './ipc/worktrees/folder-workspace-model'
+import { worktreeWorkspaceKey } from '../shared/workspace-scope'
+import type { WorkspaceLineage, WorktreeLineage } from '../shared/worktree/lineage-types'
 
 describe('host-qualified worktree metadata', () => {
   const worktreeId = 'repo-1::/workspace/feature'
@@ -42,7 +52,7 @@ describe('host-qualified worktree metadata', () => {
     rmSync(testState.dir, { recursive: true, force: true })
   })
 
-  it('reads the full-host alias winner at a point without migration or writes', () => {
+  it('reads the full-host alias winner without migration or writes', () => {
     const store = createStoreWithRepo()
     store.setWorktreeMeta(hostWorktreeTarget({ id: worktreeId, hostId: 'local' }), {
       instanceId: 'local-instance'
@@ -53,9 +63,10 @@ describe('host-qualified worktree metadata', () => {
     const written = vi.fn()
     const stop = store.onStateWritten(written)
     const raw = store.getAllWorktreeMeta()
-    expect(store.peekWorktreeMetaForHost(worktreeId, 'ssh:copy')).toEqual(
-      store.getAllWorktreeMetaForHost('ssh:copy')[worktreeId]
-    )
+    expect(store.getAllWorktreeMetaForHost('ssh:copy')[worktreeId]).toMatchObject({
+      instanceId: 'copy-instance',
+      hostId: 'ssh:copy'
+    })
     expect(store.getAllWorktreeMeta()).toBe(raw)
     expect(written).not.toHaveBeenCalled()
     stop()
@@ -67,16 +78,108 @@ describe('host-qualified worktree metadata', () => {
       worktreeMetaByIdentity: { a: first, b: second }
     }
     const before = JSON.stringify(state)
-    expect(peekWorktreeMetaForHost(state, worktreeId, 'local')).toEqual({
+    expect(getAllWorktreeMetaForHost({ state }, 'local')[worktreeId]).toEqual({
       ...second,
       hostId: 'local'
     })
     expect(JSON.stringify(state)).toBe(before)
     state.worktreeMetaByIdentity.b = { ...second, hostId: 'ssh:wrong' }
-    expect(peekWorktreeMetaForHost(state, worktreeId, 'local')).toBe(first)
-    expect(peekWorktreeMetaForHost(state, worktreeId, 'local')).toEqual(
-      getAllWorktreeMetaForHost({ state }, 'local')[worktreeId]
-    )
+    expect(getAllWorktreeMetaForHost({ state }, 'local')[worktreeId]).toBe(first)
+  })
+
+  it('retains workspace-only links and raw-owner SSH intent with one saved-edge attachment', () => {
+    const store = createStoreWithRepo()
+    const folder = makeRepo({ id: 'folder-repo', kind: 'folder', path: '/folder' })
+    store.addRepo(folder)
+    const folderId = getFolderWorkspaceRootId(folder)
+    const raw = store.getAllWorktreeMeta()
+    const workspaceRead = vi.spyOn(store, 'getWorkspaceLineage')
+    const bulkWorkspaceRead = vi.spyOn(store, 'getAllWorkspaceLineage')
+    for (const id of [worktreeId, folderId]) {
+      const meta = store.setWorktreeMeta(hostWorktreeTarget({ id, hostId: 'local' }), {
+        instanceId: 'child-instance'
+      })
+      const edge: WorkspaceLineage = {
+        childWorkspaceKey: worktreeWorkspaceKey(id),
+        childInstanceId: meta.instanceId,
+        parentWorkspaceKey: 'folder:missing-parent',
+        origin: 'cli',
+        capture: { source: 'explicit-cli-flag', confidence: 'explicit' },
+        createdAt: 1
+      }
+      store.setWorkspaceLineage(edge)
+      const owner = id === folderId ? folder : makeRepo({ id: 'repo-1', path: '/workspace' })
+      const row =
+        id === folderId
+          ? mergeFolderWorkspace(folder, id, meta)
+          : mergeWorktree(
+              owner.id,
+              {
+                path: '/workspace/feature',
+                head: '',
+                branch: '',
+                isBare: false,
+                isMainWorktree: false
+              },
+              meta
+            )
+      const [published] = projectWorktreeLineageWithHostPeers(store, owner, [row], raw)
+      expect(published).toMatchObject({
+        parentWorktreeId: null,
+        lineage: null,
+        savedLineage: {
+          ...edge,
+          worktreeId: id,
+          worktreeInstanceId: 'child-instance',
+          parentWorktreeId: 'folder:missing-parent',
+          parentWorktreeInstanceId: ''
+        }
+      })
+    }
+    expect(workspaceRead).toHaveBeenCalledTimes(2)
+    expect(bulkWorkspaceRead).not.toHaveBeenCalled()
+
+    for (const rawHost of ['local', 'ssh:copy'] as const) {
+      const remoteStore = createStore()
+      const remoteRepo = makeRepo({
+        id: 'repo-1',
+        path: '/workspace',
+        connectionId: 'copy',
+        executionHostId: 'ssh:copy'
+      })
+      remoteStore.addRepo(remoteRepo)
+      const target = hostWorktreeTarget({ id: worktreeId, hostId: rawHost })
+      remoteStore.setWorktreeMeta(target, { instanceId: 'copied-child' })
+      remoteStore.setWorktreeMeta(hostWorktreeTarget({ id: worktreeId, hostId: 'ssh:copy' }), {
+        instanceId: 'copied-child'
+      })
+      const edge: WorktreeLineage = {
+        worktreeId,
+        worktreeInstanceId: 'copied-child',
+        parentWorktreeId: 'parent::/parent',
+        parentWorktreeInstanceId: 'parent-instance',
+        origin: 'cli',
+        capture: { source: 'explicit-cli-flag', confidence: 'explicit' },
+        createdAt: 1
+      }
+      expect(remoteStore.setWorktreeLineage(target, edge)).toEqual(edge)
+      const hostMeta = remoteStore.getAllWorktreeMetaForHost('ssh:copy')
+      const index = createSshWorktreeMetaIndex(Object.entries(hostMeta))
+      const rawRead = vi.spyOn(remoteStore, 'getWorktreeMeta')
+      const bulkRawRead = vi.spyOn(remoteStore, 'getAllWorktreeMeta')
+      const lineageRead = vi.spyOn(remoteStore, 'getAllWorktreeLineage')
+      const rows = listDisconnectedSshWorktrees(remoteStore, remoteRepo, index, {
+        attachSavedLineage: false
+      })
+      const published = buildDisconnectedDetectedWorktrees(remoteStore, remoteRepo, rows, {
+        hostMeta
+      })
+      expect(published).toHaveLength(1)
+      expect(published[0].savedLineage).toEqual(rawHost === 'local' ? null : edge)
+      expect(rawRead).toHaveBeenCalledTimes(1)
+      expect(lineageRead).toHaveBeenCalledTimes(1)
+      expect(bulkRawRead).not.toHaveBeenCalled()
+    }
   })
 
   it('stores independent metadata for colliding locators on two hosts', () => {
