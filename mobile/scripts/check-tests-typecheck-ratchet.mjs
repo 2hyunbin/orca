@@ -173,6 +173,12 @@ export function collectTypecheckPass(root = process.cwd()) {
     compiler
   )
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
+  console.error(
+    output
+      .split('\n')
+      .filter((line) => ERROR_LINE.test(line) || /^\s/.test(line))
+      .join('\n')
+  )
   return {
     failing: parseFailingFiles(output),
     programTestFiles: parseProgramTestFiles(output, fs.realpathSync(root))

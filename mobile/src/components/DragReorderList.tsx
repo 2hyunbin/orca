@@ -9,7 +9,8 @@ import {
   type ReactNode
 } from 'react'
 import { View } from 'react-native'
-import Animated, {
+import type Animated from 'react-native-reanimated'
+import {
   measure,
   runOnJS,
   runOnUI,

@@ -1,3 +1,4 @@
+import './MobileNativeChatView.render-stubs.test-fixture'
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, expect, it, vi } from 'vitest'

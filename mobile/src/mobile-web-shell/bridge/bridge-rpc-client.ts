@@ -279,7 +279,7 @@ export function createBridgeRpcClient(options: BridgeRpcClientOptions): BridgeRp
     method: string,
     params: unknown,
     onData: (result: unknown) => void,
-    subscribeOptions?: Parameters<RpcClient['subscribe']>[3]
+    subscribeOptions?: Parameters<BridgeRpcClient['subscribe']>[3]
   ): () => void {
     requireSession()
     if (closed) {

@@ -80,7 +80,9 @@ export function useMobileQueuedMessageComposerActions(args: {
       if (result.status !== 'accepted' || !result.value.deleted) {
         if (currentScope.current === sessionKey) {
           args.onSendError(
-            result.status === 'accepted' && result.value.disposition === 'dispatched'
+            result.status === 'accepted' &&
+              !result.value.deleted &&
+              result.value.disposition === 'dispatched'
               ? 'Already sent — your message is still in the composer.'
               : "Couldn't remove this queued message. Your copy is in the composer."
           )

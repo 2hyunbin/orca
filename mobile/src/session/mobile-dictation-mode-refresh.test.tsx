@@ -4,23 +4,41 @@ import { act, create, type ReactTestRenderer, type ReactTestInstance } from 'rea
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RpcResponse } from '../transport/types'
 
-const env = vi.hoisted(() => ({
-  native: false,
-  tab: 'tab',
-  starts: 0,
-  transcript: null as ((text: string) => void) | null,
-  toasts: [] as string[],
-  focused: true,
-  connected: false,
-  mode: 'hold',
-  reads: 0,
-  enabled: true,
-  captureEnabled: false,
-  foreground: new Set<(state: string) => void>(),
-  slowReply: Promise.resolve<RpcResponse | null>(null),
-  deferReply: false,
-  refuseRead: false
-}))
+const env = vi.hoisted(
+  (): {
+    native: boolean
+    tab: string
+    starts: number
+    transcript: ((text: string) => void) | null
+    toasts: string[]
+    focused: boolean
+    connected: boolean
+    mode: string
+    reads: number
+    enabled: boolean
+    captureEnabled: boolean
+    foreground: Set<(state: string) => void>
+    slowReply: Promise<RpcResponse | null>
+    deferReply: boolean
+    refuseRead: boolean
+  } => ({
+    native: false,
+    tab: 'tab',
+    starts: 0,
+    transcript: null,
+    toasts: [],
+    focused: true,
+    connected: false,
+    mode: 'hold',
+    reads: 0,
+    enabled: true,
+    captureEnabled: false,
+    foreground: new Set<(state: string) => void>(),
+    slowReply: Promise.resolve<RpcResponse | null>(null),
+    deferReply: false,
+    refuseRead: false
+  })
+)
 
 vi.mock('expo-router', () => ({
   useFocusEffect: (effect: () => void | (() => void)) => {

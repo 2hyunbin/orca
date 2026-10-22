@@ -123,46 +123,48 @@ function SortableQueuedMessage({
     },
     insertion,
     grip: movable ? (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            ref={sortable.setActivatorNodeRef}
-            className="shrink-0 cursor-grab touch-none opacity-0 group-hover/queued:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
-            {...sortable.attributes}
-            {...sortable.listeners}
-            aria-label={label}
-            aria-keyshortcuts="ArrowUp ArrowDown"
-            aria-disabled={reorder.pending}
-            onKeyDown={(event) => {
-              if (reorder.pending || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
-                return
-              }
-              event.preventDefault()
-              const index = users.indexOf(card)
-              const neighbor = users[index + (event.key === 'ArrowUp' ? -1 : 1)]
-              if (neighbor) {
-                void reorder.move(
-                  card.messageId,
-                  event.key === 'ArrowUp'
-                    ? { beforeMessageId: neighbor.messageId }
-                    : { afterMessageId: neighbor.messageId }
-                )
-              }
-            }}
-          >
-            <GripVertical className="size-3.5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent side="top" sideOffset={4}>
-          {translate(
-            'components.native-chat.queuedMessages.reorderHint',
-            'Drag to reorder, or use the Up and Down arrow keys.'
-          )}
-        </TooltipContent>
-      </Tooltip>
+      <span className="inline-flex shrink-0 opacity-0 group-hover/queued:opacity-100 has-[:focus-visible]:opacity-100">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              ref={sortable.setActivatorNodeRef}
+              className="cursor-grab touch-none active:cursor-grabbing"
+              {...sortable.attributes}
+              {...sortable.listeners}
+              aria-label={label}
+              aria-keyshortcuts="ArrowUp ArrowDown"
+              aria-disabled={reorder.pending}
+              onKeyDown={(event) => {
+                if (reorder.pending || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+                  return
+                }
+                event.preventDefault()
+                const index = users.indexOf(card)
+                const neighbor = users[index + (event.key === 'ArrowUp' ? -1 : 1)]
+                if (neighbor) {
+                  void reorder.move(
+                    card.messageId,
+                    event.key === 'ArrowUp'
+                      ? { beforeMessageId: neighbor.messageId }
+                      : { afterMessageId: neighbor.messageId }
+                  )
+                }
+              }}
+            >
+              <GripVertical className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top" sideOffset={4}>
+            {translate(
+              'components.native-chat.queuedMessages.reorderHint',
+              'Drag to reorder, or use the Up and Down arrow keys.'
+            )}
+          </TooltipContent>
+        </Tooltip>
+      </span>
     ) : null
   })
 }

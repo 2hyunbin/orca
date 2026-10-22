@@ -534,6 +534,18 @@ export async function bundleMobileWebApp({ appDir = defaultAppDir } = {}) {
   const routes = await collectMobileWebAppRoutes(appDir)
   await assertRoutesCarryNoSynchronousExports(routes)
   const result = await esbuild.build(mobileWebAppBuildOptions(routes))
+  console.log(
+    '[composer-ci-metafile]',
+    JSON.stringify(
+      {
+        routeKeys: routes.map((route) => route.key),
+        esbuild: esbuild.version,
+        metafile: result.metafile
+      },
+      null,
+      2
+    )
+  )
   const entryOutputPath = Object.keys(result.metafile.outputs).find(
     (path) => basename(path) === `${ENTRY_CHUNK_NAME}.js`
   )

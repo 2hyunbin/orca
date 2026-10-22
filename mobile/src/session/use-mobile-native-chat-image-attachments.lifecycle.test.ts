@@ -9,6 +9,7 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RpcClient } from '../transport/rpc-client'
+import { createFakeRpcClient } from '../mobile-web-shell/bridge-host-test-fakes'
 import type { RpcResponse, RpcSuccess } from '../transport/types'
 import { resetMobileNativeChatStaleInputForTests } from './mobile-native-chat-stale-input'
 import { resetMobileNativeChatTerminalWritesForTests } from './mobile-native-chat-terminal-write-lock'
@@ -133,7 +134,12 @@ describe('useMobileNativeChatImageAttachments lifecycle', () => {
       const onAttachSuccess = vi.fn()
       const onError = vi.fn()
       mount(
-        baseArgs({ client: client as unknown as RpcClient, showToast, onAttachSuccess, onError })
+        baseArgs({
+          client: { ...createFakeRpcClient(), sendRequest: client.sendRequest },
+          showToast,
+          onAttachSuccess,
+          onError
+        })
       )
       let attaching: Promise<void>
       await act(async () => {
@@ -237,7 +243,7 @@ describe('useMobileNativeChatImageAttachments lifecycle', () => {
       text: `\x1b[200~${agent === 'omp' ? '@' : ''}/tmp/a.png\x1b[201~ `,
       enter: false
     })
-    const combined = String(sendCalls[1]?.params.text ?? '') + 'look at this'
+    const combined = `${String(sendCalls[1]?.params.text ?? '')}look at this`
     expect(combined).toContain('.png\x1b[201~ look')
     expect(combined).not.toContain('.png\x1b[201~look')
     // Clear, then paste, then settle, then the text send — in that order.

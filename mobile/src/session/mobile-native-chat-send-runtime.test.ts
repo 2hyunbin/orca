@@ -136,34 +136,34 @@ it.each(['before-post', 'command-pending', 'image-pending', 'terminal-clear'] as
             : schedule === 'terminal-clear'
               ? 'terminal prompt'
               : '/compact'
-      if (schedule === 'before-post' || schedule === 'image-pending') {
-        await act(async () => {
-          const p = copyMobileQueuedMessageToDraft(scope, {
-            messageId: 'picked',
-            position: 1,
-            state: 'waiting',
-            body: {
-              kind: 'message',
-              role: 'user',
-              blocks: [
-                { type: 'text', text },
-                ...(schedule === 'image-pending'
-                  ? [{ type: 'image-ref' as const, url: 'https://example.com/photo.png' }]
-                  : [])
-              ],
-              ...(schedule === 'before-post'
-                ? { skills: [{ name: 'review', path: '/a/review/SKILL.md' }] }
-                : {})
+      await act(
+        schedule === 'before-post' || schedule === 'image-pending'
+          ? async () => {
+              const p = copyMobileQueuedMessageToDraft(scope, {
+                messageId: 'picked',
+                position: 1,
+                state: 'waiting',
+                body: {
+                  kind: 'message',
+                  role: 'user',
+                  blocks: [
+                    { type: 'text', text },
+                    ...(schedule === 'image-pending'
+                      ? [{ type: 'image-ref' as const, url: 'https://example.com/photo.png' }]
+                      : [])
+                  ],
+                  ...(schedule === 'before-post'
+                    ? { skills: [{ name: 'review', path: '/a/review/SKILL.md' }] }
+                    : {})
+                }
+              })
+              await pair.flush()
+              await p
             }
-          })
-          await pair.flush()
-          await p
-        })
-      } else {
-        await act(async () => {
-          api!.setComposerText(text)
-        })
-      }
+          : async () => {
+              api!.setComposerText(text)
+            }
+      )
       let pending: Promise<MobileNativeChatSendOutcome | boolean>
       await act(async () => {
         pending =

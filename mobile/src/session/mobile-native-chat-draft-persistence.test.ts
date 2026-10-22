@@ -1,4 +1,5 @@
 import { createElement } from 'react'
+import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
 import { useMobileNativeChatFileAttachments } from './use-mobile-native-chat-file-attachments'
@@ -86,7 +87,7 @@ it('commits a large image/skill draft before acknowledgement, restores it, and d
   const key = mobileChatDraftStorageKey(scope)
   const other = mobileChatDraftStorageKey('host\0other\0tab')
   const value = JSON.stringify({
-    text: '"\\\n'.repeat(40_000) + '$review',
+    text: `${'"\\\n'.repeat(40_000)}$review`,
     images: [
       {
         id: 'remote',
@@ -409,7 +410,7 @@ it('coalesces typing around an exact copy and never authorizes a removed or expi
   const active = persistMobileNativeChatDraft(scope)
   await Promise.resolve()
   for (let index = 0; index < 100; index++) {
-    editMobileNativeChatDraft(scope, 'typing ' + index)
+    editMobileNativeChatDraft(scope, `typing ${index}`)
   }
   const pending = appendMobileNativeChatDraft(scope, { text: 'copied', images: [] })
   await Promise.resolve()
@@ -502,7 +503,7 @@ it('cancels incomplete files on runtime retirement, preserves completed files an
     }
   })
   const client = createFakeRpcClient()
-  const messages: import('../../../src/shared/native-chat-types').NativeChatMessage[] = []
+  const messages: NativeChatMessage[] = []
   const showToast = vi.fn()
   let tab = 'a'
   let files: ReturnType<typeof useMobileNativeChatFileAttachments>

@@ -2,13 +2,13 @@ import { createElement, type ReactElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, expect, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
-import { MobileNativeChatView } from './MobileNativeChatView'
 import {
   scrollToEnd,
   scrollToOffset,
   platform,
   pageScroller
 } from './MobileNativeChatView.render-stubs.test-fixture'
+import { MobileNativeChatView } from './MobileNativeChatView'
 
 export type Overrides = {
   messages?: Parameters<typeof MobileNativeChatView>[0]['messages']
