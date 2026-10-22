@@ -158,7 +158,7 @@ export async function deliverTerminalAgentLaunchPrompt(args: {
       ...(args.signal
         ? {
             signal: args.signal,
-            onInputAccepted: () => {
+            onSubmitWritten: () => {
               submitted = true
             }
           }

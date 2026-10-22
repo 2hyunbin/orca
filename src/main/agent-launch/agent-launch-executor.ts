@@ -183,6 +183,8 @@ export async function executeAgentLaunch(
       ) {
         throw error
       }
+      // The refusal proves no agent exists; a fallback after cancel would start one, argv prompt and all.
+      assertAgentPromptRequestActive(execution.signal)
       settled = downgradeAgentLaunchModeForStructuredRefusal(settled, vocabulary, settlement)
       created = await createTerminalSurface(execution, placed)
     }

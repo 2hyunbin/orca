@@ -121,6 +121,9 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
       if (!this.ptyController?.write(ptyId, initialWrite, options.inputKind)) {
         throw new Error('terminal_not_writable')
       }
+      if (submitWithPaste) {
+        options.onSubmitWritten?.()
+      }
     } catch (error) {
       renderGate?.dispose()
       throw error
@@ -167,6 +170,7 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
       if (!this.ptyController?.write(ptyId, AGENT_PROMPT_SUBMIT, options.inputKind)) {
         throw new Error(options.suffixFailureError ?? 'terminal_not_writable')
       }
+      options.onSubmitWritten?.()
     }
     const submits =
       options.composerReady && !submitWithPaste

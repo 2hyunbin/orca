@@ -3,6 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { executeAgentLaunch, type AgentLaunchExecution } from './agent-launch-executor'
+import { AgentLaunchStructuredSessionRefusedError } from './agent-launch-surface-factories'
 import type { AgentLaunchIntent } from '../../shared/agent-launch-intent'
 
 const PROMPT = { text: 'fix the flaky test', delivery: 'submit' as const }
@@ -12,6 +13,8 @@ function harness(options: {
   /** Runs while the workspace is being created. */
   duringCreate?: () => void
   duringModeSettle?: () => void
+  /** Runs during the structured create, which then refuses definitively. */
+  duringStructuredRefusal?: () => void
   /** Whether a terminal agent's typed line carried the prompt. */
   lineCarriesPrompt?: boolean
 }) {
@@ -46,6 +49,13 @@ function harness(options: {
   })
   const createStructuredSession = vi.fn(async () => {
     calls.push('createStructuredSession')
+    if (options.duringStructuredRefusal) {
+      options.duringStructuredRefusal()
+      throw new AgentLaunchStructuredSessionRefusedError(
+        'structured_agent_session_unsupported',
+        'unsupported'
+      )
+    }
     return { sessionId: 'sess-1', handle: 'handle_structured', fence: 4 }
   })
   const createTerminalAgent = vi.fn(async (args: { startupPrompt?: string }) => {
@@ -60,7 +70,7 @@ function harness(options: {
     calls.push('deliverTerminalPrompt')
     return true
   })
-  const runtime = {
+  const runtime: AgentLaunchExecution['runtime'] = {
     requireStore: () => ({
       getSettings: () => (options.structured ? { experimentalNativeChat: true } : null)
     }),
@@ -69,11 +79,11 @@ function harness(options: {
   return {
     calls,
     createRecoveryShell,
+    createTerminalAgent,
     deliverTerminalPrompt,
     run: (intent: AgentLaunchIntent, signal: AbortSignal) =>
       executeAgentLaunch({
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the stub implements only the two runtime methods the executor reaches; an omitted one throws rather than reading a wrong value.
-        runtime: runtime as unknown as AgentLaunchExecution['runtime'],
+        runtime,
         intent,
         surfaces: {
           createStructuredSession,
@@ -124,6 +134,28 @@ describe('agent launch cancellation', () => {
     ).rejects.toThrow('request_aborted')
     expect(h.calls).toEqual(['createSupport'])
   })
+
+  it.each([
+    ['an existing workspace', { kind: 'existing', worktree: 'wt-7' }],
+    ['a created workspace', CREATE.target]
+  ] as const)(
+    'starts no terminal fallback, argv prompt included, when cancelled during a structured refusal in %s',
+    async (_label, target) => {
+      const controller = new AbortController()
+      const h = harness({
+        structured: true,
+        lineCarriesPrompt: true,
+        duringStructuredRefusal: () => controller.abort()
+      })
+
+      await expect(
+        h.run({ agent: 'claude', target, prompt: PROMPT }, controller.signal)
+      ).rejects.toThrow('request_aborted')
+      expect(h.createTerminalAgent).not.toHaveBeenCalled()
+      // A workspace this launch created still gets its recovery.
+      expect(h.calls.includes('createRecoveryShell')).toBe(target.kind !== 'existing')
+    }
+  )
 
   it('returns an agent first started by the create, without pasting its prompt', async () => {
     const controller = new AbortController()

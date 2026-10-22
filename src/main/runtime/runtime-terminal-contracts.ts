@@ -308,6 +308,9 @@ export type RuntimeAgentPromptWriteOptions = Omit<RuntimeTerminalWriteOptions, '
   /** The binding the caller admitted (`getTerminalPromptRequestBinding`); a different process is
    *  refused with `terminal_handle_stale` instead of receiving the text. */
   expectedBinding?: AgentPromptExpectedBinding
+  /** Runs as soon as the write carrying Enter is accepted (OMP's paste frame included), before any
+   *  later abort check can throw: the text is submitted whatever the call then answers. */
+  onSubmitWritten?: () => void
 }
 
 export type AgentPromptExpectedBinding = { ptyId: string; processIncarnation: string }

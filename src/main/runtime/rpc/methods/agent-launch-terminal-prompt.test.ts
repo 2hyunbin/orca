@@ -499,7 +499,7 @@ describe('cancelling a launch prompt', () => {
     const controller = new AbortController()
     const stub = runtimeStub({
       send: async (_handle, _text, options) => {
-        const accepted = options.onInputAccepted
+        const accepted = options.onSubmitWritten
         if (typeof accepted === 'function') {
           accepted()
         }
@@ -554,7 +554,7 @@ describe('cancelling a launch prompt', () => {
 
     const options = stub.sendTerminalAgentPrompt.mock.calls[0]![2]
     expect(options).not.toHaveProperty('signal')
-    expect(options).not.toHaveProperty('onInputAccepted')
+    expect(options).not.toHaveProperty('onSubmitWritten')
     expect(stub.waitForTerminal.mock.calls[0]![1]).not.toHaveProperty('signal')
   })
 })
