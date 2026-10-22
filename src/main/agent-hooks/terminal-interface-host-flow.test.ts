@@ -365,30 +365,4 @@ describe('execution-host terminal interface flow', () => {
     expect(retire).toHaveBeenCalledTimes(1)
     expect(authority.read('pty', 'new-birth')?.basis).toBe('cold')
   })
-
-  it('disposes bounded jobs without taking slots from a replacement driver and emits atomic rowless retractions', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] })
-    const authority = new TerminalInterfaceAuthority()
-    const d = driver(authority)
-    d.pending(new Promise(() => {}))
-    await vi.advanceTimersByTimeAsync(1250)
-    const events: ReturnType<TerminalInterfaceAuthority['snapshotEvent']>[] = []
-    let inventory = [{ ...target, binding: { ...target.binding, incarnationId: 'replacement' } }]
-    const inspect = vi.fn(async () => shell)
-    stops.push(
-      authority.install({
-        inventory: () => inventory,
-        inspect,
-        changed: () => events.push(authority.snapshotEvent())
-      })
-    )
-    await vi.advanceTimersByTimeAsync(2500)
-    expect(authority.read('pty', 'replacement')?.state).toBe('shell')
-    expect(inspect).toHaveBeenCalled()
-    inventory = []
-    const retracted = authority.snapshotEvent()
-    expect(retracted.observations).toEqual([])
-    expect(events.at(-1)).toEqual(retracted)
-    expect(retracted.revision).toBeGreaterThan(events.at(-2)?.revision ?? -1)
-  })
 })

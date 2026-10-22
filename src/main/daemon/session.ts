@@ -1,3 +1,4 @@
+import type { TerminalInterfaceSnapshot } from '../providers/terminal-interface-capture-cohort'
 import { inspectSessionTerminalInterface } from '../providers/terminal-interface-process-evidence'
 import { isValidPtySize } from './daemon-pty-size'
 import type { SessionOutputPlane, AttachedClient } from './session-output-plane'
@@ -247,8 +248,8 @@ export class Session {
     return this.subprocess.inspectChildProcesses?.(fresh, ignoreDetached) ?? 'unverifiable'
   }
 
-  inspectTerminalInterface() {
-    return inspectSessionTerminalInterface(this.subprocess)
+  inspectTerminalInterface(snapshot?: TerminalInterfaceSnapshot) {
+    return inspectSessionTerminalInterface(this.subprocess, snapshot)
   }
 
   getForegroundProcess(options?: { rawFallback?: boolean }): string | null {

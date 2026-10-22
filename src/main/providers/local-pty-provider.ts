@@ -1,3 +1,4 @@
+import { requestTerminalInterfaceSnapshot } from './terminal-interface-capture-cohort'
 import { inspectPosixTerminalInterface } from './terminal-interface-process-evidence'
 import { inspectSpawnFileWindowsChildProcesses } from '../daemon/pty-subprocess/spawn-file-child-processes'
 import type * as pty from 'node-pty'
@@ -31,6 +32,7 @@ import {
   clearPtyState,
   pendingLocalPtySpawns,
   ptyProcesses,
+  ptyLastRecognizedForeground,
   ptyIncarnations,
   ptyShellPath,
   ptyReportsChildExitStatus,
@@ -166,20 +168,40 @@ export class LocalPtyProvider implements IPtyProvider {
         childProcessEvidence: 'unverifiable'
       }
     }
-    const foregroundProcess = await getLocalPtyForegroundProcess(id)
+    const snapshot =
+      options?.terminalInterface && process.platform !== 'win32'
+        ? await requestTerminalInterfaceSnapshot().catch(() => null)
+        : undefined
+    if (ptyProcesses.get(id) !== proc || ptyIncarnations.get(id) !== incarnation) {
+      return {
+        foregroundProcess: null,
+        hasChildProcesses: true,
+        childProcessEvidence: 'unverifiable'
+      }
+    }
+    if (snapshot === null) {
+      return {
+        foregroundProcess: ptyLastRecognizedForeground.get(id)?.name ?? null,
+        hasChildProcesses: true,
+        childProcessEvidence: 'unverifiable',
+        terminalInterface: { shellForeground: false, children: 'unverifiable', capturedAgeMs: 0 }
+      }
+    }
+    const foregroundProcess = await getLocalPtyForegroundProcess(id, snapshot?.rows)
     // A steady-state poll never decides adoption or close, so it may read the cached process table.
     const childProcessEvidence = await inspectLocalPtyChildProcesses(
       id,
       options?.steadyState !== true,
-      options?.ignoreDetached === true
+      options?.ignoreDetached === true,
+      snapshot?.rows
     )
     const terminalInterface =
       options?.terminalInterface === true
         ? process.platform === 'win32'
-          ? await inspectSpawnFileWindowsChildProcesses(
-              proc,
-              ptyShellPath.get(id) ?? '',
-              true
+          ? await (
+              options?.steadyState !== true && options?.ignoreDetached !== true
+                ? Promise.resolve(childProcessEvidence)
+                : inspectSpawnFileWindowsChildProcesses(proc, ptyShellPath.get(id) ?? '', true)
             ).then((children) => ({
               shellForeground: children === 'no-children',
               children,
@@ -188,7 +210,8 @@ export class LocalPtyProvider implements IPtyProvider {
           : await inspectPosixTerminalInterface(
               proc.pid,
               ptyShellPath.get(id) ?? '',
-              ptyReportsChildExitStatus.get(id) === false
+              ptyReportsChildExitStatus.get(id) === false,
+              snapshot
             ).catch(() => ({
               shellForeground: false,
               children: 'unverifiable' as const,

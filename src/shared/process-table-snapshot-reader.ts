@@ -312,8 +312,13 @@ export async function getFreshStrictProcessTableSnapshotWithAge(): Promise<{
   rows: ProcessTableRow[]
   capturedAgeMs: number
 }> {
+  return withEvidenceBudget(captureFreshStrictProcessTableSnapshot())
+}
+
+/** Owner cohorts retain this work until capture settles, independently of each waiter's budget. */
+export async function captureFreshStrictProcessTableSnapshot() {
   const started = performance.now()
-  const value = await withEvidenceBudget(processTableReader.getFreshSnapshot())
+  const value = await processTableReader.getFreshSnapshot()
   return { rows: value.strict(), capturedAgeMs: performance.now() - started }
 }
 

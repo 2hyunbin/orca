@@ -39,6 +39,30 @@ describe('physical shell ownership, separate from lifetime', () => {
       'unverifiable'
     )
   })
+  it('proves nested shell control without removing nested, stopped or background lifetime children', () => {
+    const root = { ...shell, command: '/bin/zsh', tpgid: 20 }
+    const nested = { ...shell, pid: 20, ppid: 10, pgid: 20, tpgid: 20, command: '/bin/sh' }
+    const work = { ...agent, pid: 30, ppid: 20, pgid: 30, tpgid: 20, stat: 'S' }
+    const evidence = (rows: ProcessTableRow[]) =>
+      terminalInterfaceEvidenceFromRows(rows, 10, 0, '/bin/zsh')
+    expect(evidence([root, nested])).toMatchObject({ shellForeground: true, children: 'children' })
+    expect(evidence([root, nested, work])).toMatchObject({
+      shellForeground: true,
+      children: 'children'
+    })
+    expect(evidence([root, nested, { ...work, stat: 'T' }]).children).toBe('children')
+    for (const rows of [
+      [root, nested, { ...work, pgid: 20 }],
+      [root, { ...nested, stat: 'T' }],
+      [root, { ...nested, tty: 'pts/2' }],
+      [root, { ...nested, ppid: 99 }],
+      [root, { ...nested, ppid: 30 }, { ...work, ppid: 10, command: 'vim' }],
+      [{ ...root, command: 'claude' }, nested],
+      [root, { ...nested, ppid: 30 }, { ...work, ppid: 20, command: '/bin/bash' }]
+    ]) {
+      expect(evidence(rows).shellForeground).toBe(false)
+    }
+  })
   it('admits the actual login launch chain but never an arbitrary nested matching shell', () => {
     const login = { ...shell, command: '/usr/bin/login' }
     const childShell = { ...shell, pid: 11, ppid: 10, pgid: 11, tpgid: 11 }

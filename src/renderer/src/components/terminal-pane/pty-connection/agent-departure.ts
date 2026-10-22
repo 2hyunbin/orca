@@ -1,3 +1,5 @@
+import { agentTypeToIconAgent } from '@/lib/agent-status'
+import { isTuiAgent } from '../../../../../shared/tui-agent-config'
 import { readTerminalInterface } from '../../native-chat/terminal-interface-presentation'
 import type { RecognizedAgentProcess } from '../../../../../shared/agent-process-recognition'
 import { resolveCompatibleAgentTypeForOwner } from '../../../../../shared/agent-title-owner'
@@ -12,35 +14,70 @@ export function readPaneObservationOwner(session: ConnectPanePtySession): string
   return agentType && agentType !== 'unknown' ? agentType : null
 }
 
-/** One accepted departure per pane: a shell return releases the chat view; only a confirmed
- *  process exit retires lifetime state (row, launch config, sleeping duplicates). */
+/** The same current-pane and recovery fence applies before and after asynchronous cleanup. */
+export function readPaneDepartureState(
+  session: ConnectPanePtySession,
+  process?: RecognizedAgentProcess
+): ReturnType<typeof useAppStore.getState> | null {
+  const state = useAppStore.getState()
+  const ptyId = session.transport.getPtyId()
+  const sleeping = session.getSleepingRecordForPane(state)
+  const wake = session.hibernatedWakeTarget
+  const current = state.agentStatusByPaneKey[session.cacheKey]
+  if (
+    session.disposed ||
+    !ptyId ||
+    state.suppressedPtyExitIds[ptyId] ||
+    session.deps.isPtyShutdownPending(ptyId) ||
+    session.restartReplacementPtyId === ptyId ||
+    (wake && wake.record === sleeping?.record && wake.ptyId === ptyId) ||
+    (process &&
+      current?.agentType &&
+      current.agentType !== 'unknown' &&
+      resolveCompatibleAgentTypeForOwner(current.agentType, process.agent) !== process.agent)
+  ) {
+    return null
+  }
+  return state
+}
+
+/** D settles turn rows; shell ownership releases presentation, and confirmed death retires lifetime. */
 export function installAgentDeparture(session: ConnectPanePtySession): void {
+  session.paneHasLiveHookAgentIcon = (state: ReturnType<typeof useAppStore.getState>): boolean => {
+    const entry = state.agentStatusByPaneKey[session.cacheKey]
+    return entry?.state !== 'done' && Boolean(agentTypeToIconAgent(entry?.agentType))
+  }
+  session.paneHasKnownAgentIdentity = (): boolean => {
+    const state = useAppStore.getState()
+    const registeredLaunchAgent =
+      state.agentLaunchConfigByPaneKey[session.cacheKey]?.identity?.agentType
+    return (
+      Boolean(state.paneForegroundAgentByPaneKey[session.cacheKey]?.agent) ||
+      session.paneHasLiveHookAgentIcon(state) ||
+      isTuiAgent(registeredLaunchAgent)
+    )
+  }
   session.acceptAgentDeparture = (
-    kind: 'foreground-release' | 'process-exit' | 'title',
+    kind: 'foreground-release' | 'command-finished' | 'process-exit' | 'title',
     process?: RecognizedAgentProcess
   ): boolean => {
-    const state = useAppStore.getState()
-    const ptyId = session.transport.getPtyId()
-    const hostPresentation = Boolean(readTerminalInterface(state, session.cacheKey))
-    const sleeping = session.getSleepingRecordForPane(state)
-    const wake = session.hibernatedWakeTarget
-    const current = state.agentStatusByPaneKey[session.cacheKey]
-    if (
-      session.disposed ||
-      !ptyId ||
-      state.suppressedPtyExitIds[ptyId] ||
-      session.deps.isPtyShutdownPending(ptyId) ||
-      session.restartReplacementPtyId === ptyId ||
-      (wake && wake.record === sleeping?.record && wake.ptyId === ptyId) ||
-      (process &&
-        current?.agentType &&
-        current.agentType !== 'unknown' &&
-        resolveCompatibleAgentTypeForOwner(current.agentType, process.agent) !== process.agent)
-    ) {
+    const state = readPaneDepartureState(session, process)
+    if (!state) {
       return false
     }
+    const hostPresentation = Boolean(readTerminalInterface(state, session.cacheKey))
+    const sleeping = session.getSleepingRecordForPane(state)
+    if (kind === 'command-finished') {
+      if (!session.deferredCommandFinishedStatusDrop) {
+        return false
+      }
+      session.settleDeferredCommandFinishedStatusDrop({ confirmedShell: true })
+      if (hostPresentation) {
+        return true
+      }
+    }
     if (
-      kind === 'foreground-release' &&
+      (kind === 'foreground-release' || kind === 'command-finished') &&
       state.paneForegroundAgentByPaneKey[session.cacheKey]?.shellForeground
     ) {
       return true
@@ -48,7 +85,7 @@ export function installAgentDeparture(session: ConnectPanePtySession): void {
     // Shell ownership releases input; only a separately confirmed death retires lifetime state.
     session.deferredCommandFinishedStatusDrop = null
     session.deferredConfirmedShellReconcile = null
-    if (kind === 'foreground-release') {
+    if (kind === 'foreground-release' || kind === 'command-finished') {
       session.paneForegroundAgentTracker.onShellForegroundObserved()
     } else if (kind === 'process-exit' && process) {
       session.paneForegroundAgentTracker.onProcessExitConfirmed(process)

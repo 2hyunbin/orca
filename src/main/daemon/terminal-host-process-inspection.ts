@@ -1,3 +1,4 @@
+import { requestTerminalInterfaceSnapshot } from '../providers/terminal-interface-capture-cohort'
 import type { TerminalInterfaceEvidence } from '../../shared/terminal-interface-observation'
 import { isShellProcess } from '../../shared/agent-detection'
 import { recognizeAgentProcess } from '../../shared/agent-process-recognition'
@@ -75,7 +76,7 @@ export async function inspectTerminalHostProcess(args: {
 
   const incarnationMatches =
     !expectedIncarnationId || expectedIncarnationId === session.incarnationId
-  if (args.steadyState === true && incarnationMatches) {
+  if (args.steadyState === true && !args.terminalInterface && incarnationMatches) {
     const anchored = await readAnchoredForeground(session)
     if (anchored !== null) {
       args.onTier?.('cheap')
@@ -86,6 +87,10 @@ export async function inspectTerminalHostProcess(args: {
   }
   args.onTier?.('full')
 
+  const snapshot =
+    args.terminalInterface && incarnationMatches && process.platform !== 'win32'
+      ? await requestTerminalInterfaceSnapshot().catch(() => null)
+      : undefined
   let foregroundProcess = session.getForegroundProcess()
   let childProcessEvidence: PtyChildProcessVerdict | undefined = session.processNameIsSpawnFile
     ? 'unverifiable'
@@ -106,12 +111,15 @@ export async function inspectTerminalHostProcess(args: {
     evidence = unverifiableEvidence(args, session, 'windows_ssh_foreground_unavailable')
   } else {
     try {
-      const snapshot = await getStrictProcessTableSnapshotWithAge()
+      if (snapshot === null) {
+        throw new Error('terminal interface capture unavailable')
+      }
+      const observedSnapshot = snapshot ?? (await getStrictProcessTableSnapshotWithAge())
       if (session.processNameIsSpawnFile) {
-        const observed = resolveSpawnFileForegroundFromRows(snapshot.rows, session.pid)
+        const observed = resolveSpawnFileForegroundFromRows(observedSnapshot.rows, session.pid)
         foregroundProcess = observed.available ? observed.processName : foregroundProcess
         childProcessEvidence = inspectSpawnFileChildProcessesFromRows(
-          snapshot.rows,
+          observedSnapshot.rows,
           session.pid,
           session.getForegroundProcess({ rawFallback: true })
         )
@@ -126,24 +134,38 @@ export async function inspectTerminalHostProcess(args: {
           ptyIncarnationId: session.incarnationId,
           authorityGeneration: args.authorityGeneration,
           observationEpoch: args.nextObservationEpoch(),
-          capturedAgeMs: snapshot.capturedAgeMs,
+          capturedAgeMs: observedSnapshot.capturedAgeMs,
           platform: process.platform
         },
-        snapshot.rows
+        observedSnapshot.rows
       )
-      await rememberSteadyStateAnchor(session, evidence, snapshot.rows)
+      await rememberSteadyStateAnchor(session, evidence, observedSnapshot.rows)
     } catch {
       evidence = unverifiableEvidence(args, session, 'process_table_unreadable')
       clearSteadyStateAnchor(session)
     }
   }
   const terminalInterface =
-    args.terminalInterface === true
-      ? await session.inspectTerminalInterface().catch(() => ({
-          shellForeground: false,
-          children: 'unverifiable' as const,
-          capturedAgeMs: 0
-        }))
+    args.terminalInterface === true && incarnationMatches
+      ? process.platform === 'win32' &&
+        incarnationMatches &&
+        args.steadyState !== true &&
+        args.ignoreDetached !== true &&
+        childProcessEvidence !== undefined
+        ? {
+            shellForeground: childProcessEvidence === 'no-children',
+            children: childProcessEvidence,
+            capturedAgeMs: 0
+          }
+        : await (
+            snapshot === null
+              ? Promise.reject(new Error('capture unavailable'))
+              : session.inspectTerminalInterface(snapshot)
+          ).catch(() => ({
+            shellForeground: false,
+            children: 'unverifiable' as const,
+            capturedAgeMs: 0
+          }))
       : undefined
   if (!session.isAlive || (args.currentSession && args.currentSession() !== session)) {
     childProcessEvidence = 'unverifiable'

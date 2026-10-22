@@ -1,6 +1,5 @@
 import { installPaneTerminalInterfacePresentation } from './pane-terminal-interface-presentation'
 import { readTerminalInterface } from '../../native-chat/terminal-interface-presentation'
-import { agentTypeToIconAgent } from '@/lib/agent-status'
 import { dismissRetainedProgramResult } from '@/lib/program-status/result-retention'
 import { isRetainedProgramResult } from '@/lib/program-status/row'
 import { useAppStore } from '@/store'
@@ -25,18 +24,16 @@ import {
 } from './pane-launch-agent-candidate'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import { clearStaleAgentTabTitleOnConfirmedShell } from './confirmed-shell-agent-title'
-import { installAgentDeparture, readPaneObservationOwner } from './agent-departure'
+import {
+  installAgentDeparture,
+  readPaneDepartureState,
+  readPaneObservationOwner
+} from './agent-departure'
+import { isObservationOwnerSuperseded } from '../pane-foreground-agent-tracker-contract'
 
 /** Pane agent identity, foreground-agent sampling, and command lifecycle handling. */
 export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
   installPaneTerminalInterfacePresentation(session)
-  // Why: the 133;D confirmation guard and the visible-pane resampler both key off
-  // "does this pane expect an agent"; derive each signal once so the two callers
-  // can't drift and silently reintroduce the icon bug this fix closes.
-  session.paneHasLiveHookAgentIcon = (state: ReturnType<typeof useAppStore.getState>): boolean => {
-    const entry = state.agentStatusByPaneKey[session.cacheKey]
-    return entry?.state !== 'done' && Boolean(agentTypeToIconAgent(entry?.agentType))
-  }
   // Why the shared module: the same ladder answers the 133;D guard, the visible-pane
   // resampler, and the OSC color-reply skip, and it is the one piece of this installer
   // that is a pure rule worth testing on its own.
@@ -63,11 +60,6 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
   // startup ingress already skips it, the renderer must skip the answer too).
   session.shouldAnswerPaneOscColorQueries = (): boolean =>
     paneShouldAnswerOscColorQueries(useAppStore.getState(), panePane())
-  // Launch and restored display hints request discovery; only live hooks establish history here.
-  session.paneHasKnownAgentIdentity = (): boolean => {
-    const state = useAppStore.getState()
-    return session.paneHasLiveHookAgentIcon(state)
-  }
   session.clearStaleAgentTabTitleOnConfirmedShell = () =>
     clearStaleAgentTabTitleOnConfirmedShell(session)
   session.deferredCommandFinishedStatusDrop = null
@@ -91,12 +83,24 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
   session.visibleForegroundSamplePending = false
   session.visibleForegroundSampleSettled = false
   session.settleDeferredCommandFinishedStatusDrop = (
-    options: { processExitConfirmed?: boolean } = {}
+    options: { confirmedShell?: boolean; processExitConfirmed?: boolean } = {}
   ): void => {
     const dropStatus = session.deferredCommandFinishedStatusDrop
     const reconcile = session.deferredConfirmedShellReconcile
     session.deferredConfirmedShellReconcile = null
-    if (!options.processExitConfirmed || !dropStatus) {
+    if (options.confirmedShell || !dropStatus) {
+      session.deferredCommandFinishedStatusDrop = null
+      if (options.confirmedShell && dropStatus) {
+        dropStatus?.()
+        reconcile?.()
+      }
+      return
+    }
+    const ptyId = session.transport.getPtyId()
+    const incarnation = session.remotePtyIncarnationId
+    const owner = readPaneObservationOwner(session)
+    const row = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+    if (!readPaneDepartureState(session) || (!row && !options.processExitConfirmed)) {
       session.deferredCommandFinishedStatusDrop = null
       return
     }
@@ -105,6 +109,18 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
         return
       }
       session.deferredCommandFinishedStatusDrop = null
+      const state = readPaneDepartureState(session)
+      const current = state?.agentStatusByPaneKey[session.cacheKey]
+      if (
+        !state ||
+        session.transport.getPtyId() !== ptyId ||
+        session.remotePtyIncarnationId !== incarnation ||
+        isObservationOwnerSuperseded(owner, readPaneObservationOwner(session)) ||
+        current?.acceptedStatusSeq !== row?.acceptedStatusSeq ||
+        (!current && !options.processExitConfirmed)
+      ) {
+        return
+      }
       if (!verifiable) {
         dropStatus()
         // Why: only a process-table-confirmed exit proves the agent's main-side latches are dead.
@@ -169,7 +185,10 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       )
     },
     getObservationOwner: () => readPaneObservationOwner(session),
-    onConfirmedShellForeground: () => {
+    onConfirmedShellForeground: (reason) => {
+      if (reason === 'command-finished') {
+        return session.acceptAgentDeparture('command-finished')
+      }
       if (!readTerminalInterface(useAppStore.getState(), session.cacheKey)) {
         return session.acceptAgentDeparture('foreground-release')
       }
@@ -230,7 +249,11 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
       // Anchor the accepted-status ordinal once, here — not per rung of the confirm ladder, which
       // can span seconds — so the gate tolerates churn across the whole window.
       const armedAcceptedStatusSeq = entry?.acceptedStatusSeq
-      session.deferredCommandFinishedStatusDrop = dropStatus
+      session.deferredCommandFinishedStatusDrop =
+        entry ||
+        state.paneForegroundAgentByPaneKey[session.cacheKey]?.agentEvidence === 'process-read'
+          ? dropStatus
+          : null
       session.deferredConfirmedShellReconcile = () =>
         session.reconcileEndedProcessIfPaneQuiet(armedAcceptedStatusSeq)
       return

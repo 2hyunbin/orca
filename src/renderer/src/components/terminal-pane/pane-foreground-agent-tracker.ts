@@ -36,7 +36,7 @@ export function createPaneForegroundAgentTracker(
   // OSC 133;D leaks onto the main PTY. For a pane an agent has owned, that D is
   // not proof the prompt returned, so confirm the foreground before clearing.
   let hasForegroundAgentEvidence = false
-  // Hook evidence survives foreground changes until separately confirmed process death.
+  // D ends presentation history; the process monitor owns lifetime independently.
   let hasKnownAgentEvidence = false
   let hasAgentExpectation = false
   let startupSampled = false
@@ -209,10 +209,6 @@ export function createPaneForegroundAgentTracker(
     }
     if (reason === 'command-finished') {
       if (processName === null) {
-        if (remoteEvidenceVerdict !== null && remoteEvidenceVerdict !== 'live') {
-          deps.onCommandFinishedUnavailable?.()
-          return
-        }
         deps.onCommandFinishedUnavailable?.()
         return
       }
@@ -233,6 +229,11 @@ export function createPaneForegroundAgentTracker(
 
   function releaseForeground(reason: 'visible-pty' | 'command-finished' | 'process-exit'): void {
     const accepted = deps.onConfirmedShellForeground?.(reason)
+    if (accepted !== false && reason === 'command-finished') {
+      clearAgentEvidence()
+      startupSampled = false
+      cancelPendingRead()
+    }
     if (accepted !== undefined) {
       return
     }

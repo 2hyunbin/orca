@@ -1,5 +1,8 @@
 import type { SubprocessHandle } from '../daemon/session-subprocess-handle'
-import { getFreshStrictProcessTableSnapshotWithAge } from '../../shared/process-table-snapshot-reader'
+import {
+  requestTerminalInterfaceSnapshot,
+  type TerminalInterfaceSnapshot
+} from './terminal-interface-capture-cohort'
 import { collectDescendantsFromIndex, getProcessTableIndex } from '../../shared/process-table-index'
 import {
   getCommandTokenPathBasename,
@@ -35,6 +38,9 @@ export function terminalInterfaceEvidenceFromRows(
   let shell: ProcessTableRow | undefined = root
   // Only the spawned root or its known launch-wrapper chain may identify the pane shell.
   while (shell && !launchChain.has(shell.pid)) {
+    if (shell.tty !== root.tty || /[TZ]/.test(shell.stat)) {
+      return unknown
+    }
     launchChain.add(shell.pid)
     if (isShellProcess(name(shell)) && name(shell) === expected) {
       break
@@ -57,13 +63,31 @@ export function terminalInterfaceEvidenceFromRows(
   ) {
     return unknown
   }
+  const foreground = rows.filter(
+    (row) => row.tty === root.tty && row.pgid === root.tpgid && !row.stat.includes('Z')
+  )
+  const controlsShell = (candidate: ProcessTableRow): boolean => {
+    const visited = new Set<number>()
+    let current: ProcessTableRow | undefined = candidate
+    while (current && !visited.has(current.pid)) {
+      if (current.tty !== root.tty || /[TZ]/.test(current.stat) || !isShellProcess(name(current))) {
+        return false
+      }
+      if (current.pid === shell?.pid) {
+        return true
+      }
+      visited.add(current.pid)
+      current = index.byPid.get(current.ppid)
+    }
+    return false
+  }
   const children = tree.some((row) => !launchChain.has(row.pid) && !row.stat.includes('Z'))
   return {
     shellForeground:
-      typeof shell.pgid === 'number' &&
-      shell.pgid > 0 &&
-      shell.pgid === shell.tpgid &&
-      !shell.stat.includes('T'),
+      typeof root.tpgid === 'number' &&
+      root.tpgid > 0 &&
+      foreground.some((row) => row.tpgid === root.tpgid && controlsShell(row)) &&
+      foreground.every(controlsShell),
     children: children ? 'children' : 'no-children',
     capturedAgeMs
   }
@@ -72,9 +96,10 @@ export function terminalInterfaceEvidenceFromRows(
 export async function inspectPosixTerminalInterface(
   rootPid: number,
   shellPath: string,
-  loginWrapped = false
+  loginWrapped = false,
+  suppliedSnapshot?: TerminalInterfaceSnapshot
 ): Promise<TerminalInterfaceEvidence> {
-  const snapshot = await getFreshStrictProcessTableSnapshotWithAge()
+  const snapshot = suppliedSnapshot ?? (await requestTerminalInterfaceSnapshot())
   return terminalInterfaceEvidenceFromRows(
     snapshot.rows,
     rootPid,
@@ -85,13 +110,18 @@ export async function inspectPosixTerminalInterface(
 }
 
 export async function inspectSessionTerminalInterface(
-  subprocess: Pick<SubprocessHandle, 'pid' | 'shellPath' | 'loginWrapped' | 'inspectChildProcesses'>
+  subprocess: Pick<
+    SubprocessHandle,
+    'pid' | 'shellPath' | 'loginWrapped' | 'inspectChildProcesses'
+  >,
+  snapshot?: TerminalInterfaceSnapshot
 ): Promise<TerminalInterfaceEvidence> {
   if (process.platform !== 'win32') {
     return inspectPosixTerminalInterface(
       subprocess.pid,
       subprocess.shellPath ?? '',
-      subprocess.loginWrapped === true
+      subprocess.loginWrapped === true,
+      snapshot
     )
   }
   const children = await (subprocess.inspectChildProcesses?.(true) ?? 'unverifiable')

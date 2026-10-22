@@ -564,7 +564,7 @@ describe('createPaneForegroundAgentTracker', () => {
     expect(onConfirmedShellForeground).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps confirming foreground until lifetime evidence retires the agent', async () => {
+  it('clears presentation history after accepted D without another foreground read', async () => {
     readForegroundProcess.mockResolvedValueOnce('codex').mockResolvedValue('zsh')
     const tracker = makeTracker()
 
@@ -580,7 +580,8 @@ describe('createPaneForegroundAgentTracker', () => {
     tracker.onCommandFinished()
 
     await flushSettleRead(COMMAND_SETTLE_MS)
-    expect(readForegroundProcess).toHaveBeenCalledOnce()
+    expect(readForegroundProcess).not.toHaveBeenCalled()
+    expect(onConfirmedShellForeground).toHaveBeenCalledOnce()
     expect(publish).toHaveBeenCalledExactlyOnceWith({ agent: null, shellForeground: true })
   })
 
