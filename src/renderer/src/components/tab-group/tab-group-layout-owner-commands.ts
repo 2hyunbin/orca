@@ -16,7 +16,7 @@ import {
 import { tabSelectionKey } from '@/store/slices/tabs/moved-tab-selection'
 import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import { splitRatioIntentAt } from '../../../../shared/workspace-layout/split-ratio-intents'
-import { serverTabCount } from '@/lib/frame-drawn-desktop-created-tabs'
+import { serverTabCount, serverTabOrder } from '@/lib/frame-drawn-desktop-created-tabs'
 import { tabOrderAnchor } from '../../../../shared/workspace-layout/tab-order'
 
 /** A tab drop as the window resolved it: within its group, into another, or beside a group. */
@@ -101,16 +101,19 @@ function commandFor(worktreeId: string, drop: TabDrop): WindowLayoutCommand | nu
     return null
   }
   const order = drop.kind === 'reorder' ? drop.tabOrder : group.tabOrder
-  const index =
+  const slot =
     drop.kind === 'reorder'
       ? drop.tabOrder.indexOf(tabId)
       : Math.min(drop.index ?? group.tabOrder.length, group.tabOrder.length)
+  // A server's frame-drawn group lacks this desktop's own tabs: neither anchor nor index names one.
+  const before = serverTabOrder(worktreeId, order.slice(0, Math.max(slot, 0)))
+  const index = slot < 0 ? slot : before.length
   return {
     type: 'moveTab',
     tabId,
     toGroupId: groupId,
     index,
-    afterTabId: tabOrderAnchor(order, index)
+    afterTabId: tabOrderAnchor(before, index)
   }
 }
 

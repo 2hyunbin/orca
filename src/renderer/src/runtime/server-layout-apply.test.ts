@@ -185,6 +185,25 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
     expect(handlers.asToday).not.toHaveBeenCalled()
   })
 
+  it('names a move’s anchor by the server’s id, and drops one the server does not hold', async () => {
+    const { store } = await drawnByServer()
+    const move = { type: 'moveTab', tabId: TAB_1, toGroupId: HOST_GROUP, index: 1 } as const
+    send(store, { ...move, afterTabId: TAB_2 })
+    send(store, { ...move, afterTabId: 'desktop-only' })
+    send(store, { ...move, index: 0, afterTabId: null })
+    await settle()
+
+    const sentParams = hoisted.sent.map((entry) => entry.params)
+    expect(sentParams[0]).toMatchObject({
+      command: { tabId: 'bar-1', afterTabId: 'bar-2', index: 1 }
+    })
+    // Unknown to the server: never sent raw, so its main places the tab by the index.
+    expect(sentParams[1]).toEqual({
+      command: { type: 'moveTab', tabId: 'bar-1', toGroupId: HOST_GROUP, index: 1, workspace: WT }
+    })
+    expect(sentParams[2]).toMatchObject({ command: { index: 0, afterTabId: null } })
+  })
+
   // A window's close tells main the window already stopped its terminals, which this desktop cannot
   // do for a server's; closes, starts, sleeps and terminal names keep the RPCs that main applies.
   it('keeps today’s path for closes, starts, sleeps and a terminal’s own name', async () => {

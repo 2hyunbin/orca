@@ -76,7 +76,19 @@ export function serverLayoutApplyFor(
     return { route, command }
   }
   const tabId = route.serverTabId(command.tabId)
-  return tabId ? { route, command: { ...command, tabId } } : null
+  if (!tabId) {
+    return null
+  }
+  if (command.type === 'moveTab' && command.afterTabId) {
+    // An anchor the server does not hold is dropped, never sent raw: its main then uses `index`.
+    const { afterTabId, ...rest } = command
+    const serverAnchor = route.serverTabId(afterTabId)
+    return {
+      route,
+      command: { ...rest, tabId, ...(serverAnchor ? { afterTabId: serverAnchor } : {}) }
+    }
+  }
+  return { route, command: { ...command, tabId } }
 }
 
 /**

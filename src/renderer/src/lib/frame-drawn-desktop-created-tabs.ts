@@ -16,7 +16,10 @@ export function isDesktopCreatedTabInFrameDrawnServerWorkspace(
 }
 
 /** A group's tabs the server's group has too: all but this desktop's own. */
-export function serverTabCount(workspace: string, tabOrder: readonly string[]): number {
+export function serverTabOrder(workspace: string, tabOrder: readonly string[]): string[] {
   return tabOrder.filter((id) => !isDesktopCreatedTabInFrameDrawnServerWorkspace(workspace, id))
-    .length
+}
+
+export function serverTabCount(workspace: string, tabOrder: readonly string[]): number {
+  return serverTabOrder(workspace, tabOrder).length
 }
