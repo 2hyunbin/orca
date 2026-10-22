@@ -4,11 +4,12 @@ import { DESKTOP_PRESENCE_TTL_MS } from '../../shared/desktop-client-presence'
 export class DesktopClientPresenceTracker {
   private readonly reports = new Map<string, { away: boolean; at: number }>()
 
-  /** Returns true when this connection had no report yet, so the caller can bind its cleanup. */
-  report(connectionId: string, away: boolean, now: number): boolean {
-    const isNew = !this.reports.has(connectionId)
+  has(connectionId: string): boolean {
+    return this.reports.has(connectionId)
+  }
+
+  report(connectionId: string, away: boolean, now: number): void {
     this.reports.set(connectionId, { away, at: now })
-    return isNew
   }
 
   forget(connectionId: string): void {
@@ -17,11 +18,15 @@ export class DesktopClientPresenceTracker {
 
   /** True only on a fresh "present" report; silence, staleness and older desktops read as away. */
   anyPresent(now: number): boolean {
-    for (const { away, at } of this.reports.values()) {
-      if (!away && now - at < DESKTOP_PRESENCE_TTL_MS) {
-        return true
+    let present = false
+    for (const [connectionId, { away, at }] of this.reports) {
+      if (now - at >= DESKTOP_PRESENCE_TTL_MS) {
+        // Why prune: the next report re-registers the forget-on-close, so nothing can pile up.
+        this.reports.delete(connectionId)
+      } else if (!away) {
+        present = true
       }
     }
-    return false
+    return present
   }
 }

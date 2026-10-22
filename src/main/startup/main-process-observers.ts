@@ -36,7 +36,15 @@ export function initializeMainProcessObservers(): void {
   state.unsubscribeSystemResumeBroadcast = registerSystemResumeBroadcast()
   state.stopDesktopPresenceReporter = startDesktopPresenceReporter({
     readAway: () => readDesktopAwayState(powerMonitor),
-    listTargets: listCapableSharedControlSockets
+    listTargets: listCapableSharedControlSockets,
+    subscribeAwayEvents: (onAway) => {
+      powerMonitor.on('suspend', onAway)
+      powerMonitor.on('lock-screen', onAway)
+      return () => {
+        powerMonitor.off('suspend', onAway)
+        powerMonitor.off('lock-screen', onAway)
+      }
+    }
   })
   state.agentAwakeService = new AgentAwakeService()
   state.agentAwakeService.setMode(

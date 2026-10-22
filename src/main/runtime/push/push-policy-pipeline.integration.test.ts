@@ -7,8 +7,7 @@ import { DeviceRegistry } from '../device-registry'
 import { RuntimeMobileNotificationController } from '../runtime-mobile-notification-controller'
 import { setRuntimeDesktopSurface } from '../runtime-desktop-surface'
 import { RuntimeSubscriptionRegistry } from '../runtime-subscription-registry'
-import { NOTIFICATION_METHODS } from '../rpc/methods/notifications'
-import type { RpcContext, RpcMethod } from '../rpc/core'
+import { reportDesktopPresence } from '../rpc/methods/notifications'
 import { DESKTOP_PRESENCE_TTL_MS } from '../../../shared/desktop-client-presence'
 import { DesktopPushService } from './desktop-push-service'
 import { PushUnregisterOutbox } from './push-unregister-outbox'
@@ -113,15 +112,19 @@ it('decides headless away from attached desktops, so the away-only filter holds 
   setRuntimeDesktopSurface(null)
   const h = await pipeline()
   const subscriptions = new RuntimeSubscriptionRegistry()
-  const report = NOTIFICATION_METHODS.find(
-    (method) => method.name === 'notifications.reportDesktopPresence'
-  ) as RpcMethod
   const runtime = {
     reportDesktopClientPresence: h.controller.reportDesktopClientPresence.bind(h.controller),
-    forgetDesktopClientPresence: h.controller.forgetDesktopClientPresence.bind(h.controller),
     registerSubscriptionCleanup: subscriptions.register.bind(subscriptions)
   }
-  const desktop = { runtime, clientKind: 'runtime', connectionId: 'desktop-socket' }
+  const desktop: {
+    runtime: typeof runtime
+    clientKind?: 'mobile' | 'runtime'
+    connectionId: string
+  } = { runtime, clientKind: 'runtime', connectionId: 'desktop-socket' }
+  const report = (
+    away: boolean,
+    context: Partial<typeof desktop> & { signal?: AbortSignal } = {}
+  ) => reportDesktopPresence({ away }, { ...desktop, ...context })
   const sends = async () => {
     h.dispatch()
     await flush()
@@ -130,22 +133,20 @@ it('decides headless away from attached desktops, so the away-only filter holds 
 
   // No desktop has ever reported: nobody is at one.
   expect(await sends()).toBe(1)
-  // A phone cannot vouch for a desktop.
-  await report.handler({ away: false }, {
-    ...desktop,
-    clientKind: 'mobile'
-  } as unknown as RpcContext)
+  // Neither a phone nor a socket that already closed can vouch for a desktop.
+  expect(report(false, { clientKind: 'mobile' })).toEqual({ recorded: false })
+  expect(report(false, { signal: AbortSignal.abort() })).toEqual({ recorded: false })
   expect(await sends()).toBe(2)
-  await report.handler({ away: false }, desktop as unknown as RpcContext)
+  report(false)
   expect(await sends()).toBe(2)
-  await report.handler({ away: true }, desktop as unknown as RpcContext)
+  report(true)
   expect(await sends()).toBe(3)
-  await report.handler({ away: false }, desktop as unknown as RpcContext)
+  report(false)
   expect(await sends()).toBe(3)
   // A desktop that stops reporting (or an older one that never did) lapses to away.
   clock.mockReturnValue(now + DESKTOP_PRESENCE_TTL_MS)
   expect(await sends()).toBe(4)
-  await report.handler({ away: false }, desktop as unknown as RpcContext)
+  report(false)
   expect(await sends()).toBe(4)
   subscriptions.cleanupForConnection('desktop-socket')
   expect(await sends()).toBe(5)

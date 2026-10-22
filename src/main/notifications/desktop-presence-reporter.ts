@@ -24,14 +24,20 @@ export type DesktopPresenceReporterDeps = {
  * Tells each connected host whether someone is at this desktop, so a headless host can honor a
  * phone's "only when desktop is away" (#31570). Sent on change, on a new socket, and as a keepalive.
  */
-export function createDesktopPresenceReporter(deps: DesktopPresenceReporterDeps): () => void {
+export function createDesktopPresenceReporter(
+  deps: DesktopPresenceReporterDeps
+): (forceAway?: boolean) => void {
   const now = deps.now ?? Date.now
   const sent = new Map<string, Sent>()
-  return () => {
-    // Why: unknown local presence must never silence a phone, so only a proven "active" is present.
-    const away = deps.readAway() !== false
-    const at = now()
+  return (forceAway = false) => {
     const targets = deps.listTargets(NOTIFICATIONS_DESKTOP_PRESENCE_RUNTIME_CAPABILITY)
+    if (targets.length === 0) {
+      sent.clear()
+      return
+    }
+    // Why: unknown local presence must never silence a phone, so only a proven "active" is present.
+    const away = forceAway || deps.readAway() !== false
+    const at = now()
     const live = new Set(targets.map((target) => target.environmentId))
     for (const environmentId of sent.keys()) {
       if (!live.has(environmentId)) {
@@ -50,10 +56,10 @@ export function createDesktopPresenceReporter(deps: DesktopPresenceReporterDeps)
       }
       const entry = { socket: target.socket, away, at }
       sent.set(target.environmentId, entry)
+      // Why: a refused report waits for the keepalive; only an unsent one retries on the next tick.
       void target
         .request('notifications.reportDesktopPresence', { away }, REPORT_TIMEOUT_MS)
         .catch(() => {
-          // Why: an unsent report lapses to away on the host; forgetting it retries next tick.
           if (sent.get(target.environmentId) === entry) {
             sent.delete(target.environmentId)
           }
@@ -72,10 +78,19 @@ export function listCapableSharedControlSockets(capability: string): ReadyShared
   return listReadySharedControlSockets().filter((target) => capable.has(target.environmentId))
 }
 
-export function startDesktopPresenceReporter(deps: DesktopPresenceReporterDeps): () => void {
+export function startDesktopPresenceReporter(
+  deps: DesktopPresenceReporterDeps & {
+    /** Sleep and screen lock: report away at once instead of leaving hosts to the TTL. */
+    subscribeAwayEvents: (onAway: () => void) => () => void
+  }
+): () => void {
   const tick = createDesktopPresenceReporter(deps)
   const timer = setInterval(tick, SAMPLE_INTERVAL_MS)
   // Why: presence reporting must never hold the app open at quit.
   timer.unref?.()
-  return () => clearInterval(timer)
+  const unsubscribe = deps.subscribeAwayEvents(() => tick(true))
+  return () => {
+    clearInterval(timer)
+    unsubscribe()
+  }
 }

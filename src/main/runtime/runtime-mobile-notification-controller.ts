@@ -109,13 +109,16 @@ export class RuntimeMobileNotificationController {
     return (await this.pushRegistrar?.unregister(deviceId)) ?? { unregistered: false }
   }
 
-  /** Returns true when the connection is new, so the caller binds its forget-on-close. */
-  reportDesktopClientPresence(connectionId: string, away: boolean): boolean {
-    return this.desktopClients.report(connectionId, away, Date.now())
-  }
-
-  forgetDesktopClientPresence(connectionId: string): void {
-    this.desktopClients.forget(connectionId)
+  /** `bindForget` runs for a connection without a live report, before it is recorded. */
+  reportDesktopClientPresence(
+    connectionId: string,
+    away: boolean,
+    bindForget: (forget: () => void) => void
+  ): void {
+    if (!this.desktopClients.has(connectionId)) {
+      bindForget(() => this.desktopClients.forget(connectionId))
+    }
+    this.desktopClients.report(connectionId, away, Date.now())
   }
 
   // Why: undefined means unknown and must never silence a phone; only a fresh report or the local
