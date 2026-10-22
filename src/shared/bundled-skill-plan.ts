@@ -44,9 +44,15 @@ export type BundledSkillObserved =
   | { kind: 'absent' }
   | { kind: 'link'; target: string }
   /** `entries` lists every non-OS-metadata name as `name:kind`; `skillDigest` is LF sha256. */
-  | { kind: 'folder'; entries: readonly string[]; skillDigest: string | null }
+  | {
+      kind: 'folder'
+      entries: readonly string[]
+      skillDigest: string | null
+      /** Whole-tree identity for edited/foreign content; released copies omit it. */
+      treeDigest?: string
+    }
   /** Any other entry: a file, socket or device. */
-  | { kind: 'file'; mtimeMs: number | null }
+  | { kind: 'file'; mtimeMs: number | null; treeDigest?: string }
   | { kind: 'unreadable' }
 
 /** A leftover sibling of an interrupted Orca swap, handled before the target's op. */

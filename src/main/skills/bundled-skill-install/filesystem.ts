@@ -5,7 +5,6 @@ import {
   cp,
   lstat,
   mkdir,
-  readdir,
   readFile,
   readlink,
   realpath,
@@ -70,17 +69,29 @@ function isMissing(error: unknown): boolean {
 }
 
 /** Every entry's relative path, kind and content (or link target), in a fixed order. */
-async function treeSignature(path: string): Promise<string> {
+export async function bundledSkillTreeSignature(
+  filesystem: BundledSkillFilesystem,
+  path: string
+): Promise<string> {
   const hash = createHash('sha256')
+  const requireRead = <T>(value: T | null): T => {
+    if (value === null) {
+      throw Object.assign(new Error(`bundled-skill-unreadable: ${path}`), { code: 'EIO' })
+    }
+    return value
+  }
   const visit = async (current: string, relative: string): Promise<void> => {
-    const stats = await lstat(current)
-    hash.update(`${relative}\0${kindOf(stats)}\0`)
-    if (stats.isSymbolicLink()) {
-      hash.update(await readlink(current))
-    } else if (stats.isFile()) {
-      hash.update(await readFile(current))
-    } else if (stats.isDirectory()) {
-      for (const name of (await readdir(current)).sort()) {
+    const found = await filesystem.stat(current)
+    const stats = requireRead(found?.kind === 'missing' ? null : found)
+    hash.update(`${JSON.stringify([relative, stats.kind])}\n`)
+    if (stats.kind === 'symlink') {
+      hash.update(JSON.stringify(requireRead(await filesystem.readLink(current))))
+    } else if (stats.kind === 'file') {
+      const bytes = requireRead(await filesystem.readFile(current))
+      hash.update(`${bytes.length}:`).update(bytes)
+    } else if (stats.kind === 'directory') {
+      const names = requireRead(await filesystem.listEntries(current)).map((entry) => entry.name)
+      for (const name of names.sort()) {
         await visit(join(current, name), `${relative}/${name}`)
       }
     }
@@ -110,7 +121,10 @@ export async function moveAcrossFilesystems(
     force: false
   })
   // The source is removed only once the copy provably holds the same bytes.
-  if ((await treeSignature(source)) !== (await treeSignature(target))) {
+  if (
+    (await bundledSkillTreeSignature(nativeBundledSkillFilesystem, source)) !==
+    (await bundledSkillTreeSignature(nativeBundledSkillFilesystem, target))
+  ) {
     throw Object.assign(new Error(`bundled-skill-backup-mismatch: ${target}`), { code: 'EBACKUP' })
   }
   await rm(source, { recursive: true, force: true })

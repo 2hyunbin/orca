@@ -5,6 +5,7 @@ import { RuntimeClientError } from '../runtime-client'
 import { getDefaultUserDataPath } from '../runtime/metadata'
 import { getRepeatedStringFlag } from '../flags'
 import { writeStdoutLine } from '../stdout-line'
+import { skillsCliAgentAliases } from '../skills-cli-agent-aliases'
 import { loadCanonicalGuides, type BundledSkillGuide } from './bundled-skill-guide-table'
 import type {
   BundledSkillOp,
@@ -34,11 +35,7 @@ export type SkillMutationVerb = 'install' | 'update'
 const SHARED_FOLDER_ONLY = 'universal'
 
 // Why: earlier releases passed `--agent` straight to the skills CLI, so scripts still use its keys.
-const SKILLS_CLI_KEY_ALIASES: ReadonlyMap<string, SkillInstallProviderId> = new Map(
-  Object.entries(SKILLS_CLI_AGENT_KEY_BY_TUI_AGENT).flatMap(([agent, key]) =>
-    key && key !== agent && isSkillInstallProviderId(agent) ? [[key, agent]] : []
-  )
-)
+const SKILLS_CLI_KEY_ALIASES = skillsCliAgentAliases(SKILLS_CLI_AGENT_KEY_BY_TUI_AGENT)
 
 /** `undefined` means detect; `[]` is `--agent universal`, the shared folder alone. */
 function requestedAgents(

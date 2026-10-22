@@ -111,6 +111,7 @@ describe('orca skills install/update', () => {
     vi.stubEnv('USERPROFILE', paths.home)
     vi.stubEnv('ORCA_USER_DATA_PATH', paths.userData)
     vi.stubEnv('CLAUDE_CONFIG_DIR', '')
+    vi.stubEnv('OPENCLAUDE_CONFIG_DIR', '')
     vi.stubEnv('ORCA_CLI_CWD', '')
     detectAgentsMock.mockReset()
     detectAgentsMock.mockResolvedValue(['claude'])
@@ -241,6 +242,32 @@ describe('orca skills install/update', () => {
     ])
     expect(shared.plan.skills[0].ops.map((op) => op.path)).toEqual([paths.shared])
     expect(detectAgentsMock).not.toHaveBeenCalled()
+  })
+
+  it('installs for OpenClaude when its Orca agent id is requested directly', async () => {
+    await run(['install', '--skill', NAME, '--agent', 'openclaude'])
+
+    expect(await realpath(join(paths.home, '.openclaude', 'skills', NAME))).toBe(paths.shared)
+    expect(await skillText(paths.shared)).toBe(NEW_TEXT)
+    expect(await lstat(paths.claude).catch(() => null)).toBeNull()
+    expect(process.exitCode).toBe(0)
+  })
+
+  it.each([
+    ['claude-code', '.claude', '.openclaude'],
+    ['openclaude', '.openclaude', '.claude']
+  ])('updates an existing agent-only copy for --agent %s', async (agent, folder, otherFolder) => {
+    const installed = join(paths.home, folder, 'skills', NAME)
+    await writeCopy(installed, OLD_TEXT)
+
+    const result = await runJson<RunJson>(['update', '--skill', NAME, '--agent', agent])
+
+    expect(result.notInstalled).toEqual([])
+    expect(result.result.skills[0].ops.map((op) => op.path)).toEqual([installed])
+    expect(await skillText(installed)).toBe(NEW_TEXT)
+    expect(await lstat(join(paths.home, otherFolder, 'skills', NAME)).catch(() => null)).toBeNull()
+    expect(await lstat(paths.shared).catch(() => null)).toBeNull()
+    expect(process.exitCode).toBe(0)
   })
 
   it('detects agents when --agent is omitted', async () => {
