@@ -4,7 +4,11 @@
 // Drafts are NEVER owed work: nothing here feeds working status, teardown, or the idle sweep.
 
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
-import type { AgentSessionQueuedMessageUpdateResult } from '../../../shared/agent-session-wire'
+import type {
+  AgentSessionQueuedMessageMoveAnchor,
+  AgentSessionQueuedMessageMoveResult,
+  AgentSessionQueuedMessageUpdateResult
+} from '../../../shared/agent-session-wire'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
 import {
   journalQueueRowBuilder,
@@ -31,6 +35,7 @@ import { QueuedMessageNotConsumableError } from './queued-message-consume-error'
 import { QueuedMessageEditLeases } from './queued-message-edit-leases'
 import { queuedMessageUpdateDecision, type QueuedMessageUpdate } from './queued-message-update'
 import type { JournalReducerState } from './journal-reducer'
+import { queuedMessageMovePlan, QueuedMessageBodyChangedError } from './queued-message-move'
 
 /** Card rows to write in one transaction, with what must commit beside them. */
 export type JournalQueuePlan = {
@@ -179,7 +184,8 @@ export class JournalQueuedMessages {
   /** Withdraws the waiting and returned cards named; `receipt` commits with the withdrawal. */
   withdraw(
     messageIds: readonly string[],
-    receipt?: JournalOperationReceipt
+    receipt?: JournalOperationReceipt,
+    expectedBodyFingerprint?: string
   ): Promise<QueuedMessageRow[]> {
     if (messageIds.length === 0) {
       // Delete races and empty carries land here; neither may cost a write transaction.
@@ -190,6 +196,12 @@ export class JournalQueuedMessages {
         const card = this.get(id)
         return card && isUnsettledQueuedMessage(card) ? [card] : []
       })
+      if (
+        expectedBodyFingerprint !== undefined &&
+        cards.some((card) => card.fingerprint !== expectedBodyFingerprint)
+      ) {
+        throw new QueuedMessageBodyChangedError()
+      }
       return {
         changes: cards.map(({ messageId }) => ({
           messageId,
@@ -198,6 +210,13 @@ export class JournalQueuedMessages {
         result: cards.map((card) => ({ ...card, state: 'withdrawn', holdReason: null }))
       }
     }, receipt)
+  }
+
+  move(
+    input: { messageId: string } & AgentSessionQueuedMessageMoveAnchor,
+    receipt?: JournalOperationReceipt
+  ): Promise<AgentSessionQueuedMessageMoveResult> {
+    return this.write(() => queuedMessageMovePlan(this.list(), input), receipt)
   }
 
   /** On the journal's lane: rows for these changes, each card an earlier build wrote moved into the

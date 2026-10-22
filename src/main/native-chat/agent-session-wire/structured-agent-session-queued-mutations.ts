@@ -14,6 +14,7 @@ import type {
   AgentSessionSendResult
 } from '../../../shared/agent-session-wire'
 import { QueuedMessageNotConsumableError } from '../agent-session-journal/queued-message-consume-error'
+import { QueuedMessageBodyChangedError } from '../agent-session-journal/queued-message-move'
 import { refusingNewerOrcaJournal } from '../agent-session-journal/journal-open-failure'
 import {
   journalRowReceiptResult,
@@ -178,12 +179,19 @@ export function sendQueuedStructuredAgentMessage(
 export function deleteQueuedStructuredAgentMessage(
   context: StructuredAgentSessionMutationContext,
   caller: StructuredAgentSessionCaller,
-  params: { envelope: AgentSessionMutationEnvelope; messageId: string }
+  params: {
+    envelope: AgentSessionMutationEnvelope
+    messageId: string
+    expectedBodyFingerprint?: string
+  }
 ): Promise<AgentSessionMutationResult<AgentSessionQueuedMessageDeleteResult>> {
-  const { messageId } = params
+  const { messageId, expectedBodyFingerprint } = params
   const plan: MutationPlan<AgentSessionQueuedMessageDeleteResult> = {
     method: 'agentSession.queuedMessageDelete',
-    fields: { messageId },
+    fields: {
+      messageId,
+      ...(expectedBodyFingerprint !== undefined ? { expectedBodyFingerprint } : {})
+    },
     conversationWrite: true,
     // The withdrawn card, or a no-op's answer when there was nothing left to withdraw.
     commandReceipt: {
@@ -209,7 +217,21 @@ export function deleteQueuedStructuredAgentMessage(
       }
       // The withdrawal's row notifies through the journal's commit listener, which also
       // re-derives the drain — deleting a returned card can unblock the cards behind it.
-      const withdrawn = await ctx.journal.queuedMessages.withdraw([messageId], ctx.operationReceipt)
+      let withdrawn
+      try {
+        withdrawn = await ctx.journal.queuedMessages.withdraw(
+          [messageId],
+          ctx.operationReceipt,
+          expectedBodyFingerprint
+        )
+      } catch (error) {
+        if (error instanceof QueuedMessageBodyChangedError) {
+          return invalid(
+            'The queued message changed. Your copy is in the composer; edit the newer message again if needed.'
+          )
+        }
+        throw error
+      }
       return withdrawn.length > 0
         ? { ok: true, value: { deleted: true, messageId } }
         : { ok: true, value: { deleted: false, messageId, disposition: 'withdrawn' } }

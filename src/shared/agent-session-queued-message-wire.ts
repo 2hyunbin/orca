@@ -33,6 +33,16 @@ export type AgentSessionQueuedMessagesResumeResult = {
   resumed: boolean
 }
 
+/** An ID neighbor, resolved against the host's full queue at commit time. */
+export type AgentSessionQueuedMessageMoveAnchor =
+  | { beforeMessageId: string | null; afterMessageId?: never }
+  | { afterMessageId: string; beforeMessageId?: never }
+
+export type AgentSessionQueuedMessageMoveResult = {
+  messageId: string
+  status: 'moved' | 'unchanged' | 'gone' | 'stale'
+}
+
 /** One draft the host holds for this conversation, published whole-list on the
  *  subscribe stream and on history pages. A card holding an image goes only to a reader that
  *  advertises `agent-session.queued-image-cards.v1`. */

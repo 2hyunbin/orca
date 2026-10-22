@@ -21,6 +21,7 @@ import {
   republish,
   updateQueuedStructuredAgentMessage
 } from './structured-agent-session-queued-edit'
+import { moveQueuedStructuredAgentMessage } from './structured-agent-session-queued-move'
 
 /** `sessions` are the live conversations (their `touch` is the idle sweep's activity renewal,
  *  which the drain's schedule rides); everything else comes from the host's mutation context,
@@ -91,6 +92,10 @@ export function wireStructuredAgentSessionQueuedMessages(
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof deleteQueuedStructuredAgentMessage>[2]
     ) => deleteQueuedStructuredAgentMessage(context(), caller, params),
+    queuedMessageMove: (
+      caller: StructuredAgentSessionCaller,
+      params: Parameters<typeof moveQueuedStructuredAgentMessage>[2]
+    ) => moveQueuedStructuredAgentMessage(context(), caller, params),
     queuedMessagesResume: (
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof resumeStructuredAgentQueue>[2]
