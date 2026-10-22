@@ -41,13 +41,11 @@ import { useFileExplorerNameFilter } from './use-file-explorer-name-filter'
 import { useFileExplorerTreePaneState } from './use-file-explorer-tree-pane-state'
 import { useWslHostUnavailableReason } from '../terminal-pane/use-wsl-host-unavailable-reason'
 import { translate } from '@/i18n/i18n'
-import type { RightSidebarExplorerView } from '../../../../shared/ui-chrome-types'
 
 /** Coordinates scoped navigation while retaining the actual worktree root for file operations and runtime routing. */
 function FileExplorerFiles(): React.JSX.Element {
   const explorerView = useAppStore((s) => s.rightSidebarExplorerView)
-  const showRightSidebarFiles = useAppStore((s) => s.showRightSidebarFiles)
-  const showRightSidebarSearch = useAppStore((s) => s.showRightSidebarSearch)
+  const setRightSidebarExplorerView = useAppStore((s) => s.setRightSidebarExplorerView)
   const searchPanel = useFileSearchPanel(explorerView)
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const runtimeEnvironmentId = useAppStore((s) =>
@@ -117,17 +115,6 @@ function FileExplorerFiles(): React.JSX.Element {
     handleClearNameFilter
   } = useFileExplorerNameFilter({ isFilesViewActive, activeWorktreeId })
 
-  const handleSelectExplorerView = useCallback(
-    (view: RightSidebarExplorerView) => {
-      if (view === 'files') {
-        showRightSidebarFiles()
-        return
-      }
-      const trimmedQuery = nameFilterQuery.trim()
-      showRightSidebarSearch(trimmedQuery ? { query: trimmedQuery } : undefined)
-    },
-    [nameFilterQuery, showRightSidebarFiles, showRightSidebarSearch]
-  )
   const {
     rowProjection,
     ignoredByRelativePath,
@@ -299,14 +286,10 @@ function FileExplorerFiles(): React.JSX.Element {
             sparse={!!activeWorktree?.isSparse}
           />
         )}
-        <FileExplorerQueryStrip view={explorerView} onSelectView={handleSelectExplorerView}>
+        <FileExplorerQueryStrip view={explorerView} onSelectView={setRightSidebarExplorerView}>
           {/* Keep query rows mounted to preserve input selection when switching modes. */}
           <div className="relative min-h-8">
-            <div
-              className={cn(
-                explorerView !== 'files' && 'pointer-events-none invisible absolute inset-x-0 top-0'
-              )}
-            >
+            <div hidden={explorerView !== 'files'}>
               <FileExplorerNameFilter
                 query={nameFilterQuery}
                 scopeLabel={rootOptions?.find((option) => option.value === rootChoice)?.label}
@@ -315,19 +298,10 @@ function FileExplorerFiles(): React.JSX.Element {
                 onClear={handleClearNameFilter}
               />
             </div>
-            <div
-              className={cn(
-                explorerView !== 'search' &&
-                  'pointer-events-none invisible absolute inset-x-0 top-0'
-              )}
-            >
+            <div hidden={explorerView !== 'search'}>
               <SearchQueryRow {...searchPanel.queryRowProps} />
             </div>
-            <div
-              className={cn(
-                explorerView !== 'search' && 'pointer-events-none invisible h-0 overflow-hidden'
-              )}
-            >
+            <div hidden={explorerView !== 'search'}>
               <SearchFilters key={activeWorktreeId} {...searchPanel.filtersProps} />
             </div>
           </div>

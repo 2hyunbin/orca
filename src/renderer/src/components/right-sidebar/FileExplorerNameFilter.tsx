@@ -26,6 +26,7 @@ export function FileExplorerNameFilter({
       <ListFilter className="size-3.5 shrink-0 text-muted-foreground" />
       <input
         type="text"
+        data-explorer-query-input="files"
         className="min-w-0 flex-1 bg-transparent py-1 text-xs text-foreground outline-none placeholder:text-muted-foreground/60"
         aria-label={translate(
           'auto.components.right.sidebar.FileExplorerNameFilter.26fb73c6e3',
