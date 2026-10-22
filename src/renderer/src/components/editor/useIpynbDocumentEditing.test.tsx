@@ -1,34 +1,37 @@
 // @vitest-environment happy-dom
+import { useState } from 'react'
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPendingEditorBuffer } from './editor-pending-flush'
 import { parseIpynb } from './ipynb-parse'
 import { useIpynbDocumentEditing } from './useIpynbDocumentEditing'
+import { rebaseIpynbSourceDrafts } from './ipynb-source-drafts'
 import { EMPTY_EDITOR_BUFFER_VIEW_INDEX as NO_SHARING } from '@/store/slices/editor/buffers/editor-buffer-views'
-import { notifyStaleViewEditRejected } from './editor-stale-view-edit'
+import type * as StaleViewEdit from './editor-stale-view-edit'
+import { notifyStaleViewEditRejected, staleViewEditEpoch } from './editor-stale-view-edit'
 
-vi.mock('./editor-stale-view-edit', () => ({ notifyStaleViewEditRejected: vi.fn() }))
+vi.mock('./editor-stale-view-edit', async (importOriginal) => ({
+  ...(await importOriginal<typeof StaleViewEdit>()),
+  notifyStaleViewEditRejected: vi.fn(),
+  staleViewEditEpoch: vi.fn(() => 0)
+}))
 
 /** Two split panes of one notebook tab sharing one record text. */
 function renderSplitPanes(initialContent: string) {
   let shared = initialContent
-  const panes = renderHook(
-    ({ content }: { content: string }) => {
-      const props = {
-        content,
-        fileId: 'notebook-a',
-        notebook: parseIpynb(content),
-        onContentChange: (next: string) => {
-          shared = next
-          panes.rerender({ content: next })
-        },
-        onDirtyStateHint: vi.fn(),
-        onDeactivateEditor: vi.fn()
-      }
-      return { a: useIpynbDocumentEditing(props), b: useIpynbDocumentEditing(props) }
-    },
-    { initialProps: { content: initialContent } }
-  )
+  const panes = renderHook(() => {
+    const [content, setContent] = useState(initialContent)
+    shared = content
+    const props = {
+      content,
+      fileId: 'notebook-a',
+      notebook: parseIpynb(content),
+      onContentChange: setContent,
+      onDirtyStateHint: vi.fn(),
+      onDeactivateEditor: vi.fn()
+    }
+    return { a: useIpynbDocumentEditing(props), b: useIpynbDocumentEditing(props) }
+  })
   return { panes, text: () => shared }
 }
 
@@ -192,6 +195,85 @@ describe('notebook document editing lifecycle', () => {
     const notebook = parseIpynb(text())
     expect(notebook.cells.map((cell) => cell.source)).toEqual(['pane a edit', 'pane b retry'])
     expect(notifyStaleViewEditRejected).toHaveBeenCalledOnce()
+  })
+
+  it('merges split pane drafts on different cells onto the latest notebook', () => {
+    vi.mocked(notifyStaleViewEditRejected).mockClear()
+    const { panes, text } = renderSplitPanes(notebookContent())
+
+    act(() => {
+      panes.result.current.b.updateCellSource(1, 'pane b edit')
+      panes.result.current.a.updateCellSource(0, 'pane a edit')
+      panes.result.current.a.flushSourceDrafts()
+    })
+    act(() => vi.advanceTimersByTime(400))
+
+    const notebook = parseIpynb(text())
+    expect(notebook.cells.map((cell) => cell.source)).toEqual(['pane a edit', 'pane b edit'])
+    expect(notifyStaleViewEditRejected).not.toHaveBeenCalled()
+  })
+
+  it('drops a draft silently once the other pane publishes the same text', () => {
+    vi.mocked(notifyStaleViewEditRejected).mockClear()
+    const { panes, text } = renderSplitPanes(notebookContent())
+
+    act(() => {
+      panes.result.current.b.updateCellSource(0, 'same edit')
+      panes.result.current.a.updateCellSource(0, 'same edit')
+      panes.result.current.a.flushSourceDrafts()
+    })
+    expect(panes.result.current.b.sourceDrafts).toEqual({})
+    expect(vi.getTimerCount()).toBe(0)
+    act(() => panes.result.current.b.flushSourceDrafts())
+    act(() => vi.advanceTimersByTime(400))
+    expect(notifyStaleViewEditRejected).not.toHaveBeenCalled()
+
+    // A fresh draft starts from the published text, so it commits.
+    act(() => {
+      panes.result.current.b.updateCellSource(0, 'same edit, then more')
+      vi.advanceTimersByTime(400)
+    })
+    expect(parseIpynb(text()).cells[0]?.source).toBe('same edit, then more')
+    expect(notifyStaleViewEditRejected).not.toHaveBeenCalled()
+  })
+
+  it('drops typing silently after a Discard instead of re-dirtying the file', () => {
+    vi.mocked(notifyStaleViewEditRejected).mockClear()
+    const initial = notebookContent()
+    const { panes, text } = renderSplitPanes(initial)
+
+    act(() => panes.result.current.b.updateCellSource(0, 'typed before discard'))
+    vi.mocked(staleViewEditEpoch).mockReturnValue(1)
+    try {
+      act(() => vi.advanceTimersByTime(400))
+    } finally {
+      vi.mocked(staleViewEditEpoch).mockReturnValue(0)
+    }
+    expect(text()).toBe(initial)
+    expect(panes.result.current.b.sourceDrafts).toEqual({})
+    expect(notifyStaleViewEditRejected).not.toHaveBeenCalled()
+  })
+
+  it('rejects position-keyed drafts once cells were inserted or removed', () => {
+    const cell = (source: string) => ({
+      id: null,
+      kind: 'code' as const,
+      language: 'python',
+      source,
+      executionCount: null,
+      outputs: []
+    })
+    const drafts = { '0:code': 'typed' }
+    const bases = { '0:code': { source: 'a', cellKinds: ['code', 'code'] as const } }
+    expect(rebaseIpynbSourceDrafts([cell('a'), cell('b')], drafts, bases).dropped).toEqual([])
+    const shifted = rebaseIpynbSourceDrafts([cell('a'), cell('new'), cell('b')], drafts, bases)
+    expect(shifted).toEqual({ updates: [], dropped: ['0:code'], lostTyping: true })
+    const changedKinds = rebaseIpynbSourceDrafts(
+      [cell('a'), { ...cell('b'), kind: 'markdown' }],
+      drafts,
+      bases
+    )
+    expect(changedKinds).toEqual({ updates: [], dropped: ['0:code'], lostTyping: true })
   })
 
   it('commits pending drafts when focus leaves the notebook so the next view sees them', () => {

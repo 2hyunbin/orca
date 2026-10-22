@@ -16397,7 +16397,7 @@
           }
         },
         "staleViewEdit": {
-          "rejected": "Votre dernière modification dans cette vue n'a pas pu être appliquée, car le fichier a été modifié ailleurs."
+          "rejected": "Votre saisie récente dans cette vue a été abandonnée, car le fichier a été modifié dans une autre vue."
         },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "Le collage est trop volumineux.",

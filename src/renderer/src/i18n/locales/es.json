@@ -16290,7 +16290,7 @@
           }
         },
         "staleViewEdit": {
-          "rejected": "No se pudo aplicar tu última edición en esta vista porque el archivo cambió en otro lugar."
+          "rejected": "Se descartó lo que escribiste recientemente en esta vista porque el archivo cambió en otra vista."
         },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "El contenido pegado es demasiado grande.",

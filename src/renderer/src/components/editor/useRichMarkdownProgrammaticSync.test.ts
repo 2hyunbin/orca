@@ -13,9 +13,12 @@ import {
   type RichMarkdownHtmlSuperscriptLinkContext
 } from './rich-markdown-html-superscript-link-context'
 import { encodeRawMarkdownHtmlForRichEditor } from './raw-markdown-html'
-import { notifyStaleViewEditRejected } from './editor-stale-view-edit'
+import { notifyStaleViewEditRejected, staleViewEditEpoch } from './editor-stale-view-edit'
 
-vi.mock('./editor-stale-view-edit', () => ({ notifyStaleViewEditRejected: vi.fn() }))
+vi.mock('./editor-stale-view-edit', () => ({
+  notifyStaleViewEditRejected: vi.fn(),
+  staleViewEditEpoch: vi.fn(() => 0)
+}))
 
 function buildEditor(
   codec: RichMarkdownEditorCodec,
@@ -69,12 +72,14 @@ describe('useRichMarkdownProgrammaticSync external-reload baseline adoption (#60
           filePath: '/repo/README.md',
           isApplyingProgrammaticUpdateRef,
           lastCommittedMarkdownRef,
+          onContentChangeRef: { current: vi.fn() },
           originalSourceRef,
           baseCanonicalRef,
           markdownDocuments: undefined,
           rootRef: { current: null },
           runtimeTarget: { kind: 'local' },
           serializeTimerRef: { current: null },
+          pendingEditEpochRef: { current: 0 },
           slashMenuSetter: vi.fn(),
           worktreeId: 'w1',
           worktreeRoot: null
@@ -105,6 +110,11 @@ describe('useRichMarkdownProgrammaticSync stale pending edit', () => {
       }),
       paneText
     )
+    const lastCommittedMarkdownRef = { current: 'base' }
+    const originalSourceRef = { current: 'base' }
+    const baseCanonicalRef = { current: 'base' }
+    const pendingEditEpochRef = { current: 0 }
+    const onContentChangeRef = { current: vi.fn<(content: string) => void>() }
     const serializeTimerRef = {
       current: pendingCommit ? window.setTimeout(pendingCommit, 300) : null
     }
@@ -118,20 +128,22 @@ describe('useRichMarkdownProgrammaticSync stale pending edit', () => {
           fileId: 'f1',
           filePath: '/repo/README.md',
           isApplyingProgrammaticUpdateRef: { current: false },
-          lastCommittedMarkdownRef: { current: 'base' },
-          originalSourceRef: { current: 'base' },
-          baseCanonicalRef: { current: 'base' },
+          lastCommittedMarkdownRef,
+          onContentChangeRef,
+          originalSourceRef,
+          baseCanonicalRef,
           markdownDocuments: undefined,
           rootRef: { current: null },
           runtimeTarget: { kind: 'local' },
           serializeTimerRef,
+          pendingEditEpochRef,
           slashMenuSetter: vi.fn(),
           worktreeId: 'w1',
           worktreeRoot: null
         }),
       { initialProps: { content: 'base' } }
     )
-    return { editor, hook, serializeTimerRef }
+    return { editor, hook, serializeTimerRef, onContentChangeRef }
   }
 
   it('rejects a split pane pending edit once the other pane replaced the shared text', () => {
@@ -139,16 +151,60 @@ describe('useRichMarkdownProgrammaticSync stale pending edit', () => {
     vi.mocked(notifyStaleViewEditRejected).mockClear()
     const commitPaneB = vi.fn()
     // Pane B typed "pane b" over "base" and is waiting out its serialize delay.
-    const { editor, hook, serializeTimerRef } = renderPane('pane b', commitPaneB)
+    const { editor, hook, serializeTimerRef, onContentChangeRef } = renderPane(
+      'pane b',
+      commitPaneB
+    )
     try {
       hook.rerender({ content: 'pane a' })
       vi.advanceTimersByTime(300)
 
       expect(commitPaneB).not.toHaveBeenCalled()
       expect(serializeTimerRef.current).toBeNull()
-      expect(notifyStaleViewEditRejected).toHaveBeenCalledOnce()
+      expect(notifyStaleViewEditRejected).toHaveBeenCalledExactlyOnceWith('f1', 0)
       expect(editor.getMarkdown()).toBe('pane a')
+      // Republished so the dirty flag this pane's typing raised is recomputed.
+      expect(onContentChangeRef.current).toHaveBeenCalledWith('pane a')
     } finally {
+      editor.destroy()
+      vi.useRealTimers()
+    }
+  })
+
+  it('cancels acknowledged typing and recomputes dirty without a toast', () => {
+    vi.useFakeTimers()
+    vi.mocked(notifyStaleViewEditRejected).mockClear()
+    const commit = vi.fn()
+    const { editor, hook, serializeTimerRef, onContentChangeRef } = renderPane('same edit', commit)
+    try {
+      hook.rerender({ content: 'same edit' })
+      vi.advanceTimersByTime(300)
+      expect(serializeTimerRef.current).toBeNull()
+      expect(commit).not.toHaveBeenCalled()
+      expect(onContentChangeRef.current).toHaveBeenCalledWith('same edit')
+      expect(notifyStaleViewEditRejected).not.toHaveBeenCalled()
+    } finally {
+      editor.destroy()
+      vi.useRealTimers()
+    }
+  })
+
+  it('silently cancels typing after discard even when shared text did not change', () => {
+    vi.useFakeTimers()
+    vi.mocked(notifyStaleViewEditRejected).mockClear()
+    const commit = vi.fn()
+    const { editor, hook, serializeTimerRef, onContentChangeRef } = renderPane('typing', commit)
+    try {
+      vi.mocked(staleViewEditEpoch).mockReturnValue(1)
+      hook.rerender({ content: 'base' })
+      vi.advanceTimersByTime(300)
+      expect(serializeTimerRef.current).toBeNull()
+      expect(commit).not.toHaveBeenCalled()
+      expect(editor.getMarkdown()).toBe('base')
+      expect(onContentChangeRef.current).toHaveBeenCalledWith('base')
+      expect(notifyStaleViewEditRejected).not.toHaveBeenCalled()
+    } finally {
+      vi.mocked(staleViewEditEpoch).mockReturnValue(0)
       editor.destroy()
       vi.useRealTimers()
     }

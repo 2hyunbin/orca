@@ -16295,7 +16295,7 @@
           }
         },
         "staleViewEdit": {
-          "rejected": "파일이 다른 곳에서 변경되어 이 보기에서 마지막으로 한 편집을 적용할 수 없습니다."
+          "rejected": "파일이 다른 보기에서 변경되어 이 보기에서 최근에 입력한 내용이 삭제되었습니다."
         },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "붙여넣기 내용이 너무 큽니다.",

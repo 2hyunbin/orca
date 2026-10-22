@@ -7,7 +7,11 @@ import {
   type MutableRefObject
 } from 'react'
 import { registerPendingEditorFlush } from './editor-pending-flush'
-import { notifyStaleViewEditRejected } from './editor-stale-view-edit'
+import {
+  focusLeftView,
+  notifyStaleViewEditRejected,
+  staleViewEditEpoch
+} from './editor-stale-view-edit'
 import {
   deleteIpynbCell,
   insertIpynbCell,
@@ -15,13 +19,16 @@ import {
   updateIpynbCellKind,
   updateIpynbCellSources
 } from './ipynb-cell-mutations'
-import type { IpynbCell, IpynbCellKind, ParsedIpynb } from './ipynb-parse'
+import { parseIpynb, type IpynbCellKind, type ParsedIpynb } from './ipynb-parse'
+import {
+  getIpynbCellKey,
+  rebaseIpynbSourceDrafts,
+  type IpynbSourceDraftBase
+} from './ipynb-source-drafts'
+
+export { getIpynbCellKey }
 
 const NOTEBOOK_SOURCE_COMMIT_DELAY_MS = 400
-
-export function getIpynbCellKey(cell: IpynbCell, index: number): string {
-  return cell.id ?? `${index}:${cell.kind}`
-}
 
 export function hasIpynbSourceDraft(drafts: Record<string, string>, key: string): boolean {
   return Object.hasOwn(drafts, key)
@@ -77,29 +84,28 @@ export function useIpynbDocumentEditing({
   const onContentChangeRef = useRef(onContentChange)
   const onDirtyStateHintRef = useRef(onDirtyStateHint)
   const sourceCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Why: the notebook text the pending drafts were typed against; a commit onto newer text is refused.
-  const draftBaseRef = useRef<string | null>(null)
+  // Why: each drafted cell's source when typing began; a draft onto a cell changed elsewhere is refused.
+  const draftBasesRef = useRef<Record<string, IpynbSourceDraftBase>>({})
+  const draftEpochRef = useRef(0)
+  const parsedContentRef = useRef(content)
   const structuralFrameIdsRef = useRef<number[]>([])
   useLayoutEffect(() => {
     contentRef.current = content
+    parsedContentRef.current = content
     notebookRef.current = notebook
     onContentChangeRef.current = onContentChange
     onDirtyStateHintRef.current = onDirtyStateHint
   }, [content, notebook, onContentChange, onDirtyStateHint])
 
-  const materializeSourceDrafts = useCallback((): string => {
-    const latestNotebook = notebookRef.current
-    const drafts = sourceDraftsRef.current
-    if (!latestNotebook || Object.keys(drafts).length === 0) {
-      return contentRef.current
+  const latestCells = useCallback(() => {
+    if (parsedContentRef.current === contentRef.current) {
+      return notebookRef.current?.cells ?? null
     }
-    const updates = latestNotebook.cells
-      .map((cell, index) => {
-        const key = getIpynbCellKey(cell, index)
-        return hasIpynbSourceDraft(drafts, key) ? { index, source: drafts[key] ?? '' } : null
-      })
-      .filter((update): update is { index: number; source: string } => update !== null)
-    return updateIpynbCellSources(contentRef.current, updates)
+    try {
+      return parseIpynb(contentRef.current).cells
+    } catch {
+      return null
+    }
   }, [])
 
   const flushSourceDrafts = useCallback((): string => {
@@ -107,21 +113,42 @@ export function useIpynbDocumentEditing({
       clearTimeout(sourceCommitTimerRef.current)
       sourceCommitTimerRef.current = null
     }
-    const base = draftBaseRef.current
-    draftBaseRef.current = null
-    if (base !== null && base !== contentRef.current) {
-      sourceDraftsRef.current = {}
-      setSourceDrafts({})
-      notifyStaleViewEditRejected()
+    const drafts = sourceDraftsRef.current
+    if (Object.keys(drafts).length === 0) {
+      draftBasesRef.current = {}
       return contentRef.current
     }
-    const nextContent = materializeSourceDrafts()
-    if (nextContent !== contentRef.current) {
-      contentRef.current = nextContent
-      onContentChangeRef.current(nextContent)
+    const cells = latestCells() ?? []
+    const discarded = staleViewEditEpoch(fileId) !== draftEpochRef.current
+    const rebase = discarded
+      ? { updates: [], dropped: Object.keys(drafts), lostTyping: false }
+      : rebaseIpynbSourceDrafts(cells, drafts, draftBasesRef.current)
+    const nextBases = { ...draftBasesRef.current }
+    for (const { key, source } of rebase.updates) {
+      nextBases[key] = { source, cellKinds: cells.map((cell) => cell.kind) }
     }
+    if (rebase.dropped.length > 0) {
+      const nextDrafts = { ...drafts }
+      for (const key of rebase.dropped) {
+        delete nextDrafts[key]
+        delete nextBases[key]
+      }
+      sourceDraftsRef.current = nextDrafts
+      setSourceDrafts(nextDrafts)
+      if (rebase.lostTyping) {
+        notifyStaleViewEditRejected(fileId, draftEpochRef.current)
+      }
+    }
+    draftBasesRef.current = nextBases
+    const nextContent = updateIpynbCellSources(
+      contentRef.current,
+      rebase.updates.filter(({ index, source }) => source !== cells[index]?.source)
+    )
+    // Republish even unchanged text to recompute dirty after cancelled or reverted typing.
+    contentRef.current = nextContent
+    onContentChangeRef.current(nextContent)
     return nextContent
-  }, [materializeSourceDrafts])
+  }, [fileId, latestCells])
 
   const queueSourceDraftCommit = useCallback((): void => {
     if (sourceCommitTimerRef.current !== null) {
@@ -153,6 +180,16 @@ export function useIpynbDocumentEditing({
     if (changed) {
       sourceDraftsRef.current = nextDrafts
       setSourceDrafts(nextDrafts)
+      draftBasesRef.current = Object.fromEntries(
+        Object.entries(draftBasesRef.current).filter(([key]) =>
+          hasIpynbSourceDraft(nextDrafts, key)
+        )
+      )
+      if (Object.keys(nextDrafts).length === 0 && sourceCommitTimerRef.current !== null) {
+        clearTimeout(sourceCommitTimerRef.current)
+        sourceCommitTimerRef.current = null
+        onContentChangeRef.current(contentRef.current)
+      }
     }
   }, [notebook])
 
@@ -170,23 +207,14 @@ export function useIpynbDocumentEditing({
 
   const flushOnFocusLeave = useCallback(
     (event: { currentTarget: Element; relatedTarget: EventTarget | null }): void => {
-      const next = event.relatedTarget
-      if (
-        sourceCommitTimerRef.current === null ||
-        (next instanceof Node && event.currentTarget.contains(next))
-      ) {
-        return
+      if (sourceCommitTimerRef.current !== null && focusLeftView(event)) {
+        void flushSourceDrafts()
       }
-      // Why: commit before focus reaches another view of this file, so alternating views never goes stale.
-      void flushSourceDrafts()
     },
     [flushSourceDrafts]
   )
 
   const applyContent = useCallback((nextContent: string): void => {
-    if (draftBaseRef.current === contentRef.current) {
-      draftBaseRef.current = nextContent
-    }
     contentRef.current = nextContent
     onContentChangeRef.current(nextContent)
   }, [])
@@ -198,14 +226,25 @@ export function useIpynbDocumentEditing({
         return
       }
       const key = getIpynbCellKey(cell, index)
-      draftBaseRef.current ??= contentRef.current
+      if (sourceCommitTimerRef.current === null) {
+        draftEpochRef.current = staleViewEditEpoch(fileId)
+      }
+      if (!Object.hasOwn(draftBasesRef.current, key)) {
+        draftBasesRef.current = {
+          ...draftBasesRef.current,
+          [key]: {
+            source: cell.source,
+            cellKinds: notebookRef.current?.cells.map((candidate) => candidate.kind) ?? []
+          }
+        }
+      }
       const nextDrafts = { ...sourceDraftsRef.current, [key]: source }
       sourceDraftsRef.current = nextDrafts
       setSourceDrafts(nextDrafts)
       onDirtyStateHintRef.current(true)
       queueSourceDraftCommit()
     },
-    [queueSourceDraftCommit]
+    [fileId, queueSourceDraftCommit]
   )
 
   const applyStructuralChange = useCallback(

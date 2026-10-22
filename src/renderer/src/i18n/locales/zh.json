@@ -16295,7 +16295,7 @@
           }
         },
         "staleViewEdit": {
-          "rejected": "文件已在其他位置更改，因此无法应用你在此视图中的最后一次编辑。"
+          "rejected": "文件已在另一个视图中更改，因此你在此视图中最近输入的内容已被丢弃。"
         },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "粘贴内容过大。",

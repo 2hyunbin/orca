@@ -16597,7 +16597,7 @@
           }
         },
         "staleViewEdit": {
-          "rejected": "Your last edit in this view couldn't be applied because the file changed elsewhere."
+          "rejected": "Recent typing in this view was discarded because the file changed in another view."
         },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "Paste is too large.",
