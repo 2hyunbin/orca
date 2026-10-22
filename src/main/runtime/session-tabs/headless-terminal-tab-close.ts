@@ -275,11 +275,11 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
     return { updated: true }
   }
 
+  protected abstract headlessTerminalFallbackTitle(worktreeId: string, tabId: string): string
+
   // Why: tab color/pin are host-authoritative for remote-server tabs but had no
   // push path, so pinning or coloring a tab reverted on the next snapshot and
   // was never persisted. Persist to the workspace session + live snapshot.
-  protected abstract headlessTerminalFallbackTitle(worktreeId: string, tabId: string): string
-
   async setMobileSessionTabProps(
     worktreeSelector: string,
     args: {
