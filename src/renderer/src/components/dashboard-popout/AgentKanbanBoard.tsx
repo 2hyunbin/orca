@@ -21,6 +21,7 @@ import {
 import './agent-board-transitions.css'
 import { translate } from '@/i18n/i18n'
 import type { AgentSubjectReadIntent } from '@/attention/agent-subject-read-actions'
+import { useAgentDashboardTelemetry } from './use-agent-dashboard-telemetry'
 
 /** Ack an agent in the pop-out window: relayed over IPC to the main renderer.
  *  ?. shields dialog-opening from dev-HMR preload skew (renderer updates hot,
@@ -135,6 +136,8 @@ type AgentKanbanBoardProps = {
   /** Header controls rendered before the close button. The in-window host
    *  passes its settings menu; the pop-out renderer has no store to drive it. */
   headerActions?: React.ReactNode
+  /** The surface that successfully mounted this board. */
+  telemetrySurface?: 'in_window' | 'popout'
 }
 
 /** The agent board: status columns fed by a snapshot. Shared by the pop-out
@@ -146,7 +149,8 @@ export function AgentKanbanBoard({
   onAckAgent = ackAgentViaPopoutRelay,
   onRevealAgent = revealAgentViaPopoutRelay,
   onClose,
-  headerActions
+  headerActions,
+  telemetrySurface = 'popout'
 }: AgentKanbanBoardProps): React.JSX.Element {
   const visibleBuckets = useMemo(
     () =>
@@ -170,6 +174,7 @@ export function AgentKanbanBoard({
     [snapshot.cards]
   )
   const [now, setNow] = useState(() => Date.now())
+  useAgentDashboardTelemetry(telemetrySurface)
   useEffect(() => {
     if (!hasRelativeTimestamps) {
       return

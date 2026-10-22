@@ -70,6 +70,7 @@ function AgentDashboardDrawerBody({
       onAckAgent={handleAckAgent}
       onRevealAgent={handleRevealAgent}
       onClose={onClose}
+      telemetrySurface="in_window"
       headerActions={
         <AgentDashboardSettingsMenu
           onSwitchToPopout={handleSwitchToPopout}

@@ -77,6 +77,7 @@ describe('AgentDashboardDrawer', () => {
 
     act(() => useAppStore.setState({ agentDashboardDrawerOpen: true }))
     expect(mocks.useLiveDashboardSnapshot).toHaveBeenCalledTimes(1)
+    expect(mocks.boardProps?.telemetrySurface).toBe('in_window')
   })
 
   it('leaves Escape to an open terminal panel before dismissing the drawer', () => {
