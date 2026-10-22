@@ -182,7 +182,12 @@ export function createRepoCatalogActions(
 
     awaitLocalRepoCatalogSettlement: () =>
       ORCA_SIDEBAR_INPUTS_IS_MAIN
-        ? awaitMainProjectCatalog().then(() => undefined)
+        ? awaitMainProjectCatalog().then((arrived) => {
+            // Why throw: hydrating the session against no catalog would drop every saved tab as orphaned.
+            if (!arrived) {
+              throw new Error("main's project catalog never arrived")
+            }
+          })
         : awaitLatestLocalRepoCatalogFetch(get)
   }
 }

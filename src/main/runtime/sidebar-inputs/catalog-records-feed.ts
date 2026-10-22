@@ -6,7 +6,7 @@ import {
 } from '../../../shared/sidebar-list/catalog-records-feed-contract'
 import { watchProjectCatalogWrites, type CatalogWatchSources } from './catalog-watch'
 import { SidebarInputsFeed, type SidebarInputsFeedDomain } from './sidebar-inputs-feed'
-import { readSidebarCatalogRecords } from './sidebar-project-catalog'
+import { readSidebarCatalogRecords, type SidebarProjectCatalogStore } from './sidebar-project-catalog'
 import type { SidebarInputsChangedEvent } from '../../../shared/sidebar-list/sidebar-inputs-feed-contract'
 import type { PairedServerRowsProducer } from './paired-server-rows-producer'
 
@@ -42,7 +42,8 @@ export function catalogRecordEntities(
   return entities
 }
 
-export type CatalogRecordsFeedSources = CatalogWatchSources & {
+export type CatalogRecordsFeedSources = Omit<CatalogWatchSources, 'store'> & {
+  store: () => (SidebarProjectCatalogStore & ReturnType<CatalogWatchSources['store']>) | null
   pairedServerRows: Pick<PairedServerRowsProducer, 'revision' | 'catalogs'>
 }
 

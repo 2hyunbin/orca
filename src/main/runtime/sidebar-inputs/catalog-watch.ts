@@ -13,7 +13,7 @@ export const CATALOG_EVENTS = new Set<RuntimeClientEvent['type']>([
 
 export type CatalogWatchSources = {
   pairedServerRows: Pick<PairedServerRowsProducer, 'revision'>
-  store: () => RuntimeStore | null
+  store: () => Partial<Pick<RuntimeStore, 'onUIChanged' | 'onStateWritten'>> | null
   onClientEvent: (
     listener: (event: RuntimeClientEvent) => void,
     options: { consumesTerminalSideEffects: false }
