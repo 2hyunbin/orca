@@ -1,4 +1,3 @@
-import { readAllWorktreeMetaForHost } from '../../../persistence/host-qualified-worktree-meta'
 import { preserveFolderUpgradeWorktreePath } from '../../../folder-upgrade-worktree-path'
 import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
 import { parseWorktreeId } from '../../worktree-logic'
@@ -11,7 +10,10 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { GitWorktreeInfo, DetectedWorktree, Worktree } from '../../../../shared/worktree/types'
 import type { Store } from '../../../persistence/loading-store/store'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
-import { readWorktreeMetaForRepo } from '../../../persistence/host-qualified-worktree-meta'
+import {
+  readAllWorktreeMetaForHost,
+  readWorktreeMetaForRepo
+} from '../../../persistence/host-qualified-worktree-meta'
 import { hostWorktreeTarget } from '../../../../shared/worktree/host-qualified-identity'
 import { getRepoOwnedWorktreeMeta } from '../../../worktree-metadata-ownership'
 import {

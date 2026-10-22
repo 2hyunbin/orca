@@ -26,30 +26,32 @@ type LineageState = {
   Pick<AppState, 'folderWorkspaces' | 'worktreeLineageById' | 'workspaceLineageByChildKey'>
 >
 const noEdges = {}
-const inputCache = new WeakMap<
-  object,
-  WeakMap<
-    object,
-    {
-      worktreeMap: Map<string, Worktree>
-      lineageById: AppState['worktreeLineageById']
-    }
-  >
->()
+type LineageInputs = {
+  worktreeMap: Map<string, Worktree>
+  lineageById: AppState['worktreeLineageById']
+}
+const inputCache = new WeakMap<object, WeakMap<object, WeakMap<object, LineageInputs>>>()
 export function getLineageInputs(state: LineageState) {
   const worktreeMap = getWorkspaceLineageRows(state.worktreesByRepo, state.folderWorkspaces)
-  const lineageById = mergeWorkspaceLineageRecords(
-    state.worktreeLineageById ?? noEdges,
-    state.workspaceLineageByChildKey ?? noEdges
-  )
-  let byRows = inputCache.get(lineageById)
+  const worktreeEdges = state.worktreeLineageById ?? noEdges
+  const workspaceEdges = state.workspaceLineageByChildKey ?? noEdges
+  // Renderer subscribers need stable snapshots of their immutable source maps.
+  let byWorkspaceEdges = inputCache.get(worktreeEdges)
+  if (!byWorkspaceEdges) {
+    byWorkspaceEdges = new WeakMap()
+    inputCache.set(worktreeEdges, byWorkspaceEdges)
+  }
+  let byRows = byWorkspaceEdges.get(workspaceEdges)
   if (!byRows) {
     byRows = new WeakMap()
-    inputCache.set(lineageById, byRows)
+    byWorkspaceEdges.set(workspaceEdges, byRows)
   }
   let inputs = byRows.get(worktreeMap)
   if (!inputs) {
-    inputs = { worktreeMap, lineageById }
+    inputs = {
+      worktreeMap,
+      lineageById: mergeWorkspaceLineageRecords(worktreeEdges, workspaceEdges)
+    }
     byRows.set(worktreeMap, inputs)
   }
   return inputs

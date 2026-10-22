@@ -23,9 +23,19 @@ vi.mock('../../../../shared/resolved-worktree-lineage', async (importOriginal) =
 
 import { computeVisibleWorktreeIds } from './compute-visible-worktrees'
 import type { computeVisibleWorktrees } from './compute-visible-worktrees'
-import { getSidebarLineageParentsByIdentity } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import {
+  getSidebarLineageAncestors,
+  getSidebarLineageParentsByIdentity
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
-import { getLineageAncestorIndex, getSortedWorktreeRankIndex } from './visible-worktree-indexes'
+import {
+  getLineageInputs,
+  getLineageAncestorIndex,
+  getSortedWorktreeRankIndex
+} from './visible-worktree-indexes'
+import { makeFolderWorkspace } from '@/store/slices/worktrees-slice-test-fixtures'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
+import type { WorkspaceLineage } from '../../../../shared/worktree/lineage-types'
 
 type IdentifiedWorktree = Worktree & { instanceId: string }
 
@@ -106,6 +116,100 @@ function visibleOptions(
 }
 
 describe('visible worktree indexes', () => {
+  it('keeps subscriber snapshots stable until rows, folders or either saved edge map changes', () => {
+    const firstParent = makeWorktree('first-parent')
+    const secondParent = makeWorktree('second-parent')
+    const child = makeWorktree('child')
+    const folder = makeFolderWorkspace()
+    const folderKey = folderWorkspaceKey(folder.id)
+    const workspaceEdge: WorkspaceLineage = {
+      childWorkspaceKey: worktreeWorkspaceKey(child.id),
+      childInstanceId: child.instanceId,
+      parentWorkspaceKey: folderKey,
+      parentInstanceId: folderKey,
+      origin: 'manual',
+      capture: { source: 'manual-action', confidence: 'explicit' },
+      createdAt: 1
+    }
+    let state: Parameters<typeof getLineageInputs>[0] = {
+      worktreesByRepo: { repo1: [firstParent, secondParent, child] },
+      folderWorkspaces: [folder],
+      worktreeLineageById: {},
+      workspaceLineageByChildKey: {}
+    }
+    let snapshot = getLineageInputs(state)
+    expect(getLineageInputs({ ...state })).toBe(snapshot)
+    const emptyState = {
+      worktreesByRepo: {},
+      worktreeLineageById: {},
+      workspaceLineageByChildKey: {}
+    }
+    expect(getLineageInputs(emptyState)).toBe(getLineageInputs({ ...emptyState }))
+    const legacyState = { worktreesByRepo: state.worktreesByRepo }
+    expect(getLineageInputs(legacyState)).toBe(getLineageInputs({ ...legacyState }))
+
+    const updates: [Partial<typeof state>, string[]][] = [
+      [{ worktreeLineageById: { [child.id]: makeLineage(child, firstParent) } }, [firstParent.id]],
+      [
+        { worktreeLineageById: { [child.id]: makeLineage(child, secondParent) } },
+        [secondParent.id]
+      ],
+      [{ worktreeLineageById: {} }, []],
+      [
+        { workspaceLineageByChildKey: { [workspaceEdge.childWorkspaceKey]: workspaceEdge } },
+        [folderKey]
+      ],
+      [
+        {
+          workspaceLineageByChildKey: {
+            [workspaceEdge.childWorkspaceKey]: {
+              ...workspaceEdge,
+              parentWorkspaceKey: worktreeWorkspaceKey(secondParent.id),
+              parentInstanceId: secondParent.instanceId
+            }
+          }
+        },
+        [secondParent.id]
+      ],
+      [{ workspaceLineageByChildKey: {} }, []],
+      [
+        { worktreeLineageById: { [child.id]: makeLineage(child, secondParent) } },
+        [secondParent.id]
+      ],
+      [
+        {
+          worktreesByRepo: {
+            repo1: [firstParent, { ...secondParent, instanceId: 'replacement' }, child]
+          }
+        },
+        []
+      ],
+      [{ worktreesByRepo: { repo1: [firstParent, secondParent, child] } }, [secondParent.id]],
+      [
+        {
+          worktreeLineageById: {},
+          workspaceLineageByChildKey: { [workspaceEdge.childWorkspaceKey]: workspaceEdge }
+        },
+        [folderKey]
+      ],
+      [{ folderWorkspaces: [] }, []],
+      [{ folderWorkspaces: [{ ...folder, name: 'Renamed folder' }] }, [folderKey]]
+    ]
+    for (const [patch, ancestors] of updates) {
+      state = { ...state, ...patch }
+      const next = getLineageInputs(state)
+      expect(next).not.toBe(snapshot)
+      expect(getLineageInputs({ ...state })).toBe(next)
+      expect(
+        getSidebarLineageAncestors(child, next.lineageById, next.worktreeMap).map((row) => row.id)
+      ).toEqual(ancestors)
+      snapshot = next
+    }
+    expect(
+      getSidebarLineageAncestors(child, snapshot.lineageById, snapshot.worktreeMap)[0]?.displayName
+    ).toBe('Renamed folder')
+  })
+
   it('reuses the lineage projection instead of rebuilding it on every store write', () => {
     const parent = makeWorktree('parent')
     const child = makeWorktree('child')
