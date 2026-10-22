@@ -31,7 +31,8 @@ import type {
   RuntimeStatus,
   RuntimeTerminalCreate,
   RuntimeTerminalResolvePane,
-  RuntimeTerminalSend
+  RuntimeTerminalSend,
+  RuntimeTerminalShow
 } from '../../../../shared/runtime-types'
 import { TERMINAL_CREATE_IDEMPOTENCY_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
 import { agentResumeHostAuthorityCapability } from '../../runtime/agent-resume-host-authority-capability'
@@ -57,6 +58,7 @@ import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'
 import { REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE } from '../../runtime/remote-runtime-terminal-snapshot-state'
 import { restoredSnapshotPaintsPrintableContent } from './restored-snapshot-coverage'
+import { hostRecordsTerminalExit } from './remote-terminal-host-exit-record'
 import type {
   RemoteRuntimeMultiplexedTerminal,
   RemoteRuntimeSnapshotOutcome
@@ -407,6 +409,7 @@ export function createRemoteRuntimePtyTransport(
   let lastAttachOptions: Parameters<PtyTransport['attach']>[0] | null = null
   let resolvePaneUnavailable = false
   let recoveringPaneHandle: string | null = null
+  let hostExitProbeHandle: string | null = null
   const getRecoveryReplacementPolicy = (targetHandle: string): HostHandleReplacementPolicy =>
     recoveryReplacementPolicyHandle === targetHandle ? recoveryReplacementPolicy : 'reuse'
   const resetRecoveryReplacementPolicy = (): void => {
@@ -2241,6 +2244,40 @@ export function createRemoteRuntimePtyTransport(
     }
   }
 
+  // Why: a stale or PTY-less refusal proves nothing about exit, so the retry stands; only the host's
+  // own exit record settles the pane, or a restored pane whose session ended retries forever (#31539).
+  function retireIfHostRecordsExit(targetHandle: string, exitedPtyId: string | null): void {
+    if (hostExitProbeHandle === targetHandle) {
+      return
+    }
+    hostExitProbeHandle = targetHandle
+    const probeLifecycle = lifecycleEpoch
+    void callRuntime<{ terminal?: RuntimeTerminalShow }>('terminal.show', {
+      terminal: targetHandle
+    })
+      .then(
+        (result) => {
+          if (
+            destroyed ||
+            terminalEnded ||
+            probeLifecycle !== lifecycleEpoch ||
+            handle !== targetHandle ||
+            !hostRecordsTerminalExit(result?.terminal)
+          ) {
+            return
+          }
+          remotePtyId ??= exitedPtyId
+          retireRemoteTerminalId()
+        },
+        () => {}
+      )
+      .finally(() => {
+        if (hostExitProbeHandle === targetHandle) {
+          hostExitProbeHandle = null
+        }
+      })
+  }
+
   function rebindRemoteTerminalHandle(
     nextHandle: string,
     nextIncarnationId: string | null = null,
@@ -2361,8 +2398,12 @@ export function createRemoteRuntimePtyTransport(
     if (isRemoteTerminalStaleMessage(message)) {
       if (tabId && leafId && worktreeId) {
         // Why: reconnect can re-mint a pane handle while its host coordinates live; keep xterm state mounted while re-resolving.
+        const refusedHandle = handle
         closeMultiplexedStream()
         scheduleResubscribeAfterTransportClose('require-replacement')
+        if (refusedHandle) {
+          retireIfHostRecordsExit(refusedHandle, remotePtyId)
+        }
       } else {
         // A stale handle without a replacement is an attachment loss, not
         // evidence that the process behind it died.
@@ -2378,8 +2419,12 @@ export function createRemoteRuntimePtyTransport(
     if (message.includes('no_connected_pty')) {
       // Why: the host also sends this when its window has not mounted the pane yet, so it proves
       // nothing about exit; back off and resubscribe, which asks the host to mount it again.
+      const refusedHandle = handle
       closeMultiplexedStream()
       scheduleResubscribeAfterBackoff()
+      if (refusedHandle) {
+        retireIfHostRecordsExit(refusedHandle, remotePtyId)
+      }
       return
     }
     if (isSshSessionGoneError(message)) {
@@ -3102,6 +3147,9 @@ export function createRemoteRuntimePtyTransport(
         // instead of latching in 'connecting' with nothing armed (#18495).
         connecting = false
         scheduleConnectRetryAfterRecoverableFailure()
+        if (handle && isRemoteTerminalStaleMessage(runtimeTerminalErrorMessage(error))) {
+          retireIfHostRecordsExit(handle, remotePtyId ?? options.existingPtyId ?? null)
+        }
         return
       }
       recovery.cancel()
