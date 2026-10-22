@@ -1,0 +1,94 @@
+// Layout-owner build (L280): a saved browser record with no tab-bar entry gets its tab from main's
+// load, as the window's browser hydration repairs it, so no window mints an id main cannot resolve.
+
+import { describe, expect, it, vi } from 'vitest'
+import { getDefaultWorkspaceSession } from '../constants'
+import { LOCAL_EXECUTION_HOST_ID } from '../execution-host'
+import type { Tab } from '../tab-types'
+import type { WorkspaceSessionState } from '../workspace-session-state-types'
+import { resolveSessionTabRow } from './old-client/old-client-session-tab-rows'
+import { loadWorkspaceLayout } from './workspace-layout-load'
+import { nameBasedLoadContext } from './workspace-layout-minted-ids'
+import { saveWorkspaceLayout } from './workspace-layout-save'
+
+vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+
+const KEY = 'repo-1::/w'
+
+function editor(id: string, groupId: string, sortOrder: number): Tab {
+  return {
+    id,
+    entityId: `/w/${id}.ts`,
+    groupId,
+    worktreeId: KEY,
+    contentType: 'editor',
+    label: id,
+    customLabel: null,
+    color: null,
+    sortOrder,
+    createdAt: 1
+  }
+}
+
+/** Two groups, the second active, and a browser record no tab-bar entry names. */
+function savedSession(): WorkspaceSessionState {
+  return {
+    ...getDefaultWorkspaceSession(),
+    unifiedTabs: { [KEY]: [editor('a', 'g1', 0), editor('b', 'g2', 0)] },
+    tabGroups: {
+      [KEY]: [
+        { id: 'g1', worktreeId: KEY, activeTabId: 'a', tabOrder: ['a'] },
+        { id: 'g2', worktreeId: KEY, activeTabId: 'b', tabOrder: ['b'] }
+      ]
+    },
+    activeGroupIdByWorktree: { [KEY]: 'g2' },
+    openFilesByWorktree: {
+      [KEY]: ['a', 'b'].map((name) => ({
+        filePath: `/w/${name}.ts`,
+        relativePath: `${name}.ts`,
+        worktreeId: KEY,
+        language: 'typescript'
+      }))
+    },
+    browserTabsByWorktree: {
+      [KEY]: [
+        {
+          id: 'browser-1',
+          worktreeId: KEY,
+          url: 'https://example.com',
+          title: 'Example',
+          loading: false,
+          faviconUrl: null,
+          canGoBack: false,
+          canGoForward: false,
+          loadError: null,
+          createdAt: 5
+        }
+      ]
+    }
+  }
+}
+
+const load = (session: WorkspaceSessionState) =>
+  loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, session, nameBasedLoadContext())
+
+describe("main's load of a browser record with no tab", () => {
+  it('gives it a tab at the end of the active group, which a row id resolves to', () => {
+    const workspace = load(savedSession()).layout.workspaces[KEY]!
+    const tab = workspace.tabs.find((entry) => entry.kind === 'browser')!
+
+    expect(tab).toMatchObject({ entityId: 'browser-1', createdAt: 5 })
+    expect(workspace.groups.map((group) => group.tabOrder)).toEqual([['a'], ['b', tab.id]])
+    // The window publishes a browser row under its record id.
+    expect(resolveSessionTabRow(workspace, 'browser-1')?.tab.id).toBe(tab.id)
+  })
+
+  it('saves the tab, so the next load mints nothing new', () => {
+    const saved = saveWorkspaceLayout(load(savedSession()))
+
+    expect(
+      saved.unifiedTabs?.[KEY]?.find((entry) => entry.contentType === 'browser')
+    ).toMatchObject({ entityId: 'browser-1', groupId: 'g2', label: 'Example' })
+    expect(load(saved).changes).toEqual([])
+  })
+})

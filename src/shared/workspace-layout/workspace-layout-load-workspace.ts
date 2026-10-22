@@ -18,6 +18,7 @@ import {
   loadTerminalTab
 } from './workspace-layout-load-tabs'
 import type { WorkspaceLoadArgs } from './workspace-layout-load-types'
+import { restoresSavedContentTab } from './saved-editor-tab-restore'
 import type { LayoutTab, LayoutTerminalTab, WorkspaceLayout } from './workspace-layout-model'
 import { pruneGroupLayout } from '../workspace-session-terminal-tab-close'
 
@@ -100,6 +101,10 @@ function loadTabs(args: WorkspaceLoadArgs): {
   const rows = takeRows(args)
   const rowByEntity = new Map(rows.map((row) => [row.id, row]))
   const merged = new Set<string>()
+  const savedEditFilePaths = new Set(
+    (session.openFilesByWorktree?.[key] ?? []).map((file) => file.filePath)
+  )
+  const heldViews = args.context.editorViewsOf?.(key)
   const tabs: LayoutTab[] = []
   const candidates: OrderCandidate[] = []
   const tabIds = new Set<string>()
@@ -128,6 +133,14 @@ function loadTabs(args: WorkspaceLoadArgs): {
     if (tabIds.has(entry.id) || aliases.has(entry.id)) {
       continue
     }
+    // Switch point: main drops the saved tabs the window's restore drops (L286).
+    if (
+      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      entry.contentType !== 'terminal' &&
+      !restoresSavedContentTab(entry, savedEditFilePaths, () => !!heldViews?.[entry.id])
+    ) {
+      continue
+    }
     if (entry.contentType === 'terminal') {
       const row = rowByEntity.get(entry.entityId)
       if (!row || merged.has(row.id)) {
@@ -149,6 +162,31 @@ function loadTabs(args: WorkspaceLoadArgs): {
     }
     if (entry.lastFocusedAt !== undefined) {
       childRecord(args.view.lastFocusedAt, key)[entry.id] = entry.lastFocusedAt
+    }
+  }
+  // Switch point: a saved browser record with no tab gets one at the end of the active group, the
+  // repair the window's browser hydration makes (createUnifiedTab), so no window mints its own id.
+  if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    for (const record of session.browserTabsByWorktree?.[key] ?? []) {
+      if (tabs.some((tab) => tab.kind === 'browser' && tab.entityId === record.id)) {
+        continue
+      }
+      const id = args.context.mintId(`browser-tab:${record.id}`)
+      tabs.push({
+        id,
+        kind: 'browser',
+        entityId: record.id,
+        createdAt: record.createdAt,
+        customTitle: null,
+        color: null
+      })
+      tabIds.add(id)
+      childRecord(args.facts.tabLabels, key)[id] = record.title
+      candidates.push({
+        id,
+        groupId: session.activeGroupIdByWorktree?.[key],
+        createdAt: record.createdAt
+      })
     }
   }
   // A row outside the tab bar whose every terminal a tab-bar tab holds is a stale copy of it.

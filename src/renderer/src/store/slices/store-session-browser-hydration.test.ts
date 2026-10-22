@@ -71,6 +71,42 @@ describe('hydrateBrowserSession', () => {
     expect(s.activeBrowserTabId).toBe('browser-1')
   })
 
+  // L280: in a layout-owner build main's layout load gives a tabless record its tab, so the window
+  // mints none of its own (an id main could not resolve); a window-owned build repairs it here.
+  it('leaves a tabless browser record to main in a layout-owner build, else gives it a tab', () => {
+    const store = createTestStore()
+    const validWt = 'repo1::/path/wt1'
+    store.setState({
+      repos: [
+        { id: 'repo1', path: '/repo1', displayName: 'Repo 1', badgeColor: '#000', addedAt: 0 }
+      ],
+      worktreesByRepo: {
+        repo1: [makeWorktree({ id: validWt, repoId: 'repo1', path: '/path/wt1' })]
+      },
+      activeWorktreeId: validWt
+    })
+
+    store.getState().hydrateBrowserSession({
+      activeRepoId: 'repo1',
+      activeWorktreeId: validWt,
+      activeTabId: null,
+      tabsByWorktree: {},
+      terminalLayoutsByTabId: {},
+      browserTabsByWorktree: {
+        [validWt]: [
+          makeBrowserTab({ id: 'browser-1', worktreeId: validWt, url: 'https://example.com' })
+        ]
+      }
+    })
+
+    const browserTabs = (store.getState().unifiedTabsByWorktree[validWt] ?? []).filter(
+      (tab) => tab.contentType === 'browser'
+    )
+    expect(browserTabs.map((tab) => tab.entityId)).toEqual(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? [] : ['browser-1']
+    )
+  })
+
   it('synthesizes a page for a browser workspace whose persisted page list is empty', () => {
     // Why: session salvage drops a corrupt page by rebuilding the array, so the
     // key survives holding []. Treating that as "has pages" restores a workspace

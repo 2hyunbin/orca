@@ -163,11 +163,7 @@ export function updateGroup(groups: TabGroup[], updated: TabGroup): TabGroup[] {
   return groups.map((g) => (g.id === updated.id ? updated : g))
 }
 
-export function isTransientEditorContentType(contentType: TabContentType): boolean {
-  return (
-    contentType === 'diff' || contentType === 'conflict-review' || contentType === 'check-details'
-  )
-}
+export { isTransientEditorContentType } from '../../../../shared/workspace-layout/saved-editor-tab-restore'
 
 export function getPersistedEditFileIdsByWorktree(
   session: WorkspaceSessionState
