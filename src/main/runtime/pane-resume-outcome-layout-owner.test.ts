@@ -90,7 +90,9 @@ describe("main's start of a pane publishes its resume outcome", () => {
     async (outcome) => {
       const { runtime, spawn, getSession } = resumablePaneRuntime(outcome)
 
-      await expect(runtime.ensureRestoredPaneStarted(PANE)).resolves.toBe('persisted-pty')
+      await expect(runtime.ensureRestoredPaneStarted(PANE)).resolves.toMatchObject({
+        id: 'persisted-pty'
+      })
 
       expect(spawn).toHaveBeenCalledWith(
         expect.objectContaining({ resumeProviderSession: expect.anything() })

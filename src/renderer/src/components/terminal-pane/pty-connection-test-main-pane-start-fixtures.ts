@@ -3,6 +3,7 @@ import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-typ
 import type { PaneResumeOutcome } from '../../../../shared/workspace-layout/workspace-layout-published'
 import type { TerminalPaneResumeOutcome } from '@/store/terminals/terminal-state'
 import type { MockTransport } from './pty-connection-test-pane-fixtures'
+import type { layoutApplyTestTransport as answeringFallback } from '@/runtime/layout-apply-test-transport.test-fixture'
 
 type ConnectOptions = {
   sessionId?: string
@@ -49,11 +50,20 @@ export function expectNoWindowStart(transport: MockTransport, store?: ResumeRegi
   }
 }
 
-/** The transport answering the window's layout commands; dynamic, as the mocked client is. */
-export async function mainLayoutApplyTransport() {
-  const { answeringLayoutApplyTestTransport } =
+type LayoutApplyTestTransport = typeof answeringFallback
+
+/** The transport the mocked RPC client answers the window's layout commands with, even after
+ *  `vi.resetModules`; dynamic, as the mocked client is. */
+export async function mainLayoutApplyTransport(): Promise<LayoutApplyTestTransport> {
+  const { ANSWERING_TRANSPORT, layoutApplyTestTransport } =
     await import('@/runtime/layout-apply-test-transport.test-fixture')
-  return answeringLayoutApplyTestTransport()
+  const client: object = await import('@/runtime/runtime-rpc-client')
+  const answering = ANSWERING_TRANSPORT in client ? client[ANSWERING_TRANSPORT] : undefined
+  return isLayoutApplyTestTransport(answering) ? answering : layoutApplyTestTransport
+}
+
+function isLayoutApplyTestTransport(value: unknown): value is LayoutApplyTestTransport {
+  return typeof value === 'object' && value !== null && 'sentOfType' in value && 'reset' in value
 }
 
 /**

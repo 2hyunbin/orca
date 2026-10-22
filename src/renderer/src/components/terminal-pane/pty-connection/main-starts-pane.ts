@@ -17,3 +17,11 @@ export function mainStartsPane(session: {
     !runtimeEnvironmentIdUnlessTwin(useAppStore.getState(), session.deps.worktreeId)
   )
 }
+
+/** A hidden pane's start through main waits for its first view, as a hidden agent resume does (#29459). */
+export function startMainPaneOnFirstView(session: ConnectPanePtySession, start: () => void): void {
+  session.mainPaneStartOnReveal = () => {
+    session.mainPaneStartOnReveal = null
+    start()
+  }
+}

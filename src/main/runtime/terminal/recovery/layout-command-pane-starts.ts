@@ -6,10 +6,10 @@ import type {
   LayoutCommand
 } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
-import type { RestoredPane } from './restored-pane-start'
+import type { RestoredPane, StartedPty } from './restored-pane-start'
 
 /** Main's restored-pane starter: the pane's terminal, or null once main no longer holds it. */
-export type LayoutPaneStart = (pane: RestoredPane) => Promise<string | null>
+export type LayoutPaneStart = (pane: RestoredPane) => Promise<StartedPty | null>
 
 const STARTING_COMMANDS: ReadonlySet<LayoutCommand['type']> = new Set([
   'startPane',

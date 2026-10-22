@@ -7,6 +7,7 @@ import { mainStartsPane } from './main-starts-pane'
 import { resolveTerminalTabId } from './terminal-tab-id'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
+import type { PtyConnectResult } from '../pty-transport-types'
 
 type Outcomes = Record<string, TerminalPaneResumeOutcome>
 type AppState = ReturnType<typeof useAppStore.getState>
@@ -55,16 +56,19 @@ function boundPtyId(session: ConnectPanePtySession, state: AppState): string | u
 }
 
 /**
- * Whether the pane's attach to `ptyId` resumed its agent: the window's own resume, or, when main
- * started the pane (`windowResume` null), main's outcome, which rides the frame binding `ptyId`.
+ * Whether the pane's attach to `ptyId` resumed its agent: the window's own resume, unless the
+ * spawn said it could not, or, when main started the pane (`windowResume` null), main's outcome,
+ * which rides the frame binding `ptyId`.
  */
 export function attachResumedAgent(
   session: ConnectPanePtySession,
   ptyId: string,
-  windowResume: ColdRestoreAgentResumeStartup | null
+  windowResume: ColdRestoreAgentResumeStartup | null,
+  connected?: PtyConnectResult | string | void
 ): boolean {
   if (!mainStartsPane(session) || windowResume) {
-    return Boolean(windowResume)
+    const unavailable = typeof connected === 'object' && connected.agentResumeUnavailable
+    return Boolean(windowResume) && !unavailable
   }
   const found = useAppStore.getState().terminalPaneResumeOutcomesByPaneKey[session.cacheKey]
   return found?.ptyId === ptyId && found.outcome === 'restored'
