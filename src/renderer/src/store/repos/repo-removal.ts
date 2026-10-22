@@ -3,9 +3,6 @@ import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { StateCreator } from 'zustand'
 import { toast } from 'sonner'
 import type { AppState } from '../types'
-import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
-import { getWorktreeIdFromVisitKey, getWorktreeVisitKey } from '@/lib/worktree-visit-recency'
-import { omitSparsePresetsForRepos } from '../slices/sparse-presets'
 import { repoMatchesHostIdentity } from '../slices/repo-host-identity'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-code'
@@ -17,12 +14,11 @@ import { destroyRecipeVmBeforeProjectRemoval } from './recipe-vm-project-removal
 import { stopRuntimeProjectTerminalsBeforeRemoval } from './runtime-project-terminal-stop'
 import type { RepoSlice } from './repo-state'
 import { ERROR_TOAST_DURATION } from './repo-state'
-import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
 import {
   closeRemovedHostTwinState,
   collectRemovedHostTwins
 } from './repo-removal-host-twin-teardown'
-import { twinSelectionPatch } from './repo-removal-host-twin-attribution'
+import { removedProjectStatePatch, worktreeBelongsToHost } from './repo-removal-state-patch'
 import {
   captureWorkspaceChatDraftKeys,
   deleteWorkspaceChatDrafts
@@ -32,11 +28,10 @@ import {
   noticeRemovedUnsavedFiles
 } from '../slices/worktrees/teardown/removed-workspace-unsaved-files'
 import { worktreePurgeClosedFileIds } from '../slices/worktrees/teardown/worktree-purge-closed-files'
-import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
+import { selectRepos } from '../project-catalog-selectors'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
+import { mainCatalogShowsWrite } from '../main-project-catalog-writes'
 
-export function worktreeBelongsToHost(worktree: { hostId?: string }, hostId: string): boolean {
-  return (worktree.hostId ?? LOCAL_EXECUTION_HOST_ID) === hostId
-}
 
 type HostScopedWorktreeRef = { id: string; hostId?: string }
 
@@ -232,89 +227,16 @@ export function createRepoRemovalActions(
         get().purgeWorktreeTerminalState(exclusiveWorktreeIds)
         deleteWorkspaceChatDrafts(chatDraftKeys)
         get().clearLocalDetectedAgentContextsForProjects(localAgentContextProjectIds)
+        // Switch point: main's catalog drops the row; the window's own state follows once it has.
+        if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+          await mainCatalogShowsWrite(
+            target,
+            (catalog) =>
+              !catalog.repos.some((repo) => repoMatchesHostIdentity(repo, projectId, ownerHostId))
+          )
+        }
 
-        set((s) => {
-          const nextWorktrees = { ...s.worktreesByRepo }
-          const remainingWorktrees = (nextWorktrees[projectId] ?? []).filter(
-            (worktree) => !worktreeBelongsToHost(worktree, ownerHostId)
-          )
-          if (remainingWorktrees.length > 0) {
-            nextWorktrees[projectId] = remainingWorktrees
-          } else {
-            delete nextWorktrees[projectId]
-          }
-          const nextDetectedWorktrees = { ...s.detectedWorktreesByRepo }
-          const detected = nextDetectedWorktrees[projectId]
-          if (detected) {
-            const remainingDetected = detected.worktrees.filter(
-              (worktree) => !worktreeBelongsToHost(worktree, ownerHostId)
-            )
-            if (remainingDetected.length > 0) {
-              nextDetectedWorktrees[projectId] = { ...detected, worktrees: remainingDetected }
-            } else {
-              delete nextDetectedWorktrees[projectId]
-            }
-          }
-          // Why no tab/layout/editor writes here: purgeWorktreeTerminalState above already dropped them.
-          const worktreeIdSet = new Set(worktreeIds)
-          const removedVisitKeys = new Set(
-            worktreeIds.map((worktreeId) => getWorktreeVisitKey(worktreeId, ownerHostId))
-          )
-          const nextRepos = selectRepos(s).filter(
-            (r) => !repoMatchesHostIdentity(r, projectId, ownerHostId)
-          )
-          // Why: when no sibling host owns this id, drop every worktree timestamp (unhydrated SSH ones would otherwise never prune); else stay host-scoped.
-          const repoIdFullyRemoved = !nextRepos.some((r) => r.id === projectId)
-          let nextLastVisitedAtByWorktreeId = s.lastVisitedAtByWorktreeId
-          for (const id of Object.keys(s.lastVisitedAtByWorktreeId)) {
-            const rawId = getWorktreeIdFromVisitKey(id)
-            if (
-              (ownerHostId && removedVisitKeys.has(id)) ||
-              (!ownerHostId && worktreeIdSet.has(rawId)) ||
-              (repoIdFullyRemoved && getRepoIdFromWorktreeId(rawId) === projectId)
-            ) {
-              if (nextLastVisitedAtByWorktreeId === s.lastVisitedAtByWorktreeId) {
-                nextLastVisitedAtByWorktreeId = { ...s.lastVisitedAtByWorktreeId }
-              }
-              delete nextLastVisitedAtByWorktreeId[id]
-            }
-          }
-          const survivingRepoIds = new Set(nextRepos.map((r) => r.id))
-          const removedRepoIds = selectRepos(s)
-            .filter((r) => !survivingRepoIds.has(r.id))
-            .map((r) => r.id)
-          return {
-            repos: nextRepos,
-            // Why: drop removed repos' sparse-preset maps so they don't outlive the repo for the whole session.
-            ...omitSparsePresetsForRepos(s, removedRepoIds),
-            ...mergeProjectCompatibilityForHostRepoChange({
-              previous: {
-                projects: selectProjects(s),
-                projectHostSetups: selectProjectHostSetups(s)
-              },
-              nextRepos,
-              hostId: ownerHostId
-            }),
-            activeRepoId: s.activeRepoId === projectId ? null : s.activeRepoId,
-            ...twinSelectionPatch(s, twins.twinHostIds, ownerHostId),
-            filterRepoIds: s.filterRepoIds.filter((id) => id !== projectId),
-            worktreesByRepo: nextWorktrees,
-            detectedWorktreesByRepo: nextDetectedWorktrees,
-            lastVisitedAtByWorktreeId: nextLastVisitedAtByWorktreeId,
-            folderWorkspacePathStatuses: {},
-            sortEpoch: s.sortEpoch + 1,
-            // Why: removing the last repo must reset activeView + clear activeWorktreeId so App renders Landing, not an empty settings/terminal pane.
-            ...(nextRepos.length === 0
-              ? {
-                  activeView: 'terminal' as const,
-                  activeWorktreeId: null,
-                  activeWorkspaceKey: null,
-                  activeWorkspaceExecutionHostId: null,
-                  activeRepoId: null
-                }
-              : {})
-          }
-        })
+        set((s) => removedProjectStatePatch(s, projectId, ownerHostId, worktreeIds, twins))
       } catch (err) {
         console.error('Failed to remove repo:', err)
         // Why: bulk and background callers aggregate their own failures, so only opted-in single-project entry points toast (#11994).
