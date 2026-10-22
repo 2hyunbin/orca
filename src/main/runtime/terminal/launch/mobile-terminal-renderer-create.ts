@@ -162,8 +162,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
           viewMode: opts.viewMode,
           targetGroupId: opts.targetGroupId,
           ...mainPlacedAfter(
-            this.mainLayoutWorkspace(worktreeId),
-            requestedAfterTabId,
+            this.mainLayoutTabOfRow(worktreeId, requestedAfterTabId),
             afterDesktopTabId
           ),
           supportsSplitGroupPlacement: opts.supportsSplitGroupPlacement,

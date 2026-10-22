@@ -30,6 +30,12 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
       : undefined
   }
 
+  /** The tab main's layout lists a row under (a chat row's id is not its tab's), if it holds it. */
+  protected mainLayoutTabOfRow(worktreeId: string, rowId: string | undefined): string | undefined {
+    const workspace = rowId ? this.mainLayoutWorkspace(worktreeId) : undefined
+    return workspace && rowId ? resolveSessionTabRow(workspace, rowId)?.tab.id : undefined
+  }
+
   /**
    * The move in main's layout, read against the rows the client was shown. Null when main does not
    * own the workspace or cannot read the move: today's path moves it, or refuses it with its codes.

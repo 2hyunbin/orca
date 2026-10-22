@@ -1,8 +1,6 @@
 // The tab a phone's new terminal goes after: its anchor row's tab, where a split's panes share one.
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { RuntimeMobileSessionSnapshotTab } from '../../../../shared/runtime-mobile-session-tab-contracts'
-import type { WorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-model'
-import { resolveSessionTabRow } from '../../../../shared/workspace-layout/old-client/old-client-session-tab-rows'
 
 /**
  * The anchor row's tab, or undefined when the create names no anchor or a client without
@@ -28,16 +26,14 @@ export function anchorTabOfCreate(
 
 /**
  * Layout-owner build: a windowless create hands main's layout the anchor, as a window's create
- * does, under main's own tab id (a chat or browser row's id is not one), so main finds its group.
+ * does, under main's own tab id when main holds the anchor row (a chat or browser row's id is not
+ * that id), so main finds its group.
  */
 export function mainPlacedAfter(
-  workspace: WorkspaceLayout | undefined,
-  anchorRowId: string | undefined,
+  heldTabId: string | undefined,
   afterDesktopTabId: string | undefined
 ): { afterDesktopTabId?: string } {
-  if (!ORCA_LAYOUT_OWNER_IS_MAIN || !afterDesktopTabId) {
-    return {}
-  }
-  const held = workspace && anchorRowId ? resolveSessionTabRow(workspace, anchorRowId) : null
-  return { afterDesktopTabId: held?.tab.id ?? afterDesktopTabId }
+  return ORCA_LAYOUT_OWNER_IS_MAIN && afterDesktopTabId
+    ? { afterDesktopTabId: heldTabId ?? afterDesktopTabId }
+    : {}
 }
