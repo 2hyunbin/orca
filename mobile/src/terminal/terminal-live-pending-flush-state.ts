@@ -14,6 +14,7 @@ type TerminalLivePendingBatch = {
 
 export type TerminalLivePendingFlushState = {
   current: Promise<boolean> | null
+  cancelCurrent: (() => void) | null
   activeRequests: TerminalLivePendingRequest[]
   generation: number
   pendingBatches: TerminalLivePendingBatch[]
@@ -22,6 +23,7 @@ export type TerminalLivePendingFlushState = {
 export function createTerminalLivePendingFlushState(): TerminalLivePendingFlushState {
   return {
     current: null,
+    cancelCurrent: null,
     activeRequests: [],
     generation: 0,
     pendingBatches: []
@@ -36,6 +38,8 @@ export function waitForTerminalLivePendingFlush(
 
 export function cancelTerminalLivePendingFlush(state: TerminalLivePendingFlushState): void {
   state.generation += 1
+  state.cancelCurrent?.()
+  state.cancelCurrent = null
   const requests = [
     ...state.activeRequests,
     ...state.pendingBatches.flatMap((batch) => batch.requests)
@@ -110,11 +114,21 @@ export function queueTerminalLiveMirrorSend(
 
   if (!state.current) {
     const generation = state.generation
+    let resolveBarrier = (_sent: boolean): void => {}
+    const barrier = new Promise<boolean>((resolve) => {
+      resolveBarrier = resolve
+    })
+    const cancelBarrier = () => resolveBarrier(false)
+    state.cancelCurrent = cancelBarrier
     const drain = drainTerminalLiveMirrorSends(state, generation).catch(() => false)
-    state.current = drain
-    void drain.then(() => {
-      if (state.current === drain) {
+    state.current = barrier
+    void drain.then((sent) => {
+      resolveBarrier(sent)
+      if (state.current === barrier) {
         state.current = null
+      }
+      if (state.cancelCurrent === cancelBarrier) {
+        state.cancelCurrent = null
       }
     })
   }
