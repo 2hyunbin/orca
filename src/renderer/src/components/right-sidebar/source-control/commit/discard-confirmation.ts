@@ -99,8 +99,8 @@ export function getDiscardAreaConfirmationCopy(
         ),
         description:
           count === 1
-            ? 'This will revert the unstaged changes in 1 file. This cannot be undone.'
-            : `This will revert unstaged changes in ${count} files. This cannot be undone.`,
+            ? 'This will revert unstaged changes and permanently delete any untracked files in this selection. This cannot be undone.'
+            : `This will revert unstaged changes and permanently delete any untracked files among these ${count} files. This cannot be undone.`,
         confirmLabel: 'Discard all'
       }
   }
