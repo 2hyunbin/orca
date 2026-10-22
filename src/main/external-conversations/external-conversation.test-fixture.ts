@@ -20,19 +20,46 @@ export const LOCAL_REPO: Repo = {
 
 type LinkRow = { externalConversations?: unknown; hostId?: ExecutionHostId }
 
+/**
+ * The real store's two projections: each host's canonical rows, and the locator-keyed map that
+ * keeps only the first host to write an id.
+ */
 export function fakeLinkStore(repos: Repo[] = [LOCAL_REPO]) {
-  const meta: Record<string, LinkRow> = {}
+  const byHost = new Map<ExecutionHostId, Record<string, LinkRow>>()
+  const legacy: Record<string, LinkRow> = {}
   const folders: (LinkRow & { id: string })[] = []
   const writes: HostWorktreeTarget[] = []
+  const rows = (hostId: ExecutionHostId): Record<string, LinkRow> => {
+    const existing = byHost.get(hostId)
+    if (existing) {
+      return existing
+    }
+    const created: Record<string, LinkRow> = {}
+    byHost.set(hostId, created)
+    return created
+  }
+  const put = (id: string, hostId: ExecutionHostId, row: Omit<LinkRow, 'hostId'>): void => {
+    const next = { ...rows(hostId)[id], ...row, hostId }
+    rows(hostId)[id] = next
+    if (!legacy[id] || legacy[id].hostId === hostId) {
+      legacy[id] = next
+    }
+  }
+  const remove = (id: string, hostId: ExecutionHostId = 'local'): void => {
+    delete rows(hostId)[id]
+    if (legacy[id]?.hostId === hostId) {
+      delete legacy[id]
+    }
+  }
   const store = {
     getRepos: () => repos,
-    getAllWorktreeMeta: () => meta,
-    getWorktreeMeta: (id: string) => meta[id],
-    getWorktreeMetaForHost: (id: string, hostId: ExecutionHostId) =>
-      meta[id]?.hostId === hostId ? meta[id] : undefined,
+    getAllWorktreeMeta: () => legacy,
+    getAllWorktreeMetaForHost: (hostId: ExecutionHostId) => rows(hostId),
+    getWorktreeMeta: (id: string) => legacy[id],
+    getWorktreeMetaForHost: (id: string, hostId: ExecutionHostId) => rows(hostId)[id],
     setWorktreeMeta: (target: HostWorktreeTarget, updates: { externalConversations: unknown }) => {
       writes.push(target)
-      meta[target.id] = { ...meta[target.id], ...updates, hostId: target.hostId }
+      put(target.id, target.hostId, updates)
     },
     getFolderWorkspace: (id: string) => folders.find((folder) => folder.id === id),
     getFolderWorkspaces: () => folders,
@@ -43,7 +70,9 @@ export function fakeLinkStore(repos: Repo[] = [LOCAL_REPO]) {
       }
     }
   } satisfies ExternalConversationLinkStore
-  return { store, meta, folders, writes }
+  const row = (id: string, hostId: ExecutionHostId = 'local'): LinkRow | undefined =>
+    rows(hostId)[id]
+  return { store, row, put, remove, folders, writes }
 }
 
 export function launchResult(
@@ -73,7 +102,8 @@ export function fakeLauncher(
   const launch = vi.fn(
     async (
       _input: unknown,
-      onSurfacePublished: (surface: AgentLaunchPublishedSurface) => void
+      onSurfacePublished: (surface: AgentLaunchPublishedSurface) => void,
+      _signal?: AbortSignal
     ): Promise<AgentLaunchResult> => {
       if (publish) {
         onSurfacePublished(launchResult(null, workspace.worktreeId))

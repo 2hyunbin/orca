@@ -11,7 +11,7 @@ import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { resolveUnlaunchedIntent } from '../runtime/rpc/methods/agent-launch-intent-resolution'
 import { agentLaunchSurfaceFactory } from '../runtime/rpc/methods/agent-launch-surfaces'
 import { agentLaunchWorkspaceFactory } from '../runtime/rpc/methods/agent-launch-worktree-creation'
-import type { Delivery } from './external-conversation-types'
+import { refused, type Delivery } from './external-conversation-types'
 
 export type ConversationLaunchInput = {
   agent: ConnectorAgent
@@ -22,7 +22,8 @@ export type ConversationLaunchInput = {
 export type ConversationLauncher = {
   launch(
     input: ConversationLaunchInput,
-    onSurfacePublished: (surface: AgentLaunchPublishedSurface) => void
+    onSurfacePublished: (surface: AgentLaunchPublishedSurface) => void,
+    signal: AbortSignal
   ): Promise<AgentLaunchResult>
   /** The launched workspace as hook rows name it, qualified by the host that runs it. */
   paneWorkspace(worktreeId: string): Promise<AgentPaneWorkspace>
@@ -35,7 +36,7 @@ export type ConversationLauncher = {
 export function runtimeConversationLauncher(runtime: OrcaRuntimeService): ConversationLauncher {
   const context = { runtime }
   return {
-    launch: async ({ agent, target, prompt }, onSurfacePublished) => {
+    launch: async ({ agent, target, prompt }, onSurfacePublished, signal) => {
       const intent = await resolveUnlaunchedIntent(
         { agent, target, prompt: { text: prompt, delivery: 'submit' } },
         runtime,
@@ -50,7 +51,8 @@ export function runtimeConversationLauncher(runtime: OrcaRuntimeService): Conver
           presentation: 'background'
         }),
         workspaces: agentLaunchWorkspaceFactory(context, agent),
-        onSurfacePublished
+        onSurfacePublished,
+        signal
       })
     },
     paneWorkspace: async (worktreeId) => {
@@ -67,6 +69,7 @@ export function runtimeConversationLauncher(runtime: OrcaRuntimeService): Conver
 export async function launchConversation(
   launcher: ConversationLauncher,
   input: ConversationLaunchInput,
+  signal: AbortSignal,
   writeLink: (workspace: AgentPaneWorkspace, paneKey: string) => void
 ): Promise<Delivery> {
   // Settled to its error, so a failed write waits for the launch instead of going unhandled.
@@ -87,11 +90,15 @@ export async function launchConversation(
   let result: AgentLaunchResult | null = null
   let launchError: unknown = null
   try {
-    result = await launcher.launch(input, onSurfacePublished)
+    result = await launcher.launch(input, onSurfacePublished, signal)
   } catch (error) {
     launchError = error
   }
   if (!link.written) {
+    // Turned off before the agent existed: the launch stopped before any effect.
+    if (signal.aborted) {
+      return refused('connectors_disabled')
+    }
     throw launchError ?? new Error('connector_launch_without_pane')
   }
   const linkError = await link.written

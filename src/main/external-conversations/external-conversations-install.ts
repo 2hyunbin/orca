@@ -1,5 +1,5 @@
-import { registerWorktreeChangeInvalidator } from '../ipc/worktree-change-invalidators'
 import type { GlobalSettings } from '../../shared/global-settings-types'
+import type { DeliveryReceiptDb } from './external-conversation-delivery-receipts'
 import type { ExternalConversationLinkStore } from './external-conversation-links'
 import { ExternalConversationSeam } from './external-conversation-seam'
 
@@ -11,14 +11,15 @@ export type ExternalConversationStore = ExternalConversationLinkStore & {
 }
 
 /**
- * Owns the seam's lifetime: one exists exactly while `experimentalConnectors` is on. The flag is
+ * Owns the seam's lifetime, on the settings-change pattern `installStructuredAgentAvailability`
+ * uses: one exists exactly while `experimentalConnectors` is on. The flag is
  * first read on the first connector call, so a host that never sees one never reads it; a change
  * after that disposes or rebuilds the seam without waiting for another call. The host is the
  * authority, so every connector entry point asks it rather than its caller's profile.
  */
 export function installExternalConversations(
   store: ExternalConversationStore | null,
-  workspaces: { onWorktreeLifecycle: (listener: () => void) => () => void }
+  runtime: { getOrchestrationDb: () => DeliveryReceiptDb }
 ): { current(): ExternalConversationSeam | null } {
   if (!store) {
     return { current: () => null }
@@ -32,15 +33,7 @@ export function installExternalConversations(
       seam = new ExternalConversationSeam({
         store,
         readSettings: () => store.getSettings(),
-        // A removed, renamed or re-adopted workspace changes which record holds a link.
-        subscribeInvalidations: (invalidate) => {
-          const releaseLifecycle = workspaces.onWorktreeLifecycle(invalidate)
-          const releaseChanges = registerWorktreeChangeInvalidator(invalidate)
-          return () => {
-            releaseLifecycle()
-            releaseChanges()
-          }
-        }
+        receiptDb: () => runtime.getOrchestrationDb()
       })
     } else if (!enabled && seam) {
       seam.dispose('connectors_disabled')
