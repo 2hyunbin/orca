@@ -2,7 +2,8 @@ import type { GlobalSettings } from '../../shared/global-settings-types'
 import { ExternalConversationSeam } from './external-conversation-seam'
 
 type ConnectorSettingsStore = {
-  getSettings(): Pick<GlobalSettings, 'experimentalConnectors'>
+  // Optional like other runtime reads: partial stores (tests, minimal hosts) mean off.
+  getSettings?: () => Pick<GlobalSettings, 'experimentalConnectors'>
   onSettingsChanged?: (listener: (updates: Partial<GlobalSettings>) => void) => unknown
 }
 
@@ -23,7 +24,7 @@ export function installExternalConversations(store: ConnectorSettingsStore | nul
     }
   }
   if (store) {
-    const enabled = (): boolean => store.getSettings().experimentalConnectors === true
+    const enabled = (): boolean => store.getSettings?.().experimentalConnectors === true
     reconcile(enabled())
     store.onSettingsChanged?.((updates) => {
       if ('experimentalConnectors' in updates) {
