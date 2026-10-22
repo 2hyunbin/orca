@@ -245,7 +245,13 @@ export const onboardingFeatureSetupRunSchema = z
     ...onboardingFeatureSetupSelectionSchema,
     cli_touched: z.boolean(),
     // How the one-click skill install ended; replaces the copy/paste command fields.
-    skill_install_result: z.enum(['installed', 'needs_attention', 'update_server', 'failed']),
+    skill_install_result: z.enum([
+      'installed',
+      'needs_attention',
+      'update_server',
+      'connect_host',
+      'failed'
+    ]),
     computer_use_permissions_opened: z.boolean(),
     warning_count: z.number().int().nonnegative(),
     cohort: cohortSchema

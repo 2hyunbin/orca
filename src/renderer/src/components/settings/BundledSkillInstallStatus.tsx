@@ -21,10 +21,15 @@ export function BundledSkillInstallStatus(props: {
   if (state.kind === 'unsupported') {
     return (
       <p className={cn('text-xs leading-snug text-muted-foreground', props.className)}>
-        {translate(
-          'auto.components.settings.BundledSkillInstallStatus.updateServer',
-          'Update Orca on the server to install its skills.'
-        )}
+        {state.reason === 'connect-host'
+          ? translate(
+              'auto.components.settings.BundledSkillInstallStatus.connectHost',
+              'Connect to this SSH host to install its skills.'
+            )
+          : translate(
+              'auto.components.settings.BundledSkillInstallStatus.updateServer',
+              'Update Orca on the server to install its skills.'
+            )}
       </p>
     )
   }

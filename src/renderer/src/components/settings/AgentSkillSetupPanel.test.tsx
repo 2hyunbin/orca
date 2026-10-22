@@ -420,8 +420,31 @@ describe('AgentSkillSetupPanel', () => {
     expect(mocks.plan).not.toHaveBeenCalled()
   })
 
+  it('installs for an SSH workspace once its managed server is the target', async () => {
+    mocks.target = { kind: 'environment', environmentId: 'managed-ssh' }
+    await renderInteractivePanel()
+
+    await clickButton('Install')
+
+    expect(mocks.plan).toHaveBeenCalledWith(
+      { kind: 'environment', environmentId: 'managed-ssh' },
+      { names: ['orca-cli'] }
+    )
+  })
+
+  it('asks to connect an SSH host no server serves yet, writing nothing here', async () => {
+    mocks.target = { kind: 'ssh', targetId: 'box' }
+    mocks.plan.mockResolvedValueOnce({ kind: 'unsupported', reason: 'connect-host' })
+    await renderInteractivePanel()
+
+    await clickButton('Install')
+
+    expect(container?.textContent).toContain('Connect to this SSH host to install its skills.')
+    expect(mocks.execute).not.toHaveBeenCalled()
+  })
+
   it('asks for a newer Orca on a server without the installer, writing nothing here', async () => {
-    mocks.plan.mockResolvedValueOnce({ kind: 'unsupported' })
+    mocks.plan.mockResolvedValueOnce({ kind: 'unsupported', reason: 'update-server' })
     mocks.target = { kind: 'environment', environmentId: 'old' }
     const onRecheck = vi.fn(async () => {})
     await renderInteractivePanel({ onRecheck })

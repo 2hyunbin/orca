@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
     refresh: vi.fn(async () => true)
   },
   useInstalledAgentSkillNames: vi.fn(),
-  plan: vi.fn(async () => ({ kind: 'unsupported' }))
+  plan: vi.fn(async () => ({ kind: 'unsupported', reason: 'update-server' }))
 }))
 
 vi.mock('@/hooks/use-bundled-skill-install-action', () => ({

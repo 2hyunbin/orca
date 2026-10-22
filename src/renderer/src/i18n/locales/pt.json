@@ -8808,7 +8808,8 @@
           "loopback": "Este computador · {{address}}"
         },
         "BundledSkillInstallStatus": {
-          "updateServer": "Atualize o Orca no servidor para instalar as skills dele."
+          "updateServer": "Atualize o Orca no servidor para instalar as skills dele.",
+          "connectHost": "Conecte-se a este host SSH para instalar as skills dele."
         }
       },
       "right": {

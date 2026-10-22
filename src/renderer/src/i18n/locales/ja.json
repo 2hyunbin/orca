@@ -12910,7 +12910,8 @@
           "loopback": "このコンピューター · {{address}}"
         },
         "BundledSkillInstallStatus": {
-          "updateServer": "スキルをインストールするには、サーバーの Orca を更新してください。"
+          "updateServer": "スキルをインストールするには、サーバーの Orca を更新してください。",
+          "connectHost": "この SSH ホストに接続すると、スキルをインストールできます。"
         }
       },
       "right": {

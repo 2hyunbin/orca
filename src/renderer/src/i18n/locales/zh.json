@@ -12910,7 +12910,8 @@
           "loopback": "此电脑 · {{address}}"
         },
         "BundledSkillInstallStatus": {
-          "updateServer": "请更新服务器上的 Orca 以安装其技能。"
+          "updateServer": "请更新服务器上的 Orca 以安装其技能。",
+          "connectHost": "请连接此 SSH 主机，才能安装其技能。"
         }
       },
       "right": {

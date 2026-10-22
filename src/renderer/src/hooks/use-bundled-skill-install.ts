@@ -8,7 +8,8 @@ import { bundledSkillTargetKey } from '@/lib/bundled-skill-target'
 import { bundledSkillInstallErrorMessage } from '@/lib/bundled-skill-install-error-message'
 import {
   executeBundledSkillsOnTarget,
-  planBundledSkillsOnTarget
+  planBundledSkillsOnTarget,
+  type BundledSkillUnsupportedReason
 } from '@/runtime/runtime-bundled-skills-client'
 import { notifyInstalledAgentSkillsChanged } from './installed-agent-skill-discovery'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
@@ -18,8 +19,8 @@ export type BundledSkillInstallState =
   | { kind: 'idle' }
   | { kind: 'installing' }
   | { kind: 'done'; summary: BundledSkillResultSummary }
-  /** The paired host answered without the installer: "Update Orca on the server". */
-  | { kind: 'unsupported' }
+  /** An older server ("Update Orca on the server"), or an SSH host no server serves yet. */
+  | { kind: 'unsupported'; reason: BundledSkillUnsupportedReason }
   /** The request itself failed; nothing says what reached the disk. */
   | { kind: 'failed'; message: string }
 
@@ -86,7 +87,7 @@ export function useBundledSkillInstall(
         const planned = await planBundledSkillsOnTarget(target, request)
         next =
           planned.kind === 'unsupported'
-            ? { kind: 'unsupported' }
+            ? { kind: 'unsupported', reason: planned.reason }
             : {
                 kind: 'done',
                 summary: summarizeBundledSkillOutcomes(

@@ -129,7 +129,9 @@ export function onboardingFeatureSetupRunTelemetry(
   const installResult =
     install.kind === 'done' && !install.summary.ok
       ? 'needs_attention'
-      : SKILL_INSTALL_TELEMETRY_RESULT[install.kind]
+      : install.kind === 'unsupported' && install.reason === 'connect-host'
+        ? 'connect_host'
+        : SKILL_INSTALL_TELEMETRY_RESULT[install.kind]
   if (!installResult) {
     return null
   }
