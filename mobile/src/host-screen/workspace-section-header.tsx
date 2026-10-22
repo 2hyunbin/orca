@@ -5,8 +5,9 @@ import { colors, MIN_TOUCH_TARGET, spacing, textStyles } from '../theme/mobile-t
 import { pressTransition, slideTransition } from '../components/ui/transition-styles'
 
 /**
- * The list's collapsible group header: `SectionHeader`'s 44 pt disclosure with a leading repo or
- * pin glyph and a project-group indent, which the shared header has no slot for.
+ * The list's collapsible group header. The group is the project, so it reads as a heading above its
+ * 17 pt rows (20 pt semibold, as Music and Files title their groups), with the count as a quiet
+ * badge, a leading repo or pin glyph and a project-group indent.
  */
 export function WorkspaceSectionHeader({
   title,
@@ -46,17 +47,19 @@ export function WorkspaceSectionHeader({
       ]}
     >
       {leading ? <View style={styles.leading}>{leading}</View> : null}
-      <Text style={styles.title} numberOfLines={1}>
+      <Text style={[styles.title, sidebar && styles.titleSidebar]} numberOfLines={1}>
         {title}
       </Text>
-      <Text style={styles.count}>{count}</Text>
+      <View style={styles.countPill}>
+        <Text style={styles.count}>{count}</Text>
+      </View>
       {pending ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       <View style={styles.spacer} />
       <View
         style={[expanded ? styles.chevronOpen : styles.chevronClosed, slideTransition]}
         pointerEvents="none"
       >
-        <ChevronDown size={16} color={colors.textMuted} strokeWidth={2.2} />
+        <ChevronDown size={18} color={colors.textSecondary} strokeWidth={2.2} />
       </View>
     </Pressable>
   )
@@ -67,23 +70,36 @@ const styles = StyleSheet.create({
     minHeight: MIN_TOUCH_TARGET,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: spacing.sm,
     paddingRight: spacing.lg + 4,
-    paddingTop: spacing.lg
+    paddingTop: spacing.xl + 4,
+    paddingBottom: spacing.xs
   },
-  first: { paddingTop: spacing.xs },
-  sidebar: { paddingRight: spacing.lg },
+  first: { paddingTop: spacing.md },
+  sidebar: { paddingRight: spacing.lg, paddingTop: spacing.lg },
   pressed: { opacity: 0.6 },
   leading: { alignItems: 'center', justifyContent: 'center' },
   title: {
-    ...textStyles.footnote,
-    fontWeight: '500',
-    color: colors.textMuted,
+    ...textStyles.title,
+    fontSize: 20,
+    lineHeight: 25,
+    color: colors.textPrimary,
     flexShrink: 1
+  },
+  titleSidebar: { ...textStyles.headline },
+  countPill: {
+    minWidth: 26,
+    height: 22,
+    paddingHorizontal: 8,
+    borderRadius: 11,
+    backgroundColor: colors.fill,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   count: {
     ...textStyles.footnote,
-    color: colors.textMuted,
+    fontWeight: '500',
+    color: colors.textSecondary,
     fontVariant: ['tabular-nums']
   },
   spacer: { flex: 1 },
