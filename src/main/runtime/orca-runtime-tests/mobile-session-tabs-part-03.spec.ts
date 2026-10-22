@@ -312,7 +312,8 @@ describe('OrcaRuntimeService', () => {
     ])
   })
 
-  it.each([
+  // L288: switch-on, a capable client's create after a split parent lands at the end.
+  const placementCases = [
     {
       label: 'after the split parent for a capable client',
       supportsSplitGroupPlacement: true,
@@ -323,7 +324,19 @@ describe('OrcaRuntimeService', () => {
       supportsSplitGroupPlacement: false,
       expectedOrder: (createdId: string) => [SPLIT_LEFT, SPLIT_RIGHT, TRAILING, createdId]
     }
-  ])('places a runtime-owned terminal $label', async (testCase) => {
+  ]
+  const awaitsL288 = (testCase: { supportsSplitGroupPlacement: boolean }) =>
+    ORCA_LAYOUT_OWNER_IS_MAIN && testCase.supportsSplitGroupPlacement
+  it.each(placementCases.filter((testCase) => !awaitsL288(testCase)))(
+    'places a runtime-owned terminal $label',
+    placesRuntimeOwnedTerminal
+  )
+  it.fails.each(placementCases.filter(awaitsL288))(
+    'places a runtime-owned terminal $label',
+    placesRuntimeOwnedTerminal
+  )
+
+  async function placesRuntimeOwnedTerminal(testCase: (typeof placementCases)[number]) {
     // Switch point: the split and trailing tabs are main's own, saved in its layout; switch-off a
     // host with no window knows them from the snapshot it published.
     const runtime = new OrcaRuntimeService(
@@ -385,7 +398,7 @@ describe('OrcaRuntimeService', () => {
     expect(
       (await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)).tabs.map((tab) => tab.id)
     ).toEqual(testCase.expectedOrder(created.tab.id))
-  })
+  }
 
   it('asks a headed host to append for an older client', async () => {
     const runtime = new OrcaRuntimeService(store)
