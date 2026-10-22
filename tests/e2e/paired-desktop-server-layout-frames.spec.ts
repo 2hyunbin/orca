@@ -11,17 +11,14 @@
 import { existsSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import type { Page } from '@stablyai/playwright-test'
-import { pairedRuntimeConnectionFromOffer } from '../../src/shared/paired-runtime-connection'
-import { decodePairingOffer } from '../../src/shared/pairing'
-import { subscribeRemoteRuntimeRequest } from '../../src/shared/remote-runtime-client'
 import {
   HOST_TERMINAL_SURFACE_SEPARATOR,
   toWebTerminalSurfaceTabId
 } from '../../src/shared/terminal-surface-id'
 import { LAYOUT_INTENTS_RUNTIME_CAPABILITY } from '../../src/shared/workspace-layout/layout-intents-capability'
 import type { PublishedWorkspaceLayout } from '../../src/shared/workspace-layout/workspace-layout-published'
-import { readWorkspaceLayoutStreamFrame } from '../../src/shared/workspace-layout/workspace-layout-stream-frames'
 import { expect, test } from './helpers/orca-app'
+import { readServerLayout } from './helpers/server-published-layout'
 import {
   launchHeadlessPairedRuntimeHost,
   type HeadlessPairedRuntimeHost
@@ -57,38 +54,6 @@ const sinkPath = path.join(scratch, 'server-layout-frames.log')
 test.afterAll(() => {
   rmSync(scratch, { recursive: true, force: true })
 })
-
-/** The server's own layout of the workspace: the first snapshot of a stream of the test's own. */
-async function readServerLayout(
-  host: HeadlessPairedRuntimeHost,
-  worktreeId: string
-): Promise<PublishedWorkspaceLayout | null> {
-  let resolveSnapshot: (value: unknown) => void = () => {}
-  const snapshot = new Promise<unknown>((resolve) => {
-    resolveSnapshot = resolve
-  })
-  const subscription = await subscribeRemoteRuntimeRequest<unknown>(
-    pairedRuntimeConnectionFromOffer(decodePairingOffer(host.offer.pairingUrl)),
-    'layout.subscribe',
-    { workspaces: [worktreeId] },
-    30_000,
-    {
-      onResponse: (response) => resolveSnapshot(response.ok ? response.result : null),
-      onError: () => resolveSnapshot(null),
-      onClose: () => resolveSnapshot(null)
-    }
-  )
-  try {
-    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 10_000))
-    const frame = readWorkspaceLayoutStreamFrame(await Promise.race([snapshot, timeout]))
-    if (frame?.type !== 'snapshot') {
-      return null
-    }
-    return frame.workspaces.find((entry) => entry.key === worktreeId)?.layout ?? null
-  } finally {
-    subscription.close()
-  }
-}
 
 /** The server's tree under the ids the desktop gives it: a terminal tab is named by its terminal. */
 function serverTree(layout: PublishedWorkspaceLayout | null): Tree | null {
