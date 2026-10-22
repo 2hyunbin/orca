@@ -27,16 +27,16 @@ export function readSecurityAudit(result) {
   return report
 }
 
-export function checkDependencySecurity(root = ROOT) {
+export function checkDependencySecurity(root = ROOT, workspaces = AUDIT_WORKSPACES) {
   const exceptions = securityExceptions.parse(
-    JSON.parse(readFileSync(join(root, 'config/dependency-security-exceptions.json'), 'utf8'))
+    JSON.parse(readFileSync(join(ROOT, 'config/dependency-security-exceptions.json'), 'utf8'))
   )
-  const reportDir = join(root, 'tmp/dependency-security')
+  const reportDir = join(ROOT, 'tmp/dependency-security')
   mkdirSync(reportDir, { recursive: true })
   const { command, prefixArgs } = resolvePnpmCliInvocation()
   const today = new Date().toISOString().slice(0, 10)
   let passed = true
-  for (const workspace of AUDIT_WORKSPACES) {
+  for (const workspace of workspaces) {
     const report = { workspace, checkedAt: new Date().toISOString() }
     try {
       const result = runProcessSync({
@@ -76,5 +76,12 @@ export function checkDependencySecurity(root = ROOT) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = checkDependencySecurity()
+  const workspaces = process.argv.slice(3)
+  if (workspaces.some((workspace) => !AUDIT_WORKSPACES.includes(workspace))) {
+    throw new Error('Unknown dependency audit workspace')
+  }
+  process.exitCode = checkDependencySecurity(
+    resolve(process.argv[2] ?? ROOT),
+    workspaces.length ? workspaces : AUDIT_WORKSPACES
+  )
 }

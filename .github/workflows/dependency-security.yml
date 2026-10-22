@@ -17,35 +17,22 @@ on:
       - 'config/pnpmfile.cjs'
       - '**/patches/**'
       - '.github/workflows/dependency-security.yml'
+      - '.github/workflows/release-cut.yml'
       - '.github/actions/install-node-dependencies/**'
       - 'src/packages/process-host/**'
-  push:
-    branches: [main]
-    paths:
-      - '**/package.json'
-      - '**/pnpm-lock.yaml'
-      - '**/pnpm-workspace.yaml'
-      - '**/.npmrc'
-      - 'native/**/Cargo.toml'
-      - 'native/**/Cargo.lock'
-      - 'config/dependency-security-exceptions.json'
-      - 'config/cargo-deny.toml'
-      - 'config/scripts/*dependency-security*'
-      - 'config/scripts/pnpm-cli-invocation.mjs'
-      - 'config/pnpmfile.cjs'
-      - '**/patches/**'
-      - '.github/workflows/dependency-security.yml'
-      - '.github/actions/install-node-dependencies/**'
-      - 'src/packages/process-host/**'
-  schedule:
-    - cron: '37 9 * * *'
+  workflow_call:
+    inputs:
+      ref:
+        description: Exact release tag to audit using the workflow commit's tooling
+        required: true
+        type: string
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: dependency-security-${{ github.event.pull_request.number || github.ref }}
+  group: dependency-security-${{ inputs.ref != '' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -59,9 +46,25 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.ref != '' && github.workflow_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        if: inputs.ref != ''
+        with:
+          ref: ${{ inputs.ref }}
+          path: candidate
           persist-credentials: false
       - uses: ./.github/actions/install-node-dependencies
-      - run: pnpm check:dependencies
+      - name: Audit JavaScript lockfiles
+        shell: bash
+        env:
+          RELEASE_REF: ${{ inputs.ref }}
+        run: |
+          if [ -n "$RELEASE_REF" ]; then
+            pnpm check:dependencies candidate . mobile
+          else
+            pnpm check:dependencies
+          fi
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -76,6 +79,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ inputs.ref != '' && github.workflow_sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@v6
+        if: inputs.ref != ''
+        with:
+          ref: ${{ inputs.ref }}
+          path: candidate
           persist-credentials: false
       - uses: actions/cache@v5
         id: scanner
@@ -86,13 +96,15 @@ jobs:
         run: cargo install cargo-deny --locked --version 0.20.2
       - name: Audit native Rust lockfiles
         shell: bash
+        working-directory: ${{ inputs.ref != '' && 'candidate' || '.' }}
         run: |
           set -euo pipefail
-          mkdir -p tmp/dependency-security
+          report_dir="$GITHUB_WORKSPACE/tmp/dependency-security"
+          mkdir -p "$report_dir"
           status=0
           for manifest in native/*/Cargo.toml; do
             name="$(basename "$(dirname "$manifest")")"
-            cargo deny --manifest-path "$manifest" --locked --config config/cargo-deny.toml check advisories 2>&1 | tee "tmp/dependency-security/$name.log" || status=1
+            cargo deny --manifest-path "$manifest" --locked --config "$GITHUB_WORKSPACE/config/cargo-deny.toml" check advisories 2>&1 | tee "$report_dir/$name.log" || status=1
           done
           exit "$status"
       - uses: actions/upload-artifact@v7
