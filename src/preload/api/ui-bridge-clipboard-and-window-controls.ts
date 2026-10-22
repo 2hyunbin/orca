@@ -1,9 +1,5 @@
 import type { AgentSessionAttachmentClipboardTarget } from '../../shared/agent-session-attachments'
 import { ipcRenderer, webFrame } from 'electron'
-import type {
-  RuntimeMobileMarkdownRequest,
-  RuntimeMobileMarkdownResponse
-} from '../../shared/mobile-markdown-document'
 import {
   richMarkdownContextMenuCommandChannel,
   richMarkdownContextMenuTargetChannel,
@@ -40,17 +36,6 @@ export const uiClipboardAndWindowControlsApi = {
     ) => callback(data)
     ipcRenderer.on('ui:openDiffFromMobile', listener)
     return () => ipcRenderer.removeListener('ui:openDiffFromMobile', listener)
-  },
-  onMobileMarkdownRequest: (
-    callback: (request: RuntimeMobileMarkdownRequest) => void
-  ): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, request: RuntimeMobileMarkdownRequest) =>
-      callback(request)
-    ipcRenderer.on('ui:mobileMarkdownRequest', listener)
-    return () => ipcRenderer.removeListener('ui:mobileMarkdownRequest', listener)
-  },
-  respondMobileMarkdownRequest: (response: RuntimeMobileMarkdownResponse): void => {
-    ipcRenderer.send('ui:mobileMarkdownResponse', response)
   },
   onCloseTerminal: (callback: (target: TerminalSurfaceCloseTarget) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, target: TerminalSurfaceCloseTarget) =>
@@ -107,6 +92,11 @@ export const uiClipboardAndWindowControlsApi = {
     /** With `forNativeChatDraft`: a structured chat on this machine, whose sends claim its pastes. */
     forStructuredChat?: boolean
   }): Promise<string | null> => ipcRenderer.invoke('clipboard:saveImageAsTempFile', args),
+  savePastedTextAsFile: (args: {
+    text: string
+    runtimeEnvironmentId?: string | null
+    agentSessionAttachment?: AgentSessionAttachmentClipboardTarget
+  }): Promise<string> => ipcRenderer.invoke('clipboard:savePastedTextAsFile', args),
   clipboardHasImage: (): Promise<boolean> => ipcRenderer.invoke('clipboard:hasImage'),
   readClipboardFilePaths: (): Promise<string[]> => ipcRenderer.invoke('clipboard:readFilePaths'),
   restoreNativeChatPastes: (

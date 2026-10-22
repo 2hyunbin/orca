@@ -1,5 +1,10 @@
 import type { BrowserSetAnnotationViewportBridgeArgs } from '../../shared/browser-annotation-viewport-bridge'
 import type {
+  BrowserPageSiteDisplay,
+  BrowserSiteColorScheme
+} from '../../shared/browser-site-display'
+import type { BrowserPageZoomDirection } from '../../shared/browser-page-zoom'
+import type {
   BrowserIdentityModeSetResult,
   BrowserIdentityModeStatus,
   BrowserUserAgentMode
@@ -13,10 +18,15 @@ import type {
   BrowserWebAuthnAccountResponse
 } from '../../shared/browser-webauthn-account'
 import type {
-  BrowserExternalAppRequest,
-  BrowserExternalAppResponse,
-  BrowserExternalAppResponseResult
-} from '../../shared/browser-external-app'
+  BrowserPagePromptRequest,
+  BrowserPagePromptResponse,
+  BrowserPagePromptResult
+} from '../../shared/browser-page-prompt'
+import type {
+  BrowserSitePermission,
+  BrowserSitePermissionDecision,
+  BrowserSitePermissionEntry
+} from '../../shared/browser-site-permission'
 import type {
   BrowserSetGrabModeArgs,
   BrowserSetGrabModeResult,
@@ -83,16 +93,25 @@ export type BrowserApi = {
   ) => () => void
   onWebAuthnAccountRequestClosed: (callback: (event: { requestId: string }) => void) => () => void
   respondWebAuthnAccount: (response: BrowserWebAuthnAccountResponse) => Promise<boolean>
-  onExternalAppRequest: (callback: (request: BrowserExternalAppRequest) => void) => () => void
-  onExternalAppRequestClosed: (callback: (event: { requestId: string }) => void) => () => void
-  respondExternalApp: (
-    response: BrowserExternalAppResponse
-  ) => Promise<BrowserExternalAppResponseResult>
+  onPagePromptRequest: (callback: (request: BrowserPagePromptRequest) => void) => () => void
+  onPagePromptClosed: (callback: (event: { requestId: string }) => void) => () => void
+  respondPagePrompt: (response: BrowserPagePromptResponse) => Promise<BrowserPagePromptResult>
   openDevTools: (args: { browserPageId: string }) => Promise<boolean>
   setViewportOverride: (args: {
     browserPageId: string
     override: BrowserViewportOverride | null
   }) => Promise<boolean>
+  getPageSiteDisplay: (args: { browserPageId: string }) => Promise<BrowserPageSiteDisplay | null>
+  /** Zooms the page's site in its browser profile, or resets it to Default Zoom. */
+  zoomPage: (args: {
+    browserPageId: string
+    direction: BrowserPageZoomDirection
+  }) => Promise<BrowserPageSiteDisplay | null>
+  /** Null makes the site match Orca's theme again. */
+  setPageSiteColorScheme: (args: {
+    browserPageId: string
+    colorScheme: BrowserSiteColorScheme | null
+  }) => Promise<BrowserPageSiteDisplay | null>
   reportViewportScrollState?: (args: {
     browserPageId: string
     state: BrowserViewportScrollState
@@ -195,6 +214,15 @@ export type BrowserApi = {
     environmentId: string
   }) => Promise<Record<string, BrowserSessionProfileSource>>
   sessionClearDefaultCookies: () => Promise<boolean>
+  /** Remembered Allow and Block answers for one browser profile on this computer, by site. */
+  sitePermissionsList: (args: { profileId: string }) => Promise<BrowserSitePermissionEntry[]>
+  /** Null forgets the answer so the site is asked again; resolves the profile's updated list. */
+  sitePermissionsSet: (args: {
+    profileId: string
+    origin: string
+    permission: BrowserSitePermission
+    decision: BrowserSitePermissionDecision | null
+  }) => Promise<BrowserSitePermissionEntry[]>
   notifyActiveTabChanged: (args: { browserPageId: string }) => Promise<boolean>
 }
 

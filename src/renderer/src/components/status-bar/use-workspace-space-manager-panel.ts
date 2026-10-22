@@ -19,6 +19,7 @@ import { useWorkspaceSpaceDecisionProjection } from './use-workspace-space-decis
 import { useWorkspaceSpaceGitRefreshAction } from './use-workspace-space-git-refresh-action'
 import { useWorkspaceSpaceManagerProjection } from './use-workspace-space-manager-projection'
 import { getWorkspaceSpaceWorktreeIdentity } from './workspace-space-delete-selection'
+import { blockRemovalForUnsavedFiles } from '../sidebar/removal-unsaved-files'
 
 export function useWorkspaceSpaceManagerPanel() {
   const bindings = useWorkspaceSpaceManagerBindings()
@@ -155,7 +156,10 @@ export function useWorkspaceSpaceManagerPanel() {
   )
 
   const deleteWorktrees = useCallback(
-    (targets: readonly WorkspaceSpaceWorktree[]): void => {
+    (
+      targets: readonly WorkspaceSpaceWorktree[],
+      { forceOnConfirm = false }: { forceOnConfirm?: boolean } = {}
+    ): void => {
       if (targets.length === 0) {
         return
       }
@@ -179,7 +183,7 @@ export function useWorkspaceSpaceManagerPanel() {
       }
       runWorktreeBatchDelete(identities, {
         forceConfirm: true,
-        forceOnConfirm: false,
+        forceOnConfirm,
         onDeleted: handleDeletedWorktrees
       })
     },
@@ -188,14 +192,23 @@ export function useWorkspaceSpaceManagerPanel() {
 
   const forceDeleteWorktree = useCallback(
     (worktree: WorkspaceSpaceWorktree): void => {
-      // Why: Space keeps normal deletes non-force so uncommitted work is not
-      // discarded silently; a failed row gets this explicit recovery path.
+      // Bulk deletion stays non-force; failed rows retain an explicit recovery path.
       // The failure toast is keyed by the store row's host, which a host-less saved Space row lacks.
       const storeRow = getWorktreeOnHostFromState(
         useAppStore.getState(),
         worktree.worktreeId,
         worktree.executionHostId ?? undefined
       )
+      // Why: this retry has no list of its own, so edits made since the first attempt refuse it.
+      if (
+        blockRemovalForUnsavedFiles(
+          useAppStore.getState,
+          [{ id: worktree.worktreeId, hostId: worktree.executionHostId ?? undefined }],
+          worktree.displayName
+        )
+      ) {
+        return
+      }
       // Why (#11960): explicit force recovery, so it may also waive PTY-stop proof.
       void removeWorktree(
         { id: worktree.worktreeId, executionHostId: worktree.executionHostId ?? null },

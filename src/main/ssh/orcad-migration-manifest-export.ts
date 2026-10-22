@@ -108,7 +108,7 @@ const ORCAD_MIGRATION_MANIFEST_TOO_LARGE = 'orcad_migration_manifest_too_large'
 // Request id, device token, method name and JSON framing around the params.
 const REQUEST_ENVELOPE_RESERVE_BYTES = 1024
 /** The largest catalog-request params that still fit the host's sealed inbound frame. */
-export const ORCAD_MIGRATION_REQUEST_PARAMS_BUDGET_BYTES =
+const ORCAD_MIGRATION_REQUEST_PARAMS_BUDGET_BYTES =
   REMOTE_RUNTIME_MAX_INBOUND_REQUEST_JSON_BYTES - REQUEST_ENVELOPE_RESERVE_BYTES
 
 /**
@@ -119,9 +119,7 @@ export const ORCAD_MIGRATION_REQUEST_PARAMS_BUDGET_BYTES =
 export function assertOrcadMigrationRequestFits(params: {
   manifest: OrcadMigrationManifest
 }): void {
-  if (
-    Buffer.byteLength(JSON.stringify(params), 'utf8') > ORCAD_MIGRATION_REQUEST_PARAMS_BUDGET_BYTES
-  ) {
+  if (!orcadMigrationRequestFits(params)) {
     throw new Error(
       describeOversizedOrcadMigrationPayload(
         params.manifest.payload,
@@ -129,6 +127,12 @@ export function assertOrcadMigrationRequestFits(params: {
       )
     )
   }
+}
+
+export function orcadMigrationRequestFits(params: { manifest: OrcadMigrationManifest }): boolean {
+  return (
+    Buffer.byteLength(JSON.stringify(params), 'utf8') <= ORCAD_MIGRATION_REQUEST_PARAMS_BUDGET_BYTES
+  )
 }
 
 /** The bare code told users nothing (#30126): name the largest parts and what to trim. */
