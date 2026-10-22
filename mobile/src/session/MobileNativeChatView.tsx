@@ -41,6 +41,7 @@ import { MobileNativeChatFloatingControls } from './MobileNativeChatFloatingCont
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import {
   MobileNativeChatComposer,
+  type MobileNativeChatMicStatus,
   type MobileNativeChatStructuredComposer
 } from './MobileNativeChatComposer'
 import { MobileNativeChatPromptCard } from './MobileNativeChatPromptCard'
@@ -113,6 +114,7 @@ type Props = ComposerTrayProps & {
   isAttaching?: boolean
   onMicPress?: () => void
   micActive?: boolean
+  micStatus?: MobileNativeChatMicStatus
   dictationMode?: string
   onMicPressIn?: () => void
   onMicPressOut?: () => void
@@ -198,6 +200,7 @@ export function MobileNativeChatView({
   isAttaching,
   onMicPress,
   micActive,
+  micStatus,
   dictationMode,
   onMicPressIn,
   onMicPressOut,
@@ -435,6 +438,7 @@ export function MobileNativeChatView({
         isAttaching={isAttaching}
         onMicPress={onMicPress}
         micActive={micActive}
+        micStatus={micStatus}
         dictationMode={dictationMode}
         onMicPressIn={onMicPressIn}
         onMicPressOut={onMicPressOut}
