@@ -116,6 +116,9 @@ describe.each(SHELLS)(
         await waitFor(() => running.output().includes(STARTUP_OUTPUT), 5_000)
         expect(running.session.shellState).toBe(timeout ? 'timed_out' : 'ready')
         expect(running.output().split(STARTUP_OUTPUT).length - 1).toBe(1)
+        expect(running.output()).not.toContain(
+          'no such hash table element: __orca_deferred_sched_init'
+        )
       } finally {
         await running.cleanup()
       }

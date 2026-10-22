@@ -49,4 +49,6 @@ export const ZSH_DEFERRED_LINE_INIT_RETIRE_BLOCK = `  if (( \${+widgets[__orca_s
   fi`
 
 // Why: plugins can copy a call to line-init into their own body; its guard makes it inert after startup.
-export const ZSH_DEFERRED_LINE_INIT_CLEANUP_BLOCK = `  (( $+__orca_deferred_sched_armed )) || builtin unfunction __orca_deferred_sched_init`
+export const ZSH_DEFERRED_LINE_INIT_CLEANUP_BLOCK = `  if (( ! $+__orca_deferred_sched_armed && \${+functions[__orca_deferred_sched_init]} )); then
+    builtin unfunction __orca_deferred_sched_init
+  fi`
