@@ -121,8 +121,8 @@ function leaveText(reason: string | undefined): string {
   const text =
     reason && isBundledSkillLeaveReason(reason)
       ? BUNDLED_SKILL_LEAVE_REASON_TEXT[reason]
-      : 'Left as it is'
-  return `Left alone: ${text}`
+      : 'this copy was kept as it is'
+  return `Not updated: ${text}`
 }
 
 function describePlanOp(op: BundledSkillOp): string {
@@ -216,7 +216,10 @@ export function createSkillMutationHandler(verb: SkillMutationVerb): CommandHand
         `${name}: not installed, so not updated. Install it with: orca skills install --skill ${name}`
     )
     const forceHint = hasReplaceableLeave(plan)
-      ? ['', 'Rerun with --force to replace a copy left alone; Orca keeps a backup of it.']
+      ? [
+          '',
+          'Rerun with --force to replace a copy that was not updated; Orca keeps a backup of it.'
+        ]
       : []
 
     if (flags.get('dry-run') === true) {

@@ -5,9 +5,7 @@ import type {
 } from '../../../../shared/bundled-skill-summary'
 import { translate } from '@/i18n/i18n'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  leaveReasonText,
   locationPlaceLabel,
   locationStateText,
   skillOutcomeText,
@@ -21,22 +19,6 @@ export type SkillReplaceToggle = {
   onReplaceChange: (path: string, replace: boolean) => void
 }
 
-/** The place, with the full path on hover; "Show all locations" lists it for keyboard users. */
-function PlaceLabel({ location }: { location: BundledSkillLocation }): React.JSX.Element {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="cursor-help text-muted-foreground underline decoration-dotted underline-offset-2">
-          {locationPlaceLabel(location)}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent className="max-w-sm [overflow-wrap:anywhere]">
-        <span className="font-mono">{location.path}</span>
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
 /** A location Update leaves alone, or one the user chose to Replace. */
 function ChoiceLine({
   location,
@@ -47,12 +29,8 @@ function ChoiceLine({
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <span className="min-w-0 [overflow-wrap:anywhere]">
-        <PlaceLabel location={location} />
-        {': '}
-        {location.state === 'replace'
-          ? locationStateText(location)
-          : leaveReasonText(location.reason)}
+      <span className="min-w-0 [overflow-wrap:anywhere]" title={location.path}>
+        {locationStateText(location)}
       </span>
       {replace && location.replaceable ? (
         <label className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground">
@@ -78,20 +56,11 @@ function LocationTable({
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2">
       {locations.map((location) => (
-        // Why the state sits under the path: a long reason must not squeeze the path to "~/…".
-        <div
-          key={location.path}
-          className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-x-2 text-xs"
-        >
-          <span className="truncate text-foreground">{locationPlaceLabel(location)}</span>
-          <span className="flex min-w-0 flex-col">
-            <span
-              className="truncate font-mono text-[11px] text-muted-foreground"
-              title={location.path}
-            >
-              {location.displayPath}
-            </span>
-            <span className="text-muted-foreground">{locationStateText(location)}</span>
+        <div key={location.path} className="min-w-0 text-xs text-muted-foreground">
+          <span>{locationPlaceLabel(location)}</span>
+          {' · '}
+          <span className="font-mono text-2xs [overflow-wrap:anywhere]" title={location.path}>
+            {location.displayPath}
           </span>
         </div>
       ))}
@@ -101,7 +70,7 @@ function LocationTable({
 
 /**
  * One skill in the update dialog: what Update does to it, the locations it leaves for the
- * user (named by agent, path on hover) and, on request, every location it planned.
+ * user and, on request, every folder it planned.
  */
 export function SkillUpdateRow({
   skill,

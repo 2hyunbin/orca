@@ -37,12 +37,12 @@ const OP_PLAN_STATE: Readonly<Record<BundledSkillOpKind, BundledSkillPlanState>>
 }
 
 export const BUNDLED_SKILL_LEAVE_REASON_TEXT: Readonly<Record<BundledSkillLeaveReason, string>> = {
-  edited: "You've changed this copy",
-  other: 'A different skill already uses this name',
+  edited: 'you edited this copy',
+  other: 'a different skill already uses this name',
   unwritable: "Orca can't write to this folder",
-  unreadable: "Orca can't read all of this copy",
-  busy: 'Another skill install is still finishing here',
-  'shared-not-current': 'The shared copy this folder uses is not Orca\u2019s'
+  unreadable: "Orca can't read every file in this copy",
+  busy: 'another skill install is still finishing here',
+  'shared-not-current': 'the shared copy this folder uses is not Orca\u2019s'
 }
 
 /** What Update does at one location, for plain-text surfaces; the app translates its own. */
@@ -50,12 +50,12 @@ export const BUNDLED_SKILL_PLAN_OP_TEXT: Readonly<
   Record<Exclude<BundledSkillOpKind, 'leave'>, string>
 > = {
   keep: 'No change',
-  write: 'Will install',
-  copy: 'Will install',
-  update: 'Will update',
-  link: 'Will link',
-  replace: 'Will replace',
-  restore: 'Needs repair'
+  write: 'Install',
+  copy: 'Install',
+  update: 'Update',
+  link: 'Link',
+  replace: 'Replace',
+  restore: 'Repair'
 }
 
 function opPlanState(op: Pick<BundledSkillOp, 'kind' | 'reason'>): BundledSkillPlanState {
@@ -86,7 +86,7 @@ export type BundledSkillPlanSkillSummary = {
   state: BundledSkillPlanState
   /** One per planned location, labelled by agent; the dialog's rows and location table. */
   locations: BundledSkillLocation[]
-  /** Everything here is current and nothing is left alone, so it collapses into one line. */
+  /** Every location is current, so the skill collapses into one line. */
   upToDate: boolean
 }
 
@@ -193,14 +193,14 @@ export type BundledSkillOutcomeSummary = {
   text: BundledSkillOutcomeText
   /** Printed as warnings; never part of the exit code. */
   leftAlone: BundledSkillLeftAlone[]
-  /** e.g. "Updated - 1 left alone: You've changed this copy". */
+  /** e.g. "Updated - 1 not updated: you edited this copy". */
   line: string
 }
 
 function leaveReasonText(reason: string | undefined): string {
   return reason && isBundledSkillLeaveReason(reason)
     ? BUNDLED_SKILL_LEAVE_REASON_TEXT[reason]
-    : 'Left as it is'
+    : 'this copy was kept as it is'
 }
 
 export function summarizeBundledSkillOutcome(
@@ -219,7 +219,7 @@ export function summarizeBundledSkillOutcome(
     name: outcome.name,
     text,
     leftAlone,
-    line: leftAlone.length > 0 ? `${text} \u00B7 ${leftAlone.length} left alone: ${reasons}` : text
+    line: leftAlone.length > 0 ? `${text} \u00B7 ${leftAlone.length} not updated: ${reasons}` : text
   }
 }
 
@@ -227,7 +227,7 @@ export type BundledSkillResultSummary = {
   ok: boolean
   /** The CLI's exit code: 1 only when an op failed or found the disk changed. */
   exitCode: 0 | 1
-  /** Skills the run changed: "Updated N skills · M left alone". */
+  /** Skills the run changed: "Updated N skills · M not updated". */
   changedCount: number
   leftAloneCount: number
   skills: BundledSkillOutcomeSummary[]
