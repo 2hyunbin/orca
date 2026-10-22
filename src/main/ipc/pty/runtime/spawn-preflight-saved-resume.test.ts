@@ -1,3 +1,4 @@
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { localProvider } from '../provider/registry'
 import { spawnPtyFromRuntimeController } from './spawn'
 import * as owners from '../pane/agent-session-owners'
@@ -266,6 +267,7 @@ it('returns the committed runtime shell when exact saved-record persistence fail
   }
   const warning = vi.spyOn(console, 'warn').mockImplementation(() => {})
   const spawn = vi.spyOn(localProvider, 'spawn').mockResolvedValue({ id: 'cleanup-failed-shell' })
+  const onResumeOutcome = vi.fn()
   try {
     const result = await spawnPtyFromRuntimeController(deps(runtime), {
       cols: 80,
@@ -275,12 +277,16 @@ it('returns the committed runtime shell when exact saved-record persistence fail
       command: `claude --resume ${C}`,
       launchAgent: 'claude',
       resumeOrigin: 'saved',
-      resumeProviderSession: { key: 'session_id', id: C }
+      resumeProviderSession: { key: 'session_id', id: C },
+      onResumeOutcome
     })
     expect(result).toMatchObject({ id: 'cleanup-failed-shell', agentResumeRefused: 'chat-home' })
     expect(spawn.mock.calls[0]?.[0].command).toBeUndefined()
     expect(runtime.registerPty).toHaveBeenCalled()
     expect(runtime.forgetRefusedSavedResume).toHaveBeenCalledOnce()
+    expect(onResumeOutcome.mock.calls).toEqual(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? [['cleanup-failed-shell', 'resume-unavailable']] : []
+    )
     await Promise.resolve()
     expect(warning).toHaveBeenCalled()
   } finally {

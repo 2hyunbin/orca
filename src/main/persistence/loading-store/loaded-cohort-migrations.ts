@@ -96,7 +96,6 @@ export class LoadedCohortMigrationOperations {
       ...state,
       settings: {
         ...state.settings,
-        ...(onboardingLanguageCohort === 'control' ? { uiLanguage: 'en' as const } : {}),
         telemetry: {
           ...existing,
           ...(onboardingLanguageCohort ? { onboardingLanguageCohort } : {}),

@@ -141,7 +141,8 @@ export function bindBuildColdRestoreAgentResumeStartup(session: ConnectPanePtySe
 /** Keeps the reattach fallback's actual fresh-agent outcome with the pane's start. */
 export function reopenPaneAfterMissingReattach(
   session: ConnectPanePtySession,
-  startup: ColdRestoreAgentResumeStartup | null
+  startup: ColdRestoreAgentResumeStartup | null,
+  resumedAgent: (ptyId: string) => boolean
 ): Promise<HeldPaneReopenOutcome> {
   let resumeUnavailable = false
   return session
@@ -154,7 +155,7 @@ export function reopenPaneAfterMissingReattach(
     .then(
       (ptyId: string | null) => ({
         reopened: ptyId !== null,
-        agentResumed: ptyId !== null && Boolean(startup) && !resumeUnavailable
+        agentResumed: ptyId !== null && resumedAgent(ptyId) && !resumeUnavailable
       }),
       () => NOT_REOPENED
     )

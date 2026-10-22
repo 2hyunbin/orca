@@ -16,6 +16,7 @@ import { shouldIgnoreStalePanePtyLayoutBinding } from './pane-pty-layout-binding
 
 import { hasEmptyReattachRetireEvidence } from './empty-reattach-retire-evidence'
 import { mainStartsPane } from './main-starts-pane'
+import { showMainPaneResumeOutcome } from './main-pane-resume-banner'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
@@ -336,6 +337,7 @@ export function bindHandleReattachResult(sessionBag: ConnectPanePtySession): voi
       session.warnParkRevealNoHostImage(ptyId, noHostImageReason)
     }
     session.scheduleReattachIdleAgentCursorReset()
+    showMainPaneResumeOutcome(sessionBag, ptyId)
 
     scheduleRuntimeGraphSync()
     return true

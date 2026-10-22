@@ -7996,7 +7996,7 @@
           "1f32ba27a6": "Custom",
           "a182c5125e": "Git Username",
           "sourceControlGroupOrderTitle": "Source Control Group Order",
-          "sourceControlGroupOrderDescription": "Choose whether Changes, Staged Changes, or Untracked Files appear first in Source Control.",
+          "sourceControlGroupOrderDescription": "Choose whether Staged Changes or Changes appear first in Source Control.",
           "changesFirst": "Changes first",
           "stagedFirst": "Staged first",
           "untrackedFirst": "Untracked first",
@@ -10522,7 +10522,7 @@
             "5ecd91c5ef": "Prefix added to branch names when creating worktrees.",
             "68bd65fdb8": "Branch Prefix",
             "sourceControlGroupOrderTitle": "Source Control Group Order",
-            "sourceControlGroupOrderDescription": "Choose whether Changes, Staged Changes, or Untracked Files appear first in Source Control.",
+            "sourceControlGroupOrderDescription": "Choose whether Staged Changes or Changes appear first in Source Control.",
             "groupOrder": "group order",
             "changesFirst": "changes first",
             "stagedFirst": "staged first",
@@ -12947,7 +12947,7 @@
           "reassurance": "Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to the host."
         },
         "sshHostServer": {
-          "sourceChanged": "An older version of Orca changed this host’s projects. Move those changes to this host’s Orca server, or keep the server’s version, to connect again.",
+          "sourceChanged": "This computer has projects or folders for this host that its Orca server doesn’t have yet, often added by an older version of Orca. Move them to this host’s Orca server, or keep the server’s version, to connect again.",
           "deploying": "Setting up Orca on {{host}}…",
           "converting": "Moving to Orca on {{host}}…",
           "connecting": "Connecting to Orca on {{host}}…",
@@ -13571,10 +13571,10 @@
             "dcc294f28d": "(results truncated)"
           },
           "SearchFilters": {
-            "01e4671ccf": "files to exclude (e.g. *.min.js, dist/**)",
-            "0a6412a895": "Files To Exclude",
-            "8a77efcbd1": "files to include (e.g. *.ts, src/**)",
-            "a69ee1bd0e": "Files To Include"
+            "01e4671ccf": "e.g. *.min.js, dist/**",
+            "0a6412a895": "files to exclude",
+            "8a77efcbd1": "e.g. *.ts, src/**",
+            "a69ee1bd0e": "files to include"
           },
           "SearchHeader": {
             "6234a5ef85": "Use Regular Expression",
@@ -14824,7 +14824,7 @@
             "databaseCount_one": "{{value0}} database",
             "databaseCount_other": "{{value0}} databases",
             "scanning": "Scanning {{value0}}",
-            "reading": "Reading {{value0}} files",
+            "checking": "Checking {{value0}}",
             "scanned": "Scanned {{value0}}"
           }
         }
@@ -18598,7 +18598,8 @@
         "alreadyOpen": "Another Orca window already has a plain SSH terminal open to this host.",
         "endedBySignal": "ssh was stopped (signal {{signal}}). Close this window when you’re done reading.",
         "cancelled": "This plain SSH terminal was closed before it started.",
-        "terminalUnavailable": "Orca couldn’t open a terminal here."
+        "terminalUnavailable": "Orca couldn’t open a terminal here.",
+        "openHint": "Keeps you working on the host while Orca can’t set up there."
       }
     },
     "i18n": {
@@ -20212,8 +20213,12 @@
   },
   "sourceControl": {
     "discard": {
+      "deleteUntrackedFileDescription": "This will permanently delete this untracked file. This cannot be undone.",
+      "deleteUntrackedFilesDescription": "This will permanently delete these {{count}} untracked files. This cannot be undone.",
       "restoreStagedVersionDescription": "This will restore the last staged version and discard the deletion. This cannot be undone.",
-      "unstagedChangesDescription": "This will revert the unstaged changes to this file. This cannot be undone."
+      "unstagedChangesDescription": "This will revert the unstaged changes to this file. This cannot be undone.",
+      "unstagedSelectionIncludingUntrackedDescription": "This will revert unstaged changes and permanently delete any untracked files in this selection. This cannot be undone.",
+      "unstagedFilesIncludingUntrackedDescription": "This will revert unstaged changes and permanently delete any untracked files among these {{count}} files. This cannot be undone."
     },
     "unlinkedPr": {
       "status": "PR #{{number}} unlinked"
@@ -20657,7 +20662,12 @@
     "remoteScopeAccountsAddHere": "Showing accounts managed by {{value0}}. New accounts sign in there; you finish in this device’s browser."
   },
   "fileSearch": {
-    "failed": "Search failed. Try again."
+    "failed": "Search failed. Try again.",
+    "filters": {
+      "toggle": "Toggle search details",
+      "active": "{{count}} active"
+    },
+    "noResults": "No results. Try another search or adjust your filters."
   },
   "workspaceDeletion": {
     "preferenceSaveFailed": "Could not save deletion preference",
