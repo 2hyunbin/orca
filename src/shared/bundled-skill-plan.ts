@@ -122,15 +122,13 @@ export type BundledSkillInstallResult = {
 const BundledSkillForceSchema = z.array(z.string().min(1).max(4096)).max(256)
 
 /** The local app's request: this machine's global homes, Orca's installed skills only. */
-export const BundledSkillPlanRequestSchema = z
-  .object({ force: BundledSkillForceSchema.optional() })
-  .strict()
+export const BundledSkillPlanRequestSchema = z.strictObject({
+  force: BundledSkillForceSchema.optional()
+})
 export type BundledSkillPlanRequest = z.infer<typeof BundledSkillPlanRequestSchema>
 
-export const BundledSkillExecuteRequestSchema = z
-  .object({
-    force: BundledSkillForceSchema.optional(),
-    planDigest: z.string().regex(/^[0-9a-f]{64}$/u)
-  })
-  .strict()
+export const BundledSkillExecuteRequestSchema = z.strictObject({
+  force: BundledSkillForceSchema.optional(),
+  planDigest: z.string().regex(/^[0-9a-f]{64}$/u)
+})
 export type BundledSkillExecuteRequest = z.infer<typeof BundledSkillExecuteRequestSchema>
