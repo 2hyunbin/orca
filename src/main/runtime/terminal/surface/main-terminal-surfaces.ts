@@ -365,6 +365,20 @@ export function mainLayoutHoldsPane(runtime: SurfacesOwner, paneKey: string): bo
   return surfaces && pane ? surfaces.paneOf(pane.tabId, pane.leafId) !== null : null
 }
 
+/** Whether another pane still holds an agent session: a terminal of it that has not exited, or no
+ *  terminal at all, which switch-on holds only while main's layout still holds the pane. */
+export function paneHoldsSession(
+  runtime: SurfacesOwner,
+  paneKey: string,
+  panePtyIds: readonly string[],
+  exited: (ptyId: string) => boolean
+): boolean {
+  if (panePtyIds.length > 0) {
+    return panePtyIds.some((ptyId) => !exited(ptyId))
+  }
+  return !ORCA_LAYOUT_OWNER_IS_MAIN || mainLayoutHoldsPane(runtime, paneKey) !== false
+}
+
 /**
  * Switch-on, whether a pane in the workspace is main's own: then the pane existing proves nothing
  * about its terminal, whose record and the host's inventory decide whether it runs. A paired

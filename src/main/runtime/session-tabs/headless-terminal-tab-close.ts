@@ -17,7 +17,6 @@ import type { RuntimePtyWorktreeRecord } from '../runtime-terminal-state-records
 import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
 import type { RuntimeTerminalRename } from '../../../shared/runtime-terminal-contracts'
 import type { RuntimeSessionTabCloseReason } from '../../../shared/runtime-session-contracts'
-import { liveTerminalsOfTab } from '../session-lifecycle/close/closed-tab-terminal'
 
 export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithMainLayoutTabMoves {
   protected abstract applyHeadlessSessionTabPropsToSnapshot(
@@ -73,9 +72,7 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
       return proof ? [proof] : []
     })
     const acknowledgeRetirement = this.captureTerminalTabRetirement(worktreeId, closedParentTabId)
-    const liveTerminalOf = liveTerminalsOfTab(snapshot, closedParentTabId, (row) =>
-      this.findPtyForMobileTerminalTab(worktreeId, row)
-    )
+    const liveTerminalOf = this.liveTerminalsOfClosedTab(worktreeId, snapshot, closedParentTabId)
     const projectedPtyIds = await this.closeTerminalSurface(
       worktreeId,
       { kind: 'tab', tabId: closedParentTabId },

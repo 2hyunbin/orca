@@ -10,6 +10,7 @@ import type {
 import { translateSessionTabMove } from '../../../shared/workspace-layout/old-client/old-client-method-translation'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
+import { liveTerminalsOfTab } from '../session-lifecycle/close/closed-tab-terminal'
 
 export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithMainLayoutRenames {
   protected abstract toMobileSessionTabsResult(
@@ -17,6 +18,17 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
       OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']
     >
   ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']>
+
+  /** A closed tab's rows' live terminals, read before main's close drops their panes. */
+  protected liveTerminalsOfClosedTab(
+    worktreeId: string,
+    snapshot: RuntimeMobileSessionTabsSnapshot,
+    tabId: string
+  ): ReturnType<typeof liveTerminalsOfTab> {
+    return liveTerminalsOfTab(snapshot, tabId, (row) =>
+      this.findPtyForMobileTerminalTab(worktreeId, row)
+    )
+  }
 
   /**
    * The move in main's layout, checked against the rows the client was shown and refused with

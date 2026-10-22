@@ -28,7 +28,6 @@ import {
   buildHeadlessMobileSessionTabGroups,
   cloneTerminalLayoutSnapshot
 } from '../../mobile-session-layout-projection'
-import { mainLayoutHoldsPane } from '../../terminal/surface/main-terminal-surfaces'
 import { findPaneSleepingRecord } from './pane-sleeping-record'
 
 export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends OrcaRuntimeWithPerformMobileSessionPtyRecordsRefresh {
@@ -233,14 +232,7 @@ export abstract class OrcaRuntimeWithApplyMobileSessionTabNavigation extends Orc
     )
     // Why: only a proven exit clears a holder; an unverifiable PTY (dropped SSH relay) or one not
     // yet hydrated after a restart may still be writing the transcript.
-    const ptys = [...this.ptysById.values()]
-    const holderPaneKeys = [...otherPaneKeys].filter((paneKey) => {
-      const panePtys = ptys.filter((pty) => this.paneOfPty(pty).paneKey === paneKey)
-      // Switch point: an empty pane holds the session only while main's layout still holds it.
-      return panePtys.length === 0
-        ? !ORCA_LAYOUT_OWNER_IS_MAIN || mainLayoutHoldsPane(this, paneKey) !== false
-        : panePtys.some((pty) => !this.isPtyKnownExited(pty.ptyId))
-    })
+    const holderPaneKeys = [...otherPaneKeys].filter((paneKey) => this.paneHoldsSession(paneKey))
     if (holderPaneKeys.length === 0) {
       return false
     }
