@@ -15,23 +15,25 @@
 // settles it first (`journal-unsent-send-hold.ts`).
 
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
-import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalCursor,
+  AgentJournalSubmission
+} from '../../../shared/agent-session-journal-types'
+import type { AgentSessionRefusalReference } from '../../../shared/agent-session-wire-refusals'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import type { AgentSessionFailureWordsContext } from '../../../shared/agent-session-failure-words'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
-import { structuredAgentSessionStartFailure } from './structured-agent-session-failure-text'
 import type { StructuredAgentSessionStartClaim } from './structured-agent-session-agent-start'
 import type {
   StructuredAgentSessionHostSession,
   StructuredAgentSessionProviderChildIdentity
 } from './structured-agent-session-host-types'
 import {
-  acceptedNoLaterThan,
   oldestQueuedSubmission,
-  recordStructuredAgentSessionStartFailure,
+  recordStructuredAgentSessionDeliveryStartFailure,
   refusedStructuredAgentSessionStart,
   startThatFailedWhileQueued
 } from './structured-agent-session-start-failure-row'
@@ -50,6 +52,7 @@ import { waitsForCodexTurnOptions } from './structured-agent-session-message-opt
 import type { StructuredAgentSessionRanRecorder } from './structured-agent-session-ran-options'
 import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
+import { rejectBlockedStructuredAgentSessionTransition } from './structured-agent-session-outgrown-child'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
   deliveryOrder: StructuredAgentSessionDeliveryOrder
@@ -62,7 +65,10 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   /** Claims the start for the queued head inside the ordered preparation. */
   startProviderChild: (sessionId: string, startedFor: string) => StructuredAgentSessionStartClaim
   /** Stops a child the chat outgrew (a new login or permission mode); inside `serialize`. */
-  retireOutgrownChild: (sessionId: string) => Promise<void>
+  retireOutgrownChild: (
+    sessionId: string,
+    next: AgentJournalSubmission
+  ) => Promise<AgentSessionRefusalReference | void>
   readiness: (
     sessionId: string,
     child: StructuredAgentSessionProviderChildIdentity
@@ -92,6 +98,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
 
 type Prepared =
   | 'stop'
+  | 'continue'
   | { start: StructuredAgentSessionStartClaim; acceptedBy: AgentJournalCursor }
   | {
       ok: true
@@ -153,6 +160,9 @@ export class StructuredAgentSessionDeliveryLoop {
         if (prepared === 'stop') {
           return
         }
+        if (prepared === 'continue') {
+          continue
+        }
         if ('start' in prepared) {
           // Outside the serialize: sends are accepted while the agent starts.
           const started = await prepared.start.outcome
@@ -171,7 +181,12 @@ export class StructuredAgentSessionDeliveryLoop {
           // An unproven close fails only what was queued when the start was asked for: a later
           // ask runs the close again, so its verdict no longer holds for what came after.
           await this.deps.serialize(sessionId, () =>
-            this.recordFailure(sessionId, failure, prepared.acceptedBy)
+            recordStructuredAgentSessionDeliveryStartFailure(
+              this.deps,
+              sessionId,
+              failure,
+              prepared.acceptedBy
+            )
           )
           continue
         }
@@ -180,7 +195,7 @@ export class StructuredAgentSessionDeliveryLoop {
         }
         await prepared.before
         const handed = await this.deps.serialize(sessionId, () =>
-          this.handOver(sessionId, prepared.awaited, prepared.readiness !== null)
+          this.handOver(sessionId, prepared.awaited)
         )
         if (handed === 'stop') {
           return
@@ -248,7 +263,9 @@ export class StructuredAgentSessionDeliveryLoop {
     if (failedStart) {
       return this.fail(sessionId, failedStart)
     }
-    await this.deps.retireOutgrownChild(sessionId)
+    if (await rejectBlockedStructuredAgentSessionTransition(this.deps, sessionId, oldest)) {
+      return 'continue'
+    }
     const child = this.deps.sessions.get(sessionId)?.child
     if (!child || child.close) {
       return {
@@ -267,8 +284,7 @@ export class StructuredAgentSessionDeliveryLoop {
 
   private async handOver(
     sessionId: string,
-    awaited: StructuredAgentSessionProviderChildIdentity,
-    waited: boolean
+    awaited: StructuredAgentSessionProviderChildIdentity
   ): Promise<'continue' | 'stop' | StructuredAgentSessionPendingHandover> {
     const session = this.deps.sessions.get(sessionId)
     if (!session || this.disposed) {
@@ -306,12 +322,12 @@ export class StructuredAgentSessionDeliveryLoop {
     if (!next) {
       return this.stop(sessionId)
     }
-    if (waited) {
-      // Re-check launch permission only after proving the awaited child still exists.
-      await this.deps.retireOutgrownChild(sessionId)
-      if (session.child !== awaitedChild) {
-        return 'continue'
-      }
+    // Re-derive for the actual next input after proving the awaited child still exists.
+    if (
+      (await rejectBlockedStructuredAgentSessionTransition(this.deps, sessionId, next)) ||
+      session.child !== awaitedChild
+    ) {
+      return 'continue'
     }
     if (
       waitsForCodexTurnOptions(this.deps.record(sessionId), session.journal, next, awaitedChild)
@@ -344,29 +360,8 @@ export class StructuredAgentSessionDeliveryLoop {
   }
 
   private async fail(sessionId: string, failure: StartFailure): Promise<'stop'> {
-    await this.recordFailure(sessionId, failure)
+    await recordStructuredAgentSessionDeliveryStartFailure(this.deps, sessionId, failure)
     return this.stop(sessionId)
-  }
-
-  private async recordFailure(
-    sessionId: string,
-    failure: StartFailure,
-    acceptedBy?: AgentJournalCursor
-  ): Promise<void> {
-    const session = this.deps.sessions.get(sessionId)
-    if (session) {
-      await recordStructuredAgentSessionStartFailure(
-        { journal: session.journal, fence: this.deps.conversationFence(sessionId) },
-        {
-          startKey: failure.startKey,
-          ...structuredAgentSessionStartFailure(
-            failure.cause,
-            this.deps.failureTextContext(sessionId)
-          )
-        },
-        acceptedBy && acceptedNoLaterThan(session.journal, acceptedBy)
-      )
-    }
   }
 
   /** Inside the serialized step that found nothing to do, so an accept after it wakes anew. */

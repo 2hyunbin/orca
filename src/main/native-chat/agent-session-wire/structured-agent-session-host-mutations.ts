@@ -86,6 +86,8 @@ export function sendStructuredAgentSessionTurn(
      *  launch's first prompt. `userSend` is always one; another agent's message carries `from`. */
     personsMessage?: true
     beforeRun?: () => void
+    /** Host-local: keep the running process's choices instead of capturing saved ones. */
+    keepCurrentOptions?: true
   },
   arrival?: Parameters<typeof sendPreparation>[2]
 ): Promise<AgentSessionMutationResult<AgentSessionSendResult>> {

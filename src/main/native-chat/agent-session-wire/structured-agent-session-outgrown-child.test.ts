@@ -18,10 +18,7 @@ import {
   retireOutgrownStructuredAgentSessionChild,
   structuredAgentSessionChildReportedSignedOut
 } from './structured-agent-session-outgrown-child'
-import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
-import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
 import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { StructuredAgentSessionProviderChild } from './structured-agent-session-host-types'
 import type {
   AgentJournalItemBody,
@@ -133,6 +130,7 @@ const conversation = (
           visit(item.itemId, index, item.body, item.agentId ? { agentId: item.agentId } : {})
         ),
       itemFence: (itemId: string) => items.find((item) => item.itemId === itemId)?.fence,
+      itemBody: (itemId: string) => items.find((item) => item.itemId === itemId)?.body,
       newestTurn: (): AgentJournalTurnLifecycle | null =>
         input.newestTurnEndedAt === undefined
           ? null
@@ -282,82 +280,6 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
       expect(
         (await retire(askChild, {}, undefined, async () => null)).stopAgent
       ).not.toHaveBeenCalled()
-    })
-
-    // The check reads the same mode a start launches with, so each start ends the restarts.
-    describe('against the mode a start launches with', () => {
-      // The saved catalog the probe keeps from `claude` 2.1.280: the default row folded into the
-      // row it resolves to, every row but haiku listed as running auto.
-      const listed = [
-        { id: 'opus[1m]', isDefault: true, supportsAutoMode: true },
-        { id: 'sonnet', isDefault: false, supportsAutoMode: true },
-        { id: 'haiku', isDefault: false }
-      ]
-      const catalog = (rows: typeof listed) => ({
-        read: vi.fn(async () => ({
-          origin: 'probe' as const,
-          fetchedAt: 1,
-          models: rows.map((row) => ({ ...row, label: row.id, efforts: [] }))
-        })),
-        retainedLiveModelIds: vi.fn(async () => []),
-        recordLiveListing: vi.fn(),
-        prewarm: vi.fn(async () => undefined),
-        stop: vi.fn(),
-        providerStarted: vi.fn()
-      })
-      const launch = ({ permissionMode, ...options }: Record<string, string>, rows = listed) => {
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the launch mode reads only the record's id, agent, options and mode.
-        const record = {
-          sessionId: 'session',
-          provider: 'claude',
-          options,
-          permissionMode
-        } as AgentSessionRecord
-        return () =>
-          structuredAgentSessionLaunchPermission(
-            { agents: claudeAndCodexDeclared(), modelCatalog: catalog(rows) },
-            record
-          )
-      }
-      const stoppedAfterLaunch = async (
-        launched: AgentChatPermissionMode,
-        current: () => Promise<AgentChatPermissionMode | null>
-      ) =>
-        (await retire({ child: childAt({ permissionMode: launched }) }, {}, undefined, current))
-          .stopAgent.mock.calls.length > 0
-
-      it('restarts Full access or Accept edits into Ask on a model listed without auto', async () => {
-        const autoPick = launch({ model: 'haiku', permissionMode: 'auto' })
-        await expect(autoPick()).resolves.toBe('ask')
-        expect(await stoppedAfterLaunch('full-access', autoPick)).toBe(true)
-        expect(await stoppedAfterLaunch('accept-edits', autoPick)).toBe(true)
-        expect(await stoppedAfterLaunch('ask', autoPick)).toBe(false)
-      })
-
-      it('restarts into auto once the model is no longer listed without it', async () => {
-        const onHaiku = await launch({ model: 'haiku', permissionMode: 'auto' })()
-        const onSonnet = launch({ model: 'sonnet', permissionMode: 'auto' })
-        expect(await stoppedAfterLaunch(onHaiku!, onSonnet)).toBe(true)
-        expect(await stoppedAfterLaunch((await onSonnet())!, onSonnet)).toBe(false)
-      })
-
-      it('never restarts a child it just started, from an alias or a resolved id', async () => {
-        const records: Record<string, string>[] = [
-          { permissionMode: 'auto' },
-          { model: 'default', permissionMode: 'auto' },
-          { model: 'opus[1m]', permissionMode: 'auto' },
-          { model: 'sonnet', permissionMode: 'auto' },
-          { model: 'haiku', permissionMode: 'auto' },
-          { model: 'claude-opus-5-5[1m]', permissionMode: 'auto' }
-        ]
-        const runsAuto = [true, true, true, true, false, true]
-        for (const [index, options] of records.entries()) {
-          const current = launch(options)
-          const launched = await current()
-          expect(launched).toBe(runsAuto[index] ? 'auto' : 'ask')
-          expect(await stoppedAfterLaunch(launched!, current)).toBe(false)
-        }
-      })
     })
 
     it('never reads the mode for a child launched with none', async () => {

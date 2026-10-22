@@ -114,6 +114,10 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
 
   holdsDispatch = (sessionId: string): boolean =>
     this.liveOwnerOrNull(sessionId)?.holdsDispatch?.(sessionId) ?? false
+  requiresModelTransitionRestart: NonNullable<
+    StructuredAgentSessionAdapter['requiresModelTransitionRestart']
+  > = (input) =>
+    this.liveOwnerOrNull(input.sessionId)?.requiresModelTransitionRestart?.(input) ?? false
 
   heldSends = (sessionId: string): ReadonlySet<string> | undefined =>
     this.liveOwnerOrNull(sessionId)?.heldSends?.(sessionId)

@@ -139,6 +139,10 @@ function couldNot(verb: 'couldNotStart' | 'couldNotRestart'): Sentence {
       return installationFailure
     }
     const failed = say(verb, agent(say, context))
+    const blocked = commandRefusedByReason(say, context, fact)
+    if (blocked) {
+      return joinSentences([failed, blocked, ...startRetry(say, context)])
+    }
     if (fact.argumentProblem) {
       const problemCopy = {
         unsupportedOption: 'argumentsUnsupportedOption',

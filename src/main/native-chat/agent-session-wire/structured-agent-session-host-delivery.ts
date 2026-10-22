@@ -88,12 +88,20 @@ export function createStructuredAgentSessionConversationDelivery(input: {
     serialize: input.serialize,
     trackStart: input.trackStart,
     startProviderChild: input.startProviderChild,
-    retireOutgrownChild: async (sessionId) => {
+    retireOutgrownChild: async (sessionId, next) => {
       // A send waiting on a person's Stop is not handed over yet; the step after the Stop decides.
       const session = input.clientDelivery.readStopping(sessionId)
         ? undefined
         : sessions.get(sessionId)
-      await retireOutgrownStructuredAgentSessionChild(sessionId, session, {
+      return retireOutgrownStructuredAgentSessionChild(sessionId, session, {
+        next,
+        requiresModelTransitionRestart: (submission) =>
+          session?.child?.phase === 'ready' &&
+          deps.adapter.requiresModelTransitionRestart?.({
+            sessionId,
+            fence: session.child.fence,
+            executionOptions: submission.options
+          }) === true,
         work: {
           currentWork: () =>
             hostStructuredAgentSessionCurrentWork({ store: deps.store, sessions }, sessionId),

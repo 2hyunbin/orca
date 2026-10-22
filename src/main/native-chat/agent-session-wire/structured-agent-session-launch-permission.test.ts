@@ -1,7 +1,5 @@
-// The mode a start launches with: Claude's Approve for me drops to Ask only on a model the saved
-// catalog lists without it; a catalog that can't say keeps the saved choice.
-
 import { describe, expect, it, vi } from 'vitest'
+import { AGENT_CHAT_PERMISSION_MODES } from '../../../shared/agent-chat-permission-mode'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import { claudeAndCodexDeclared } from './structured-agent-session-adapter-router-test-support'
@@ -45,75 +43,53 @@ function launchPermission(
     stop: vi.fn(),
     providerStarted: vi.fn()
   }
-  return {
-    read,
-    result: structuredAgentSessionLaunchPermission(
-      { agents: claudeAndCodexDeclared(), modelCatalog },
-      record(provider, options)
-    )
-  }
+  const deps = { agents: claudeAndCodexDeclared(), modelCatalog }
+  return { read, result: structuredAgentSessionLaunchPermission(deps, record(provider, options)) }
 }
 
 describe('the permission mode a chat starts with', () => {
-  it('launches a saved mode that needs no model as it is, without reading the catalog', async () => {
-    const claude = launchPermission('claude', { permissionMode: 'accept-edits' })
-    await expect(claude.result).resolves.toBe('accept-edits')
-    expect(claude.read).not.toHaveBeenCalled()
-    const codex = launchPermission('codex', { permissionMode: 'auto' })
-    await expect(codex.result).resolves.toBe('auto')
-    expect(codex.read).not.toHaveBeenCalled()
-  })
-
-  it('asks for a chat saved before modes existed', async () => {
-    await expect(launchPermission('claude', undefined).result).resolves.toBe('ask')
-  })
-
-  it('runs Claude auto on a model the saved catalog lists as supporting it', async () => {
-    const supported = launchPermission(
-      'claude',
-      { permissionMode: 'auto', model: 'opus' },
-      listing([{ id: 'opus', supportsAutoMode: true }])
-    )
-    await expect(supported.result).resolves.toBe('auto')
-    expect(supported.read).toHaveBeenCalledWith(expect.objectContaining({ savedOnly: true }))
-  })
-
-  it('asks on a model listed without auto, or a chat with no model whose listed default lacks it', async () => {
-    const rows = listing([
-      { id: 'sonnet', isDefault: true },
-      { id: 'opus', supportsAutoMode: true },
-      { id: 'haiku' }
-    ])
-    const savedOptions: Record<string, string>[] = [{ model: 'haiku' }, {}]
-    for (const options of savedOptions) {
-      await expect(
-        launchPermission('claude', { permissionMode: 'auto', ...options }, rows).result
-      ).resolves.toBe('ask')
-    }
-    // A CLI before 2.1.72 does not report model auto support; the auto value arrived in 2.1.71.
-    await expect(
-      launchPermission(
+  it.each(AGENT_CHAT_PERMISSION_MODES)(
+    'launches saved Claude %s without consulting the catalog',
+    async (permissionMode) => {
+      const launch = launchPermission(
         'claude',
-        { permissionMode: 'auto', model: 'opus' },
-        listing([{ id: 'opus' }, { id: 'sonnet' }])
-      ).result
+        { permissionMode, model: 'haiku' },
+        listing([{ id: 'haiku' }])
+      )
+      await expect(launch.result).resolves.toBe(permissionMode)
+      expect(launch.read).not.toHaveBeenCalled()
+    }
+  )
+
+  // #30032: a catalog saved under another account home read as none, and the chat relaunched asking.
+  it('keeps saved auto with no selected model, unlisted models, or an unavailable catalog', async () => {
+    const savedOptions: Record<string, string>[] = [{}, { model: 'claude-opus-5-5[1m]' }]
+    for (const options of savedOptions) {
+      const launch = launchPermission(
+        'claude',
+        { permissionMode: 'auto', ...options },
+        new Error('catalog unavailable')
+      )
+      await expect(launch.result).resolves.toBe('auto')
+      expect(launch.read).not.toHaveBeenCalled()
+    }
+    await expect(launchPermission('codex', { permissionMode: 'auto' }).result).resolves.toBe('auto')
+  })
+
+  it('asks for an absent or invalid saved mode, including modes the provider does not offer', async () => {
+    await expect(launchPermission('claude', undefined).result).resolves.toBe('ask')
+    await expect(
+      launchPermission('claude', { permissionMode: 'bypassPermissions' }).result
+    ).resolves.toBe('ask')
+    await expect(
+      launchPermission('codex', { permissionMode: 'accept-edits' }).result
     ).resolves.toBe('ask')
   })
 
-  // #30032: a catalog saved under another account home read as none, and the chat relaunched asking.
-  it('keeps the saved auto when the catalog cannot say whether the model runs it', async () => {
-    for (const answer of [
-      { origin: 'unknown' } as const,
-      new Error('catalog unavailable'),
-      listing([{ id: 'sonnet', supportsAutoMode: true }])
-    ]) {
-      await expect(
-        launchPermission('claude', { permissionMode: 'auto', model: 'opus' }, answer).result
-      ).resolves.toBe('auto')
-    }
-  })
-
-  it('has none for an agent with no modes', async () => {
+  it('has none for an unregistered agent or one with no modes', async () => {
+    await expect(launchPermission('grok', { permissionMode: 'full-access' }).result).resolves.toBe(
+      null
+    )
     await expect(launchPermission('pi', { permissionMode: 'full-access' }).result).resolves.toBe(
       null
     )

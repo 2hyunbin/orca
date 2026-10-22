@@ -141,6 +141,7 @@ export function sendPlan(
     /** A person's message the host sends for them; `userSend` is always one. */
     personsMessage?: true
     beforeRun?: () => void
+    keepCurrentOptions?: true
   }
 ): MutationPlan<AgentSessionSendResult> {
   // The operation id IS the client message id: one send, one durable row, one
@@ -166,6 +167,7 @@ export function sendPlan(
         ...(source ? { source } : {}),
         clientMessageId,
         ...(params.options ? { options: params.options } : {}),
+        ...(params.keepCurrentOptions ? { keepCurrentOptions: true } : {}),
         // Body-only, so the reducer's echo aliasing never sees control fields or the sender.
         payloadFingerprint: agentSessionSendBodyFingerprint(params.envelope.sessionId, params.body),
         body: params.body

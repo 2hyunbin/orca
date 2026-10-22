@@ -3,11 +3,8 @@
 import {
   AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
   agentChatPermissionModes,
-  chatModelSupportsAutoMode,
-  offeredChatPermissionModes,
   type AgentChatPermissionMode
 } from './agent-chat-permission-mode'
-import type { AgentSessionOptionCatalog } from './agent-session-option-catalog'
 import type { StructuredAgentSessionOptionRecord } from './structured-agent-session-option-state'
 import type { SessionOptionDescriptor } from './native-chat-session-options'
 
@@ -54,20 +51,7 @@ function agentDescriptions(agent: string): Partial<Record<AgentChatPermissionMod
   return AGENT_DESCRIPTIONS.get(agent) ?? OTHER_AGENT_DESCRIPTIONS
 }
 
-/** Only decides whether the menu offers Approve for me, by the host's own rule. */
-function currentModelSupportsAutoMode(
-  catalog: AgentSessionOptionCatalog | null,
-  record: StructuredAgentSessionOptionRecord
-): boolean {
-  const model = record.values.model?.value
-  return (
-    catalog !== null &&
-    chatModelSupportsAutoMode(catalog.models, typeof model === 'string' ? model : undefined)
-  )
-}
-
 export function structuredAgentSessionPermissionDescriptor(state: {
-  catalog: AgentSessionOptionCatalog | null
   record: StructuredAgentSessionOptionRecord
   permissionMode: string | null
 }): SessionOptionDescriptor | null {
@@ -76,10 +60,6 @@ export function structuredAgentSessionPermissionDescriptor(state: {
   if (!support || !current) {
     return null
   }
-  const offered = offeredChatPermissionModes(
-    support,
-    current === 'auto' || currentModelSupportsAutoMode(state.catalog, state.record)
-  )
   return {
     id: AGENT_CHAT_PERMISSION_MODE_OPTION_ID,
     label: 'Permissions',
@@ -87,7 +67,7 @@ export function structuredAgentSessionPermissionDescriptor(state: {
     kind: {
       type: 'select',
       currentValue: current,
-      choices: offered.map((value) => ({
+      choices: support.modes.map((value) => ({
         value,
         label: MODE_COPY[value].label,
         description: agentDescriptions(state.record.agent)[value] ?? MODE_COPY[value].description

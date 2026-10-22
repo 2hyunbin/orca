@@ -39,6 +39,7 @@ import {
   bindClaudeConnectionJournalControls,
   createClaudeSessionJournalTranslator
 } from './claude-structured-session-journal-control'
+import { isRootClaudeFrame } from './claude-turn-opening'
 
 export async function acquireClaudeSession({
   input,
@@ -60,6 +61,7 @@ export async function acquireClaudeSession({
   const { previous, attempt } = acquisitions.start(sessionId, prompts)
   let unbindReadingControl: (() => void) | undefined
   let liveSession: ClaudeSession | null = null
+  let firstRootInit: ClaudeSession['firstRootInit']
   let observedLeafUuid: string | null = null,
     expectedProviderSessionId: string | null = null
   // The CLI's own account of why it ended (stderr included): the only reason a user can act on.
@@ -90,6 +92,12 @@ export async function acquireClaudeSession({
         initProof.refuse()
       }
       return
+    }
+    if (message.type === 'system' && message.subtype === 'init' && isRootClaudeFrame(message)) {
+      firstRootInit ??= { permissionMode: readClaudeFrameString(message, 'permissionMode') }
+      if (liveSession) {
+        liveSession.firstRootInit = firstRootInit
+      }
     }
     const modelChanged =
       liveSession && init?.model ? observeClaudeExecutionModel(liveSession, init.model) : false
@@ -264,7 +272,11 @@ export async function acquireClaudeSession({
     })
     const session = publication.session
     liveSession = session
-    adoptClaudeStructuredSpawnOptions(session, launch.savedOptions)
+    session.firstRootInit = firstRootInit
+    adoptClaudeStructuredSpawnOptions(session, {
+      ...launch.savedOptions,
+      sdkOptions: launch.options
+    })
     acquisitions.deleteIfCurrent(sessionId, attempt)
     await withAgentSessionCreatePhase('publish', input.recordPhase, async () => {
       sessions.set(sessionId, session)

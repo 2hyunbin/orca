@@ -369,6 +369,12 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   /** The provider reported taking a send it has neither answered nor ended, as a queued follow-up
    *  or a silent retry does. Derived from the live child; false with none. */
   holdsDispatch?(sessionId: string): boolean
+  /** Host-local construction facts for the exact next input; absent providers keep their child. */
+  requiresModelTransitionRestart?(input: {
+    sessionId: string
+    fence: number
+    executionOptions?: AgentSessionExecutionOptions
+  }): boolean
   /** The sends the live child still holds as its own work, by client message id; undefined when
    *  this adapter cannot say, and the host reads an unanswered send as held. */
   heldSends?(sessionId: string): ReadonlySet<string> | undefined
