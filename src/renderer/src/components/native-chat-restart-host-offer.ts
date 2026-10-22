@@ -1,3 +1,5 @@
+import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
+import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { executionHostIdForStructuredTarget } from '@/runtime/structured-agent-session-owner'
 import type { ResumeCandidate, ResumeFailure } from './native-chat-resume-on-restart-grouping'
@@ -37,4 +39,38 @@ export function restartOfferOnTarget(
   const onThisHost = <T extends ResumeCandidate>(rows: readonly T[]): T[] =>
     rows.map((row) => ({ ...row, executionHostId: executionHostIdForStructuredTarget(target) }))
   return { ...answer, candidates: onThisHost(answer.candidates), failed: onThisHost(answer.failed) }
+}
+
+/** Missing methods settle quietly; transport failures leave discovery unsettled. */
+export async function readRestartHostOffer(target: RuntimeClientTarget): Promise<HostOfferRead> {
+  try {
+    const offered = await callStructuredAgentSession<HostOfferPayload>(
+      target,
+      'agentSession.restartResumable'
+    )
+    if (!Array.isArray(offered.sessions)) {
+      throw new Error('agent_session_restart_offer_invalid')
+    }
+    return { candidates: offered.sessions, failed: failedFrom(offered), available: true }
+  } catch (error) {
+    return {
+      candidates: [],
+      failed: [],
+      available: error instanceof RuntimeRpcCallError && error.code === 'method_not_found'
+    }
+  }
+}
+
+export async function dismissRestartHostOffer(
+  target: RuntimeClientTarget,
+  sessionIds?: readonly string[]
+): Promise<NativeChatRestartOffer | null> {
+  const result = await callStructuredAgentSession<HostOfferPayload>(
+    target,
+    'agentSession.restartResumableDismiss',
+    sessionIds ? { sessionIds: [...sessionIds] } : {}
+  )
+  return Array.isArray(result.sessions)
+    ? { candidates: result.sessions, failed: failedFrom(result), listedAt: Date.now() }
+    : null
 }

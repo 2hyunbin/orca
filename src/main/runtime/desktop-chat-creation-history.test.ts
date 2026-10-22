@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -41,4 +41,8 @@ it('treats unreadable history as unknown and never vetoes a create when its writ
     history.recordCreate('ssh', 'agentSession.create', { envelope: { sessionId: 'chat' } })
   ).resolves.toBeUndefined()
   expect(history.sessionIds()).toEqual(['chat'])
+  rmSync(path)
+  mkdirSync(path)
+  await history.recordCreate('ssh', 'agentSession.create', { envelope: { sessionId: 'chat' } })
+  expect(new DesktopChatCreationHistory(path).sessionIds()).toEqual(['chat'])
 })

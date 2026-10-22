@@ -8,7 +8,7 @@ import {
   useNativeChatRestartRun,
   type NativeChatRestartStore
 } from '../native-chat-resume-on-restart-store'
-import { useManagedNativeChatRestartRuntimes } from '../native-chat-restart-runtimes'
+import { useNativeChatRestartRuntimes } from '../native-chat-restart-runtimes'
 import { resumeRunInFlight } from '../native-chat-resume-run'
 import { resumeRunView } from '../native-chat-resume-run-view'
 
@@ -182,7 +182,7 @@ export function NativeChatResumeStatusSegment({
   iconOnly: boolean
 }): React.JSX.Element {
   const enabled = useNativeChatRestartOfferEnabled()
-  const runtimes = useManagedNativeChatRestartRuntimes()
+  const runtimes = useNativeChatRestartRuntimes()
   return (
     <>
       <NativeChatRuntimeResumeStatusSegment

@@ -1,43 +1,71 @@
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { useAppStore } from '../store'
+import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
   createNativeChatRestartStore,
+  localNativeChatRestartStore,
   type NativeChatRestartStore
 } from './native-chat-resume-on-restart-store'
 
 const stores = new Map<string, NativeChatRestartStore>()
-
-function runtimeStore(environmentId: string): NativeChatRestartStore {
-  let store = stores.get(environmentId)
-  if (!store) {
-    store = createNativeChatRestartStore({ kind: 'environment', environmentId })
-    stores.set(environmentId, store)
+const listeners = new Set<() => void>()
+let revision = 0
+const subscribe = (listener: () => void) => {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
   }
-  return store
+}
+const empty: readonly string[] = []
+const emptySnapshot = () => empty
+const noSubscribe = () => () => {}
+
+/** Consumers only subscribe; enrollment and discovery belong to the lifecycle effect. */
+export function useNativeChatTargetRestartResuming(target: RuntimeClientTarget) {
+  const owner = () =>
+    target.kind === 'local' ? localNativeChatRestartStore : stores.get(target.environmentId)
+  const store = useSyncExternalStore(subscribe, owner, owner)
+  return useSyncExternalStore(
+    store?.subscribe ?? noSubscribe,
+    store?.getNativeChatRestartResuming ?? emptySnapshot,
+    emptySnapshot
+  )
 }
 
-export function useManagedNativeChatRestartRuntimes() {
+export function useNativeChatRestartRuntimes() {
   const environments = useAppStore((state) => state.runtimeEnvironments)
   const statuses = useAppStore((state) => state.runtimeStatusByEnvironmentId)
+  useSyncExternalStore(
+    subscribe,
+    () => revision,
+    () => revision
+  )
   useEffect(() => {
-    const managed = new Set(environments.filter((env) => env.orcadDeployment).map((env) => env.id))
+    const enrolled = new Set(environments.map((env) => env.id))
+    let changed = false
     for (const [id, store] of stores) {
-      if (!managed.has(id)) {
-        store._resetNativeChatRestartOffer()
-        store.consumeNativeChatResumeOnRestartDialogRequest()
+      if (!enrolled.has(id)) {
+        store.dispose()
         stores.delete(id)
+        changed = true
       }
     }
     for (const environment of environments) {
-      if (environment.orcadDeployment) {
-        runtimeStore(environment.id).observeRuntimeStatus(statuses.get(environment.id))
+      let store = stores.get(environment.id)
+      if (!store) {
+        store = createNativeChatRestartStore({ kind: 'environment', environmentId: environment.id })
+        stores.set(environment.id, store)
+        changed = true
       }
+      store.observeRuntimeStatus(statuses.get(environment.id))
+    }
+    if (changed) {
+      revision++
+      listeners.forEach((listener) => listener())
     }
   }, [environments, statuses])
-  return environments
-    .filter((environment) => environment.orcadDeployment)
-    .map((environment) => ({
-      environment,
-      store: runtimeStore(environment.id)
-    }))
+  return environments.flatMap((environment) => {
+    const store = stores.get(environment.id)
+    return store ? [{ environment, store }] : []
+  })
 }

@@ -1,3 +1,5 @@
+import { NativeChatResumeRuntimeModal } from './NativeChatResumeRuntimeModal'
+export { NativeChatResumeRuntimeModal } from './NativeChatResumeRuntimeModal'
 import { NativeChatResumeDialogHeader } from './NativeChatResumeDialogHeader'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNativeChatRestartOfferEnabled } from './native-chat-restart-offer-gate'
@@ -27,7 +29,7 @@ import {
   useNativeChatRestartRun,
   type NativeChatRestartStore
 } from './native-chat-resume-on-restart-store'
-import { useManagedNativeChatRestartRuntimes } from './native-chat-restart-runtimes'
+import { useNativeChatRestartRuntimes } from './native-chat-restart-runtimes'
 import { useResumeRunPanel } from './NativeChatResumeRunPanel'
 import { NativeChatResumeAutoNote } from './NativeChatResumeAutoNote'
 import { NativeChatRemoteResumeActions } from './NativeChatRemoteResumeActions'
@@ -70,7 +72,7 @@ function selectedByDefault(failure: ResumeFailure | undefined): boolean {
 
 export function NativeChatResumeOnRestartModal(): React.JSX.Element {
   const enabled = useNativeChatRestartOfferEnabled()
-  const runtimes = useManagedNativeChatRestartRuntimes()
+  const runtimes = useNativeChatRestartRuntimes()
   return (
     <>
       <NativeChatResumeRuntimeModal store={localNativeChatRestartStore} offerEnabled={enabled} />
@@ -86,7 +88,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element {
   )
 }
 
-export function NativeChatResumeRuntimeModal({
+export function NativeChatResumeOccurrenceModal({
   store,
   machineName,
   offerEnabled
@@ -407,7 +409,7 @@ export function NativeChatResumeRuntimeModal({
               resumeButtonRef={resumeButtonRef}
               store={store}
               machineName={machineName ?? ''}
-              rows={rows}
+              chosen={chosen}
               busy={busy}
               resume={(ids) => {
                 consumeNativeChatResumeOnRestartDialogRequest()

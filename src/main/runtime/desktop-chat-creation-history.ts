@@ -9,9 +9,11 @@ export class DesktopChatCreationHistory {
 
   constructor(userDataPath: string) {
     const file = join(userDataPath, 'desktop-chat-creation-history.json')
-    this.writer = new AtomicSnapshotWriter(() => file, { fileMode: 0o600 })
+    this.writer = new AtomicSnapshotWriter(() => file, { fileMode: 0o600, skipUnchanged: true })
     try {
-      const saved: unknown = JSON.parse(readFileSync(file, 'utf8'))
+      const content = readFileSync(file, 'utf8')
+      const saved: unknown = JSON.parse(content)
+      this.writer.primeCommittedContent(content)
       if (saved && typeof saved === 'object') {
         for (const [environmentId, ids] of Object.entries(saved)) {
           if (Array.isArray(ids) && ids.every((id) => typeof id === 'string')) {

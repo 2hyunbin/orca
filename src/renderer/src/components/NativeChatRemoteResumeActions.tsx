@@ -1,12 +1,11 @@
 import { Button } from './ui/button'
 import { translate } from '@/i18n/i18n'
 import type { NativeChatRestartStore } from './native-chat-resume-on-restart-store'
-import type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
 
 export function NativeChatRemoteResumeActions({
   store,
   machineName,
-  rows,
+  chosen,
   busy,
   resume,
   dismiss,
@@ -14,13 +13,13 @@ export function NativeChatRemoteResumeActions({
 }: {
   store: NativeChatRestartStore
   machineName: string
-  rows: readonly ResumeCandidate[]
+  chosen: readonly string[]
   busy: boolean
   resume: (ids: string[]) => void
   dismiss: () => void
   resumeButtonRef: React.Ref<HTMLButtonElement>
 }): React.JSX.Element {
-  const all = rows.map((row) => row.sessionId)
+  const all = [...chosen]
   const startedHere = all.filter(store.startedHere)
   return (
     <>

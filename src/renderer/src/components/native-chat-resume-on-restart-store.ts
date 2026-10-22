@@ -1,3 +1,4 @@
+import { RESTART_READ_RETRY_DELAYS_MS } from './native-chat-remote-restart-offer'
 import { requestNativeChatResumeOnRestartDialog } from './native-chat-resume-on-restart-dialog'
 import { useAppStore } from '../store'
 import { markNativeChatLaunchResumeDecided } from './native-chat-launch-resume-decision'
@@ -48,14 +49,14 @@ export function useNativeChatRestartRun(store = localNativeChatRestartStore) {
 }
 
 let launch: Promise<void> | undefined
-const LAUNCH_READ_RETRY_DELAYS_MS = [100, 250, 500] as const
+
 async function loadLaunchOffer(store: NativeChatRestartStore): Promise<void> {
   // The preference belongs to this launch's request; later saves cannot dispatch another.
   const autoResume = useAppStore.getState().settings?.nativeChatResumeWorkOnRestart === true
   let read = await store.readNativeChatRestartOffer()
   // Host startup can race the renderer. Retry only failed reads, never a confirmed empty result,
   // so a transient startup gap does not strand a durable offer or add steady-state polling.
-  for (const delay of LAUNCH_READ_RETRY_DELAYS_MS) {
+  for (const delay of RESTART_READ_RETRY_DELAYS_MS) {
     if (read.available) {
       break
     }

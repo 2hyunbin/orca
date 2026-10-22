@@ -236,7 +236,7 @@ function registerPassiveCallHandler(getUserDataPath: () => string): void {
       if (isRuntimeEnvironmentManuallyDisconnected(environment.id)) {
         return manuallyDisconnectedResponse(environment)
       }
-      await desktopChatCreationHistory(getUserDataPath()).recordCreate(
+      void desktopChatCreationHistory(getUserDataPath()).recordCreate(
         environment.id,
         args.method,
         args.params
