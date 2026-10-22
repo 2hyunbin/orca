@@ -24,6 +24,8 @@ import { applyProjectGroupDeleteCascade } from './project-group-removal-state'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
+import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
+import { mainCatalogShowsWrite } from '../main-project-catalog-writes'
 import {
   selectProjectGroups,
   selectProjectHostSetups,
@@ -78,6 +80,15 @@ export function createProjectGroupMutationActions(
               ).group
         const ownedGroup = adoptFromEndpoint(target, { kind: 'projectGroup', row: group })
         const ownerHostId = getProjectGroupHostId(ownedGroup)
+        if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+          set({ folderWorkspacePathStatuses: {} })
+          const shown = await mainCatalogShowsWrite(target, (catalog) =>
+            catalog.projectGroups.some((existing) =>
+              projectGroupMatchesOwnerHost(existing, ownedGroup.id, ownerHostId)
+            )
+          )
+          return shown ? ownedGroup : null
+        }
         set((s) => {
           // An overlapping catalog refresh may have already inserted a newer copy.
           if (
@@ -123,6 +134,16 @@ export function createProjectGroupMutationActions(
           return false
         }
         const ownedGroup = adoptFromEndpoint(target, { kind: 'projectGroup', row: updated })
+        if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+          set({ folderWorkspacePathStatuses: {} })
+          return mainCatalogShowsWrite(target, (catalog) =>
+            catalog.projectGroups.some(
+              (group) =>
+                projectGroupMatchesOwnerHost(group, groupId, ownerHostId) &&
+                group.updatedAt >= ownedGroup.updatedAt
+            )
+          )
+        }
         set((s) => ({
           projectGroups: selectProjectGroups(s).map((group) =>
             projectGroupMatchesOwnerHost(group, groupId, ownerHostId) ? ownedGroup : group
@@ -157,6 +178,21 @@ export function createProjectGroupMutationActions(
               ).deleted
         if (!deleted) {
           return false
+        }
+        if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+          // Main's catalog clears the members; only the window's folder rows cascade here.
+          set((s) => {
+            const { folderWorkspaces, folderWorkspacePathStatuses } =
+              applyProjectGroupDeleteCascade(s, groupId, ownerHostId)
+            return { folderWorkspaces, folderWorkspacePathStatuses }
+          })
+          return mainCatalogShowsWrite(
+            target,
+            (catalog) =>
+              !catalog.projectGroups.some((group) =>
+                projectGroupMatchesOwnerHost(group, groupId, ownerHostId)
+              )
+          )
         }
         set((s) => applyProjectGroupDeleteCascade(s, groupId, ownerHostId))
         return true
@@ -299,7 +335,21 @@ export function createProjectGroupMutationActions(
         }
         const ownedMoved = adoptFromEndpoint(target, { kind: 'repo', row: moved })
         const movedHostId = getRepoExecutionHostId(ownedMoved)
-        set((s) => {
+        if (ORCA_SIDEBAR_INPUTS_IS_MAIN) {
+          set({ folderWorkspacePathStatuses: {} })
+          const shown = await mainCatalogShowsWrite(target, (catalog) =>
+            catalog.repos.some(
+              (candidate) =>
+                isSameRepoRow(candidate, ownedMoved) &&
+                (candidate.projectGroupId ?? null) === (ownedMoved.projectGroupId ?? null) &&
+                candidate.projectGroupOrder === ownedMoved.projectGroupOrder
+            )
+          )
+          if (!shown) {
+            return false
+          }
+        } else {
+          set((s) => {
           const nextRepos = selectRepos(s).map((candidate) =>
             isSameRepoRow(candidate, repo) ? ownedMoved : candidate
           )
@@ -316,6 +366,7 @@ export function createProjectGroupMutationActions(
             folderWorkspacePathStatuses: {}
           }
         })
+        }
         // Why: hosts store an unknown group id as "no group" and still return the row (#13699).
         if (groupId && (moved.projectGroupId ?? null) !== groupId) {
           notifyProjectGroupOnOtherHost()

@@ -122,16 +122,29 @@ function listOf<Row>(keys: readonly string[], parse: (raw: unknown) => Row | nul
   return keys.flatMap((key) => parse(rawDomain?.get(key)) ?? [])
 }
 
+// Unchanged rows keep the list's identity, so a reader's memo survives another field's change.
+function sameRowsOr<Row>(previous: Row[] | undefined, next: Row[]): Row[] {
+  return previous?.length === next.length && previous.every((row, index) => row === next[index])
+    ? previous
+    : next
+}
+
 function rebuild(): void {
   const order = rawDomain ? OrderSchema.safeParse(rawDomain.get('order')) : null
   if (!order?.success) {
     return
   }
   catalog = {
-    repos: listOf(order.data.repos, parsers.repos).map(withIcon),
-    projectGroups: listOf(order.data.projectGroups, parsers.projectGroups),
-    projects: listOf(order.data.projects, parsers.projects),
-    projectHostSetups: listOf(order.data.projectHostSetups, parsers.projectHostSetups)
+    repos: sameRowsOr(catalog?.repos, listOf(order.data.repos, parsers.repos).map(withIcon)),
+    projectGroups: sameRowsOr(
+      catalog?.projectGroups,
+      listOf(order.data.projectGroups, parsers.projectGroups)
+    ),
+    projects: sameRowsOr(catalog?.projects, listOf(order.data.projects, parsers.projects)),
+    projectHostSetups: sameRowsOr(
+      catalog?.projectHostSetups,
+      listOf(order.data.projectHostSetups, parsers.projectHostSetups)
+    )
   }
   listeners.forEach((listener) => listener())
 }
