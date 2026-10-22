@@ -92,6 +92,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithTerminalInterfaces {
         scan: () => this.scanResolvedWorktreeRepos(),
         join: (scans) => this.joinResolvedWorktreeScans(scans),
         visible: (snapshot) => this.visibleResolvedWorktreeSnapshot(snapshot),
+        lifecycle: this.workspaceLifecycle,
         onClientEvent: (listener, options) => this.onClientEvent(listener, options)
       })
     : null
@@ -102,7 +103,7 @@ class OrcaRuntimeService extends OrcaRuntimeWithTerminalInterfaces {
           sidebarInputsFeedDomains({
             facts: requireSwitchedOn(this.sidebarFacts),
             pairedServerRows: requireSwitchedOn(this.pairedServerRows),
-            workspaceCreations: requireSwitchedOn(this.workspaceCreations),
+            workspaceLifecycle: requireSwitchedOn(this.workspaceLifecycle),
             workspaceRows: requireSwitchedOn(this.workspaceRows),
             repoIcons: requireSwitchedOn(this.repoIconDataUrls),
             store: () => this.store,

@@ -4,6 +4,8 @@ import type { StructuredAgentId } from '../../../src/shared/agent-session-provid
 import type { DiffComment } from '../../../src/shared/diff-comment-types'
 import type { TuiAgent } from '../../../src/shared/tui-agent'
 import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
+import type { RuntimeMobileSessionAgentTabStatus } from '../../../src/shared/runtime-types'
+import type { MirroredEvidenceReceipt } from '../../../src/shared/agent-status-observation'
 import type { MobileBrowserTab } from '../browser/MobileBrowserPane'
 import type { MobileTerminalTheme } from '../terminal/terminal-webview-contract'
 import type { MobileDiffLine } from './mobile-diff-lines'
@@ -40,6 +42,7 @@ export type MobileSessionTab =
       title: string
       sessionId: string
       agent: StructuredAgentId
+      chatStatus?: RuntimeMobileSessionAgentTabStatus & MirroredEvidenceReceipt
       isActive: boolean
     }
   | {
