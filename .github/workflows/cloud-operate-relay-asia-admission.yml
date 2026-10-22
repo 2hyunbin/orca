@@ -193,11 +193,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true
 
-      - uses: pnpm/setup@v2
+      - uses: ./.github/actions/setup-pnpm
         with:
           package-json-file: cloud/package.json
-          install: false
         if: ${{ steps.inputs.outputs.canary == 'true' }}
 
       - name: Install exact canary dependencies
@@ -280,7 +280,7 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
         if: ${{ inputs.mode == 'configure' }}
         with:
-          terraform_version: 1.15.8
+          terraform_version: 1.17.0
           terraform_wrapper: false
 
       - name: Run the exact generation-bound admission operation
