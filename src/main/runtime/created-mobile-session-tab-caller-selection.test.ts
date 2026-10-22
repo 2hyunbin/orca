@@ -153,3 +153,23 @@ it.each(['chat', 'terminal'] as const)(
     }
   }
 )
+
+it('preserves a surface selected while initialization is pending', async () => {
+  const { runtime } = pairedRuntime()
+  const launch = beginCreatedWorkspaceLaunch(runtime, 'claude')
+  launch.onWorkspaceCreated(WT)
+  const picked = await createPane(runtime)
+  await runtime.publishStructuredAgentSessionTab({
+    workspaceId: WT,
+    sessionId: 'late-initial',
+    agent: 'claude',
+    activate: true
+  })
+  await runtime.createTerminal(`id:${WT}`, {
+    command: 'claude',
+    launchAgent: 'claude',
+    presentation: 'background'
+  })
+  launch.release()
+  expect((await runtime.listMobileSessionTabs(`id:${WT}`)).activeTabId).toBe(picked.id)
+})

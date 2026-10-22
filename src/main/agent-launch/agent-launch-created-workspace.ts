@@ -70,8 +70,7 @@ export function initialChatSelection<T extends { workspaceId: string; activate: 
   snapshots: ReadonlyMap<string, Pick<RuntimeMobileSessionTabsResult, 'tabs' | 'activeTabId'>>
 ): T {
   const snapshot = snapshots.get(input.workspaceId)
-  return readCreatedWorkspaceLaunch(runtime, input.workspaceId) &&
-    !snapshot?.tabs.some((tab) => tab.id === snapshot.activeTabId)
-    ? { ...input, activate: true }
+  return readCreatedWorkspaceLaunch(runtime, input.workspaceId)
+    ? { ...input, activate: !snapshot?.tabs.some((tab) => tab.id === snapshot.activeTabId) }
     : input
 }

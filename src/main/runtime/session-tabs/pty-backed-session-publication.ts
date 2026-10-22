@@ -57,7 +57,7 @@ export abstract class OrcaRuntimeWithPublishPtyBackedMobileSessionTerminal exten
       return
     }
     if (pty.launchAgent && readCreatedWorkspaceLaunch(this, worktreeId)) {
-      args = { ...args, selectIfNoActiveTab: true }
+      args = { ...args, activate: false, selectIfNoActiveTab: true }
     }
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
     const ownerAgent = pty.launchAgent ?? pty.foregroundAgent
