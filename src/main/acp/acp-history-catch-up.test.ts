@@ -2,7 +2,7 @@
 // OpenCode 2.0.14 and Grok 1.0.62 recordings: once, in order, under one divider, and never a turn
 // the chat already holds.
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   agentJournalSubmissionKey,
   parseAgentJournalItemKey
@@ -61,6 +61,7 @@ function loadReplay(frames: AcpFixtureFrame[], process: string) {
 
 async function setup(dialect: AcpDialect, identity: AcpHistoryTurnIdentity) {
   const fixture = await openAcpFixtureRig(dialect)
+  const warn = vi.fn()
   const catchUp = (frames: ReturnType<typeof loadReplay>) =>
     catchUpAcpHistory({
       frames,
@@ -70,9 +71,10 @@ async function setup(dialect: AcpDialect, identity: AcpHistoryTurnIdentity) {
       agent: AGENT,
       providerSessionId: NAMESPACE,
       dialect,
+      logger: { warn, error: vi.fn() },
       assertCurrent: () => {}
     })
-  return { fixture, catchUp }
+  return { fixture, catchUp, warn }
 }
 
 function userTexts(rows: AgentJournalRenderItem[]): string[] {
@@ -435,6 +437,245 @@ describe('ACP history catch-up', () => {
     expect(journal.receiptFor('queued')).toBeNull()
     expect(journal.submission('queued')?.dispatchState).toBe('pending')
     expect(journal.submission('queued')?.handedOverAt).toBeUndefined()
+  })
+  it.each(['interleaved', 'adjacent', 'hidden-root', 'hidden-later'] as const)(
+    'keeps Grok root and later messages in one execution across restart: %s',
+    async (scenario) => {
+      const { fixture, catchUp } = await setup(GROK_ACP_DIALECT, 'prompt-id')
+      const { rig } = fixture
+      const user = (
+        eventId: string,
+        text: string,
+        meta: Record<string, unknown> = {},
+        displayText?: string
+      ) => ({
+        method: 'session/update',
+        params: {
+          sessionId: NAMESPACE,
+          _meta: { eventId, isReplay: true },
+          update: {
+            sessionUpdate: 'user_message_chunk',
+            _meta: meta,
+            content: {
+              type: 'text',
+              text,
+              ...(displayText === undefined ? {} : { _meta: { displayText } })
+            }
+          }
+        }
+      })
+      const output = (text: string) => ({
+        method: 'session/update',
+        params: {
+          sessionId: NAMESPACE,
+          _meta: { promptId: 'outside', isReplay: true },
+          update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } }
+        }
+      })
+      const root = user('root-event', 'root', {
+        promptIndex: 0,
+        ...(scenario === 'hidden-root' ? { hideFromScrollback: true } : {})
+      })
+      const first = user(
+        'interjection-event',
+        '<user_query>model envelope</user_query>',
+        {
+          interjection: true,
+          ...(scenario === 'hidden-later' ? { hideFromScrollback: true } : {})
+        },
+        'typed followup'
+      )
+      const image = {
+        ...first,
+        params: {
+          ...first.params,
+          update: {
+            ...first.params.update,
+            content: { type: 'image', mimeType: 'image/png', data: 'aW1hZ2U=' }
+          }
+        }
+      }
+      const second = user('permission-event', 'visible permission followup')
+      const rootBlocks =
+        scenario === 'interleaved'
+          ? [
+              root,
+              {
+                ...image,
+                params: {
+                  ...image.params,
+                  _meta: { eventId: 'root-image-event', isReplay: true },
+                  update: { ...image.params.update, _meta: { promptIndex: 0 } }
+                }
+              }
+            ]
+          : [root]
+      if (scenario === 'interleaved') {
+        await catchUp([...rootBlocks, output('A')])
+      }
+      const before = await rig.rows()
+      const submissions = rig.journal.submissions()
+      await fixture.restart()
+      const replay = [
+        ...rootBlocks,
+        ...(scenario === 'adjacent' ? [] : [output('A')]),
+        first,
+        image,
+        ...(scenario === 'adjacent' ? [] : [output('B')]),
+        second,
+        output('C'),
+        {
+          method: '_x.ai/session/update',
+          params: {
+            sessionId: NAMESPACE,
+            update: {
+              sessionUpdate: 'turn_completed',
+              prompt_id: 'outside',
+              stop_reason: 'end_turn'
+            }
+          }
+        }
+      ]
+      await catchUp(replay)
+      const rows = await rig.rows()
+      const messages = rows.flatMap((row) => (row.body.kind === 'message' ? [row] : []))
+      expect(messages.map((row) => row.body)).toMatchObject([
+        {
+          role: 'user',
+          blocks:
+            scenario === 'hidden-root'
+              ? []
+              : [
+                  { text: 'root' },
+                  ...(scenario === 'interleaved'
+                    ? [{ type: 'image-ref', url: 'data:image/png;base64,aW1hZ2U=' }]
+                    : [])
+                ]
+        },
+        ...(scenario === 'adjacent' ? [] : [{ role: 'assistant', blocks: [{ text: 'A' }] }]),
+        {
+          role: 'user',
+          blocks:
+            scenario === 'hidden-later'
+              ? []
+              : [
+                  { text: 'typed followup' },
+                  { type: 'image-ref', url: 'data:image/png;base64,aW1hZ2U=' }
+                ]
+        },
+        ...(scenario === 'adjacent' ? [] : [{ role: 'assistant', blocks: [{ text: 'B' }] }]),
+        { role: 'user', blocks: [{ text: 'visible permission followup' }] },
+        { role: 'assistant', blocks: [{ text: 'C' }] }
+      ])
+      const lifecycle = rows.filter((row) => readAgentJournalTurn(row.body))
+      expect(lifecycle).toHaveLength(1)
+      const opener = messages[0]!
+      expect(opener.itemId).toBe(providerItemId('item', 'user:outside', { thread: NAMESPACE }))
+      const laterUsers = messages
+        .filter((row) => row.body.kind === 'message' && row.body.role === 'user')
+        .slice(1)
+      expect(laterUsers.map((row) => row.itemId)).toEqual(
+        ['interjection-event', 'permission-event'].map((id) =>
+          providerItemId('item', `user-message:${JSON.stringify(['outside', id])}`, {
+            thread: NAMESPACE
+          })
+        )
+      )
+      expect(readAgentJournalTurn(lifecycle[0]!.body)?.userItemId).toBe(opener.itemId)
+      expect(opener.turnScope).toEqual({ kind: 'turn', turnItemId: lifecycle[0]!.itemId })
+      expect(
+        messages.every((row) =>
+          isHistoricalProviderTimelineItem(row, (key) => rig.journal.item(key))
+        )
+      ).toBe(true)
+      for (const held of before) {
+        const current = rows.find((row) => row.itemId === held.itemId)!
+        expect(current.sequence).toBe(held.sequence)
+        expect(current.turnScope).toEqual(held.turnScope)
+        if (readAgentJournalTurn(held.body)) {
+          expect(current.body).toMatchObject({ state: 'completed', outcome: 'success' })
+          expect(current.revision).toBe(held.revision + 1)
+        } else {
+          expect(current).toEqual(held)
+        }
+      }
+      expect(dividers(rows)).toHaveLength(0)
+      expect(rig.journal.submissions()).toEqual(submissions)
+      await catchUp(replay)
+      expect(await rig.rows()).toEqual(rows)
+    }
+  )
+  it('skips unsupported or contradictory Grok source atomically and permits the next load', async () => {
+    const { fixture, catchUp, warn } = await setup(GROK_ACP_DIALECT, 'prompt-id')
+    const root = replayUpdate('user_message_chunk', {
+      content: { type: 'text', text: 'root' },
+      _meta: { promptIndex: 0 }
+    })
+    const output = {
+      method: 'session/update',
+      params: {
+        sessionId: NAMESPACE,
+        _meta: { promptId: 'outside' },
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'A' } }
+      }
+    }
+    const end = replayUpdate('turn_completed', { prompt_id: 'outside', stop_reason: 'end_turn' })
+    const later = userReplay('later', 'followup')
+    const snapshots = [
+      [root, output, later],
+      [
+        root,
+        output,
+        replayUpdate('user_message_chunk', {
+          content: { type: 'text', text: '/help' },
+          _meta: { hostTurn: true }
+        })
+      ],
+      [
+        root,
+        output,
+        replayUpdate('turn_completed', { prompt_id: 'conflict', stop_reason: 'end_turn' })
+      ],
+      [root, output, end, later]
+    ]
+    for (const frames of snapshots) {
+      await catchUp(frames)
+      expect(await fixture.rig.rows()).toEqual([])
+    }
+    expect(warn).toHaveBeenCalledTimes(snapshots.length)
+    expect(warn.mock.calls.every(([, fields]) => fields.reason === 'import-skipped')).toBe(true)
+    await catchUp([root, output])
+    expect(userTexts(await fixture.rig.rows())).toEqual(['root'])
+  })
+
+  it('coalesces OpenCode root text and attachments under the provider message id', async () => {
+    const { fixture, catchUp } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
+    const frames = [
+      userReplay('root', 'read this'),
+      replayUpdate('user_message_chunk', {
+        messageId: 'root',
+        content: { type: 'image', mimeType: 'image/png', data: 'aW1hZ2U=' }
+      }),
+      answerReplay('answer')
+    ]
+    await catchUp(frames)
+    const rows = await fixture.rig.rows()
+    expect(
+      rows
+        .filter((row) => row.body.kind === 'message' && row.body.role === 'user')
+        .map((row) => row.body)
+    ).toEqual([
+      {
+        kind: 'message',
+        role: 'user',
+        blocks: [
+          { type: 'text', text: 'read this' },
+          { type: 'image-ref', url: 'data:image/png;base64,aW1hZ2U=' }
+        ]
+      }
+    ])
+    await catchUp(frames)
+    expect(await fixture.rig.rows()).toEqual(rows)
   })
   it.each(['refused', 'direct', 'queued', 'card', 'empty'] as const)(
     'places the divider from visible retained content with a %s submission',

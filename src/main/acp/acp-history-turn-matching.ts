@@ -178,7 +178,7 @@ export function matchAcpHistoryTurns(
       if (kind.has(id) || candidate.items.some((item) => acpHistoryHasOutput(item.body))) {
         continue
       }
-      const text = candidate.source.textOnly ? promptText(candidate.source.user) : null
+      const text = candidate.source.textOnly ? promptText(candidate.source.user.blocks) : null
       if (text === null) {
         continue
       }

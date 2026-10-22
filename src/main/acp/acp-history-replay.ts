@@ -37,14 +37,20 @@ export class AcpLoadHistory {
 /** Where a replayed turn's id comes from. */
 export type AcpHistoryTurnIdentity = 'prompt-id' | 'user-message-id'
 
+type AcpHistoryUser = {
+  blocks: NativeChatBlock[]
+  boundary: AcpLoadHistoryFrame
+  eventId?: string
+}
+
 export type AcpHistoryTurn = {
   /** The agent's id for the turn; null when its replay names none. */
   turn: string | null
-  /** The person's message, in the order its chunks came. */
-  user: NativeChatBlock[]
+  /** The execution's root message, in the order its chunks came. */
+  user: AcpHistoryUser
   textOnly: boolean
-  /** The turn's own frames after the person's message, no longer marked as replay. */
-  frames: AcpLoadHistoryFrame[]
+  /** Later messages and output in source order, no longer marked as replay. */
+  observations: (AcpHistoryUser | AcpLoadHistoryFrame)[]
   /** Every message id the replay gave this turn (OpenCode): the person's and the agent's. */
   messageIds: string[]
   /** When the agent recorded the person's message (Grok), on the agent host's clock. */
@@ -62,14 +68,22 @@ const frameSchema = z.looseObject({
     messageId: z.string().optional(),
     prompt_id: z.string().optional(),
     content: z.unknown().optional(),
-    _meta: z.looseObject({ promptIndex: z.number().optional() }).optional()
+    _meta: z.looseObject({ promptIndex: z.number().int().nonnegative().optional() }).optional()
   }),
   _meta: z
-    .looseObject({ promptId: z.string().optional(), agentTimestampMs: z.number().optional() })
+    .looseObject({
+      promptId: z.string().optional(),
+      eventId: z.string().min(1).optional(),
+      agentTimestampMs: z.number().optional()
+    })
     .optional()
 })
 const contentSchema = z.discriminatedUnion('type', [
-  z.looseObject({ type: z.literal('text'), text: z.string() }),
+  z.looseObject({
+    type: z.literal('text'),
+    text: z.string(),
+    _meta: z.looseObject({ displayText: z.unknown().optional() }).optional()
+  }),
   z.looseObject({ type: z.literal('image'), mimeType: z.string(), data: z.string() }),
   z.looseObject({ type: z.literal('resource_link'), uri: z.string(), name: z.string().optional() }),
   z.looseObject({
@@ -84,7 +98,10 @@ const REASONING_SUFFIX = /:reasoning:\d+$/
 function userBlock(block: z.infer<typeof contentSchema>): NativeChatBlock {
   switch (block.type) {
     case 'text':
-      return { type: 'text', text: block.text }
+      return {
+        type: 'text',
+        text: typeof block._meta?.displayText === 'string' ? block._meta.displayText : block.text
+      }
     case 'image':
       return { type: 'image-ref', url: `data:${block.mimeType};base64,${block.data}` }
     case 'resource_link':
@@ -111,8 +128,13 @@ export function acpHistoryTurns(
   identity: AcpHistoryTurnIdentity,
   check: () => void = () => {}
 ): AcpHistoryTurn[] {
-  const turns: (AcpHistoryTurn & { userKey: string | number | undefined })[] = []
-  let current: (AcpHistoryTurn & { userKey: string | number | undefined }) | null = null
+  const turns: AcpHistoryTurn[] = []
+  let current: AcpHistoryTurn | undefined
+  let lastUser: AcpHistoryUser | undefined
+  let userKey: string | number | undefined
+  let inUser = false
+  let marked = false
+  let ended = false
   const nameTurn = (turn: AcpHistoryTurn, id: string | undefined) => {
     if (id === undefined || id === turn.turn) {
       return
@@ -126,41 +148,77 @@ export function acpHistoryTurns(
     check()
     const parsed = frameSchema.safeParse(frame.params)
     if (!parsed.success) {
-      current?.frames.push(unmarked(frame))
-      continue
+      throw new Error('unrecognised-history-frame')
     }
     const { update, _meta: meta } = parsed.data
     if (update.sessionUpdate === 'user_message_chunk') {
-      const userKey = identity === 'user-message-id' ? update.messageId : update._meta?.promptIndex
-      if (!current || current.frames.length > 0 || current.userKey !== userKey) {
+      const key = identity === 'user-message-id' ? update.messageId : update._meta?.promptIndex
+      marked ||= update._meta?.promptIndex !== undefined
+      // After marked roots appear, unmarked users stay inside their execution.
+      const root =
+        identity === 'user-message-id'
+          ? !inUser || userKey !== key
+          : update._meta?.interjection !== true &&
+            (!marked || key !== undefined) &&
+            (!inUser || userKey !== key)
+      if (update._meta?.hostTurn === true || (identity === 'user-message-id' && !key)) {
+        throw new Error('unattributed-history-user')
+      }
+      if (root) {
         current = {
           turn: null,
-          user: [],
+          user: { blocks: [], boundary: unmarked(frame) },
           textOnly: true,
-          frames: [],
+          observations: [],
           messageIds: [],
-          startedAt: meta?.agentTimestampMs ?? null,
-          userKey
+          startedAt: meta?.agentTimestampMs ?? null
         }
         turns.push(current)
+        lastUser = current.user
+        ended = false
         if (identity === 'user-message-id') {
           nameTurn(current, update.messageId)
         }
+      } else if (!current || ended) {
+        throw new Error('unattributed-history-user')
+      } else if (
+        lastUser !== current.user ||
+        !inUser ||
+        userKey !== key ||
+        update._meta?.interjection === true
+      ) {
+        if (!meta?.eventId) {
+          throw new Error('unkeyed-history-user')
+        }
+        if (!inUser || lastUser?.eventId !== meta.eventId) {
+          lastUser = { blocks: [], boundary: unmarked(frame), eventId: meta.eventId }
+          current.observations.push(lastUser)
+        }
       }
+      if (!current || !lastUser) {
+        throw new Error('unattributed-history-user')
+      }
+      inUser = true
+      userKey = key
       const raw = contentSchema.safeParse(update.content)
-      if (!raw.success || raw.data.type !== 'text') {
+      if (!raw.success) {
+        throw new Error('unrecognised-history-user-content')
+      }
+      const hidden = update._meta?.hideFromScrollback === true
+      if (lastUser === current.user ? raw.data.type !== 'text' || hidden : !hidden) {
         current.textOnly = false
       }
-      const block = raw.success ? userBlock(raw.data) : null
-      if (block) {
-        current.user.push(block)
+      if (!hidden) {
+        lastUser.blocks.push(userBlock(raw.data))
       }
     } else if (current) {
-      current.frames.push(unmarked(frame))
+      inUser = false
+      current.observations.push(unmarked(frame))
       if (identity === 'prompt-id') {
         nameTurn(current, meta?.promptId)
         if (update.sessionUpdate === 'turn_completed') {
           nameTurn(current, update.prompt_id)
+          ended = true
         }
       }
     } else {
@@ -173,7 +231,10 @@ export function acpHistoryTurns(
       }
     }
   }
-  return turns.map(({ userKey: _userKey, ...turn }) => turn)
+  if (turns.some((turn) => turn.turn === null)) {
+    throw new Error('unattributed-history-turn')
+  }
+  return turns
 }
 
 export function acpHistoryFrameTime(frame: AcpLoadHistoryFrame): number | null {

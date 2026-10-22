@@ -65,17 +65,23 @@ export function translateHistoryTurn(
   }
   try {
     apply(translator.openHistoryTurn(turn.turn, at))
-    apply([
-      {
-        type: 'item.update',
-        item: `user:${turn.turn}`,
-        body: { kind: 'message', role: 'user', blocks: turn.user },
-        join: { thread: scope.providerSessionId, turn: turn.turn }
-      }
-    ])
-    for (const frame of turn.frames) {
+    for (const observation of [turn.user, ...turn.observations]) {
       check()
+      const frame = 'blocks' in observation ? observation.boundary : observation
       apply(translator.notification(frame.method, frame.params, acpHistoryFrameTime(frame) ?? at))
+      if ('blocks' in observation) {
+        apply([
+          {
+            type: 'item.update',
+            item:
+              observation === turn.user
+                ? `user:${turn.turn}`
+                : `user-message:${JSON.stringify([turn.turn, observation.eventId])}`,
+            body: { kind: 'message', role: 'user', blocks: observation.blocks },
+            join: { thread: scope.providerSessionId, turn: turn.turn }
+          }
+        ])
+      }
     }
     assembler.flush()
     const created = overlay.created()
