@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { sendTerminalLiveControlAfterPendingFlush } from './terminal-live-control-send-order'
 import {
   isTerminalLiveInputWithinByteLimit,
@@ -212,6 +212,59 @@ describe('terminal live mirror send queue', () => {
 
     // Then
     expect(state.current).toBeNull()
+  })
+
+  it('cancels flush waiters before the retired transport acknowledges', async () => {
+    const state = createTerminalLivePendingFlushState()
+    let releaseRetired = (_sent: boolean): void => {}
+    let releaseFresh = (_sent: boolean): void => {}
+    const retired = queueTerminalLiveMirrorSend(
+      state,
+      'retired',
+      'old',
+      () =>
+        new Promise<boolean>((resolve) => {
+          releaseRetired = resolve
+        })
+    )
+    const controlBytes: string[] = []
+    let controlResult: boolean | null = null
+    const control = sendTerminalLiveControlAfterPendingFlush(
+      () => waitForTerminalLivePendingFlush(state),
+      async () => {
+        controlBytes.push('enter')
+        return true
+      }
+    ).then((sent) => {
+      controlResult = sent
+    })
+
+    cancelTerminalLivePendingFlush(state)
+    const fresh = queueTerminalLiveMirrorSend(
+      state,
+      'fresh',
+      'new',
+      () =>
+        new Promise<boolean>((resolve) => {
+          releaseFresh = resolve
+        })
+    )
+    const freshBarrier = waitForTerminalLivePendingFlush(state)
+    try {
+      await vi.waitFor(() => expect(controlResult).toBe(false))
+      expect(controlBytes).toEqual([])
+      await expect(retired).resolves.toBe(false)
+      releaseRetired(true)
+      await Promise.resolve()
+      expect(state.current).toBe(freshBarrier)
+      cancelTerminalLivePendingFlush(state)
+      await expect(freshBarrier).resolves.toBe(false)
+      await expect(fresh).resolves.toBe(false)
+    } finally {
+      releaseRetired(true)
+      releaseFresh(true)
+      await control
+    }
   })
 
   it('Given queued input When the queue is cancelled Then unsent input is dropped', async () => {
