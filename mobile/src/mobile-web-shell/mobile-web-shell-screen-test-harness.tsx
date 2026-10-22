@@ -2,6 +2,11 @@ import { createElement, type ComponentType, type ReactElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { vi, type Mock } from 'vitest'
 import type { FakeRpcClient } from './bridge-host-test-fakes'
+import {
+  createDownloadProgressFeed,
+  downloadFraction,
+  type PublishedDownloadProgressFeed
+} from './download-progress-feed'
 import type {
   MobileWebShellSessionState,
   MobileWebShellUpdateNotice
@@ -39,6 +44,8 @@ export type ScreenDependencies = {
   /** Whether the view refuses what it is handed, which is a page the post never reached. */
   postFails: boolean
   state: MobileWebShellSessionState
+  /** Moved with every `fetching` state a render is handed, as the hook moves it on dispatch. */
+  downloadProgress: PublishedDownloadProgressFeed
   /** Non-null when the generation on screen is a fallback from an update the shell refused. */
   updateNotice: MobileWebShellUpdateNotice | null
   /** What the session reducer says about the page's handshake; true only for the fence's case. */
@@ -104,6 +111,7 @@ export function createScreenDependencies(): ScreenDependencies {
     posted: [],
     postFails: false,
     state: { kind: 'checking' },
+    downloadProgress: createDownloadProgressFeed(),
     updateNotice: null,
     pageReady: false,
     pageFrame: 'pending',
@@ -133,6 +141,7 @@ export function resetScreenDependencies(dependencies: ScreenDependencies): void 
   dependencies.reportPagePainted.mockReset()
   dependencies.snapshotUnreadable = false
   dependencies.storageRefreshes = 0
+  dependencies.downloadProgress = createDownloadProgressFeed()
   dependencies.lifecycle.length = 0
   dependencies.viewRenders = 0
   dependencies.posted.length = 0
@@ -200,12 +209,19 @@ function element(Screen: ScreenComponent): ReactElement {
   })
 }
 
+function setScreenState(dependencies: ScreenDependencies, state: MobileWebShellSessionState): void {
+  dependencies.state = state
+  if (state.kind === 'fetching') {
+    dependencies.downloadProgress.publish(downloadFraction(state.receivedBytes, state.totalBytes))
+  }
+}
+
 export async function renderScreen(
   Screen: ScreenComponent,
   dependencies: ScreenDependencies,
   state: MobileWebShellSessionState
 ): Promise<ReactTestRenderer> {
-  dependencies.state = state
+  setScreenState(dependencies, state)
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
   await act(async () => {
     rendered.tree = create(element(Screen))
@@ -223,7 +239,7 @@ export async function updateScreen(
   tree: ReactTestRenderer,
   state: MobileWebShellSessionState
 ): Promise<void> {
-  dependencies.state = state
+  setScreenState(dependencies, state)
   await act(async () => {
     tree.update(element(Screen))
   })

@@ -147,6 +147,7 @@ export function MobileWebShellScreen({
   const { droppedBinaryFrames, reportDroppedBinaryFrames } = useMobileWebShellDroppedFrames()
   const {
     state,
+    downloadProgress,
     pageRoutes,
     pageRouteGrants,
     routeGrants,
@@ -314,7 +315,7 @@ export function MobileWebShellScreen({
     sendBack: bridge.sendBack,
     setOptions: navigation.setOptions
   })
-  useReportedShellOverlayLoad(onOverlayLoad, state, pageFrame)
+  useReportedShellOverlayLoad(onOverlayLoad, state, pageFrame, downloadProgress)
 
   // A profile read that rejected never becomes a host, so the session would otherwise sit in
   // `ready` behind an un-hidden view with nothing serving it and the page asking forever.
@@ -359,7 +360,11 @@ export function MobileWebShellScreen({
   if (state.kind === 'fetching') {
     return (
       <Centered>
-        <ShellDownloadProgress state={state} host={snapshot?.host ?? null} />
+        <ShellDownloadProgress
+          state={state}
+          feed={downloadProgress}
+          host={snapshot?.host ?? null}
+        />
       </Centered>
     )
   }

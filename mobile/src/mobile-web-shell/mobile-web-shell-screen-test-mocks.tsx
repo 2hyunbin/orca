@@ -9,16 +9,26 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
   return {
     'react-native': () => ({
       ActivityIndicator: 'ActivityIndicator',
-      Easing: { in: (fn: unknown) => fn, quad: 'quad' },
-      // Enough of it for the cover to mount, fade and unmount. What the fade looks like is not this
-      // test's business; that the cover is up until the page paints is, and that is the `visible` prop.
+      AccessibilityInfo: {
+        isReduceMotionEnabled: () => Promise.resolve(false),
+        addEventListener: () => ({ remove: () => {} })
+      },
+      Easing: { in: (fn: unknown) => fn, out: (fn: unknown) => fn, quad: 'quad' },
+      // Enough of it for the cover to mount, fade and unmount, and for the download bar's fill to be
+      // read. An animation lands at once: what the motion looks like is not this test's business.
       Animated: {
         View: 'Animated.View',
         Value: class {
-          setValue(): void {}
+          constructor(public value: number) {}
+          setValue(value: number): void {
+            this.value = value
+          }
         },
-        timing: () => ({
-          start: (done?: (result: { finished: boolean }) => void) => done?.({ finished: true }),
+        timing: (value: { setValue: (next: number) => void }, config: { toValue: number }) => ({
+          start: (done?: (result: { finished: boolean }) => void) => {
+            value.setValue(config.toValue)
+            done?.({ finished: true })
+          },
           stop: () => {}
         })
       },
@@ -172,6 +182,7 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
     './use-mobile-web-shell-session': () => ({
       useMobileWebShellSession: () => ({
         state: dependencies.state,
+        downloadProgress: dependencies.downloadProgress,
         pageRoutes: dependencies.pageRoutes,
         routeGrants: dependencies.routeGrants,
         updateNotice: dependencies.updateNotice,
