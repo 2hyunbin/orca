@@ -6,6 +6,7 @@ import {
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import { OPENCODE_ACP_DIALECT } from './acp-dialects/opencode-dialect'
 import { AcpTimelineTranslator } from './acp-timeline-translator'
+import { AcpAgentError } from './acp-errors'
 
 afterEach(closeProviderTimelineRigs)
 
@@ -38,6 +39,64 @@ const bashStart = {
 }
 
 describe('OpenCode over ACP', () => {
+  it.each([
+    { errorName: 'provider.quota' },
+    { errorName: 'provider.rate-limit', retryAfterMs: 60_000 }
+  ])('shows a usage-limit row for $errorName prompt failures', async (data) => {
+    const { rig, translator, apply } = await openCodeRig()
+    const message = 'Internal error: Rate limit exceeded. Please try again later.'
+    apply(
+      translator.promptFailed(
+        'send-1',
+        new AcpAgentError(-32603, message, {
+          service: 'session',
+          ...data
+        }),
+        1001
+      )
+    )
+    const statuses = (await rig.rows()).filter((row) => row.body.kind === 'status')
+    expect(statuses.map((row) => row.body)).toEqual([
+      expect.objectContaining({
+        kind: 'status',
+        tone: 'warning',
+        failure: {
+          kind: 'usageLimitReached',
+          detail: { text: message, audience: 'person' },
+          ...('retryAfterMs' in data ? { usageLimit: { resetsAt: 61_001 } } : {})
+        }
+      })
+    ])
+    expect((await rig.turns())[0]?.outcome).toBe('failure')
+  })
+
+  it.each([
+    { status: 402, message: 'Request rejected' },
+    { message: 'Payment Required' },
+    { message: 'Insufficient balance or no resource package. Please recharge.' },
+    { message: 'Credit limit exceeded.' },
+    { message: 'Upstream request failed: Insufficient account funds' },
+    { message: 'Upstream request failed: Account invoice is overdue' }
+  ])('keeps a billing quota error generic: $message', async ({ message: detail, ...data }) => {
+    const { rig, translator, apply } = await openCodeRig()
+    const message = `Internal error: ${detail}`
+    apply(
+      translator.promptFailed(
+        'send-1',
+        new AcpAgentError(-32603, message, {
+          service: 'session',
+          errorName: 'provider.quota',
+          ...data
+        }),
+        1001
+      )
+    )
+    expect(
+      (await rig.rows()).filter((row) => row.body.kind === 'status').map((row) => row.body)
+    ).toEqual([{ kind: 'status', tone: 'error', text: message }])
+    expect((await rig.turns())[0]?.outcome).toBe('failure')
+  })
+
   it("reads a shell tool's exit code and output from OpenCode's metadata", async () => {
     const { rig, update } = await openCodeRig()
     update(bashStart, 1001)

@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { usageLimitResetsAt } from '../../../shared/agent-session-usage-limit'
+import type { AcpAgentError } from '../acp-errors'
 import type { ToolCallUpdate } from '../generated/acp-protocol.generated'
 import type { AcpDialect } from './acp-dialect'
 
@@ -13,6 +15,33 @@ const commandRawOutputSchema = z.looseObject({
     })
     .optional()
 })
+
+const promptFailureDataSchema = z.object({
+  errorName: z.enum(['provider.quota', 'provider.rate-limit']),
+  status: z.number().optional().catch(undefined),
+  resetsAt: z.number().optional().catch(undefined),
+  retryAfterMs: z.number().nonnegative().optional().catch(undefined)
+})
+
+// ACP can omit the HTTP status, leaving only the provider's billing message.
+const BILLING_FAILURE =
+  /\b(?:insufficient (?:balance|account funds)|credit limit exceeded|payment required|account invoice is overdue|billing_error)\b/i
+
+function promptFailure(error: AcpAgentError, at: number) {
+  const parsed = promptFailureDataSchema.safeParse(error.data)
+  if (!parsed.success || parsed.data.status === 402 || BILLING_FAILURE.test(error.message)) {
+    return undefined
+  }
+  const { resetsAt, retryAfterMs } = parsed.data
+  const reset = usageLimitResetsAt(
+    resetsAt ?? (retryAfterMs === undefined ? undefined : at + retryAfterMs),
+    at
+  )
+  return {
+    stopReason: 'rate_limit',
+    ...(reset === undefined ? {} : { usageLimit: { resetsAt: reset } })
+  }
+}
 
 function normalizeToolUpdate(update: ToolCallUpdate): ToolCallUpdate {
   const parsed = commandRawOutputSchema.safeParse(update.rawOutput)
@@ -41,5 +70,6 @@ function normalizeToolUpdate(update: ToolCallUpdate): ToolCallUpdate {
 }
 
 export const OPENCODE_ACP_DIALECT: AcpDialect = {
-  normalizeToolUpdate
+  normalizeToolUpdate,
+  promptFailure
 }
