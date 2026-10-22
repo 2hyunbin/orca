@@ -17,10 +17,7 @@ import {
   runtimeHostConnectionStateForEntry
 } from './runtime-host-connection-state'
 import { createServerLayoutFrameTranslator } from './server-layout-frame-ids'
-import {
-  selectDetectedWorktreesByRepo,
-  selectWorktreesByRepo
-} from '@/store/workspace-record-selectors'
+import { routingInputs, sameValues } from './server-layout-frame-routing-inputs'
 import {
   DESKTOP_CREATED_SERVER_TAB_HOLDS,
   forgetPublishedServerTabs,
@@ -321,24 +318,6 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
     }
     open.clear()
   }
-}
-
-/** The store slices a workspace's owning server derives from. */
-function routingInputs(state: AppState): unknown[] {
-  return [
-    state.repos,
-    selectWorktreesByRepo(state),
-    selectDetectedWorktreesByRepo(state),
-    state.projectGroups,
-    state.restoredRuntimeHostIdByWorkspaceSessionKey,
-    state.runtimeEnvironments,
-    state.runtimeStatusByEnvironmentId
-  ]
-}
-
-/** Compared by reference: store slices are replaced, never edited in place. */
-function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index])
 }
 
 let installed: (() => void) | null = null
