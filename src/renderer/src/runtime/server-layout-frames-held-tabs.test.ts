@@ -429,9 +429,9 @@ describe('a held tab and the split commands', () => {
 describe('a simulator tab opened on this desktop in a server’s frame-drawn workspace', () => {
   it('opens as the user’s tab in the server group it would split beside, and is never sent', async () => {
     const { store } = await appStoreFrameDrawn(serverSplit())
-    store.getState().focusGroup(WT, GROUP_2)
+    store.getState().focusGroup(WT, HOST_GROUP)
 
-    const simulator = ensureSimulatorTab(WT, { placement: 'rightSplit' })!
+    const simulator = ensureSimulatorTab(WT, { targetGroupId: GROUP_2, placement: 'rightSplit' })!
     await settle()
     expect(groupIds(store)).toEqual([HOST_GROUP, GROUP_2])
     expect(groupOf(store, simulator)).toBe(GROUP_2)
@@ -479,15 +479,19 @@ describe('a simulator tab opened on this desktop in a server’s frame-drawn wor
     expect(tabIds(store)).toEqual([TAB_1, TAB_2])
   })
 
-  it('is recorded only in a server’s frame-drawn workspace: a local one records nothing', async () => {
+  it('is recorded only while a server’s frames draw it: a mirrored server workspace records nothing', async () => {
     const store = useAppStore
+    hoisted.owners.set(WT, ENV)
     mirrorSnapshot(store, ENV, sessionTabs([surface('host-tab-1', LEAF_ID, 'terminal-1')], 1))
-    // This window's main owns WT: no paired server draws it.
-    hoisted.owners.clear()
-    const simulator = ensureSimulatorTab(WT, { targetGroupId: HOST_GROUP })
+    const before = groupIds(store)
+
+    const simulator = ensureSimulatorTab(WT, { placement: 'rightSplit' })
     await settle()
-    // Presence: the open ran.
+    // Drawn here as today, in a split of its own: no server's frames draw this workspace.
     expect(simulator).toBeTruthy()
+    expect(tabIds(store)).toContain(simulator)
+    expect(groupIds(store)).toHaveLength(before.length + 1)
+    expect(before).not.toContain(groupOf(store, simulator!))
     expect(DESKTOP_CREATED_SERVER_TAB_HOLDS.isTabHeld(WT, simulator!)).toBe(false)
     expect(storage.size).toBe(0)
   })
