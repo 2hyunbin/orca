@@ -171,10 +171,15 @@ export async function spawnInAdmittedPane(
   const resumeOutcomes = startStatus?.resumesSleepingRecord ? startStatus.resumeOutcomes : undefined
   if (resumeOutcomes) {
     // Why the generation now: a respawn may keep the terminal id, so only a later bind is this one.
-    const afterGeneration = store?.getPtyBindingGeneration?.(
-      normalizeExecutionHostId(hostIdOf(args)) ?? LOCAL_EXECUTION_HOST_ID,
-      args.leafId
-    )
+    // A pane never bound in this process is at 0: every bind here is numbered from 1.
+    const generationOf = store?.getPtyBindingGeneration
+    const afterGeneration = generationOf
+      ? (generationOf.call(
+          store,
+          normalizeExecutionHostId(hostIdOf(args)) ?? LOCAL_EXECUTION_HOST_ID,
+          args.leafId
+        ) ?? 0)
+      : undefined
     spawnArgs.onResumeOutcome = (ptyId, outcome) =>
       resumeOutcomes.set(paneKey, outcome, { ptyId, afterGeneration })
   }
@@ -215,6 +220,8 @@ export async function spawnInAdmittedPane(
     } else {
       startStatus?.sink.clear(paneKey)
     }
+    // A start that failed after its spawn reported (a refused bind) resumed nothing here.
+    resumeOutcomes?.clear(paneKey)
     throw error
   }
   startStatus?.sink.clear(paneKey)

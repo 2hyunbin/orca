@@ -18,8 +18,6 @@ export type PaneStartFact = { status: PaneStartStatus; reason?: string }
 /** A pane's start status (layout-owner build), given the pane's current binding (`bindingOf`). */
 export type PaneStartFactOf = (paneKey: string, binding: string) => PaneStartFact | null
 
-export { bindingOf }
-
 export class PaneStartStatuses extends PaneLiveFacts<PaneStartFact> {}
 
 /** Whether main's resume of a pane's agent came back, set with the terminal that start made. */

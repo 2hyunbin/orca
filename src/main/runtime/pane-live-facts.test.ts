@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { spawnInAdmittedPane } from './runtime-pane-admission'
 import type { RuntimeStore } from './runtime-store-contract'
+import { bindingOf } from './pane-live-facts'
 import {
-  bindingOf,
   PaneResumeOutcomes,
   PaneStartStatuses,
   paneStartFactsOf,
@@ -112,7 +112,8 @@ describe("main's start records a resume outcome only when it wakes the pane's re
   async function start(
     register: PaneResumeOutcomes,
     resumesSleepingRecord: boolean,
-    boundGeneration?: number
+    boundGeneration?: number,
+    bind?: () => void
   ) {
     const sink = new PaneStartStatuses(() => {})
     const store = { getPtyBindingGeneration: () => boundGeneration }
@@ -125,6 +126,8 @@ describe("main's start records a resume outcome only when it wakes the pane's re
             onResumeOutcome?: (ptyId: string, outcome: PaneResumeOutcome) => void
           }) => {
             args.onResumeOutcome?.('pty-1', 'restored')
+            // The pane's bind is written after the report, as the spawn commit does.
+            bind?.()
             return { id: 'pty-1' }
           }
         )
@@ -152,6 +155,24 @@ describe("main's start records a resume outcome only when it wakes the pane's re
     await start(register, true, 4)
     expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 4 }))).toBeNull()
     expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 5 }))).toBe('restored')
+  })
+
+  it('waits past the old bind of a pane this process never bound (a relaunch resume)', async () => {
+    const { register } = outcomes()
+    await start(register, true, undefined)
+    // A frame before the bind still shows the pane's saved terminal, which kept its id.
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1' }))).toBeNull()
+    expect(register.get(PANE_KEY, bindingOf({ ptyId: 'pty-1', ptyGeneration: 1 }))).toBe('restored')
+  })
+
+  it('clears the outcome when the start fails after its spawn reported it', async () => {
+    const { register } = outcomes()
+    await expect(
+      start(register, true, 2, () => {
+        throw new Error('terminal_split_source_not_found')
+      })
+    ).rejects.toThrow('terminal_split_source_not_found')
+    expect(register.peek(PANE_KEY)).toBeNull()
   })
 
   it("ends the pane's earlier outcome when a later start begins", async () => {
