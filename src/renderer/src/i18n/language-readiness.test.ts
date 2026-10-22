@@ -90,7 +90,7 @@ describe('client-local startup language', () => {
   })
 })
 
-it('falls back when native IPC never settles and ignores its late result', async () => {
+it('bounds startup with browser fallback and reconciles a late native result', async () => {
   vi.useFakeTimers()
   let finish: (value: unknown) => void = () => {}
   installBridge(
@@ -105,7 +105,13 @@ it('falls back when native IPC never settles and ignores its late result', async
   expect(await detection).toMatchObject({ locale: 'fr', source: 'browser-fallback' })
   finish({ detectedTag: 'ja-JP', locale: 'ja', status: 'supported', source: 'native' })
   await Promise.resolve()
-  expect(useLanguageReadiness.getState().detection?.locale).toBe('fr')
+  expect(useLanguageReadiness.getState().detection).toMatchObject({
+    locale: 'ja',
+    source: 'native'
+  })
+  const { getRendererLanguageDetection } = await import('../../../shared/ui-locale')
+  expect(getRendererLanguageDetection().locale).toBe('ja')
+  expect(await initializeLanguageDetection()).toMatchObject({ locale: 'ja', source: 'native' })
 })
 
 it('uses browser fallback when native IPC rejects', async () => {

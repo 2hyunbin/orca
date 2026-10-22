@@ -47,6 +47,24 @@ async function openRequest(): Promise<void> {
 }
 
 describe('onboarding language request', () => {
+  it.each(['control', 'treatment'] as const)('gates the picker for the %s cohort', (cohort) => {
+    useAppStore.setState({
+      settings: {
+        ...getDefaultSettings('/tmp'),
+        telemetry: {
+          optedIn: true,
+          installId: 'test-install',
+          existedBeforeTelemetryRelease: false,
+          onboardingLanguageCohort: cohort
+        }
+      }
+    })
+    render(<OnboardingLanguageSwitcher open={false} onOpenChange={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Switch language' }) !== null).toBe(
+      cohort === 'treatment'
+    )
+  })
+
   it('acknowledges only delivered feedback, disables duplicate sends and preserves language', async () => {
     let finish: (value: { ok: true }) => void = () => {}
     submit.mockImplementation(
@@ -97,6 +115,46 @@ describe('onboarding language request', () => {
     expect(submit).toHaveBeenCalledTimes(2)
   })
 
+  it('allows language selection after leaving a pending request and still prevents duplicate requests', async () => {
+    let finishRequest: (value: { ok: true }) => void = () => {}
+    submit.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRequest = resolve
+        })
+    )
+    const save = vi.fn(async () => {
+      const settings = useAppStore.getState().settings
+      if (settings) {
+        useAppStore.setState({ settings: { ...settings, uiLanguage: 'fr' } })
+      }
+    })
+    useAppStore.setState({ updateSettingsOrThrow: save })
+    await openRequest()
+    fireEvent.click(screen.getByRole('button', { name: 'Request language' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Languages' }))
+
+    expect(screen.getByRole('radiogroup').getAttribute('aria-disabled')).toBe('false')
+    fireEvent.click(screen.getByRole('radio', { name: 'Français' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Français' }).getAttribute('data-state')).toBe(
+        'checked'
+      )
+    )
+    expect(useAppStore.getState().settings?.uiLanguage).toBe('fr')
+    fireEvent.click(screen.getByRole('button', { name: 'Other language…' }))
+    const form = screen.getByRole('textbox').closest('form')
+    if (!form) {
+      throw new Error('Request form missing')
+    }
+    fireEvent.submit(form)
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('status')).toBeNull()
+    await act(async () => finishRequest({ ok: true }))
+    expect(screen.getByRole('status').textContent).toContain('recorded')
+  })
+
   it('rejects empty and oversized input before transport', async () => {
     await openRequest()
     fireEvent.change(screen.getByRole('textbox'), { target: { value: ' ' } })
@@ -122,6 +180,36 @@ describe('onboarding language request', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'English' }))
     await waitFor(() => expect(save).toHaveBeenCalledWith({ uiLanguage: 'en' }))
     expect(screen.getByRole('button', { name: 'Switch language' })).toBeTruthy()
+  })
+
+  it('lets an open picker close after late native English detection removes its eligibility', async () => {
+    useLanguageReadiness.setState({ detection: detectUiLanguage(['en-US'], 'browser-fallback') })
+    const onOpenChange = vi.fn()
+    function Picker(): React.JSX.Element {
+      const [open, setOpen] = useState(false)
+      return (
+        <OnboardingLanguageSwitcher
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next)
+            onOpenChange(next)
+          }}
+        />
+      )
+    }
+    const user = userEvent.setup()
+    render(<Picker />)
+    await user.click(screen.getByRole('button', { name: 'Switch language' }))
+    await act(async () => {
+      useLanguageReadiness.setState({ detection: detectUiLanguage(['en-US'], 'native') })
+    })
+
+    expect(screen.getByRole('radiogroup')).toBeTruthy()
+    await user.keyboard('{Escape}')
+
+    expect(onOpenChange).toHaveBeenLastCalledWith(false)
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Switch language' })).toBeNull()
   })
   it('keeps the previous selection and offers retry when persistence fails', async () => {
     const save = vi

@@ -9,6 +9,9 @@ export function I18nProvider({ children }: { children: ReactNode }): React.JSX.E
   const uiLanguage = useAppStore((state) => state.settings?.uiLanguage ?? null)
   const packs = usePluginLanguagePacks()
   const retryCount = useLanguageReadiness((state) => state.retryCount)
+  const systemLocale = useLanguageReadiness((state) =>
+    uiLanguage === 'system' ? state.detection?.locale : null
+  )
   const generation = useRef(0)
 
   useEffect(() => {
@@ -52,7 +55,7 @@ export function I18nProvider({ children }: { children: ReactNode }): React.JSX.E
     return () => {
       cancelled = true
     }
-  }, [uiLanguage, packs, retryCount])
+  }, [uiLanguage, packs, retryCount, systemLocale])
 
   return <I18nextProvider i18n={i18n}>{children}</I18nextProvider>
 }

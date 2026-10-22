@@ -25,11 +25,13 @@ export function OnboardingLanguageSwitcher({
   open: boolean
   onOpenChange: (open: boolean) => void
 }): React.JSX.Element | null {
+  const cohort = useAppStore((state) => state.settings?.telemetry?.onboardingLanguageCohort)
   const language = useAppStore((state) => state.settings?.uiLanguage ?? 'system')
   const updateSettings = useAppStore((state) => state.updateSettingsOrThrow)
   const catalogError = useLanguageReadiness((state) => state.error)
   const catalogLoading = useLanguageReadiness((state) => state.loading)
-  const [initialDetection] = useState(getRendererLanguageDetection)
+  const detection =
+    useLanguageReadiness((state) => state.detection) ?? getRendererLanguageDetection()
   const [recoveryVisible] = useState(catalogError)
   const [requestView, setRequestView] = useState(false)
   const [draft, setDraft] = useState('')
@@ -39,10 +41,10 @@ export function OnboardingLanguageSwitcher({
     language: SupportedUiLocale
     stage: 'load' | 'save'
   } | null>(null)
-  const inFlight = useRef(false)
+  const selectionInFlight = useRef(false)
+  const requestInFlight = useRef(false)
   const successfulRequests = useRef(new Set<string>())
   const contentRef = useRef<HTMLDivElement>(null)
-  const detection = initialDetection
   const busy = selectionPhase !== null || catalogLoading
   const canRequestLanguage = !isWebClientLocation()
   const metadata = {
@@ -60,10 +62,10 @@ export function OnboardingLanguageSwitcher({
   }
 
   const chooseLanguage = async (next: SupportedUiLocale): Promise<void> => {
-    if (inFlight.current || catalogLoading) {
+    if (selectionInFlight.current || catalogLoading) {
       return
     }
-    inFlight.current = true
+    selectionInFlight.current = true
     setSelectionPhase('load')
     setSelectionFailure(null)
     let stage: 'load' | 'save' = 'load'
@@ -86,14 +88,14 @@ export function OnboardingLanguageSwitcher({
     } catch {
       setSelectionFailure({ language: next, stage })
     } finally {
-      inFlight.current = false
+      selectionInFlight.current = false
       setSelectionPhase(null)
     }
   }
 
   const submitRequest = async (): Promise<void> => {
     const request = draft.trim()
-    if (!canRequestLanguage || !request || request.length > 80 || inFlight.current) {
+    if (!canRequestLanguage || !request || request.length > 80 || requestInFlight.current) {
       return
     }
     const normalized = request.normalize('NFKC').toLowerCase()
@@ -101,7 +103,7 @@ export function OnboardingLanguageSwitcher({
       setRequestState('success')
       return
     }
-    inFlight.current = true
+    requestInFlight.current = true
     setRequestState('pending')
     try {
       const result = await window.api.feedback.submit({
@@ -119,11 +121,14 @@ export function OnboardingLanguageSwitcher({
     } catch {
       setRequestState('error')
     } finally {
-      inFlight.current = false
+      requestInFlight.current = false
     }
   }
 
-  if (!shouldShowLanguageSwitcher(detection) && !catalogError && !recoveryVisible) {
+  if (
+    cohort === 'control' ||
+    (!open && !shouldShowLanguageSwitcher(detection) && !catalogError && !recoveryVisible)
+  ) {
     return null
   }
 
@@ -250,7 +255,7 @@ export function OnboardingLanguageSwitcher({
               <RadioGroup
                 value={language === 'system' ? detection.locale : language}
                 aria-busy={busy}
-                aria-disabled={busy || requestState === 'pending'}
+                aria-disabled={busy}
                 onKeyDownCapture={(event) => {
                   if (
                     busy &&

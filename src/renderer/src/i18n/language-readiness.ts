@@ -26,7 +26,17 @@ export const useLanguageReadiness = create<{
 
 let detectionPromise: Promise<UiLanguageDetection> | undefined
 
+function publishLanguageDetection(detection: UiLanguageDetection): UiLanguageDetection {
+  setRendererLanguageDetection(detection)
+  useLanguageReadiness.setState({ detection })
+  return detection
+}
+
 export function initializeLanguageDetection(): Promise<UiLanguageDetection> {
+  const currentDetection = useLanguageReadiness.getState().detection
+  if (currentDetection) {
+    return Promise.resolve(currentDetection)
+  }
   detectionPromise ??= (async () => {
     let detection: UiLanguageDetection | null = null
     const browserClient = isWebClientLocation()
@@ -39,16 +49,20 @@ export function initializeLanguageDetection(): Promise<UiLanguageDetection> {
           browserDetection.detectedTag ? [browserDetection.detectedTag] : []
         )
         if (snapshot) {
-          detection = await withTimeout<UiLanguageDetection | null>(snapshot, 1000, null)
+          detection = await withTimeout<UiLanguageDetection | null>(
+            snapshot.then((nativeDetection) =>
+              nativeDetection ? publishLanguageDetection(nativeDetection) : null
+            ),
+            1000,
+            null
+          )
         }
       } catch {
         // Older local bridges do not provide the optional snapshot.
       }
     }
-    detection ??= browserDetection
-    setRendererLanguageDetection(detection)
-    useLanguageReadiness.setState({ detection })
-    return detection
+    detection ??= useLanguageReadiness.getState().detection ?? browserDetection
+    return publishLanguageDetection(detection)
   })()
   return detectionPromise
 }
