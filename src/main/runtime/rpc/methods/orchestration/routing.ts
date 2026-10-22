@@ -5,6 +5,7 @@ import type { OrchestrationCallerIdentity } from '../../../orchestration/orchest
 import { MESSAGE_TYPES } from '../../../orchestration/types'
 import { OrchestrationError } from '../../../orchestration/orchestration-error'
 import { LEGACY_CONTRACT_VERSION } from '../../../orchestration/db'
+import { parseMessageTaskId } from './schemas'
 
 export function parseMessageTypes(rawTypes: string | undefined): MessageType[] | undefined {
   const types = rawTypes
@@ -76,6 +77,16 @@ export function resolveMessageRun(
       'dispatch_run_mismatch',
       `Dispatch ${dispatch.id} belongs to Run ${dispatch.run_id}, not ${run.id}.`
     )
+  }
+  if (run && !params.to && !params.runId) {
+    const taskId = parseMessageTaskId(params.payload)
+    const task = taskId ? db.getTask(taskId) : undefined
+    if (task?.run_id && task.run_id !== run.id) {
+      throw new OrchestrationError(
+        'task_run_mismatch',
+        `Task ${task.id} belongs to Run ${task.run_id}, not ${run.id}.`
+      )
+    }
   }
   return { run, dispatchId: dispatch?.id ?? dispatchId }
 }
