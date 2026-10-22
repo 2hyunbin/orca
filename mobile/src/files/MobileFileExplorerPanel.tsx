@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { FlatList, View, type ListRenderItem } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { FolderOpen, SearchX, X } from 'lucide-react-native'
+import { FolderOpen, SearchX } from 'lucide-react-native'
 import { useWorkspaceExecutionHost } from '../navigation/workspace-execution-host'
 import { useWorkspaceRouteHandoff } from '../navigation/workspace-route-handoff'
 import { useForceReconnect } from '../transport/host-client-hooks'
@@ -28,12 +27,11 @@ import { isMobileMethodUnavailableError } from '../transport/mobile-method-unava
 import { directoryCacheFromFileList } from './file-list-fallback'
 import { fileDirectoryRead, legacyFileListRead } from './mobile-file-explorer-operations'
 import { fileExplorerStyles as styles } from './mobile-file-explorer-styles'
+import { MobileFileExplorerHeader } from './mobile-file-explorer-header'
 import { MobileFileExplorerRow } from './mobile-file-explorer-row'
 import { navigateToMobileFilePreview } from './mobile-file-preview-navigation'
 import { MobileLoadErrorState } from '../components/MobileLoadErrorState'
 import { MobileSearchField } from '../components/MobileSearchField'
-import { NavBar } from '../components/ui/NavBar'
-import { IconButton } from '../components/ui/IconButton'
 import { StateView } from '../components/ui/StateView'
 
 export function MobileFileExplorerPanel(props: {
@@ -369,25 +367,6 @@ export function MobileFileExplorerPanel(props: {
   }
 
   const subtitle = legacyListTruncated ? `${worktreeLabel} · first 5,000 files` : worktreeLabel
-  const headerBar = embedded ? (
-    <NavBar
-      title="Files"
-      subtitle={subtitle}
-      scrolled={scrolled}
-      trailing={
-        <IconButton icon={X} accessibilityLabel="Close files" onPress={() => onRequestClose?.()} />
-      }
-    />
-  ) : (
-    <NavBar
-      title="Files"
-      subtitle={subtitle}
-      onBack={() => router.back()}
-      backAccessibilityLabel="Back to session"
-      scrolled={scrolled}
-    />
-  )
-
   // Why: while disconnected, re-sending the request is useless — revive the parked transport
   // instead (issue #5049); loadDirectory re-runs via its effect once the new client connects.
   const rootRetry = connectionRetryAction({
@@ -436,20 +415,18 @@ export function MobileFileExplorerPanel(props: {
     </View>
   ) : null
 
-  // Embedded: the dock column owns safe-area/layout, so render a plain View and
-  // a non-inset header. Full-screen: keep the SafeAreaView top inset + chrome.
   return (
     <View
       style={styles.container}
       onLayout={({ nativeEvent }) => setPanelWidth(nativeEvent.layout.width)}
     >
-      {embedded ? (
-        <View style={styles.header}>{headerBar}</View>
-      ) : (
-        <SafeAreaView style={styles.header} edges={['top']}>
-          {headerBar}
-        </SafeAreaView>
-      )}
+      <MobileFileExplorerHeader
+        subtitle={subtitle}
+        embedded={embedded === true}
+        scrolled={scrolled}
+        onClose={() => onRequestClose?.()}
+        onBack={() => router.back()}
+      />
       {filterField}
       {body}
     </View>
