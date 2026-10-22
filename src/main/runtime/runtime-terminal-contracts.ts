@@ -222,6 +222,8 @@ export type TerminalHandleRecord = {
   leafId: string
   ptyId: string | null
   ptyGeneration: number
+  /** Issue-time stamp of the pane main bound a terminal handle for; read only by recoverTerminalPane. */
+  issuedForPaneKey?: string
 }
 
 export type OrchestrationCompatibilityTerminalAuthority = {

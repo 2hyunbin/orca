@@ -236,8 +236,8 @@ export abstract class OrcaRuntimeWithAutomationOperations extends OrcaRuntimeWit
     if (
       !pty?.connected ||
       pty.incarnationId !== expected.incarnationId ||
-      pty.tabId !== expected.tabId ||
-      pty.paneKey !== makePaneKey(expected.tabId, expected.leafId) ||
+      this.paneOfPty(pty).tabId !== expected.tabId ||
+      this.paneOfPty(pty).paneKey !== makePaneKey(expected.tabId, expected.leafId) ||
       !worktreeIdsEqual(pty.worktreeId, expected.worktreeId) ||
       this.handleByPtyId.get(expected.ptyId) !== expected.terminalHandle
     ) {
