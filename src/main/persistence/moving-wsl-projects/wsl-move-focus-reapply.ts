@@ -6,14 +6,14 @@
  * rewrites (host copies, visible hosts, the automation filter) would undo a later user choice.
  * No ledger entry is written; the ledgered pass alone owns the journal.
  */
-import { LOCAL_EXECUTION_HOST_ID, toRuntimeExecutionHostId } from '../../../shared/execution-host'
+import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
 import { WSL_MOVE_CUTOVER_PHASES } from '../../../shared/wsl-move/wsl-move-cutover'
 import { wslHostsGateOpen } from '../../wsl/wsl-host-gate'
 import type { Store } from '../loading-store/store'
 import { listWslMoveCutovers } from './wsl-move-cutover-journal'
+import { applyWslMoveSessionFocus } from './wsl-move-main-rewrite-stores'
 import { createUncToLinuxPathRewriter } from './wsl-move-path-rewriter'
 import { wslMoveRewriteScope } from './wsl-move-rewrite-scope'
-import { wslMoveSessionGlobalsPatch } from './wsl-move-session-rewrite'
 import { wslMoveLastActiveWorktreeUpdate } from './wsl-move-ui-routing-rewrite'
 
 export type WslMoveFocusProfile = Pick<
@@ -42,6 +42,7 @@ export function reapplyWslMoveFocusRewrites(
         cutover,
         rewritePath: createUncToLinuxPathRewriter(cutover.manifest.source.distro),
         destinationHostId: toRuntimeExecutionHostId(cutover.destinationEnvironmentId),
+        // Seeding is the ledgered pass's alone; the scope never records.
         recordSeededHostWorkspaceIds: () => {
           throw new Error('wsl_move_focus_reapply_seeds_nothing')
         }
@@ -51,12 +52,7 @@ export function reapplyWslMoveFocusRewrites(
         profile.updateUI(lastActive)
         writes += 1
       }
-      const focus = wslMoveSessionGlobalsPatch(
-        profile.getWorkspaceSession(LOCAL_EXECUTION_HOST_ID),
-        scope
-      )
-      if (focus) {
-        profile.patchWorkspaceSession(focus, LOCAL_EXECUTION_HOST_ID)
+      if (applyWslMoveSessionFocus(profile, scope)) {
         writes += 1
       }
     }

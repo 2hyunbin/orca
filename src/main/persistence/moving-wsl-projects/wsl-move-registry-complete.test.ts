@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../../shared/constants'
 import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
 import { WSL_HOSTS_INTERNAL_GATE_ENV } from '../../../shared/wsl-host-internal-gate'
@@ -33,6 +33,7 @@ import {
   resetWslMoveDesktopRewriteStoresForTests
 } from './wsl-move-desktop-rewrite-stores'
 import { reapplyWslMoveFocusRewrites } from './wsl-move-focus-reapply'
+import type { WslMoveHostAutomations } from './wsl-move-host-automations-rewrite'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import { runWslMoveRetentionPass } from './wsl-move-retention'
 import { loadWslMoveFence, resetWslMoveFenceForTests } from './wsl-move-scope-guard'
@@ -68,7 +69,7 @@ const committedMove = (migrationId = 'move-1') =>
 const journal = () => listWslMoveCutovers(testState.dir)
 
 let store: Store
-let enableAutomations: ReturnType<typeof vi.fn>
+let enableAutomations: Mock<WslMoveHostAutomations['enable']>
 
 /** Startup's registration, against this test's profile. */
 function registerRegistry(): void {
@@ -148,7 +149,7 @@ beforeEach(() => {
     }
   })
   store = createStore()
-  enableAutomations = vi.fn(async () => {})
+  enableAutomations = vi.fn<WslMoveHostAutomations['enable']>(async () => {})
   registerRegistry()
 })
 afterEach(async () => {

@@ -103,6 +103,7 @@ describe('registerRendererShutdownCheckpointHandler', () => {
         return Promise.resolve()
       })
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handler only calls the four methods stubbed above.
     registerRendererShutdownCheckpointHandler(store as never, undefined, undefined, () => {
       callOrder.push('after-stage')
     })

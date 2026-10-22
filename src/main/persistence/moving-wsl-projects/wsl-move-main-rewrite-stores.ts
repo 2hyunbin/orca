@@ -7,7 +7,7 @@ import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { Store } from '../loading-store/store'
 import { wslMoveAutomationHostFilterUpdate } from './wsl-move-automation-filter-rewrite'
 import { registerWslMoveDesktopRewriteStore } from './wsl-move-desktop-rewrite-stores'
-import { wslMoveRewriteScope } from './wsl-move-rewrite-scope'
+import { wslMoveRewriteScope, type WslMoveRewriteScope } from './wsl-move-rewrite-scope'
 import { wslMoveHostSessionSeed, wslMoveSessionGlobalsPatch } from './wsl-move-session-rewrite'
 import { rewriteWslMoveUiRouting } from './wsl-move-ui-routing-rewrite'
 
@@ -47,14 +47,7 @@ export function registerWslMoveMainRewriteStores(profile: WslMoveMainRewriteProf
     id: 'session-globals',
     side: 'main',
     run: (context) => {
-      const patch = wslMoveSessionGlobalsPatch(
-        profile.getWorkspaceSession(LOCAL_EXECUTION_HOST_ID),
-        wslMoveRewriteScope(context)
-      )
-      if (patch) {
-        // One-shot, ledgered move rewrite of focus; no LayoutCommand owns focus or seeding.
-        profile.patchWorkspaceSession(patch, LOCAL_EXECUTION_HOST_ID)
-      }
+      applyWslMoveSessionFocus(profile, wslMoveRewriteScope(context))
     },
     flush
   })
@@ -82,4 +75,21 @@ export function registerWslMoveMainRewriteStores(profile: WslMoveMainRewriteProf
     },
     flush
   })
+}
+
+/** The local session's focus onto the host when it names a moved project; true when it wrote. */
+export function applyWslMoveSessionFocus(
+  profile: Pick<Store, 'getWorkspaceSession' | 'patchWorkspaceSession'>,
+  scope: WslMoveRewriteScope
+): boolean {
+  const patch = wslMoveSessionGlobalsPatch(
+    profile.getWorkspaceSession(LOCAL_EXECUTION_HOST_ID),
+    scope
+  )
+  if (!patch) {
+    return false
+  }
+  // A move's rewrite of focus, re-applied only to undo a stale window; no LayoutCommand owns focus.
+  profile.patchWorkspaceSession(patch, LOCAL_EXECUTION_HOST_ID)
+  return true
 }
