@@ -13,10 +13,6 @@ import {
 import { startDeferredSessionReattach } from './deferred-session-reattach-connect'
 import { mainStartsPane } from './main-starts-pane'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
-import type { HeldPaneReopenOutcome } from '../newer-daemon-hold-state'
-import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
-
-export const NOT_REOPENED: HeldPaneReopenOutcome = { reopened: false, agentResumed: false }
 
 type MainPaneStartHandlers = {
   /** Runs once main's start for the pane ends: the pane is bound to its terminal. */
@@ -145,26 +141,4 @@ export function defersToMainPaneStart(
     session.mainPaneStartOnReveal = startOnView
   }
   return true
-}
-
-/** Keeps the reattach fallback's actual fresh-agent outcome with the pane's start. */
-export function reopenPaneAfterMissingReattach(
-  session: ConnectPanePtySession,
-  startup: ColdRestoreAgentResumeStartup | null
-): Promise<HeldPaneReopenOutcome> {
-  let resumeUnavailable = false
-  return session
-    .startFreshColdRestoreAgentResume(startup, {
-      forceBlankRestoredViewport: true,
-      onAgentResumeUnavailable: () => {
-        resumeUnavailable = true
-      }
-    })
-    .then(
-      (ptyId: string | null) => ({
-        reopened: ptyId !== null,
-        agentResumed: ptyId !== null && Boolean(startup) && !resumeUnavailable
-      }),
-      () => NOT_REOPENED
-    )
 }

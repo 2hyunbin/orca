@@ -20971,5 +20971,26 @@
       "unavailable": "This workspace is protected or unavailable."
     },
     "rowActions": "Actions for {{name}}"
+  },
+  "onboarding": {
+    "language": {
+      "back": "Languages",
+      "requestPrompt": "Which language would you like Orca to support?",
+      "requestSuccess": "Language request recorded. You can continue onboarding.",
+      "requestError": "Could not record your request. Try again.",
+      "retry": "Retry",
+      "requestAction": "Request language",
+      "title": "Display language",
+      "device": "System language: {{language}}",
+      "unsupported": "System language: {{language}}. This language is not supported yet.",
+      "unknown": "Your system language could not be detected. Choose a language below.",
+      "loadError": "Could not load this language. Try again.",
+      "saveError": "Could not save your language preference. Try again.",
+      "other": "Other language…",
+      "settingsError": "Could not load your settings.",
+      "loadingSettings": "Loading settings…",
+      "loading": "Loading language…",
+      "saving": "Saving language…"
+    }
   }
 }

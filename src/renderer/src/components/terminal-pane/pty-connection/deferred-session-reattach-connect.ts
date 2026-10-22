@@ -1,4 +1,4 @@
-import { NOT_REOPENED, reopenPaneAfterMissingReattach } from './main-pane-start-request'
+import { NOT_REOPENED, reopenPaneAfterMissingReattach } from './cold-restore-resume-startup'
 import { writeStartupCwdFallbackNotice } from './startup-cwd-fallback-notice'
 import { armPaneOwnerRetry } from './pane-owner-recovery'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
