@@ -241,7 +241,9 @@ export class Session {
     return this.output.takePendingOutput(includeSnapshot, heldBytes, () => this.getSnapshot())
   }
 
-  getCwd = (): string | null => this.output.getCwd()
+  getCwd(): string | null {
+    return this.output.getCwd()
+  }
 
   inspectChildProcesses(fresh?: boolean, ignoreDetached?: boolean): ChildProcessVerdictRead {
     return this.subprocess.inspectChildProcesses?.(fresh, ignoreDetached) ?? 'unverifiable'

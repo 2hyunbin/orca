@@ -55,6 +55,12 @@ function deferredListing() {
   return { promise, resolve, reject }
 }
 
+const removableExitCases = [
+  { localOnly: false, incarnationId: undefined },
+  { localOnly: false, incarnationId: 'A' },
+  { localOnly: true, incarnationId: 'A' }
+]
+
 describe('resource session inventory request-scoped exits', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
@@ -77,13 +83,13 @@ describe('resource session inventory request-scoped exits', () => {
     expect(cache.getSnapshot().sessionInventory.count).toBe(0)
   })
 
-  it.each([undefined, 'A'])(
-    'suppresses an in-flight exit only until that listing settles: %s',
-    async (incarnationId) => {
+  it.each(removableExitCases)(
+    'suppresses an in-flight exit only until that listing settles: $incarnationId (localOnly=$localOnly)',
+    async ({ incarnationId, localOnly }) => {
       const original = session('one', incarnationId)
       const slow = deferredListing()
       const list = vi.fn().mockReturnValueOnce(slow.promise).mockResolvedValue([original])
-      const cache = new ResourceSessionInventoryCache(list, true)
+      const cache = new ResourceSessionInventoryCache(list, localOnly)
       cache.setActive(true)
       await vi.advanceTimersByTimeAsync(0)
 
@@ -99,12 +105,12 @@ describe('resource session inventory request-scoped exits', () => {
     }
   )
 
-  it.each([undefined, 'A'])(
-    'does not suppress authoritative results after an idle exit: %s',
-    async (incarnationId) => {
+  it.each(removableExitCases)(
+    'does not suppress authoritative results after an idle exit: $incarnationId (localOnly=$localOnly)',
+    async ({ incarnationId, localOnly }) => {
       const original = session('one', incarnationId)
       const list = vi.fn().mockResolvedValue([original])
-      const cache = new ResourceSessionInventoryCache(list, true)
+      const cache = new ResourceSessionInventoryCache(list, localOnly)
       cache.setActive(true)
       await vi.advanceTimersByTimeAsync(0)
 
@@ -116,13 +122,13 @@ describe('resource session inventory request-scoped exits', () => {
     }
   )
 
-  it.each([undefined, 'A'])(
-    'keeps a replacement incarnation visible in the same listing as an exit: %s',
-    async (incarnationId) => {
+  it.each(removableExitCases)(
+    'keeps a replacement incarnation visible in the same listing as an exit: $incarnationId (localOnly=$localOnly)',
+    async ({ incarnationId, localOnly }) => {
       const original = session('one', incarnationId)
       const replacement = session('one', 'B')
       const slow = deferredListing()
-      const cache = new ResourceSessionInventoryCache(() => slow.promise, true)
+      const cache = new ResourceSessionInventoryCache(() => slow.promise, localOnly)
       cache.setActive(true)
       await vi.advanceTimersByTimeAsync(0)
 
