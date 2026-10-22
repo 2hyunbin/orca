@@ -4,29 +4,32 @@ import type { AgentLaunchResult } from '../../../shared/agent-launch-intent'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
 
-const mocks = vi.hoisted(() => ({
-  capabilities: vi.fn(),
-  rpc: vi.fn(),
-  send: vi.fn(),
-  draft: vi.fn(),
-  close: vi.fn(),
-  reveal: vi.fn(),
-  ready: vi.fn(),
-  complete: vi.fn(),
-  refresh: vi.fn(),
-  state: {
-    repos: [{ id: 'repo-1', executionHostId: 'local' }],
-    settings: {},
-    sortBy: 'manual',
-    activeView: 'terminal',
-    activePendingCreationId: 'creation-1',
-    activeWorktreeId: null,
-    pendingWorktreeCreations: { 'creation-1': {} } as Record<string, unknown>,
-    updatePendingWorktreeCreation: vi.fn(),
-    closeUnifiedTab: vi.fn(),
-    seedNativeChatLaunchDraft: vi.fn()
+const mocks = vi.hoisted(() => {
+  const pendingWorktreeCreations: Record<string, unknown> = { 'creation-1': {} }
+  return {
+    capabilities: vi.fn(),
+    rpc: vi.fn(),
+    send: vi.fn(),
+    draft: vi.fn(),
+    close: vi.fn(),
+    reveal: vi.fn(),
+    ready: vi.fn(),
+    complete: vi.fn(),
+    refresh: vi.fn(),
+    state: {
+      repos: [{ id: 'repo-1', executionHostId: 'local' }],
+      settings: {},
+      sortBy: 'manual',
+      activeView: 'terminal',
+      activePendingCreationId: 'creation-1',
+      activeWorktreeId: null,
+      pendingWorktreeCreations,
+      updatePendingWorktreeCreation: vi.fn(),
+      closeUnifiedTab: vi.fn(),
+      seedNativeChatLaunchDraft: vi.fn()
+    }
   }
-}))
+})
 vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.state } }))
 vi.mock('@/runtime/local-runtime-capabilities', () => ({
   ensureLocalRuntimeCapabilities: mocks.capabilities
