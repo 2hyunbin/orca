@@ -1,15 +1,18 @@
 import { translate } from '@/i18n/i18n'
-import type { PaletteItem, PaletteListEntry } from '../worktree-jump-palette-model'
+import type {
+  PaletteItem,
+  PaletteListEntry,
+  PaletteSectionKey
+} from '../worktree-jump-palette-model'
 import { buildPaletteListEntryRenderKeys } from './palette-list-entry-render-keys'
 
-export type PaletteSectionKey = 'open-tabs' | 'worktrees' | 'projects' | 'middle' | 'tasks'
 export type PaletteObservedOccurrence = {
   key: string
   id: string
-  type: PaletteListEntry['type']
-  section: PaletteSectionKey | null
-  label?: string
-}
+} & (
+  | { type: 'section-header' | 'hint'; section: PaletteSectionKey; label: string }
+  | { type: PaletteItem['type'] | 'create-worktree'; section: PaletteSectionKey | null }
+)
 
 export function paletteEntrySection(entry: PaletteListEntry): PaletteSectionKey | null {
   switch (entry.type) {
@@ -28,6 +31,7 @@ export function paletteEntrySection(entry: PaletteListEntry): PaletteSectionKey 
       return 'tasks'
     case 'section-header':
     case 'hint':
+      return entry.section
     case 'create-worktree':
       return null
   }
@@ -37,30 +41,15 @@ export function describePaletteOccurrences(
   entries: readonly PaletteListEntry[],
   keys: readonly string[]
 ): PaletteObservedOccurrence[] {
-  let section: PaletteSectionKey | null = null
   return entries.map((entry, index) => {
-    const itemSection = paletteEntrySection(entry)
-    if (itemSection) {
-      section = itemSection
-    }
-    if (entry.type === 'section-header') {
-      section = entry.id.includes('open_tabs')
-        ? 'open-tabs'
-        : entry.id.includes('worktrees')
-          ? 'worktrees'
-          : entry.id.includes('projects')
-            ? 'projects'
-            : entry.id.includes('tasks')
-              ? 'tasks'
-              : 'middle'
-    }
-    return {
+    const occurrence = {
       key: keys[index] ?? entry.id,
       id: entry.id,
-      type: entry.type,
-      section: entry.type === 'create-worktree' ? null : section,
-      ...(entry.type === 'section-header' || entry.type === 'hint' ? { label: entry.label } : {})
+      section: paletteEntrySection(entry)
     }
+    return entry.type === 'section-header' || entry.type === 'hint'
+      ? { ...occurrence, type: entry.type, section: entry.section, label: entry.label }
+      : { ...occurrence, type: entry.type }
   })
 }
 
@@ -109,13 +98,19 @@ export function reconcilePaletteObservedPrefix({
       if (current?.type === occurrence.type) {
         result.push(current)
       } else if (occurrence.type === 'section-header') {
-        result.push({ id: occurrence.id, type: 'section-header', label: occurrence.label ?? '' })
+        result.push({
+          id: occurrence.id,
+          type: 'section-header',
+          section: occurrence.section,
+          label: occurrence.label
+        })
       } else {
         result.push({
           id: occurrence.id,
           type: 'hint',
-          label: occurrence.label ?? '',
-          onSeeMore: () => onExpandSection(occurrence.section ?? '')
+          section: occurrence.section,
+          label: occurrence.label,
+          onSeeMore: () => onExpandSection(occurrence.section)
         })
       }
       protectedControls.add(occurrence.id)

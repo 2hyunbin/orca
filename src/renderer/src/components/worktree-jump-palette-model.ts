@@ -74,10 +74,18 @@ export type ProjectTargetPaletteItem = {
   result: CmdJProjectSearchResult & Pick<CmdJRankedProjectSearchResult, 'qualityClass'>
 }
 
-export type SectionHeader = { id: string; type: 'section-header'; label: string }
+export type PaletteSectionKey = 'open-tabs' | 'worktrees' | 'projects' | 'middle' | 'tasks'
+
+export type SectionHeader = {
+  id: string
+  type: 'section-header'
+  section: PaletteSectionKey
+  label: string
+}
 export type HintRow = {
   id: string
   type: 'hint'
+  section: PaletteSectionKey
   label: string
   onSeeMore?: () => void
 }

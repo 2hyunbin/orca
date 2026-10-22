@@ -11,7 +11,12 @@ afterEach(cleanup)
 
 function fixture() {
   const entries: PaletteListEntry[] = [
-    { id: '__header_open_tabs__', type: 'section-header', label: 'Open Tabs' },
+    {
+      id: '__header_open_tabs__',
+      type: 'section-header',
+      section: 'open-tabs',
+      label: 'Open Tabs'
+    },
     ...Array.from({ length: 6 }, (_, index) => {
       const result = buildWorkspaceTabBaseResult(
         transcriptTab(String(index)),

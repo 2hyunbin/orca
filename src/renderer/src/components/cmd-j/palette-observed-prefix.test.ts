@@ -17,13 +17,15 @@ const rows = (prefix: string, count: number): WorkspaceTabPaletteItem[] =>
     return { id: result.paletteIdentity, type: 'workspace-tab', result, transcriptReserved: true }
   })
 const header: PaletteListEntry = {
-  id: '__header_open_tabs__',
+  id: 'tabs-heading',
   type: 'section-header',
+  section: 'open-tabs',
   label: 'Open Tabs'
 }
 const hint: PaletteListEntry = {
-  id: '__hint_open_tab_overflow__',
+  id: 'tabs-overflow',
   type: 'hint',
+  section: 'open-tabs',
   label: '20 more',
   onSeeMore: vi.fn()
 }
@@ -73,6 +75,7 @@ it('preserves split headings and hint/control footprints despite a new leading s
     {
       id: '__header_projects_groups__',
       type: 'section-header' as const,
+      section: 'projects' as const,
       label: 'Projects & Groups'
     }
   ]
