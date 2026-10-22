@@ -1,17 +1,17 @@
-import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import type { Repo } from '../../../../shared/repo-types'
-import { Button } from '../ui/button'
-import { Label } from '../ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
-import { BaseRefPicker } from './BaseRefPicker'
-import { RepoSettingsDraftInput } from './RepositorySettingsDraftInput'
-import { SearchableSetting } from './SearchableSetting'
+import type { GlobalSettings } from '../../../../../../shared/global-settings-types'
+import type { Repo } from '../../../../../../shared/repo-types'
+import { Button } from '../../../ui/button'
+import { Label } from '../../../ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select'
+import { BaseRefPicker } from '../../BaseRefPicker'
+import { RepoSettingsDraftInput } from '../../RepositorySettingsDraftInput'
+import { SearchableSetting } from '../../SearchableSetting'
 import { translate } from '@/i18n/i18n'
-import { getRepoExecutionHostId } from '../../../../shared/execution-host'
+import { getRepoExecutionHostId } from '../../../../../../shared/execution-host'
 import {
   effectiveExternalWorktreeVisibility,
   isLegacyRepoForExternalWorktreeVisibility
-} from '../../../../shared/external-worktree-visibility'
+} from '../../../../../../shared/external-worktree-visibility'
 
 type RepositoryWorktreeDefaultsUpdate = Pick<Repo, 'worktreeBasePath' | 'worktreeBaseRef'> & {
   externalWorktreeVisibility?: Repo['externalWorktreeVisibility'] | null

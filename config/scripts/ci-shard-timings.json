@@ -8026,7 +8026,7 @@
       "src/renderer/src/components/settings/RepositoryPane.test.ts": 3208,
       "src/renderer/src/components/settings/RepositoryPaneDraftInput.test.tsx": 318,
       "src/renderer/src/components/settings/RepositorySourceControlAiSection.test.ts": 357,
-      "src/renderer/src/components/settings/RepositoryWorktreeDefaultsSection.test.tsx": 415,
+      "src/renderer/src/components/settings/repository/execution/RepositoryWorktreeDefaultsSection.test.tsx": 415,
       "src/renderer/src/components/settings/RuntimeEnvironmentsPane.test.ts": 280,
       "src/renderer/src/components/settings/RuntimeHostAccessForm.test.tsx": 334,
       "src/renderer/src/components/settings/RuntimePairingGeneratorForm.test.tsx": 260,

@@ -3,20 +3,20 @@
 import React, { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Repo } from '../../../../shared/repo-types'
-import type { GlobalSettings } from '../../../../shared/global-settings-types'
+import type { Repo } from '../../../../../../shared/repo-types'
+import type { GlobalSettings } from '../../../../../../shared/global-settings-types'
 import { RepositoryWorktreeDefaultsSection } from './RepositoryWorktreeDefaultsSection'
 
-vi.mock('../../store', () => ({
+vi.mock('@/store/index', () => ({
   useAppStore: (selector: (state: { settingsSearchQuery: string }) => unknown) =>
     selector({ settingsSearchQuery: '' })
 }))
 
-vi.mock('./BaseRefPicker', () => ({
+vi.mock('../../BaseRefPicker', () => ({
   BaseRefPicker: () => null
 }))
 
-vi.mock('../ui/select', () => ({
+vi.mock('../../../ui/select', () => ({
   Select: ({
     value,
     onValueChange,
