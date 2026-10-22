@@ -609,6 +609,27 @@
     },
     "managedProfile": {
       "createFailed": "Não foi possível criar o perfil do navegador deste espaço de trabalho. Feche esta aba e abra uma nova para tentar novamente."
+    },
+    "newTab": {
+      "emptyHint": "Pesquise ou digite um endereço acima. Os sites que você visitar, os servidores de desenvolvimento em execução neste espaço de trabalho e o PR e a issue vinculados aparecerão aqui.",
+      "openServerFailed": "Não foi possível abrir {{address}}",
+      "removedFromHistory": "“{{title}}” removido do histórico",
+      "removeSuggestion": "Remover do histórico",
+      "state": {
+        "closed": "Fechado",
+        "draft": "Rascunho",
+        "merged": "Mesclado",
+        "open": "Aberto"
+      },
+      "suggested": "Sugestões",
+      "thisWorkspace": "Este espaço de trabalho",
+      "undo": "Desfazer",
+      "checks": {
+        "failing": "Verificações com falha",
+        "passing": "Verificações aprovadas",
+        "pending": "Verificações pendentes"
+      },
+      "runningElsewhere": "{{count}} em execução em outros espaços de trabalho"
     }
   },
   "settings": {
@@ -861,7 +882,11 @@
       "customPermissions": "Argumentos personalizados",
       "replaceWithPermissionMode": "Substituir por {{mode}}",
       "expandAgentSettings": "Expandir configurações do agente",
-      "collapseAgentSettings": "Recolher configurações do agente"
+      "collapseAgentSettings": "Recolher configurações do agente",
+      "defaultOpensAs": "Abrir {{value0}} como",
+      "defaultOpensAsChat": "Chat",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "Aplica-se a novas sessões de {{value0}} iniciadas neste computador, inclusive em hosts pareados. Corresponde à opção em Provedores."
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "link simbólico",
@@ -8188,7 +8213,8 @@
           "5f5142a62a": "Ícone anterior"
         },
         "BrowserDefaultZoomSetting": {
-          "265597101f": "Zoom Padrão"
+          "265597101f": "Zoom Padrão",
+          "siteDefault": "Zoom para sites cujo zoom você ainda não alterou."
         },
         "BrowserUseComputerUseNotice": {
           "15b5e680ba": "Abrir Uso do Computador",
@@ -8559,7 +8585,8 @@
           "nodeDownloadBlocked": "Nem este computador nem este host conseguiram baixar o Node.js, necessário para o servidor Orca. Use um espelho do Node.js ou verifique a rede nas duas máquinas.",
           "nodeDownloadBlockedNoMirror": "Nem este computador nem este host conseguiram baixar o Node.js, necessário para o servidor Orca. Verifique a rede ou o proxy nas duas máquinas e conecte novamente.",
           "nodeDownloadBlockedMirrorTried": "Nem este computador nem este host conseguiram baixar o Node.js, nem mesmo pelo espelho de downloads do Node.js. Verifique a configuração do espelho e conecte novamente.",
-          "reassurance": "É executado em {{host}}, acessado pela sua própria conexão SSH. Seu código e seus arquivos permanecem onde estão. Apenas a lista de projetos, abas e terminais do Orca é movida para {{host}}."
+          "reassurance": "É executado em {{host}}, acessado pela sua própria conexão SSH. Seu código e seus arquivos permanecem onde estão. Apenas a lista de projetos, abas e terminais do Orca é movida para {{host}}.",
+          "refusedBlockedReason": "O Orca ainda não está configurado neste host. {{reason}}"
         },
         "ZcodeCliSetupSection": {
           "title": "Usar GLM com ZCode",
@@ -8886,6 +8913,12 @@
           "attentionSharedNotCurrent": "Atenção necessária · A cópia compartilhada usada por esta pasta não é do Orca",
           "resultUpdateSkippedPlaces": "{{result}} · Atualização ignorada em {{places}} locais: {{reason}}",
           "resultUpdateSkippedAgent": "{{result}} · Atualização ignorada em {{agent}}: {{reason}}"
+        },
+        "ReleaseBuildPicker": {
+          "build": "Build",
+          "searchLabel": "Buscar builds",
+          "searchPlaceholder": "Buscar builds…",
+          "noMatches": "Nenhuma build encontrada."
         }
       },
       "right": {
@@ -10420,7 +10453,8 @@
             "databaseCount_other": "{{value0}} bancos de dados",
             "scanning": "Verificando {{value0}}",
             "scanned": "Verificação concluída: {{value0}}",
-            "agentChecked": "{{agent}}: {{settled}} de {{total}} candidatos do histórico verificados"
+            "agentChecked": "{{agent}}: {{settled}} de {{total}} candidatos do histórico verificados",
+            "checking": "Verificando {{value0}}"
           },
           "run": {
             "source": {
@@ -16519,7 +16553,16 @@
             "bf648471c5": "Criando…",
             "53bbe3dab4": "{{value0}} cookies importados do arquivo.",
             "c5f0e4d3b2a1": "{{value0}} cookies importados de {{value1}} ({{value2}}).",
-            "d6a1f5e4c3b2": "{{value0}} cookies importados de {{value1}}."
+            "d6a1f5e4c3b2": "{{value0}} cookies importados de {{value1}}.",
+            "zoom": "Zoom",
+            "zoomOut": "Diminuir zoom",
+            "zoomIn": "Aumentar zoom",
+            "resetZoom": "Redefinir zoom",
+            "appearance": "Aparência",
+            "appearanceMatchOrca": "Usar aparência do Orca",
+            "appearanceLight": "Claro",
+            "appearanceDark": "Escuro",
+            "zoomPercent": "Zoom {{value0}}%"
           },
           "GrabConfirmationSheet": {
             "314a0aaa5b": "Anexar à IA",
@@ -16613,7 +16656,8 @@
               "bar": {
                 "suggestions": {
                   "87fcdd0da9": "Buscar {{value0}}"
-                }
+                },
+                "placeholder": "Pesquise ou digite uma URL"
               }
             }
           },
@@ -18989,6 +19033,21 @@
         "copyFailed": "Não foi possível copiar o link.",
         "signingIn": "Entrando…",
         "cancel": "Cancelar"
+      },
+      "plainSshTerminal": {
+        "open": "Abrir terminal SSH simples",
+        "unmanaged": "SSH simples — não gerenciado. Não é um espaço de trabalho do Orca: os agentes e as abas aqui não são acompanhados, e este terminal não é restaurado. Fechá-lo encerra a sessão SSH.",
+        "ended": "O ssh foi encerrado com o código {{code}}. Feche esta janela quando terminar a leitura.",
+        "title": "SSH simples · {{host}}",
+        "minimize": "Minimizar",
+        "close": "Fechar e encerrar sessão",
+        "unknownTarget": "Este host SSH não está mais salvo no Orca.",
+        "notBlocked": "O Orca consegue acessar este host novamente. Use os terminais do Orca. O SSH simples só está disponível enquanto o Orca não consegue se configurar no host.",
+        "alreadyOpen": "Outra janela do Orca já tem um terminal SSH simples aberto para este host.",
+        "endedBySignal": "O ssh foi interrompido (sinal {{signal}}). Feche esta janela quando terminar a leitura.",
+        "cancelled": "Este terminal SSH simples foi fechado antes de iniciar.",
+        "terminalUnavailable": "O Orca não conseguiu abrir um terminal aqui.",
+        "openHint": "Permite continuar trabalhando no host enquanto o Orca não consegue se configurar nele."
       }
     },
     "startup": {
@@ -19207,7 +19266,8 @@
           "minimal": "Mín",
           "medium": "Méd",
           "xhigh": "Extra alto"
-        }
+        },
+        "imageUnavailable": "Prévia indisponível"
       },
       "tool": {
         "exitCode": "saída {{value0}}",
@@ -19411,7 +19471,9 @@
         "send": "Enviar",
         "next": "Próximo",
         "skip": "Pular",
-        "sending": "Enviando…"
+        "sending": "Enviando…",
+        "terminalRequired": "Responda a esta pergunta do OMP no terminal.",
+        "openTerminal": "Responder no terminal"
       },
       "ask": {
         "awaiting": "Aguardando entrada do usuário:",
@@ -19426,7 +19488,9 @@
         "cancel": "Cancelar",
         "reason": "Motivo",
         "plan": {
-          "file": "Arquivo do plano"
+          "file": "Arquivo do plano",
+          "reviewTitle": "Revisar plano proposto",
+          "refineHint": "Refinar plano fecha a revisão para que você possa enviar o que deseja alterar."
         },
         "needsAccess": "Precisa de acesso a",
         "needsNewerOrca": "Esta solicitação requer uma versão mais recente do Orca."
@@ -19568,7 +19632,8 @@
         "agentNotSignedIn": "Entre na conta de {{agent}}.",
         "thenSendAgain": "Depois, envie sua mensagem novamente.",
         "runCommandWhenDone": "Execute /{{command}} quando terminar.",
-        "commandAfterAnswer": "Responda à pergunta ou ao pedido de aprovação do agente e execute /{{command}}."
+        "commandAfterAnswer": "Responda à pergunta ou ao pedido de aprovação do agente e execute /{{command}}.",
+        "cliTooOld": "A versão {{installedVersion}} de {{agent}} é antiga demais para chats. Atualize para a versão {{minimumVersion}} ou mais recente."
       },
       "writeNotice": {
         "notDoneReadHistory": "Não foi possível carregar o histórico deste chat.",
@@ -19826,6 +19891,10 @@
         "checking": "Verificando as permissões de chat deste host…",
         "outdatedHost": "Este host executa uma versão antiga do Orca que ignora as permissões de chat; por isso, o {{value0}} seria executado aqui sem pedir aprovação. Atualize o Orca neste host para usar {{value1}}.",
         "unverified": "O Orca não conseguiu confirmar as permissões do host para {{value0}}."
+      },
+      "imagePreview": {
+        "fileActions": "Ações do arquivo",
+        "linkActions": "Ações do link"
       }
     },
     "tab": {
@@ -20112,6 +20181,17 @@
           "checking": "Verificando alterações…",
           "checkingDetails": "Verificando…",
           "unavailableDetails": "Detalhes indisponíveis"
+        },
+        "unsavedEdits": {
+          "discarded_one": "As alterações não salvas em {{count}} arquivo serão descartadas:",
+          "discarded_other": "As alterações não salvas em {{count}} arquivos serão descartadas:",
+          "moreFiles": "e mais {{value}}",
+          "blocked_one": "Primeiro, salve ou feche {{count}} arquivo não salvo em {{name}}",
+          "blocked_other": "Primeiro, salve ou feche {{count}} arquivos não salvos em {{name}}",
+          "closedToast_one": "{{count}} arquivo com alterações não salvas de {{workspace}} foi fechado",
+          "closedToast_other": "{{count}} arquivos com alterações não salvas de {{workspace}} foram fechados",
+          "reopen": "Reabrir",
+          "reopenFailed": "Não foi possível reabrir alguns arquivos. Abra um espaço de trabalho e tente Reabrir novamente."
         }
       }
     },
@@ -20652,7 +20732,12 @@
     "remoteScopeAccountsAddHere": "Mostrando contas gerenciadas por {{value0}}. Novas contas são conectadas lá; você conclui no navegador deste dispositivo."
   },
   "fileSearch": {
-    "failed": "A busca falhou. Tente novamente."
+    "failed": "A busca falhou. Tente novamente.",
+    "filters": {
+      "toggle": "Alternar detalhes da busca",
+      "active": "Filtros ativos: {{count}}"
+    },
+    "noResults": "Nenhum resultado. Tente outra busca ou ajuste os filtros."
   },
   "workspaceDeletion": {
     "preferenceSaveFailed": "Não foi possível salvar a preferência de exclusão",
