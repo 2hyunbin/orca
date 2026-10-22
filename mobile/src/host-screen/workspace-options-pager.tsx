@@ -92,5 +92,5 @@ const styles = StyleSheet.create({
   pager: { overflow: 'hidden' },
   underlay: { position: 'absolute', top: 0, left: 0, right: 0 },
   // Opaque and as tall as the pager, so no part of the main sheet shows around the page.
-  page: { flexGrow: 1, backgroundColor: colors.bgBase }
+  page: { flexGrow: 1, backgroundColor: colors.sheet }
 })

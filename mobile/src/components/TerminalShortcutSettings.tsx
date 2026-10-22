@@ -315,7 +315,7 @@ const styles = StyleSheet.create({
   reorderGroup: {
     marginHorizontal: spacing.lg,
     borderRadius: radii.group,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: colors.groupFill,
     overflow: 'hidden'
   },
   // Why: rows inside DragReorderList get a fixed height and a trailing grip

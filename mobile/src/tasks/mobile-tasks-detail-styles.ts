@@ -48,7 +48,7 @@ export const mobileTasksDetailStyles = StyleSheet.create({
   },
   actionGroup: {
     marginHorizontal: spacing.xs,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: colors.groupFill,
     borderRadius: radii.group,
     overflow: 'hidden'
   },

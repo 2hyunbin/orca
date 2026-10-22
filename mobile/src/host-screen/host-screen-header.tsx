@@ -177,18 +177,11 @@ export function HostListTitle({ controller }: { controller: HostScreenController
       <LargeTitle
         title={hostDisplay.title}
         subtitle={
-          <View style={styles.subtitle}>
-            <View style={styles.statusLine}>
-              <View style={[styles.dot, { backgroundColor: statusDotColor(connState, verdict) }]} />
-              <Text style={styles.statusText} numberOfLines={2}>
-                {status}
-              </Text>
-            </View>
-            {hostDisplay.descriptorLine ? (
-              <Text style={styles.descriptor} numberOfLines={1}>
-                {hostDisplay.descriptorLine}
-              </Text>
-            ) : null}
+          <View style={styles.statusLine}>
+            <View style={[styles.dot, { backgroundColor: statusDotColor(connState, verdict) }]} />
+            <Text style={styles.statusText} numberOfLines={2}>
+              {hostDisplay.descriptorLine ? `${status} · ${hostDisplay.descriptorLine}` : status}
+            </Text>
           </View>
         }
       />
@@ -218,18 +211,12 @@ export function HostListTitle({ controller }: { controller: HostScreenController
 
 const styles = StyleSheet.create({
   titleBlock: { paddingTop: 2, paddingBottom: spacing.xs },
-  subtitle: { gap: 2 },
   statusLine: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   statusText: {
-    ...textStyles.subhead,
+    ...textStyles.callout,
     color: colors.textSecondary,
     flexShrink: 1
-  },
-  descriptor: {
-    ...textStyles.footnote,
-    color: colors.textMuted,
-    marginLeft: 15
   },
   searchRow: {
     flexDirection: 'row',

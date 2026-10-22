@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
   // Why: the sheet already pads 12; the group adds 4 so rows sit 16 from the sheet edge.
   group: {
     marginHorizontal: spacing.xs,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: colors.groupFill,
     borderRadius: radii.group,
     overflow: 'hidden',
     maxHeight: 460,

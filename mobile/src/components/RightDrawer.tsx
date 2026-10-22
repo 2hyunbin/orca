@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   },
   drawer: {
     height: '100%',
-    backgroundColor: colors.bgBase,
+    backgroundColor: colors.sheet,
     borderTopLeftRadius: radii.group,
     borderBottomLeftRadius: radii.group,
     paddingHorizontal: spacing.md,

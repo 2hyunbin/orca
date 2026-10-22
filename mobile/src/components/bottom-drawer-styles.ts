@@ -11,7 +11,7 @@ export const bottomDrawerStyles = StyleSheet.create({
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)'
+    backgroundColor: 'rgba(0,0,0,0.55)'
   },
   backdropPressable: {
     ...StyleSheet.absoluteFillObject
@@ -24,7 +24,7 @@ export const bottomDrawerStyles = StyleSheet.create({
     alignItems: 'center'
   },
   drawer: {
-    backgroundColor: colors.bgBase,
+    backgroundColor: colors.sheet,
     borderTopLeftRadius: radii.sheet,
     borderTopRightRadius: radii.sheet,
     paddingHorizontal: spacing.md,
@@ -73,6 +73,6 @@ export const bottomDrawerStyles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 500,
-    backgroundColor: colors.bgBase
+    backgroundColor: colors.sheet
   }
 })

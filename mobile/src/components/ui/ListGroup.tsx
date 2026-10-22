@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   inset: {
     marginHorizontal: spacing.lg,
     borderRadius: radii.group,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: colors.groupFill,
     overflow: 'hidden'
   },
   plain: {},

@@ -272,7 +272,7 @@ function LineageToggle({
 export const WorktreeListRow = memo(WorktreeListRowComponent, areStructurallyEqual)
 
 // The title line's height, so the dot and the trailing badges centre on the name.
-const TITLE_LINE = textStyles.body.lineHeight
+const TITLE_LINE = textStyles.headline.lineHeight
 
 const styles = StyleSheet.create({
   row: {
@@ -314,15 +314,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm
   },
+  // A content list's title, as in Mail: 17 semibold over a 15 pt grey line, so the name leads.
   name: {
-    ...textStyles.body,
-    fontWeight: '500',
+    ...textStyles.headline,
     color: colors.textPrimary,
     flexShrink: 1
   },
-  nameUnread: { fontWeight: '600' },
+  nameUnread: { color: colors.primary },
   textReadOnly: { opacity: 0.5 },
-  subtitle: { ...textStyles.subhead, color: colors.textSecondary },
+  subtitle: { ...textStyles.callout, color: colors.textSecondary },
   // Why: matches the desktop's compact repo chip, a small framed icon ahead of the title.
   repoChip: {
     width: 20,

@@ -123,15 +123,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: LIST_ROW_PADDING,
     paddingVertical: 10
   },
-  rowTwoLine: { minHeight: 64 },
+  rowTwoLine: { minHeight: 66 },
   pressed: { backgroundColor: colors.fill },
   disabled: { opacity: motion.disabledOpacity },
   leading: { width: 28, alignItems: 'center', justifyContent: 'center' },
   main: { flex: 1, minWidth: 0, gap: 2 },
   title: { ...textStyles.body, color: colors.textPrimary },
-  titleEmphasis: { fontWeight: '500' },
+  titleEmphasis: { fontSize: 17, lineHeight: 22, fontWeight: '500' },
   titleDestructive: { color: colors.danger },
-  subtitle: { ...textStyles.subhead, color: colors.textSecondary },
+  subtitle: { ...textStyles.callout, color: colors.textSecondary },
   value: { ...textStyles.callout, color: colors.textSecondary, flexShrink: 1, maxWidth: 180 },
   checkSpace: { width: 18 }
 })

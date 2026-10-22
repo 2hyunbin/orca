@@ -31,7 +31,7 @@ export const mobilePrSidebarStyles = StyleSheet.create({
   group: {
     marginHorizontal: spacing.lg,
     borderRadius: radii.group,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: colors.groupFill,
     overflow: 'hidden'
   },
   groupPadded: {

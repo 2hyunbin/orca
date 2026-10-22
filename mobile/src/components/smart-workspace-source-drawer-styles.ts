@@ -30,7 +30,7 @@ export const smartWorkspaceSourceDrawerStyles = StyleSheet.create({
     flex: 1,
     marginHorizontal: GROUP_INSET,
     marginBottom: spacing.sm,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: colors.groupFill,
     borderRadius: radii.group,
     overflow: 'hidden'
   },
@@ -61,7 +61,7 @@ export const smartWorkspaceSourceDrawerStyles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.separator,
-    backgroundColor: colors.bgBase,
+    backgroundColor: colors.sheet,
     paddingTop: spacing.md,
     paddingBottom: spacing.sm,
     gap: spacing.md,

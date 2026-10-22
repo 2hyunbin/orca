@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
     maxHeight: 200,
     marginHorizontal: spacing.xs,
     borderRadius: radii.field,
-    backgroundColor: colors.bgPanel,
+    backgroundColor: colors.groupFill,
     borderWidth: 1,
     borderColor: colors.separator
   },

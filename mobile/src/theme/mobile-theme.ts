@@ -68,6 +68,10 @@ export const colors = {
   fill: 'rgba(255, 255, 255, 0.075)',
   fillPressed: 'rgba(255, 255, 255, 0.14)',
   fieldFill: 'rgba(255, 255, 255, 0.05)',
+  // A sheet sits one step above the page so it reads as a layer, not a recolour of the page.
+  sheet: '#1c1c1c',
+  // Grouped rows are translucent so they lift the same step on the page and inside a sheet.
+  groupFill: 'rgba(255, 255, 255, 0.06)',
   fieldBorder: 'rgba(255, 255, 255, 0.1)',
   fieldBorderFocused: 'rgba(255, 255, 255, 0.3)',
   separator: 'rgba(255, 255, 255, 0.08)',
