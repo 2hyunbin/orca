@@ -4,11 +4,11 @@ import { MobileEmulatorAgentControlRow } from './MobileEmulatorAgentControlRow'
 
 const mocks = vi.hoisted(
   (): {
-    canUseLocalSkillFreshness: boolean
+    canUseSkillFreshness: boolean
     freshnessSkillName: string | undefined
     panelProps: Record<string, unknown>
   } => ({
-    canUseLocalSkillFreshness: true,
+    canUseSkillFreshness: true,
     freshnessSkillName: undefined,
     panelProps: {}
   })
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
-    canUseLocalSkillFreshness: mocks.canUseLocalSkillFreshness,
+    canUseSkillFreshness: mocks.canUseSkillFreshness,
     terminalShellOverride: undefined
   })
 }))
@@ -46,7 +46,7 @@ vi.mock('./MobileEmulatorExamples', () => ({ MobileEmulatorExamples: () => null 
 
 describe('MobileEmulatorAgentControlRow freshness authority', () => {
   beforeEach(() => {
-    mocks.canUseLocalSkillFreshness = true
+    mocks.canUseSkillFreshness = true
     mocks.freshnessSkillName = undefined
   })
 
@@ -54,7 +54,7 @@ describe('MobileEmulatorAgentControlRow freshness authority', () => {
     renderToStaticMarkup(<MobileEmulatorAgentControlRow />)
     expect(mocks.freshnessSkillName).toBe('orca-cli')
 
-    mocks.canUseLocalSkillFreshness = false
+    mocks.canUseSkillFreshness = false
     renderToStaticMarkup(<MobileEmulatorAgentControlRow />)
     expect(mocks.freshnessSkillName).toBeUndefined()
   })

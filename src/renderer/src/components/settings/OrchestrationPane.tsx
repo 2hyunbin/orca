@@ -152,7 +152,7 @@ export function OrchestrationPane({
         }
         onRecheck={refreshOrchestrationSkill}
         freshnessSkillName={
-          activeSkillRuntime.canUseLocalSkillFreshness ? ORCHESTRATION_SKILL_NAME : undefined
+          activeSkillRuntime.canUseSkillFreshness ? ORCHESTRATION_SKILL_NAME : undefined
         }
       />
 

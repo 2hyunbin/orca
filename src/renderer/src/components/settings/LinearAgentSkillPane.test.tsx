@@ -74,7 +74,7 @@ vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
     agentRuntime: { runtime: mocks.runtime },
     terminalShellOverride: undefined,
     installDisabledReason: null,
-    canUseLocalSkillFreshness: mocks.runtime !== 'wsl'
+    canUseSkillFreshness: mocks.runtime !== 'wsl'
   })
 }))
 

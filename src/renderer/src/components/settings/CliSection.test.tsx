@@ -18,11 +18,11 @@ type CapturedPanelProps = {
 
 const capturedPanel = vi.hoisted(
   (): {
-    canUseLocalSkillFreshness: boolean
+    canUseSkillFreshness: boolean
     props: CapturedPanelProps | null
     useInstalledAgentSkill: ReturnType<typeof vi.fn>
   } => ({
-    canUseLocalSkillFreshness: true,
+    canUseSkillFreshness: true,
     props: null,
     useInstalledAgentSkill: vi.fn()
   })
@@ -38,7 +38,7 @@ vi.mock('@/hooks/useInstalledAgentSkills', () => ({
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
-    canUseLocalSkillFreshness: capturedPanel.canUseLocalSkillFreshness
+    canUseSkillFreshness: capturedPanel.canUseSkillFreshness
   })
 }))
 
@@ -51,7 +51,7 @@ capturedPanel.useInstalledAgentSkill.mockReturnValue({
 
 afterEach(() => {
   cleanup()
-  capturedPanel.canUseLocalSkillFreshness = true
+  capturedPanel.canUseSkillFreshness = true
   toastError.mockReset()
   vi.unstubAllGlobals()
 })
@@ -81,11 +81,11 @@ describe('CliSection project runtime defaults', () => {
     renderToStaticMarkup(<CliSection currentPlatform="darwin" settings={settings} />)
     expect(capturedPanel.props?.freshnessSkillName).toBe('orca-cli')
 
-    capturedPanel.canUseLocalSkillFreshness = false
+    capturedPanel.canUseSkillFreshness = false
     renderToStaticMarkup(<CliSection currentPlatform="darwin" settings={settings} />)
     expect(capturedPanel.props?.freshnessSkillName).toBeUndefined()
 
-    capturedPanel.canUseLocalSkillFreshness = true
+    capturedPanel.canUseSkillFreshness = true
     renderToStaticMarkup(
       <CliSection
         currentPlatform="win32"

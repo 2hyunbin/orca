@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   toastDismiss: vi.fn(),
   requestDialog: vi.fn(),
   settingsLoaded: true,
-  canUseLocalSkillFreshness: true,
+  canUseSkillFreshness: true,
   freshnessEnabled: true,
   plan: ((): BundledSkillPlan | null => null)(),
   error: null as string | null
@@ -40,7 +40,7 @@ vi.mock('@/hooks/useSkillFreshness', () => ({
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
-    bundledSkillTarget: mocks.canUseLocalSkillFreshness ? { kind: 'local' } : null
+    bundledSkillTarget: mocks.canUseSkillFreshness ? { kind: 'local' } : null
   })
 }))
 
@@ -88,7 +88,7 @@ describe('SkillFreshnessNudge', () => {
   beforeEach(() => {
     mocks.dismissed = []
     mocks.settingsLoaded = true
-    mocks.canUseLocalSkillFreshness = true
+    mocks.canUseSkillFreshness = true
     mocks.freshnessEnabled = true
     mocks.plan = updatePlan()
     mocks.error = null
@@ -188,7 +188,7 @@ describe('SkillFreshnessNudge', () => {
     await renderNudge()
     const options = mocks.toastInfo.mock.calls[0]?.[1]
 
-    mocks.canUseLocalSkillFreshness = false
+    mocks.canUseSkillFreshness = false
     await rerenderNudge()
     options.onDismiss()
 

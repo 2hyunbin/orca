@@ -5,7 +5,7 @@ import { getDefaultSettings } from '../../../shared/constants'
 import { useAppStore } from '@/store'
 import {
   hasLocalSkillRuntimeAuthority,
-  shouldUseLocalSkillFreshness,
+  shouldUseSkillFreshness,
   useActiveProjectSkillRuntime
 } from './useActiveProjectSkillRuntime'
 
@@ -99,21 +99,16 @@ describe('useActiveProjectSkillRuntime', () => {
     expect(result.current.terminalShellOverride).toBeUndefined()
   })
 
-  it('limits local freshness to resolved host runtimes', () => {
-    expect(shouldUseLocalSkillFreshness({ kind: 'local' }, undefined)).toBe(true)
-    expect(
-      shouldUseLocalSkillFreshness({ kind: 'local' }, { runtime: 'host', label: 'Host' })
-    ).toBe(true)
-    expect(shouldUseLocalSkillFreshness({ kind: 'local' }, { runtime: 'wsl', label: 'WSL' })).toBe(
-      false
+  it('limits freshness pills to this machine and paired hosts', () => {
+    expect(shouldUseSkillFreshness({ kind: 'local' }, undefined)).toBe(true)
+    expect(shouldUseSkillFreshness({ kind: 'local' }, { runtime: 'host', label: 'Host' })).toBe(
+      true
     )
+    expect(shouldUseSkillFreshness({ kind: 'local' }, { runtime: 'wsl', label: 'WSL' })).toBe(false)
     expect(
-      shouldUseLocalSkillFreshness(
-        { kind: 'environment', environmentId: 'ssh-production' },
-        undefined
-      )
-    ).toBe(false)
-    expect(shouldUseLocalSkillFreshness(null, undefined)).toBe(false)
+      shouldUseSkillFreshness({ kind: 'environment', environmentId: 'ssh-production' }, undefined)
+    ).toBe(true)
+    expect(shouldUseSkillFreshness(null, undefined)).toBe(false)
   })
 
   it('limits the no-project Windows fallback to local runtime authority', () => {

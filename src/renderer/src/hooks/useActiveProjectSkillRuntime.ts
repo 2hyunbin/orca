@@ -26,16 +26,20 @@ type ActiveProjectSkillRuntime = {
   agentRuntime?: ProjectAgentSkillRuntime
   terminalShellOverride?: string
   installDisabledReason: string | null
-  canUseLocalSkillFreshness: boolean
+  canUseSkillFreshness: boolean
   /** Where Update skills plans Orca's skills; null while that host is unknown. */
   bundledSkillTarget: BundledSkillTarget | null
 }
 
-export function shouldUseLocalSkillFreshness(
+/** Whether setup surfaces show the plan's pill: this machine or a paired host, not WSL yet. */
+export function shouldUseSkillFreshness(
   runtimeTarget: RuntimeClientTarget | null,
   agentRuntime?: ProjectAgentSkillRuntime
 ): boolean {
-  return runtimeTarget?.kind === 'local' && agentRuntime?.runtime !== 'wsl'
+  return (
+    runtimeTarget?.kind === 'environment' ||
+    (runtimeTarget?.kind === 'local' && agentRuntime?.runtime !== 'wsl')
+  )
 }
 
 export function hasLocalSkillRuntimeAuthority(runtimeTarget: RuntimeClientTarget | null): boolean {
@@ -111,12 +115,12 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
             undefined
           )
         : undefined
-      const canUseLocalSkillFreshness = shouldUseLocalSkillFreshness(runtimeTarget)
+      const canUseSkillFreshness = shouldUseSkillFreshness(runtimeTarget)
       const bundledSkillTarget = resolveBundledSkillTarget(runtimeTarget, undefined)
       return {
         installDisabledReason: null,
         ...(terminalShellOverride ? { terminalShellOverride } : {}),
-        canUseLocalSkillFreshness,
+        canUseSkillFreshness,
         bundledSkillTarget
       }
     }
@@ -132,7 +136,7 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
         agentRuntime
       ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
-      canUseLocalSkillFreshness: shouldUseLocalSkillFreshness(runtimeTarget, agentRuntime),
+      canUseSkillFreshness: shouldUseSkillFreshness(runtimeTarget, agentRuntime),
       bundledSkillTarget: resolveBundledSkillTarget(runtimeTarget, projectRuntime)
     }
   }, [currentPlatform, runtimeState, runtimeTarget, windowsCapabilities])

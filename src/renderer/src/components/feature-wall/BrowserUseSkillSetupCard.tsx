@@ -52,9 +52,7 @@ export function BrowserUseSkillSetupCard(props: {
       onBeforeOpenTerminal={handleBeforeOpenTerminal}
       showRecheckWhenInstalled={false}
       onRecheck={skill.refresh}
-      freshnessSkillName={
-        activeSkillRuntime.canUseLocalSkillFreshness ? ORCA_CLI_SKILL_NAME : undefined
-      }
+      freshnessSkillName={activeSkillRuntime.canUseSkillFreshness ? ORCA_CLI_SKILL_NAME : undefined}
     />
   )
 

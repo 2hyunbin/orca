@@ -89,7 +89,7 @@ export function FloatingTerminalOrchestrationDialog({
                 )}
               </IntegrationStatusPill>
             ) : orchestrationSkillDetected ? (
-              activeSkillRuntime.canUseLocalSkillFreshness ? (
+              activeSkillRuntime.canUseSkillFreshness ? (
                 <SkillFreshnessStatusPill skillName={ORCHESTRATION_SKILL_NAME} />
               ) : (
                 <IntegrationStatusPill tone="connected">

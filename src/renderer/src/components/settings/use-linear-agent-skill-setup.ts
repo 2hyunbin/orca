@@ -60,7 +60,7 @@ export function useLinearAgentSkillSetup(): {
     : buildSkillCommandForRuntime(updateTarget.command, activeSkillRuntime.agentRuntime)
 
   // Freshness cannot verify WSL, so report presence there.
-  const freshnessSkillName = activeSkillRuntime.canUseLocalSkillFreshness
+  const freshnessSkillName = activeSkillRuntime.canUseSkillFreshness
     ? updateTarget.skillName
     : undefined
 

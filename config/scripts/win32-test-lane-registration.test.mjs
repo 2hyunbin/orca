@@ -117,6 +117,8 @@ const MANUAL_OPT_IN = [
   'src/main/skills/skill-wsl-install-transaction.integration.test.ts',
   // Same flag; real WSL POSIX semantics.
   'src/main/skills/skill-wsl-posix-semantics.integration.test.ts',
+  // Same flag; the bundled-skill installer in a real distro home.
+  'src/main/skills/bundled-skill-install/wsl-filesystem.integration.test.ts',
   // `runRealWsl = … && ORCA_REAL_WSL_DELETE_TEST === '1'`; real distro traversal race.
   'src/main/wsl-approved-root-race.wsl.test.ts',
   // Same flag; real UNC delete against a distro.
@@ -127,7 +129,7 @@ const MANUAL_OPT_IN = [
 
 /** Caps so growing either list is two deliberate edits, not one. */
 const UNREGISTERED_MAX = 8
-const MANUAL_OPT_IN_MAX = 9
+const MANUAL_OPT_IN_MAX = 10
 
 /**
  * Floor for the Windows-gated population, so a broken walk or a regex that

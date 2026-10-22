@@ -173,7 +173,7 @@ export function EphemeralVmsPane(): React.JSX.Element {
         icon={<Server className="size-5" />}
         onRecheck={refreshSkill}
         freshnessSkillName={
-          activeSkillRuntime.canUseLocalSkillFreshness ? EPHEMERAL_VMS_SKILL_NAME : undefined
+          activeSkillRuntime.canUseSkillFreshness ? EPHEMERAL_VMS_SKILL_NAME : undefined
         }
       />
 
