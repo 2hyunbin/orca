@@ -12,6 +12,8 @@ type NavBarProps = {
   subtitleColor?: string
   onBack?: () => void
   backAccessibilityLabel?: string
+  /** Replaces the back button, e.g. a close button on a docked panel. */
+  leading?: ReactNode
   /** At most two IconButtons; anything more belongs in an overflow menu. */
   trailing?: ReactNode
   /** False while a LargeTitle under the bar still shows the title. */
@@ -28,6 +30,7 @@ export function NavBar({
   subtitleColor,
   onBack,
   backAccessibilityLabel = 'Back',
+  leading,
   trailing,
   titleVisible = true,
   scrolled = false,
@@ -36,14 +39,15 @@ export function NavBar({
   return (
     <View style={[styles.bar, scrolled && styles.scrolled]} testID={testID}>
       <View style={styles.side}>
-        {onBack ? (
-          <IconButton
-            icon={ChevronLeft}
-            accessibilityLabel={backAccessibilityLabel}
-            onPress={onBack}
-            iconSize={22}
-          />
-        ) : null}
+        {leading ??
+          (onBack ? (
+            <IconButton
+              icon={ChevronLeft}
+              accessibilityLabel={backAccessibilityLabel}
+              onPress={onBack}
+              iconSize={22}
+            />
+          ) : null)}
       </View>
       <View
         style={[styles.center, titleVisible ? styles.shown : styles.hidden, slideTransition]}

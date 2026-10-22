@@ -24,6 +24,8 @@ type ReplyBoxProps = {
   sending?: boolean
   /** Locks the field and the button, e.g. while disconnected. */
   disabled?: boolean
+  /** Locks only the text, e.g. while a commit runs; the box keeps its full look. */
+  editable?: boolean
   /** Allows sending with nothing typed, e.g. an approval with an optional note. */
   allowEmpty?: boolean
   autoFocus?: boolean
@@ -52,6 +54,7 @@ export function ReplyBox({
   sendAccessibilityLabel = 'Send',
   sending = false,
   disabled = false,
+  editable = true,
   allowEmpty = false,
   autoFocus = false,
   maxLines = 6,
@@ -87,7 +90,7 @@ export function ReplyBox({
         placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
         selectionColor={colors.accentBlue}
-        editable={!disabled}
+        editable={!disabled && editable}
         autoFocus={autoFocus}
         multiline
         textAlignVertical="top"

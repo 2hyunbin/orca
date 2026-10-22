@@ -78,6 +78,9 @@ export const colors = {
   onPrimary: '#101010',
   // Destructive actions are red text on a secondary fill, never a red fill outside a confirm.
   danger: '#ff6b6b',
+  // Tinted notice surfaces for warning and error banners.
+  warningFill: 'rgba(245, 158, 11, 0.1)',
+  errorFill: 'rgba(255, 107, 107, 0.1)',
   onDanger: '#ffffff'
 } as const
 

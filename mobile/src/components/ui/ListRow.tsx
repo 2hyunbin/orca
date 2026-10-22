@@ -9,6 +9,8 @@ type ListRowProps = {
   subtitle?: string
   /** Colours the subtitle, e.g. amber for "Waiting for your permission". */
   subtitleColor?: string
+  /** Red title, for an action row that loses work. */
+  destructive?: boolean
   /** A 28 pt slot for an icon or a status dot. */
   leading?: ReactNode
   /** A trailing value in grey, e.g. "Ask first". */
@@ -34,6 +36,7 @@ export function ListRow({
   title,
   subtitle,
   subtitleColor,
+  destructive = false,
   leading,
   value,
   accessory,
@@ -62,7 +65,11 @@ export function ListRow({
       {leading !== undefined ? <View style={styles.leading}>{leading}</View> : null}
       <View style={styles.main}>
         <Text
-          style={[styles.title, subtitle !== undefined && styles.titleEmphasis]}
+          style={[
+            styles.title,
+            subtitle !== undefined && styles.titleEmphasis,
+            destructive && styles.titleDestructive
+          ]}
           numberOfLines={titleNumberOfLines}
         >
           {title}
@@ -123,6 +130,7 @@ const styles = StyleSheet.create({
   main: { flex: 1, minWidth: 0, gap: 2 },
   title: { ...textStyles.body, color: colors.textPrimary },
   titleEmphasis: { fontWeight: '500' },
+  titleDestructive: { color: colors.danger },
   subtitle: { ...textStyles.subhead, color: colors.textSecondary },
   value: { ...textStyles.callout, color: colors.textSecondary, flexShrink: 1, maxWidth: 180 },
   checkSpace: { width: 18 }
