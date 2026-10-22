@@ -112,13 +112,14 @@ export function updateEditorBuffer<TState extends EditorBufferState>(
 /**
  * A host-mirrored tab carries the host's buffer state, so its record adopts it in the same write,
  * and every view mirrors the record's dirty flag. Dirty is the OR of the record's
- * mirrored views: an older host publishes it per tab.
+ * mirrored views: an older host publishes it per tab. `views` is `openFiles` with that flag
+ * mirrored; the caller's session-sync patch writes it.
  */
 export function adoptMirroredEditorBuffers(
   records: EditorBufferRecords,
   openFiles: OpenFile[],
   index: EditorBufferViewIndex
-): EditorBufferWrite {
+): { editorBuffers: EditorBufferRecords; views: OpenFile[] } {
   const adopted = new Map<string, EditorBufferRecord>()
   for (const file of openFiles) {
     const recordId = editorBufferIdOfView(index, file.id)
@@ -155,7 +156,7 @@ export function adoptMirroredEditorBuffers(
     mirrored = true
     return { ...file, isDirty: record.isDirty }
   })
-  return { editorBuffers, openFiles: mirrored ? nextOpenFiles : openFiles }
+  return { editorBuffers, views: mirrored ? nextOpenFiles : openFiles }
 }
 
 const MOVED_EDITOR_BUFFER_PREFIX = 'moved:'

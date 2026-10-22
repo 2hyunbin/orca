@@ -40,8 +40,14 @@ describe('mirrored editor buffer dirty state', () => {
 
     expect(adopted.editorBuffers.rec?.isDirty).toBe(true)
     // Every view mirrors the record, so a later dirty write on the clean one is not a no-op.
-    expect(adopted.openFiles.map((file) => file.isDirty)).toEqual([true, true])
-    expect(() => assertEditorBufferRecordsMatchViews({ ...SHARED, ...adopted })).not.toThrow()
+    expect(adopted.views.map((file) => file.isDirty)).toEqual([true, true])
+    expect(() =>
+      assertEditorBufferRecordsMatchViews({
+        ...SHARED,
+        openFiles: adopted.views,
+        editorBuffers: adopted.editorBuffers
+      })
+    ).not.toThrow()
   })
 
   it('clears the record once every host-owned view reads clean', () => {
@@ -58,7 +64,7 @@ describe('mirrored editor buffer dirty state', () => {
     const records: EditorBufferRecords = { rec: editorBufferRecordFromFile(openFiles[0]) }
     const adopted = adoptMirroredEditorBuffers(records, openFiles, SHARED)
     expect(adopted.editorBuffers).toBe(records)
-    expect(adopted.openFiles).toBe(openFiles)
+    expect(adopted.views).toBe(openFiles)
   })
 
   it('no longer tolerates a view reading clean on a dirty record', () => {
