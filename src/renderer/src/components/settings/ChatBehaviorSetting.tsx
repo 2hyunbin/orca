@@ -1,7 +1,11 @@
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { translate } from '@/i18n/i18n'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
-import { useStructuredAgentSessionHostQueuesMessages } from '@/runtime/structured-agent-session-host-capability'
+import { AGENT_SESSION_USAGE_LIMIT_AUTO_CONTINUE_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
+import {
+  useStructuredAgentSessionHostCapabilityState,
+  useStructuredAgentSessionHostQueuesMessages
+} from '@/runtime/structured-agent-session-host-capability'
 import { useAppStore } from '../../store'
 import { Card, CardContent } from '../ui/card'
 import { ChatPermissionSetting } from './ChatPermissionSetting'
@@ -30,11 +34,16 @@ export function ChatBehaviorSetting({
   const query = useAppStore((state) => state.settingsSearchQuery)
   // A host without the capability ignores the preference; the switch would do nothing.
   const hostQueuesMessages = useStructuredAgentSessionHostQueuesMessages(STRUCTURED_CHAT_HOST)
+  const hostContinuesUsageLimits =
+    useStructuredAgentSessionHostCapabilityState(
+      STRUCTURED_CHAT_HOST,
+      AGENT_SESSION_USAGE_LIMIT_AUTO_CONTINUE_RUNTIME_CAPABILITY
+    ) === 'supported'
   const entries = getChatBehaviorEntriesByKey()
   const rows = [
     ...(settings.nativeChatPermissionMode !== undefined ? [getChatPermissionSearchEntry()] : []),
     entries.resumeOnRestart,
-    entries.autoContinueAfterUsageLimit,
+    ...(hostContinuesUsageLimits ? [entries.autoContinueAfterUsageLimit] : []),
     ...(hostQueuesMessages ? [entries.queueFollowUps] : []),
     entries.shellEnvironment
   ]
@@ -74,25 +83,27 @@ export function ChatBehaviorSetting({
                 }
               />
             </SearchableSetting>
-            <SearchableSetting
-              {...entries.autoContinueAfterUsageLimit}
-              id={entries.autoContinueAfterUsageLimit.targetSectionId}
-              forceVisible={forceVisible}
-              className="max-w-none"
-            >
-              <SettingsSwitchRow
-                label={entries.autoContinueAfterUsageLimit.title}
-                description={entries.autoContinueAfterUsageLimit.description}
-                checked={autoContinueEnabled}
-                ariaLabel={translate(
-                  'components.settings.nativeChat.usageLimitContinueToggleLabel',
-                  'Toggle continuing chats when a usage limit resets'
-                )}
-                onChange={() =>
-                  updateSettings({ nativeChatAutoContinueAfterUsageLimit: !autoContinueEnabled })
-                }
-              />
-            </SearchableSetting>
+            {hostContinuesUsageLimits ? (
+              <SearchableSetting
+                {...entries.autoContinueAfterUsageLimit}
+                id={entries.autoContinueAfterUsageLimit.targetSectionId}
+                forceVisible={forceVisible}
+                className="max-w-none"
+              >
+                <SettingsSwitchRow
+                  label={entries.autoContinueAfterUsageLimit.title}
+                  description={entries.autoContinueAfterUsageLimit.description}
+                  checked={autoContinueEnabled}
+                  ariaLabel={translate(
+                    'components.settings.nativeChat.usageLimitContinueToggleLabel',
+                    'Toggle continuing chats when a usage limit resets'
+                  )}
+                  onChange={() =>
+                    updateSettings({ nativeChatAutoContinueAfterUsageLimit: !autoContinueEnabled })
+                  }
+                />
+              </SearchableSetting>
+            ) : null}
             {hostQueuesMessages ? (
               <SearchableSetting
                 {...entries.queueFollowUps}

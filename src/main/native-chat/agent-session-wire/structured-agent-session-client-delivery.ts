@@ -102,6 +102,9 @@ export class StructuredAgentSessionClientDelivery {
     return record ? adapter.atRestCommands?.read(record) : undefined
   }
 
+  readUsageLimitCut = (sessionId: string) =>
+    this.statusFeed.journalProjection(sessionId)?.usageLimitCut ?? null
+
   publishStatus = (sessionId: string): void => this.statusFeed.publish(sessionId)
 
   publishConversationName = (sessionId: string): void =>

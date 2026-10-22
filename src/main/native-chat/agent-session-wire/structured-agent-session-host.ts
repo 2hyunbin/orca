@@ -240,7 +240,7 @@ export class StructuredAgentSessionHost {
 
   knownAgentIds = (): readonly string[] => providerSupport.knownAgentIds(this.deps)
 
-  private readonly tabs = createTabs(this, this.sessions, this.clientDelivery.forgetStatus)
+  private readonly tabs = createTabs(this, this.sessions, this.clientDelivery)
   listSessionTabs = this.tabs.listSessionTabs
   getPersistedVisibleSessionTabIndex = this.tabs.getPersistedVisibleSessionTabIndex
   getSessionTabId = this.tabs.getSessionTabId

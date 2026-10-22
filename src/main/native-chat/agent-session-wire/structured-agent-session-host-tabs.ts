@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionClientDelivery } from './structured-agent-session-client-delivery'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
@@ -76,7 +77,7 @@ export function createStructuredAgentSessionTabSurface(
     }
   },
   sessions: TabSessions,
-  forgetStatus: (sessionId: string) => void
+  delivery: Pick<StructuredAgentSessionClientDelivery, 'forgetStatus' | 'publishStatus'>
 ) {
   // Restored chats that could not be opened. Each keeps its tab, whose read says why.
   const unopened = new Set<string>()
@@ -97,7 +98,11 @@ export function createStructuredAgentSessionTabSurface(
     getPersistedVisibleSessionTabIndex: () => host.deps.store.getVisibleSessionTabIndex(),
     getSessionTabId: (sessionId: string): string | null =>
       host.deps.store.getSessionTabId(sessionId),
-    showSessionTabs: (sessionIds: readonly string[]) => host.deps.store.showSessionTabs(sessionIds),
+    showSessionTabs: async (sessionIds: readonly string[]) => {
+      const result = await host.deps.store.showSessionTabs(sessionIds)
+      sessionIds.forEach(delivery.publishStatus)
+      return result
+    },
     notifySessionTabHidden: (sessionId: string): void => notifyTabHidden(host, sessionId),
     setSessionTabVisibility: async (
       sessionId: string,
@@ -113,9 +118,10 @@ export function createStructuredAgentSessionTabSurface(
           notifyTabHidden(host, sessionId)
         }
       }
+      delivery.publishStatus(sessionId)
       // The tab edge of the row's lifetime; the handle close is the other.
       if (!visible && !sessions.get(sessionId)?.child) {
-        forgetStatus(sessionId)
+        delivery.forgetStatus(sessionId)
       }
     }
   }

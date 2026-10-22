@@ -1,5 +1,9 @@
 import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
-import { parseAgentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat-usage-limit-cut'
+import {
+  agentJournalItemKey,
+  parseAgentJournalItemKey
+} from '../../../shared/agent-session-journal-item-key'
 import { agentSessionProviderHandleChainHead } from '../../../shared/agent-session-provider-handle'
 import { isDeepStrictEqual } from 'node:util'
 import { structuredRewindCut, type StructuredRewindCut } from './structured-rewind-cut'
@@ -224,6 +228,7 @@ export async function applyStructuredRewindRecovery(
     ) {
       throw new Error('agent_session_rewind:stale-context')
     }
+    await cancelRestoredUsageLimitContinue(deps, sessionId, journal, cut)
     const completed = rewind
     await journal.context.rewind(
       { epoch: completed.expectedEpoch, sequence: completed.contextClearSequence! },
@@ -235,6 +240,7 @@ export async function applyStructuredRewindRecovery(
     )
     return
   }
+  await cancelRestoredUsageLimitContinue(deps, sessionId, journal, cut)
   const cursor = alreadyReplaced
     ? journal.cursor()
     : await journal.replaceEpochItems('handle_forked', fence, cut!.kept)
@@ -252,4 +258,40 @@ export async function applyStructuredRewindRecovery(
       rewind: { itemId: rewind.itemId, epoch: cursor.epoch }
     }
   })
+}
+
+/** Cancel before publishing the restored prefix, including recovery after the epoch already moved. */
+async function cancelRestoredUsageLimitContinue(
+  { store, logger }: RewindRecoveryDeps,
+  sessionId: string,
+  journal: AgentSessionJournal,
+  cut: StructuredRewindCut | null
+): Promise<void> {
+  try {
+    const snapshot = cut
+      ? {
+          items: cut.kept.map((item, index) => ({
+            ...item,
+            itemId: agentJournalItemKey(item.identity),
+            revision: 1,
+            sequence: index + 1,
+            observedAt: item.observedAt ?? 0
+          })),
+          submissions: []
+        }
+      : journal.snapshot()
+    const restored = latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
+    if (restored?.resetsAt !== undefined && Number.isFinite(restored.resetsAt)) {
+      await store.cancelUsageLimitContinue(sessionId, {
+        turnItemId: restored.turnItemId,
+        resetsAt: restored.resetsAt
+      })
+    }
+  } catch (error) {
+    logger.warn('cancelling automatic continuation after rewind failed', {
+      scope: 'usage-limit-continue',
+      sessionId,
+      error
+    })
+  }
 }

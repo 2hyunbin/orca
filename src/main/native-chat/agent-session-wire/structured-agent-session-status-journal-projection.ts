@@ -1,3 +1,7 @@
+import {
+  latestNativeChatUsageLimitCut,
+  type NativeChatUsageLimitCut
+} from '../../../shared/native-chat-usage-limit-cut'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import { isStructuredAgentSessionCommandEntry } from '../../../shared/structured-agent-session-command-entry'
@@ -30,6 +34,7 @@ export type StructuredAgentSessionJournalProjection = {
   workRevision: number
   /** The Stop marks' settle revision: a settle edge writes no row, so it is a key of its own. */
   stopRevision: number
+  usageLimitCut: NativeChatUsageLimitCut | null
   state: StructuredAgentSessionStatusState
   acceptedSendKey: string
   firstInputSubmissionKey: string | null
@@ -111,6 +116,7 @@ export class StructuredAgentSessionJournalProjections {
       }
       projection = {
         ...cursor,
+        usageLimitCut: latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions),
         firstInputSubmissionKey,
         submissionCount: snapshot.submissions.length,
         fence,

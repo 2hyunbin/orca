@@ -1,4 +1,5 @@
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-mutation-context'
+import type { StructuredAgentSessionClientDelivery } from './structured-agent-session-client-delivery'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
 import type { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
 import type { StructuredAgentSessionConversationLifetime } from './structured-agent-session-conversation-lifetime'
@@ -8,11 +9,12 @@ import { sleepStructuredAgentSessionWorkspace } from './structured-agent-session
 export function createUsageLimitContinue(
   context: StructuredAgentSessionMutationContext,
   host: Pick<StructuredAgentSessionHost, 'send'>,
-  delivery: { publishStatus: (id: string) => void }
+  delivery: Pick<StructuredAgentSessionClientDelivery, 'publishStatus' | 'readUsageLimitCut'>
 ): StructuredAgentSessionUsageLimitContinue {
   return new StructuredAgentSessionUsageLimitContinue({
     host: context.deps,
     sessions: context.sessions,
+    readLoadedCut: delivery.readUsageLimitCut,
     serialize: context.serialize,
     send: (params) => host.send({ callerKey: 'trusted-local:usage-limit-continue' }, params),
     publish: delivery.publishStatus,

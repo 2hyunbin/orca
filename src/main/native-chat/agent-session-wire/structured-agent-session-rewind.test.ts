@@ -17,6 +17,7 @@ import {
   agentJournalSubmissionKey
 } from '../../../shared/agent-session-journal-item-key'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
+import { expectUsageLimitRewindCancellation } from './structured-agent-session-rewind-usage-limit.test-fixture'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { nativeChatTurnMembership } from '../../../shared/native-chat-turn-membership'
@@ -209,6 +210,10 @@ async function params(itemId: string, epoch?: string) {
 const LATE = { provider: 'codex' as const, threadId: HOST_TEST_THREAD, turnId: 'late', ordinal: 0 }
 
 describe('host rewind', () => {
+  it('keeps an older limited turn idle when rewind removes its superseding message', async () => {
+    await expectUsageLimitRewindCancellation({ host, store, target: await seed(), params, clock })
+  })
+
   it('replays the original ordinary rewind after another rewind replaces its record', () =>
     expectSupersededRewindReplay({ host, store, rewind, recoverRewind, seed, params }))
 

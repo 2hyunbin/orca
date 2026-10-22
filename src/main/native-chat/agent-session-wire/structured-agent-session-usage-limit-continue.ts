@@ -25,6 +25,7 @@ type Deps = {
   send: (
     params: Parameters<typeof sendStructuredAgentSessionTurn>[2]
   ) => ReturnType<typeof sendStructuredAgentSessionTurn>
+  readLoadedCut: (id: string) => NativeChatUsageLimitCut | null
   publish: (id: string) => void
   now: () => number
 }
@@ -69,8 +70,7 @@ export class StructuredAgentSessionUsageLimitContinue {
     const session = this.deps.sessions.get(id)
     if (session) {
       this.coldCuts.delete(id)
-      const snapshot = session.journal.snapshot()
-      return latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
+      return this.deps.readLoadedCut(id)
     }
     if (!this.coldCuts.has(id) && cold) {
       const load = replayJournal(this.deps.host.journalDatabase.db, id)
@@ -85,7 +85,12 @@ export class StructuredAgentSessionUsageLimitContinue {
 
   readState = (id: string): AgentSessionStatusSummary['usageLimitContinue'] => {
     const cut = this.readCut(id)
-    if (cut?.resetsAt === undefined || !Number.isFinite(cut.resetsAt)) {
+    if (
+      cut?.resetsAt === undefined ||
+      !Number.isFinite(cut.resetsAt) ||
+      cut.turnEndedAt === undefined ||
+      cut.resetsAt <= cut.turnEndedAt
+    ) {
       return undefined
     }
     const cancel = this.deps.host.store.getRecord(id)?.usageLimitContinueCancel
@@ -148,6 +153,13 @@ export class StructuredAgentSessionUsageLimitContinue {
           }
         }
       }
+      // Visibility and workspace sleep can change without a journal or settings commit.
+      for (const id of this.deps.sessions.keys()) {
+        this.deps.publish(id)
+      }
+      if (this.deps.host.usageLimitAutoContinue?.isEnabled() !== true) {
+        return
+      }
       let coldReads = 0
       const due: { id: string; cut: Cut; at: number }[] = []
       for (const id of visible) {
@@ -164,12 +176,12 @@ export class StructuredAgentSessionUsageLimitContinue {
         if (!cut || !this.eligible(id, cut) || attempt?.unconfirmed || (attempt?.count ?? 0) >= 5) {
           continue
         }
-        const retryAt = attempt ? attempt.at + 60_000 * 2 ** (attempt.count - 1) : 0
+        const retryAt = attempt ? attempt.at + 60_000 * 2 ** Math.max(0, attempt.count - 1) : 0
         if (this.deps.now() >= Math.max(cut.resetsAt + 15_000, retryAt)) {
           due.push({ id, cut, at: attempt?.at ?? 0 })
         }
       }
-      due.sort((a, b) => a.cut.resetsAt - b.cut.resetsAt || a.at - b.at)
+      due.sort((a, b) => a.at - b.at || a.cut.resetsAt - b.cut.resetsAt)
       const next = due[0]
       if (next) {
         await this.send(next.id, next.cut)
@@ -181,6 +193,20 @@ export class StructuredAgentSessionUsageLimitContinue {
       })
     } finally {
       this.running = false
+    }
+  }
+
+  private deferUnchangedCut(id: string, cut: Cut, at: number): void {
+    const current = this.readCut(id)
+    // Admission also refuses temporary backlog; yield the next passes without spending a failure.
+    if (current && identity(current) === identity(cut)) {
+      this.attempts.set(id, {
+        identity: identity(cut),
+        count: this.attempts.get(id)?.count ?? 0,
+        at
+      })
+    } else {
+      this.attempts.delete(id)
     }
   }
 
@@ -221,12 +247,17 @@ export class StructuredAgentSessionUsageLimitContinue {
           }
         }
       })
-      if (result.ok || result.refusal.details?.reason === 'continuationSuperseded') {
+      if (result.ok) {
+        return
+      }
+      if (result.refusal.details?.reason === 'continuationSuperseded') {
+        this.deferUnchangedCut(id, cut, at)
         return
       }
       this.attempts.set(id, attempt)
     } catch (error) {
       if (error instanceof RestartContinuationSupersededError) {
+        this.deferUnchangedCut(id, cut, at)
         return
       }
       // An exception cannot prove the message was refused before acceptance; never send it twice.

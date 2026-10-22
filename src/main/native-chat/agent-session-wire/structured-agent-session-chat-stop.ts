@@ -6,6 +6,7 @@
 // reachable only through `mutateWithChatStop`, which queues that step in the same synchronous call
 // as the mutation. Once saved, a failure is answered from the Stop's receipt and noted on the chat.
 
+import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat-usage-limit-cut'
 import type {
   AgentSessionCancelResult,
   AgentSessionMutationEnvelope,
@@ -145,6 +146,28 @@ export function mutateWithChatStop<TValue>(
     )
   }
   const stop = async (ctx: AgentSessionTurnContext): Promise<ChatStopOutcome> => {
+    let cancelledContinue = false
+    // An untargeted Stop also withdraws this idle turn's scheduled work; late named Stops do not.
+    if (turnId === undefined) {
+      const snapshot = ctx.journal.snapshot()
+      const cut = latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
+      if (cut?.resetsAt !== undefined && Number.isFinite(cut.resetsAt)) {
+        try {
+          await context.deps.store.cancelUsageLimitContinue(sessionId, {
+            turnItemId: cut.turnItemId,
+            resetsAt: cut.resetsAt
+          })
+          cancelledContinue = true
+          context.publish(sessionId, ctx.journal)
+        } catch (error) {
+          context.deps.logger.warn('cancelling automatic continuation on Stop failed', {
+            scope: 'usage-limit-continue',
+            sessionId,
+            error
+          })
+        }
+      }
+    }
     const operations = context.acquireAborts.captureOperations(sessionId)
     const flight = context.startFlights.get(sessionId)
     const target = captureChatStopTarget(ctx, {
@@ -155,7 +178,7 @@ export function mutateWithChatStop<TValue>(
     })
     if (!target) {
       // Late, or nothing to stop: answered as a no-op, its receipt committed before the answer.
-      return { ok: true, value: { ...named, cancelled: false } }
+      return { ok: true, value: { ...named, cancelled: cancelledContinue } }
     }
     const accepted = await accept(ctx, target)
     if (!accepted.ok) {
