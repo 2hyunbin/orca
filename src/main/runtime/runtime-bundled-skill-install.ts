@@ -3,10 +3,14 @@ import type {
   BundledSkillInstallResult,
   BundledSkillLocalExecuteRequest,
   BundledSkillLocalPlanRequest,
-  BundledSkillPlan
+  BundledSkillPlan,
+  BundledSkillPlanRequest
 } from '../../shared/bundled-skill-plan'
 import { isSkillInstallProviderId } from '../../shared/skill-install-providers'
-import { localBundledSkillInput } from '../skills/bundled-skill-install/local-host'
+import {
+  localBundledSkillInput,
+  type BundledSkillSelection
+} from '../skills/bundled-skill-install/local-host'
 import {
   installBundledSkills,
   previewBundledSkillInstall,
@@ -24,11 +28,19 @@ import {
   resolveSkillProviderRoots
 } from './runtime-skill-install-authority'
 
+/** Named skills are an install for the host's agents; otherwise update what is installed. */
+function bundledSkillSelection(request: BundledSkillPlanRequest): BundledSkillSelection {
+  return {
+    ...(request.names ? { names: request.names } : { installedOnly: true }),
+    ...(request.force ? { force: request.force } : {})
+  }
+}
+
 /** Agents in the guest read the guest's homes, with the guest's own env and agent detection. */
 async function wslInput(
   host: RuntimeSkillCommandHost,
   wsl: NonNullable<BundledSkillLocalPlanRequest['wsl']>,
-  selection: { force?: readonly string[] }
+  selection: BundledSkillPlanRequest
 ): Promise<BundledSkillServiceInput> {
   const distro = wsl.distro ?? getDefaultWslDistro()
   if (!distro) {
@@ -63,13 +75,13 @@ async function wslInput(
       homeDirectory: destination.homeDirectory,
       providerRootOverrides
     }),
-    installedOnly: true,
-    ...(selection.force ? { force: selection.force } : {})
+    ...bundledSkillSelection(selection)
   }
 }
 
-// Why global and installed-only: this is the app's Update skills, which never adds a skill
-// the user did not install. A paired server or SSH host plans this on its own host over RPC.
+// Why global: these are the user's own agents. Without names this is the app's Update skills,
+// which never adds a skill the user did not install. A paired server or SSH host plans this on
+// its own host over RPC.
 async function appInput(
   host: RuntimeSkillCommandHost,
   request: BundledSkillLocalPlanRequest
@@ -87,7 +99,7 @@ async function appInput(
     userDataPath: host.getUserDataPath(),
     destination,
     claudeConfigDirectory: host.getClaudeConfigDirectory?.({ runtime: 'host' }),
-    selection: { installedOnly: true, ...(request.force ? { force: request.force } : {}) }
+    selection: bundledSkillSelection(request)
   })
 }
 

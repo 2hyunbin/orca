@@ -279,7 +279,7 @@ describe('registerSkillsHandlers', () => {
     registerSkillsHandlers(store as never, runtime as never)
 
     await expect(handlerFor('skills:bundledPlan')(null, { force: 'all' })).rejects.toThrow()
-    await expect(handlerFor('skills:bundledPlan')(null, { names: ['x'] })).rejects.toThrow()
+    await expect(handlerFor('skills:bundledPlan')(null, { names: ['../x'] })).rejects.toThrow()
     await expect(handlerFor('skills:bundledExecute')(null, {})).rejects.toThrow()
     await expect(
       handlerFor('skills:bundledExecute')(null, { planDigest: 'not-a-digest' })

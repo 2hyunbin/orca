@@ -12,6 +12,7 @@ import {
 } from '../../../skills/bundled-skill-install/service'
 import {
   makeSkillHome,
+  NAME,
   NEW_TEXT,
   OLD_TEXT,
   removeSkillHomes,
@@ -48,8 +49,13 @@ async function call<T>(name: string, params: unknown, context: RpcContext): Prom
 
 /** The host's runtime, planning its own (temp) home as `planLocalBundledSkills` does. */
 function hostContext(home: SkillHome): RpcContext {
-  const input = (request: BundledSkillPlanRequest) =>
-    serviceInput(home, { installedOnly: true, ...(request.force ? { force: request.force } : {}) })
+  const input = (request: BundledSkillPlanRequest) => ({
+    ...serviceInput(home, {
+      installedOnly: !request.names,
+      ...(request.force ? { force: request.force } : {})
+    }),
+    ...(request.names ? { names: request.names } : {})
+  })
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: these handlers read only the two runtime methods stubbed here.
   return {
     runtime: {
@@ -123,5 +129,48 @@ describe('skills.planBundledOrca / skills.executeBundledOrca', () => {
 
     expect(result.skills.map((skill) => skill.status)).toEqual(['changed'])
     expect(await readFile(join(home.claude, 'SKILL.md'), 'utf8')).toBe('edited meanwhile\n')
+  })
+
+  it('installs named skills for the host’s agents, as `orca skills install` does', async () => {
+    const home = await makeSkillHome()
+    const context = hostContext(home)
+    const request = { names: [NAME] }
+
+    const plan = await call<BundledSkillPlan>('skills.planBundledOrca', request, context)
+    expect(plan.skills[0].ops.map((op) => [op.path, op.kind])).toEqual([
+      [home.shared, 'write'],
+      [home.claude, 'link']
+    ])
+    const result = await call<BundledSkillInstallResult>(
+      'skills.executeBundledOrca',
+      { planDigest: plan.planDigest, request },
+      context
+    )
+
+    expect(result.skills[0].ops.map((op) => op.status)).toEqual(['done', 'done'])
+    expect(await readFile(join(home.claude, 'SKILL.md'), 'utf8')).toBe(NEW_TEXT)
+  })
+
+  it('rejects a name the host does not ship', async () => {
+    const home = await makeSkillHome()
+    await expect(
+      call('skills.planBundledOrca', { names: ['not-an-orca-skill'] }, hostContext(home))
+    ).rejects.toThrow('bundled-skill-unknown')
+    expect(() => method('skills.planBundledOrca').params?.parse({ names: ['../x'] })).toThrow()
+  })
+
+  it('runs nothing when the executed request names different skills than the preview', async () => {
+    const home = await makeSkillHome()
+    const context = hostContext(home)
+    const plan = await call<BundledSkillPlan>('skills.planBundledOrca', { names: [NAME] }, context)
+
+    const result = await call<BundledSkillInstallResult>(
+      'skills.executeBundledOrca',
+      { planDigest: plan.planDigest, request: {} },
+      context
+    )
+
+    expect(result.skills.map((skill) => skill.status)).toEqual(['changed'])
+    expect(await readFile(join(home.shared, 'SKILL.md'), 'utf8').catch(() => null)).toBeNull()
   })
 })

@@ -127,7 +127,16 @@ const BundledSkillForceSchema = z.array(z.string().min(1).max(4096)).max(256)
  * new field; a field needs a new capability.
  */
 export const BundledSkillPlanRequestSchema = z.strictObject({
-  force: BundledSkillForceSchema.optional()
+  force: BundledSkillForceSchema.optional(),
+  /**
+   * Install these bundled skills for the host's agents, like `orca skills install <names>`.
+   * Absent: update only what is already installed. The host rejects a name it does not ship.
+   */
+  names: z
+    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/u))
+    .min(1)
+    .max(64)
+    .optional()
 })
 export type BundledSkillPlanRequest = z.infer<typeof BundledSkillPlanRequestSchema>
 
