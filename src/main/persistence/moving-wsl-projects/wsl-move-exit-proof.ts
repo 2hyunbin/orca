@@ -6,7 +6,7 @@
  * Precondition: the move's fence is up, so no new terminal can start in scope while this reads.
  */
 import { parsePtySessionId, WORKTREE_ID_SEPARATOR } from '../../../shared/pty-session-id-format'
-import { foldWslUncPathCaseInsensitiveParts, toWindowsWslUncPath } from '../../../shared/wsl-paths'
+import { comparableWslPath, isAtOrUnder, isLinuxSpelled } from './wsl-move-comparable-path'
 import type { SessionInfo } from '../../daemon/types'
 
 export type WslMoveExitProof =
@@ -153,19 +153,6 @@ function comparableKey(key: string, distro: string): string {
     return key
   }
   return `${key.slice(0, key.indexOf(WORKTREE_ID_SEPARATOR))}${WORKTREE_ID_SEPARATOR}${comparable}`
-}
-
-function comparableWslPath(path: string, distro: string): string | null {
-  const unc = isLinuxSpelled(path) ? toWindowsWslUncPath(path, distro) : path
-  return foldWslUncPathCaseInsensitiveParts(unc)?.replace(/\/+$/, '') ?? null
-}
-
-function isLinuxSpelled(path: string): boolean {
-  return /^\/(?!\/)/.test(path)
-}
-
-function isAtOrUnder(path: string, root: string): boolean {
-  return path === root || path.startsWith(`${root}/`)
 }
 
 function sameDistro(left: string, right: string): boolean {

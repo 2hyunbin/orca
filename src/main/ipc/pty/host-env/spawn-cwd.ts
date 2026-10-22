@@ -11,6 +11,7 @@ import {
   getFolderWorkspacePathStatus
 } from '../../../project-groups/folder-workspace-path-status'
 import {
+  isWslMoveCwdFenced,
   isWslMoveWorkspaceBlocked,
   WslMoveProjectFencedError
 } from '../../../persistence/moving-wsl-projects/wsl-move-scope-guard'
@@ -19,18 +20,29 @@ import { listLiveDaemonPtyIds } from '../../../daemon/daemon-provider-state'
 /**
  * A new PTY needs a workspace no WSL move is taking, and a folder that still exists. Reattaching to
  * a session the daemon still runs is not a new PTY: a reload mid-move must not orphan a live pane.
+ * With no workspace, the requested folder decides: one inside a moving project is fenced too.
  */
 export function assertWorkspaceAcceptsNewPty(
   store: Store | undefined,
   worktreeId: string | undefined,
-  sessionId?: string
+  sessionId?: string,
+  cwd?: string
 ): Promise<void> | void {
-  if (isWslMoveWorkspaceBlocked(store, worktreeId)) {
+  const fencedByCwd = !worktreeId && !!cwd && isWslMoveCwdFenced(cwd)
+  if (fencedByCwd || isWslMoveWorkspaceBlocked(store, worktreeId)) {
     return assertReattachesLiveSession(sessionId).then(() =>
       assertFolderWorkspacePtyPathUsable(store, worktreeId)
     )
   }
   return assertFolderWorkspacePtyPathUsable(store, worktreeId)
+}
+
+/** Only a spawn on this machine starts in a folder a WSL move can be taking. */
+export function localPtySpawnCwd(args: {
+  connectionId?: string | null
+  cwd?: string
+}): string | undefined {
+  return args.connectionId ? undefined : args.cwd
 }
 
 async function assertReattachesLiveSession(sessionId: string | undefined): Promise<void> {
