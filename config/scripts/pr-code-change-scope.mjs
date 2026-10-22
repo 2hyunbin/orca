@@ -178,6 +178,7 @@ const MOBILE_WEB_APP_PREFIXES = [
   'src/packages/process-host/',
   'config/scripts/verify-mobile-web-app-bundle',
   'config/scripts/mobile-web-app-',
+  'config/scripts/mobile-web-app/',
   'config/scripts/mobile-web-bundle-',
   'config/scripts/verify-packaged-mobile-web-bundle',
   'config/scripts/mobile-web-source-line-endings',

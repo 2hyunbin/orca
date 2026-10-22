@@ -18,7 +18,7 @@ import {
   unresolvedEditableHostStyles
 } from './mobile-web-app-editable-host-font-size.mjs'
 
-const mobileDir = fileURLToPath(new URL('../../mobile', import.meta.url))
+const mobileDir = fileURLToPath(new URL('../../../../mobile', import.meta.url))
 
 /** The editor's own two modules, as a closure naming nothing else. */
 const EDITOR_CLOSURE = {
