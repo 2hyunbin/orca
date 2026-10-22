@@ -35,4 +35,9 @@ describe('browser.tabCreate placement schema', () => {
   it('rejects a navigation target the host does not define', () => {
     expect(() => BrowserTabCreateParams.parse({ navigation: 'others' })).toThrow()
   })
+
+  it('keeps the joined tab optional for older clients and carries it when sent', () => {
+    expect(BrowserTabCreateParams.parse({ worktree: 'id:worktree-a' }).browserTabId).toBeUndefined()
+    expect(BrowserTabCreateParams.parse({ browserTabId: 'tab-1' }).browserTabId).toBe('tab-1')
+  })
 })

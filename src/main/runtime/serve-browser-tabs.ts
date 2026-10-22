@@ -16,6 +16,7 @@ import {
   savedBrowserTabEntryId,
   withClosedServeBrowserTab,
   withOpenedServeBrowserTab,
+  withoutServeBrowserPage,
   withoutServeBrowserPages,
   withServeBrowserPageRecord,
   withServeBrowserPageState,
@@ -23,6 +24,13 @@ import {
 } from './serve-browser-tab-layout'
 
 type LayoutApply = (command: LayoutCommand, hostId: ExecutionHostId) => Promise<LayoutApplyOutcome>
+
+type OpenedServeBrowserPage = ServeBrowserPageState & {
+  profileId?: string
+  groupId?: string
+  /** An existing tab the page joins (layout-owner builds only); a new tab otherwise. */
+  browserTabId?: string
+}
 
 type RestorableBrowserPage = {
   /** The saved tab; a host's own tab is named by its page, a window's by its own id. */
@@ -53,7 +61,7 @@ export class ServeBrowserTabs {
   /** Opens main has not answered yet, by page id: the page's latest address, which the open saves. */
   private readonly pendingOpens = new Map<string, ServeBrowserPageState>()
 
-  opened(page: ServeBrowserPageState & { profileId?: string; groupId?: string }): void {
+  opened(page: OpenedServeBrowserPage): void {
     // Switch point: main's layout command writes the tab; the page's address is a fact saved after.
     if (ORCA_LAYOUT_OWNER_IS_MAIN && this.deps.applyLayout) {
       this.openThroughLayout(page, this.deps.applyLayout)
@@ -179,10 +187,7 @@ export class ServeBrowserTabs {
     return true
   }
 
-  private openThroughLayout(
-    page: ServeBrowserPageState & { profileId?: string; groupId?: string },
-    applyLayout: LayoutApply
-  ): void {
+  private openThroughLayout(page: OpenedServeBrowserPage, applyLayout: LayoutApply): void {
     const { worktreeId, pageId } = page
     const session = this.deps.backend() ? this.deps.session(worktreeId) : null
     if (
@@ -192,27 +197,38 @@ export class ServeBrowserTabs {
     ) {
       return
     }
+    // An unknown tab (closed meanwhile) gets a new tab, as before the page could join one.
+    const joined = session.browserTabsByWorktree?.[worktreeId]?.some(
+      (tab) => tab.id === page.browserTabId
+    )
+      ? page.browserTabId
+      : undefined
     this.pendingOpens.set(pageId, page)
-    const command: LayoutCommand = {
-      type: 'openBrowserTab',
-      workspace: worktreeId,
-      pageId,
-      ...(page.profileId ? { profileId: page.profileId } : {}),
-      ...(page.groupId ? { groupId: page.groupId } : {})
-    }
+    const command: LayoutCommand = joined
+      ? { type: 'openBrowserPage', workspace: worktreeId, browserTabId: joined, pageId }
+      : {
+          type: 'openBrowserTab',
+          workspace: worktreeId,
+          pageId,
+          ...(page.profileId ? { profileId: page.profileId } : {}),
+          ...(page.groupId ? { groupId: page.groupId } : {})
+        }
     void this.applyLogged(applyLayout, worktreeId, command).then((ok) => {
       const latest = this.pendingOpens.get(pageId)
       this.pendingOpens.delete(pageId)
       if (ok && latest) {
-        this.write(worktreeId, (_hostId, next) => withServeBrowserPageRecord(next, latest))
+        this.write(worktreeId, (_hostId, next) =>
+          withServeBrowserPageRecord(next, latest, joined ?? pageId)
+        )
       } else if (ok) {
-        // Closed while main wrote it: a host's tab is named by its page.
-        void this.applyLogged(applyLayout, worktreeId, {
-          type: 'closeTabs',
-          workspace: worktreeId,
-          tabIds: [pageId],
-          force: true
-        })
+        // Closed while main wrote it: a host's own tab is named by its page.
+        void this.applyLogged(
+          applyLayout,
+          worktreeId,
+          joined
+            ? { type: 'closeBrowserPage', workspace: worktreeId, browserTabId: joined, pageId }
+            : { type: 'closeTabs', workspace: worktreeId, tabIds: [pageId], force: true }
+        )
       }
     })
   }
@@ -230,6 +246,17 @@ export class ServeBrowserTabs {
     const saved = session ? findSavedBrowserPage(session, worktreeId, pageId) : null
     if (!session || !saved) {
       return false
+    }
+    // A page of a tab that keeps others closes alone.
+    if (withoutServeBrowserPage(session, saved.tabId, pageId)) {
+      this.write(worktreeId, (_hostId, next) => withoutServeBrowserPage(next, saved.tabId, pageId))
+      void this.applyLogged(applyLayout, worktreeId, {
+        type: 'closeBrowserPage',
+        workspace: worktreeId,
+        browserTabId: saved.tabId,
+        pageId
+      })
+      return true
     }
     // Pages first: a tab with no saved page is listed nowhere, so the close shows at once (and a
     // refused close leaves only an unlisted tab record).

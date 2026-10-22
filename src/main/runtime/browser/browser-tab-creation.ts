@@ -45,6 +45,7 @@ export class RuntimeBrowserTabCreation {
       navigation?: RuntimeNavigationTarget
       targetGroupId?: string
       placement?: BrowserPageCreationPlacement
+      browserTabId?: string
     },
     caller?: { pairedDeviceId?: string; clientKind?: 'mobile' | 'runtime' }
   ): Promise<{ browserPageId: string }> {
@@ -97,7 +98,8 @@ export class RuntimeBrowserTabCreation {
           url,
           title: '',
           ...(params.profileId ? { profileId: params.profileId } : {}),
-          ...(params.targetGroupId ? { groupId: params.targetGroupId } : {})
+          ...(params.targetGroupId ? { groupId: params.targetGroupId } : {}),
+          ...(params.browserTabId ? { browserTabId: params.browserTabId } : {})
         })
       }
       publishCreatedBrowserSessionTab(this.host, {

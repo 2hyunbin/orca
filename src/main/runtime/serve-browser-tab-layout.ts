@@ -76,30 +76,49 @@ export function withOpenedServeBrowserTab(
   })
 }
 
-function servePageRecord(page: ServeBrowserPageState, createdAt: number): BrowserPage {
+function servePageRecord(
+  page: ServeBrowserPageState,
+  createdAt: number,
+  browserTabId = page.pageId
+): BrowserPage {
   return {
     ...BLANK_BROWSER_TAB_STATE,
     url: page.url,
     title: page.title,
     id: page.pageId,
-    workspaceId: page.pageId,
+    workspaceId: browserTabId,
     worktreeId: page.worktreeId,
     createdAt
   }
 }
 
 /**
- * The partition with the page record of a tab `openBrowserTab` just wrote under the page's id, and
- * the tab's address; null when that tab is gone or its page is saved already.
+ * The partition with the page record of a tab main just wrote: `openBrowserTab`'s, named by the
+ * page, or `openBrowserPage`'s existing tab the page joined. Null when that tab is gone or the page
+ * is saved already.
  */
 export function withServeBrowserPageRecord(
   session: WorkspaceSessionState,
-  page: ServeBrowserPageState
+  page: ServeBrowserPageState,
+  browserTabId = page.pageId
 ): WorkspaceSessionState | null {
   const tabs = session.browserTabsByWorktree?.[page.worktreeId] ?? []
-  const tab = tabs.find((entry) => entry.id === page.pageId)
+  const tab = tabs.find((entry) => entry.id === browserTabId)
   if (!tab || findSavedBrowserPage(session, page.worktreeId, page.pageId)) {
     return null
+  }
+  if (browserTabId !== page.pageId) {
+    // A joined page is not the tab's first, so the tab's own address stays its active page's.
+    return {
+      ...session,
+      browserPagesByWorkspace: {
+        ...session.browserPagesByWorkspace,
+        [browserTabId]: [
+          ...(session.browserPagesByWorkspace?.[browserTabId] ?? []),
+          servePageRecord(page, Date.now(), browserTabId)
+        ]
+      }
+    }
   }
   return {
     ...session,
@@ -113,6 +132,23 @@ export function withServeBrowserPageRecord(
       ...session.browserPagesByWorkspace,
       [page.pageId]: [servePageRecord(page, tab.createdAt)]
     }
+  }
+}
+
+/** The partition without one page of a tab that keeps others; null when the tab holds no other. */
+export function withoutServeBrowserPage(
+  session: WorkspaceSessionState,
+  browserTabId: string,
+  pageId: string
+): WorkspaceSessionState | null {
+  const pages = session.browserPagesByWorkspace?.[browserTabId] ?? []
+  const kept = pages.filter((entry) => entry.id !== pageId)
+  if (kept.length === 0 || kept.length === pages.length) {
+    return null
+  }
+  return {
+    ...session,
+    browserPagesByWorkspace: { ...session.browserPagesByWorkspace, [browserTabId]: kept }
   }
 }
 

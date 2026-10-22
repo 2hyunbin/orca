@@ -171,4 +171,88 @@ describe('served browser tabs in a layout-owner build', () => {
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
+
+  describe('a page that joins an existing tab', () => {
+    const JOINED = { ...PAGE, pageId: 'page-2', url: 'https://example.com/b', title: 'B' }
+
+    async function hostWithTab() {
+      const host = servedHost()
+      host.tabs.opened(PAGE)
+      await settle()
+      return host
+    }
+
+    it('adds the page to that tab and saves its record under it', async () => {
+      const host = await hostWithTab()
+
+      host.tabs.opened({ ...JOINED, browserTabId: 'page-1' })
+      await settle()
+
+      expect(host.applyLayout).toHaveBeenLastCalledWith(
+        { type: 'openBrowserPage', workspace: WT, browserTabId: 'page-1', pageId: 'page-2' },
+        'local'
+      )
+      expect(host.session().browserTabsByWorktree?.[WT]).toEqual([
+        expect.objectContaining({ id: 'page-1', pageIds: ['page-1', 'page-2'], url: PAGE.url })
+      ])
+      expect(host.session().browserPagesByWorkspace?.['page-1']).toEqual([
+        expect.objectContaining({ id: 'page-1', workspaceId: 'page-1' }),
+        expect.objectContaining({ id: 'page-2', workspaceId: 'page-1', url: JOINED.url })
+      ])
+      expect(host.session().browserPagesByWorkspace?.['page-2']).toBeUndefined()
+      expect(host.tabs.unifiedTabId(WT, 'page-2')).toBe('page-1')
+    })
+
+    it('opens a new tab when the named tab is not saved', async () => {
+      const host = await hostWithTab()
+
+      host.tabs.opened({ ...JOINED, browserTabId: 'gone-tab' })
+      await settle()
+
+      expect(host.applyLayout).toHaveBeenLastCalledWith(
+        { type: 'openBrowserTab', workspace: WT, pageId: 'page-2' },
+        'local'
+      )
+      expect(host.session().browserTabsByWorktree?.[WT]?.map((tab) => tab.id)).toEqual([
+        'page-1',
+        'page-2'
+      ])
+    })
+
+    it('closes only that page, keeping the tab and its first page', async () => {
+      const host = await hostWithTab()
+      host.tabs.opened({ ...JOINED, browserTabId: 'page-1' })
+      await settle()
+
+      expect(host.tabs.closed(WT, 'page-2')).toBe(true)
+      await settle()
+
+      expect(host.applyLayout).toHaveBeenLastCalledWith(
+        { type: 'closeBrowserPage', workspace: WT, browserTabId: 'page-1', pageId: 'page-2' },
+        'local'
+      )
+      expect(host.session().browserTabsByWorktree?.[WT]).toEqual([
+        expect.objectContaining({ id: 'page-1', pageIds: ['page-1'] })
+      ])
+      expect(host.session().browserPagesByWorkspace?.['page-1']?.map((page) => page.id)).toEqual([
+        'page-1'
+      ])
+      expect(host.tabs.listUnstarted(WT).map((tab) => tab.browserPageId)).toEqual(['page-1'])
+    })
+
+    it('drops only that page when it closes while main is adding it', async () => {
+      const host = await hostWithTab()
+
+      host.tabs.opened({ ...JOINED, browserTabId: 'page-1' })
+      expect(host.tabs.closed(WT, 'page-2')).toBe(true)
+      await settle()
+
+      expect(host.session().browserTabsByWorktree?.[WT]).toEqual([
+        expect.objectContaining({ id: 'page-1', pageIds: ['page-1'] })
+      ])
+      expect(host.session().browserPagesByWorkspace?.['page-1']?.map((page) => page.id)).toEqual([
+        'page-1'
+      ])
+    })
+  })
 })
