@@ -59,6 +59,14 @@ function chatTabPlacement(
   return { groupId: group.id, ...(afterTabId ? { afterTabId } : {}) }
 }
 
+/** Whether the create may carry a place: only in a workspace a server's frames draw. */
+export function mayPlaceFrameDrawnChatTab(intent: {
+  target: RuntimeClientTarget
+  worktreeId: string
+}): boolean {
+  return frameDrawnEnvironment(intent.target, intent.worktreeId) !== null
+}
+
 /** The create's params, with the tab's place when the host takes one. Read as the create is sent. */
 export async function withFrameDrawnChatTabPlacement(intent: {
   target: RuntimeClientTarget
