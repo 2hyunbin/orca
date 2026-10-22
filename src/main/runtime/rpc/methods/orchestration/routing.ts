@@ -46,6 +46,7 @@ export function resolveMessageRun(
       // Lifecycle validation owns malformed payload errors; routing simply cannot derive a Dispatch.
     }
   }
+  const payloadNamesDispatch = dispatchId !== undefined
   if (!dispatchId && params.to?.startsWith('dispatch:')) {
     dispatchId = params.to.slice('dispatch:'.length)
   }
@@ -78,13 +79,14 @@ export function resolveMessageRun(
       `Dispatch ${dispatch.id} belongs to Run ${dispatch.run_id}, not ${run.id}.`
     )
   }
-  if (run && !params.to && !params.runId) {
+  // Why: a resolved --dispatch-id scopes the message; lifecycle validation owns Task/Dispatch mismatches.
+  if (run && !params.to && !params.runId && !(payloadNamesDispatch && dispatch)) {
     const taskId = parseMessageTaskId(params.payload)
     const task = taskId ? db.getTask(taskId) : undefined
     if (task?.run_id && task.run_id !== run.id) {
       throw new OrchestrationError(
         'task_run_mismatch',
-        `Task ${task.id} belongs to Run ${task.run_id}, not ${run.id}.`
+        `Task ${task.id} belongs to Run ${task.run_id}, not the inferred Run ${run.id}. Nothing was sent; pass --run or --to to choose the destination.`
       )
     }
   }

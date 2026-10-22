@@ -2,6 +2,7 @@ import '../../../unused-default-rpc-methods.test-fixture'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createRootDispatch } from '../../../../orchestration/db/root-dispatch-test-fixture'
 import { createOrchestrationRpcHarness } from '../rpc-test-harness'
+import { mapRuntimeError } from '../../../errors'
 
 describe('implicit task-scoped message routing', () => {
   const harness = createOrchestrationRpcHarness()
@@ -17,9 +18,10 @@ describe('implicit task-scoped message routing', () => {
     })
     const otherTask = state.db.createTask({ runId: otherRun.id, spec: 'Other Run work' })
     const from = sender === 'worker' ? 'term_worker' : 'term_coord'
+    let dispatchId: string | undefined
     if (sender === 'worker') {
       const paneKey = 'tab_worker:leaf_worker'
-      createRootDispatch(state.db, ownTask.id, from, paneKey)
+      dispatchId = createRootDispatch(state.db, ownTask.id, from, paneKey).id
       vi.mocked(state.runtime.getTerminalPaneKey).mockImplementation((handle) =>
         handle === from ? paneKey : null
       )
@@ -30,7 +32,7 @@ describe('implicit task-scoped message routing', () => {
         { from, type: 'status', subject: 'Task progress', ...params },
         state.ctx
       )
-    return { ...state, ownTask, otherTask, otherRun, from, send }
+    return { ...state, ownTask, otherTask, otherRun, from, dispatchId, send }
   }
 
   it.each(['coordinator', 'worker'] as const)(
@@ -39,11 +41,14 @@ describe('implicit task-scoped message routing', () => {
       const { db, runtime, otherTask, otherRun, activeRunId, send } = setup(sender)
       const notify = vi.spyOn(runtime, 'notifyMessageArrived')
 
-      await expect(
-        send({ payload: JSON.stringify({ taskId: otherTask.id }) })
-      ).rejects.toMatchObject({
+      const error = await send({ payload: JSON.stringify({ taskId: otherTask.id }) }).catch(
+        (caught: unknown) => caught
+      )
+      expect(mapRuntimeError('req', { runtimeId: 'runtime' }, error).error).toMatchObject({
         code: 'task_run_mismatch',
-        message: `Task ${otherTask.id} belongs to Run ${otherRun.id}, not ${activeRunId}.`
+        message: expect.stringContaining(
+          `Task ${otherTask.id} belongs to Run ${otherRun.id}, not the inferred Run ${activeRunId}.`
+        )
       })
 
       expect(db.getInbox(100)).toEqual([])
@@ -82,6 +87,23 @@ describe('implicit task-scoped message routing', () => {
       ])
     }
   )
+
+  it('leaves a stale Task on an explicit Dispatch to lifecycle rejection in the Dispatch Run', async () => {
+    const { db, otherTask, activeRunId, dispatchId, send } = setup('worker')
+    const receipt = await send({
+      type: 'worker_done',
+      payload: JSON.stringify({
+        taskId: otherTask.id,
+        dispatchId,
+        outcome: 'succeeded'
+      })
+    })
+
+    expect(receipt).toMatchObject({
+      lifecycle: { action: 'rejected', code: 'task_dispatch_mismatch' }
+    })
+    expect(db.getInbox(100)).toEqual([expect.objectContaining({ run_id: activeRunId })])
+  })
 
   it('preserves explicit terminal delivery when the payload references a foreign task', async () => {
     const { db, otherTask, activeRunId, runtime, send } = setup()
