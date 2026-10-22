@@ -281,15 +281,25 @@ export function AgentSessionContinuationDialog({
               </SelectContent>
             </Select>
             <p className="text-[11px] leading-4 text-muted-foreground">
-              {contextMode === 'focused'
-                ? translate(
-                    'components.agentSessionContinuation.modeFocusedDescription',
-                    'Uses the latest status and current workspace, reading older transcript details only when needed.'
-                  )
-                : translate(
-                    'components.agentSessionContinuation.modeFullDescription',
-                    'Asks the new Agent to read the complete saved session before continuing. This can take longer and use significant context, plan usage, or API credits.'
-                  )}
+              {!hasFullContext
+                ? request?.source.sourceKind === 'chat'
+                  ? translate(
+                      'components.agentSessionContinuation.modeLoadedDescription',
+                      'Uses recent messages currently loaded in this chat and the current workspace.'
+                    )
+                  : translate(
+                      'components.agentSessionContinuation.modeCapturedDescription',
+                      'Uses captured text and the current workspace.'
+                    )
+                : contextMode === 'focused'
+                  ? translate(
+                      'components.agentSessionContinuation.modeFocusedDescription',
+                      'Uses the latest status and current workspace, reading older transcript details only when needed.'
+                    )
+                  : translate(
+                      'components.agentSessionContinuation.modeFullDescription',
+                      'Asks the new Agent to read the complete saved session before continuing. This can take longer and use significant context, plan usage, or API credits.'
+                    )}
             </p>
           </div>
 

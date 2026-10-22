@@ -10,7 +10,12 @@ const promptKey = (item: PromptItem): string => `${item.itemId}:${item.revision}
  * Holds a prompt card from the press until the host refuses the response. An accepted one stays
  * held: the host retires that prompt, and a second response to it would only be refused.
  */
-export function useStructuredPromptResponseHold(respond: Respond): {
+export function useStructuredPromptResponseHold(
+  respond: Respond,
+  controller: Pick<ReturnType<typeof useStructuredAgentSession>, 'prompts' | 'turnId' | 'cancel'>,
+  agent: string
+): {
+  cancel: () => void
   respond: Respond
   holds: (item: PromptItem) => boolean
 } {
@@ -33,5 +38,17 @@ export function useStructuredPromptResponseHold(respond: Respond): {
     },
     [respond]
   )
-  return { respond: holdingRespond, holds: (item) => heldKey === promptKey(item) }
+  return {
+    respond: holdingRespond,
+    holds: (item) => heldKey === promptKey(item),
+    cancel: () => {
+      const prompt = controller.prompts[0]
+      if (prompt && (controller.turnId || agent === 'pi')) {
+        void controller.cancel(controller.turnId ?? undefined, {
+          itemId: prompt.itemId,
+          expectedRevision: prompt.revision
+        })
+      }
+    }
+  }
 }

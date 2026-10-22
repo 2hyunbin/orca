@@ -93,6 +93,26 @@ describe('AgentSessionContinuationDialog', () => {
     container.remove()
   })
 
+  it.each(['chat', undefined] as const)(
+    'labels useful %s fallback without promising older history',
+    async (sourceKind) => {
+      mocks.detectAgents.mockResolvedValue([])
+      await act(async () =>
+        root.render(
+          <AgentSessionContinuationDialog
+            open
+            request={{ ...request('wt'), source: { ...request('wt').source, sourceKind } }}
+            onOpenChange={vi.fn()}
+          />
+        )
+      )
+      expect(container.textContent).toContain(
+        sourceKind === 'chat' ? 'recent messages currently loaded' : 'captured text'
+      )
+      expect(container.textContent).not.toContain('reading older transcript details')
+    }
+  )
+
   it('cannot start with only the source agent available', async () => {
     mocks.detectAgents.mockResolvedValue(['codex'])
     await act(async () => {

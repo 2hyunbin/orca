@@ -4,7 +4,6 @@ import { formatShortcutLabel } from '@/hooks/useShortcutLabel'
 import { getShortcutPlatform } from '@/lib/shortcut-platform'
 import { isOrcaSessionId } from '../../../../shared/orca-session-address'
 import { resolveStructuredSessionOrcaSessionId } from '../../runtime/structured-session-orca-session-id'
-import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import type { NativeChatStructuredViewProps } from './native-chat-view-types'
 import type { NativeChatComposerHandle } from './NativeChatComposer'
 import { useNativeChatPasteBridge } from './use-native-chat-paste-bridge'
@@ -15,19 +14,18 @@ import {
 } from './use-native-chat-context-menu'
 import { matchNativeChatSplitShortcut } from './native-chat-split-shortcut'
 import { runNativeChatSplitTarget } from './native-chat-layout-actions'
-import { useNativeChatHandOff } from './use-native-chat-hand-off'
+import type { NativeChatHandOff } from './use-native-chat-hand-off'
 
 export function useStructuredNativeChatPaneCommands({
   pane,
-  messages,
+  handOff,
   rootRef,
   composerRef,
   questionAnswerInputRef,
   ...menuTargets
 }: {
   pane: Omit<NativeChatStructuredViewProps, 'mode'>
-  /** Loaded chat context a hand-off carries when the host has no saved transcript file. */
-  messages: readonly NativeChatMessage[]
+  handOff: NativeChatHandOff
   rootRef: RefObject<HTMLDivElement | null>
   composerRef: RefObject<NativeChatComposerHandle | null>
   questionAnswerInputRef: RefObject<HTMLInputElement | null>
@@ -46,11 +44,6 @@ export function useStructuredNativeChatPaneCommands({
     rootRef,
     composerRef,
     questionAnswerInputRef
-  })
-  const handOff = useNativeChatHandOff({
-    pane,
-    directory: menuTargets.fileLinkContext ?? null,
-    messages
   })
   const contextMenu = useNativeChatContextMenu({
     ...menuTargets,
@@ -116,12 +109,6 @@ export function useStructuredNativeChatPaneCommands({
 
   return {
     ...contextMenu,
-    menu: (
-      <>
-        {contextMenu.menu}
-        {handOff.dialog}
-      </>
-    ),
     onKeyDownCapture
   }
 }

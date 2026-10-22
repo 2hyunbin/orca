@@ -12,10 +12,8 @@ import {
   NativeChatOrcaStopContext,
   type NativeChatOrcaStopView
 } from './native-chat-orca-stop-context'
-import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import type { NativeChatStructuredViewProps } from './native-chat-view-types'
-import type { NativeChatFileLinkContext } from './native-chat-file-link'
-import { useNativeChatHandOff } from './use-native-chat-hand-off'
+import type { NativeChatHandOff } from './use-native-chat-hand-off'
 
 type UsageLimitActions = {
   account: ReactNode
@@ -27,15 +25,13 @@ const UsageLimitActionsContext = createContext<UsageLimitActions | null>(null)
 
 export function NativeChatUsageLimitActionsProvider({
   pane,
-  directory,
-  messages,
+  handOffState,
   view,
   recovery,
   children
 }: {
   pane: Omit<NativeChatStructuredViewProps, 'mode'>
-  directory: NativeChatFileLinkContext | null
-  messages: readonly NativeChatMessage[]
+  handOffState: NativeChatHandOff
   view: NativeChatOrcaStopView
   recovery: {
     readCurrent: boolean
@@ -47,13 +43,6 @@ export function NativeChatUsageLimitActionsProvider({
   const loading = !recovery.readCurrent
   const canSwitchAccount = recovery.canSwitchAccount
   const active = view.usageLimitTurnItemId !== null
-  const handOffState = useNativeChatHandOff({
-    pane,
-    directory,
-    messages,
-    invalidation: [recovery.epoch, view.usageLimitTurnItemId, recovery.readCurrent],
-    avoidSourceAgent: true
-  })
   const disabled = loading || handOffState.preparing
   const canHandOff = active && handOffState.available
   let account: ReactNode = null
@@ -86,7 +75,7 @@ export function NativeChatUsageLimitActionsProvider({
       )
     }
   }
-  const openHandOff = handOffState.open
+  const openHandOff = () => handOffState.open({ avoidSourceAgent: true })
   const actions = useMemo<UsageLimitActions>(
     () => ({
       account,
@@ -112,7 +101,6 @@ export function NativeChatUsageLimitActionsProvider({
       <NativeChatOrcaStopContext.Provider value={stopView}>
         {children}
       </NativeChatOrcaStopContext.Provider>
-      {handOffState.dialog}
     </UsageLimitActionsContext.Provider>
   )
 }

@@ -13,7 +13,8 @@ import { holdStructuredAgentSessionSends } from './structured-agent-session-pend
 /** Holds sends during clear; an older host's replacement keeps the hold until the view leaves. */
 export function useStructuredAgentSessionCommandWrite(
   sessionId: string,
-  write: StructuredAgentSessionWrite
+  write: StructuredAgentSessionWrite,
+  onSourceSuperseded?: () => void
 ): (
   command: AgentSessionConversationCommand,
   delivery?: 'queue-if-active'
@@ -45,6 +46,9 @@ export function useStructuredAgentSessionCommandWrite(
       let movedOn = false
       try {
         const outcome = await send()
+        if (outcome.kind === 'done') {
+          onSourceSuperseded?.()
+        }
         movedOn = outcome.kind === 'done' && outcome.value.replacementSessionId !== undefined
         return outcome
       } finally {
@@ -56,6 +60,6 @@ export function useStructuredAgentSessionCommandWrite(
         }
       }
     },
-    [sessionId, write]
+    [sessionId, write, onSourceSuperseded]
   )
 }

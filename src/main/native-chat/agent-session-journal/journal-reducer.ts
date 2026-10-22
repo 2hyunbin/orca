@@ -73,6 +73,8 @@ export type JournalReducerState = {
   derivedTurnScope: JournalDerivedTurnScope
   /** Latest actual acceptance in this epoch, even when its message is rewound away; 0 when none. */
   latestAcceptedTurnSequence: number
+  /** Latest accepted meaningful removal in this epoch, rebuilt by replay. */
+  contextHistoryRemovalSequence: number
   /** The latest person's Stop event and Resume, what the queue's pause is derived from. */
   queuePauseMarks: JournalQueuePauseMarks
   /** Host-only: each handed-over send's stopped-message history, from its latest `pending` row. */
@@ -98,6 +100,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     aliases: new Map(),
     appliedSettlementIds: new Set(),
     derivedTurnScope: new JournalDerivedTurnScope(),
+    contextHistoryRemovalSequence: 0,
     latestAcceptedTurnSequence: 0,
     queuePauseMarks: createJournalQueuePauseMarks(),
     stoppedHistoryCarried: new Map()

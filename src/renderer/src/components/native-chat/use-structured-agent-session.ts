@@ -14,15 +14,8 @@ import {
   useStructuredAgentSessionHostQueuesMessagesState
 } from '@/runtime/structured-agent-session-host-capability'
 import { structuredAgentSessionStopControl } from './structured-agent-session-stop-control'
-import type { AgentSessionPromptResponse } from '../../../../shared/agent-session-question-answer'
-import {
-  respondToStructuredAgentSessionPrompt,
-  cancelStructuredAgentSessionPrompt
-} from './structured-agent-session-prompt-response'
-import {
-  pendingStructuredSessionPrompts,
-  type StructuredPromptItem
-} from './structured-agent-session-message-projection'
+import { structuredAgentSessionPromptActions } from './structured-agent-session-prompt-response'
+import { pendingStructuredSessionPrompts } from './structured-agent-session-message-projection'
 import { useStructuredAgentSessionMessages } from './use-structured-agent-session-messages'
 import { useStructuredAgentSessionTransportState } from './use-structured-agent-session-transport-state'
 import { useStructuredAgentSessionStop } from './use-structured-agent-session-stop'
@@ -67,6 +60,7 @@ export function useStructuredAgentSession(args: {
   hostStopping?: boolean
   /** The option values the host's status carries; a change re-reads the chat's options. */
   hostOptionStamp?: string
+  onSourceSuperseded?: () => void
   /** The host's rewind latch and what follows a message returned by a rewind. */
   rewind?: NativeChatRewindHost
 }) {
@@ -86,6 +80,7 @@ export function useStructuredAgentSession(args: {
     state,
     stateRef,
     readCurrent,
+    sourceBoundary,
     loadingOlder,
     olderHistoryGeneration,
     loadOlder,
@@ -181,7 +176,11 @@ export function useStructuredAgentSession(args: {
   })
 
   const { pending } = sends
-  const commandWrite = useStructuredAgentSessionCommandWrite(sessionId, write)
+  const commandWrite = useStructuredAgentSessionCommandWrite(
+    sessionId,
+    write,
+    args.onSourceSuperseded
+  )
   const agentName = structuredAgentLabel(agent)
   const sending = pending.some((entry) => entry.phase === 'sending')
   // What the host refuses a rewind behind; a command's own hold is the runner's below.
@@ -249,6 +248,8 @@ export function useStructuredAgentSession(args: {
   })
   return {
     epoch: state.epoch,
+    cursor: state.cursor,
+    sourceBoundary,
     /** Whether a live `/clear` is fading the old transcript out, and how many this view drew. */
     contextClear,
     /** The transcript has caught up with the host since this pane last started reading. */
@@ -315,18 +316,13 @@ export function useStructuredAgentSession(args: {
     /** A send made now while the agent works is held as a queued card: the host queues, and this
      *  send asks it to (the setting is on and no pending prompt blocks the queue). */
     sendsQueue: structuredAgentSessionNewSendsQueue(queue),
-    cancel: (
-      turnId: string | undefined,
-      prompt?: Parameters<typeof cancelStructuredAgentSessionPrompt>[3]
-    ) => cancelStructuredAgentSessionPrompt(target, mutate, turnId, prompt),
+    ...structuredAgentSessionPromptActions(target, mutate),
     stopBackgroundTask: (taskId?: string) =>
       mutate<AgentSessionCancelResult>('agentSession.cancel', 'agentSession.cancel', {
         turnId: 'background-tasks',
         scope: 'background-tasks',
         ...(taskId ? { taskId } : {})
       }),
-    respond: (item: StructuredPromptItem, response: AgentSessionPromptResponse) =>
-      respondToStructuredAgentSessionPrompt({ item, response, target, mutate }),
     optionSnapshot,
     optionSurface,
     sessionCommands: transportEnabled ? (state.commands ?? undefined) : undefined,

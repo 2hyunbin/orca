@@ -2,6 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { useNativeChatHandOff } from './use-native-chat-hand-off'
 import { NativeChatUsageLimitActionsProvider } from './NativeChatUsageLimitActions'
 import { NativeChatNoticeRow } from './NativeChatNoticeRow'
 import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
@@ -14,6 +15,7 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 
 const mocks = vi.hoisted(() => ({
   readSnapshot: {
+    status: 'current',
     canSwitchAccount: true,
     transcriptPath: '/work/chat.jsonl'
   },
@@ -25,7 +27,8 @@ const mocks = vi.hoisted(() => ({
   dialog: vi.fn()
 }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
-  callStructuredAgentSession: mocks.options
+  callStructuredAgentSession: mocks.options,
+  supportsStructuredAgentSessionContinuationContext: async () => true
 }))
 vi.mock('@/runtime/structured-conversation-name', () => ({
   useStructuredChatTabConversationName: () => 'My chat'
@@ -81,12 +84,38 @@ afterEach(() => {
   mocks.follows = true
 })
 
-function row(
-  target: RuntimeClientTarget = { kind: 'local' },
-  offered = true,
-  agent: AgentType = 'claude',
-  messages: readonly NativeChatMessage[] = []
-) {
+function Row({
+  target,
+  offered,
+  agent,
+  messages
+}: {
+  target: RuntimeClientTarget
+  offered: boolean
+  agent: AgentType
+  messages: readonly NativeChatMessage[]
+}) {
+  const pane = {
+    tabId: 'tab',
+    sessionId: 'chat',
+    agent,
+    target,
+    isVisible: true,
+    isFocusedGroup: true
+  }
+  const handOff = useNativeChatHandOff({
+    pane,
+    directory: {
+      worktreeId: 'folder',
+      worktreePath: '/work',
+      runtimeEnvironmentId: target.kind === 'environment' ? target.environmentId : null
+    },
+    messages,
+    cursor: { epoch: 'epoch', sequence: 1 },
+    sourceBoundary: boundary,
+    focusComposer: () => {},
+    invalidation: [offered]
+  })
   const view: NativeChatOrcaStopView = {
     hostLabel: null,
     remoteHost: target.kind !== 'local',
@@ -101,20 +130,8 @@ function row(
       <NativeChatUsageLimitActionsProvider
         recovery={{ readCurrent: true, canSwitchAccount: mocks.follows }}
         view={view}
-        pane={{
-          tabId: 'tab',
-          sessionId: 'chat',
-          agent,
-          target,
-          isVisible: true,
-          isFocusedGroup: true
-        }}
-        directory={{
-          worktreeId: 'folder',
-          worktreePath: '/work',
-          runtimeEnvironmentId: target.kind === 'environment' ? target.environmentId : null
-        }}
-        messages={messages}
+        pane={pane}
+        handOffState={handOff}
       >
         <NativeChatNoticeRow
           agentName="Claude"
@@ -127,8 +144,18 @@ function row(
           }}
         />
       </NativeChatUsageLimitActionsProvider>
+      {handOff.dialog}
     </TooltipProvider>
   )
+}
+const boundary = {}
+function row(
+  target: RuntimeClientTarget = { kind: 'local' },
+  offered = true,
+  agent: AgentType = 'claude',
+  messages: readonly NativeChatMessage[] = []
+) {
+  return <Row target={target} offered={offered} agent={agent} messages={messages} />
 }
 function snapshot(count: number) {
   return {
@@ -229,7 +256,7 @@ it('admits one preparation and discards it after Continue supersedes the cut', a
   const button = screen.getByRole('button', { name: 'Hand Off to Another Agent' })
   fireEvent.click(button)
   fireEvent.click(button)
-  expect(mocks.options).toHaveBeenCalledTimes(1)
+  await waitFor(() => expect(mocks.options).toHaveBeenCalledTimes(1))
   expect(button).toBeDisabled()
   view.rerender(row({ kind: 'local' }, false))
   answer(mocks.readSnapshot)
@@ -243,7 +270,7 @@ it('admits one preparation and discards it after Continue supersedes the cut', a
 })
 
 it('hands off database-backed chats using labelled recent messages when no native file exists', async () => {
-  mocks.options.mockResolvedValue({ canSwitchAccount: false })
+  mocks.options.mockResolvedValue({ status: 'current' })
   render(
     row({ kind: 'local' }, true, 'opencode', [
       {

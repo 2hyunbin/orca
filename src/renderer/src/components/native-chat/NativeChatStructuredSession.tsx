@@ -1,8 +1,9 @@
+import { useNativeChatHandOff } from './use-native-chat-hand-off'
 import { NativeChatUsageLimitActionsProvider } from './NativeChatUsageLimitActions'
 import { cn } from '@/lib/utils'
 import { NATIVE_CHAT_APPEARANCE_ROOT_CLASS } from './native-chat-appearance-style'
 import { useNativeChatStoreAppearanceStyle } from './use-native-chat-store-appearance-style'
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { agentSessionPromptQuestions } from '../../../../shared/agent-session-question-answer'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { useStructuredChatLiveSession } from './use-structured-chat-live-session'
@@ -73,16 +74,15 @@ export function NativeChatStructuredSession(
   const provisionalLaunch = useNativeChatProvisionalLaunch(ownerWorktreeId, props.sessionId)
   // The host's own word on whether the provider child has answered startup yet.
   const hostExecution = useStructuredAgentSessionHostExecution(props.sessionId, props.target)
-  const paneKey = useMemo(
-    () => structuredAgentSessionPaneKey(props.tabId, props.sessionId),
-    [props.sessionId, props.tabId]
-  )
+  const paneKey = structuredAgentSessionPaneKey(props.tabId, props.sessionId)
   // Chat-wide: absent means on; only an explicit off keeps mid-turn sends immediate.
   const queueFollowUps = useAppStore((store) => store.settings?.nativeChatQueueFollowUps !== false)
   const composerRef = useRef<NativeChatComposerHandle>(null)
   // Paste target while a question card replaces the composer.
   const questionAnswerInputRef = useRef<HTMLInputElement>(null)
   const { rewindHost, focusComposer } = useNativeChatRewindHost(props, composerRef)
+  const supersedeHandOff = useRef<() => void>(() => {})
+  const supersede = () => supersedeHandOff.current()
   const controller = useStructuredAgentSession({
     ...props,
     // Why: Stop and a queued card's Edit give text back to the conversation's draft, as the composer keeps it.
@@ -93,7 +93,8 @@ export function NativeChatStructuredSession(
     providerStarting: hostExecution.phase === 'starting',
     // A start's own verdict (a signed-out agent) exists only once that start is proven.
     providerRunning: hostExecution.phase === 'ready',
-    rewind: rewindHost,
+    rewind: { ...rewindHost, beforeRewind: supersede },
+    onSourceSuperseded: supersede,
     transportEnabled: provisionalLaunch.transportEnabled,
     ...(provisionalLaunch.launch ? { launch: provisionalLaunch.launch } : {})
   })
@@ -127,7 +128,7 @@ export function NativeChatStructuredSession(
   const hostPermission = useNativeChatHostPermissionGate(props.target, props.agent, agentLabel)
   const hostHeld = hostPermission.sendBlockedReason !== null
   const submits = useStructuredNativeChatSubmitReveal(controller, provisionalLaunch.retry, hostHeld)
-  const promptResponse = useStructuredPromptResponseHold(submits.respond)
+  const promptResponse = useStructuredPromptResponseHold(submits.respond, controller, props.agent)
   const needsFailureFacts =
     submits.queuedMessages.cards.some((card) => card.state === 'returned') ||
     controller.submissions.some(
@@ -144,8 +145,6 @@ export function NativeChatStructuredSession(
     startFailures,
     agentName: agentLabel
   })
-  // Nothing reads an unread history, so its pane stays blank beside the Retry line.
-  const loadingPane = historyPhase === 'unread' ? null : <NativeChatLoadingCue />
   // A lost contact is the host notice's to say; the read adds only a refusal the host sent.
   const readFailure =
     controller.status === 'error' && !(hostOutage && !controller.readRefusal)
@@ -165,9 +164,18 @@ export function NativeChatStructuredSession(
     rootRef,
     { sessionId: props.sessionId, isVisible: props.isVisible }
   )
+  const handOff = useNativeChatHandOff({
+    pane: props,
+    directory: fileLinkContext,
+    messages: controller.messages,
+    cursor: controller.cursor,
+    focusComposer,
+    sourceBoundary: controller.sourceBoundary
+  })
+  supersedeHandOff.current = handOff.reset
   const paneCommands = useStructuredNativeChatPaneCommands({
     pane: props,
-    messages: controller.messages,
+    handOff,
     rootRef,
     composerRef,
     questionAnswerInputRef,
@@ -185,14 +193,6 @@ export function NativeChatStructuredSession(
   const installLayout = viewState.kind === 'empty' ? 'hero' : 'strip'
   const install = useNativeChatInstallSlot(props, agentLabel, installLayout)
   const approval = prompt?.body.kind === 'approval' ? chatApprovalFromJournal(prompt.body) : null
-  const cancelPrompt = () => {
-    if (prompt && (controller.turnId || props.agent === 'pi')) {
-      void controller.cancel(controller.turnId ?? undefined, {
-        itemId: prompt.itemId,
-        expectedRevision: prompt.revision
-      })
-    }
-  }
   const rootInput = useNativeChatRootInputRouting({
     tabId: props.tabId,
     rootRef,
@@ -226,10 +226,6 @@ export function NativeChatStructuredSession(
     transport: structuredTransport
   })
 
-  // Said once: on the pane when the failure took it, else in the composer's notices.
-  const sessionError =
-    viewState.kind === 'error' || !readFailure ? controller.error : readFailure.text
-  const launch = { ...provisionalLaunch, retry: submits.retryLaunch }
   const availability = useNativeChatAvailabilityNotice({
     unavailable: controller.unavailable,
     agent: props.agent,
@@ -247,9 +243,13 @@ export function NativeChatStructuredSession(
   })
   // While Install shows, it says what to do; a start failure's "send again" or Retry can't help.
   const notices = structuredSessionNotices({
-    launch: install.slot.kind === 'install' ? { ...launch, lifecycle: null } : launch,
+    launch: {
+      ...provisionalLaunch,
+      retry: submits.retryLaunch,
+      ...(install.slot.kind === 'install' ? { lifecycle: null } : {})
+    },
     agentLabel,
-    sessionError,
+    sessionError: viewState.kind === 'error' || !readFailure ? controller.error : readFailure.text,
     composerError: composerError ?? continuation.continueError,
     claudeSignIn,
     availability,
@@ -284,7 +284,9 @@ export function NativeChatStructuredSession(
       <NativeChatContextClearFade clearing={controller.contextClear.clearing}>
         {find.isOpen ? <NativeChatFindBar find={find} isVisible={props.isVisible} /> : null}
         {viewState.kind === 'loading' || (viewState.kind === 'error' && !readFailure) ? (
-          loadingPane
+          historyPhase === 'unread' ? null : (
+            <NativeChatLoadingCue />
+          )
         ) : viewState.kind === 'error' ? (
           <NativeChatEmptyState
             kind="error"
@@ -298,8 +300,7 @@ export function NativeChatStructuredSession(
             <NativeChatUsageLimitActionsProvider
               recovery={controller}
               pane={props}
-              directory={fileLinkContext}
-              messages={controller.messages}
+              handOffState={handOff}
               view={continuation.view}
             >
               <NativeChatClaudeSignInContext.Provider value={claudeSignIn}>
@@ -371,7 +372,7 @@ export function NativeChatStructuredSession(
                 void promptResponse.respond(prompt, { kind: 'option', optionId })
               }
               isSubmitting={promptResponse.holds(prompt)}
-              onCancel={cancelPrompt}
+              onCancel={promptResponse.cancel}
               shouldFocus={!promptsUnanswerable && props.isVisible && props.isFocusedGroup}
               onLinkClick={onLinkClick}
               allowFileUriLinks={onLinkClick !== undefined}
@@ -383,7 +384,7 @@ export function NativeChatStructuredSession(
               questions={agentSessionPromptQuestions(questionBody)}
               onAnswer={(response) => void promptResponse.respond(prompt, response)}
               isSubmitting={promptResponse.holds(prompt)}
-              onCancel={cancelPrompt}
+              onCancel={promptResponse.cancel}
               shouldFocus={!promptsUnanswerable && props.isVisible && props.isFocusedGroup}
               answerInputRef={questionAnswerInputRef}
             />
@@ -409,6 +410,7 @@ export function NativeChatStructuredSession(
         </>
       )}
       {paneCommands.menu}
+      {handOff.dialog}
       <LinkActionPopover request={linkActionRequest} onClose={closeLinkActions} />
     </div>
   )

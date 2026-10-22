@@ -51,6 +51,47 @@ async function readableContext(
   }
 }
 
+export async function structuredSessionNativeContext(
+  record: AgentSessionRecord | null,
+  launchEnv: NodeJS.ProcessEnv,
+  input: {
+    cache: RecoveryContextCache
+    resolveWorkspacePath?: (workspaceId: string) => Promise<string>
+  }
+): Promise<{ transcriptPath: string; store: string } | null> {
+  const metadata = record && structuredAgentRuntimeMetadata(record.provider)
+  const head = record && agentSessionProviderHandleChainHead(record.providerHandleChain)
+  const importer = metadata?.transcriptImport
+  if (!record || !metadata || !head || !importer || importer.readableContext.kind !== 'file') {
+    return null
+  }
+  const store = importer.conversationStore({ accountHome: record.accountHome, launchEnv })
+  if (!store) {
+    return null
+  }
+  const source = {
+    provider: record.provider,
+    handle: head,
+    accountHome: record.accountHome,
+    store,
+    providerSessionId: metadata.sessionHistory.rowSessionId(head),
+    workspaceCwd:
+      agentSessionPinnedLaunchDirectory(record) ??
+      (await input.resolveWorkspacePath?.(record.location.workspaceId)) ??
+      ''
+  }
+  const key = JSON.stringify([record.providerHandleChain, source])
+  const transcriptPath = await readableContext(input.cache, key, store, importer, () =>
+    importer.handleNamesTranscript
+      ? importer.admitTranscriptPath({ store, transcriptPath: head.handle.nativeId })
+      : importer.findTranscript({ ...source, launchEnv })
+  )
+  if (!transcriptPath) {
+    return null
+  }
+  return { transcriptPath, store }
+}
+
 /** Facts are rederived at action time; only the identified readable content is reusable. */
 export async function structuredSessionRecoveryOptions(
   record: AgentSessionRecord | null,
@@ -60,44 +101,20 @@ export async function structuredSessionRecoveryOptions(
     resolveWorkspacePath?: (workspaceId: string) => Promise<string>
   }
 ): Promise<{ canSwitchAccount: boolean; transcriptPath?: string }> {
-  const metadata = record && structuredAgentRuntimeMetadata(record.provider)
-  const head = record && agentSessionProviderHandleChainHead(record.providerHandleChain)
-  const importer = metadata?.transcriptImport
-  if (!record || !metadata || !head || !importer || importer.readableContext.kind !== 'file') {
-    return { canSwitchAccount: false }
-  }
   try {
-    const store = importer.conversationStore({ accountHome: record.accountHome, launchEnv })
-    if (!store) {
+    const source = await structuredSessionNativeContext(record, launchEnv, input)
+    if (!source || !record) {
       return { canSwitchAccount: false }
     }
-    const source = {
-      provider: record.provider,
-      handle: head,
-      accountHome: record.accountHome,
-      store,
-      providerSessionId: metadata.sessionHistory.rowSessionId(head),
-      workspaceCwd:
-        agentSessionPinnedLaunchDirectory(record) ??
-        (await input.resolveWorkspacePath?.(record.location.workspaceId)) ??
-        ''
-    }
-    const key = JSON.stringify([record.providerHandleChain, source])
-    const transcriptPath = await readableContext(input.cache, key, store, importer, () =>
-      importer.handleNamesTranscript
-        ? importer.admitTranscriptPath({ store, transcriptPath: head.handle.nativeId })
-        : importer.findTranscript({ ...source, launchEnv })
-    )
-    if (!transcriptPath) {
-      return { canSwitchAccount: false }
-    }
+    const { transcriptPath, store } = source
+    const metadata = structuredAgentRuntimeMetadata(record.provider)
     const router = getClaudeProfileRouter()
     let canSwitchAccount = false
     if (
       router &&
       record.provider === 'claude' &&
       record.location.wslDistro === null &&
-      metadata.launchFollowsSelection?.()
+      metadata?.launchFollowsSelection?.()
     ) {
       try {
         const roots = await Promise.all(

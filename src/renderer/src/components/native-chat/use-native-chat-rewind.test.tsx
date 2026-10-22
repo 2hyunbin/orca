@@ -84,9 +84,13 @@ describe('structured chat rewind', () => {
   it('confirms without a count, sends, and returns the message', async () => {
     const props = input()
     const onMessageReturned = vi.fn()
+    const beforeRewind = vi.fn(() => expect(props.send).not.toHaveBeenCalled())
     const confirm = vi.fn().mockResolvedValue(true)
-    const view = render({ ...props, onMessageReturned })
+    const view = render({ ...props, onMessageReturned, beforeRewind })
+    await act(() => view.result.current.request('user', async () => false))
+    expect(beforeRewind).not.toHaveBeenCalled()
     await act(() => view.result.current.request('user', confirm))
+    expect(beforeRewind).toHaveBeenCalledOnce()
     expect(confirm).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Rewind to here?',

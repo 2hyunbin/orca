@@ -17,6 +17,7 @@ export const MOBILE_AGENT_SESSION_RPC_METHODS = [
   'agentSession.setOption',
   'agentSession.handoffStatus',
   'agentSession.options',
+  'agentSession.continuationContext',
   'agentSession.modelCatalog',
   'agentSession.conversationCommand',
   'agentSession.commands',

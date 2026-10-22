@@ -16,10 +16,8 @@ import { withPublishedWork, withPublishedWorkResult } from './agent-session-publ
 import { refreshPublishedWork } from './agent-session-work-refresh'
 import type { AgentSessionPublishedWork } from './agent-session-published-work'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
-import {
-  createAgentSessionCatchUpReader,
-  readAgentSessionHydrationPage
-} from './agent-session-history-page'
+import { createAgentSessionCatchUpReader } from './agent-session-history-page'
+import { readAgentSessionCatchUpSnapshot } from './agent-session-catch-up-snapshot'
 import { subscriberHistoryReader } from './agent-session-bounded-frames'
 import {
   subscriberCommandsChanged,
@@ -115,12 +113,17 @@ export function deliverToSubscriber(
     }
     // Replaying an unbounded gap blocks the host; older rows remain available on scroll.
     if (page.hasNewer && subscriber.snapshotCatchUp !== false) {
-      const tail = withPublishedWork(
-        readAgentSessionHydrationPage(journal, subscriber.fence, reader),
-        work
+      const replacement = readAgentSessionCatchUpSnapshot(
+        journal,
+        subscriber.cursor,
+        subscriber.fence,
+        reader
       )
+      const tail = withPublishedWork(replacement.page, work)
       emit(subscriber, {
-        type: 'snapshot',
+        ...(replacement.ok
+          ? { type: 'snapshot' as const }
+          : { type: 'reset' as const, reset: replacement.reset }),
         sessionId: subscriber.sessionId,
         page: tail,
         fence: subscriber.fence,

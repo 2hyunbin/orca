@@ -40,6 +40,7 @@ export type RewindInput = {
   composerScopeKey?: string
   /** Called once the discarded message is back in the composer. */
   onMessageReturned?: () => void
+  beforeRewind?: () => void
   /** Whether the pane is shown, and so reading; absent means shown. */
   isVisible?: boolean
   state: StructuredAgentSessionState
@@ -210,6 +211,7 @@ export function useNativeChatRewind(input: RewindInput) {
         toast.error(blocked)
         return
       }
+      current.beforeRewind?.()
       blockedRef.current = true
       setSending(true)
       const outcome = await current.send({ itemId, expectedEpoch })
@@ -305,5 +307,6 @@ export type NativeChatRewindHost = {
   /** The host's in-doubt latch, from its status feed. */
   hostBlockedReason?: AgentSessionRewindReason | null
   onMessageReturned?: () => void
+  beforeRewind?: () => void
   isVisible?: boolean
 }

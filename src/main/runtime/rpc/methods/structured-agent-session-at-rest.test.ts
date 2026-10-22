@@ -1,5 +1,11 @@
 import '../unused-default-rpc-methods.test-fixture'
-import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../../shared/agent-session-journal-types'
+import { mkdir, realpath, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { structuredAgentRuntimeMetadata } from '../../structured-agent-runtime-metadata'
+import {
+  AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalCursor
+} from '../../../../shared/agent-session-journal-types'
 // A chat at rest, through the RPC surface a client actually calls: opening it starts nothing, what
 // it can answer without an agent it answers, and the first send is what starts one.
 
@@ -146,6 +152,212 @@ describe('opening a chat at rest (P2-01)', () => {
     expect(rig.adapter.acquire).toHaveBeenCalledOnce()
     expect(rig.adapter.dispatch).toHaveBeenCalledOnce()
   })
+})
+
+const continuationParams = (expectedCursor: AgentJournalCursor) => ({
+  sessionId: SESSION,
+  workspaceId: 'workspace-1',
+  expectedCursor
+})
+
+describe('explicit continuation context', () => {
+  it('dispatches an ordinary resting Codex chat to its pinned native file without provider work', async () => {
+    await restingChat()
+    const root = await realpath(rig.root)
+    const account = join(root, 'pr-31782-account')
+    const other = join(root, 'pr-31782-other-account')
+    let transcript = ''
+    for (const home of [account, other]) {
+      await mkdir(join(home, 'sessions'), { recursive: true })
+      const file = join(home, 'sessions', `rollout-2026-10-21T05-03-04-${REST_TEST_THREAD}.jsonl`)
+      await writeFile(
+        file,
+        `${JSON.stringify({ type: 'session_meta', payload: { id: REST_TEST_THREAD, cwd: root } })}\n`
+      )
+      if (home === account) {
+        transcript = file
+      }
+    }
+    await rig.store.transitionHandoff(SESSION, (record) => ({
+      ...record,
+      accountHome: { variable: 'CODEX_HOME', path: account }
+    }))
+    const resolveWorkspacePath = vi.fn(async () => root)
+    const resolveLaunchEnv = vi.fn(async () => ({ CODEX_HOME: other }))
+    rig.host.deps.resolveWorkspacePath = resolveWorkspacePath
+    rig.host.deps.resolveLaunchEnv = resolveLaunchEnv
+    const importer = structuredAgentRuntimeMetadata('codex').transcriptImport!
+    const locate = vi.spyOn(importer, 'findTranscript')
+    const [options] = await call('agentSession.options', { sessionId: SESSION })
+    expect(options).toMatchObject({ ok: true, result: { canSwitchAccount: false } })
+    expect(locate).not.toHaveBeenCalled()
+    const snapshot = await rig.host.journalSnapshot(SESSION)
+    const params = continuationParams(snapshot.cursor)
+    expect(await call('agentSession.continuationContext', params)).toMatchObject([
+      { ok: true, result: { status: 'current', transcriptPath: transcript } }
+    ])
+    expect(locate).toHaveBeenCalledOnce()
+    expect(resolveWorkspacePath).toHaveBeenCalledWith('workspace-1')
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.readOptions).not.toHaveBeenCalled()
+    expect(rig.adapter.dispatch).not.toHaveBeenCalled()
+    expect(
+      await call('agentSession.continuationContext', { ...params, purpose: 'handOff' })
+    ).toMatchObject([{ ok: false }])
+    expect(
+      await call('agentSession.continuationContext', { ...params, workspaceId: 'other-workspace' })
+    ).toMatchObject([{ ok: true, result: { status: 'superseded' } }])
+  })
+
+  it('keeps appends current and rejects destructive changes during lookup and after replay', async () => {
+    await restingChat()
+    await rig.host.journalSnapshot(SESSION)
+    const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+    const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
+    const receipt = { write: () => {}, committed: () => {} }
+    const identity = {
+      provider: 'codex' as const,
+      threadId: REST_TEST_THREAD,
+      turnId: 'context',
+      ordinal: 123
+    }
+    const read = async (change: () => Promise<unknown>, status: 'current' | 'superseded') => {
+      const expectedCursor = journal.cursor()
+      const env = Promise.withResolvers<NodeJS.ProcessEnv>()
+      const resolveLaunchEnv = vi.fn(() => env.promise)
+      rig.host.deps.resolveLaunchEnv = resolveLaunchEnv
+      const pending = call('agentSession.continuationContext', continuationParams(expectedCursor))
+      await vi.waitFor(() => expect(resolveLaunchEnv).toHaveBeenCalledOnce())
+      await change()
+      env.resolve({})
+      expect(await pending).toMatchObject([{ ok: true, result: { status } }])
+      return expectedCursor
+    }
+    await read(
+      () =>
+        journal.appendItem(identity, hostTestMessage('appended'), {
+          fence,
+          turnScope: AGENT_JOURNAL_THREAD_SCOPE
+        }),
+      'current'
+    )
+    const note = { provider: 'orca' as const, clientMessageId: 'pr-31782-stop-note' }
+    await journal.appendItem(
+      note,
+      { kind: 'status', text: 'Interrupted' },
+      { fence, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )
+    await read(() => journal.appendTombstone(note, { fence }), 'current')
+    await read(
+      () =>
+        journal.context.clear(
+          { operationId: 'pr-31782-clear', afterFence: fence, clearedAt: rig.clock.now },
+          receipt,
+          'pr-31782-clear'
+        ),
+      'superseded'
+    )
+    await journal.appendItem({ ...identity, ordinal: 124 }, hostTestMessage('after clear'), {
+      fence,
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE
+    })
+    const floor = journal.context.floor()!
+    const observed = await read(
+      () => journal.context.rewind(floor, fence, [], () => receipt),
+      'superseded'
+    )
+    expect(journal.cursor().epoch).toBe(observed.epoch)
+    expect(journal.context.floor()).toEqual(floor)
+    await rig.restart()
+    setStructuredAgentSessionHost(rig.host)
+    expect(
+      await call('agentSession.continuationContext', continuationParams(observed))
+    ).toMatchObject([{ ok: true, result: { status: 'superseded' } }])
+  })
+})
+
+it.each(['history', 'instance', 'account', 'directory'] as const)(
+  'rechecks %s while the final directory resolution is pending',
+  async (change) => {
+    await restingChat()
+    await rig.host.journalSnapshot(SESSION)
+    const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+    const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
+    const identity = {
+      provider: 'codex' as const,
+      threadId: REST_TEST_THREAD,
+      turnId: 'final-directory',
+      ordinal: 1
+    }
+    await journal.appendItem(identity, hostTestMessage('discarded'), {
+      fence,
+      turnScope: AGENT_JOURNAL_THREAD_SCOPE
+    })
+    const finalDirectory = Promise.withResolvers<string>()
+    const resolveWorkspacePath = vi
+      .fn()
+      .mockResolvedValueOnce(rig.root)
+      .mockReturnValueOnce(finalDirectory.promise)
+    rig.host.deps.resolveWorkspacePath = resolveWorkspacePath
+    rig.host.deps.resolveLaunchEnv = async () => ({})
+    const pending = call('agentSession.continuationContext', continuationParams(journal.cursor()))
+    await vi.waitFor(() => expect(resolveWorkspacePath).toHaveBeenCalledTimes(2))
+    if (change === 'history') {
+      await journal.appendTombstone(identity, { fence })
+    }
+    if (change === 'instance') {
+      rig.host.collaboratorsForTests().sessions.delete(SESSION)
+    }
+    if (change === 'account') {
+      await rig.store.transitionHandoff(SESSION, (record) => ({
+        ...record,
+        accountHome: { variable: 'CODEX_HOME', path: join(rig.root, 'pr-31782-changed') }
+      }))
+    }
+    finalDirectory.resolve(change === 'directory' ? join(rig.root, 'pr-31782-moved') : rig.root)
+    expect(await pending).toMatchObject([{ ok: true, result: { status: 'superseded' } }])
+  }
+)
+
+it('uses loaded text for a stable durable uncertain rewind and rejects its later replacement', async () => {
+  await restingChat()
+  const expectedEpoch = (await rig.host.journalSnapshot(SESSION)).cursor.epoch
+  await rig.store.transitionHandoff(SESSION, (record) => ({
+    ...record,
+    rewind: {
+      operationId: 'pr-31782-uncertain',
+      callerKey: CALLER.callerKey,
+      itemId: 'codex:thread-1:rewind:1',
+      expectedEpoch,
+      phase: 'prepared'
+    }
+  }))
+  await rig.restart()
+  setStructuredAgentSessionHost(rig.host)
+  const importer = vi.spyOn(
+    structuredAgentRuntimeMetadata('codex').transcriptImport!,
+    'findTranscript'
+  )
+  const expectedCursor = (await rig.host.journalSnapshot(SESSION)).cursor
+  const params = continuationParams(expectedCursor)
+  expect(await call('agentSession.continuationContext', params)).toMatchObject([
+    { ok: true, result: { status: 'current' } }
+  ])
+  const directory = Promise.withResolvers<string>()
+  rig.host.deps.resolveWorkspacePath = vi
+    .fn()
+    .mockResolvedValueOnce(rig.root)
+    .mockReturnValueOnce(directory.promise)
+  const pending = call('agentSession.continuationContext', params)
+  await vi.waitFor(() => expect(rig.host.deps.resolveWorkspacePath).toHaveBeenCalledTimes(2))
+  await rig.store.transitionHandoff(SESSION, (record) => ({
+    ...record,
+    rewind: { ...record.rewind!, phase: 'provider-succeeded' }
+  }))
+  directory.resolve(rig.root)
+  expect(await pending).toMatchObject([{ ok: true, result: { status: 'superseded' } }])
+  expect(importer).not.toHaveBeenCalled()
+  expect(rig.adapter.acquire).not.toHaveBeenCalled()
 })
 
 describe('the accessor', () => {

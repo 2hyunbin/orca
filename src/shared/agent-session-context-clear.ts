@@ -7,6 +7,16 @@ import type {
 import { isAgentSessionProviderContextBoundary } from './agent-session-provider-context'
 import type { NativeChatMessage } from './native-chat-types'
 
+/** Content whose removal replaces the source history, unlike status-note bookkeeping. */
+export function isAgentSessionContextHistory(body: AgentJournalItemBody): boolean {
+  return (
+    body.kind === 'message' ||
+    body.kind === 'tool-call' ||
+    body.kind === 'diff' ||
+    body.kind === 'turn'
+  )
+}
+
 export function isAgentSessionContextClear(body: AgentJournalItemBody | undefined): boolean {
   return body?.kind === 'status' && isAgentSessionProviderContextBoundary(body.contextClear)
 }
