@@ -173,6 +173,7 @@ import {
   SetValue,
   TypeText
 } from './computer-schemas-params'
+import { ConnectorSend, ConnectorStart } from './connector-params'
 import {
   AttachParams as AttachParamsOfEmulatorParams,
   AxParams,
@@ -888,6 +889,8 @@ export const RPC_PARAMS_BY_METHOD = {
   'computer.scroll': ScrollOfComputerSchemasParams,
   'computer.setValue': SetValue,
   'computer.typeText': TypeText,
+  'connector.send': ConnectorSend,
+  'connector.start': ConnectorStart,
   'desktopBrowserBridge.attach': DesktopBrowserBridgeAttachParams,
   'desktopBrowserBridge.result': DesktopBrowserBridgeResultParams,
   'diagnostics.memory': null,

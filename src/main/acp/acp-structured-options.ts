@@ -3,6 +3,9 @@
 // Kept as the agent last reported it; nothing here is guessed or listed by Orca itself.
 
 import { abortSignalReason } from '../../shared/abort-signal-reason'
+import type { StructuredAgentSessionSetOptionInput } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
+import type { AcpStructuredSession } from './acp-structured-session'
 
 import type {
   AgentSessionModelOption,
@@ -65,6 +68,8 @@ export class AcpStructuredOptions {
   // A loaded session keeps the model it ran; only a new one resolves the agent's own config.
   private resolvesConfig = false
   readonly picked = new Set<string>()
+  /** Each key's value from Orca's last successful write; never the agent's report. */
+  readonly applied = new Map<string, string>()
   private initialChoice: Readonly<Record<string, string>> = {}
   currentProof = new Set<string>()
   writeRevision = 0
@@ -245,12 +250,35 @@ export async function readAcpLiveOptions(
   return { ...withLiveCatalogListing(session.options.read()), acceptsImages }
 }
 
+export async function setAcpLiveOption(
+  session: Pick<AcpStructuredSession, 'options' | 'connection' | 'spec'>,
+  input: Pick<StructuredAgentSessionSetOptionInput, 'key' | 'value' | 'signal'>,
+  timeoutMs: number
+): Promise<Readonly<Record<string, string>>> {
+  const write = session.options.write(input.key, input.value)
+  if (!write) {
+    throw new AgentSessionOptionRejectedError(
+      `${session.spec.agent} offers no session option named ${input.key}`
+    )
+  }
+  session.options.notePick(input.key)
+  // Bounded, and abandoned by a close or Stop: the session's queue waits on it.
+  await writeAcpSessionOption(session.connection, session.options, write, {
+    key: input.key,
+    value: input.value,
+    agent: session.spec.agent,
+    timeoutMs,
+    ...(input.signal ? { signal: input.signal } : {})
+  })
+  return session.options.reported()
+}
+
 /** Only the current, still-awaited write may establish reusable option proof. */
 export function writeAcpSessionOption(
   connection: Pick<AcpStructuredConnection, 'setConfigOption' | 'setModel'>,
   options: AcpStructuredOptions,
   write: AcpOptionWrite,
-  bound: { agent: string; timeoutMs: number; signal?: AbortSignal; key: string }
+  bound: { agent: string; timeoutMs: number; signal?: AbortSignal; key: string; value: string }
 ): Promise<void> {
   const { agent, timeoutMs, signal } = bound
   if (signal?.aborted) {
@@ -267,6 +295,7 @@ export function writeAcpSessionOption(
     }
     apply()
     options.currentProof.add(bound.key)
+    options.applied.set(bound.key, bound.value)
   }
   const applied =
     write.method === 'config'

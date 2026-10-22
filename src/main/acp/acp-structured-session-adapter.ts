@@ -26,7 +26,6 @@ import type { ProviderStartAttempt } from '../provider-process/provider-acquisit
 import { waitForAcpExit, type AcpStructuredConnection } from './acp-structured-connection'
 import { AcpConnectionClosedError } from './acp-errors'
 import { applyAcpMessageOptions } from './acp-message-execution-options'
-import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import { awaitAcpTurnEnd, interruptAcpTurn } from './acp-structured-stop'
 import { acpDispatchPrompt } from './acp-prompt-content'
 import {
@@ -34,7 +33,7 @@ import {
   ACP_STOP_GRACE_MS,
   type AcpStructuredSessionAdapterDeps
 } from './acp-structured-session-adapter-deps'
-import { readAcpLiveOptions, writeAcpSessionOption } from './acp-structured-options'
+import { readAcpLiveOptions, setAcpLiveOption } from './acp-structured-options'
 import { readAcpRecoveryHistory } from './acp-recovery-history'
 import { stopAcpChildren, acpChildStopCapabilities } from './acp-structured-child-stop'
 import { acpStartupFailure, isAcpReadySession } from './acp-structured-child'
@@ -258,22 +257,11 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   async setOption(
     input: StructuredAgentSessionSetOptionInput
   ): Promise<Readonly<Record<string, string>>> {
-    const session = this.live(input.sessionId)
-    const write = session.options.write(input.key, input.value)
-    if (!write) {
-      throw new AgentSessionOptionRejectedError(
-        `${session.spec.agent} offers no session option named ${input.key}`
-      )
-    }
-    session.options.notePick(input.key)
-    // Bounded, and abandoned by a close or Stop: the session's queue waits on it.
-    await writeAcpSessionOption(session.connection, session.options, write, {
-      key: input.key,
-      agent: session.spec.agent,
-      timeoutMs: this.deps.optionWriteTimeoutMs ?? ACP_OPTION_WRITE_TIMEOUT_MS,
-      ...(input.signal ? { signal: input.signal } : {})
-    })
-    return session.options.reported()
+    return setAcpLiveOption(
+      this.live(input.sessionId),
+      input,
+      this.deps.optionWriteTimeoutMs ?? ACP_OPTION_WRITE_TIMEOUT_MS
+    )
   }
 
   readOptions = async (input: { sessionId: string; fence: number }) =>
