@@ -21,7 +21,7 @@ import {
   isFolderWorkspaceIdForRepo,
   mergeFolderWorkspace
 } from './ipc/worktrees/folder-workspace-model'
-import { worktreeWorkspaceKey } from '../shared/workspace-scope'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../shared/workspace-scope'
 import type { RuntimeStore } from './runtime/runtime-store-contract'
 
 type HostPeerStore = Pick<
@@ -43,7 +43,9 @@ export function withSavedWorktreeLineage<T extends Worktree>(
   raw?: Readonly<Record<string, WorktreeMeta>>
 ) {
   return rows.map((row) => {
-    const key = row.id.startsWith('folder:') ? row.id : worktreeWorkspaceKey(row.id)
+    const key = row.id.startsWith('folder:')
+      ? folderWorkspaceKey(row.id.slice(7))
+      : worktreeWorkspaceKey(row.id)
     const workspaceEdge = lineageById[row.id] ? undefined : store.getWorkspaceLineage?.(key)
     const ownEdge =
       lineageById[row.id] ??
