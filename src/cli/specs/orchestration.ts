@@ -232,7 +232,7 @@ export const ORCHESTRATION_COMMAND_SPECS: CommandSpec[] = [
     identityFlagRoles: { from: 'caller' },
     notes: [
       'From an active Dispatch, a new question defaults to its owning Run mailbox.',
-      'Timeout leaves the question pending; resume with the original message ID.'
+      '--timeout-ms accepts 1–1800000 milliseconds (maximum 30 minutes; default 600000 / 10 minutes). Larger values are rejected before creating or resuming a question. Timeout leaves the question pending; resume with the original message ID.'
     ]
   },
   {
