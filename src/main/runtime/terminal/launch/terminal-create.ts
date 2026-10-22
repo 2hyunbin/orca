@@ -274,7 +274,7 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           cwd: savedStartupCwd,
           launchOpts: {
             ...launchOpts,
-            title: pty?.title ?? launch.effectiveTitle ?? null,
+            title: pty?.title ?? launch.effectiveTitle ?? undefined,
             launchAgent: pty?.launchAgent ?? undefined,
             viewMode: launch.effectiveViewMode
           },

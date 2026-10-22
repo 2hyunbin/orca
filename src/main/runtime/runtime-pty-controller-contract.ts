@@ -23,6 +23,7 @@ import type {
 } from '../providers/pty-provider-contract'
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 import type { WriteSettlement } from '../../shared/pty-write-settlement'
+import type { StartupCwdFallback } from '../../shared/startup-cwd-fallback'
 import type { TerminalInputKind } from '../../shared/terminal-input-kind'
 
 export type PtyInventoryRefreshOptions = {
@@ -116,6 +117,7 @@ export type RuntimePtyController = {
   }): Promise<
     PtySpawnResult & {
       stablePaneOwner?: { handle: string; tabId: string; leafId: string }
+      startupCwdFallback?: StartupCwdFallback
       savedStartupCwd?: string
     }
   >
