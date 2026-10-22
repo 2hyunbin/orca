@@ -23,7 +23,7 @@
 }
 
 .native-chat-markdown :is(th, td) {
-  min-width: 4.5rem;
+  overflow-wrap: break-word;
 }
 
 .native-chat-markdown code {
