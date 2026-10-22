@@ -1,3 +1,4 @@
+import { askOwnsComposer } from './mobile-native-chat-answer-layout'
 import { useCallback, useMemo } from 'react'
 import { nativeChatTaskListPredecessors } from '../../../src/shared/native-chat-task-list-history'
 import {
@@ -232,10 +233,8 @@ export function MobileNativeChatView({
   keyboardInset = 0
 }: Props): React.JSX.Element {
   const insets = useSafeAreaInsets()
-  // Lift the composer clear of the keyboard, plus the bottom safe-area so it
-  // never sits under the home indicator / nav bar (mirrors the terminal dock).
   const { isLandscapePhone } = useResponsiveLayout()
-  const hideComposer = ask != null && !askRequiresTerminal && !collapsedPrompt && !micActive
+  const hideComposer = askOwnsComposer(ask, askRequiresTerminal, collapsedPrompt != null, micActive)
   const expandedQuestion = hideComposer && (isLandscapePhone || keyboardInset > 0)
   const bottomPad = keyboardInset > 0 ? keyboardInset + insets.bottom : insets.bottom
   const { fontScale, pinchGesture } = useMobileNativeChatPinchGesture()

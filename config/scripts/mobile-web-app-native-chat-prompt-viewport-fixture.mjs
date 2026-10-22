@@ -1,18 +1,23 @@
 export const PROMPT_QUESTION =
   'How should the workspace retain its split layout when a document is closed and later opened again? Choose the behavior that fits the task.'
 
-export function nativeChatPromptViewportFixture({ chatViewModule, clientContextModule }) {
+export function nativeChatPromptViewportFixture({
+  chatViewModule,
+  clientContextModule,
+  sessionSurfaceModule
+}) {
   return `
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SafeAreaInsetsContext, SafeAreaProvider } from 'react-native-safe-area-context'
 import { View } from 'react-native'
 import { MobileNativeChatView } from ${JSON.stringify(chatViewModule)}
+${sessionSurfaceModule ? `import { MobileSessionSurface } from ${JSON.stringify(sessionSurfaceModule)}` : ''}
 import { RpcClientProvider } from ${JSON.stringify(clientContextModule)}
 
 const params = new URLSearchParams(location.search)
 const short = params.has('short')
-const insets = { top: 0, bottom: Number(params.get('bottom') ?? 0), left: 0, right: 0 }
+const insets = { top: Number(params.get('top') ?? 0), bottom: Number(params.get('bottom') ?? 0), left: 0, right: 0 }
 const question = {
   header: 'Workspace',
   question: short ? 'Continue?' : ${JSON.stringify(PROMPT_QUESTION)},
@@ -43,6 +48,27 @@ const client = {
   onStateChange: () => () => {}
 }
 
+function SessionFrame({ collapsed, children }) {
+  ${
+    sessionSurfaceModule
+      ? `if (params.has('surface')) {
+    return <MobileSessionSurface controller={{
+      insets,
+      keyboardLift: collapsed ? 0 : Number(params.get('keyboard') ?? 0),
+      dictation: { isRecording: false },
+      nativeChatController: {
+        showNativeChat: true, nativeChatAsk: prompt, nativeChatStructured: true,
+        nativeChatAgent: 'claude', nativeChatCollapsedPrompt: collapsed ? {} : null
+      },
+      fixtureContent: children,
+      fixtureChromeHeight: Number(params.get('chrome') ?? 0)
+    }} />
+  }`
+      : ''
+  }
+  return <><View style={{ height: Number(params.get('chrome') ?? 0), flexShrink: 0 }} />{children}</>
+}
+
 function PromptViewportFixture() {
   const [collapsed, setCollapsed] = useState(false)
   const [draft, setDraft] = useState('')
@@ -51,10 +77,10 @@ function PromptViewportFixture() {
       frame: { x: 0, y: 0, width: innerWidth, height: innerHeight },
       insets
     }}>
-      <View style={{ height: Number(params.get('chrome') ?? 0), flexShrink: 0 }} />
       {/* The browser reports zero OS insets; this boundary supplies the phone's environment. */}
       <SafeAreaInsetsContext.Provider value={insets}>
       <RpcClientProvider client={client}>
+        <SessionFrame collapsed={collapsed}>
         <MobileNativeChatView
           messages={context}
           folded={context}
@@ -89,8 +115,9 @@ function PromptViewportFixture() {
             title: 'Agent question',
             expand: () => setCollapsed(false)
           } : null}
-          keyboardInset={Number(params.get('keyboard') ?? 0)}
+          keyboardInset={collapsed && params.has('surface') ? 0 : Number(params.get('keyboard') ?? 0)}
         />
+        </SessionFrame>
       </RpcClientProvider>
       </SafeAreaInsetsContext.Provider>
     </SafeAreaProvider>

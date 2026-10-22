@@ -34,11 +34,28 @@ beforeAll(async () => {
   await mkdir(outDir)
   await esbuild.build({
     ...mobileWebAppBuildOptions([]),
+    plugins: [
+      ...mobileWebAppBuildOptions([]).plugins,
+      {
+        name: 'session-boundary-fixture',
+        setup(build) {
+          build.onLoad({ filter: /MobileSession(Header|ContentRow|Sheets)\.tsx$/ }, ({ path }) => ({
+            loader: 'tsx',
+            contents: path.endsWith('MobileSessionHeader.tsx')
+              ? `import React from 'react'; import { View } from 'react-native'; export function MobileSessionHeader({ controller }) { return <View testID="session-header" style={{ height: controller.fixtureChromeHeight, flexShrink: 0 }} /> }`
+              : path.endsWith('MobileSessionContentRow.tsx')
+                ? `export function MobileSessionContentRow({ controller }) { return controller.fixtureContent }`
+                : `export function MobileSessionSheets() { return null }`
+          }))
+        }
+      }
+    ],
     entryPoints: undefined,
     entryNames: 'app',
     stdin: {
       contents: nativeChatPromptViewportFixture({
         chatViewModule: join(sessionDir, 'MobileNativeChatView'),
+        sessionSurfaceModule: join(sessionDir, 'MobileSessionSurface'),
         clientContextModule: join(sessionDir, '../transport/client-context.web')
       }),
       resolveDir: sessionDir,
@@ -226,6 +243,50 @@ describeRender('native chat question answering surface', () => {
       await page.setViewportSize({ width: 402, height: 874 })
       expect(await answerField(page).inputValue()).toBe('Edited in landscape')
       await recordLayout(page, 'portrait-keyboard-answer', await readPromptLayout(page))
+      expect(errors).toEqual([])
+    } finally {
+      await page.close()
+    }
+  })
+
+  it('reclaims session chrome above a small landscape IME and restores it with the drafts', async () => {
+    const { page, errors } = await openPrompt(
+      { width: 640, height: 360 },
+      '?surface=1&keyboard=239&chrome=69&top=24'
+    )
+    try {
+      expect(await page.getByTestId('session-header').isVisible()).toBe(false)
+      await scrollQuestionToEnd(page)
+      await page.getByText('Other…', { exact: true }).click({ timeout: 3000 })
+      await answerField(page).fill('Small phone answer', { timeout: 3000 })
+      await expect
+        .poll(async () => {
+          const input = await answerField(page).boundingBox()
+          const body = await page.getByTestId('native-chat-ask-body').boundingBox()
+          return (
+            input.height >= 44 &&
+            input.y >= body.y - 1 &&
+            input.y + input.height <= body.y + body.height + 1
+          )
+        })
+        .toBe(true)
+      const layout = await readPromptLayout(page)
+      expect(layout.inlineActions).toBe(true)
+      expect(layout.submit.height).toBeGreaterThanOrEqual(44)
+      expect(layout.submit.bottom).toBeLessThanOrEqual(360 - 239)
+      expect(await viewConversation(page).isVisible()).toBe(true)
+      await recordLayout(page, '640-360-native-sized-keyboard', layout)
+      await viewConversation(page).click({ timeout: 3000 })
+      expect(await page.getByTestId('session-header').isVisible()).toBe(true)
+      await composerField(page).fill('Retained message', { timeout: 3000 })
+      await page.getByLabel('Expand', { exact: true }).click({ timeout: 3000 })
+      expect(await page.getByTestId('session-header').isVisible()).toBe(false)
+      expect(await answerField(page).inputValue()).toBe('Small phone answer')
+      expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toBeUndefined()
+      await page.setViewportSize({ width: 360, height: 640 })
+      expect(await page.getByTestId('session-header').isVisible()).toBe(true)
+      await viewConversation(page).click({ timeout: 3000 })
+      expect(await composerField(page).inputValue()).toBe('Retained message')
       expect(errors).toEqual([])
     } finally {
       await page.close()

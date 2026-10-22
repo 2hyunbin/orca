@@ -41,6 +41,7 @@ export function MobileNativeChatAsk({
   const submittingRef = useRef(false)
   const scrollRef = useRef<ScrollView>(null)
   const editingOtherRef = useRef(false)
+  const cardWidthRef = useRef(0)
   const revealAnswer = (): void => {
     if (editingOtherRef.current) {
       scrollRef.current?.scrollToEnd({ animated: false })
@@ -240,7 +241,14 @@ export function MobileNativeChatAsk({
   return (
     <View
       style={[styles.card, expanded && styles.expanded]}
-      onLayout={(event) => recordHeight('card', event.nativeEvent.layout.height)}
+      onLayout={(event) => {
+        const { width, height } = event.nativeEvent.layout
+        if (cardWidthRef.current > 0 && cardWidthRef.current !== width && editingOtherRef.current) {
+          Keyboard.dismiss()
+        }
+        cardWidthRef.current = width
+        recordHeight('card', height)
+      }}
     >
       {scrollHeader ? null : header}
       <ScrollView
@@ -267,6 +275,7 @@ export function MobileNativeChatAsk({
                 disabled={submitting}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: i === index, disabled: submitting }}
+                aria-selected={i === index}
                 onPress={() => selectQuestion(i)}
               >
                 <Text
@@ -322,6 +331,7 @@ export function MobileNativeChatAsk({
               placeholderTextColor={colors.textMuted}
               editable={!submitting}
               multiline
+              numberOfLines={compact ? 1 : undefined}
               onFocus={() => {
                 editingOtherRef.current = true
                 revealAnswer()
@@ -362,6 +372,7 @@ function OptionRow({
       accessibilityLabel={label}
       accessibilityHint={description}
       accessibilityState={{ checked: selected, disabled }}
+      aria-checked={selected}
       style={[styles.option, selected && styles.optionSelected]}
       disabled={disabled}
       onPress={onPress}
