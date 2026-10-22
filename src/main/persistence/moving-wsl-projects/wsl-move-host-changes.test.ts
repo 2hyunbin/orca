@@ -21,6 +21,7 @@ import {
   wslMoveRigTempDir,
   type WslMoveRig
 } from '../__fixtures__/wsl-mover/wsl-move-kill-rig'
+import { isRecord } from './wsl-move-canonical-form'
 import { listWslMoveCutovers, removeWslMoveCutover } from './wsl-move-cutover-journal'
 import { resetWslMoveDesktopRewriteStoresForTests } from './wsl-move-desktop-rewrite-stores'
 import { moveProjectsToWslHost } from './wsl-move-driver'
@@ -72,10 +73,12 @@ function at(point: string, change: () => void): void {
 /** The stage is in a format this orcad cannot read, as when versions differ: it is dropped on load. */
 function replaceOrcadWithNewerStagingFormat(): void {
   const persisted: unknown = JSON.parse(readPersistedStateJson())
-  const state = typeof persisted === 'object' && persisted !== null ? persisted : {}
-  const staged = Reflect.get(state, 'orcadMigrationStagedCatalogs')
+  const state = isRecord(persisted) ? persisted : {}
+  const staged = state.orcadMigrationStagedCatalogs
   for (const entry of Array.isArray(staged) ? staged : []) {
-    Reflect.set(entry, 'version', 2)
+    if (isRecord(entry)) {
+      entry.version = 2
+    }
   }
   writeDataFile(state)
   rig.host = createStore()
