@@ -82,7 +82,6 @@
 1 src/renderer/src/components/right-sidebar/useCreatePullRequestDialogFields.ts
 1 src/renderer/src/components/settings/BaseRefPicker.tsx
 2 src/renderer/src/components/settings/BrowserPane.tsx
-1 src/renderer/src/components/settings/CliSkillRuntimeSetup.tsx
 1 src/renderer/src/components/settings/GeneralPane.tsx
 1 src/renderer/src/components/settings/IntegrationsPane.tsx
 3 src/renderer/src/components/settings/LinearAgentSkillPane.tsx
