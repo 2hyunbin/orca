@@ -62,6 +62,13 @@ export function useStoredBufferedTerminalDrafts(
     unconfirmedEdited: new Set()
   })
   const [state, setState] = useState<State>(empty)
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
   const currentRef = useRef(state)
   const contextRef = useRef({ storageKey, scopePrefix, onStorageError })
   contextRef.current = { storageKey, scopePrefix, onStorageError }
@@ -137,6 +144,9 @@ export function useStoredBufferedTerminalDrafts(
 
   const update = useCallback(
     (field: 'drafts' | 'unconfirmed', value: SetStateAction<Drafts>) => {
+      if (!mountedRef.current) {
+        return
+      }
       const current = currentRef.current
       const nextValues = typeof value === 'function' ? value(current[field]) : value
       if (nextValues === current[field]) {
@@ -172,7 +182,7 @@ export function useStoredBufferedTerminalDrafts(
     }
     try {
       await persist(snapshot)
-      return currentRef.current.identity === snapshot.identity
+      return mountedRef.current && currentRef.current.identity === snapshot.identity
     } catch {
       return false
     }

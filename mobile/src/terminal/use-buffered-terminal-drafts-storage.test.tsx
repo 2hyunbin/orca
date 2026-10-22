@@ -305,3 +305,25 @@ it('does not allow dispatch before the journal is durably saved', async () => {
     'paired:terminal-a': 'journal before send'
   })
 })
+
+it('old screen completion cannot overwrite remounted newer draft', async () => {
+  await mount()
+  await act(async () => hook().setInput('possibly sent'))
+  const old = hook()
+  let send: ReturnType<typeof old.beginBufferedTerminalDraftSend> | undefined
+  await act(async () => {
+    send = old.beginBufferedTerminalDraftSend('terminal-a', old.input)
+  })
+  await leave()
+  await mount()
+  await act(async () => hook().setInput('new screen text'))
+  await act(async () => {
+    if (!send) {
+      throw new Error('Expected a pending send')
+    }
+    old.settleBufferedTerminalDraftSend(send)
+  })
+  await leave()
+  await mount()
+  expect(hook().input).toBe('new screen text')
+})
