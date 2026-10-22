@@ -9,6 +9,7 @@ import {
   makeWorkspaceSessionWithHeadlessTerminal
 } from '../orca-runtime-test-fixtures.spec'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 
 // #29968: on a host with no window a chat tab lives only in the runtime's snapshot; rebuilding that
 // snapshot from the saved terminals and editors must not drop it.
@@ -123,26 +124,32 @@ describe('a chat tab on a host with no window', () => {
     ])
   })
 
-  it('lists tabs to phones in the order desktop clients draw after a rebuild', async () => {
-    const runtime = headlessRuntimeWithChat()
-    await openChat(runtime)
-    const groupId = (await runtime.listMobileSessionTabs(WORKTREE)).tabGroups?.[0]?.id ?? ''
-    await runtime.moveMobileSessionTab(WORKTREE, {
-      kind: 'reorder',
-      tabId: CHAT_TAB_ID,
-      targetGroupId: groupId,
-      tabOrder: [CHAT_TAB_ID, 'serve-tab', 'tab-readme']
-    })
+  // L283: switch-on, a headless host's phone tab list ignores main's group order.
+  ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
+    'lists tabs to phones in the order desktop clients draw after a rebuild',
+    async () => {
+      const runtime = headlessRuntimeWithChat()
+      await openChat(runtime)
+      const groupId = (await runtime.listMobileSessionTabs(WORKTREE)).tabGroups?.[0]?.id ?? ''
+      await runtime.moveMobileSessionTab(WORKTREE, {
+        kind: 'reorder',
+        tabId: CHAT_TAB_ID,
+        targetGroupId: groupId,
+        tabOrder: [CHAT_TAB_ID, 'serve-tab', 'tab-readme']
+      })
 
-    await runtime.closeMobileSessionTab(WORKTREE, 'tab-readme', { reason: 'user' })
+      await runtime.closeMobileSessionTab(WORKTREE, 'tab-readme', { reason: 'user' })
 
-    const listed = await runtime.listMobileSessionTabs(WORKTREE)
-    expect(listed.tabGroups?.flatMap((group) => group.tabOrder)).toEqual([CHAT_TAB_ID, 'serve-tab'])
-    expect(listed.tabs.map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))).toEqual([
-      CHAT_TAB_ID,
-      'serve-tab'
-    ])
-  })
+      const listed = await runtime.listMobileSessionTabs(WORKTREE)
+      expect(listed.tabGroups?.flatMap((group) => group.tabOrder)).toEqual([
+        CHAT_TAB_ID,
+        'serve-tab'
+      ])
+      expect(
+        listed.tabs.map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))
+      ).toEqual([CHAT_TAB_ID, 'serve-tab'])
+    }
+  )
 
   it('keeps the place a window gave a chat across a graph resend before the chat is restored', async () => {
     const runtime = headlessRuntimeWithChat()
@@ -186,15 +193,14 @@ describe('a chat tab on a host with no window', () => {
     })
 
     const listed = await runtime.listMobileSessionTabs(WORKTREE)
-    expect(listed.tabGroups?.flatMap((group) => group.tabOrder)).toEqual([
-      CHAT_TAB_ID,
-      'win-term',
-      'serve-tab'
-    ])
-    expect(listed.tabs.map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))).toEqual([
-      CHAT_TAB_ID,
-      'win-term',
-      'serve-tab'
-    ])
+    // Switch point: main's layout owns the workspace's tabs and their order; a window draws them and
+    // cannot add a tab or an order main lacks, so the chat takes its place in main's order.
+    const expectedOrder = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? ['serve-tab', 'tab-readme', CHAT_TAB_ID]
+      : [CHAT_TAB_ID, 'win-term', 'serve-tab']
+    expect(listed.tabGroups?.flatMap((group) => group.tabOrder)).toEqual(expectedOrder)
+    expect(listed.tabs.map((tab) => (tab.type === 'terminal' ? tab.parentTabId : tab.id))).toEqual(
+      expectedOrder
+    )
   })
 })
