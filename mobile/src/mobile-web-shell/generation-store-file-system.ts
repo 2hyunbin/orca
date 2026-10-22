@@ -26,6 +26,8 @@ export type GenerationFileSystem = {
   /** Null only when the file is missing. A read that fails throws, because "absent" and "could not
    *  be read" lead the store to opposite decisions about deleting the cache. */
   readText(uri: string): Promise<string | null>
+  /** Null only when the file is missing, and a failed read throws, as `readText`. */
+  readBytes(uri: string): Promise<Uint8Array<ArrayBuffer> | null>
   fileExists(uri: string): Promise<boolean>
   /** Recursive, and a no-op when the path is missing. */
   delete(uri: string): Promise<void>
@@ -81,6 +83,10 @@ export function createExpoGenerationFileSystem(): GenerationFileSystem {
       // The throw is deliberate: iOS data protection and I/O errors reach the store as failures
       // rather than as a missing file.
       return file.exists ? await file.text() : null
+    },
+    async readBytes(uri) {
+      const file = new File(uri)
+      return file.exists ? await file.bytes() : null
     },
     async fileExists(uri) {
       return new File(uri).exists

@@ -156,6 +156,7 @@ function createFakeStore(): {
     abortStagedGeneration: async () => {
       aborted += 1
     },
+    openReusableAssets: async () => ({ has: () => false, read: async () => null }),
     sweepStagedGenerations: async () => undefined,
     deleteHostCache: async () => undefined,
     recordUpdateFailure: async () => undefined,

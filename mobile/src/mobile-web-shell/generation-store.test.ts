@@ -572,6 +572,29 @@ describe('generation store', () => {
 
 /** An older build rewrote the manifest through `manifest-next.json`; an interrupted rewrite can
  *  have left that file behind, and this build never reads it. */
+describe('reusable assets for the next download', () => {
+  it("reads the active generation's bytes by content, and nothing it does not hold", async () => {
+    const fs = createFakeFileSystem()
+    const store = createGenerationStore({ fileSystem: fs })
+    const empty = await store.openReusableAssets(HOST)
+    const cached = buildResult({})
+    await activate(store, HOST, cached)
+    const [index, app] = cached.manifest.assets
+    // Renamed in the next build: content, not path, is what matches.
+    const moved = { ...app!, path: 'assets/app-2.js' }
+
+    const reusable = await store.openReusableAssets(HOST)
+
+    expect(empty.has(index!)).toBe(false)
+    expect(reusable.has(moved)).toBe(true)
+    expect(await reusable.read(moved)).toEqual(new Uint8Array(2).fill(7))
+    expect(reusable.has({ ...index!, byteLength: 5 })).toBe(false)
+    expect(reusable.has({ ...index!, sha256: 'f'.repeat(64) })).toBe(false)
+    fs.failReadsAt(`${HOST}/generations/${BUILD}/index.html`)
+    expect(await reusable.read(index!)).toBeNull()
+  })
+})
+
 describe('a pending manifest left by an older build', () => {
   const MANIFEST_PATH = `${HOST}/generations/${BUILD}/manifest.json`
   const NEXT_PATH = `${HOST}/generations/${BUILD}/manifest-next.json`

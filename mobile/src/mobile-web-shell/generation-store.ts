@@ -3,7 +3,10 @@ import {
   MobileWebBundleManifestReadSchema,
   type MobileWebBundleManifestRead
 } from '../transport/mobile-web-bundle-reply-schemas'
-import type { MobileWebBundleFetchResult } from '../transport/mobile-web-bundle-fetch'
+import type {
+  MobileWebBundleFetchResult,
+  MobileWebBundleReusableAssets
+} from '../transport/mobile-web-bundle-fetch'
 import { joinUri } from './generation-cache-uri'
 import type { GenerationDirectoryEntry, GenerationFileSystem } from './generation-store-file-system'
 import { isHostCacheKey } from './host-cache-key'
@@ -39,6 +42,8 @@ export type StagedGeneration = {
 
 export type GenerationStore = {
   readActiveGeneration(hostKey: string): Promise<ActiveGeneration | null>
+  /** The host's active generation, by content, for a download to take unchanged assets from. */
+  openReusableAssets(hostKey: string): Promise<MobileWebBundleReusableAssets>
   stageGeneration(hostKey: string, result: MobileWebBundleFetchResult): Promise<StagedGeneration>
   commitGeneration(staged: StagedGeneration): Promise<ActiveGeneration>
   abortStagedGeneration(staged: StagedGeneration): Promise<void>
@@ -260,6 +265,31 @@ export function createGenerationStore(options: {
     return active
   }
 
+  async function openReusable(hostKey: string): Promise<MobileWebBundleReusableAssets> {
+    const active = await readActive(hostKey)
+    const byHash = new Map((active?.manifest.assets ?? []).map((asset) => [asset.sha256, asset]))
+    const cachedOf = (asset: { sha256: string; byteLength: number }) => {
+      const cached = byHash.get(asset.sha256)
+      return cached?.byteLength === asset.byteLength ? cached : undefined
+    }
+    return {
+      has: (asset) => cachedOf(asset) !== undefined,
+      // Outside the queue and never rejecting: a commit may replace this generation mid-download,
+      // and the caller hashes what it gets, so a read that misses or changes costs only a download.
+      read: async (asset) => {
+        const cached = cachedOf(asset)
+        if (active === null || cached === undefined) {
+          return null
+        }
+        try {
+          return await fs.readBytes(joinUri(active.directory, requireStorablePath(cached.path)))
+        } catch {
+          return null
+        }
+      }
+    }
+  }
+
   async function sweep(): Promise<void> {
     // Every host's `tmp`, not just the one being opened: an interrupted download must not survive a
     // restart, and it may belong to a host this launch never selects.
@@ -289,6 +319,7 @@ export function createGenerationStore(options: {
 
   return {
     readActiveGeneration: (hostKey) => serialize(() => openActive(hostKey)),
+    openReusableAssets: (hostKey) => serialize(() => openReusable(hostKey)),
     stageGeneration: (hostKey, result) => serialize(() => stage(hostKey, result)),
     commitGeneration: (staged) => serialize(() => commit(staged)),
     abortStagedGeneration: (staged) =>
