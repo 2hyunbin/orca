@@ -156,7 +156,13 @@ function mergeNativeChatSkills(
     if (!safeName) {
       continue
     }
-    byName.set(safeName, [...(byName.get(safeName) ?? []), { ...skill, name: safeName }])
+    const namedSkills = byName.get(safeName)
+    const namedSkill = { ...skill, name: safeName }
+    if (namedSkills) {
+      namedSkills.push(namedSkill)
+    } else {
+      byName.set(safeName, [namedSkill])
+    }
   }
   const discovered = new Map(
     [...byName.entries()].map(([name, namedSkills]) => [
@@ -172,8 +178,12 @@ function mergeNativeChatSkills(
   // A reported skill with its file is its own row: two skills may share a name, and the pick
   // tells the agent which file it means.
   const nameCounts = new Map<string, number>()
+  const firstReportedByName = new Map<string, NativeChatSessionSkill>()
   for (const skill of sessionSkills ?? []) {
     nameCounts.set(skill.name, (nameCounts.get(skill.name) ?? 0) + 1)
+    if (!firstReportedByName.has(skill.name)) {
+      firstReportedByName.set(skill.name, skill)
+    }
   }
   const located = (sessionSkills ?? []).flatMap((skill) =>
     skill.path && isTokenSafe(skill.name)
@@ -202,7 +212,7 @@ function mergeNativeChatSkills(
     ...located,
     ...[...new Set(names)].map((name) => {
       const skill = discovered.get(name) ?? pickerSkill(name, [], skillSigil)
-      const reported = sessionSkills?.find((entry) => entry.name === name)?.description
+      const reported = firstReportedByName.get(name)?.description
       return skill.description === null && reported
         ? { ...skill, description: sanitizePickerText(reported, 240) }
         : skill
