@@ -17,7 +17,7 @@ vi.mock('electron', () => ({
     removeHandler: vi.fn()
   }
 }))
-vi.mock('../ephemeral-vm-runtime-ssh', () => ({
+vi.mock('../ephemeral-vm/runtime-ssh', () => ({
   connectRuntimeOwnedSshTarget: connect,
   disconnectRuntimeOwnedSshTarget: vi.fn(async () => {}),
   removeRuntimeOwnedSshTarget: vi.fn(async () => {})
@@ -26,10 +26,10 @@ vi.mock('./runtime-environments/runtime-environments', () => ({
   invalidateRuntimeEnvironmentTransport: vi.fn()
 }))
 
-import type { Store } from '../persistence'
+import type { Store } from '../persistence/loading-store/store'
 import { listEphemeralVmRuntimes } from '../../shared/ephemeral-vm-runtime-store'
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
-import { suspendEphemeralVmWorkspace } from '../ephemeral-vm-workspace-suspend'
+import { suspendEphemeralVmWorkspace } from '../ephemeral-vm/workspace-suspend'
 
 const tempDirs: string[] = []
 afterEach(() => {

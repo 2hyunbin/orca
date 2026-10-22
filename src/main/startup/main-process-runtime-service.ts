@@ -27,7 +27,7 @@ import { getPreferredPairedRuntimeConnection } from '../../shared/runtime-enviro
 import { fingerprintOrchestrationPeer } from '../runtime/orchestration/environment-transport'
 import { callRuntimeEnvironment } from '../ipc/runtime-environments/runtime-environment-transport-routing'
 import { mainProcessState as state } from './main-process-state'
-import { suspendEphemeralVmWorkspace } from '../ephemeral-vm-workspace-suspend'
+import { suspendEphemeralVmWorkspace } from '../ephemeral-vm/workspace-suspend'
 import { installWslOrcadAccountShim } from './wsl-orcad-account-env-wiring'
 import {
   codexStructuredLaunchHomeResolvers,
