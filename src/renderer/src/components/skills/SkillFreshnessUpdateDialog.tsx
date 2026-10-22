@@ -301,6 +301,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
         {shownSummary && shownSummary.skills.length > 0 ? (
           <SkillUpdateRows
             skills={shownSummary.skills}
+            unforcedPlan={state.plan}
             phase={phase}
             outcomes={runOutcomes(run)}
             replace={replace}

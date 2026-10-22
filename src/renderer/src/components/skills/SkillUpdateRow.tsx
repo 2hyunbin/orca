@@ -29,9 +29,11 @@ function ChoiceLine({
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <span className="min-w-0 [overflow-wrap:anywhere]" title={location.path}>
-        {locationStateText(location)}
-      </span>
+      {location.state === 'leave' ? (
+        <span className="min-w-0 [overflow-wrap:anywhere]" title={location.path}>
+          {locationStateText(location)}
+        </span>
+      ) : null}
       {replace && location.replaceable ? (
         <label className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground">
           <Checkbox
@@ -85,6 +87,7 @@ export function SkillUpdateRow({
   replace?: SkillReplaceToggle
   showLocations: boolean
 }): React.JSX.Element {
+  const replacement = skill.locations.find((location) => location.state === 'replace')
   const headline =
     phase === 'pending'
       ? translate('auto.components.skills.SkillFreshnessUpdateDialog.updating', 'Updating…')
@@ -93,7 +96,9 @@ export function SkillUpdateRow({
           outcome.text === 'No change' && outcome.leftAlone.length > 0
           ? null
           : skillOutcomeText(outcome.text)
-        : skillPlanHeadline(skill.state)
+        : replacement
+          ? locationStateText(replacement)
+          : skillPlanHeadline(skill.state)
   const choices = skill.locations.filter(
     (location) => location.state === 'leave' || location.state === 'replace'
   )

@@ -247,7 +247,9 @@ describe('SkillFreshnessUpdateDialog', () => {
       forced.resolve(forcedPlan())
       await forced.promise
     })
-    expect(container.textContent).toContain('Replace')
+    expect(container.querySelector('[data-skill-row="orca-cli"]')?.textContent).toBe(
+      "orca-cliReplaceReplace with Orca's copy (keeps a backup)"
+    )
     skillsApi.bundledExecute.mockResolvedValueOnce(doneResult(forcedPlan()))
     click(button('Update 1 skill'))
     await flush()
@@ -256,6 +258,40 @@ describe('SkillFreshnessUpdateDialog', () => {
       planDigest: '2'.repeat(64),
       force: [EDITED_PATH]
     })
+  })
+
+  it('keeps an edited row in place with one Replace status when selected', async () => {
+    mocks.plan = planOf([
+      planEntry('orca-cli', [
+        planOp('leave', EDITED_PATH, { reason: 'edited', replaceable: true })
+      ]),
+      sharedEntry('orchestration', 'update')
+    ])
+    skillsApi.bundledPlan.mockResolvedValueOnce(
+      planOf([
+        planEntry('orca-cli', [planOp('replace', EDITED_PATH)]),
+        sharedEntry('orchestration', 'update')
+      ])
+    )
+    render()
+    const rowNames = () =>
+      [...container.querySelectorAll('[data-skill-row]')].map((row) =>
+        row.getAttribute('data-skill-row')
+      )
+    expect(rowNames()).toEqual(['orchestration', 'orca-cli'])
+
+    click(replaceCheckbox())
+    await flush()
+
+    expect(rowNames()).toEqual(['orchestration', 'orca-cli'])
+    const row = container.querySelector('[data-skill-row="orca-cli"]')
+    expect(row?.textContent).toBe("orca-cliReplaceReplace with Orca's copy (keeps a backup)")
+    expect(replaceCheckbox().getAttribute('aria-checked')).toBe('true')
+
+    click(replaceCheckbox())
+    await flush()
+    expect(rowNames()).toEqual(['orchestration', 'orca-cli'])
+    expect(row?.textContent).toContain('Not updated: you edited this copy')
   })
 
   it('reports each skill with its left-alone copies after the run', async () => {
