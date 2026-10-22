@@ -34,9 +34,8 @@ export const prCreateEmptyStateStyles = StyleSheet.create({
     gap: spacing.xs,
     marginTop: spacing.sm
   },
-  secondaryActions: {
-    flexDirection: 'row',
-    gap: spacing.xs
+  notice: {
+    paddingTop: spacing.lg
   },
   failure: {
     paddingHorizontal: spacing.lg,

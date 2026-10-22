@@ -14,11 +14,12 @@ export const prActionsStyles = StyleSheet.create({
   autoMergeGroup: {
     marginHorizontal: 0
   },
+  // Equal halves under the full-width Merge, so the actions line up as one block.
   secondaryRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: PR_PAGE_INSET - spacing.lg
-  }
+  },
+  secondaryButton: { flex: 1 }
 })

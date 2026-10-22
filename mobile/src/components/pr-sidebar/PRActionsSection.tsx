@@ -210,9 +210,12 @@ export function PRActionsSection({ pr, actions, client, worktreeId, onUnlinked }
           <View style={styles.secondaryRow}>
             {avail.canClose || avail.canReopen ? (
               <Button
-                label={avail.canClose ? 'Close pull request' : 'Reopen pull request'}
+                label={avail.canClose ? 'Close' : 'Reopen'}
                 variant={avail.canClose ? 'destructive' : 'secondary'}
                 size="compact"
+                block
+                style={styles.secondaryButton}
+                accessibilityLabel={avail.canClose ? 'Close pull request' : 'Reopen pull request'}
                 busy={stateBusy}
                 onPress={() => {
                   setUnlinkError(null)
@@ -225,6 +228,8 @@ export function PRActionsSection({ pr, actions, client, worktreeId, onUnlinked }
                 label="Unlink"
                 icon={Link2Off}
                 size="compact"
+                block
+                style={styles.secondaryButton}
                 busy={unlinking}
                 disabled={unlinkBusy && !unlinking}
                 onPress={() => {

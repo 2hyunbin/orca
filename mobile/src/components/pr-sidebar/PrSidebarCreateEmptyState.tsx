@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Text, View } from 'react-native'
-import { GitPullRequestArrow, Link2, RefreshCw } from 'lucide-react-native'
+import { GitPullRequestArrow, Link2 } from 'lucide-react-native'
 import { colors } from '../../theme/mobile-theme'
 import { triggerError, triggerSuccess } from '../../platform/haptics'
+import { Banner } from '../ui/Banner'
 import { Button } from '../ui/Button'
 import type { RpcClient } from '../../transport/rpc-client'
 import type { ConnectionState } from '../../transport/types'
@@ -187,30 +188,21 @@ export function PrSidebarCreateEmptyState({
             disabled={!canCreate}
             onPress={() => void openComposer()}
           />
-          <View style={styles.secondaryActions}>
-            <Button
-              label="Link existing"
-              icon={Link2}
-              variant="plain"
-              size="compact"
-              disabled={!client}
-              onPress={() => setMode('link')}
-              accessibilityLabel="Link an existing pull request"
-            />
-            <Button
-              label="Refresh"
-              icon={RefreshCw}
-              variant="plain"
-              size="compact"
-              onPress={refreshPrState}
-              accessibilityLabel="Refresh pull request"
-            />
-          </View>
+          <Button
+            label="Link existing pull request"
+            icon={Link2}
+            variant="plain"
+            size="compact"
+            disabled={!client}
+            onPress={() => setMode('link')}
+          />
         </View>
-        {createWarning && !commitFailureRecovery ? (
-          <Text style={styles.message}>{createWarning}</Text>
-        ) : null}
       </View>
+      {createWarning && !commitFailureRecovery ? (
+        <View style={styles.notice}>
+          <Banner tone={loading ? 'info' : 'warning'} message={createWarning} />
+        </View>
+      ) : null}
       {commitFailureRecovery ? (
         <View style={styles.failure}>
           <MobileCommitFailurePanel
