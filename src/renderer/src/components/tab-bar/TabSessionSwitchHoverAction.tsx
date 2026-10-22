@@ -1,3 +1,4 @@
+import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
 import { useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { MessagesSquare, SquareTerminal } from 'lucide-react'
@@ -22,6 +23,10 @@ export function TabSessionSwitchHoverAction({
   tab: { id: string; worktreeId: string }
   nativeChat?: NativeChatTabSession
 }): React.JSX.Element | null {
+  const enabled = useAppStore((state) => isNativeChatEnabled(state.settings))
+  if (!enabled) {
+    return null
+  }
   return nativeChat ? (
     <ChatSwitchAction tab={tab} nativeChat={nativeChat} />
   ) : (

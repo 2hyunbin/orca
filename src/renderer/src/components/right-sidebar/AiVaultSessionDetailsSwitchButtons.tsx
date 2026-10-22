@@ -1,3 +1,5 @@
+import { useAppStore } from '@/store'
+import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
 import { MessagesSquare, SquareTerminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -15,10 +17,14 @@ export function AiVaultSessionDetailsSwitchButtons({
   session: Pick<AiVaultSession, 'agent' | 'executionHostId'>
   onResumeInNewChat?: () => void
   onResumeInNewCli?: () => void
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const inPlaceAgent = useAiVaultInPlaceAgent(session)
   const switchLoading =
     useInPlaceSwitchCapability(session.executionHostId, session.agent) === undefined
+  const enabled = useAppStore((state) => isNativeChatEnabled(state.settings))
+  if (!enabled && (inPlaceAgent !== undefined || switchLoading)) {
+    return null
+  }
   return (
     <>
       {onResumeInNewChat ? (

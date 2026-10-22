@@ -1,3 +1,4 @@
+import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
 import { useShallow } from 'zustand/react/shallow'
 import { MessagesSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -19,7 +20,7 @@ export function TerminalPaneResumeInChatButton({
   tabId: string
   worktreeId: string
   paneKey: string
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   const source = useAppStore(
     useShallow((state) =>
       resolveCliChatResumeSource(state, { tab: { id: tabId, worktreeId }, paneKey })
@@ -35,6 +36,10 @@ export function TerminalPaneResumeInChatButton({
     )
   })
   const pending = useCliChatResumePending(source)
+  const enabled = useAppStore((state) => isNativeChatEnabled(state.settings))
+  if (!enabled && capability !== false) {
+    return null
+  }
   const label =
     capability === false
       ? translate(

@@ -1,3 +1,4 @@
+import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
 import { SquareTerminal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -40,10 +41,11 @@ export function NativeChatTopRightControls({
   const agent = AI_VAULT_AGENTS.find((candidate) => candidate === session.agent)
   const inPlace = useInPlaceSwitchCapability(hostId, agent)
   const pending = useNativeChatCliSwitchPending(session.sessionId)
+  const enabled = useAppStore((state) => isNativeChatEnabled(state.settings))
   if (find.isOpen) {
     return <NativeChatFindBar find={find} isVisible={session.isVisible} />
   }
-  if (!worktreeId || !hostId || !agent || (inPlace === false && agent !== 'omp')) {
+  if (!enabled || !worktreeId || !hostId || !agent || (inPlace === false && agent !== 'omp')) {
     return null
   }
   const label = translate('components.tab.bar.switch.toCli', 'Switch to CLI')

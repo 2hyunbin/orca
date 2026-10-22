@@ -155,6 +155,7 @@ beforeEach(async () => {
     }
   })
   useAppStore.setState(useAppStore.getInitialState(), true)
+  useAppStore.setState({ settings: createGlobalSettingsFixture({ experimentalNativeChat: true }) })
   setLocalRuntimeCapabilitiesForTests([HISTORY])
   await refreshLocalRuntimeCapabilities()
   mocks.owner.mockReturnValue('local')

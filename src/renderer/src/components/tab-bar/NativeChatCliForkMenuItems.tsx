@@ -1,3 +1,4 @@
+import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
 import { useState } from 'react'
 import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { useAppStore } from '@/store'
@@ -32,7 +33,8 @@ export function NativeChatCliForkMenuItems({
   const commandOverrides = useAppStore((state) => state.settings?.agentCmdOverrides)
   const agent = AI_VAULT_AGENTS.find((candidate) => candidate === nativeChat.agent)
   const inPlace = useInPlaceSwitchCapability(chat?.request.executionHostScope, agent)
-  if (!chat || !agent) {
+  const enabled = useAppStore((state) => isNativeChatEnabled(state.settings))
+  if (!chat || !agent || (!enabled && inPlace !== false)) {
     return null
   }
   return (

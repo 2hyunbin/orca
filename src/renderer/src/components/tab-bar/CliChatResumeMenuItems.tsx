@@ -1,3 +1,4 @@
+import { isNativeChatEnabled } from '../../../../shared/structured-native-chat-launch-route'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
 import { DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
@@ -18,7 +19,8 @@ export function CliChatResumeMenuItems({
   const source = useAppStore(useShallow((state) => resolveCliChatResumeSource(state, { tab })))
   const capability = useCliChatResumeCapability(tab.worktreeId, source?.agent)
   const pending = useCliChatResumePending(source)
-  if (!source) {
+  const enabled = useAppStore((state) => isNativeChatEnabled(state.settings))
+  if (!source || (!enabled && capability !== false)) {
     return null
   }
   return (
