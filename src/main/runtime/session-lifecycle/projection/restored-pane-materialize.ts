@@ -214,7 +214,9 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
             dispatched = true
           },
           ...(resumeClaim ? { onPtyCreated: resumeClaim.bind } : {}),
-          ...(automatic ? { refuseSleptWorktree: true } : {})
+          ...(automatic ? { refuseSleptWorktree: true } : {}),
+          // Switch point: only a start from the pane's own record shows the window's banner.
+          ...(resumedRecord ? { resumesSleepingRecord: true as const } : {})
         }
       )
       // Switch point: under main the resumed agent runs, so its record must not read as a sleep.

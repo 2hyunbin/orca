@@ -48,6 +48,7 @@ export type OwnedMobileTerminalCreateOptions = {
   launchRuntime?: AgentLaunchRuntime
   signal?: AbortSignal
   refuseSleptWorktree?: boolean
+  resumesSleepingRecord?: true
   /** See TerminalCreateOptions; a create that throws before it proves nothing spawned. */
   onPtySpawnDispatched?: () => void
   /** The PTY this create produced, reported before publication can fail. */
@@ -150,7 +151,8 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
         // Why: this method publishes the authoritative snapshot below; skip the intermediate publish to avoid a wrong-group flash.
         deferMobileSessionPublish: true,
         signal: opts.signal,
-        ...(opts.refuseSleptWorktree ? { refuseSleptWorktree: true } : {})
+        ...(opts.refuseSleptWorktree ? { refuseSleptWorktree: true } : {}),
+        ...(opts.resumesSleepingRecord ? { resumesSleepingRecord: true } : {})
       })
     const terminal = opts.createMutation
       ? await this.dedupeTerminalCreate(
