@@ -21,7 +21,11 @@
           "package": "golang.org/x/crypto",
           "installedVersion": "v0.57.0",
           "fixedVersion": null,
-          "severity": "UNKNOWN"
+          "severity": "UNKNOWN",
+          "goAdvisoryIds": [
+            "GO-2026-5932"
+          ],
+          "binaryReachability": "symbol"
         }
       ]
     },
@@ -42,7 +46,11 @@
           "package": "golang.org/x/crypto",
           "installedVersion": "v0.58.0",
           "fixedVersion": null,
-          "severity": "UNKNOWN"
+          "severity": "UNKNOWN",
+          "goAdvisoryIds": [
+            "GO-2026-5932"
+          ],
+          "binaryReachability": "module"
         },
         {
           "target": "cloud-sql-proxy",
@@ -50,7 +58,11 @@
           "package": "stdlib",
           "installedVersion": "v1.27.2",
           "fixedVersion": "1.26.10, 1.27.3",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6809"
+          ],
+          "binaryReachability": "symbol"
         }
       ]
     },
@@ -63,7 +75,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6611"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -71,7 +87,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6603"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -79,7 +99,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6610"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -87,7 +111,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6612"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -95,7 +123,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6617"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -103,7 +135,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.10, 1.27.3",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6809"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -111,7 +147,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6609"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -119,7 +159,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6611"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -127,7 +171,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6607"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -135,7 +183,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6605"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -143,7 +195,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6603"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -151,7 +207,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6610"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -159,7 +219,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6612"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -167,7 +231,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6613"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -175,7 +243,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6608"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -183,7 +255,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6599"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -191,7 +267,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6600"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -199,7 +279,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6617"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "external/2.4.2/linux_amd64/terraform-provider-external_v2.4.2_x5",
@@ -215,7 +299,11 @@
           "package": "go.opentelemetry.io/otel/sdk",
           "installedVersion": "v1.44.0",
           "fixedVersion": "1.45.0",
-          "severity": "LOW"
+          "severity": "LOW",
+          "goAdvisoryIds": [
+            "GO-2026-6505"
+          ],
+          "binaryReachability": "module"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -223,7 +311,11 @@
           "package": "golang.org/x/crypto",
           "installedVersion": "v0.55.0",
           "fixedVersion": "0.56.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6355"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -231,7 +323,11 @@
           "package": "golang.org/x/crypto",
           "installedVersion": "v0.55.0",
           "fixedVersion": "0.56.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6354"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -239,7 +335,11 @@
           "package": "golang.org/x/crypto",
           "installedVersion": "v0.55.0",
           "fixedVersion": null,
-          "severity": "UNKNOWN"
+          "severity": "UNKNOWN",
+          "goAdvisoryIds": [
+            "GO-2026-5932"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -247,7 +347,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6611"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -255,7 +359,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6603"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -263,7 +371,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6610"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -271,7 +383,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6612"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -279,7 +395,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6617"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "google/8.8.0/linux_amd64/terraform-provider-google_v8.8.0_x5",
@@ -287,7 +407,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.9",
           "fixedVersion": "1.26.10, 1.27.3",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6809"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -295,7 +419,11 @@
           "package": "golang.org/x/crypto",
           "installedVersion": "v0.56.0",
           "fixedVersion": null,
-          "severity": "UNKNOWN"
+          "severity": "UNKNOWN",
+          "goAdvisoryIds": [
+            "GO-2026-5932"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -303,7 +431,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6611"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -311,7 +443,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6603"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -319,7 +455,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6610"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -327,7 +467,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6612"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -335,7 +479,11 @@
           "package": "golang.org/x/net",
           "installedVersion": "v0.58.0",
           "fixedVersion": "0.60.0",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6617"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -343,7 +491,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.10, 1.27.3",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6809"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -351,7 +503,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6609"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -359,7 +515,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6611"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -367,7 +527,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "HIGH"
+          "severity": "HIGH",
+          "goAdvisoryIds": [
+            "GO-2026-6607"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -375,7 +539,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6605"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -383,7 +551,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6603"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -391,7 +563,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6610"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -399,7 +575,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6612"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -407,7 +587,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6613"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -415,7 +599,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6608"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -423,7 +611,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6599"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -431,7 +623,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6600"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -439,7 +635,11 @@
           "package": "stdlib",
           "installedVersion": "v1.26.8",
           "fixedVersion": "1.26.9, 1.27.2",
-          "severity": "MEDIUM"
+          "severity": "MEDIUM",
+          "goAdvisoryIds": [
+            "GO-2026-6617"
+          ],
+          "binaryReachability": "symbol"
         },
         {
           "target": "random/3.9.1/linux_amd64/terraform-provider-random_v3.9.1_x5",
@@ -451,5 +651,6 @@
         }
       ]
     }
-  ]
+  ],
+  "binaryScanner": "govulncheck v1.9.0, binary symbol mode; symbol linkage is not a runtime call trace"
 }

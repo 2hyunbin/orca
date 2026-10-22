@@ -93,6 +93,22 @@ Terraform scans with default inputs do not establish the live IAM/network policy
   dependencies inside signed upstream executables. External has 19 instances,
   Google 10, and random 20; all are itemized in the inventory.
 
+Govulncheck 1.9.0 additionally analyzed the exact Linux amd64 Terraform, proxy,
+and provider executables in binary symbol mode. The inventory records its
+strongest evidence for each matching Go finding. OpenPGP is module-only in the
+proxy, while its affected symbols are linked into Terraform, Google and random.
+The proxy's affected `crypto/x509.Certificate.Verify` symbol is linked. These
+checks establish linked code, not runtime exploitability or a production call
+trace; the original Trivy findings remain visible.
+
+| Binary | Unique Go advisories at module level | With affected linked symbols |
+| --- | --- | --- |
+| Terraform 1.17.0 | 1 | 1 |
+| Cloud SQL Proxy 2.26.2 | 2 | 1 |
+| Google provider 8.8.0 | 10 | 9 |
+| External provider 2.4.2 | 13 | 13 |
+| Random provider 3.9.1 | 14 | 14 |
+
 CI retains unfiltered JSON and CycloneDX inventories for every runtime image and
 installed Terraform providers, including these findings. Runtime image checks
 reject advisories with available fixes at every severity. Only the two specific
