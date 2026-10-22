@@ -8,7 +8,10 @@ import type { MainPaneBinding } from './main-pane-verdict'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../../shared/runtime-session-contracts'
-import { withMainSessionTabRows } from '../../session-tabs/main-session-tab-rows'
+import {
+  withMainSessionTabRows,
+  type MainSessionTabRows
+} from '../../session-tabs/main-session-tab-rows'
 import { withMainTabOrder } from '../../session-tabs/main-session-tab-order'
 import { headlessMobileSnapshotContentUnchanged } from '../../mobile-session-snapshot-equality'
 import type { RuntimeStore } from '../../runtime-store-contract'
@@ -84,6 +87,11 @@ class MainSurfacePublisher {
   ): RuntimeMobileSessionTabsSnapshot {
     const projected = this.index.lastSessionTabsOf(published.worktree)
     return projected ? withMainSessionTabRows(published, projected, this.host.exited) : published
+  }
+
+  /** Main's projection of a workspace it owns, read fresh; null for any other. */
+  sessionTabsOf(worktreeId: string): MainSessionTabRows | null {
+    return this.index.sessionTabsOf(worktreeId)
   }
 
   /** Rows a writer stores, ordered and grouped as main's last projection has them: no read. */
