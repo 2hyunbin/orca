@@ -169,6 +169,16 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
     ) {
       pty.agentSessionOwners = []
     }
+    // Switch point: a new process under a reused id has not exited, so an exit wait cannot settle
+    // on the old process's code.
+    if (
+      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      state.incarnationId &&
+      state.incarnationId !== pty.incarnationId
+    ) {
+      pty.lastExitCode = null
+      pty.lastExitCause = null
+    }
     if (state.incarnationId !== undefined) {
       if (pty.incarnationId && state.incarnationId && pty.incarnationId !== state.incarnationId) {
         this.invalidatePtyIncarnationHandle(ptyId)

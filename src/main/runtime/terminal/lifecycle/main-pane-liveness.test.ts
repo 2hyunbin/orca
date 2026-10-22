@@ -27,6 +27,8 @@ const {
   makeWorkspaceSessionWithHeadlessTerminal
 } = await import('../../orca-runtime-test-fixtures.spec')
 
+const { registerBoundPty } = await import('../../bind-first-pane.test-fixture')
+
 const SSH_PTY = toAppSshPtyId('ssh-target', 'relay-pty')
 
 type Host = { live: Set<string> }
@@ -312,6 +314,31 @@ describe('an exit wait through a listing gap (switch on)', () => {
     await expect(
       runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 50 })
     ).resolves.toMatchObject({ satisfied: true })
+  })
+})
+
+describe('an exit wait on a new process of a reused terminal id (switch on)', () => {
+  it("does not settle from the old process's exit code through a listing gap", async () => {
+    const { runtime, host } = savedPaneHost('saved-pty', { windowed: true })
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    await runtime.onPtyExit('saved-pty', 0)
+    // The host starts a new process under the same id in the same pane; its commit binds it.
+    registerBoundPty(runtime, 'saved-pty', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: HEADLESS_LEAF_ID,
+      incarnationId: 'inc-new'
+    })
+    const handle = runtime.resolveTerminalPane(
+      `host-tab:${HEADLESS_LEAF_ID}`,
+      TEST_WORKTREE_ID
+    ).handle
+    host.live.clear()
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    expect(record(runtime, 'saved-pty')?.connected).toBe(false)
+
+    await expect(
+      runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 50 })
+    ).rejects.toThrow('timeout')
   })
 })
 
