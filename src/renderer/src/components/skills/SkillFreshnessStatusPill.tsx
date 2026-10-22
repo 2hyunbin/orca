@@ -1,4 +1,5 @@
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
+import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
 import { IntegrationStatusPill } from '@/components/integration-status-pill'
@@ -51,7 +52,19 @@ function statusPill(status: SkillFreshnessDisplayStatus): React.JSX.Element {
 // update exists, that every copy is current, or that a copy is left for the user — and
 // green must never stand in for that last case.
 export function SkillFreshnessStatusPill({ skillName }: { skillName: string }): React.JSX.Element {
-  const { plan, loading, error } = useSkillFreshness()
+  const { plan, unsupported, loading, error } = useSkillFreshness(
+    useActiveProjectSkillRuntime().bundledSkillTarget
+  )
+  if (unsupported) {
+    return (
+      <IntegrationStatusPill tone="neutral">
+        {translate(
+          'auto.components.skills.SkillFreshnessStatusPill.updateServer',
+          'Update Orca on the server'
+        )}
+      </IntegrationStatusPill>
+    )
+  }
   if (loading && !plan) {
     return (
       <IntegrationStatusPill tone="neutral">

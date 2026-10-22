@@ -44,7 +44,7 @@ const states = new Map<string, SkillFreshnessState>()
 const renderedPlans: (BundledSkillPlan | null)[] = []
 
 function Probe({ id = 'default', enabled = true }: { id?: string; enabled?: boolean }): null {
-  state = useSkillFreshness(enabled)
+  state = useSkillFreshness(enabled ? { kind: 'local' } : null)
   states.set(id, state)
   renderedPlans.push(state.plan)
   return null

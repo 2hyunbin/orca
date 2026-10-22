@@ -20,7 +20,8 @@ vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
     discoveryTarget: undefined,
     terminalShellOverride: undefined,
     installDisabledReason: null,
-    canUseLocalSkillFreshness: mocks.canUseLocalSkillFreshness
+    canUseLocalSkillFreshness: mocks.canUseLocalSkillFreshness,
+    bundledSkillTarget: mocks.canUseLocalSkillFreshness ? { kind: 'local' } : null
   })
 }))
 

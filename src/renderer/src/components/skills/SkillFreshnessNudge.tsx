@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
+import { bundledSkillTargetKey } from '@/lib/bundled-skill-target'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
 import {
@@ -10,7 +11,6 @@ import {
   summarizeBundledSkillPlan
 } from '../../../../shared/bundled-skill-summary'
 import { requestSkillFreshnessUpdateDialog } from './skill-freshness-update-dialog'
-import { LOCAL_SKILL_UPDATE_TARGET } from './skill-update-run-store'
 
 const MAX_DISMISSED_FRESHNESS_NUDGES = 512
 const NO_DISMISSED_FRESHNESS_NUDGES: string[] = []
@@ -22,8 +22,9 @@ type ActiveFreshnessNudge = {
 }
 
 export function SkillFreshnessNudge(): null {
-  const activeSkillRuntime = useActiveProjectSkillRuntime()
-  const state = useSkillFreshness(activeSkillRuntime.canUseLocalSkillFreshness)
+  const target = useActiveProjectSkillRuntime().bundledSkillTarget
+  const targetKey = target ? bundledSkillTargetKey(target) : null
+  const state = useSkillFreshness(target)
   const settingsLoaded = useAppStore((store) => store.settings !== null)
   const dismissed = useAppStore(
     (store) => store.settings?.dismissedSkillFreshnessNudges ?? NO_DISMISSED_FRESHNESS_NUDGES
@@ -34,7 +35,7 @@ export function SkillFreshnessNudge(): null {
   const activeNudgeRef = useRef<ActiveFreshnessNudge | null>(null)
 
   useEffect(() => {
-    if (!activeSkillRuntime.canUseLocalSkillFreshness) {
+    if (!targetKey) {
       const active = activeNudgeRef.current
       if (active) {
         active.persistDismissal = false
@@ -60,7 +61,7 @@ export function SkillFreshnessNudge(): null {
     }
     // Why the summary's key: it changes with the host, the skills the badge counts and the
     // bytes they would get, so the next Orca version nudges again.
-    const fingerprint = bundledSkillNudgeKey(LOCAL_SKILL_UPDATE_TARGET, plan)
+    const fingerprint = bundledSkillNudgeKey(targetKey, plan)
     if (!fingerprint || dismissed.includes(fingerprint)) {
       const active = activeNudgeRef.current
       if (active) {
@@ -167,14 +168,7 @@ export function SkillFreshnessNudge(): null {
       }
     )
     activeNudgeRef.current = nextActive
-  }, [
-    activeSkillRuntime.canUseLocalSkillFreshness,
-    dismissed,
-    settingsLoaded,
-    state.error,
-    state.plan,
-    updateSettings
-  ])
+  }, [targetKey, dismissed, settingsLoaded, state.error, state.plan, updateSettings])
 
   return null
 }

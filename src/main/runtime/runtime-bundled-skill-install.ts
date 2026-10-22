@@ -1,26 +1,73 @@
+import { join } from 'node:path'
 import type {
-  BundledSkillExecuteRequest,
   BundledSkillInstallResult,
-  BundledSkillPlan,
-  BundledSkillPlanRequest
+  BundledSkillLocalExecuteRequest,
+  BundledSkillLocalPlanRequest,
+  BundledSkillPlan
 } from '../../shared/bundled-skill-plan'
+import { isSkillInstallProviderId } from '../../shared/skill-install-providers'
 import { localBundledSkillInput } from '../skills/bundled-skill-install/local-host'
 import {
   installBundledSkills,
   previewBundledSkillInstall,
   type BundledSkillServiceInput
 } from '../skills/bundled-skill-install/service'
+import { createWslBundledSkillFilesystem } from '../skills/bundled-skill-install/wsl-filesystem'
 import { clearSkillDiscoveryCaches } from '../skills/skill-discovery-target'
 import { resolveSkillInstallDestination } from '../skills/skill-install-destinations'
+import { detectSkillProvidersInWsl } from '../skills/skill-wsl-provider-detection'
+import { getDefaultWslDistro } from '../wsl'
 import type { RuntimeSkillCommandHost } from './runtime-skill-command-contract'
-import { createSkillInstallAuthority } from './runtime-skill-install-authority'
+import {
+  createSkillInstallAuthority,
+  resolveSkillProviderRoots
+} from './runtime-skill-install-authority'
+
+/** Agents in the guest read the guest's homes, with the guest's own env and agent detection. */
+async function wslInput(
+  host: RuntimeSkillCommandHost,
+  requestedDistro: string | undefined,
+  selection: { force?: readonly string[] }
+): Promise<BundledSkillServiceInput> {
+  const distro = requestedDistro ?? getDefaultWslDistro()
+  if (!distro) {
+    throw new Error('skill-install-wsl-unavailable')
+  }
+  const destination = await resolveSkillInstallDestination(
+    { scope: 'global', executionTarget: { kind: 'wsl', distro } },
+    createSkillInstallAuthority(host)
+  )
+  await host.skillTransactionRecovery
+  const providerRootOverrides = await resolveSkillProviderRoots(host, {
+    scope: 'global',
+    homeDirectory: destination.homeDirectory,
+    wslDistro: distro
+  })
+  return {
+    destination,
+    agents: (await detectSkillProvidersInWsl(distro)).filter(isSkillInstallProviderId),
+    providerRootOverrides,
+    // Why Windows userData: cloud installs into this guest from the app keep their state here.
+    stateDirectory: join(host.getUserDataPath(), 'skill-installs'),
+    filesystem: createWslBundledSkillFilesystem({
+      distro,
+      homeDirectory: destination.homeDirectory,
+      providerRootOverrides
+    }),
+    installedOnly: true,
+    ...(selection.force ? { force: selection.force } : {})
+  }
+}
 
 // Why global and installed-only: this is the app's Update skills, which never adds a skill
-// the user did not install. WSL and remote hosts plan on their own host (not here).
+// the user did not install. A paired server or SSH host plans this on its own host over RPC.
 async function appInput(
   host: RuntimeSkillCommandHost,
-  force: readonly string[] | undefined
+  request: BundledSkillLocalPlanRequest
 ): Promise<BundledSkillServiceInput> {
+  if (request.wsl) {
+    return wslInput(host, request.wsl.distro, request)
+  }
   const destination = await resolveSkillInstallDestination(
     { scope: 'global' },
     createSkillInstallAuthority(host)
@@ -31,22 +78,22 @@ async function appInput(
     userDataPath: host.getUserDataPath(),
     destination,
     claudeConfigDirectory: host.getClaudeConfigDirectory?.({ runtime: 'host' }),
-    selection: { installedOnly: true, ...(force ? { force } : {}) }
+    selection: { installedOnly: true, ...(request.force ? { force: request.force } : {}) }
   })
 }
 
 export async function planLocalBundledSkills(
   host: RuntimeSkillCommandHost,
-  request: BundledSkillPlanRequest
+  request: BundledSkillLocalPlanRequest
 ): Promise<BundledSkillPlan> {
-  return previewBundledSkillInstall(await appInput(host, request.force))
+  return previewBundledSkillInstall(await appInput(host, request))
 }
 
 export async function executeLocalBundledSkills(
   host: RuntimeSkillCommandHost,
-  request: BundledSkillExecuteRequest
+  { planDigest, request }: BundledSkillLocalExecuteRequest
 ): Promise<BundledSkillInstallResult> {
-  const result = await installBundledSkills(await appInput(host, request.force), request.planDigest)
+  const result = await installBundledSkills(await appInput(host, request), planDigest)
   // Discovery would otherwise serve its pre-install answer from cache.
   clearSkillDiscoveryCaches()
   return result

@@ -80,6 +80,26 @@ const ALIAS_TARGET_SCRIPT = [
   '[ "$(readlink -f -- "$1")" = "$(readlink -f -- "$2")" ] && printf yes'
 ].join('\n')
 
+/** `distro`'s own spelling of a Windows path into it (UNC or drive); throws for anything else. */
+export function toWslGuestPath(path: string, distro: string): string {
+  const parsed = parseWslUncPath(path)
+  if (parsed) {
+    if (
+      parsed.distro.toLocaleLowerCase('en-US') !== distro.toLocaleLowerCase('en-US') ||
+      !posix.isAbsolute(parsed.linuxPath) ||
+      parsed.linuxPath.includes('\0')
+    ) {
+      throw new Error('skill-install-wsl-path-invalid')
+    }
+    return posix.normalize(parsed.linuxPath)
+  }
+  const drive = path.replace(/\\/g, '/').match(/^([A-Za-z]):\/(.*)$/)
+  if (!drive || path.includes('\0')) {
+    throw new Error('skill-install-wsl-path-invalid')
+  }
+  return posix.join('/mnt', drive[1].toLocaleLowerCase('en-US'), drive[2])
+}
+
 export class WslSkillInstallFilesystem implements SkillInstallFilesystem {
   private readonly guestAllowedRoots: string[]
 
@@ -219,25 +239,11 @@ export class WslSkillInstallFilesystem implements SkillInstallFilesystem {
   }
 
   private toGuestPath(path: string): string {
-    const parsed = parseWslUncPath(path)
-    if (parsed) {
-      if (
-        parsed.distro.toLocaleLowerCase('en-US') !== this.distro.toLocaleLowerCase('en-US') ||
-        !posix.isAbsolute(parsed.linuxPath) ||
-        parsed.linuxPath.includes('\0')
-      ) {
-        throw new Error('skill-install-wsl-path-invalid')
-      }
-      return posix.normalize(parsed.linuxPath)
-    }
-    const drive = path.replace(/\\/g, '/').match(/^([A-Za-z]):\/(.*)$/)
-    if (!drive || path.includes('\0')) {
-      throw new Error('skill-install-wsl-path-invalid')
-    }
-    return posix.join('/mnt', drive[1].toLocaleLowerCase('en-US'), drive[2])
+    return toWslGuestPath(path, this.distro)
   }
 
-  private requireAllowed(path: string): string {
+  /** The guest path, for a path strictly inside an authorized root; throws otherwise. */
+  requireAllowed(path: string): string {
     const guestPath = this.toGuestPath(path)
     const allowed = this.guestAllowedRoots.some((root) => {
       const child = posix.relative(root, guestPath)

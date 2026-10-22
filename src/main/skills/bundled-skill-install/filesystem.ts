@@ -20,22 +20,27 @@ import {
 } from '../skill-install-filesystem'
 import { createNativeSkillAlias } from '../skill-placement-reconciliation'
 
-export type BundledSkillPathStat = { kind: SkillFilesystemEntryKind; mtimeMs: number | null }
+/** One path as `plan` and `execute` need it, read in one go so a guest host answers a batch at once. */
+export type BundledSkillPathObservation = {
+  /** `lstat` semantics: a link is `symlink` whatever it points at. */
+  kind: SkillFilesystemEntryKind
+  mtimeMs: number | null
+  /** A link's raw target; null when it can't be read. */
+  linkTarget?: string | null
+  /** Where a link resolves; null when broken. */
+  linkRealPath?: string | null
+  /** A directory's entries; null when it can't be listed. */
+  entries?: SkillDirectoryEntry[] | null
+  /** A directory's `SKILL.md` bytes when that entry is a plain file; null when unreadable. */
+  skillFile?: Buffer | null
+}
 
-/**
- * Everything the bundled installer does to a host's disk, so a WSL guest or a remote host can
- * supply its own. Reads never throw for a missing path; writes throw on any failure.
- */
 export type BundledSkillFilesystem = {
   /** Whether this host can make a directory link; decided once, so `plan` never promises one it can't. */
   readonly supportsLinks: boolean
-  /** `lstat` semantics; null when the path cannot be read at all. */
-  stat(path: string): Promise<BundledSkillPathStat | null>
-  readLink(path: string): Promise<string | null>
+  /** Keyed by the given paths; a null value is a path that can't be read at all. */
+  observe(paths: readonly string[]): Promise<Map<string, BundledSkillPathObservation | null>>
   realpath(path: string): Promise<string | null>
-  /** `[]` for a missing directory, null when it cannot be listed. */
-  listEntries(directory: string): Promise<SkillDirectoryEntry[] | null>
-  readFile(path: string): Promise<Buffer | null>
   /** Whether the nearest existing ancestor of `directory` accepts new entries. */
   canWrite(directory: string): Promise<boolean>
   /** Creates `path` (and missing parents) holding exactly `files`; dirs 0755, files 0644. */
@@ -90,6 +95,36 @@ async function treeSignature(path: string): Promise<string> {
   return hash.digest('hex')
 }
 
+async function observeNative(path: string): Promise<BundledSkillPathObservation | null> {
+  let stats: Awaited<ReturnType<typeof lstat>>
+  try {
+    stats = await lstat(path)
+  } catch (error) {
+    return isMissing(error) ? { kind: 'missing', mtimeMs: null } : null
+  }
+  const kind = kindOf(stats)
+  if (kind === 'symlink') {
+    return {
+      kind,
+      mtimeMs: stats.mtimeMs,
+      linkTarget: await readlink(path).catch(() => null),
+      linkRealPath: await realpath(path).catch(() => null)
+    }
+  }
+  if (kind !== 'directory') {
+    return { kind, mtimeMs: stats.mtimeMs }
+  }
+  const listing = await nativeSkillInstallFilesystem.listEntries?.([path]).catch(() => null)
+  const entries = listing?.get(path) ?? null
+  const hasSkillFile = entries?.some((entry) => entry.name === 'SKILL.md' && entry.kind === 'file')
+  return {
+    kind,
+    mtimeMs: stats.mtimeMs,
+    entries,
+    ...(hasSkillFile ? { skillFile: await readFile(join(path, 'SKILL.md')).catch(() => null) } : {})
+  }
+}
+
 export async function moveAcrossFilesystems(
   source: string,
   target: string,
@@ -118,21 +153,11 @@ export async function moveAcrossFilesystems(
 
 export const nativeBundledSkillFilesystem: BundledSkillFilesystem = {
   supportsLinks: true,
-  stat: async (path) => {
-    try {
-      const stats = await lstat(path)
-      return { kind: kindOf(stats), mtimeMs: stats.mtimeMs }
-    } catch (error) {
-      return isMissing(error) ? { kind: 'missing', mtimeMs: null } : null
-    }
-  },
-  readLink: (path) => readlink(path).catch(() => null),
+  observe: async (paths) =>
+    new Map(
+      await Promise.all(paths.map(async (path) => [path, await observeNative(path)] as const))
+    ),
   realpath: (path) => realpath(path).catch(() => null),
-  listEntries: async (directory) => {
-    const listing = await nativeSkillInstallFilesystem.listEntries?.([directory]).catch(() => null)
-    return listing?.get(directory) ?? null
-  },
-  readFile: (path) => readFile(path).catch(() => null),
   canWrite: async (directory) => {
     for (let current = directory; ; current = dirname(current)) {
       const writable = await access(current, constants.W_OK).then(

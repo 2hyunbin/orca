@@ -1,0 +1,95 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { BUNDLED_ORCA_SKILL_CAPABILITY } from '../../../shared/skill-install-capability'
+
+const callRuntimeRpc = vi.fn()
+const runtimeEnvironmentSupportsCapability = vi.fn()
+
+vi.mock('./runtime-rpc-client', () => ({
+  callRuntimeRpc: (...args: unknown[]) => callRuntimeRpc(...args),
+  runtimeEnvironmentSupportsCapability: (...args: unknown[]) =>
+    runtimeEnvironmentSupportsCapability(...args)
+}))
+
+const { executeBundledSkillsOnTarget, planBundledSkillsOnTarget } =
+  await import('./runtime-bundled-skills-client')
+
+const PLAN = { scope: 'global', homeDirectory: '/home/u', skills: [], planDigest: 'd'.repeat(64) }
+const SERVER = { kind: 'environment', environmentId: 'env-1' } as const
+const bundledPlan = vi.fn()
+const bundledExecute = vi.fn()
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  bundledPlan.mockResolvedValue(PLAN)
+  vi.stubGlobal('window', { api: { skills: { bundledPlan, bundledExecute } } })
+})
+
+describe('planBundledSkillsOnTarget', () => {
+  it('plans a paired host over RPC and never this machine', async () => {
+    runtimeEnvironmentSupportsCapability.mockResolvedValue(true)
+    callRuntimeRpc.mockResolvedValue(PLAN)
+
+    expect(await planBundledSkillsOnTarget(SERVER, { force: ['/x'] })).toEqual({
+      kind: 'plan',
+      plan: PLAN
+    })
+    expect(runtimeEnvironmentSupportsCapability).toHaveBeenCalledWith(
+      'env-1',
+      BUNDLED_ORCA_SKILL_CAPABILITY
+    )
+    expect(callRuntimeRpc).toHaveBeenCalledWith(
+      SERVER,
+      'skills.planBundledOrca',
+      { force: ['/x'] },
+      expect.anything()
+    )
+    expect(bundledPlan).not.toHaveBeenCalled()
+  })
+
+  it('reads an older server that answered its status without the capability as unsupported', async () => {
+    runtimeEnvironmentSupportsCapability.mockResolvedValue(false)
+
+    expect(await planBundledSkillsOnTarget(SERVER, {})).toEqual({ kind: 'unsupported' })
+    expect(callRuntimeRpc).not.toHaveBeenCalled()
+    expect(bundledPlan).not.toHaveBeenCalled()
+  })
+
+  it('reports a failed status probe as an error, not as an older server', async () => {
+    runtimeEnvironmentSupportsCapability.mockRejectedValue(new Error('status.get timed out'))
+
+    await expect(planBundledSkillsOnTarget(SERVER, {})).rejects.toThrow('status.get timed out')
+    expect(bundledPlan).not.toHaveBeenCalled()
+  })
+
+  it('plans a WSL distro through this app, naming the distro', async () => {
+    await planBundledSkillsOnTarget({ kind: 'wsl', distro: 'Ubuntu' }, { force: ['/x'] })
+
+    expect(bundledPlan).toHaveBeenCalledWith({ force: ['/x'], wsl: { distro: 'Ubuntu' } })
+    expect(callRuntimeRpc).not.toHaveBeenCalled()
+  })
+
+  it('plans this machine without a WSL target', async () => {
+    await planBundledSkillsOnTarget({ kind: 'local' }, {})
+
+    expect(bundledPlan).toHaveBeenCalledWith({})
+  })
+})
+
+describe('executeBundledSkillsOnTarget', () => {
+  it('sends the previewed digest and request to the host that planned it', async () => {
+    await executeBundledSkillsOnTarget(SERVER, 'd'.repeat(64), { force: ['/x'] })
+    await executeBundledSkillsOnTarget({ kind: 'wsl', distro: 'Ubuntu' }, 'e'.repeat(64), {})
+
+    expect(callRuntimeRpc).toHaveBeenCalledWith(
+      SERVER,
+      'skills.executeBundledOrca',
+      { planDigest: 'd'.repeat(64), request: { force: ['/x'] } },
+      expect.anything()
+    )
+    expect(bundledExecute).toHaveBeenCalledTimes(1)
+    expect(bundledExecute).toHaveBeenCalledWith({
+      planDigest: 'e'.repeat(64),
+      request: { wsl: { distro: 'Ubuntu' } }
+    })
+  })
+})

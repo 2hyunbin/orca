@@ -11,10 +11,11 @@ import type { BundledSkillSource } from './bundled-skill-sources'
 import { hasCloudReceipt, hasPendingCloudTransaction, stateKeysFor } from './cloud-state'
 import {
   bundledSkillTextDigest,
-  classifyBundledSkillPath,
+  classifyBundledSkillObservation,
   type BundledSkillFolderClass
 } from './classify'
 import type { BundledSkillFilesystem } from './filesystem'
+import { canWriteOnce, observeTargets, type PlanPass } from './plan-observations'
 import { bundledSkillSiblingKind } from './swap'
 import {
   bundledSkillPathKey,
@@ -47,6 +48,7 @@ export type ResolvedBundledSkillPlan = {
 
 type SkillContext = {
   input: BundledSkillPlanInput
+  pass: PlanPass
   source: BundledSkillSource
   digest: string
   force: Set<string> | 'all'
@@ -76,12 +78,12 @@ export function sameBundledSkillObserved(
 async function linkPointsAt(
   filesystem: BundledSkillFilesystem,
   path: string,
-  rawTarget: string,
+  link: { rawTarget: string; realPath: string | null },
   realPath: string
 ): Promise<boolean> {
   const resolved =
-    (await filesystem.realpath(path)) ??
-    resolve(await resolveBundledSkillRealPath(filesystem, dirname(path)), rawTarget)
+    link.realPath ??
+    resolve(await resolveBundledSkillRealPath(filesystem, dirname(path)), link.rawTarget)
   return bundledSkillPathKey(resolved) === bundledSkillPathKey(realPath)
 }
 
@@ -90,8 +92,7 @@ async function recoverySiblings(
   root: BundledSkillTargetRoot,
   targetIsAbsent: boolean
 ): Promise<{ restoreFrom?: BundledSkillOp['restoreFrom']; cleanup: BundledSkillCleanup[] }> {
-  const { filesystem } = context.input
-  const listing = (await filesystem.listEntries(root.path)) ?? []
+  const listing = context.pass.observations.get(root.realPath)?.entries ?? []
   const cleanup: BundledSkillCleanup[] = []
   const olds: { path: string; observed: BundledSkillObserved; folderClass: string }[] = []
   for (const entry of [...listing].sort((left, right) => (left.name < right.name ? -1 : 1))) {
@@ -100,9 +101,8 @@ async function recoverySiblings(
     if (!kind) {
       continue
     }
-    const classified = await classifyBundledSkillPath(
-      filesystem,
-      path,
+    const classified = classifyBundledSkillObservation(
+      context.pass.observations.get(path),
       context.source,
       context.digest
     )
@@ -136,9 +136,8 @@ async function planTarget(
   const path = join(root.path, context.source.name)
   const realPath = join(root.realPath, context.source.name)
   const stateKeys = stateKeysFor(path, realPath)
-  const classified = await classifyBundledSkillPath(
-    filesystem,
-    path,
+  const classified = classifyBundledSkillObservation(
+    context.pass.observations.get(path),
     context.source,
     context.digest
   )
@@ -196,7 +195,12 @@ async function planTarget(
     if (
       shared &&
       observed.kind === 'link' &&
-      (await linkPointsAt(filesystem, path, observed.target, shared.realPath))
+      (await linkPointsAt(
+        filesystem,
+        path,
+        { rawTarget: observed.target, realPath: classified.linkRealPath ?? null },
+        shared.realPath
+      ))
     ) {
       return shared.current
         ? { ...base, kind: 'keep', cleanup }
@@ -218,7 +222,7 @@ async function planTarget(
   }
   const blocked = (await hasPendingCloudTransaction(stateDirectory, stateKeys))
     ? 'busy'
-    : (await filesystem.canWrite(root.realPath))
+    : (await canWriteOnce(context.pass, context.input.filesystem, root.realPath))
       ? null
       : 'unwritable'
   if (!blocked) {
@@ -229,11 +233,13 @@ async function planTarget(
 
 async function planSkill(
   input: BundledSkillPlanInput,
+  pass: PlanPass,
   roots: readonly BundledSkillTargetRoot[],
   source: BundledSkillSource
 ): Promise<BundledSkillPlanEntry | null> {
   const context: SkillContext = {
     input,
+    pass,
     source,
     digest: bundledSkillTextDigest(Buffer.from(source.text, 'utf8')),
     force: input.force === 'all' ? 'all' : new Set((input.force ?? []).map(bundledSkillPathKey))
@@ -299,9 +305,10 @@ export async function buildBundledSkillPlan(
         return source
       })
     : input.sources
+  const pass = await observeTargets(input.filesystem, roots, selected)
   const skills: BundledSkillPlanEntry[] = []
   for (const source of selected) {
-    const entry = await planSkill(input, roots, source)
+    const entry = await planSkill(input, pass, roots, source)
     if (entry) {
       skills.push(entry)
     }

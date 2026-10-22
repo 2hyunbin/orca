@@ -5,13 +5,12 @@ import {
   type BundledSkillResultSummary
 } from '../../../../shared/bundled-skill-summary'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
+import { bundledSkillTargetKey, type BundledSkillTarget } from '@/lib/bundled-skill-target'
+import { executeBundledSkillsOnTarget } from '@/runtime/runtime-bundled-skills-client'
 import {
   getSkillFreshnessUpdateDialogRequest,
   subscribeSkillFreshnessUpdateDialog
 } from './skill-freshness-update-dialog'
-
-/** The host whose skills a run changed; WSL and paired hosts get their own key later. */
-export const LOCAL_SKILL_UPDATE_TARGET = 'local'
 
 export type SkillUpdateRun =
   | { state: 'idle' }
@@ -38,6 +37,8 @@ const IDLE: SkillUpdateRun = Object.freeze({ state: 'idle' })
 const slots = new Map<string, RunSlot>()
 const listeners = new Set<() => void>()
 let nextToken = 0
+// The status bar reports the run the user started last, whichever host it ran on.
+let latestTargetKey: string | null = null
 
 /** How long a finished run keeps its green check in the status bar. */
 export const SKILL_UPDATE_SUCCESS_LINGER_MS = 4000
@@ -102,50 +103,57 @@ export function subscribeSkillUpdateRun(listener: () => void): () => void {
   return () => listeners.delete(listener)
 }
 
-export function getSkillUpdateRun(targetKey: string = LOCAL_SKILL_UPDATE_TARGET): SkillUpdateRun {
-  return slots.get(targetKey)?.run ?? IDLE
+export function getSkillUpdateRun(targetKey: string | null): SkillUpdateRun {
+  return (targetKey && slots.get(targetKey)?.run) || IDLE
 }
 
-export function useSkillUpdateRun(targetKey: string = LOCAL_SKILL_UPDATE_TARGET): SkillUpdateRun {
+/** `targetKey` is `bundledSkillTargetKey` of the host; null reads idle. */
+export function useSkillUpdateRun(targetKey: string | null): SkillUpdateRun {
   const read = (): SkillUpdateRun => getSkillUpdateRun(targetKey)
   return useSyncExternalStore(subscribeSkillUpdateRun, read, read)
 }
 
-/** Executes the plan the user reviewed, identified by its digest. */
+export function useLatestSkillUpdateRun(): SkillUpdateRun {
+  const read = (): SkillUpdateRun => getSkillUpdateRun(latestTargetKey)
+  return useSyncExternalStore(subscribeSkillUpdateRun, read, read)
+}
+
+/** Executes the plan the user reviewed on `target`, identified by its digest. */
 export async function startSkillUpdateRun(request: {
-  /** Only the local host has a plan route in this build. */
-  targetKey: typeof LOCAL_SKILL_UPDATE_TARGET
+  target: BundledSkillTarget
   names: string[]
   planDigest: string
   force: string[]
 }): Promise<void> {
-  const { targetKey, names } = request
+  const { target, names } = request
+  const targetKey = bundledSkillTargetKey(target)
   const slot = slotFor(targetKey)
   if (slot.run.state === 'running') {
     return
   }
   const token = ++nextToken
   slot.token = token
+  latestTargetKey = targetKey
   setRun(targetKey, { state: 'running', targetKey, names, startedAt: Date.now() })
-  const settled = await window.api.skills
-    .bundledExecute({ planDigest: request.planDigest, force: request.force })
-    .then(
-      (result): SkillUpdateRun => ({
-        state: 'done',
-        targetKey,
-        names,
-        finishedAt: Date.now(),
-        result,
-        summary: summarizeBundledSkillOutcomes(result)
-      }),
-      (error: unknown): SkillUpdateRun => ({
-        state: 'error',
-        targetKey,
-        names,
-        finishedAt: Date.now(),
-        message: error instanceof Error ? error.message : String(error)
-      })
-    )
+  const settled = await executeBundledSkillsOnTarget(target, request.planDigest, {
+    force: request.force
+  }).then(
+    (result): SkillUpdateRun => ({
+      state: 'done',
+      targetKey,
+      names,
+      finishedAt: Date.now(),
+      result,
+      summary: summarizeBundledSkillOutcomes(result)
+    }),
+    (error: unknown): SkillUpdateRun => ({
+      state: 'error',
+      targetKey,
+      names,
+      finishedAt: Date.now(),
+      message: error instanceof Error ? error.message : String(error)
+    })
+  )
   // Why: a completion for a run that was acknowledged or replaced is stale.
   if (slots.get(targetKey)?.token !== token) {
     return
@@ -156,7 +164,7 @@ export async function startSkillUpdateRun(request: {
 }
 
 /** Clears a settled run so the status-bar segment can retire itself. */
-export function acknowledgeSkillUpdateRun(targetKey: string = LOCAL_SKILL_UPDATE_TARGET): void {
+export function acknowledgeSkillUpdateRun(targetKey: string): void {
   const slot = slots.get(targetKey)
   if (!slot || slot.run.state === 'idle' || slot.run.state === 'running') {
     return
@@ -173,4 +181,5 @@ export function _resetSkillUpdateRunStore(): void {
   }
   slots.clear()
   listeners.clear()
+  latestTargetKey = null
 }

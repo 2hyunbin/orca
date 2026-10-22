@@ -16,6 +16,7 @@ import {
 } from '../../../../shared/bundled-skill-summary'
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
+import { bundledSkillTargetKey } from '@/lib/bundled-skill-target'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
@@ -31,7 +32,6 @@ import { SkillUpdateRow, type SkillRowPhase } from './SkillUpdateRow'
 import { SummaryHeadline, updateActionLabel } from './skill-freshness-summary-headline'
 import {
   acknowledgeSkillUpdateRun,
-  LOCAL_SKILL_UPDATE_TARGET,
   startSkillUpdateRun,
   useSkillUpdateRun,
   type SkillUpdateRun
@@ -152,16 +152,23 @@ function RunHeadline({ run }: { run: SkillUpdateRun }): React.JSX.Element | null
 }
 
 export function SkillFreshnessUpdateDialog(): React.JSX.Element {
-  const activeSkillRuntime = useActiveProjectSkillRuntime()
-  const state = useSkillFreshness(activeSkillRuntime.canUseLocalSkillFreshness)
-  const run = useSkillUpdateRun(LOCAL_SKILL_UPDATE_TARGET)
+  const target = useActiveProjectSkillRuntime().bundledSkillTarget
+  const targetKey = target ? bundledSkillTargetKey(target) : null
+  const state = useSkillFreshness(target)
+  const run = useSkillUpdateRun(targetKey)
   const open = useSyncExternalStore(
     subscribeSkillFreshnessUpdateDialog,
     getSkillFreshnessUpdateDialogRequest,
     getSkillFreshnessUpdateDialogRequest
   )
   const [force, setForce] = useState<string[]>([])
-  const reviewed = useReviewedSkillPlan(state.plan, force)
+  // Why: Replace choices name one host's paths, so another host starts without them.
+  const [forceTargetKey, setForceTargetKey] = useState(targetKey)
+  if (forceTargetKey !== targetKey) {
+    setForceTargetKey(targetKey)
+    setForce([])
+  }
+  const reviewed = useReviewedSkillPlan(target, state.plan, force)
 
   // Why: settling a run re-plans every skills surface, and the plan is null while that
   // re-reads the disk. Keeping the last rows on screen avoids blanking the dialog at the
@@ -205,18 +212,18 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     if (run.state === 'idle') {
       lastPlanRef.current = null
     }
-    if (showResult) {
-      acknowledgeSkillUpdateRun(LOCAL_SKILL_UPDATE_TARGET)
+    if (showResult && targetKey) {
+      acknowledgeSkillUpdateRun(targetKey)
     }
     notifyInstalledAgentSkillsChanged()
   }
 
   const handleUpdate = (): void => {
-    if (!livePlan) {
+    if (!livePlan || !target) {
       return
     }
     void startSkillUpdateRun({
-      targetKey: LOCAL_SKILL_UPDATE_TARGET,
+      target,
       // Why: only skills with work; the status bar counts these.
       names: summarizeBundledSkillPlan(livePlan)
         .skills.filter((skill) => skill.state !== 'current')
@@ -227,7 +234,9 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
   }
 
   const handleRecheck = (): void => {
-    acknowledgeSkillUpdateRun(LOCAL_SKILL_UPDATE_TARGET)
+    if (targetKey) {
+      acknowledgeSkillUpdateRun(targetKey)
+    }
     setForce([])
     void state.refresh()
   }
@@ -236,8 +245,8 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     isReplaced: (path: string) => force.includes(path),
     onReplaceChange: (path: string, next: boolean) => {
       // Why: a choice made on the result starts a new review of the re-planned skills.
-      if (showResult) {
-        acknowledgeSkillUpdateRun(LOCAL_SKILL_UPDATE_TARGET)
+      if (showResult && targetKey) {
+        acknowledgeSkillUpdateRun(targetKey)
       }
       setForce((previous) =>
         next ? [...new Set([...previous, path])].sort() : previous.filter((item) => item !== path)
@@ -259,7 +268,14 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
           </DialogTitle>
         </DialogHeader>
 
-        {error && !isRunning && !showResult ? (
+        {state.unsupported && !isRunning && !showResult ? (
+          <p className="text-xs text-muted-foreground">
+            {translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.updateServer',
+              'Update Orca on the server to update its Orca skills.'
+            )}
+          </p>
+        ) : error && !isRunning && !showResult ? (
           <p className="min-w-0 [overflow-wrap:anywhere] text-xs text-destructive">{error}</p>
         ) : isRunning || showResult ? (
           <RunHeadline run={run} />

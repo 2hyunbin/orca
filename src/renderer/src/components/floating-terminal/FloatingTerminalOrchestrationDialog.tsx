@@ -62,7 +62,7 @@ export function FloatingTerminalOrchestrationDialog({
 
   const recheckOrchestrationSkill = async (): Promise<boolean> => {
     const installed = await refreshOrchestrationSkill()
-    if (activeSkillRuntime.canUseLocalSkillFreshness) {
+    if (activeSkillRuntime.bundledSkillTarget) {
       await refreshSkillFreshness()
     }
     return installed

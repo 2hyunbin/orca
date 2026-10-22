@@ -4,21 +4,19 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
-  BundledSkillExecuteRequest,
   BundledSkillInstallResult,
-  BundledSkillPlan,
-  BundledSkillPlanRequest
+  BundledSkillLocalExecuteRequest,
+  BundledSkillLocalPlanRequest,
+  BundledSkillPlan
 } from '../../../../shared/bundled-skill-plan'
 import { SkillFreshnessUpdateDialog } from './SkillFreshnessUpdateDialog'
 import {
   consumeSkillFreshnessUpdateDialogRequest,
   requestSkillFreshnessUpdateDialog
 } from './skill-freshness-update-dialog'
-import {
-  _resetSkillUpdateRunStore,
-  getSkillUpdateRun,
-  LOCAL_SKILL_UPDATE_TARGET
-} from './skill-update-run-store'
+import { _resetSkillUpdateRunStore, getSkillUpdateRun } from './skill-update-run-store'
+
+const LOCAL_SKILL_UPDATE_TARGET = 'local'
 import {
   doneResult,
   planEntry,
@@ -29,6 +27,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   plan: ((): BundledSkillPlan | null => null)(),
+  unsupported: false,
   loading: false,
   error: null as string | null,
   refresh: vi.fn(),
@@ -38,6 +37,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/useSkillFreshness', () => ({
   useSkillFreshness: () => ({
     plan: mocks.plan,
+    unsupported: mocks.unsupported,
     loading: mocks.loading,
     error: mocks.error,
     refresh: mocks.refresh
@@ -45,7 +45,7 @@ vi.mock('@/hooks/useSkillFreshness', () => ({
 }))
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
-  useActiveProjectSkillRuntime: () => ({ canUseLocalSkillFreshness: true })
+  useActiveProjectSkillRuntime: () => ({ bundledSkillTarget: { kind: 'local' } })
 }))
 
 vi.mock('@/hooks/useInstalledAgentSkills', () => ({
@@ -72,11 +72,11 @@ function deferred<T>(): Deferred<T> {
 }
 
 const skillsApi = {
-  bundledPlan: vi.fn(async (_request?: BundledSkillPlanRequest): Promise<BundledSkillPlan> =>
+  bundledPlan: vi.fn(async (_request?: BundledSkillLocalPlanRequest): Promise<BundledSkillPlan> =>
     planOf([])
   ),
   bundledExecute: vi.fn(
-    async (_request: BundledSkillExecuteRequest): Promise<BundledSkillInstallResult> => ({
+    async (_request: BundledSkillLocalExecuteRequest): Promise<BundledSkillInstallResult> => ({
       scope: 'global',
       skills: []
     })
@@ -154,6 +154,7 @@ function replaceCheckbox(): HTMLElement {
 
 beforeEach(() => {
   mocks.plan = null
+  mocks.unsupported = false
   mocks.loading = false
   mocks.error = null
   mocks.refresh.mockReset()
@@ -252,7 +253,7 @@ describe('SkillFreshnessUpdateDialog', () => {
 
     expect(skillsApi.bundledExecute).toHaveBeenCalledWith({
       planDigest: '2'.repeat(64),
-      force: [EDITED_PATH]
+      request: { force: [EDITED_PATH] }
     })
   })
 
@@ -267,7 +268,7 @@ describe('SkillFreshnessUpdateDialog', () => {
 
     expect(skillsApi.bundledExecute).toHaveBeenCalledWith({
       planDigest: plan.planDigest,
-      force: []
+      request: { force: [] }
     })
     expect(container.textContent).toContain('Updated 1 skill · 1 left alone')
     const row = container.querySelector('[data-skill-row="orca-cli"]')?.textContent ?? ''

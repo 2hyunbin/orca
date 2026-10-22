@@ -27,10 +27,10 @@ import type {
   SkillShareResolvedOperation
 } from '../../shared/skill-sharing-contract'
 import type {
-  BundledSkillExecuteRequest,
+  BundledSkillLocalExecuteRequest,
   BundledSkillInstallResult,
   BundledSkillPlan,
-  BundledSkillPlanRequest
+  BundledSkillLocalPlanRequest
 } from '../../shared/bundled-skill-plan'
 
 import type {
@@ -41,9 +41,9 @@ import type {
 
 export type SkillsApi = {
   discover: (target?: SkillDiscoveryTarget) => Promise<SkillDiscoveryResult>
-  /** This machine's plan for Orca's installed skills; WSL and remote hosts are not planned here. */
-  bundledPlan: (request?: BundledSkillPlanRequest) => Promise<BundledSkillPlan>
-  bundledExecute: (request: BundledSkillExecuteRequest) => Promise<BundledSkillInstallResult>
+  /** This machine's (or one of its WSL distros') plan for Orca's installed skills; paired hosts plan over RPC. */
+  bundledPlan: (request?: BundledSkillLocalPlanRequest) => Promise<BundledSkillPlan>
+  bundledExecute: (request: BundledSkillLocalExecuteRequest) => Promise<BundledSkillInstallResult>
   prepareShare: (input: {
     skillIds: string[]
     bundleName: string

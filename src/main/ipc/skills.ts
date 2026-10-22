@@ -6,8 +6,8 @@ import {
   type SkillDiscoveryTarget
 } from '../../shared/skills'
 import {
-  BundledSkillExecuteRequestSchema,
-  BundledSkillPlanRequestSchema,
+  BundledSkillLocalExecuteRequestSchema,
+  BundledSkillLocalPlanRequestSchema,
   type BundledSkillInstallResult,
   type BundledSkillPlan
 } from '../../shared/bundled-skill-plan'
@@ -38,15 +38,15 @@ export function registerSkillsHandlers(store: Store, runtime?: OrcaRuntimeServic
   }
   registerSkillCloudIpcHandlers(runtime, discover)
 
-  // Local host only; WSL and paired hosts plan Orca's skills on their own host.
+  // This machine or a WSL distro it reaches; paired hosts plan Orca's skills over RPC.
   handleMainWindowSkillIpc(
     'skills:bundledPlan',
     async (_event, value: unknown): Promise<BundledSkillPlan> =>
-      runtime.planLocalBundledSkills(BundledSkillPlanRequestSchema.parse(value ?? {}))
+      runtime.planLocalBundledSkills(BundledSkillLocalPlanRequestSchema.parse(value ?? {}))
   )
   handleMainWindowSkillIpc(
     'skills:bundledExecute',
     async (_event, value: unknown): Promise<BundledSkillInstallResult> =>
-      runtime.executeLocalBundledSkills(BundledSkillExecuteRequestSchema.parse(value))
+      runtime.executeLocalBundledSkills(BundledSkillLocalExecuteRequestSchema.parse(value))
   )
 }

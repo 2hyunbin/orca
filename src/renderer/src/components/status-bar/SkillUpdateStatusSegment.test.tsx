@@ -7,7 +7,6 @@ import type { BundledSkillInstallResult } from '../../../../shared/bundled-skill
 import { SkillUpdateStatusSegment } from './SkillUpdateStatusSegment'
 import {
   _resetSkillUpdateRunStore,
-  LOCAL_SKILL_UPDATE_TARGET,
   SKILL_UPDATE_SUCCESS_LINGER_MS,
   startSkillUpdateRun
 } from '../skills/skill-update-run-store'
@@ -53,7 +52,7 @@ let running: Promise<void> | null = null
 async function start(names: string[]): Promise<void> {
   await act(async () => {
     running = startSkillUpdateRun({
-      targetKey: LOCAL_SKILL_UPDATE_TARGET,
+      target: { kind: 'local' },
       names,
       planDigest: 'a'.repeat(64),
       force: []

@@ -26,10 +26,11 @@ function updatePlan(): BundledSkillPlan {
 }
 
 vi.mock('@/hooks/useSkillFreshness', () => ({
-  useSkillFreshness: (enabled = true) => {
-    mocks.freshnessEnabled = enabled
+  useSkillFreshness: (target: unknown) => {
+    mocks.freshnessEnabled = target !== null
     return {
       plan: mocks.plan,
+      unsupported: false,
       loading: false,
       error: mocks.error,
       refresh: vi.fn()
@@ -39,7 +40,7 @@ vi.mock('@/hooks/useSkillFreshness', () => ({
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
-    canUseLocalSkillFreshness: mocks.canUseLocalSkillFreshness
+    bundledSkillTarget: mocks.canUseLocalSkillFreshness ? { kind: 'local' } : null
   })
 }))
 

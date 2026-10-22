@@ -16,6 +16,7 @@ import {
   type ProjectAgentSkillRuntime
 } from '@/lib/project-skill-runtime'
 import { useWindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
+import { resolveBundledSkillTarget, type BundledSkillTarget } from '@/lib/bundled-skill-target'
 import { useAppStore } from '@/store'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
@@ -26,12 +27,9 @@ type ActiveProjectSkillRuntime = {
   terminalShellOverride?: string
   installDisabledReason: string | null
   canUseLocalSkillFreshness: boolean
+  /** Where Update skills plans Orca's skills; null while that host is unknown. */
+  bundledSkillTarget: BundledSkillTarget | null
 }
-
-const EMPTY_ACTIVE_PROJECT_SKILL_RUNTIME: ActiveProjectSkillRuntime = Object.freeze({
-  installDisabledReason: null,
-  canUseLocalSkillFreshness: false
-})
 
 export function shouldUseLocalSkillFreshness(
   runtimeTarget: RuntimeClientTarget | null,
@@ -114,10 +112,13 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
           )
         : undefined
       const canUseLocalSkillFreshness = shouldUseLocalSkillFreshness(runtimeTarget)
-      if (!terminalShellOverride && !canUseLocalSkillFreshness) {
-        return EMPTY_ACTIVE_PROJECT_SKILL_RUNTIME
+      const bundledSkillTarget = resolveBundledSkillTarget(runtimeTarget, undefined)
+      return {
+        installDisabledReason: null,
+        ...(terminalShellOverride ? { terminalShellOverride } : {}),
+        canUseLocalSkillFreshness,
+        bundledSkillTarget
       }
-      return { installDisabledReason: null, terminalShellOverride, canUseLocalSkillFreshness }
     }
 
     const agentRuntime = getProjectAgentSkillRuntime(projectRuntime, currentPlatform)
@@ -131,7 +132,8 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
         agentRuntime
       ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
-      canUseLocalSkillFreshness: shouldUseLocalSkillFreshness(runtimeTarget, agentRuntime)
+      canUseLocalSkillFreshness: shouldUseLocalSkillFreshness(runtimeTarget, agentRuntime),
+      bundledSkillTarget: resolveBundledSkillTarget(runtimeTarget, projectRuntime)
     }
   }, [currentPlatform, runtimeState, runtimeTarget, windowsCapabilities])
 
