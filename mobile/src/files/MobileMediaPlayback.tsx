@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { View } from 'react-native'
+import { StyleSheet, View } from 'react-native'
 import { CircleAlert } from 'lucide-react-native'
 import { StateView } from '../components/ui/StateView'
-import { filePreviewStyles as styles } from './mobile-file-preview-styles'
+import { spacing } from '../theme/mobile-theme'
 
 export type MobileMediaPlaybackProps = { uri: string; mimeType: string; title: string }
 
@@ -44,7 +44,7 @@ export function MobileMediaPlayback({ uri, mimeType, title }: MobileMediaPlaybac
       setFailure((current) => current || 'Its format may not be supported on this device.')
   }
   return (
-    <View style={styles.state}>
+    <View style={playbackStyles.frame}>
       {mimeType.startsWith('audio/') ? (
         <audio {...props} style={{ width: '100%' }} />
       ) : (
@@ -53,3 +53,7 @@ export function MobileMediaPlayback({ uri, mimeType, title }: MobileMediaPlaybac
     </View>
   )
 }
+
+const playbackStyles = StyleSheet.create({
+  frame: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }
+})
