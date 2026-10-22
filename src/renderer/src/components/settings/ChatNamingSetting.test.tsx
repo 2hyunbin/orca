@@ -88,13 +88,24 @@ describe('Chat names setting', () => {
     expect(updateSettings).toHaveBeenCalledWith({ nativeChatAutoName: false })
   })
 
-  it('shows the effective CLI recipe while arguments exist and returns to chat agent when cleared', () => {
-    renderSetting({
+  it('labels the prospective default with retained arguments and returns to chat agent when cleared', async () => {
+    const { settings, element, rerender } = renderSetting({
       defaultTuiAgent: 'claude',
       sourceControlAi: normalizeSourceControlAiSettings({
-        actions: { conversationName: { agentId: null, agentArgs: '--model haiku' } }
+        agentId: 'pi',
+        actions: { conversationName: { agentId: 'codex', agentArgs: '--model haiku' } }
       })
     })
+    expect(screen.getByRole('combobox').textContent).toContain('Codex')
+    fireEvent.click(screen.getByRole('combobox'))
+    fireEvent.click(screen.getByRole('option', { name: 'Use configured CLI agent (Claude)' }))
+    await waitFor(() =>
+      expect(settings.sourceControlAi?.actions?.conversationName).toMatchObject({
+        agentId: null,
+        agentArgs: '--model haiku'
+      })
+    )
+    rerender(element())
     expect(screen.getByRole('combobox').textContent).toContain('Use configured CLI agent (Claude)')
     expect(screen.getByText('Clear CLI arguments to use each chat’s agent.')).toBeTruthy()
     changeAgentArgs('')

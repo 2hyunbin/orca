@@ -1,5 +1,6 @@
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { resolveTuiAgentLaunchEnv } from '../../shared/tui-agent-launch-defaults'
 import { acpLaunchSpecFor } from '../acp/acp-launch-specs'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
 import {
@@ -13,7 +14,8 @@ import type { CommitMessageGenerationTarget } from '../text-generation/source-co
 export async function chatNamingAgentTarget(
   record: AgentSessionRecord,
   cwd: string,
-  resolveEnvironment: (agent: string) => Promise<Record<string, string>>
+  resolveEnvironment: (agent: string) => Promise<Record<string, string>>,
+  configuredEnv: Parameters<typeof resolveTuiAgentLaunchEnv>[1]
 ): Promise<CommitMessageGenerationTarget> {
   let env = await resolveEnvironment(record.provider)
   const spec = acpLaunchSpecFor(record.provider)
@@ -28,12 +30,13 @@ export async function chatNamingAgentTarget(
   }
   const home = requireLegacyAgentSessionAccountHome(record.accountHome)
   if (record.provider === 'claude') {
-    env = withoutInheritedClaudeConfigDir(env)
+    env = {
+      ...withoutInheritedClaudeConfigDir(env),
+      ...resolveTuiAgentLaunchEnv('claude', configuredEnv)
+    }
     const path = await resolveClaudeStructuredLaunchHome(getClaudeProfileRouter(), env, home.path)
-    const patch = claudeConfigDirEnvPatch(path, {
-      env: withoutInheritedClaudeConfigDir(process.env)
-    })
-    return { kind: 'local', cwd, env: { ...env, CLAUDE_CONFIG_DIR: undefined, ...patch } }
+    const patch = claudeConfigDirEnvPatch(path, { env })
+    return { kind: 'local', cwd, env: { CLAUDE_CONFIG_DIR: undefined, ...env, ...patch } }
   }
   return { kind: 'local', cwd, env: { ...env, [home.variable]: home.path } }
 }

@@ -323,18 +323,17 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
   forceCloseSession = (sessionId: string): Promise<boolean> => this.children.stop(sessionId, false)
 
   async closeAll(): Promise<void> {
-    const copiedChildren = this.copies.closeAll()
-    const textChildren = this.textTasks.closeAll()
     const ids = new Set([
       ...this.children.sessions.keys(),
       ...this.children.starts.failedSessionIds()
     ])
     // A start still under way is the host's to abort: its teardown does, before this runs.
-    const proven = await Promise.all(
-      [...ids].map((sessionId) => this.children.stop(sessionId, true))
-    )
-    const stoppedTasks = await Promise.all([copiedChildren, textChildren])
-    if (stoppedTasks.includes(false) || proven.includes(false)) {
+    const proven = await Promise.all([
+      this.copies.closeAll(),
+      this.textTasks.closeAll(),
+      ...[...ids].map((sessionId) => this.children.stop(sessionId, true))
+    ])
+    if (proven.includes(false)) {
       throw new Error('an ACP agent child could not be proven stopped')
     }
   }

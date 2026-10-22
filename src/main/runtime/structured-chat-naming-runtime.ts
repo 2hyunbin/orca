@@ -7,6 +7,7 @@ import {
   sanitizeGeneratedConversationName
 } from '../../shared/conversation-name-generation'
 import { chatNamingAgentTarget } from './structured-chat-naming-agent-launch'
+import type { GlobalSettings } from '../../shared/global-settings-types'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
 import type { CommitMessageAgentEnvironmentResolvers } from '../text-generation/commit-message-agent-environment'
 import type { StructuredChatNamingDeps } from '../native-chat/structured-chat-naming'
@@ -34,6 +35,7 @@ type StructuredChatNamingRuntime = {
 export function structuredChatNamingDeps(
   getStore: () => {
     getSettings: () => Parameters<typeof resolveTextGenerationParams>[0] &
+      Partial<Pick<GlobalSettings, 'agentDefaultEnv'>> &
       ReturnType<StructuredChatNamingDeps['getSettings']>
   },
   runtime: StructuredChatNamingRuntime,
@@ -124,7 +126,12 @@ export function structuredChatNamingDeps(
         return { error: settings.error }
       }
       const target = useChatAgent
-        ? await chatNamingAgentTarget(record, workspace.path, runtime.resolveNamingEnvironment)
+        ? await chatNamingAgentTarget(
+            record,
+            workspace.path,
+            runtime.resolveNamingEnvironment,
+            current.agentDefaultEnv
+          )
         : await resolveGenerationTarget(workspace.path, settings.params.agentId, runtime)
       if (!target) {
         const error = 'No chat-name agent can run in this workspace.'

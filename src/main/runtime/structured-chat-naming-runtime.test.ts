@@ -213,6 +213,44 @@ describe('structured chat naming runtime', () => {
     )
   })
 
+  it.each([undefined, '/user-configured/claude'])(
+    'distinguishes the explicit Claude directory %s from inherited environment under System default',
+    async (configuredDir) => {
+      const root = await mkdtemp(join(tmpdir(), 'orca-naming-system-account-test-'))
+      roots.push(root)
+      const router = new ClaudeProfileRouter({
+        getSettings: () => ({
+          claudeManagedAccounts: [],
+          activeClaudeManagedAccountId: null,
+          agentStatusHooksEnabled: false,
+          disabledTuiAgents: []
+        }),
+        dataRoot: root,
+        userHome: join(root, 'personal'),
+        env: {}
+      })
+      installClaudeProfileRouter(router)
+      const state = rig()
+      state.settings.agentDefaultEnv = {
+        claude: configuredDir ? { CLAUDE_CONFIG_DIR: configuredDir } : {}
+      }
+      state.runtime.resolveNamingEnvironment.mockResolvedValue({
+        PATH: '/usr/bin',
+        CLAUDE_CONFIG_DIR: configuredDir ?? '/inherited/claude'
+      })
+      await state.deps.generate(agentSessionRecordFixture(), 'Repair login')
+      expect(mocks.generate).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({
+          env: expect.objectContaining({
+            CLAUDE_CONFIG_DIR: configuredDir ?? router.systemDefaultHome()
+          })
+        })
+      )
+    }
+  )
+
   it.each([false, true])(
     'preserves args-only CLI recipes (explicit null: %s)',
     async (explicitNull) => {

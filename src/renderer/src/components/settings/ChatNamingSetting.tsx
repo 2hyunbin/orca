@@ -132,19 +132,25 @@ export function ChatNamingSetting({
     }
   }
 
-  const cliRecipe =
-    !recipe?.agentId && value.agentArgs.trim()
-      ? resolveSourceControlAiForOperation({
-          settings: {
-            ...settings,
-            sourceControlAi: {
-              ...config,
-              actions: { ...config.actions, conversationName: { ...recipe, ...value } }
+  const cliRecipe = value.agentArgs.trim()
+    ? resolveSourceControlAiForOperation({
+        settings: {
+          ...settings,
+          sourceControlAi: {
+            ...config,
+            actions: {
+              ...config.actions,
+              conversationName: {
+                ...recipe,
+                ...value,
+                ...(recipe?.agentId ? { agentId: null } : {})
+              }
             }
-          },
-          operation: 'conversationName'
-        })
-      : null
+          }
+        },
+        operation: 'conversationName'
+      })
+    : null
   const cliAgent = cliRecipe?.ok ? cliRecipe.value.params.agentId : null
   const defaultAgentLabel = cliRecipe?.ok
     ? translate('settings.chat.names.configuredCliAgent', 'Use configured CLI agent ({{agent}})', {
