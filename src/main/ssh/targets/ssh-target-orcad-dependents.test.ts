@@ -110,8 +110,8 @@ describe('client state that still references an SSH target', () => {
   })
 
   it('blocks on worktree metadata recorded for the host', () => {
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census reads only the keys.
-    const meta = { 'repo-1::/srv/app': {} } as never
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census reads the keys and host stamps.
+    const meta = { 'repo-1::/srv/app': { hostId: HOST } } as never
     expect(
       messageFor({
         getAllWorktreeMetaForHost: (hostId) => (hostId === HOST ? meta : {})
@@ -140,6 +140,8 @@ describe('client state that still references an SSH target', () => {
           },
           [SETUP_TERMINAL_ID]: { ...row },
           'local-repo::/home/me/app': { ...row },
+          'removed-repo::/srv/old': { ...row },
+          'project-1::/srv/project': { ...row },
           'ssh-repo::/srv/app': { ...row }
         },
         worktreeMetaByIdentity: {},
@@ -152,6 +154,8 @@ describe('client state that still references an SSH target', () => {
     function metadataBlockerNames(state: PersistedState): string[] | undefined {
       const [blocker] = blockersFor({
         getRepos: () => repos,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census reads only project ids.
+        getProjects: () => [{ id: 'project-1' }] as never,
         getAllWorktreeMetaForHost: (hostId) => getAllWorktreeMetaForHost({ state }, hostId)
       })
       return blocker?.code === 'orcad_migration_dependent_state'
@@ -159,20 +163,22 @@ describe('client state that still references an SSH target', () => {
         : undefined
     }
 
-    it('counts only the row whose repo lives on the target, before and after the load stamps it', () => {
+    it('counts only rows its repo or a project may own, before and after the load stamps them', () => {
       const state = legacyProfile()
-      expect(metadataBlockerNames(state)).toEqual(['ssh-repo::/srv/app'])
+      const owned = ['project-1::/srv/project', 'ssh-repo::/srv/app']
+      expect(metadataBlockerNames(state)).toEqual(owned)
 
       expect(normalizeWorktreeLinkedItemMetadata(state)).toBe(true)
       expect(state.worktreeMeta[FLOATING_TERMINAL_WORKTREE_ID]?.hostId).toBe('local')
       expect(state.worktreeMeta[SETUP_TERMINAL_ID]?.hostId).toBe('local')
       expect(state.worktreeMeta['ssh-repo::/srv/app']?.hostId).toBeUndefined()
-      expect(metadataBlockerNames(state)).toEqual(['ssh-repo::/srv/app'])
+      expect(metadataBlockerNames(state)).toEqual(owned)
     })
 
-    it('no longer blocks an unrelated SSH target on the floating terminal row', () => {
+    it('blocks an unrelated SSH target on neither the floating terminal row nor an orphan', () => {
       const state = legacyProfile()
       delete state.worktreeMeta['ssh-repo::/srv/app']
+      delete state.worktreeMeta['project-1::/srv/project']
       expect(metadataBlockerNames(state)).toBeUndefined()
       expect(getAllWorktreeMetaForHost({ state }, 'local')).toHaveProperty(
         FLOATING_TERMINAL_WORKTREE_ID

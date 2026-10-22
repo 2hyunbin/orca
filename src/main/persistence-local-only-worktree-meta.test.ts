@@ -8,7 +8,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultPersistedState } from '../shared/constants'
-import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
+import {
+  composeWorktreeHostIdentity,
+  hostWorktreeTarget
+} from '../shared/worktree/host-qualified-identity'
+import { canonicalWorktreeIdentity } from '../shared/worktree/identity'
 import { resolveWorktreeMetaOwner } from './persistence/host-qualified-worktree-meta'
 import { collectDependentStateBlockers } from './ssh/targets/ssh-target-orcad-dependents'
 
@@ -21,23 +25,25 @@ vi.mock('./telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
 
 const SSH_HOST = 'ssh:ssh-1'
 
-function createUpgradedStore() {
+const INSTANCE_ID = '11111111-1111-4111-8111-111111111111'
+const floatingRow = {
+  instanceId: INSTANCE_ID,
+  displayName: '',
+  comment: '',
+  isUnread: false,
+  sortOrder: 1,
+  lastActivityAt: 1,
+  workspaceStatus: 'in-progress'
+}
+
+function createUpgradedStore(metadata: Record<string, unknown> = {}) {
   mkdirSync(testState.dir, { recursive: true })
   writeFileSync(
     join(testState.dir, 'orca-data.json'),
     JSON.stringify({
       ...getDefaultPersistedState(testState.dir),
-      worktreeMeta: {
-        [FLOATING_TERMINAL_WORKTREE_ID]: {
-          instanceId: '11111111-1111-4111-8111-111111111111',
-          displayName: '',
-          comment: '',
-          isUnread: false,
-          sortOrder: 1,
-          lastActivityAt: 1,
-          workspaceStatus: 'in-progress'
-        }
-      }
+      worktreeMeta: { [FLOATING_TERMINAL_WORKTREE_ID]: floatingRow },
+      ...metadata
     }),
     'utf-8'
   )
@@ -61,6 +67,29 @@ describe('local-only workspace metadata', () => {
       FLOATING_TERMINAL_WORKTREE_ID
     )
     expect(store.getWorktreeMetaForHost(FLOATING_TERMINAL_WORKTREE_ID, 'local')?.sortOrder).toBe(1)
+    expect(collectDependentStateBlockers(store, 'ssh-1')).toEqual([])
+  })
+
+  it('moves a floating terminal row an older build stamped for an SSH host back to this machine', () => {
+    const remoteKey = canonicalWorktreeIdentity({
+      worktreeId: FLOATING_TERMINAL_WORKTREE_ID,
+      executionHostId: SSH_HOST,
+      instanceId: INSTANCE_ID
+    })
+    const remoteRow = { ...floatingRow, hostId: SSH_HOST }
+    const store = createUpgradedStore({
+      worktreeMeta: { [FLOATING_TERMINAL_WORKTREE_ID]: remoteRow },
+      worktreeMetaByIdentity: { [remoteKey]: remoteRow },
+      worktreeIdentityAliases: {
+        [composeWorktreeHostIdentity(SSH_HOST, FLOATING_TERMINAL_WORKTREE_ID)]: [remoteKey]
+      }
+    })
+    expect(store.getAllWorktreeMetaForHost(SSH_HOST)).toEqual({})
+    expect(store.getWorktreeMetaForHost(FLOATING_TERMINAL_WORKTREE_ID, 'local')).toMatchObject({
+      hostId: 'local',
+      instanceId: INSTANCE_ID,
+      workspaceStatus: 'in-progress'
+    })
     expect(collectDependentStateBlockers(store, 'ssh-1')).toEqual([])
   })
 

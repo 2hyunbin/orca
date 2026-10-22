@@ -32,7 +32,10 @@ export const WORKTREE_METADATA_DOMAINS = [
 ] as const
 
 /** Select one readable row without discarding competing alias candidates. */
-function resolveAliasIdentityKey(state: WorktreeMetaState, alias: string): string | undefined {
+export function resolveAliasIdentityKey(
+  state: WorktreeMetaState,
+  alias: string
+): string | undefined {
   const identityKeys = state.worktreeIdentityAliases?.[alias] ?? []
   if (identityKeys.length === 0) {
     return undefined

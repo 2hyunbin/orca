@@ -19,6 +19,7 @@ import type { OrcadMigrationManifest } from '../../../shared/orcad-migration/orc
 export type DependentStateStore = Pick<
   Store,
   | 'getAllWorktreeMetaForHost'
+  | 'getProjects'
   | 'getRepos'
   | 'getSshRemotePtyLeases'
   | 'getWorkspaceSession'
@@ -119,18 +120,20 @@ export function collectUntransferredDependentBlockers(
 }
 
 /**
- * The projection hands every host each unstamped legacy row; one whose repo is registered only on
- * other hosts is theirs, so it must not block this target (#31498). Unknown owners still count.
+ * The projection hands every host each unstamped legacy row, so one counts only when its repo is
+ * registered on this host, or it belongs to a project (which can span hosts). An orphan whose repo
+ * is gone is no host's state and cannot be cleared in the UI, so it must not block (#31498).
  */
 function hostWorktreeMetadataNames(store: DependentStateStore, hostId: ExecutionHostId): string[] {
   const repos = store.getRepos()
+  const projectIds = new Set(store.getProjects().map((project) => project.id))
   return Object.entries(store.getAllWorktreeMetaForHost(hostId))
     .filter(([worktreeId, meta]) => {
       if (meta.hostId) {
         return meta.hostId === hostId
       }
-      const owners = getRepoRegistrationHostIds(repos, getRepoIdFromWorktreeId(worktreeId))
-      return owners.size === 0 || owners.has(hostId)
+      const ownerId = getRepoIdFromWorktreeId(worktreeId)
+      return getRepoRegistrationHostIds(repos, ownerId).has(hostId) || projectIds.has(ownerId)
     })
     .map(([worktreeId]) => worktreeId)
 }
@@ -168,12 +171,19 @@ function isEmptyValue(value: unknown): boolean {
   return typeof value === 'object' && Object.keys(value).length === 0
 }
 
+/** Each blocking dependency with its count and the first names, e.g. `automation ×1 (Nightly)`. */
+export function dependentStateSummary(dependencies: OrcadMigrationDependency[]): string {
+  return dependencies
+    .map(
+      ({ kind, count, names }) =>
+        `${kind} ×${count}${names?.length ? ` (${names.join(', ')})` : ''}`
+    )
+    .join('; ')
+}
+
 export function dependentStateMessage(dependencies: OrcadMigrationDependency[]): string {
-  const parts = dependencies.map(
-    ({ kind, count, names }) => `${kind} ×${count}${names?.length ? ` (${names.join(', ')})` : ''}`
-  )
   return (
     'This SSH target is still referenced by saved Orca state that this host’s Orca server cannot take ' +
-    `over yet: ${parts.join('; ')}. Remove it, or keep this host in direct SSH mode.`
+    `over yet: ${dependentStateSummary(dependencies)}. Remove it, or keep this host in direct SSH mode.`
   )
 }
