@@ -8,6 +8,7 @@ export type ConnectorRefusal =
   | 'agent_not_reachable'
   | 'unsupported_agent'
   | 'delivery_id_reused'
+  | 'delivery_backlog_full'
 
 /**
  * The connector's own answer, weaker than a `WriteSettlement`: `accepted` means the writer
