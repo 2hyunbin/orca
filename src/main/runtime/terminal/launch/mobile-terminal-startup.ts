@@ -29,8 +29,6 @@ export type MobileTerminalCommandOptions = {
   agentPrompt?: string
   launchConfig?: SleepingAgentLaunchConfig
   launchAgent?: TuiAgent
-  /** The runtime an explicit `command` was quoted for. */
-  launchRuntime?: AgentLaunchRuntime
 }
 
 /** What a resume reads from a recorded session; a SleepingAgentSessionRecord is one. */
@@ -120,8 +118,7 @@ export abstract class OrcaRuntimeWithResolveMobileSessionTerminalCommand extends
         envToDelete: opts.envToDelete,
         launchConfig: opts.launchConfig,
         launchAgent: opts.launchAgent,
-        startupCommandDelivery: opts.startupCommandDelivery,
-        launchRuntime: opts.launchRuntime
+        startupCommandDelivery: opts.startupCommandDelivery
       }
     }
     if (!this.store) {

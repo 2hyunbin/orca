@@ -9,60 +9,60 @@ export type ResumedAgentSession = {
   providerSession: AgentProviderSessionMetadata
 }
 
-/** One conversation's in-flight resume; `paneKey` is null until a fresh pane's create names it. */
+/** One conversation's resume into one pane, from the decision until the hook store covers it. */
 export type AgentSessionResumeHold = ResumedAgentSession & {
-  paneKey: string | null
-  ptyId: string | null
+  paneKey: string
   claimedAt: number
-  holders: number
 }
+
+type Hold = AgentSessionResumeHold & { holders: number; stopWatchingExit: () => void }
 
 /** A resumer's share of a hold: bind it to the spawned PTY, or release it when nothing spawned. */
 export type AgentSessionResumeClaim = {
-  bind: (binding: { paneKey: string; ptyId: string | null }) => void
+  bind: (ptyId: string | null) => void
   release: () => void
 }
 
 /**
- * Which pane is resuming a conversation, from the decision until the hook store can see it.
- * Why: the duplicate-holder guard reads hook rows, which an SSH resume (never seeded) or a spawn
- * still in flight has not written yet, so two resumers could both pass it.
+ * Which pane is resuming a conversation, taken before any awaited decision and held through the
+ * spawn. Why: the duplicate-holder guard reads hook rows, which an SSH resume (never seeded) or a
+ * spawn still in flight has not written yet, so two resumers could both pass it.
  */
 export class AgentSessionResumeClaims {
-  private readonly holds = new Set<AgentSessionResumeHold>()
+  private readonly holds = new Set<Hold>()
 
-  /** `settled`: the hook store now covers the hold, or its PTY is proven exited. */
-  constructor(private readonly settled: (hold: AgentSessionResumeHold) => boolean) {}
+  constructor(
+    private readonly lifecycle: {
+      /** The hook store now names the session in the hold's pane. */
+      reported: (hold: AgentSessionResumeHold) => boolean
+      /** Calls `onExit` once the PTY proves exited; returns the unsubscribe. */
+      watchExit: (ptyId: string, onExit: () => void) => () => void
+    }
+  ) {}
 
   /** Null while another pane's resume of this conversation is unsettled. */
-  claim(session: ResumedAgentSession, paneKey: string | null): AgentSessionResumeClaim | null {
+  claim(session: ResumedAgentSession, paneKey: string): AgentSessionResumeClaim | null {
     const held = this.find(session)
     if (held) {
       // Why: overlapping opens of one pane resume alongside each other (claimWindowWakeRecordForPane).
-      if (paneKey === null || held.paneKey !== paneKey) {
+      if (held.paneKey !== paneKey) {
         return null
       }
       held.holders += 1
       return this.share(held)
     }
-    const hold: AgentSessionResumeHold = {
+    const hold: Hold = {
       ...session,
       paneKey,
-      ptyId: null,
       claimedAt: Date.now(),
-      holders: 1
+      holders: 1,
+      stopWatchingExit: () => {}
     }
     this.holds.add(hold)
     return this.share(hold)
   }
 
-  /** Whether a resumer other than `paneKey` holds this conversation. */
-  isHeldElsewhere(session: ResumedAgentSession, paneKey: string | null): boolean {
-    const held = this.find(session)
-    return held !== undefined && (paneKey === null || held.paneKey !== paneKey)
-  }
-
-  private find(session: ResumedAgentSession): AgentSessionResumeHold | undefined {
+  private find(session: ResumedAgentSession): Hold | undefined {
     for (const hold of this.holds) {
       if (
         hold.agent !== session.agent ||
@@ -70,8 +70,9 @@ export class AgentSessionResumeClaims {
       ) {
         continue
       }
-      if (this.settled(hold)) {
-        this.holds.delete(hold)
+      // Why: hook rows outlive the agent's exit, so reading them at the next claim is enough.
+      if (this.lifecycle.reported(hold)) {
+        this.end(hold)
         continue
       }
       return hold
@@ -79,14 +80,22 @@ export class AgentSessionResumeClaims {
     return undefined
   }
 
-  private share(hold: AgentSessionResumeHold): AgentSessionResumeClaim {
+  private end(hold: Hold): void {
+    hold.stopWatchingExit()
+    this.holds.delete(hold)
+  }
+
+  private share(hold: Hold): AgentSessionResumeClaim {
     let open = true
     return {
-      bind: ({ paneKey, ptyId }) => {
-        if (open) {
-          open = false
-          hold.paneKey = paneKey
-          hold.ptyId = ptyId ?? hold.ptyId
+      bind: (ptyId) => {
+        if (!open) {
+          return
+        }
+        open = false
+        if (ptyId !== null && this.holds.has(hold)) {
+          hold.stopWatchingExit()
+          hold.stopWatchingExit = this.lifecycle.watchExit(ptyId, () => this.end(hold))
         }
       },
       release: () => {
@@ -96,7 +105,7 @@ export class AgentSessionResumeClaims {
         open = false
         hold.holders -= 1
         if (hold.holders === 0) {
-          this.holds.delete(hold)
+          this.end(hold)
         }
       }
     }

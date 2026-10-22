@@ -1,26 +1,32 @@
 import { describe, expect, it } from 'vitest'
-import {
-  AgentSessionResumeClaims,
-  type AgentSessionResumeHold
-} from './agent-session-resume-claims'
+import { AgentSessionResumeClaims } from './agent-session-resume-claims'
 
 const SESSION = { agent: 'claude', providerSession: { key: 'session_id', id: 'one' } } as const
 
+function makeClaims(reported = () => false) {
+  const exits = new Map<string, () => void>()
+  const claims = new AgentSessionResumeClaims({
+    reported,
+    watchExit: (ptyId, onExit) => {
+      exits.set(ptyId, onExit)
+      return () => exits.delete(ptyId)
+    }
+  })
+  return { claims, exits }
+}
+
 describe('AgentSessionResumeClaims', () => {
-  it('refuses a second pane, and a fresh-pane resume, while one is unsettled', () => {
-    const claims = new AgentSessionResumeClaims(() => false)
+  it('refuses another pane while one is unsettled', () => {
+    const { claims } = makeClaims()
     expect(claims.claim(SESSION, 'tab:a')).not.toBeNull()
     expect(claims.claim(SESSION, 'tab:b')).toBeNull()
-    expect(claims.claim(SESSION, null)).toBeNull()
-    expect(claims.isHeldElsewhere(SESSION, 'tab:b')).toBe(true)
-    expect(claims.isHeldElsewhere(SESSION, 'tab:a')).toBe(false)
     expect(
       claims.claim({ ...SESSION, providerSession: { key: 'session_id', id: 'two' } }, 'tab:b')
     ).not.toBeNull()
   })
 
   it('shares one pane between overlapping opens until every open releases', () => {
-    const claims = new AgentSessionResumeClaims(() => false)
+    const { claims } = makeClaims()
     const first = claims.claim(SESSION, 'tab:a')
     const second = claims.claim(SESSION, 'tab:a')
     first?.release()
@@ -29,20 +35,22 @@ describe('AgentSessionResumeClaims', () => {
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
   })
 
-  it('keeps a bound hold past its claimant until it settles', () => {
-    let settled = false
-    const seen: AgentSessionResumeHold[] = []
-    const claims = new AgentSessionResumeClaims((hold) => {
-      seen.push(hold)
-      return settled
-    })
-    const claim = claims.claim(SESSION, null)
-    claim?.bind({ paneKey: 'tab:new', ptyId: 'pty-1' })
-    claim?.release()
-    expect(claims.claim(SESSION, 'tab:a')).toBeNull()
-    expect(seen.at(-1)).toMatchObject({ paneKey: 'tab:new', ptyId: 'pty-1' })
+  it('ends a bound hold when its PTY exits, and stops watching it', () => {
+    const { claims, exits } = makeClaims()
+    claims.claim(SESSION, 'tab:a')?.bind('pty-1')
+    expect(claims.claim(SESSION, 'tab:b')).toBeNull()
 
-    settled = true
-    expect(claims.claim(SESSION, 'tab:a')).not.toBeNull()
+    exits.get('pty-1')?.()
+    expect(exits.has('pty-1')).toBe(false)
+    expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
+  })
+
+  it('ends a hold once the hook store reports it in its pane', () => {
+    let reported = false
+    const { claims, exits } = makeClaims(() => reported)
+    claims.claim(SESSION, 'tab:a')?.bind('pty-1')
+    reported = true
+    expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
+    expect(exits.has('pty-1')).toBe(false)
   })
 })

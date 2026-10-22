@@ -1,14 +1,13 @@
 // Starting a saved pane that has no live terminal: a client's first view of a pending row, and,
 // in the layout-owner build, every trigger that is not a desktop window's own restore.
 
-import type { OrcaRuntimeWithResumeAgentSessionInWorkspace as AgentSessionResume } from './resume-agent-session-in-workspace'
+import type { OrcaRuntimeWithAgentSessionResumeOwnership as AgentSessionResume } from './agent-session-resume-ownership'
 import type {
   MobileTerminalCommand,
   MobileTerminalResumeCommand
 } from '../../terminal/launch/mobile-terminal-startup'
 import { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './build-headless-mobile-session-browser-tabs'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { isWorktreeTerminalsSleepingError } from '../../worktree-terminals-sleeping-error'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -147,6 +146,7 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
         }
       }
     }
+    let dispatched = false
     try {
       const created = await this.createRuntimeOwnedMobileSessionTerminal(
         worktreeId,
@@ -173,16 +173,19 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
             : {}),
           launchRuntime: agentStartup.launchRuntime,
           targetGroupId,
+          onPtySpawnDispatched: () => {
+            dispatched = true
+          },
           ...(automatic ? { refuseSleptWorktree: true } : {})
         }
       )
-      resumeClaim?.bind({
-        paneKey: makePaneKey(tab.parentTabId, tab.leafId),
-        ptyId: created.tab.ptyId ?? null
-      })
+      resumeClaim?.bind(created.tab.ptyId ?? null)
       return created
     } catch (err) {
-      resumeClaim?.release()
+      // Why: once the spawn request left, a failure proves nothing (a lost SSH reply).
+      if (!dispatched) {
+        resumeClaim?.release()
+      }
       if (
         !(automatic && isWorktreeTerminalsSleepingError(err)) &&
         sessionId &&

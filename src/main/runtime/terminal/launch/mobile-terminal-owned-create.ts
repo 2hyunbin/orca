@@ -48,6 +48,8 @@ export type OwnedMobileTerminalCreateOptions = {
   launchRuntime?: AgentLaunchRuntime
   signal?: AbortSignal
   refuseSleptWorktree?: boolean
+  /** See TerminalCreateOptions; a create that throws before it proves nothing spawned. */
+  onPtySpawnDispatched?: () => void
 }
 
 export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
@@ -98,6 +100,7 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
         ...(mutationHandle
           ? {
               onPtySpawnDispatched: (launch) => {
+                opts.onPtySpawnDispatched?.()
                 if (!launch) {
                   return
                 }
@@ -118,7 +121,9 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
                 })
               }
             }
-          : {}),
+          : opts.onPtySpawnDispatched
+            ? { onPtySpawnDispatched: opts.onPtySpawnDispatched }
+            : {}),
         ...(preAllocatedHandle ? { preAllocatedHandle } : {}),
         command: opts.command,
         ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),

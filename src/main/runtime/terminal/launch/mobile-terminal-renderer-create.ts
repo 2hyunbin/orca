@@ -34,7 +34,6 @@ export type MobileTerminalCreateOptions = {
   agentPrompt?: string
   launchConfig?: SleepingAgentLaunchConfig
   launchAgent?: TuiAgent
-  launchRuntime?: MobileTerminalCommand['launchRuntime']
   viewMode?: 'terminal' | 'chat'
   activate?: boolean
   clientNavigationId?: string
