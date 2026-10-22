@@ -23,13 +23,21 @@ const promptFailureDataSchema = z.object({
   retryAfterMs: z.number().nonnegative().optional().catch(undefined)
 })
 
-// ACP can omit the HTTP status, leaving only the provider's billing message.
-const BILLING_FAILURE =
-  /\b(?:insufficient (?:balance|account funds)|credit limit exceeded|payment required|account invoice is overdue|billing_error)\b/i
+// ACP omits HTTP status; documented billing and entitlement instructions survive in the message.
+const NON_RESET_QUOTA_FAILURES = [
+  /\b(?:insufficient (?:balance|account funds)|credit limit exceeded|payment required|account invoice is overdue|billing_error)\b/i,
+  /\bplease add or update your payment method to continue\b/i,
+  /\b(?:GLM Coding Plan|enterprise) package has expired\b/i,
+  /\byour current subscription plan does not yet include access to\b/i
+]
 
 function promptFailure(error: AcpAgentError, at: number) {
   const parsed = promptFailureDataSchema.safeParse(error.data)
-  if (!parsed.success || parsed.data.status === 402 || BILLING_FAILURE.test(error.message)) {
+  if (
+    !parsed.success ||
+    parsed.data.status === 402 ||
+    NON_RESET_QUOTA_FAILURES.some((pattern) => pattern.test(error.message))
+  ) {
     return undefined
   }
   const { resetsAt, retryAfterMs } = parsed.data

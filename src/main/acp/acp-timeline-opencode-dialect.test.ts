@@ -40,11 +40,15 @@ const bashStart = {
 
 describe('OpenCode over ACP', () => {
   it.each([
-    { errorName: 'provider.quota' },
-    { errorName: 'provider.rate-limit', retryAfterMs: 60_000 }
-  ])('shows a usage-limit row for $errorName prompt failures', async (data) => {
+    { errorName: 'provider.quota', message: undefined },
+    { errorName: 'provider.rate-limit', retryAfterMs: 60_000, message: undefined },
+    ...[
+      'Usage limit reached for 5 hours. Your limit will reset at 2026-10-01 00:00:00',
+      'Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-01 00:00:00'
+    ].map((message) => ({ errorName: 'provider.quota', message }))
+  ])('shows usage limits for $errorName', async ({ message: detail, ...data }) => {
     const { rig, translator, apply } = await openCodeRig()
-    const message = 'Internal error: Rate limit exceeded. Please try again later.'
+    const message = `Internal error: ${detail ?? 'Rate limit exceeded. Please try again later.'}`
     apply(
       translator.promptFailed(
         'send-1',
@@ -76,8 +80,20 @@ describe('OpenCode over ACP', () => {
     { message: 'Insufficient balance or no resource package. Please recharge.' },
     { message: 'Credit limit exceeded.' },
     { message: 'Upstream request failed: Insufficient account funds' },
-    { message: 'Upstream request failed: Account invoice is overdue' }
-  ])('keeps a billing quota error generic: $message', async ({ message: detail, ...data }) => {
+    { message: 'Upstream request failed: Account invoice is overdue' },
+    ...[
+      'Please add or update your payment method to continue',
+      'Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.',
+      '[1309][Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.][20260929132151e73af01340d54b58]',
+      'Your current subscription plan does not yet include access to glm-5',
+      'Your enterprise package has expired. Please contact your enterprise administrator.'
+    ].map((message) => ({ message })),
+    {
+      errorName: 'provider.free-limit',
+      message:
+        'Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.'
+    }
+  ])('keeps non-reset errors generic: $message', async ({ message: detail, ...data }) => {
     const { rig, translator, apply } = await openCodeRig()
     const message = `Internal error: ${detail}`
     apply(
