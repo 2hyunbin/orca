@@ -34,7 +34,10 @@ import {
 } from './web-runtime-session-environment'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
 import { runtimeEnvironmentSupportsCapability } from './runtime-rpc-client'
-import { SESSION_TAB_CLOSE_FORCE_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
+import {
+  SESSION_TAB_CLOSE_FORCE_RUNTIME_CAPABILITY,
+  SESSION_TAB_CLOSE_REPLAY_REASON_RUNTIME_CAPABILITY
+} from '../../../shared/session-tabs-runtime-capabilities'
 
 export async function activateWebRuntimeSessionTab(args: {
   worktreeId: string
@@ -89,6 +92,8 @@ export async function closeWebRuntimeSessionTab(args: {
   expectedPairingRevision?: number
   /** The user confirmed closing a pinned tab; sent only to hosts that honour it. */
   force?: boolean
+  /** A held close re-sent, not a fresh click; marked so only to hosts that accept the mark. */
+  replay?: true
 }): Promise<WebRuntimeSessionTabCloseOutcome> {
   return callWebRuntimeSessionTabMethod('session.tabs.close', args)
 }
@@ -109,6 +114,7 @@ export async function replayWebSessionTabCloses(
       tabId: replay.hostTabIds[0],
       environmentId,
       reason: 'user',
+      replay: true,
       ...(replay.owner.pairingRevision !== undefined
         ? { expectedPairingRevision: replay.owner.pairingRevision }
         : {}),
@@ -155,6 +161,7 @@ async function callWebRuntimeSessionTabMethod(
     expectedCurrentLocalTabId?: string | null
     expectedPairingRevision?: number
     force?: boolean
+    replay?: true
   }
 ): Promise<WebRuntimeSessionTabCloseOutcome> {
   const environmentId = resolveTabEnvironmentId(args.environmentId)
@@ -232,6 +239,15 @@ async function callWebRuntimeSessionTabMethod(
         environmentId,
         SESSION_TAB_CLOSE_FORCE_RUNTIME_CAPABILITY
       ))
+    // Only a user close carries `replay`. The mark is diagnostic, so an unanswered probe sends 'user'.
+    const closeReason =
+      args.replay === true &&
+      (await runtimeEnvironmentSupportsCapability(
+        environmentId,
+        SESSION_TAB_CLOSE_REPLAY_REASON_RUNTIME_CAPABILITY
+      ).catch(() => false))
+        ? 'replay'
+        : args.reason
     const response = await callEnvironment({
       // Why: old hosts cannot route this additive method, so a generation
       // cutover fails closed before their destructive legacy close handler.
@@ -257,7 +273,7 @@ async function callWebRuntimeSessionTabMethod(
               terminal: args.terminalHandle
             }
           : isClose
-            ? { reason: args.reason, ...(force ? { force: true } : {}) }
+            ? { reason: closeReason, ...(force ? { force: true } : {}) }
             : {})
       },
       timeoutMs: WEB_SESSION_TAB_RPC_TIMEOUT_MS
