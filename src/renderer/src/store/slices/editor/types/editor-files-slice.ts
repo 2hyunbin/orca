@@ -22,6 +22,7 @@ import type {
   OpenFile
 } from './open-file'
 import type { EditorBufferRecords } from '../buffers/editor-buffer-record'
+import type { EditorBufferKeptRecords } from '../buffers/editor-buffer-kept'
 import type { EditorBufferDetachments, EditorBufferViewIndex } from '../buffers/editor-buffer-views'
 import type { EditorOpenLinkIntent, EditorOpenResult } from './editor-open-link-intent'
 import type { OpenFilePathRekey, RekeyOpenFilesResult } from './open-file-path-rekey'
@@ -54,6 +55,10 @@ export type EditorFilesSlice = {
   editorBufferViews: EditorBufferViewIndex['editorBufferViews']
   /** Views kept off the record their identity names (divergent dirty drafts, retired hosts). */
   editorBufferDetached: EditorBufferDetachments
+  /** Dirty records whose last view closed without a prompt, by record id; reopening joins them. */
+  editorBufferKept: EditorBufferKeptRecords
+  /** Drops the kept records these closed views left behind (their removal notice went away). */
+  releaseKeptEditorBuffers: (viewIds: readonly string[]) => void
   /** Bumped when runtime revisions change, so the record middleware re-resolves identities. */
   editorBufferIdentityRevision: number
   /** Re-resolves every view's file identity after a change the store can't see (revisions). */

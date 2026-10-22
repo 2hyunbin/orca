@@ -15,7 +15,10 @@ import {
 export function createEditorBufferIdentityActions(
   set: EditorSet,
   _get: EditorGet
-): Pick<EditorSlice, 'reconcileEditorBufferIdentities' | 'detachRetiredEditorBuffers'> {
+): Pick<
+  EditorSlice,
+  'reconcileEditorBufferIdentities' | 'detachRetiredEditorBuffers' | 'releaseKeptEditorBuffers'
+> {
   return {
     reconcileEditorBufferIdentities: () =>
       set((s) => ({ editorBufferIdentityRevision: s.editorBufferIdentityRevision + 1 })),
@@ -39,6 +42,21 @@ export function createEditorBufferIdentityActions(
           }
         }
         return detached ? { editorBufferDetached: detached } : s
+      }),
+
+    releaseKeptEditorBuffers: (viewIds) =>
+      set((s) => {
+        const released = Object.entries(s.editorBufferKept).filter(([, entry]) =>
+          entry.viewIds.some((id) => viewIds.includes(id))
+        )
+        if (released.length === 0) {
+          return s
+        }
+        const editorBufferKept = { ...s.editorBufferKept }
+        for (const [recordId] of released) {
+          delete editorBufferKept[recordId]
+        }
+        return { editorBufferKept }
       })
   }
 }

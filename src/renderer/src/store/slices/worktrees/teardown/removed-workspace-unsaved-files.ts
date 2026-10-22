@@ -12,6 +12,7 @@ import { resolveEditorModelOwner } from '@/components/editor/editor-model-owner'
 import { isRemovedRuntimeHostId } from '../../stale-runtime-host-rows'
 import { folderWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '../../../workspace-record-selectors'
+import { requestKeepEditorBuffers } from '../../editor/buffers/editor-buffer-kept'
 
 /** Text retained only until the removal notice is dismissed or recovered. */
 export type ClosedUnsavedFile = { fileId: string; filePath: string; content: string }
@@ -100,6 +101,8 @@ export function noticeRemovedUnsavedFiles(
         notice.files.delete(file.id)
         notice.discarded.add(file.id)
       } else if (!notice.discarded.has(file.id) && !notice.files.has(file.id)) {
+        // Why: the record and its model outlive the tabs until the notice goes away or the file reopens.
+        requestKeepEditorBuffers(unsavedTextViewIds(s, file))
         notice.files.set(file.id, {
           file: { fileId: file.id, filePath: file.filePath, content },
           workspace: workspaceLabel(s, file.worktreeId)

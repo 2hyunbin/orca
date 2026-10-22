@@ -101,6 +101,7 @@ export function showClosedUnsavedFilesToast(
   workspaceLabel: string
 ): void {
   const holder: { files: readonly ClosedUnsavedFile[] | null } = { files: closed }
+  const closedIds = closed.map((file) => file.fileId)
   let reopening = false
   const toastId = toast.warning(closedUnsavedFilesToastTitle(closed.length, workspaceLabel), {
     duration: Number.POSITIVE_INFINITY,
@@ -128,6 +129,7 @@ export function showClosedUnsavedFilesToast(
     onDismiss: () => {
       const files = holder.files
       holder.files = null
+      useAppStore.getState().releaseKeptEditorBuffers(closedIds)
       if (files) {
         console.warn('[editor] dropped unsaved edits from a removed workspace', {
           filePaths: files.map((file) => file.filePath)

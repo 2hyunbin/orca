@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     activeWorktreeId: nullableActiveWorkspace(),
     activeWorkspaceExecutionHostId: nullableActiveHost(),
     getKnownWorktreeById: vi.fn((_id: string, _host?: string) => ({ path: '/active' })),
+    releaseKeptEditorBuffers: vi.fn((_viewIds: readonly string[]) => {}),
     openFile: vi.fn()
   }
   return {
@@ -178,6 +179,8 @@ describe('closed unsaved files toast', () => {
     notice().onDismiss()
     click()
     expect(mocks.create).not.toHaveBeenCalled()
+    // The removed tabs' kept records go with the notice.
+    expect(mocks.state.releaseKeptEditorBuffers).toHaveBeenCalledWith(['a', 'a'])
     expect(console.warn).toHaveBeenCalledTimes(1)
     expect(console.warn).toHaveBeenCalledWith(
       '[editor] dropped unsaved edits from a removed workspace',

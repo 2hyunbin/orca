@@ -14,11 +14,14 @@ import {
   type EditorBufferRouteState
 } from './slices/editor/buffers/editor-buffer-identity-cache'
 import { reconcileEditorBufferRecords } from './slices/editor/buffers/editor-buffer-reconcile'
+import { isEditorBufferRejoinDue } from './slices/editor/buffers/editor-buffer-rejoin'
+import { takeEditorBufferKeepRequests } from './slices/editor/buffers/editor-buffer-kept'
 
 type EditorBufferStoreState = EditorBufferState & EditorBufferRouteState
 
 const NO_DRAFTS: Record<string, string> = {}
 const NO_DETACHMENTS = {}
+const NO_KEPT = {}
 
 /**
  * Ties editor buffer records and their view index to `openFiles` membership and file identity
@@ -30,21 +33,40 @@ const NO_DETACHMENTS = {}
 function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
   state: TState,
   write: TState | Partial<TState>,
-  checkInvariant: boolean
+  checkInvariant: boolean,
+  scheduleRejoin: () => void
 ): TState | Partial<TState> {
   const openFiles = write.openFiles ?? state.openFiles
   const records = write.editorBuffers ?? state.editorBuffers
   const drafts = write.editorDrafts ?? state.editorDrafts
   const detachments = write.editorBufferDetached ?? state.editorBufferDetached
+  const kept = write.editorBufferKept ?? state.editorBufferKept
   if (
     openFiles === state.openFiles &&
     records === state.editorBuffers &&
     detachments === state.editorBufferDetached &&
+    kept === state.editorBufferKept &&
     !editorBufferRouteInputsChanged(state, write)
   ) {
     // Why only drafts: this runs per keystroke, and nothing else about the views changed.
     if (checkInvariant && drafts !== state.editorDrafts) {
       assertEditorBufferDraftsAgree({ ...state, ...write }, drafts)
+    }
+    // Why: clearing a draft can make a detached side clean, which rejoins it.
+    if (
+      drafts !== state.editorDrafts &&
+      Object.keys(detachments ?? NO_DETACHMENTS).length > 0 &&
+      isEditorBufferRejoinDue({
+        openFiles,
+        editorBuffers: records,
+        editorDrafts: drafts ?? NO_DRAFTS,
+        editorBufferIdOf: state.editorBufferIdOf,
+        editorBufferViews: state.editorBufferViews,
+        editorBufferDetached: detachments ?? NO_DETACHMENTS,
+        editorBufferKept: kept ?? NO_KEPT
+      })
+    ) {
+      scheduleRejoin()
     }
     return write
   }
@@ -55,11 +77,21 @@ function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
     editorDrafts: drafts ?? NO_DRAFTS,
     editorBufferIdOf: write.editorBufferIdOf ?? state.editorBufferIdOf,
     editorBufferViews: write.editorBufferViews ?? state.editorBufferViews,
-    editorBufferDetached: detachments ?? NO_DETACHMENTS
+    editorBufferDetached: detachments ?? NO_DETACHMENTS,
+    editorBufferKept: kept ?? NO_KEPT
   }
-  const next = reconcileEditorBufferRecords(input, (file) =>
-    editorBufferIdForFile(file, routeState)
+  // Why only on an identity pass: callers settle a record in steps (clean, then clear the draft);
+  // a rejoin between them would let the second step clear the draft the rejoin adopted.
+  const rejoin = Object.hasOwn(write, 'editorBufferIdentityRevision')
+  const next = reconcileEditorBufferRecords(
+    input,
+    (file) => editorBufferIdForFile(file, routeState),
+    { viewIds: takeEditorBufferKeepRequests(), drafts: state.editorDrafts ?? NO_DRAFTS },
+    rejoin
   )
+  if (!rejoin && isEditorBufferRejoinDue(next)) {
+    scheduleRejoin()
+  }
   if (checkInvariant) {
     assertEditorBufferInvariant(next)
   }
@@ -81,6 +113,9 @@ function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
   }
   if (next.editorBufferDetached !== input.editorBufferDetached) {
     changed.editorBufferDetached = next.editorBufferDetached
+  }
+  if (next.editorBufferKept !== input.editorBufferKept) {
+    changed.editorBufferKept = next.editorBufferKept
   }
   if (Object.keys(changed).length === 0) {
     return write
@@ -137,6 +172,21 @@ export function withEditorBufferRecords<TState extends EditorBufferStoreState>(
   checkInvariant: boolean = import.meta.env.DEV
 ): StateCreator<TState, [], []> {
   return (set, get, api) => {
+    let rejoinQueued = false
+    const scheduleRejoin = (): void => {
+      if (rejoinQueued) {
+        return
+      }
+      rejoinQueued = true
+      queueMicrotask(() => {
+        rejoinQueued = false
+        const bump: Partial<EditorBufferStoreState> = {
+          editorBufferIdentityRevision: (api.getState().editorBufferIdentityRevision ?? 0) + 1
+        }
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: editorBufferIdentityRevision is an EditorBufferRouteState field TState extends.
+        api.setState(bump as Partial<TState>)
+      })
+    }
     const wrap = (write: typeof set): typeof set => {
       const wrapped = (
         partial: TState | Partial<TState> | ((state: TState) => TState | Partial<TState>),
@@ -148,7 +198,8 @@ export function withEditorBufferRecords<TState extends EditorBufferStoreState>(
             reconcileEditorBuffers(
               state,
               typeof partial === 'function' ? partial(state) : partial,
-              checkInvariant
+              checkInvariant,
+              scheduleRejoin
             ),
           replace
         )

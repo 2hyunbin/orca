@@ -1,146 +1,47 @@
 import type { OpenFile } from '../types/open-file'
-import {
-  EDITOR_BUFFER_FIELDS,
-  editorBufferRecordFromFile,
-  isMovedEditorBufferId,
-  type EditorBufferRecord,
-  type EditorBufferRecords
-} from './editor-buffer-record'
+import { editorBufferRecordFromFile, isMovedEditorBufferId } from './editor-buffer-record'
 import {
   decideEditorBufferJoin,
   isDirtyEditorBufferSide,
   type EditorBufferJoinSide
 } from './editor-buffer-join'
+import { staysDetached } from './editor-buffer-rejoin'
+import type { EditorBufferKeepRequest } from './editor-buffer-kept'
+import { detachedEditorBufferId, type EditorBufferDetachments } from './editor-buffer-views'
 import {
-  detachedEditorBufferId,
-  type EditorBufferDetachments,
-  type EditorBufferViewIndex
-} from './editor-buffer-views'
-
-export type EditorBufferReconcileState = EditorBufferViewIndex & {
-  openFiles: OpenFile[]
-  editorBuffers: EditorBufferRecords
-  editorDrafts: Record<string, string>
-  editorBufferDetached: EditorBufferDetachments
-}
-
-type Drafts = Record<string, string>
-
-/** Copy-on-write accumulators for one reconcile pass. */
-class ReconcileWrite {
-  records: EditorBufferRecords
-  drafts: Drafts
-  readonly mirrors = new Map<string, EditorBufferRecord>()
-
-  constructor(private readonly input: EditorBufferReconcileState) {
-    this.records = input.editorBuffers
-    this.drafts = input.editorDrafts
-  }
-
-  setRecord(recordId: string, record: EditorBufferRecord): void {
-    if (this.records[recordId] === record) {
-      return
-    }
-    this.records = this.records === this.input.editorBuffers ? { ...this.records } : this.records
-    this.records[recordId] = record
-  }
-
-  /** Writes a view's mirror fields and draft from the record it now belongs to. */
-  showView(viewId: string, side: EditorBufferJoinSide): void {
-    this.mirrors.set(viewId, side.record)
-    if (this.drafts[viewId] === side.draft) {
-      return
-    }
-    this.drafts = this.drafts === this.input.editorDrafts ? { ...this.drafts } : this.drafts
-    if (side.draft === undefined) {
-      delete this.drafts[viewId]
-    } else {
-      this.drafts[viewId] = side.draft
-    }
-  }
-
-  openFiles(): OpenFile[] {
-    if (this.mirrors.size === 0) {
-      return this.input.openFiles
-    }
-    let changed = false
-    const next = this.input.openFiles.map((file) => {
-      const record = this.mirrors.get(file.id)
-      if (!record || EDITOR_BUFFER_FIELDS.every((field) => Object.is(file[field], record[field]))) {
-        return file
-      }
-      changed = true
-      return { ...file, ...record }
-    })
-    return changed ? next : this.input.openFiles
-  }
-}
-
-class IndexBuilder {
-  readonly idOf: Record<string, string> = {}
-  readonly views: Record<string, string[]> = {}
-
-  place(viewId: string, recordId: string): void {
-    this.idOf[viewId] = recordId
-    ;(this.views[recordId] ??= []).push(viewId)
-  }
-
-  /** Moves every view of `from` to `to`. */
-  move(from: string, to: string): void {
-    for (const viewId of this.views[from] ?? []) {
-      this.place(viewId, to)
-    }
-    delete this.views[from]
-  }
-
-  build(): EditorBufferViewIndex {
-    for (const [recordId, viewIds] of Object.entries(this.views)) {
-      if (viewIds.length === 0) {
-        delete this.views[recordId]
-      }
-    }
-    return { editorBufferIdOf: this.idOf, editorBufferViews: this.views }
-  }
-}
-
-function sameIndex(a: EditorBufferViewIndex, b: EditorBufferViewIndex): boolean {
-  const aIds = Object.keys(a.editorBufferIdOf)
-  const aRecords = Object.keys(a.editorBufferViews)
-  return (
-    aIds.length === Object.keys(b.editorBufferIdOf).length &&
-    aIds.every((id) => b.editorBufferIdOf[id] === a.editorBufferIdOf[id]) &&
-    aRecords.length === Object.keys(b.editorBufferViews).length &&
-    aRecords.every((id) => {
-      const other = b.editorBufferViews[id]
-      const own = a.editorBufferViews[id]
-      return other?.length === own.length && own.every((view, index) => other[index] === view)
-    })
-  )
-}
-
-function sameDetachments(a: EditorBufferDetachments, b: EditorBufferDetachments): boolean {
-  const ids = Object.keys(a)
-  return ids.length === Object.keys(b).length && ids.every((id) => a[id] === b[id])
-}
+  IndexBuilder,
+  ReconcileWrite,
+  sameDetachments,
+  sameIndex,
+  type EditorBufferReconcileState
+} from './editor-buffer-reconcile-write'
 
 /**
  * Puts every open view on the record its identity names, running the join rules for each view
- * that moves (opened, hydrated, owner resolved, renamed): `rekey` when no view holds the identity,
- * else attach, adopt (dirty wins), merge or detach. A view arriving by rename carries the file's
- * new content, so it takes the key: a clean target's views attach to it, a dirty target detaches.
- * Returns `state`'s own objects for whatever did not change.
+ * that moves (opened, hydrated, owner resolved, renamed, rejoined): `rekey` when no view holds the
+ * identity, else attach, adopt (dirty wins), merge or detach. A view arriving by rename carries the
+ * file's new content, so it takes the key: a clean target's views attach to it, a dirty target
+ * detaches. With `rejoin`, a detached view rejoins once its side or its partner is clean. `keep`
+ * names closing views whose dirty record outlives them. Returns `state`'s own objects for whatever
+ * did not change.
  */
 export function reconcileEditorBufferRecords(
   state: EditorBufferReconcileState,
-  identityOf: (file: OpenFile) => string
+  identityOf: (file: OpenFile) => string,
+  keep: EditorBufferKeepRequest = { viewIds: new Set(), drafts: {} },
+  rejoin = false
 ): EditorBufferReconcileState {
   const detached: EditorBufferDetachments = {}
   const desired = new Map<string, string>()
+  const open = new Set(state.openFiles.map((file) => file.id))
   for (const file of state.openFiles) {
     const identity = identityOf(file)
     const entry = state.editorBufferDetached[file.id]
     // Why: a detachment holds only while the view still names the identity it was kept off.
-    if (entry && (entry.retired || entry.key === identity)) {
+    if (
+      entry &&
+      (entry.retired || (entry.key === identity && (!rejoin || staysDetached(state, entry, open))))
+    ) {
       detached[file.id] = entry
       desired.set(file.id, entry.recordId)
     } else {
@@ -212,9 +113,20 @@ export function reconcileEditorBufferRecords(
     }
   }
 
-  // Membership: a record with no view left is dropped.
+  // Membership: a record with no view left is dropped, unless a no-prompt close asked to keep it.
   for (const recordId of Object.keys(write.records)) {
     if (!index.views[recordId]?.length) {
+      const viewIds = state.editorBufferViews[recordId] ?? []
+      const record = state.editorBuffers[recordId]
+      // Why the drafts before this write: the closing write drops the closed views' drafts.
+      const side = { record, draft: viewIds[0] === undefined ? undefined : keep.drafts[viewIds[0]] }
+      if (
+        viewIds.length > 0 &&
+        viewIds.every((id) => keep.viewIds.has(id)) &&
+        isDirtyEditorBufferSide(side)
+      ) {
+        write.setKept(recordId, { ...side, viewIds })
+      }
       write.records = write.records === state.editorBuffers ? { ...write.records } : write.records
       delete write.records[recordId]
     }
@@ -229,7 +141,8 @@ export function reconcileEditorBufferRecords(
     editorBufferViews: indexSame ? state.editorBufferViews : built.editorBufferViews,
     editorBufferDetached: sameDetachments(detached, state.editorBufferDetached)
       ? state.editorBufferDetached
-      : detached
+      : detached,
+    editorBufferKept: write.kept
   }
 }
 
@@ -245,7 +158,18 @@ function joinView(
 ): string {
   const targetViews = [...(index.views[want] ?? [])]
   if (targetViews.length === 0) {
-    write.setRecord(want, joining.record)
+    // Why not a rename: the moved file replaced the kept text's file on disk.
+    const kept =
+      source !== undefined && isMovedEditorBufferId(source) ? undefined : write.kept[want]
+    const join = kept ? decideEditorBufferJoin(kept, joining) : 'rekey'
+    // Why attach or merge only: divergent text reopening a kept record leaves the kept text alone.
+    if (kept && (join === 'attach' || join === 'merge')) {
+      write.setKept(want, undefined)
+      write.setRecord(want, kept.record)
+      write.showView(viewId, kept)
+    } else {
+      write.setRecord(want, joining.record)
+    }
     index.place(viewId, want)
     return want
   }

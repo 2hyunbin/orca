@@ -16,6 +16,7 @@ import { createEditorWatcherReloadCoalescer } from './editor-watcher-reload-coal
 import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
 import { hasRecentSelfWrite } from './editor-self-write-registry'
 import { editorModelSiblingTabs, isEditorModelDirty } from './editor-save-disk-precondition'
+import { withRecordDiskText } from './editor-buffer-adapter'
 
 type EditorViewModeByFile = ReturnType<typeof useAppStore.getState>['editorViewMode']
 
@@ -194,8 +195,9 @@ export function useEditorPanelExternalContentEvents({
         return
       }
       if (file.mode === 'edit' || file.mode === 'markdown-preview') {
+        const state = useAppStore.getState()
         setFileContents((prev) => ({
-          ...prev,
+          ...withRecordDiskText(prev, state, file.id, detail.content),
           [file.id]: { content: detail.content, isBinary: false }
         }))
       }
