@@ -172,6 +172,7 @@ function openSplitPane(
 }
 
 type CloseManagedPaneArgs = {
+  failures?: unknown[]
   paneId: number
   activePaneId: number | null
   panes: Map<number, ManagedPaneInternal>
@@ -246,7 +247,7 @@ export function retireManagedPanePreservingPty(
 function removePaneContainer(args: CloseManagedPaneArgs, pane: ManagedPaneInternal): void {
   const paneContainer = pane.container
   const parent = paneContainer.parentElement
-  disposePane(pane, args.panes)
+  disposePane(pane, args.panes, args.failures)
   if (!parent) {
     return
   }

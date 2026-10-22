@@ -26,18 +26,35 @@ export function registerTerminalPaneMount(
       ) {
         throw new Error('terminal_pane_owner_unavailable')
       }
-      removeTerminalPresentation(original, () => {
+      removeTerminalPresentation(original, (failures) => {
         if (pane && manager) {
-          if (!manager.retirePanePreservingPty(pane.id, true)) {
-            throw new Error('terminal_pane_close_failed')
-          }
-          if (manager.getPanes().length === 0) {
-            onEmpty(manager)
-            if (deps.managerRef.current === manager) {
-              deps.managerRef.current = null
+          const structuralFailures: unknown[] = []
+          try {
+            if (!manager.retirePanePreservingPty(pane.id, true, failures)) {
+              throw new Error('terminal_pane_close_failed')
             }
-            ownedManager = null
-            unregisterRuntimeTab()
+          } catch (error) {
+            structuralFailures.push(error)
+          } finally {
+            if (manager.getPanes().length === 0) {
+              try {
+                onEmpty(manager)
+              } catch (error) {
+                structuralFailures.push(error)
+              } finally {
+                if (deps.managerRef.current === manager) {
+                  deps.managerRef.current = null
+                }
+                ownedManager = null
+                unregisterRuntimeTab()
+              }
+            }
+          }
+          if (structuralFailures.length === 1) {
+            throw structuralFailures[0]
+          }
+          if (structuralFailures.length > 1) {
+            throw new AggregateError(structuralFailures, 'terminal_tab_close_failed')
           }
         }
       })

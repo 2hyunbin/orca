@@ -1,5 +1,4 @@
 import type { TerminalSurfaceCloseCapture } from '../../../shared/terminal-tab-close'
-import { closeLeafOrTab } from './terminal-topology-commit'
 import type {
   CommandOf,
   LayoutApplyOutcome,
@@ -18,6 +17,7 @@ import type {
 } from '../loading-store/store-runtime-state'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
+  closeLeafOrTab,
   applyLayout,
   applyEditorFileRenamesInPartitions,
   topologyCommitContext
@@ -134,14 +134,14 @@ export class LayoutCommandPersistence {
                   command.tabIds[0] === source.tabId),
             hostIds,
             getSession: (id) => context.sessions.getWorkspaceSession(id),
-            setSession: (session, id) =>
-              context.runtime.dirtyProfileStateDomains.add(
-                assignWorkspaceSessionPartition(context.runtime.state, id, session)
-              ),
+            setSession: (session, id) => {
+              const domain = assignWorkspaceSessionPartition(context.runtime.state, id, session)
+              context.runtime.dirtyProfileStateDomains?.add(domain)
+            },
             onClosed: () => {}
           })()
           if (mutation.value) {
-            return mutation
+            return { ...mutation, value: mutation.value }
           }
           return {
             ...mutation,

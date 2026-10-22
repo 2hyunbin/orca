@@ -1,5 +1,4 @@
 import type { RuntimeMobileSessionTerminalTab } from '../../../shared/runtime-types'
-import { resolveTerminalCloseTarget, type PaneCloseResolution } from '../terminal-surface-close'
 import {
   isRetainedTerminalSurfaceIdentity,
   type TerminalSurfaceCloseIdentity
@@ -10,6 +9,8 @@ import { OrcaRuntimeWithPersistTerminalSurfaceRetirements } from './terminal-sur
 import { captureAcknowledgedTerminalTabRetirement } from '../workspace-session-terminal-tab-retirement-identity'
 import { closeLeafOrTab } from '../../persistence/terminal-topology/terminal-topology-commit'
 import {
+  resolveTerminalCloseTarget,
+  type PaneCloseResolution,
   captureTerminalCloseRequest,
   type TerminalSurfaceCloseOptions
 } from '../terminal-surface-close'

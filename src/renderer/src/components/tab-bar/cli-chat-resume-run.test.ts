@@ -57,7 +57,8 @@ vi.mock('@/runtime/local-runtime-capabilities', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   readLocalRuntimeCapabilitiesOrUnknown: () => [
     STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY,
-    STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY
+    STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,
+    'agent-session.structured.switch.v1:codex'
   ]
 }))
 vi.mock('@/runtime/host-structured-agents', async (importOriginal) => ({
@@ -124,7 +125,7 @@ import { resetLocalStructuredSessionVersionForTests } from '@/runtime/local-stru
 import { resetWebSessionTabsSnapshotFreshnessForTests } from '@/runtime/web-session-tabs-sync/tracking-lifecycle'
 import { buildWorkspaceSessionPayload } from '@/lib/workspace-session'
 import { buildHydratedTabState } from '@/store/slices/tabs-hydration'
-import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
+import { makeTerminalTab, makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-types'
 import { useAppStore } from '@/store'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -228,6 +229,19 @@ beforeEach(async () => {
     }
   )
   main = await drawTabsFromMain(useAppStore)
+  useAppStore.setState({
+    tabsByWorktree: {
+      'wt-1': [makeTerminalTab({ id: 'tab-1', worktreeId: 'wt-1', createdAt: 1 })]
+    },
+    terminalLayoutsByTabId: {
+      'tab-1': {
+        root: { type: 'leaf', leafId: 'leaf' },
+        activeLeafId: 'leaf',
+        expandedLeafId: null,
+        ptyIdsByLeafId: { leaf: 'pty-1' }
+      }
+    }
+  })
 })
 
 function snapshot(sessionId?: string): RuntimeMobileSessionTabsResult {
@@ -430,30 +444,6 @@ describe('CLI identity resume through the existing launch owner', () => {
     await running
     mocks.source = SOURCE
     mocks.switchCapability.mockResolvedValue(false)
-    mocks.rpc.mockImplementation(async (_target, method) =>
-      method === 'terminal.resolvePane'
-        ? {
-            terminal: {
-              handle: 'handle-1',
-              ptyId: 'pty-1',
-              incarnationId: 'i1',
-              presentation: {
-                identity: {
-                  worktreeId: 'wt-1',
-                  tabId: mocks.source?.tabId ?? 'tab-1',
-                  leafId: mocks.source?.paneKey.split(':')[1] ?? 'leaf-1',
-                  createdAt: 1,
-                  generation: 0,
-                  hasLeaf: true,
-                  ptyId: 'pty-1',
-                  incarnationId: 'i1'
-                },
-                holders: []
-              }
-            }
-          }
-        : { close: { ptyKilled: true } }
-    )
     capability.resolve(true)
     await vi.waitFor(() => expect([...structuredLaunchStates()]).toHaveLength(0))
     expect(mocks.call).not.toHaveBeenCalled()
@@ -534,7 +524,7 @@ describe('CLI identity resume through the existing launch owner', () => {
     useAppStore.setState({
       terminalLayoutsByTabId: {
         'tab-1': {
-          root: null,
+          root: { type: 'leaf', leafId },
           activeLeafId: leafId,
           expandedLeafId: null,
           ptyIdsByLeafId: { [leafId]: 'pty-1' }

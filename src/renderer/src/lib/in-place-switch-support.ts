@@ -1,42 +1,51 @@
 import { useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
-import { subscribeLocalRuntimeCapabilityObservation } from '@/runtime/local-runtime-capabilities'
-import { supportsInPlaceSwitch } from '@/runtime/structured-agent-session-client'
+import {
+  ensureLocalRuntimeCapabilities,
+  readLocalRuntimeCapabilitiesOrUnknown,
+  subscribeLocalRuntimeCapabilityObservation
+} from '@/runtime/local-runtime-capabilities'
+import {
+  isRuntimeHostContactRevoked,
+  lastVerifiedRuntimeStatus
+} from '../../../shared/runtime-host-status'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import {
   onRuntimeEnvironmentRevisionsChanged,
   onRuntimeEnvironmentsRetired
 } from '@/runtime/runtime-environment-revision'
-import { inPlaceSwitchEnabled } from '../../../shared/structured-agent-cli-conversation-adoption'
+import {
+  inPlaceSwitchCapability,
+  inPlaceSwitchEnabled
+} from '../../../shared/structured-agent-cli-conversation-adoption'
 import type { AiVaultAgent } from '../../../shared/ai-vault-types'
 
-// The answer per host and agent; a reconnect or retirement asks again.
-const known = new Map<string, boolean>()
-const asking = new Map<string, Promise<boolean>>()
 const listeners = new Set<() => void>()
 let revision = 0
 const changed = () => {
   revision += 1
   listeners.forEach((listener) => listener())
 }
-const forget = () => {
-  known.clear()
-  asking.clear()
-  changed()
-}
-onRuntimeEnvironmentRevisionsChanged(forget)
-onRuntimeEnvironmentsRetired(forget)
-subscribeLocalRuntimeCapabilityObservation(forget)
+onRuntimeEnvironmentRevisionsChanged(changed)
+onRuntimeEnvironmentsRetired(changed)
+subscribeLocalRuntimeCapabilityObservation(changed)
 let stopStatusSubscription: (() => void) | undefined
 const subscribe = (listener: () => void) => {
-  if (listeners.size === 0) {
+  const activate = listeners.size === 0
+  if (activate) {
     stopStatusSubscription = useAppStore.subscribe((state, previous) => {
-      if (state.runtimeStatusByEnvironmentId !== previous.runtimeStatusByEnvironmentId) {
-        forget()
+      if (
+        state.runtimeStatusByEnvironmentId !== previous.runtimeStatusByEnvironmentId ||
+        state.runtimeEnvironments !== previous.runtimeEnvironments
+      ) {
+        changed()
       }
     })
   }
   listeners.add(listener)
+  if (activate) {
+    void ensureLocalRuntimeCapabilities()
+  }
   return () => {
     listeners.delete(listener)
     if (listeners.size === 0) {
@@ -54,7 +63,7 @@ export function useInPlaceSwitchRevision(): number {
   )
 }
 
-/** The cached answer, asking in the background when there is none yet. */
+/** The addressed runtime owner's learned answer; reading never starts a probe. */
 export function inPlaceSwitchCapabilityNow(
   executionHostId: string | null | undefined,
   agent: string
@@ -62,22 +71,20 @@ export function inPlaceSwitchCapabilityNow(
   if (!inPlaceSwitchEnabled(agent)) {
     return false
   }
-  const key = `${executionHostId ?? ''}\0${agent}`
-  const answer = known.get(key)
   const target = structuredAgentSessionTargetForHost(executionHostId)
-  if (answer === undefined && target && !asking.has(key)) {
-    const attempt = supportsInPlaceSwitch(target, agent)
-    asking.set(key, attempt)
-    void attempt.then((supported) => {
-      if (asking.get(key) !== attempt) {
-        return
-      }
-      asking.delete(key)
-      known.set(key, supported)
-      changed()
-    })
+  if (!target) {
+    return undefined
   }
-  return answer
+  if (target.kind === 'local') {
+    return readLocalRuntimeCapabilitiesOrUnknown()?.includes(inPlaceSwitchCapability(agent))
+  }
+  const state = useAppStore.getState()
+  if (!state.runtimeEnvironments.some((environment) => environment.id === target.environmentId)) {
+    return undefined
+  }
+  const entry = state.runtimeStatusByEnvironmentId.get(target.environmentId)
+  const status = isRuntimeHostContactRevoked(entry) ? null : lastVerifiedRuntimeStatus(entry)
+  return status ? (status.capabilities ?? []).includes(inPlaceSwitchCapability(agent)) : undefined
 }
 
 export function inPlaceSwitchSupportedNow(host: string | null | undefined, agent: string): boolean {

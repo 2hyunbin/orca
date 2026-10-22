@@ -182,13 +182,28 @@ export function registerMobileAndTerminalCloseIpcBridge(
               if (originalSurface.tabId !== tabId || !localPtyTeardownOwnedExternally) {
                 throw new Error('terminal_pane_owner_changed')
               }
-              retireTerminalPresentation(originalSurface)
-              const state = useAppStore.getState()
-              await persistWorkspaceSessionByHost(
-                window.api.session,
-                buildWorkspaceSessionPayload(state),
-                state
-              )
+              const failures: unknown[] = []
+              try {
+                retireTerminalPresentation(originalSurface)
+              } catch (error) {
+                failures.push(error)
+              }
+              try {
+                const state = useAppStore.getState()
+                await persistWorkspaceSessionByHost(
+                  window.api.session,
+                  buildWorkspaceSessionPayload(state),
+                  state
+                )
+              } catch (error) {
+                failures.push(error)
+              }
+              if (failures.length === 1) {
+                throw failures[0]
+              }
+              if (failures.length > 1) {
+                throw new AggregateError(failures, 'terminal_tab_close_failed')
+              }
               respond()
             })().catch((error: unknown) =>
               respond(error instanceof Error ? error.message : 'terminal_tab_close_failed')

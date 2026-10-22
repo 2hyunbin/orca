@@ -51,10 +51,9 @@ export type PtySpawnCommitState = {
     | 'tabId'
     | 'launchAgent'
     | 'resumeProviderSession'
-    | 'resumeOrigin'
     | 'onResumeOutcome'
     | 'telemetry'
-  >
+  > & { resumeOrigin?: unknown }
   result: PtySpawnResult
   provider: IPtyProvider
   cwd: string | undefined

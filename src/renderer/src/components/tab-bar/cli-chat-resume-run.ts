@@ -17,40 +17,8 @@ import {
   toastCliChatResumeFailure
 } from './cli-chat-resume-feedback'
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
-import type { RuntimeTerminalResolvePane } from '../../../../shared/runtime-types'
-import { getRemoteRuntimePtyOwner } from '@/runtime/runtime-terminal-stream'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
-
-/** Capture the existing host handle and incarnation before starting the destination. */
-async function captureSourceTerminal(source: CliChatResumeSource) {
-  const owner = source.ptyId ? getRemoteRuntimePtyOwner(source.ptyId) : null
-  if (isRemoteRuntimePtyId(source.ptyId) && !owner) {
-    return null
-  }
-  const target = owner?.target ?? { kind: 'local' as const }
-  try {
-    const { terminal } = await callRuntimeRpc<{ terminal: RuntimeTerminalResolvePane }>(
-      target,
-      'terminal.resolvePane',
-      {
-        paneKey: source.paneKey,
-        worktreeId: source.workspaceId
-      }
-    )
-    return terminal.incarnationId &&
-      (owner ? terminal.handle === owner.terminal : terminal.ptyId === source.ptyId)
-      ? {
-          target,
-          handle: owner?.terminal ?? terminal.handle,
-          incarnationId: terminal.incarnationId,
-          presentation: terminal.presentation
-        }
-      : null
-  } catch {
-    return null
-  }
-}
+import { captureSourceTerminal } from './cli-chat-resume-terminal-capture'
 
 /** The execution host closes only the captured shell; refused or unknown closes leave it alone. */
 async function retireSwitchedTerminalPane(

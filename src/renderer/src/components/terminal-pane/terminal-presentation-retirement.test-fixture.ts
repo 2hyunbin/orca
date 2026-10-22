@@ -35,8 +35,8 @@ function pane(id: number, leafId: string): ManagedPaneInternal {
     unicode11Addon: addon(),
     webLinksAddon: addon(),
     fitAddon: addon(),
-    webglAddon: null,
-    imageAddon: null,
+    webglAddon: addon(),
+    imageAddon: addon(),
     ligaturesAddon: null,
     fitResizeObserver: null,
     pendingObservedFitRafId: null,
@@ -129,10 +129,11 @@ export function mountedOwner(
   manager = {
     getPanes: () => [...panes.values()],
     getActivePane: () => panes.get(2) ?? panes.get(1) ?? null,
-    retirePanePreservingPty: (id: number, permanent: boolean) =>
+    retirePanePreservingPty: (id: number, permanent: boolean, failures?: unknown[]) =>
       retireManagedPanePreservingPty(
         {
           paneId: id,
+          failures,
           activePaneId: 1,
           panes,
           root: document.createElement('div'),

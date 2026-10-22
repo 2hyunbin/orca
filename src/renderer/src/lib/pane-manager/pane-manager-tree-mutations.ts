@@ -97,11 +97,13 @@ export function detachPaneForExternalMoveOnManager(host: PaneManagerHost, paneId
 export function retirePanePreservingPtyOnManager(
   host: PaneManagerHost,
   paneId: number,
-  permanent = false
+  permanent = false,
+  failures?: unknown[]
 ): boolean {
   return retireManagedPanePreservingPty(
     {
       paneId,
+      failures,
       activePaneId: host.getActivePaneId(),
       panes: host.panes,
       root: host.root,

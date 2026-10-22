@@ -1,10 +1,10 @@
 import type { TerminalSurfaceCloseCapture } from '../../shared/terminal-tab-close'
 import type {
+  RuntimeMobileSessionTabCloseResult,
   RuntimeMobileSessionRetiredTerminalSurface,
   RuntimeSessionTabCloseReason
 } from '../../shared/runtime-types'
 import type { RuntimePtyTabCloseAuthority } from './runtime-terminal-state-records'
-import type { RuntimeMobileSessionTabCloseResult } from '../../shared/runtime-types'
 import type { ClientSessionTabSelectionStore } from './client-session-tab-selection'
 
 // Why: a selection tombstone (ClientSessionTabSelectionStore.forgetTabs) is not a

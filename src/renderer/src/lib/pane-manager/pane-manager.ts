@@ -155,8 +155,8 @@ export class PaneManager {
     return detachPaneForExternalMoveOnManager(this.host, paneId)
   }
 
-  retirePanePreservingPty(paneId: number, permanent = false): boolean {
-    return retirePanePreservingPtyOnManager(this.host, paneId, permanent)
+  retirePanePreservingPty(paneId: number, permanent = false, failures?: unknown[]): boolean {
+    return retirePanePreservingPtyOnManager(this.host, paneId, permanent, failures)
   }
 
   getPanes(limit = Number.POSITIVE_INFINITY): ManagedPane[] {

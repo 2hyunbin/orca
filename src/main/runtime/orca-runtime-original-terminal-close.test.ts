@@ -16,10 +16,10 @@ function captured(harness: ReturnType<typeof createHarness>) {
   if (!source.presentation || !source.incarnationId) {
     throw new Error('Missing original source')
   }
+  const { incarnationId, presentation } = source
   return {
     source,
-    close: () =>
-      harness.runtime.closeTerminal(source.handle, source.incarnationId, source.presentation)
+    close: () => harness.runtime.closeTerminal(source.handle, incarnationId, presentation)
   }
 }
 

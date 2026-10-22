@@ -1,9 +1,9 @@
-import type { TerminalSurfaceCloseIdentity } from '../../shared/terminal-tab-close'
 import { randomUUID } from 'node:crypto'
 
 import { ipcMain } from 'electron'
 import type { BrowserWindow } from 'electron'
 import type {
+  TerminalSurfaceCloseIdentity,
   TerminalTabCloseRequest,
   TerminalTabCloseResponse
 } from '../../shared/terminal-tab-close'

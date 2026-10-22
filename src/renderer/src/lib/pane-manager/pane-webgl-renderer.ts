@@ -127,7 +127,7 @@ export function isPaneWebglContextLost(pane: ManagedPaneInternal): boolean {
 
 export function disposeWebgl(
   pane: ManagedPaneInternal,
-  options?: { refreshDimensions?: boolean }
+  options?: { refreshDimensions?: boolean; failures?: unknown[] }
 ): void {
   cancelPendingWebglRefresh(pane)
   panesAwaitingWebglAddon.delete(pane)
@@ -137,8 +137,8 @@ export function disposeWebgl(
   releaseXtermWebglContext(pane.webglAddon)
   try {
     pane.webglAddon.dispose()
-  } catch {
-    /* ignore */
+  } catch (error) {
+    options?.failures?.push(error)
   }
   pane.webglAddon = null
   if (options?.refreshDimensions) {

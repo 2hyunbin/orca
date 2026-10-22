@@ -3,17 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { makeTerminalTab } from '@/store/slices/worktrees-slice-test-fixtures'
 import { captureTerminalSurfaceIdentity } from '../../../../shared/terminal-tab-close'
-import { retireTerminalPresentation } from './terminal-presentation-retirement'
+import {
+  removeTerminalPresentation,
+  retireTerminalPresentation
+} from './terminal-presentation-retirement'
 import { capturedPanesByTabId, parkedWatchersByTabId } from './terminal-parked-watcher-registry'
 import { LEAF, SIBLING, mountedOwner } from './terminal-presentation-retirement.test-fixture'
-import {
-  createHarness,
-  WORKTREE_ID,
-  TAB_ID,
-  LEAF_ID,
-  PTY_ID,
-  INCARNATION_ID
-} from '../../../../main/runtime/__fixtures__/orca-runtime-terminal-close-continuity-fixtures'
 import { hasRegisteredRuntimeTerminalTab } from '@/runtime/mounted-terminal-tab-registry'
 
 vi.mock('@/runtime/sync-runtime-graph', () => ({ scheduleRuntimeGraphSync: vi.fn() }))
@@ -148,52 +143,6 @@ describe('direct permanent presentation owner', () => {
     }
   )
 
-  it('completes host stop, direct mounted disposal and explicit durable intent together', async () => {
-    const harness = createHarness({ registerPtyBacked: true, publishMobileSurface: true })
-    const session = harness.getSession()
-    useAppStore.setState({
-      tabsByWorktree: session.tabsByWorktree,
-      terminalLayoutsByTabId: session.terminalLayoutsByTabId
-    })
-    useAppStore
-      .getState()
-      .createUnifiedTab(WORKTREE_ID, 'terminal', { id: TAB_ID, entityId: TAB_ID })
-    const source = harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
-    if (!source.presentation) {
-      throw new Error('Expected original presentation')
-    }
-    const owner = mountedOwner(false, {
-      tabId: TAB_ID,
-      worktreeId: WORKTREE_ID,
-      leafId: LEAF_ID,
-      ptyId: PTY_ID
-    })
-    harness.setVerifiedStopResult(true)
-    harness.setStopAndWaitAction(async () => {
-      await harness.runtime.onPtyExit(PTY_ID, 0, INCARNATION_ID, { hostExitConfirmed: true })
-      expect(owner.source.terminal.dispose).not.toHaveBeenCalled()
-      expect(useAppStore.getState().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
-    })
-    harness.setCloseTerminalTabAction(() =>
-      retireTerminalPresentation(source.presentation!.identity)
-    )
-    try {
-      await expect(
-        harness.runtime.closeTerminal(source.handle, source.incarnationId, source.presentation)
-      ).resolves.toMatchObject({ ptyKilled: true })
-      expect(owner.source.terminal.dispose).toHaveBeenCalledOnce()
-      expect(owner.transports.size).toBe(0)
-      expect(owner.bindings.size).toBe(0)
-      expect(owner.sourceTransport.destroy).not.toHaveBeenCalled()
-      expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toEqual([])
-      expect(harness.getSession().closedTerminalTabTombstonesByTabId?.[TAB_ID]).toBeDefined()
-      expect(harness.flushOrThrow).toHaveBeenCalled()
-      expect(harness.kill).not.toHaveBeenCalled()
-    } finally {
-      owner.unregister()
-    }
-  })
-
   it('refuses a replacement or a newly pinned final tab before disposal', () => {
     const identity = prepare(false)
     const owner = mountedOwner(false)
@@ -239,5 +188,152 @@ describe('direct permanent presentation owner', () => {
     } finally {
       owner.unregister()
     }
+  })
+  it('reports nested actual addon/terminal failures after closure and layout, while ordinary callers remain best effort', () => {
+    const identity = prepare(false)
+    const owner = mountedOwner(false)
+    const image = owner.source.imageAddon
+    const webgl = owner.source.webglAddon
+    if (!image || !webgl) {
+      throw new Error('Expected actual addon owners')
+    }
+    vi.spyOn(image, 'dispose').mockImplementation(() => {
+      throw undefined
+    })
+    vi.spyOn(webgl, 'dispose').mockImplementation(() => {
+      throw false
+    })
+    vi.spyOn(owner.source.terminal, 'dispose').mockImplementation(() => {
+      throw new Error('terminal failed')
+    })
+    try {
+      let failure: unknown
+      try {
+        retireTerminalPresentation(identity)
+      } catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(AggregateError)
+      if (!(failure instanceof AggregateError)) {
+        throw new Error('Expected failure')
+      }
+      expect(failure.errors).toEqual([undefined, false, new Error('terminal failed')])
+      expect(owner.source.searchAddon.dispose).toHaveBeenCalledOnce()
+      expect(owner.binding.dispose).toHaveBeenCalledOnce()
+      expect(owner.sourceTransport.detach).toHaveBeenCalledOnce()
+      expect(owner.manager.destroy).toHaveBeenCalledOnce()
+      expect(useAppStore.getState().terminalLayoutsByTabId.terminal).toBeUndefined()
+      expect(hasRegisteredRuntimeTerminalTab('terminal', 'wt-1')).toBe(false)
+    } finally {
+      owner.unregister()
+    }
+
+    prepare(false)
+    const ordinary = mountedOwner(false)
+    vi.spyOn(ordinary.source.searchAddon, 'dispose').mockImplementation(() => {
+      throw new Error('advisory')
+    })
+    try {
+      expect(() => ordinary.manager.retirePanePreservingPty(1, true)).not.toThrow()
+      expect(ordinary.source.terminal.dispose).toHaveBeenCalledOnce()
+    } finally {
+      ordinary.unregister()
+    }
+  })
+
+  it.each(['DOM', 'onPaneClosed'] as const)(
+    'retains caught and genuine %s and final-owner failures without claiming structural completion',
+    (stage) => {
+      const identity = prepare(false)
+      const owner = mountedOwner(false)
+      const caught = new Error('addon failed')
+      const structural = new Error(stage)
+      const final = new Error('onEmpty failed')
+      vi.spyOn(owner.source.searchAddon, 'dispose').mockImplementation(() => {
+        throw caught
+      })
+      if (stage === 'DOM') {
+        document.body.append(owner.source.container)
+        vi.spyOn(owner.source.container, 'remove').mockImplementation(() => {
+          throw structural
+        })
+      } else {
+        owner.link.dispose.mockImplementation(() => {
+          throw structural
+        })
+      }
+      owner.empty.mockImplementation(() => {
+        throw final
+      })
+      try {
+        let failure: unknown
+        try {
+          retireTerminalPresentation(identity)
+        } catch (error) {
+          failure = error
+        }
+        if (!(failure instanceof AggregateError)) {
+          throw new Error('Expected aggregate')
+        }
+        expect(failure.errors[0]).toBe(caught)
+        expect(failure.errors[1]).toBeInstanceOf(AggregateError)
+        expect(failure.errors[1].errors).toEqual([structural, final])
+        expect(owner.empty).toHaveBeenCalledOnce()
+        expect(owner.panes.size).toBe(0)
+        expect(useAppStore.getState().tabsByWorktree['wt-1']).toHaveLength(1)
+        expect(hasRegisteredRuntimeTerminalTab('terminal', 'wt-1')).toBe(false)
+      } finally {
+        owner.unregister()
+        document.body.replaceChildren()
+      }
+    }
+  )
+
+  it('preserves an ordinary previously unswallowed owner throw', () => {
+    prepare(false)
+    const owner = mountedOwner(false)
+    owner.source.paneDragCleanup = () => {
+      throw new Error('ordinary owner failed')
+    }
+    try {
+      expect(() => owner.manager.retirePanePreservingPty(1, true)).toThrow('ordinary owner failed')
+      expect(owner.panes.size).toBe(1)
+    } finally {
+      owner.unregister()
+    }
+  })
+
+  it('retains caught failures when layout throws, and rejects them even after an already-absent leaf', () => {
+    const identity = prepare(true)
+    const caught = new Error('caught disposal')
+    const layoutFailure = new Error('layout failed')
+    const originalSet = useAppStore.getState().setTabLayout
+    useAppStore.setState({
+      setTabLayout: () => {
+        throw layoutFailure
+      }
+    })
+    try {
+      let failure: unknown
+      try {
+        removeTerminalPresentation(identity, (failures) => {
+          failures.push(caught)
+        })
+      } catch (error) {
+        failure = error
+      }
+      if (!(failure instanceof AggregateError)) {
+        throw new Error('Expected aggregate')
+      }
+      expect(failure.errors).toEqual([caught, layoutFailure])
+    } finally {
+      useAppStore.setState({ setTabLayout: originalSet })
+    }
+    useAppStore.setState({ tabsByWorktree: {}, terminalLayoutsByTabId: {} })
+    expect(() =>
+      removeTerminalPresentation(identity, (failures) => {
+        failures.push(caught)
+      })
+    ).toThrow(AggregateError)
   })
 })

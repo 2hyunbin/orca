@@ -60,6 +60,19 @@ vi.mock('@/lib/ai-vault-tab-title-requests', async (original) => ({
   collectAgentPaneConversations: mocks.panes
 }))
 
+const SWITCH = 'agent-session.structured.switch.v1:codex'
+const paired = {
+  id: 'paired',
+  name: 'Paired',
+  createdAt: 1,
+  updatedAt: 1,
+  pairingRevision: 1,
+  lastUsedAt: null,
+  runtimeId: 'paired',
+  preferredEndpointId: 'endpoint',
+  endpoints: [{ id: 'endpoint', kind: 'websocket' as const, label: 'Host', endpoint: 'ws://host' }]
+}
+
 const row: AiVaultSession = {
   id: 'codex-history',
   agent: 'codex',
@@ -151,12 +164,12 @@ beforeEach(async () => {
     api: {
       ...window.api,
       aiVault: {},
-      runtime: { getStatus: async () => ({ capabilities: [HISTORY] }) }
+      runtime: { getStatus: async () => ({ capabilities: [HISTORY, SWITCH] }) }
     }
   })
   useAppStore.setState(useAppStore.getInitialState(), true)
   useAppStore.setState({ settings: createGlobalSettingsFixture({ experimentalNativeChat: true }) })
-  setLocalRuntimeCapabilitiesForTests([HISTORY])
+  setLocalRuntimeCapabilitiesForTests([HISTORY, SWITCH])
   await refreshLocalRuntimeCapabilities()
   mocks.owner.mockReturnValue('local')
   mocks.probe.mockResolvedValue(true)
@@ -170,7 +183,7 @@ function pairedHistoryStatus() {
   if (!response.ok) {
     throw new Error('Expected status fixture')
   }
-  return { status: { ...response.result, capabilities: [HISTORY] }, checkedAt: 1 }
+  return { status: { ...response.result, capabilities: [HISTORY, SWITCH] }, checkedAt: 1 }
 }
 
 it.each(['local', 'runtime:paired'] as const)(
@@ -178,21 +191,31 @@ it.each(['local', 'runtime:paired'] as const)(
   async (host) => {
     mocks.owner.mockReturnValue(host)
     useAppStore.setState({
+      runtimeEnvironments: [paired],
       runtimeStatusByEnvironmentId: new Map([['paired', pairedHistoryStatus()]])
     })
-    let answer = (_value: boolean) => {}
-    mocks.probe.mockImplementationOnce(
-      () =>
+    setLocalRuntimeCapabilitiesForTests(null)
+    useAppStore.setState({ runtimeStatusByEnvironmentId: new Map() })
+    let answer = (_value: { capabilities: string[] }) => {}
+    Object.assign(window.api.runtime, {
+      getStatus: () =>
         new Promise((resolve) => {
           answer = resolve
         })
-    )
+    })
     const session = { ...row, executionHostId: host }
     render(<History session={session} />)
-    const button = screen.getByRole('button', { name: 'Switch to native chat' })
-    expect(button.hasAttribute('disabled')).toBe(true)
-    await act(async () => answer(true))
-    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+    expect(screen.queryByRole('button', { name: 'Switch to native chat' })).toBeNull()
+    await act(async () => {
+      answer({ capabilities: [HISTORY, SWITCH] })
+      if (host !== 'local') {
+        useAppStore.setState({
+          runtimeStatusByEnvironmentId: new Map([['paired', pairedHistoryStatus()]])
+        })
+      }
+    })
+    const button = await screen.findByRole('button', { name: 'Switch to native chat' })
+    expect(button.hasAttribute('disabled')).toBe(false)
     await userEvent.setup().click(button)
     expect(mocks.startOwner).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: 'workspace' }),
@@ -215,6 +238,7 @@ it.each(['local', 'runtime:paired'] as const)(
 it('routes a capable paired unowned row with a matching terminal through the same return', async () => {
   mocks.owner.mockReturnValue('runtime:paired')
   useAppStore.setState({
+    runtimeEnvironments: [paired],
     runtimeStatusByEnvironmentId: new Map([['paired', pairedHistoryStatus()]])
   })
   const session = {
@@ -265,6 +289,7 @@ it.each([
   },
   { executionHostId: 'local' as const, agent: 'omp' as const, filePath: '/session.jsonl' }
 ])('keeps ordinary restrictions for an unsupported owned row: %s', async (overrides) => {
+  setLocalRuntimeCapabilitiesForTests([HISTORY])
   mocks.probe.mockResolvedValue(false)
   mocks.owner.mockReturnValue(
     overrides.executionHostId.startsWith('ssh:') ? null : overrides.executionHostId
@@ -280,6 +305,7 @@ it.each([
 it.each(['codex', 'claude', 'grok', 'omp', 'opencode', 'opencode2', 'pi'] as const)(
   'keeps ordinary local History resume and owned fork usable for %s',
   async (agent) => {
+    setLocalRuntimeCapabilitiesForTests([HISTORY])
     mocks.probe.mockResolvedValue(false)
     const session = { ...row, agent, structuredSession: undefined }
     const view = render(<History session={session} />)

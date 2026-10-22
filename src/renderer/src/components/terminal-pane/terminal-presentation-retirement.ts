@@ -13,7 +13,7 @@ import { collapseParkedTerminalLeaf } from './terminal-parked-pty-watcher'
 /** Admission and disposal share one synchronous owner action. */
 export function removeTerminalPresentation(
   original: TerminalSurfaceCloseIdentity,
-  dispose: () => void
+  dispose: (failures: unknown[]) => void
 ): void {
   const state = useAppStore.getState()
   const current = captureTerminalSurfaceIdentity(
@@ -46,19 +46,29 @@ export function removeTerminalPresentation(
   for (const paneId of paneIds) {
     state.clearRuntimePaneTitle(original.tabId, paneId)
   }
-  dispose()
-  if (!current?.hasLeaf) {
-    return
+  const failures: unknown[] = []
+  try {
+    dispose(failures)
+    if (current?.hasLeaf) {
+      if (split) {
+        useAppStore.getState().setTabLayout(original.tabId, split.sourceLayout)
+      } else {
+        useAppStore.getState().closeTab(original.tabId, {
+          reason: 'user',
+          captureRecentlyClosed: false,
+          localPtyTeardownOwnedExternally: true,
+          remoteCloseOwnedByHost: true
+        })
+      }
+    }
+  } catch (error) {
+    if (failures.length === 0) {
+      throw error
+    }
+    failures.push(error)
   }
-  if (split) {
-    useAppStore.getState().setTabLayout(original.tabId, split.sourceLayout)
-  } else {
-    useAppStore.getState().closeTab(original.tabId, {
-      reason: 'user',
-      captureRecentlyClosed: false,
-      localPtyTeardownOwnedExternally: true,
-      remoteCloseOwnedByHost: true
-    })
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'terminal_tab_close_failed')
   }
 }
 
