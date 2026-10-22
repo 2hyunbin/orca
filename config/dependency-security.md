@@ -13,8 +13,9 @@ published; RC releases skip it. Stable releases audit the desktop and embedded
 mobile-web lockfiles plus native Rust. Cloud, docs, and isolated audit tooling
 remain covered by dependency PR checks and do not block desktop releases.
 Scanner tooling and exception policy come from the workflow commit, while
-lockfiles, patch registrations, and patch bytes come from the release tag. The candidate is not installed and its pnpm hooks do not
-run. Branch protection is unchanged.
+lockfiles, patch registrations, and patch bytes come from the release tag. Only candidate Rust manifests, lockfiles, and patches are extracted; candidate
+package manifests, pnpm/Cargo configuration, and toolchain overrides are excluded. The candidate is
+not installed and its pnpm hooks do not run. Branch protection is unchanged.
 
 The Rust job runs pinned cargo-deny 0.20.2 directly against every native manifest
 with `--locked`, all features, and no target restriction. The scanner binary is

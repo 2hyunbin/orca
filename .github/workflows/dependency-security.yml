@@ -19,6 +19,7 @@ on:
       - '.github/workflows/dependency-security.yml'
       - '.github/workflows/release-cut.yml'
       - '.github/actions/install-node-dependencies/**'
+      - '.github/actions/prepare-dependency-audit/**'
       - 'src/packages/process-host/**'
   workflow_call:
     inputs:
@@ -32,7 +33,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: dependency-security-${{ inputs.ref != '' && github.run_id || github.event.pull_request.number || github.ref }}
+  group: dependency-security-${{ inputs.ref && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:
@@ -46,15 +47,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref != '' && github.workflow_sha || github.sha }}
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
-      - uses: actions/checkout@v6
+      - uses: ./.github/actions/install-node-dependencies
+      - uses: ./.github/actions/prepare-dependency-audit
         if: inputs.ref != ''
         with:
           ref: ${{ inputs.ref }}
-          path: candidate
-          persist-credentials: false
-      - uses: ./.github/actions/install-node-dependencies
       - name: Audit JavaScript lockfiles
         shell: bash
         env:
@@ -79,13 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref != '' && github.workflow_sha || github.sha }}
-          persist-credentials: false
-      - uses: actions/checkout@v6
-        if: inputs.ref != ''
-        with:
-          ref: ${{ inputs.ref }}
-          path: candidate
+          ref: ${{ github.workflow_sha }}
           persist-credentials: false
       - uses: actions/cache@v5
         id: scanner
@@ -94,6 +87,10 @@ jobs:
           key: cargo-deny-0.20.2-${{ runner.os }}-${{ runner.arch }}
       - if: steps.scanner.outputs.cache-hit != 'true'
         run: cargo install cargo-deny --locked --version 0.20.2
+      - uses: ./.github/actions/prepare-dependency-audit
+        if: inputs.ref != ''
+        with:
+          ref: ${{ inputs.ref }}
       - name: Audit native Rust lockfiles
         shell: bash
         working-directory: ${{ inputs.ref != '' && 'candidate' || '.' }}

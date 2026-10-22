@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { runProcess } from '@orca/process-host'
 import { runInNewContext } from 'node:vm'
 import { expect, it } from 'vitest'
 import { parse } from 'yaml'
@@ -40,21 +43,93 @@ it('scans the release tag with read-only workflow tooling instead of installing 
   expect(security.on.schedule).toBeUndefined()
   for (const job of Object.values(security.jobs)) {
     const checkouts = job.steps.filter((step) => step.uses === 'actions/checkout@v6')
-    expect(checkouts).toHaveLength(2)
-    expect(checkouts[0].with.ref).toBe(
-      "${{ inputs.ref != '' && github.workflow_sha || github.sha }}"
+    expect(checkouts).toHaveLength(1)
+    expect(checkouts[0].with.ref).toBe('${{ github.workflow_sha }}')
+    const preparation = job.steps.find(
+      (step) => step.uses === './.github/actions/prepare-dependency-audit'
     )
-    expect(checkouts[1].with).toMatchObject({
-      ref: '${{ inputs.ref }}',
-      path: 'candidate',
-      'persist-credentials': false
-    })
-    expect(checkouts[1].if).toBe("inputs.ref != ''")
+    expect(preparation.with.ref).toBe('${{ inputs.ref }}')
+    expect(preparation.if).toBe("inputs.ref != ''")
     for (const step of job.steps) {
       if (step.uses?.startsWith('./')) {
         expect(step['working-directory']).toBeUndefined()
         expect(step.with?.['working-directory']).toBeUndefined()
       }
     }
+  }
+})
+
+it('extracts release data while excluding executable package and Cargo configuration', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'release audit data '))
+  const source = join(root, 'source')
+  const tooling = join(root, 'tooling')
+  mkdirSync(source)
+  mkdirSync(tooling)
+  const data = [
+    'pnpm-lock.yaml',
+    'pnpm-workspace.yaml',
+    'mobile/pnpm-lock.yaml',
+    'mobile/pnpm-workspace.yaml',
+    'native/example/Cargo.toml',
+    'native/example/Cargo.lock',
+    'config/patches/example.patch',
+    'mobile/patches/example.patch'
+  ]
+  const configuration = [
+    'package.json',
+    'mobile/package.json',
+    '.npmrc',
+    '.pnpmfile.cjs',
+    'config/pnpmfile.cjs',
+    'mobile/.npmrc',
+    'mobile/.pnpmfile.cjs',
+    '.cargo/config.toml',
+    'native/.cargo/config.toml',
+    'native/example/.cargo/config.toml',
+    'native/example/rust-toolchain.toml',
+    'native/example/build.rs'
+  ]
+  async function run(program, args, cwd, env = process.env) {
+    const result = await runProcess({ program, args, cwd, env })
+    expect(result.code, result.stderr).toBe(0)
+  }
+  try {
+    for (const file of [...data, ...configuration]) {
+      mkdirSync(dirname(join(source, file)), { recursive: true })
+      writeFileSync(join(source, file), `${file} contents`)
+    }
+    await run('git', ['init', '--quiet'], source)
+    await run('git', ['add', '.'], source)
+    await run(
+      'git',
+      [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        'commit',
+        '--quiet',
+        '-m',
+        'fixture'
+      ],
+      source
+    )
+    await run('git', ['init', '--quiet'], tooling)
+    await run('git', ['remote', 'add', 'origin', source], tooling)
+    const action = parse(
+      readFileSync('.github/actions/prepare-dependency-audit/action.yml', 'utf8')
+    )
+    await run('bash', ['-c', action.runs.steps[0].run], tooling, {
+      ...process.env,
+      RELEASE_REF: 'HEAD'
+    })
+    for (const file of data) {
+      expect(readFileSync(join(tooling, 'candidate', file), 'utf8')).toBe(`${file} contents`)
+    }
+    for (const file of configuration) {
+      expect(existsSync(join(tooling, 'candidate', file)), file).toBe(false)
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })
