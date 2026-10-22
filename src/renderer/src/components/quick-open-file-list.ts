@@ -1,4 +1,6 @@
 import { getRuntimeFileListTarget } from './quick-open-file-list-target'
+import { cleanRuntimeFileListError } from './quick-open-file-list-error'
+export { cleanRuntimeFileListError }
 export {
   getRuntimeFileListTarget,
   getNestedWorktreeExcludeRequest
@@ -30,7 +32,8 @@ import {
   nextCappedLocalListing,
   type CappedLocalListing
 } from '@/components/quick-open-capped-local-listing'
-import { selectProjectGroups, selectRepos, useAppStore } from '@/store'
+import { useAppStore } from '@/store'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 import { useKnownWorktreeById, useWorktreesForRepo } from '@/store/selectors'
 import type { FileExplorerOperationOwner } from '@/components/right-sidebar/file-explorer-types'
 import {
@@ -58,11 +61,6 @@ type RuntimeFileListing = {
 }
 
 const NO_LISTING: RuntimeFileListing = { requestKey: '', files: [], truncated: false }
-
-export function cleanRuntimeFileListError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : String(error)
-  return raw.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/, '')
-}
 
 export function useRuntimeFileListForWorktree({
   enabled,

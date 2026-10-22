@@ -15,7 +15,8 @@ import {
   toSshExecutionHostId
 } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
-import { selectRepos, useAppStore } from '../../store'
+import { useAppStore } from '../../store'
+import { selectRepos } from '@/store/project-catalog-selectors'
 import { withoutConvertedSshHostRows } from '../../store/repos/converted-ssh-host-rows'
 import { rekeyWorktreeVisitHost } from '@/lib/worktree-visit-recency'
 import { preserveConvertedSshBrowserPages } from '../../store/repos/converted-ssh-browser-pages'
@@ -195,9 +196,7 @@ async function loadManagedServerCatalogs(targetId: string, load: CatalogLoad): P
 async function fetchServerWorktrees(environmentId: string): Promise<void> {
   const executionHostId = toRuntimeExecutionHostId(environmentId)
   const state = useAppStore.getState()
-  const repos = selectRepos(state).filter(
-    (repo) => getRepoExecutionHostId(repo) === executionHostId
-  )
+  const repos = selectRepos(state).filter((r) => getRepoExecutionHostId(r) === executionHostId)
   await Promise.all(repos.map((repo) => state.fetchWorktrees(repo.id, { executionHostId })))
 }
 

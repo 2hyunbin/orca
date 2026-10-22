@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { selectProjectGroups, useAppStore } from '@/store'
+import { useAppStore } from '@/store'
+import { selectProjectGroups } from '@/store/project-catalog-selectors'
 import { useAllWorktrees, useRepoById, useRepoMap, useWorktreeMap } from '@/store/selectors'
 import type { Worktree } from '../../../../shared/worktree/types'
 import {
@@ -163,9 +164,7 @@ export function useWorktreeContextMenuModel({
   )
   const sleepableWorktrees = useMemo(
     () =>
-      activeContextWorktrees.filter((item) =>
-        hasSleepableWorkspaceActivity(item.id, sleepActivity)
-      ),
+      activeContextWorktrees.filter((wt) => hasSleepableWorkspaceActivity(wt.id, sleepActivity)),
     [activeContextWorktrees, sleepActivity]
   )
   const lineageMenuActions = useWorkspaceLineageMenuActions({

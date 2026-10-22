@@ -1,7 +1,7 @@
 /* oxlint-disable react-doctor/no-adjust-state-on-prop-change -- Why: setup-guide readiness is driven by bounded IPC probes and browser focus events; the state cannot be derived synchronously from render inputs. */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { selectRepos, useAppStore } from '@/store'
-import { isGitRepoKind } from '../../../../shared/repo-kind'
+import { useAppStore } from '@/store'
+import { selectRepos } from '@/store/project-catalog-selectors'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { hasFeatureInteraction } from '../../../../shared/feature-interactions'
 import { checkRuntimeHooks } from '@/runtime/runtime-hooks-client'
@@ -28,7 +28,8 @@ import {
   getComputerUsePermissionSetupState,
   getCurrentSetupScriptProbeState,
   getSetupGuideProgressReady,
-  getSetupScriptProbeSignature
+  getSetupScriptProbeSignature,
+  orderGitReposActiveFirst
 } from './setup-guide-progress-readiness'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import {
@@ -132,15 +133,10 @@ export function useSetupGuideProgress(
     shouldRefreshCoreState
   ])
 
-  const orderedGitRepos = useMemo(() => {
-    const gitRepos = repos.filter(isGitRepoKind)
-    const activeRepo = activeRepoId
-      ? (gitRepos.find((repo) => repo.id === activeRepoId) ?? null)
-      : null
-    return activeRepo
-      ? [activeRepo, ...gitRepos.filter((repo) => repo.id !== activeRepo.id)]
-      : gitRepos
-  }, [activeRepoId, repos])
+  const orderedGitRepos = useMemo(
+    () => orderGitReposActiveFirst(repos, activeRepoId),
+    [activeRepoId, repos]
+  )
 
   const setupScriptProbeSignature = useMemo(
     () => getSetupScriptProbeSignature(settings, orderedGitRepos),

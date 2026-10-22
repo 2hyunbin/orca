@@ -9,7 +9,8 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { selectRepos, useAppStore } from '@/store'
+import { useAppStore } from '@/store'
+import { selectRepos } from '@/store/project-catalog-selectors'
 import {
   resolveDismissedOnboardingFolderAgentLaunch,
   revealOnboardingFolderWithAgentLaunch

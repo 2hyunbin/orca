@@ -172,12 +172,6 @@ registerRendererMemoryProfileContributor('storeKB', () =>
 )
 
 export type { AppState } from './types'
-export {
-  selectProjectGroups,
-  selectProjectHostSetups,
-  selectProjects,
-  selectRepos
-} from './project-catalog-selectors'
 
 // Why: exposes the Zustand store on window for console debugging (dev) and
 // E2E tests (VITE_EXPOSE_STORE). The E2E suite reads store state directly

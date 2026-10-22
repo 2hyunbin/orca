@@ -1,9 +1,11 @@
+import { listRuntimeSessionHostIdsForStartup } from './startup-runtime-session-hosts'
 import { restoreStructuredLaunchSurfaces } from '@/lib/structured-agent-session-launch-surface'
 import { useEffect, useRef } from 'react'
 import { restoreLocalStructuredChatsAtStartup } from '@/runtime/local-structured-chats'
 import { syncZoomCSSVar } from '@/lib/ui-zoom'
 import { installCodexDetachedPaneRestartExecutor } from '@/components/terminal-pane/codex-detached-pane-restart-scheduler'
-import { selectRepos, useAppStore } from '../store'
+import { useAppStore } from '../store'
+import { selectRepos } from '@/store/project-catalog-selectors'
 import { reconcileHydratedWorkspaceTabModels } from './reconcile-hydrated-workspace-tab-models'
 import { useStartupActions } from './use-app-startup-actions'
 import { waitForNativeChatDraftsAtStartup } from './native-chat-draft-startup'
@@ -32,24 +34,11 @@ import {
 import {
   getRepoExecutionHostId,
   isOwnedSshTargetId,
-  parseExecutionHostId,
-  toRuntimeExecutionHostId,
-  type ExecutionHostId
+  parseExecutionHostId
 } from '../../../shared/execution-host'
 import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 import type { OnboardingState } from '../../../shared/onboarding-state-types'
 import { ensureLocalRuntimeCapabilities } from '../runtime/local-runtime-capabilities'
-
-async function listRuntimeSessionHostIdsForStartup(): Promise<ExecutionHostId[]> {
-  try {
-    return (await window.api.runtimeEnvironments.list()).map((environment) =>
-      toRuntimeExecutionHostId(environment.id)
-    )
-  } catch (err) {
-    console.warn('Failed to list runtime session hosts for startup:', err)
-    return []
-  }
-}
 
 /**
  * Runs the renderer's one-shot boot chain: settings, persisted UI, the local repo catalog,
