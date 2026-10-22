@@ -2,6 +2,7 @@
 // equal to the store's keeps the store's object, so an unchanged frame re-renders nothing; a
 // record the store already holds keeps what only this window knows about it (a terminal row's
 // in-flight spawn and recovery state, an open file's editor state, a browser tab's page state).
+// Building also notes a staged browser tab the frames take over (L284): every built patch is applied.
 
 import { BROWSER_TAB_LAYOUT_FIELDS } from '../../../shared/workspace-layout/workspace-layout-beside'
 import { stableJson } from '../../../shared/workspace-layout/workspace-layout-load-report'

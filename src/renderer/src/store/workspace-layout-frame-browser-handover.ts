@@ -24,7 +24,7 @@ export function noteFramesTakingOverStagedBrowserTabs(
   if (droppedTabIds.length === 0) {
     return
   }
-  // A frame's page carries the server's page id and no handle yet: that id is the staged remote id.
+  // A frame's page id is the server's page id, which the staged handle names as its remote id.
   const drawnPageIds = new Set(
     [...drawnTabIds].flatMap((tabId) =>
       (built.browserPagesByWorkspace[tabId] ?? []).map((page) => page.id)
