@@ -37,7 +37,8 @@ function runtime() {
       return () => {
         lifecycle.delete(listener)
       }
-    }
+    },
+    subscribeAgentProviderSessionChangesFn: null
   }
 }
 

@@ -35,6 +35,10 @@ export type RuntimeConstructionDependencies = {
   readObservedAgentStatusPaneIdentity?: (paneKey: string) => ObservedAgentStatusPaneIdentity
   getAgentProviderSessionSnapshot?: () => AgentStatusIpcPayload[]
   getAgentProviderSessionRowsForPane?: (paneKey: string) => AgentStatusIpcPayload[]
+  /** Every change to the provider sessions the hook store holds, by pane; returns the release. */
+  subscribeAgentProviderSessionChanges?: (
+    listener: (sessions: readonly { paneKey: string; sessionId: string }[]) => void
+  ) => () => void
   attestAgentHookCompatibilityAuthority?: (candidate: {
     paneKey: string
     launchTokenHash: string

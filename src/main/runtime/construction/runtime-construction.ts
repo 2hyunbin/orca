@@ -63,6 +63,10 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
     | RuntimeConstructionBindings['readHookCliWriterObservation']
     | null
   declare protected readonly checkHookAgentPresenceFn: HostServices['checkHookAgentPresenceFn']
+  /** Hook-reported provider session changes; null on a host without a hook store. */
+  declare readonly subscribeAgentProviderSessionChangesFn:
+    | RuntimeConstructionBindings['subscribeAgentProviderSessionChanges']
+    | null
   declare protected readonly reconcileAgentStatusForEndedProcessFn: HostServices['reconcileAgentStatusForEndedProcessFn']
   declare protected readonly forgetHookAgentExitFn: HostServices['forgetHookAgentExitFn']
   declare protected readonly dropAgentStatusForRemovedWorktreeFn: HostServices['dropAgentStatusForRemovedWorktreeFn']
@@ -215,6 +219,7 @@ export abstract class OrcaRuntimeWithStateFields extends OrcaRuntimeWithLinearCo
       deps?.retireAgentHookCompatibilityAuthority ?? null
     this.readHookCliWriterObservationFn = deps?.readHookCliWriterObservation ?? null
     this.checkHookAgentPresenceFn = deps?.checkHookAgentPresence ?? null
+    this.subscribeAgentProviderSessionChangesFn = deps?.subscribeAgentProviderSessionChanges ?? null
     this.reconcileAgentStatusForEndedProcessFn = deps?.reconcileAgentStatusForEndedProcess ?? null
     this.forgetHookAgentExitFn = deps?.forgetHookAgentExit ?? null
     this.dropAgentStatusForRemovedWorktreeFn = deps?.dropAgentStatusForRemovedWorktree ?? null

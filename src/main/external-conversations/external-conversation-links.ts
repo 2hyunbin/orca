@@ -6,8 +6,10 @@ import {
 import {
   getRepoExecutionHostId,
   LOCAL_EXECUTION_HOST_ID,
+  normalizeExecutionHostId,
   type ExecutionHostId
 } from '../../shared/execution-host'
+import { normalizeAgentProviderSession } from '../../shared/agent-session-resume'
 import { readAllWorktreeMetaForHost } from '../persistence/host-qualified-worktree-meta'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import type { AgentPaneWorkspace } from '../agent-hooks/agent-transition-detector'
@@ -40,6 +42,17 @@ const ExternalConversationLinkSchema = z.object({
   externalId: z.string(),
   paneKey: z.string(),
   agent: z.enum(CONNECTOR_AGENTS),
+  // A malformed session drops alone: the link still delivers, it just cannot reopen.
+  providerSession: z
+    .unknown()
+    .transform((raw) => normalizeAgentProviderSession(raw) ?? undefined)
+    .optional(),
+  captureHostId: z
+    .unknown()
+    .transform(
+      (raw) => (typeof raw === 'string' ? normalizeExecutionHostId(raw) : null) ?? undefined
+    )
+    .optional(),
   createdAt: z.number()
 })
 

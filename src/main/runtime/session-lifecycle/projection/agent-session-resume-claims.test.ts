@@ -91,4 +91,30 @@ describe('AgentSessionResumeClaims', () => {
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
     expect(exits.has('pty-1')).toBe(false)
   })
+
+  it('ends a hold once the hook store reports it, even if the row is gone by the next claim', () => {
+    let reported = false
+    const listeners = new Set<() => void>()
+    const exits = new Map<string, () => void>()
+    const claims = new AgentSessionResumeClaims({
+      reported: () => reported,
+      watchExit: (ptyId, onExit) => {
+        exits.set(ptyId, onExit)
+        return () => exits.delete(ptyId)
+      },
+      watchReports: (onChange) => {
+        listeners.add(onChange)
+        return () => listeners.delete(onChange)
+      }
+    })
+    claims.claim(SESSION, 'tab:a')?.bind('pty-1')
+    expect(listeners.size).toBe(1)
+    // The resumed agent reports, then exits to its shell, which drops its row; the PTY lives on.
+    reported = true
+    listeners.forEach((onChange) => onChange())
+    reported = false
+    expect(listeners.size).toBe(0)
+    expect(exits.has('pty-1')).toBe(false)
+    expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
+  })
 })
