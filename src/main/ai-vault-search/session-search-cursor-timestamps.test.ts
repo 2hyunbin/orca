@@ -164,6 +164,8 @@ it('does not commit a read cancelled while completing consumer metadata', async 
 it('repairs existing null Cursor dates on reopen without rebuilding search content', async () => {
   const { candidate } = await cursorTranscript('cached', LATER)
   index.db.prepare('UPDATE sessions SET updated_at = NULL').run()
+  // APFS and NTFS record sub-millisecond mtimes; the repair must truncate like Date#toISOString.
+  index.db.prepare('UPDATE files SET mtime_ms = mtime_ms + 0.6').run()
   const incarnation = index.db
     .prepare("SELECT value FROM meta WHERE key = 'index_incarnation'")
     .get()
@@ -177,7 +179,7 @@ it('repairs existing null Cursor dates on reopen without rebuilding search conte
   expect(index.db.prepare('SELECT id, session_row_id FROM messages').all()).toEqual(content)
   expect(index.db.prepare('SELECT byte_offset, mtime_ms FROM files').get()).toEqual({
     byte_offset: candidate.file.sizeBytes,
-    mtime_ms: candidate.file.mtimeMs
+    mtime_ms: candidate.file.mtimeMs + 0.6
   })
   expect(engine.search({ query: 'timestampneedle', filters: { since: SINCE } }).hits).toMatchObject(
     [{ sessionId: 'cached', updatedAt: LATER }]

@@ -107,7 +107,7 @@ export function openSessionSearchDatabase(path: string): SyncDatabase {
       // Older Cursor rows omitted the file-time fallback; repair metadata without rereading transcripts.
       db.exec(`
         UPDATE sessions SET updated_at = (
-          SELECT strftime('%Y-%m-%dT%H:%M:%fZ', files.mtime_ms / 1000.0, 'unixepoch')
+          SELECT strftime('%Y-%m-%dT%H:%M:%fZ', CAST(files.mtime_ms AS INTEGER) / 1000.0, 'unixepoch')
           FROM files WHERE files.path = sessions.file_path AND files.session_row_id = sessions.id
         )
         WHERE agent = 'cursor' AND updated_at IS NULL
