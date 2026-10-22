@@ -1,8 +1,3 @@
-import {
-  assertPosixShellStartupCommandPrepared,
-  POSIX_SHELL_STARTUP_COMMAND_ENV,
-  supportsPosixShellStartupCommand
-} from '../../pty/posix-shell-startup-command'
 import { win32 as pathWin32 } from 'node:path'
 import { isWindowsGitBashShellPath, resolveWindowsGitBashShellPath } from '../../git-bash'
 import { isPwshAvailable } from '../../pwsh'
@@ -54,7 +49,6 @@ export type PtyShellLaunchPlan = {
   spawnCwd: string
   validationCwd: string
   startupCommandDeliveredInShellArgs: boolean
-  startupCommandDeliveredByWrapper: boolean
   windowsFallbackAttempts: WindowsShellSpawnAttempt[]
   startupAgentRecognition: RecognizedAgentProcess | null
 }
@@ -67,8 +61,6 @@ export function createPtyShellLaunchPlan(
   let shellPath = resolvedWslContext ? 'wsl.exe' : opts.shellOverride || resolvePtyShellPath(env)
   let shellArgs: string[]
   let startupCommandDeliveredInShellArgs = false
-  let startupCommandDeliveredByWrapper = false
-  delete env[POSIX_SHELL_STARTUP_COMMAND_ENV]
   let windowsFallbackAttempts: WindowsShellSpawnAttempt[] = []
   const startupAgentRecognition = recognizeAgentProcessFromCommandLine(opts.command)
   const requestedCwd = opts.cwd || resolveSafePtyDefaultCwd()
@@ -218,16 +210,10 @@ export function createPtyShellLaunchPlan(
       {
         hasStartupCommand: Boolean(opts.command),
         inheritedXdgDataDirs: env.XDG_DATA_DIRS,
-        ...(opts.command && supportsPosixShellStartupCommand(shellPath)
-          ? { startupCommand: opts.command }
-          : {}),
         shellArgs: userShellArgs
       }
     )
     Object.assign(env, shellLaunch.env)
-    assertPosixShellStartupCommandPrepared(opts.command, shellPath, shellLaunch.env)
-    startupCommandDeliveredByWrapper =
-      shellLaunch.env[POSIX_SHELL_STARTUP_COMMAND_ENV] !== undefined
     shellArgs = userShellArgs ?? shellLaunch.args ?? ['-l']
   }
 
@@ -247,7 +233,6 @@ export function createPtyShellLaunchPlan(
     spawnCwd,
     validationCwd,
     startupCommandDeliveredInShellArgs,
-    startupCommandDeliveredByWrapper,
     windowsFallbackAttempts,
     startupAgentRecognition
   }

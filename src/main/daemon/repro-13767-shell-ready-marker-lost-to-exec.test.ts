@@ -176,7 +176,8 @@ async function startFixture(
       cols: 80,
       rows: 24,
       subprocess,
-      shellReadySupported: true
+      shellReadySupported: true,
+      shellReadyTimeoutMs: 2_000
     })
     let output = ''
     let onOutput = (): void => {}
@@ -187,9 +188,7 @@ async function startFixture(
       },
       onExit: () => {}
     })
-    if (!subprocess.startupCommandDeliveredByWrapper) {
-      session.writeStartupCommand(fixture.command)
-    }
+    session.writeStartupCommand(fixture.command)
     const runningSubprocess = subprocess
     const runningSession = session
     const activeConsoleWarnSpy = consoleWarnSpy
@@ -259,8 +258,11 @@ fi
 `
   )
   try {
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    expect(running.session.shellState).toBe('pending')
+    expect(running.output()).not.toContain(COMMAND_OUTPUT)
     await waitForOutput(running.subscribe, () => running.output().includes(COMMAND_OUTPUT))
-    expect(running.session.shellState).toBe('ready')
+    expect(running.session.shellState).toBe('timed_out')
     expect(count(running.output(), COMMAND_OUTPUT)).toBe(1)
     expect(running.output()).toContain(fixture.instrumentationOutput)
     expect(running.output()).not.toContain('orca-shell-start')
@@ -277,7 +279,7 @@ async function runReadOracle(fixture: ShellFixture, child: boolean): Promise<voi
     expect(running.session.shellState).toBe('pending')
     expect(running.output()).not.toContain(COMMAND_OUTPUT)
 
-    running.session.write('x\r')
+    running.subprocess.write('x\r')
     await waitForOutput(running.subscribe, () => running.output().includes(COMMAND_OUTPUT))
     expect(count(running.output(), COMMAND_OUTPUT)).toBe(1)
     expect(running.output()).not.toContain('orca-shell-start')
@@ -305,7 +307,7 @@ describePosix('#13767 shell-ready marker loss across exec', () => {
     const runnable = fixture.shellPath.endsWith('zsh') ? hasZsh : hasBash
     const testCase = runnable ? it : it.skip
     testCase(
-      `releases at the real ${fixture.name} prompt after exec`,
+      `submits once at the timeout after ${fixture.name} exec`,
       () => runExecOracle(fixture),
       10_000
     )
@@ -355,7 +357,7 @@ zle -N zle-line-init
         expect(running.session.shellState).toBe('pending')
         expect(running.output()).not.toContain(COMMAND_OUTPUT)
 
-        running.session.write('x')
+        running.subprocess.write('x')
         try {
           await waitForOutput(running.subscribe, () => running.output().includes(COMMAND_OUTPUT))
         } catch (error) {
@@ -443,7 +445,7 @@ fi
 `
 
   alternateBashTest(
-    'releases at the prompt of a second Bash install the pane PATH resolves',
+    'submits at the timeout to a second Bash install',
     async () => {
       const running = await startFixture(
         bashFixture,
@@ -453,7 +455,7 @@ fi
       )
       try {
         await waitForOutput(running.subscribe, () => running.output().includes(COMMAND_OUTPUT))
-        expect(running.session.shellState).toBe('ready')
+        expect(running.session.shellState).toBe('timed_out')
         expect(count(running.output(), COMMAND_OUTPUT)).toBe(1)
         expect(running.output()).not.toContain('orca-shell-start')
       } finally {

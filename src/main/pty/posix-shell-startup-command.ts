@@ -7,24 +7,7 @@ export function supportsPosixShellStartupCommand(shellPath: string): boolean {
   return shellName === 'bash' || shellName === 'zsh' || shellName === 'fish'
 }
 
-export function assertPosixShellStartupCommandPrepared(
-  command: string | undefined,
-  shellPath: string,
-  env: Record<string, string>
-): void {
-  // A failed wrapper write cannot turn shell-owned execution into guessed terminal input.
-  if (
-    command &&
-    supportsPosixShellStartupCommand(shellPath) &&
-    env[POSIX_SHELL_STARTUP_COMMAND_ENV] !== command
-  ) {
-    throw new Error(
-      'Orca could not prepare the shell startup files. Try opening the terminal again.'
-    )
-  }
-}
-
-export function getBashStartupCommandPromptBlock(readyMarkerEscaped?: string): string {
+export function getBashStartupCommandPromptBlock(): string {
   return `if [[ \${${POSIX_SHELL_STARTUP_COMMAND_ENV}+present} == present ]]; then
   __orca_remove_startup_command_prompt_hook() {
     local __orca_item
@@ -46,14 +29,6 @@ export function getBashStartupCommandPromptBlock(readyMarkerEscaped?: string): s
     unset ${POSIX_SHELL_STARTUP_COMMAND_ENV}
     __orca_remove_startup_command_prompt_hook
     unset -f __orca_remove_startup_command_prompt_hook
-${
-  readyMarkerEscaped
-    ? `    if [[ -n "\${__orca_ready_marker:-}" ]]; then
-      builtin printf "${readyMarkerEscaped}"
-      __orca_ready_marker=""
-    fi\n`
-    : ''
-}\
     builtin history -s "$__orca_command" 2>/dev/null || true
     builtin printf '%s\n' "$__orca_command"
     eval "$__orca_command"

@@ -86,7 +86,6 @@ export class Session {
       write: (data) => this.subprocess.write(data),
       onEmission: (emission) => this.recoveryBarrier.accept(emission)
     })
-    this.shellReady.startPromptReadinessProbe()
     this.subprocess.onData((data) => {
       if (!this._disposed) {
         this.shellReady.ingestSubprocessData(data)
@@ -365,7 +364,6 @@ export class Session {
     }
 
     this.shellReady.releaseDeviceAttributes()
-    this.shellReady.disposePromptReadinessProbe()
     this.shellReady.releaseHeldBytes()
     this.startupIngress.drainAndClose()
     // Why after drainAndClose: drained ingress bytes re-enter the barrier and can

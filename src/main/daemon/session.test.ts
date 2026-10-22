@@ -638,7 +638,7 @@ describe('Session', () => {
       expect(subprocess.written).toEqual(['waiting input'])
     })
 
-    it('honors a shorter shell-ready timeout for Codex startup sessions', () => {
+    it('honors an injected shell-ready timeout', () => {
       createSession({ shellReadySupported: true, shellReadyTimeoutMs: 300 })
       session.writeStartupCommand('codex\n')
 

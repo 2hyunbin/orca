@@ -23,7 +23,6 @@ import {
 } from './daemon-shell-ready-wrapper-fileset'
 import { inheritedZdotdirEnv, resolveInheritedZdotdir } from '../zsh-wrapper-dir-ownership'
 import { SHELL_READY_MARKER } from './daemon-shell-ready-marker'
-import { POSIX_SHELL_STARTUP_COMMAND_ENV } from '../pty/posix-shell-startup-command'
 
 const ORCA_USER_DATA_PATH_ENV = 'ORCA_USER_DATA_PATH'
 
@@ -144,19 +143,11 @@ export function getShellLaunchConfig(
   features: readonly ShellStartupFeature[],
   options?: {
     hasStartupCommand?: boolean
-    startupCommand?: string
     inheritedXdgDataDirs: string | undefined
     shellArgs?: readonly string[]
   }
 ): ShellLaunchConfig {
   const shellName = pathWin32.basename(basename(shellPath)).toLowerCase()
-  const startupEnv: Record<string, string> =
-    options?.startupCommand !== undefined
-      ? { [POSIX_SHELL_STARTUP_COMMAND_ENV]: options.startupCommand }
-      : {}
-  if (options?.startupCommand !== undefined && !features.includes('startup')) {
-    features = [...features, 'startup']
-  }
 
   if (shellName === 'zsh') {
     if (features.length === 0) {
@@ -172,8 +163,7 @@ export function getShellLaunchConfig(
       env: {
         ...inheritedZdotdirEnv(resolveInheritedZdotdir(process.env)),
         ZDOTDIR: join(getShellReadyWrapperRoot(), 'zsh'),
-        [SHELL_STARTUP_FEATURE_ENV]: encodeShellStartupFeatures(features),
-        ...startupEnv
+        [SHELL_STARTUP_FEATURE_ENV]: encodeShellStartupFeatures(features)
       },
       supportsReadyMarker: features.includes('ready')
     }
@@ -186,8 +176,7 @@ export function getShellLaunchConfig(
     return {
       args: ['--rcfile', join(getShellReadyWrapperRoot(), 'bash', 'rcfile')],
       env: {
-        [SHELL_STARTUP_FEATURE_ENV]: encodeShellStartupFeatures(features),
-        ...startupEnv
+        [SHELL_STARTUP_FEATURE_ENV]: encodeShellStartupFeatures(features)
       },
       supportsReadyMarker: features.includes('ready')
     }
@@ -214,9 +203,9 @@ export function getShellLaunchConfig(
       args: [
         '-l',
         '-C',
-        `${getFishShellReadyInitCommand(SHELL_READY_MARKER, features.includes('ready'), options?.startupCommand !== undefined)}\n${getFishCodexShellLaunchPreflight() + getFishClaudeShellFunction()}`
+        `${getFishShellReadyInitCommand(SHELL_READY_MARKER, features.includes('ready'))}\n${getFishCodexShellLaunchPreflight() + getFishClaudeShellFunction()}`
       ],
-      env: startupEnv,
+      env: {},
       supportsReadyMarker: features.includes('ready')
     }
   }

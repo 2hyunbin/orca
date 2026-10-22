@@ -1,4 +1,3 @@
-import type { StartupCommandStaging } from '../../shared/startup-command-staging'
 import { win32 as pathWin32 } from 'node:path'
 import { recognizeAgentProcessFromCommandLine } from '../../shared/agent-process-recognition'
 import { WINDOWS_GIT_BASH_SHELL } from '../../shared/windows-terminal-shell'
@@ -37,7 +36,6 @@ type LocalPtyLaunchSeed = {
 
 export type LocalPtyLaunchPlan = {
   startupAgentRecognition: ReturnType<typeof recognizeAgentProcessFromCommandLine>
-  startupCommandStaging?: Map<string, StartupCommandStaging>
   defaultCwd: string
   cwd: string
   wslInfo: ReturnType<typeof parseWslPath>

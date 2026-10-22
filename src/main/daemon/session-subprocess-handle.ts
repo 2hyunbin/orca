@@ -18,8 +18,6 @@ export type SubprocessHandle = {
   confirmShellForeground?(): Promise<boolean>
   /** True when shell launch args already delivered the startup command, so the host skips its stdin fallback write. */
   startupCommandDeliveredInShellArgs?: boolean
-  /** The shell owns the one-shot command; no stdin fallback may submit another copy. */
-  startupCommandDeliveredByWrapper?: boolean
   /** Shell the subprocess actually spawned, after fallbacks. The host reconciles the caller's shell-ready
    *  assumption against it so a fallback shell without a ready marker never gates startup commands. */
   shellPath?: string

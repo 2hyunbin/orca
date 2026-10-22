@@ -226,9 +226,7 @@ async function spawnAndPublishSession(
   const token = session.attachClient(opts.streamClient)
 
   const startupCommandWritten =
-    Boolean(opts.command) &&
-    !subprocess.startupCommandDeliveredInShellArgs &&
-    !subprocess.startupCommandDeliveredByWrapper
+    Boolean(opts.command) && !subprocess.startupCommandDeliveredInShellArgs
   // Why: without this, a missing command and a lost one log identically.
   // Length, never the text -- launches can carry credentials.
   try {
@@ -238,8 +236,7 @@ async function spawnAndPublishSession(
       hasCommand: Boolean(opts.command),
       commandLength: opts.command?.length ?? 0,
       viaShellArgs: subprocess.startupCommandDeliveredInShellArgs === true,
-      viaShellWrapper: subprocess.startupCommandDeliveredByWrapper === true,
-      queuedByShellReadyBarrier: startupCommandWritten && shellReadySupported
+      queuedByShellReadyBarrier: shellReadySupported
     })
   } catch {
     // Diagnostics must never turn a live PTY into a failed create.

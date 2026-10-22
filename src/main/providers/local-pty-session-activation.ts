@@ -50,7 +50,6 @@ export function activateLocalPtySession(args: {
   env: Record<string, string>
   proc: pty.IPty
   reportsChildExitStatus: boolean
-  startupCommandStaging?: StartupCommandStaging
   spawnedWslDistro: string | null | undefined
 }): PtySpawnResult {
   const { id, incarnationId, spawn, getOptions, plan, env, proc, spawnedWslDistro } = args
@@ -122,11 +121,6 @@ export function activateLocalPtySession(args: {
     proc,
     startupIngress
   })
-  if (args.startupCommandStaging) {
-    readiness.setStartupCommandCleanup(() =>
-      discardStagedStartupCommand(args.startupCommandStaging)
-    )
-  }
   const disposables: { dispose: () => void }[] = []
   const onDataDisposable = proc.onData((rawData) => {
     readiness.acceptData(rawData)
@@ -137,7 +131,7 @@ export function activateLocalPtySession(args: {
   ptyDisposables.set(id, disposables)
 
   let exitedBeforeSpawnReply = false
-  let staging = args.startupCommandStaging
+  let staging: StartupCommandStaging | undefined
   const onExitDisposable = proc.onExit(({ exitCode, signal }) => {
     exitedBeforeSpawnReply = true
     discardStagedStartupCommand(staging)
@@ -177,7 +171,7 @@ export function activateLocalPtySession(args: {
 
   const startupCommandDeliveredByWrapper =
     spawn.command !== undefined &&
-    plan.shellReadyLaunch?.env[POSIX_SHELL_STARTUP_COMMAND_ENV] !== undefined
+    plan.shellReadyLaunch?.env[POSIX_SHELL_STARTUP_COMMAND_ENV] === spawn.command
   if (
     !exitedBeforeSpawnReply &&
     spawn.command &&

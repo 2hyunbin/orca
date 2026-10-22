@@ -1,7 +1,3 @@
-import {
-  discardStagedStartupCommand,
-  type StartupCommandStaging
-} from '../../../shared/startup-command-staging'
 import type * as pty from 'node-pty'
 import type { RecognizedAgentProcess } from '../../../shared/agent-process-recognition'
 import { readPtySlavePath } from '../../../shared/pty-slave-line-discipline-echo'
@@ -27,14 +23,11 @@ export function createDaemonPtySubprocessHandle(args: {
   spawnCwd: string
   env: Record<string, string>
   startupCommandDeliveredInShellArgs: boolean
-  startupCommandDeliveredByWrapper: boolean
-  startupCommandStaging?: StartupCommandStaging
   reportsChildExitStatus: boolean
   requestedCwd?: string
   sessionId: string
   startupAgentRecognition: RecognizedAgentProcess | null
 }): SubprocessHandle {
-  const startupCommandStaging = args.startupCommandStaging
   const reportsChildExitStatus = args.reportsChildExitStatus
   const shellPath = args.shellPath
   const proc = args.process
@@ -62,7 +55,6 @@ export function createDaemonPtySubprocessHandle(args: {
   proc.onExit(({ exitCode, signal }) => {
     // Exit listeners may re-enter cleanup; retire signal authority before notifying them.
     dead = true
-    discardStagedStartupCommand(startupCommandStaging)
     foreground.markDead()
     // Why: neutralize kill synchronously so a later async socket-close SIGHUP cannot hit a recycled pid.
     if (process.platform !== 'win32') {
@@ -92,7 +84,6 @@ export function createDaemonPtySubprocessHandle(args: {
     ...(args.startupCommandDeliveredInShellArgs
       ? { startupCommandDeliveredInShellArgs: true }
       : {}),
-    ...(args.startupCommandDeliveredByWrapper ? { startupCommandDeliveredByWrapper: true } : {}),
     getForegroundProcess: foreground.getForegroundProcess,
     confirmForegroundProcess: foreground.confirmForegroundProcess,
     confirmShellForeground: foreground.confirmShellForeground,
@@ -217,7 +208,6 @@ export function createDaemonPtySubprocessHandle(args: {
         return
       }
       disposed = true
-      discardStagedStartupCommand(startupCommandStaging)
       dead = true
       events.clear()
       // POSIX destroy() can asynchronously signal a recycled pid; Windows needs kill() to close ConPTY.

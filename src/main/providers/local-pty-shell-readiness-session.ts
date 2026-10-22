@@ -1,5 +1,4 @@
 import type * as pty from 'node-pty'
-import { POSIX_SHELL_STARTUP_COMMAND_ENV } from '../pty/posix-shell-startup-command'
 import type { PtyStartupIngress } from '../../shared/pty-startup-ingress'
 import { readPtySlavePath } from '../../shared/pty-slave-line-discipline-echo'
 import {
@@ -35,8 +34,6 @@ export function createLocalPtyShellReadinessSession(args: {
   startupIngress: PtyStartupIngress
 }): LocalPtyShellReadinessSession {
   const { id, spawn, plan, env, proc, startupIngress } = args
-  const wrapperOwnsCommand =
-    plan.shellReadyLaunch?.env[POSIX_SHELL_STARTUP_COMMAND_ENV] !== undefined
   let resolveShellReady: ((signal: ShellReadySignal) => void) | null = null
   let shellReadyTimeout: ReturnType<typeof setTimeout> | null = null
   let shellStartupPid: number | null = null
@@ -74,7 +71,7 @@ export function createLocalPtyShellReadinessSession(args: {
     }
     startupIngress.accept(heldBytes)
   }
-  if (shellStartupOutputScanState && !wrapperOwnsCommand) {
+  if (shellStartupOutputScanState) {
     shellPromptReadinessProbe = createShellPromptReadinessProbe({
       slavePath: readPtySlavePath(proc),
       shellPath: plan.shellPath,
@@ -93,9 +90,7 @@ export function createLocalPtyShellReadinessSession(args: {
   if (spawn.command) {
     if (plan.shellReadyLaunch?.supportsReadyMarker) {
       shellReadyTimeout = setTimeout(() => {
-        if (!wrapperOwnsCommand) {
-          releaseHeldShellReadyBytes()
-        }
+        releaseHeldShellReadyBytes()
         finishShellReady({ postMarkerBytesObserved: false })
       }, STARTUP_COMMAND_READY_MAX_WAIT_MS)
     } else {
@@ -122,14 +117,13 @@ export function createLocalPtyShellReadinessSession(args: {
     shellReadyPromise,
     acceptData: (rawData) => {
       let data = rawData
-      if (shellStartupOutputScanState) {
+      if (shellStartupOutputScanState && resolveShellReady) {
         const scanned = scanShellStartupOutput(shellStartupOutputScanState, data)
         data = scanned.output
         if (scanned.shellPid) {
           shellStartupPid = scanned.shellPid
         }
         if (scanned.ready) {
-          shellStartupOutputScanState = null
           finishShellReady({ postMarkerBytesObserved: scanned.postMarkerBytesObserved })
         }
       }

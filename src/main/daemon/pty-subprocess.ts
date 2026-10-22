@@ -13,11 +13,6 @@ import {
 import { createDaemonPtySubprocessHandle } from './pty-subprocess/subprocess-handle'
 import type { StartupCommandDelivery } from '../../shared/codex-startup-delivery'
 import type { TuiAgent } from '../../shared/tui-agent'
-import {
-  discardStagedStartupCommand,
-  stageStartupCommand
-} from '../../shared/startup-command-staging'
-import { POSIX_SHELL_STARTUP_COMMAND_ENV } from '../pty/posix-shell-startup-command'
 
 const PTY_SPAWN_HEALTH_RETRY_ATTEMPTS = 2
 
@@ -77,64 +72,45 @@ export async function createPtySubprocess(opts: PtySubprocessOptions): Promise<S
   const env = createDaemonPtyEnvironment(opts)
   const launch = createPtyShellLaunchPlan(opts, env)
 
-  // Shell-owned delivery still needs file staging to stay below exec's environment limits.
-  const staging =
-    launch.startupCommandDeliveredByWrapper && opts.command
-      ? stageStartupCommand({
-          command: opts.command,
-          shellPath: launch.shellPath,
-          orcaBuiltLine: opts.launchAgent !== undefined
-        })
-      : undefined
-  if (staging) {
-    env[POSIX_SHELL_STARTUP_COMMAND_ENV] = staging.command
+  await preflightPtySpawn({
+    validationCwd: launch.validationCwd,
+    cwdWasExplicit: opts.cwd !== undefined,
+    sessionId: opts.sessionId,
+    ...(opts.cancelSignal ? { signal: opts.cancelSignal } : {})
+  })
+  if (opts.isCanceled?.()) {
+    throw new TerminalAttachCanceledError(opts.sessionId)
   }
+
+  let spawned: SpawnedDaemonPty
   try {
-    await preflightPtySpawn({
-      validationCwd: launch.validationCwd,
-      cwdWasExplicit: opts.cwd !== undefined,
-      sessionId: opts.sessionId,
-      ...(opts.cancelSignal ? { signal: opts.cancelSignal } : {})
-    })
-    if (opts.isCanceled?.()) {
-      throw new TerminalAttachCanceledError(opts.sessionId)
-    }
-
-    let spawned: SpawnedDaemonPty
-    try {
-      spawned = await spawnNativeDaemonPty({
-        shellPath: launch.shellPath,
-        shellArgs: launch.shellArgs,
-        spawnCwd: launch.spawnCwd,
-        env,
-        cols: size.cols,
-        rows: size.rows,
-        windowsFallbackAttempts: launch.windowsFallbackAttempts,
-        onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy
-      })
-    } catch (error) {
-      if (process.platform === 'win32') {
-        throw formatPtySpawnError(error, launch.shellPath, launch.spawnCwd)
-      }
-      throw error
-    }
-
-    return createDaemonPtySubprocessHandle({
-      process: spawned.process,
-      shellPath: spawned.shellPath,
-      spawnCwd: spawned.spawnCwd,
+    spawned = await spawnNativeDaemonPty({
+      shellPath: launch.shellPath,
+      shellArgs: launch.shellArgs,
+      spawnCwd: launch.spawnCwd,
       env,
-      startupCommandDeliveredInShellArgs:
-        spawned.startupCommandDeliveredInShellArgs ?? launch.startupCommandDeliveredInShellArgs,
-      startupCommandDeliveredByWrapper: launch.startupCommandDeliveredByWrapper,
-      startupCommandStaging: staging,
-      reportsChildExitStatus: spawned.reportsChildExitStatus,
-      requestedCwd: opts.cwd,
-      sessionId: opts.sessionId,
-      startupAgentRecognition: launch.startupAgentRecognition
+      cols: size.cols,
+      rows: size.rows,
+      windowsFallbackAttempts: launch.windowsFallbackAttempts,
+      onMacosTccSpawnStrategy: opts.onMacosTccSpawnStrategy
     })
   } catch (error) {
-    discardStagedStartupCommand(staging)
+    if (process.platform === 'win32') {
+      throw formatPtySpawnError(error, launch.shellPath, launch.spawnCwd)
+    }
     throw error
   }
+
+  return createDaemonPtySubprocessHandle({
+    process: spawned.process,
+    shellPath: spawned.shellPath,
+    spawnCwd: spawned.spawnCwd,
+    env,
+    startupCommandDeliveredInShellArgs:
+      spawned.startupCommandDeliveredInShellArgs ?? launch.startupCommandDeliveredInShellArgs,
+    reportsChildExitStatus: spawned.reportsChildExitStatus,
+    requestedCwd: opts.cwd,
+    sessionId: opts.sessionId,
+    startupAgentRecognition: launch.startupAgentRecognition
+  })
 }

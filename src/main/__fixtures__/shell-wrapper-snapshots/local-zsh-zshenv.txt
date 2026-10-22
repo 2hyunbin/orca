@@ -286,7 +286,7 @@ __orca_deferred_init() {
       if [[ -n "${__orca_prev_line_init_fn:-}" ]]; then
         "${__orca_prev_line_init_fn}" "$@"
       fi
-      if [[ "${CONTEXT-}" == start ]] && (( ${+ORCA_POSIX_SHELL_STARTUP_COMMAND} )); then
+      if (( ${+ORCA_POSIX_SHELL_STARTUP_COMMAND} )); then
         BUFFER="$ORCA_POSIX_SHELL_STARTUP_COMMAND"
         CURSOR=${#BUFFER}
         builtin unset ORCA_POSIX_SHELL_STARTUP_COMMAND
@@ -301,16 +301,6 @@ __orca_deferred_init() {
   builtin unset _orca_shell_features _orca_histfile
   (( $+__orca_deferred_sched_armed )) || builtin unfunction __orca_deferred_sched_init
   builtin unfunction __orca_deferred_init __orca_has_feature __orca_arm_deferred_line_init
-  if [[ ! -o zle ]] && (( ${+ORCA_POSIX_SHELL_STARTUP_COMMAND} )); then
-    local __orca_command="$ORCA_POSIX_SHELL_STARTUP_COMMAND"
-    builtin unset ORCA_POSIX_SHELL_STARTUP_COMMAND
-    if [[ "${__orca_emit_ready_marker-1}" == 1 ]]; then
-      builtin printf "\033]777;orca-shell-ready\007"
-      __orca_emit_ready_marker=""
-    fi
-    builtin print -r -- "$__orca_command"
-    eval "$__orca_command"
-  fi
 }
 {
   builtin typeset _orca_user_zshenv="${ZDOTDIR-$HOME}/.zshenv"

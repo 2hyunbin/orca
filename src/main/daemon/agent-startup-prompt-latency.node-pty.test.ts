@@ -36,7 +36,7 @@ async function launch(
       rows: 30,
       cwd: root,
       shellOverride: shell,
-      command: legacy ? undefined : COMMAND,
+      command: COMMAND,
       env: { HOME: root, SHELL: shell, TERM: 'xterm-256color' }
     })
     session = new Session({
@@ -65,7 +65,7 @@ async function launch(
       })
       if (legacy) {
         legacyTimer = setTimeout(() => active.write(`${COMMAND}\n`), 300)
-      } else if (!subprocess.startupCommandDeliveredByWrapper) {
+      } else {
         active.writeStartupCommand(`${COMMAND}\n`)
       }
     })
@@ -92,7 +92,7 @@ describe('agent startup at the rendered shell prompt', () => {
       const result = await launch(shell, true)
       expect(result.output).not.toContain('orca-shell-ready')
       expect(result.output.split(COMMAND)).toHaveLength(2)
-      expect(result.output).toContain('AGENT_STARTED')
+      expect(result.output.indexOf('prompt> ')).toBeLessThan(result.output.indexOf(COMMAND))
     }
   )
 

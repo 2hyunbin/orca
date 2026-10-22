@@ -30,7 +30,6 @@ import { MANAGED_DATA_ACCOUNT_POSIX_RESTORE } from '../shared/managed-data-accou
  * hook restores zsh option semantics for the body at call time.
  */
 import { getPosixOmpShellWrapper } from './pty/omp-shell-wrapper'
-import { POSIX_SHELL_STARTUP_COMMAND_ENV } from './pty/posix-shell-startup-command'
 import { WSL_MANAGED_CLI_PATH_RESTORE } from './wsl-managed-cli-path-restore'
 import { getPosixCodexShellLaunchPreflight } from '../shared/codex-shell-function'
 import { getPosixClaudeShellFunction } from '../shared/claude-shell-function'
@@ -65,7 +64,7 @@ export type ZshStartupHookSpec = {
   readyMarkerEscaped: string
   /** OSC 133 command-lifecycle hooks (behind the `markers` feature). */
   osc133CommandMarkers: boolean
-  /** One-shot command delivery from the shell's first command prompt. */
+  /** Local-only command delivery from the first zle line editor. */
   startupCommandDelivery: boolean
   /** Comment heading the overlay restores inside the hook. */
   overlayRestoreComment: string
@@ -209,20 +208,6 @@ ${
 }  builtin unset _orca_shell_features _orca_histfile
 ${ZSH_DEFERRED_LINE_INIT_CLEANUP_BLOCK}
   builtin unfunction __orca_deferred_init __orca_has_feature __orca_arm_deferred_line_init
-${
-  spec.startupCommandDelivery
-    ? `  if [[ ! -o zle ]] && (( \${+${POSIX_SHELL_STARTUP_COMMAND_ENV}} )); then
-    local __orca_command="\$${POSIX_SHELL_STARTUP_COMMAND_ENV}"
-    builtin unset ${POSIX_SHELL_STARTUP_COMMAND_ENV}
-    if [[ "\${__orca_emit_ready_marker-1}" == 1 ]]; then
-      builtin printf "${spec.readyMarkerEscaped}"
-      __orca_emit_ready_marker=""
-    fi
-    builtin print -r -- "$__orca_command"
-    eval "$__orca_command"
-  fi`
-    : ''
-}
 }`
 }
 
