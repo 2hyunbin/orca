@@ -62,7 +62,8 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     const session: ResumedAgentSession = { agent: request.agent, providerSession }
     const claim = this.agentSessionResumeClaims.claim(
       session,
-      makePaneKey(identity.tabId, identity.leafId)
+      makePaneKey(identity.tabId, identity.leafId),
+      seed
     )
     if (!claim) {
       return { ok: false, reason: 'held_elsewhere' }
