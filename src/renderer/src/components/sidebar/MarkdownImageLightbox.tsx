@@ -41,7 +41,12 @@ export function ExpandableMarkdownImage({
 }: ExpandableMarkdownImageProps): React.JSX.Element {
   const [internalOpen, setInternalOpen] = React.useState(false)
   const open = controlledOpen ?? internalOpen
-  const setOpen = onOpenChange ?? setInternalOpen
+  const setOpen = (nextOpen: boolean): void => {
+    if (controlledOpen === undefined) {
+      setInternalOpen(nextOpen)
+    }
+    onOpenChange?.(nextOpen)
+  }
   const label =
     alt?.trim() || translate('auto.components.sidebar.MarkdownImageLightbox.image', 'Image')
 

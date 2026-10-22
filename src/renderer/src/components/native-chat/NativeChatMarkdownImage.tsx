@@ -30,6 +30,7 @@ import { NativeChatMarkdownImageOwnerContext } from './native-chat-markdown-imag
 import { nativeChatLinkActions } from './native-chat-link-target-actions'
 import { copyableNativeChatImageSrc, keepPreviewOpenForChatMenu } from './native-chat-image-copy'
 import { resolveNativeChatFileLink } from './native-chat-file-link'
+import { useNativeChatFileLinkClick } from './use-native-chat-file-link-click'
 
 export const NativeChatMarkdownImageLinkContext = createContext<string | undefined>(undefined)
 const IMAGE_ACCESS = chatImageAccess()
@@ -68,7 +69,7 @@ function NativeChatMarkdownImagePreview({
   const linkedHref = useContext(NativeChatMarkdownImageLinkContext)
   const [open, setOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failedSrc, setFailedSrc] = useState<string>()
   const handingOff = useRef(false)
   const runtimeContext = owner?.runtimeContext ?? null
   const fileLinkContext =
@@ -93,15 +94,15 @@ function NativeChatMarkdownImagePreview({
     runtimeContext,
     IMAGE_ACCESS
   )
-  const displaySrc = failed ? undefined : external || attachment ? src : loadedSrc
+  const imageSrc = external || attachment ? src : loadedSrc
+  const displaySrc = imageSrc === failedSrc ? undefined : imageSrc
+  const onFileLinkClick = useNativeChatFileLinkClick(fileLinkContext)
   const title =
     alt?.trim() ||
     (target ? basename(target.absolutePath) : '') ||
     translate('auto.components.sidebar.MarkdownImageLightbox.image', 'Image')
   const visible = owner?.isVisible ?? true
-  const [wasVisible, setWasVisible] = useState(visible)
-  if (wasVisible !== visible) {
-    setWasVisible(visible)
+  if (!visible && (open || menuOpen)) {
     setOpen(false)
     setMenuOpen(false)
   }
@@ -110,6 +111,9 @@ function NativeChatMarkdownImagePreview({
       ? nativeChatLinkActions(imageHref, fileLinkContext)
       : null
   const canOfferActions = Boolean(fileLinkContext && (target || /^https?:/i.test(src ?? '')))
+  const actionsLabel = target
+    ? translate('components.native-chat.imagePreview.fileActions', 'File actions')
+    : translate('components.native-chat.imagePreview.linkActions', 'Link actions')
   const runAction = (action: LinkAction): void => {
     handingOff.current = true
     flushSync(() => {
@@ -143,11 +147,15 @@ function NativeChatMarkdownImagePreview({
       }}
       triggerLabel={`${translate('components.native-chat.composer.viewAttachment', 'View image')}: ${title}`}
       className="max-h-96 max-w-full rounded-md object-contain outline outline-1 outline-border/70"
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(imageSrc)}
       triggerAttributes={copyAttributes}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-          onLinkClick?.(event, src)
+          if (route.kind === 'file') {
+            onFileLinkClick?.(event, imageHref)
+          } else {
+            onLinkClick?.(event, src)
+          }
           event.preventDefault()
         }
       }}
@@ -159,7 +167,11 @@ function NativeChatMarkdownImagePreview({
       }}
       dialogProps={{
         fallback,
-        restoreFocus: () => !handingOff.current,
+        onCloseAutoFocus: (event) => {
+          if (handingOff.current) {
+            event.preventDefault()
+          }
+        },
         onInteractOutside: keepPreviewOpenForChatMenu,
         ...copyAttributes,
         toolbarActions: canOfferActions ? (
@@ -167,31 +179,12 @@ function NativeChatMarkdownImagePreview({
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={
-                      target
-                        ? translate(
-                            'components.native-chat.imagePreview.fileActions',
-                            'File actions'
-                          )
-                        : translate(
-                            'components.native-chat.imagePreview.linkActions',
-                            'Link actions'
-                          )
-                    }
-                  >
+                  <Button type="button" variant="ghost" size="icon-sm" aria-label={actionsLabel}>
                     <FileText />
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {target
-                  ? translate('components.native-chat.imagePreview.fileActions', 'File actions')
-                  : translate('components.native-chat.imagePreview.linkActions', 'Link actions')}
-              </TooltipContent>
+              <TooltipContent side="bottom">{actionsLabel}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent
               align="end"

@@ -6,7 +6,10 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LinkActionPopover } from '@/components/link-actions/LinkActionPopover'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { resetLocalImageSrcStateForTests } from '@/components/editor/useLocalImageSrc'
+import {
+  invalidateLocalImageSrcCacheForTests,
+  resetLocalImageSrcStateForTests
+} from '@/components/editor/useLocalImageSrc'
 import { useAppStore } from '@/store'
 import { NativeChatMarkdown } from './NativeChatMarkdown'
 import { NativeChatMarkdownImageOwnerContext } from './native-chat-markdown-image-owner'
@@ -172,8 +175,11 @@ describe('native chat Markdown image preview', () => {
     expect(screen.getByRole('dialog', { name: 'Chart' })).toBe(dialog)
   })
 
-  it('keeps linked-image caption actions separate from preview and preserves the context-menu target', () => {
-    const { container } = render(<Transcript content="[caption ![Chart](chart.png)](details.md)" />)
+  it.each([
+    '[caption ![Chart](chart.png)](details.md)',
+    '[**caption ![Chart](chart.png)**](details.md)'
+  ])('keeps linked-image caption actions separate from preview in %s', (content) => {
+    const { container } = render(<Transcript content={content} />)
     expect(container.querySelector('a button')).toBeNull()
     const trigger = screen.getByRole('button', { name: 'View image: Chart' })
     expect(trigger.closest('[data-native-chat-link-href]')).toHaveAttribute(
@@ -236,6 +242,30 @@ describe('native chat Markdown image preview', () => {
     )
   })
 
+  it('uses the same literal image path and owner for modified clicks and preview reads', async () => {
+    const owner: ImageOwner = {
+      ...localOwner,
+      runtimeContext: {
+        ...localOwner.runtimeContext,
+        target: { kind: 'environment', environmentId: 'remote-a' },
+        worktreePath: '/remote/chat'
+      }
+    }
+    render(<Transcript owner={owner} content="![Chart](screenshots/chart.png:123)" />)
+    await screen.findByRole('img', { name: 'Chart' })
+    fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }), {
+      ctrlKey: true,
+      metaKey: true
+    })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mocks.openDetectedFilePath).toHaveBeenCalledExactlyOnceWith(
+      '/remote/chat/screenshots/chart.png:123',
+      null,
+      null,
+      expect.objectContaining({ worktreePath: '/remote/chat', runtimeEnvironmentId: 'remote-a' })
+    )
+  })
+
   it('retains a closable unavailable preview after image decoding fails', async () => {
     render(<Transcript content="![Chart](chart.png)" />)
     await screen.findByRole('img', { name: 'Chart' })
@@ -248,9 +278,27 @@ describe('native chat Markdown image preview', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('recovers from a failed thumbnail when refreshed image bytes become available', async () => {
+    render(<Transcript content="![Chart](chart.png)" />)
+    fireEvent.error(await screen.findByRole('img', { name: 'Chart' }))
+    expect(screen.queryByRole('img', { name: 'Chart' })).toBeNull()
+    act(() => invalidateLocalImageSrcCacheForTests())
+    expect(await screen.findByRole('img', { name: 'Chart' })).toHaveAttribute('src', 'blob:image-2')
+    fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
+    expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
+      'src',
+      'blob:image-2'
+    )
+  })
+
   it('dismisses the nested file menu before the dialog and runs an action after preview closes', async () => {
     const user = userEvent.setup()
-    render(<Transcript />)
+    render(
+      <>
+        <Transcript />
+        <input aria-label="Opened editor" />
+      </>
+    )
     await user.click(screen.getByRole('button', { name: 'View image: Chart' }))
     const trigger = screen.getByRole('button', { name: 'File actions' })
     await user.click(trigger)
@@ -262,6 +310,7 @@ describe('native chat Markdown image preview', () => {
     await user.click(trigger)
     mocks.openDetectedFilePath.mockImplementationOnce(() => {
       expect(screen.queryByRole('dialog')).toBeNull()
+      screen.getByRole('textbox', { name: 'Opened editor' }).focus()
     })
     await user.click(screen.getByRole('menuitem', { name: 'Open file' }))
     expect(mocks.openDetectedFilePath).toHaveBeenCalledExactlyOnceWith(
@@ -271,6 +320,9 @@ describe('native chat Markdown image preview', () => {
       expect.objectContaining({ worktreeId: 'wt-1', sourceTabId: 'tab-1' })
     )
     expect(screen.queryByRole('menu')).toBeNull()
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Opened editor' })).toHaveFocus()
+    )
   })
 
   it('keeps Close usable while the file menu is open', async () => {
@@ -307,6 +359,8 @@ describe('native chat Markdown image preview', () => {
       { kind: 'chat-image' }
     )
     rerender(<Transcript owner={{ ...owner, runtimeContext: null }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }), { ctrlKey: true })
+    expect(mocks.openDetectedFilePath).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
     expect(screen.queryByRole('button', { name: 'File actions' })).toBeNull()
     await act(async () =>
