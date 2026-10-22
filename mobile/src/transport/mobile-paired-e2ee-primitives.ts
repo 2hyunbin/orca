@@ -6,7 +6,7 @@ import {
   decodeCanonicalBase64Bytes,
   encodeBase64Bytes
 } from './base64-byte-codec'
-import { bundleWindowNativeCodec } from './bundle-window-native-codec'
+import { pairedE2EENativeCodec } from './paired-e2ee-native-codec'
 import * as e2ee from './e2ee'
 
 // Why arrows: resolved per call, so transport tests that mock ./e2ee partially still load.
@@ -24,14 +24,14 @@ export const MOBILE_PAIRED_E2EE_PRIMITIVES: PairedE2EEPrimitives = {
   sealLegacyBinary: (plaintext, sharedKey) => e2ee.encryptBytes(plaintext, sharedKey),
   openLegacyBinary: (frame, sharedKey) => e2ee.decryptBytes(frame, sharedKey),
   openSecretbox: (box, nonce, key) => {
-    const native = bundleWindowNativeCodec()
+    const native = pairedE2EENativeCodec()
     return native ? native.openSecretbox(box, nonce, key) : nacl.secretbox.open(box, nonce, key)
   },
   decodeCanonicalBase64: (value) => {
-    const native = bundleWindowNativeCodec()
+    const native = pairedE2EENativeCodec()
     return native ? native.decodeBase64(value) : decodeCanonicalBase64Bytes(value)
   },
   decodeUtf8: (bytes) =>
-    bundleWindowNativeCodec()?.decodeUtf8(bytes) ?? new TextDecoder().decode(bytes),
+    pairedE2EENativeCodec()?.decodeUtf8(bytes) ?? new TextDecoder().decode(bytes),
   deriveV2KeySchedule: derivePairedE2EEV2KeySchedule
 }

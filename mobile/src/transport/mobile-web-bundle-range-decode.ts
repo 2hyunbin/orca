@@ -1,5 +1,5 @@
 import { gunzipSync } from 'fflate'
-import { bundleWindowNativeCodec } from './bundle-window-native-codec'
+import { pairedE2EENativeCodec } from './paired-e2ee-native-codec'
 import { MobileWebBundleFetchError } from './mobile-web-bundle-fetch-refusal'
 
 /**
@@ -27,7 +27,7 @@ export function decodeMobileWebBundleRange(
     )
   }
   try {
-    const native = bundleWindowNativeCodec()
+    const native = pairedE2EENativeCodec()
     return native
       ? native.gunzip(wire, expectedLength + 1)
       : gunzipSync(wire, { out: new Uint8Array(expectedLength + 1) })

@@ -1,5 +1,5 @@
 import { decodeBase64Bytes } from './base64-byte-codec'
-import { bundleWindowNativeCodec } from './bundle-window-native-codec'
+import { pairedE2EENativeCodec } from './paired-e2ee-native-codec'
 import { mobileWebBundleChunkRead, mobileWebBundleRangeRead } from './mobile-web-bundle-operations'
 import { decodeMobileWebBundleRange } from './mobile-web-bundle-range-decode'
 import type { MobileWebBundleManifestReply } from './mobile-web-bundle-reply-schemas'
@@ -83,7 +83,7 @@ export function mobileWebBundleWindowReader(
 /** Every host encodes with `Buffer#toString('base64')`, so the strict native decoder refuses nothing a
  *  host sends; `atob` is the fallback the pairing and E2EE paths already run on Hermes. */
 function decodeBase64(value: string): Uint8Array {
-  const native = bundleWindowNativeCodec()
+  const native = pairedE2EENativeCodec()
   if (!native) {
     return decodeBase64Bytes(value)
   }

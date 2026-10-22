@@ -25,8 +25,8 @@ export type PairedE2EEPrimitives = {
   openLegacyText: (frame: string, sharedKey: Uint8Array) => string | null
   sealLegacyBinary: (plaintext: Uint8Array, sharedKey: Uint8Array) => Uint8Array<ArrayBuffer>
   openLegacyBinary: (frame: Uint8Array, sharedKey: Uint8Array) => Uint8Array | null
-  // Why optional: only the phone swaps these, for native code where Hermes JS is too slow for a
-  // page-bundle download. Absent, the v2 session uses tweetnacl, decode-and-re-encode and TextDecoder.
+  // Why optional: only the phone swaps these, for native code on every inbound v2 frame, since
+  // Hermes JS is ~100x slower than V8. Absent, the session uses tweetnacl, re-encode and TextDecoder.
   openSecretbox?: SecretboxOpen
   // Null for anything but canonical padded base64.
   decodeCanonicalBase64?: (value: string) => Uint8Array | null
