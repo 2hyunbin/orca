@@ -13,9 +13,10 @@ import {
   beginLayoutFramePositions,
   noteLayoutFramePosition
 } from './layout-frame-position'
-import { sendLayoutApply, type WindowLayoutCommand } from './layout-apply-send'
+import { recordLayoutApply, sendLayoutApply, type WindowLayoutCommand } from './layout-apply-send'
+import { recordTabOrderInLayoutOwner } from '@/store/slices/tabs/tab-order-layout-owner'
 import { mainLayoutFrameSender } from './main-loaded-layout-frames.test-fixture'
-import { SERVER_ROUTED_LAYOUT_COMMANDS } from './server-layout-apply'
+import { SERVER_ROUTED_LAYOUT_COMMANDS, serverLayoutApplyFor } from './server-layout-apply'
 import { redrawServerLayoutWorkspace } from './server-layout-apply-routes'
 import {
   CAPABLE,
@@ -96,6 +97,7 @@ hoisted.subscribe = streams.subscribe
 
 const TAB_1 = toWebTerminalSurfaceTabId('host-tab-1')
 const TAB_2 = toWebTerminalSurfaceTabId('host-tab-2')
+const THIRD_LEAF_ID = '33333333-3333-4333-8333-333333333333'
 // The server's tab-bar ids differ from its terminals' ids: the join must not derive one from the other.
 const TWO_TABS: PublishedWorkspaceLayout = (() => {
   const tabs = [
@@ -168,6 +170,7 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
             tabId: 'bar-2',
             toGroupId: HOST_GROUP,
             index: 0,
+            afterTabId: null,
             workspace: WT
           }
         }
@@ -185,6 +188,28 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
     expect(handlers.asToday).not.toHaveBeenCalled()
   })
 
+  it('names a move’s anchor by the server’s id', async () => {
+    const { store } = await drawnByServer()
+    send(store, {
+      type: 'moveTab',
+      tabId: TAB_1,
+      toGroupId: HOST_GROUP,
+      index: 1,
+      afterTabId: TAB_2
+    })
+    await settle()
+    expect(hoisted.sent[0]!.params).toMatchObject({
+      command: { tabId: 'bar-1', afterTabId: 'bar-2', index: 1 }
+    })
+  })
+
+  it('never sends raw an anchor the server does not hold when no drawn order places it', async () => {
+    await drawnByServer()
+    const move = { type: 'moveTab', tabId: TAB_1, toGroupId: HOST_GROUP, index: 1 } as const
+    expect(serverLayoutApplyFor(ENV, WT, { ...move, afterTabId: 'desktop-only' })?.command).toEqual(
+      { ...move, tabId: 'bar-1' }
+    )
+  })
   // A window's close tells main the window already stopped its terminals, which this desktop cannot
   // do for a server's; closes, starts, sleeps and terminal names keep the RPCs that main applies.
   it('keeps today’s path for closes, starts, sleeps and a terminal’s own name', async () => {
@@ -413,5 +438,96 @@ describe('a layout intent for a workspace a server’s frames draw', () => {
     uninstallAll()
     await settle()
     expect(handlers.apply).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('a move routed to a server among tabs this desktop holds alone', () => {
+  const TAB_3 = toWebTerminalSurfaceTabId('host-tab-3')
+  const THREE_TABS: PublishedWorkspaceLayout = (() => {
+    const tabs = [
+      { ...serverTerminalTab('host-tab-1', LEAF_ID, 'server-pty-1'), id: 'bar-1' },
+      { ...serverTerminalTab('host-tab-2', SECOND_LEAF_ID, 'server-pty-2'), id: 'bar-2' },
+      { ...serverTerminalTab('host-tab-3', THIRD_LEAF_ID, 'server-pty-3'), id: 'bar-3' }
+    ]
+    return {
+      ...serverLayout(tabs),
+      groups: [{ id: HOST_GROUP, tabIds: ['bar-1', 'bar-3', 'bar-2'] }]
+    }
+  })()
+
+  /** Draws `order` in the server's group, with rows for the ids the server's frames lack. */
+  function drawOrder(store: TestStore, order: string[]): void {
+    const rows = store.getState().unifiedTabsByWorktree[WT]!
+    const extra = order
+      .filter((id) => !rows.some((tab) => tab.id === id))
+      .map((id) => ({ ...rows[0]!, id, entityId: id }))
+    store.setState({
+      unifiedTabsByWorktree: { [WT]: [...rows, ...extra] },
+      groupsByWorktree: {
+        [WT]: store
+          .getState()
+          .groupsByWorktree[WT]!.map((group) =>
+            group.id === HOST_GROUP ? { ...group, tabOrder: order } : group
+          )
+      }
+    })
+  }
+
+  const sentCommand = (at: number) => hoisted.sent[at]!.params
+
+  it('anchors a reopened tab after desktop tabs on the server tab before them', async () => {
+    const { store } = await drawnByServer(THREE_TABS)
+    // [S1, D1, D2, T, S2]: the server's [S1, S2] takes T between them.
+    drawOrder(store, [TAB_1, 'd1', 'd2', TAB_3, TAB_2])
+    recordLayoutApply(store.getState(), WT, {
+      type: 'moveTab',
+      tabId: TAB_3,
+      toGroupId: HOST_GROUP,
+      index: 3,
+      afterTabId: 'd2'
+    })
+    // An index-only move (an agent launch's) is placed the same way.
+    recordLayoutApply(store.getState(), WT, {
+      type: 'moveTab',
+      tabId: TAB_3,
+      toGroupId: HOST_GROUP,
+      index: 3
+    })
+    await settle()
+    for (const at of [0, 1]) {
+      expect(sentCommand(at)).toMatchObject({
+        command: { tabId: 'bar-3', index: 1, afterTabId: 'bar-1' }
+      })
+    }
+  })
+
+  it('places a reorder past desktop tabs among the server’s tabs only', async () => {
+    const { store } = await drawnByServer()
+    const from = [TAB_1, 'd1', 'd2', TAB_2]
+    const to = ['d1', 'd2', TAB_1, TAB_2]
+    drawOrder(store, to)
+    recordTabOrderInLayoutOwner(store.getState(), HOST_GROUP, { worktreeId: WT, from, to })
+    await settle()
+    // The server's order [S1, S2] is unchanged: S1 stays first.
+    expect(hoisted.sent).toHaveLength(1)
+    expect(sentCommand(0)).toMatchObject({
+      command: { tabId: 'bar-1', index: 0, afterTabId: null }
+    })
+  })
+
+  it('anchors a drop after a desktop tab on the server tab before it', async () => {
+    const { store } = await drawnByServer(THREE_TABS)
+    drawOrder(store, [TAB_1, 'd1', TAB_3, TAB_2])
+    send(store, {
+      type: 'moveTab',
+      tabId: TAB_2,
+      toGroupId: HOST_GROUP,
+      index: 2,
+      afterTabId: 'd1'
+    })
+    await settle()
+    expect(sentCommand(0)).toMatchObject({
+      command: { tabId: 'bar-2', index: 1, afterTabId: 'bar-1' }
+    })
   })
 })
