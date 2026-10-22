@@ -1,4 +1,10 @@
 import { expect, vi } from 'vitest'
+import { Terminal } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { SearchAddon } from '@xterm/addon-search'
+import { SerializeAddon } from '@xterm/addon-serialize'
+import { PaneManager } from '@/lib/pane-manager/pane-manager'
+import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
 import { useAppStore } from '@/store'
 import {
   makeTerminalTab,
@@ -18,8 +24,6 @@ import { installSleepingRecordAccess } from '../terminal-pane/pty-connection/sle
 import type { ConnectPanePtySession } from '../terminal-pane/pty-connection/connect-pane-pty-session'
 import {
   createMockTransport,
-  createPane,
-  createManager,
   LEAF_1,
   LEAF_2
 } from '../terminal-pane/pty-connection-test-pane-fixtures'
@@ -103,16 +107,61 @@ export async function verifyExitedPaneHistoryReturn(
     agentEvidence: 'process-read',
     shellForeground: false
   })
-  // SAFETY: these installers exercise only the real process-exit cleanup, with inert terminal I/O.
-  const connection = {
+  if (!isTerminalLeafId(LEAF_1)) {
+    throw new Error('Expected a valid fixture leaf ID')
+  }
+  const terminal = new Terminal({ cols: 120, rows: 40 })
+  const manager = new PaneManager(document.createElement('div'), { linkOpenHint: () => '' })
+  const connection: ConnectPanePtySession = {
     cacheKey: paneKey,
-    pane: createPane(1),
-    manager: createManager(1),
-    deps: { tabId: 'shell', worktreeId: 'wt-1' },
-    transport: createMockTransport('pty-1'),
+    pane: {
+      id: 1,
+      leafId: LEAF_1,
+      stablePaneId: LEAF_1,
+      terminal,
+      container: document.createElement('div'),
+      linkTooltip: document.createElement('div'),
+      fitAddon: new FitAddon(),
+      searchAddon: new SearchAddon(),
+      serializeAddon: new SerializeAddon()
+    },
+    manager,
+    deps: {
+      tabId: 'shell',
+      worktreeId: 'wt-1',
+      mountFollowsTerminalPark: false,
+      paneTransportsRef: { current: new Map() },
+      paneMode2031Ref: { current: new Map() },
+      paneKittyKeyboardModesRef: { current: new Map() },
+      paneLastThemeModeRef: { current: new Map() },
+      replayingPanesRef: { current: new Map() },
+      isActiveRef: { current: true },
+      isVisibleRef: { current: true },
+      onPtyExitRef: { current: vi.fn() },
+      onAgentExitedRef: { current: vi.fn() },
+      clearTabPtyId: vi.fn(),
+      consumeSuppressedPtyExit: vi.fn(() => false),
+      isPtyShutdownPending: vi.fn(() => false),
+      updateTabTitle: vi.fn(),
+      setRuntimePaneTitle: vi.fn(),
+      clearRuntimePaneTitle: vi.fn(),
+      updateTabPtyId: vi.fn(),
+      markTerminalBell: vi.fn(),
+      onShowSessionRestoredBanner: vi.fn(),
+      dispatchNotification: vi.fn(),
+      setCacheTimerStartedAt: vi.fn(),
+      syncPanePtyLayoutBinding: vi.fn(),
+      clearExitedPanePtyLayoutBinding: vi.fn()
+    },
+    transport: {
+      ...createMockTransport('pty-1'),
+      connect: vi.fn(async () => {}),
+      isConnected: vi.fn(() => true)
+    },
+    hiddenOutputRestoreUnhideSeq: null,
     paneStartup: null,
     writeInputModeGround: vi.fn()
-  } as unknown as ConnectPanePtySession
+  }
   installSleepingRecordAccess(connection)
   installPaneAgentIdentity(connection)
   connection.paneForegroundAgentTracker.onProcessExitConfirmed({
@@ -245,5 +294,7 @@ export async function verifyExitedPaneHistoryReturn(
     window.removeEventListener(CLOSE_TERMINAL_PANE_EVENT, closed)
     connection.paneForegroundAgentTracker.dispose()
     connection.commandLifecycle.dispose()
+    manager.destroy()
+    terminal.dispose()
   }
 }
