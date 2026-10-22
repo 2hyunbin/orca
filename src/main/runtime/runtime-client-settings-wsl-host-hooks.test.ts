@@ -19,10 +19,13 @@ vi.mock('../ipc/wsl-guest-windows-drive-path', () => ({
 }))
 
 function controller(): RuntimeClientSettingsController {
-  const settings = createGlobalSettingsFixture({ agentStatusHooksEnabled: true })
+  let settings = createGlobalSettingsFixture({ agentStatusHooksEnabled: true })
   return new RuntimeClientSettingsController({
     getSettings: () => settings,
-    updateSettings: (updates: Partial<GlobalSettings>) => Object.assign(settings, updates),
+    updateSettings: (updates: Partial<GlobalSettings>) => {
+      settings = { ...settings, ...updates }
+      return settings
+    },
     runDurableMutation: async (mutate) => mutate().value
   })
 }
@@ -44,6 +47,18 @@ describe('turning status hooks off through a paired client', () => {
       false,
       expect.anything(),
       expect.objectContaining({ keepSharedEntries: keep })
+    )
+  })
+
+  it('keeps them too when one agent is disabled on a WSL host', async () => {
+    mocks.wslHost.mockReturnValue(true)
+
+    await controller().update({ disabledTuiAgents: ['claude'] })
+
+    expect(mocks.apply).toHaveBeenCalledWith(
+      true,
+      expect.anything(),
+      expect.objectContaining({ keepSharedEntries: true })
     )
   })
 })

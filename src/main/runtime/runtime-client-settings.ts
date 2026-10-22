@@ -246,7 +246,7 @@ export class RuntimeClientSettingsController {
         return
       }
       await applyAgentStatusHooksEnabled(settings.agentStatusHooksEnabled !== false, settings, {
-        // R42: in a distro the WSL bridge still runs panes on these entries, as startup knows.
+        // R42, COMPAT(wsl-bridge): the bridge's panes in this distro share these entries; drop at D4.
         keepSharedEntries: isWslHostOrcadProcess(),
         shouldHydrateShellPath: getAppEnvironment().isPackaged(),
         onInstallError: recordManagedHookInstallFailure,
