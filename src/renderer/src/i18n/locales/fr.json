@@ -5290,6 +5290,7 @@
           "needsAttention": "Demande votre attention",
           "other": "un autre skill utilise déjà ce nom",
           "replace": "Remplacer",
+          "replacedWithBackup": "Remplacé · Votre copie a été sauvegardée",
           "sharedNotCurrent": "la copie partagée utilisée par ce dossier n’est pas celle d’Orca",
           "unwritable": "Orca ne peut pas écrire dans ce dossier",
           "unreadable": "Orca ne peut pas lire tous les fichiers de cette copie",

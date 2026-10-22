@@ -1,5 +1,6 @@
 import {
   isBundledSkillLeaveReason,
+  type BundledSkillOutcome,
   type BundledSkillPlan
 } from '../../../../shared/bundled-skill-plan'
 import type {
@@ -8,8 +9,8 @@ import type {
 } from '../../../../shared/bundled-skill-locations'
 import {
   bundledSkillInstallAgents,
+  bundledSkillOutcomeText,
   summarizeBundledSkillPlan,
-  type BundledSkillOutcomeText,
   type BundledSkillPlanState
 } from '../../../../shared/bundled-skill-summary'
 import { SKILL_INSTALL_PROVIDERS } from '../../../../shared/skill-install-providers'
@@ -97,9 +98,16 @@ export function skillPlanHeadline(state: BundledSkillPlanState): string | null {
   }
 }
 
-export function skillOutcomeText(text: BundledSkillOutcomeText): string {
+export function skillOutcomeText(outcome: BundledSkillOutcome): string {
+  const text = bundledSkillOutcomeText(outcome)
   switch (text) {
     case 'Updated':
+      if (outcome.ops.some((op) => op.kind === 'replace' && op.status === 'done')) {
+        return translate(
+          'auto.components.skills.skillPlanOpCopy.replacedWithBackup',
+          'Replaced · Your copy was saved as a backup'
+        )
+      }
       return translate('auto.components.skills.skillPlanOpCopy.updated', 'Updated')
     case 'Installed':
       return translate('auto.components.skills.skillPlanOpCopy.installed', 'Installed')

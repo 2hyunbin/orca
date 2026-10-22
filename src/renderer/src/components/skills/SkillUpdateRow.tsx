@@ -1,7 +1,8 @@
 import type { BundledSkillLocation } from '../../../../shared/bundled-skill-locations'
-import type {
-  BundledSkillOutcomeSummary,
-  BundledSkillPlanSkillSummary
+import type { BundledSkillOutcome } from '../../../../shared/bundled-skill-plan'
+import {
+  bundledSkillOutcomeText,
+  type BundledSkillPlanSkillSummary
 } from '../../../../shared/bundled-skill-summary'
 import { translate } from '@/i18n/i18n'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -83,7 +84,7 @@ export function SkillUpdateRow({
 }: {
   skill: BundledSkillPlanSkillSummary
   phase: SkillRowPhase
-  outcome?: BundledSkillOutcomeSummary
+  outcome?: BundledSkillOutcome
   replace?: SkillReplaceToggle
   showLocations: boolean
 }): React.JSX.Element {
@@ -93,14 +94,15 @@ export function SkillUpdateRow({
       ? translate('auto.components.skills.SkillFreshnessUpdateDialog.updating', 'Updating…')
       : phase === 'result' && outcome
         ? // Why: a skill the run only reports on shows its left-alone lines, not "No change".
-          outcome.text === 'No change' && outcome.leftAlone.length > 0
+          bundledSkillOutcomeText(outcome) === 'No change' &&
+          outcome.ops.some((op) => op.kind === 'leave')
           ? null
-          : skillOutcomeText(outcome.text)
+          : skillOutcomeText(outcome)
         : replacement
           ? locationStateText(replacement)
           : skillPlanHeadline(skill.state)
   const choices = skill.locations.filter(
-    (location) => location.state === 'leave' || location.state === 'replace'
+    (location) => location.state === 'leave' || (phase !== 'result' && location.state === 'replace')
   )
   return (
     <div

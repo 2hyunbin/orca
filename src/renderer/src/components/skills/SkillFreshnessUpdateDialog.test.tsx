@@ -258,6 +258,9 @@ describe('SkillFreshnessUpdateDialog', () => {
       planDigest: '2'.repeat(64),
       force: [EDITED_PATH]
     })
+    expect(container.querySelector('[data-skill-row="orca-cli"]')?.textContent).toBe(
+      'orca-cliReplaced · Your copy was saved as a backup'
+    )
   })
 
   it('keeps an edited row in place with one Replace status when selected', async () => {

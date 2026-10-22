@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BundledSkillOp, BundledSkillOutcome } from '../../../../shared/bundled-skill-plan'
 import {
   BUNDLED_SKILL_PLAN_OP_TEXT,
-  summarizeBundledSkillOutcome,
   summarizeBundledSkillPlan
 } from '../../../../shared/bundled-skill-summary'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -147,10 +146,45 @@ describe('SkillUpdateRow', () => {
           planOp('leave', CLAUDE, { reason: 'edited', replaceable: true })
         ])}
         phase="result"
-        outcome={summarizeBundledSkillOutcome(outcome)}
+        outcome={outcome}
         showLocations={false}
       />
     )
     expect(row(view)).toBe('orca-cliUpdatedNot updated: you edited this copy')
+  })
+
+  it.each<{
+    ops: BundledSkillOutcome['ops']
+    text: string
+  }>([
+    {
+      ops: [{ path: CLAUDE, kind: 'replace', status: 'done' }],
+      text: 'Replaced · Your copy was saved as a backup'
+    },
+    {
+      ops: [{ path: CLAUDE, kind: 'update', status: 'done' }],
+      text: 'Updated'
+    },
+    {
+      ops: [{ path: CLAUDE, kind: 'replace', status: 'skipped' }],
+      text: 'Needs attention'
+    },
+    {
+      ops: [
+        { path: CLAUDE, kind: 'replace', status: 'done' },
+        { path: SHARED, kind: 'update', status: 'failed' }
+      ],
+      text: 'Needs attention'
+    }
+  ])('shows $text from the executed operations after the plan refreshes', async ({ ops, text }) => {
+    const view = await render(
+      <SkillUpdateRow
+        skill={skillOf([planOp('keep', SHARED), planOp('keep', CLAUDE)])}
+        phase="result"
+        outcome={{ name: 'orca-cli', status: 'ran', ops }}
+        showLocations={false}
+      />
+    )
+    expect(row(view)).toBe(`orca-cli${text}`)
   })
 })
