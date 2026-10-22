@@ -167,7 +167,6 @@ function resetStore(): void {
     createTab: mocks.createTab,
     dropUnifiedTab: mocks.dropUnifiedTab,
     focusGroup: mocks.focusGroup,
-    recordDesktopTabChoice: vi.fn(),
     makePreviewFilePermanent: mocks.makePreviewFilePermanent,
     openFile: mocks.openFile,
     pinFile: mocks.pinFile,

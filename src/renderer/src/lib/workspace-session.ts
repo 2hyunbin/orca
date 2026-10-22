@@ -1,5 +1,4 @@
-import { buildSanitizedTabsByWorktree } from './workspace-session-terminal-tabs'
-export { buildSanitizedTabsByWorktree } from './workspace-session-terminal-tabs'
+import { pendingAgentLaunchPane } from '../../../shared/agent-launch-pane-verdict'
 import type { WorkspaceVisibleTabType } from '../../../shared/tab-types'
 import type {
   PersistedOpenFile,
@@ -61,7 +60,6 @@ export type WorkspaceSessionSnapshot = Pick<
   | 'defaultTerminalTabsAppliedByWorktreeId'
 > &
   CloseIntentFields & {
-    desktopLayoutView?: AppState['desktopLayoutView']
     activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
     sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
     /** Optional so the many partial snapshot fixtures keep type-checking; see buildTerminalSessionData. */
@@ -96,7 +94,6 @@ export const SESSION_RELEVANT_FIELDS = [
   'groupsByWorktree',
   'layoutByWorktree',
   'activeGroupIdByWorktree',
-  'desktopLayoutView',
   'sshConnectionStates',
   'repos',
   'worktreesByRepo',
@@ -205,6 +202,33 @@ export function buildEditorSessionData(
   }
 }
 
+export function buildSanitizedTabsByWorktree(
+  tabsByWorktree: WorkspaceSessionSnapshot['tabsByWorktree']
+): WorkspaceSessionState['tabsByWorktree'] {
+  // Why: strip transient pendingActivationSpawn — session:set persists without Zod re-parse, so a stale flag would drop the first PTY spawn on restart.
+  // Same for the recovery ledger: it describes a mounted pane's in-flight heal, so a persisted one would refuse the first recovery after restart.
+  // A launch pane's outcome is not saved: a reload asks main again, which keeps it until it quits; after a restart the pane spawns like any other.
+  return Object.fromEntries(
+    Object.entries(tabsByWorktree).map(([worktreeId, tabs]) => [
+      worktreeId,
+      tabs.map((tab) => {
+        const {
+          pendingActivationSpawn: _unused,
+          recovery: _recovery,
+          restoredFromSession: _restored,
+          ...rest
+        } = tab
+        void _unused
+        void _recovery
+        void _restored
+        return rest.agentLaunchPane
+          ? { ...rest, agentLaunchPane: pendingAgentLaunchPane(rest.agentLaunchPane) }
+          : rest
+      })
+    ])
+  )
+}
+
 export function buildTerminalSessionData(
   snapshot: WorkspaceSessionSnapshot
 ): Pick<WorkspaceSessionState, 'activeWorktreeIdsOnShutdown' | 'remoteSessionIdsByTabId'> {
@@ -303,17 +327,6 @@ export function buildWorkspaceSessionPayload(
     workspaceDocHistory: normalizeWorkspaceDocHistoryEntries(snapshot.workspaceDocHistory ?? []),
     // Why: persist only layouts backed by real tabs so a reload can't restore a blank split pane from the split-before-tab midpoint.
     ...buildPersistedUnifiedTabSessionData(snapshot),
-    ...(snapshot.desktopLayoutView
-      ? {
-          activeTabId:
-            snapshot.desktopLayoutView.activeTabIdByWorktree?.[snapshot.activeWorktreeId ?? ''] ??
-            null,
-          activeTabIdByWorktree: snapshot.desktopLayoutView.activeTabIdByWorktree,
-          activeTabTypeByWorktree: snapshot.desktopLayoutView.activeTabTypeByWorktree,
-          activeFileIdByWorktree: snapshot.desktopLayoutView.activeFileIdByWorktree,
-          activeBrowserTabIdByWorktree: snapshot.desktopLayoutView.activeBrowserTabIdByWorktree
-        }
-      : {}),
     activeConnectionIdsAtShutdown: buildActiveConnectionIdsAtShutdown(
       snapshot,
       terminalSessionData.remoteSessionIdsByTabId ?? null

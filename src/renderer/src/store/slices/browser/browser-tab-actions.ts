@@ -1,4 +1,3 @@
-import { chooseWorkspaceTabInStore } from '@/store/slices/tabs/desktop-tab-choice'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { translate } from '@/i18n/i18n'
 import type {
@@ -188,13 +187,12 @@ export function createBrowserTabActions(
         }
         throw new Error('The paired runtime could not create a managed browser tab.')
       }
-      const opened = get().createBrowserTab(worktreeId, defaultUrl, {
+      get().createBrowserTab(worktreeId, defaultUrl, {
         title: translate('auto.store.slices.browser.d175274b6d', 'New Browser Tab'),
         focusAddressBar: true,
         browserRuntimeEnvironmentId: null,
         targetGroupId: groupId
       })
-      chooseWorkspaceTabInStore(worktreeId, opened.id, { getState: get, setState: set })
       get().recordFeatureInteraction('browser-tab-created')
     },
 
@@ -232,12 +230,11 @@ export function createBrowserTabActions(
           return false
         }
       }
-      const opened = get().createBrowserTab(worktreeId, url, {
+      get().createBrowserTab(worktreeId, url, {
         activate: true,
         sessionProfileId: profileId,
         browserRuntimeEnvironmentId: null
       })
-      chooseWorkspaceTabInStore(worktreeId, opened.id, { getState: get, setState: set })
       return true
     }
   }

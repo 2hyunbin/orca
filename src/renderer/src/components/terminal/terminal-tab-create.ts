@@ -1,4 +1,3 @@
-import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { useAppStore } from '@/store'
 import { createWebRuntimeSessionTerminal } from '@/runtime/web-runtime-terminal-creation'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
@@ -38,7 +37,6 @@ export function createNewTerminalTab(
     id: tabId,
     ...(options?.startupCwd ? { startupCwd: options.startupCwd } : {})
   })
-  chooseWorkspaceTab(activeWorktreeId, tabId)
   state.setActiveTabType('terminal', activeWorktreeId)
   // Why: without a saved order the tab bar falls back to terminals-first, so
   // persist the current visual order with the new terminal last.

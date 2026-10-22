@@ -23,7 +23,6 @@ import { ownsGlobalSelection } from '../global-selection-owner'
 import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-context'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { desktopCreationDefaultTab } from '../slices/tabs/desktop-tab-choice'
 import {
   recordCreatedTerminalTabInLayoutOwner,
   terminalTabCreateCommand,
@@ -219,15 +218,6 @@ export function createTerminalTabCreationActions(
           // Why: omit for non-agent tabs so they keep the implicit 'terminal' view mode.
           ...(options?.viewMode ? { viewMode: options.viewMode } : {})
         }
-        // Why: an unchosen workspace shows its creation agent's terminal when it arrives. Display
-        // only: no focus, history or choice is recorded.
-        const shown =
-          shouldActivate ||
-          desktopCreationDefaultTab(
-            { ...s, tabsByWorktree: { ...s.tabsByWorktree, [worktreeId]: [...existing, tab] } },
-            worktreeId,
-            [...existingUnifiedTabs, unifiedTab]
-          )?.id === unifiedTab.id
         const nextGroupOrder = dedupeTabOrder([...cleanedGroupOrder, unifiedTab.id])
         const nextRecent = shouldActivate
           ? pushRecentTabId(sanitizeRecentTabIds(group.recentTabIds, nextGroupOrder), unifiedTab.id)
@@ -237,7 +227,7 @@ export function createTerminalTabCreationActions(
           cleanedTargetGroup.activeTabId && !orphanTerminalIds.has(cleanedTargetGroup.activeTabId)
             ? cleanedTargetGroup.activeTabId
             : null
-        const nextActiveTabIdForWorktree = shown
+        const nextActiveTabIdForWorktree = shouldActivate
           ? tab.id
           : (cleanedActiveTabIdForWorktree ?? cleanedGroupActiveTabId ?? tab.id)
         return {
@@ -257,7 +247,9 @@ export function createTerminalTabCreationActions(
             ...groupsByWorktree,
             [worktreeId]: updateGroup(cleanedGroups, {
               ...cleanedTargetGroup,
-              activeTabId: shown ? unifiedTab.id : (cleanedGroupActiveTabId ?? unifiedTab.id),
+              activeTabId: shouldActivate
+                ? unifiedTab.id
+                : (cleanedGroupActiveTabId ?? unifiedTab.id),
               tabOrder: nextGroupOrder,
               recentTabIds: nextRecent
             })
@@ -268,7 +260,9 @@ export function createTerminalTabCreationActions(
             [worktreeId]: s.layoutByWorktree[worktreeId] ?? { type: 'leaf', groupId: group.id }
           },
           activeTabId:
-            shown && ownsGlobalSelection(s, worktreeId) ? tab.id : orphanCleanupPatch.activeTabId,
+            shouldActivate && ownsGlobalSelection(s, worktreeId)
+              ? tab.id
+              : orphanCleanupPatch.activeTabId,
           activeTabIdByWorktree: {
             ...orphanCleanupPatch.activeTabIdByWorktree,
             [worktreeId]: nextActiveTabIdForWorktree

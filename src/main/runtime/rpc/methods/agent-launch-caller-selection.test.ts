@@ -183,16 +183,6 @@ describe('a paired client launching into an existing workspace', () => {
     )
   })
 
-  // A phone create never moves the desktop, and its default stays derived, never a recorded pick.
-  it('a worktree it creates activates nothing on the host and records no pick', async () => {
-    const runtime = selectionRuntime({ settings: STRUCTURED_PREFERENCE })
-
-    await launch(CREATE_LAUNCH, runtime)
-
-    expect(chatActivation()).toBe(false)
-    expect(runtime.selectCreatedMobileSessionTabForClient).not.toHaveBeenCalled()
-  })
-
   it.each(['focused', 'background'] as const)(
     'keeps a paired %s chat inactive on the host',
     async (presentation) => {
@@ -250,6 +240,15 @@ describe('launches that keep the host-wide behaviour', () => {
       clientKind: 'runtime',
       pairedDeviceId: undefined
     })
+
+    expect(chatActivation()).toBe(true)
+    expect(runtime.selectCreatedMobileSessionTabForClient).not.toHaveBeenCalled()
+  })
+
+  it('a worktree-creating launch from a paired client keeps the create navigation', async () => {
+    const runtime = selectionRuntime({ settings: STRUCTURED_PREFERENCE })
+
+    await launch(CREATE_LAUNCH, runtime)
 
     expect(chatActivation()).toBe(true)
     expect(runtime.selectCreatedMobileSessionTabForClient).not.toHaveBeenCalled()

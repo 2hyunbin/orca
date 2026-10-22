@@ -1,4 +1,3 @@
-import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { useCallback } from 'react'
 import type { Tab } from '../../../../shared/tab-types'
 import { useAppStore } from '../../store'
@@ -23,10 +22,7 @@ export function useTabGroupActivationCommands({
   worktreeState: TabGroupWorktreeSnapshot
 }) {
   const focusGroup = useAppStore((state) => state.focusGroup)
-  const activateTab = useCallback(
-    (tabId: string) => chooseWorkspaceTab(worktreeId, tabId),
-    [worktreeId]
-  )
+  const activateTab = useAppStore((state) => state.activateTab)
   const setActiveTab = useAppStore((state) => state.setActiveTab)
   const setActiveTabType = useAppStore((state) => state.setActiveTabType)
   const setActiveFile = useAppStore((state) => state.setActiveFile)
@@ -143,7 +139,6 @@ export function useTabGroupActivationCommands({
 
   const activateAgentSession = useCallback(
     (tabId: string) => {
-      chooseWorkspaceTab(worktreeId, tabId)
       activateStructuredAgentSessionTab({ worktreeId, tabId })
     },
     [worktreeId]

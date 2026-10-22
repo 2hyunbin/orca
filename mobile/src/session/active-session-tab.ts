@@ -22,9 +22,6 @@ export function resolveActiveSessionTab<T extends SessionTabLike>(
     pendingActiveSessionTabId: string | null
     selectedSessionTabId: string | null
     navigationIntent?: 'follow'
-    /** The host projected this snapshot for this device: its active flags are this device's pick,
-     *  or, until it picks, the workspace's derived default. */
-    acceptCreationArrival?: boolean
   }
 ): ResolveActiveSessionTabResult<T> {
   const snapshotActive = tabs.find((tab) => tab.isActive) ?? tabs[0] ?? null
@@ -58,16 +55,6 @@ export function resolveActiveSessionTab<T extends SessionTabLike>(
     }
   }
   const clearPendingActiveSessionTabId = pendingActiveSessionTabId !== null
-  // Why: the last displayed tab is only a display cache; an interim Setup it showed must not
-  // outrank the agent the host resolves once that agent's tab exists.
-  if (opts.acceptCreationArrival) {
-    return {
-      activeTab: snapshotActive,
-      selectionSource: 'snapshot',
-      clearPendingActiveSessionTabId,
-      retainSelectedSessionTabId: false
-    }
-  }
   const selectedTab = opts.selectedSessionTabId
     ? (tabs.find((tab) => tab.id === opts.selectedSessionTabId) ?? null)
     : null

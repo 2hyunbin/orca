@@ -1,4 +1,3 @@
-import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { toast } from 'sonner'
 import type { EmulatorStreamInfo } from '@/components/emulator-pane/emulator-pane-types'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
@@ -64,7 +63,6 @@ export async function openMobileEmulatorTab(
   }
   const existingTab = getSimulatorTabForWorktree(worktreeId, LOCAL_EXECUTION_HOST_ID)
   if (existingTab) {
-    chooseWorkspaceTab(worktreeId, existingTab.id)
     return existingTab.id
   }
   const targetGroupId =
@@ -78,16 +76,12 @@ export async function openMobileEmulatorTab(
   cancelPendingSimulatorPaneShutdown(worktreeId)
   const alreadyLaunching = isManualSimulatorLaunchPending(worktreeId)
   if (alreadyLaunching) {
-    const opened = ensureSimulatorTab(worktreeId, {
+    return ensureSimulatorTab(worktreeId, {
       placement: options.placement ?? 'rightSplit',
       targetGroupId,
       surfacePane: true,
       executionHostId: LOCAL_EXECUTION_HOST_ID
     })
-    if (opened) {
-      chooseWorkspaceTab(worktreeId, opened)
-    }
-    return opened
   }
   beginManualSimulatorLaunch(worktreeId)
   try {
@@ -102,7 +96,6 @@ export async function openMobileEmulatorTab(
     if (!tabId) {
       return null
     }
-    chooseWorkspaceTab(worktreeId, tabId)
     dispatchManualSimulatorLaunchStarted(worktreeId)
     try {
       // Why: the pane is visible but inert while serve-sim settles; the actual

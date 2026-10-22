@@ -8,7 +8,6 @@ import type {
 } from '../../../../../shared/tab-types'
 import type { WorkspaceSessionState } from '../../../../../shared/workspace-session-state-types'
 import type { WorkspaceSessionHydrationOptions } from '@/lib/workspace-session-hydration-keys'
-import type { DesktopLayoutView } from '../../../../../shared/workspace-layout/workspace-layout-beside'
 
 export type TabSplitDirection = 'left' | 'right' | 'up' | 'down'
 
@@ -30,7 +29,6 @@ export type TabsSlice = {
   groupsByWorktree: Record<string, TabGroup[]>
   activeGroupIdByWorktree: Record<string, string>
   layoutByWorktree: Record<string, TabGroupLayoutNode>
-  desktopLayoutView: DesktopLayoutView
   createUnifiedTab: (
     worktreeId: string,
     contentType: TabContentType,

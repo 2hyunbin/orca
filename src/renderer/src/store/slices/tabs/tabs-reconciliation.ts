@@ -4,8 +4,6 @@ import type { Tab } from '../../../../../shared/tab-types'
 import { dedupeTabOrder } from '../../../../../shared/workspace-layout/tab-order'
 import { ensureGroup, sanitizeRecentTabIds, updateGroup } from '../tab-group-state'
 import { pruneTabGroupLayoutForGroups } from '../tabs-hydration'
-import { activeSurfacePatchMatchesState, buildActiveSurfacePatch } from './tabs-surface'
-import { desktopCreationDefaultTab } from './desktop-tab-choice'
 import {
   buildOrphanTerminalCleanupPatch,
   getOrphanTerminalIds,
@@ -138,30 +136,14 @@ export function projectWorktreeTabModelReconciliation(
   const validTabs =
     renderableTabs.length === reconciledUnifiedTabs.length ? reconciledUnifiedTabs : renderableTabs
   const validTabIds = new Set(validTabs.map((tab) => tab.id))
-  const validTabById = new Map(validTabs.map((tab) => [tab.id, tab]))
-  // Why: a group with no shown tab (an unchosen workspace restores none) fills from the creation
-  // default before topology, so it opens on its agent; a shown tab is never replaced here.
-  const creationTab = desktopCreationDefaultTab(
-    state,
-    worktreeId,
-    reconciledGroups.flatMap((group) => group.tabOrder.flatMap((id) => validTabById.get(id) ?? []))
-  )
-  let creationGroupId: string | undefined
   const nextGroupsWithEmpty = reconciledGroups.map((group) => {
     const slots = structuredLaunchSlotIds(worktreeId, group.id)
     const tabOrder = group.tabOrder.filter((tabId) => validTabIds.has(tabId) || slots.has(tabId))
     const realOrder = tabOrder.filter((id) => validTabIds.has(id))
-    const fillsCreationTab = creationTab !== undefined && realOrder.includes(creationTab.id)
-    creationGroupId = fillsCreationTab ? group.id : creationGroupId
-    const rawTabId = state.desktopLayoutView?.groups[worktreeId]?.[group.id]?.activeTabId
     const activeTabId =
-      rawTabId && validTabIds.has(rawTabId)
-        ? rawTabId
-        : fillsCreationTab
-          ? creationTab.id
-          : group.activeTabId && validTabIds.has(group.activeTabId)
-            ? group.activeTabId
-            : (realOrder[0] ?? null)
+      group.activeTabId && validTabIds.has(group.activeTabId)
+        ? group.activeTabId
+        : (realOrder[0] ?? null)
     const tabOrderUnchanged =
       tabOrder.length === group.tabOrder.length &&
       tabOrder.every((tabId, index) => tabId === group.tabOrder[index])
@@ -189,14 +171,11 @@ export function projectWorktreeTabModelReconciliation(
     state.activeGroupIdByWorktree[worktreeId] ??
     ensuredGroupState?.activeGroupIdByWorktree[worktreeId]
   const activeGroupStillExists = nextGroups.some((group) => group.id === currentActiveGroupId)
-  const nextActiveGroupId =
-    creationGroupId && nextGroups.some((group) => group.id === creationGroupId)
-      ? creationGroupId
-      : activeGroupStillExists
-        ? currentActiveGroupId
-        : (nextGroups.find((group) => group.activeTabId !== null)?.id ??
-          nextGroups[0]?.id ??
-          currentActiveGroupId)
+  const nextActiveGroupId = activeGroupStillExists
+    ? currentActiveGroupId
+    : (nextGroups.find((group) => group.activeTabId !== null)?.id ??
+      nextGroups[0]?.id ??
+      currentActiveGroupId)
   const tabsChanged = validTabs !== unifiedTabs
   const activeGroupChanged = nextActiveGroupId !== currentActiveGroupId
   const baseNextLayout =
@@ -283,17 +262,6 @@ export function projectWorktreeTabModelReconciliation(
         ? buildOrphanTerminalCleanupPatch(state, worktreeId, orphanTerminalIds)
         : {})
     }
-  }
-
-  const display = buildActiveSurfacePatch({ ...state, ...patch }, worktreeId, nextActiveGroupId)
-  if (state.activeWorktreeId !== worktreeId) {
-    display.activeTabId = state.activeTabId
-    display.activeTabType = state.activeTabType
-    display.activeFileId = state.activeFileId
-    display.activeBrowserTabId = state.activeBrowserTabId
-  }
-  if (!activeSurfacePatchMatchesState(state, worktreeId, display)) {
-    patch = { ...patch, ...display }
   }
 
   return {

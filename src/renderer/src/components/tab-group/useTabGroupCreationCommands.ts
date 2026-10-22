@@ -1,4 +1,3 @@
-import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { toast } from 'sonner'
 import { useAppStore } from '../../store'
 import { focusTerminalTabSurface } from '../../lib/focus-terminal-tab-surface'
@@ -48,10 +47,7 @@ export function useTabGroupCreationCommands({
     newSimulatorTab: worktreeState.mobileEmulatorEnabled
       ? () => {
           if (getSimulatorTabForWorktree(worktreeId)) {
-            const opened = ensureSimulatorTab(worktreeId, { surfacePane: true })
-            if (opened) {
-              chooseWorkspaceTab(worktreeId, opened)
-            }
+            void ensureSimulatorTab(worktreeId, { surfacePane: true })
             return
           }
           // Why: mobile simulators are most useful beside the current tab group.
@@ -99,12 +95,11 @@ export function useTabGroupCreationCommands({
           throw new Error('The paired runtime could not duplicate the managed browser tab.')
         }
         // Why no targetGroupId: a source-following duplicate joins the source's live group.
-        const opened = createBrowserTab(worktreeId, source.url, {
+        createBrowserTab(worktreeId, source.url, {
           ...buildDuplicatedBrowserTabOptions(source),
           ...(runtimeEnvironmentId ? { browserRuntimeEnvironmentId: null } : {}),
           afterTabId: sourceUnifiedTabId
         })
-        chooseWorkspaceTab(worktreeId, opened.id)
       })().catch((error) => {
         toast.error(error instanceof Error ? error.message : String(error))
       })
@@ -134,7 +129,6 @@ export function useTabGroupCreationCommands({
         }
         const tabId = createBrowserUuid()
         createTab(worktreeId, groupId, shellOverride, { id: tabId })
-        chooseWorkspaceTab(worktreeId, tabId)
         setActiveTab(tabId)
         setActiveTabType('terminal', worktreeId)
         focusTerminalTabSurface(tabId)

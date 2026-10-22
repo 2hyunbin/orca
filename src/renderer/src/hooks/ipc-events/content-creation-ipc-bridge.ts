@@ -1,4 +1,3 @@
-import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { ensureSimulatorTab } from '@/lib/ensure-simulator-tab'
 import { openMobileEmulatorTab } from '@/lib/open-mobile-emulator-tab'
 import {
@@ -121,13 +120,10 @@ export function registerContentCreationIpcBridge(
     if (isRuntimeEnvironmentActive()) {
       return
     }
-    const opened = ensureSimulatorTab(worktreeId, {
+    ensureSimulatorTab(worktreeId, {
       surfacePane: true,
       executionHostId: LOCAL_EXECUTION_HOST_ID
     })
-    if (opened) {
-      chooseWorkspaceTab(worktreeId, opened)
-    }
   })
   if (unsubscribeEmulatorPaneFocus) {
     unsubs.push(unsubscribeEmulatorPaneFocus)

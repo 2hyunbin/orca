@@ -1,4 +1,3 @@
-import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
 import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { activateWebRuntimeSessionTab } from '@/runtime/web-runtime-session-tab-lifecycle'
@@ -122,7 +121,7 @@ export function activateWorkspaceTabPaletteResult(
 
   const runtimeEnvironmentId = runtimeEnvironmentIdOrLocalUnlessTwin(state, result.worktreeId)
   state.focusGroup(result.worktreeId, result.groupId)
-  chooseWorkspaceTab(result.worktreeId, result.tabId)
+  state.activateTab(result.tabId, { worktreeId: result.worktreeId })
 
   if (result.contentType === 'terminal') {
     if (isWebRuntimeSessionActive(runtimeEnvironmentId)) {

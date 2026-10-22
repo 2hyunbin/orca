@@ -218,9 +218,7 @@ export type MirroredBrowserTab = {
 }
 export type MirroredEditorTab = { file: OpenFile; unifiedTab: Tab; hostTabId: string }
 
-export type WebSessionTabsSyncState = {
-  worktreesByRepo?: Record<string, readonly { id: string; createdWithAgent?: string }[]>
-} & Pick<
+export type WebSessionTabsSyncState = Pick<
   AppState,
   | 'activeBrowserTabId'
   | 'activeBrowserTabIdByWorktree'
@@ -257,8 +255,6 @@ export type WebSessionTabsSyncState = {
       | 'activityClearedAtByPaneKey'
       | 'agentLaunchConfigByPaneKey'
       | 'automaticAgentResumeClaimsByTabId'
-      | 'desktopLayoutView'
-      | 'folderWorkspaces'
       // Why: a client draft is the evidence that a mirrored file's dirty flag is the client's
       // own and must survive a host republish (#21392); absent here, the host flag wins.
       | 'editorDrafts'

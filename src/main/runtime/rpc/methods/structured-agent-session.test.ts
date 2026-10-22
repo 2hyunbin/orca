@@ -415,8 +415,10 @@ describe('method routing', () => {
       }),
       ...fields
     }
-    const created = await call('agentSession.create', params, STRUCTURED_CLIENT)
-    expect(created).toMatchObject({ ok: true, result: { ok: true } })
+    expect(await call('agentSession.create', params, STRUCTURED_CLIENT)).toMatchObject({
+      ok: true,
+      result: { ok: true }
+    })
     // Beside `options`, after the attach fingerprint: which tab shows the chat is not which
     // conversation this attaches to.
     expect(hostCalls.attach.mock.calls[0]?.[1]).toEqual(

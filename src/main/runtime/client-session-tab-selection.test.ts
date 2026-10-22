@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { PersistedMobileClientTabSelections } from '../../shared/persisted-state-types'
 import { ClientSessionTabSelectionStore } from './client-session-tab-selection'
@@ -483,62 +483,3 @@ describe('client session-tab selection', () => {
     })
   })
 })
-
-const { OrcaRuntimeService } = await import('./orca-runtime-test-mocks.spec')
-await import('./orca-runtime-test-lifecycle.spec')
-const { makeRuntimeStoreWithWorkspaceSession, makeWorktreeMeta, makeFolderWorkspace, store } =
-  await import('./orca-runtime-test-fixtures.spec')
-const { getDefaultWorkspaceSession } = await import('../../shared/constants')
-
-class ViewerProjectionRuntime extends OrcaRuntimeService {
-  project(result: RuntimeMobileSessionTabsResult) {
-    return this.projectMobileSessionTabsForClient(result, 'new-phone')
-  }
-}
-
-it.each(['local', 'ssh:box', 'folder'] as const)(
-  'projects the creation tab using the %s execution owner',
-  (owner) => {
-    const worktree = owner === 'folder' ? 'folder:workspace' : 'repo-1::/same/path'
-    const creator = owner === 'ssh:box' ? 'codex' : 'claude'
-    const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(getDefaultWorkspaceSession())
-    const repo = store.getRepos()[0]!
-    const owned = { ...repo, executionHostId: owner === 'ssh:box' ? owner : ('local' as const) }
-    const metadata = vi.fn((_id: string, host: string) =>
-      makeWorktreeMeta({ createdWithAgent: host === 'ssh:box' ? 'codex' : 'claude' })
-    )
-    const folder = makeFolderWorkspace({ id: 'workspace', createdWithAgent: creator })
-    const runtime = new ViewerProjectionRuntime({
-      ...runtimeStore,
-      getRepo: () => owned,
-      getRepos: () => [owned, { ...repo, executionHostId: 'ssh:other' }],
-      getWorktreeMeta: () => makeWorktreeMeta({ createdWithAgent: 'gemini' }),
-      getWorktreeMetaForHost: metadata,
-      getFolderWorkspace: () => folder,
-      getFolderWorkspaces: () => [folder]
-    })
-    const projected = runtime.project({
-      worktree,
-      publicationEpoch: 'host:1',
-      snapshotVersion: 1,
-      activeTabId: null,
-      activeTabType: 'terminal',
-      activeGroupId: null,
-      tabs: (['claude', 'codex'] as const).map((agent) => ({
-        type: 'agent-session',
-        id: agent,
-        sessionId: agent,
-        agent,
-        title: agent,
-        isActive: false
-      }))
-    })
-    expect(projected.activeTabId).toBe(creator)
-    expect(projected.tabs.find((tab) => tab.isActive)?.id).toBe(creator)
-    if (owner === 'folder') {
-      expect(metadata).not.toHaveBeenCalled()
-    } else {
-      expect(metadata).toHaveBeenCalledWith(worktree, owner)
-    }
-  }
-)

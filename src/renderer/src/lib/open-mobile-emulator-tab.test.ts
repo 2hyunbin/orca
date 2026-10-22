@@ -11,7 +11,6 @@ import { cancelPendingSimulatorPaneShutdown } from './simulator-pane-shutdown-sc
 import { ensureSimulatorTab, getSimulatorTabForWorktree } from './ensure-simulator-tab'
 
 const mockStoreState = vi.hoisted(() => ({
-  activateTab: vi.fn(),
   activeGroupIdByWorktree: { 'wt-1': 'group-1' } as Record<string, string>,
   groupsByWorktree: { 'wt-1': [{ id: 'group-1' }] } as Record<string, { id: string }[]>,
   unifiedTabsByWorktree: {} as Record<string, { id: string; contentType: string }[]>,
@@ -24,7 +23,6 @@ const mockStoreState = vi.hoisted(() => ({
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    setState: vi.fn(),
     getState: () => mockStoreState
   }
 }))

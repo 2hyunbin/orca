@@ -1,4 +1,3 @@
-import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { useCallback } from 'react'
 import { toast } from 'sonner'
 import type { TuiAgent } from '../../../shared/tui-agent'
@@ -60,7 +59,6 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
       }
       const tabId = createBrowserUuid()
       createTab(activeWorktreeId, undefined, shellOverride, { id: tabId })
-      chooseWorkspaceTab(activeWorktreeId, tabId)
       setActiveTabType('terminal', activeWorktreeId)
       persistAgentLaunchTabOrder(activeWorktreeId, tabId)
       focusTerminalTabSurface(tabId)
@@ -144,12 +142,9 @@ export function useTerminalCreateActions(controller: TerminalColdActivationContr
     })
   }, [activeWorktreeId, createBrowserTab, openNewBrowserTabInActiveWorkspace])
 
-  const handleOpenEntry = useCallback(
-    async (args: TabCreateEntryArgs) => {
-      await openTabBarEntry(args)
-    },
-    [activeWorktreeId]
-  )
+  const handleOpenEntry = useCallback(async (args: TabCreateEntryArgs) => {
+    await openTabBarEntry(args)
+  }, [])
 
   const handleDuplicateBrowserTab = useCallback(
     (browserTabId: string, sourceUnifiedTabId: string) => {

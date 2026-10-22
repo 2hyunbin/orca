@@ -70,7 +70,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/store', () => ({
   useAppStore: {
-    setState: vi.fn(),
     getState: () => mocks.store
   }
 }))

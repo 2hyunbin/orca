@@ -30,7 +30,6 @@ import {
 } from './terminal-surfaces'
 import { buildMirroredTerminalTabs } from './terminal-build'
 import { hostSnapshotAffirmsWorktreeContents } from '../host-session-snapshot-authority'
-import { arrivingCreationTab } from '../../store/slices/tabs/desktop-tab-choice'
 
 export function prepareWebSessionTabsSnapshotBase(
   state: WebSessionTabsSyncState,
@@ -95,10 +94,7 @@ export function prepareWebSessionTabsSnapshotBase(
     snapshot.navigationIntent === 'follow'
       ? (snapshot.tabs.find((tab) => tab.id === snapshot.activeTabId) ?? null)
       : null
-  // Why: an unchosen workspace opens on its creation chat once it arrives, through the same
-  // coherent group/tab/type projection as a focus intent; nothing is recorded as a choice.
-  const navigationIntentTab =
-    callerFocusIntentTab ?? followIntentTab ?? arrivingCreationTab(state, worktreeId, snapshot)
+  const navigationIntentTab = callerFocusIntentTab ?? followIntentTab
   const honorSnapshotActiveFocus = navigationIntentTab !== null
   if (matchingFocusIntentTab) {
     clearWebSessionFocusIntent({ environmentId }, worktreeId)
