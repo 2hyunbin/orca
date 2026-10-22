@@ -53,7 +53,11 @@ function runtime() {
 describe('installExternalConversations', () => {
   it('builds nothing and opens nothing while connectors are off', () => {
     const { store, getSettings, update } = fakeStore({})
-    const host = runtime()
+    const host = { ...runtime(), subscribeAgentProviderSessionChangesFn: vi.fn(() => () => {}) }
+    const repos = vi.spyOn(store, 'getRepos')
+    const meta = vi.spyOn(store, 'getAllWorktreeMetaForHost')
+    const folders = vi.spyOn(store, 'getFolderWorkspaces')
+    const rows = vi.spyOn(host, 'getAgentStatusRowsForPane')
     const connectors = installExternalConversations(store, host)
     // Nothing is read until the host's first `current()`.
     expect(getSettings).not.toHaveBeenCalled()
@@ -62,6 +66,11 @@ describe('installExternalConversations', () => {
     expect(connectors.current()).toBeNull()
     expect(host.getOrchestrationDb).not.toHaveBeenCalled()
     expect(host.lifecycle.size).toBe(0)
+    expect(host.subscribeAgentProviderSessionChangesFn).not.toHaveBeenCalled()
+    expect(repos).not.toHaveBeenCalled()
+    expect(meta).not.toHaveBeenCalled()
+    expect(folders).not.toHaveBeenCalled()
+    expect(rows).not.toHaveBeenCalled()
   })
 
   it('builds the seam on first use when the setting is already on', () => {
@@ -109,7 +118,7 @@ describe('installExternalConversations', () => {
         { ...link, providerSession: SESSION, captureHostId: 'local', createdAt: 1 }
       ]
     })
-    const { store } = fakeStore({ experimentalConnectors: true }, records)
+    const { store, update } = fakeStore({ experimentalConnectors: true }, records)
     let rows: AgentStatusIpcPayload[] = []
     const reports = new Set<(sessions: readonly { paneKey: string; sessionId: string }[]) => void>()
     const host = {
@@ -123,13 +132,30 @@ describe('installExternalConversations', () => {
       }
     }
     // What each runtime host does at startup, before any connector call.
-    installExternalConversations(store, host).current()
+    const connectors = installExternalConversations(store, host)
+    connectors.current()
     const cleared = { ...SESSION, id: 'claude-session-after-clear' }
     rows = [sessionRow(PANE, null, cleared)]
     reports.forEach((listener) => listener([{ paneKey: PANE, sessionId: cleared.id }]))
     rows = []
     expect(records.row(WORKTREE)?.externalConversations).toEqual([
       expect.objectContaining({ ...link, providerSession: cleared })
+    ])
+    update({ experimentalConnectors: false })
+    expect(reports.size).toBe(0)
+    const reenabled = { ...SESSION, id: 'claude-session-after-reenable' }
+    rows = [sessionRow(PANE, null, reenabled)]
+    update({ experimentalConnectors: true })
+    expect(reports.size).toBe(1)
+    expect(records.row(WORKTREE)?.externalConversations).toEqual([
+      expect.objectContaining({ ...link, providerSession: reenabled })
+    ])
+    const later = { ...SESSION, id: 'claude-session-after-new-report' }
+    rows = [sessionRow(PANE, null, later)]
+    reports.forEach((listener) => listener([{ paneKey: PANE, sessionId: later.id }]))
+    rows = []
+    expect(records.row(WORKTREE)?.externalConversations).toEqual([
+      expect.objectContaining({ ...link, providerSession: later })
     ])
   })
 })
