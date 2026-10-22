@@ -248,31 +248,37 @@ describe('terminal close and handle incarnation continuity', () => {
     expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
   })
 
-  // L256: switch-on bug waiting on its ledger row's fix.
-  ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
-    'does not let a PTY handle cross its recorded worktree boundary',
-    async () => {
-      const harness = await createStaleTabCloseHarness({ headless: true })
-      const { terminal } = harness
-      // The crossing terminal's own commit binds its pane in the other workspace first, as every
-      // registration does; a tab id is its workspace's own, so that pane is a new one there.
-      const crossing = ORCA_LAYOUT_OWNER_IS_MAIN
-        ? { tabId: 'tab-close-continuity-crossing', leafId: '44444444-4444-4444-8444-444444444444' }
-        : { tabId: STALE_TAB_ID, leafId: LEAF_ID }
-      registerBoundPty(harness.runtime, RUNTIME_OWNED_PTY_ID, OTHER_WORKTREE_ID, null, {
-        ...crossing,
-        incarnationId: INCARNATION_ID
-      })
-
-      await expect(harness.runtime.closeTerminalTab(terminal.handle)).rejects.toThrow(
-        'terminal_handle_stale'
-      )
-
-      expect(harness.kill).not.toHaveBeenCalled()
-      expect(harness.closeTerminalTab).not.toHaveBeenCalled()
-      expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
+  it('does not let a PTY handle cross its recorded worktree boundary', async () => {
+    const harness = await createStaleTabCloseHarness({ headless: true })
+    const { terminal } = harness
+    const register = () =>
+      ORCA_LAYOUT_OWNER_IS_MAIN
+        ? // The crossing commit binds a new pane in the other workspace first, as every registration
+          // does; main's workspace fence (terminalHoldsPane, P2) refuses it the pane (L256).
+          registerBoundPty(harness.runtime, RUNTIME_OWNED_PTY_ID, OTHER_WORKTREE_ID, null, {
+            tabId: 'tab-close-continuity-crossing',
+            leafId: '44444444-4444-4444-8444-444444444444',
+            incarnationId: INCARNATION_ID
+          })
+        : harness.runtime.registerPty(RUNTIME_OWNED_PTY_ID, OTHER_WORKTREE_ID, null, {
+            tabId: STALE_TAB_ID,
+            leafId: LEAF_ID,
+            incarnationId: INCARNATION_ID
+          })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      expect(register).toThrow('pane_unbound_at_registration')
+    } else {
+      register()
     }
-  )
+
+    await expect(harness.runtime.closeTerminalTab(terminal.handle)).rejects.toThrow(
+      'terminal_handle_stale'
+    )
+
+    expect(harness.kill).not.toHaveBeenCalled()
+    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
+    expect(harness.getSession().tabsByWorktree[WORKTREE_ID]).toHaveLength(1)
+  })
 
   it('does not acknowledge final-pane close before durable tab retirement', async () => {
     const harness = createHarness()

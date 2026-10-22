@@ -19,6 +19,15 @@ import {
   store
 } from '../orca-runtime-test-fixtures.spec'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import {
+  SPLIT_LEFT,
+  SPLIT_RIGHT,
+  TRAILING,
+  LEFT_LEAF,
+  RIGHT_LEAF,
+  TRAILING_LEAF,
+  splitPlacementStore
+} from './split-placement-session.test-fixture'
 
 describe('OrcaRuntimeService', () => {
   it('keeps client selection when a renderer session-tab close cannot commit', async () => {
@@ -307,25 +316,19 @@ describe('OrcaRuntimeService', () => {
     {
       label: 'after the split parent for a capable client',
       supportsSplitGroupPlacement: true,
-      expectedOrder: (createdId: string) => [
-        'split::left',
-        'split::right',
-        createdId,
-        'trailing::leaf'
-      ]
+      expectedOrder: (createdId: string) => [SPLIT_LEFT, SPLIT_RIGHT, createdId, TRAILING]
     },
     {
       label: 'at the end for an older client',
       supportsSplitGroupPlacement: false,
-      expectedOrder: (createdId: string) => [
-        'split::left',
-        'split::right',
-        'trailing::leaf',
-        createdId
-      ]
+      expectedOrder: (createdId: string) => [SPLIT_LEFT, SPLIT_RIGHT, TRAILING, createdId]
     }
   ])('places a runtime-owned terminal $label', async (testCase) => {
-    const runtime = new OrcaRuntimeService(store)
+    // Switch point: the split and trailing tabs are main's own, saved in its layout; switch-off a
+    // host with no window knows them from the snapshot it published.
+    const runtime = new OrcaRuntimeService(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? splitPlacementStore() : store
+    )
     runtime.setPtyController({
       spawn: vi.fn(committingSpawn(runtime, async () => ({ id: 'pty-created-after-split' }))),
       write: () => true,
@@ -341,30 +344,30 @@ describe('OrcaRuntimeService', () => {
           publicationEpoch: 'headless:split-placement',
           snapshotVersion: 1,
           activeGroupId: 'group-1',
-          activeTabId: 'split::left',
+          activeTabId: SPLIT_LEFT,
           activeTabType: 'terminal',
           tabs: [
             {
               type: 'terminal',
-              id: 'split::left',
+              id: SPLIT_LEFT,
               parentTabId: 'split',
-              leafId: 'left',
+              leafId: LEFT_LEAF,
               title: 'Split',
               isActive: true
             },
             {
               type: 'terminal',
-              id: 'split::right',
+              id: SPLIT_RIGHT,
               parentTabId: 'split',
-              leafId: 'right',
+              leafId: RIGHT_LEAF,
               title: 'Split',
               isActive: false
             },
             {
               type: 'terminal',
-              id: 'trailing::leaf',
+              id: TRAILING,
               parentTabId: 'trailing',
-              leafId: 'leaf',
+              leafId: TRAILING_LEAF,
               title: 'Trailing',
               isActive: false
             }
@@ -374,7 +377,7 @@ describe('OrcaRuntimeService', () => {
     })
 
     const created = await runtime.createMobileSessionTerminal(`id:${TEST_WORKTREE_ID}`, {
-      afterTabId: 'split::left',
+      afterTabId: SPLIT_LEFT,
       clientNavigationId: 'mobile-client',
       supportsSplitGroupPlacement: testCase.supportsSplitGroupPlacement
     })
