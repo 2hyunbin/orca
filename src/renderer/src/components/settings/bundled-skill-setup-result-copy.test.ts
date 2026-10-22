@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeBundledSkillOutcomes } from '../../../../shared/bundled-skill-summary'
 import {
   doneResult,
   planEntry,
@@ -15,13 +14,24 @@ import {
 
 function resultLine(plan: ReturnType<typeof planOf>): string {
   const result = doneResult(plan)
-  return skillInstallResultLine(
-    summarizeBundledSkillOutcomes(result),
-    bundledSkillSetupChanges(plan, result)
-  )
+  return skillInstallResultLine(result, bundledSkillSetupChanges(plan, result))
 }
 
 describe('setup result details', () => {
+  it.each([
+    ['write', 'Installed'],
+    ['update', 'Updated'],
+    ['link', 'Linked'],
+    ['keep', 'No change']
+  ] as const)('uses the outcome API for a %s result without setup changes', (kind, headline) => {
+    const result = doneResult(planOf([sharedEntry('orca-cli', kind)]))
+    expect(skillInstallResultLine(result)).toBe(headline)
+  })
+
+  it('keeps an empty result unchanged without setup changes', () => {
+    expect(skillInstallResultLine(doneResult(planOf([])))).toBe('No change')
+  })
+
   it.each([
     ['edited', 'you edited this copy'],
     ['other', 'a different skill already uses this name'],
@@ -69,12 +79,9 @@ describe('setup result details', () => {
     const result = doneResult(plan)
     expect(resultLine(plan)).toBe('Replaced · Your copy was saved as a backup')
     result.skills[0].ops[0].status = 'failed'
-    expect(
-      skillInstallResultLine(
-        summarizeBundledSkillOutcomes(result),
-        bundledSkillSetupChanges(plan, result)
-      )
-    ).toBe('Needs attention')
+    expect(skillInstallResultLine(result, bundledSkillSetupChanges(plan, result))).toBe(
+      'Needs attention'
+    )
   })
 
   it('keeps the install-for suffix after a replacement', () => {

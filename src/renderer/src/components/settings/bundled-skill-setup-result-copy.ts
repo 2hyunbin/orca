@@ -1,10 +1,11 @@
 import {
   isBundledSkillLeaveReason,
+  type BundledSkillInstallResult,
   type BundledSkillPlan
 } from '../../../../shared/bundled-skill-plan'
-import type {
-  BundledSkillOutcomeText,
-  BundledSkillResultSummary
+import {
+  summarizeBundledSkillOutcomes,
+  type BundledSkillOutcomeText
 } from '../../../../shared/bundled-skill-summary'
 import { collapseHomePath } from '../../../../shared/bundled-skill-locations'
 import { leaveReasonText, locationPlaceLabel, skillOutcomeText } from '../skills/skill-plan-op-copy'
@@ -67,14 +68,19 @@ export function bundledSkillSetupAttentionMessage(plan: BundledSkillPlan): strin
 }
 
 export function skillInstallResultLine(
-  summary: BundledSkillResultSummary,
+  result: BundledSkillInstallResult,
   changes?: BundledSkillSetupChanges
 ): string {
+  const summary = summarizeBundledSkillOutcomes(result)
   const texts = new Set(summary.skills.map((skill) => skill.text))
+  const headlineText = RESULT_HEADLINE_ORDER.find((text) => texts.has(text)) ?? 'No change'
+  const outcome = result.skills.find((_, index) => summary.skills[index].text === headlineText)
   const headline =
     changes && summary.ok && !texts.has('Needs attention')
       ? bundledSkillSetupResultHeadline(changes)
-      : skillOutcomeText(RESULT_HEADLINE_ORDER.find((text) => texts.has(text)) ?? 'No change')
+      : outcome
+        ? skillOutcomeText(outcome)
+        : translate('auto.components.skills.skillPlanOpCopy.keep', 'No change')
   const notUpdated = summary.skills.flatMap((skill) => skill.leftAlone)
   if (notUpdated.length === 0) {
     return headline

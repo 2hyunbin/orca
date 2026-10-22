@@ -9,7 +9,10 @@ import {
   summarizeBundledSkillOutcomes,
   type BundledSkillResultSummary
 } from '../../../shared/bundled-skill-summary'
-import type { BundledSkillPlanRequest } from '../../../shared/bundled-skill-plan'
+import type {
+  BundledSkillInstallResult,
+  BundledSkillPlanRequest
+} from '../../../shared/bundled-skill-plan'
 import { bundledSkillTargetKey, type BundledSkillTarget } from '@/lib/bundled-skill-target'
 import { bundledSkillInstallErrorMessage } from '@/lib/bundled-skill-install-error-message'
 import {
@@ -24,7 +27,12 @@ import { useMountedRef } from './useMountedRef'
 export type BundledSkillInstallState =
   | { kind: 'idle' }
   | { kind: 'installing' }
-  | { kind: 'done'; summary: BundledSkillResultSummary; changes?: BundledSkillSetupChanges }
+  | {
+      kind: 'done'
+      result: BundledSkillInstallResult
+      summary: BundledSkillResultSummary
+      changes?: BundledSkillSetupChanges
+    }
   /** An older server ("Update Orca on the server"), or an SSH host no server serves yet. */
   | { kind: 'unsupported'; reason: BundledSkillUnsupportedReason }
   /** The request itself failed; nothing says what reached the disk. */
@@ -114,6 +122,7 @@ export function useBundledSkillInstall(
           )
           next = {
             kind: 'done',
+            result,
             summary: summarizeBundledSkillOutcomes(result),
             changes: bundledSkillSetupChanges(planned.plan, result)
           }
