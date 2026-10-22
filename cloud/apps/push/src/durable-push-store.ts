@@ -220,7 +220,13 @@ export class DurablePushStore {
       ['push_event_recipients', 'event_id, registration_id'],
       ['push_events', 'event_id']
     ] as const) {
-      const sweep = await this.deleteInBatches(table, key, 'created_at < ?', [now - RETENTION_MS])
+      const sweep = await this.deleteInBatches(
+        table,
+        key,
+        'created_at < ?',
+        [now - RETENTION_MS],
+        'created_at'
+      )
       deleted += sweep.deleted
       saturated ||= sweep.saturated
     }
@@ -231,13 +237,15 @@ export class DurablePushStore {
     table: string,
     key: string,
     where: string,
-    params: unknown[]
+    params: unknown[],
+    orderBy?: 'created_at'
   ): Promise<PushPruneSweep> {
     const lockRows = this.background.dialect === 'postgres' ? ' FOR UPDATE SKIP LOCKED' : ''
+    const order = orderBy ? ` ORDER BY ${orderBy}` : ''
     let total = 0
     for (let batch = 0; batch < PRUNE_MAX_BATCHES; batch++) {
       const [result] = await this.background.query(
-        `DELETE FROM ${table} WHERE (${key}) IN (SELECT ${key} FROM ${table} WHERE ${where} LIMIT ${PRUNE_BATCH_ROWS}${lockRows})`,
+        `DELETE FROM ${table} WHERE (${key}) IN (SELECT ${key} FROM ${table} WHERE ${where}${order} LIMIT ${PRUNE_BATCH_ROWS}${lockRows})`,
         params
       )
       const changes = Number(result?.changes ?? 0)

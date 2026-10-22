@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach, vi } from 'vitest'
-import { isGitLabIssueFilter, isGitLabMRFilter } from './task-page-source-context'
+import { isGitLabIssueFilter, isGitLabMRFilter } from '../../task-page-source-context'
 
 describe('isGitLabMRFilter', () => {
   it('accepts MR statuses including all', () => {
@@ -33,7 +33,7 @@ const { rejectAppStoreAccess } = vi.hoisted(() => ({
   })
 }))
 
-vi.mock('@/store', () => ({
+vi.mock('@/store/index', () => ({
   useAppStore: Object.assign(rejectAppStoreAccess, {
     getState: rejectAppStoreAccess,
     getInitialState: rejectAppStoreAccess,

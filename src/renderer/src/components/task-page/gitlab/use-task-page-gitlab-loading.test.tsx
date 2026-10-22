@@ -2,7 +2,7 @@
 
 import { cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Repo } from '../../../shared/repo-types'
+import type { Repo } from '../../../../../shared/repo-types'
 
 const rpc = vi.hoisted(() => ({ call: vi.fn() }))
 

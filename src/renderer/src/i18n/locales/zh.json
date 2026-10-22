@@ -12682,7 +12682,7 @@
           "reassurance": "在各个主机上运行，通过你自己的 SSH 连接访问。你的代码和文件留在原处。只有 Orca 的项目、标签页和终端列表会移到该主机。"
         },
         "sshHostServer": {
-          "sourceChanged": "较旧版本的 Orca 更改了此主机的项目。要重新连接，请将这些更改迁移到此主机上的 Orca 服务器，或保留服务器版本。",
+          "sourceChanged": "此计算机上有此主机的 Orca 服务器尚未包含的项目或文件夹，通常是由较旧版本的 Orca 添加的。要重新连接，请将它们迁移到此主机上的 Orca 服务器，或保留服务器版本。",
           "deploying": "正在 {{host}} 上设置 Orca…",
           "converting": "正在迁移到 {{host}} 上的 Orca…",
           "connecting": "正在连接到 {{host}} 上的 Orca…",
