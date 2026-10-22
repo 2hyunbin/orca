@@ -5,6 +5,7 @@
  */
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { Store } from '../loading-store/store'
+import { wslMoveAutomationHostFilterUpdate } from './wsl-move-automation-filter-rewrite'
 import { registerWslMoveDesktopRewriteStore } from './wsl-move-desktop-rewrite-stores'
 import { wslMoveRewriteScope } from './wsl-move-rewrite-scope'
 import { wslMoveHostSessionSeed, wslMoveSessionGlobalsPatch } from './wsl-move-session-rewrite'
@@ -27,7 +28,15 @@ export function registerWslMoveMainRewriteStores(profile: WslMoveMainRewriteProf
     id: 'ui-routing',
     side: 'main',
     run: (context) => {
-      const updates = rewriteWslMoveUiRouting(profile.getUI(), wslMoveRewriteScope(context))
+      const ui = profile.getUI()
+      const automationHostFilter = wslMoveAutomationHostFilterUpdate(
+        ui.automationHostFilter,
+        context.cutover.manifest.payload.dormantState?.automations?.length ?? 0
+      )
+      const updates = {
+        ...rewriteWslMoveUiRouting(ui, wslMoveRewriteScope(context)),
+        ...(automationHostFilter ? { automationHostFilter } : {})
+      }
       if (Object.keys(updates).length > 0) {
         profile.updateUI(updates)
       }
