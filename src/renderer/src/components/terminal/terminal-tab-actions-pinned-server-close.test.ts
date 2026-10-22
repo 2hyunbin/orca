@@ -87,16 +87,29 @@ describe('closing a pinned terminal tab of a server workspace', () => {
     expect(mocks.closeWebRuntimeSessionTab).not.toHaveBeenCalled()
   })
 
-  it('never forces an unconfirmed close', () => {
-    mocks.getState.mockReturnValue(serverWorkspaceState(false))
-    closeTerminalTab('local-tab-1')
-    // Pinned, with the confirmation turned off: no confirmation was given.
+  it('forces a pinned close when the pin confirmation is turned off', () => {
     mocks.getState.mockReturnValue(serverWorkspaceState(true, false))
     closeTerminalTab('local-tab-1')
 
-    expect(mocks.closeWebRuntimeSessionTab).toHaveBeenCalledTimes(2)
-    for (const [args] of mocks.closeWebRuntimeSessionTab.mock.calls) {
-      expect(args).not.toHaveProperty('force')
-    }
+    expect(mocks.closeWebRuntimeSessionTab).toHaveBeenCalledWith(
+      expect.objectContaining({ tabId: 'host-tab-1', reason: 'user', force: true })
+    )
+  })
+
+  it('never forces the close of an unpinned tab', () => {
+    mocks.getState.mockReturnValue(serverWorkspaceState(false))
+    closeTerminalTab('local-tab-1')
+
+    expect(mocks.closeWebRuntimeSessionTab).toHaveBeenCalledTimes(1)
+    expect(mocks.closeWebRuntimeSessionTab.mock.calls[0][0]).not.toHaveProperty('force')
+  })
+
+  it('rejects a pinned lifecycle close without forcing, even with the confirmation off', () => {
+    const onCancel = vi.fn()
+    mocks.getState.mockReturnValue(serverWorkspaceState(true, false))
+    closeTerminalTab('local-tab-1', { rejectPinned: true, onCancel })
+
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(mocks.closeWebRuntimeSessionTab).not.toHaveBeenCalled()
   })
 })
