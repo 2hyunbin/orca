@@ -4,7 +4,11 @@ import {
   getRemoteHeadBranchName,
   getRepoDefaultBranchName
 } from '../../../source-control/repo-default-branch'
-import type { GhExecOptions, HostedReviewLocalGitOptions } from './../github-exec-scope'
+import {
+  ownerRepoFromPullRequestUrl,
+  type GhExecOptions,
+  type HostedReviewLocalGitOptions
+} from './../github-exec-scope'
 import type { TrackedUpstreamBranch } from './tracked-upstream-cache'
 import {
   pullRequestHeadRepository,
@@ -33,14 +37,8 @@ export function createImplicitDefaultBranchPRPolicy(
   return {
     rejectedPRUrls,
     async accepts(data, prRepo) {
-      const expectedHeads = [context.originHeadRepo, context.trackedUpstream?.headRepo].filter(
-        (head) => head != null
-      )
-      // Cached numbers must not revive a foreign head rejected by branch discovery.
       const hidden =
-        (data.headRefName === context.branchName &&
-          expectedHeads.length > 0 &&
-          expectedHeads.every((head) => !pullRequestMatchesHeadRepository(data, prRepo, head))) ||
+        isForeignSameNamedHead(context, data, prRepo) ||
         (await shouldHideImplicitDefaultBranchPR({ ...context, data, prRepo }))
       if (hidden && prRepo) {
         rejected.add(`${githubRepoIdentityKey(prRepo)}#${data.number}`)
@@ -54,6 +52,27 @@ export function createImplicitDefaultBranchPRPolicy(
       return rejected.has(`${githubRepoIdentityKey(prRepo)}#${number}`)
     }
   }
+}
+
+// Cached numbers must not revive a foreign head rejected by branch discovery.
+function isForeignSameNamedHead(
+  context: ImplicitDefaultBranchPRContext,
+  data: PullRequestLookupData,
+  prRepo: OwnerRepo | null
+): boolean {
+  const expectedHeads = [context.originHeadRepo, context.trackedUpstream?.headRepo].filter(
+    (head) => head != null
+  )
+  if (data.headRefName !== context.branchName || expectedHeads.length === 0) {
+    return false
+  }
+  const headRepo = pullRequestHeadRepository(data, prRepo)
+  const baseRepo = data.url ? ownerRepoFromPullRequestUrl(data.url) : null
+  // Why: a same-repo PR lives in a checkout remote; its canonical URL survives stale renamed-remote URLs.
+  if (headRepo && baseRepo && githubRepoIdentityKey(headRepo) === githubRepoIdentityKey(baseRepo)) {
+    return false
+  }
+  return expectedHeads.every((head) => !pullRequestMatchesHeadRepository(data, prRepo, head))
 }
 
 async function shouldHideImplicitDefaultBranchPR(

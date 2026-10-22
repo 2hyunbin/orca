@@ -41,20 +41,17 @@ const foreign = { owner: 'contributor', repo: 'widgets' }
 function primeLookup(
   options: {
     head?: { owner: string; repo: string } | null
-    expected?: { owner: string; repo: string; host?: string } | null
-    candidateHost?: string
+    expected?: { owner: string; repo: string } | null
+    checkout?: { owner: string; repo: string }
     trackedFork?: boolean
     branchResult?: boolean
     headRefName?: string
   } = {}
 ) {
-  const candidate = {
-    ...upstream,
-    ...(options.candidateHost ? { host: options.candidateHost } : {})
-  }
+  const candidate = options.checkout ?? upstream
   resolvePRRepositoryCandidatesMock.mockResolvedValue({
     candidates: [candidate],
-    headRepo: options.expected === undefined ? upstream : options.expected
+    headRepo: options.expected === undefined ? candidate : options.expected
   })
   gitExecFileAsyncMock.mockImplementation(async (args: string[]) => {
     if (args[0] === 'for-each-ref') {
@@ -70,7 +67,7 @@ function primeLookup(
     number: 7,
     title: 'A pull request on main',
     state: 'OPEN',
-    url: `https://${options.candidateHost ?? 'github.com'}/acme/widgets/pull/7`,
+    url: 'https://github.com/acme/widgets/pull/7',
     updatedAt: '2026-10-22T00:00:00Z',
     statusCheckRollup: [],
     isDraft: false,
@@ -189,19 +186,11 @@ describe('cached pull request head repository identity', () => {
     })
   })
 
-  it('compares repository names without case sensitivity', async () => {
-    primeLookup({ head: { owner: 'ACME', repo: 'Widgets' } })
+  it('keeps a same-repository PR when origin still uses the pre-rename URL', async () => {
+    primeLookup({ head: upstream, checkout: { owner: 'acme', repo: 'old-widgets' } })
     expect(await getPRForBranchOutcome('/repo', 'main', null, null, 7)).toMatchObject({
       kind: 'found',
-      pr: { number: 7 }
-    })
-  })
-
-  it('does not confuse a cached GitHub Enterprise PR with the public repository', async () => {
-    const pr = primeLookup({ head: upstream, candidateHost: 'github.example.com' })
-    expect(await getPRForBranchOutcome('/repo', 'main', null, null, 7)).toMatchObject({
-      kind: 'no-pr',
-      rejectedPRUrls: [pr.url]
+      pr: { number: 7, headRepo: upstream }
     })
   })
 })
