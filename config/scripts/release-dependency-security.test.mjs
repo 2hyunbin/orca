@@ -16,6 +16,19 @@ const cases = [
 ]
 
 describe('release dependency security boundaries', () => {
+  it('keeps deferred JavaScript license review out of CI enforcement', () => {
+    const steps = workflow('dependency-policy').jobs.node.steps
+    expect(steps.find((step) => step.name === 'Check all pnpm workspaces').run).toBe(
+      'pnpm check:dependencies --security-only'
+    )
+    expect(
+      steps.find((step) => step.name === 'Check all pnpm workspaces')['continue-on-error']
+    ).toBeUndefined()
+    expect(steps.find((step) => step.uses?.startsWith('actions/upload-artifact@')).if).toBe(
+      'always()'
+    )
+  })
+
   it.each(cases)('gates %s / %s on the source it ships', (name, job, profile, sha) => {
     const jobs = workflow(name).jobs
     const gate = jobs['dependency-security']

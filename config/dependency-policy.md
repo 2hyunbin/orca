@@ -141,7 +141,11 @@ separate work. License findings do not block security-only releases.
 The dedicated `Dependency policy` workflow runs for dependency and policy changes,
 on relevant pushes to main, every day at 09:37 UTC, and manually. JavaScript and
 Rust run as separate jobs; all upload their reports even when findings fail the
-check. The scanner version is pinned, while advisory databases stay current.
+check. JavaScript CI uses `--security-only`: license findings remain in the reports
+for review without blocking CI, matching the release policy. The local command
+without that flag still enforces the license allowlist. Rust CI retains its full
+advisory, license, bans and sources checks. The scanner version is pinned, while
+advisory databases stay current.
 
 These workflow jobs report failures but are not automatically required by branch
 protection. Making them required is a repository setting and should follow
