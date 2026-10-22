@@ -277,7 +277,6 @@ export function createStructuredChatNamingHandler(deps: StructuredChatNamingDeps
       if (!store?.getRecord(sessionId)) {
         return null
       }
-      attempted.add(sessionId)
       const { record, applied } = await store.setUserConversationName(sessionId, name, write)
       if (applied) {
         forget(sessionId)

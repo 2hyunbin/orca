@@ -99,6 +99,7 @@ function rig(provider: 'claude' | 'codex') {
     summary,
     getRecord,
     setConversationName,
+    setUserConversationName,
     handle: createStructuredChatNamingHandler(deps),
     read: () => record,
     replace: (next: AgentSessionRecord | null) => {
@@ -108,6 +109,24 @@ function rig(provider: 'claude' | 'codex') {
 }
 
 describe.each(['claude', 'codex'] as const)('structured %s chat naming', (provider) => {
+  it('still names the first message after a manual rename fails to save', async () => {
+    const state = rig(provider)
+    state.setUserConversationName.mockRejectedValueOnce(new Error('Save failed'))
+    await expect(
+      state.handle.setUserName(state.summary.sessionId, 'Manual name', 'rename')
+    ).rejects.toThrow('Save failed')
+    expect(state.read()?.conversationName).toBeUndefined()
+    state.handle(state.summary, { replay: false, firstInputSubmissionKey: 'first-message' })
+    await settle()
+    expect(state.setConversationName).toHaveBeenCalledWith(
+      state.summary.sessionId,
+      'Please repair the login flow',
+      null
+    )
+    expect(state.deps.generate).toHaveBeenCalledTimes(1)
+    expect(state.read()?.conversationName).toBe('auth/login')
+  })
+
   it('names the chat from its first prompt at once, then takes the generated name', async () => {
     const state = rig(provider)
     const generation = deferred<StructuredChatNameGeneration>()

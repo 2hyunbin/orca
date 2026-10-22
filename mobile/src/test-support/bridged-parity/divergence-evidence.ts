@@ -49,28 +49,35 @@ export function withReplyMeta(json: string): string {
  * the field records it where the faithful run records nothing. Removing it is what makes the two
  * runs comparable; it is a key the recorder never sees on this corpus, so nothing else is lost.
  */
-export function withoutRpcMeta(value: RecordedValue): RecordedValue {
+export function withoutRpcMeta(value: RecordedValue, injectedOnly = false): RecordedValue {
   if (Array.isArray(value)) {
-    return value.map(withoutRpcMeta)
+    return value.map((entry) => withoutRpcMeta(entry, injectedOnly))
   }
   if (typeof value !== 'object' || value === null) {
     return value
   }
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => key !== '_meta')
-      .map(([key, entry]) => [key, withoutRpcMeta(entry)])
+      .filter(
+        ([key, entry]) =>
+          key !== '_meta' ||
+          (injectedOnly &&
+            (!isKeyedObject(entry) ||
+              Object.keys(entry).length !== 1 ||
+              entry.runtimeId !== 'counterfactual-runtime'))
+      )
+      .map(([key, entry]) => [key, withoutRpcMeta(entry, injectedOnly)])
   )
 }
 
 /** A recording with the counterfactual's fingerprints removed, ready to diff against a golden. */
-export function recordingWithoutRpcMeta(recording: Recording): Recording {
+export function recordingWithoutRpcMeta(recording: Recording, injectedOnly = false): Recording {
   return {
     scenario: recording.scenario,
     checkpoints: recording.checkpoints.map((checkpoint) => ({
       id: checkpoint.id,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: `withoutRpcMeta` preserves shape, so an observation maps to an observation.
-      observation: withoutRpcMeta(checkpoint.observation) as Observation
+      observation: withoutRpcMeta(checkpoint.observation, injectedOnly) as Observation
     }))
   }
 }

@@ -5,6 +5,7 @@ import type { Recording, RecordingScenario } from '../rpc-recording/recording-sc
 import type { BridgeRpcClientDiagnostic } from '../../mobile-web-shell/bridge/bridge-rpc-client'
 import { recordingDifferences, valueDifferences } from '../rpc-recording/golden-difference'
 import { classifyBridgedParity } from './divergence-classes'
+import { strictReplayVerdict } from './replay-verdict'
 import {
   createBridgePortPair,
   type BridgePortPair
@@ -123,6 +124,51 @@ describe('undoing the counterfactual', () => {
 })
 
 describe('the fields that diverged', () => {
+  it('requires independent original and reply-meta evidence at the replay admission seam', () => {
+    const expected = recording({
+      sender: [{ ordinal: 1 }],
+      payloads: [{ json: '{"id":"frame-1","method":"status.get"}' }]
+    })
+    const ordinal = structuredClone(expected)
+    ordinal.checkpoints[0]!.observation.sender = [{ ordinal: 2 }]
+    const run = (value: Recording | null, thrown: unknown = null) => ({
+      recording: value,
+      thrown,
+      pairs: []
+    })
+    expect(strictReplayVerdict(expected, [], run(ordinal), run(ordinal)).name).toBe('write-ordinal')
+    for (const original of [
+      run(null, new Error('Original failed')),
+      run(expected, new Error('Late failure'))
+    ]) {
+      const result = strictReplayVerdict(expected, [], original, run(ordinal))
+      expect(result.original.name).toBe('unclassified')
+      expect(result.replyMeta.name).toBe('write-ordinal')
+      expect(result.name).toBe('unclassified')
+    }
+    for (const change of [
+      { state: { corrupted: true } },
+      { payloads: [{ json: '{"id":"frame-2","method":"status.get"}' }] }
+    ]) {
+      const corrupt = structuredClone(ordinal)
+      Object.assign(corrupt.checkpoints[0]!.observation, change)
+      const result = strictReplayVerdict(expected, [], run(corrupt), run(ordinal))
+      expect(result.original.name).toBe('unclassified')
+      expect(result.replyMeta.name).toBe('write-ordinal')
+      expect(result.name).toBe('unclassified')
+      expect(strictReplayVerdict(expected, [], run(ordinal), run(corrupt)).name).toBe(
+        'unclassified'
+      )
+    }
+    const meta = structuredClone(ordinal)
+    meta.checkpoints[0]!.observation.settlements = {
+      _meta: { runtimeId: 'counterfactual-runtime' }
+    }
+    expect(strictReplayVerdict(expected, [], run(ordinal), run(meta)).name).toBe('write-ordinal')
+    meta.checkpoints[0]!.observation.settlements = { _meta: { runtimeId: 'unexpected-runtime' } }
+    expect(strictReplayVerdict(expected, [], run(ordinal), run(meta)).name).toBe('unclassified')
+  })
+
   it('keeps later wire differences and occurrence-aligned shared checkpoints despite list changes', () => {
     const expected = recording({
       sender: [{ ordinal: 1, settlement: { value: { id: 'frame-2' } } }],
@@ -173,19 +219,23 @@ describe('the fields that diverged', () => {
   it('attributes a real malformed exchange without excusing valid wire changes beside it', async () => {
     const pairs: BridgePortPair<RpcClient>[] = []
     const native = new ScriptedRpcTransport()
-    const bridge = new ScriptedRpcTransport(
-      () => 0,
-      undefined,
-      (rpc) => {
-        const pair = createBridgePortPair({ rpc })
-        pairs.push(pair)
-        for (let round = 0; round < 4; round += 1) {
-          pair.drainNow()
+    const makeBridge = (rewriteToPage?: (json: string) => string) =>
+      new ScriptedRpcTransport(
+        () => 0,
+        undefined,
+        (rpc) => {
+          const pair = createBridgePortPair({ rpc, rewriteToPage })
+          pairs.push(pair)
+          for (let round = 0; round < 4; round += 1) {
+            pair.drainNow()
+          }
+          return pair.client
         }
-        return pair.client
-      }
-    )
+      )
+    const bridge = makeBridge()
+    const metaBridge = makeBridge(withReplyMeta)
     const pair = pairs[0]!
+    const metaPair = pairs[1]!
     try {
       const nativeReply = native.client.sendRequest('status.get', {})
       const nativeWorktrees = native.client.sendRequest('worktree.ps', { limit: 10000 })
@@ -195,18 +245,26 @@ describe('the fields that diverged', () => {
       const bridgeWorktrees = bridge.client
         .sendRequest('worktree.ps', { limit: 10000 })
         .catch((error: unknown) => error)
-      await pair.flush()
+      const metaReply = metaBridge.client
+        .sendRequest('status.get', {})
+        .catch((error: unknown) => error)
+      const metaWorktrees = metaBridge.client
+        .sendRequest('worktree.ps', { limit: 10000 })
+        .catch((error: unknown) => error)
+      await Promise.all(pairs.map((entry) => entry.flush()))
       native.complete('status.get#1', {}, { ok: true })
       bridge.complete('status.get#1', {}, { ok: true })
+      metaBridge.complete('status.get#1', {}, { ok: true })
       const worktreeParams = { limit: 10000, supportsWorktreeVisibilitySourceDefaults: true }
       native.complete('worktree.ps#1', worktreeParams, { ok: true })
       bridge.complete('worktree.ps#1', worktreeParams, { ok: true })
-      await Promise.all([nativeWorktrees, bridgeWorktrees])
-      const [reply, error] = await Promise.all([nativeReply, bridgeReply])
-      await pair.flush()
+      metaBridge.complete('worktree.ps#1', worktreeParams, { ok: true })
+      await Promise.all([nativeWorktrees, bridgeWorktrees, metaWorktrees])
+      const [reply, error, metaError] = await Promise.all([nativeReply, bridgeReply, metaReply])
+      await Promise.all(pairs.map((entry) => entry.flush()))
       const message = 'The host sent a reply this app could not read (status.get)'
       expect(() => agentHistoryHostStatusRead.interpret(reply)).toThrow(message)
-      if (!(error instanceof Error)) {
+      if (!(error instanceof Error) || !(metaError instanceof Error)) {
         throw new Error('missing actual bridge refusal')
       }
       const snapshot = (transport: ScriptedRpcTransport, text: string) =>
@@ -225,12 +283,31 @@ describe('the fields that diverged', () => {
         ]),
         operation: 'aiVault.history-scan'
       }
-      expect(classify(expected, actual, [injected], pairs)).toBe('result-absent-settlement')
+      const original = { recording: actual, thrown: null, pairs: [pair] }
+      const replyMeta = {
+        recording: snapshot(metaBridge, metaError.message),
+        thrown: null,
+        pairs: [metaPair]
+      }
+      expect(strictReplayVerdict(expected, [injected], original, replyMeta).name).toBe(
+        'result-absent-settlement'
+      )
+      expect(
+        strictReplayVerdict(expected, [injected], { ...original, pairs: [] }, replyMeta).name
+      ).toBe('unclassified')
+      expect(
+        strictReplayVerdict(expected, [injected], original, { ...replyMeta, pairs: [] }).name
+      ).toBe('unclassified')
+      expect(classify(expected, actual, [injected], [pair])).toBe('result-absent-settlement')
       const changed = structuredClone(actual)
       changed.checkpoints[0]!.observation.payloads = [
         { name: 'status.get#1', ordinal: 2, json: '{"id":"frame-1","method":"wrong"}' }
       ]
-      expect(classify(expected, changed, [injected], pairs)).toBe('unclassified')
+      expect(classify(expected, changed, [injected], [pair])).toBe('unclassified')
+      expect(
+        strictReplayVerdict(expected, [injected], { ...original, recording: changed }, replyMeta)
+          .name
+      ).toBe('unclassified')
       const sibling = scenario([{ checkpoint: 'only' }])
       sibling.id = 'normal'
       const combined = (injection: Recording, normal: Recording): Recording => ({
@@ -253,14 +330,17 @@ describe('the fields that diverged', () => {
           expected,
           actual,
           [{ ...injected, steps: [{ checkpoint: 'only' }, injected.steps[0]!] }],
-          pairs
+          [pair]
         )
       ).toBe('unclassified')
     } finally {
-      pair.client.close()
-      pair.host.dispose()
+      for (const entry of pairs) {
+        entry.client.close()
+        entry.host.dispose()
+      }
       native.dispose()
       bridge.dispose()
+      metaBridge.dispose()
     }
   })
   it('reports every one, not the first', () => {

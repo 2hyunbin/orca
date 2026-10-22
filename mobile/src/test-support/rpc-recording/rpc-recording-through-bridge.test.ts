@@ -1,4 +1,4 @@
-import { absentResultExplainsResiduals } from '../bridged-parity/absent-result-evidence'
+import { strictReplayVerdict, type BridgedReplay } from '../bridged-parity/replay-verdict'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readBridgeHostMessage } from '../../mobile-web-shell/bridge/bridge-envelope'
@@ -70,11 +70,7 @@ const BUILD_ID = 'recording-build'
 /** `ready` out, `init` back: two deliveries, and a round to see that the session landed. */
 const HANDSHAKE_ROUNDS = 4
 
-type Replay = {
-  recording: Recording | null
-  thrown: unknown
-  pairs: BridgePortPair<RpcClient>[]
-}
+type Replay = BridgedReplay
 
 const counts: Record<BridgedParityClass, number> = {
   'reply-meta-required': 0,
@@ -203,7 +199,7 @@ async function verdict(
     Object.hasOwn(C5_PAGE_CLOSURE['aiVault.history'] ?? {}, id) ||
     Object.hasOwn(C5_PAGE_CLOSURE['aiVault.history-screen'] ?? {}, id)
   const fields = run.recording === null ? [] : divergingFields(expected.recording, run.recording)
-  if (run.recording !== null && fields.length === 0) {
+  if (!certified && run.recording !== null && fields.length === 0) {
     // Not redundant with the field walk: this one also pins the encoding.
     compareGolden(expected, { ...expected, recording: run.recording })
     identical += 1
@@ -211,6 +207,27 @@ async function verdict(
     return
   }
   const asIf = await replay(id, scenarios, withReplyMeta)
+  if (certified) {
+    const result = strictReplayVerdict(expected.recording, scenarios, run, asIf)
+    if (result.name === 'unclassified') {
+      throw new Error(
+        `Unclassified bridged divergence: ${id}\noriginal (${result.original.name}):\n${explain(result.original.fields, run)}\nwith \`_meta\` supplied (${result.replyMeta.name}):\n${explain(result.replyMeta.fields, asIf)}`
+      )
+    }
+    if (result.name === 'identical') {
+      compareGolden(expected, { ...expected, recording: run.recording! })
+      identical += 1
+      record('identical')
+      return
+    }
+    counts[result.name] += 1
+    record(result.name)
+    members.set(result.name, [...(members.get(result.name) ?? []), id])
+    if (!samples.has(result.name)) {
+      samples.set(result.name, `${id}\n${explain(fields, run)}`)
+    }
+    return
+  }
   const asIfFields =
     asIf.recording === null
       ? []
@@ -222,35 +239,17 @@ async function verdict(
     fixedByReplyMeta: asIf.recording !== null && asIfFields.length === 0,
     threwWhileRecording: asIf.recording === null,
     divergingFields: asIfFields,
-    absentResultExplainsResiduals:
-      certified &&
-      asIf.recording !== null &&
-      absentResultExplainsResiduals(
-        expected.recording,
-        recordingWithoutRpcMeta(asIf.recording),
-        scenarios,
-        asIf.pairs
-      ),
+    absentResultExplainsResiduals: false,
     paramsMismatch: paramsMismatchEvidence(asIf.thrown, failing, asIf.pairs.at(-1)?.toShell ?? []),
     refusalReleasedStream:
-      !certified &&
-      scriptsAbsent &&
-      asIf.pairs.some((pair) => refusalReleasedStream(pair.diagnostics)),
-    ...(certified
-      ? {}
-      : {
-          legacyBaseline: {
-            firstField:
-              asIf.recording === null
-                ? undefined
-                : divergingFields(
-                    expected.recording,
-                    recordingWithoutRpcMeta(asIf.recording),
-                    false
-                  )[0],
-            scriptsAbsentResultReply: scriptsAbsent
-          }
-        })
+      scriptsAbsent && asIf.pairs.some((pair) => refusalReleasedStream(pair.diagnostics)),
+    legacyBaseline: {
+      firstField:
+        asIf.recording === null
+          ? undefined
+          : divergingFields(expected.recording, recordingWithoutRpcMeta(asIf.recording), false)[0],
+      scriptsAbsentResultReply: scriptsAbsent
+    }
   }
   const name = classifyBridgedParity(evidence)
   counts[name] += 1
