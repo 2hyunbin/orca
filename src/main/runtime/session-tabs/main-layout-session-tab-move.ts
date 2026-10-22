@@ -7,7 +7,7 @@ import type {
   RuntimeMobileSessionTabMoveResult,
   RuntimeMobileSessionTabsSnapshot
 } from '../../../shared/runtime-types'
-import { translateSessionTabMove } from '../../../shared/workspace-layout/old-client/old-client-session-tabs-projection'
+import { translateSessionTabMove } from '../../../shared/workspace-layout/old-client/old-client-method-translation'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
 

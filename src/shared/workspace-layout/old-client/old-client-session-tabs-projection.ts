@@ -35,9 +35,6 @@ import type {
 } from '../workspace-layout-model'
 
 /** One view's selection: the desktop's record today, a phone's own record once views exist. */
-// The one way out of this folder for a phone's or paired client's tab move.
-export { translateSessionTabMove } from './old-client-method-translation'
-
 export type SessionTabsView = Pick<
   DesktopLayoutView,
   'activeGroupIdByWorktree' | 'groups' | 'panes' | 'editorDrafts'
