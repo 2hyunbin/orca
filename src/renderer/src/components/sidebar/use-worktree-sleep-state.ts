@@ -1,9 +1,11 @@
 import { useAppStore } from '@/store'
 import { useDesktopSidebarFeedValue } from '@/lib/desktop-sidebar-feed'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getWorktreeExecutionHostId } from '../../../../shared/execution-host'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
-import { feedSleepOverride } from '../../../../shared/sidebar-list/workspace-sleep-verdict'
+import {
+  feedSleepOverride,
+  sleepHintHostId
+} from '../../../../shared/sidebar-list/workspace-sleep-verdict'
 import { getAgentStatusEpochNow } from '@/lib/agent-status-epoch-clock'
 import { getWorktreeIdsWithLiveAgent, isInactiveWorkspace } from '@/lib/worktree-activity-state'
 import { getWorktreeIdsWithStructuredChat } from './visible-worktree-activity-inputs'
@@ -105,7 +107,7 @@ const useMainSleepOverride: (worktree: SleepWorktree) => boolean | undefined =
     ? (worktree) => {
         // The host the feed keys this copy's hint by: the row's own host, else its repo's owner.
         const hostId = useAppStore((state) =>
-          getWorktreeExecutionHostId(
+          sleepHintHostId(
             worktree,
             state.repos.find((repo) => repo.id === worktree.repoId)
           )

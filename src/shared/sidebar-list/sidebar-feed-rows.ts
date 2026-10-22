@@ -52,7 +52,7 @@ import type { SidebarFeedDomains } from './sidebar-feed-domains'
 import { planSidebarRows } from './sidebar-row-plan'
 import type { SortBy } from './smart-sort'
 import { selectVisibleSidebarWorktrees } from './visible-worktrees'
-import { feedLifecycleHint, isWorkspaceAsleep } from './workspace-sleep-verdict'
+import { isFeedWorkspaceAsleep } from './workspace-sleep-verdict'
 import { prGroupOfReviewFact } from './workspace-review-facts'
 
 /** The host's view settings a reader shows the list with; the host's own phone reads them off ui.get. */
@@ -143,7 +143,7 @@ export function planSidebarFeedRows(
   }
   // Each row carries its own edge (sidebar-feed-worktrees.ts); an id-keyed map would keep one host's.
   const lineageById = NO_LINEAGE_MAP
-  const retained = new Set(domains.retention?.retainedIds ?? [])
+  const retained = new Set(domains.retention?.retainedIds)
   const rankByIdentity = new Map(rankedIdentities.map((identity, rank) => [identity, rank]))
   const factsOf = (worktree: Worktree) => byIdentity.get(getWorktreeHostIdentity(worktree))?.facts
   const pairedDeviceIdsByEnvironment = new Map(
@@ -155,10 +155,6 @@ export function planSidebarFeedRows(
     })
   )
 
-  const hostOf = (worktree: Worktree) => {
-    const repo = repoMap.get(worktree.repoId)
-    return repo ? getWorktreeExecutionHostId(worktree, repo, defaultHostId) : null
-  }
   const visibleWorktrees = selectVisibleSidebarWorktrees({
     rows: allWorktrees,
     ancestorByIdentity,
@@ -168,7 +164,10 @@ export function planSidebarFeedRows(
       isArchived: (worktree) => worktree.isArchived,
       isFolderWorkspace: () => false,
       repoId: (worktree) => worktree.repoId,
-      hostId: hostOf,
+      hostId: (worktree) => {
+        const repo = index.repoOf(worktree)
+        return repo ? getWorktreeExecutionHostId(worktree, repo, defaultHostId) : null
+      },
       isOtherClient: (worktree) =>
         isWorkspaceOwnedBySomeoneElse(worktree, pairedDeviceIdsByEnvironment),
       isDefaultBranch: (worktree) => factsOf(worktree)?.defaultBranch === true,
@@ -177,11 +176,7 @@ export function planSidebarFeedRows(
       isDetachedHead: (worktree) => factsOf(worktree)?.detachedHead === true,
       isMainWorktree: (worktree) => worktree.isMainWorktree,
       isSleeping: (worktree) =>
-        isWorkspaceAsleep({
-          hint: feedLifecycleHint(domains.inProgress, worktree.id, hostOf(worktree)),
-          retained: retained.has(getWorktreeHostIdentity(worktree)),
-          activity: domains.activity.get(worktree.id)
-        })
+        isFeedWorkspaceAsleep(domains, retained, worktree, index.repoOf(worktree))
     },
     worktreeLineageById: lineageById,
     filterRepoIds: view.filters.filterRepoIds,
@@ -231,7 +226,9 @@ export function planSidebarFeedRows(
     groupBy,
     worktrees: visibleWorktrees,
     repoMap,
-    prGroupOf: (worktree) => prGroupOfReviewFact(domains.review.get(worktree.id)),
+    repoOfWorktree: index.repoOf,
+    prGroupOf: (worktree) =>
+      prGroupOfReviewFact(domains.review.get(getWorktreeHostIdentity(worktree))),
     repoOrder,
     workspaceStatuses: view.workspaceStatuses,
     projectOrderBy: view.projectOrderBy,

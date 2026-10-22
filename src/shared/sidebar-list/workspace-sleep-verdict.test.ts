@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { IDLE_WORKSPACE_ACTIVITY } from './workspace-activity-facts'
-import { feedSleepOverride, isWorkspaceAsleep } from './workspace-sleep-verdict'
+import { feedSleepOverride, sleepHintHostId, isWorkspaceAsleep } from './workspace-sleep-verdict'
 import type { WorkspaceLifecycleHint } from './workspace-lifecycle-hints'
 
 const live = { ...IDLE_WORKSPACE_ACTIVITY, terminal: 'live' as const }
@@ -48,5 +48,14 @@ describe('feedSleepOverride', () => {
         'local'
       )
     ).toBeUndefined()
+  })
+})
+
+describe('sleepHintHostId', () => {
+  it("reads the row's host, else its repo's owner, else local; never a focused host", () => {
+    expect(sleepHintHostId({ hostId: 'ssh:box' }, undefined)).toBe('ssh:box')
+    expect(sleepHintHostId({}, { connectionId: 'box', executionHostId: undefined })).toBe('ssh:box')
+    expect(sleepHintHostId({}, { connectionId: null, executionHostId: undefined })).toBe('local')
+    expect(sleepHintHostId({}, undefined)).toBe('local')
   })
 })

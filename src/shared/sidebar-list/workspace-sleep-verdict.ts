@@ -1,9 +1,30 @@
-import type { ExecutionHostId } from '../execution-host'
-import { composeWorktreeHostIdentity } from '../worktree/host-qualified-identity'
+import {
+  getWorktreeExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
+  type ExecutionHostId
+} from '../execution-host'
+import type { Repo } from '../repo-types'
+import type { Worktree } from '../worktree/types'
+import {
+  composeWorktreeHostIdentity,
+  getWorktreeHostIdentity
+} from '../worktree/host-qualified-identity'
 import { worktreeIdentityKey } from '../worktree/id'
 import type { SidebarFeedDomains } from './sidebar-feed-domains'
 import { isIdleWorkspaceActivity, type WorkspaceActivityFacts } from './workspace-activity-facts'
 import type { WorkspaceLifecycleHint } from './workspace-lifecycle-hints'
+
+/**
+ * The host whose queue key carries this copy's sleep hint: the row's own host, else its repo's
+ * owner, else local, as main keys a workspace that names no host. The card and Hide sleeping
+ * both read it, so a hostless workspace's glyph and filter cannot disagree.
+ */
+export function sleepHintHostId(
+  worktree: Pick<Worktree, 'hostId'>,
+  repo: Pick<Repo, 'connectionId' | 'executionHostId'> | undefined
+): ExecutionHostId {
+  return getWorktreeExecutionHostId(worktree, repo, LOCAL_EXECUTION_HOST_ID)
+}
 
 /** The lifecycle hint main publishes for one host's copy of a workspace. */
 export function feedLifecycleHint(
@@ -51,4 +72,19 @@ export function feedSleepOverride(
     return false
   }
   return hint?.kind === 'sleep' ? true : undefined
+}
+
+/** Hide sleeping's verdict for one listed row, from main's feed: the card reads the same rule. */
+export function isFeedWorkspaceAsleep(
+  domains: Pick<SidebarFeedDomains, 'inProgress' | 'activity'>,
+  retained: ReadonlySet<string>,
+  worktree: Pick<Worktree, 'id' | 'hostId' | 'repoId'>,
+  repo: Pick<Repo, 'connectionId' | 'executionHostId'> | undefined
+): boolean {
+  const identity = getWorktreeHostIdentity(worktree)
+  return isWorkspaceAsleep({
+    hint: feedLifecycleHint(domains.inProgress, worktree.id, sleepHintHostId(worktree, repo)),
+    retained: retained.has(identity),
+    activity: domains.activity.get(identity)
+  })
 }

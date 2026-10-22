@@ -24,7 +24,10 @@ import { TerminalUseProducer } from './terminal-use-producer'
 import { createKeyedTrailingEdgeCoalescer } from '../keyed-trailing-edge-coalescer'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId, worktreeIdentityKey } from '../../../shared/worktree/id'
-import { getWorktreeIdFromHostIdentity } from '../../../shared/worktree/host-qualified-identity'
+import {
+  getWorktreeIdFromHostIdentity,
+  parseWorktreeHostIdentity
+} from '../../../shared/worktree/host-qualified-identity'
 import { anySleepKeyNames } from '../terminal/stop/worktree-terminal-sleep-key'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
 import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/worktree-identity-metadata'
@@ -47,7 +50,8 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithDete
     // The workspaces producer's own rows, so retention keys never need a listing of their own.
     rowKeys: () => {
       const rows = this.workspaceRows?.snapshot()?.rows
-      return rows ? Object.keys(rows) : null
+      // The domain keys its rows host-qualified; a bare key names no host and is no row here.
+      return rows ? Object.keys(rows).flatMap((key) => parseWorktreeHostIdentity(key) ?? []) : null
     },
     watchRowKeys: (changed) => this.workspaceRows?.revision.onChange(changed) ?? (() => {}),
     retentionCandidates: () => this.readSidebarRetentionCandidates()
@@ -240,7 +244,6 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithDete
       (this.workspaceLifecycle?.pausedKeys() ?? []).map(getWorktreeIdFromHostIdentity)
     )
     return {
-      ids: Object.keys(facts),
       // A command whose host never confirmed it keeps the row shown, tabs or not.
       isActive: (worktreeId) => worktreeId in facts || paused.has(worktreeIdentityKey(worktreeId)),
       // A sleep this host ran (or is running) is definitive: no grace.
