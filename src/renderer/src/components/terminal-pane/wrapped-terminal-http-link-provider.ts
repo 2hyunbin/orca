@@ -1,6 +1,6 @@
 import { rangeForParsedLinkOnRow } from './terminal-link-row-range'
 import type { ILink, ILinkProvider, Terminal } from '@xterm/xterm'
-import { buildTerminalHttpLogicalLines } from './terminal-http-logical-lines'
+import { buildTerminalHttpLogicalLines, hasHardWrappedRows } from './terminal-http-logical-lines'
 import { extractTerminalHttpLinks } from './terminal-http-url-extraction'
 import { rangeForParsedFileLink } from './wrapped-terminal-link-ranges'
 import { terminalLogicalLinkHasOscLink } from './terminal-osc-link-cells'
@@ -15,7 +15,7 @@ export function createWrappedTerminalHttpLinkProvider(
         terminal.buffer.active,
         bufferLineNumber
       )) {
-        if (!logicalLine.rows.slice(1).some((row) => !row.isWrapped)) {
+        if (!hasHardWrappedRows(logicalLine)) {
           continue
         }
         const links = extractTerminalHttpLinks(logicalLine.text).flatMap((parsed): ILink[] => {

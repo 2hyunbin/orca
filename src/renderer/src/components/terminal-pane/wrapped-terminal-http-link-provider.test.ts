@@ -125,6 +125,70 @@ describe('wrapped terminal HTTP link provider', () => {
     }
   })
 
+  it('keeps cold clicks consistent with hover across mixed soft and hard wraps', async () => {
+    const url = `https://example.com/${'a'.repeat(90)}`
+    const { terminal, linksAt } = await terminalWithRows([url.slice(0, 80), url.slice(80)], 40)
+    const openUrl = vi.fn()
+    vi.stubGlobal('window', { api: { shell: { openUrl } } })
+    registerHttpLinkStoreAccessor(() => ({
+      settings: { openLinksInApp: false },
+      setActiveWorktree: vi.fn(),
+      createBrowserTab: vi.fn()
+    }))
+    try {
+      expect(terminal.buffer.active.getLine(1)?.isWrapped).toBe(true)
+      expect(terminal.buffer.active.getLine(2)?.isWrapped).toBe(false)
+      for (const y of [1, 2, 3]) {
+        expect((await linksAt(y))?.[0]?.text).toBe(url)
+        openUrl.mockClear()
+        expect(
+          openHttpLinkAtBufferPosition(terminal.buffer.active, { x: 3, y }, 40, {
+            worktreeId: 'test',
+            modifierHeld: true
+          })
+        ).toBe(true)
+        expect(openUrl).toHaveBeenCalledExactlyOnceWith(url)
+      }
+    } finally {
+      terminal.dispose()
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('does not infer a right margin from unwritten cells after a complete URL', async () => {
+    const url = 'https://example.com/docs/pages'
+    const firstRow = `  Docs: ${url}`
+    expect(firstRow.length).toBe(38)
+    const { terminal, linksAt } = await terminalWithRows([firstRow, '  and more prose here'], 40)
+    try {
+      expect(await linksAt(1)).toBeUndefined()
+      expect(await linksAt(2)).toBeUndefined()
+    } finally {
+      terminal.dispose()
+    }
+  })
+
+  it.each([0, 1])(
+    'reconstructs hanging list indentation with %i-column margins',
+    async (padding) => {
+      const url = `https://example.com/${'a'.repeat(40)}`
+      const margin = ' '.repeat(padding)
+      const prefix = `${margin}* See `
+      const width = 40 - padding - prefix.length
+      const { terminal, linksAt } = await terminalWithRows(
+        [`${prefix}${url.slice(0, width)}${margin}`, `${margin}  ${url.slice(width)}${margin}`],
+        40
+      )
+      try {
+        for (const row of [1, 2]) {
+          expect((await linksAt(row))?.[0]?.text).toBe(url)
+        }
+      } finally {
+        terminal.dispose()
+      }
+    }
+  )
+
   it('keeps a sibling URL outside the continued link range', async () => {
     const first = `https://example.com/${'a'.repeat(26)}`
     const sibling = 'https://other.test/'

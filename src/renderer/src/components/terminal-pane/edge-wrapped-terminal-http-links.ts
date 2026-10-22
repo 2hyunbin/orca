@@ -27,6 +27,7 @@ type TrimmedTranslatedLine = {
   columns: number[]
   lineLength: number
   padding: number
+  hasWrittenRightPadding: boolean
 }
 
 function trimRightTranslatedLine(line: IBufferLine): TrimmedTranslatedLine | null {
@@ -43,7 +44,9 @@ function trimRightTranslatedLine(line: IBufferLine): TrimmedTranslatedLine | nul
     sourceText: translated.text,
     columns: translated.columns.slice(0, endIndex + 1),
     lineLength: line.length,
-    padding: translated.text.match(/^ */)?.[0].length ?? 0
+    padding: translated.text.match(/^ */)?.[0].length ?? 0,
+    hasWrittenRightPadding:
+      typeof line.getCell !== 'function' || line.getCell(line.length - 1)?.getChars() === ' '
   }
 }
 
@@ -85,11 +88,14 @@ function findHttpSchemeIndex(text: string): number {
 }
 
 function rowsCanContinueAtTerminalEdge(
-  row: WrappedLogicalLine['rows'][number],
+  row: TrimmedTranslatedLine,
   nextRow: TrimmedTranslatedLine,
   padding: number,
   rightPadding: number
 ): boolean {
+  if (rightPadding > 0 && !row.hasWrittenRightPadding) {
+    return false
+  }
   // Why: a cursor-positioned label is not URL continuation evidence even when
   // the preceding URL happens to end at the terminal edge (#8832).
   const nextColumnAfterText = nextRow.columns.at(-1)
@@ -155,9 +161,12 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
       continue
     }
     const rightPadding = start.columns.at(-1) === start.lineLength ? 0 : start.padding
-    const continuationPadding =
-      rightPadding === 0 ? (getTranslatedLine(startY + 1)?.padding ?? 0) : start.padding
-    if (continuationPadding !== start.padding && continuationPadding !== 0) {
+    const continuationPadding = getTranslatedLine(startY + 1)?.padding ?? start.padding
+    if (
+      continuationPadding !== 0 &&
+      (continuationPadding < start.padding ||
+        continuationPadding > (start.columns[schemeIndex] ?? start.padding))
+    ) {
       continue
     }
 
@@ -176,7 +185,12 @@ export function buildEdgeWrappedHttpLogicalLineCandidates(
       if (
         rows.length > 0 &&
         !line.isWrapped &&
-        !rowsCanContinueAtTerminalEdge(rows.at(-1)!, translated, continuationPadding, rightPadding)
+        !rowsCanContinueAtTerminalEdge(
+          getTranslatedLine(rowY - 1)!,
+          translated,
+          continuationPadding,
+          rightPadding
+        )
       ) {
         break
       }
