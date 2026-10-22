@@ -1,15 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({
-  state: {
-    groupsByWorktree: {} as Record<string, { id: string; tabOrder: string[] }[]>,
-    unifiedTabsByWorktree: {} as Record<string, { id: string; entityId: string }[]>
-  },
-  frameDrawn: true,
-  supported: true,
-  created: new Set<string>(),
-  noted: [] as string[][]
-}))
+const mocks = vi.hoisted(() => {
+  const groupsByWorktree: Record<string, { id: string; tabOrder: string[] }[]> = {}
+  const unifiedTabsByWorktree: Record<string, { id: string; entityId: string }[]> = {}
+  const noted: string[][] = []
+  return {
+    state: { groupsByWorktree, unifiedTabsByWorktree },
+    frameDrawn: true,
+    supported: true,
+    created: new Set<string>(),
+    noted
+  }
+})
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.state } }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({

@@ -6,7 +6,6 @@ import { collectSavedStructuredAgentSessionIds } from '../saved-structured-agent
 import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import { seedStructuredAgentSessionTabIndex } from '../structured-agent-session-tab-index-seed'
 import { restoredChatTabChanges } from './restored-chat-tab-changes'
-import type { ChatTabPlacement } from '../agent-session-tab-layout'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type {
   RuntimeMobileSessionAgentTab,
@@ -107,7 +106,8 @@ export abstract class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce exten
     /** This machine's window made the create; its own open places the tab. */
     placedByWindow?: boolean
     /** Where the creating paired client opens the chat. */
-    placement?: ChatTabPlacement
+    /** A ChatTabPlacement, typed in place: this file is at its line limit. */
+    placement?: { groupId?: string; afterTabId?: string }
   }): Promise<void> {
     const host = getStructuredAgentSessionHost()
     if (typeof host?.setSessionTabVisibility === 'function') {

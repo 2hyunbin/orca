@@ -72,7 +72,11 @@ describe("a host's chat tab change as main's layout command", () => {
   describe("a paired client's chosen place (L270)", () => {
     /** Two groups: group-1 holds [a, c], group-2 holds [d]; group-1 is remembered active. */
     function twoGroups(): WorkspaceSessionState {
-      const tabs = [chatTab('a', 'tab-a'), chatTab('c', 'tab-c'), { ...chatTab('d', 'tab-d'), groupId: 'group-2' }]
+      const tabs = [
+        chatTab('a', 'tab-a'),
+        chatTab('c', 'tab-c'),
+        { ...chatTab('d', 'tab-d'), groupId: 'group-2' }
+      ]
       return {
         ...session(tabs, 'group-1'),
         tabGroups: {
@@ -106,7 +110,9 @@ describe("a host's chat tab change as main's layout command", () => {
     })
 
     it('falls back to the active group for a group the workspace no longer holds', () => {
-      expect(commandOn(twoGroups(), placed({ groupId: 'gone', afterTabId: 'tab-a' }))).toMatchObject({
+      expect(
+        commandOn(twoGroups(), placed({ groupId: 'gone', afterTabId: 'tab-a' }))
+      ).toMatchObject({
         groupId: 'group-1',
         afterTabId: 'tab-a'
       })

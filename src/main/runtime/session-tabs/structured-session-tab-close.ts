@@ -284,14 +284,7 @@ export abstract class OrcaRuntimeWithCloseStructuredAgentSessionTab extends Orca
     chat: { sessionId: string; agent: StructuredAgentId; placement?: ChatTabPlacement }
   ): void {
     this.changeWindowlessChatTabs(worktreeId, [
-      {
-        open: {
-          sessionId: chat.sessionId,
-          agent: chat.agent,
-          tabId: chatTabId(chat.sessionId),
-          ...(chat.placement ? { placement: chat.placement } : {})
-        }
-      }
+      { open: { ...chat, tabId: chatTabId(chat.sessionId) } }
     ])
   }
 
