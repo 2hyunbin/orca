@@ -218,11 +218,11 @@ export function HostWorkspaceList({
           const repoSectionIcon = repoSectionLook?.icon ?? null
           const groupGlyph =
             state.view.groupBy !== 'repo' ? null : section.isProjectGroup ? (
-              <FolderTree size={18} color={colors.textSecondary} />
+              <FolderTree size={14} color={colors.textSecondary} />
             ) : (
               <MobileRepoIcon
                 repoIcon={repoSectionIcon}
-                size={18}
+                size={14}
                 color={repoSectionColor ?? colors.textSecondary}
               />
             )
@@ -242,7 +242,7 @@ export function HostWorkspaceList({
                 leading={
                   section.icon === 'pin' || groupGlyph ? (
                     <View style={listStyles.headerGlyphs}>
-                      {section.icon === 'pin' && <Pin size={17} color={colors.textSecondary} />}
+                      {section.icon === 'pin' && <Pin size={14} color={colors.textMuted} />}
                       {groupGlyph}
                     </View>
                   ) : undefined
