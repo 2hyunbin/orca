@@ -1,11 +1,10 @@
 import { vi } from 'vitest'
 import type { AgentLaunchResult } from '../../shared/agent-launch-intent'
 import type { ExecutionHostId } from '../../shared/execution-host'
-import { WRITE_ACCEPTED } from '../../shared/pty-write-settlement'
 import type { Repo } from '../../shared/repo-types'
 import type { RuntimeTerminalSend } from '../../shared/runtime-terminal-send-contract'
 import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
-import type { AgentPaneChange, AgentPaneWorkspace } from '../agent-hooks/agent-transition-detector'
+import type { AgentPaneWorkspace } from '../agent-hooks/agent-transition-detector'
 import type { AgentLaunchPublishedSurface } from '../agent-launch/agent-launch-execution'
 import type { ExternalConversationLinkStore } from './external-conversation-links'
 import type { FollowUpTerminal } from './external-conversation-send'
@@ -23,19 +22,46 @@ export const LOCAL_REPO: Repo = {
 
 type LinkRow = { externalConversations?: unknown; hostId?: ExecutionHostId }
 
+/**
+ * The real store's two projections: each host's canonical rows, and the locator-keyed map that
+ * keeps only the first host to write an id.
+ */
 export function fakeLinkStore(repos: Repo[] = [LOCAL_REPO]) {
-  const meta: Record<string, LinkRow> = {}
+  const byHost = new Map<ExecutionHostId, Record<string, LinkRow>>()
+  const legacy: Record<string, LinkRow> = {}
   const folders: (LinkRow & { id: string })[] = []
   const writes: HostWorktreeTarget[] = []
+  const rows = (hostId: ExecutionHostId): Record<string, LinkRow> => {
+    const existing = byHost.get(hostId)
+    if (existing) {
+      return existing
+    }
+    const created: Record<string, LinkRow> = {}
+    byHost.set(hostId, created)
+    return created
+  }
+  const put = (id: string, hostId: ExecutionHostId, row: Omit<LinkRow, 'hostId'>): void => {
+    const next = { ...rows(hostId)[id], ...row, hostId }
+    rows(hostId)[id] = next
+    if (!legacy[id] || legacy[id].hostId === hostId) {
+      legacy[id] = next
+    }
+  }
+  const remove = (id: string, hostId: ExecutionHostId = 'local'): void => {
+    delete rows(hostId)[id]
+    if (legacy[id]?.hostId === hostId) {
+      delete legacy[id]
+    }
+  }
   const store = {
     getRepos: () => repos,
-    getAllWorktreeMeta: () => meta,
-    getWorktreeMeta: (id: string) => meta[id],
-    getWorktreeMetaForHost: (id: string, hostId: ExecutionHostId) =>
-      meta[id]?.hostId === hostId ? meta[id] : undefined,
+    getAllWorktreeMeta: () => legacy,
+    getAllWorktreeMetaForHost: (hostId: ExecutionHostId) => rows(hostId),
+    getWorktreeMeta: (id: string) => legacy[id],
+    getWorktreeMetaForHost: (id: string, hostId: ExecutionHostId) => rows(hostId)[id],
     setWorktreeMeta: (target: HostWorktreeTarget, updates: { externalConversations: unknown }) => {
       writes.push(target)
-      meta[target.id] = { ...meta[target.id], ...updates, hostId: target.hostId }
+      put(target.id, target.hostId, updates)
     },
     getFolderWorkspace: (id: string) => folders.find((folder) => folder.id === id),
     getFolderWorkspaces: () => folders,
@@ -46,7 +72,9 @@ export function fakeLinkStore(repos: Repo[] = [LOCAL_REPO]) {
       }
     }
   } satisfies ExternalConversationLinkStore
-  return { store, meta, folders, writes }
+  const row = (id: string, hostId: ExecutionHostId = 'local'): LinkRow | undefined =>
+    rows(hostId)[id]
+  return { store, row, put, remove, folders, writes }
 }
 
 export function launchResult(
@@ -76,7 +104,8 @@ export function fakeLauncher(
   const launch = vi.fn(
     async (
       _input: unknown,
-      onSurfacePublished: (surface: AgentLaunchPublishedSurface) => void
+      onSurfacePublished: (surface: AgentLaunchPublishedSurface) => void,
+      _signal?: AbortSignal
     ): Promise<AgentLaunchResult> => {
       if (publish) {
         onSurfacePublished(launchResult(null, workspace.worktreeId))
@@ -88,77 +117,82 @@ export function fakeLauncher(
   return { launcher, launch }
 }
 
-type WriteOptions = { beforeWrite?: (ptyId: string) => unknown; signal?: AbortSignal }
+type WriteOptions = {
+  beforeWrite?: (ptyId: string) => unknown
+  signal?: AbortSignal
+  onPermission?: 'refuse' | 'wait'
+  expectedBinding?: { ptyId: string; processIncarnation: string }
+}
 
-/** A terminal whose prompt writer checks like the real one: guard, then signal, then the write. */
+/**
+ * A terminal whose prompt writer keeps the shared writer's order: hold while blocked (under
+ * `wait`), then the binding fence, the guard, the signal, and the write.
+ */
 export function fakeTerminal() {
   const state: { ptyId: string | null; blocked: boolean } = { ptyId: 'pty-1', blocked: false }
   const writes: string[] = []
-  const transitionListeners = new Set<(change: AgentPaneChange) => void>()
-  const exitListeners = new Set<() => void>()
-  const accepted = (handle: string): RuntimeTerminalSend => ({
-    handle,
-    accepted: true,
-    bytesWritten: 1
-  })
-  const writeChecked = async (text: string, options: WriteOptions): Promise<void> => {
-    await options.beforeWrite?.(state.ptyId ?? '')
-    if (options.signal?.aborted) {
-      throw new Error('request_aborted')
-    }
-    writes.push(text)
-  }
+  const waiters = new Set<(error?: Error) => void>()
+  const hold = (signal: AbortSignal | undefined): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const settle = (error?: Error): void => {
+        waiters.delete(settle)
+        signal?.removeEventListener('abort', onAbort)
+        if (error) {
+          reject(error)
+        } else {
+          resolve()
+        }
+      }
+      const onAbort = (): void => settle(new Error('request_aborted'))
+      signal?.addEventListener('abort', onAbort)
+      waiters.add(settle)
+    })
   const sendTerminalAgentPrompt = vi.fn(
-    async (handle: string, prompt: string, options: WriteOptions) => {
-      await writeChecked(prompt, options)
-      return accepted(handle)
-    }
-  )
-  const sendTerminal = vi.fn(
-    async (
-      handle: string,
-      action: { text?: string },
-      options: WriteOptions
-    ): Promise<RuntimeTerminalSend> => {
-      await writeChecked(action.text ?? '', options)
-      return { ...accepted(handle), writeSettlement: WRITE_ACCEPTED }
+    async (handle: string, prompt: string, options: WriteOptions): Promise<RuntimeTerminalSend> => {
+      if (state.blocked) {
+        if (options.onPermission !== 'wait') {
+          throw new Error('agent_prompt_blocked')
+        }
+        await hold(options.signal)
+      }
+      if (options.expectedBinding && options.expectedBinding.ptyId !== state.ptyId) {
+        throw new Error('terminal_handle_stale')
+      }
+      await options.beforeWrite?.(state.ptyId ?? '')
+      if (options.signal?.aborted) {
+        throw new Error('request_aborted')
+      }
+      writes.push(prompt)
+      return { handle, accepted: true, bytesWritten: 1 }
     }
   )
   const terminal = {
     getTerminalHandleForPaneKey: (paneKey: string) =>
       paneKey === PANE && state.ptyId ? 'term-1' : null,
-    getTerminalPtyIdForHandle: () => state.ptyId,
-    isAgentPromptBlocked: () => state.blocked,
-    subscribeToPtyExit: (_ptyId: string, listener: () => void) => {
-      exitListeners.add(listener)
-      return () => exitListeners.delete(listener)
+    getTerminalPromptRequestBinding: () => {
+      if (!state.ptyId) {
+        throw new Error('terminal_not_writable')
+      }
+      return { ptyId: state.ptyId, processIncarnation: `inc-${state.ptyId}`, generation: 1 }
     },
-    sendTerminal,
     sendTerminalAgentPrompt,
     readLaunchedAgentForeground: vi.fn(async () => 'agent' as const),
-    subscribeToTerminalData: () => () => {},
-    agentTransitions: {
-      subscribe: (listener: (change: AgentPaneChange) => void) => {
-        transitionListeners.add(listener)
-        return () => transitionListeners.delete(listener)
-      }
-    }
+    subscribeToTerminalData: () => () => {}
   } satisfies FollowUpTerminal
   return {
     terminal,
     state,
     writes,
-    transitionListeners,
-    sendTerminal,
     sendTerminalAgentPrompt,
-    observe(paneKey = PANE) {
-      transitionListeners.forEach((listener) =>
-        listener({ kind: 'observed', paneKey, workspace: null, phase: 'working', at: 0 })
-      )
+    /** Holds waiting on the approval. */
+    held: () => waiters.size,
+    answer() {
+      state.blocked = false
+      ;[...waiters].forEach((settle) => settle())
     },
     exit() {
       state.ptyId = null
-      exitListeners.forEach((listener) => listener())
+      ;[...waiters].forEach((settle) => settle(new Error('terminal_not_writable')))
     }
   }
 }

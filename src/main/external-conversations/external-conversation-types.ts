@@ -1,28 +1,24 @@
 import type { ConnectorSource } from '../../shared/external-conversation-link'
-import type { WriteSettlement } from '../../shared/pty-write-settlement'
 
 export type ConversationKey = { source: ConnectorSource; externalId: string }
 
 /** Why the seam declined before any byte left it. */
 export type ConnectorRefusal =
   | 'connectors_disabled'
-  | 'write_refused'
-  | 'busy'
   | 'agent_not_reachable'
   | 'unsupported_agent'
   | 'delivery_id_reused'
 
 /**
  * The connector's own answer, weaker than a `WriteSettlement`: `accepted` means the writer
- * returned, never that the agent read it. `write` is nested only where a raw write settled.
+ * returned, never that the agent read it.
  */
 export type Delivery =
   | { outcome: 'accepted' }
-  | { outcome: 'refused'; reason: ConnectorRefusal; write?: WriteSettlement }
+  | { outcome: 'refused'; reason: ConnectorRefusal }
   | {
       outcome: 'unknown'
-      reason: 'launch_outcome_unknown' | 'writer_failed' | 'write_unverifiable'
-      write?: WriteSettlement
+      reason: 'launch_outcome_unknown' | 'writer_failed' | 'replayed_after_restart'
     }
 
 export type ConversationStart = { conversation: ConversationKey; initial: Delivery }

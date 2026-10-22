@@ -1,40 +1,82 @@
-import type { Delivery } from './external-conversation-types'
+import { z } from 'zod'
+import type { OrchestrationDb } from '../runtime/orchestration/db/orchestration-db'
+import { OrchestrationError } from '../runtime/orchestration/orchestration-error'
+import { hashCanonical } from '../runtime/rpc/orchestration-mutation-receipt'
+import { refused, type ConversationKey, type Delivery } from './external-conversation-types'
 
-type Receipt = { payload: string; delivery: Promise<Delivery> }
+export type DeliveryReceiptDb = OrchestrationDb
 
-const SETTLED_RECEIPT_LIMIT = 1000
+const RecordedDelivery = z.discriminatedUnion('outcome', [
+  z.object({ outcome: z.literal('accepted') }),
+  z.object({
+    outcome: z.literal('unknown'),
+    reason: z.enum(['launch_outcome_unknown', 'writer_failed', 'replayed_after_restart'])
+  })
+])
+
+const LOST: Delivery = { outcome: 'unknown', reason: 'replayed_after_restart' }
 
 /**
- * A caller's delivery ids, scoped by conversation: the same id and payload share one delivery, and
- * the same id with another payload is refused. Settled receipts are bounded; an operation still
- * running is never evicted, so a retry during it can never start a second one.
+ * A connector's delivery ids on orchestration's durable mutation receipts, under one caller
+ * identity per source: the same id and payload share one answer, across restarts too, and another
+ * payload is refused. A duplicate of one still running waits for it; a running one a restart
+ * interrupted reads `unknown`. Refusals and throws wrote nothing, so they leave no receipt.
  */
 export class DeliveryReceipts {
-  private readonly active = new Map<string, Receipt>()
-  private readonly settled = new Map<string, Receipt>()
+  private readonly inFlight = new Map<string, Promise<Delivery>>()
 
-  constructor(private readonly settledLimit = SETTLED_RECEIPT_LIMIT) {}
+  constructor(private readonly db: () => DeliveryReceiptDb) {}
 
-  /** Null when the id was already used for a different payload. */
-  run(id: string, payload: string, execute: () => Promise<Delivery>): Promise<Delivery> | null {
-    const existing = this.active.get(id) ?? this.settled.get(id)
-    if (existing) {
-      return existing.payload === payload ? existing.delivery : null
+  run(
+    key: ConversationKey,
+    deliveryId: string,
+    method: 'connector.start' | 'connector.send',
+    payload: unknown,
+    execute: () => Promise<Delivery>
+  ): Promise<Delivery> {
+    const identity = {
+      callerFingerprint: `connector:${key.source}`,
+      requestId: JSON.stringify([key.externalId, deliveryId]),
+      method,
+      payloadHash: hashCanonical(payload)
     }
-    const delivery = execute()
-    const receipt: Receipt = { payload, delivery }
-    this.active.set(id, receipt)
-    const settle = (): void => {
-      this.active.delete(id)
-      this.settled.set(id, receipt)
-      for (const oldest of this.settled.keys()) {
-        if (this.settled.size <= this.settledLimit) {
-          break
-        }
-        this.settled.delete(oldest)
+    const flightKey = JSON.stringify([identity.callerFingerprint, identity.requestId])
+    const db = this.db()
+    let begun: ReturnType<DeliveryReceiptDb['beginMutationReceipt']>
+    try {
+      begun = db.beginMutationReceipt(identity)
+    } catch (error) {
+      if (error instanceof OrchestrationError && error.code === 'request_mismatch') {
+        return Promise.resolve(refused('delivery_id_reused'))
       }
+      throw error
     }
-    delivery.then(settle, settle)
+    if (begun.disposition === 'completed') {
+      const recorded = RecordedDelivery.safeParse(JSON.parse(begun.row.receipt ?? 'null'))
+      return Promise.resolve(recorded.success ? recorded.data : LOST)
+    }
+    if (begun.disposition === 'pending') {
+      return this.inFlight.get(flightKey) ?? Promise.resolve(LOST)
+    }
+    const delivery = execute().then(
+      (result) => {
+        if (result.outcome === 'refused') {
+          db.discardPendingMutationReceipt(identity.callerFingerprint, identity.requestId)
+        } else {
+          db.completeMutationReceipt({ ...identity, receipt: JSON.stringify(result) })
+        }
+        return result
+      },
+      (error: unknown) => {
+        db.discardPendingMutationReceipt(identity.callerFingerprint, identity.requestId)
+        throw error
+      }
+    )
+    this.inFlight.set(flightKey, delivery)
+    const forget = (): void => {
+      this.inFlight.delete(flightKey)
+    }
+    delivery.then(forget, forget)
     return delivery
   }
 }

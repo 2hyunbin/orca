@@ -3,7 +3,12 @@ import {
   CONNECTOR_SOURCES,
   type ExternalConversationLink
 } from '../../shared/external-conversation-link'
-import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../shared/execution-host'
+import {
+  getRepoExecutionHostId,
+  LOCAL_EXECUTION_HOST_ID,
+  type ExecutionHostId
+} from '../../shared/execution-host'
+import { readAllWorktreeMetaForHost } from '../persistence/host-qualified-worktree-meta'
 import { folderWorkspaceKey } from '../../shared/workspace-scope'
 import type { AgentPaneWorkspace } from '../agent-hooks/agent-transition-detector'
 import {
@@ -12,7 +17,7 @@ import {
   type WorkspaceRecordStore
 } from '../runtime/sidebar-inputs/sort-stamp-records'
 import { CONNECTOR_AGENTS } from './connector-agents'
-import { conversationId, type ConversationKey } from './external-conversation-types'
+import type { ConversationKey } from './external-conversation-types'
 
 type LinkRecord = { externalConversations?: unknown }
 
@@ -22,6 +27,9 @@ export type ExternalConversationLinkStore = WorkspaceRecordStore<
   { externalConversations: ExternalConversationLink[] }
 > & {
   getAllWorktreeMeta: () => Record<string, LinkRecord & { hostId?: ExecutionHostId }>
+  getAllWorktreeMetaForHost?: (
+    hostId: ExecutionHostId
+  ) => Record<string, LinkRecord & { hostId?: ExecutionHostId }>
   getFolderWorkspaces?: () => readonly (LinkRecord & { id: string })[]
 }
 
@@ -71,73 +79,34 @@ export function writeLink(
 }
 
 /**
- * The derived `conversation → link` and `pane → link` lookups. Every answer is confirmed against
- * the workspace record, and a stale or missing entry rebuilds once, so a removed, renamed or
- * re-adopted workspace is never answered from the cache. Writers and workspace lifecycle events
- * also invalidate it so the pane lookup sees new links.
+ * The conversation's link, read from every host's canonical rows each time: the locator-keyed map
+ * keeps only one host's row per id, and a removed, renamed or re-adopted workspace is never
+ * answered from a cache.
  */
-export class ExternalConversationIndex {
-  private byConversation: Map<string, LinkedConversation> | null = null
-  private byPane = new Map<string, LinkedConversation>()
-
-  constructor(private readonly store: ExternalConversationLinkStore) {}
-
-  invalidate(): void {
-    this.byConversation = null
-  }
-
-  lookup(key: ConversationKey): LinkedConversation | null {
-    return this.confirmed(() => this.index().get(conversationId(key)))
-  }
-
-  lookupPane(paneKey: string): LinkedConversation | null {
-    return this.confirmed(() => {
-      this.index()
-      return this.byPane.get(paneKey)
-    })
-  }
-
-  private confirmed(read: () => LinkedConversation | undefined): LinkedConversation | null {
-    const cached = read()
-    if (cached && this.confirm(cached)) {
-      return cached
-    }
-    this.invalidate()
-    const rebuilt = read()
-    return rebuilt && this.confirm(rebuilt) ? rebuilt : null
-  }
-
-  private confirm({ workspace, link }: LinkedConversation): boolean {
-    return readLinks(this.store, workspace).some(
-      (current) => sameConversation(current, link) && current.paneKey === link.paneKey
-    )
-  }
-
-  private index(): Map<string, LinkedConversation> {
-    if (this.byConversation) {
-      return this.byConversation
-    }
-    const byConversation = new Map<string, LinkedConversation>()
-    const byPane = new Map<string, LinkedConversation>()
-    const add = (workspace: AgentPaneWorkspace, links: unknown): void => {
-      for (const link of linksOf(links)) {
-        const linked = { workspace, link }
-        byConversation.set(conversationId(link), linked)
-        byPane.set(link.paneKey, linked)
+export function findLink(
+  store: ExternalConversationLinkStore,
+  key: ConversationKey
+): LinkedConversation | null {
+  const matches = (links: unknown): ExternalConversationLink | undefined =>
+    linksOf(links).find((link) => sameConversation(link, key))
+  const hosts = new Set<ExecutionHostId>([
+    LOCAL_EXECUTION_HOST_ID,
+    ...store.getRepos().map(getRepoExecutionHostId)
+  ])
+  for (const hostId of hosts) {
+    for (const [worktreeId, meta] of Object.entries(readAllWorktreeMetaForHost(store, hostId))) {
+      const link = matches(meta.externalConversations)
+      if (link) {
+        const sshHostId = hostId === LOCAL_EXECUTION_HOST_ID ? null : hostId
+        return { workspace: { worktreeId, sshHostId }, link }
       }
     }
-    for (const [worktreeId, meta] of Object.entries(this.store.getAllWorktreeMeta())) {
-      const hostId = meta.hostId && meta.hostId !== LOCAL_EXECUTION_HOST_ID ? meta.hostId : null
-      add({ worktreeId, sshHostId: hostId }, meta.externalConversations)
-    }
-    for (const folder of this.store.getFolderWorkspaces?.() ?? []) {
-      add(
-        { worktreeId: folderWorkspaceKey(folder.id), sshHostId: null },
-        folder.externalConversations
-      )
-    }
-    this.byConversation = byConversation
-    this.byPane = byPane
-    return byConversation
   }
+  for (const folder of store.getFolderWorkspaces?.() ?? []) {
+    const link = matches(folder.externalConversations)
+    if (link) {
+      return { workspace: { worktreeId: folderWorkspaceKey(folder.id), sshHostId: null }, link }
+    }
+  }
+  return null
 }

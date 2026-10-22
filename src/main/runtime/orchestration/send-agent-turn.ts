@@ -21,6 +21,7 @@ import { ORCHESTRATION_READINESS_TIMEOUT_MS } from '../../../shared/orchestratio
 import { structuredAgentSessionMessageSendMutation } from '../../../shared/structured-agent-session-send-mutation'
 import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
 import { dispatchPreambleSendOptions, type DispatchPreambleSendOptions } from './preamble'
+import type { RuntimeAgentPromptWriteOptions } from '../runtime-terminal-contracts'
 
 /**
  * `now` hands the message over at once, joining a running turn as a steer. `queue` asks a busy chat
@@ -72,12 +73,18 @@ export type TerminalTurn = {
   operationId: string
 }
 
+/** The writer's opt-in options a terminal turn may carry; no current caller sets them. */
+type TerminalTurnWriteOptions = Pick<
+  RuntimeAgentPromptWriteOptions,
+  'signal' | 'onPermission' | 'expectedBinding'
+>
+
 /** Method syntax on purpose: the runtime's own signature takes the wider write options. */
 type TerminalAgentTurnRuntime<TReceipt> = {
   sendTerminalAgentPrompt(
     handle: string,
     prompt: string,
-    options: DispatchPreambleSendOptions
+    options: DispatchPreambleSendOptions & TerminalTurnWriteOptions
   ): Promise<TReceipt>
 }
 
@@ -88,9 +95,7 @@ export type TerminalTurnSend<TReceipt> = {
   turn: TerminalTurn
   /** Runs before each PTY write; throwing refuses it (`createWorkerBriefWriteGuard`). */
   beforeWrite?: DispatchPreambleSendOptions['beforeWrite']
-  /** Aborting stops the write at its next boundary. */
-  signal?: AbortSignal
-}
+} & TerminalTurnWriteOptions
 
 /**
  * `sent` carries the submission as it settled, or as first answered when the wait ran out; it is
@@ -117,7 +122,9 @@ export function sendAgentTurn<TReceipt>(
       return send.runtime.sendTerminalAgentPrompt(send.handle, send.turn.body, {
         ...terminalTurnOptions(send.turn),
         ...(send.beforeWrite ? { beforeWrite: send.beforeWrite } : {}),
-        ...(send.signal ? { signal: send.signal } : {})
+        ...(send.signal ? { signal: send.signal } : {}),
+        ...(send.onPermission ? { onPermission: send.onPermission } : {}),
+        ...(send.expectedBinding ? { expectedBinding: send.expectedBinding } : {})
       })
   }
 }

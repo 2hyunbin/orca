@@ -2,20 +2,14 @@ import type { AgentStatusHooksSettings } from '../../shared/agent-status-hooks-s
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { admitConnectorAgent } from './connector-agents'
 import { ConversationChain } from './external-conversation-chain'
-import { DeliveryReceipts } from './external-conversation-delivery-receipts'
+import { DeliveryReceipts, type DeliveryReceiptDb } from './external-conversation-delivery-receipts'
 import {
-  ExternalConversationIndex,
+  findLink,
   writeLink,
   type ExternalConversationLinkStore,
   type LinkedConversation
 } from './external-conversation-links'
-import {
-  bindPane,
-  deliverFollowUp,
-  waitWhileAgentAsks,
-  type FollowUpTerminal,
-  type PaneInputState
-} from './external-conversation-send'
+import { deliverFollowUp, type FollowUpTerminal } from './external-conversation-send'
 import {
   launchConversation,
   runtimeConversationLauncher,
@@ -43,92 +37,92 @@ export function runtimeConversationHost(runtime: OrcaRuntimeService): ExternalCo
 export type ExternalConversationSeamDeps = {
   store: ExternalConversationLinkStore
   readSettings: () => AgentStatusHooksSettings
-  /** Workspace removals and renames; returns the release. */
-  subscribeInvalidations: (invalidate: () => void) => () => void
+  receiptDb: () => DeliveryReceiptDb
+  /** Worktree removals; returns the release. */
+  onWorkspaceRemoved: (listener: (worktreeId: string) => void) => () => void
 }
 
 type StartInput = Omit<ConversationLaunchInput, 'agent'> & { agent: string }
 
 /**
- * The connector seam for one enabled period. Turning connectors off disposes it, which settles
- * held and queued work `connectors_disabled` and drops its index, receipts and subscriptions;
- * turning them on builds a fresh one.
+ * The connector seam for one enabled period. Turning connectors off disposes it: queued work
+ * settles `connectors_disabled` at once and running work stops at its next boundary. Turning them
+ * on builds a fresh one.
  */
 export class ExternalConversationSeam {
   private readonly abort = new AbortController()
-  private readonly index: ExternalConversationIndex
-  private readonly receipts = new DeliveryReceipts()
-  private readonly chain = new ConversationChain()
-  private readonly paneInput: PaneInputState = { claims: new Set(), stale: new Map() }
+  private readonly chain = new ConversationChain(this.abort.signal)
+  private readonly receipts: DeliveryReceipts
   /** Conversations this period started, so a second start for one shares its creation. */
   private readonly startedHere = new Set<string>()
-  private readonly releaseInvalidations: () => void
+  /** The workspace each conversation with work sent here is linked to. */
+  private readonly linkedWorkspaces = new Map<string, string>()
+  private readonly releaseRemovals: () => void
 
   constructor(private readonly deps: ExternalConversationSeamDeps) {
-    this.index = new ExternalConversationIndex(deps.store)
-    this.releaseInvalidations = deps.subscribeInvalidations(() => this.index.invalidate())
+    this.receipts = new DeliveryReceipts(deps.receiptDb)
+    // A removed workspace may keep its PTY registered a while; its held and queued sends end now.
+    this.releaseRemovals = deps.onWorkspaceRemoved((worktreeId) => {
+      for (const [id, linked] of this.linkedWorkspaces) {
+        if (linked === worktreeId) {
+          this.linkedWorkspaces.delete(id)
+          this.chain.cancel(id, 'agent_not_reachable')
+        }
+      }
+    })
   }
 
-  /** Deferred work rechecks this before each write, so nothing writes after a disable. */
+  /** Deferred work passes this to every effect, so nothing starts or writes after a disable. */
   get signal(): AbortSignal {
     return this.abort.signal
   }
 
   dispose(reason: 'connectors_disabled'): void {
-    this.releaseInvalidations()
+    this.releaseRemovals()
     this.abort.abort(reason)
   }
 
-  start(
+  async start(
     host: ExternalConversationHost,
     key: ConversationKey,
     deliveryId: string,
     input: StartInput
   ): Promise<ConversationStart> {
-    const id = conversationId(key)
-    const delivery = this.receipts.run(
-      receiptId(key, deliveryId),
-      JSON.stringify(['start', input.agent, input.target, input.prompt]),
+    const initial = await this.receipts.run(
+      key,
+      deliveryId,
+      'connector.start',
+      [input.agent, input.target, input.prompt],
       () =>
-        this.chain.enqueue(id, async () => {
+        this.chain.enqueue(conversationId(key), async (signal) => {
           const { agent } = input
-          if (this.signal.aborted) {
-            return refused('connectors_disabled')
-          }
           if (!admitConnectorAgent(this.deps.readSettings(), agent)) {
             return refused('unsupported_agent')
           }
-          const linked = this.index.lookup(key)
+          const linked = findLink(this.deps.store, key)
           if (linked) {
             // A link from before this period cannot say what became of its launch.
-            return this.startedHere.has(id)
-              ? this.deliver(host.terminal, key, linked, deliveryId, input.prompt)
+            return this.startedHere.has(conversationId(key))
+              ? this.deliver(host.terminal, key, linked, deliveryId, input.prompt, signal)
               : { outcome: 'unknown', reason: 'launch_outcome_unknown' }
           }
-          try {
-            return await launchConversation(
-              host.launcher,
-              { ...input, agent },
-              (workspace, paneKey) => {
-                writeLink(this.deps.store, workspace, {
-                  ...key,
-                  paneKey,
-                  agent,
-                  createdAt: Date.now()
-                })
-                this.index.invalidate()
-                this.startedHere.add(id)
-              }
-            )
-          } finally {
-            this.index.invalidate()
-          }
+          return launchConversation(
+            host.launcher,
+            { ...input, agent },
+            signal,
+            (workspace, paneKey) => {
+              writeLink(this.deps.store, workspace, {
+                ...key,
+                paneKey,
+                agent,
+                createdAt: Date.now()
+              })
+              this.startedHere.add(conversationId(key))
+            }
+          )
         })
     )
-    return (delivery ?? Promise.resolve(refused('delivery_id_reused'))).then((initial) => ({
-      conversation: key,
-      initial
-    }))
+    return { conversation: key, initial }
   }
 
   send(
@@ -138,50 +132,36 @@ export class ExternalConversationSeam {
     text: string
   ): Promise<Delivery> {
     const id = conversationId(key)
-    const delivery = this.receipts.run(
-      receiptId(key, deliveryId),
-      JSON.stringify(['send', text]),
-      () =>
-        this.chain.enqueue(id, async () => {
-          if (this.signal.aborted) {
-            return refused('connectors_disabled')
-          }
-          const linked = this.index.lookup(key)
-          if (!linked) {
-            throw new Error('external_conversation_not_found')
-          }
-          return this.deliver(host.terminal, key, linked, deliveryId, text)
-        })
-    )
-    return delivery ?? Promise.resolve(refused('delivery_id_reused'))
-  }
-
-  private async deliver(
-    terminal: FollowUpTerminal,
-    key: ConversationKey,
-    { link }: LinkedConversation,
-    deliveryId: string,
-    text: string
-  ): Promise<Delivery> {
-    const pane = bindPane(terminal, link.paneKey)
-    if (!pane) {
-      return refused('agent_not_reachable')
-    }
-    const held = await waitWhileAgentAsks(terminal, pane, this.signal)
-    if (held !== 'ready') {
-      this.chain.settleWaiting(conversationId(key), held)
-      return refused(held)
-    }
-    return deliverFollowUp(terminal, this.paneInput, {
-      pane,
-      agent: link.agent,
-      text,
-      requestId: receiptId(key, deliveryId),
-      signal: this.signal
+    return this.receipts.run(key, deliveryId, 'connector.send', [text], () => {
+      const queued = findLink(this.deps.store, key)
+      if (queued) {
+        this.linkedWorkspaces.set(id, queued.workspace.worktreeId)
+      }
+      return this.chain.enqueue(id, async (signal) => {
+        const linked = findLink(this.deps.store, key)
+        if (!linked) {
+          throw new Error('external_conversation_not_found')
+        }
+        return this.deliver(host.terminal, key, linked, deliveryId, text, signal)
+      })
     })
   }
-}
 
-function receiptId(key: ConversationKey, deliveryId: string): string {
-  return JSON.stringify([key.source, key.externalId, deliveryId])
+  private deliver(
+    terminal: FollowUpTerminal,
+    key: ConversationKey,
+    { workspace, link }: LinkedConversation,
+    deliveryId: string,
+    text: string,
+    signal: AbortSignal
+  ): Promise<Delivery> {
+    this.linkedWorkspaces.set(conversationId(key), workspace.worktreeId)
+    return deliverFollowUp(terminal, {
+      paneKey: link.paneKey,
+      agent: link.agent,
+      text,
+      requestId: JSON.stringify([key.source, key.externalId, deliveryId]),
+      signal
+    })
+  }
 }

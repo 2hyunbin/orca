@@ -7996,7 +7996,7 @@
           "1f32ba27a6": "Custom",
           "a182c5125e": "Git Username",
           "sourceControlGroupOrderTitle": "Source Control Group Order",
-          "sourceControlGroupOrderDescription": "Choose whether Changes, Staged Changes, or Untracked Files appear first in Source Control.",
+          "sourceControlGroupOrderDescription": "Choose whether Staged Changes or Changes appear first in Source Control.",
           "changesFirst": "Changes first",
           "stagedFirst": "Staged first",
           "untrackedFirst": "Untracked first",
@@ -10522,7 +10522,7 @@
             "5ecd91c5ef": "Prefix added to branch names when creating worktrees.",
             "68bd65fdb8": "Branch Prefix",
             "sourceControlGroupOrderTitle": "Source Control Group Order",
-            "sourceControlGroupOrderDescription": "Choose whether Changes, Staged Changes, or Untracked Files appear first in Source Control.",
+            "sourceControlGroupOrderDescription": "Choose whether Staged Changes or Changes appear first in Source Control.",
             "groupOrder": "group order",
             "changesFirst": "changes first",
             "stagedFirst": "staged first",
@@ -12947,7 +12947,7 @@
           "reassurance": "Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to the host."
         },
         "sshHostServer": {
-          "sourceChanged": "An older version of Orca changed this host’s projects. Move those changes to this host’s Orca server, or keep the server’s version, to connect again.",
+          "sourceChanged": "This computer has projects or folders for this host that its Orca server doesn’t have yet, often added by an older version of Orca. Move them to this host’s Orca server, or keep the server’s version, to connect again.",
           "deploying": "Setting up Orca on {{host}}…",
           "converting": "Moving to Orca on {{host}}…",
           "connecting": "Connecting to Orca on {{host}}…",
@@ -13571,10 +13571,10 @@
             "dcc294f28d": "(results truncated)"
           },
           "SearchFilters": {
-            "01e4671ccf": "files to exclude (e.g. *.min.js, dist/**)",
-            "0a6412a895": "Files To Exclude",
-            "8a77efcbd1": "files to include (e.g. *.ts, src/**)",
-            "a69ee1bd0e": "Files To Include"
+            "01e4671ccf": "e.g. *.min.js, dist/**",
+            "0a6412a895": "files to exclude",
+            "8a77efcbd1": "e.g. *.ts, src/**",
+            "a69ee1bd0e": "files to include"
           },
           "SearchHeader": {
             "6234a5ef85": "Use Regular Expression",
@@ -14819,12 +14819,13 @@
             "sourceActionsUnavailable": "The transcript source is unavailable."
           },
           "AiVaultScanProgressStrip": {
+            "agentChecked": "{{agent}}: {{settled}} of {{total}} history candidates checked",
             "fileCount_one": "{{value0}} file",
             "fileCount_other": "{{value0}} files",
             "databaseCount_one": "{{value0}} database",
             "databaseCount_other": "{{value0}} databases",
             "scanning": "Scanning {{value0}}",
-            "reading": "Reading {{value0}} files",
+            "checking": "Checking {{value0}}",
             "scanned": "Scanned {{value0}}"
           }
         }
@@ -16680,6 +16681,9 @@
             },
             "sectionStale": {
               "notice": "This file changed on disk since this section loaded."
+            },
+            "notUtf8": {
+              "notice": "Autosave is paused for {{name}} because it isn't UTF-8 text. Save it yourself to convert it to UTF-8."
             }
           }
         },
@@ -18582,6 +18586,21 @@
         "copyFailed": "Could not copy the link.",
         "signingIn": "Signing in…",
         "cancel": "Cancel"
+      },
+      "plainSshTerminal": {
+        "open": "Open plain SSH terminal",
+        "unmanaged": "Plain SSH — unmanaged. Not an Orca workspace: agents and tabs here aren’t tracked, and this terminal isn’t restored. Closing it ends the SSH session.",
+        "ended": "ssh exited with code {{code}}. Close this window when you’re done reading.",
+        "title": "Plain SSH · {{host}}",
+        "minimize": "Minimize",
+        "close": "Close and end session",
+        "unknownTarget": "This SSH host is no longer saved in Orca.",
+        "notBlocked": "Orca can reach this host again, so use its terminals instead. Plain SSH is only for while Orca can’t set up on the host.",
+        "alreadyOpen": "Another Orca window already has a plain SSH terminal open to this host.",
+        "endedBySignal": "ssh was stopped (signal {{signal}}). Close this window when you’re done reading.",
+        "cancelled": "This plain SSH terminal was closed before it started.",
+        "terminalUnavailable": "Orca couldn’t open a terminal here.",
+        "openHint": "Keeps you working on the host while Orca can’t set up there."
       }
     },
     "i18n": {
@@ -18871,6 +18890,8 @@
         "settleEarlierMessage": "Wait for your earlier message to go through, or retry it.",
         "queueTooLarge": "Too much text is waiting in the queue.",
         "shrinkQueue": "Delete a queued message, or wait for one to go through, then try again.",
+        "messageTooLarge": "It is over the 256 KB limit for one message.",
+        "shortenMessage": "Shorten or split it, then send it again.",
         "optionRejected": "The agent didn't accept this setting.",
         "goalsUnsupported": "This agent doesn't support goals.",
         "agentRefused": "The agent turned this down.",
@@ -18979,6 +19000,10 @@
         "uploadingFile": "Uploading {{name}}…",
         "removeAttachment": "Remove attachment",
         "pastedImageLabel": "Pasted image",
+        "pastedTextLabel": "Pasted text",
+        "pasteNotSavedLabel": "Paste not saved",
+        "pasteNotSaved": "This paste was not saved. Paste it again or remove it.",
+        "pastedTextTooLarge": "This paste would put your message over the 256 KB limit for one message. Shorten it, then paste again.",
         "draftNotSaved": "This draft couldn't be saved yet. Orca keeps trying.",
         "imageNotBroughtBack": "{{name}} couldn't be brought back with this draft. Attach it again or remove it.",
         "pastedImageNotBroughtBack": "This pasted image couldn't be brought back with this draft. Remove it, and paste it again if you still need it.",
@@ -20179,8 +20204,12 @@
   },
   "sourceControl": {
     "discard": {
+      "deleteUntrackedFileDescription": "This will permanently delete this untracked file. This cannot be undone.",
+      "deleteUntrackedFilesDescription": "This will permanently delete these {{count}} untracked files. This cannot be undone.",
       "restoreStagedVersionDescription": "This will restore the last staged version and discard the deletion. This cannot be undone.",
-      "unstagedChangesDescription": "This will revert the unstaged changes to this file. This cannot be undone."
+      "unstagedChangesDescription": "This will revert the unstaged changes to this file. This cannot be undone.",
+      "unstagedSelectionIncludingUntrackedDescription": "This will revert unstaged changes and permanently delete any untracked files in this selection. This cannot be undone.",
+      "unstagedFilesIncludingUntrackedDescription": "This will revert unstaged changes and permanently delete any untracked files among these {{count}} files. This cannot be undone."
     },
     "unlinkedPr": {
       "status": "PR #{{number}} unlinked"
@@ -20624,7 +20653,12 @@
     "remoteScopeAccountsAddHere": "Showing accounts managed by {{value0}}. New accounts sign in there; you finish in this device’s browser."
   },
   "fileSearch": {
-    "failed": "Search failed. Try again."
+    "failed": "Search failed. Try again.",
+    "filters": {
+      "toggle": "Toggle search details",
+      "active": "{{count}} active"
+    },
+    "noResults": "No results. Try another search or adjust your filters."
   },
   "workspaceDeletion": {
     "preferenceSaveFailed": "Could not save deletion preference",
@@ -20952,5 +20986,26 @@
       "unavailable": "This workspace is protected or unavailable."
     },
     "rowActions": "Actions for {{name}}"
+  },
+  "onboarding": {
+    "language": {
+      "back": "Languages",
+      "requestPrompt": "Which language would you like Orca to support?",
+      "requestSuccess": "Language request recorded. You can continue onboarding.",
+      "requestError": "Could not record your request. Try again.",
+      "retry": "Retry",
+      "requestAction": "Request language",
+      "title": "Display language",
+      "device": "System language: {{language}}",
+      "unsupported": "System language: {{language}}. This language is not supported yet.",
+      "unknown": "Your system language could not be detected. Choose a language below.",
+      "loadError": "Could not load this language. Try again.",
+      "saveError": "Could not save your language preference. Try again.",
+      "other": "Other language…",
+      "settingsError": "Could not load your settings.",
+      "loadingSettings": "Loading settings…",
+      "loading": "Loading language…",
+      "saving": "Saving language…"
+    }
   }
 }

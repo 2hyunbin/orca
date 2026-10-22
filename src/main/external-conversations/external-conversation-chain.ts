@@ -1,34 +1,61 @@
 import { refused, type ConnectorRefusal, type Delivery } from './external-conversation-types'
 
+type Lane = { controller: AbortController; signal: AbortSignal; tail: Promise<unknown> }
+
+/** Why an aborted conversation signal stopped: the seam's disable, or this conversation's cancel. */
+export function refusalOf(signal: AbortSignal): ConnectorRefusal {
+  return signal.reason === 'agent_not_reachable' ? 'agent_not_reachable' : 'connectors_disabled'
+}
+
 /**
- * Ordering per conversation: one active head, the rest behind it in arrival order. A head that
- * ends its hold (agent exit, new binding) settles everything already waiting with its reason.
+ * Ordering per conversation: one active head, the rest behind it in arrival order. Disposal, or
+ * cancelling one conversation, settles everything still waiting at once and aborts the head's
+ * signal; the head keeps the outcome of what it already wrote.
  */
 export class ConversationChain {
-  private readonly tails = new Map<string, Promise<unknown>>()
-  private readonly epochs = new Map<string, number>()
-  private readonly settled = new Map<string, { through: number; reason: ConnectorRefusal }>()
+  private readonly lanes = new Map<string, Lane>()
 
-  enqueue(id: string, run: () => Promise<Delivery>): Promise<Delivery> {
-    const epoch = this.epochs.get(id) ?? 0
-    const turn = (): Promise<Delivery> => {
-      const settled = this.settled.get(id)
-      return settled && epoch <= settled.through ? Promise.resolve(refused(settled.reason)) : run()
-    }
-    const result = (this.tails.get(id) ?? Promise.resolve()).then(turn, turn)
+  constructor(private readonly signal: AbortSignal) {}
+
+  enqueue(id: string, run: (signal: AbortSignal) => Promise<Delivery>): Promise<Delivery> {
+    const lane = this.lanes.get(id) ?? this.openLane(id)
+    const previous = lane.tail
+    const turn = new Promise<void>((resolve) => {
+      const onAbort = (): void => resolve()
+      lane.signal.addEventListener('abort', onAbort, { once: true })
+      void previous.then(() => {
+        lane.signal.removeEventListener('abort', onAbort)
+        resolve()
+      })
+    })
+    const result = turn.then(() =>
+      lane.signal.aborted ? refused(refusalOf(lane.signal)) : run(lane.signal)
+    )
     const tail = result.catch(() => undefined)
-    this.tails.set(id, tail)
+    lane.tail = tail
     void tail.then(() => {
-      if (this.tails.get(id) === tail) {
-        this.tails.delete(id)
+      if (this.lanes.get(id) === lane && lane.tail === tail) {
+        this.lanes.delete(id)
       }
     })
     return result
   }
 
-  settleWaiting(id: string, reason: ConnectorRefusal): void {
-    const epoch = this.epochs.get(id) ?? 0
-    this.settled.set(id, { through: epoch, reason })
-    this.epochs.set(id, epoch + 1)
+  /** Settles this conversation's running and queued work; later work starts a fresh lane. */
+  cancel(id: string, reason: ConnectorRefusal): void {
+    const lane = this.lanes.get(id)
+    this.lanes.delete(id)
+    lane?.controller.abort(reason)
+  }
+
+  private openLane(id: string): Lane {
+    const controller = new AbortController()
+    const lane: Lane = {
+      controller,
+      signal: AbortSignal.any([this.signal, controller.signal]),
+      tail: Promise.resolve()
+    }
+    this.lanes.set(id, lane)
+    return lane
   }
 }
