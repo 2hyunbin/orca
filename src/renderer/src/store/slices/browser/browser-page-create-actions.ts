@@ -5,6 +5,7 @@ import type {
   RemoteBrowserPageHandle
 } from './browser-slice-contract'
 import {
+  assertBrowserPageIdUnused,
   buildBrowserPage,
   findPage,
   findWorkspace,
@@ -27,6 +28,7 @@ export function createBrowserPageCreateActions(
       if (!workspace) {
         return null
       }
+      assertBrowserPageIdUnused(get(), options?.browserPageId)
       const page = buildBrowserPage(
         workspaceId,
         workspace.worktreeId,
