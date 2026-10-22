@@ -163,7 +163,7 @@ describe('a chat tab on a host with no window', () => {
 
   it('lists tabs to phones in the order desktop clients draw after a rebuild', async () => {
     const runtime = headlessRuntimeWithChat({ asProfileStore: true })
-    // A chat the host opens is saved in main's layout too, so main can move it.
+    // Layout-owner builds: main's layout holds a chat the host opens and moves it, so it stays first.
     await runtime.listMobileSessionTabs(WORKTREE)
     await runtime.publishStructuredAgentSessionTab({
       workspaceId: TEST_WORKTREE_ID,

@@ -183,7 +183,7 @@ export function withMainSessionTabRows(
   // layout are main's, so the phone gets no group the layout lacks.
   const { stray } = placement
   if (tabGroups.length > 0) {
-    tabGroups = withStrayIn(tabGroups, placement, Math.max(activeGroupIndex(windowActive), 0))
+    tabGroups = withStrayIn(tabGroups, stray, Math.max(activeGroupIndex(windowActive), 0))
   } else if (stray.length > 0) {
     // Main lists no group: the window's groups hold the rows only it knows.
     for (const group of published.tabGroups ?? []) {
