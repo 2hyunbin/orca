@@ -9,6 +9,9 @@ import {
 import type { RuntimeStatus } from '../../shared/runtime-types'
 import { RuntimeClientError, type RuntimeRpcResponse } from './types'
 
+// Paired CLI callers are not exempt from the host's agent.launch gate like the local socket is.
+const CLI_CLIENT_CAPABILITIES = [AGENT_LAUNCH_RUNTIME_CAPABILITY] as const
+
 export async function sendWebSocketRequest<TResult>(
   connection: PairedRuntimeConnection,
   method: string,
@@ -24,7 +27,7 @@ export async function sendWebSocketRequest<TResult>(
       timeoutMs,
       envelope,
       undefined,
-      [AGENT_LAUNCH_RUNTIME_CAPABILITY]
+      CLI_CLIENT_CAPABILITIES
     )
   } catch (error) {
     if (error instanceof RemoteRuntimeClientError) {
@@ -50,7 +53,7 @@ export async function sendWebSocketRequestWithStatusPreflight<TResult>(
       timeoutMs,
       validateStatus,
       envelope,
-      [AGENT_LAUNCH_RUNTIME_CAPABILITY]
+      CLI_CLIENT_CAPABILITIES
     )
   } catch (error) {
     if (error instanceof RemoteRuntimeClientError) {
