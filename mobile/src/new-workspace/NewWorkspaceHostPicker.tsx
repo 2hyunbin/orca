@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'expo-router'
 import { PickerModal } from '../components/PickerModal'
-import { hostPickerOptions } from '../components/use-connected-host-picker'
+import { homeDesktopPickerOptions } from '../home/home-desktop-picker-options'
 import { selectConnectableHostProfiles } from '../transport/host-catalog-selection'
 import { loadHostCatalog } from '../transport/host-store'
 import type { HostProfile } from '../transport/types'
@@ -33,7 +33,7 @@ export function NewWorkspaceHostPicker({
     <PickerModal
       title="Create workspace on"
       visible={hosts !== null && !nothingToPick && open}
-      options={hostPickerOptions(hosts ?? [])}
+      options={homeDesktopPickerOptions(hosts ?? [])}
       selected=""
       onSelect={(hostId) => {
         pickedRef.current = true
