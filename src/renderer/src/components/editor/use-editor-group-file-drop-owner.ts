@@ -105,7 +105,9 @@ export function useEditorGroupFileDropOwner({
         if (!claimWorkspaceDrag(event) || !event.dataTransfer) {
           return
         }
-        const result = readWorkspaceFileDragPaths(event.dataTransfer)
+        const result = readWorkspaceFileDragPaths(event.dataTransfer, {
+          collapseDescendantsForMove: false
+        })
         if (result.status === 'rejected') {
           toast.error(getWorkspaceFileDragRejectionMessage(result.reason))
           return

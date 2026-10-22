@@ -3,7 +3,7 @@ import { detectLanguage } from '@/lib/language-detect'
 import { isPathInsideWorktree, toWorktreeRelativePath } from '@/lib/terminal-links'
 import { useAppStore } from '@/store'
 import { getConnectionId } from '@/lib/connection-context'
-import { joinPath } from '@/lib/path'
+import { basename, joinPath } from '@/lib/path'
 import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
 import { importExternalPathsToRuntime } from '@/runtime/runtime-file-import-client'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
@@ -16,7 +16,14 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { requireRuntimeTargetForFileOwner } from '@/lib/file-owner-runtime-target'
 import { openWorkspaceFile } from '@/lib/workspace-file-open'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
-import type { WorkspaceFileDragSource } from '@/lib/workspace-file-drag'
+import {
+  isResolvedWorkspaceFileDragExecutionHost,
+  type WorkspaceFileDragSource
+} from '@/lib/workspace-file-drag'
+import {
+  captureFileExplorerOperationGuard,
+  getFileExplorerOperationOwner
+} from '../right-sidebar/file-explorer-operation-owner'
 
 export function shouldUploadRemoteEditorFileDrop(
   target: RuntimeClientTarget,
@@ -50,13 +57,29 @@ type EditorFileDropContext = {
   fileContext: RuntimeFileOperationArgs
   worktreePath: string | undefined
   connectionId: string | undefined
+  assertCurrent?: () => void
 }
 
-function captureEditorFileDropContext(worktreeId: string): EditorFileDropContext | null {
+function captureEditorFileDropContext(
+  worktreeId: string,
+  workspaceResource = false
+): EditorFileDropContext | null {
   const store = useAppStore.getState()
   const worktreePath = store.getKnownWorktreeById(worktreeId)?.path
-  const connectionId = getConnectionId(worktreeId) ?? undefined
   try {
+    if (workspaceResource) {
+      const guard = captureFileExplorerOperationGuard(
+        worktreeId,
+        getFileExplorerOperationOwner(worktreeId)
+      )
+      return {
+        fileContext: { ...guard.route, worktreeId, worktreePath },
+        worktreePath,
+        connectionId: guard.route.connectionId,
+        assertCurrent: guard.assertCurrent
+      }
+    }
+    const connectionId = getConnectionId(worktreeId) ?? undefined
     return {
       fileContext: {
         ...getEditorFileDropOperationContext(store, worktreeId, worktreePath, connectionId),
@@ -110,6 +133,26 @@ function canOpenEditorFileDrop(
   if (!editorGroupStillExists(destination)) {
     return false
   }
+  if (captured.assertCurrent) {
+    try {
+      const state = useAppStore.getState()
+      if (
+        state.getKnownWorktreeById(destination.worktreeId)?.path !== captured.worktreePath ||
+        (destination.groupId &&
+          !state.groupsByWorktree[destination.worktreeId]?.some(
+            (group) =>
+              group.id === destination.groupId && group.worktreeId === destination.worktreeId
+          ))
+      ) {
+        throw new Error('Destination changed')
+      }
+      captured.assertCurrent()
+      return true
+    } catch {
+      showOwnerChangedError()
+      return false
+    }
+  }
   const current = captureEditorFileDropContext(destination.worktreeId)
   if (!current || !sameEditorFileDropOwner(captured, current)) {
     showOwnerChangedError()
@@ -126,19 +169,26 @@ export function captureEditorFileDropOpen(
   destination: EditorFileDropDestination,
   source?: WorkspaceFileDragSource
 ): (paths: readonly string[]) => Promise<void> {
-  const captured = captureEditorFileDropContext(destination.worktreeId)
+  const captured = captureEditorFileDropContext(destination.worktreeId, source !== undefined)
   const sourceHost = parseExecutionHostId(source?.executionHostId)
-  const sourceEnvironmentId =
-    source?.runtimeEnvironmentId ??
-    (sourceHost?.kind === 'runtime' ? sourceHost.environmentId : null)
-  if (
-    !captured ||
-    (source &&
-      ((sourceHost?.kind === 'runtime' ? 'local' : source?.executionHostId) !==
-        captured.fileContext.expectedExecutionHostId ||
-        sourceEnvironmentId !== runtimeTargetEnvironmentId(captured.fileContext.target)))
-  ) {
+  if (!captured || (source && !isResolvedWorkspaceFileDragExecutionHost(source.executionHostId))) {
     showOwnerChangedError()
+    return async () => undefined
+  }
+  if (
+    source &&
+    ((sourceHost?.kind === 'runtime' ? 'local' : source.executionHostId) !==
+      captured.fileContext.expectedExecutionHostId ||
+      (source.runtimeEnvironmentId ??
+        (sourceHost?.kind === 'runtime' ? sourceHost.environmentId : null)) !==
+        runtimeTargetEnvironmentId(captured.fileContext.target))
+  ) {
+    toast.error(
+      translate(
+        'auto.hooks.useGlobalFileDrop.hostMismatch',
+        'This editor is on a different host. Open the file from its source workspace.'
+      )
+    )
     return async () => undefined
   }
   return async (paths) => {
@@ -218,6 +268,9 @@ async function openEditorFileDropPaths(
 
   // Sequential, so a multi-file drop opens its tabs in drop order.
   for (const filePath of paths) {
+    if (!clientLocalPaths && !canOpenEditorFileDrop(context, destination)) {
+      return
+    }
     try {
       const stat = await statUserOpenedPath(fileContext, filePath)
       if (!canOpenEditorFileDrop(context, destination)) {
@@ -250,13 +303,21 @@ async function openEditorFileDropPaths(
         options: {
           ...groupOptions,
           ...(!clientLocalPaths
-            ? { suppressActiveRuntimeFallback: runtimeEnvironmentId === null }
+            ? { suppressActiveRuntimeFallback: runtimeEnvironmentId === null, focusEditor: true }
             : {}),
           ...(floating ? { preview: false, suppressActiveRuntimeFallback: true } : {})
         }
       })
     } catch {
-      // Ignore files that cannot be stat'd.
+      if (!clientLocalPaths) {
+        toast.error(
+          translate(
+            'auto.hooks.useGlobalFileDrop.workspaceOpenFailed',
+            'Could not open {{fileName}}. Open it from its source workspace and try again.',
+            { fileName: basename(filePath) }
+          )
+        )
+      }
     }
   }
 }

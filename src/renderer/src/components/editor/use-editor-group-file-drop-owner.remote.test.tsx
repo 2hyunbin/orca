@@ -12,17 +12,19 @@ import {
 import { WORKSPACE_FILE_PATHS_MIME, writeWorkspaceFileDragSource } from '@/lib/workspace-file-drag'
 import { joinPath } from '@/lib/path'
 import { useEditorGroupFileDropOwner } from './use-editor-group-file-drop-owner'
+import { captureEditorFileDropOpen } from './editor-dropped-file-open'
 import { createCompatibleRuntimeStatusResponse } from '@/runtime/runtime-compatibility-test-fixture'
 
 const mocks = vi.hoisted(() => ({
   stat: vi.fn(),
+  rpc: vi.fn(),
   importPaths: vi.fn(),
   prepare: vi.fn(),
   openFile: vi.fn(),
   setActiveTabType: vi.fn(),
   toastError: vi.fn()
 }))
-vi.mock('@/lib/user-opened-local-path', () => ({ statUserOpenedPath: mocks.stat }))
+vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.rpc }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
 vi.mock('@/runtime/runtime-file-import-client', () => ({
   importExternalPathsToRuntime: mocks.importPaths
@@ -59,6 +61,8 @@ beforeEach(() => {
       ['owner-runtime', { status: response.result, checkedAt: Date.now() }]
     ])
   })
+  mocks.stat.mockResolvedValue({ isDirectory: false, size: 1, mtime: 0 })
+  mocks.rpc.mockResolvedValue({ isDirectory: false, size: 1, mtime: 0 })
   mocks.prepare.mockImplementation(async ({ paths }: { paths: string[] }) => ({
     paths,
     failures: []
@@ -72,6 +76,7 @@ beforeEach(() => {
   }))
   vi.stubGlobal('api', {
     fs: {
+      stat: mocks.stat,
       getPathForFile: (file: File) => `/Users/me/Desktop/${file.name}`,
       prepareDroppedPaths: mocks.prepare
     }
@@ -85,23 +90,49 @@ afterEach(() => {
 })
 
 describe('editor group OS file drops on remote workspaces', () => {
-  it.each(['wt-ssh', 'wt-runtime'])(
+  it.each(['wt-ssh', 'wt-runtime', 'nested-ssh'])(
     'opens existing explorer files in %s without uploading and skips folders',
-    async (worktreeId) => {
+    async (kind) => {
+      const worktreeId = kind === 'nested-ssh' ? 'wt-runtime' : kind
+      if (kind === 'nested-ssh') {
+        useAppStore.setState((state) => ({
+          worktreesByRepo: {
+            ...state.worktreesByRepo,
+            'repo-rt': state.worktreesByRepo['repo-rt'].map((wt) => ({
+              ...wt,
+              hostId: 'ssh:ssh-1',
+              runtimeOwnerEnvironmentId: 'owner-runtime'
+            }))
+          }
+        }))
+        for (const [targetId, connection] of sshConnectionStatesAt(3)) {
+          useAppStore
+            .getState()
+            .setEnvironmentSshConnectionState('owner-runtime', targetId, connection)
+        }
+      }
       const ssh = worktreeId === 'wt-ssh'
       const groupId = ssh ? 'group-ssh' : 'group-runtime'
       const root = ssh ? SSH_PATH : RUNTIME_PATH
-      const paths = ['folder', 'first.ts', 'second.md'].map((path) => joinPath(root, path))
-      mocks.stat.mockImplementation(async (_context, path) => ({
-        isDirectory: path === paths[0],
-        escapesWorktree: false
-      }))
+      const paths = ['folder', 'folder/first.ts', 'second.md', 'last-folder'].map((path) =>
+        joinPath(root, path)
+      )
+      const stat = (path: string) => ({
+        isDirectory: [paths[0], paths[3]].includes(path),
+        size: 1,
+        mtime: 0
+      })
+      mocks.stat.mockImplementation(async ({ filePath }) => stat(filePath))
+      mocks.rpc.mockImplementation(async (_target, _method, { relativePath }) =>
+        stat(joinPath(root, relativePath))
+      )
       const payload = new Map([[WORKSPACE_FILE_PATHS_MIME, JSON.stringify(paths)]])
       writeWorkspaceFileDragSource(
         { setData: (type, value) => payload.set(type, value) },
         {
           workspaceId: worktreeId,
-          executionHostId: ssh ? 'ssh:ssh-1' : 'runtime:owner-runtime'
+          executionHostId: ssh || kind === 'nested-ssh' ? 'ssh:ssh-1' : 'runtime:owner-runtime',
+          ...(kind === 'nested-ssh' ? { runtimeEnvironmentId: 'owner-runtime' } : {})
         }
       )
       const event = new Event('drop', { bubbles: true, cancelable: true })
@@ -116,18 +147,104 @@ describe('editor group OS file drops on remote workspaces', () => {
         view.getByTestId('strip').dispatchEvent(event)
       })
       await waitFor(() => expect(mocks.openFile).toHaveBeenCalledTimes(2))
-      expect(mocks.openFile.mock.calls.map(([file]) => file.filePath)).toEqual(paths.slice(1))
+      expect(mocks.openFile.mock.calls.map(([file]) => file.filePath)).toEqual(paths.slice(1, 3))
       expect(mocks.openFile).toHaveBeenCalledWith(
         expect.objectContaining({
           worktreeId,
           runtimeEnvironmentId: ssh ? undefined : 'owner-runtime'
         }),
-        { targetGroupId: groupId, suppressActiveRuntimeFallback: ssh }
+        { targetGroupId: groupId, suppressActiveRuntimeFallback: ssh, focusEditor: true }
       )
       expect(mocks.importPaths).not.toHaveBeenCalled()
       expect(mocks.prepare).not.toHaveBeenCalled()
     }
   )
+
+  it('routes overlapping paired roots, reports failed files, and opens later selections', async () => {
+    mocks.rpc.mockRejectedValueOnce(new Error('PRIVATE provider failure'))
+    const open = captureEditorFileDropOpen(
+      { worktreeId: 'wt-runtime', groupId: 'group-runtime' },
+      { workspaceId: 'source-subfolder', executionHostId: 'runtime:owner-runtime' }
+    )
+    await open(['/srv/disjoint/no.ts', `${RUNTIME_PATH}/gone.ts`, `${RUNTIME_PATH}/sub/ok.md`])
+    expect(mocks.stat).not.toHaveBeenCalled()
+    expect(mocks.rpc.mock.calls.map(([, method, args]) => [method, args])).toEqual([
+      ['files.stat', { worktree: 'id:wt-runtime', relativePath: 'gone.ts' }],
+      ['files.stat', { worktree: 'id:wt-runtime', relativePath: 'sub/ok.md' }]
+    ])
+    expect(mocks.openFile).toHaveBeenCalledTimes(1)
+    expect(mocks.openFile.mock.calls[0][0].relativePath).toBe('sub/ok.md')
+    expect(mocks.toastError.mock.calls.map(([message]) => message)).toEqual([
+      expect.stringMatching(/no.ts.*Open.*source workspace/),
+      expect.stringMatching(/gone.ts.*Open.*source workspace/)
+    ])
+  })
+
+  it('stops after the pending stat rejects if its group has closed', async () => {
+    let rejectStat: (error: Error) => void = () => undefined
+    mocks.rpc.mockImplementationOnce(() => new Promise((_resolve, reject) => (rejectStat = reject)))
+    const open = captureEditorFileDropOpen(
+      { worktreeId: 'wt-runtime', groupId: 'group-runtime' },
+      { workspaceId: 'wt-runtime', executionHostId: 'runtime:owner-runtime' }
+    )
+    const pending = open([`${RUNTIME_PATH}/first.ts`, `${RUNTIME_PATH}/second.ts`])
+    useAppStore.setState({ groupsByWorktree: {} })
+    rejectStat(new Error('Disconnected'))
+    await pending
+    expect(mocks.rpc).toHaveBeenCalledTimes(1)
+    expect(mocks.openFile).not.toHaveBeenCalled()
+  })
+
+  it('uses the repo-derived SSH folder owner and refuses completion after reconnect', async () => {
+    useAppStore.setState((state) => ({
+      folderWorkspaces: [
+        {
+          id: 'notes',
+          projectGroupId: 'project',
+          name: 'Notes',
+          folderPath: SSH_PATH,
+          linkedTask: null,
+          comment: '',
+          isArchived: false,
+          isUnread: false,
+          isPinned: false,
+          sortOrder: 0,
+          lastActivityAt: 0,
+          createdAt: 0,
+          updatedAt: 0
+        }
+      ],
+      repos: state.repos.map((repo) =>
+        repo.id === 'repo-ssh'
+          ? { ...repo, projectGroupId: 'project', path: `${SSH_PATH}/repo` }
+          : repo
+      ),
+      groupsByWorktree: {
+        'folder:notes': [
+          { id: 'folder-group', worktreeId: 'folder:notes', activeTabId: null, tabOrder: [] }
+        ]
+      }
+    }))
+    const destination = { worktreeId: 'folder:notes', groupId: 'folder-group' }
+    const source = { workspaceId: 'folder:notes', executionHostId: 'ssh:ssh-1' } as const
+    await captureEditorFileDropOpen(destination, source)([`${SSH_PATH}/ok.md`])
+    expect(mocks.stat).toHaveBeenCalledWith(expect.objectContaining({ connectionId: 'ssh-1' }))
+    expect(mocks.openFile).toHaveBeenCalledTimes(1)
+    let finish: (stat: { isDirectory: boolean }) => void = () => undefined
+    mocks.stat.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    const pending = captureEditorFileDropOpen(destination, source)([`${SSH_PATH}/later.md`])
+    useAppStore.setState({ sshConnectionStates: sshConnectionStatesAt(4) })
+    finish({ isDirectory: false })
+    await pending
+    expect(mocks.openFile).toHaveBeenCalledTimes(1)
+    expect(mocks.toastError).toHaveBeenCalledWith(
+      expect.stringMatching(/Couldn't verify which host owns/)
+    )
+    captureEditorFileDropOpen(destination, { ...source, executionHostId: 'local' })
+    expect(mocks.toastError).toHaveBeenLastCalledWith(
+      expect.stringMatching(/different host.*source workspace/)
+    )
+  })
 
   it("uploads an SSH group's drop into that workspace and opens it in that group", async () => {
     const view = render(<EditorStrip worktreeId="wt-ssh" groupId="group-ssh" />)

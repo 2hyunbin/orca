@@ -3,9 +3,11 @@ import { Suspense, use } from 'react'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparedDroppedPaths } from '../../../../shared/native-file-drop-preparation'
-import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { useAppStore } from '@/store'
+import { makeWorktree, TEST_REPO } from '@/store/slices/worktrees-slice-test-fixtures'
+import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../../shared/constants'
 import { createOsFileDropSequence } from '@/hooks/use-os-file-drop-owner'
-import { WORKSPACE_FILE_PATH_MIME, writeWorkspaceFileDragSource } from '@/lib/workspace-file-drag'
+import { WORKSPACE_FILE_PATHS_MIME, writeWorkspaceFileDragSource } from '@/lib/workspace-file-drag'
 import type * as OsFileDropOwnerModule from '@/hooks/use-os-file-drop-owner'
 import { useEditorGroupFileDropOwner } from './use-editor-group-file-drop-owner'
 
@@ -24,46 +26,6 @@ vi.mock('@/hooks/use-os-file-drop-owner', async (importOriginal) => {
   const actual = await importOriginal<typeof OsFileDropOwnerModule>()
   return { ...actual, createOsFileDropSequence: vi.fn(actual.createOsFileDropSequence) }
 })
-vi.mock('@/lib/connection-context', () => ({ getConnectionId: () => null }))
-vi.mock('@/lib/ssh-mutation-expectation', () => ({
-  // Like the real lookup, a workspace with no host record fails closed.
-  captureWorktreeSshMutationExpectation: (_state: unknown, worktreeId: string) => {
-    if (
-      !worktreeId.startsWith('wt-') &&
-      !worktreeId.startsWith('folder:') &&
-      worktreeId !== FLOATING_TERMINAL_WORKTREE_ID
-    ) {
-      throw new Error('unresolved host')
-    }
-    return { expectedExecutionHostId: 'local' }
-  }
-}))
-vi.mock('@/lib/file-owner-runtime-target', () => {
-  const getRuntimeTargetForFileOwner = (
-    _state: unknown,
-    _worktreeId: string | null | undefined,
-    _runtimeEnvironmentId: string | null | undefined
-  ) => ({ kind: 'local' as const })
-  return {
-    FILE_OWNER_UNRESOLVED_MESSAGE: 'unresolved',
-    getRuntimeTargetForFileOwner,
-    requireRuntimeTargetForFileOwner: getRuntimeTargetForFileOwner,
-    getRuntimeTargetForWorktreeOwner: (state: unknown, worktreeId: string | null | undefined) =>
-      getRuntimeTargetForFileOwner(state, worktreeId, undefined)
-  }
-})
-vi.mock('@/lib/user-opened-local-path', () => ({ statUserOpenedPath: mocks.stat }))
-vi.mock('@/store', () => ({
-  useAppStore: {
-    getState: () => ({
-      settings: {},
-      activeWorktreeId: 'wt-active',
-      groupsByWorktree: mocks.groupsByWorktree,
-      getKnownWorktreeById: (id: string) => ({ id, path: `/repos/${id}` }),
-      openFile: mocks.openFile
-    })
-  }
-}))
 
 function EditorArea({ worktreeId, groupId }: { worktreeId: string; groupId: string }) {
   const attachArea = useEditorGroupFileDropOwner({ worktreeId, groupId })
@@ -115,13 +77,47 @@ beforeEach(() => {
     'folder:notes': [{ id: 'group-b' }],
     [FLOATING_TERMINAL_WORKTREE_ID]: [{ id: 'floating-group' }]
   }
-  mocks.stat.mockResolvedValue({ isDirectory: false, escapesWorktree: false })
+  useAppStore.setState({
+    settings: getDefaultSettings('/home/me'),
+    repos: [{ ...TEST_REPO, executionHostId: 'local', connectionId: null }],
+    worktreesByRepo: {
+      [TEST_REPO.id]: [makeWorktree({ id: 'wt-b', repoId: TEST_REPO.id, path: '/repos/wt-b' })]
+    },
+    folderWorkspaces: [
+      {
+        id: 'notes',
+        projectGroupId: 'project',
+        name: 'Notes',
+        folderPath: '/repos/wt-b',
+        linkedTask: null,
+        comment: '',
+        isArchived: false,
+        isUnread: false,
+        isPinned: false,
+        sortOrder: 0,
+        lastActivityAt: 0,
+        createdAt: 0,
+        updatedAt: 0
+      }
+    ],
+    openFile: mocks.openFile
+  })
+  useAppStore.setState({
+    groupsByWorktree: Object.fromEntries(
+      Object.entries(mocks.groupsByWorktree).map(([worktreeId, groups]) => [
+        worktreeId,
+        groups.map(({ id }) => ({ id, worktreeId, activeTabId: null, tabOrder: [] }))
+      ])
+    )
+  })
+  mocks.stat.mockResolvedValue({ isDirectory: false, size: 1, mtime: 0 })
   mocks.prepare.mockImplementation(async ({ paths }: { paths: string[] }) => ({
     paths,
     failures: []
   }))
   vi.stubGlobal('api', {
     fs: {
+      stat: mocks.stat,
       getPathForFile: (file: File) => `/repos/wt-b/${file.name}`,
       prepareDroppedPaths: mocks.prepare
     }
@@ -146,7 +142,9 @@ describe('editor group OS file drops', () => {
           : 'wt-b'
       const groupId = floating ? 'floating-group' : 'group-b'
       const view = render(<EditorGroup worktreeId={worktreeId} groupId={groupId} />)
-      const payload = new Map([[WORKSPACE_FILE_PATH_MIME, '/repos/wt-b/notes.md']])
+      const payload = new Map([
+        [WORKSPACE_FILE_PATHS_MIME, JSON.stringify(['/repos/wt-b', '/repos/wt-b/notes.md'])]
+      ])
       writeWorkspaceFileDragSource(
         { setData: (type, value) => payload.set(type, value) },
         {
@@ -159,6 +157,11 @@ describe('editor group OS file drops', () => {
         getData: (type: string) => payload.get(type) ?? '',
         dropEffect: 'none'
       }
+      mocks.stat.mockImplementation(async ({ filePath }) => ({
+        isDirectory: filePath === '/repos/wt-b',
+        size: 1,
+        mtime: 0
+      }))
       const target = view.getByTestId(`${groupId}:${floating || root === 'folder' ? 'area' : root}`)
       for (const type of ['dragover', 'drop']) {
         const event = new Event(type, { bubbles: true, cancelable: true, composed: true })
@@ -172,7 +175,7 @@ describe('editor group OS file drops', () => {
       await waitFor(() => expect(mocks.openFile).toHaveBeenCalledTimes(1))
       expect(mocks.openFile).toHaveBeenCalledWith(
         expect.objectContaining({ filePath: '/repos/wt-b/notes.md', worktreeId }),
-        expect.objectContaining({ targetGroupId: groupId })
+        expect.objectContaining({ targetGroupId: groupId, focusEditor: true })
       )
       expect(mocks.prepare).not.toHaveBeenCalled()
     }
@@ -252,7 +255,7 @@ describe('editor group OS file drops', () => {
     const view = render(<EditorGroup worktreeId="wt-b" groupId="group-b" />)
     dropFile(view.getByTestId('group-b:area'), 'shot.png')
     view.unmount()
-    mocks.groupsByWorktree['wt-b'] = [{ id: 'group-other' }]
+    useAppStore.setState({ groupsByWorktree: {} })
     await act(async () =>
       finish({
         paths: ['/repos/wt-b/shot.png'],
@@ -302,9 +305,13 @@ describe('editor group OS file drops', () => {
       expect(mocks.toastError).toHaveBeenCalledTimes(1)
       view.unmount()
       if (closed === 'workspace') {
-        delete mocks.groupsByWorktree['wt-b']
+        useAppStore.setState({ groupsByWorktree: {} })
       } else {
-        mocks.groupsByWorktree['wt-b'] = [{ id: 'group-other' }]
+        useAppStore.setState({
+          groupsByWorktree: {
+            'wt-b': [{ id: 'group-other', worktreeId: 'wt-b', activeTabId: null, tabOrder: [] }]
+          }
+        })
       }
       await act(async () => finish({ isDirectory: false, escapesWorktree: false }))
       expect(mocks.openFile).not.toHaveBeenCalled()
