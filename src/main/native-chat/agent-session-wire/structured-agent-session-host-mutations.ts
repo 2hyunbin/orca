@@ -57,10 +57,10 @@ export type { StructuredAgentSessionMutationContext } from './structured-agent-s
 import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import {
   readStructuredAgentSessionOptions,
-  IN_PROCESS_OPTIONS_READER,
   recordStructuredAgentSessionOptionIntent,
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
+import { IN_PROCESS_OPTIONS_READER } from './structured-agent-session-option-observation'
 import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
 import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 
@@ -236,6 +236,8 @@ export async function setStructuredAgentSessionOption(
   params: { envelope: AgentSessionMutationEnvelope; key: string; value: string }
 ): Promise<AgentSessionMutationResult<AgentSessionOptionResult>> {
   const plan = setOptionPlan(params)
+  const noChoice =
+    caller.readsOptionsWithoutModel === false && params.key === 'model' && params.value === ''
   return mutateStructuredAgentSession(
     context,
     caller,
@@ -243,7 +245,19 @@ export async function setStructuredAgentSessionOption(
     {
       ...plan,
       conversationWrite: true,
-      run: (ctx) => recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
+      run: (ctx) =>
+        recordStructuredAgentSessionOptionIntent(context.deps, ctx, params, {
+          readsWithoutModel: caller.readsOptionsWithoutModel !== false
+        }),
+      ...(noChoice
+        ? {
+            settledOutcome: (value: AgentSessionOptionResult) => ({
+              status: 'succeeded' as const,
+              sessionId: params.envelope.sessionId,
+              optionResult: { version: 1, ...value }
+            })
+          }
+        : {})
     },
     openForWrite(context, params.envelope)
   )

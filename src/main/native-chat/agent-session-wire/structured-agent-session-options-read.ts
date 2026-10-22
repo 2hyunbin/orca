@@ -33,6 +33,8 @@ import { structuredAgentSessionLaunchPermission } from './structured-agent-sessi
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 import type { StructuredAgentSessionMutationContext } from './structured-agent-session-host-mutations'
 
+import { IN_PROCESS_OPTIONS_READER } from './structured-agent-session-option-observation'
+
 type RestingOptions = Pick<
   AgentSessionOptionsResult,
   'models' | 'listedModelIds' | 'fastModeSupport' | 'current'
@@ -40,11 +42,6 @@ type RestingOptions = Pick<
 
 /** What the asking client takes: whether it reads an answer that names no model. */
 export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean }
-
-/** A same-build caller in this process reads as the RPC gate treats one: it takes no model. */
-export const IN_PROCESS_OPTIONS_READER: StructuredAgentSessionOptionsReader = {
-  readsWithoutModel: true
-}
 
 /** Whether the agent takes this pick: a permission mode it offers, or an option key it names. */
 function acceptsOptionPick(
@@ -122,7 +119,10 @@ async function readStructuredAgentSessionOptionsAtRest(
       : scoped
   // With no catalog for the account, the list a running child of this agent falls back to.
   const listed = catalog.origin === 'unknown' ? (rules?.fallbackModels() ?? null) : catalog.models
-  const models = listed ?? []
+  const models =
+    catalog.origin === 'unknown' && saved.model === undefined
+      ? (listed ?? []).map((row) => ({ ...row, isDefault: false }))
+      : (listed ?? [])
   const listedModelIds = finishedListingIds(catalog)
   const fastMode =
     saved.fastMode === undefined
@@ -141,7 +141,7 @@ async function readStructuredAgentSessionOptionsAtRest(
       ? models.find((entry) => entry.id === model)?.defaultEffort
       : undefined)
   return {
-    models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
+    models: listed ? structuredAgentSessionOptionModels(models, model, (row) => row) : [],
     ...(listedModelIds ? { listedModelIds } : {}),
     ...(catalog.origin !== 'unknown' && catalog.fastModeSupport
       ? { fastModeSupport: catalog.fastModeSupport }
@@ -162,7 +162,8 @@ export async function recordStructuredAgentSessionOptionIntent(
     agents: Pick<StructuredAgentRegistry, 'definition'>
   },
   ctx: Pick<AgentSessionTurnContext, 'sessionId' | 'fence' | 'persistOptions' | 'publish' | 'now'>,
-  input: { key: string; value: string }
+  input: { key: string; value: string },
+  reader: StructuredAgentSessionOptionsReader = IN_PROCESS_OPTIONS_READER
 ): Promise<TurnOutcome<AgentSessionOptionResult>> {
   const record = deps.store.getRecord(ctx.sessionId)
   if (!record || !acceptsOptionPick(deps.agents, record.provider, input.key, input.value)) {
@@ -174,6 +175,9 @@ export async function recordStructuredAgentSessionOptionIntent(
         `${record?.provider ?? 'This session'} has no session option named ${input.key}`
       )
     }
+  }
+  if (!reader.readsWithoutModel && input.key === 'model' && input.value === '') {
+    return { ok: true, value: { key: input.key, value: input.value, options: {} } }
   }
   const options = { ...record.options, [input.key]: input.value }
   // The answer still names the mode among the options, as the wire always has.

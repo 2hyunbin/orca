@@ -15,6 +15,17 @@ import { SessionConfigOptionSchema } from '../../acp/generated/acp-protocol.gene
 import { withLiveCatalogListing } from '../agent-model-catalog/agent-model-catalog-entry'
 import { StructuredAgentSessionTaskQueue } from './structured-agent-session-task-queue'
 import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import { CLAUDE_SESSION_OPTION_CATALOG } from '../../../shared/agent-session-option-catalog-claude-codex'
+import {
+  applyStructuredAgentSessionOptions,
+  commitStructuredAgentSessionOptionValues,
+  createStructuredAgentSessionOptionState,
+  structuredAgentSessionOptionSnapshot
+} from '../../../shared/structured-agent-session-options'
+import { structuredAgentSessionSendSelection } from '../../../shared/structured-agent-session-option-view'
+import { createRestTestRig } from './structured-agent-session-rest-test-rig'
+import { agentSessionRecordFixture } from '../../../shared/agent-session-record.test-fixture'
+import { seedTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 
 const SESSION = 'session-1'
 
@@ -29,6 +40,40 @@ function restingRecord(): AgentSessionRecord {
 }
 
 describe('options at rest', () => {
+  it('keeps an unknown Claude observation out of cold sends while retaining warm aliases', async () => {
+    const rig = await createRestTestRig()
+    try {
+      const fixture = agentSessionRecordFixture()
+      await seedTestAgentSessionRecordStore(rig.root, { records: [fixture] })
+      await rig.restart()
+      const seed = CLAUDE_SESSION_OPTION_CATALOG
+      const result = await rig.host.readOptions(fixture.sessionId)
+      expect(result.current.model).toBeUndefined()
+      expect(result.models.length).toBeGreaterThan(0)
+      expect(result.models.every((model) => !model.isDefault)).toBe(true)
+      expect(result.conversationCommands).toContain('clear')
+      const cold = createStructuredAgentSessionOptionState('claude', seed)
+      const snapshot = (state: typeof cold) =>
+        structuredAgentSessionOptionSnapshot(
+          applyStructuredAgentSessionOptions(state, seed, result)
+        )
+      expect(structuredAgentSessionSendSelection('claude', snapshot(cold))).toBeUndefined()
+      const warm = commitStructuredAgentSessionOptionValues(
+        createStructuredAgentSessionOptionState('claude', seed),
+        { model: 'opus[1m]', effort: 'max' }
+      )
+      expect(structuredAgentSessionSendSelection('claude', snapshot(warm))).toEqual({
+        model: 'opus[1m]'
+      })
+      expect(warm.record.valuesByModel['opus[1m]'].effort.value).toBe('max')
+      expect(rig.store.getRecord(fixture.sessionId)?.options).toBeUndefined()
+      expect(rig.adapter.acquire).not.toHaveBeenCalled()
+      expect(seed.models.some((model) => model.isDefault)).toBe(true)
+    } finally {
+      await rig.dispose()
+    }
+  })
+
   it('keeps the account model for an older client when the starting child has no folder default', async () => {
     const record = restingRecord()
     const read = vi.fn(async (params: { inSessionWorkspace?: true }) => ({

@@ -6,6 +6,15 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../../shared/agent-session-jou
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../../shared/agent-session-mutation-envelope'
 import { STRUCTURED_AGENT_SESSION_RUNTIME_CAPABILITY } from '../../../../shared/protocol-version'
+import { AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY } from '../../../../shared/agent-session-optional-model-capability'
+import { editPersistedTestAgentSessionStore } from '../../agent-session-record-store-test-harness'
+import { agentSessionOperationKey } from '../../../../shared/agent-session-operation-ledger'
+import { CODEX_SESSION_OPTION_CATALOG } from '../../../../shared/agent-session-option-catalog-claude-codex'
+import {
+  commitStructuredAgentSessionOptionValues,
+  createStructuredAgentSessionOptionState,
+  structuredAgentSessionOptionPicks
+} from '../../../../shared/structured-agent-session-options'
 import { activeStructuredAgentSessionTurnId } from '../../../../shared/structured-agent-session-projection'
 import {
   hostTestAttachParams,
@@ -46,15 +55,32 @@ let rig: RestTestRig
 let dispatcher: RpcDispatcher
 let requests = 0
 
-async function call(method: string, params: unknown): Promise<RpcResponse[]> {
+async function call(method: string, params: unknown, client = CLIENT): Promise<RpcResponse[]> {
   const replies: RpcResponse[] = []
   requests += 1
   await dispatcher.dispatchStreaming(
     { id: `request-${requests}`, authToken: 'token', method, params },
     (raw) => replies.push(JSON.parse(raw) as RpcResponse),
-    CLIENT
+    client
   )
   return replies
+}
+
+function optionRequest(value: string, sessionId = SESSION) {
+  const fields = { key: 'model', value }
+  return {
+    ...fields,
+    envelope: {
+      sessionId,
+      clientOperationId: hostTestOperationId(),
+      expectedRuntimeFence: rig.store.getRecord(sessionId)!.lease.runtimeFence,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({
+        method: 'agentSession.setOption',
+        sessionId,
+        fields
+      })
+    }
+  }
 }
 
 /** A chat that once ran, reopened by a fresh host: nothing of it is in memory. */
@@ -93,6 +119,149 @@ afterEach(async () => {
 })
 
 describe('opening a chat at rest (P2-01)', () => {
+  it('commits a legacy no-choice answer before reply and replays it after upgrade and a real pick', async () => {
+    await restingChat()
+    const record = rig.store.getRecord(SESSION)!
+    await rig.host.readOptions(SESSION)
+    await rig.store.replaceSessionOptions({
+      sessionId: SESSION,
+      fence: record.lease.runtimeFence,
+      options: { effort: 'high' },
+      now: rig.clock.now
+    })
+    const replace = vi.spyOn(rig.store, 'replaceSessionOptions')
+    rig.sink.publish.mockClear()
+    const params = optionRequest('')
+    const inert = { key: 'model', value: '', options: {} }
+    expect((await call('agentSession.setOption', params))[0]).toMatchObject({
+      result: { ok: true, replayed: false, value: inert }
+    })
+    expect(replace).not.toHaveBeenCalled()
+    expect(rig.sink.publish).not.toHaveBeenCalled()
+    expect(rig.store.getRecord(SESSION)?.options).toEqual({ effort: 'high' })
+    expect(
+      rig.store.getOperationRow('device-1', params.envelope.clientOperationId)?.outcome
+    ).toMatchObject({ optionResult: { version: 1, ...inert } })
+    const warm = commitStructuredAgentSessionOptionValues(
+      createStructuredAgentSessionOptionState('codex', CODEX_SESSION_OPTION_CATALOG),
+      { model: 'gpt-saved', effort: 'high' }
+    )
+    expect(structuredAgentSessionOptionPicks(warm, inert.options)).toEqual([])
+    const choice = await call('agentSession.setOption', optionRequest('gpt-new'))
+    expect(choice[0]).toMatchObject({
+      result: {
+        ok: true,
+        value: { value: 'gpt-new', options: { model: 'gpt-new', effort: 'high' } }
+      }
+    })
+    expect(
+      structuredAgentSessionOptionPicks(warm, { model: 'gpt-new', effort: 'high' })
+    ).toHaveLength(2)
+    expect((await call('agentSession.setOption', optionRequest('')))[0]).toMatchObject({
+      result: { ok: true, replayed: false, value: inert }
+    })
+    await rig.restart()
+    setStructuredAgentSessionHost(rig.host)
+    expect(
+      (
+        await call('agentSession.setOption', params, {
+          ...CLIENT,
+          clientCapabilities: [
+            ...CLIENT.clientCapabilities,
+            AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY
+          ]
+        })
+      )[0]
+    ).toMatchObject({ result: { ok: true, replayed: true, value: inert } })
+    expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'gpt-new', effort: 'high' })
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.readOptions).not.toHaveBeenCalled()
+  })
+
+  it('preserves a v1.4.223 live ACP acceptance without reclassifying it as no-choice', async () => {
+    await restingChat()
+    // Captured after the old live adapter performed an empty request and reopened its database.
+    const row = {
+      callerKey: 'device-1',
+      operationId: '1800000000000-0000000000000000000000000000ac01',
+      fingerprint: 'df56281bb29dcb9d435ba37cd35c0704edcfad8e4cd94c9d85ebf8efe78d8935',
+      operationTimestamp: 1800000000000,
+      recordedAt: 1800000000000,
+      expiresAt: 1800086700000,
+      outcome: { status: 'succeeded' as const, sessionId: 'session-alpha-1' }
+    }
+    const envelope = {
+      sessionId: 'session-alpha-1',
+      clientOperationId: '1800000000000-0000000000000000000000000000ac01',
+      expectedRuntimeFence: 7,
+      payloadFingerprint: 'df56281bb29dcb9d435ba37cd35c0704edcfad8e4cd94c9d85ebf8efe78d8935'
+    }
+    const sessionId = envelope.sessionId
+    await editPersistedTestAgentSessionStore(rig.root, (state) => {
+      state.records[sessionId] = {
+        ...state.records[SESSION],
+        sessionId,
+        lease: {
+          ...state.records[SESSION].lease,
+          sessionId,
+          runtimeFence: envelope.expectedRuntimeFence
+        },
+        providerHandleChain: state.records[SESSION].providerHandleChain.map((link) => ({
+          ...link,
+          mintedAtFence: envelope.expectedRuntimeFence
+        })),
+        options: { model: 'historical-acp-M' }
+      }
+      state.operations[agentSessionOperationKey(row.callerKey, row.operationId)] = row
+    })
+    await rig.restart()
+    setStructuredAgentSessionHost(rig.host)
+    const params = { key: 'model', value: '', envelope }
+    expect((await call('agentSession.setOption', params))[0]).toMatchObject({
+      result: { ok: true, replayed: true, value: { options: { model: 'historical-acp-M' } } }
+    })
+    await call('agentSession.setOption', optionRequest('later-model', sessionId))
+    expect((await call('agentSession.setOption', params))[0]).toMatchObject({
+      result: { ok: true, replayed: true, value: { options: { model: 'later-model' } } }
+    })
+    expect(rig.store.getOperationRow(row.callerKey, row.operationId)?.outcome).toEqual(row.outcome)
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+    expect(rig.adapter.readOptions).not.toHaveBeenCalled()
+  })
+
+  it('keeps unreadable accepted results spent and modern empty writes on their ordinary path', async () => {
+    await restingChat()
+    const params = optionRequest('')
+    await call('agentSession.setOption', params)
+    for (const optionResult of [null, { version: 2, key: 'model', value: '', options: {} }]) {
+      await editPersistedTestAgentSessionStore(rig.root, (state) => {
+        const row = Object.values(state.operations).find(
+          (row) => row.operationId === params.envelope.clientOperationId
+        )!
+        row.outcome = { status: 'succeeded', sessionId: SESSION, optionResult }
+      })
+      await rig.restart()
+      setStructuredAgentSessionHost(rig.host)
+      expect((await call('agentSession.setOption', params))[0]).toMatchObject({
+        result: { ok: false, refusal: { details: { reason: 'resultLost' } } }
+      })
+      expect(
+        rig.store.getOperationRow('device-1', params.envelope.clientOperationId)?.outcome
+      ).toMatchObject({ optionResult })
+    }
+    const modern = {
+      ...CLIENT,
+      clientCapabilities: [
+        ...CLIENT.clientCapabilities,
+        AGENT_SESSION_OPTIONAL_MODEL_CLIENT_CAPABILITY
+      ]
+    }
+    expect((await call('agentSession.setOption', optionRequest(''), modern))[0]).toMatchObject({
+      ok: false
+    })
+    expect(rig.store.getRecord(SESSION)?.options).toEqual({ model: 'gpt-saved', effort: 'high' })
+  })
+
   it('reads, subscribes and answers everything without starting an agent', async () => {
     await restingChat()
     expect(rig.host.hasSession(SESSION)).toBe(false)

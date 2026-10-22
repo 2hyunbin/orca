@@ -1,5 +1,11 @@
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { ClaudeProfileRouter } from '../../claude-accounts/claude-profile-router'
+import { installClaudeProfileRouter } from '../../claude-accounts/claude-profile-installed-router'
+import { resolveStructuredClaudeAccountHomePath } from '../../runtime/structured-agent-account-home'
 
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
@@ -436,13 +442,16 @@ describe('one account, one catalog key', () => {
     const store = new AgentModelCatalogStore()
     const founded = record('/accounts/a')
     let live: AgentSessionAccountHome | undefined = HOME('CODEX_HOME', '/accounts/b')
+    const launchAccountHome = vi.fn(async (): Promise<AgentSessionAccountHome | null> =>
+      HOME('CODEX_HOME', '/accounts/c')
+    )
     const service = createAgentModelCatalogService({
       store,
       getRecord: () => founded,
       drivesRecord: () => true,
       resolveAccountHome: async () => HOME('CODEX_HOME', '/accounts/c'),
       liveAccountHome: () => live,
-      launchAccountHome: async () => HOME('CODEX_HOME', '/accounts/c')
+      launchAccountHome
     })
     service.recordLiveListing('session-1', { models: listing('on-b').models })
     const keyOf = (path: string) => agentModelCatalogFingerprintForRecord(record(path))
@@ -453,8 +462,86 @@ describe('one account, one catalog key', () => {
       return read.origin === 'unknown' ? null : read.models.map((model) => model.id)
     }
     expect(await ids()).toEqual(['on-b'])
+    expect(launchAccountHome).not.toHaveBeenCalled()
     // At rest, the chat reads the account its next start launches under.
     live = undefined
     expect(await ids()).toBeNull()
+    store.recordSuccess(keyOf('/accounts/a'), 'codex', listing('on-a'), 'discovery')
+    launchAccountHome.mockResolvedValueOnce(null)
+    expect(await ids()).toEqual(['on-a'])
+  })
+
+  it('does not read A while selected B is missing, and recovers on the next read', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'chat-account-switch-catalog-'))
+    const router = new ClaudeProfileRouter({
+      dataRoot: root,
+      userHome: join(root, 'personal'),
+      env: {},
+      getSettings: () => ({
+        claudeManagedAccounts: [],
+        activeClaudeManagedAccountId: 'b',
+        activeClaudeManagedAccountIdsByRuntime: undefined,
+        agentStatusHooksEnabled: false,
+        disabledTuiAgents: []
+      })
+    })
+    installClaudeProfileRouter(router)
+    try {
+      const founded = {
+        ...record('/accounts/a'),
+        provider: 'claude',
+        accountHome: HOME('CLAUDE_CONFIG_DIR', '/accounts/a')
+      }
+      const store = new AgentModelCatalogStore()
+      const keyA = agentModelCatalogFingerprintForRecord(founded)
+      store.recordSuccess(keyA, 'claude', listing('only-a'), 'discovery')
+      const savedA = structuredClone(store.get(keyA))
+      const readEntry = vi.spyOn(store, 'get')
+      const readFailure = vi.spyOn(store, 'failure')
+      const probe = vi.fn(async () => listing('only-b'))
+      const recordWorkspacePath = vi.fn(async () => root)
+      const resolveAccountHome = vi.fn(async () => founded.accountHome)
+      const service = createAgentModelCatalogService({
+        store,
+        getRecord: () => founded,
+        drivesRecord: () => true,
+        resolveAccountHome,
+        recordWorkspacePath,
+        probes: { claude: probe },
+        launchAccountHome: async (record) =>
+          HOME(
+            'CLAUDE_CONFIG_DIR',
+            resolveStructuredClaudeAccountHomePath({
+              launchEnv: {},
+              wslDistro: record.location.wslDistro,
+              getClaudeConfigDirectory: () => router.systemDefaultHome()
+            })
+          )
+      })
+      const read = { agent: 'claude', sessionId: 'session-1', inSessionWorkspace: true as const }
+      expect(router.systemDefaultLogin()).toBeNull()
+      for (const savedOnly of [true, false]) {
+        expect(await service.read({ ...read, savedOnly })).toEqual({ origin: 'unknown' })
+      }
+      expect(recordWorkspacePath).not.toHaveBeenCalled()
+      expect(resolveAccountHome).not.toHaveBeenCalled()
+      expect(probe).not.toHaveBeenCalled()
+      expect(readEntry).not.toHaveBeenCalled()
+      expect(readFailure).not.toHaveBeenCalled()
+      mkdirSync(router.accountHome('b'), { recursive: true })
+      expect(await service.read({ ...read, waitForListing: true })).toMatchObject({
+        origin: 'probe',
+        models: [{ id: 'only-b' }]
+      })
+      expect(probe).toHaveBeenCalledExactlyOnceWith(
+        HOME('CLAUDE_CONFIG_DIR', router.accountHome('b')),
+        { signal: expect.any(AbortSignal) }
+      )
+      expect(store.get(keyA)).toEqual(savedA)
+      expect(founded.accountHome).toEqual(HOME('CLAUDE_CONFIG_DIR', '/accounts/a'))
+    } finally {
+      installClaudeProfileRouter(undefined)
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

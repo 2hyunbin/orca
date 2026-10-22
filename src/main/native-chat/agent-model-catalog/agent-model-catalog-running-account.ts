@@ -7,7 +7,7 @@ import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 export type AgentModelCatalogRunningAccountDeps = {
   /** The account the chat's running agent launched under, when it reports one. */
   liveAccountHome?: (sessionId: string) => AgentSessionAccountHome | undefined
-  /** The account the chat's next start launches under; null when it keeps the record's. */
+  /** The next launch's account; null keeps the record's, rejection means it cannot be read now. */
   launchAccountHome?: (record: AgentSessionRecord) => Promise<AgentSessionAccountHome | null>
 }
 
@@ -28,6 +28,6 @@ export async function onRunningAccount(
   if (deps.liveAccountHome?.(record.sessionId)) {
     return onLiveAccount(deps, record)
   }
-  const accountHome = await deps.launchAccountHome?.(record).catch(() => null)
+  const accountHome = await deps.launchAccountHome?.(record)
   return accountHome ? { ...record, accountHome } : record
 }

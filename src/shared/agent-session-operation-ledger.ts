@@ -44,6 +44,8 @@ export type AgentSessionOperationOutcome =
       sessionId: string
       conversationCommand?: AgentSessionConversationCommandResult
       rewind?: AgentSessionRewindResult
+      /** A no-choice answer cannot be rebuilt from saved picks; narrow at replay, not row load. */
+      optionResult?: unknown
       /**
        * The full `agent.launch` answer. Recorded whole rather than rebuilt, because the preferred
        * mode and the reason a launch downgraded away from it cannot be recomputed once the user's

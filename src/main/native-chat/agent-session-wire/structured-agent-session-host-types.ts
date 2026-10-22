@@ -29,7 +29,10 @@ import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { StructuredAgentSessionStartupLimits } from './structured-agent-session-startup-attempt-contract'
 import type { AgentChatPermissionMode } from '../../../shared/agent-chat-permission-mode'
 
-export type StructuredAgentSessionCaller = { callerKey: string }
+export type StructuredAgentSessionCaller = {
+  callerKey: string
+  readsOptionsWithoutModel?: boolean
+}
 
 /** What the host believes about a session it just made addressable again. The workspace and agent
  *  come from the record, so a caller publishes the host's view rather than a client's assertion.

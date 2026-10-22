@@ -5,6 +5,7 @@
 // prompt answer's replay answers from the resolution its receipt keeps; the journal projects the
 // others' current answer.
 
+import { readNoChoiceOptionResult } from './structured-agent-session-option-observation'
 import type { AgentChildWorkEvidence } from '../../../shared/agent-status-child-work-evidence'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
@@ -342,13 +343,18 @@ export function setOptionPlan(params: {
       return { ok: true, value: { ...params, options } }
     },
     // Reapply unsettled picks; only a settled success can be replayed directly.
-    replay: (ctx, outcome) =>
-      outcome.status === 'succeeded'
-        ? {
-            key: params.key,
-            value: params.value,
-            ...(ctx.persistedOptions ? { options: { ...ctx.persistedOptions } } : {})
-          }
-        : null
+    replay: (ctx, outcome) => {
+      if (outcome.status !== 'succeeded') {
+        return null
+      }
+      if (Object.hasOwn(outcome, 'optionResult')) {
+        return readNoChoiceOptionResult(outcome.optionResult, params)
+      }
+      return {
+        key: params.key,
+        value: params.value,
+        ...(ctx.persistedOptions ? { options: { ...ctx.persistedOptions } } : {})
+      }
+    }
   }
 }

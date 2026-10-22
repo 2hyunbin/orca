@@ -62,7 +62,10 @@ async function readOptions(client: typeof OLDER_CLIENT | typeof CURRENT_CLIENT) 
 
 /** A Codex chat with no pick, at rest in a repo; `configured` gives the repo a `.codex/config.toml`
  *  that sets the effort. */
-async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
+async function chatAtRest(repoConfig: {
+  configured: boolean
+  unreadableAccount?: boolean
+}): Promise<void> {
   await foundRestTestChat(rig)
   // The chat never picked: its next start runs whatever its config resolves.
   await rig.store.replaceSessionOptions({
@@ -106,6 +109,11 @@ async function chatAtRest(repoConfig: { configured: boolean }): Promise<void> {
     getRecord: (sessionId) => rig.store.getRecord(sessionId) ?? undefined,
     drivesRecord: () => true,
     resolveAccountHome: async () => rig.store.getRecord(SESSION)!.accountHome,
+    launchAccountHome: repoConfig.unreadableAccount
+      ? () => {
+          throw new Error('account unreadable')
+        }
+      : undefined,
     listingNamesConfiguredModel: new Set(['codex']),
     recordWorkspacePath: async () => repo,
     agentReadsProjectModelConfig,
@@ -160,6 +168,33 @@ describe('options at rest in a repo whose config may pick the model', () => {
 })
 
 describe('options at rest in a repo with no config of its own', () => {
+  it('keeps saved aliases and effort on unknown identity, including for older clients', async () => {
+    await chatAtRest({ configured: false, unreadableAccount: true })
+    const current = await readOptions(CURRENT_CLIENT)
+    expect(current).toMatchObject({ ok: true, result: { current: {} } })
+    expect(current).not.toHaveProperty('result.current.model')
+    expect(await readOptions(OLDER_CLIENT)).toMatchObject({
+      ok: true,
+      result: {
+        current: { model: '' },
+        models: [{ id: '', label: 'Model not reported', isDefault: false, efforts: [] }],
+        conversationCommands: ['clear']
+      }
+    })
+    const options = { model: 'opus[1m]', effort: 'max' }
+    await rig.store.replaceSessionOptions({
+      sessionId: SESSION,
+      fence: rig.store.getRecord(SESSION)!.lease.runtimeFence,
+      options,
+      now: rig.clock.now
+    })
+    for (const client of [CURRENT_CLIENT, OLDER_CLIENT]) {
+      expect(await readOptions(client)).toMatchObject({ ok: true, result: { current: options } })
+    }
+    expect(rig.store.getRecord(SESSION)?.options).toEqual(options)
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  })
+
   it('names the default model and its effort for a client that needs a model', async () => {
     await chatAtRest({ configured: false })
 

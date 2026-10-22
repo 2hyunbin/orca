@@ -194,10 +194,14 @@ export function createAgentModelCatalogService(
     },
     async read(params) {
       const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
-      const scoped =
-        record && record.provider === params.agent && deps.drivesRecord(record)
-          ? await onRunningAccount(deps, record)
-          : undefined
+      let scoped: AgentSessionRecord | undefined
+      if (record && record.provider === params.agent && deps.drivesRecord(record)) {
+        try {
+          scoped = await onRunningAccount(deps, record)
+        } catch {
+          return { origin: 'unknown' }
+        }
+      }
       const workspacePath = params.inSessionWorkspace
         ? record
           ? await sessionWorkspacePath(deps, record)
