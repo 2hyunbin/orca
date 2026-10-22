@@ -9,13 +9,15 @@ describe('emitPluginWorktreeLifecycle', () => {
     mainProcessState.pluginService = null
   })
 
-  it('publishes a folder workspace removal as a valid worktree.removed', () => {
+  it('keeps folder removals internal and publishes Git worktree removals', () => {
     const emitEvent = vi.fn()
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the emitter only calls emitEvent.
     mainProcessState.pluginService = { emitEvent } as unknown as PluginService
     emitPluginWorktreeLifecycle({ kind: 'removed', worktreeId: 'folder:ws-1', path: '/tmp/ws' })
+    expect(emitEvent).not.toHaveBeenCalled()
+    emitPluginWorktreeLifecycle({ kind: 'removed', worktreeId: 'repo::/tmp/ws', path: '/tmp/ws' })
     expect(emitEvent).toHaveBeenCalledWith('worktree.removed', {
-      worktreeId: 'folder:ws-1',
+      worktreeId: 'repo::/tmp/ws',
       path: '/tmp/ws'
     })
     expect(worktreeRemovedPayloadSchema.safeParse(emitEvent.mock.calls[0]?.[1]).success).toBe(true)
