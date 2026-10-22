@@ -13,6 +13,9 @@
  * and the app dies (#15479). A jump host that sandboxes the SFTP subsystem into its own
  * chroot makes a late `SSH_FX_NO_SUCH_FILE` the normal answer, so the listener has to
  * outlive the transfer rather than the other way round.
+ *
+ * `waitForSshChannelOpen` does this for every SFTP session `SshConnection.sftp()` opens;
+ * this is the same guarantee one level down, on the streams.
  */
 
 /** SSH_FX_* status code ssh2 copies onto the `Error` it builds from a STATUS reply. */
