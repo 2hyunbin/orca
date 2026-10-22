@@ -80,7 +80,7 @@ function renderList(node: List, key: number, ctx: MarkdownBlockContext, depth: n
             {item.checked == null
               ? node.ordered
                 ? `${(node.start ?? 1) + itemIndex}.`
-                : '-'
+                : '•'
               : item.checked
                 ? '[x]'
                 : '[ ]'}

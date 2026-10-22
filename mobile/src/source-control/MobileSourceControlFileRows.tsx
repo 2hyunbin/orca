@@ -134,7 +134,7 @@ export function makeRenderFileRow(state: RowState) {
               icon={Trash2}
               variant="bare"
               iconSize={17}
-              iconColor={colors.danger}
+              iconColor={colors.textSecondary}
               disabled={ioBusy}
               onPress={() => setDiscardTarget(item)}
               accessibilityLabel={`Discard ${item.path}`}

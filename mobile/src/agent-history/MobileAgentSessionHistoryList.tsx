@@ -165,14 +165,16 @@ function AgentHistoryCardRow({
                 {card.lastMessage}
               </Text>
             ) : null}
+            {showCurrentWorktreeBadge && card.isCurrentWorktree ? (
+              <View style={styles.badgeLine}>
+                <Badge label="This workspace" tone="blue" />
+              </View>
+            ) : null}
             <View style={styles.metaRow}>
               <Text style={styles.metaText} numberOfLines={1}>
                 {card.agentLabel} · {card.messageCount}{' '}
                 {card.messageCount === 1 ? 'message' : 'messages'}
               </Text>
-              {showCurrentWorktreeBadge && card.isCurrentWorktree ? (
-                <Badge label="This workspace" tone="blue" />
-              ) : null}
               <View style={styles.metaSpacer} />
               {resumable ? (
                 <Button

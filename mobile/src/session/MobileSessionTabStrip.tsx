@@ -27,6 +27,8 @@ const TRACK_PADDING = 3
 const MIN_TAB_WIDTH = 148
 // Past this many tabs a phone stops shrinking them and the track scrolls instead.
 const TABS_THAT_FIT = 2.4
+// The active tab grows by its close button, so the X never takes room from the title.
+const ACTIVE_CLOSE_EXTRA = 30
 
 /** Ghostty-style tabs: equal capsules in one rounded track, a sliding pill on the active one. */
 export function MobileSessionTabStrip({ controller }: { controller: MobileSessionController }) {
@@ -92,7 +94,10 @@ export function MobileSessionTabStrip({ controller }: { controller: MobileSessio
   const laneWidth = Math.max(0, trackWidth - TRACK_PADDING * 2)
   const tabWidth =
     laneWidth > 0
-      ? Math.max(MIN_TAB_WIDTH, Math.floor(laneWidth / Math.min(visibleTabs.length, TABS_THAT_FIT)))
+      ? Math.max(
+          MIN_TAB_WIDTH,
+          Math.floor((laneWidth - ACTIVE_CLOSE_EXTRA) / Math.min(visibleTabs.length, TABS_THAT_FIT))
+        )
       : MIN_TAB_WIDTH
   const activeIndex = visibleTabs.findIndex((tab) => tab.id === activeSessionTabId)
 
@@ -203,7 +208,10 @@ export function MobileSessionTabStrip({ controller }: { controller: MobileSessio
               pointerEvents="none"
               style={[
                 styles.activePill,
-                { width: tabWidth, transform: [{ translateX: activeIndex * tabWidth }] },
+                {
+                  width: tabWidth + ACTIVE_CLOSE_EXTRA,
+                  transform: [{ translateX: activeIndex * tabWidth }]
+                },
                 slideTransition
               ]}
             />
@@ -220,7 +228,7 @@ export function MobileSessionTabStrip({ controller }: { controller: MobileSessio
                 state={tabStates.get(t.id)}
                 active={active}
                 dividerHidden={index === 0 || active || index - 1 === activeIndex}
-                width={tabWidth}
+                width={active ? tabWidth + ACTIVE_CLOSE_EXTRA : tabWidth}
                 onLayout={(x, width) => {
                   tabLayoutsRef.current.set(t.id, { x, width })
                   if (t.id === activeSessionTabIdRef.current) {

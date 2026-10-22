@@ -61,8 +61,11 @@ export const styles = StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.md
   },
+  // Pinned to the title line, so the check names the account rather than its usage.
   rowTrailing: {
     width: 24,
+    height: 23,
+    alignSelf: 'flex-start',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0

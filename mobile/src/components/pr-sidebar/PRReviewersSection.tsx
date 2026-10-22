@@ -102,10 +102,9 @@ export function PRReviewersSection({ details, actions, client, worktreeId, onRet
               <ListRow
                 key={row.login}
                 title={row.name ?? row.login}
-                subtitle={row.name ? row.login : undefined}
+                // The state rides the second line so a long name keeps the full row width.
+                subtitle={row.name ? `${row.login} · ${row.stateLabel}` : row.stateLabel}
                 leading={<PRAvatar login={row.login} url={row.avatarUrl} />}
-                // Neutral like the desktop PR page; the label carries the state.
-                value={row.stateLabel}
                 accessory={
                   busy ? (
                     <View style={styles.rowSpinner}>

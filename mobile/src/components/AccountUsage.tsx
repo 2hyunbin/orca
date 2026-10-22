@@ -56,7 +56,10 @@ export function UsageBar({
   const valueText = unavailable || used == null ? '—' : `${used}%`
   const track = (
     <View
-      style={[styles.usageTrack, layout === 'stacked' && styles.usageTrackStacked]}
+      style={[
+        styles.usageTrack,
+        layout === 'stacked' ? styles.usageTrackStacked : styles.usageTrackInline
+      ]}
       accessibilityRole="progressbar"
       accessibilityLabel={`${label} usage`}
       accessibilityValue={used == null ? undefined : { min: 0, max: 100, now: used }}
@@ -125,16 +128,14 @@ const styles = StyleSheet.create({
     width: 22
   },
   usageTrack: {
-    flex: 1,
     height: 6,
     borderRadius: 3,
     backgroundColor: colors.fill,
     overflow: 'hidden'
   },
-  usageTrackStacked: {
-    flex: 0,
-    alignSelf: 'stretch'
-  },
+  usageTrackInline: { flex: 1 },
+  // No `flex` here: in a column it sets the height basis, which collapses the 6 pt track on web.
+  usageTrackStacked: { alignSelf: 'stretch' },
   usageFill: {
     height: '100%',
     borderRadius: 3

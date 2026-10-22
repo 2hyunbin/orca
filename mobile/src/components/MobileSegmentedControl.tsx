@@ -35,6 +35,8 @@ const PADDING = 3
 export function MobileSegmentedControl<Value extends string>(props: Props<Value>) {
   const [frames, setFrames] = useState<Readonly<Record<string, LayoutRectangle>>>({})
   const thumb = props.selected === undefined ? undefined : frames[props.selected]
+  // Five or more shared segments get a tighter label so words like "Extra high" still fit a phone.
+  const dense = props.fill === true && props.segments.length >= 5
   return (
     <View
       style={[styles.track, props.disabled && styles.disabled, props.style]}
@@ -74,13 +76,18 @@ export function MobileSegmentedControl<Value extends string>(props: Props<Value>
             style={({ pressed }) => [
               styles.segment,
               props.fill && styles.segmentFill,
+              dense && styles.segmentDense,
               // The thumb lands after the first layout; until then the segment paints itself.
               active && !thumb && styles.segmentActive,
               pressed && !active && styles.segmentPressed
             ]}
           >
             <Text
-              style={[styles.segmentText, active && styles.segmentTextActive]}
+              style={[
+                styles.segmentText,
+                dense && styles.segmentTextDense,
+                active && styles.segmentTextActive
+              ]}
               numberOfLines={1}
             >
               {segment.label}
@@ -117,8 +124,10 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill
   },
   segmentFill: { flex: 1, alignItems: 'center', paddingHorizontal: 6 },
+  segmentDense: { paddingHorizontal: 2 },
   segmentActive: { backgroundColor: 'rgba(255, 255, 255, 0.17)' },
   segmentPressed: { opacity: 0.6 },
   segmentText: { ...textStyles.subhead, fontWeight: '500', color: colors.textSecondary },
+  segmentTextDense: { ...textStyles.footnote, fontWeight: '500' },
   segmentTextActive: { color: colors.textPrimary }
 })

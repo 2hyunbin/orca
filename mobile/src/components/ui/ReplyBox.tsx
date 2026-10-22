@@ -35,6 +35,9 @@ type ReplyBoxProps = {
   leading?: ReactNode
   /** Replaces the round send, e.g. a labelled compact "Commit" button. */
   trailing?: ReactNode
+  /** Gives the text its own full-width line and puts `leading`/`trailing` in a row under it, as
+   *  the chat composer does; for labelled buttons that would squeeze the field. */
+  actionsBelow?: boolean
   returnKeyType?: TextInputProps['returnKeyType']
   testID?: string
 }
@@ -60,6 +63,7 @@ export function ReplyBox({
   maxLines = 6,
   leading,
   trailing,
+  actionsBelow = false,
   returnKeyType,
   testID
 }: ReplyBoxProps) {
@@ -79,10 +83,15 @@ export function ReplyBox({
 
   return (
     <View
-      style={[styles.box, focused && styles.focused, disabled && styles.disabled]}
+      style={[
+        styles.box,
+        actionsBelow && styles.boxStacked,
+        focused && styles.focused,
+        disabled && styles.disabled
+      ]}
       testID={testID}
     >
-      {leading}
+      {actionsBelow ? null : leading}
       <TextInput
         ref={input}
         value={value}
@@ -100,43 +109,53 @@ export function ReplyBox({
         onBlur={() => setFocused(false)}
         style={[
           styles.field,
+          actionsBelow ? styles.fieldStacked : styles.fieldInline,
           { maxHeight },
           contentHeight !== undefined && {
             height: Math.min(maxHeight, Math.max(LINE + 12, contentHeight))
           }
         ]}
       />
-      {trailing ?? (
-        <Pressable
-          onPress={send}
-          disabled={!canSend}
-          accessibilityRole="button"
-          accessibilityLabel={sendAccessibilityLabel}
-          accessibilityState={{ disabled: !canSend, busy: sending }}
-          style={styles.sendTouch}
-        >
-          {({ pressed }) => (
-            <View
-              style={[
-                styles.send,
-                canSend ? styles.sendReady : styles.sendIdle,
-                pressed && styles.sendPressed,
-                pressed ? pressTransition.pressed : pressTransition.rest
-              ]}
+      {actionsBelow ? (
+        <View style={styles.actionsRow}>
+          {leading}
+          <View style={styles.actionsSpacer} />
+          {trailing}
+        </View>
+      ) : null}
+      {actionsBelow
+        ? null
+        : (trailing ?? (
+            <Pressable
+              onPress={send}
+              disabled={!canSend}
+              accessibilityRole="button"
+              accessibilityLabel={sendAccessibilityLabel}
+              accessibilityState={{ disabled: !canSend, busy: sending }}
+              style={styles.sendTouch}
             >
-              {sending ? (
-                <ActivityIndicator size="small" color={colors.textSecondary} />
-              ) : (
-                <ArrowUp
-                  size={17}
-                  color={canSend ? colors.onPrimary : colors.textMuted}
-                  strokeWidth={2.4}
-                />
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.send,
+                    canSend ? styles.sendReady : styles.sendIdle,
+                    pressed && styles.sendPressed,
+                    pressed ? pressTransition.pressed : pressTransition.rest
+                  ]}
+                >
+                  {sending ? (
+                    <ActivityIndicator size="small" color={colors.textSecondary} />
+                  ) : (
+                    <ArrowUp
+                      size={17}
+                      color={canSend ? colors.onPrimary : colors.textMuted}
+                      strokeWidth={2.4}
+                    />
+                  )}
+                </View>
               )}
-            </View>
-          )}
-        </Pressable>
-      )}
+            </Pressable>
+          ))}
     </View>
   )
 }
@@ -154,12 +173,19 @@ const styles = StyleSheet.create({
     borderColor: colors.fieldBorder,
     backgroundColor: colors.fieldFill
   },
+  boxStacked: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+    paddingTop: 10,
+    paddingBottom: 8,
+    paddingRight: 8
+  },
   focused: { borderColor: colors.fieldBorderFocused },
   disabled: { opacity: motion.disabledOpacity },
   field: {
     ...textStyles.body,
     fontSize: TEXT_INPUT_FONT_SIZE,
-    flex: 1,
     minWidth: 0,
     minHeight: LINE + 12,
     paddingHorizontal: 4,
@@ -167,6 +193,10 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     color: colors.textPrimary
   },
+  fieldInline: { flex: 1 },
+  fieldStacked: { alignSelf: 'stretch' },
+  actionsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  actionsSpacer: { flex: 1 },
   // The 44 pt touch box overhangs the 32 pt circle into the box's own padding.
   sendTouch: { width: 44, height: 44, margin: -6, alignItems: 'center', justifyContent: 'center' },
   send: {

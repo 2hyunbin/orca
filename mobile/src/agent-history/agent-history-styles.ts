@@ -93,6 +93,7 @@ export const styles = StyleSheet.create({
     ...textStyles.callout,
     color: colors.textSecondary
   },
+  badgeLine: { flexDirection: 'row', marginTop: 6 },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',

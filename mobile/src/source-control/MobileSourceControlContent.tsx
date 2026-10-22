@@ -195,6 +195,7 @@ export function MobileSourceControlContent({ state }: Props) {
             placeholder={generatingMessage ? 'Writing a message…' : 'Commit message'}
             maxLines={8}
             editable={busyAction === null}
+            actionsBelow
             testID="source-control-commit-message"
             trailing={
               <View style={styles.commitTrailing}>
