@@ -30,7 +30,9 @@ export const PREFLIGHT_METHODS = [
     handler: async (params, { runtime }) =>
       params.project
         ? runtime.detectProjectLaunchContext(params.project.repo)
-        : detectAgentsOnHost(await runtime.resolveAgentDetectionHost(params.worktreeId))
+        : detectAgentsOnHost(
+            await runtime.resolveAgentDetectionHost(params.worktreeId, params.repoId)
+          )
   }),
   defineMethod({
     name: 'preflight.detectRemoteAgents',
@@ -50,6 +52,6 @@ export const PREFLIGHT_METHODS = [
     permission: 'workspace',
     params: PreflightAgentDetection,
     handler: async (params, { runtime }) =>
-      refreshAgentsOnHost(await runtime.resolveAgentDetectionHost(params.worktreeId))
+      refreshAgentsOnHost(await runtime.resolveAgentDetectionHost(params.worktreeId, params.repoId))
   })
 ]
