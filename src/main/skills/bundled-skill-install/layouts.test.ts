@@ -28,6 +28,7 @@ import { skillInstallReceiptPath } from '../skill-install-provenance'
 import { skillInstallJournalPath } from '../skill-install-recovery'
 import { installBundledSkills, previewBundledSkillInstall } from './service'
 import {
+  linkDirectory,
   makeSkillHome,
   NAME,
   NEW_TEXT,
@@ -67,7 +68,7 @@ const noLinks: BundledSkillFilesystem = { ...nativeBundledSkillFilesystem, suppo
 
 async function linkClaudeToShared(home: SkillHome) {
   await mkdir(dirname(home.claude), { recursive: true })
-  await symlink(home.shared, home.claude, 'dir')
+  await linkDirectory(home.shared, home.claude)
 }
 
 async function npxShared(home: SkillHome, text = OLD_TEXT, extra: Record<string, string> = {}) {
@@ -129,7 +130,7 @@ const LAYOUTS: Layout[] = [
       await npxShared(home)
       await writeCopy(join(home.root, 'elsewhere', NAME), OLD_TEXT)
       await mkdir(dirname(home.cursor), { recursive: true })
-      await symlink(join(home.root, 'elsewhere', NAME), home.cursor, 'dir')
+      await linkDirectory(join(home.root, 'elsewhere', NAME), home.cursor)
     },
     agents: ['claude', 'cursor'],
     ops: [
@@ -146,7 +147,7 @@ const LAYOUTS: Layout[] = [
       await writeNpxLock(home)
       await writeCopy(home.shared, OLD_TEXT)
       await mkdir(dirname(home.claude), { recursive: true })
-      await symlink(join(home.root, 'gone', NAME), home.claude, 'dir')
+      await linkDirectory(join(home.root, 'gone', NAME), home.claude)
     },
     ops: [
       ['shared', 'update'],
@@ -256,7 +257,7 @@ const LAYOUTS: Layout[] = [
     arrange: async (home) => {
       await writeCopy(home.shared, OLD_TEXT)
       await mkdir(join(home.home, '.claude'), { recursive: true })
-      await symlink(dirname(home.shared), dirname(home.claude), 'dir')
+      await linkDirectory(dirname(home.shared), dirname(home.claude))
     },
     ops: [['shared', 'update']],
     text: 'Updated'
@@ -278,7 +279,7 @@ const LAYOUTS: Layout[] = [
       await npxShared(home)
       await writeCopy(join(home.root, 'dotfiles', NAME), 'theirs\n')
       await mkdir(dirname(home.cursor), { recursive: true })
-      await symlink(join(home.root, 'dotfiles', NAME), home.cursor, 'dir')
+      await linkDirectory(join(home.root, 'dotfiles', NAME), home.cursor)
     },
     force: ['cursor'],
     ops: [
@@ -384,21 +385,25 @@ describe('bundled skill install edges', () => {
     expect(await snapshot(join(project, '.agents', '.orca-skill-backups'))).toBe('missing')
   })
 
-  it('moves a backup across filesystems by copying, verifying, then removing', async () => {
-    const home = await makeSkillHome()
-    const source = join(home.root, 'source', NAME)
-    await writeCopy(source, EDITED_TEXT, { 'notes.md': 'mine\n' })
-    await symlink('notes.md', join(source, 'link.md'))
-    const target = join(home.root, 'backups', NAME)
-    await mkdir(dirname(target), { recursive: true })
-    const crossDevice = async () => {
-      throw Object.assign(new Error('cross-device'), { code: 'EXDEV' })
+  // Why: a file symlink needs Developer Mode on Windows; the product never makes one.
+  it.skipIf(process.platform === 'win32')(
+    'moves a backup across filesystems by copying, verifying, then removing',
+    async () => {
+      const home = await makeSkillHome()
+      const source = join(home.root, 'source', NAME)
+      await writeCopy(source, EDITED_TEXT, { 'notes.md': 'mine\n' })
+      await symlink('notes.md', join(source, 'link.md'))
+      const target = join(home.root, 'backups', NAME)
+      await mkdir(dirname(target), { recursive: true })
+      const crossDevice = async () => {
+        throw Object.assign(new Error('cross-device'), { code: 'EXDEV' })
+      }
+      await moveAcrossFilesystems(source, target, crossDevice)
+      expect(await snapshot(source)).toBe('missing')
+      expect(await snapshot(target)).toBe(`dir[SKILL.md,link.md,notes.md]:${EDITED_TEXT}`)
+      expect(await readlink(join(target, 'link.md'))).toBe('notes.md')
     }
-    await moveAcrossFilesystems(source, target, crossDevice)
-    expect(await snapshot(source)).toBe('missing')
-    expect(await snapshot(target)).toBe(`dir[SKILL.md,link.md,notes.md]:${EDITED_TEXT}`)
-    expect(await readlink(join(target, 'link.md'))).toBe('notes.md')
-  })
+  )
 
   it('links into a project only where its agent folder already exists', async () => {
     const home = await makeSkillHome()
@@ -420,7 +425,7 @@ describe('bundled skill install edges', () => {
     await writeCopy(home.claude, OLD_TEXT)
     const profileSkills = join(home.root, 'profile', 'skills')
     await mkdir(dirname(profileSkills), { recursive: true })
-    await symlink(dirname(home.claude), profileSkills, 'dir')
+    await linkDirectory(dirname(home.claude), profileSkills)
     const viaProfile = serviceInput(home, { providerRootOverrides: { claude: profileSkills } })
     const viaHome = serviceInput(home)
     const previewViaHome = await previewBundledSkillInstall(viaHome)

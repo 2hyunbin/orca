@@ -9,6 +9,7 @@ import {
   readlink,
   realpath,
   rm,
+  symlink,
   writeFile
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -73,6 +74,11 @@ export async function removeSkillHomes(): Promise<void> {
     await chmod(join(directory, 'home', '.agents', 'skills'), 0o755).catch(() => undefined)
     await rm(directory, { recursive: true, force: true })
   }
+}
+
+/** Directory links as the product makes them: junctions on Windows need no Developer Mode. */
+export async function linkDirectory(target: string, path: string): Promise<void> {
+  await symlink(target, path, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
 export async function writeCopy(path: string, text: string, extra: Record<string, string> = {}) {

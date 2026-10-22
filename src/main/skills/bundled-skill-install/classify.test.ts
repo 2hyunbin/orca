@@ -1,4 +1,4 @@
-import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { isSkillStagingEntryName } from '../skill-delete/staging-names'
@@ -7,6 +7,7 @@ import { nativeBundledSkillFilesystem } from './filesystem'
 import { buildBundledSkillPlan } from './plan'
 import { bundledSkillSiblingKind } from './swap'
 import {
+  linkDirectory,
   makeSkillHome,
   NAME,
   NEW_SOURCE,
@@ -41,7 +42,7 @@ describe('classifyBundledSkillPath', () => {
     await mkdir(join(root, 'file'), { recursive: true })
     await writeFile(at('file'), NEW_TEXT)
     await mkdir(join(root, 'link'), { recursive: true })
-    await symlink(at('current'), at('link'), 'dir')
+    await linkDirectory(at('current'), at('link'))
 
     const classes = Object.fromEntries(
       await Promise.all(
