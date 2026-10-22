@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { getDefaultWorkspaceSession } from '../../../shared/constants'
+import {
+  FLOATING_TERMINAL_WORKTREE_ID,
+  getDefaultWorkspaceSession
+} from '../../../shared/constants'
+import type { PersistedState } from '../../../shared/persisted-state-types'
+import type { Repo } from '../../../shared/repo-types'
+import { getAllWorktreeMetaForHost } from '../../persistence/loading-store/worktree-identity-metadata'
+import { normalizeWorktreeLinkedItemMetadata } from '../../persistence/tracking-repos/worktree-metadata-normalization'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { collectDependentStateBlockers } from './ssh-target-orcad-dependents'
 import { emptyDependentStateStore } from './ssh-target-orcad-dependents-fixture'
@@ -110,6 +117,67 @@ describe('client state that still references an SSH target', () => {
         getAllWorktreeMetaForHost: (hostId) => (hostId === HOST ? meta : {})
       })
     ).toContain('worktree-metadata ×1 (repo-1::/srv/app)')
+  })
+
+  describe('profiles with unstamped metadata rows from an older build (#31498)', () => {
+    const SETUP_TERMINAL_ID = 'ephemeral-setup-terminal:panel-1'
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census reads only id, connectionId and executionHostId.
+    const repos = [
+      { id: 'local-repo', connectionId: null },
+      { id: 'ssh-repo', connectionId: 'ssh-1' }
+    ] as Repo[]
+
+    function legacyProfile(): PersistedState {
+      const row = { displayName: '', comment: '', isUnread: false, sortOrder: 1, lastActivityAt: 1 }
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the load normalizer and host projection read only these maps.
+      return {
+        repos,
+        worktreeMeta: {
+          [FLOATING_TERMINAL_WORKTREE_ID]: {
+            ...row,
+            instanceId: '11111111-1111-4111-8111-111111111111',
+            workspaceStatus: 'in-progress'
+          },
+          [SETUP_TERMINAL_ID]: { ...row },
+          'local-repo::/home/me/app': { ...row },
+          'ssh-repo::/srv/app': { ...row }
+        },
+        worktreeMetaByIdentity: {},
+        worktreeIdentityAliases: {},
+        worktreeLineageById: {},
+        workspaceLineageByChildKey: {}
+      } as unknown as PersistedState
+    }
+
+    function metadataBlockerNames(state: PersistedState): string[] | undefined {
+      const [blocker] = blockersFor({
+        getRepos: () => repos,
+        getAllWorktreeMetaForHost: (hostId) => getAllWorktreeMetaForHost({ state }, hostId)
+      })
+      return blocker?.code === 'orcad_migration_dependent_state'
+        ? blocker.dependencies.flatMap((dependency) => dependency.names ?? [])
+        : undefined
+    }
+
+    it('counts only the row whose repo lives on the target, before and after the load stamps it', () => {
+      const state = legacyProfile()
+      expect(metadataBlockerNames(state)).toEqual(['ssh-repo::/srv/app'])
+
+      expect(normalizeWorktreeLinkedItemMetadata(state)).toBe(true)
+      expect(state.worktreeMeta[FLOATING_TERMINAL_WORKTREE_ID]?.hostId).toBe('local')
+      expect(state.worktreeMeta[SETUP_TERMINAL_ID]?.hostId).toBe('local')
+      expect(state.worktreeMeta['ssh-repo::/srv/app']?.hostId).toBeUndefined()
+      expect(metadataBlockerNames(state)).toEqual(['ssh-repo::/srv/app'])
+    })
+
+    it('no longer blocks an unrelated SSH target on the floating terminal row', () => {
+      const state = legacyProfile()
+      delete state.worktreeMeta['ssh-repo::/srv/app']
+      expect(metadataBlockerNames(state)).toBeUndefined()
+      expect(getAllWorktreeMetaForHost({ state }, 'local')).toHaveProperty(
+        FLOATING_TERMINAL_WORKTREE_ID
+      )
+    })
   })
 
   it('blocks on a saved terminal lease of any status', () => {

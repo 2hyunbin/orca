@@ -22,6 +22,7 @@ import {
 import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import { fillDefaultWorktreeMetaFields } from '../../../shared/worktree/meta-persisted-defaults'
 import { getWorkspaceAttachments } from '../../../shared/workspace-attachments'
+import { isLocalOnlyWorktreeMetaId } from '../../../shared/worktree/local-only-worktree-meta-ids'
 
 // Why: worktrees deleted outside Orca orphan their worktreeMeta, so the map grew monotonically (63% dead on a heavy install).
 // GC stays narrow: local-host entries only (a local existsSync would falsely condemn SSH/WSL remote paths) and only after a 30-day idle grace.
@@ -157,6 +158,11 @@ export function normalizeWorktreeLinkedItemMetadata(state: PersistedState): bool
     // on-disk shape is already canonical -- flagging it would force a full rewrite on every launch.
     fillDefaultWorktreeMetaFields(meta)
     changed = normalizeLinkedMetadata(meta) || changed
+    // Why: an unstamped row projects onto every host, so it counted as each SSH target's state (#31498).
+    if (!meta.hostId && isLocalOnlyWorktreeMetaId(key)) {
+      meta.hostId = LOCAL_EXECUTION_HOST_ID
+      changed = true
+    }
   }
   const rawIdentityMetadata = state.worktreeMetaByIdentity as unknown
   if (

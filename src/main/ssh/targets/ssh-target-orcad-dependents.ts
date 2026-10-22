@@ -4,7 +4,9 @@
  */
 import type { Store } from '../../persistence'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
-import { toSshExecutionHostId } from '../../../shared/execution-host'
+import { toSshExecutionHostId, type ExecutionHostId } from '../../../shared/execution-host'
+import { getRepoRegistrationHostIds } from '../../../shared/repo-host-identity'
+import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
 import { GLOBAL_WORKSPACE_SESSION_FIELDS } from '../../../shared/workspace-session-host-field-ownership'
 import {
   ORCAD_MIGRATION_DEPENDENCY_KINDS,
@@ -17,6 +19,7 @@ import type { OrcadMigrationManifest } from '../../../shared/orcad-migration/orc
 export type DependentStateStore = Pick<
   Store,
   | 'getAllWorktreeMetaForHost'
+  | 'getRepos'
   | 'getSshRemotePtyLeases'
   | 'getWorkspaceSession'
   | 'getWorkspaceSessionHostIds'
@@ -40,7 +43,7 @@ export function collectDependentStateBlockers(
           .filter((a) => a.executionTargetType === 'ssh' && a.executionTargetId === targetId)
           .map((a) => a.name)
     ],
-    ['worktree-metadata', () => Object.keys(store.getAllWorktreeMetaForHost(hostId))],
+    ['worktree-metadata', () => hostWorktreeMetadataNames(store, hostId)],
     // Why every status: a terminated lease is still a saved record pointing at this host.
     [
       'terminal-lease',
@@ -113,6 +116,23 @@ export function collectUntransferredDependentBlockers(
   return dependencies.length > 0
     ? [{ code: 'orcad_migration_dependent_state', category: 'client-owned-state', dependencies }]
     : []
+}
+
+/**
+ * The projection hands every host each unstamped legacy row; one whose repo is registered only on
+ * other hosts is theirs, so it must not block this target (#31498). Unknown owners still count.
+ */
+function hostWorktreeMetadataNames(store: DependentStateStore, hostId: ExecutionHostId): string[] {
+  const repos = store.getRepos()
+  return Object.entries(store.getAllWorktreeMetaForHost(hostId))
+    .filter(([worktreeId, meta]) => {
+      if (meta.hostId) {
+        return meta.hostId === hostId
+      }
+      const owners = getRepoRegistrationHostIds(repos, getRepoIdFromWorktreeId(worktreeId))
+      return owners.size === 0 || owners.has(hostId)
+    })
+    .map(([worktreeId]) => worktreeId)
 }
 
 /** Non-default host-owned fields of the host's partition, plus a local session pointed at the host. */

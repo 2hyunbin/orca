@@ -25,6 +25,7 @@ import {
 } from '../managed-server/lifecycle/orcad-managed-tunnel'
 import { verifyRuntimeEnvironmentSshTunnel } from './runtime-ssh-access-verification'
 import { fingerprintRuntimeSshTarget } from './runtime-ssh-target-fingerprint'
+import { orcadTargetBlockerMessage } from './targets/ssh-target-orcad-claims'
 
 type TargetClaims = ReturnType<typeof requireManagedOrcadInfrastructure>['claims']
 
@@ -53,7 +54,10 @@ function requireAccessOnlyTarget(claims: TargetClaims, targetId: string, environ
         )
     )
   if (blockers.length) {
-    throw new Error(`SSH access cannot claim direct SSH authority: ${blockers[0].code}`)
+    // Why: the code alone gave users nothing to act on; the message names the blocking state.
+    throw new Error(
+      `SSH access cannot claim direct SSH authority: ${blockers[0].code}. ${orcadTargetBlockerMessage(targetId, blockers[0])}`
+    )
   }
   return target
 }
