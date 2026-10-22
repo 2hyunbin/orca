@@ -58,10 +58,15 @@ export function SkillFreshnessStatusPill({ skillName }: { skillName: string }): 
   if (unsupported) {
     return (
       <IntegrationStatusPill tone="neutral">
-        {translate(
-          'auto.components.skills.SkillFreshnessStatusPill.updateServer',
-          'Update Orca on the server'
-        )}
+        {unsupported === 'connect-host'
+          ? translate(
+              'auto.components.skills.SkillFreshnessStatusPill.connectHost',
+              'Connect the SSH host'
+            )
+          : translate(
+              'auto.components.skills.SkillFreshnessStatusPill.updateServer',
+              'Update Orca on the server'
+            )}
       </IntegrationStatusPill>
     )
   }

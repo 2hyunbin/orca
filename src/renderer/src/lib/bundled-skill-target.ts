@@ -1,4 +1,12 @@
-import { parseExecutionHostId } from '../../../shared/execution-host'
+import {
+  parseExecutionHostId,
+  toRuntimeExecutionHostId,
+  type ExecutionHostId
+} from '../../../shared/execution-host'
+import {
+  getManagedOrcadSshTargetId,
+  type ManagedOrcadEnvironmentSummary
+} from '../../../shared/managed-orcad-execution-host'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
@@ -7,8 +15,10 @@ export type BundledSkillTarget =
   | { kind: 'local' }
   /** This Windows app's WSL distro, where the active project's (or the default) agents run. */
   | { kind: 'wsl'; distro: string }
-  /** A paired server or SSH host; it plans its own disk. */
+  /** A paired server or the managed server on an SSH host; it plans its own disk. */
   | { kind: 'environment'; environmentId: string }
+  /** An SSH host no Orca server serves yet: nothing can plan it until it connects. */
+  | { kind: 'ssh'; targetId: string }
 
 /** Keys runs and nudge dismissals, so one host's result never reads as another's. */
 export function bundledSkillTargetKey(target: BundledSkillTarget): string {
@@ -19,13 +29,30 @@ export function bundledSkillTargetKey(target: BundledSkillTarget): string {
       return `wsl:${target.distro}`
     case 'environment':
       return `runtime:${target.environmentId}`
+    case 'ssh':
+      return `ssh:${target.targetId}`
   }
+}
+
+/** An SSH host's owner id, rewritten to the managed server that serves that host, if any. */
+export function servingExecutionHostId(
+  hostId: ExecutionHostId | null,
+  runtimeEnvironments: readonly ManagedOrcadEnvironmentSummary[] | undefined
+): string | null {
+  const owner = parseExecutionHostId(hostId)
+  if (owner?.kind !== 'ssh') {
+    return hostId
+  }
+  const server = runtimeEnvironments?.find(
+    (environment) => getManagedOrcadSshTargetId(environment) === owner.targetId
+  )
+  return server ? toRuntimeExecutionHostId(server.id.trim()) : hostId
 }
 
 /**
  * Where the agents run, never the client by default: null while the owning runtime is
- * unknown, the active workspace is on a direct SSH host (no route to plan it), or a WSL
- * project still needs its distro repaired.
+ * unknown or a WSL project still needs its distro repaired. Pass the active workspace's owner
+ * through `servingExecutionHostId`, so an SSH host with a managed server plans on that server.
  */
 export function resolveBundledSkillTarget(
   runtimeTarget: RuntimeClientTarget | null,
@@ -34,7 +61,7 @@ export function resolveBundledSkillTarget(
 ): BundledSkillTarget | null {
   const owner = parseExecutionHostId(activeWorkspaceHostId)
   if (owner?.kind === 'ssh') {
-    return null
+    return { kind: 'ssh', targetId: owner.targetId }
   }
   if (owner?.kind === 'runtime') {
     return { kind: 'environment', environmentId: owner.environmentId }

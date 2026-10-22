@@ -4,7 +4,8 @@ import { summarizeBundledSkillPlan } from '../../../shared/bundled-skill-summary
 import { bundledSkillTargetKey, type BundledSkillTarget } from '@/lib/bundled-skill-target'
 import {
   planBundledSkillsOnTarget,
-  type BundledSkillPlanResult
+  type BundledSkillPlanResult,
+  type BundledSkillUnsupportedReason
 } from '@/runtime/runtime-bundled-skills-client'
 import { INSTALLED_AGENT_SKILLS_CHANGED_EVENT } from './installed-agent-skills-change-event'
 
@@ -29,13 +30,13 @@ type SkillFreshnessSnapshot = {
   /** The host this snapshot describes; a surface on another target never reads it. */
   targetKey: string | null
   plan: BundledSkillPlan | null
-  /** The paired host answered its status without the capability: "Update Orca on the server". */
-  unsupported: boolean
+  /** Why this host can't be planned: an older server, or an SSH host no server serves yet. */
+  unsupported: BundledSkillUnsupportedReason | null
   loading: boolean
   error: string | null
 }
 
-const IDLE = { plan: null, unsupported: false, loading: false, error: null } as const
+const IDLE = { plan: null, unsupported: null, loading: false, error: null } as const
 let snapshot: SkillFreshnessSnapshot = { ...IDLE, targetKey: null }
 const DISABLED_SNAPSHOT: SkillFreshnessSnapshot = Object.freeze({ ...IDLE, targetKey: null })
 const REENABLING_SNAPSHOT: SkillFreshnessSnapshot = Object.freeze({
@@ -131,7 +132,7 @@ async function refreshPlan(force: boolean, background: boolean): Promise<void> {
       publishSnapshot(
         result.kind === 'plan'
           ? { ...IDLE, targetKey, plan: result.plan }
-          : { ...IDLE, targetKey, unsupported: true }
+          : { ...IDLE, targetKey, unsupported: result.reason }
       )
     }
   } catch (cause) {

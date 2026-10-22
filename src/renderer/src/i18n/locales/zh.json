@@ -4789,7 +4789,9 @@
           "upToDateOne": "{{value0}} 已是最新。",
           "updatedLeftAlone": "{{value0}} · {{value1}} 处保持不变",
           "updatedMany": "已更新 {{value0}} 个技能",
-          "updatedOne": "已更新 1 个技能"
+          "updatedOne": "已更新 1 个技能",
+          "updateServer": "请在服务器上更新 Orca，才能更新其 Orca 技能。",
+          "connectHost": "请连接此 SSH 主机，才能检查其 Orca 技能。"
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "有可用更新",
@@ -4798,7 +4800,9 @@
           "details": "Details",
           "needsAttention": "Review skill",
           "checking": "检查中...",
-          "checkFailed": "检查失败"
+          "checkFailed": "检查失败",
+          "updateServer": "请在服务器上更新 Orca",
+          "connectHost": "请连接 SSH 主机"
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {

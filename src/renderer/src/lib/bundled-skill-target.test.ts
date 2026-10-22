@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
-import { bundledSkillTargetKey, resolveBundledSkillTarget } from './bundled-skill-target'
+import {
+  bundledSkillTargetKey,
+  resolveBundledSkillTarget,
+  servingExecutionHostId
+} from './bundled-skill-target'
 
 const WSL_PROJECT: ProjectExecutionRuntimeResolution = {
   status: 'resolved',
@@ -57,10 +61,44 @@ describe('resolveBundledSkillTarget', () => {
       kind: 'environment',
       environmentId: 'env-2'
     })
-    expect(resolveBundledSkillTarget({ kind: 'local' }, undefined, 'ssh:target-1')).toBeNull()
+    expect(resolveBundledSkillTarget({ kind: 'local' }, undefined, 'ssh:target-1')).toEqual({
+      kind: 'ssh',
+      targetId: 'target-1'
+    })
   })
 
   it('plans this machine otherwise', () => {
     expect(resolveBundledSkillTarget({ kind: 'local' }, undefined)).toEqual({ kind: 'local' })
+  })
+})
+
+describe('servingExecutionHostId', () => {
+  const environments = [
+    { id: 'paired', orcadDeployment: null },
+    { id: 'box-server', orcadDeployment: { sshTargetId: 'box' } },
+    { id: 'wsl-server', orcadDeployment: { kind: 'wsl' as const } }
+  ]
+
+  it('sends an SSH workspace to the managed server that serves its host', () => {
+    const hostId = servingExecutionHostId('ssh:box', environments)
+    expect(hostId).toBe('runtime:box-server')
+    expect(resolveBundledSkillTarget({ kind: 'local' }, undefined, hostId)).toEqual({
+      kind: 'environment',
+      environmentId: 'box-server'
+    })
+  })
+
+  it('keeps an SSH host no server serves as SSH, which never plans this machine', () => {
+    const hostId = servingExecutionHostId('ssh:other', environments)
+    expect(hostId).toBe('ssh:other')
+    const target = resolveBundledSkillTarget({ kind: 'local' }, undefined, hostId)
+    expect(target).toEqual({ kind: 'ssh', targetId: 'other' })
+    expect(bundledSkillTargetKey(target!)).toBe('ssh:other')
+  })
+
+  it('leaves local and paired owners alone', () => {
+    expect(servingExecutionHostId('local', environments)).toBe('local')
+    expect(servingExecutionHostId('runtime:paired', environments)).toBe('runtime:paired')
+    expect(servingExecutionHostId(null, environments)).toBeNull()
   })
 })

@@ -8,6 +8,7 @@ import {
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { bundledSkillTargetKey } from '@/lib/bundled-skill-target'
+import type { BundledSkillUnsupportedReason } from '@/runtime/runtime-bundled-skills-client'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
 import { translate } from '@/i18n/i18n'
 import { Button } from '@/components/ui/button'
@@ -142,7 +143,7 @@ function DialogHeadline({
   plan
 }: {
   run: SkillUpdateRun
-  unsupported: boolean
+  unsupported: BundledSkillUnsupportedReason | null
   error: string | null
   plan: BundledSkillPlan | null
 }): React.JSX.Element | null {
@@ -152,10 +153,15 @@ function DialogHeadline({
   if (unsupported) {
     return (
       <p className="text-xs text-muted-foreground">
-        {translate(
-          'auto.components.skills.SkillFreshnessUpdateDialog.updateServer',
-          'Update Orca on the server to update its Orca skills.'
-        )}
+        {unsupported === 'connect-host'
+          ? translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.connectHost',
+              'Connect to this SSH host to check its Orca skills.'
+            )
+          : translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.updateServer',
+              'Update Orca on the server to update its Orca skills.'
+            )}
       </p>
     )
   }

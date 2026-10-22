@@ -15,7 +15,11 @@ import {
   type ProjectAgentSkillRuntime
 } from '@/lib/project-skill-runtime'
 import { useWindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
-import { resolveBundledSkillTarget, type BundledSkillTarget } from '@/lib/bundled-skill-target'
+import {
+  resolveBundledSkillTarget,
+  servingExecutionHostId,
+  type BundledSkillTarget
+} from '@/lib/bundled-skill-target'
 import { getResolvedExecutionHostIdForWorktree } from '@/lib/resolved-worktree-execution-host'
 import { useAppStore } from '@/store'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
@@ -78,7 +82,10 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
     }))
   )
   const activeWorkspaceHostId = useAppStore((state) =>
-    getResolvedExecutionHostIdForWorktree(state, state.activeWorktreeId)
+    servingExecutionHostId(
+      getResolvedExecutionHostIdForWorktree(state, state.activeWorktreeId),
+      state.runtimeEnvironments
+    )
   )
   const currentPlatform = getCurrentPlatform()
   const windowsCapabilities = useWindowsTerminalCapabilities(currentPlatform === 'win32')

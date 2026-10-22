@@ -4784,7 +4784,9 @@
           "upToDateOne": "{{value0}} está actualizada.",
           "updatedLeftAlone": "{{value0}} · {{value1}} sin cambios",
           "updatedMany": "Se actualizaron {{value0}} skills",
-          "updatedOne": "Se actualizó 1 skill"
+          "updatedOne": "Se actualizó 1 skill",
+          "updateServer": "Actualiza Orca en el servidor para actualizar sus skills de Orca.",
+          "connectHost": "Conéctate a este host SSH para revisar sus skills de Orca."
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "Actualización disponible",
@@ -4793,7 +4795,9 @@
           "details": "Details",
           "needsAttention": "Review skill",
           "checking": "De cheques...",
-          "checkFailed": "Verificación fallida"
+          "checkFailed": "Verificación fallida",
+          "updateServer": "Actualiza Orca en el servidor",
+          "connectHost": "Conecta el host SSH"
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {

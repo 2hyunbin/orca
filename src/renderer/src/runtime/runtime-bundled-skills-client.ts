@@ -14,7 +14,10 @@ const BUNDLED_SKILL_EXECUTE_TIMEOUT_MS = 5 * 60_000
  *  the server"). A failed probe is not this; it rejects like any other error. */
 export type BundledSkillPlanResult =
   | { kind: 'plan'; plan: BundledSkillPlan }
-  | { kind: 'unsupported' }
+  /** `connect-host`: an SSH host no Orca server serves yet; never planned on this machine. */
+  | { kind: 'unsupported'; reason: BundledSkillUnsupportedReason }
+
+export type BundledSkillUnsupportedReason = 'update-server' | 'connect-host'
 
 /** Plans on the host that runs the agents; a paired host plans its own disk, never this one's. */
 export async function planBundledSkillsOnTarget(
@@ -22,6 +25,9 @@ export async function planBundledSkillsOnTarget(
   request: BundledSkillPlanRequest,
   options: { background?: boolean } = {}
 ): Promise<BundledSkillPlanResult> {
+  if (target.kind === 'ssh') {
+    return { kind: 'unsupported', reason: 'connect-host' }
+  }
   if (target.kind !== 'environment') {
     const plan = await window.api.skills.bundledPlan({
       ...request,
@@ -43,7 +49,7 @@ export async function planBundledSkillsOnTarget(
       BUNDLED_ORCA_SKILL_CAPABILITY
     ))
   ) {
-    return { kind: 'unsupported' }
+    return { kind: 'unsupported', reason: 'update-server' }
   }
   const plan = await callRuntimeRpc<BundledSkillPlan>(
     { kind: 'environment', environmentId: target.environmentId },
@@ -60,6 +66,9 @@ export function executeBundledSkillsOnTarget(
   planDigest: string,
   request: BundledSkillPlanRequest
 ): Promise<BundledSkillInstallResult> {
+  if (target.kind === 'ssh') {
+    return Promise.reject(new Error('skill-install-ssh-host-not-served'))
+  }
   if (target.kind !== 'environment') {
     return window.api.skills.bundledExecute({
       planDigest,

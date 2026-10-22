@@ -12662,7 +12662,9 @@
           "upToDateOne": "{{value0}} está atualizada.",
           "updatedLeftAlone": "{{value0}} · {{value1}} mantida(s) como está",
           "updatedMany": "{{value0}} skills atualizadas",
-          "updatedOne": "1 skill atualizada"
+          "updatedOne": "1 skill atualizada",
+          "updateServer": "Atualize o Orca no servidor para atualizar as skills do Orca.",
+          "connectHost": "Conecte-se a este host SSH para verificar as skills do Orca."
         },
         "SkillFreshnessRow": {},
         "SkillShareReviewContent": {
@@ -12987,7 +12989,9 @@
           "details": "Detalhes",
           "needsAttention": "Revisar skill",
           "checking": "Verificando...",
-          "checkFailed": "Falha na verificação"
+          "checkFailed": "Falha na verificação",
+          "updateServer": "Atualize o Orca no servidor",
+          "connectHost": "Conecte o host SSH"
         },
         "SkillSharedLinkRow": {
           "contentsUnavailable": "Não foi possível carregar o que este link contém.",
