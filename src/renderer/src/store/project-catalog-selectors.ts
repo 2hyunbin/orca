@@ -57,3 +57,15 @@ export function selectProjectHostSetups(
     ? mainCatalogOf(state).projectHostSetups
     : state.projectHostSetups
 }
+
+/** The whole catalog a state reads, for a reader outside the store (e2e builds expose it). */
+export function selectProjectCatalog(
+  state: Pick<AppState, 'repos' | 'projectGroups' | 'projects' | 'projectHostSetups'>
+): Pick<AppState, 'repos' | 'projectGroups' | 'projects' | 'projectHostSetups'> {
+  return {
+    repos: selectRepos(state),
+    projectGroups: selectProjectGroups(state),
+    projects: selectProjects(state),
+    projectHostSetups: selectProjectHostSetups(state)
+  }
+}
