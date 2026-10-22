@@ -12953,9 +12953,8 @@
           "attentionEdited": "Requiere atención · Editaste esta copia",
           "attentionOther": "Requiere atención · Otra habilidad ya usa este nombre",
           "attentionSharedNotCurrent": "Requiere atención · La copia compartida que usa esta carpeta no es de Orca",
-          "editedCopies": "editaste estas copias",
-          "resultNotUpdatedPlaces": "{{result}} · No se actualizó en {{places}} ubicaciones: {{reason}}",
-          "resultNotUpdatedAgent": "{{result}} · No se actualizó en {{agent}}: {{reason}}"
+          "resultUpdateSkippedPlaces": "{{result}} · Actualización omitida en {{places}} ubicaciones: {{reason}}",
+          "resultUpdateSkippedAgent": "{{result}} · Actualización omitida en {{agent}}: {{reason}}"
         }
       },
       "right": {

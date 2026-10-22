@@ -13066,9 +13066,8 @@
           "attentionEdited": "Attention requise · Vous avez modifié cette copie",
           "attentionOther": "Attention requise · Une autre compétence utilise déjà ce nom",
           "attentionSharedNotCurrent": "Attention requise · La copie partagée utilisée par ce dossier n’est pas celle d’Orca",
-          "editedCopies": "vous avez modifié ces copies",
-          "resultNotUpdatedPlaces": "{{result}} · Non mise à jour dans {{places}} emplacements : {{reason}}",
-          "resultNotUpdatedAgent": "{{result}} · Non mise à jour pour {{agent}} : {{reason}}"
+          "resultUpdateSkippedPlaces": "{{result}} · Mise à jour ignorée dans {{places}} emplacements : {{reason}}",
+          "resultUpdateSkippedAgent": "{{result}} · Mise à jour ignorée pour {{agent}} : {{reason}}"
         }
       },
       "right": {

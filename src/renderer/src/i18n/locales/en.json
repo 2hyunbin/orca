@@ -13290,9 +13290,8 @@
           "attentionEdited": "Needs attention · You edited this copy",
           "attentionOther": "Needs attention · A different skill already uses this name",
           "attentionSharedNotCurrent": "Needs attention · The shared copy this folder uses is not Orca’s",
-          "editedCopies": "you edited these copies",
-          "resultNotUpdatedPlaces": "{{result}} · Not updated in {{places}} places: {{reason}}",
-          "resultNotUpdatedAgent": "{{result}} · Not updated in {{agent}}: {{reason}}"
+          "resultUpdateSkippedPlaces": "{{result}} · Update skipped in {{places}} places: {{reason}}",
+          "resultUpdateSkippedAgent": "{{result}} · Update skipped in {{agent}}: {{reason}}"
         }
       },
       "right": {

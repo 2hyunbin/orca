@@ -12958,9 +12958,8 @@
           "attentionEdited": "対応が必要です · このコピーは編集されています",
           "attentionOther": "対応が必要です · 別のスキルがすでにこの名前を使用しています",
           "attentionSharedNotCurrent": "対応が必要です · このフォルダーが使用する共有コピーは Orca のものではありません",
-          "editedCopies": "これらのコピーは編集されています",
-          "resultNotUpdatedPlaces": "{{result}} · {{places}} か所で未更新: {{reason}}",
-          "resultNotUpdatedAgent": "{{result}} · {{agent}} では未更新: {{reason}}"
+          "resultUpdateSkippedPlaces": "{{result}} · {{places}} か所で更新をスキップ: {{reason}}",
+          "resultUpdateSkippedAgent": "{{result}} · {{agent}} で更新をスキップ: {{reason}}"
         }
       },
       "right": {

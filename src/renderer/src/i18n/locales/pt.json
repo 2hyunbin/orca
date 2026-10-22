@@ -8854,9 +8854,8 @@
           "attentionEdited": "Atenção necessária · Você editou esta cópia",
           "attentionOther": "Atenção necessária · Outra habilidade já usa este nome",
           "attentionSharedNotCurrent": "Atenção necessária · A cópia compartilhada usada por esta pasta não é do Orca",
-          "editedCopies": "você editou estas cópias",
-          "resultNotUpdatedPlaces": "{{result}} · Não atualizada em {{places}} locais: {{reason}}",
-          "resultNotUpdatedAgent": "{{result}} · Não atualizada em {{agent}}: {{reason}}"
+          "resultUpdateSkippedPlaces": "{{result}} · Atualização ignorada em {{places}} locais: {{reason}}",
+          "resultUpdateSkippedAgent": "{{result}} · Atualização ignorada em {{agent}}: {{reason}}"
         }
       },
       "right": {

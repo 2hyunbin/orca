@@ -12958,9 +12958,8 @@
           "attentionEdited": "需要处理 · 你编辑过此副本",
           "attentionOther": "需要处理 · 另一个技能已使用此名称",
           "attentionSharedNotCurrent": "需要处理 · 此文件夹使用的共享副本不是 Orca 的副本",
-          "editedCopies": "你编辑过这些副本",
-          "resultNotUpdatedPlaces": "{{result}} · {{places}} 个位置未更新：{{reason}}",
-          "resultNotUpdatedAgent": "{{result}} · {{agent}} 中未更新：{{reason}}"
+          "resultUpdateSkippedPlaces": "{{result}} · 已跳过 {{places}} 个位置的更新：{{reason}}",
+          "resultUpdateSkippedAgent": "{{result}} · 已跳过 {{agent}} 中的更新：{{reason}}"
         }
       },
       "right": {

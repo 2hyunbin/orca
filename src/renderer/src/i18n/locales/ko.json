@@ -12958,9 +12958,8 @@
           "attentionEdited": "확인 필요 · 이 사본을 수정했습니다",
           "attentionOther": "확인 필요 · 다른 스킬이 이미 이 이름을 사용하고 있습니다",
           "attentionSharedNotCurrent": "확인 필요 · 이 폴더가 사용하는 공유 사본은 Orca의 사본이 아닙니다",
-          "editedCopies": "이 사본들을 수정했습니다",
-          "resultNotUpdatedPlaces": "{{result}} · {{places}}곳에서 업데이트되지 않음: {{reason}}",
-          "resultNotUpdatedAgent": "{{result}} · {{agent}}에서 업데이트되지 않음: {{reason}}"
+          "resultUpdateSkippedPlaces": "{{result}} · {{places}}곳에서 업데이트 건너뜀: {{reason}}",
+          "resultUpdateSkippedAgent": "{{result}} · {{agent}}에서 업데이트 건너뜀: {{reason}}"
         }
       },
       "right": {

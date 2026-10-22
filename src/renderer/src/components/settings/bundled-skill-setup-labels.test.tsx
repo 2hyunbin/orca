@@ -179,7 +179,7 @@ it('keeps the edited-copy suffix after the mixed result', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Update' }))
   expect(
     await screen.findByText(
-      'Updated · Installed for Cursor · Not updated in Droid: you edited this copy'
+      'Updated · Installed for Cursor · Update skipped in Droid: Skill edited outside Orca'
     )
   ).toBeDefined()
 })

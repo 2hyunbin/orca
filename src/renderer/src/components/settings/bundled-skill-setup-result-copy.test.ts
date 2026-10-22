@@ -33,13 +33,13 @@ describe('setup result details', () => {
   })
 
   it.each([
-    ['edited', 'you edited this copy'],
-    ['other', 'a different skill already uses this name'],
+    ['edited', 'Skill edited outside Orca'],
+    ['other', 'A different skill uses this name'],
     ['unwritable', "Orca can't write to this folder"],
-    ['unreadable', "Orca can't read every file in this copy"],
-    ['busy', 'another skill install is still finishing here'],
-    ['shared-not-current', 'the shared copy this folder uses is not Orca’s'],
-    [undefined, 'this copy was kept as it is']
+    ['unreadable', "Orca can't read every file"],
+    ['busy', 'Another install is still running'],
+    ['shared-not-current', "The shared copy isn't Orca's"],
+    [undefined, 'This copy was kept as it is']
   ] as const)('names the agent for a %s copy', (reason, text) => {
     const plan = planOf([
       planEntry('orca-cli', [
@@ -47,10 +47,10 @@ describe('setup result details', () => {
         planOp('leave', '/home/u/.claude/skills/orca-cli', { reason })
       ])
     ])
-    expect(resultLine(plan)).toBe(`Installed · Not updated in Claude Code: ${text}`)
+    expect(resultLine(plan)).toBe(`Installed · Update skipped in Claude Code: ${text}`)
   })
 
-  it('uses plural edited-copy wording for several places', () => {
+  it('uses the same reason text for several skipped places', () => {
     const plan = planOf([
       planEntry('orca-cli', [
         planOp('write', '/home/u/.agents/skills/orca-cli'),
@@ -58,7 +58,9 @@ describe('setup result details', () => {
         planOp('leave', '/home/u/.cursor/skills/orca-cli', { reason: 'edited', agents: ['cursor'] })
       ])
     ])
-    expect(resultLine(plan)).toBe('Installed · Not updated in 2 places: you edited these copies')
+    expect(resultLine(plan)).toBe(
+      'Installed · Update skipped in 2 places: Skill edited outside Orca'
+    )
   })
 
   it('keeps distinct reasons for several places', () => {
@@ -70,7 +72,7 @@ describe('setup result details', () => {
       ])
     ])
     expect(resultLine(plan)).toBe(
-      'Installed · Not updated in 2 places: you edited this copy; a different skill already uses this name'
+      'Installed · Update skipped in 2 places: Skill edited outside Orca; A different skill uses this name'
     )
   })
 

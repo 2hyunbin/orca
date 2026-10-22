@@ -347,7 +347,7 @@ describe('AgentSkillSetupPanel', () => {
     await clickButton("Replace with Orca's copy")
 
     expect(container?.textContent).toContain(
-      'Installed · Not updated in Shared folder: you edited this copy'
+      'Installed · Update skipped in Shared folder: Skill edited outside Orca'
     )
     expect(container?.textContent).not.toContain('Needs attention')
   })

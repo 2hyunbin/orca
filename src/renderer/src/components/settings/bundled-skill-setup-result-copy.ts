@@ -86,26 +86,19 @@ export function skillInstallResultLine(
     return headline
   }
   const reasons = [...new Set(notUpdated.map((left) => left.code))]
-    .map((reason) =>
-      reason === 'edited' && notUpdated.filter((left) => left.code === reason).length > 1
-        ? translate(
-            'auto.components.settings.bundledSkillSetupCopy.editedCopies',
-            'you edited these copies'
-          )
-        : leaveReasonText(reason)
-    )
+    .map((reason) => leaveReasonText(reason))
     .join('; ')
   if (notUpdated.length > 1) {
     return translate(
-      'auto.components.settings.bundledSkillSetupCopy.resultNotUpdatedPlaces',
-      '{{result}} · Not updated in {{places}} places: {{reason}}',
+      'auto.components.settings.bundledSkillSetupCopy.resultUpdateSkippedPlaces',
+      '{{result}} · Update skipped in {{places}} places: {{reason}}',
       { result: headline, places: notUpdated.length, reason: reasons }
     )
   }
   const location = changes?.notUpdated.find((location) => location.path === notUpdated[0].path)
   return translate(
-    'auto.components.settings.bundledSkillSetupCopy.resultNotUpdatedAgent',
-    '{{result}} · Not updated in {{agent}}: {{reason}}',
+    'auto.components.settings.bundledSkillSetupCopy.resultUpdateSkippedAgent',
+    '{{result}} · Update skipped in {{agent}}: {{reason}}',
     {
       result: headline,
       agent: location ? locationPlaceLabel(location) : notUpdated[0].path,
