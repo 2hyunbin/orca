@@ -5,7 +5,8 @@ import type {
 } from '../../../shared/runtime-types'
 import { useAppStore } from '../store'
 import { hasRuntimeRpcErrorCode } from '../../../shared/runtime-rpc-error-code'
-import { RuntimeRpcCallError, unwrapRuntimeRpcResult } from './runtime-rpc-result'
+import { unwrapRuntimeRpcResult } from './runtime-rpc-result'
+import { isUndeliveredCloseFailure } from './web-runtime-session-undelivered-close'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import {
   clearWebSessionCloseIntent,
@@ -32,6 +33,8 @@ import {
   matchesWebSessionIntentOwner
 } from './web-runtime-session-environment'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
+import { isServerFrameDrawnWorkspace } from './web-session-tabs-sync/frame-drawn-server-workspaces'
+import { redrawServerLayoutWorkspace } from './server-layout-apply-routes'
 
 export async function activateWebRuntimeSessionTab(args: {
   worktreeId: string
@@ -86,21 +89,6 @@ export async function closeWebRuntimeSessionTab(args: {
   expectedPairingRevision?: number
 }): Promise<WebRuntimeSessionTabCloseOutcome> {
   return callWebRuntimeSessionTabMethod('session.tabs.close', args)
-}
-
-// Why these and a bare rejection only: they mean the close never reached the host, so sending it
-// again is the user's own close. A structured refusal (e.g. a re-paired host) is an answer.
-// A Disconnect is answered by this client, not the host, so a tab closed meanwhile stays closed.
-const UNDELIVERED_CLOSE_CODES = new Set([
-  'runtime_manually_disconnected',
-  'runtime_unavailable',
-  'remote_runtime_unavailable',
-  'runtime_timeout',
-  'remote_runtime_timeout'
-])
-
-function isUndeliveredCloseFailure(error: unknown): boolean {
-  return !(error instanceof RuntimeRpcCallError) || UNDELIVERED_CLOSE_CODES.has(error.code)
 }
 
 /** Keeps a user close the host never received, hiding the tab until a replay reaches the host. */
@@ -222,8 +210,12 @@ async function callWebRuntimeSessionTabMethod(
     return 'failed'
   }
 
+  // Switch point: frames draw this workspace's tabs and focus, so the mirror's intent ledgers skip it.
+  const frameDrawn = isServerFrameDrawnWorkspace(environmentId, args.worktreeId)
   const immediateHostTabId = toHostSessionTabId(args.tabId)
-  if (isClose) {
+  // The host's id for this tab; a frame-drawn close that never arrived is held under it for replay.
+  let closeHostTabId = immediateHostTabId
+  if (isClose && !frameDrawn) {
     // Why: record before async id resolution so a stale snapshot cannot flash the closed tab back.
     closeIntentTabIds.add(immediateHostTabId)
     recordWebSessionCloseIntent(intentOwner, args.worktreeId, immediateHostTabId, Date.now())
@@ -239,11 +231,12 @@ async function callWebRuntimeSessionTabMethod(
         worktreeId: args.worktreeId,
         tabId: args.tabId
       }) ?? toHostSessionTabId(args.tabId)
-    if (isClose) {
+    closeHostTabId = hostTabId
+    if (isClose && !frameDrawn) {
       // Why: suppress until the host confirms removal, else an in-flight pre-close snapshot flashes the tab back.
       closeIntentTabIds.add(hostTabId)
       recordWebSessionCloseIntent(intentOwner, args.worktreeId, hostTabId, Date.now())
-    } else {
+    } else if (!isClose && !frameDrawn) {
       activationHostTabId = hostTabId
       recordWebSessionFocusIntent(
         intentOwner,
@@ -287,6 +280,9 @@ async function callWebRuntimeSessionTabMethod(
       response as RuntimeRpcResponse<RuntimeMobileSessionTabCloseResult | undefined>
     )
     if (isClose) {
+      if (frameDrawn && result?.refused === true) {
+        redrawServerLayoutWorkspace(environmentId, args.worktreeId)
+      }
       if (result?.refused === true && result.snapshotRepublished === true) {
         // Why: the host kept an authoritative live PTY. Stop hiding its mirror
         // only when it republished; dead-leaf refusals must stay suppressed.
@@ -314,15 +310,20 @@ async function callWebRuntimeSessionTabMethod(
     const hostHasNoSuchTab =
       hasRuntimeRpcErrorCode(error, 'tab_not_found') ||
       hasRuntimeRpcErrorCode(error, 'terminal_tab_not_found')
-    if (
-      isClose &&
-      args.reason === 'user' &&
-      !hostHasNoSuchTab &&
-      isUndeliveredCloseFailure(error)
-    ) {
+    const undeliveredUserClose =
+      isClose && args.reason === 'user' && !hostHasNoSuchTab && isUndeliveredCloseFailure(error)
+    if (isClose && frameDrawn && !undeliveredUserClose) {
+      // The window dropped the tab; a refused close (a pinned tab, say) draws what the server kept.
+      redrawServerLayoutWorkspace(environmentId, args.worktreeId)
+    }
+    if (undeliveredUserClose) {
       // Why: clearing here let the host's next snapshot bring back a tab the user closed (STA-6224).
       // The resolved host id was added last and is the one the host knows.
-      holdUndeliveredUserClose(intentOwner, args.worktreeId, [...closeIntentTabIds].toReversed())
+      holdUndeliveredUserClose(
+        intentOwner,
+        args.worktreeId,
+        frameDrawn ? [closeHostTabId] : [...closeIntentTabIds].toReversed()
+      )
     } else {
       for (const hostTabId of closeIntentTabIds) {
         if (hostHasNoSuchTab) {

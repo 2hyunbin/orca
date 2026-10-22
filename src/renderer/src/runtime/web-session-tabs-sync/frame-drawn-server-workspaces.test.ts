@@ -260,24 +260,37 @@ describe('frame-drawn server workspaces', () => {
     ])
   })
 
-  it('keeps the id-mapping and intent ledgers running for a frame-drawn workspace', () => {
+  // L240: the frames name a frame-drawn workspace's tabs, so the mirror's ledgers stay for old servers.
+  it.each([
+    { name: 'keeps none of the mirror’s id or intent ledgers for', drawn: true },
+    {
+      name: 'keeps the mirror’s id and intent ledgers for a server without frames, unlike',
+      drawn: false
+    }
+  ])('$name a frame-drawn workspace', ({ drawn }) => {
     const store = frameDrawnStore()
+    if (!drawn) {
+      setFrameDrawnServerWorkspaces(ENV, new Set())
+    }
     clearHostSessionTabIdMappings(ENV, WT)
     const owner = { environmentId: ENV }
     recordWebSessionCloseIntent(owner, WT, 'host-tab-gone', NOW)
     recordWebSessionFocusIntent(owner, WT, 'host-tab-1', LEAF_ID)
 
-    // Nothing but layout changed, so the store is untouched.
-    expect(applyWebSessionTabsSnapshot(store, shell('b', 2), ENV, NOW)).toBe(store)
+    const patch = applyWebSessionTabsSnapshot(store, shell('b', 2), ENV, NOW)
+    if (drawn) {
+      // Nothing but layout changed, so the store is untouched.
+      expect(patch).toBe(store)
+    }
     expect(
       resolveHostSessionTabIdForWebSessionTab(store, {
         environmentId: ENV,
         worktreeId: WT,
         tabId: MIRRORED_TAB_ID
       })
-    ).toBe('host-tab-1')
-    expect(isWebSessionCloseIntentPending(owner, WT, 'host-tab-gone', NOW)).toBe(false)
-    expect(peekWebSessionFocusIntent(owner, WT)).toBeNull()
+    ).toBe(drawn ? null : 'host-tab-1')
+    expect(isWebSessionCloseIntentPending(owner, WT, 'host-tab-gone', NOW)).toBe(drawn)
+    expect(peekWebSessionFocusIntent(owner, WT) !== null).toBe(drawn)
   })
 
   it('changes nothing with the switch off', () => {

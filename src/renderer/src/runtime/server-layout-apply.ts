@@ -1,7 +1,12 @@
 // A layout intent for a workspace a paired server's frames draw goes to that server's main
 // (design H5c), under the server's ids. Only the intents on one list do; any other keeps today's
-// path, as does every intent for a server that does not advertise `layout.intents.v1`. Editor
-// opens go too (H5d): a new tab keeps the id the window proposed, which the server's frame draws.
+// path, as does every intent for a server that does not advertise `layout.intents.v1`. Closes,
+// starts and terminal names keep their RPCs (session.tabs.close, terminal.close, terminal.split,
+// session.tabs.createTerminal, terminal.rename), which that server's main applies to its own layout.
+// Editor opens go too (H5d): a new tab keeps the id the window proposed, which the server's frame
+// draws.
+
+import { isWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 
 import type {
   LayoutApplyReply,
@@ -12,9 +17,12 @@ import { serverLayoutApplyRoute, type ServerLayoutApplyRoute } from './server-la
 import { serverEditorFileId } from './server-layout-frame-ids'
 
 /**
- * The intents a server's main takes from a paired desktop now: tab and group placement, pane
- * sizes and moves, and editor opens, which main applies with no window. Not yet: anything that
- * starts, stops or closes a terminal, until main does that itself headless (D2), nor tab closes.
+ * The intents a server's main applies from a paired desktop exactly as from its own window: tab and
+ * group placement, pane sizes and moves, a tab's props and non-terminal names, a tab's chat pane,
+ * and editor opens. Never a close (closeTabs, closePane): main takes a window's close as already
+ * stopped and stops nothing, while this desktop cannot stop a server's terminals; nor a start
+ * (createTerminalTab, splitPane), sleep or wake, which need main's terminal side. Their RPCs reach
+ * that main instead.
  */
 export const SERVER_ROUTED_LAYOUT_COMMANDS = [
   'moveTab',
@@ -23,6 +31,9 @@ export const SERVER_ROUTED_LAYOUT_COMMANDS = [
   'setPaneRatios',
   'equalizePanes',
   'movePane',
+  'setTabProps',
+  'setChatPane',
+  'renameTab',
   'openEditorTab'
 ] as const satisfies readonly WindowLayoutCommand['type'][]
 
@@ -34,6 +45,14 @@ type ServerRoutedCommand = Extract<
 const ROUTED: ReadonlySet<string> = new Set(SERVER_ROUTED_LAYOUT_COMMANDS)
 
 function isServerRouted(command: WindowLayoutCommand): command is ServerRoutedCommand {
+  // A terminal's own name goes by terminal.rename, which also names the server's terminal.
+  if (command.type === 'renameTab' && command.kind === 'custom') {
+    return !isWebTerminalSurfaceTabId(command.tabId)
+  }
+  // This desktop's guess that a launched agent exited must not clear the server's relaunch record.
+  if (command.type === 'setTabProps' && command.clearLaunchAgent) {
+    return false
+  }
   return ROUTED.has(command.type)
 }
 

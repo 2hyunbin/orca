@@ -45,3 +45,11 @@ export function serverLayoutApplyRoute(
 ): ServerLayoutApplyRoute | null {
   return providers.get(environmentId)?.(worktreeId) ?? null
 }
+
+/** Draws a workspace from its server's frames again, over what the window drew; false when no
+ *  server's frames draw it now. */
+export function redrawServerLayoutWorkspace(environmentId: string, worktreeId: string): boolean {
+  const route = serverLayoutApplyRoute(environmentId, worktreeId)
+  route?.redraw()
+  return route !== null
+}
