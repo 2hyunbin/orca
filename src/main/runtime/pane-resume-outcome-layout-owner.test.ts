@@ -105,6 +105,25 @@ describe("main's start of a pane publishes its resume outcome", () => {
     }
   )
 
+  it('publishes it for any create into the pane that wakes its record, not only a restore', async () => {
+    // A window tab's start through main's create (PR-3a) names the wake itself.
+    const { runtime } = resumablePaneRuntime('restored', false)
+
+    await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
+      tabId: PANE.tabId,
+      leafId: PANE.leafId,
+      sessionId: 'persisted-pty',
+      launchAgent: 'claude',
+      resumeProviderSession: { key: 'session_id', id: 'provider-session-1' },
+      resumesSleepingRecord: true
+    })
+
+    expect(publishedPane(runtime)?.ptyId).toBe('persisted-pty')
+    expect(publishedPane(runtime)?.resumeOutcome).toBe(
+      ORCA_LAYOUT_OWNER_IS_MAIN ? 'restored' : undefined
+    )
+  })
+
   it('publishes nothing for a start that resumed nothing', async () => {
     const { runtime } = resumablePaneRuntime(undefined, false)
 
