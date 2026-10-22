@@ -46,7 +46,7 @@ outputs:
     description: The small pnpm-owned verification record, without registry metadata.
     value: ${{ steps.verification-cache.outputs.path }}
   verification-cache-key:
-    description: Exact verification record key, also used by the isolated PR benchmark.
+    description: Exact verification record cache key.
     value: ${{ steps.verification-cache.outputs.key }}
   node-version:
     description: Resolved Node.js version used for the install.
