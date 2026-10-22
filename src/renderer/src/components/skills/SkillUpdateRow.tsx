@@ -78,17 +78,21 @@ function LocationTable({
   return (
     <div className="flex flex-col gap-1.5 rounded-md border border-border bg-muted/40 px-3 py-2">
       {locations.map((location) => (
-        <div key={location.path} className="flex min-w-0 items-center gap-2 text-xs">
-          <span className="w-28 shrink-0 truncate text-foreground">
-            {locationPlaceLabel(location)}
+        // Why the state sits under the path: a long reason must not squeeze the path to "~/…".
+        <div
+          key={location.path}
+          className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-baseline gap-x-2 text-xs"
+        >
+          <span className="truncate text-foreground">{locationPlaceLabel(location)}</span>
+          <span className="flex min-w-0 flex-col">
+            <span
+              className="truncate font-mono text-[11px] text-muted-foreground"
+              title={location.path}
+            >
+              {location.displayPath}
+            </span>
+            <span className="text-muted-foreground">{locationStateText(location)}</span>
           </span>
-          <span
-            className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground"
-            title={location.path}
-          >
-            {location.displayPath}
-          </span>
-          <span className="shrink-0 text-muted-foreground">{locationStateText(location)}</span>
         </div>
       ))}
     </div>
