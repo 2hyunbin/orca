@@ -27,10 +27,8 @@ import {
 import { getTerminalState } from '../../terminal-wait-results'
 import { readStructuredWorkerTerminal } from '../../structured-worker-terminal-read'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { ResolvedPaneHandles } from './resolved-pane-handles'
 
 export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWithRestoredHandlePaneStart {
-  private readonly resolvedPaneHandles = new ResolvedPaneHandles()
   protected abstract assertLiveTerminalHandleTargetsPty(handle: string, expectedPtyId: string): void
   abstract createTerminal(
     ...args: Parameters<OrcaRuntimeWithCreateTerminal['createTerminal']>
@@ -84,7 +82,6 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
       // Why: pane coordinates restored by a paired client must not cross workspace ownership.
       throw new Error('terminal_not_found')
     }
-    this.resolvedPaneHandles.note(handle, paneKey)
     return {
       handle,
       tabId: parsed?.tabId ?? record?.tabId ?? '',
@@ -104,14 +101,14 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
     const parsed = parsePaneKey(paneKey)
     const pty = this.getPtyRecordForPaneKey(paneKey)
     const handlePaneKey = expectedHandle ? this.getPaneKeyForTerminalHandle(expectedHandle) : null
-    const stalePtyId = expectedHandle ? this.handles.get(expectedHandle)?.ptyId : undefined
-    const stale = stalePtyId ? this.ptysById.get(stalePtyId) : undefined
+    const staleRecord = expectedHandle ? this.handles.get(expectedHandle) : undefined
+    const stale = staleRecord?.ptyId ? this.ptysById.get(staleRecord.ptyId) : undefined
     // Switch point: main's layout names no pane for a terminal its replacement unbound, so a handle
     // resolved for this pane, whose terminal ended, learns the connected replacement (never spawns).
     const replacedHandle =
       ORCA_LAYOUT_OWNER_IS_MAIN &&
       handlePaneKey === null &&
-      this.resolvedPaneHandles.paneKeyOf(expectedHandle ?? '') === paneKey &&
+      staleRecord?.issuedForPaneKey === paneKey &&
       !stale?.connected &&
       pty?.connected === true &&
       this.getTerminalWorktreeIdForHandle(expectedHandle ?? '') === expectedWorktreeId
