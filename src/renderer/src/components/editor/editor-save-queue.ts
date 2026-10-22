@@ -4,7 +4,6 @@ import type { OpenFile } from '@/store/slices/editor'
 import { findWorktreeById } from '@/store/slices/worktree-helpers'
 import { getEditorFileOperationContext } from '@/lib/editor-file-operation-owner'
 import {
-  canAutoSaveOpenFile,
   isAutosaveSuspendedForFile,
   normalizeAutoSaveDelayMs,
   ORCA_EDITOR_FILE_SAVED_EVENT,
@@ -12,7 +11,11 @@ import {
 } from './editor-autosave'
 import { flushPendingEditorBuffer, hasPendingEditorBufferChange } from './editor-pending-flush'
 import { createAutoSaveHolds, editorPathHoldKey } from './editor-autosave-holds'
-import { editorBufferIdOfView } from '@/store/slices/editor/buffers/editor-buffer-views'
+import {
+  editorBufferIdOfView,
+  editorBufferViewIds
+} from '@/store/slices/editor/buffers/editor-buffer-views'
+import { editorAutoSaveDueRecords } from './editor-autosave-due-records'
 import {
   clearSelfWrite,
   recordSelfWrite,
@@ -258,46 +261,15 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     const state = store.getState()
     holds.flagOverdue(state)
     releaseNonUtf8PausesWithoutDirtyTab(state.openFiles)
-    const openFilesByKey = new Map(
-      state.openFiles.map((file) => [editorBufferIdOfView(state, file.id), file])
-    )
-
+    const due = editorAutoSaveDueRecords(state, holds.isHeld)
     for (const key of Array.from(autoSaveTimers.keys())) {
-      const file = openFilesByKey.get(key)
-      const draft = file ? state.editorDrafts[file.id] : undefined
-      const shouldKeepTimer =
-        state.settings?.editorAutoSave &&
-        file &&
-        file.isDirty &&
-        canAutoSaveOpenFile(file) &&
-        // Why: suspension holds until the user picks a side via the banner (or saves manually).
-        !isAutosaveSuspendedForFile(file) &&
-        !holds.isHeld(state, file) &&
-        draft !== undefined
-      if (!shouldKeepTimer) {
+      if (!due.has(key)) {
         clearScheduledAutoSave(key)
       }
     }
 
-    if (!state.settings?.editorAutoSave) {
-      return
-    }
-
-    const autoSaveDelayMs = normalizeAutoSaveDelayMs(state.settings.editorAutoSaveDelayMs)
-    for (const file of state.openFiles) {
-      const key = editorBufferIdOfView(state, file.id)
-      const draft = state.editorDrafts[file.id]
-      if (
-        !file.isDirty ||
-        draft === undefined ||
-        !canAutoSaveOpenFile(file) ||
-        isAutosaveSuspendedForFile(file) ||
-        holds.isHeld(state, file)
-      ) {
-        clearScheduledAutoSave(key)
-        continue
-      }
-
+    const autoSaveDelayMs = normalizeAutoSaveDelayMs(state.settings?.editorAutoSaveDelayMs)
+    for (const [key, { file, draft }] of due) {
       if (autoSaveTimers.has(key) && autoSaveScheduledContent.get(key) === draft) {
         continue
       }
@@ -307,7 +279,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       const timerId = window.setTimeout(() => {
         autoSaveTimers.delete(key)
         autoSaveScheduledContent.delete(key)
-        void queueSave(file, draft, 'autosave').catch((error) => {
+        // Why: the view that scheduled may have closed while another view keeps the record open.
+        const current = store.getState()
+        const viewIds = new Set(editorBufferViewIds(current, key))
+        const view = current.openFiles.find((openFile) => viewIds.has(openFile.id)) ?? file
+        void queueSave(view, draft, 'autosave').catch((error) => {
           console.error('[editor] autosave failed', error)
         })
       }, autoSaveDelayMs)

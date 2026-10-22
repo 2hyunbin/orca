@@ -1,6 +1,10 @@
 import type { OpenFile } from '@/store/slices/editor'
 import type { WorktreeOperationRouteState } from '@/lib/worktree-operation-route'
 import { resolveWorktreeOperationRoute } from '@/lib/worktree-operation-route'
+import {
+  isDetachedEditorBufferId,
+  type EditorBufferViewIndex
+} from '@/store/slices/editor/buffers/editor-buffer-views'
 import { toRuntimeExecutionHostId, toSshExecutionHostId } from '../../../../shared/execution-host'
 
 export type EditorModelOwner = { environmentId: string | null; hostId: string | null }
@@ -50,7 +54,15 @@ export function resolvedEditorModelOwnerKey({
   return hostId === 'local' && !environmentId ? '' : JSON.stringify([environmentId, hostId])
 }
 
-export function getEditorModelOwnerKey(file: OpenFile, state: WorktreeOperationRouteState): string {
+export function getEditorModelOwnerKey(
+  file: OpenFile,
+  state: WorktreeOperationRouteState & Partial<EditorBufferViewIndex>
+): string {
+  const recordId = state.editorBufferIdOf?.[file.id]
+  // Why: a detached record keeps its own text, so it must never share a model with the file's other record.
+  if (recordId !== undefined && isDetachedEditorBufferId(recordId)) {
+    return JSON.stringify(['detached', recordId])
+  }
   const owner = resolveEditorModelOwner(file, state)
   // Unresolved owners must not borrow another host's retained text.
   return (

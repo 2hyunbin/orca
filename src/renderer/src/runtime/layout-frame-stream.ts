@@ -2,6 +2,7 @@
 // window's ids. Only the local stream's positions answer this window's layout.apply replies.
 
 import type { AppState } from '@/store/types'
+import type { HeldDrawnTabs } from '@/store/workspace-layout-frame-held-tabs'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
 import {
@@ -16,6 +17,8 @@ import { framesDrawWorkspace } from './workspace-layout-frame-drawn-workspaces'
 export type LayoutFrameSource = {
   target: RuntimeClientTarget
   draws: (state: AppState) => (key: string) => boolean
+  /** Tabs this window draws that the source's frames never carry: every build keeps them as drawn. */
+  heldTabs?: HeldDrawnTabs
   /** Frames under this window's ids; the local stream's already are. */
   translate?: (frame: WorkspaceLayoutChangeFrame) => WorkspaceLayoutChangeFrame
   onStatus?: (status: RuntimeLayoutStreamStatus) => void

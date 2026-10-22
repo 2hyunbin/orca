@@ -93,27 +93,51 @@ export function updateEditorBuffer<TState extends EditorBufferState>(
   return changes ? writeEditorBuffer(state, fileId, patch) : state
 }
 
-/** A host-mirrored tab carries the host's buffer state, so its record adopts it in the same write. */
+/**
+ * A host-mirrored tab carries the host's buffer state, so its record adopts it in the same write.
+ * Dirty is the OR of the record's mirrored views: an older host publishes it per tab.
+ */
 export function adoptMirroredEditorBuffers(
   records: EditorBufferRecords,
   openFiles: readonly OpenFile[],
   index: EditorBufferViewIndex
 ): EditorBufferRecords {
-  let next = records
+  const adopted = new Map<string, EditorBufferRecord>()
   for (const file of openFiles) {
     const recordId = editorBufferIdOfView(index, file.id)
-    const record = records[recordId]
-    if (
-      file.mirroredFromRuntimeSession !== true ||
-      !record ||
-      editorBufferMirrorMismatch(file, record) === null
-    ) {
+    if (file.mirroredFromRuntimeSession !== true || !records[recordId]) {
+      continue
+    }
+    const prior = adopted.get(recordId)
+    adopted.set(
+      recordId,
+      prior
+        ? { ...prior, isDirty: prior.isDirty || file.isDirty }
+        : editorBufferRecordFromFile(file)
+    )
+  }
+  let next = records
+  for (const [recordId, record] of adopted) {
+    if (EDITOR_BUFFER_FIELDS.every((field) => Object.is(records[recordId][field], record[field]))) {
       continue
     }
     next = next === records ? { ...records } : next
-    next[recordId] = editorBufferRecordFromFile(file)
+    next[recordId] = record
   }
   return next
+}
+
+/**
+ * A host-mirrored view may read clean while its record is dirty, but only because another
+ * host-owned view of the record reads dirty: the record ORs per-tab host values.
+ */
+export function editorBufferViewMirrorMismatch(
+  file: OpenFile,
+  record: EditorBufferRecord,
+  hostSiblingDirty: boolean
+): keyof EditorBufferRecord | null {
+  const hostDirty = file.mirroredFromRuntimeSession === true && record.isDirty && hostSiblingDirty
+  return editorBufferMirrorMismatch(hostDirty ? { ...file, isDirty: true } : file, record)
 }
 
 /** Moves each migrated tab's record to its new id in the same update that re-keys the tab. */
