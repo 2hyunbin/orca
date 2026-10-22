@@ -19,7 +19,8 @@ type Hold = AgentSessionResumeHold & { holders: number; stopWatchingExit: () => 
 
 /** A resumer's share of a hold: bind it to the spawned PTY, or release it when nothing spawned. */
 export type AgentSessionResumeClaim = {
-  bind: (ptyId: string | null) => void
+  /** Without an id, binds the PTY the pane gained since the claim, if the runtime holds one. */
+  bind: (ptyId?: string | null) => void
   release: () => void
 }
 
@@ -37,6 +38,8 @@ export class AgentSessionResumeClaims {
       reported: (hold: AgentSessionResumeHold) => boolean
       /** Calls `onExit` once the PTY proves exited; returns the unsubscribe. */
       watchExit: (ptyId: string, onExit: () => void) => () => void
+      /** The PTYs the runtime has bound to this pane. */
+      panePtyIds: (paneKey: string) => string[]
     }
   ) {}
 
@@ -87,13 +90,17 @@ export class AgentSessionResumeClaims {
 
   private share(hold: Hold): AgentSessionResumeClaim {
     let open = true
+    const priorPtyIds = new Set(this.lifecycle.panePtyIds(hold.paneKey))
     return {
-      bind: (ptyId) => {
+      bind: (exact) => {
         if (!open) {
           return
         }
         open = false
-        if (ptyId !== null && this.holds.has(hold)) {
+        // Why: a create can spawn and then fail; its PTY's exit must still end the hold.
+        const ptyId =
+          exact ?? this.lifecycle.panePtyIds(hold.paneKey).findLast((id) => !priorPtyIds.has(id))
+        if (ptyId && this.holds.has(hold)) {
           hold.stopWatchingExit()
           hold.stopWatchingExit = this.lifecycle.watchExit(ptyId, () => this.end(hold))
         }

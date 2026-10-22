@@ -183,7 +183,9 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
       return created
     } catch (err) {
       // Why: once the spawn request left, a failure proves nothing (a lost SSH reply).
-      if (!dispatched) {
+      if (dispatched) {
+        resumeClaim?.bind()
+      } else {
         resumeClaim?.release()
       }
       if (

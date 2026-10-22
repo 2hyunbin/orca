@@ -448,3 +448,61 @@ describe('resumeAgentSessionInWorkspace', () => {
     await expect(resume()).resolves.toMatchObject({ ok: true })
   })
 })
+
+describe('resumeAgentSessionInWorkspace retries, cancellation and a failed publication', () => {
+  it('reconciles the same request after its own hook arrives', async () => {
+    let rows: AgentStatusIpcPayload[] = []
+    const terminalHandle = deriveRemoteRuntimeTerminalCreateHandle(
+      'agent-session-resume',
+      TEST_WORKTREE_ID,
+      MUTATION_ID
+    )
+    const { resume, spawn } = makeRuntime(makeSleptWorkspace(), {
+      rows: () => rows,
+      checkHookAgentPresence: async () => 'live',
+      // The host's inventory lists the first resume's PTY, as a live daemon or relay does.
+      listProcesses: async () =>
+        spawn.mock.calls.length > 0
+          ? [
+              {
+                id: 'resumed-pty',
+                cwd: '',
+                title: 'claude',
+                terminalHandle,
+                worktreeId: TEST_WORKTREE_ID
+              }
+            ]
+          : []
+    })
+    const first = await resume()
+    if (!first.ok) {
+      throw new Error(first.reason)
+    }
+    rows = [sessionRow(first.paneKey, Date.now() + 1)]
+    await expect(resume()).resolves.toEqual(first)
+    expect(spawn).toHaveBeenCalledOnce()
+  })
+
+  it('honors cancellation during create inventory lookup before dispatch', async () => {
+    const controller = new AbortController()
+    const { resume, spawn } = makeRuntime(makeSleptWorkspace(), {
+      listProcesses: async () => {
+        controller.abort()
+        return []
+      }
+    })
+    await expect(resume({ signal: controller.signal })).resolves.toMatchObject({ ok: false })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('settles a failed post-spawn publication when that PTY exits', async () => {
+    const { runtime, resume } = makeRuntime(makeSleptWorkspace())
+    const unsubscribe = runtime.onMobileSessionTabsChanged(() => {
+      throw new Error('publication failed')
+    })
+    await expect(resume()).resolves.toEqual({ ok: false, reason: 'create_failed' })
+    unsubscribe()
+    runtime.onPtyExit('resumed-pty', 0)
+    await expect(resume({ mutationId: 'next-delivery' })).resolves.toMatchObject({ ok: true })
+  })
+})

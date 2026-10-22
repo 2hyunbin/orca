@@ -3,16 +3,17 @@ import { AgentSessionResumeClaims } from './agent-session-resume-claims'
 
 const SESSION = { agent: 'claude', providerSession: { key: 'session_id', id: 'one' } } as const
 
-function makeClaims(reported = () => false) {
+function makeClaims(reported = () => false, panePtyIds: string[] = []) {
   const exits = new Map<string, () => void>()
   const claims = new AgentSessionResumeClaims({
     reported,
+    panePtyIds: () => panePtyIds,
     watchExit: (ptyId, onExit) => {
       exits.set(ptyId, onExit)
       return () => exits.delete(ptyId)
     }
   })
-  return { claims, exits }
+  return { claims, exits, panePtyIds }
 }
 
 describe('AgentSessionResumeClaims', () => {
@@ -43,6 +44,14 @@ describe('AgentSessionResumeClaims', () => {
     exits.get('pty-1')?.()
     expect(exits.has('pty-1')).toBe(false)
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
+  })
+
+  it('binds a spawned-then-failed create to the PTY its pane gained since the claim', () => {
+    const { claims, exits, panePtyIds } = makeClaims(() => false, ['old-pty'])
+    const claim = claims.claim(SESSION, 'tab:a')
+    panePtyIds.push('new-pty')
+    claim?.bind()
+    expect([...exits.keys()]).toEqual(['new-pty'])
   })
 
   it('ends a hold once the hook store reports it in its pane', () => {

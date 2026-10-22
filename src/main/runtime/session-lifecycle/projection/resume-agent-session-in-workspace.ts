@@ -73,14 +73,17 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
       onPtySpawnDispatched: () => {
         dispatched = true
       }
-    }).catch((): AgentSessionResumeResult => ({ ok: false, reason: 'create_failed' }))
-    if (result.ok) {
-      claim.bind(result.ptyId)
-    } else if (!dispatched) {
-      claim.release()
-    }
+    }).catch((): AgentSessionResumeResult => ({
+      ok: false,
+      reason: !dispatched && request.signal?.aborted ? 'aborted' : 'create_failed'
+    }))
     // Why: once the spawn request left, a failure proves nothing (a lost SSH reply), so the pane
     // stays held until its PTY exits or the hook store names it.
+    if (result.ok || dispatched) {
+      claim.bind(result.ok ? result.ptyId : undefined)
+    } else {
+      claim.release()
+    }
     return result
   }
 
@@ -107,7 +110,9 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     if (getConnectionExecutionHostId(workspace.connectionId) !== request.captureHostId) {
       return refuse('no_resume_command')
     }
-    if (await this.isProviderSessionLiveInAnotherPane(session, null)) {
+    // Why its own pane: a retry of this request reconciles the pane it started.
+    const ownPaneKey = makePaneKey(create.identity.tabId, create.identity.leafId)
+    if (await this.isProviderSessionLiveInAnotherPane(session, ownPaneKey)) {
       return refuse('held_elsewhere')
     }
     const records = Object.values(
@@ -163,7 +168,8 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
         spawnIntent: 'user-resume',
         identity: create.identity,
         createMutation: { clientIdentity: 'agent-session-resume', id: request.mutationId },
-        onPtySpawnDispatched: create.onPtySpawnDispatched
+        onPtySpawnDispatched: create.onPtySpawnDispatched,
+        signal: request.signal
       }
     )
     const { tab } = created

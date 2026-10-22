@@ -40,7 +40,9 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
 
   protected readonly agentSessionResumeClaims = new AgentSessionResumeClaims({
     reported: (hold) => this.hookStoreReportsResumeHold(hold),
-    watchExit: (ptyId, onExit) => this.subscribeToPtyExit(ptyId, onExit)
+    watchExit: (ptyId, onExit) => this.subscribeToPtyExit(ptyId, onExit),
+    panePtyIds: (paneKey) =>
+      [...this.ptysById.values()].filter((pty) => pty.paneKey === paneKey).map((pty) => pty.ptyId)
   })
 
   /**
