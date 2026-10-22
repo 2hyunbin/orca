@@ -1,12 +1,20 @@
 // Layout-owner build: main's starts publish their status on the pane, and a start main could not
 // make leaves its pane showing why, whether it failed before the pane was written or after.
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { isHibernationDoneRecord } from '../../../../shared/hibernation-done-record'
+import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { LayoutApplyReply } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 import type * as dependencies from '../../orca-runtime-create-terminal-dependencies'
 import { PaneStartStatuses, paneStartFailure } from '../../pane-start-statuses'
-import type { WindowLayoutCommand } from '../../runtime-layout-apply'
+import type { LayoutCommandRunOptions, WindowLayoutCommand } from '../../runtime-layout-apply'
+import {
+  runLayoutPaneStarts,
+  startsPanes,
+  stopReplacedTerminals
+} from '../recovery/layout-command-pane-starts'
 import { allocateTerminalPaneIdentity } from '../../runtime-terminal-pane-identity'
 import { OrcaRuntimeWithCreateTerminal } from './terminal-create'
+import { mainOwnsTabLayout } from './main-owned-tab-layout'
 import { PaneOwnerContentionError } from '../../../ipc/pty/pane/pane-spawn-operation'
 
 export type FailedStartPane = { tabId: string; leafId: string }
@@ -37,6 +45,58 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     ? new PaneStartStatuses(() => this.markPaneLiveTitlesDirty())
     : null
 
+  /**
+   * Layout-owner build: main's side of a client's startPane, wake or restartPane, its live start
+   * statuses in and its effects out. Undefined for any other command, and with the switch off.
+   */
+  protected layoutCommandRun(command: WindowLayoutCommand): LayoutCommandRunOptions | undefined {
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN || command.type === 'renameTabs' || !startsPanes(command)) {
+      return undefined
+    }
+    const { workspace } = command
+    return {
+      live: {
+        // Why unverifiable counts as live: lost contact is never evidence the terminal ended.
+        isBindingLive: (paneKey: string, ptyId: string) =>
+          (this.ptysById.get(ptyId)?.connected === true ||
+            this.ptyLivenessVerdictByPtyId.get(ptyId)?.verdict.status === 'unverifiable') &&
+          !this.paneStartStatuses?.peek(paneKey),
+        // Why local only: a remote or SSH terminal may hold output this host never saw.
+        retiresBinding: (paneKey: string, ptyId: string) => {
+          const pty = this.ptysById.get(ptyId)
+          const record =
+            this.getWorkspaceSessionForWorktree(workspace)?.sleepingAgentSessionsByPaneKey?.[
+              paneKey
+            ]
+          return (
+            pty?.connected === true &&
+            pty.connectionId === null &&
+            !isRemoteRuntimePtyId(ptyId) &&
+            pty.lastOutputAt == null &&
+            record !== undefined &&
+            isHibernationDoneRecord(record)
+          )
+        }
+      },
+      stopBeforeWrite: (ptyIds) =>
+        stopReplacedTerminals(ptyIds, (ptyId) => {
+          this.forgetRestoredPaneStart(ptyId)
+          return this.ptyController?.kill(ptyId) ?? false
+        }),
+      onEffects: (effects) =>
+        runLayoutPaneStarts({ type: command.type, workspace }, effects, (pane) =>
+          this.ensureRestoredPaneStarted(pane)
+        )
+    }
+  }
+
+  protected showRestoredPaneStart(paneKey: string, start: 'starting' | { failed: unknown }): void {
+    this.paneStartStatuses?.set(
+      paneKey,
+      start === 'starting' ? { status: 'starting' } : paneStartFailure(start.failed)
+    )
+  }
+
   protected paneStartStatusArgs: dependencies.PaneStartArgsOf = (opts) => {
     const sink = this.paneStartStatuses
     return sink
@@ -66,6 +126,31 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
       )
     }
     return super.createTerminal(worktreeSelector, opts, created)
+  }
+
+  /**
+   * Starts the first pane of a tab the window drew and main already wrote, under the window's ids;
+   * the window's pane attaches to it. Refused (`host_not_owned`) as a pane-named split is: switch
+   * off, or a tab main's layout does not hold, keeps the window's own start.
+   */
+  startWindowTabTerminal(
+    worktreeId: string,
+    pane: { tabId: string; leafId: string },
+    opts: Omit<dependencies.TerminalCreateOptions, 'tabId' | 'leafId' | 'presentation'>
+  ): Promise<dependencies.RuntimeTerminalCreate> {
+    if (
+      !ORCA_LAYOUT_OWNER_IS_MAIN ||
+      !mainOwnsTabLayout(this.getWorkspaceSessionHostIdsForTab(worktreeId, pane.tabId))
+    ) {
+      return Promise.reject(new Error('host_not_owned'))
+    }
+    // Background: the window already shows the tab, so main reveals nothing.
+    return this.createTerminal(`id:${worktreeId}`, {
+      ...opts,
+      ...pane,
+      presentation: 'background',
+      keepPaneOnStartFailure: true
+    })
   }
 
   protected notePaneSleeping(paneKey: string): void {
