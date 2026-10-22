@@ -24,7 +24,7 @@
   "settings": {
     "chat": {
       "permissionsTitle": "새 채팅의 권한",
-      "permissionsDescription": "새 채팅에만 적용됩니다. 터미널에서 여는 에이전트는 설정 → 에이전트 → 에이전트 권한을 사용합니다.",
+      "permissionsDescription": "새 채팅에만 적용됩니다. 에이전트별 기본값은 설정 → 에이전트에 있습니다.",
       "description": "채팅의 모양과 동작 방식을 선택하세요.",
       "names": {
         "title": "채팅 이름",
@@ -12854,7 +12854,7 @@
         "SshRestoreRemovedHosts": {
           "title": "제거한 호스트를 복원할까요?",
           "description": "Orca에서 제거한 ~/.ssh/config 호스트가 설정과 모든 호스트 선택 목록에 다시 표시됩니다.",
-          "none": "~/.ssh/config에서 제거한 호스트가 없습니다.",
+          "none": "Orca에서 제거한 ~/.ssh/config 호스트 중 복원할 수 있는 호스트가 없습니다.",
           "confirm": "복원"
         },
         "SshTargetList": {
@@ -16292,6 +16292,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "파일이 다른 보기에서 변경되어 이 보기에서 최근에 입력한 내용이 삭제되었습니다."
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "붙여넣기 내용이 너무 큽니다.",
           "stopped": "큰 페이스트는 완성되기 전에 멈췄습니다.",
@@ -16306,11 +16309,11 @@
           "copy": "복사 작업"
         },
         "ExternalFileChangeBanner": {
-          "7c41e90d12": "This file changed on disk while you have unsaved edits. Overwrite replaces the newer disk content.",
+          "7c41e90d12": "저장하지 않은 편집 내용이 있는 동안 디스크의 파일이 변경되었습니다. 덮어쓰면 디스크의 최신 내용이 대체됩니다.",
           "3fa2b8d417": "디스크에서 다시 로드",
           "a95d02c644": "편집 내용 유지",
-          "overwrite": "Overwrite",
-          "keepHint": "Keeps your version. Your next save replaces the version on disk.",
+          "overwrite": "덮어쓰기",
+          "keepHint": "편집 중인 버전을 유지합니다. 다음에 저장하면 디스크의 버전이 대체됩니다.",
           "5c02de9b31": "디스크에서 다시 로드됨",
           "d1e830fa22": "실행 취소",
           "90b2ce7d43": "비교"
@@ -16351,10 +16354,10 @@
               }
             },
             "stale": {
-              "notice": "This file changed on disk since your edits. Use the banner to compare, reload, or overwrite."
+              "notice": "편집한 이후 디스크의 파일이 변경되었습니다. 배너에서 비교하거나 다시 로드하거나 덮어쓰세요."
             },
             "sectionStale": {
-              "notice": "This file changed on disk since this section loaded."
+              "notice": "이 섹션을 불러온 이후 디스크의 파일이 변경되었습니다."
             }
           }
         },
@@ -19062,7 +19065,7 @@
       "thought": "생각함",
       "thoughtForDuration": "{{duration}} 동안 생각함",
       "structuredSessionHostDeclined": "{{value0}}을(를) 터미널에서 열었습니다",
-      "structuredSessionHostDeclinedDescription": "이 서버는 이 워크스페이스에서 {{value0}} 채팅을 실행할 수 없습니다.",
+      "structuredSessionHostDeclinedDescription": "이 워크스페이스에서는 {{value0}} 채팅을 실행할 수 없습니다.",
       "structuredSessionHostUnreachable": "{{value0}}에 연결할 수 없습니다",
       "structuredSessionHostUnreachableDescription": "Orca가 {{value0}} 채팅을 열지 않았습니다. 서버 연결을 확인하고 다시 시도하세요.",
       "hostOutage": {
@@ -19406,7 +19409,11 @@
           "discarded_other": "파일 {{count}}개의 저장되지 않은 편집 내용이 버려집니다:",
           "moreFiles": "외 {{value}}개",
           "blocked_one": "먼저 {{name}}에서 저장되지 않은 파일 {{count}}개를 저장하거나 닫으세요",
-          "blocked_other": "먼저 {{name}}에서 저장되지 않은 파일 {{count}}개를 저장하거나 닫으세요"
+          "blocked_other": "먼저 {{name}}에서 저장되지 않은 파일 {{count}}개를 저장하거나 닫으세요",
+          "closedToast_one": "{{workspace}}에서 저장되지 않은 편집 내용이 있는 파일 {{count}}개를 닫았습니다",
+          "closedToast_other": "{{workspace}}에서 저장되지 않은 편집 내용이 있는 파일 {{count}}개를 닫았습니다",
+          "reopen": "다시 열기",
+          "reopenFailed": "일부 파일을 다시 열지 못했습니다. 워크스페이스를 열고 다시 열기를 다시 시도하세요."
         }
       }
     },
@@ -20627,6 +20634,27 @@
       "waitingAriaLabel": "다른 Orca 인스턴스를 기다리는 업데이트입니다. 클릭하여 펼치세요.",
       "preparingLabel": "업데이트 준비 중",
       "preparingAriaLabel": "업데이트 준비 중입니다. 클릭하여 펼치세요."
+    }
+  },
+  "onboarding": {
+    "language": {
+      "back": "언어",
+      "requestPrompt": "Orca에서 어떤 언어를 지원하면 좋을까요?",
+      "requestSuccess": "언어 요청이 기록되었습니다. 설정을 계속할 수 있습니다.",
+      "requestError": "요청을 기록하지 못했습니다. 다시 시도하세요.",
+      "retry": "다시 시도",
+      "requestAction": "언어 지원 요청",
+      "title": "표시 언어",
+      "device": "시스템 언어: {{language}}",
+      "unsupported": "시스템 언어: {{language}}. 이 언어는 아직 지원되지 않습니다.",
+      "unknown": "시스템 언어를 감지하지 못했습니다. 아래에서 언어를 선택하세요.",
+      "loadError": "이 언어를 불러오지 못했습니다. 다시 시도하세요.",
+      "saveError": "언어 설정을 저장하지 못했습니다. 다시 시도하세요.",
+      "other": "다른 언어…",
+      "settingsError": "설정을 불러오지 못했습니다.",
+      "loadingSettings": "설정 불러오는 중…",
+      "loading": "언어 불러오는 중…",
+      "saving": "언어 저장 중…"
     }
   }
 }

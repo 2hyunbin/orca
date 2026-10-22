@@ -24,7 +24,7 @@
   "settings": {
     "chat": {
       "permissionsTitle": "Permisos para chats nuevos",
-      "permissionsDescription": "Se aplica solo a chats nuevos. Los agentes que abres en una terminal usan Configuración → Agentes → Permisos de agentes.",
+      "permissionsDescription": "Solo para chats nuevos. Los valores predeterminados de cada agente están en Configuración → Agentes.",
       "description": "Elige cómo se ven y se comportan los chats.",
       "names": {
         "title": "Nombres de chats",
@@ -5435,7 +5435,7 @@
         "PendingWorktreeRow": {
           "af21e953d1": "Cancelar creación del worktree",
           "188f6922a0": "Cancelar",
-          "creatingWorkspace": "Creando workspace…"
+          "creatingWorkspace": "Creando espacio de trabajo…"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "Cancelar",
@@ -12849,7 +12849,7 @@
         "SshRestoreRemovedHosts": {
           "title": "¿Restaurar los hosts eliminados?",
           "description": "Los hosts de ~/.ssh/config que eliminaste en Orca vuelven a Ajustes y a todos los selectores de hosts.",
-          "none": "No hay hosts eliminados de ~/.ssh/config.",
+          "none": "No hay hosts de ~/.ssh/config eliminados en Orca que se puedan restaurar.",
           "confirm": "Restaurar"
         },
         "SshTargetList": {
@@ -16287,6 +16287,9 @@
             }
           }
         },
+        "staleViewEdit": {
+          "rejected": "Se descartó lo que escribiste recientemente en esta vista porque el archivo cambió en otra vista."
+        },
         "richMarkdownLargeTextPaste": {
           "tooLarge": "El contenido pegado es demasiado grande.",
           "stopped": "El pegado grande se detuvo antes de terminar.",
@@ -16301,11 +16304,11 @@
           "copy": "Tareas de copia"
         },
         "ExternalFileChangeBanner": {
-          "7c41e90d12": "This file changed on disk while you have unsaved edits. Overwrite replaces the newer disk content.",
+          "7c41e90d12": "Este archivo ha cambiado en el disco mientras tienes cambios sin guardar. Al sobrescribir, se reemplaza el contenido más reciente del disco.",
           "3fa2b8d417": "Recargar desde disco",
           "a95d02c644": "Mantener mis ediciones",
-          "overwrite": "Overwrite",
-          "keepHint": "Keeps your version. Your next save replaces the version on disk.",
+          "overwrite": "Sobrescribir",
+          "keepHint": "Conserva tu versión. La próxima vez que guardes, se reemplazará la versión del disco.",
           "5c02de9b31": "Recargado desde disco",
           "d1e830fa22": "Deshacer",
           "90b2ce7d43": "Comparar"
@@ -16346,10 +16349,10 @@
               }
             },
             "stale": {
-              "notice": "This file changed on disk since your edits. Use the banner to compare, reload, or overwrite."
+              "notice": "Este archivo ha cambiado en el disco desde que lo editaste. Usa el aviso para comparar, recargar o sobrescribir."
             },
             "sectionStale": {
-              "notice": "This file changed on disk since this section loaded."
+              "notice": "Este archivo ha cambiado en el disco desde que se cargó esta sección."
             }
           }
         },
@@ -19022,7 +19025,7 @@
         "set": "Objetivo establecido"
       },
       "structuredSessionHostDeclined": "Se abrió {{value0}} en una terminal",
-      "structuredSessionHostDeclinedDescription": "Este servidor no puede ejecutar un chat de {{value0}} en este espacio de trabajo.",
+      "structuredSessionHostDeclinedDescription": "Este espacio de trabajo no puede ejecutar un chat de {{value0}}.",
       "structuredSessionHostUnreachable": "No se pudo contactar con {{value0}}",
       "structuredSessionHostUnreachableDescription": "Orca no abrió un chat de {{value0}}. Comprueba la conexión con el servidor y vuelve a intentarlo.",
       "hostOutage": {
@@ -19359,7 +19362,11 @@
           "discarded_other": "Se descartarán las ediciones sin guardar de {{count}} archivos:",
           "moreFiles": "y {{value}} más",
           "blocked_one": "Guarda o cierra antes {{count}} archivo sin guardar en {{name}}",
-          "blocked_other": "Guarda o cierra antes {{count}} archivos sin guardar en {{name}}"
+          "blocked_other": "Guarda o cierra antes {{count}} archivos sin guardar en {{name}}",
+          "closedToast_one": "Se cerró {{count}} archivo con ediciones sin guardar de {{workspace}}",
+          "closedToast_other": "Se cerraron {{count}} archivos con ediciones sin guardar de {{workspace}}",
+          "reopen": "Reabrir",
+          "reopenFailed": "No se pudieron reabrir algunos archivos. Abre un espacio de trabajo e intenta Reabrir de nuevo."
         }
       }
     },
@@ -20615,6 +20622,27 @@
       "siteMismatch": "Elige un proyecto del sitio de Jira del favorito o borra el filtro de proyectos.",
       "truncated": "No se pudieron mostrar algunos favoritos. Gestiona tus favoritos en Jira para acortar la lista.",
       "unsupported": "Actualiza el host de Jira para usar los favoritos."
+    }
+  },
+  "onboarding": {
+    "language": {
+      "back": "Idiomas",
+      "requestPrompt": "¿Qué idioma te gustaría que Orca admitiera?",
+      "requestSuccess": "Solicitud de idioma registrada. Puedes continuar la configuración.",
+      "requestError": "No se pudo registrar tu solicitud. Inténtalo de nuevo.",
+      "retry": "Reintentar",
+      "requestAction": "Solicitar idioma",
+      "title": "Idioma de la interfaz",
+      "device": "Idioma del sistema: {{language}}",
+      "unsupported": "Idioma del sistema: {{language}}. Este idioma aún no es compatible.",
+      "unknown": "No se pudo detectar el idioma del sistema. Elige uno a continuación.",
+      "loadError": "No se pudo cargar este idioma. Inténtalo de nuevo.",
+      "saveError": "No se pudo guardar tu preferencia de idioma. Inténtalo de nuevo.",
+      "other": "Otro idioma…",
+      "settingsError": "No se pudo cargar tu configuración.",
+      "loadingSettings": "Cargando configuración…",
+      "loading": "Cargando idioma…",
+      "saving": "Guardando idioma…"
     }
   }
 }
