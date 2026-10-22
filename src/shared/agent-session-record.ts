@@ -306,11 +306,14 @@ function isPersistedAgentSessionLease(value: unknown): value is PersistedAgentSe
     return false
   }
   const lease = value as Partial<AgentSessionLease>
+  const { minimumNextFence } = lease
   return (
     isAgentSessionId(lease.sessionId) &&
     isPersistedAgentSessionRuntimeKind(lease.runtimeKind) &&
     Number.isSafeInteger(lease.runtimeFence) &&
     (lease.runtimeFence as number) >= 0 &&
+    (minimumNextFence === undefined ||
+      (Number.isSafeInteger(minimumNextFence) && minimumNextFence >= 0)) &&
     (lease.handoffStage === null || isPersistedAgentSessionHandoffStage(lease.handoffStage)) &&
     (lease.provenHandleLinkId === null || isBoundedString(lease.provenHandleLinkId, 128)) &&
     (lease.ownerProcess === null || isAgentSessionProcessIdentity(lease.ownerProcess)) &&

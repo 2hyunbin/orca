@@ -98,6 +98,18 @@ const STORED_CODEX_ROW = JSON.stringify({
 })
 
 describe('a record row older builds wrote', () => {
+  it.each([undefined, 0, 6, 7, 9, Number.MAX_SAFE_INTEGER])(
+    'keeps a valid legacy next-fence floor %s readable',
+    (minimumNextFence) => {
+      const record = agentSessionRecordFixture(agentSessionLeaseFixture({ minimumNextFence }))
+      const stored = JSON.parse(JSON.stringify(encodeAgentSessionRecord(record)))
+      expect(isPersistedAgentSessionRecord(stored)).toBe(true)
+      expect(decodePersistedAgentSessionRecord(stored).record.lease.minimumNextFence).toBe(
+        minimumNextFence
+      )
+    }
+  )
+
   it.each([
     ['Claude', STORED_CLAUDE_ROW],
     ['Codex', STORED_CODEX_ROW]

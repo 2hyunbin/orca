@@ -726,6 +726,55 @@ describe('host and workspace isolation', () => {
 })
 
 describe('claim keys and unreadable rows', () => {
+  it.each(['bad', {}, null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'preserves a damaged next-fence floor %j through refusal and unrelated writes',
+    async (minimumNextFence) => {
+      const first = await open()
+      await first.reserveOwner(reserveRequest())
+      await first.setSessionTabVisibility('session-alpha', true, 'tab-alpha')
+      let damaged: PersistedAgentSessionRecord | undefined
+      await editPersistedTestAgentSessionStore(directory, (persisted) => {
+        damaged = persisted.records['session-alpha']
+        Object.assign(damaged.lease, { minimumNextFence })
+      })
+      const reopened = await open()
+      expect(reopened.isSessionUnreadable('session-alpha')).toBe(true)
+      await expect(reopened.reserveOwner(reserveRequest())).rejects.toMatchObject({
+        refusal: { details: { reason: 'recordUnreadable' } }
+      })
+      await establishOwner(reopened, { sessionId: 'session-beta', claimKeyId: 'key-2' })
+      expect((await open()).isSessionUnreadable('session-alpha')).toBe(true)
+      const persisted = await readPersistedTestAgentSessionStore(directory)
+      expect(persisted.records['session-alpha']).toEqual(damaged)
+      expect(persisted.sessionTabs).toContainEqual({
+        tabId: 'tab-alpha',
+        sessionId: 'session-alpha'
+      })
+    }
+  )
+
+  it('uses a legacy floor for the next reservation after restarting a released chat', async () => {
+    const first = await open()
+    await first.reserveOwner(reserveRequest())
+    await editPersistedTestAgentSessionStore(directory, (persisted) => {
+      Object.assign(persisted.records['session-alpha'].lease, {
+        claimStatus: 'released',
+        reservedSpawnToken: null,
+        minimumNextFence: 9
+      })
+    })
+    const reopened = await open()
+    await reopened.reconcileOnRestart({ probe: async () => UNUSED, now: NOW + 1_000 })
+    const reserved = await reopened.reserveOwner(
+      reserveRequest({ expectedFence: 1, probe: UNUSED })
+    )
+    expect(reserved.record.lease.runtimeFence).toBe(9)
+    expect((await open()).getRecord('session-alpha')?.lease).toMatchObject({
+      runtimeFence: 9,
+      minimumNextFence: 9
+    })
+  })
+
   it('keeps a retired claim key verifiable for the retention window', async () => {
     const store = await open()
     await store.retireClaimKey('key-1', NOW)
