@@ -463,6 +463,32 @@ describe('a WSL host that refuses the enrolled pairing', () => {
     )
   })
 
+  it('retires the bridge when the repaired pairing is refused too, so no failure stores the old token', async () => {
+    const store = repairable(readiness(first.port, 'fresh-token'))
+    let hostLostRegistry = false
+    const onChange = vi.fn()
+    const { manager } = setup({
+      // The host accepts the enrolled token until it loses its registry, then accepts nothing.
+      verifyIdentity: async (pairingOffer: string) =>
+        !hostLostRegistry && parsePairingCode(pairingOffer)?.deviceToken === 'lost-token'
+          ? ({ verdict: 'verified' } as const)
+          : ({ verdict: 'unpaired', detail: 'access grant refused' } as const),
+      pairingRecovery: store.recovery,
+      getPairingOffer: () => getPreferredPairingOffer(store.stored()),
+      onChange
+    })
+    await manager.ensure('Ubuntu', { environmentId: 'wsl:ubuntu' })
+    hostLostRegistry = true
+    await expect(manager.ensure('Ubuntu', { environmentId: 'wsl:ubuntu' })).rejects.toThrow()
+    expect(manager.get('Ubuntu')).toBeNull()
+    expect(onChange).toHaveBeenLastCalledWith(
+      'Ubuntu',
+      null,
+      expect.objectContaining({ state: 'failed' })
+    )
+    expect(getPreferredPairingOffer(store.stored()).deviceToken).toBe('fresh-token')
+  })
+
   it('never gives the token to a server under another host key', async () => {
     const published = readiness(first.port, 'fresh-token')
     if (!published.pairing.available) {

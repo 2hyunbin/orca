@@ -63,9 +63,10 @@ export function createWslHostConnector(options: {
         ? unguardedHolder.ensureHeld(distro)
         : Promise.reject(refuseUnknown(distro))
   }
+  const pairingRecovery = createWslOrcadPairingRecovery(options.userDataPath)
   const manager = new WslOrcadConnectionManager({
     holder,
-    pairingRecovery: createWslOrcadPairingRecovery(options.userDataPath),
+    pairingRecovery,
     getPairingOffer: (environmentId) =>
       findWslHostDeployment(options.userDataPath, environmentId)
         ? resolveEnvironmentPairingOffer(options.userDataPath, environmentId)
@@ -143,6 +144,7 @@ export function createWslHostConnector(options: {
     listDistros: () => listWslHostDistros(),
     readOrcadPublicKey: (distro) => readWslDistroOrcadPublicKey(transportFor(distro)),
     connect: (distro, connectOptions) => liveness.connect(distro, connectOptions),
+    forgetPairingFailures: (environmentId) => pairingRecovery.repairs.forgetFailures(environmentId),
     get: (distro) => manager.get(distro),
     isReachable: async (distro, environmentId) =>
       options.runtime.isReady?.(environmentId) ||
