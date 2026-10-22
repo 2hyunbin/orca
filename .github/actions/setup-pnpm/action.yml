@@ -18,6 +18,13 @@ runs:
         package-json-file: ${{ inputs.package-json-file }}
         install: false
 
+    - name: Setup Node.js for the npm fallback
+      if: steps.primary.outcome == 'failure'
+      uses: actions/setup-node@v6
+      with:
+        node-version: '24'
+        package-manager-cache: false
+
     # npm resolves full packuments; pnpm/setup's version endpoint can stall independently.
     - name: Bootstrap and verify pnpm through npm
       if: steps.primary.outcome == 'failure'
