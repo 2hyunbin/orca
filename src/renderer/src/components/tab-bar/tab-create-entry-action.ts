@@ -48,6 +48,10 @@ export {
 } from './tab-create-entry-local-path'
 import { statUserOpenedPath } from '@/lib/user-opened-local-path'
 import { openHtmlFilePreview } from '@/lib/open-html-file-preview'
+import {
+  assertEditorFileOperationCurrent,
+  captureEditorFileOperationProvenance
+} from '@/lib/editor-file-operation-owner'
 
 export type TabCreateEntryArgs = {
   classification?: TabEntryActionClassification
@@ -75,7 +79,11 @@ type OpenTabEntryWithOperationsArgs = {
   fileList: RuntimeFileListState
   worktreeId: string
   groupId: string
-  getFileContext: () => { worktreePath: string; runtimeContext: RuntimeFileOperationArgs }
+  getFileContext: () => {
+    worktreePath: string
+    runtimeContext: RuntimeFileOperationArgs
+    assertCurrent: () => void
+  }
   allowAbsolutePaths: boolean
   localPlatform: TabEntryLocalPlatform
   searchEngine: SearchEngine
@@ -117,6 +125,7 @@ async function createParentDirectoriesForNewFile(args: {
 }
 
 async function openExistingFile(args: {
+  assertCurrent: () => void
   context: RuntimeFileOperationArgs
   groupId: string
   operations: TabEntryOperations
@@ -131,6 +140,7 @@ async function openExistingFile(args: {
   } catch {
     throw new Error(`File no longer exists: ${args.relativePath}`)
   }
+  args.assertCurrent()
   if (stat.isDirectory) {
     throw new Error(`Cannot open a directory: ${args.relativePath}`)
   }
@@ -213,7 +223,7 @@ export async function openTabEntryWithOperations({
     return
   }
 
-  const { worktreePath, runtimeContext } = getFileContext()
+  const { worktreePath, runtimeContext, assertCurrent } = getFileContext()
 
   if (classification.kind === 'absolute-file') {
     if (!allowAbsolutePaths) {
@@ -233,6 +243,7 @@ export async function openTabEntryWithOperations({
 
   if (classification.kind === 'existing-file') {
     await openExistingFile({
+      assertCurrent,
       context: runtimeContext,
       groupId,
       operations,
@@ -258,6 +269,7 @@ export async function openTabEntryWithOperations({
     }
   }
   await openExistingFile({
+    assertCurrent,
     context: runtimeContext,
     groupId,
     operations,
@@ -282,9 +294,18 @@ export async function openTabBarEntry(args: TabCreateEntryArgs): Promise<void> {
       if (!worktree) {
         throw new Error('No active worktree.')
       }
+      const provenance = captureEditorFileOperationProvenance(
+        state,
+        args.worktreeId,
+        undefined,
+        false
+      )
       return {
         worktreePath: worktree.path,
-        runtimeContext: getTabEntryFileOperationContext(state, args.worktreeId, worktree.path)
+        runtimeContext: getTabEntryFileOperationContext(state, args.worktreeId, worktree.path),
+        assertCurrent: () => {
+          assertEditorFileOperationCurrent(useAppStore.getState(), args.worktreeId, provenance)
+        }
       }
     },
     allowAbsolutePaths,
