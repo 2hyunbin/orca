@@ -6,7 +6,8 @@ import {
 } from './session-scanner-first-user-prompt'
 import {
   extractPreviewContentText,
-  normalizePreviewText
+  normalizePreviewText,
+  sliceAtCodeUnitLimit
 } from './session-scanner-text-normalization'
 import type { SessionAccumulator } from './session-scanner-types'
 import { transcriptMessagesFromDecodedMessage } from './session-transcript-message-content'
@@ -14,12 +15,14 @@ import { decodeSessionMessage, type DecodedSessionMessage } from './session-deco
 
 const SESSION_PREVIEW_MESSAGE_LIMIT = 5
 
+type SessionMessageOptions = { seedFirstUserPrompt?: boolean; previewScanLimit?: number }
+
 export function addSessionContent(
   accumulator: SessionAccumulator,
   role: AiVaultSessionPreviewMessage['role'],
   content: unknown,
   timestamp?: unknown,
-  options?: { seedFirstUserPrompt?: boolean }
+  options?: SessionMessageOptions
 ): boolean {
   return addDecodedSessionMessage(
     accumulator,
@@ -36,8 +39,7 @@ export function addSessionText(
     role: AiVaultSessionPreviewMessage['role']
     text: string | null
     timestamp?: unknown
-    seedFirstUserPrompt?: boolean
-  }
+  } & SessionMessageOptions
 ): void {
   addSessionContent(accumulator, args.role, args.text, args.timestamp, args)
 }
@@ -45,7 +47,7 @@ export function addSessionText(
 export function addDecodedSessionMessage(
   accumulator: SessionAccumulator,
   message: DecodedSessionMessage,
-  options?: { seedFirstUserPrompt?: boolean }
+  options?: SessionMessageOptions
 ): boolean {
   const textParts = message.blocks.flatMap((block) => (block.kind === 'text' ? [block.text] : []))
   if (
@@ -61,11 +63,27 @@ export function addDecodedSessionMessage(
       accumulator.messages.push(transcript)
     }
   }
+  const previewParts =
+    options?.previewScanLimit === undefined
+      ? textParts
+      : boundedPreviewTextParts(textParts, options.previewScanLimit)
   return addPreviewMessage(accumulator, {
     role: message.role,
-    text: extractPreviewContentText(textParts, message.role),
+    text: extractPreviewContentText(previewParts, message.role),
     timestamp: message.timestamp
   })
+}
+
+function boundedPreviewTextParts(parts: readonly string[], remaining: number): string[] {
+  const bounded: string[] = []
+  for (const part of parts) {
+    if (remaining <= 0) {
+      break
+    }
+    bounded.push(sliceAtCodeUnitLimit(part, remaining))
+    remaining -= Math.min(part.length, remaining)
+  }
+  return bounded
 }
 
 export function addPreviewMessage(

@@ -14,6 +14,51 @@ afterEach(async () => {
 })
 
 describe('parseDevinSessionFile', () => {
+  it.each([
+    {
+      shape: 'message array',
+      fields: (text: string) => ({ message: [], content: [{ type: 'text', text }] })
+    },
+    {
+      shape: 'wrapped content',
+      fields: (text: string) => ({ message: { content: '' }, text })
+    },
+    {
+      shape: 'text',
+      fields: (text: string) => ({ text: '', content: [{ type: 'text', text }] })
+    }
+  ])('falls back from empty $shape without shortening content', async ({ fields }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'orca-devin-fallback-'))
+    tempDirs.push(dir)
+    const path = join(dir, 'fallback.json')
+    const text = `actual request\n${'x'.repeat(5000)}`
+    await writeFile(
+      path,
+      JSON.stringify({
+        session_id: 'fallback',
+        steps: ['user', 'agent'].map((source) => ({
+          source,
+          ...fields(text)
+        }))
+      })
+    )
+    const messages: TranscriptMessage[] = []
+    const session = await withFullFirstUserPromptCapture(() =>
+      parseDevinSessionFile({ path, mtimeMs: 1, modifiedAt: '2026-05-01T00:00:00.000Z' }, 'linux', {
+        active: true,
+        push: (message) => messages.push(message)
+      })
+    )
+
+    expect(messages).toEqual([
+      { role: 'user', text, timestamp: null },
+      { role: 'assistant', text, timestamp: null }
+    ])
+    expect(session?.firstUserPrompt).toBe(text)
+    expect(session?.title).toMatch(/^actual request /)
+    expect(session?.previewMessages.map((message) => message.text.length)).toEqual([220, 220])
+  })
+
   it.each(
     [
       { shape: 'string', fields: (text: string) => ({ message: text }) },

@@ -10,7 +10,8 @@ import {
   sessionIdFromFileName,
   updateTimeline
 } from './session-scanner-accumulator'
-import { addSessionContent } from './session-scanner-messages'
+import { addDecodedSessionMessage } from './session-scanner-messages'
+import { decodeSessionMessage, type DecodedSessionMessage } from './session-decoded-message'
 import {
   arrayValue,
   asRecord,
@@ -78,17 +79,19 @@ function parseDevinSessionRecord(
   return finalizeSession(accumulator, platform, options)
 }
 
-function extractDevinStepContent(step: Record<string, unknown>): unknown {
-  // ATIF-v1.7 carries `message` as a plain string; older shapes wrap it as {content}.
-  if (typeof step.message === 'string' && step.message.trim()) {
-    return step.message
+function decodeDevinStepMessage(
+  step: Record<string, unknown>,
+  role: 'user' | 'assistant',
+  includeTools: boolean
+): DecodedSessionMessage | null {
+  const wrapped = asRecord(step.message)
+  for (const content of [wrapped ? wrapped.content : step.message, step.text, step.content]) {
+    const message = decodeSessionMessage(role, content, null, { includeTools })
+    if (message.blocks.some((block) => ('text' in block ? block.text.trim().length > 0 : true))) {
+      return message
+    }
   }
-  const message = asRecord(step.message)
-  if (message) {
-    return message.content ?? step.text ?? step.content
-  }
-  // ATIF also allows `message` as an array of content parts.
-  return Array.isArray(step.message) ? step.message : (step.text ?? step.content)
+  return null
 }
 
 // Each bucket resolves from the first source that reports it. ATIF
@@ -150,21 +153,30 @@ export function consumeDevinSessionStep(accumulator: SessionAccumulator, step: u
   const source = extractString(stepRecord.source)
   const isSystem = source === 'system'
   const isUser = !isSystem && (source === 'user' || metadata?.is_user_input === true)
-  if (isUser) {
-    accumulator.messageCount++
-    const content = extractDevinStepContent(stepRecord)
-    const titleCandidate = extractContentText(content)
-    if (titleCandidate) {
-      accumulator.title ??= titleCandidate
-    }
-    addSessionContent(accumulator, 'user', content)
-  } else if (
-    !isSystem &&
-    (source === 'agent' || extractString(stepRecord.role) === 'assistant' || stepRecord.tool_calls)
+  if (
+    isSystem ||
+    (!isUser &&
+      source !== 'agent' &&
+      extractString(stepRecord.role) !== 'assistant' &&
+      !stepRecord.tool_calls)
   ) {
-    accumulator.messageCount++
-    addSessionContent(accumulator, 'assistant', extractDevinStepContent(stepRecord))
+    return
   }
+  accumulator.messageCount++
+  const message = decodeDevinStepMessage(
+    stepRecord,
+    isUser ? 'user' : 'assistant',
+    accumulator.messages.active
+  )
+  if (!message) {
+    return
+  }
+  if (isUser) {
+    accumulator.title ??= extractContentText(
+      message.blocks.flatMap((block) => ('text' in block ? [block.text] : []))
+    )
+  }
+  addDecodedSessionMessage(accumulator, message)
 }
 
 export async function parseDevinSessionDocument(

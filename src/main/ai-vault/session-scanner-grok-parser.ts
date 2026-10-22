@@ -24,6 +24,8 @@ import {
   parseJsonObject
 } from './session-scanner-values'
 
+const GROK_PREVIEW_SCAN_LIMIT = 4096
+
 export async function parseGrokSessionFile(
   file: FileWithMtime,
   platform: NodeJS.Platform = process.platform,
@@ -84,7 +86,8 @@ async function consumeGrokChatHistory(
           addSessionText(accumulator, {
             role,
             text,
-            timestamp: record.timestamp
+            timestamp: record.timestamp,
+            previewScanLimit: GROK_PREVIEW_SCAN_LIMIT
           })
         }
         continue
@@ -96,7 +99,8 @@ async function consumeGrokChatHistory(
         typeof record.content === 'string'
           ? stripGrokUserQueryEnvelope(record.content)
           : record.content,
-        record.timestamp
+        record.timestamp,
+        { previewScanLimit: GROK_PREVIEW_SCAN_LIMIT }
       )
     }
   } catch (error) {
