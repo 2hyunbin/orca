@@ -19,6 +19,23 @@ export function paletteTranscriptPaneState(
   unifiedTabsByWorktree: AppState['unifiedTabsByWorktree']
 ): OriginalPaneState {
   const workspaceIds = new Set(workspaces.map((workspace) => workspace.id))
+  const tabsByWorktree = Object.fromEntries(
+    Object.entries(state.tabsByWorktree)
+      .filter(([workspaceId]) => workspaceIds.has(workspaceId))
+      .map(([workspaceId, tabs]) => {
+        const remoteTabIds = new Set(
+          (unifiedTabsByWorktree[workspaceId] ?? [])
+            .filter(
+              (tab) =>
+                tab.contentType === 'terminal' &&
+                tab.executionHostId &&
+                tab.executionHostId !== LOCAL_EXECUTION_HOST_ID
+            )
+            .map((tab) => tab.entityId)
+        )
+        return [workspaceId, tabs.filter((tab) => !remoteTabIds.has(tab.id))]
+      })
+  )
   return {
     ...state,
     agentStatusByPaneKey: Object.fromEntries(
@@ -36,23 +53,7 @@ export function paletteTranscriptPaneState(
         ([, entry]) => entry && workspaceIds.has(entry.worktreeId)
       )
     ),
-    tabsByWorktree: Object.fromEntries(
-      Object.entries(state.tabsByWorktree)
-        .filter(([workspaceId]) => workspaceIds.has(workspaceId))
-        .map(([workspaceId, tabs]) => {
-          const remoteTabIds = new Set(
-            (unifiedTabsByWorktree[workspaceId] ?? [])
-              .filter(
-                (tab) =>
-                  tab.contentType === 'terminal' &&
-                  tab.executionHostId &&
-                  tab.executionHostId !== LOCAL_EXECUTION_HOST_ID
-              )
-              .map((tab) => tab.entityId)
-          )
-          return [workspaceId, tabs.filter((tab) => !remoteTabIds.has(tab.id))]
-        })
-    )
+    tabsByWorktree
   }
 }
 
