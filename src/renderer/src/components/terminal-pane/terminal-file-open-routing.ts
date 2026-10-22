@@ -1,3 +1,4 @@
+import type { RuntimeNativeChatFileContext } from '../../../../shared/runtime-file-contracts'
 import { openWorkspaceFile } from '@/lib/workspace-file-open'
 import { downloadAndOpenRemoteTerminalFile } from './terminal-remote-file-download-open'
 import { findWorkspaceFileRoute } from '@/lib/runtime-workspace-file-route'
@@ -53,6 +54,8 @@ type TerminalFileOpenDeps = {
   openWithSystemDefault?: boolean
   /** The paired-server terminal that printed the link; lets its host grant a file outside workspaces. */
   terminalHandle?: string | null
+  /** The chat that links the file; lets its host grant a file outside workspaces. */
+  nativeChatContext?: RuntimeNativeChatFileContext | null
   /** Reports a path that could not be verified before opening; skipped once a later open supersedes it. */
   onOpenFailure?: (failure: FileOpenFailure) => void
   /** The tab that owns the link; editor opens place themselves relative to its group. */
@@ -141,11 +144,10 @@ export function openDetectedFilePath(
     }
 
     try {
-      const linkOwner = await resolveHostWorkspaceFile(
-        fileContext,
-        mappedFilePath,
-        deps.terminalHandle
-      )
+      const linkOwner = await resolveHostWorkspaceFile(fileContext, mappedFilePath, {
+        terminalHandle: deps.terminalHandle,
+        nativeChatContext: deps.nativeChatContext
+      })
       if (linkOwner?.kind === 'grant') {
         hostGrantId = linkOwner.grantId
         mappedFilePath = linkOwner.absolutePath

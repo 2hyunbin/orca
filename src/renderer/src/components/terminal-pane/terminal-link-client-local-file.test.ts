@@ -121,6 +121,37 @@ describe('a link to this computer printed in a paired-server terminal', () => {
     )
   })
 
+  it('never reads this computer for a chat link the host does not have', async () => {
+    // Why: the chat's agent wrote the path on its host; a same-named local file is not that file.
+    hostDisowns('/mnt/data/report.pdf')
+    const onOpenFailure = vi.fn()
+
+    openDetectedFilePath('/mnt/data/report.pdf', null, null, {
+      ...serverWorkspace,
+      nativeChatContext: { tabId: 'tab-1', sessionId: 'session-1' },
+      onOpenFailure
+    })
+    await flushDoubleRaf()
+
+    expect(runtimeEnvironmentCallMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'files.resolveTerminalPath',
+        params: {
+          worktree: 'id:wt-feat',
+          pathText: '/mnt/data/report.pdf',
+          crossWorkspace: true,
+          nativeChatContext: { tabId: 'tab-1', sessionId: 'session-1' }
+        }
+      })
+    )
+    expect(statMock).not.toHaveBeenCalled()
+    expect(openFileMock).not.toHaveBeenCalled()
+    expect(onOpenFailure).toHaveBeenCalledWith({
+      verdict: 'missing',
+      error: new Error('File not found on its host: /mnt/data/report.pdf')
+    })
+  })
+
   it('keeps the host refusal when this computer does not have the file either', async () => {
     hostDisowns('/etc/orca-missing')
     statMock.mockRejectedValueOnce(new Error('ENOENT: no such file'))

@@ -316,6 +316,63 @@ describe('native chat Markdown image preview', () => {
     expect(mocks.readRuntimeFilePreview).toHaveBeenCalledOnce()
   })
 
+  it('loads sandbox: images on the chat host and opens sandbox: links there (#30774)', async () => {
+    useAppStore.setState({
+      settings: { ...getDefaultSettings('/tmp'), terminalLinkClickBehavior: 'open' }
+    })
+    const owner: ImageOwner = {
+      ...localOwner,
+      runtimeContext: {
+        ...localOwner.runtimeContext,
+        target: { kind: 'environment', environmentId: 'remote-a' },
+        nativeChatContext: { tabId: 'tab-1', sessionId: 'session-1' }
+      },
+      fileLinkContext: {
+        ...localOwner.fileLinkContext,
+        runtimeEnvironmentId: 'remote-a',
+        chatSessionId: 'session-1'
+      }
+    }
+    render(
+      <Transcript
+        owner={owner}
+        content={[
+          '![Chart](sandbox:/mnt/data/report.png)',
+          '[![Thumb](sandbox:/mnt/data/thumb.png)](https://example.com/full)',
+          '[Download PDF](sandbox:/mnt/data/report.pdf)'
+        ].join('\n\n')}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
+    expect(
+      await within(screen.getByRole('dialog', { name: 'Chart' })).findByRole('img', {
+        name: 'Chart'
+      })
+    ).toHaveAttribute('src', expect.stringMatching(/^blob:/))
+    for (const path of ['/mnt/data/report.png', '/mnt/data/thumb.png']) {
+      expect(mocks.readRuntimeFilePreview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: { kind: 'environment', environmentId: 'remote-a' },
+          nativeChatContext: { tabId: 'tab-1', sessionId: 'session-1' }
+        }),
+        path,
+        { kind: 'chat-image' }
+      )
+    }
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' }))
+    fireEvent.click(screen.getByRole('link', { name: 'Download PDF' }))
+    expect(mocks.openDetectedFilePath).toHaveBeenCalledWith(
+      '/mnt/data/report.pdf',
+      null,
+      null,
+      expect.objectContaining({
+        runtimeEnvironmentId: 'remote-a',
+        nativeChatContext: { tabId: 'tab-1', sessionId: 'session-1' }
+      })
+    )
+  })
+
   it('closes the preview when the owning chat becomes hidden', () => {
     const { rerender } = render(<Transcript />)
     fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
