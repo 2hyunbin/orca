@@ -194,7 +194,9 @@ it('keeps uncertain delivery pinned to the saved surface after handle remint and
 it('conservatively retains a send if its screen unmounts before the acknowledgment arrives', async () => {
   await mount()
   await act(async () => hook().setInput('sent before leaving'))
-  await act(async () => hook().beginBufferedTerminalDraftSend('terminal-a', hook().input))
+  await act(async () => {
+    hook().beginBufferedTerminalDraftSend('terminal-a', hook().input)
+  })
   await leave()
   await mount()
   expect(hook().input).toBe('')

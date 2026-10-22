@@ -89,7 +89,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }))
 vi.mock('../storage/mirrored-storage-keys', () => ({ persistMirrored: async () => {} }))
 
-const frames: Array<{ id: string; method: string; params: unknown }> = []
+const frames: Array<{ id: string; method: string; params?: unknown }> = []
 let tracker: RpcClientRequestTracker
 let beforeConnect = async () => {}
 let completionGeneration = 0
@@ -225,7 +225,9 @@ describe('buffered command recovery', () => {
     await mount()
     vi.useFakeTimers()
     const finish = await startSend()
-    await act(async () => vi.advanceTimersByTimeAsync(30000))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000)
+    })
     expect(drafts.input).toBe('')
     expect(drafts.unconfirmedCommand).toBe('printf sent >> log')
     await act(async () => actions.handleSend())
