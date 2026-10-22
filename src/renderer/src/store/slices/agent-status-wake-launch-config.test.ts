@@ -61,7 +61,7 @@ describe('sleep capture of a resumed pane before its first launch-token hook', (
     store: ReturnType<typeof createTestStore>,
     args: {
       launchToken: string
-      pinnedSession: typeof resumedSession | undefined
+      resumedProviderSession: typeof resumedSession | undefined
       reportedSession: typeof resumedSession
     }
   ) {
@@ -70,7 +70,9 @@ describe('sleep capture of a resumed pane before its first launch-token hook', (
       launchToken: args.launchToken,
       tabId: 'tab-1',
       leafId: 'leaf-1',
-      ...(args.pinnedSession ? { providerSession: args.pinnedSession } : {})
+      ...(args.resumedProviderSession
+        ? { resumedProviderSession: args.resumedProviderSession }
+        : {})
     })
     store.getState().clearSleepingAgentSession(paneKey)
     // Codex defers its token-bearing SessionStart until the first prompt.
@@ -105,7 +107,7 @@ describe('sleep capture of a resumed pane before its first launch-token hook', (
     for (const launchToken of ['wake-1', 'wake-2']) {
       const record = wakeAndSleep(store, {
         launchToken,
-        pinnedSession: resumedSession,
+        resumedProviderSession: resumedSession,
         reportedSession: resumedSession
       })
       expect(record?.launchConfig).toEqual(launchConfig)
@@ -113,15 +115,47 @@ describe('sleep capture of a resumed pane before its first launch-token hook', (
   })
 
   it.each([
-    { label: 'an unpinned launch', pinnedSession: undefined },
-    { label: 'a different session', pinnedSession: { key: 'session_id' as const, id: 'other' } }
-  ])('does not give $label the registered flags', ({ pinnedSession }) => {
+    { label: 'a launch that resumed nothing', resumedProviderSession: undefined },
+    {
+      label: 'a different session',
+      resumedProviderSession: { key: 'session_id' as const, id: 'other' }
+    }
+  ])('does not give $label the registered flags', ({ resumedProviderSession }) => {
     const record = wakeAndSleep(makeStore(), {
       launchToken: 'wake-1',
-      pinnedSession,
+      resumedProviderSession,
       reportedSession: resumedSession
     })
     expect(record?.providerSession).toEqual(resumedSession)
     expect(record?.launchConfig).toBeUndefined()
+  })
+
+  it('lets a new session from the resumed launch keep its flags through its token hook', () => {
+    const store = makeStore()
+    store.getState().registerAgentLaunchConfig(paneKey, launchConfig, {
+      agentType: 'codex',
+      launchToken: 'wake-1',
+      tabId: 'tab-1',
+      leafId: 'leaf-1',
+      resumedProviderSession: resumedSession
+    })
+    // The resume did not take (or the user started /new): the process reports another session.
+    const newSession = { key: 'session_id' as const, id: 'codex-session-2' }
+    store
+      .getState()
+      .recordAgentProviderSession(
+        paneKey,
+        'codex',
+        newSession,
+        { updatedAt: 20 },
+        { tabId: 'tab-1', worktreeId: 'wt-1', connectionId: null },
+        { launchToken: 'wake-1' }
+      )
+
+    expect(store.getState().agentLaunchConfigByPaneKey[paneKey]?.launchConfig).toEqual(launchConfig)
+    expect(store.getState().sleepingAgentSessionsByPaneKey[paneKey]).toMatchObject({
+      providerSession: newSession,
+      launchConfig
+    })
   })
 })

@@ -24,7 +24,8 @@ import { holdInPlaceResumeUntilSettled } from './in-place-resume-hold'
 
 export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySession): void {
   session.applyColdRestoreAgentResumeStartup = (
-    startup: ColdRestoreAgentResumeStartup | null
+    startup: ColdRestoreAgentResumeStartup | null,
+    outcome?: { resumed: boolean }
   ): boolean => {
     if (!startup) {
       return false
@@ -35,7 +36,7 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
       launchToken: startup.launchToken,
       tabId: session.deps.tabId,
       leafId: session.pane.leafId,
-      providerSession: startup.resumeProviderSession
+      ...(outcome?.resumed ? { resumedProviderSession: startup.resumeProviderSession } : {})
     })
     return true
   }

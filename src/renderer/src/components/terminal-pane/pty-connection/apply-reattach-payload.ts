@@ -264,7 +264,9 @@ export function createReattachPayloadHandlers(
         `${RESET_GRAPHIC_RENDITION}${ctx.connectResult.coldRestore.scrollback}`
       )
       const preparedStartup = ctx.coldRestoreStartup ?? session.buildColdRestoreAgentResumeStartup()
-      const didPrepareResume = session.applyColdRestoreAgentResumeStartup(preparedStartup)
+      const didPrepareResume = session.applyColdRestoreAgentResumeStartup(preparedStartup, {
+        resumed: !ctx.connectResult.agentResumeUnavailable && !isRemoteRuntimePtyId(ctx.ptyId)
+      })
       if (didPrepareResume) {
         if (ctx.connectResult.agentResumeUnavailable) {
           // Why: main dropped the resume argv, so this pane is a NEW session —

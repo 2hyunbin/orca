@@ -145,7 +145,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         launchToken,
         tabId: 'tab-1',
         leafId: LEAF_1,
-        providerSession: { key: 'session_id', id: 'codex-session-1' }
+        resumedProviderSession: { key: 'session_id', id: 'codex-session-1' }
       })
     })
 
@@ -319,7 +319,7 @@ export function registerPtyConnectionAgentSessionResumeTests(): void {
         launchToken: expect.stringMatching(new RegExp(`^${UUID_RE}$`)),
         tabId: 'tab-1',
         leafId: LEAF_1,
-        providerSession: { key: 'session_id', id: 'codex-session-1' }
+        resumedProviderSession: { key: 'session_id', id: 'codex-session-1' }
       })
       expect(mockStoreState.clearSleepingAgentSession).not.toHaveBeenCalled()
     })

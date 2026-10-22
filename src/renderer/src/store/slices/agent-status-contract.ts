@@ -65,6 +65,8 @@ export type AgentLaunchConfigRegistrationMetadata = {
   leafId?: string
   terminalHandle?: string
   providerSession?: AgentProviderSessionMetadata
+  /** Capture-only: the session this spawn really resumed. Hook matching ignores it. */
+  resumedProviderSession?: AgentProviderSessionMetadata
 }
 
 export type AgentLaunchConfigRegistryEntry = {

@@ -369,6 +369,12 @@ export function registerPtyConnectionColdRestoreAgentResumeTests(): void {
 
       expect(deps.onShowSessionRestoredBanner).toHaveBeenCalledTimes(1)
       expect(deps.onShowSessionRestoredBanner).toHaveBeenCalledWith(1, 'resume-unavailable')
+      // A new session runs here, so sleep capture must not treat the old one as resumed.
+      expect(mockStoreState.registerAgentLaunchConfig).toHaveBeenCalledWith(
+        paneKey,
+        expect.anything(),
+        expect.not.objectContaining({ resumedProviderSession: expect.anything() })
+      )
     })
 
     it('resumes from an unambiguous legacy sleeping record when cold-restoring a preserved pane', async () => {

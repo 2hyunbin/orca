@@ -22,7 +22,10 @@ export function normalizeLaunchConfigRegistrationMetadata(
     tabId: metadata?.tabId ?? getTabIdFromPaneKey(paneKey) ?? undefined,
     leafId: metadata?.leafId ?? getLeafIdFromPaneKey(paneKey) ?? undefined,
     ...(metadata?.terminalHandle ? { terminalHandle: metadata.terminalHandle } : {}),
-    ...(metadata?.providerSession ? { providerSession: metadata.providerSession } : {})
+    ...(metadata?.providerSession ? { providerSession: metadata.providerSession } : {}),
+    ...(metadata?.resumedProviderSession
+      ? { resumedProviderSession: metadata.resumedProviderSession }
+      : {})
   }
 }
 
@@ -42,7 +45,36 @@ export function launchConfigRegistryEntriesEqual(
       a.identity.agentType ?? b.identity.agentType,
       a.identity.providerSession,
       b.identity.providerSession
+    ) &&
+    agentProviderSessionsEqual(
+      a.identity.agentType ?? b.identity.agentType,
+      a.identity.resumedProviderSession,
+      b.identity.resumedProviderSession
     )
+  )
+}
+
+function registryIdentityFitsPane(
+  identity: AgentLaunchConfigRegistrationMetadata,
+  args: {
+    paneKey: string
+    agentType: AgentType | undefined
+    tabId: string | undefined
+    terminalHandle: string | undefined
+  }
+): boolean {
+  if (identity.agentType !== undefined && identity.agentType !== args.agentType) {
+    return false
+  }
+  if (identity.tabId !== undefined && identity.tabId !== args.tabId) {
+    return false
+  }
+  if (identity.leafId !== undefined && identity.leafId !== getLeafIdFromPaneKey(args.paneKey)) {
+    return false
+  }
+  return (
+    identity.terminalHandle === undefined ||
+    (args.terminalHandle !== undefined && identity.terminalHandle === args.terminalHandle)
   )
 }
 
@@ -62,19 +94,7 @@ export function registryEntryMatchesStatus(args: {
     return false
   }
   const identity = entry.identity
-  if (identity.agentType !== undefined && identity.agentType !== args.agentType) {
-    return false
-  }
-  if (identity.tabId !== undefined && identity.tabId !== args.tabId) {
-    return false
-  }
-  if (identity.leafId !== undefined && identity.leafId !== getLeafIdFromPaneKey(args.paneKey)) {
-    return false
-  }
-  if (
-    identity.terminalHandle !== undefined &&
-    (args.terminalHandle === undefined || identity.terminalHandle !== args.terminalHandle)
-  ) {
+  if (!registryIdentityFitsPane(identity, args)) {
     return false
   }
   if (
@@ -112,22 +132,29 @@ export function getLaunchConfigForEntry(
   entry: AgentStatusEntry
 ): SleepingAgentLaunchConfig | undefined {
   const registryEntry = state.agentLaunchConfigByPaneKey[entry.paneKey]
-  // Why: capture has no hook claim to carry the token; a resume spawn's pinned session is the proof.
-  const pinnedSessionMatches =
-    registryEntry?.identity.providerSession !== undefined &&
-    entry.providerSession !== undefined &&
-    agentProviderSessionsEqual(
-      entry.agentType,
-      registryEntry.identity.providerSession,
-      entry.providerSession
-    )
-  const registryLaunchConfig = registryEntryMatchesStatus({
-    entry: registryEntry,
+  const paneScope = {
     paneKey: entry.paneKey,
     agentType: entry.agentType,
     tabId: entry.tabId ?? getTabIdFromPaneKey(entry.paneKey) ?? undefined,
-    terminalHandle: entry.terminalHandle,
-    launchToken: pinnedSessionMatches ? registryEntry?.identity.launchToken : undefined,
+    terminalHandle: entry.terminalHandle
+  }
+  // Why: capture has no hook token; a spawn that really resumed this session is the proof instead.
+  if (
+    registryEntry?.identity.resumedProviderSession &&
+    entry.providerSession &&
+    agentProviderSessionsEqual(
+      entry.agentType,
+      registryEntry.identity.resumedProviderSession,
+      entry.providerSession
+    ) &&
+    registryIdentityFitsPane(registryEntry.identity, paneScope)
+  ) {
+    return registryEntry.launchConfig
+  }
+  const registryLaunchConfig = registryEntryMatchesStatus({
+    entry: registryEntry,
+    ...paneScope,
+    launchToken: undefined,
     providerSession: entry.providerSession,
     existingProviderSession: entry.providerSession,
     providerSessionChanged: false

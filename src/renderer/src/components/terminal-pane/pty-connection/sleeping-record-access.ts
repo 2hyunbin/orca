@@ -192,7 +192,7 @@ export function installSleepingRecordAccess(session: ConnectPanePtySession): voi
       tabId: session.deps.tabId,
       leafId: session.pane.leafId,
       ...(metadata?.resumedProviderSession
-        ? { providerSession: metadata.resumedProviderSession }
+        ? { resumedProviderSession: metadata.resumedProviderSession }
         : {})
     })
   }
