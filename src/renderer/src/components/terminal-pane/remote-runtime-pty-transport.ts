@@ -2267,7 +2267,8 @@ export function createRemoteRuntimePtyTransport(
             return
           }
           remotePtyId ??= exitedPtyId
-          retireRemoteTerminalId()
+          const cause = result.terminal?.exitCause
+          retireRemoteTerminalId(cause?.kind === 'exited' ? cause.exitCode : undefined)
         },
         () => {}
       )

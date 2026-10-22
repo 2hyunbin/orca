@@ -40,6 +40,8 @@ const {
 
 const HOST_TAB_PTY_ID = 'remote:hub-env@@terminal-ended'
 
+type ShowParams = { terminal?: string }
+
 function refuseStream(message: string): void {
   const streamId = latestSubscribePayload().streamId
   subscriptionCallbacks?.onResponse({ ok: true, result: { type: 'error', streamId, message } })
@@ -48,9 +50,9 @@ function refuseStream(message: string): void {
 function answerShow(terminal: Record<string, unknown>): string[] {
   const shown: string[] = []
   const defaultCall = runtimeCall.getMockImplementation()
-  runtimeCall.mockImplementation(async (args: { method: string; params?: unknown }) => {
+  runtimeCall.mockImplementation(async (args: { method: string; params?: ShowParams }) => {
     if (args.method === 'terminal.show') {
-      shown.push((args.params as { terminal: string }).terminal)
+      shown.push(args.params?.terminal ?? '')
       return { ok: true, result: { terminal: { handle: 'terminal-ended', ...terminal } } }
     }
     if (args.method === 'session.tabs.list') {
@@ -84,11 +86,15 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
   it('settles a stale restored pane as exited when the host verdict is exited', async () => {
     const onPtyExit = vi.fn()
     const transport = await attachRestoredHostTab(onPtyExit)
-    const shown = answerShow({ connected: false, verdict: 'exited' })
+    const shown = answerShow({
+      connected: false,
+      verdict: 'exited',
+      exitCause: { kind: 'exited', exitCode: 3 }
+    })
 
     refuseStream('terminal_handle_stale')
 
-    await vi.waitFor(() => expect(onPtyExit).toHaveBeenCalledWith(HOST_TAB_PTY_ID))
+    await vi.waitFor(() => expect(onPtyExit).toHaveBeenCalledWith(HOST_TAB_PTY_ID, 3))
     expect(onPtyExit).toHaveBeenCalledOnce()
     expect(shown).toEqual(['terminal-ended'])
     expect(transport.getRecoveryState?.().phase).toBe('ended')
@@ -113,6 +119,10 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
     [
       'a live verdict over a stale exit cause',
       { connected: true, verdict: 'live', exitCause: { kind: 'operator_close' } }
+    ],
+    [
+      'a stop the host never saw land',
+      { connected: false, exitCause: { kind: 'unknown', reason: 'stop_unverified' } }
     ],
     ['an older host without exit fields', { connected: false }]
   ])('keeps retrying on %s', async (_label, terminal) => {
@@ -144,12 +154,12 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
       onPtyExit
     })
     const shown: string[] = []
-    runtimeCall.mockImplementation(async (args: { method: string; params?: unknown }) => {
+    runtimeCall.mockImplementation(async (args: { method: string; params?: ShowParams }) => {
       if (args.method === 'terminal.resolvePane') {
         return { ok: false, error: { code: 'runtime_error', message: 'terminal_handle_stale' } }
       }
       if (args.method === 'terminal.show') {
-        shown.push((args.params as { terminal: string }).terminal)
+        shown.push(args.params?.terminal ?? '')
         return { ok: true, result: { terminal: { connected: false, verdict: 'exited' } } }
       }
       return { ok: true, result: {} }
