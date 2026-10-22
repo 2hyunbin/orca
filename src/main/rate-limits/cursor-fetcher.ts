@@ -220,7 +220,12 @@ export async function fetchCursorRateLimits(
         'POST'
       )
       if (current.kind === 'result') {
-        if (![404, 405, 501].includes(current.httpStatus ?? 0)) {
+        // Why: only a retired endpoint falls back (Cursor serves unknown dashboard routes as
+        // 200 HTML); other failures must not publish obsolete zeros as healthy usage.
+        const retired =
+          [404, 405, 501].includes(current.httpStatus ?? 0) ||
+          current.result.usageMetadata?.failureKind === 'parse'
+        if (!retired) {
           return current.result
         }
       } else {

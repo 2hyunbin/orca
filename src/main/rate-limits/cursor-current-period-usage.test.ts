@@ -150,15 +150,24 @@ describe('Cursor Unified Ultra current-period usage', () => {
     }
   )
 
-  it.each([404, 405, 501])(
-    'falls back to legacy request quota when current-period is unsupported (HTTP %i)',
-    async (status) => {
+  it.each([
+    ['HTTP 404', () => new Response(null, { status: 404 })],
+    ['HTTP 405', () => new Response(null, { status: 405 })],
+    ['HTTP 501', () => new Response(null, { status: 501 })],
+    // Cursor answers unknown dashboard routes with its HTML app shell.
+    [
+      '200 HTML',
+      () => new Response('<!DOCTYPE html>', { headers: { 'content-type': 'text/html' } })
+    ]
+  ])(
+    'falls back to legacy request quota when current-period is unsupported (%s)',
+    async (_label, currentResponse) => {
       fetchMock.mockImplementation(async (url) => {
         if (url === SUMMARY_URL) {
           return Response.json({ membershipType: 'unified_ultra' })
         }
         if (url === CURRENT_PERIOD_URL) {
-          return new Response(null, { status })
+          return currentResponse()
         }
         return Response.json({ 'gpt-4': { numRequests: 25, maxRequestUsage: 50 } })
       })
