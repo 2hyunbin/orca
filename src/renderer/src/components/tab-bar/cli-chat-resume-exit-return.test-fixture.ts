@@ -22,11 +22,8 @@ import { switchAiVaultSessionToNativeChat } from '../right-sidebar/ai-vault-sess
 import { installPaneAgentIdentity } from '../terminal-pane/pty-connection/pane-agent-identity'
 import { installSleepingRecordAccess } from '../terminal-pane/pty-connection/sleeping-record-access'
 import type { ConnectPanePtySession } from '../terminal-pane/pty-connection/connect-pane-pty-session'
-import {
-  createMockTransport,
-  LEAF_1,
-  LEAF_2
-} from '../terminal-pane/pty-connection-test-pane-fixtures'
+import { LEAF_1, LEAF_2 } from '../terminal-pane/pty-connection-test-pane-fixtures'
+import { createExitReturnTransport } from './cli-chat-resume-transport.test-fixture'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
 import { CLOSE_TERMINAL_PANE_EVENT, type CloseTerminalPaneDetail } from '@/constants/terminal'
 
@@ -153,11 +150,7 @@ export async function verifyExitedPaneHistoryReturn(
       syncPanePtyLayoutBinding: vi.fn(),
       clearExitedPanePtyLayoutBinding: vi.fn()
     },
-    transport: {
-      ...createMockTransport('pty-1'),
-      connect: vi.fn(async () => {}),
-      isConnected: vi.fn(() => true)
-    },
+    transport: createExitReturnTransport('pty-1'),
     hiddenOutputRestoreUnhideSeq: null,
     paneStartup: null,
     writeInputModeGround: vi.fn()
