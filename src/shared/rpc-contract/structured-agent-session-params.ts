@@ -169,7 +169,15 @@ export const CreateIntentParams = z
       })
       .strict()
       .optional(),
-    options: AgentSessionOptions.optional()
+    options: AgentSessionOptions.optional(),
+    /** Requires `agentSession.create.tab-placement.v1`; the host's own group and tab ids. */
+    tabPlacement: z
+      .object({
+        groupId: Identifier('Invalid group id').optional(),
+        afterTabId: Identifier('Invalid tab id').optional()
+      })
+      .strict()
+      .optional()
   })
   .strict()
 
