@@ -30,10 +30,11 @@ export function anchorTabOfCreate(
  * that id), so main finds its group.
  */
 export function mainPlacedAfter(
-  heldTabId: string | undefined,
+  heldTabId: () => string | undefined,
   afterDesktopTabId: string | undefined
 ): { afterDesktopTabId?: string } {
+  // Read main's layout only when its answer is used: never switch-off, nor for an appending phone.
   return ORCA_LAYOUT_OWNER_IS_MAIN && afterDesktopTabId
-    ? { afterDesktopTabId: heldTabId ?? afterDesktopTabId }
+    ? { afterDesktopTabId: heldTabId() ?? afterDesktopTabId }
     : {}
 }
