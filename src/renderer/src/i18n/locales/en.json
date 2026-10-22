@@ -18598,7 +18598,8 @@
         "alreadyOpen": "Another Orca window already has a plain SSH terminal open to this host.",
         "endedBySignal": "ssh was stopped (signal {{signal}}). Close this window when you’re done reading.",
         "cancelled": "This plain SSH terminal was closed before it started.",
-        "terminalUnavailable": "Orca couldn’t open a terminal here."
+        "terminalUnavailable": "Orca couldn’t open a terminal here.",
+        "openHint": "Keeps you working on the host while Orca can’t set up there."
       }
     },
     "i18n": {

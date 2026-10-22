@@ -9,7 +9,7 @@ import {
   reactNativeLinkingSites
 } from './mobile-web-app-external-link-seam.mjs'
 
-const mobileDir = fileURLToPath(new URL('../../mobile/', import.meta.url))
+const mobileDir = fileURLToPath(new URL('../../../../mobile/', import.meta.url))
 
 describe('the seam predicate', () => {
   it.each([

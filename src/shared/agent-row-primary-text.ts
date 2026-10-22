@@ -1,9 +1,9 @@
-import type { AgentStatusEntry } from '../../../shared/agent-status-types'
+import type { AgentStatusEntry } from './agent-status-types'
 import {
   findOrcaDispatchPreambleStart,
   findOrcaDispatchTaskMarkerIndex,
   ORCA_DISPATCH_STATUS_TASK_MARKER
-} from '../../../shared/orca-dispatch-status-prompt'
+} from './orca-dispatch-status-prompt'
 
 const ORCA_DISPATCH_TASK_MARKER = ORCA_DISPATCH_STATUS_TASK_MARKER
 const ORCA_DISPATCH_TASK_ID_MARKER = 'Your task ID is:'
