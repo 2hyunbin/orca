@@ -17,7 +17,7 @@ import { RpcClientProvider } from ${JSON.stringify(clientContextModule)}
 
 const params = new URLSearchParams(location.search)
 const short = params.has('short')
-const insets = { top: Number(params.get('top') ?? 0), bottom: Number(params.get('bottom') ?? 0), left: 0, right: 0 }
+const insets = { top: Number(params.get('top') ?? 0), bottom: Number(params.get('bottom') ?? 0), left: Number(params.get('left') ?? 0), right: Number(params.get('right') ?? 0) }
 const question = {
   header: 'Workspace',
   question: short ? 'Continue?' : ${JSON.stringify(PROMPT_QUESTION)},
@@ -55,10 +55,10 @@ function SessionFrame({ collapsed, children }) {
     return <MobileSessionSurface controller={{
       insets,
       keyboardLift: collapsed ? 0 : Number(params.get('keyboard') ?? 0),
-      dictation: { isRecording: false },
+      dictation: { isRecording: params.has('mic') },
       nativeChatController: {
-        showNativeChat: true, nativeChatAsk: prompt, nativeChatStructured: true,
-        nativeChatAgent: 'claude', nativeChatCollapsedPrompt: collapsed ? {} : null
+        showNativeChat: !params.has('hiddenchat'), nativeChatAsk: prompt, nativeChatStructured: !params.has('terminal'),
+        nativeChatAgent: params.has('terminal') ? 'omp' : 'claude', nativeChatCollapsedPrompt: collapsed ? {} : null
       },
       fixtureContent: children,
       fixtureChromeHeight: Number(params.get('chrome') ?? 0)
@@ -87,6 +87,7 @@ function PromptViewportFixture() {
           status="ready"
           streaming={null}
           pending={[]}
+          micActive={params.has('mic')}
           onSend={async () => true}
           sendSurfaceId="prompt-viewport-fixture"
           getSendCompletionGeneration={() => 0}

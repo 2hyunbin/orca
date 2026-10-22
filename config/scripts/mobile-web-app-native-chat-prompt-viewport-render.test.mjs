@@ -293,6 +293,48 @@ describeRender('native chat question answering surface', () => {
     }
   })
 
+  it.each(['mic', 'terminal', 'hiddenchat'])(
+    'retains session navigation when answering cannot own the composer: %s',
+    async (state) => {
+      const { page, errors } = await openPrompt(
+        { width: 640, height: 360 },
+        `?surface=1&keyboard=239&chrome=69&top=24&${state}=1`
+      )
+      try {
+        expect(await page.getByTestId('session-header').isVisible()).toBe(true)
+        expect(errors).toEqual([])
+      } finally {
+        await page.close()
+      }
+    }
+  )
+
+  it('keeps question controls inside landscape notch insets', async () => {
+    const { page, errors } = await openPrompt(
+      { width: 874, height: 402 },
+      '?surface=1&keyboard=208&chrome=62&top=0&left=59&right=59&bottom=21'
+    )
+    try {
+      await scrollQuestionToEnd(page)
+      await page.getByText('Other…', { exact: true }).click({ timeout: 3000 })
+      await answerField(page).fill('Safe beside the notch')
+      for (const control of [
+        answerField(page),
+        viewConversation(page),
+        page.getByText('Submit', { exact: true })
+      ]) {
+        const rect = await control.boundingBox()
+        expect(rect.x).toBeGreaterThanOrEqual(59)
+        expect(rect.x + rect.width).toBeLessThanOrEqual(874 - 59 + 1)
+        expect(rect.y + rect.height).toBeLessThanOrEqual(402 - 208 - 21 + 1)
+      }
+      await recordLayout(page, 'landscape-notch-answering', await readPromptLayout(page))
+      expect(errors).toEqual([])
+    } finally {
+      await page.close()
+    }
+  })
+
   it('keeps terminal-only question navigation reachable above the keyboard', async () => {
     const { page, errors } = await openPrompt(
       { width: 375, height: 650 },
