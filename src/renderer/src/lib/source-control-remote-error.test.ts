@@ -1,10 +1,35 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { normalizeGitErrorMessage } from '../../../shared/git-remote-error'
+
 import { resolveRemoteOperationErrorMessage } from './source-control-remote-error'
 
 describe('source-control remote error formatting', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it.each([
+    { options: { isPush: true }, label: 'Push' },
+    { options: { isForcePush: true }, label: 'Force Push' },
+    { options: { publish: true }, label: 'Publish Branch' },
+    { options: { isSync: true }, label: 'Sync' },
+    { options: { isSync: true, isSyncPushStage: true }, label: 'Sync' }
+  ])('retains normalized authentication guidance for $label', ({ options, label }) => {
+    for (const stderr of [
+      "fatal: could not read Username for 'https://example.com': terminal prompts disabled",
+      'fatal: unable to get password from user'
+    ]) {
+      const normalized = normalizeGitErrorMessage(new Error(stderr), 'push')
+      const error = new Error(normalized)
+      const wrapped = new Error(`Error invoking remote method 'git:push': Error: ${normalized}`)
+
+      for (const failure of [error, wrapped]) {
+        expect(resolveRemoteOperationErrorMessage(failure, options)).toBe(
+          `${label} failed. Authentication failed. Check your remote credentials.`
+        )
+      }
+    }
   })
 
   it('prefers fatal detail over an earlier remote detail for publish failures', () => {

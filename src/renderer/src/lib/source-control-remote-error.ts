@@ -1,4 +1,5 @@
 import {
+  GIT_AUTHENTICATION_FAILED_MESSAGE,
   formatSubmodulePushFailureDetail,
   stripCredentialsFromMessage
 } from '../../../shared/git-remote-error'
@@ -247,6 +248,21 @@ export function resolveRemoteOperationErrorMessage(
       return 'Fast-forward blocked — move, remove, or add untracked files first.'
     }
     return 'Pull blocked — move, remove, or add untracked files first.'
+  }
+
+  if (error.message.includes(GIT_AUTHENTICATION_FAILED_MESSAGE)) {
+    const operationLabel = options?.publish
+      ? 'Publish Branch'
+      : options?.isSync
+        ? 'Sync'
+        : options?.isForcePush
+          ? 'Force Push'
+          : options?.isPush
+            ? 'Push'
+            : null
+    if (operationLabel) {
+      return `${operationLabel} failed. ${GIT_AUTHENTICATION_FAILED_MESSAGE}`
+    }
   }
 
   if (options?.publish) {

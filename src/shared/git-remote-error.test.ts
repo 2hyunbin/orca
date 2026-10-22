@@ -14,6 +14,15 @@ afterEach(() => {
 })
 
 describe('normalizeGitErrorMessage', () => {
+  it.each(['push', 'pull', 'fetch', 'upstream'] as const)(
+    'classifies noninteractive credential refusal for %s',
+    (operation) => {
+      expect(
+        normalizeGitErrorMessage(new Error('fatal: unable to get password from user'), operation)
+      ).toBe('Authentication failed. Check your remote credentials.')
+    }
+  )
+
   it('keeps the submodule name when a recursive push is rejected', () => {
     const error = new Error(
       "Command failed: git push\nPushing submodule 'find-cmux-followers'\n" +
