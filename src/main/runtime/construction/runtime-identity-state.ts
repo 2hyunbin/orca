@@ -394,7 +394,9 @@ export abstract class OrcaRuntimeWithRuntimeId extends RuntimeConstructionServic
       ...this.tuiIdleEvidenceSource,
       defaultTimeoutMs: TUI_IDLE_DEFAULT_TIMEOUT_MS,
       getLivePty: (handle) => this.getLivePtyForHandle(handle),
+      // An exit event of any code settles the wait, as the switch-off rule did.
       exitUnsettled: (pty) =>
+        pty.lastExitCode === null &&
         mainBindsUnendedTerminal(this, pty.ptyId, this.ptyLivenessVerdictByPtyId.get(pty.ptyId)),
       getLiveLeaf: (handle) => this.getLiveLeafForHandle(handle),
       startVisibleReadProbe: (waiter, waiterTimeoutMs, agent) =>

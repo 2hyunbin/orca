@@ -72,6 +72,11 @@ export function mainBindsUnendedTerminal(
     ORCA_LAYOUT_OWNER_IS_MAIN &&
     status !== 'exited' &&
     status !== 'unverifiable' &&
-    startedMainTerminalSurfaces(runtime)?.bindsTerminal(ptyId) === true
+    mainHoldsTerminal(runtime, ptyId)
   )
+}
+
+/** Whether a pane main owns holds the terminal now: its workspace and stamped incarnation match. */
+export function mainHoldsTerminal(runtime: object, ptyId: string): boolean {
+  return (startedMainTerminalSurfaces(runtime)?.findPaneForPty(ptyId) ?? null) !== null
 }

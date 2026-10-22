@@ -273,6 +273,25 @@ describe('stopping a workspace through a listing gap (switch on)', () => {
   })
 })
 
+describe('a reused terminal id of another workspace (switch on)', () => {
+  it('is never a stop target of the workspace whose saved pane names the same id', async () => {
+    const { runtime, host } = savedPaneHost('reused-pty')
+    const other = 'repo-1::/tmp/worktree-other'
+    runtime.setPtyController(hostController(host, '/tmp/worktree-other', other))
+    await sweepProvider(runtime, null)
+    expect(runtime['ptysById'].get('reused-pty')?.worktreeId).toBe(other)
+    host.live.clear()
+    await sweepProvider(runtime, null)
+
+    const liveIds: unknown = Reflect.apply(
+      Reflect.get(runtime, 'getLivePtyIdsForWorktree'),
+      runtime,
+      [TEST_WORKTREE_ID]
+    )
+    expect(liveIds).toEqual(new Set())
+  })
+})
+
 describe('an exit wait through a listing gap (switch on)', () => {
   it('keeps waiting on a disconnected terminal main binds until its exit is certified', async () => {
     const { runtime, host } = savedPaneHost('saved-pty', { windowed: true })
@@ -291,8 +310,13 @@ describe('an exit wait through a listing gap (switch on)', () => {
     ).rejects.toThrow('timeout')
 
     const waiting = runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 5_000 })
-    await runtime.onPtyExit('saved-pty', 3)
+    // A lost-contact code: nothing certifies the exit, yet the process event arrived.
+    await runtime.onPtyExit('saved-pty', -1)
     await expect(waiting).resolves.toMatchObject({ satisfied: true })
+    // That event still ends a wait that starts after it, as the switch-off rule did.
+    await expect(
+      runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 50 })
+    ).resolves.toMatchObject({ satisfied: true })
   })
 })
 
