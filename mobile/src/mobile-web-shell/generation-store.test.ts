@@ -579,73 +579,56 @@ describe('reusable assets for the next download', () => {
       { path: 'assets/app-2.js', byteLength: 2 }
     ]
   })
-  const NEXT_STAGING = `${HOST}/tmp/${NEXT.manifest.buildId}`
+  const NEXT_BUILD = NEXT.manifest.buildId
+  const [PAGE, SCRIPT] = NEXT.manifest.assets
+  const DOWNLOADED = new Map([['index.html', new Uint8Array(8).fill(9)]])
+  const LEFT_TO_STAGE = { ...NEXT, assets: DOWNLOADED, reused: ['assets/app-2.js'] }
 
-  it("copies cached assets by content into the next build's staging tree", async () => {
+  it('matches cached assets by content, and checks them without reading them', async () => {
     const fs = createFakeFileSystem()
     const store = createGenerationStore({ fileSystem: fs })
-    expect(
-      (await store.openReusableAssets(HOST, NEXT.manifest)).has(NEXT.manifest.assets[1]!)
-    ).toBe(false)
+    expect((await store.openReusableAssets(HOST)).has(SCRIPT!)).toBe(false)
     await activate(store, HOST)
-    const [page, script] = NEXT.manifest.assets
 
-    const reusable = await store.openReusableAssets(HOST, NEXT.manifest)
+    const reusable = await store.openReusableAssets(HOST)
 
     // Content, not path: the script was renamed, and the page kept its name but changed length.
-    expect(reusable.has(script!)).toBe(true)
-    expect(reusable.has(page!)).toBe(false)
-    expect(await reusable.place(script!)).toBe(true)
-    expect(fs.bytes(`${NEXT_STAGING}/assets/app-2.js`)).toEqual(new Uint8Array(2).fill(7))
-    expect(await reusable.place(page!)).toBe(false)
+    expect(reusable.has(SCRIPT!)).toBe(true)
+    expect(reusable.has(PAGE!)).toBe(false)
+    expect(await reusable.check(SCRIPT!)).toBe(true)
+    fs.seed(`${HOST}/generations/${BUILD}/assets/app.js`, {
+      kind: 'file',
+      bytes: new Uint8Array(1)
+    })
+    expect(await reusable.check(SCRIPT!)).toBe(false)
   })
 
-  it('answers false, never throws, when the cached file cannot be copied', async () => {
+  it('copies the reused assets beside the downloaded ones and commits the whole build', async () => {
     const fs = createFakeFileSystem()
     const store = createGenerationStore({ fileSystem: fs })
     await activate(store, HOST)
-    const reusable = await store.openReusableAssets(HOST, NEXT.manifest)
-    const script = NEXT.manifest.assets[1]!
 
-    fs.failReadsAt(`${HOST}/generations/${BUILD}/assets/app.js`)
-    expect(await reusable.place(script)).toBe(false)
-    fs.failReadsAt(null)
-    // A commit elsewhere deleted the generation mid-download.
-    await store.deleteHostCache(HOST)
-    expect(await reusable.place(script)).toBe(false)
-  })
+    await activate(store, HOST, LEFT_TO_STAGE)
 
-  it('stages the downloaded assets beside the placed ones and commits the whole build', async () => {
-    const fs = createFakeFileSystem()
-    const store = createGenerationStore({ fileSystem: fs })
-    await activate(store, HOST)
-    const reusable = await store.openReusableAssets(HOST, NEXT.manifest)
-    await reusable.place(NEXT.manifest.assets[1]!)
-    const downloaded = new Map([['index.html', new Uint8Array(8).fill(9)]])
-
-    await activate(store, HOST, { ...NEXT, assets: downloaded, reused: ['assets/app-2.js'] })
-
-    const generation = `${HOST}/generations/${NEXT.manifest.buildId}`
+    const generation = `${HOST}/generations/${NEXT_BUILD}`
     expect(fs.bytes(`${generation}/index.html`)).toEqual(new Uint8Array(8).fill(9))
     expect(fs.bytes(`${generation}/assets/app-2.js`)).toEqual(new Uint8Array(2).fill(7))
-    expect((await store.readActiveGeneration(HOST))?.buildId).toBe(NEXT.manifest.buildId)
+    expect((await store.readActiveGeneration(HOST))?.buildId).toBe(NEXT_BUILD)
   })
 
-  it('refuses to stage a reused asset whose copy is gone, leaving no staged tree', async () => {
+  it('refuses to stage a reused asset the active generation no longer holds', async () => {
     const fs = createFakeFileSystem()
     const store = createGenerationStore({ fileSystem: fs })
     await activate(store, HOST)
-    const reusable = await store.openReusableAssets(HOST, NEXT.manifest)
-    await reusable.place(NEXT.manifest.assets[1]!)
-    // Another mount's open swept the tree mid-download.
-    await store.sweepStagedGenerations()
-    const downloaded = new Map([['index.html', new Uint8Array(8).fill(9)]])
+    fs.failReadsAt(`${HOST}/generations/${BUILD}/assets/app.js`)
 
-    await expect(
-      store.stageGeneration(HOST, { ...NEXT, assets: downloaded, reused: ['assets/app-2.js'] })
-    ).rejects.toThrow('no longer staged whole')
-    expect(fs.paths().some((path) => path.startsWith(`${NEXT_STAGING}`))).toBe(false)
-    expect((await store.readActiveGeneration(HOST))?.buildId).toBe(BUILD)
+    await expect(store.stageGeneration(HOST, LEFT_TO_STAGE)).rejects.toThrow('unreadable')
+    await store.deleteHostCache(HOST)
+    fs.failReadsAt(null)
+    await expect(store.stageGeneration(HOST, LEFT_TO_STAGE)).rejects.toThrow(
+      'no longer holds the reused asset assets/app-2.js'
+    )
+    expect(fs.paths().some((path) => path.includes(`tmp/${NEXT_BUILD}`))).toBe(false)
   })
 })
 

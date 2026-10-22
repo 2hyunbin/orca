@@ -29,8 +29,8 @@ export type GenerationFileSystem = {
   fileExists(uri: string): Promise<boolean>
   /** Null when the file is missing. */
   fileSize(uri: string): Promise<number | null>
-  /** Copies a file natively, creating the destination's directories and replacing what is there.
-   *  Throws when the source is gone or unreadable. */
+  /** Copies a file natively, creating the destination's directories. The destination must not
+   *  exist, as on both platforms. Throws when the source is gone or unreadable. */
   copyFile(fromUri: string, toUri: string): Promise<void>
   /** Recursive, and a no-op when the path is missing. */
   delete(uri: string): Promise<void>
@@ -96,11 +96,8 @@ export function createExpoGenerationFileSystem(): GenerationFileSystem {
     },
     async copyFile(fromUri, toUri) {
       const target = new File(toUri)
-      // iOS copies only into an existing directory and over nothing, Android only over nothing.
+      // iOS copies only into an existing directory.
       target.parentDirectory.create({ intermediates: true, idempotent: true })
-      if (target.exists) {
-        target.delete()
-      }
       new File(fromUri).copy(target)
     },
     async delete(uri) {

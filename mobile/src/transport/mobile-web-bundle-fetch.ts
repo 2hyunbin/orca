@@ -42,7 +42,8 @@ export type MobileWebBundleFetchResult = {
   readonly manifest: MobileWebBundleManifestRead
   /** The assets read over the wire, verified. */
   readonly assets: ReadonlyMap<string, Uint8Array>
-  /** The assets placed in the staging tree from the cache instead. */
+  /** The assets left for the stage to copy from the host's cached generation instead: a contract
+   *  with `stageGeneration`, which copies each one and fails rather than stage a tree without it. */
   readonly reused: readonly string[]
   readonly totalBytes: number
   readonly elapsedMs: number
@@ -59,13 +60,14 @@ type WindowRead = { readonly asset: AssetReassembly; readonly offset: number }
 /**
  * Where a download may take an asset from instead of the wire: the host's cached generation. A
  * match is by content (hash and length). The cache was hash-verified when it was written and is
- * never modified in place, so a placed asset is the same bytes the page already opens from it.
+ * never modified in place, so the stage's copy of a reused asset is the bytes the page already
+ * opens from it.
  */
 export type MobileWebBundleReusableAssets = {
   readonly has: (asset: MobileWebBundleAssetRead) => boolean
-  /** Copies the cached asset into this download's staging tree, natively. False when it could not
-   *  be placed whole, which downloads it instead; never rejects. */
-  readonly place: (asset: MobileWebBundleAssetRead) => Promise<boolean>
+  /** Whether the cached file is still on disk at its full length: a native stat, no bytes read.
+   *  False downloads it instead; never rejects. */
+  readonly check: (asset: MobileWebBundleAssetRead) => Promise<boolean>
 }
 
 /**
@@ -80,8 +82,7 @@ export async function fetchMobileWebBundle(args: {
   client: RpcClient
   signal?: AbortSignal
   onProgress?: (progress: MobileWebBundleFetchProgress) => void
-  /** Opened once the manifest is read, since the build it names is what the copies are staged for. */
-  reuse?: (manifest: MobileWebBundleManifestRead) => Promise<MobileWebBundleReusableAssets>
+  reusable?: MobileWebBundleReusableAssets
 }): Promise<MobileWebBundleFetchResult> {
   const startedAt = Date.now()
   const stopped = new AbortController()
@@ -89,8 +90,7 @@ export async function fetchMobileWebBundle(args: {
   const opened = await runRpcOperation(args.client, mobileWebBundleManifestRead, null)
   const manifest = opened.manifest
   const reader = mobileWebBundleWindowReader(args.client, opened)
-  // A cache that cannot be opened is one with nothing to reuse, not a failed download.
-  const reusable = await args.reuse?.(manifest).catch(() => undefined)
+  const reusable = args.reusable
   const candidates = new Set(
     reusable === undefined ? [] : manifest.assets.filter((entry) => reusable.has(entry))
   )
@@ -204,7 +204,7 @@ export async function fetchMobileWebBundle(args: {
     }
   }
 
-  /** The candidates the cache could not place whole, which are downloaded after all. */
+  /** The candidates no longer whole in the cache, which are downloaded after all. */
   const reuseCandidates = async (): Promise<MobileWebBundleAssetRead[]> => {
     const missed: MobileWebBundleAssetRead[] = []
     for (const entry of candidates) {
@@ -212,7 +212,7 @@ export async function fetchMobileWebBundle(args: {
         break
       }
       throwIfCallerAborted(args.signal)
-      if (await reusable?.place(entry)) {
+      if (await reusable?.check(entry)) {
         reused.push(entry.path)
       } else {
         missed.push(entry)
@@ -232,8 +232,8 @@ export async function fetchMobileWebBundle(args: {
     if (candidates.size > 0) {
       reportProgress()
     }
-    // Read while the window reads are in flight: each is a short native read and hash, and the
-    // download it would otherwise delay is waiting on the network.
+    // Checked while the window reads are in flight: each is a native stat, and the download it
+    // would otherwise delay is waiting on the network.
     const [, missed] = await Promise.all([readWindows(fetched), reuseCandidates()])
     if (missed.length > 0 && !stopped.signal.aborted) {
       countDownload(missed)

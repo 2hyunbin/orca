@@ -121,6 +121,9 @@ export function createFakeGenerationFileSystem(): FakeGenerationFileSystem {
       if (node?.kind !== 'file') {
         throw new Error(`fake filesystem has no file at ${fromUri}`)
       }
+      if (nodes.has(toUri)) {
+        throw new Error(`fake filesystem refuses to copy onto ${toUri}`)
+      }
       write(toUri, node.bytes)
     },
     async delete(target) {
