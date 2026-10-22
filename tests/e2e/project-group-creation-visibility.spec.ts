@@ -101,9 +101,9 @@ for (const delayCreateResponse of [false, true]) {
         await expect
           .poll(() =>
             orcaPage.evaluate(() =>
-              window
-                .__store!.getState()
-                .projectGroups.some((group) => group.name === 'Crowded group')
+              window.__projectCatalog!().projectGroups.some(
+                (group) => group.name === 'Crowded group'
+              )
             )
           )
           .toBe(true)

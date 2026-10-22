@@ -284,7 +284,7 @@ test.describe('switch on', () => {
       orcaPage.evaluate(
         async ({ repoId, groupId }) => {
           const state = window.__store!.getState()
-          const repo = state.repos.find((candidate) => candidate.id === repoId)
+          const repo = window.__projectCatalog!().repos.find((candidate) => candidate.id === repoId)
           return repo ? state.moveProjectToGroup(repo, groupId) : false
         },
         { repoId, groupId }

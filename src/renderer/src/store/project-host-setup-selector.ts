@@ -5,6 +5,7 @@ import {
 } from '../../../shared/project-host-setup-projection'
 import { resolveProjectHostSetupProjection } from '../../../shared/project-host-setup-hydration'
 import type { AppState } from './types'
+import { selectProjectHostSetups, selectProjects, selectRepos } from './project-catalog-selectors'
 
 const derivedProjectionByRepos = new WeakMap<AppState['repos'], ProjectHostSetupProjection>()
 // Catalog writers replace these readonly arrays; their identities are the invalidation boundary.
@@ -28,7 +29,9 @@ function getDerivedProjection(repos: AppState['repos']): ProjectHostSetupProject
 export function getProjectHostSetupProjectionFromState(
   state: Pick<AppState, 'repos'> & Partial<Pick<AppState, 'projects' | 'projectHostSetups'>>
 ): ProjectHostSetupProjection {
-  const { repos, projects, projectHostSetups: setups } = state
+  const repos = selectRepos(state)
+  const projects = selectProjects(state)
+  const setups = selectProjectHostSetups(state)
   if (!projects || !setups) {
     return getDerivedProjection(repos)
   }
