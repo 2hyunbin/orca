@@ -312,7 +312,6 @@ describe('OrcaRuntimeService', () => {
     ])
   })
 
-  // L288: switch-on, a capable client's create after a split parent lands at the end.
   const placementCases = [
     {
       label: 'after the split parent for a capable client',
@@ -325,16 +324,7 @@ describe('OrcaRuntimeService', () => {
       expectedOrder: (createdId: string) => [SPLIT_LEFT, SPLIT_RIGHT, TRAILING, createdId]
     }
   ]
-  const awaitsL288 = (testCase: { supportsSplitGroupPlacement: boolean }) =>
-    ORCA_LAYOUT_OWNER_IS_MAIN && testCase.supportsSplitGroupPlacement
-  it.each(placementCases.filter((testCase) => !awaitsL288(testCase)))(
-    'places a runtime-owned terminal $label',
-    placesRuntimeOwnedTerminal
-  )
-  it.fails.each(placementCases.filter(awaitsL288))(
-    'places a runtime-owned terminal $label',
-    placesRuntimeOwnedTerminal
-  )
+  it.each(placementCases)('places a runtime-owned terminal $label', placesRuntimeOwnedTerminal)
 
   async function placesRuntimeOwnedTerminal(testCase: (typeof placementCases)[number]) {
     // Switch point: the split and trailing tabs are main's own, saved in its layout; switch-off a
