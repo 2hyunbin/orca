@@ -182,6 +182,24 @@ export function getWorktreeMetaForHost(
   return !legacy?.hostId || legacy.hostId === executionHostId ? legacy : undefined
 }
 
+/** The full host projection's winner for one id, without migration or writes. */
+export function peekWorktreeMetaForHost(
+  state: WorktreeMetaState,
+  worktreeId: string,
+  executionHostId: ExecutionHostId
+): WorktreeMeta | undefined {
+  const key = resolveAliasIdentityKey(
+    state,
+    composeWorktreeHostIdentity(executionHostId, worktreeId)
+  )
+  const meta = key ? state.worktreeMetaByIdentity?.[key] : undefined
+  if (meta && (!meta.hostId || meta.hostId === executionHostId)) {
+    return meta.hostId ? meta : { ...meta, hostId: executionHostId }
+  }
+  const legacy = state.worktreeMeta[worktreeId]
+  return !legacy?.hostId || legacy.hostId === executionHostId ? legacy : undefined
+}
+
 /** Read-only host projection used by listings that must include canonical-only rows. */
 export function getAllWorktreeMetaForHost(
   runtime: { state: WorktreeMetaState },
@@ -210,7 +228,7 @@ export function getAllWorktreeMetaForHost(
   return projected
 }
 
-/** Canonical aliases and legacy owners, captured once by the lineage candidate index. */
+/** Canonical alias winners and legacy owners for current complete relationship reads. */
 export function getWorktreeLineageMetadata(
   state: WorktreeMetaState
 ): { id: string; meta: WorktreeMeta }[] {

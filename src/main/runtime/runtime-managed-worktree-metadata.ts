@@ -1,4 +1,4 @@
-import { getWorktreeLineageCandidates } from '../worktree-lineage-candidates'
+import { readWorktreeLineageCorpus } from '../worktree-lineage-candidates'
 import {
   isSameSavedWorktreeParent,
   sharesWorktreeLineageBoundary
@@ -52,10 +52,15 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
   const childKey = worktree.id.startsWith('folder:')
     ? (`folder:${worktree.id.slice(7)}` as const)
     : worktreeWorkspaceKey(worktree.id)
-  const existingLineage = lineage
-    ? getWorktreeLineageCandidates(args.store).edgeOf(worktree)
-    : undefined
-  const previousParentRepoId = lineage
+  let facts = lineage ? readWorktreeLineageCorpus(args.store) : undefined
+  if (facts && !facts.hasCurrent(worktree)) {
+    throw new RuntimeLineageError(
+      'LINEAGE_PARENT_INSTANCE_STALE',
+      'The workspace changed. Refresh and try again.'
+    )
+  }
+  let existingLineage = lineage ? facts?.edgeOf(worktree) : undefined
+  let previousParentRepoId = lineage
     ? splitWorktreeId(existingLineage?.parentWorktreeId ?? '')?.repoId
     : undefined
   let nextParentRepoId: string | undefined
@@ -70,7 +75,7 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
   ) {
     return worktree
   }
-  const target = worktreeRowTarget(args.store, { id: worktree.id, hostId: executionHostId })
+  let target = worktreeRowTarget(args.store, { id: worktree.id, hostId: executionHostId })
   if (!target) {
     throw new Error('selector_ambiguous')
   }
@@ -112,13 +117,22 @@ export async function updateRuntimeManagedWorktreeMetadata(args: {
         lineage.parentWorktree ?? `id:${ref?.worktreeId}`,
         ref?.instanceId
       )
-      if (ref && parent.instanceId !== ref.instanceId) {
+      facts = readWorktreeLineageCorpus(args.store)
+      target = worktreeRowTarget(args.store, { id: worktree.id, hostId: executionHostId })
+      if (
+        !target ||
+        !facts.hasCurrent(worktree) ||
+        !facts.hasCurrent(parent) ||
+        (ref && parent.instanceId !== ref.instanceId)
+      ) {
         throw new RuntimeLineageError(
           'LINEAGE_PARENT_INSTANCE_STALE',
           'The parent workspace changed. Refresh and try again.'
         )
       }
-      const sameSavedParent = isSameSavedWorktreeParent(existing, worktree, {
+      existingLineage = facts.edgeOf(worktree)
+      previousParentRepoId = splitWorktreeId(existingLineage?.parentWorktreeId ?? '')?.repoId
+      const sameSavedParent = isSameSavedWorktreeParent(existingLineage, worktree, {
         worktreeId: parent.id,
         instanceId: parent.instanceId,
         external: !sharesWorktreeLineageBoundary(worktree, parent)

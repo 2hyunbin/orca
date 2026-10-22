@@ -1,4 +1,4 @@
-import { getWorktreeLineageCandidates } from '../../worktree-lineage-candidates'
+import { readWorktreeLineageCorpus } from '../../worktree-lineage-candidates'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import {
   buildWorkspaceRows,
@@ -77,10 +77,10 @@ export class WorkspaceRowsProducer {
       return { revision, rows: {} }
     }
     this.visibilityKey = visibilitySettingsKey(store)
-    const candidates = getWorktreeLineageCandidates(store)
     const { worktrees, platformByRepoId } = await this.sources.listVisibleWorktrees()
+    const candidates = readWorktreeLineageCorpus(store)
     const rows = buildWorkspaceRows({
-      worktrees,
+      worktrees: worktrees.map(candidates.currentRow),
       folderWorkspaces: runtimeVisibleFolderWorkspaces(store),
       repos: store.getRepos(),
       knownPeers: candidates.rows,

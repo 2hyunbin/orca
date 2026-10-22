@@ -18,6 +18,7 @@ export type HostQualifiedWorktreeMetaStore = {
     worktreeId: string,
     executionHostId: ExecutionHostId
   ) => WorktreeMeta | undefined
+  peekWorktreeMetaForHost?: (id: string, host: ExecutionHostId) => WorktreeMeta | undefined
   getAllWorktreeMetaForHost?: (executionHostId: ExecutionHostId) => Record<string, WorktreeMeta>
 }
 
@@ -37,6 +38,19 @@ export function readAllWorktreeMetaForHost(
     }
   }
   return projected
+}
+
+/** Read-only publication metadata; partial stores retain the same filtered raw fallback. */
+export function peekWorktreeMetaForHost(
+  store: Pick<HostQualifiedWorktreeMetaStore, 'getAllWorktreeMeta' | 'peekWorktreeMetaForHost'>,
+  id: string,
+  host: ExecutionHostId
+): WorktreeMeta | undefined {
+  if (store.peekWorktreeMetaForHost) {
+    return store.peekWorktreeMetaForHost(id, host)
+  }
+  const meta = store.getAllWorktreeMeta()[id]
+  return !meta?.hostId || meta.hostId === host ? meta : undefined
 }
 
 /**

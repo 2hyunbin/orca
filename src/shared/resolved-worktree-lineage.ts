@@ -89,7 +89,8 @@ function addCandidate<T>(
 export function resolveWorktreeLineageParents<T extends LineageRow>(
   rows: readonly T[],
   lineageOf: (row: T) => SavedLineageEdge | null | undefined,
-  cyclicChildren?: Set<T>
+  cyclicChildren?: Set<T>,
+  policy: 'store' | 'publication' | 'saved-walk' = 'store'
 ): Map<T, T> {
   const byStore = new Map<
     string,
@@ -100,8 +101,13 @@ export function resolveWorktreeLineageParents<T extends LineageRow>(
     }
   >()
   const aggregate = new Map<string, Candidates<T>>()
+  const byLocator = new Map<string, T[]>()
   const exactKey = (id: string, instance: string): string => JSON.stringify([id, instance])
   for (const [index, row] of rows.entries()) {
+    if (policy === 'publication') {
+      byLocator.set(row.id, [...(byLocator.get(row.id) ?? []), row])
+      continue
+    }
     const key = lineageStoreKeyForRow(row)
     let store = byStore.get(key)
     if (!store) {
@@ -125,7 +131,20 @@ export function resolveWorktreeLineageParents<T extends LineageRow>(
     const store = byStore.get(key)
     const instance = edge.parentWorktreeInstanceId
     let parent: T | undefined
-    if (instance) {
+    if (policy === 'publication') {
+      const exact = edge.parentStore
+        ? []
+        : (byLocator.get(edge.parentWorktreeId) ?? []).filter(
+            (row) =>
+              row.id !== child.id &&
+              (!row.hostId || !child.hostId || row.hostId === child.hostId) &&
+              child.instanceId === edge.worktreeInstanceId &&
+              row.instanceId === instance
+          )
+      if (exact.length === 1) {
+        parent = exact[0]
+      }
+    } else if (instance) {
       const exact = store?.exact.get(exactKey(edge.parentWorktreeId, instance))
       const local = store?.instance.get(instance)
       if (edge.parentStore === 'external') {
@@ -144,9 +163,12 @@ export function resolveWorktreeLineageParents<T extends LineageRow>(
         parent = legacy.first
       }
     }
-    if (parent && parent !== child) {
+    if (parent && (policy === 'saved-walk' || parent !== child)) {
       parents.set(child, parent)
     }
+  }
+  if (policy === 'saved-walk') {
+    return parents
   }
   for (const child of getCyclicLineageChildKeys(parents)) {
     cyclicChildren?.add(child)
@@ -225,7 +247,8 @@ export function projectResolvedWorktreeLineage<T extends Worktree>(
   worktrees: readonly T[],
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   knownPeers: readonly Worktree[] = [],
-  metadata?: Readonly<Record<string, WorktreeMeta>>
+  metadata?: Readonly<Record<string, WorktreeMeta>>,
+  policy: 'store' | 'publication' = 'store'
 ): WorktreeWithResolvedLineage<T>[] {
   const allWorktrees = [
     ...new Map(
@@ -236,7 +259,7 @@ export function projectResolvedWorktreeLineage<T extends Worktree>(
     ).values()
   ]
   const edgeOf = (row: Worktree) => getSavedWorktreeLineage(row, lineageById, metadata)
-  const parents = resolveWorktreeLineageParents(allWorktrees, edgeOf)
+  const parents = resolveWorktreeLineageParents(allWorktrees, edgeOf, undefined, policy)
   const children = new Map<Worktree, string[]>()
   for (const [child, parent] of parents) {
     const ids = children.get(parent) ?? []
@@ -265,21 +288,11 @@ export function worktreeLineageFromWorkspaceLineage(edge: WorkspaceLineage): Wor
   }
 }
 
-const mergedEdges = new WeakMap<object, WeakMap<object, Record<string, WorktreeLineage>>>()
 export function mergeWorkspaceLineageRecords(
   worktreeLineage: Readonly<Record<string, WorktreeLineage>>,
   workspaceLineage: Readonly<Record<string, WorkspaceLineage>>
 ): Record<string, WorktreeLineage> {
-  let byWorkspace = mergedEdges.get(worktreeLineage)
-  if (!byWorkspace) {
-    byWorkspace = new WeakMap()
-    mergedEdges.set(worktreeLineage, byWorkspace)
-  }
-  const cached = byWorkspace.get(workspaceLineage)
-  if (cached) {
-    return cached
-  }
-  const merged = {
+  return {
     ...Object.fromEntries(
       Object.values(workspaceLineage).map((edge) => {
         const lineage = worktreeLineageFromWorkspaceLineage(edge)
@@ -288,6 +301,4 @@ export function mergeWorkspaceLineageRecords(
     ),
     ...worktreeLineage
   }
-  byWorkspace.set(workspaceLineage, merged)
-  return merged
 }

@@ -51,9 +51,15 @@ function setup(links: Record<string, WorktreeLineage>) {
     }),
     getAllWorktreeMeta: () =>
       Object.fromEntries(
-        Object.values(links)
-          .flatMap((e) => [e.worktreeId, e.parentWorktreeId])
-          .map((id) => [id, row(id)])
+        [
+          ...new Set([
+            'C',
+            'P',
+            'Q',
+            'R',
+            ...Object.values(links).flatMap((e) => [e.worktreeId, e.parentWorktreeId])
+          ])
+        ].map((id) => [id, row(id)])
       ),
     getAllWorktreeLineage: () => links,
     getWorktreeMeta: (id: string) => row(id),
@@ -77,6 +83,26 @@ function setup(links: Record<string, WorktreeLineage>) {
   return { controller, store }
 }
 describe('cross-machine lineage writes', () => {
+  it('follows renamed saved ancestors and rejects a repeated chain without flattening it first', () => {
+    const renamed = { ...row('renamed'), instanceId: 'Q' }
+    const links = {
+      P: edge('P', 'old'),
+      renamed: { ...edge('Q', 'R', true), worktreeId: 'renamed' }
+    }
+    links.P.parentWorktreeInstanceId = 'Q'
+    const { store, controller } = setup(links)
+    Object.assign(store, { getAllWorktreeMeta: () => ({ C: row('C'), P: row('P'), renamed }) })
+    expect(() => controller.validateParent(row('C'), row('P'))).toThrow(
+      'chain reaches another Orca install'
+    )
+    links.renamed = {
+      ...links.renamed,
+      parentStore: undefined,
+      parentWorktreeId: 'P',
+      parentWorktreeInstanceId: 'P'
+    }
+    expect(() => controller.validateParent(row('C'), row('P'))).toThrow('cycle')
+  })
   it('records a caller-resolved external parent without resolving that parent on the child server', async () => {
     const resolveParent = vi.fn()
     const resolution = await resolveRuntimeWorktreeCreateLineage(
@@ -146,7 +172,12 @@ describe('cross-machine lineage writes', () => {
   it('uses the selected parent saved-null authority instead of another host raw external edge', async () => {
     const { store, controller } = setup({ P: edge('P', 'Q', true) })
     Object.assign(store, {
-      getAllWorktreeMeta: () => ({ P: { ...row('P'), hostId: 'ssh:owner' } })
+      getAllWorktreeMeta: () => ({ C: row('C'), P: { ...row('P'), hostId: 'ssh:owner' } }),
+      getWorktreeLineageMetadata: () => [
+        { id: 'C', meta: row('C') },
+        { id: 'P', meta: { ...row('P'), hostId: 'local' as const } },
+        { id: 'P', meta: { ...row('P'), hostId: 'ssh:owner' as const } }
+      ]
     })
     const parent = { ...row('P'), savedLineage: null }
     const child = row('C')

@@ -78,7 +78,11 @@ export function registerHostCatalogHandlers(context: WorktreeIpcContext): void {
         return hasConflictingStoredWorktreeOwner(store, repo, folderWorkspaceIds)
           ? rejected()
           : complete(
-              projectWorktreeLineageWithHostPeers(store, buildFolderDetectedWorktrees(store, repo))
+              projectWorktreeLineageWithHostPeers(
+                store,
+                repo,
+                buildFolderDetectedWorktrees(store, repo)
+              )
             )
       }
       const hostMeta = readAllWorktreeMetaForHost(store, requestedExecutionHostId)

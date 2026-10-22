@@ -119,7 +119,7 @@ describe('host-qualified scoped worktree resolution', () => {
     expect(deps.scanRepo.mock.calls.map(([owner]) => owner)).toEqual([parentRepo, childRepo])
   })
 
-  it('publishes a same-project parent on another host through scoped and persisted-peer readers', async () => {
+  it('publishes a same-project parent on another host through scoped readers while publication retains saved intent', async () => {
     const local = repo('shared', '/local', { executionHostId: 'local' })
     const ssh = repo('shared', '/remote', {
       connectionId: 'builder',
@@ -153,9 +153,12 @@ describe('host-qualified scoped worktree resolution', () => {
     const child = await resolveScopedWorktreeIdRow(deps, childId, 'local')
     expect(child?.parentWorktreeId).toBe(parentId)
     expect(deps.scanRepo.mock.calls.map(([owner]) => owner)).toEqual([local, ssh])
-    expect(child && projectWorktreeLineageWithHostPeers(deps.store, [child])[0]).toMatchObject({
-      parentWorktreeId: parentId,
-      lineage
+    expect(
+      child && projectWorktreeLineageWithHostPeers(deps.store, local, [child])[0]
+    ).toMatchObject({
+      parentWorktreeId: null,
+      lineage: null,
+      savedLineage: lineage
     })
     // A failed scan must not turn a copied instance into a unique rename fallback.
     deps.store.getRepos().push(repo('copy', '/copy', { executionHostId: 'local' }))
@@ -169,9 +172,15 @@ describe('host-qualified scoped worktree resolution', () => {
     const ambiguous = await resolveScopedWorktreeIdRow(deps, childId, 'local')
     expect(ambiguous?.parentWorktreeId).toBeNull()
     expect(
-      ambiguous && projectWorktreeLineageWithHostPeers(deps.store, [ambiguous])[0].parentWorktreeId
+      ambiguous &&
+        projectWorktreeLineageWithHostPeers(deps.store, local, [ambiguous])[0].parentWorktreeId
     ).toBeNull()
     expect(deps.metaById['copy::/copy'].instanceId).toBe(deps.metaById[parentId].instanceId)
+    delete deps.metaById['copy::/copy']
+    await expect(resolveScopedWorktreeIdRow(deps, childId, 'local')).resolves.toMatchObject({
+      parentWorktreeId: parentId,
+      savedLineage: lineage
+    })
   })
 
   it('scans only the selected local or SSH owner when repo ids and paths collide', async () => {

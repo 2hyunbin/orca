@@ -1,7 +1,6 @@
 import { resolveWorktreeLineageParents } from '../../shared/resolved-worktree-lineage'
-import { getWorktreeLineageCandidates, type CandidateStore } from '../worktree-lineage-candidates'
+import { readWorktreeLineageCorpus, type LineageStore } from '../worktree-lineage-candidates'
 import { getWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
-import { getRepoExecutionHostId } from '../../shared/execution-host'
 // The host's read of "Notify About Hidden Workspaces": with it off, news from a workspace the
 // desktop's sidebar Filters switches hide sends no phone push from the host. The shared unread dot
 // ignores it: clients' Filters differ.
@@ -33,7 +32,7 @@ export type WorkspaceNotificationMuteDeps = {
     RuntimeStore,
     'getUI' | 'getRepo' | 'getWorktreeMeta' | 'getAllWorktreeLineage' | 'getFolderWorkspaces'
   > &
-    CandidateStore & { getSettings: () => { notifications?: NotificationSettings } }
+    LineageStore & { getSettings: () => { notifications?: NotificationSettings } }
   /** Last resolved Git listing, possibly stale; branch and HEAD come only from here. */
   resolvedWorktrees: readonly Worktree[] | null
 }
@@ -79,22 +78,18 @@ export function isWorkspaceHiddenBySidebarFilters(
       isWorkspaceOwnedBySomeoneElse(folder, EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT)
     )
   }
-  const snapshot = getWorktreeLineageCandidates(deps.store)
+  const snapshot = readWorktreeLineageCorpus(deps.store)
   const rows = new Map<string, Worktree>(
     snapshot.rows.map((row) => [getWorktreeHostIdentity(row), row])
   )
   const listedByIdentity = new Map<string, Worktree>(
     (deps.resolvedWorktrees ?? []).map((row) => {
-      const owners = snapshot.reposById.get(row.repoId) ?? []
-      const owned =
-        !row.hostId && owners.length === 1
-          ? { ...row, hostId: getRepoExecutionHostId(owners[0]) }
-          : row
-      return [getWorktreeHostIdentity(owned), owned]
+      const current = snapshot.currentRow(row)
+      return [getWorktreeHostIdentity(current), current]
     })
   )
   for (const [key, row] of listedByIdentity) {
-    rows.set(key, { ...row, savedLineage: undefined, lineage: undefined })
+    rows.set(key, row)
   }
   const children = new Map<string, string[]>()
   for (const [child, parent] of resolveWorktreeLineageParents(

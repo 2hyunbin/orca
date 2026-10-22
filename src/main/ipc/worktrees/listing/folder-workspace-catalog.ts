@@ -20,7 +20,10 @@ import {
   toDetectedWorktree,
   applyMetadataFallbackVisibility
 } from '../../../../shared/worktree/ownership'
-import { projectWorktreeLineageWithHostPeers } from '../../../worktree-lineage-host-peers'
+import {
+  projectWorktreeLineageWithHostPeers,
+  withSavedWorktreeLineage
+} from '../../../worktree-lineage-host-peers'
 import { getProjectHostSetupMetaUpdates } from './worktree-discovery-metadata'
 import {
   getFolderWorkspaceInstanceIdentity,
@@ -110,7 +113,7 @@ export function buildFolderDetectedWorktrees(store: Store, repo: Repo): Detected
 
 export function listVisibleFolderWorkspaces(store: Store, repo: Repo): Worktree[] {
   const writeMeta = folderMetaWriter(store, repo)
-  return buildFolderDetectedWorktrees(store, repo)
+  const visible = buildFolderDetectedWorktrees(store, repo)
     .filter((worktree) => worktree.visible)
     .map((worktree) => {
       const meta = store.getWorktreeMeta(worktree.id)
@@ -121,6 +124,7 @@ export function listVisibleFolderWorkspaces(store: Store, repo: Repo): Worktree[
           : writeMeta(worktree.id, ownershipUpdates)
       return mergeFolderWorkspace(repo, worktree.id, repairedMeta)
     })
+  return withSavedWorktreeLineage(store, repo, visible)
 }
 
 export function buildDisconnectedDetectedWorktrees(
@@ -150,5 +154,5 @@ export function buildDisconnectedDetectedWorktrees(
     })
     return applyMetadataFallbackVisibility(detected)
   })
-  return projectWorktreeLineageWithHostPeers(store, detected)
+  return projectWorktreeLineageWithHostPeers(store, repo, detected)
 }

@@ -270,7 +270,9 @@ describe('registerWorktreeHandlers', () => {
       [worktreeId]: makeWorktreeMeta({ displayName: 'Legacy local', hostId: 'local' })
     })
     Object.assign(store, {
-      getWorktreeLineageMetadata: () => [{ id: worktreeId, meta: canonicalRemote }]
+      getAllWorktreeMetaForHost: (host: string) =>
+        host === 'ssh:conn-1' ? { [worktreeId]: canonicalRemote } : {},
+      getWorktreeLineageMetadata: vi.fn(() => [{ id: worktreeId, meta: canonicalRemote }])
     })
 
     const listed = await handlers['worktrees:list'](null, { repoId: repo.id })
@@ -432,9 +434,12 @@ describe('registerWorktreeHandlers', () => {
       }
     ])
 
+    const complete = vi.fn()
+    Object.assign(store, { getWorktreeLineageMetadata: complete })
     const listed = await handlers['worktrees:listAll'](null, undefined)
 
-    expect(store.getAllWorktreeMeta).toHaveBeenCalledTimes(1)
+    // Raw getter calls are O(1); publication must not enumerate the canonical corpus.
+    expect(complete).not.toHaveBeenCalled()
     expect(listed).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -472,9 +477,12 @@ describe('registerWorktreeHandlers', () => {
       'repo-ssh-b::/remote/b/two': makeWorktreeMeta({ displayName: 'Two' })
     })
 
+    const complete = vi.fn()
+    Object.assign(store, { getWorktreeLineageMetadata: complete })
     const listed = await handlers['worktrees:listAll'](null, undefined)
 
-    expect(store.getAllWorktreeMeta).toHaveBeenCalledTimes(1)
+    // Raw getter calls are O(1); publication must not enumerate the canonical corpus.
+    expect(complete).not.toHaveBeenCalled()
     expect(listed).toEqual([
       expect.objectContaining({ id: 'repo-ssh-a::/remote/a/one' }),
       expect.objectContaining({ id: 'repo-ssh-b::/remote/b/two' })

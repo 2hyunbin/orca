@@ -1,4 +1,4 @@
-import { getWorktreeLineageCandidates } from '../worktree-lineage-candidates'
+import { readWorktreeLineageCorpus } from '../worktree-lineage-candidates'
 import type { Worktree } from '../../shared/worktree/types'
 import { getWorktreeHostIdentity } from '../../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage, WorkspaceLineage } from '../../shared/worktree/lineage-types'
@@ -98,7 +98,13 @@ export class RuntimeWorktreeLineageController {
 
   validateParent(child: ResolvedWorktree, parent: ResolvedWorktree): void {
     const store = this.deps.getStore()
-    const snapshot = store ? getWorktreeLineageCandidates(store) : undefined
+    const snapshot = store ? readWorktreeLineageCorpus(store) : undefined
+    if (snapshot && !snapshot.hasCurrent(child)) {
+      throw new RuntimeLineageError(
+        'LINEAGE_PARENT_INSTANCE_STALE',
+        'The workspace changed. Refresh and try again.'
+      )
+    }
     const edgeOf = (row: Worktree) => snapshot?.edgeOf(row)
     const existing = edgeOf(child)
     if (
@@ -119,16 +125,25 @@ export class RuntimeWorktreeLineageController {
         "Can't move an existing workspace under a parent whose chain reaches another Orca install. Create the new workspace from that parent instead, or clear its parent first."
       )
     }
+    if (snapshot && !snapshot.hasCurrent(parent)) {
+      throw new RuntimeLineageError(
+        'LINEAGE_PARENT_INSTANCE_STALE',
+        'The parent workspace changed. Refresh and try again.'
+      )
+    }
     const rows = new Map((snapshot?.rows ?? []).map((row) => [getWorktreeHostIdentity(row), row]))
     rows.set(getWorktreeHostIdentity(child), child)
     rows.set(getWorktreeHostIdentity(parent), parent)
-    const parents = resolveWorktreeLineageParents([...rows.values()], (row) =>
-      row === child ? null : edgeOf(row)
+    const parents = resolveWorktreeLineageParents(
+      [...rows.values()],
+      (row) => (row === child ? null : edgeOf(row)),
+      undefined,
+      'saved-walk'
     )
     let cursor: Worktree | undefined = parent
     const visited = new Set<Worktree>()
-    while (cursor && !visited.has(cursor)) {
-      if (cursor === child) {
+    while (cursor) {
+      if (cursor === child || visited.has(cursor)) {
         throw new RuntimeLineageError(
           'LINEAGE_PARENT_CYCLE',
           'Parent selector would create a lineage cycle.'
@@ -174,8 +189,10 @@ export class RuntimeWorktreeLineageController {
       return
     }
     for (const worktree of await this.deps.listResolvedWorktrees()) {
+      const current = readWorktreeLineageCorpus(store)
       if (
-        store.getWorktreeLineage(worktree.id) ||
+        !current.hasCurrent(worktree) ||
+        current.edgeOf(worktree) ||
         !worktree.instanceId ||
         isWslMoveWorktreeBlocked(worktree.id, worktree.hostId, worktree.path)
       ) {
@@ -186,14 +203,13 @@ export class RuntimeWorktreeLineageController {
         continue
       }
       const candidate = await this.resolveTaskCandidate(taskId)
-      if (
-        !candidate?.parent.instanceId ||
-        candidate.parent.type !== 'worktree' ||
-        candidate.parent.worktree.id === worktree.id
-      ) {
+      if (!candidate?.parent.instanceId || candidate.parent.type !== 'worktree') {
         continue
       }
       try {
+        if (readWorktreeLineageCorpus(store).edgeOf(worktree)) {
+          continue
+        }
         this.validateParent(worktree, candidate.parent.worktree)
       } catch {
         continue

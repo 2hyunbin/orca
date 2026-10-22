@@ -1,4 +1,4 @@
-import { getWorktreeLineageCandidates } from '../../worktree-lineage-candidates'
+import { readWorktreeLineageCorpus } from '../../worktree-lineage-candidates'
 import { OrcaRuntimeWithReadKittyFile } from '../orca-runtime-read-kitty-file'
 import type { RuntimeWorkspaceRepoScanRefresh } from './workspace-repo-scan-refresh'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
@@ -16,7 +16,6 @@ import {
   resolveRepoWorktreeRows,
   resolveScopedWorktreeIdRow
 } from '../repo-worktree-row-resolution'
-import { projectResolvedWorktreeLineage } from '../../../shared/resolved-worktree-lineage'
 import type { RepoWorktreeRowDeps } from '../repo-worktree-row-resolution'
 import { listRuntimeFolderWorkspaces } from '../runtime-worktree-filesystem'
 import type { ExecutionHostId } from '../../../shared/execution-host'
@@ -102,7 +101,7 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
     if (!this.store) {
       return { worktrees: [], platformByRepoId: new Map() }
     }
-    const snapshot = getWorktreeLineageCandidates(this.store)
+    const snapshot = readWorktreeLineageCorpus(this.store)
     const metaById = snapshot.rawMetadata
     const repos = snapshot.repos
     const projectRuntimeByRepoId = resolveLocalProjectRuntimesForRepos(this.requireStore(), repos)
@@ -125,13 +124,8 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
           )
       )
     )
-    const current = getWorktreeLineageCandidates(this.store)
-    const worktrees = projectResolvedWorktreeLineage(
-      perRepoWorktrees.flat(),
-      current.lineageById,
-      current.rows,
-      current.rawMetadata
-    )
+    const current = readWorktreeLineageCorpus(this.store)
+    const worktrees = current.project(perRepoWorktrees.flat())
     return { worktrees, platformByRepoId }
   }
 

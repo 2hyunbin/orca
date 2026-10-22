@@ -1,4 +1,4 @@
-import { getWorktreeLineageCandidates } from '../../worktree-lineage-candidates'
+import { readWorktreeLineageCorpus } from '../../worktree-lineage-candidates'
 import { RuntimeLineageError } from '../runtime-worktree-lineage-resolution'
 import { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree } from '../terminal/launch/terminal-workspace-scope'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
@@ -67,7 +67,7 @@ export abstract class RuntimeWorkspaceSelectors extends OrcaRuntimeWithResolveBr
       let hostId
       if (instanceId) {
         const matches = this.store
-          ? getWorktreeLineageCandidates(this.store).rows.filter(
+          ? readWorktreeLineageCorpus(this.store).rows.filter(
               (row) =>
                 worktreeIdentityKey(row.id) === worktreeIdentityKey(explicitWorktreeId) &&
                 row.instanceId === instanceId

@@ -75,6 +75,28 @@ describe('sharesWorktreeLineageBoundary', () => {
 })
 
 describe('projectResolvedWorktreeLineage', () => {
+  it('keeps base publication exact while held readers resolve saved rename intent', () => {
+    const c = worktree('child', 'child-instance', { hostId: 'local' })
+    const p = worktree('renamed', 'parent-instance', { hostId: 'local' })
+    const edges = { child: lineage() }
+    expect(projectResolvedWorktreeLineage([c], edges, [p])[0].parentWorktreeId).toBe('renamed')
+    expect(
+      projectResolvedWorktreeLineage([c], edges, [p], undefined, 'publication')[0]
+    ).toMatchObject({ parentWorktreeId: null, savedLineage: edges.child })
+    edges.child.parentWorktreeId = p.id
+    expect(
+      projectResolvedWorktreeLineage([c], edges, [p], undefined, 'publication')[0].parentWorktreeId
+    ).toBe(p.id)
+    expect(
+      projectResolvedWorktreeLineage(
+        [c],
+        edges,
+        [{ ...p, hostId: 'ssh:other' }],
+        undefined,
+        'publication'
+      )[0].parentWorktreeId
+    ).toBeNull()
+  })
   const parent = worktree('parent', 'parent-instance')
   const child = worktree('child', 'child-instance')
 

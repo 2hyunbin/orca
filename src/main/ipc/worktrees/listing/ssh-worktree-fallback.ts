@@ -1,4 +1,4 @@
-import { getWorktreeLineageCandidates } from '../../../worktree-lineage-candidates'
+import { readAllWorktreeMetaForHost } from '../../../persistence/host-qualified-worktree-meta'
 import { preserveFolderUpgradeWorktreePath } from '../../../folder-upgrade-worktree-path'
 import type { WorktreeMeta } from '../../../../shared/worktree/meta-types'
 import { parseWorktreeId } from '../../worktree-logic'
@@ -25,7 +25,10 @@ import {
   resolveCustomWorktreeVisibilitySources
 } from '../../../../shared/worktree/visibility-sources'
 import { resolveConfiguredWorktreeBasePaths } from '../../../../shared/worktree/configured-worktree-base-path'
-import { projectWorktreeLineageWithHostPeers } from '../../../worktree-lineage-host-peers'
+import {
+  projectWorktreeLineageWithHostPeers,
+  withSavedWorktreeLineage
+} from '../../../worktree-lineage-host-peers'
 import { loggedMalformedWorktreeMetaKeys, warnOnce } from './worktree-listing-diagnostics'
 import {
   getProjectHostSetupMetaUpdates,
@@ -102,7 +105,7 @@ export function listDisconnectedSshWorktrees(
 ): Worktree[] {
   const byWorktreeId = new Map<string, Worktree>()
   const expectedHostId = getRepoExecutionHostId(repo)
-  const repoOwners = getWorktreeLineageCandidates(store).reposById.get(repo.id) ?? []
+  const repoOwners = store.getRepos().filter((candidate) => candidate.id === repo.id)
   for (const candidate of metaIndex.get(repo.id) ?? []) {
     if (
       (candidate.meta.hostId && candidate.meta.hostId !== expectedHostId) ||
@@ -134,7 +137,7 @@ export function listDisconnectedSshWorktrees(
     byWorktreeId.delete(worktree.id)
     byWorktreeId.set(worktree.id, worktree)
   }
-  return [...byWorktreeId.values()]
+  return withSavedWorktreeLineage(store, repo, [...byWorktreeId.values()])
 }
 
 export function buildDetectedGitWorktrees(
@@ -157,13 +160,12 @@ export function buildDetectedGitWorktrees(
     resolveCustomWorktreeVisibilitySources(repo, settings.worktreeVisibilityDefaults),
     resolveConfiguredWorktreeBasePaths(repo)
   )
-  const snapshot = getWorktreeLineageCandidates(store)
   const allMeta =
     allMetaOverride ??
     (typeof store.getAllWorktreeMeta === 'function'
-      ? snapshot.metadataForHost(getRepoExecutionHostId(repo))
+      ? readAllWorktreeMetaForHost(store, getRepoExecutionHostId(repo))
       : undefined)
-  const repoOwnerCount = snapshot.reposById.get(repo.id)?.length ?? 0
+  const repoOwnerCount = store.getRepos().filter((candidate) => candidate.id === repo.id).length
   const detected = liveWorktrees.map((gitWorktree) => {
     const worktreeId = `${repo.id}::${gitWorktree.path}`
     // Why: the locator-keyed row is only a stand-in for a missing host snapshot, so don't read it when we have one.
@@ -207,7 +209,7 @@ export function buildDetectedGitWorktrees(
       worktreeVisibilitySourceMatcher
     })
   })
-  return projectWorktreeLineageWithHostPeers(store, detected)
+  return projectWorktreeLineageWithHostPeers(store, repo, detected)
 }
 
 export function stampAndMergeVisibleDetectedWorktree(
@@ -216,13 +218,8 @@ export function stampAndMergeVisibleDetectedWorktree(
   detected: DetectedWorktree,
   allMetaOverride?: Record<string, WorktreeMeta>
 ) {
-  const snapshot = getWorktreeLineageCandidates(store)
-  const meta = resolveWorktreeMetaWithDiscoveryBackfill(
-    store,
-    repo,
-    detected.id,
-    allMetaOverride ?? snapshot.metadataForHost(getRepoExecutionHostId(repo)),
-    snapshot.reposById.get(repo.id)?.length ?? 0
-  )
-  return mergeWorktree(repo.id, detected, meta, repo.displayName)
+  const meta = resolveWorktreeMetaWithDiscoveryBackfill(store, repo, detected.id, allMetaOverride)
+  return withSavedWorktreeLineage(store, repo, [
+    mergeWorktree(repo.id, detected, meta, repo.displayName)
+  ])[0]
 }

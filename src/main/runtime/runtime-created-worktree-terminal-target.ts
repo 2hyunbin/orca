@@ -10,12 +10,12 @@ import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import type { Repo } from '../../shared/repo-types'
 import type { ExecutionHostId } from '../../shared/execution-host'
 import { mergeWorktree } from '../ipc/worktree-metadata-merge'
-import { projectWorktreeLineageWithHostPeers } from '../worktree-lineage-host-peers'
-import type { CandidateStore } from '../worktree-lineage-candidates'
+import { projectCurrentStoreWorktreeLineage } from '../worktree-lineage-candidates'
+import type { LineageStore } from '../worktree-lineage-candidates'
 
 type CreationEvidenceStore = Pick<Store, 'getRepos' | 'getWorktreeMeta'> &
   Partial<Pick<Store, 'getWorktreeMetaForHost'>> &
-  CandidateStore
+  LineageStore
 
 function readOwnedMetadata(
   store: CreationEvidenceStore,
@@ -62,6 +62,6 @@ export function resolveCreatedWorktreeTerminalTarget(
     { ...meta, hostId: routing.hostId },
     routing.repo.displayName
   )
-  const projected = projectWorktreeLineageWithHostPeers(store, [target])[0]
+  const projected = projectCurrentStoreWorktreeLineage(store, [target])[0]
   return projected ? { ...projected, git: worktree } : null
 }

@@ -1,3 +1,26 @@
+import { updateRuntimeManagedWorktreeMetadata } from '../runtime-managed-worktree-metadata'
+import { buildRuntimeWorktreePsSummaries } from '../runtime-worktree-ps-summaries'
+import { isWorkspaceHiddenBySidebarFilters } from '../workspace-notification-mute'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  createStore,
+  closeTestStores,
+  testState,
+  makeRepo,
+  makeWorktreeLineage
+} from '../../persistence-test-harness'
+import { hostWorktreeTarget } from '../../../shared/worktree/host-qualified-identity'
+import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../shared/workspace-scope'
+import { projectCurrentStoreWorktreeLineage } from '../../worktree-lineage-candidates'
+import { buildDetectedGitWorktrees } from '../../ipc/worktrees/listing/ssh-worktree-fallback'
+import { readFeedWorkspaceRow } from '../../../shared/sidebar-list/sidebar-feed-worktrees'
+import {
+  getWorkspaceLineageRows,
+  getWorktreeLineageProjection
+} from '../../../shared/sidebar-list/worktree-lineage-projection'
+import { WorkspaceRowsProducer } from './workspace-rows-producer'
 // Runs on plain Node, as orcad does: rows come from the runtime's own listing and store.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../../../shared/repo-types'
@@ -244,4 +267,224 @@ describe('WorkspaceRowsProducer', () => {
     ])
     phone.disconnect()
   })
+})
+
+describe('current saved lineage at real Store boundaries', () => {
+  async function withStore(run: (store: ReturnType<typeof createStore>) => Promise<void>) {
+    vi.useRealTimers()
+    testState.dir = mkdtempSync(join(tmpdir(), 'orca-b-lineage-'))
+    const store = createStore()
+    try {
+      await run(store)
+    } finally {
+      await closeTestStores()
+      rmSync(testState.dir, { recursive: true, force: true })
+    }
+  }
+  it('acquires final facts after listing, publishes current validity, and holds a real canonical fallback competitor', async () =>
+    withStore(async (store) => {
+      const owner = makeRepo({ id: 'repo-1', path: '/r' })
+      const copyRepo = makeRepo({
+        id: 'copy',
+        path: '/copy',
+        connectionId: 'copy',
+        executionHostId: 'ssh:copy'
+      })
+      store.addRepo(owner)
+      const c = { ...resolved('repo-1::/r/c', owner, 'local'), instanceId: 'c' }
+      const p = { ...resolved('repo-1::/r/p', owner, 'local'), instanceId: 'p' }
+      for (const row of [c, p]) {
+        store.setWorktreeMeta(hostWorktreeTarget(row), { instanceId: row.instanceId })
+      }
+      const edge = makeWorktreeLineage({
+        worktreeId: c.id,
+        worktreeInstanceId: 'c',
+        parentWorktreeId: 'old::/gone',
+        parentWorktreeInstanceId: 'p'
+      })
+      store.setWorktreeLineage(hostWorktreeTarget(c), edge)
+      let release = Promise.withResolvers<ResolvedWorktreeSnapshot>()
+      const producer = new WorkspaceRowsProducer({
+        store,
+        onClientEvent: () => () => {},
+        listVisibleWorktrees: () => release.promise
+      })
+      expect(projectCurrentStoreWorktreeLineage(store, [c, p])[0].parentWorktreeId).toBe(p.id)
+      const pending = producer.snapshot()
+      store.addRepo(copyRepo)
+      const qid = 'copy::/copy'
+      store.setWorktreeMeta(hostWorktreeTarget({ id: qid, hostId: 'local' }), {
+        instanceId: 'other'
+      })
+      store.setWorktreeMeta(hostWorktreeTarget({ id: qid, hostId: 'ssh:copy' }), {
+        instanceId: 'p'
+      })
+      release.resolve({
+        worktrees: projectCurrentStoreWorktreeLineage(store, [c, p]),
+        platformByRepoId: new Map()
+      })
+      const result = await pending
+      expect(result.rows[`local|${c.id}`]).toMatchObject({ lineage: null, savedLineage: edge })
+      const q = buildDetectedGitWorktrees(store, copyRepo, [
+        { path: '/copy', head: '', branch: '', isBare: false, isMainWorktree: true }
+      ])
+      expect(q[0]).toMatchObject({ id: qid, hostId: 'ssh:copy', instanceId: 'p' })
+      const held = Object.entries(result.rows).flatMap(
+        ([key, value]) => readFeedWorkspaceRow(key, value)?.worktree ?? []
+      )
+      const graph = getWorktreeLineageProjection(
+        {},
+        getWorkspaceLineageRows({ held: [...held, ...q] })
+      )
+      expect(graph.parents.size).toBe(0)
+      store.removeWorktreeMeta(hostWorktreeTarget({ id: qid, hostId: 'ssh:copy' }))
+      release = Promise.withResolvers<ResolvedWorktreeSnapshot>()
+      release.resolve({
+        worktrees: projectCurrentStoreWorktreeLineage(store, [c, p]),
+        platformByRepoId: new Map()
+      })
+      const recovered = await producer.snapshot()
+      expect(recovered.rows[`local|${c.id}`].lineage).toMatchObject({
+        parentWorktreeId: 'old::/gone'
+      })
+      const recoveredHeld = Object.entries(recovered.rows).flatMap(
+        ([key, value]) => readFeedWorkspaceRow(key, value)?.worktree ?? []
+      )
+      expect(
+        [
+          ...getWorktreeLineageProjection(
+            {},
+            getWorkspaceLineageRows({ held: recoveredHeld })
+          ).parents.values()
+        ].map((row) => row.id)
+      ).toEqual([p.id])
+    }))
+  it('keeps unchanged warm reads cheap and reflects actual set/change/clear actions without accepting a rotated selection', async () =>
+    withStore(async (store) => {
+      const owner = makeRepo({ id: 'repo-1', path: '/r' })
+      store.addRepo(owner)
+      const input = ['c', 'p', 'q'].map((id) => ({
+        ...resolved(`repo-1::/r/${id}`, owner, 'local'),
+        instanceId: id,
+        ...(id === 'c' ? {} : { cliProvenance: { kind: 'created-by-cli' as const, createdAt: 0 } })
+      }))
+      for (const row of input) {
+        store.setWorktreeMeta(hostWorktreeTarget(row), {
+          instanceId: row.instanceId,
+          cliProvenance: row.cliProvenance
+        })
+      }
+      store.updateUI({ hideCliCreatedWorkspaces: true })
+      class Probe extends OrcaRuntimeService {
+        protected override async computeResolvedWorktrees(): Promise<ResolvedWorktreeSnapshot> {
+          return {
+            worktrees: projectCurrentStoreWorktreeLineage(store, input),
+            platformByRepoId: new Map()
+          }
+        }
+        protected override async resolveExplicitWorktreeIdScoped(id: string) {
+          return (
+            (await this.computeResolvedWorktrees()).worktrees.find((row) => row.id === id) ?? null
+          )
+        }
+        cached() {
+          return this.listResolvedWorktreeSnapshot()
+        }
+        terminalTarget(selector: string) {
+          return this.resolveTerminalWorkspaceLaunchTarget(selector)
+        }
+      }
+      const runtime = new Probe(store)
+      const read = vi.spyOn(store, 'getWorktreeLineageMetadata')
+      const warm = await runtime.cached()
+      const summaries = () =>
+        buildRuntimeWorktreePsSummaries({
+          store,
+          resolvedWorktrees: warm.worktrees,
+          platformByRepoId: warm.platformByRepoId
+        })
+      const hidden = (id: string) =>
+        isWorkspaceHiddenBySidebarFilters(
+          { store, resolvedWorktrees: warm.worktrees },
+          `repo-1::/r/${id}`
+        )
+      const count = read.mock.calls.length
+      expect((await runtime.cached()).worktrees).toBe(warm.worktrees)
+      expect(read).toHaveBeenCalledTimes(count)
+      for (const id of ['p', 'q']) {
+        await runtime.updateManagedWorktreeMeta(`id:${input[0].id}`, {
+          lineage: { parentWorktreeRef: { worktreeId: `repo-1::/r/${id}`, instanceId: id } }
+        })
+        expect((await runtime.showManagedWorktree(`id:${input[0].id}`)).parentWorktreeId).toBe(
+          `repo-1::/r/${id}`
+        )
+        expect(summaries().get(input[0].id)?.parentWorktreeId).toBe(`repo-1::/r/${id}`)
+        expect(hidden(id)).toBe(false)
+        expect(hidden(id === 'p' ? 'q' : 'p')).toBe(true)
+      }
+      await runtime.updateManagedWorktreeMeta(`id:${input[0].id}`, { lineage: { noParent: true } })
+      expect((await runtime.showManagedWorktree(`id:${input[0].id}`)).savedLineage).toBeNull()
+      expect(summaries().get(input[0].id)).toMatchObject({
+        parentWorktreeId: null,
+        savedLineage: null
+      })
+      expect([hidden('p'), hidden('q')]).toEqual([true, true])
+      const group = store.createProjectGroup({
+        name: 'Folders',
+        parentPath: testState.dir,
+        createdFrom: 'folder-scan'
+      })
+      const folder = store.createFolderWorkspace({ projectGroupId: group.id, name: 'Child' })
+      store.setWorkspaceLineage({
+        childWorkspaceKey: folderWorkspaceKey(folder.id),
+        childInstanceId: folderWorkspaceKey(folder.id),
+        parentWorkspaceKey: worktreeWorkspaceKey('old::/renamed'),
+        parentInstanceId: 'p',
+        origin: 'manual',
+        capture: { source: 'manual-action', confidence: 'explicit' },
+        createdAt: 1
+      })
+      const target = await runtime.terminalTarget(folderWorkspaceKey(folder.id))
+      expect(target.scope).toMatchObject({
+        id: folderWorkspaceKey(folder.id),
+        path: folder.folderPath,
+        connectionId: null
+      })
+      expect(target.managedWorktree).toMatchObject({ parentWorktreeId: input[1].id })
+      store.setWorktreeMeta(hostWorktreeTarget(input[1]), { instanceId: 'replacement' })
+      expect(
+        (await runtime.terminalTarget(folderWorkspaceKey(folder.id))).managedWorktree
+      ).toMatchObject({
+        parentWorktreeId: null
+      })
+      await expect(
+        runtime.updateManagedWorktreeMeta(`id:${input[0].id}`, {
+          lineage: { parentWorktreeRef: { worktreeId: input[1].id, instanceId: 'p' } }
+        })
+      ).rejects.toThrow('changed')
+      expect(store.getWorktreeLineage(input[0].id)).toBeUndefined()
+      store.setWorktreeMeta(hostWorktreeTarget(input[1]), { instanceId: 'p' })
+      const pendingParent = Promise.withResolvers<ResolvedWorktree>()
+      const validateParent = vi.fn()
+      const changing = updateRuntimeManagedWorktreeMetadata({
+        selector: `id:${input[0].id}`,
+        updates: { lineage: { parentWorktreeRef: { worktreeId: input[1].id, instanceId: 'p' } } },
+        store,
+        ports: {
+          resolveWorktree: async (selector) =>
+            selector === `id:${input[0].id}` ? input[0] : pendingParent.promise,
+          validateParent,
+          invalidateResolved: () => {},
+          invalidateScan: () => {},
+          notifyChanged: () => {},
+          showWorktree: async () => input[0]
+        }
+      })
+      await Promise.resolve()
+      store.setWorktreeMeta(hostWorktreeTarget(input[0]), { instanceId: 'new-child' })
+      pendingParent.resolve(input[1])
+      await expect(changing).rejects.toThrow('changed')
+      expect(validateParent).not.toHaveBeenCalled()
+      expect(store.getWorktreeLineage(input[0].id)).toBeUndefined()
+    }))
 })

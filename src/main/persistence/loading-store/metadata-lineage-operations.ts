@@ -26,6 +26,7 @@ import {
 import { migrateWorktreeIdentity as migrateWorktreeIdentityOperation } from '../tracking-repos/worktree-identity-migration'
 import {
   getWorktreeLineageMetadata,
+  peekWorktreeMetaForHost,
   getAllWorktreeMetaForHost as getAllWorktreeMetaForHostOperation,
   getWorktreeMetaForHost as getWorktreeMetaForHostOperation,
   migrateWorktreeMetadataLocator,
@@ -74,6 +75,10 @@ export class MetadataLineageOperations {
       worktreeId,
       executionHostId
     )
+  }
+
+  peekWorktreeMetaForHost(id: string, host: ExecutionHostId): WorktreeMeta | undefined {
+    return peekWorktreeMetaForHost(this[metadataLineageOperationsContext].runtime.state, id, host)
   }
 
   getAllWorktreeMeta(): Record<string, WorktreeMeta> {

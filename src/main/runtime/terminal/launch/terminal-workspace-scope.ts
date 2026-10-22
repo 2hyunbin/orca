@@ -1,4 +1,4 @@
-import { projectWorktreeLineageWithHostPeers } from '../../../worktree-lineage-host-peers'
+import { projectCurrentStoreWorktreeLineage } from '../../../worktree-lineage-candidates'
 import { worktreeLineageFromWorkspaceLineage } from '../../../../shared/resolved-worktree-lineage'
 import { OrcaRuntimeWithTransitionGraphReloadToTerminalState } from '../../session-graph/session-graph-authority'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
@@ -116,7 +116,7 @@ export abstract class OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktr
     if (edge) {
       worktree.savedLineage = worktreeLineageFromWorkspaceLineage(edge)
     }
-    return this.store ? projectWorktreeLineageWithHostPeers(this.store, [worktree])[0] : worktree
+    return this.store ? projectCurrentStoreWorktreeLineage(this.store, [worktree])[0] : worktree
   }
 
   resolveWorkspaceTerminalStartupCwd(

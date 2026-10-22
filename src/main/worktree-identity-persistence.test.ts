@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { rmSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -16,6 +16,11 @@ import {
   testState,
   writeDataFile
 } from './persistence-test-harness'
+import {
+  peekWorktreeMetaForHost,
+  getAllWorktreeMetaForHost
+} from './persistence/loading-store/worktree-identity-metadata'
+import { mergeWorktreeMetaForWrite } from './persistence/loading-store/worktree-meta-write-normalization'
 import { removeWorktreeMetaRow } from './persistence/host-qualified-worktree-meta'
 
 describe('host-qualified worktree metadata', () => {
@@ -35,6 +40,43 @@ describe('host-qualified worktree metadata', () => {
 
   afterEach(() => {
     rmSync(testState.dir, { recursive: true, force: true })
+  })
+
+  it('reads the full-host alias winner at a point without migration or writes', () => {
+    const store = createStoreWithRepo()
+    store.setWorktreeMeta(hostWorktreeTarget({ id: worktreeId, hostId: 'local' }), {
+      instanceId: 'local-instance'
+    })
+    store.setWorktreeMeta(hostWorktreeTarget({ id: worktreeId, hostId: 'ssh:copy' }), {
+      instanceId: 'copy-instance'
+    })
+    const written = vi.fn()
+    const stop = store.onStateWritten(written)
+    const raw = store.getAllWorktreeMeta()
+    expect(store.peekWorktreeMetaForHost(worktreeId, 'ssh:copy')).toEqual(
+      store.getAllWorktreeMetaForHost('ssh:copy')[worktreeId]
+    )
+    expect(store.getAllWorktreeMeta()).toBe(raw)
+    expect(written).not.toHaveBeenCalled()
+    stop()
+    const first = mergeWorktreeMetaForWrite(undefined, { lastActivityAt: 1 })
+    const second = { ...first, displayName: 'winner', lastActivityAt: 2 }
+    const state = {
+      worktreeMeta: { [worktreeId]: first },
+      worktreeIdentityAliases: { [composeWorktreeHostIdentity('local', worktreeId)]: ['a', 'b'] },
+      worktreeMetaByIdentity: { a: first, b: second }
+    }
+    const before = JSON.stringify(state)
+    expect(peekWorktreeMetaForHost(state, worktreeId, 'local')).toEqual({
+      ...second,
+      hostId: 'local'
+    })
+    expect(JSON.stringify(state)).toBe(before)
+    state.worktreeMetaByIdentity.b = { ...second, hostId: 'ssh:wrong' }
+    expect(peekWorktreeMetaForHost(state, worktreeId, 'local')).toBe(first)
+    expect(peekWorktreeMetaForHost(state, worktreeId, 'local')).toEqual(
+      getAllWorktreeMetaForHost({ state }, 'local')[worktreeId]
+    )
   })
 
   it('stores independent metadata for colliding locators on two hosts', () => {

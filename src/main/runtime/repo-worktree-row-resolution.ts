@@ -1,4 +1,4 @@
-import { getWorktreeLineageCandidates } from '../worktree-lineage-candidates'
+import { readWorktreeLineageCorpus } from '../worktree-lineage-candidates'
 import { preserveFolderUpgradeWorktreePath } from '../folder-upgrade-worktree-path'
 import {
   splitWorktreeId,
@@ -8,7 +8,6 @@ import {
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../shared/execution-host'
 import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import { isFolderRepo } from '../../shared/repo-kind'
-import { projectResolvedWorktreeLineage } from '../../shared/resolved-worktree-lineage'
 import { withTimeout } from '../../shared/promise-timeout-fallback'
 import type { GitWorktreeInfo, Worktree } from '../../shared/worktree/types'
 import type { WorktreeLineage } from '../../shared/worktree/lineage-types'
@@ -35,7 +34,6 @@ type RepoWorktreeRowStore = Pick<
   | 'getProjects'
   | 'getSettings'
   | 'getWorktreeLineageMetadata'
-  | 'onStateWritten'
   | 'getAllWorktreeMeta'
   | 'getAllWorktreeMetaForHost'
   | 'getWorktreeMeta'
@@ -86,7 +84,7 @@ export type RepoWorktreeRowDeps = {
 export function listStoredWorktreeRowsForRepo(
   store: RepoWorktreeRowStore,
   repo: Repo,
-  repoOwnerCount = getWorktreeLineageCandidates(store).reposById.get(repo.id)?.length ?? 0,
+  repoOwnerCount = store.getRepos().filter((candidate) => candidate.id === repo.id).length,
   allMeta = readAllWorktreeMetaForHost(store, getRepoExecutionHostId(repo))
 ): GitWorktreeInfo[] {
   const expectedHostId = getRepoExecutionHostId(repo)
@@ -122,7 +120,7 @@ export async function resolveRepoWorktreeRows(
   repo: Repo,
   metaById: Record<string, WorktreeMeta>,
   projectRuntimeByRepoId: ReadonlyMap<string, ProjectExecutionRuntimeResolution>,
-  repoOwnerCount = getWorktreeLineageCandidates(deps.store).reposById.get(repo.id)?.length ?? 0
+  repoOwnerCount = deps.store.getRepos().filter((candidate) => candidate.id === repo.id).length
 ): Promise<RepoWorktreeRow[]> {
   const { store } = deps
   if (isFolderRepo(repo)) {
@@ -210,7 +208,7 @@ export async function resolveScopedWorktreeIdRow(
   if (!parsed?.repoId || !parsed.worktreePath) {
     return null
   }
-  let snapshot = getWorktreeLineageCandidates(store)
+  let snapshot = readWorktreeLineageCorpus(store)
   const owners = snapshot.repos.filter(
     (repo) =>
       repo.id === parsed.repoId &&
@@ -240,7 +238,7 @@ export async function resolveScopedWorktreeIdRow(
   if (!target) {
     return null
   }
-  snapshot = getWorktreeLineageCandidates(store)
+  snapshot = readWorktreeLineageCorpus(store)
   const relatedRepos = snapshot
     .relatedRepos([target.id])
     .filter(
@@ -261,12 +259,7 @@ export async function resolveScopedWorktreeIdRow(
       )
     )
   )
-  snapshot = getWorktreeLineageCandidates(store)
-  const projected = projectResolvedWorktreeLineage(
-    [...ownerRows, ...otherRows.flat()],
-    snapshot.lineageById,
-    snapshot.rows,
-    snapshot.rawMetadata
-  )
+  snapshot = readWorktreeLineageCorpus(store)
+  const projected = snapshot.project([...ownerRows, ...otherRows.flat()])
   return projected[ownerRows.indexOf(target)] ?? null
 }
