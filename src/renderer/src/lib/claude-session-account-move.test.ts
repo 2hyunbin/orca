@@ -4,6 +4,7 @@ import type { AgentStatusEntry } from '../../../shared/agent-status-types'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { ClaudeManagedAccount } from '../../../shared/managed-account-types'
+import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import { getDefaultSettings } from '../../../shared/constants'
 import type * as localPreflightContext from '@/lib/local-preflight-context'
 import type * as paneSelectionLane from './codex-pane-selection-lane'
@@ -20,6 +21,7 @@ import {
 } from './claude-session-account-move'
 
 const laneByPtyId: Record<string, string> = {}
+let projectRuntime: ProjectExecutionRuntimeResolution | undefined
 
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
   inspectRuntimeTerminalProcess: vi.fn(),
@@ -28,7 +30,7 @@ vi.mock('@/runtime/runtime-terminal-inspection', () => ({
 vi.mock('./renderer-app-platform', () => ({ getRendererAppPlatform: () => 'win32' }))
 vi.mock('@/lib/local-preflight-context', async (importOriginal) => ({
   ...(await importOriginal<typeof localPreflightContext>()),
-  getLocalProjectExecutionRuntimeContext: () => undefined
+  getLocalProjectExecutionRuntimeContext: () => projectRuntime
 }))
 vi.mock('./codex-pane-selection-lane', async (importOriginal) => ({
   ...(await importOriginal<typeof paneSelectionLane>()),
@@ -145,6 +147,7 @@ const movable = async (
   )
 
 beforeEach(() => {
+  projectRuntime = undefined
   for (const key of Object.keys(laneByPtyId)) {
     delete laneByPtyId[key]
   }
@@ -253,6 +256,17 @@ describe('findMovableClaudeSessions', () => {
       hasChildProcesses: true
     })
     vi.mocked(confirmRuntimeTerminalForegroundProcess).mockResolvedValue(null)
+    projectRuntime = {
+      status: 'resolved',
+      runtime: {
+        kind: 'wsl',
+        hostPlatform: 'wsl',
+        projectId: 'project-1',
+        distro: 'Ubuntu-24.04',
+        reason: 'project-override',
+        cacheKey: 'project-1:wsl:Ubuntu-24.04'
+      }
+    }
 
     expect(await movable('acct-a', { runtime: 'wsl', wslDistro: 'Ubuntu-24.04' })).toEqual([
       ptyId(1)
