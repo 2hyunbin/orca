@@ -1,3 +1,4 @@
+import { retainedProviderSessionRow } from './retained-provider-session-row'
 import type { AgentProcessPresence } from '../../../shared/agent-process-presence'
 import {
   admitLegacyAgentStatus,
@@ -17,24 +18,26 @@ import { isLocalHookConnectionId } from '../../../shared/wsl-hook-relay-contract
 import type { EnrichedAgentHookEventPayload } from './server-types'
 import { AgentHookServerAuthorityFences } from './server-authority-fences'
 import { recordAgentExit } from './agent-exit-evidence'
+import { TerminalMailTargets, type TerminalMailTarget } from './terminal-mail-target'
 
 export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFences {
-  /** The resume-identity remnant of a dropped row: a `providerSessionOnly` entry carries no state
-   *  claim — it cannot gate a pane `working` — so it survives teardowns that end the pane's live
-   *  claims. Returns null when the row has no resumable session to keep. */
-  protected toRetainedProviderSessionRow(
-    entry: EnrichedAgentHookEventPayload | null | undefined
-  ): EnrichedAgentHookEventPayload | null {
-    if (
-      !entry?.providerSession ||
-      !entry.payload.agentType ||
-      entry.payload.agentType === 'unknown'
-    ) {
-      return null
-    }
-    const { launchToken: _launchToken, ...resumeIdentity } = entry
-    return { ...resumeIdentity, providerSessionOnly: true, retainedForLiveness: true }
+  private readonly terminalMailTargets = new TerminalMailTargets()
+
+  readTerminalMailTarget(paneKey: string): TerminalMailTarget | null {
+    return this.terminalMailTargets.read(
+      this.state.lastStatusByPaneKey.get(this.resolvePaneKeyAlias(paneKey))
+    )
   }
+
+  terminalMailTargetWasAbandoned(target: TerminalMailTarget): boolean {
+    const key = this.resolvePaneKeyAlias(target.paneKey)
+    return this.terminalMailTargets.wasAbandoned(
+      { ...target, paneKey: key },
+      this.state.lastStatusByPaneKey.get(key),
+      this.agentExitedAtByPaneKey.get(key)?.process
+    )
+  }
+  protected toRetainedProviderSessionRow = retainedProviderSessionRow
 
   /** Drop only the status row (user dismissal); do NOT wipe prompt/tool caches since the pane's agent may still be alive. Use clearPaneState for PTY-teardown. */
   dropStatusEntry(
@@ -136,6 +139,10 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
     for (const paneKey of paneKeys) {
       const resolvedPaneKey = this.resolvePaneKeyAlias(paneKey)
       if (options?.endedPresence) {
+        this.terminalMailTargets.observeExit(
+          this.state.lastStatusByPaneKey.get(resolvedPaneKey),
+          options.endedPresence.process
+        )
         // Why both: cleanup below drops the alias, and a reader may still hold the original key.
         const paneKeys = new Set([resolvedPaneKey, paneKey])
         for (const [aliasKey, alias] of this.legacyPaneKeyAliases) {
@@ -149,20 +156,14 @@ export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFen
       if (!this.hasLiveClaimsForPaneKey(resolvedPaneKey)) {
         continue
       }
+      const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey)
       const resumeRow = options?.preserveResumeIdentity
-        ? this.toRetainedProviderSessionRow(
-            this.state.lastStatusByPaneKey.get(resolvedPaneKey) as
-              | EnrichedAgentHookEventPayload
-              | undefined
-          )
+        ? this.toRetainedProviderSessionRow(previous)
         : null
       const retained =
         resumeRow && options?.endedPresence
           ? { ...resumeRow, agentPresence: options.endedPresence }
           : resumeRow
-      const previous = this.state.lastStatusByPaneKey.get(resolvedPaneKey) as
-        | EnrichedAgentHookEventPayload
-        | undefined
       this.clearPaneState(resolvedPaneKey, { emitStatusRowMutation: false })
       if (retained) {
         admitLegacyAgentStatus(

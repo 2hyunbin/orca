@@ -1,3 +1,4 @@
+import { journalSubmissionHandoff } from './journal-submission-handoff'
 // Append-only journal store for one agent session. It owns the chat's fold and write queue, and no
 // connection: every statement goes through the host's one journal database.
 
@@ -265,6 +266,9 @@ export class AgentSessionJournal {
   historyOrigin = () => this.state.historyOrigin
 
   submission = (clientMessageId: string) => this.state.submissions.get(clientMessageId)
+
+  submissionHandoff = (clientMessageId: string) =>
+    journalSubmissionHandoff(this.state, clientMessageId)
 
   pendingSubmissions = () => this.submissions().filter((entry) => entry.dispatchState === 'pending')
 

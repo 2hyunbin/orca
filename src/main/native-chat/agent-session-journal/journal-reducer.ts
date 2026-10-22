@@ -15,7 +15,8 @@ import type {
   AgentJournalAcceptanceReceipt,
   AgentJournalRenderItem,
   AgentJournalSnapshot,
-  AgentJournalSubmission
+  AgentJournalSubmission,
+  AgentJournalTurnScope
 } from '../../../shared/agent-session-journal-types'
 import { journalHistoryOrigin, type JournalHistoryOrigin } from './journal-history-origin'
 import { journalBatchMutationProducer, journalRenderItem } from './journal-render-item'
@@ -66,6 +67,7 @@ export type JournalReducerState = {
   /** Turn ids whose record a tombstone removed, as a rewind does: over, though no row shows it. */
   removedTurnIds: Set<string>
   submissions: Map<string, AgentJournalSubmission>
+  submissionTurnScopes: Map<string, AgentJournalTurnScope | null>
   receipts: Map<string, AgentJournalAcceptanceReceipt>
   /** Provider item id → the submission slot that adopted it. Stops an accepted
    *  echo from appending a second copy of the user's own message. */
@@ -100,6 +102,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     tombstones: new Map(),
     removedTurnIds: new Set(),
     submissions: new Map(),
+    submissionTurnScopes: new Map(),
     receipts: new Map(),
     aliases: new Map(),
     itemEchoes: new Map(),

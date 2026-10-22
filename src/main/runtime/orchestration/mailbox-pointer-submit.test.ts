@@ -279,7 +279,8 @@ describe('orchestration mailbox pointer submit', () => {
     }
   })
 
-  it('releases every reservation when a pending batch targets multiple PTYs', () => {
+  it('releases only unwritten reservations and preserves ambiguous input across PTY changes', () => {
+    const settleMailboxPointerEnter = vi.fn()
     const releaseMailboxPointerEnter = vi.fn()
     const messages = [
       {
@@ -302,7 +303,7 @@ describe('orchestration mailbox pointer submit', () => {
 
     const resumed = resumePendingOrchestrationMailboxPointer({
       deps: {
-        getDb: () => ({ releaseMailboxPointerEnter }) as never,
+        getDb: () => ({ releaseMailboxPointerEnter, settleMailboxPointerEnter }) as never,
         resolveSubmitTarget: () => ({
           leaf: {} as never,
           terminalHandle: 'term-current',
@@ -324,12 +325,12 @@ describe('orchestration mailbox pointer submit', () => {
     expect(releaseMailboxPointerEnter).toHaveBeenCalledWith(
       ['msg-a'],
       { ptyId: 'pty-a', processIncarnation: 'inc-a' },
-      [MAILBOX_POINTER_RESERVED, MAILBOX_POINTER_WRITE_ATTEMPTED, MAILBOX_POINTER_ENTER_ATTEMPTED]
+      [MAILBOX_POINTER_RESERVED]
     )
     expect(releaseMailboxPointerEnter).toHaveBeenCalledWith(
       ['msg-b'],
       { ptyId: 'pty-b', processIncarnation: 'inc-b' },
-      [MAILBOX_POINTER_RESERVED, MAILBOX_POINTER_WRITE_ATTEMPTED, MAILBOX_POINTER_ENTER_ATTEMPTED]
+      [MAILBOX_POINTER_RESERVED]
     )
   })
 
@@ -494,13 +495,17 @@ describe('orchestration mailbox pointer submit', () => {
       redrive: vi.fn()
     })
 
-    expect(resumed).toBe(true)
+    expect(resumed).toBe(false)
     expect(settleMailboxPointerEnter).toHaveBeenCalledWith(
       ['msg-surviving'],
       { ptyId, processIncarnation: target.processIncarnation },
       [MAILBOX_POINTER_WRITE_ATTEMPTED, MAILBOX_POINTER_ENTER_ATTEMPTED]
     )
-    expect(releaseMailboxPointerEnter).not.toHaveBeenCalled()
+    expect(releaseMailboxPointerEnter).toHaveBeenCalledWith(
+      ['msg-surviving'],
+      { ptyId, processIncarnation: target.processIncarnation },
+      [MAILBOX_POINTER_RESERVED]
+    )
     expect(writePty).not.toHaveBeenCalled()
   })
 })

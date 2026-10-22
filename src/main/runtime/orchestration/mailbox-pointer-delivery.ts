@@ -1,7 +1,6 @@
 import type { PointerDeliveryDependencies } from './mailbox-pointer-delivery-contract'
 import {
   hasUnfilteredOrchestrationWaiter,
-  selectOrchestrationPointerBatch,
   type OrchestrationMessageWaiter
 } from './mailbox-pointer-eligibility'
 import type { OrchestrationMailboxLeaf } from './mailbox-owner'
@@ -15,6 +14,7 @@ import {
 } from './db/messages/mailbox-pointer-enter-state'
 import { resumePendingOrchestrationMailboxPointer } from './mailbox-pointer-resume'
 import { stageOrchestrationMailboxPointer } from './mailbox-pointer-stage'
+import { selectTerminalMailHandoff } from './terminal-mail-settlement'
 
 export type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 
@@ -67,9 +67,6 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
     if (!this.deps.getTerminalHandleForLeafKey(this.leafKey(leaf))) {
       return
     }
-    if (db.hasOutstandingMailboxDelivery?.(mailboxHandle)) {
-      return
-    }
     // Why the gate lives HERE and not at each caller: this method is the single point at
     // which this subsystem commits to typing the pointer into the pane, and it has four
     // callers (handle delivery, post-probe redelivery, flight settle, and the notification
@@ -118,9 +115,11 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
     ) {
       return
     }
-    const unread = selectOrchestrationPointerBatch({
+    const unread = selectTerminalMailHandoff({
       db,
-      mailboxHandle,
+      mailbox: mailboxHandle,
+      target: this.deps.readMailTarget?.(leaf) ?? null,
+      wasAbandoned: (target) => this.deps.mailTargetWasAbandoned?.(target) ?? false,
       waiters,
       reservedTypes: options.reservedTypes
     })

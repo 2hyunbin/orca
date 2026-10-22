@@ -82,6 +82,39 @@ function visible(server: AgentHookServer): boolean {
 }
 
 describe('host-owned hook presence', () => {
+  it('retains exact abandoned mail target proof across an idle successor, but not its next root turn', async () => {
+    const server = await createServer()
+    await hook(server, 'SessionStart')
+    await hook(server, 'UserPromptSubmit')
+    const target = server.readTerminalMailTarget(PANE)
+    expect(target).not.toBeNull()
+    if (!target) {
+      throw new Error('Missing open root target')
+    }
+    expect(server.terminalMailTargetWasAbandoned(target)).toBe(false)
+    probe.mockResolvedValue('exited')
+    expect(await server.checkAgentPresence(PANE)).toBe('exited')
+    expect(server.terminalMailTargetWasAbandoned(target)).toBe(true)
+    await hook(server, 'SessionStart', 'successor', undefined, 4002)
+    expect(server.terminalMailTargetWasAbandoned(target)).toBe(true)
+    await hook(server, 'UserPromptSubmit', 'successor', undefined, 4002)
+    expect(server.terminalMailTargetWasAbandoned(target)).toBe(false)
+  })
+
+  it('does not recover a mail target after its root completed normally before process exit', async () => {
+    const server = await createServer()
+    await hook(server, 'SessionStart')
+    await hook(server, 'UserPromptSubmit')
+    const target = server.readTerminalMailTarget(PANE)
+    if (!target) {
+      throw new Error('Missing open root target')
+    }
+    await hook(server, 'Stop')
+    probe.mockResolvedValue('exited')
+    await server.checkAgentPresence(PANE)
+    expect(server.terminalMailTargetWasAbandoned(target)).toBe(false)
+  })
+
   it('keeps writer observations exact and topology local to the accepted row', async () => {
     const server = await createServer()
     await hook(server, 'SessionStart')

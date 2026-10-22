@@ -16,6 +16,7 @@ import type {
 import { submitOrchestrationMailboxPointer } from './mailbox-pointer-submit'
 import type { OrchestrationMailboxPointerSubmitTarget } from './mailbox-pointer-submit'
 import { isSettledWrite, type WriteSettlement } from '../../../shared/pty-write-settlement'
+import { terminalMailHandoffCanSubmit } from './terminal-mail-settlement'
 
 type StagePointerArgs<TWaiter extends OrchestrationMessageWaiter> = {
   deps: PointerDeliveryDependencies<TWaiter>
@@ -46,8 +47,16 @@ export function stageOrchestrationMailboxPointer<TWaiter extends OrchestrationMe
     ptyId,
     processIncarnation: expectedTarget.processIncarnation
   }
+  const validateHandoff = (): boolean =>
+    terminalMailHandoffCanSubmit(
+      db,
+      args.mailboxHandle,
+      args.messages,
+      (target) => args.deps.mailTargetWasAbandoned?.(target) ?? false
+    )
   if (
     !db ||
+    !validateHandoff() ||
     shouldReleaseOrchestrationPointer(
       db,
       args.mailboxHandle,
@@ -62,7 +71,7 @@ export function stageOrchestrationMailboxPointer<TWaiter extends OrchestrationMe
   flight.stagedMessageIds = args.messages.map((message) => message.id)
   try {
     if (
-      !db.stageMailboxPointerEnter(flight.stagedMessageIds, reservationTarget) ||
+      !db.stageMailboxPointerEnter(flight.stagedMessageIds, reservationTarget, args.messages) ||
       !db.markMailboxPointerWriteAttempted(flight.stagedMessageIds, reservationTarget)
     ) {
       args.settle(ptyId, flight)
@@ -161,6 +170,13 @@ function finishPointerWriteAndStageEnter<TWaiter extends OrchestrationMessageWai
       submitOrchestrationMailboxPointer(
         {
           mailboxOwner: args.deps.mailboxOwner,
+          validateHandoff: () =>
+            terminalMailHandoffCanSubmit(
+              args.deps.getDb(),
+              args.mailboxHandle,
+              args.messages,
+              (target) => args.deps.mailTargetWasAbandoned?.(target) ?? false
+            ),
           state: args.state,
           getDb: args.deps.getDb,
           resolveSubmitTarget: args.deps.resolveSubmitTarget,

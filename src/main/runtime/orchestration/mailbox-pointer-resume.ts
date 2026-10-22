@@ -74,8 +74,8 @@ export function resumePendingOrchestrationMailboxPointer<
         byTarget.set(key, group)
       }
       for (const group of byTarget.values()) {
-        db.releaseMailboxPointerEnter(group.ids, group.target, [
-          MAILBOX_POINTER_RESERVED,
+        db.releaseMailboxPointerEnter(group.ids, group.target, [MAILBOX_POINTER_RESERVED])
+        db.settleMailboxPointerEnter(group.ids, group.target, [
           MAILBOX_POINTER_WRITE_ATTEMPTED,
           MAILBOX_POINTER_ENTER_ATTEMPTED
         ])
@@ -91,7 +91,10 @@ export function resumePendingOrchestrationMailboxPointer<
         MAILBOX_POINTER_WRITE_ATTEMPTED,
         MAILBOX_POINTER_ENTER_ATTEMPTED
       ])
-    return true
+    args.deps
+      .getDb()
+      ?.releaseMailboxPointerEnter(messageIds, persistedTarget!, [MAILBOX_POINTER_RESERVED])
+    return false
   }
   args.deps
     .getDb()

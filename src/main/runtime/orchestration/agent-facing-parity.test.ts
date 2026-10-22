@@ -128,7 +128,19 @@ async function renderChatPointer(mailbox: string): Promise<string> {
     getCliCommand: localOrchestrationCliCommand,
     senderName: () => null,
     host: {
-      readSessionFacts: async () => ({ submissions: [] }),
+      readSessionFacts: async () => ({ epoch: 'epoch', frontier: 'frontier' }),
+      readHandoffEvidence: async () => null,
+      readHandoffEvidenceNow: () => ({
+        epoch: 'epoch',
+        frontier: 'frontier',
+        stopInForce: false,
+        submission: undefined,
+        owner: null,
+        latestTurn: null,
+        acceptedUnopened: false,
+        personStopped: false,
+        diedTurnId: null
+      }),
       hasActionablePromptNow: () => false,
       currentFence: () => 1,
       currentContextClearOperationId: () => undefined,

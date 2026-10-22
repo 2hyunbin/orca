@@ -64,12 +64,11 @@ async function readPointerSessionFacts(
     return null
   }
   const host = getStructuredAgentSessionHost()
-  const boundary = host?.deps.store.getRecord(sessionId)?.providerContextBoundary
-  return {
-    submissions: boundary
-      ? snapshot.submissions.filter((submission) => submission.fence > boundary.afterFence)
-      : snapshot.submissions
+  const evidence = host?.readMailHandoffEvidenceNow(sessionId, '')
+  if (!evidence) {
+    return null
   }
+  return { epoch: snapshot.cursor.epoch, frontier: evidence.frontier }
 }
 
 async function readSessionJournal(sessionId: string): Promise<AgentJournalSnapshot | null> {
@@ -91,6 +90,23 @@ async function readSessionJournal(sessionId: string): Promise<AgentJournalSnapsh
 
 export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHost {
   return {
+    async readHandoffEvidence(reference) {
+      return (
+        (await getStructuredAgentSessionHost()?.readMailHandoffEvidence(
+          reference.sessionId,
+          reference.clientMessageId
+        )) ?? null
+      )
+    },
+
+    readHandoffEvidenceNow(reference) {
+      return (
+        getStructuredAgentSessionHost()?.readMailHandoffEvidenceNow(
+          reference.sessionId,
+          reference.clientMessageId
+        ) ?? null
+      )
+    },
     readSessionFacts(sessionId) {
       return readPointerSessionFacts(sessionId)
     },
@@ -131,6 +147,9 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
             operationId: input.operationId,
             expectedRuntimeFence: input.expectedRuntimeFence,
             beforeRun: () => {
+              if (!input.beforeRun()) {
+                throw new StructuredMailSupersededError()
+              }
               if (
                 input.body.from?.orchestration?.message === 'mail-notice' &&
                 host.currentWork(input.sessionId)?.hasActionablePrompt()
@@ -141,6 +160,9 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
           }
         })
       } catch (error) {
+        if (error instanceof StructuredMailSupersededError) {
+          return { kind: 'superseded' }
+        }
         if (error instanceof StructuredMailHeldError) {
           return { kind: 'held' }
         }
@@ -150,15 +172,21 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
         case 'refused':
           return outcome.refusal.code === AGENT_SESSION_NOT_ATTACHED.code
             ? { kind: 'unattached' }
-            : { kind: 'sent', state: 'rejected' }
+            : {
+                kind: 'sent',
+                state: 'rejected',
+                nonAdmission:
+                  outcome.refusal.code === 'agent_session_operation_expired' ? 'expired' : 'refused'
+              }
         case 'queued':
-          return { kind: 'queued' }
+          return { kind: 'queued', clientMessageId: outcome.clientMessageId }
         case 'sent': {
           // `pending` is not yet an acknowledgement; only `accepted` may consume mail. A send still
           // pending after the wait parks for the next journal edge.
           const state = outcome.submission?.dispatchState
           return {
             kind: 'sent',
+            clientMessageId: outcome.submission?.clientMessageId ?? outcome.clientMessageId,
             state: state === 'accepted' ? 'accepted' : state === 'rejected' ? 'rejected' : 'unknown'
           }
         }
@@ -168,3 +196,5 @@ export function createStructuredMailboxPointerHost(): StructuredMailboxPointerHo
 }
 
 class StructuredMailHeldError extends Error {}
+
+class StructuredMailSupersededError extends Error {}

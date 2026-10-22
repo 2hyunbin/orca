@@ -1,4 +1,5 @@
 import type { CliWriterObservation } from '../../agent-hooks/server/cli-writer-observation'
+import type { TerminalMailTarget } from '../../agent-hooks/server/terminal-mail-target'
 import type { ExecutionHostScope } from '../../../shared/execution-host'
 import type { IPtyProvider } from '../../providers/pty-provider-contract'
 import type { PrepareClaudeAuth } from '../../ipc/pty/host-env/types'
@@ -22,6 +23,8 @@ import type { OrchestrationEnvironmentTransport } from '../orchestration/environ
 import type { SessionSearchSettingsApply } from '../runtime-session-search-settings'
 
 export type RuntimeConstructionDependencies = {
+  readTerminalMailTarget?: (paneKey: string) => TerminalMailTarget | null
+  terminalMailTargetWasAbandoned?: (target: TerminalMailTarget) => boolean
   getLocalProvider?: () => IPtyProvider
   prepareClaudeAuth?: PrepareClaudeAuth
   onPtyStopped?: (ptyId: string) => void

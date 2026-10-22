@@ -15,6 +15,7 @@ import type {
 import type { WriteSettlement } from '../../../shared/pty-write-settlement'
 
 type PointerSubmitDependencies<TWaiter extends OrchestrationMessageWaiter> = {
+  validateHandoff?: () => boolean
   mailboxOwner: OrchestrationMailboxOwner
   state: OrchestrationMailboxPointerState
   getDb: () => OrchestrationDb | null
@@ -100,6 +101,7 @@ export function submitOrchestrationMailboxPointer<TWaiter extends OrchestrationM
         releaseWithoutRedrive = true
       } else {
         if (
+          deps.validateHandoff?.() === false ||
           shouldReleaseOrchestrationPointer(
             deps.getDb(),
             input.mailboxHandle,

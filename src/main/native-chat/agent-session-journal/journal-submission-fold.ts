@@ -17,6 +17,7 @@ export function applyJournalSubmission(
   state: JournalReducerState,
   row: Extract<JournalRow, { kind: 'submission' }>
 ): void {
+  state.submissionTurnScopes.set(row.clientMessageId, row.turnScope ?? null)
   const options = readAgentSessionExecutionOptions(row.options)
   state.submissions.set(row.clientMessageId, {
     clientMessageId: row.clientMessageId,
