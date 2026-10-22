@@ -1,4 +1,7 @@
-import type { CreateWorktreeProgressEvent } from '../../shared/worktree/create-types'
+import type {
+  CreateWorktreeProgressEvent,
+  CreateWorktreeResult
+} from '../../shared/worktree/create-types'
 import type {
   RuntimeEditorTabReveal,
   RuntimeFileOpenPosition
@@ -20,7 +23,6 @@ import type {
   WorktreeBaseStatusEvent,
   WorktreeRemoteBranchConflictEvent
 } from '../../shared/worktree/base-ref-drift-types'
-import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type {
   RuntimeMobileSessionTabsResult,

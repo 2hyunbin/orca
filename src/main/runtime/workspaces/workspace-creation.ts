@@ -1,4 +1,7 @@
-import type { CreateWorktreeProgressEvent } from '../../../shared/worktree/create-types'
+import type {
+  CreateWorktreeProgressEvent,
+  CreateWorktreeResult
+} from '../../../shared/worktree/create-types'
 import type { Repo } from '../../../shared/repo-types'
 import type {
   WorktreeLineageInput,
@@ -6,7 +9,6 @@ import type {
 } from '../runtime-worktree-lineage-resolution'
 import { OrcaRuntimeWithGetWorktreeTerminalProvisioningHost } from './startup/workspace-terminal-provisioning'
 import type { RuntimeManagedWorktreeCreateArgs } from '../runtime-managed-worktree-create-types'
-import type { CreateWorktreeResult } from '../../../shared/worktree/create-types'
 import { isFolderRepo } from '../../../shared/repo-kind'
 import { notifyLineageRepos } from '../../worktree-lineage-change-notification'
 import { resolveWorktreeCreateRoute } from '../../worktree-create-execution-host-route'
