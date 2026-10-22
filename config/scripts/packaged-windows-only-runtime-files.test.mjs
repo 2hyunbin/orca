@@ -60,6 +60,7 @@ describe('Windows-only runtime files', () => {
   })
 
   it('keeps pagent.exe for Pageant on Windows but drops its build inputs', async () => {
+    // Why the linux entry: the win32 plan resolves Windows-only addons absent on other hosts.
     const { from } = createPackagedRuntimeNodeModuleResources('linux').find(
       (entry) => entry.to === ssh2Target
     )
@@ -81,9 +82,9 @@ describe('Windows-only runtime files', () => {
       await writeFile(join(nested, 'fake.exe'), Buffer.from('MZ not really'))
 
       for (const platform of ['darwin', 'linux']) {
-        expect(() => assertNoWindowsExecutablesInRuntimeNodeModules(resourcesDir, platform)).toThrow(
-          /: node_modules\/some-dep\/bin\/helper\. /
-        )
+        expect(() =>
+          assertNoWindowsExecutablesInRuntimeNodeModules(resourcesDir, platform)
+        ).toThrow(/: node_modules\/some-dep\/bin\/helper\. /)
       }
       expect(() =>
         assertNoWindowsExecutablesInRuntimeNodeModules(resourcesDir, 'win32')
