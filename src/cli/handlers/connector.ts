@@ -10,6 +10,15 @@ function formatDelivery(delivery: ConnectorDelivery): string {
   return delivery.reason ? `${delivery.outcome}: ${delivery.reason}` : delivery.outcome
 }
 
+/** `unknown` cannot say whether this call started the agent, so only the definite answers claim it. */
+export function formatConnectorStart(initial: ConnectorDelivery): string {
+  const prompt = `prompt ${formatDelivery(initial)}`
+  if (initial.outcome === 'accepted') {
+    return `started; ${prompt}`
+  }
+  return initial.outcome === 'refused' ? `not started; ${prompt}` : prompt
+}
+
 // The host decides whether connectors are on; this only names an older host's refusal.
 export async function callConnector<TResult>(
   client: Pick<HandlerContext['client'], 'call'>,
@@ -62,6 +71,6 @@ export const CONNECTOR_HANDLERS: Record<string, CommandHandler> = {
       prompt: getRequiredStringFlag(flags, 'prompt'),
       target
     })
-    printResult(result, json, (value) => `started; prompt ${formatDelivery(value.initial)}`)
+    printResult(result, json, (value) => formatConnectorStart(value.initial))
   }
 }

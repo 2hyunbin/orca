@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { RuntimeClientError } from '../runtime-client'
-import { callConnector } from './connector'
+import { callConnector, formatConnectorStart } from './connector'
 
 function refusingClient(code: string) {
   return {
@@ -21,5 +21,15 @@ describe('orca connector', () => {
     await expect(
       callConnector(refusingClient('method_not_found'), 'connector.start', {})
     ).rejects.toThrow('Update Orca on the host')
+  })
+
+  it('claims a start only for a definite answer', () => {
+    expect(formatConnectorStart({ outcome: 'accepted' })).toBe('started; prompt accepted')
+    expect(formatConnectorStart({ outcome: 'refused', reason: 'unsupported_agent' })).toBe(
+      'not started; prompt refused: unsupported_agent'
+    )
+    expect(formatConnectorStart({ outcome: 'unknown', reason: 'replayed_after_restart' })).toBe(
+      'prompt unknown: replayed_after_restart'
+    )
   })
 })
