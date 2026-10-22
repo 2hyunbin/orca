@@ -91,17 +91,9 @@ runs:
         esac
         printf 'lookup-only=%s\n' "$lookup_only" >> "$GITHUB_OUTPUT"
 
-    - name: Bootstrap Node.js for pnpm installation
-      uses: actions/setup-node@v6
-      with:
-        node-version: 24
-        check-latest: true
-        package-manager-cache: false
-
     # setup-node needs pnpm on PATH to locate and restore its store.
     - name: Setup pnpm
-      shell: bash
-      run: npm install --global pnpm@12.14.0
+      uses: ./.github/actions/setup-pnpm
 
     # Desktop-only jobs should not miss their download cache when mobile dependencies change.
     - name: Setup Node.js
