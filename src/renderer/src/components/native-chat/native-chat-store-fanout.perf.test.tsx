@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import { resolveNativeChatDraftOwner } from '@/lib/native-chat-draft-owner'
 import type { Tab } from '../../../../shared/tab-types'
+import { testOrcaSessionId } from '../../../../shared/orca-session-address-test-fixture'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import { useAgentMessageSenderLabel } from './native-chat-agent-message-sender-label'
@@ -91,9 +92,9 @@ function Sender({ index }: { index: number }) {
   const name = useAgentMessageSenderLabel(
     {
       party: {
-        address: `sender-${index}`,
+        address: `orca_session_id:session-${index}`,
         terminalHandle: null,
-        orcaSessionId: `session-${index}`
+        orcaSessionId: testOrcaSessionId(`session-${index}`)
       },
       name: 'Recorded'
     },
