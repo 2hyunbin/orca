@@ -401,11 +401,7 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     sessionId: string,
     options: Readonly<Record<string, string>>
   ): StructuredAgentSessionOptionProjection | undefined
-  /** Fetch off the lane, then apply the result under the same child's fence. */
-  prepareReadOptions?(input: {
-    sessionId: string
-    fence: number
-  }): Promise<() => StructuredAgentSessionLiveOptions> | undefined
+  /** Memory projection only; optional native observations belong to provider activity. */
   readOptions?(input: {
     sessionId: string
     fence: number

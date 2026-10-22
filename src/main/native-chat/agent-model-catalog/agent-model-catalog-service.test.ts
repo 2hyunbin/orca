@@ -79,7 +79,10 @@ describe('agent model catalog service', () => {
     // record-scoped read probes the RECORD's pinned home, not the selection.
     await service.read({ agent: 'grok', sessionId: 'session-1', waitForListing: true })
     await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(1))
-    expect(probe).toHaveBeenCalledWith(GROK_HOME('/homes/a'), { signal: expect.any(AbortSignal) })
+    expect(probe).toHaveBeenCalledWith(
+      GROK_HOME('/homes/a'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     await vi.waitFor(async () => {
       const result = await service.read({
         agent: 'grok',
@@ -132,9 +135,12 @@ describe('agent model catalog service', () => {
       listingInProgress: true
     })
     await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
-    expect(probe).toHaveBeenCalledWith(GROK_HOME('/homes/new'), {
-      signal: expect.any(AbortSignal)
-    })
+    expect(probe).toHaveBeenCalledWith(
+      GROK_HOME('/homes/new'),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal)
+      })
+    )
     await vi.waitFor(async () => {
       const result = await service.read({ agent: 'grok', waitForListing: true })
       expect(result.origin === 'unknown' ? null : result.models[0]!.id).toBe('gpt-new')
@@ -698,3 +704,100 @@ it.each(['cold', 'warm'] as const)(
     }
   }
 )
+
+it.each(['opencode', 'opencode2', 'omp'] as const)(
+  'keeps %s session-folder requests separate for explicit and historical readers',
+  async (agent) => {
+    const records = new Map(
+      ['w1', 'w2'].map((id) => [
+        id,
+        {
+          ...record('/same-account'),
+          sessionId: id,
+          provider: agent,
+          location: { ...record('/same-account').location, workspaceId: id }
+        }
+      ])
+    )
+    const store = new AgentModelCatalogStore()
+    const probe = vi.fn(
+      async (_home: AgentSessionAccountHome, options?: { workspacePath?: string }) =>
+        listing(options?.workspacePath ?? 'account')
+    )
+    const service = createAgentModelCatalogService({
+      store,
+      getRecord: (id) => records.get(id),
+      drivesRecord: () => true,
+      resolveAccountHome: async () => GROK_HOME('/same-account'),
+      recordWorkspacePath: async (row) => `/${row.location.workspaceId}`,
+      listsInChatFolder: new Set([agent]),
+      probes: { [agent]: probe }
+    })
+    try {
+      for (const inSessionWorkspace of [true, undefined] as const) {
+        const params = (sessionId: string) => ({
+          agent,
+          sessionId,
+          ...(inSessionWorkspace ? { inSessionWorkspace } : {})
+        })
+        await service.demand(params('w1'))
+        expect(service.snapshot(params('w1'))).toMatchObject({ models: [{ id: '/w1' }] })
+        if (inSessionWorkspace) {
+          expect(service.snapshot(params('w2'))).toEqual({ origin: 'unknown' })
+        } else {
+          expect(service.snapshot(params('w2'))).toMatchObject({ models: [{ id: '/w2' }] })
+        }
+        await service.prepareSaved(params('w2'))
+        await service.demand(params('w2'))
+        expect(service.snapshot(params('w2'))).toMatchObject({ models: [{ id: '/w2' }] })
+      }
+    } finally {
+      service.stop()
+    }
+  }
+)
+
+it('shares account rows while keeping workspace default provenance separate', async () => {
+  const store = new AgentModelCatalogStore()
+  const records = new Map(
+    ['w1', 'w2'].map((id) => [
+      id,
+      {
+        ...record('/same-account'),
+        sessionId: id,
+        provider: 'pi',
+        location: { ...record('/same-account').location, workspaceId: id }
+      }
+    ])
+  )
+  const first = records.get('w1')!
+  store.recordSuccess(
+    agentModelCatalogFingerprintForRecord(first),
+    'pi',
+    listing('account-default'),
+    'discovery'
+  )
+  const service = createAgentModelCatalogService({
+    store,
+    getRecord: (id) => records.get(id),
+    drivesRecord: () => true,
+    resolveAccountHome: async () => first.accountHome,
+    recordWorkspacePath: async (row) => `/${row.location.workspaceId}`,
+    agentReadsProjectModelConfig: () => true,
+    workspaceMayOverrideDefaultModel: async ({ workspacePath }) => workspacePath === '/w2'
+  })
+  try {
+    const one = { agent: 'pi', sessionId: 'w1', inSessionWorkspace: true as const }
+    const two = { ...one, sessionId: 'w2' }
+    expect(await service.prepareSaved(one)).toMatchObject({
+      models: [{ id: 'account-default', isDefault: true }]
+    })
+    expect(service.snapshot(two)).toEqual({ origin: 'unknown' })
+    expect(await service.prepareSaved(two)).toMatchObject({
+      models: [{ id: 'account-default', isDefault: false }]
+    })
+    expect(service.snapshot(one)).toMatchObject({ models: [{ isDefault: true }] })
+  } finally {
+    service.stop()
+  }
+})

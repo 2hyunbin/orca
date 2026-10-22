@@ -188,7 +188,10 @@ export function applyStructuredAgentSessionOptions(
         ? 'default'
         : current.confirmed?.includes(id)
           ? 'reported'
-          : 'dispatched'
+          : id === 'serviceTier' && current.defaulted !== undefined
+            ? 'applied'
+            : 'dispatched',
+    state.record.agent === 'codex' && current.defaulted !== undefined
   )
   return {
     ...state,

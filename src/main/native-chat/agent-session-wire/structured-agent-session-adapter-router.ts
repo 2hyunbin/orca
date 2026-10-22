@@ -164,9 +164,6 @@ export class StructuredAgentSessionAdapterRouter implements StructuredAgentSessi
   projectOptions: StructuredAgentSessionAdapter['projectOptions'] = (sessionId, options) =>
     this.liveOwnerOrNull(sessionId)?.projectOptions?.(sessionId, options)
 
-  prepareReadOptions = (input: { sessionId: string; fence: number }) =>
-    this.liveOwnerOrNull(input.sessionId)?.prepareReadOptions?.(input)
-
   readOptions = (input: { sessionId: string; fence: number }) => {
     const reader = this.owner(input.sessionId).readOptions
     if (!reader) {

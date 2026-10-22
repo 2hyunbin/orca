@@ -60,7 +60,7 @@ type Flow = {
 }
 
 export type AntigravityChatSignInHost = {
-  launchSources(): ReturnType<typeof structuredAgentHostLaunchSources>
+  launchSources(signal: AbortSignal): ReturnType<typeof structuredAgentHostLaunchSources>
   /** Rejects when a chat is not proven stopped. */
   stopLiveChats(): Promise<void>
   connect?: ConnectAcpAgent<AcpAgentConnection>
@@ -169,7 +169,7 @@ async function signIn(current: Flow, host: AntigravityChatSignInHost): Promise<v
     spec,
     () => active === current && running(current) && !signal.aborted
   )
-  const { accountHome, env, commandSettings, dataDirectory } = await host.launchSources()
+  const { accountHome, env, commandSettings, dataDirectory } = await host.launchSources(signal)
   const deps = { spec, dataDirectory, connect: host.connect ?? createAcpAgentConnection }
   const resolve = () =>
     resolveAcpLaunchInvocation(spec, accountHome, {

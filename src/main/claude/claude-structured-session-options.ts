@@ -142,12 +142,33 @@ export function claudeFallbackModelOptions(): WireClaudeModel[] {
 
 export async function readClaudeStructuredSessionOptions(
   session: ClaudeSession,
-  timeoutMs: number | undefined
+  _timeoutMs?: number
 ): Promise<StructuredAgentSessionLiveOptions> {
-  const readMutationSequence = session.optionMutationSequence
-  const settings = await session.connection.getSettings({ timeoutMs }).catch(() => null)
-  observeClaudeSettingsReadback(session, settings, readMutationSequence)
   return claudeStructuredSessionOptionsFrom(session, null)
+}
+
+/** Native turn completion owns optional settings observations, independently of user actions. */
+export async function refreshClaudeStructuredSessionOptions(
+  session: ClaudeSession,
+  timeoutMs: number | undefined,
+  current: () => boolean,
+  report: (options: StructuredAgentSessionLiveOptions) => void
+): Promise<void> {
+  const sequence = session.optionMutationSequence
+  const token = Symbol('settings')
+  session.settingsObservation = token
+  const connection = session.connection
+  const settings = await connection.getSettings({ timeoutMs }).catch(() => null)
+  if (
+    !current() ||
+    connection.closed ||
+    session.settingsObservation !== token ||
+    sequence !== session.optionMutationSequence
+  ) {
+    return
+  }
+  observeClaudeSettingsReadback(session, settings, sequence)
+  report(claudeStructuredSessionOptionsFrom(session, null))
 }
 
 function observeClaudeSettingsReadback(

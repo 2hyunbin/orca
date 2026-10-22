@@ -111,7 +111,7 @@ describe('independent installed CLI discovery', () => {
       h.read('b', { waitForListing: true })
     ])
     expect(h.run).toHaveBeenCalledTimes(1)
-    expect(h.resolve.mock.calls.every((call) => call.length === 2)).toBe(true)
+    expect(h.resolve.mock.calls.every((call) => call.length === 4)).toBe(true)
     expect(h.service.peek('a', true)).toBe(h.service.peek('b', true))
     expect(await h.read('b')).toMatchObject({
       models: [{ id: 'old', isDefault: true, defaultEffort: 'high' }]
@@ -250,7 +250,16 @@ it('prepares hydrated Auto evidence without discovery and shares it with another
       first
     )
   ).toBe('auto')
-  expect(probe.resolve).toHaveBeenCalledWith(HOME, '/project', true)
+  expect(probe.resolve).toHaveBeenCalledWith(
+    HOME,
+    '/project',
+    true,
+    expect.objectContaining({
+      current: expect.any(Function),
+      signal: expect.any(AbortSignal),
+      deadline: expect.any(Number)
+    })
+  )
   const resolutions = probe.resolve.mock.calls.length
   expect(
     await catalog.read({ ...params, workspacePath: '/project', inSessionWorkspace: undefined })

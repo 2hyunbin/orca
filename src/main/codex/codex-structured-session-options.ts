@@ -1,6 +1,5 @@
 import type { StructuredAgentSessionLiveOptions } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
-import type { CodexAppServerConnection } from './codex-app-server-connection'
 import type { CodexSession } from './codex-structured-session-state'
 import { isCodexTurnOptionKey } from './codex-structured-turn-start'
 import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
@@ -8,7 +7,6 @@ import { decodeStructuredAgentSessionOptionValue } from '../../shared/structured
 import { CODEX_DEFAULT_SERVICE_TIER, codexFastServiceTier } from './codex-structured-service-tier'
 import {
   composeCodexSessionOptionCatalog,
-  readCodexStructuredSessionOptionCatalog,
   type CodexSessionOptionCatalog
 } from './codex-structured-model-catalog'
 import { codexSessionCapabilities } from './codex-structured-catalog-entry'
@@ -38,18 +36,6 @@ export function reportedCodexSessionOptions(
 }
 
 export type { CodexSessionOptionCatalog } from './codex-structured-model-catalog'
-
-export { readCodexStructuredSessionOptionCatalog } from './codex-structured-model-catalog'
-
-export async function readCodexStructuredSessionOptions(input: {
-  connection: Pick<CodexAppServerConnection, 'request'>
-  current: { model?: string; effort?: string; serviceTier?: string }
-  reportedServiceTier?: string | null
-  reportedServiceTierKnown?: boolean
-  timeoutMs?: number
-}): Promise<AgentSessionOptionsResult> {
-  return readCodexStructuredSessionOptionCatalog(input)
-}
 
 function composeLiveCodexCatalog(
   session: CodexSession,

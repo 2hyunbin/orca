@@ -11,7 +11,7 @@ import {
 } from './structured-agent-session-option-models'
 
 /** What the asking client takes: whether it reads an answer that names no model. */
-export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean }
+export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean; deadline?: number }
 
 /** A same-build caller in this process reads as the RPC gate treats one: it takes no model. */
 export const IN_PROCESS_OPTIONS_READER: StructuredAgentSessionOptionsReader = {
@@ -29,7 +29,7 @@ export async function readStructuredAgentSessionOptionsAtRest(
   }
   const deadline = reader.readsWithoutModel
     ? undefined
-    : Date.now() + AGENT_MODEL_CATALOG_PICKER_WAIT_MS
+    : (reader.deadline ?? Date.now() + AGENT_MODEL_CATALOG_PICKER_WAIT_MS)
   const rules = deps.agents.definition(record.provider)?.restingOptions ?? null
   const readCatalog = async (
     inSessionWorkspace: boolean

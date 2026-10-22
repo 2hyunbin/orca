@@ -1,3 +1,4 @@
+import { assertStructuredAgentResolutionCurrent } from '../native-chat/structured-agent-command-resolution'
 import { activeProviderContext } from '../../shared/agent-session-provider-context'
 import { getClaudeProfileRouter } from '../claude-accounts/claude-profile-installed-router'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
@@ -153,7 +154,9 @@ export async function resolveClaudeStructuredInvocation(
   options?: Parameters<typeof claudeChildEnv>[2]
 ): Promise<ClaudeStructuredInvocation> {
   const sources = resolvedSources ?? (await resolveClaudeChildEnvSources(deps))
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const auth = await deps.resolveAuthPolicy()
+  assertStructuredAgentResolutionCurrent(deps.operation)
   // Why never strip: a shell proxy's key must travel with its ANTHROPIC_BASE_URL, on every account.
   return {
     command: sources.command,

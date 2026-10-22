@@ -24,6 +24,8 @@ import {
   resolveHostAgentBaseEnvironment
 } from './structured-agent-shell-environment'
 import type { AgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { nativeChatShellEnvironmentPolicy } from '../../shared/native-chat-shell-environment'
+import { createStructuredAgentEnvironmentResolvers } from './structured-agent-shell-environment'
 import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 
 type LaunchEnvironmentSettings = Pick<
@@ -106,7 +108,8 @@ export async function structuredAgentHostLaunchSources(
   agent: StructuredAgentId,
   runtime: Pick<LaunchSupportRuntime, 'requireStore'> & {
     resolveStructuredAgentAccountHome(agent: StructuredAgentId): Promise<AgentSessionAccountHome>
-  }
+  },
+  signal: AbortSignal
 ): Promise<{
   accountHome: AgentSessionAccountHome
   env: Record<string, string>
@@ -114,9 +117,24 @@ export async function structuredAgentHostLaunchSources(
   dataDirectory: string
 }> {
   const settings = runtime.requireStore().getSettings()
+  const policy = nativeChatShellEnvironmentPolicy(settings)
+  const overlay = isTuiAgent(agent)
+    ? { ...resolveTuiAgentLaunchEnv(agent, settings.agentDefaultEnv) }
+    : {}
+  const environment = createStructuredAgentEnvironmentResolvers({
+    prewarm: false,
+    processEnvironment: { ...process.env },
+    resolveShellEnvironmentPolicy: () => policy,
+    resolveAgentLaunchEnv: () => overlay
+  })
+  const release = environment.bindCatalogSources([agent])
+  signal.addEventListener('abort', release, { once: true })
+  if (signal.aborted) {
+    release()
+  }
   return {
     accountHome: await runtime.resolveStructuredAgentAccountHome(agent),
-    env: await resolveHostStructuredAgentLaunchEnvironment(agent, settings),
+    env: await environment.resolveAgentEnvironment(agent),
     commandSettings: settings,
     // The chat host's own state root (ensureStructuredAgentSessionHost).
     dataDirectory: getProfileUserDataPath()

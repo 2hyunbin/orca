@@ -1,3 +1,4 @@
+import { AGENT_MODEL_CATALOG_PICKER_WAIT_MS } from '../agent-model-catalog/agent-model-catalog-listing-waiters'
 import { independentAgentModelCatalog } from '../agent-model-catalog/agent-model-catalog-discovery'
 import {
   readStructuredAgentSessionOptionsAtRest,
@@ -11,8 +12,6 @@ import { structuredAgentSessionThreadGoalReport } from './structured-agent-sessi
 import type { AgentSessionOptionsResult } from '../../../shared/agent-session-wire'
 import { journalOpenReadRefusal } from '../agent-session-journal/journal-open-failure'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
-import { retainedAgentModelCatalogModels } from '../agent-model-catalog/agent-model-catalog-entry'
-import { saveStructuredAgentSessionListing } from './structured-agent-session-start-listing'
 import {
   structuredAgentSessionCapabilityView,
   type StructuredAgentSessionRestingOptions as RestingOptions
@@ -35,6 +34,9 @@ export async function readStructuredAgentSessionOptions(
   sessionId: string,
   reader: StructuredAgentSessionOptionsReader
 ): Promise<AgentSessionOptionsResult> {
+  reader = reader.readsWithoutModel
+    ? reader
+    : { ...reader, deadline: reader.deadline ?? Date.now() + AGENT_MODEL_CATALOG_PICKER_WAIT_MS }
   const { adapter, agents, store } = context.deps
   const started = await context.serialize(sessionId, async () => {
     const session = await context.openConversation(sessionId).catch((error: unknown) => {
@@ -44,10 +46,6 @@ export async function readStructuredAgentSessionOptions(
     // A starting child is asked nothing: the answer is the saved intent and the catalog.
     if (!child || child.phase === 'starting') {
       return { kind: 'rest' as const }
-    }
-    const prepared = adapter.prepareReadOptions?.({ sessionId, fence: child.fence })
-    if (prepared) {
-      return { kind: 'prepared' as const, child, session, prepared }
     }
     if (!adapter.readOptions) {
       throw new Error('structured_agent_session_options_unsupported')
@@ -60,16 +58,7 @@ export async function readStructuredAgentSessionOptions(
     }
   })
   const live: StructuredAgentSessionLiveOptions | null =
-    started.kind === 'live'
-      ? started.options
-      : started.kind === 'prepared'
-        ? await started.prepared.then((apply) =>
-            context.serialize(sessionId, async () => {
-              const child = (await context.openConversation(sessionId))?.child
-              return child === started.child ? apply() : null
-            })
-          )
-        : null
+    started.kind === 'live' ? started.options : null
   let rested: RestingOptions | undefined
   const atRest = async (): Promise<RestingOptions> =>
     (rested ??= await readStructuredAgentSessionOptionsAtRest(context.deps, sessionId, reader))
@@ -82,25 +71,6 @@ export async function readStructuredAgentSessionOptions(
     if (!catalogListing && !answer.listedModelIds && store.getRecord(sessionId)) {
       const { listedModelIds } = await atRest()
       options = listedModelIds ? { ...answer, listedModelIds } : answer
-    }
-    if (
-      catalogListing &&
-      !independentAgentModelCatalog(store.getRecord(sessionId)?.provider ?? '')
-    ) {
-      // Check prior membership before saving: a launch-added row cannot verify itself.
-      const listedModelIds = context.deps.modelCatalog
-        ? await context.deps.modelCatalog.retainedLiveModelIds(sessionId, catalogListing)
-        : retainedAgentModelCatalogModels(undefined, catalogListing).map((model) => model.id)
-      saveStructuredAgentSessionListing(
-        context,
-        sessionId,
-        catalogListing,
-        () =>
-          started.kind !== 'rest' &&
-          started.child.catalogSource?.() !== false &&
-          started.session.child === started.child
-      )
-      options = { ...answer, listedModelIds }
     }
   } else {
     const { inventory: _inventory, fallback: _fallback, ...answer } = await atRest()
@@ -116,7 +86,7 @@ export async function readStructuredAgentSessionOptions(
   const contextFloor = floor ? { contextFloor: floor } : {}
   // What a start launches now, live or at rest: a child never reports it.
   const permissionMode = record
-    ? await structuredAgentSessionLaunchPermission(context.deps, record)
+    ? await structuredAgentSessionLaunchPermission(context.deps, record, reader.deadline)
     : null
   const resting = live ? await atRest() : null
   const selected = resting ?? options
@@ -155,9 +125,11 @@ export async function readStructuredAgentSessionOptions(
     key === 'model' && !options.current.model
       ? displayDefault !== undefined || selected.current.defaulted?.includes(key) === true
       : options.current.defaulted?.includes(key) === true
-  const defaulted = structuredAgentSessionNeverSent(record, session.journal)
-    ? []
-    : (['model', 'effort'] as const).filter((key) => saved[key] === undefined && defaultedBy(key))
+  const defaulted =
+    (agent !== 'codex' || !live || options.current.model) &&
+    structuredAgentSessionNeverSent(record, session.journal)
+      ? []
+      : (['model', 'effort'] as const).filter((key) => saved[key] === undefined && defaultedBy(key))
   const confirmed = options.current.confirmed?.filter((key) =>
     key === 'model' || key === 'effort' || key === 'fastMode' || key === 'serviceTier'
       ? current[key] === options.current[key]
@@ -181,12 +153,13 @@ export async function readStructuredAgentSessionOptions(
         : undefined
     )
     options = { ...options, ...view, listedModelIds, current }
-    const projected = live
-      ? adapter.projectOptions?.(sessionId, {
-          ...saved,
-          ...(model ? { model } : {})
-        })
-      : undefined
+    const projected =
+      live && (saved.serviceTier !== undefined || saved.fastMode !== undefined)
+        ? adapter.projectOptions?.(sessionId, {
+            ...saved,
+            ...(model ? { model } : {})
+          })
+        : undefined
     if (projected?.options.serviceTier !== undefined) {
       current.serviceTier = projected.options.serviceTier
     }

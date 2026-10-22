@@ -1,3 +1,7 @@
+import {
+  assertStructuredAgentResolutionCurrent,
+  type StructuredAgentResolutionOperation
+} from '../native-chat/structured-agent-command-resolution'
 // What a structured Claude child's environment is built from, shared by its launch and the
 // `--version` probe that runs the same binary.
 
@@ -18,6 +22,7 @@ function cloneDefinedEnv(env: NodeJS.ProcessEnv | Record<string, string>): Recor
 }
 
 export type ClaudeEnvDeps = {
+  operation?: StructuredAgentResolutionOperation
   resolveCommand?: (options?: { pathEnv?: string | null; homePath?: string }) => string
   /** Refreshes the inherited env after the command was not found in it; absent never retries. */
   refreshEnvironmentAfterMiss?: (askedAt: number) => Promise<void>
@@ -45,15 +50,19 @@ export function resolveClaudeChildEnvSources(deps: ClaudeEnvDeps): Promise<Claud
     {
       env: ({ inheritedEnv, overlay }) => ({ ...inheritedEnv, ...overlay }),
       cwd: deps.resolveWorkingDirectory
-    }
+    },
+    deps.operation
   )
 }
 
 async function readClaudeChildEnvSources(deps: ClaudeEnvDeps): Promise<ClaudeChildEnvSources> {
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const overlay = await deps.resolveEnv?.()
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const inheritedEnv = deps.resolveInheritedEnv
     ? await deps.resolveInheritedEnv()
     : cloneDefinedEnv(process.env)
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const effectiveEnv = { ...inheritedEnv, ...overlay }
   const command = (deps.resolveCommand ?? resolveClaudeCommand)({
     pathEnv: effectiveEnv.PATH ?? effectiveEnv.Path ?? null,

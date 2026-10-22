@@ -9,8 +9,6 @@ import {
 import { describe, expect, it, vi } from 'vitest'
 import {
   applyCodexStructuredSessionOption,
-  readCodexStructuredSessionOptions,
-  readCodexStructuredSessionOptionCatalog,
   readLiveCodexSessionOptions,
   restoredCodexSessionOptions
 } from './codex-structured-session-options'
@@ -19,6 +17,19 @@ import type { CodexSession } from './codex-structured-session-state'
 import { startCodexTurn } from './codex-structured-turn-start'
 import { AgentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { optionSession } from './codex-structured-option-session.test-fixture'
+
+import {
+  fetchCodexModelCatalogListing,
+  composeCodexSessionOptionCatalog
+} from './codex-structured-model-catalog'
+
+async function readCodexStructuredSessionOptionCatalog(
+  input: Parameters<typeof fetchCodexModelCatalogListing>[0] &
+    Parameters<typeof composeCodexSessionOptionCatalog>[1]
+) {
+  return composeCodexSessionOptionCatalog(await fetchCodexModelCatalogListing(input), input)
+}
+const readCodexStructuredSessionOptions = readCodexStructuredSessionOptionCatalog
 
 async function primePicker(session: CodexSession): Promise<void> {
   session.catalogAccess = {
@@ -321,10 +332,10 @@ describe('structured Codex session options', () => {
       serviceTier: 'unrecognized-tier',
       confirmed: ['serviceTier']
     })
-    // A thread that reported no model runs the listing's default, which the chat never chose.
+    // A menu default cannot fill an unknown applied model.
     await expect(
       readCodexStructuredSessionOptions({ connection, current: {} })
-    ).resolves.toMatchObject({ current: { model: 'gpt-live', defaulted: ['model'] } })
+    ).resolves.toMatchObject({ current: {} })
   })
 
   it('keeps catalog presentation separate from legacy native Fast input', async () => {

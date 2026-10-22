@@ -11,7 +11,8 @@ import { createClaudeInitProof } from './claude-structured-init-proof'
 import { claudeProviderHandleLink } from './claude-structured-owner-identity'
 import {
   observeClaudeFastModeFacts,
-  readClaudeStructuredSessionOptions
+  readClaudeStructuredSessionOptions,
+  refreshClaudeStructuredSessionOptions
 } from './claude-structured-session-options'
 
 function sessionFor(setModel: ClaudeSession['connection']['setModel']): ClaudeSession {
@@ -224,6 +225,12 @@ describe('Claude structured Fast mode', () => {
     const { session } = fastModeSession(true)
     session.options.set('fastMode', 'true')
     session.connection.getSettings = async () => ({ effective: { fastMode: false } })
+    await refreshClaudeStructuredSessionOptions(
+      session,
+      undefined,
+      () => true,
+      () => {}
+    )
 
     await expect(readClaudeStructuredSessionOptions(session, undefined)).resolves.toMatchObject({
       current: { fastMode: false, confirmed: ['fastMode'] }
@@ -237,6 +244,12 @@ describe('Claude structured Fast mode', () => {
     session.options.set('fastMode', 'false')
     session.connection.getSettings = async () => ({ effective: { fastMode: true } })
     observeClaudeFastModeFacts(session, { fast_mode_state: 'cooldown' })
+    await refreshClaudeStructuredSessionOptions(
+      session,
+      undefined,
+      () => true,
+      () => {}
+    )
 
     await expect(readClaudeStructuredSessionOptions(session, undefined)).resolves.toMatchObject({
       current: { fastMode: true, fastModeState: 'cooldown', confirmed: ['fastMode'] }
@@ -251,6 +264,12 @@ describe('Claude structured Fast mode', () => {
       fast_mode_state: 'cooldown',
       fast_mode_disabled_reason: null
     })
+    await refreshClaudeStructuredSessionOptions(
+      session,
+      undefined,
+      () => true,
+      () => {}
+    )
     await expect(readClaudeStructuredSessionOptions(session, undefined)).resolves.toMatchObject({
       current: {
         model: 'opus',
@@ -298,6 +317,12 @@ describe('Claude structured Fast mode', () => {
       { value: 'opus', displayName: 'Opus', supportsFastMode: true },
       { value: 'haiku', displayName: 'Haiku', supportsFastMode: false }
     ]
+    await refreshClaudeStructuredSessionOptions(
+      session,
+      undefined,
+      () => true,
+      () => {}
+    )
 
     await expect(readClaudeStructuredSessionOptions(session, undefined)).resolves.toMatchObject({
       current: { model: 'haiku', fastMode: false }

@@ -17,6 +17,7 @@ import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cach
 import type { RuntimeStore } from '../runtime-store-contract'
 import {
   projectRepoWorktreeRows,
+  joinRepoWorktreeRows,
   scanRepoWorktreeRows,
   type RepoWorktreeRowDeps,
   type RepoWorktreeRowsScan
@@ -87,7 +88,8 @@ export async function scanResolvedWorktreeRepos(
 export function joinResolvedWorktreeScans(
   store: RuntimeStore | null,
   rowDeps: () => RepoWorktreeRowDeps,
-  scans: ResolvedWorktreeRepoScans
+  scans: ResolvedWorktreeRepoScans,
+  projectOnly = false
 ): ResolvedWorktreeScanJoin {
   if (!store) {
     return {
@@ -114,7 +116,12 @@ export function joinResolvedWorktreeScans(
     if (!scan && !isFolderRepo(repo)) {
       unscannedRepoKeys.add(key)
     }
-    const rows = projectRepoWorktreeRows(deps, repo, scan, metaById)
+    const rows = (projectOnly ? projectRepoWorktreeRows : joinRepoWorktreeRows)(
+      deps,
+      repo,
+      scan,
+      metaById
+    )
     if (scan?.ok) {
       scannedRepoKeys.add(key)
       for (const row of rows) {

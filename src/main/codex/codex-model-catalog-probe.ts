@@ -1,3 +1,7 @@
+import {
+  assertStructuredAgentResolutionCurrent,
+  type StructuredAgentResolutionOperation
+} from '../native-chat/structured-agent-command-resolution'
 import { codexStructuredLaunchArgs } from './codex-structured-launch-args'
 import type { AgentSessionAccountKind } from '../../shared/agent-session-availability'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
@@ -52,12 +56,15 @@ export function createCodexModelCatalogProbe(
   const resolve = async (
     accountHome: Parameters<AgentModelCatalogProbe>[0],
     cwd?: string,
-    savedOnly = false
+    savedOnly = false,
+    operation?: StructuredAgentResolutionOperation
   ) => {
+    assertStructuredAgentResolutionCurrent(operation)
     const accountHomePath = requireLegacyAgentSessionAccountHome(accountHome).path
     const overlay = { ...deps.resolveEnv?.() }
     const { command, environment } = await resolveCodexStructuredInvocation({
       ...deps,
+      operation,
       resolveEnvironment: async () => ({
         ...(await (savedOnly ? deps.resolveSavedEnvironment?.() : deps.resolveEnvironment?.())),
         ...overlay
@@ -65,14 +72,18 @@ export function createCodexModelCatalogProbe(
       ...(savedOnly ? { refreshEnvironmentAfterMiss: undefined } : {}),
       ...(cwd ? { resolveWorkingDirectory: () => cwd } : {})
     })
+    assertStructuredAgentResolutionCurrent(operation)
     const args = [
       ...(cwd ? codexStructuredLaunchArgs((await deps.resolveLaunchArgs?.()) ?? []) : []),
       ...CODEX_SHORT_LIVED_PROBE_APP_SERVER_ARGS
     ]
+    assertStructuredAgentResolutionCurrent(operation)
     const env = { ...definedEnv(environment), CODEX_HOME: accountHomePath }
     return {
       identity: { command, args, cwd, overlay: Object.entries(overlay).sort() },
       run: async (signal?: AbortSignal): Promise<AgentModelCatalogSuccess> => {
+        assertStructuredAgentResolutionCurrent(operation)
+        signal?.throwIfAborted()
         deps.prepareHome?.(accountHomePath)
         const run = deps.runSession ?? runCodexAppServerSession
         const { listing, unavailable } = await run(
@@ -142,7 +153,9 @@ export function createCodexModelCatalogProbe(
     Pick<AgentModelCatalogProbe, 'resolve' | 'resolveLegacy'>
   >(
     async (home, options) =>
-      (await resolve(home, options?.cwd ?? process.cwd())).run(options?.signal),
-    { resolve, resolveLegacy: (home) => resolve(home) }
+      (await resolve(home, options?.cwd ?? process.cwd(), false, options?.operation)).run(
+        options?.signal
+      ),
+    { resolve, resolveLegacy: (home, operation) => resolve(home, undefined, false, operation) }
   )
 }

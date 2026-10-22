@@ -108,8 +108,10 @@ describe('structured option confirmation reaches the pill', () => {
     const adapter = await acquired(claude)
     await adapter.setOption({ sessionId: 'session-1', key: 'effort', value: 'low', fence: 7 })
 
-    const result = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
-    expect(result.current.confirmed).toContain('effort')
+    await vi.waitFor(async () => {
+      const result = await adapter.readOptions({ sessionId: 'session-1', fence: 7 })
+      expect(result.current.confirmed).toContain('effort')
+    })
   })
 
   it('treats a host that reports no confirmation as unconfirmed', () => {

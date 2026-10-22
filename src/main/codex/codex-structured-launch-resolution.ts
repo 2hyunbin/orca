@@ -1,3 +1,7 @@
+import {
+  assertStructuredAgentResolutionCurrent,
+  type StructuredAgentResolutionOperation
+} from '../native-chat/structured-agent-command-resolution'
 // How a durable session record becomes a Codex process launch.
 //
 // Every input is read back from the record the store already made durable, not
@@ -30,6 +34,7 @@ export type CodexStructuredInvocationDeps = Pick<
   CodexStructuredLaunchPartDeps,
   'resolveCommand'
 > & {
+  operation?: StructuredAgentResolutionOperation
   /** Fresh shell/configured environment for this spawn; never written to the session record. */
   resolveEnvironment?: () => Promise<NodeJS.ProcessEnv>
   /** Rereads that environment when Codex is not found in it; absent never retries. */
@@ -56,14 +61,17 @@ export function resolveCodexStructuredInvocation(
   return resolveAgainAfterRefreshOnMissingProgram(
     () => readCodexStructuredInvocation(deps),
     deps.refreshEnvironmentAfterMiss,
-    { env: ({ environment }) => environment, cwd: deps.resolveWorkingDirectory }
+    { env: ({ environment }) => environment, cwd: deps.resolveWorkingDirectory },
+    deps.operation
   )
 }
 
 async function readCodexStructuredInvocation(
   deps: CodexStructuredInvocationDeps
 ): Promise<CodexStructuredInvocation> {
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const environment = await deps.resolveEnvironment?.()
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const pathEnv = environment?.PATH ?? environment?.Path ?? null
   const homePath = environment?.HOME ?? environment?.USERPROFILE
   const command = (deps.resolveCommand ?? resolveCodexCommand)({

@@ -1,3 +1,4 @@
+import type { StructuredAgentResolutionOperation } from '../structured-agent-command-resolution'
 import { homedir } from 'node:os'
 import type {
   AgentSessionAccountHome,
@@ -22,7 +23,8 @@ export async function resolveAgentModelCatalogScope(
   record: AgentSessionRecord | undefined,
   base: string,
   home: AgentSessionAccountHome | null,
-  current: () => boolean = () => true
+  current: () => boolean = () => true,
+  operation?: StructuredAgentResolutionOperation
 ): Promise<{
   base: string
   fingerprint: string
@@ -41,7 +43,9 @@ export async function resolveAgentModelCatalogScope(
   }
   const probe = deps.probes?.[params.agent]
   if (params.legacy) {
-    const resolved = params.savedOnly ? null : await probe?.resolveLegacy?.(home).catch(() => null)
+    const resolved = params.savedOnly
+      ? null
+      : await probe?.resolveLegacy?.(home, operation).catch(() => null)
     if (!current()) {
       return null
     }
@@ -63,8 +67,8 @@ export async function resolveAgentModelCatalogScope(
     return { base, fingerprint: base, exact: false }
   }
   const resolution = params.savedOnly
-    ? probe?.resolve?.(home, cwd, true)
-    : probe?.resolve?.(home, cwd)
+    ? probe?.resolve?.(home, cwd, true, operation)
+    : probe?.resolve?.(home, cwd, false, operation)
   const resolved = await resolution?.catch(() => null)
   if (!current() || (probe?.resolve && !resolved)) {
     return null

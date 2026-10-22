@@ -36,7 +36,7 @@ export function codexAcquireCatalogListing(
 export function codexSessionCapabilities(
   session: Pick<CodexSession, 'catalogAccess' | 'options'> &
     Partial<Pick<CodexSession, 'reportedOptions' | 'appliedTurnOptions'>>,
-  model = session.options.get('model') ?? session.reportedOptions?.model
+  model = session.appliedTurnOptions?.model
 ): ReturnType<typeof structuredAgentSessionCapabilityView> {
   return structuredAgentSessionCapabilityView(
     codexAcquireCatalogListing(session.catalogAccess) ?? { origin: 'unknown' },

@@ -136,11 +136,18 @@ async function confirmClaudeOption(
   mutationSequence: number,
   timeoutMs: number | undefined
 ): Promise<void> {
+  const token = Symbol('control-settings')
+  session.settingsObservation = token
   const settings =
     (input.key === 'effort' && input.value !== 'max') || input.key === 'fastMode'
       ? await session.connection.getSettings({ timeoutMs }).catch(() => null)
       : null
-  if (mutationSequence !== session.optionMutationSequence || settings === null) {
+  if (
+    session.connection.closed ||
+    session.settingsObservation !== token ||
+    mutationSequence !== session.optionMutationSequence ||
+    settings === null
+  ) {
     return
   }
   observeClaudeSettingsApplied(session, settings)

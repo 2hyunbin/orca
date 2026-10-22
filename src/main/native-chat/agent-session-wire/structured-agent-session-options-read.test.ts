@@ -1,6 +1,18 @@
+import type { ClaudeStructuredSessionEvent } from '../../claude/claude-structured-session-adapter'
+import { startCodexTurn } from '../../codex/codex-structured-turn-start'
+import { readLiveCodexSessionOptions } from '../../codex/codex-structured-session-options'
+import { optionSession } from '../../codex/codex-structured-option-session.test-fixture'
+import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
+import { structuredAgentSessionDrawnValues } from '../../../shared/structured-agent-session-option-snapshot'
 import { structuredAgentSessionCapabilityView } from './structured-agent-session-option-models'
 import { claudeFallbackModelOptions } from '../../claude/claude-structured-session-options'
-import { acquired, fakeClaude } from '../../claude/claude-structured-session-test-support'
+import {
+  acquired,
+  fakeClaude,
+  claudeOpened,
+  claudeFrame,
+  USER_MESSAGE
+} from '../../claude/claude-structured-session-test-support'
 import { getAgentSessionOptionCatalog } from '../../../shared/agent-session-option-catalog'
 import {
   applyStructuredAgentSessionModelCatalog,
@@ -169,7 +181,7 @@ describe('options at rest', () => {
   })
 
   it.each(['omp', 'grok', 'opencode'] as const)(
-    '%s keeps an unknown model and learns menus from later options',
+    '%s keeps an unknown model and learns menus from qualified reports',
     async (provider) => {
       const record = { ...restingRecord(), provider }
       const probe = vi.fn(() => new Promise<AgentModelCatalogSuccess>(() => {}))
@@ -230,6 +242,7 @@ describe('options at rest', () => {
         record.options = { model: 'grok-4.6', effort: 'high' }
         live = true
         await read()
+        modelCatalog.recordLiveListing(SESSION, { models: reader.read().models })
         live = false
         const answer = await read()
         expect(answer.models).toEqual(reader.read().models)
@@ -293,6 +306,81 @@ describe('a chat at rest, read by the host', () => {
   ])('%s', async (_name, facts, items, wroteBeforeOpen, defaulted) => {
     const read = await readAtRest(facts, items, wroteBeforeOpen)
     expect(read.current).toMatchObject({ model: 'gpt-account', defaulted })
+  })
+
+  it('preserves sparse Codex knowledge from an actual turn through host and shared desktop/phone values', async () => {
+    const pending = Promise.withResolvers<unknown>()
+    const request = vi.fn(() => pending.promise)
+    const native = optionSession(request)
+    native.appliedTurnOptions = { model: 'B', effort: 'high', serviceTier: 'rapid' }
+    const inventory = [
+      { id: 'A', label: 'A', isDefault: true, efforts: [], serviceTiers: [] },
+      {
+        id: 'B',
+        label: 'B',
+        isDefault: false,
+        efforts: [],
+        serviceTiers: [{ value: 'rapid', label: 'Fast' }]
+      },
+      { id: 'C', label: 'C', isDefault: false, efforts: [], serviceTiers: [] }
+    ]
+    const store = new AgentModelCatalogStore()
+    native.catalogAccess = { store, fingerprint: 'fixture', accountHomePath: '/fixture' }
+    store.recordSuccess(
+      'fixture',
+      'codex',
+      { origin: 'probe', complete: true, models: inventory },
+      'discovery'
+    )
+    const previous = await readLiveCodexSessionOptions(native, undefined)
+    const sendTurn = (id: string) =>
+      startCodexTurn(native, {
+        clientMessageId: id,
+        requestedAt: 1,
+        body: USER_MESSAGE,
+        turnOptions: { model: 'C' }
+      })
+    const sending = sendTurn('uncertain').catch((error: unknown) => error)
+    await vi.waitFor(() => expect(request).toHaveBeenCalledOnce())
+    expect(native.appliedTurnOptions).toEqual({ effort: 'high', serviceTier: 'rapid' })
+    const assertProjection = async (models: AgentSessionModelOption[] | null) => {
+      const provider = await readLiveCodexSessionOptions(native, undefined)
+      expect(provider.current).toMatchObject({ effort: 'high', serviceTier: 'rapid' })
+      expect(provider.current).not.toHaveProperty('model')
+      expect(provider.current).not.toHaveProperty('fastMode')
+      for (const saved of [{}, { model: 'C' }]) {
+        const host = await readAtRest({ options: saved }, [turnBody], true, models, true, provider)
+        expect(host.current.serviceTier).toBe('rapid')
+        const seed = getAgentSessionOptionCatalog('codex')!
+        let state = applyStructuredAgentSessionModelCatalog(
+          createStructuredAgentSessionOptionState('codex'),
+          seed,
+          models ? { origin: 'probe', models, fetchedAt: 1 } : { origin: 'unknown' },
+          { newLaunch: false }
+        )
+        state = applyStructuredAgentSessionOptions(state, seed, {
+          ...previous,
+          current: { ...previous.current, defaulted: [] }
+        })
+        state = applyStructuredAgentSessionOptions(state, seed, host)
+        expect(structuredAgentSessionDrawnValues(state).serviceTier?.value).toBe('rapid')
+        expect(state.record.values.model?.value).toBe(host.current.model)
+      }
+    }
+    const turnBody = turn
+    await assertProjection(inventory)
+    native.catalogAccess = undefined
+    await assertProjection(null)
+    pending.reject(new Error('transport uncertainty'))
+    expect(await sending).toBeInstanceOf(Error)
+    await assertProjection(null)
+    native.appliedTurnOptions = { model: 'B', effort: 'high', serviceTier: 'rapid' }
+    request.mockRejectedValueOnce(new CodexAppServerRequestError('turn/start', -32602, 'refused'))
+    await expect(sendTurn('refused')).rejects.toThrow('refused')
+    expect(native.appliedTurnOptions?.model).toBe('B')
+    request.mockResolvedValueOnce({ turn: { id: 'accepted' } })
+    await sendTurn('accepted')
+    expect(native.appliedTurnOptions).toEqual({ model: 'C', effort: 'high', serviceTier: 'rapid' })
   })
 
   it('uses seeds only for an unknown inventory, never beside known rows or a known empty list', () => {
@@ -562,123 +650,6 @@ describe('a chat at rest, read by the host', () => {
     expect(chat.record().options).toEqual({ model: 'opus[1m]', effort: 'low' })
   })
 
-  it('keeps newer saved picks after a cold live listing waits without holding the session lane', async () => {
-    const listing = Promise.withResolvers<void>()
-    const queue = new StructuredAgentSessionTaskQueue()
-    const record = { ...restingRecord(), options: { model: 'gpt-picked', effort: 'high' } }
-    const child = { fence: 7 }
-    const apply = vi.fn(() => ({
-      models: [{ id: 'gpt-live', label: 'GPT Live', efforts: [] }],
-      current: { model: 'gpt-live', effort: 'high', confirmed: ['model', 'effort'] as const }
-    }))
-    const prepareReadOptions = vi.fn(async () => {
-      await listing.promise
-      return apply
-    })
-    const live = {
-      child,
-      params: { provider: 'codex' },
-      journal: restingJournal()
-    }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
-    const context = {
-      deps: {
-        adapter: { prepareReadOptions },
-        agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => record }
-      },
-      serialize: (sessionId: string, task: () => Promise<unknown>) =>
-        queue.serialize(sessionId, task),
-      openConversation: async () => live,
-      conversation: async () => live
-    } as unknown as StructuredAgentSessionMutationContext
-
-    const reading = readStructuredAgentSessionOptions(context, SESSION, {
-      readsWithoutModel: false
-    })
-    await vi.waitFor(() =>
-      expect(prepareReadOptions).toHaveBeenCalledWith({ sessionId: SESSION, fence: 7 })
-    )
-    await expect(queue.serialize(SESSION, async () => 'delivery can proceed')).resolves.toBe(
-      'delivery can proceed'
-    )
-    expect(apply).not.toHaveBeenCalled()
-    record.options = { model: 'gpt-next', effort: 'low' }
-    listing.resolve()
-    await expect(reading).resolves.toMatchObject({
-      current: { model: 'gpt-next', effort: 'low' }
-    })
-    expect(apply).toHaveBeenCalledOnce()
-  })
-
-  it('keeps a listing failure visible to the picker', async () => {
-    const queue = new StructuredAgentSessionTaskQueue()
-    const live = {
-      child: { fence: 7 },
-      params: { provider: 'codex' },
-      journal: restingJournal()
-    }
-    const failure = new Error('model/list unavailable')
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the failed read ends before touching the remaining context fields.
-    const context = {
-      deps: {
-        adapter: {
-          prepareReadOptions: async () => {
-            throw failure
-          }
-        },
-        agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => restingRecord() }
-      },
-      serialize: (sessionId: string, task: () => Promise<unknown>) =>
-        queue.serialize(sessionId, task),
-      openConversation: async () => live
-    } as unknown as StructuredAgentSessionMutationContext
-
-    await expect(
-      readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
-    ).rejects.toBe(failure)
-    await expect(queue.serialize(SESSION, async () => 'Stop can proceed')).resolves.toBe(
-      'Stop can proceed'
-    )
-  })
-
-  it('does not apply a listing to a replaced child', async () => {
-    const listing = Promise.withResolvers<void>()
-    const queue = new StructuredAgentSessionTaskQueue()
-    const apply = vi.fn(() => ({ models: [], current: { model: 'stale' } }))
-    const prepareReadOptions = vi.fn(async () => {
-      await listing.promise
-      return apply
-    })
-    const live = {
-      child: { fence: 7 },
-      params: { provider: 'codex' },
-      journal: restingJournal()
-    }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this read touches only the declared context fields.
-    const context = {
-      deps: {
-        adapter: { prepareReadOptions },
-        agents: NO_STRUCTURED_AGENTS,
-        store: { getRecord: () => restingRecord() }
-      },
-      serialize: (sessionId: string, task: () => Promise<unknown>) =>
-        queue.serialize(sessionId, task),
-      openConversation: async () => live,
-      conversation: async () => live
-    } as unknown as StructuredAgentSessionMutationContext
-
-    const reading = readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
-    await vi.waitFor(() => expect(prepareReadOptions).toHaveBeenCalledOnce())
-    await queue.serialize(SESSION, async () => {
-      live.child = { fence: 8 }
-    })
-    listing.resolve()
-    expect((await reading).current).not.toHaveProperty('model')
-    expect(apply).not.toHaveBeenCalled()
-  })
-
   it('fences a live read and newly received startup report to their actual child through folder awaits', async () => {
     const record = agentSessionRecordFixture({ sessionId: SESSION, provider: 'opencode2' })
     const folder = Promise.withResolvers<string | null>()
@@ -732,6 +703,14 @@ describe('a chat at rest, read by the host', () => {
       readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
     try {
       await read()
+      expect(lookup).not.toHaveBeenCalled()
+      const report = (generation: string, fence: number) =>
+        saveStructuredAgentSessionStartReadbackListing(
+          context,
+          { sessionId: SESSION, acquisitionGeneration: generation, fence },
+          { models: [{ id: model, label: model, isDefault: false, efforts: [] }] }
+        )
+      await report('old', 7)
       await vi.waitFor(() => expect(lookup).toHaveBeenCalled())
       await queue.serialize(SESSION, async () => {
         store.expireAgent(record.provider)
@@ -739,6 +718,7 @@ describe('a chat at rest, read by the host', () => {
         model = 'current'
       })
       await read()
+      await report('new', 8)
       // The old child's first receipt after replacement cannot acquire the new child's authority.
       await saveStructuredAgentSessionStartReadbackListing(
         context,
@@ -770,4 +750,71 @@ describe('a chat at rest, read by the host', () => {
       catalog.stop()
     }
   })
+})
+
+it('projects held Claude reports through the full reader while actual controls and Send proceed', async () => {
+  const events: ClaudeStructuredSessionEvent[] = []
+  const native = fakeClaude()
+  const adapter = await acquired(native, {}, events)
+  await claudeOpened(adapter, SESSION)
+  const connection = native.connections[0]!
+  const pending = Promise.withResolvers<unknown>()
+  const settings = vi.spyOn(connection, 'getSettings').mockReturnValueOnce(pending.promise)
+  const queue = new StructuredAgentSessionTaskQueue()
+  const record = { ...restingRecord(), provider: 'claude', options: {} }
+  const live = { child: { fence: 7 }, params: { provider: 'claude' }, journal: restingJournal() }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the full reader uses only these context members; provider operations use the actual adapter.
+  const context = {
+    deps: { adapter, agents: claudeAndCodexAgents(), store: { getRecord: () => record } },
+    serialize: (id: string, task: () => Promise<unknown>) => queue.serialize(id, task),
+    openConversation: async () => live,
+    conversation: async () => live
+  } as unknown as StructuredAgentSessionMutationContext
+  const read = () =>
+    readStructuredAgentSessionOptions(context, SESSION, { readsWithoutModel: true })
+  try {
+    claudeFrame(connection, { type: 'result', subtype: 'success', result: 'done', is_error: false })
+    await vi.waitFor(() => expect(settings).toHaveBeenCalledOnce())
+    expect((await read()).current.effort).toBe('high')
+    await queue.serialize(SESSION, () =>
+      adapter.dispatch({
+        sessionId: SESSION,
+        fence: 7,
+        clientMessageId: 'while-reporting',
+        body: USER_MESSAGE
+      })
+    )
+    expect(connection.sent.length).toBeGreaterThan(0)
+    await queue.serialize(SESSION, () =>
+      adapter.setOption({ sessionId: SESSION, fence: 7, key: 'model', value: 'claude-opus-5' })
+    )
+    pending.resolve({
+      applied: { model: 'old', effort: 'max' },
+      effective: { effortLevel: 'max', fastMode: true }
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    expect((await read()).current).toMatchObject({ model: 'claude-opus-5', effort: 'high' })
+    settings.mockResolvedValueOnce({
+      applied: { model: 'claude-opus-5', effort: 'low' },
+      effective: { effortLevel: 'low', fastMode: true }
+    })
+    claudeFrame(connection, {
+      type: 'result',
+      subtype: 'success',
+      result: 'later',
+      is_error: false
+    })
+    await vi.waitFor(async () =>
+      expect((await read()).current).toMatchObject({ effort: 'low', fastMode: true })
+    )
+    expect(
+      events.some(
+        (event) => event.type === 'options-reported' && event.reportedOptions.effort === 'max'
+      )
+    ).toBe(false)
+  } finally {
+    pending.resolve(null)
+    await adapter.closeSession(SESSION)
+  }
 })

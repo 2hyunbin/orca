@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { createAgentModelCatalogService } from './agent-model-catalog-service'
+import { AgentModelCatalogStore } from './agent-model-catalog-store'
+import { agentSessionRecordFixture } from '../agent-session-record-test-fixture'
+import { describe, expect, it, vi } from 'vitest'
 import { createClaudeModelCatalogProbe } from '../../claude/claude-model-catalog-probe'
 import { createCodexModelCatalogProbe } from '../../codex/codex-model-catalog-probe'
 import {
@@ -59,6 +62,81 @@ describe('installed catalog invocation identity', () => {
       command = '/installed/agent'
       args = launchArgs('personal')
       expect(await key()).not.toBe(first)
+    }
+  )
+})
+
+describe('original operation through actual nested resolution', () => {
+  it.each(['overlay', 'environment', 'auth'] as const)(
+    'starts no stage after %s resolves beyond the original deadline',
+    async (held) => {
+      vi.useFakeTimers()
+      const gate = Promise.withResolvers<void>()
+      const entered = Promise.withResolvers<void>()
+      const stages: string[] = []
+      const stage = async (name: string) => {
+        stages.push(name)
+        if (name === held) {
+          entered.resolve()
+          await gate.promise
+        }
+      }
+      const runListing = vi.fn(async () => '')
+      const probe = createClaudeModelCatalogProbe({
+        resolveLaunchArgs: () => [],
+        resolveEnv: async () => {
+          await stage('overlay')
+          return {}
+        },
+        resolveInheritedEnv: async () => {
+          await stage('environment')
+          return { PATH: '/fixture' }
+        },
+        resolveCommand: () => {
+          stages.push('lookup')
+          return '/fixture/claude'
+        },
+        resolveAuthPolicy: async () => {
+          await stage('auth')
+          return { account: 'system' }
+        },
+        runListing
+      })
+      const record = agentSessionRecordFixture({
+        provider: 'claude',
+        accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: '/fixture/account' }
+      })
+      const store = new AgentModelCatalogStore()
+      const service = createAgentModelCatalogService({
+        store,
+        getRecord: () => record,
+        drivesRecord: () => true,
+        resolveAccountHome: async () => record.accountHome,
+        recordWorkspacePath: async () => '/fixture/workspace',
+        probes: { claude: probe }
+      })
+      try {
+        const demand = service.demand({
+          agent: 'claude',
+          sessionId: record.sessionId,
+          deadline: Date.now() + 10
+        })
+        await entered.promise
+        const before = [...stages]
+        await vi.advanceTimersByTimeAsync(11)
+        await demand
+        gate.resolve()
+        await vi.advanceTimersByTimeAsync(0)
+        expect(stages).toEqual(before)
+        expect(runListing).not.toHaveBeenCalled()
+        expect(service.snapshot({ agent: 'claude', sessionId: record.sessionId })).toEqual({
+          origin: 'unknown'
+        })
+      } finally {
+        gate.resolve()
+        service.stop()
+        vi.useRealTimers()
+      }
     }
   )
 })

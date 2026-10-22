@@ -34,8 +34,11 @@ export function agentModelCatalogRequestKey(
     record &&
     !params.workspace &&
     params.workspacePath === undefined &&
-    independentAgentModelCatalog(params.agent) &&
-    !params.legacy
+    (params.inSessionWorkspace ||
+      deps.listsInChatFolder?.has(params.agent) ||
+      ((independentAgentModelCatalog(params.agent) ||
+        deps.agentReadsProjectModelConfig?.(params.agent) === true) &&
+        !params.legacy))
   return JSON.stringify({
     agent: params.agent,
     account: record && [
@@ -103,7 +106,9 @@ export function agentModelCatalogMemoryBinding(
   if (
     deps.listsInChatFolder?.has(params.agent) ||
     params.workspace ||
-    (params.workspacePath !== null && independentAgentModelCatalog(params.agent))
+    (params.workspacePath !== null &&
+      (independentAgentModelCatalog(params.agent) ||
+        (deps.agentReadsProjectModelConfig?.(params.agent) === true && !params.legacy)))
   ) {
     return
   }

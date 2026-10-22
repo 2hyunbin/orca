@@ -20,7 +20,10 @@ import { ClaudePromptRegistry } from './claude-structured-prompt-replies'
 import { adoptClaudeStructuredSpawnOptions } from './claude-structured-spawn-options'
 import { observeClaudeExecutionModel } from './claude-structured-execution-observations'
 import { observeClaudeFastModeFacts } from './claude-structured-session-options'
-import { createClaudeSessionPublication } from './claude-structured-session-publication'
+import {
+  createClaudeSessionPublication,
+  reportClaudeOptions
+} from './claude-structured-session-publication'
 import {
   mintClaudeAcquisitionGeneration,
   type ClaudeAcquisitionRegistry,
@@ -107,6 +110,7 @@ export async function acquireClaudeSession({
       // Recording a turn end is an owner action; a result that trails the child's exit has no owner.
       if (message.type === 'result' && sessions.get(sessionId) === liveSession) {
         persistClaudeTurnResumePoint(sessionId, liveSession, deps)
+        reportClaudeOptions(liveSession, sessions, input, deps.requestTimeoutMs, attempt, callbacks)
       }
       // The CLI's idle wakes whatever waits for its turn to end.
       if (claudeSessionStateEndsTurn(message) && sessions.get(sessionId) === liveSession) {

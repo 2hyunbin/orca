@@ -42,13 +42,10 @@ export function createAgentModelCatalogService(
   const lifetime = new AbortController()
   const admission = new PrioritySemaphore(2)
 
-  type Claim = {
-    identity: string
+  type Claim = Pick<AgentModelCatalogBinding, 'identity' | 'params' | 'current'> & {
     controller: AbortController
     promise: Promise<void>
     ready: Promise<void>
-    current: () => boolean
-    params: AgentModelCatalogReadParams
   }
   const bindings = new Map<string, AgentModelCatalogBinding>()
   const claims = new Map<string, Claim>()
@@ -141,11 +138,16 @@ export function createAgentModelCatalogService(
         }
         coldWorkspace = false
       } else {
-        workspacePath = params.inSessionWorkspace
-          ? record
-            ? await sessionWorkspacePath(deps, record)
-            : null
-          : params.workspacePath
+        workspacePath =
+          params.inSessionWorkspace ||
+          (record &&
+            params.workspacePath === undefined &&
+            !params.legacy &&
+            deps.agentReadsProjectModelConfig?.(params.agent) === true)
+            ? record
+              ? await sessionWorkspacePath(deps, record)
+              : null
+            : params.workspacePath
       }
       if (!current()) {
         return
@@ -178,7 +180,8 @@ export function createAgentModelCatalogService(
         scoped,
         fingerprint,
         probeHome,
-        current
+        current,
+        { deadline, current, signal: controller.signal }
       )
       if (!current() || !scope) {
         return
@@ -233,6 +236,7 @@ export function createAgentModelCatalogService(
       const signal = AbortSignal.any([lifetime.signal, controller.signal])
       const list = scopedAgentModelCatalogLister({
         legacy: params.legacy,
+        operation: { deadline, current, signal },
         admission,
         signal,
         resolved,

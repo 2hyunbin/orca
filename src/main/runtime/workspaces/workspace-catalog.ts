@@ -181,7 +181,8 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
         listFolderWorkspaces: (repo, count) =>
           projectRuntimeFolderWorkspaces(this.requireStore(), repo, count)
       }),
-      scans
+      scans,
+      true
     )
   }
 

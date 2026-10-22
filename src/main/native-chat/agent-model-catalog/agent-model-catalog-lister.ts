@@ -1,3 +1,4 @@
+import type { StructuredAgentResolutionOperation } from '../structured-agent-command-resolution'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-record'
 import type { PrioritySemaphore } from '../../../shared/priority-semaphore'
 import { startSpan } from '../../observability/tracer'
@@ -156,6 +157,7 @@ export function refreshAgentModelCatalogListing(input: {
 
 export function scopedAgentModelCatalogLister(input: {
   legacy?: boolean
+  operation?: StructuredAgentResolutionOperation
   admission: PrioritySemaphore
   signal: AbortSignal
   resolved: AgentModelCatalogResolvedProbe | undefined
@@ -177,7 +179,11 @@ export function scopedAgentModelCatalogLister(input: {
       if (!probe || !probeHome) {
         throw new AgentModelCatalogListingStoppedError('catalog scope unavailable')
       }
-      return await probe(probeHome, { signal: attemptSignal, workspacePath })
+      return await probe(probeHome, {
+        signal: attemptSignal,
+        workspacePath,
+        operation: input.operation
+      })
     } catch (error) {
       throw signal.aborted ? new AgentModelCatalogListingStoppedError(String(error)) : error
     } finally {

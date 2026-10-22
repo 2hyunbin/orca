@@ -1,3 +1,4 @@
+import type { StructuredAgentResolutionOperation } from '../structured-agent-command-resolution'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import type { AgentModelCatalogSuccess } from './agent-model-catalog-entry'
 
@@ -8,13 +9,22 @@ export type AgentModelCatalogResolvedProbe = {
 
 export type AgentModelCatalogProbe = ((
   accountHome: AgentSessionAccountHome,
-  options?: { signal?: AbortSignal; workspacePath?: string; cwd?: string }
+  options?: {
+    signal?: AbortSignal
+    workspacePath?: string
+    cwd?: string
+    operation?: StructuredAgentResolutionOperation
+  }
 ) => Promise<AgentModelCatalogSuccess>) & {
-  resolveLegacy?: (home: AgentSessionAccountHome) => Promise<AgentModelCatalogResolvedProbe>
+  resolveLegacy?: (
+    home: AgentSessionAccountHome,
+    operation?: StructuredAgentResolutionOperation
+  ) => Promise<AgentModelCatalogResolvedProbe>
   resolve?: (
     home: AgentSessionAccountHome,
     cwd: string,
-    savedOnly?: boolean
+    savedOnly?: boolean,
+    operation?: StructuredAgentResolutionOperation
   ) => Promise<AgentModelCatalogResolvedProbe>
 }
 

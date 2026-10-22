@@ -86,7 +86,7 @@ function modelOption(value: unknown): AgentSessionModelOption | null {
   }
 }
 
-export type CodexSessionOptionCatalog = AgentSessionOptionsResult & { current: { model: string } }
+export type CodexSessionOptionCatalog = AgentSessionOptionsResult
 
 export type CodexModelCatalogListing = {
   models: AgentSessionModelOption[]
@@ -189,10 +189,7 @@ export function composeCodexSessionOptionCatalog(
     input.current.model,
     (row) => row
   )
-  const model = input.current.model ?? models.find((entry) => entry.isDefault)?.id ?? models[0]?.id
-  if (!model) {
-    throw new Error('codex app-server returned no available models')
-  }
+  const model = input.current.model
   const reportedTier = input.reportedServiceTierKnown
     ? (input.reportedServiceTier ?? CODEX_DEFAULT_SERVICE_TIER)
     : undefined
@@ -219,29 +216,13 @@ export function composeCodexSessionOptionCatalog(
     models,
     ...(support ? { fastModeSupport: support } : {}),
     current: {
-      model,
+      ...(model ? { model } : {}),
       ...(input.current.effort ? { effort: input.current.effort } : {}),
       ...(serviceTier ? { serviceTier } : {}),
       ...(fastMode !== undefined ? { fastMode } : {}),
       ...(reportedTier !== undefined && input.current.serviceTier === undefined
         ? { confirmed: fastMode === undefined ? ['serviceTier'] : ['serviceTier', 'fastMode'] }
-        : {}),
-      // The listing's default stands in for a thread that reported no model of its own.
-      ...(input.current.model ? {} : { defaulted: ['model'] as const })
+        : {})
     }
   }
-}
-
-export async function readCodexStructuredSessionOptionCatalog(input: {
-  connection: Pick<CodexAppServerConnection, 'request'>
-  current: { model?: string; effort?: string; serviceTier?: string }
-  reportedServiceTier?: string | null
-  reportedServiceTierKnown?: boolean
-  timeoutMs?: number
-}): Promise<CodexSessionOptionCatalog> {
-  const listing = await fetchCodexModelCatalogListing({
-    connection: input.connection,
-    ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs })
-  })
-  return composeCodexSessionOptionCatalog(listing, input)
 }

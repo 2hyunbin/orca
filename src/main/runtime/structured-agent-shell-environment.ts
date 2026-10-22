@@ -194,6 +194,8 @@ export async function resolveHostAgentBaseEnvironment(
 }
 
 export type StructuredAgentEnvironmentSources = {
+  prewarm?: boolean
+  processEnvironment?: NodeJS.ProcessEnv
   /** Replaces the host's shell env, read once when the resolvers are made; never reread. */
   resolveEnvironment?: () => Promise<NodeJS.ProcessEnv>
   resolveShellEnvironmentPolicy?: () => NativeChatShellEnvironmentPolicy
@@ -216,13 +218,14 @@ export function createStructuredAgentEnvironmentResolvers(
   // Why: start as soon as the runtime exists so the first chat rarely waits for the profile.
   const injected = sources.resolveEnvironment?.()
   const shellEnvironment = injected ? () => injected : hostShellEnvironment
-  if (!injected) {
+  if (!injected && sources.prewarm !== false) {
     void hostShellEnvironment().catch(() => {})
   }
   const resolveBase = async (cachedOnly = false): Promise<Record<string, string>> =>
     structuredAgentBaseEnvironment({
       shellEnv: await shellEnvironment(cachedOnly),
-      policy: sources.resolveShellEnvironmentPolicy?.() ?? nativeChatShellEnvironmentPolicy(null)
+      policy: sources.resolveShellEnvironmentPolicy?.() ?? nativeChatShellEnvironmentPolicy(null),
+      processEnv: sources.processEnvironment
     })
   return {
     refreshAfterMissingProgram: injected
@@ -236,7 +239,7 @@ export function createStructuredAgentEnvironmentResolvers(
         const selectedPolicy =
           sources.resolveShellEnvironmentPolicy?.() ?? nativeChatShellEnvironmentPolicy(null)
         const policy = { ...selectedPolicy, names: [...selectedPolicy.names] }
-        const processEnv = { ...process.env }
+        const processEnv = { ...(sources.processEnvironment ?? process.env) }
         const overlays = new Map(
           agents.map((agent) => [agent, { ...sources.resolveAgentLaunchEnv?.(agent) }])
         )

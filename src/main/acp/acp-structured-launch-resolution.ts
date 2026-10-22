@@ -1,3 +1,7 @@
+import {
+  assertStructuredAgentResolutionCurrent,
+  type StructuredAgentResolutionOperation
+} from '../native-chat/structured-agent-command-resolution'
 // How a durable session record becomes an ACP agent launch, on the machine this runtime runs on.
 //
 // Every input is read back from the record the store made durable, never from the call that
@@ -86,6 +90,7 @@ export type AcpStructuredLaunchPartDeps = {
 
 /** What a launch's binary and environment are read from; a catalog probe reads the same. */
 export type AcpLaunchInvocationDeps = {
+  operation?: StructuredAgentResolutionOperation
   /** The shared base env; re-read per acquisition. */
   resolveEnvironment: () => Promise<Record<string, string>>
   /** The user's per-agent environment overlay from settings. */
@@ -174,7 +179,8 @@ export function resolveAcpLaunchInvocation(
   return resolveAgainAfterRefreshOnMissingProgram(
     () => readAcpLaunchInvocation(spec, accountHome, deps),
     deps.refreshEnvironmentAfterMiss,
-    { env: ({ env }) => env, cwd: deps.resolveWorkingDirectory }
+    { env: ({ env }) => env, cwd: deps.resolveWorkingDirectory },
+    deps.operation
   )
 }
 
@@ -183,7 +189,9 @@ async function readAcpLaunchInvocation(
   accountHome: AgentSessionAccountHome,
   deps: AcpLaunchInvocationDeps
 ): Promise<{ command: string; env: Record<string, string>; envToDelete: string[] }> {
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const base = await deps.resolveEnvironment()
+  assertStructuredAgentResolutionCurrent(deps.operation)
   const env: Record<string, string> = spec.account.environment(accountHome, {
     ...base,
     ...deps.resolveLaunchEnv?.(spec.agent)

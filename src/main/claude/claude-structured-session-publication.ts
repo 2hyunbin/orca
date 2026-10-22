@@ -1,8 +1,16 @@
-import type { AgentSessionAcquisition } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import { refreshClaudeStructuredSessionOptions } from './claude-structured-session-options'
+import type {
+  AgentSessionAcquisition,
+  StructuredAgentSessionAcquireInput
+} from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { claudeProviderHandleLink } from './claude-structured-owner-identity'
 import type { ClaudePromptRegistry } from './claude-structured-prompt-replies'
 import type { ClaudeJournalTranslator } from './claude-journal-translator-contract'
-import type { ClaudeSession } from './claude-structured-session-state'
+import type {
+  ClaudeSession,
+  ClaudeAcquisitionAttempt,
+  ClaudeAcquireCallbacks
+} from './claude-structured-session-state'
 import { ClaudeBackgroundTaskTracker } from './claude-background-task-tracker'
 import { ClaudeChildWorkDecoder } from './claude-child-work-decoder'
 import { ClaudeSlashCommandCatalog } from './claude-slash-command-catalog'
@@ -78,4 +86,31 @@ export function createClaudeSessionPublication(input: {
       initialization: input.initialization
     }
   }
+}
+
+/** Optional reporting keeps the same acquisition and connection as native result publication. */
+export function reportClaudeOptions(
+  session: ClaudeSession,
+  sessions: Map<string, ClaudeSession>,
+  input: StructuredAgentSessionAcquireInput,
+  timeoutMs: number | undefined,
+  attempt: ClaudeAcquisitionAttempt,
+  callbacks: ClaudeAcquireCallbacks
+): void {
+  const sessionId = input.identity.sessionId
+  void refreshClaudeStructuredSessionOptions(
+    session,
+    timeoutMs,
+    () => sessions.get(sessionId) === session,
+    (options) =>
+      callbacks.deliver(attempt, sessionId, () =>
+        callbacks.emit(session, input.events, {
+          type: 'options-reported',
+          sessionId,
+          fence: session.fence,
+          acquisitionGeneration: session.acquisitionGeneration,
+          reportedOptions: options.current
+        })
+      )
+  ).catch(() => {})
 }

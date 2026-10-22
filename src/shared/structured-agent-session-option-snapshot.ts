@@ -91,7 +91,13 @@ function valuesUnderControls(
 ): Readonly<Record<string, TrackedNativeChatSessionOption>> {
   const tier = values.serviceTier?.value
   const control = controls.find((option) => option.id === 'serviceTier')
-  if (typeof tier !== 'string' || !control || (olderHost && tier === 'flex')) {
+  if (
+    typeof tier !== 'string' ||
+    !control ||
+    values.serviceTier?.source === 'applied' ||
+    values.model?.source === 'default' ||
+    (olderHost && tier === 'flex')
+  ) {
     return values
   }
   const effective = effectiveServiceTier({
