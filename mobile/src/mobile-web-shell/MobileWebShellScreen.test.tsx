@@ -60,11 +60,15 @@ const fetching = (receivedBytes: number, totalBytes: number): MobileWebShellSess
 
 /** How far the bar's fill is scaled across the track, which is what the native driver moves. */
 function fillScaleOf(tree: ReactTestRenderer): unknown {
+  return fillOf(tree).value
+}
+
+function fillOf(tree: ReactTestRenderer): { readonly value: unknown } {
   const bar = tree.root.find(
     (node) => node.props.testID === 'mobile-web-shell-progress-bar' && String(node.type) === 'View'
   )
   const [fill] = bar.findAll((node) => String(node.type) === 'Animated.View')
-  return fill.props.style[1].transform[0].scaleX.value
+  return fill.props.style[1].transform[0].scaleX
 }
 
 const renderScreen = (state: MobileWebShellSessionState): Promise<ReactTestRenderer> =>
@@ -171,6 +175,39 @@ describe('the hybrid shell screen', () => {
     dependencies.downloadProgress.publish(0.5)
     expect(fillScaleOf(tree)).toBe(0.5)
     expect(textOf(tree)).toContain('2.0 of 8.1 MB')
+  })
+
+  it('starts one ease per window toward the latest value, and lands full at once', async () => {
+    const tree = await renderScreen(fetching(0, 8_082_368))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      dependencies.downloadProgress.publish(0.1)
+      dependencies.downloadProgress.publish(0.2)
+      dependencies.downloadProgress.publish(0.3)
+      expect(fillScaleOf(tree)).toBe(0.1)
+      vi.advanceTimersByTime(50)
+      expect(fillScaleOf(tree)).toBe(0.3)
+      dependencies.downloadProgress.publish(0.4)
+      dependencies.downloadProgress.publish(1)
+      expect(fillScaleOf(tree)).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('starts nothing after unmount for a value still waiting on its window', async () => {
+    const tree = await renderScreen(fetching(0, 8_082_368))
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+    try {
+      dependencies.downloadProgress.publish(0.1)
+      dependencies.downloadProgress.publish(0.5)
+      const fill = fillOf(tree)
+      act(() => tree.unmount())
+      vi.advanceTimersByTime(50)
+      expect(fill.value).toBe(0.1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('caps the bar at full when more bytes arrive than the total named', async () => {

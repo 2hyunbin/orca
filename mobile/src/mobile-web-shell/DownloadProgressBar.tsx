@@ -4,8 +4,14 @@ import { useReducedMotionEnabled } from '../platform/use-reduced-motion'
 import { colors } from '../theme/mobile-theme'
 import { downloadFraction, type DownloadProgressFeed } from './download-progress-feed'
 
-/** Long enough to read as motion between replies, short enough not to trail the caption. */
-const FILL_EASE_MS = 150
+/** Long enough to read as motion between steps, short enough not to trail the caption. */
+const FILL_EASE_MS = 100
+/**
+ * The feed fires per asset, often well under a frame apart, and a timing replaced that fast never
+ * draws: the fill sat empty until the last one. One start per window gives each ease three frames,
+ * three quarters of its step, before the next takes over from where it got to.
+ */
+const FILL_RESTART_MS = 50
 // Why: web has no native driver.
 const useNativeDriver = Platform.OS !== 'web'
 
@@ -43,8 +49,12 @@ export function DownloadProgressBar({
   useEffect(() => {
     reducedMotionRef.current = reducedMotion
   }, [reducedMotion])
+  // oxlint-disable-next-line react-doctor/effect-needs-cleanup -- Cleanup clears the trailing timer the listener arms.
   useEffect(() => {
     let easing: Animated.CompositeAnimation | null = null
+    let easedAt = Number.NEGATIVE_INFINITY
+    let latest = 0
+    let trailing: ReturnType<typeof setTimeout> | undefined
     const follow = (fraction: number, duration: number): void => {
       // Always the native driver, a jump included: a JS-side setValue only reaches the screen
       // through a React commit, and the download keeps those from happening.
@@ -57,12 +67,26 @@ export function DownloadProgressBar({
       })
       easing.start()
     }
-    follow(feed.current(), 0)
-    const unsubscribe = feed.subscribe((fraction) =>
+    const ease = (fraction: number): void => {
+      clearTimeout(trailing)
+      trailing = undefined
+      easedAt = Date.now()
       follow(fraction, reducedMotionRef.current ? 0 : FILL_EASE_MS)
-    )
+    }
+    follow(feed.current(), 0)
+    const unsubscribe = feed.subscribe((fraction) => {
+      const wait = easedAt + FILL_RESTART_MS - Date.now()
+      if (fraction >= 1 || wait <= 0) {
+        ease(fraction)
+        return
+      }
+      latest = fraction
+      // Why: lands the last value of a burst if no later callback comes past the window to carry it.
+      trailing ??= setTimeout(() => ease(latest), wait)
+    })
     return () => {
       unsubscribe()
+      clearTimeout(trailing)
       easing?.stop()
     }
   }, [feed, fill])
