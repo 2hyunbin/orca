@@ -6,6 +6,7 @@ import { getRepoIdFromWorktreeId } from '../../shared/worktree/id'
 import { OrcaRuntimeWithMigrationCatalog } from './orca-runtime-migration-catalog'
 import { getRuntimeDesktopSurface } from './runtime-desktop-surface'
 import type { AgentStatusStoreView } from './sidebar-inputs/workspace-activity-facts-producer'
+import { subscribeHookStatusTitles } from './terminal/layout/hook-status-title-subscription'
 import {
   TerminalAgentPhonePush,
   type TerminalAgentWorkspaceLabels
@@ -47,12 +48,17 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
     this.agentTransitions.subscribe((change) => this.terminalAgentPhonePush.observe(change))
   }
 
-  /** Attaches the detector; layers above subscribe their readers first. */
+  /** Attaches the detector, and main's generated tab titles; layers above subscribe their readers first. */
   attachAgentStatusStore(store: AgentStatusStoreView): () => void {
     this.terminalAgentPhonePush.dispose()
-    const stop = this.agentTransitions.attach(store)
+    const detachTransitions = this.agentTransitions.attach(store)
+    const subscribe = store.subscribeEnrichedStatus?.bind(store)
+    const detachTitles = subscribe
+      ? subscribeHookStatusTitles({ subscribeEnrichedStatus: subscribe }, this)
+      : () => {}
     return () => {
-      stop()
+      detachTitles()
+      detachTransitions()
       this.terminalAgentPhonePush.dispose()
     }
   }
