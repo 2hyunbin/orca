@@ -10,6 +10,7 @@ import { loadWorkspaceLayout } from '../../shared/workspace-layout/workspace-lay
 import { nameBasedLoadContext } from '../../shared/workspace-layout/workspace-layout-minted-ids'
 import { saveWorkspaceLayout } from '../../shared/workspace-layout/workspace-layout-save'
 import type { WorkspaceSessionState } from '../../shared/workspace-session-state-types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { randomUUID } from 'node:crypto'
 
 export type ServeBrowserPageState = {
@@ -197,7 +198,11 @@ export function withServeBrowserPageState(
       ...session.browserTabsByWorktree,
       // The tab mirrors its active page only.
       [page.worktreeId]: tabs.map((tab) =>
-        tab.id === saved.tabId && (!tab.activePageId || tab.activePageId === page.pageId)
+        tab.id === saved.tabId &&
+        // Switch point: a host's tab records no active page, so its shown page is its first.
+        (ORCA_LAYOUT_OWNER_IS_MAIN
+          ? (tab.activePageId ?? tab.pageIds?.[0] ?? tab.id) === page.pageId
+          : !tab.activePageId || tab.activePageId === page.pageId)
           ? { ...tab, ...state }
           : tab
       )
