@@ -1,5 +1,5 @@
-import { Pressable, Text, View } from 'react-native'
-import { ChevronRight, Circle, CircleCheck, CircleDot, ListChecks } from 'lucide-react-native'
+import { Text, View } from 'react-native'
+import { Circle, CircleCheck, CircleDot, ListChecks } from 'lucide-react-native'
 import {
   diffNativeChatTaskLists,
   NATIVE_CHAT_TASK_LIST_COPY,
@@ -10,7 +10,8 @@ import {
 } from '../../../src/shared/native-chat-task-list'
 import { colors } from '../theme/mobile-theme'
 import { useMobileNativeChatOpenedDetail } from './mobile-native-chat-opened-detail'
-import { toolStyles as styles, toolType } from './mobile-native-chat-tool-styles'
+import { TOOL_ICON_SIZE, toolStyles as styles, toolType } from './mobile-native-chat-tool-styles'
+import { MobileNativeChatDisclosureRow } from './MobileNativeChatDisclosureRow'
 import { useMobileNativeChatDisclosure } from './mobile-native-chat-disclosure-store'
 
 const STATUS_WORD: Record<NativeChatTask['status'], string> = {
@@ -49,7 +50,7 @@ function TaskRow({
     >
       <View style={[styles.taskIcon, { height: toolType(fontScale).row.lineHeight }]}>
         <Icon
-          size={14 * fontScale}
+          size={15 * fontScale}
           color={active ? colors.textPrimary : colors.textMuted}
           strokeWidth={2}
         />
@@ -95,19 +96,15 @@ function FullList({
   const [open, setOpen] = useMobileNativeChatDisclosure(disclosureKey, false)
   return (
     <View>
-      <Pressable
-        style={styles.taskDisclosure}
+      <MobileNativeChatDisclosureRow
         onPress={() => setOpen(!open)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
+        expanded={open}
+        fontScale={fontScale}
       >
-        <View style={open ? styles.caretOpen : undefined}>
-          <ChevronRight size={14 * fontScale} color={colors.textMuted} strokeWidth={2} />
-        </View>
         <Text style={[styles.lineMeta, toolType(fontScale).meta]}>
           {NATIVE_CHAT_TASK_LIST_COPY.showAll}
         </Text>
-      </Pressable>
+      </MobileNativeChatDisclosureRow>
       {open ? <OpenedChecklist list={list} fontScale={fontScale} /> : null}
     </View>
   )
@@ -146,7 +143,7 @@ export function MobileNativeChatTaskList({
           .replace('{{completed}}', String(completed))
           .replace('{{total}}', String(list.tasks.length))}
       >
-        <ListChecks size={15 * fontScale} color={colors.textMuted} strokeWidth={2} />
+        <ListChecks size={TOOL_ICON_SIZE * fontScale} color={colors.textMuted} strokeWidth={2} />
         <Text style={[styles.lineMeta, styles.taskTitle, type.meta]}>
           {NATIVE_CHAT_TASK_LIST_COPY.title}
         </Text>

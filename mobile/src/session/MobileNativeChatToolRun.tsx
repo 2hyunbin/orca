@@ -9,7 +9,6 @@ import {
 } from 'react'
 import {
   Animated,
-  Pressable,
   Platform,
   type ScrollView,
   Text,
@@ -51,7 +50,8 @@ import {
   MobileNativeChatDisclosureContext,
   useMobileNativeChatDisclosure
 } from './mobile-native-chat-disclosure-store'
-import { toolStyles as styles, toolType } from './mobile-native-chat-tool-styles'
+import { TOOL_ICON_SIZE, toolStyles as styles, toolType } from './mobile-native-chat-tool-styles'
+import { MobileNativeChatDisclosureRow } from './MobileNativeChatDisclosureRow'
 import { mobileNativeChatMemberId } from './mobile-native-chat-reading-place'
 import { MobileNativeChatOwnedScrollView } from './MobileNativeChatOwnedScrollView'
 import type {
@@ -253,44 +253,47 @@ export function ToolRun({
       : null
   ].filter((mark) => mark !== null)
   const type = toolType(fontScale)
-  const iconSize = 15 * fontScale
+  const iconSize = TOOL_ICON_SIZE * fontScale
 
   return (
     <View style={styles.run} testID={mobileNativeChatMemberId('run')}>
       {/* One element for the run's whole life: live and settled are states of this
           button, not two buttons. */}
-      <Pressable
-        style={styles.header}
+      <MobileNativeChatDisclosureRow
         onPress={() => setOpen(!open)}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
+        expanded={open}
+        fontScale={fontScale}
         accessibilityLiveRegion="polite"
       >
         {headerIcon ? (
-          <MobileNativeChatToolGlyph name={headerIcon} size={iconSize} color={colors.textMuted} />
+          <MobileNativeChatToolGlyph
+            name={headerIcon}
+            size={iconSize}
+            color={live ? colors.textSecondary : colors.textMuted}
+          />
         ) : null}
         <PulsingText
           pulsing={live}
-          style={[styles.headerSentence, type.row, live && styles.headerSentenceLive]}
+          style={[styles.headerSentence, type.sentence, live && styles.headerSentenceLive]}
         >
           {sentence ?? fallbackLabel}
         </PulsingText>
         {marks.length > 0 ? (
           // Never shrinks: it is the one thing the reader cannot afford to miss.
           <Text style={[styles.lineMeta, styles.headerMarks, type.meta]} numberOfLines={1}>
-            {` · ${marks.join(', ')}`}
+            {`· ${marks.join(', ')}`}
           </Text>
         ) : null}
         {/* Only a stated success is marked done, and never while live. */}
         {!live && outcome.succeeded ? (
-          <Check size={12 * fontScale} color={colors.textMuted} strokeWidth={2} />
+          <Check size={14 * fontScale} color={colors.textMuted} strokeWidth={2.2} />
         ) : null}
         {latestCallLabel ? (
-          <Text style={[styles.headerLatest, type.meta]} numberOfLines={1}>
+          <Text style={[styles.lineMeta, styles.headerLatest, type.meta]} numberOfLines={1}>
             {latestCallLabel}
           </Text>
         ) : null}
-      </Pressable>
+      </MobileNativeChatDisclosureRow>
       {open ? (
         <ToolRunMembers
           followKey={blocks.length + asideCount}
