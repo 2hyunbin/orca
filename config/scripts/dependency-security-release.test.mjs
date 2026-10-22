@@ -78,6 +78,7 @@ it('extracts release data while excluding executable package and Cargo configura
   const configuration = [
     'package.json',
     'mobile/package.json',
+    '.gitattributes',
     '.npmrc',
     '.pnpmfile.cjs',
     'config/pnpmfile.cjs',
@@ -96,7 +97,12 @@ it('extracts release data while excluding executable package and Cargo configura
   try {
     for (const file of [...data, ...configuration]) {
       mkdirSync(dirname(join(source, file)), { recursive: true })
-      writeFileSync(join(source, file), `${file} contents`)
+      writeFileSync(
+        join(source, file),
+        file === '.gitattributes'
+          ? '*.yaml export-ignore\n*.patch export-subst\n'
+          : `${file} contents`
+      )
     }
     await run('git', ['init', '--quiet'], source)
     await run('git', ['add', '.'], source)
@@ -129,6 +135,29 @@ it('extracts release data while excluding executable package and Cargo configura
     for (const file of configuration) {
       expect(existsSync(join(tooling, 'candidate', file)), file).toBe(false)
     }
+    rmSync(join(tooling, 'candidate'), { recursive: true })
+    await run('git', ['rm', '--quiet', 'pnpm-workspace.yaml'], source)
+    await run(
+      'git',
+      [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        'commit',
+        '--quiet',
+        '-m',
+        'missing workspace'
+      ],
+      source
+    )
+    const missing = await runProcess({
+      program: 'bash',
+      args: ['-c', action.runs.steps[0].run],
+      cwd: tooling,
+      env: { ...process.env, RELEASE_REF: 'HEAD' }
+    })
+    expect(missing.code).not.toBe(0)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
