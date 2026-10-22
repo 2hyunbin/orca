@@ -203,7 +203,7 @@ export async function commitStructuredAgentSessionCreate(args: {
 }): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
   const { prepared } = args
   const tab = prepared.tab
-  const placedByWindow = {
+  const tabPlace = {
     ...(args.placedByWindow ? { placedByWindow: true } : {}),
     ...(args.tabPlacement ? { placement: args.tabPlacement } : {})
   }
@@ -226,7 +226,7 @@ export async function commitStructuredAgentSessionCreate(args: {
                     sessionId: prepared.attachParams.envelope.sessionId,
                     agent: tab.agent,
                     activate: args.activate,
-                    ...placedByWindow,
+                    ...tabPlace,
                     ...(prepared.attachParams.surfaceTabId
                       ? { tabId: prepared.attachParams.surfaceTabId }
                       : {})
@@ -256,7 +256,7 @@ export async function commitStructuredAgentSessionCreate(args: {
       sessionId: result.value.sessionId,
       agent: prepared.tab.agent,
       activate: args.activate,
-      ...placedByWindow,
+      ...tabPlace,
       ...(surfaceTabId ? { tabId: surfaceTabId } : {})
     })
   } catch (error) {
