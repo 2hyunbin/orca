@@ -54,7 +54,7 @@ export type AgentPaneThreadsStoreData = Pick<
   | 'acknowledgeAgents'
   | 'unacknowledgeAgents'
 > & {
-  /** Terminal and agent-session tabs only, identity-stable across focus writes. */
+  /** Current native-chat originals and terminal tabs with semantic identity reuse. */
   activityTabs: ActivityTabProjection
   worktreeMap: ReturnType<typeof getWorktreeMapFromState>
   repoMap: ReturnType<typeof getRepoMapFromState>
