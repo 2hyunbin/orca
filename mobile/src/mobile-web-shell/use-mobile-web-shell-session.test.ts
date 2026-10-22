@@ -300,16 +300,16 @@ async function flush(): Promise<void> {
   await act(async () => undefined)
 }
 
-describe('the hybrid shell runner', () => {
-  beforeEach(() => {
-    doubles.manifestReads = 0
-    doubles.manifestClients.length = 0
-    doubles.manifestRejection = null
-    doubles.fetches.length = 0
-    doubles.connection = { client: {}, state: 'connected' }
-    doubles.gates.hostCapabilities = [MOBILE_WEB_BUNDLE_CAPABILITY]
-  })
+beforeEach(() => {
+  doubles.manifestReads = 0
+  doubles.manifestClients.length = 0
+  doubles.manifestRejection = null
+  doubles.fetches.length = 0
+  doubles.connection = { client: {}, state: 'connected' }
+  doubles.gates.hostCapabilities = [MOBILE_WEB_BUNDLE_CAPABILITY]
+})
 
+describe('the hybrid shell runner', () => {
   it('abandons the cache read of a session that has been unmounted', async () => {
     const fake = createFakeStore()
     const mounted = await mount(fake.store)
@@ -452,15 +452,6 @@ describe('the hybrid shell runner', () => {
  * clock the session sits in `ready` behind a WebView showing nothing, forever.
  */
 describe('the wait for the page to speak', () => {
-  beforeEach(() => {
-    doubles.manifestReads = 0
-    doubles.manifestClients.length = 0
-    doubles.manifestRejection = null
-    doubles.fetches.length = 0
-    doubles.connection = { client: {}, state: 'connected' }
-    doubles.gates.hostCapabilities = [MOBILE_WEB_BUNDLE_CAPABILITY]
-  })
-
   async function ready(): Promise<Mounted> {
     const fake = createFakeStore()
     const mounted = await mount(fake.store)
