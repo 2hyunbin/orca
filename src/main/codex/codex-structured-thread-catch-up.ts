@@ -40,7 +40,8 @@ export async function catchUpCodexThread(input: {
     ...(input.logger ? { logger: input.logger } : {}),
     readView: (history) => readCodexHistoryJournalView(history, input.threadId),
     sameView: sameCodexHistoryJournalView,
-    prepare: async ({ view, journal, signal, deadline, check, yieldTurn }) => {
+    prepare: async ({ view: readView, journal, signal, deadline, check, yieldTurn }) => {
+      const view = readView()
       const read = {
         connection: input.connection,
         threadId: input.threadId,
