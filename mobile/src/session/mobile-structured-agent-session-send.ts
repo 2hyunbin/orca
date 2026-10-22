@@ -7,6 +7,11 @@ import {
   structuredAgentSessionSendBody,
   type StructuredAgentSessionAttachment
 } from '../../../src/shared/structured-agent-session-send-mutation'
+import { structuredAgentSessionBlocksTooLarge } from '../../../src/shared/rpc-contract/structured-agent-session-message-params'
+import {
+  AGENT_SESSION_MESSAGE_TOO_LARGE_PARTS,
+  agentSessionWriteNoticeEnglish
+} from '../../../src/shared/agent-session-refusal-notice'
 import type { RpcClient } from '../transport/rpc-client'
 import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
 import {
@@ -38,6 +43,12 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
     input.onError('Message not sent')
     return 'rejected'
   }
+  const body = structuredAgentSessionSendBody(input.text, input.attachments, input.skills)
+  // The host refuses it unexplained, so say why here and keep the draft.
+  if (structuredAgentSessionBlocksTooLarge(body.blocks)) {
+    input.onError(agentSessionWriteNoticeEnglish(AGENT_SESSION_MESSAGE_TOO_LARGE_PARTS))
+    return 'rejected'
+  }
   // Each Send is a new action, under one operation id.
   const result = await requestStructuredAgentSessionMutation<AgentSessionSendResult>({
     client: input.client,
@@ -46,7 +57,7 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
     sessionId: input.sessionId,
     expectedRuntimeFence: input.expectedRuntimeFence,
     fields: {
-      body: structuredAgentSessionSendBody(input.text, input.attachments, input.skills),
+      body,
       ...(input.delivery ? { delivery: input.delivery } : {}),
       ...(input.options ? { options: input.options } : {})
     },

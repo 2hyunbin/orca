@@ -21,7 +21,7 @@ import {
 type EffectiveProxy = ReturnType<typeof resolveEffectiveProxy>
 
 /** The first ssh2 attempt that failed, and what it was dialled with. */
-export type FailedSsh2Attempt = {
+type FailedSsh2Attempt = {
   config: ConnectConfig
   resolved: SshResolvedConfig | null
   effectiveProxy: EffectiveProxy
