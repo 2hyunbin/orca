@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import { OrchestrationDb } from '../runtime/orchestration/db/orchestration-db'
 import { hashCanonical } from '../runtime/rpc/orchestration-mutation-receipt'
+import { DeliveryReceipts } from './external-conversation-delivery-receipts'
 import { ExternalConversationSeam } from './external-conversation-seam'
 import type { ConversationKey } from './external-conversation-types'
 import {
@@ -28,7 +29,7 @@ function harness(
     new ExternalConversationSeam({
       store: records.store,
       readSettings: () => settings,
-      receiptDb: () => db,
+      receipts: new DeliveryReceipts(() => db),
       onWorkspaceRemoved: (listener) => {
         removed.add(listener)
         return () => removed.delete(listener)

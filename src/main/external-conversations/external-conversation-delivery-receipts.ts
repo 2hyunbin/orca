@@ -52,7 +52,7 @@ export class DeliveryReceipts {
     const flightKey = JSON.stringify([identity.callerFingerprint, identity.requestId])
     const db = this.db()
     if (!this.leftoversSettled) {
-      // Pending rows from before this seam already answer only unknown; record that, never delete
+      // Pending rows from a previous process already answer only unknown; record that, never delete
       // (they may have written), so the ledger can prune them and they leave the limit.
       db.settlePendingMutationReceipts(CONNECTOR_FINGERPRINTS, JSON.stringify(LOST))
       this.leftoversSettled = true
