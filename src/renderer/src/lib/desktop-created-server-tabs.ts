@@ -17,6 +17,11 @@ type Entry = { environmentId: string; worktreeId: string; ids: Set<string> }
 let records: Map<string, Entry> | undefined
 
 function recordMap(): Map<string, Entry> {
+  // Switch point: only a layout-owner build draws a server's frames; any other never reads or
+  // keeps the record.
+  if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
+    return new Map()
+  }
   if (records) {
     return records
   }
@@ -51,7 +56,6 @@ function save(map: Map<string, Entry>): void {
       map.delete(key)
     }
   }
-  // Switch point: only a layout-owner build draws a server's frames, so only it writes the record.
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
     return
   }

@@ -13,13 +13,12 @@ export type DrawnWorkspace = {
   activeGroupId: string | undefined
 }
 
-/** Where held tabs go: their new group, the window's groups after the move, the tab the user was
- *  on when it moved (shown in its new group), and the group they follow it into. */
+/** Where held tabs go: their new group, the window's groups after the move, and the tab the user
+ *  was on when it moved (shown in its new group). */
 export type HeldTabPlacement = {
   tabGroupIdById: ReadonlyMap<string, string>
   groups: TabGroup[]
   shownTabId: string | undefined
-  activeGroupId: string | undefined
 }
 
 /** The subtree beside `groupId`'s leaf. */
@@ -100,7 +99,6 @@ export function heldTabsInMainGroups(
         .filter((group) => into(group.id).length > 0)
         .map((group) => withMoved(group, group.tabOrder))
     ],
-    shownTabId: shownId,
-    activeGroupId: shownId ? strays.get(shownId) : undefined
+    shownTabId: shownId
   }
 }

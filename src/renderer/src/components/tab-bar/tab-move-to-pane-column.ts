@@ -1,7 +1,10 @@
 import { useAppStore } from '../../store'
 import type { TabSplitDirection } from '../../store/slices/tabs'
 import { mirrorWebRuntimeTabMove } from './web-runtime-tab-move-mirror'
-import { isHeldServerTab, serverTabCount } from '@/lib/held-server-tabs'
+import {
+  isDesktopCreatedTabInFrameDrawnServerWorkspace,
+  serverTabCount
+} from '@/lib/frame-drawn-desktop-created-tabs'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { dropTabThroughLayoutOwner } from '../tab-group/tab-group-layout-owner-commands'
 
@@ -27,10 +30,11 @@ export function canMoveTabToNewPaneColumnFromState(
       return false
     }
     // Why: mirror dropUnifiedTab — splitting the only tab in a group onto an
-    // adjacent split pane is a layout no-op the store rejects. A held tab never splits off, and
-    // counts for nothing: the server's group lacks it.
+    // adjacent split pane is a layout no-op the store rejects. A tab this desktop created never
+    // splits off, and counts for nothing: the server's group lacks it.
     return (
-      !isHeldServerTab(worktreeId, unifiedTabId) && serverTabCount(worktreeId, group.tabOrder) > 1
+      !isDesktopCreatedTabInFrameDrawnServerWorkspace(worktreeId, unifiedTabId) &&
+      serverTabCount(worktreeId, group.tabOrder) > 1
     )
   }
   return false

@@ -16,7 +16,7 @@ import {
 import { tabSelectionKey } from '@/store/slices/tabs/moved-tab-selection'
 import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import { splitRatioIntentAt } from '../../../../shared/workspace-layout/split-ratio-intents'
-import { serverTabCount } from '@/lib/held-server-tabs'
+import { serverTabCount } from '@/lib/frame-drawn-desktop-created-tabs'
 
 /** A tab drop as the window resolved it: within its group, into another, or beside a group. */
 export type TabDrop =

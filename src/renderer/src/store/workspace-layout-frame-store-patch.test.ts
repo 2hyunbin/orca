@@ -21,6 +21,13 @@ import {
   noteDesktopCreatedServerTab
 } from '@/lib/desktop-created-server-tabs'
 
+// Off as the build ships; the desktop-created record exists only with it on.
+const layoutOwner = vi.hoisted(() => ({ on: false }))
+vi.mock('../../../shared/layout-owner-switch', () => ({
+  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+    return layoutOwner.on
+  }
+}))
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentStatusModule>()
@@ -174,6 +181,7 @@ describe('laying frame slices over the store', () => {
     const order = groupOf(state.groupsByWorktree)!.tabOrder
     // The server's frame lists every tab but the one this desktop hosts.
     const serverFrame = { ...withoutTab(frame, 'browser-1'), browserTabs: [] }
+    layoutOwner.on = true
     noteDesktopCreatedServerTab('web-env-1', GIT_KEY, 'browser-1')
     try {
       const patch = patchFor(
@@ -192,6 +200,7 @@ describe('laying frame slices over the store', () => {
       expect(after.remoteBrowserPageHandlesByPageId[page.id]).toEqual(handle)
     } finally {
       _resetDesktopCreatedServerTabsForTests()
+      layoutOwner.on = false
     }
     // Presence: without the hold, the same frame drops all three.
     const dropped = patchFor(hosting, session, serverFrame)
