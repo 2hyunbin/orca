@@ -7,8 +7,8 @@ import { resolveGitFetchHeadCommand } from '../../shared/git-fetch-head-lock'
 import { resolveGitDir } from './source-control/resolve-git-dir'
 import type { GitRuntimeOptions } from './git-runtime-options'
 
-// Transfers that leave HEAD, the index, and the working tree untouched.
-const WORKTREE_NEUTRAL_SUBCOMMANDS = new Set(['fetch', 'push', 'ls-remote'])
+// These can write refs or objects without changing HEAD, the index, or the working tree.
+const WORKTREE_NEUTRAL_SUBCOMMANDS = new Set(['fetch', 'push', 'ls-remote', 'merge-tree'])
 
 const pending = new Set<{ path: string; gitDir?: string; wslDistro?: string }>()
 
@@ -54,5 +54,5 @@ export async function isGitWorktreeMutationInFlight(
           (await canonical(entry.gitDir)) === targetGitDir)
     )
   )
-  return matches.includes(true)
+  return candidates.some((entry, index) => pending.has(entry) && matches[index])
 }

@@ -9,7 +9,6 @@ export function ConflictSummaryCard({
   conflictOperation,
   unresolvedCount,
   sourceControlAiActionsVisible,
-  isResolvingWithAI,
   isRecoveryBusy = false,
   isAbortingOperation = false,
   onAbortOperation,
@@ -19,7 +18,6 @@ export function ConflictSummaryCard({
   conflictOperation: GitConflictOperation
   unresolvedCount: number
   sourceControlAiActionsVisible: boolean
-  isResolvingWithAI: boolean
   isRecoveryBusy?: boolean
   isAbortingOperation?: boolean
   onAbortOperation?: (operation: GitConflictOperation) => void
@@ -74,14 +72,10 @@ export function ConflictSummaryCard({
             variant="default"
             size="sm"
             className="h-7 w-full text-xs"
-            disabled={isResolvingWithAI || isAbortingOperation || isRecoveryBusy}
+            disabled={isAbortingOperation || isRecoveryBusy}
             onClick={onResolveWithAI}
           >
-            {isResolvingWithAI ? (
-              <RefreshCw className="size-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="size-3.5" />
-            )}
+            <Sparkles className="size-3.5" />
             {translate('auto.components.right.sidebar.SourceControl.f6cb48b6fe', 'Resolve with AI')}
           </Button>
         ) : null}
@@ -102,7 +96,7 @@ export function ConflictSummaryCard({
             variant="outline"
             size="sm"
             className="mt-1.5 h-7 w-full text-xs"
-            disabled={isResolvingWithAI || isAbortingOperation}
+            disabled={isAbortingOperation}
             onClick={() => onAbortOperation(conflictOperation)}
           >
             {isAbortingOperation ? <RefreshCw className="size-3.5 animate-spin" /> : null}

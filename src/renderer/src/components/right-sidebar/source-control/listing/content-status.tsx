@@ -61,7 +61,6 @@ export function SourceControlContentStatus({
             conflictOperation={conflictOperation}
             unresolvedCount={unresolvedConflictCount}
             sourceControlAiActionsVisible={sourceControlAiActionsVisible}
-            isResolvingWithAI={false}
             isRecoveryBusy={isRecoveryBusy}
             isAbortingOperation={isAbortingOperation}
             onAbortOperation={onAbortOperation}

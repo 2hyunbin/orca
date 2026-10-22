@@ -29,17 +29,28 @@ describe('Git worktree mutation tracking', () => {
     await expect(isGitWorktreeMutationInFlight(repo, {})).resolves.toBe(false)
   })
 
-  it('ignores reads and transfers that cannot change the worktree', async () => {
+  it('ignores reads, transfers, and conflict previews that cannot change the worktree', async () => {
     const releases = [
       trackGitWorktreeMutation(['status', '--porcelain=v2'], { cwd: repo }),
       trackGitWorktreeMutation(['-c', 'gc.auto=0', 'fetch', 'origin'], { cwd: repo }),
-      trackGitWorktreeMutation(['push', 'origin', 'HEAD'], { cwd: repo })
+      trackGitWorktreeMutation(['--git-dir', join(repo, '.git'), 'fetch', 'origin'], {
+        cwd: root
+      }),
+      trackGitWorktreeMutation(['push', 'origin', 'HEAD'], { cwd: repo }),
+      trackGitWorktreeMutation(['merge-tree', '--write-tree', 'HEAD', 'main'], { cwd: repo })
     ]
     try {
       await expect(isGitWorktreeMutationInFlight(repo, {})).resolves.toBe(false)
     } finally {
       releases.forEach((release) => release())
     }
+  })
+
+  it('does not report a mutation that finishes while its path is being resolved', async () => {
+    const release = trackGitWorktreeMutation(['rebase', '--continue'], { cwd: repo })
+    const checking = isGitWorktreeMutationInFlight(repo, {})
+    release()
+    await expect(checking).resolves.toBe(false)
   })
 
   it('isolates mutations by workspace and WSL distro', async () => {
