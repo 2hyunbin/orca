@@ -32,6 +32,16 @@ function paneLayoutEditIsNoOp(
 }
 
 export abstract class RuntimeHeadlessTabProperties extends OrcaRuntimeWithCloseHeadlessMobileTerminalTab {
+  /** What `title` reads once a manual name is cleared; readers that predate `customTitle` show it. */
+  protected headlessTerminalFallbackTitle(worktreeId: string, tabId: string): string {
+    const tab = this.getWorkspaceSessionForWorktree(worktreeId)?.tabsByWorktree[worktreeId]?.find(
+      (candidate) => candidate.id === tabId
+    )
+    return (
+      tab?.generatedTitle?.trim() || tab?.title?.trim() || tab?.defaultTitle?.trim() || 'Terminal'
+    )
+  }
+
   protected persistHeadlessSessionTabProps(
     worktreeId: string,
     tabId: string,

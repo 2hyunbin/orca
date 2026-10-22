@@ -278,15 +278,7 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
   // Why: tab color/pin are host-authoritative for remote-server tabs but had no
   // push path, so pinning or coloring a tab reverted on the next snapshot and
   // was never persisted. Persist to the workspace session + live snapshot.
-  /** What `title` reads once a manual name is cleared; readers that predate `customTitle` show it. */
-  protected headlessTerminalFallbackTitle(worktreeId: string, tabId: string): string {
-    const tab = this.getWorkspaceSessionForWorktree(worktreeId)?.tabsByWorktree[worktreeId]?.find(
-      (candidate) => candidate.id === tabId
-    )
-    return (
-      tab?.generatedTitle?.trim() || tab?.title?.trim() || tab?.defaultTitle?.trim() || 'Terminal'
-    )
-  }
+  protected abstract headlessTerminalFallbackTitle(worktreeId: string, tabId: string): string
 
   async setMobileSessionTabProps(
     worktreeSelector: string,
@@ -315,6 +307,14 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
       return { updated: true }
     }
     if (this.getAvailableAuthoritativeWindow()) {
+      if (args.color !== undefined || args.isPinned !== undefined || args.viewMode !== undefined) {
+        throw Object.assign(
+          new Error(
+            'Tab color, pin, and view mode edits are unavailable while a desktop window owns the layout'
+          ),
+          { code: 'capability_unsupported' }
+        )
+      }
       if (customTitle !== undefined) {
         this.notifier?.renameTerminal(hostTabId, customTitle)
       }
