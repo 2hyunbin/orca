@@ -142,8 +142,9 @@ function registerStart(
   const { runtimeState } = context
   const attemptId = randomUUID()
   const acquire = runtimeState.acquireAborts.begin(sessionId)
-  const workspaceId = context.deps.store.getRecord(sessionId)?.location.workspaceId
-  const setup = workspaceId === undefined ? null : (context.deps.setupHold?.(workspaceId) ?? null)
+  const { setupHold } = context.deps
+  const record = setupHold ? context.deps.store.getRecord(sessionId) : null
+  const setup = setupHold && record ? setupHold(record.location.workspaceId) : null
   if (!setup) {
     runtimeState.startupAttempts.begin(sessionId, attemptId)
   }
