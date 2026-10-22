@@ -13,8 +13,8 @@ import { translate } from '@/i18n/i18n'
 import { captureWorktreeSshMutationExpectation } from '@/lib/ssh-mutation-expectation'
 import { statUserOpenedPath } from '@/lib/user-opened-local-path'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
+import { openDocumentInFloatingWorkspace } from '@/lib/open-document-in-floating-workspace'
 import { requireRuntimeTargetForFileOwner } from '@/lib/file-owner-runtime-target'
-import { openWorkspaceFile } from '@/lib/workspace-file-open'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import {
   isResolvedWorkspaceFileDragExecutionHost,
@@ -56,7 +56,6 @@ export type EditorFileDropDestination = {
 type EditorFileDropContext = {
   fileContext: RuntimeFileOperationArgs
   worktreePath: string | undefined
-  connectionId: string | undefined
   assertCurrent?: () => void
 }
 
@@ -75,7 +74,6 @@ function captureEditorFileDropContext(
       return {
         fileContext: { ...guard.route, worktreeId, worktreePath },
         worktreePath,
-        connectionId: guard.route.connectionId,
         assertCurrent: guard.assertCurrent
       }
     }
@@ -85,8 +83,7 @@ function captureEditorFileDropContext(
         ...getEditorFileDropOperationContext(store, worktreeId, worktreePath, connectionId),
         ...captureWorktreeSshMutationExpectation(store, worktreeId)
       },
-      worktreePath,
-      connectionId
+      worktreePath
     }
   } catch {
     return null
@@ -98,7 +95,7 @@ function sameEditorFileDropOwner(a: EditorFileDropContext, b: EditorFileDropCont
   const right = b.fileContext
   return (
     a.worktreePath === b.worktreePath &&
-    a.connectionId === b.connectionId &&
+    left.connectionId === right.connectionId &&
     runtimeTargetEnvironmentId(left.target) === runtimeTargetEnvironmentId(right.target) &&
     left.expectedExecutionHostId === right.expectedExecutionHostId &&
     left.expectedSshTargetId === right.expectedSshTargetId &&
@@ -115,15 +112,12 @@ function showOwnerChangedError(): void {
   )
 }
 
-export function editorGroupStillExists({
-  worktreeId,
-  groupId
-}: EditorFileDropDestination): boolean {
-  if (!groupId) {
-    return true
-  }
-  const groups = useAppStore.getState().groupsByWorktree[worktreeId] ?? []
-  return groups.some((group) => group.id === groupId)
+export function editorGroupStillExists(destination: EditorFileDropDestination): boolean {
+  const { worktreeId, groupId } = destination
+  return (
+    !groupId ||
+    !!useAppStore.getState().groupsByWorktree[worktreeId]?.some((group) => group.id === groupId)
+  )
 }
 
 function canOpenEditorFileDrop(
@@ -133,32 +127,29 @@ function canOpenEditorFileDrop(
   if (!editorGroupStillExists(destination)) {
     return false
   }
-  if (captured.assertCurrent) {
-    try {
+  try {
+    if (captured.assertCurrent) {
       const state = useAppStore.getState()
+      const { worktreeId, groupId } = destination
+      const groups = state.groupsByWorktree[worktreeId] ?? []
       if (
-        state.getKnownWorktreeById(destination.worktreeId)?.path !== captured.worktreePath ||
-        (destination.groupId &&
-          !state.groupsByWorktree[destination.worktreeId]?.some(
-            (group) =>
-              group.id === destination.groupId && group.worktreeId === destination.worktreeId
-          ))
+        state.getKnownWorktreeById(worktreeId)?.path !== captured.worktreePath ||
+        (groupId && groups.find((group) => group.id === groupId)?.worktreeId !== worktreeId)
       ) {
         throw new Error('Destination changed')
       }
       captured.assertCurrent()
-      return true
-    } catch {
-      showOwnerChangedError()
-      return false
+    } else {
+      const current = captureEditorFileDropContext(destination.worktreeId)
+      if (!current || !sameEditorFileDropOwner(captured, current)) {
+        throw new Error('Owner changed')
+      }
     }
-  }
-  const current = captureEditorFileDropContext(destination.worktreeId)
-  if (!current || !sameEditorFileDropOwner(captured, current)) {
+    return true
+  } catch {
     showOwnerChangedError()
     return false
   }
-  return true
 }
 
 /**
@@ -191,12 +182,10 @@ export function captureEditorFileDropOpen(
     )
     return async () => undefined
   }
-  return async (paths) => {
-    if (paths.length === 0 || !canOpenEditorFileDrop(captured, destination)) {
-      return
-    }
-    await openEditorFileDropPaths(captured, destination, paths, source === undefined)
-  }
+  return (paths) =>
+    paths.length > 0 && canOpenEditorFileDrop(captured, destination)
+      ? openEditorFileDropPaths(captured, destination, paths, source === undefined)
+      : Promise.resolve()
 }
 
 async function openEditorFileDropPaths(
@@ -205,7 +194,9 @@ async function openEditorFileDropPaths(
   paths: readonly string[],
   clientLocalPaths: boolean
 ): Promise<void> {
-  const { fileContext, worktreePath, connectionId } = context
+  const { fileContext, worktreePath } = context
+  const { connectionId } = fileContext
+  const { openFile, setActiveTabType } = useAppStore.getState()
   const { worktreeId, groupId } = destination
   const groupOptions = groupId ? { targetGroupId: groupId } : null
   const runtimeEnvironmentId = runtimeTargetEnvironmentId(fileContext.target)
@@ -229,6 +220,9 @@ async function openEditorFileDropPaths(
         destinationDir,
         { ensureDestinationDir: true, nameExtensionlessImages: true }
       )
+      if (!canOpenEditorFileDrop(context, destination)) {
+        return
+      }
       for (const result of results) {
         if (!canOpenEditorFileDrop(context, destination)) {
           return
@@ -237,9 +231,9 @@ async function openEditorFileDropPaths(
           continue
         }
         const maybeRelative = toWorktreeRelativePath(result.destPath, worktreePath)
-        openWorkspaceFile({
-          kind: 'file',
-          file: {
+        setActiveTabType('editor', worktreeId)
+        openFile(
+          {
             filePath: result.destPath,
             relativePath: maybeRelative ?? result.destPath,
             worktreeId,
@@ -247,8 +241,8 @@ async function openEditorFileDropPaths(
             language: detectLanguage(result.destPath),
             mode: 'edit'
           },
-          options: { suppressActiveRuntimeFallback: runtimeEnvironmentId === null, ...groupOptions }
-        })
+          { suppressActiveRuntimeFallback: runtimeEnvironmentId === null, ...groupOptions }
+        )
       }
       if (results.some((result) => result.status !== 'imported')) {
         toast.error(
@@ -288,26 +282,31 @@ async function openEditorFileDropPaths(
           relativePath = maybeRelative
         }
       }
+      setActiveTabType('editor', worktreeId)
       const floating = worktreeId === FLOATING_TERMINAL_WORKTREE_ID
-      openWorkspaceFile({
-        kind: 'file',
-        file: {
-          filePath,
-          relativePath,
-          worktreeId,
-          language: detectLanguage(filePath),
-          mode: 'edit',
-          ...(!clientLocalPaths ? { runtimeEnvironmentId: runtimeEnvironmentId ?? undefined } : {}),
-          ...(floating ? { runtimeEnvironmentId: null } : {})
-        },
-        options: {
+      if (clientLocalPaths && floating) {
+        openDocumentInFloatingWorkspace(openFile, { filePath, relativePath }, groupOptions ?? {})
+        continue
+      }
+      const file = {
+        filePath,
+        relativePath,
+        worktreeId,
+        language: detectLanguage(filePath),
+        mode: 'edit' as const,
+        runtimeEnvironmentId: floating ? null : (runtimeEnvironmentId ?? undefined)
+      }
+      if (!clientLocalPaths || groupOptions) {
+        openFile(file, {
           ...groupOptions,
           ...(!clientLocalPaths
             ? { suppressActiveRuntimeFallback: runtimeEnvironmentId === null, focusEditor: true }
             : {}),
           ...(floating ? { preview: false, suppressActiveRuntimeFallback: true } : {})
-        }
-      })
+        })
+      } else {
+        openFile(file)
+      }
     } catch {
       if (!clientLocalPaths) {
         toast.error(

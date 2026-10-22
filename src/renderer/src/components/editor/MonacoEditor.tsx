@@ -46,6 +46,8 @@ type MonacoEditorProps = {
   markdownAnnotationsEnabled?: boolean
   conflictDecorationsEnabled?: boolean
   readOnly?: boolean
+  // Why: shows another tab's record read-only; never moves its cursor line or takes its reveals.
+  passiveMirror?: boolean
   liveTail?: boolean
   autoHeight?: boolean
 }
@@ -68,6 +70,7 @@ export default function MonacoEditor({
   markdownAnnotationsEnabled = false,
   conflictDecorationsEnabled = false,
   readOnly = false,
+  passiveMirror = false,
   liveTail = false,
   autoHeight = false
 }: MonacoEditorProps): React.JSX.Element {
@@ -199,6 +202,7 @@ export default function MonacoEditor({
     modelOwnerKey,
     viewStateKey,
     viewStateId,
+    passiveMirror,
     worktreeId,
     autoHeight,
     autoHeightLineHeight,

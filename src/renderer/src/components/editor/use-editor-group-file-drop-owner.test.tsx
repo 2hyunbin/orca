@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
   const groupsByWorktree: Record<string, { id: string }[]> = {}
   return {
     openFile: vi.fn(),
+    setActiveTabType: vi.fn(),
     stat: vi.fn(),
     prepare: vi.fn(),
     toastError: vi.fn(),
@@ -100,7 +101,8 @@ beforeEach(() => {
         updatedAt: 0
       }
     ],
-    openFile: mocks.openFile
+    openFile: mocks.openFile,
+    setActiveTabType: mocks.setActiveTabType
   })
   useAppStore.setState({
     groupsByWorktree: Object.fromEntries(
@@ -142,8 +144,9 @@ describe('editor group OS file drops', () => {
           : 'wt-b'
       const groupId = floating ? 'floating-group' : 'group-b'
       const view = render(<EditorGroup worktreeId={worktreeId} groupId={groupId} />)
+      const filePath = `/repos/wt-b/notes.${root === 'area' ? 'html' : 'md'}`
       const payload = new Map([
-        [WORKSPACE_FILE_PATHS_MIME, JSON.stringify(['/repos/wt-b', '/repos/wt-b/notes.md'])]
+        [WORKSPACE_FILE_PATHS_MIME, JSON.stringify(['/repos/wt-b', filePath])]
       ])
       writeWorkspaceFileDragSource(
         { setData: (type, value) => payload.set(type, value) },
@@ -174,7 +177,7 @@ describe('editor group OS file drops', () => {
       expect(transfer.dropEffect).toBe('copy')
       await waitFor(() => expect(mocks.openFile).toHaveBeenCalledTimes(1))
       expect(mocks.openFile).toHaveBeenCalledWith(
-        expect.objectContaining({ filePath: '/repos/wt-b/notes.md', worktreeId }),
+        expect.objectContaining({ filePath, worktreeId }),
         expect.objectContaining({ targetGroupId: groupId, focusEditor: true })
       )
       expect(mocks.prepare).not.toHaveBeenCalled()
@@ -199,6 +202,7 @@ describe('editor group OS file drops', () => {
         }),
         { targetGroupId: 'group-b' }
       )
+      expect(mocks.setActiveTabType).toHaveBeenCalledWith('editor', 'wt-b')
     }
   )
 
@@ -315,6 +319,7 @@ describe('editor group OS file drops', () => {
       }
       await act(async () => finish({ isDirectory: false, escapesWorktree: false }))
       expect(mocks.openFile).not.toHaveBeenCalled()
+      expect(mocks.setActiveTabType).not.toHaveBeenCalled()
       expect(mocks.toastError).toHaveBeenCalledTimes(1)
     }
   )
