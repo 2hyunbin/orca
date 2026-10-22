@@ -7,8 +7,6 @@ import { isRecord } from '../../moving-wsl-projects/wsl-move-canonical-form'
 
 /** Session fields the real pipeline does not carry yet, with why; each still differs today. */
 export const WSL_MOVE_ROUND_TRIP_KNOWN_GAPS: Readonly<Record<string, string>> = {
-  markdownFrontmatterVisible: 'Dropped by the export (file-keyed by the UNC path); a UI toggle.',
-  closedTerminalTabTombstonesByTabId: 'Reopen-closed-tab records are not carried.',
   activeWorktreeIdsOnShutdown: 'Never seeded: focus belongs to whoever looks at the host.',
   terminalSurfaceTombstonesByPaneKey: 'Fences of local PTY incarnations; the host starts its own.'
 }
