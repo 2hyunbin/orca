@@ -242,11 +242,6 @@ class OrcaRuntimeService extends OrcaRuntimeSidebarBase {
     return this.resolveAgentTerminalCreateOptions(workspace, opts)
   }
 
-  /** Whether a running process holds this pane now: such a pane is attached to, never launched into. */
-  hasLiveTerminalForPaneKey(paneKey: string): boolean {
-    return this.getPtyRecordForPaneKey(paneKey)?.connected === true
-  }
-
   private readonly workspaceLayoutStream = new WorkspaceLayoutStream({
     store: () => this.store,
     homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
