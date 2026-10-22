@@ -1,0 +1,67 @@
+import type { CommandHandler, HandlerContext } from '../dispatch'
+import { getOptionalStringFlag, getRequiredStringFlag } from '../flags'
+import { printResult } from '../format'
+import { RuntimeClientError } from '../runtime-client'
+import { getRequiredWorktreeSelector } from '../selectors'
+
+type ConnectorDelivery = { outcome: string; reason?: string }
+
+function formatDelivery(delivery: ConnectorDelivery): string {
+  return delivery.reason ? `${delivery.outcome}: ${delivery.reason}` : delivery.outcome
+}
+
+// The host decides whether connectors are on; this only names an older host's refusal.
+export async function callConnector<TResult>(
+  client: Pick<HandlerContext['client'], 'call'>,
+  method: string,
+  params: Record<string, unknown>
+) {
+  try {
+    return await client.call<TResult>(method, params)
+  } catch (error) {
+    if (error instanceof RuntimeClientError && error.code === 'method_not_found') {
+      throw new RuntimeClientError(
+        'incompatible_runtime',
+        'This Orca host has no connectors. Update Orca on the host and try again.'
+      )
+    }
+    throw error
+  }
+}
+
+function conversationParams(flags: HandlerContext['flags']) {
+  return {
+    source: 'dev',
+    externalId: getRequiredStringFlag(flags, 'conversation'),
+    deliveryId: getRequiredStringFlag(flags, 'delivery-id')
+  }
+}
+
+export const CONNECTOR_HANDLERS: Record<string, CommandHandler> = {
+  'connector start': async ({ flags, client, cwd, json }) => {
+    const projectGroupId = getOptionalStringFlag(flags, 'project-group')
+    if ((projectGroupId !== undefined) === flags.has('worktree')) {
+      throw new RuntimeClientError(
+        'invalid_argument',
+        'Pass exactly one of --worktree or --project-group.'
+      )
+    }
+    const name = getOptionalStringFlag(flags, 'name')
+    const target = projectGroupId
+      ? {
+          kind: 'create-folder-workspace',
+          create: { projectGroupId, ...(name ? { name } : {}) }
+        }
+      : {
+          kind: 'existing',
+          worktree: await getRequiredWorktreeSelector(flags, 'worktree', cwd, client)
+        }
+    const result = await callConnector<{ initial: ConnectorDelivery }>(client, 'connector.start', {
+      ...conversationParams(flags),
+      agent: getRequiredStringFlag(flags, 'agent'),
+      prompt: getRequiredStringFlag(flags, 'prompt'),
+      target
+    })
+    printResult(result, json, (value) => `started; prompt ${formatDelivery(value.initial)}`)
+  }
+}
