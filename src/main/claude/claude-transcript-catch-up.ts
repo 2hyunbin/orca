@@ -89,6 +89,7 @@ export async function catchUpClaudeTranscript(input: {
       if (!filePath) {
         return null
       }
+      const planned = view()
       const tail = await readClaudeTranscriptTail({ filePath, leafUuid: input.leafUuid, check })
       check()
       if (!tail) {
@@ -100,7 +101,7 @@ export async function catchUpClaudeTranscript(input: {
         sessionId: input.sessionId,
         providerSessionId: input.providerSessionId,
         journal,
-        rewound: view.hasRows ? tail.rewound : null,
+        rewound: planned.hasRows ? tail.rewound : null,
         check
       })
       try {
@@ -114,5 +115,5 @@ export async function catchUpClaudeTranscript(input: {
       }
     }
   })
-  return complete && outcome === 'committed'
+  return complete && (outcome === 'committed' || outcome === 'checked')
 }

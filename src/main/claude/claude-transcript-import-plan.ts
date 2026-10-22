@@ -36,18 +36,10 @@ import {
   claudeThinkingIdentity,
   claudeToolIdentity,
   claudeToolUses,
-  readClaudeMessageEnvelope,
-  type ClaudeMessageEnvelope
+  readClaudeMessageEnvelope
 } from './claude-structured-item-translation'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 import { createClaudeTranscriptItemReader } from './claude-transcript-item-reader'
-
-function isPrompt(envelope: ClaudeMessageEnvelope | null): boolean {
-  return (
-    envelope?.role === 'user' &&
-    envelope.content.some((part) => claudeRecord(part)?.type !== 'tool_result')
-  )
-}
 
 /** An isolated projection of final source items, compared with saved historical content. */
 export function createClaudeTranscriptImportPlan(input: {
@@ -123,10 +115,7 @@ export function createClaudeTranscriptImportPlan(input: {
       ...journalLifecycleItemMutation({ ...options, turnScope }, identity, body),
       ...(body.kind === 'message' && body.role === 'user' ? { echoOf: null } : {})
     })
-    if (
-      mutations.size > HISTORY_CATCH_UP_MAX_OPERATIONS ||
-      dependencies.size > HISTORY_CATCH_UP_MAX_OPERATIONS
-    ) {
+    if (mutations.size > HISTORY_CATCH_UP_MAX_OPERATIONS) {
       throw new Error('too-large')
     }
     return { accepted: true } as const
@@ -199,7 +188,10 @@ export function createClaudeTranscriptImportPlan(input: {
       const parsedAt = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN
       const observedAt = Number.isFinite(parsedAt) ? parsedAt : undefined
       lastAt = observedAt ?? lastAt
-      const prompt = queued || isPrompt(envelope)
+      const prompt =
+        queued ||
+        (envelope?.role === 'user' &&
+          envelope.content.some((part) => claudeRecord(part)?.type !== 'tool_result'))
       const decoded = prompt
         ? decodeClaudeTranscriptLine(JSON.stringify(row), `${input.providerSessionId}:${uuid}`)
         : null
@@ -285,8 +277,21 @@ export function createClaudeTranscriptImportPlan(input: {
           )
         )
       }
+      const revised = new Set<string>()
       for (const row of rows) {
-        batch.push(row)
+        const key = agentJournalItemKey(row.identity)
+        const existing = saved(key)
+        if (existing && row.kind === 'item') {
+          batch.revise(row, { canonicalItemId: existing.itemId, revision: existing.revision })
+          revised.add(key)
+        } else {
+          batch.push(row)
+        }
+      }
+      for (const [key, item] of dependencies) {
+        if (!revised.has(key)) {
+          batch.expectItem(key, { canonicalItemId: item.itemId, revision: item.revision })
+        }
       }
       return batch.finish('claude-history-import', [
         input.journal.epoch,
@@ -294,9 +299,6 @@ export function createClaudeTranscriptImportPlan(input: {
         uuids,
         rows
       ])
-    },
-    get dependencies() {
-      return dependencies
     },
     dispose: () => translator.dispose()
   }
