@@ -32,7 +32,7 @@ function routeInputsOf(state: EditorBufferRouteState): RouteInputs {
 }
 
 /** One token per distinct set of route inputs, so a keystroke resolves no routes. */
-export function editorBufferRouteEpochOf(state: EditorBufferRouteState): object {
+function routeEpochOf(state: EditorBufferRouteState): object {
   const inputs = routeInputsOf(state)
   if (
     inputs.length !== epochInputs.length ||
@@ -51,7 +51,7 @@ export function editorBufferIdentityKeyOf(
   file: OpenFile,
   state: EditorBufferRouteState
 ): string | null {
-  const epoch = editorBufferRouteEpochOf(state)
+  const epoch = routeEpochOf(state)
   const cached = identityCache.get(file)
   if (cached?.epoch === epoch) {
     return cached.key
