@@ -569,7 +569,7 @@ async function runSelectedRuntimeAddJourney(
         .fetchFolderWorkspaces({ runtimeEnvironmentId: null, throwOnError: true })
       return {
         folderWorkspaces: store.getState().folderWorkspaces,
-        projectGroups: store.getState().projectGroups
+        projectGroups: window.__projectCatalog!().projectGroups
       }
     })
     expect(catalogAfterLocalRefresh.projectGroups).toEqual(

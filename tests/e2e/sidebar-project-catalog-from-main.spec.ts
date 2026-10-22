@@ -13,7 +13,6 @@ import { expect, test } from './helpers/orca-app'
 import { createRestartSession } from './helpers/orca-restart'
 import { SIDEBAR_INPUTS_BUILD } from './helpers/sidebar-inputs-build'
 import { waitForSessionReady } from './helpers/store'
-import type { Repo } from '../../src/shared/repo-types'
 
 test.skip(!SIDEBAR_INPUTS_BUILD, 'the window reads main only in an ORCA_SIDEBAR_INPUTS=main build')
 test.use({ seedTestRepo: false })
@@ -23,8 +22,6 @@ declare global {
   interface Window {
     __catalogHeaders?: () => string[]
     __catalogDraws?: { atInstall: boolean; states: string[][] }
-    /** Main's catalog as the window reads it (e2e builds expose it). */
-    __mainProjectCatalog?: () => { repos: Repo[]; projectGroups: unknown[] }
   }
 }
 
@@ -114,7 +111,7 @@ async function timeStep(page: Page, step: Step, shown: Shown): Promise<Timed> {
         )
       }
       const repo = (id: string) => {
-        const found = window.__mainProjectCatalog!().repos.find((candidate) => candidate.id === id)
+        const found = window.__projectCatalog!().repos.find((candidate) => candidate.id === id)
         if (!found) {
           throw new Error(`missing repo ${id}`)
         }
@@ -213,9 +210,7 @@ test('project and group create, rename, reorder, move and delete show from main'
   const drawn = await headers()
   const position = (id: string): number => drawn.indexOf(`project:${id}@ungrouped`)
   const [upper, lower] = position(a) < position(b) ? [a, b] : [b, a]
-  const allIds = await orcaPage.evaluate(() =>
-    window.__mainProjectCatalog!().repos.map((r) => r.id)
-  )
+  const allIds = await orcaPage.evaluate(() => window.__projectCatalog!().repos.map((r) => r.id))
   timings.reorder = await timeStep(
     orcaPage,
     {
@@ -343,7 +338,7 @@ test('a restored project catalog draws its headers once', async (// oxlint-disab
     const groupId = await first.page.evaluate(async (repoId) => {
       const store = window.__store!
       const group = await store.getState().createProjectGroup('Restored', 'local')
-      const repo = window.__mainProjectCatalog!().repos.find((candidate) => candidate.id === repoId)
+      const repo = window.__projectCatalog!().repos.find((candidate) => candidate.id === repoId)
       if (!group || !repo || !(await store.getState().moveProjectToGroup(repo, group.id))) {
         throw new Error('group setup failed')
       }

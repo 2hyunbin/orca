@@ -110,7 +110,7 @@ test('keeps a collapsed group visible when an idle card below it grows', async (
     }
     await store.getState().awaitLocalRepoCatalogSettlement()
     const repos = repoPaths.map((repoPath) => {
-      const repo = store.getState().repos.find((candidate) => candidate.path === repoPath)
+      const repo = window.__projectCatalog!().repos.find((candidate) => candidate.path === repoPath)
       if (!repo) {
         throw new Error(`Fixture repo was not registered: ${repoPath}`)
       }

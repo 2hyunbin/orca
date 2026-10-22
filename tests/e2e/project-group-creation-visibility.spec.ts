@@ -61,7 +61,7 @@ for (const delayCreateResponse of [false, true]) {
         await window.api.repos.add({ path: repoPath })
       }
       await store.getState().awaitLocalRepoCatalogSettlement()
-      const repos = store.getState().repos.filter((repo) => paths.includes(repo.path))
+      const repos = window.__projectCatalog!().repos.filter((repo) => paths.includes(repo.path))
       for (const repo of repos) {
         await store.getState().fetchWorktrees(repo.id)
       }
@@ -126,7 +126,7 @@ for (const delayCreateResponse of [false, true]) {
       async ({ repoIds, groupId }) => {
         const store = window.__store!
         for (const repoId of repoIds.slice(0, 2)) {
-          const repo = store.getState().repos.find((candidate) => candidate.id === repoId)
+          const repo = window.__projectCatalog!().repos.find((candidate) => candidate.id === repoId)
           if (!repo) {
             throw new Error(`Missing repo ${repoId}`)
           }

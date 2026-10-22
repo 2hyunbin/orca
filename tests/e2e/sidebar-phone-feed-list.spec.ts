@@ -184,7 +184,7 @@ test.describe('switch on', () => {
     await expect
       .poll(() =>
         orcaPage.evaluate(
-          (id) => window.__store!.getState().repos.some((entry) => entry.id === id),
+          (id) => window.__projectCatalog!().repos.some((entry) => entry.id === id),
           folder.repo.id
         )
       )
