@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { REMOTE_RUNTIME_SHARED_CONTROL_CAPABILITY } from '../../../shared/protocol-version'
 import { ELECTRON_REMOTE_RUNTIME_CLIENT_CAPABILITIES } from '../../../shared/electron-remote-runtime-client-capabilities'
 import * as environmentStore from '../../../shared/runtime-environment-store'
+import { DesktopChatCreationHistory } from '../../runtime/desktop-chat-creation-history'
 import { RemoteRuntimeClientError } from '../../../shared/remote-runtime-client-error'
 import { RuntimeRpcCallQueueOverloadError } from '../../../shared/runtime-rpc-call-queue'
 import type { RuntimeRpcResponse } from '../../../shared/runtime-rpc-envelope'
@@ -119,6 +120,30 @@ describe('registerRuntimeEnvironmentHandlers', () => {
   afterEach(() => {
     resetRuntimeEnvironmentStatusOwners()
     rmSync(userDataPath, { recursive: true, force: true })
+  })
+
+  it('durably records a desktop create before dispatch, including a lost reply', async () => {
+    registerRuntimeEnvironmentHandlers(store as never)
+    const environment = environmentStore.addEnvironmentFromPairingCode(userDataPath, {
+      name: 'desk',
+      pairingCode: pairingCode()
+    })
+    sendRemoteRuntimeRequestMock.mockImplementation(async () => {
+      expect(new DesktopChatCreationHistory(userDataPath).sessionIds()).toEqual(['codex_minted'])
+      throw new Error('reply lost')
+    })
+    const call = handler<
+      { selector: string; method: string; params: unknown },
+      RuntimeRpcResponse<unknown>
+    >('runtimeEnvironments:call')
+    await expect(
+      call(null, {
+        selector: environment.id,
+        method: 'agentSession.create',
+        params: { envelope: { sessionId: 'codex_minted' } }
+      })
+    ).resolves.toMatchObject({ ok: false, error: { message: 'reply lost' } })
+    expect(new DesktopChatCreationHistory(userDataPath).sessionIds()).toEqual(['codex_minted'])
   })
 
   it('proxies generic one-shot RPC calls to the saved remote runtime', async () => {
