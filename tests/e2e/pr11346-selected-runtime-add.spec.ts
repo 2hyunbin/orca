@@ -246,9 +246,9 @@ async function runSelectedRuntimeAddJourney(
           folder: store
             .getState()
             .folderWorkspaces.find((workspace) => workspace.folderPath === reconnectCatalogPath),
-          group: store
-            .getState()
-            .projectGroups.find((entry) => entry.parentPath === reconnectCatalogPath)
+          group: window.__projectCatalog!().projectGroups.find(
+            (entry) => entry.parentPath === reconnectCatalogPath
+          )
         }
       },
       {

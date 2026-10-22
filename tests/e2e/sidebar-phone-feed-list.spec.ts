@@ -198,7 +198,7 @@ test.describe('switch on', () => {
           throw new Error('Expected a project group')
         }
         const repoById = (id: string) => {
-          const found = state().repos.find((entry) => entry.id === id)
+          const found = window.__projectCatalog!().repos.find((entry) => entry.id === id)
           if (!found) {
             throw new Error(`Expected repo ${id}`)
           }

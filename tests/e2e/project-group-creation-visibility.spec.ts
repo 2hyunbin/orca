@@ -132,9 +132,9 @@ for (const delayCreateResponse of [false, true]) {
           }
           await store.getState().moveProjectToGroup(repo, groupId)
         }
-        const collapsedGroups = store
-          .getState()
-          .projectHostSetups.map((setup) => `project:${setup.projectId}`)
+        const collapsedGroups = window.__projectCatalog!().projectHostSetups.map(
+          (setup) => `project:${setup.projectId}`
+        )
         await window.api.ui.set({ groupBy: 'repo', collapsedGroups })
         store.setState({ collapsedGroups: new Set(collapsedGroups) })
       },
