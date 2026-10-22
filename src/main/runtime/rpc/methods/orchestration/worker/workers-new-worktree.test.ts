@@ -113,19 +113,22 @@ describe('orchestration new-worktree workers', () => {
   }) {
     const hookFound = options?.hookFound ?? true
     const state = options?.state ?? (hookFound ? 'running' : 'not_configured')
-    vi.spyOn(runtime, 'createManagedWorktree').mockResolvedValue({
-      worktree: { id: 'repo::created', repoId: 'repo' },
-      startupTerminal: { spawned: true, handle: 'term_worker' },
-      setupReceipt: {
-        requested: state === 'skipped' ? 'skip' : 'run',
-        hookFound,
-        startupPolicy: options?.startupPolicy ?? 'start-immediately',
-        state,
-        terminalHandle:
-          options?.setupTerminalHandle ??
-          options?.terminals?.find((terminal) => terminal.title === 'Setup')?.handle
-      }
-    } as never)
+    vi.spyOn(runtime, 'createManagedWorktree').mockImplementation(async (args) => {
+      args.onWorkspaceCreated?.('repo::created')
+      return {
+        worktree: { id: 'repo::created', repoId: 'repo' },
+        startupTerminal: { spawned: true, handle: 'term_worker' },
+        setupReceipt: {
+          requested: state === 'skipped' ? 'skip' : 'run',
+          hookFound,
+          startupPolicy: options?.startupPolicy ?? 'start-immediately',
+          state,
+          terminalHandle:
+            options?.setupTerminalHandle ??
+            options?.terminals?.find((terminal) => terminal.title === 'Setup')?.handle
+        }
+      } as never
+    })
     if (options?.terminals) {
       vi.mocked(runtime.listTerminals).mockResolvedValue({
         terminals: options.terminals,
