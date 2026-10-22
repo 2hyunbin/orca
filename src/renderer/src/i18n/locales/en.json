@@ -19011,7 +19011,8 @@
           "minimal": "Min",
           "medium": "Med",
           "xhigh": "XHigh"
-        }
+        },
+        "imageUnavailable": "Preview unavailable"
       },
       "tool": {
         "exitCode": "exit {{value0}}",
@@ -19446,6 +19447,10 @@
         "checking": "Checking this host's chat permissions…",
         "outdatedHost": "This host runs an older Orca that ignores chat permissions, so {{value0}} would run here without asking. Update Orca on this host to use {{value1}}.",
         "unverified": "Orca couldn't confirm the host's permissions for {{value0}}."
+      },
+      "imagePreview": {
+        "fileActions": "File actions",
+        "linkActions": "Link actions"
       }
     },
     "tab": {
