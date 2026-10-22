@@ -12944,6 +12944,7 @@
           "installForMore": "为另外 {{value0}} 个代理安装",
           "installedForAgent": "已为 {{value0}} 安装",
           "installedForMore": "已为另外 {{value0}} 个代理安装",
+          "installedForAgents": "已为 {{value0}} 个代理安装",
           "replacedWithBackup": "已替换 · 你的副本已保存为备份",
           "attentionUnwritable": "需要处理 · Orca 无法写入 {{folder}}",
           "attentionBusy": "需要处理 · 此处的另一个技能安装仍未完成",

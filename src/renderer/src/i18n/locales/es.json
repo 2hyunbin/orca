@@ -12939,6 +12939,7 @@
           "installForMore": "Instalar para {{value0}} agentes más",
           "installedForAgent": "Instalado para {{value0}}",
           "installedForMore": "Instalado para {{value0}} agentes más",
+          "installedForAgents": "Instalado para {{value0}} agentes",
           "replacedWithBackup": "Reemplazada · Se guardó una copia de seguridad de tu versión",
           "attentionUnwritable": "Requiere atención · Orca no puede escribir en {{folder}}",
           "attentionBusy": "Requiere atención · Otra instalación de habilidades aún está terminando aquí",

@@ -8846,6 +8846,7 @@
           "installForMore": "Instalar para mais {{value0}} agentes",
           "installedForAgent": "Instalado para {{value0}}",
           "installedForMore": "Instalado para mais {{value0}} agentes",
+          "installedForAgents": "Instalado para {{value0}} agentes",
           "replacedWithBackup": "Substituída · Sua cópia foi salva como backup",
           "attentionUnwritable": "Atenção necessária · O Orca não consegue gravar em {{folder}}",
           "attentionBusy": "Atenção necessária · Outra instalação de habilidade ainda está sendo concluída aqui",

@@ -12944,6 +12944,7 @@
           "installForMore": "さらに {{value0}} 個のAgentにインストール",
           "installedForAgent": "{{value0}} にインストール済み",
           "installedForMore": "さらに {{value0}} 個のAgentにインストール済み",
+          "installedForAgents": "{{value0}} 個のAgentにインストール済み",
           "replacedWithBackup": "置き換え済み · 元のコピーはバックアップとして保存されました",
           "attentionUnwritable": "対応が必要です · Orca は {{folder}} に書き込めません",
           "attentionBusy": "対応が必要です · この場所では別のスキルのインストールがまだ完了していません",

@@ -12,6 +12,7 @@ import { translate } from '@/i18n/i18n'
 
 export type BundledSkillSetupChanges = {
   agents: string[]
+  alreadyInstalled: boolean
   updates: boolean
   replaced: boolean
   notUpdated: BundledSkillLocation[]
@@ -39,6 +40,9 @@ export function bundledSkillSetupChanges(
   }))
   return {
     agents: bundledSkillInstallAgents(entries),
+    alreadyInstalled: plan.skills.some((entry) =>
+      entry.ops.some((op) => op.agents.length > 0 && op.observed.kind !== 'absent')
+    ),
     replaced: entries.some((entry) => entry.ops.some((op) => op.kind === 'replace')),
     notUpdated: entries.flatMap((entry) =>
       entry.ops
@@ -54,6 +58,9 @@ export function bundledSkillSetupChanges(
 export function bundledSkillSetupActionLabel(changes: BundledSkillSetupChanges): string {
   if (changes.updates) {
     return translate('auto.components.settings.AgentSkillSetupPanel.updateLabel', 'Update')
+  }
+  if (!changes.alreadyInstalled) {
+    return translate('auto.components.settings.AgentSkillSetupPanel.installLabel', 'Install')
   }
   if (changes.agents.length > 1) {
     return translate(
@@ -75,11 +82,17 @@ export function bundledSkillSetupActionLabel(changes: BundledSkillSetupChanges):
 export function bundledSkillSetupResultHeadline(changes: BundledSkillSetupChanges): string {
   const installed =
     changes.agents.length > 1
-      ? translate(
-          'auto.components.settings.bundledSkillSetupCopy.installedForMore',
-          'Installed for {{value0}} more agents',
-          { value0: changes.agents.length }
-        )
+      ? changes.alreadyInstalled
+        ? translate(
+            'auto.components.settings.bundledSkillSetupCopy.installedForMore',
+            'Installed for {{value0}} more agents',
+            { value0: changes.agents.length }
+          )
+        : translate(
+            'auto.components.settings.bundledSkillSetupCopy.installedForAgents',
+            'Installed for {{value0}} agents',
+            { value0: changes.agents.length }
+          )
       : changes.agents.length === 1
         ? translate(
             'auto.components.settings.bundledSkillSetupCopy.installedForAgent',

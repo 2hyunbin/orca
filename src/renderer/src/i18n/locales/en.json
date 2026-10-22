@@ -13276,6 +13276,7 @@
           "installForMore": "Install for {{value0}} more agents",
           "installedForAgent": "Installed for {{value0}}",
           "installedForMore": "Installed for {{value0}} more agents",
+          "installedForAgents": "Installed for {{value0}} agents",
           "replacedWithBackup": "Replaced · Your copy was saved as a backup",
           "attentionUnwritable": "Needs attention · Orca can't write to {{folder}}",
           "attentionBusy": "Needs attention · Another skill install is still finishing here",

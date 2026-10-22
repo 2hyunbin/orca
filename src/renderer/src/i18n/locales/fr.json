@@ -13052,6 +13052,7 @@
           "installForMore": "Installer pour {{value0}} agents supplémentaires",
           "installedForAgent": "Installé pour {{value0}}",
           "installedForMore": "Installé pour {{value0}} agents supplémentaires",
+          "installedForAgents": "Installé pour {{value0}} agents",
           "replacedWithBackup": "Remplacée · Votre copie a été sauvegardée",
           "attentionUnwritable": "Attention requise · Orca ne peut pas écrire dans {{folder}}",
           "attentionBusy": "Attention requise · Une autre installation de compétence est encore en cours ici",

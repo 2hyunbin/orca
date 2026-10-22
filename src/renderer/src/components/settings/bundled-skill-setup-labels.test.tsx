@@ -48,7 +48,9 @@ function operations(
 ): BundledSkillOp[] {
   return [
     planOp(update ? 'update' : 'keep', `/home/u/.agents/skills/${name}`),
-    planOp('keep', `/home/u/.claude/skills/${name}`),
+    planOp('keep', `/home/u/.claude/skills/${name}`, {
+      observed: { kind: 'link', target: `/home/u/.agents/skills/${name}` }
+    }),
     ...agents.map((agent) =>
       planOp('link', `/home/u/.${agent}/skills/${name}`, {
         agents: agent === 'cursor' ? ['cursor'] : ['gemini']
@@ -178,4 +180,40 @@ it('keeps the edited-copy suffix after the mixed result', async () => {
       'Updated · Installed for Cursor · Not updated in Droid: you edited this copy'
     )
   ).toBeDefined()
+})
+
+it.each([
+  { agents: ['cursor'], result: 'Installed for Cursor' },
+  { agents: ['cursor', 'gemini'], result: 'Installed for 2 agents' }
+])('uses first-install wording for $result', async ({ agents, result }) => {
+  const plan = planOf([
+    planEntry('orca-cli', [
+      planOp('write', '/home/u/.agents/skills/orca-cli'),
+      ...agents.map((agent) =>
+        planOp('link', `/home/u/.${agent}/skills/orca-cli`, {
+          agents: agent === 'cursor' ? ['cursor'] : ['gemini']
+        })
+      )
+    ])
+  ])
+  mocks.plan.mockResolvedValue({ kind: 'plan', plan })
+  mocks.execute.mockResolvedValue(doneResult(plan))
+  render(
+    <AgentSkillSetupPanel
+      title="CLI skill"
+      description={null}
+      skillNames={['orca-cli']}
+      installed={false}
+      loading={false}
+      error={null}
+      onRecheck={mocks.refresh}
+    />
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Install', exact: true }).hasAttribute('disabled')
+    ).toBe(false)
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Install', exact: true }))
+  expect(await screen.findByText(result, { exact: true })).toBeDefined()
 })
