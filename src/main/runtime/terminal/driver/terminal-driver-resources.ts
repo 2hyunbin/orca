@@ -4,7 +4,7 @@ import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 import type { RuntimeAccountController } from '../../runtime-account-controller'
-import type { BrowserNetworkExecutionHost } from '../../../../shared/browser-client-host-protocol'
+import type { BrowserNetworkExecutionHost } from '../../../../shared/browser-network-execution-host'
 import type { BrowserWindow } from 'electron'
 import type { BrowserSessionTabSelectionOptions } from '../../browser-tab-create-publication'
 import type { RuntimeStore } from '../../runtime-store-contract'
@@ -26,7 +26,7 @@ import type {
 
 import { RuntimeTerminalDriverController } from '../../runtime-terminal-driver-controller'
 import { RuntimeEdgeCommandController } from '../../runtime-edge-command-controller'
-import { getBrowserHostLeaseRegistry } from '../../browser-host-lease-registry-instance'
+import { getBrowserHostLeaseRegistry } from '../../browser-host/browser-host-lease-registry-instance'
 import { getRuntimeBrowserPageRegistry } from '../../runtime-browser-page-registry'
 
 import { RuntimeBrowserDriverController } from '../../runtime-browser-driver-controller'
@@ -38,15 +38,10 @@ import { RuntimeWorktreeBaseReconciliation } from '../../runtime-worktree-base-r
 import { RuntimeWorktreeRemovalInFlight } from '../../runtime-worktree-removal-in-flight'
 import { ServeBrowserTabs } from '../../serve-browser-tabs'
 import type { ServeBrowserPageState } from '../../serve-browser-tab-layout'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
 
 export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitOverrideListeners {
-  protected get canonicalFetchKeyCache(): ReadonlyMap<string, string> {
-    return this.remoteFetches.getCanonicalFetchKeyCache()
-  }
-  protected get fetchLastCompletedAt(): ReadonlyMap<string, number> {
-    return this.remoteFetches.getFetchLastCompletedAt()
-  }
-
   declare registerSubscriptionCleanup: RuntimeServiceCommandSurface['registerSubscriptionCleanup']
   declare cleanupSubscription: RuntimeServiceCommandSurface['cleanupSubscription']
 
@@ -149,7 +144,19 @@ export abstract class OrcaRuntimeWithTerminalDrivers extends OrcaRuntimeWithFitO
       ),
     session: (worktreeId) => this.getWorkspaceSessionForWorktree(worktreeId),
     hostId: (worktreeId) => this.getWorkspaceSessionHostIdForWorktree(worktreeId),
-    save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session)
+    save: (worktreeId, session) => this.setWorkspaceSessionForWorktree(worktreeId, session),
+    // Switch point: a layout-owner build writes served tabs through `layout.apply`.
+    ...(ORCA_LAYOUT_OWNER_IS_MAIN
+      ? {
+          applyLayout: async (command: LayoutCommand, hostId: ExecutionHostId) => {
+            const store = this.requireStore()
+            if (!store.applyLayoutCommand) {
+              throw new Error('layout_store_unavailable')
+            }
+            return store.applyLayoutCommand(command, [hostId])
+          }
+        }
+      : {})
   })
 
   serveBrowserPageNavigated(page: ServeBrowserPageState): void {

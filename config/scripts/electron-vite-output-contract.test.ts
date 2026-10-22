@@ -79,16 +79,44 @@ const electronBuilderConfig = require('../electron-builder.config.cjs')
 const { FileMatcher } = require('app-builder-lib/out/fileMatcher')
 
 describe('Electron Vite output contract', () => {
+  it('skips main maps only for explicit check builds and always keeps official release maps', async () => {
+    try {
+      for (const [setting, identity, expected] of [
+        [undefined, undefined, 'hidden'],
+        ['false', undefined, 'hidden'],
+        ['1', undefined, 'hidden'],
+        ['0', undefined, false],
+        ['0', 'stable', 'hidden'],
+        ['0', 'rc', 'hidden']
+      ] as const) {
+        vi.stubEnv('ORCA_CI_MAIN_SOURCEMAPS', setting)
+        vi.stubEnv('ORCA_BUILD_IDENTITY', identity)
+        vi.resetModules()
+        const { electronViteConfig: configured } = await import('../../electron.vite.config')
+        expect(configured.main?.build?.sourcemap).toBe(expected)
+        expect(configured.main?.build?.minify).toBe(electronViteConfig.main?.build?.minify)
+        expect(configured.main?.build?.rollupOptions?.input).toEqual(
+          electronViteConfig.main?.build?.rollupOptions?.input
+        )
+        expect(configured.renderer?.build).toEqual(electronViteConfig.renderer?.build)
+        expect(configured.preload?.build).toEqual(electronViteConfig.preload?.build)
+      }
+    } finally {
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
   it('can skip main source maps during development without changing build output settings', () => {
     try {
       vi.stubEnv('ORCA_DEV_MAIN_SOURCEMAPS', undefined)
-      expect(configureElectronVite({ command: 'serve', mode: 'development' })).toBe(
-        electronViteConfig
-      )
+      const defaults = configureElectronVite({ command: 'serve', mode: 'development' })
+      expect(defaults.main?.build?.sourcemap).toBe('hidden')
+      expect(defaults.main?.build?.minify).toBe(false)
       vi.stubEnv('ORCA_DEV_MAIN_SOURCEMAPS', '0')
       const development = configureElectronVite({ command: 'serve', mode: 'development' })
       expect(development.main?.build?.sourcemap).toBe(false)
-      expect(development.main?.build?.minify).toBe(electronViteConfig.main?.build?.minify)
+      expect(development.main?.build?.minify).toBe(false)
       expect(development.main?.build?.rollupOptions).toBe(
         electronViteConfig.main?.build?.rollupOptions
       )
@@ -162,6 +190,7 @@ describe('Electron Vite output contract', () => {
 
     for (const name of [
       'gitlab/project-ref-parser',
+      'macos-tree-clone',
       'orca-profiles/profile-index-store',
       'persistence/profile-state/profile-state-access',
       'persistence/profile-state/profile-state-active-location',
@@ -178,6 +207,8 @@ describe('Electron Vite output contract', () => {
       expect(input).toHaveProperty(name)
     }
     expect(electronBuilderConfig.asarUnpack).toContain('out/main/gitlab/project-ref-parser.js')
+    expect(electronBuilderConfig.asarUnpack).toContain('out/main/macos-tree-clone.js')
+    expect(electronBuilderConfig.asarUnpack).toContain('out/main/asar-transparent-fs.js')
     expect(electronBuilderConfig.asarUnpack).toContain('out/main/persistence/profile-state/**')
     expect(electronBuilderConfig.asarUnpack).toContain(
       'out/main/orca-profiles/profile-index-store.js'

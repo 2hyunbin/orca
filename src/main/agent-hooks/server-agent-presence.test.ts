@@ -23,6 +23,10 @@ afterEach(() => {
 })
 
 class PresenceTestServer extends AgentHookServer {
+  persistedWriterState(): string {
+    return this.serializeStatusFile()
+  }
+
   applyTranscriptUpdate(): void {
     const row = this.state.lastStatusByPaneKey.get(PANE)
     if (row) {
@@ -78,6 +82,29 @@ function visible(server: AgentHookServer): boolean {
 }
 
 describe('host-owned hook presence', () => {
+  it('keeps writer observations exact and topology local to the accepted row', async () => {
+    const server = await createServer()
+    await hook(server, 'SessionStart')
+    const row = server.getStatusSnapshot().find((entry) => entry.paneKey === PANE)
+    expect(row).toBeDefined()
+    if (!row) {
+      throw new Error('Missing hook row')
+    }
+    const observed = server.readCliWriterObservation(row)
+    probe.mockResolvedValue('exited')
+    expect(await observed?.presence()).toBe('exited')
+    expect(observed?.current()).toBe(true)
+    expect(
+      server.readCliWriterObservation({
+        ...row,
+        providerSession: { key: 'session_id', id: 'other' }
+      })
+    ).toBeNull()
+    await hook(server, 'UserPromptSubmit')
+    expect(observed?.current()).toBe(false)
+    expect(server.persistedWriterState()).not.toContain('pane-owned')
+  })
+
   it('clears the status on SessionEnd while the terminal survives, without a renderer', async () => {
     const server = await createServer()
     await hook(server, 'SessionStart')
@@ -626,5 +653,72 @@ describe('retained agent exit', () => {
     await hook(server, 'SessionStart', 'relaunch', undefined, 4002)
     probe.mockResolvedValue('live')
     expect(await server.checkAgentPresenceSince(PANE, attachedAt)).toBe('live')
+  })
+})
+
+describe('retained agent exit lifetime', () => {
+  async function serverWithExit(): Promise<AgentHookServer> {
+    const server = await createServer()
+    await hook(server, 'SessionStart')
+    await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
+    return server
+  }
+
+  it('keeps the exit through a plain pane cleanup but drops it when the PTY retires', async () => {
+    const server = await serverWithExit()
+    server.clearPaneState(PANE)
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
+    server.clearPaneState(PANE, { forgetAgentExit: true })
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBeNull()
+  })
+
+  it('drops the exit when the pane tab closes', async () => {
+    const server = await serverWithExit()
+    server.dropStatusEntriesByTabPrefix('tab-1')
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBeNull()
+  })
+
+  it('keeps a moved pane exit when its former tab closes', async () => {
+    const server = await serverWithExit()
+    const moved = makePaneKey('tab-moved', LEAF_1)
+    server.transferPaneAuthority(PANE, moved)
+    server.dropStatusEntriesByTabPrefix('tab-1')
+    expect(await server.checkAgentPresenceSince(moved, 0)).toBe('exited')
+    server.dropStatusEntriesByTabPrefix('tab-moved')
+    expect(await server.checkAgentPresenceSince(moved, 0)).toBeNull()
+  })
+
+  // Why: a finished shell command retires launch authority while the PTY, and the exit's meaning, survive.
+  it('keeps the exit when only the pane launch authority retires', async () => {
+    const server = await serverWithExit()
+    server.retirePaneAuthority(PANE)
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
+  })
+
+  it('prunes an exit older than the hydrate window when saving', async () => {
+    const server = new AgentHookServer()
+    servers.push(server)
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-presence-exit-prune-'))
+    await server.start({ env: 'production', userDataPath })
+    await hook(server, 'SessionStart')
+    await hook(server, 'SessionEnd', 'session-a', 'prompt_input_exit')
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
+    const saveEightDaysLater = (): void => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now + 8 * 24 * 60 * 60 * 1000)
+      try {
+        server.flushStatusPersistSync()
+      } finally {
+        clock.mockRestore()
+      }
+    }
+    // The retained resume row still names the session, so its exit must stay with it.
+    expect(server.getStatusSnapshot().some((row) => row.paneKey === PANE)).toBe(true)
+    saveEightDaysLater()
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBe('exited')
+    server.clearPaneState(PANE)
+    saveEightDaysLater()
+    expect(await server.checkAgentPresenceSince(PANE, 0)).toBeNull()
   })
 })

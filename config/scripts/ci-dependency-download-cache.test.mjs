@@ -3,6 +3,7 @@ import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 import { parse } from 'yaml'
 import { classifyPrJobs } from './pr-code-change-scope.mjs'
+import { WINDOWS_BOUNDARY_TESTS } from './pr-package-test-paths.mjs'
 
 const read = (path) => parse(readFileSync(path, 'utf8'))
 const workflow = (name) => read(`.github/workflows/${name}.yml`)
@@ -290,7 +291,9 @@ describe('CI dependency download caches', () => {
     ).jobs
     const warmer = platformJobs['warm-windows'].steps.find((step) => step.uses === installer)
     expect(action.inputs['cache-pnpm-store'].default).toBe('true')
-    expect(persistence.with['cache-pnpm-store']).toBe("${{ runner.os != 'Windows' }}")
+    expect(persistence.with['cache-pnpm-store']).toBe(
+      "${{ !inputs.build_template && runner.os != 'Windows' }}"
+    )
     expect(ssh.with['cache-pnpm-store']).toBe('false')
     expect(warmer.with['cache-pnpm-store']).toBe('false')
     expect(warmer.with['native-runtime']).toBe('node')
@@ -349,13 +352,19 @@ describe('CI dependency download caches', () => {
       const shared = workflow('ci-cache-warmup')
       const platformWorkflow = workflow('ci-cache-warmup-platforms')
       const platforms = read(platformWorkflow.jobs['warm-platforms'].uses)
-      const context = { github: { event_name: event, event: { pull_request: { draft } } } }
+      const contextFor = (isDraft) => ({
+        github: {
+          event_name: event,
+          event: event === 'pull_request' ? { pull_request: { draft: isDraft } } : {}
+        }
+      })
+      const context = contextFor(draft)
       expect(runInNewContext(platforms.jobs['warm-linux-runtime'].if, context)).toBe(armRuns)
       expect(runInNewContext(shared.jobs['warm-platforms'].if, context)).toBe(sharedPlatforms)
-      expect(runInNewContext(shared.jobs.warm.if ?? 'true', context)).toBe(admitted)
-      expect(runInNewContext(platformWorkflow.jobs['warm-platforms'].if ?? 'true', context)).toBe(
-        admitted
-      )
+      for (const guard of [shared.jobs.warm.if, platformWorkflow.jobs['warm-platforms'].if]) {
+        expect(runInNewContext(guard, context)).toBe(admitted)
+        expect(runInNewContext(guard, contextFor(!draft))).toBe(event !== 'pull_request' || draft)
+      }
       expect(platforms.jobs['warm-windows'].if).toBeUndefined()
       expect(platforms.jobs['warm-windows'].strategy.matrix.os).toEqual([
         'windows-2022',
@@ -548,9 +557,14 @@ describe('release install targets', () => {
   it('keeps installed Windows addon checks in the Windows CI lane', () => {
     const steps = Object.values(workflow('pr').jobs).flatMap((job) => job.steps ?? [])
     const test = steps.find((step) => step.name === 'Test Windows-specific boundaries')
-    expect(test.run).toContain('config/scripts/windows-process-tree-gyp-path.test.mjs')
-    expect(test.run).toContain('config/scripts/windows-process-tree-gyp-rebuild.test.mjs')
-    expect(test.run).toContain('config/scripts/package-electron-runtime-contract.test.mjs')
-    expect(test.run).toContain('config/scripts/electron-builder-runtime-resources.test.mjs')
+    expect(test.run).toContain('config/scripts/pr-package-test-paths.mjs')
+    expect(WINDOWS_BOUNDARY_TESTS).toEqual(
+      expect.arrayContaining([
+        'config/scripts/windows-process-tree-gyp-path.test.mjs',
+        'config/scripts/windows-process-tree-gyp-rebuild.test.mjs',
+        'config/scripts/package-electron-runtime-contract.test.mjs',
+        'config/scripts/electron-builder-runtime-resources.test.mjs'
+      ])
+    )
   })
 })
