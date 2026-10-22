@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["OrcaBundleWindowCodecModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.orcabundlewindowcodec.OrcaBundleWindowCodecModule"]
+  }
+}
