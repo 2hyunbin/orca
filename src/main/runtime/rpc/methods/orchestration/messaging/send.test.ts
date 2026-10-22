@@ -462,6 +462,40 @@ describe('orchestration RPC methods', () => {
       expect(stored?.delivered_at).not.toBeNull()
     })
 
+    it('refuses a heartbeat from a replaced process without waking the coordinator', async () => {
+      setup()
+      const task = db.createTask({ spec: 'work' })
+      const dispatch = createRootDispatch(
+        db,
+        task.id,
+        'term_worker',
+        'tab_worker:leaf_worker',
+        undefined,
+        'runtime_test:term_worker:1'
+      )
+      vi.mocked(runtime.getTerminalPaneKey).mockImplementation((handle) =>
+        handle === 'term_worker' ? 'tab_worker:leaf_worker' : coordinatorPaneKey
+      )
+      vi.mocked(runtime.getTerminalProcessIncarnation).mockReturnValue('runtime_test:term_worker:2')
+      const notify = vi.spyOn(runtime, 'notifyMessageArrived').mockImplementation(() => {})
+
+      const result = await call('orchestration.send', {
+        from: 'term_worker',
+        subject: 'alive',
+        type: 'heartbeat',
+        payload: JSON.stringify({ taskId: task.id, dispatchId: dispatch.id })
+      })
+
+      expect(result).toMatchObject({
+        lifecycle: { action: 'rejected', code: 'worker_identity_changed' }
+      })
+      expect(notify).not.toHaveBeenCalled()
+      expect(db.getDispatchContextById(dispatch.id)?.last_heartbeat_at).toBeNull()
+      expect(db.getAllMessagesForHandle(`run:${activeRunId}`)).toEqual([
+        expect.objectContaining({ type: 'heartbeat', read: 1 })
+      ])
+    })
+
     it('allows an omitted recipient so an active Dispatch can default to its Run', () => {
       const method = findMethod('orchestration.send')
       expect(method.params!.parse({ subject: 'hi' })).toMatchObject({ subject: 'hi' })
