@@ -141,6 +141,21 @@ function persistedState(dir: string): PersistedState {
 
 async function moveFixture(name: WslMoverProfileName): Promise<RoundTrip> {
   const source = wslMoverProfile(name, 'source')
+  // Non-default repo settings, so a move that drops or changes them cannot pass as a default.
+  const [first, ...rest] = source.state.repos
+  source.state.repos = [
+    {
+      ...first,
+      gitUsername: 'dev-user',
+      hookSettings: {
+        mode: 'auto',
+        scripts: { setup: 'make bootstrap', archive: '' },
+        setupRunPolicy: 'run-by-default',
+        setupAgentStartupPolicy: 'start-immediately'
+      }
+    },
+    ...rest
+  ]
   const desktopDir = tempDir('wsl-round-trip-desktop-')
   const desktop = openWslMoveRoundTripStore(desktopDir, {
     ...getDefaultPersistedState(desktopDir),
@@ -221,10 +236,10 @@ describe('WSL move round trip on every fixture', () => {
       )
       expect(sessionAfter, 'local-only scrollback became host snapshots').not.toBeNull()
       const expected = normalizeWslMoveRoundTripProjection(source)
-      const actual = normalizeWslMoveRoundTripProjection({
-        ...(isRecord(destination) ? destination : {}),
-        session: sessionAfter
-      })
+      const actual = normalizeWslMoveRoundTripProjection(
+        { ...(isRecord(destination) ? destination : {}), session: sessionAfter },
+        source
+      )
       for (const key of Object.keys(isRecord(expected) ? expected : {})) {
         expect.soft(pick(actual, key), key).toEqual(pick(expected, key))
       }

@@ -95,7 +95,7 @@ export function createWslMoveDriverDeps(
       projectGroups: store.getProjectGroups()
     }),
     connectHost: (distro) => connectWslMoveHost(userDataPath, distro),
-    isDistroRegistered: (distro) => isWslDistroRegistered(distro),
+    isDistroRegistered: (distro, distroGuid) => isWslDistroRegistered(distro, distroGuid),
     exportManifest: (request) => exportWslMoveManifest(store, request),
     gateInputs: (scope) => collectWslMoveGateInputs(facts, scope),
     listPanes: (scope) => listWslMovePanes(facts, scope),

@@ -179,8 +179,8 @@ export async function initializeReadyFoundation(): Promise<void> {
     { userDataPath },
     {
       recover: () =>
-        recoverInterruptedWslMoves(userDataPath, undefined, (distro) =>
-          isWslDistroRegistered(distro)
+        recoverInterruptedWslMoves(userDataPath, undefined, (distro, distroGuid) =>
+          isWslDistroRegistered(distro, distroGuid)
         ),
       reapply: () => {
         reapplyWslMoveFocusRewrites(userDataPath, store)

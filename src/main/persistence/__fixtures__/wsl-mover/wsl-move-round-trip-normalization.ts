@@ -13,24 +13,51 @@ export const WSL_MOVE_ROUND_TRIP_KNOWN_GAPS: Readonly<Record<string, string>> = 
   terminalSurfaceTombstonesByPaneKey: 'Fences of local PTY incarnations; the host starts its own.'
 }
 
-// Values the host's load fills in where the source row left the field out.
-const DEFAULTED: Readonly<Record<string, readonly string[]>> = {
+// Row keys the host's load fills in; dropped only where the source row left the key out.
+const FILLED_IN: Readonly<Record<string, readonly string[]>> = {
   repos: ['gitUsername', 'hookSettings', 'kind'],
   projects: ['kind'],
   // Re-derived on the host from the project the setup resolves to.
-  worktreeMeta: ['projectId'],
-  // Moved disabled; the ledgered `host-automations` step turns them back on (checked separately).
-  automations: ['enabled']
+  worktreeMeta: ['projectId']
 }
+// Moved disabled; the ledgered `host-automations` step turns them back on (checked separately).
+const BOTH_SIDES: Readonly<Record<string, readonly string[]>> = { automations: ['enabled'] }
 const DEFAULTED_SESSION: Readonly<Record<string, Readonly<Record<string, unknown>>>> = {
   browserTabsByWorktree: { sessionPartition: null, sessionProfileId: null },
   sleepingAgentSessionsByPaneKey: { connectionId: null }
 }
 
-function withoutKeys(value: unknown, keys: ReadonlySet<string>): unknown {
-  return JSON.parse(JSON.stringify(value ?? null), (key, entry: unknown) =>
-    keys.has(key) ? undefined : entry
-  )
+type Rows = Map<string, Record<string, unknown>>
+
+/** A field's rows by id (arrays) or by key (records). */
+function rowsOf(value: unknown): Rows {
+  const rows: Rows = new Map()
+  const entries = Array.isArray(value)
+    ? value.map((row): [unknown, unknown] => [isRecord(row) ? row.id : undefined, row])
+    : Object.entries(isRecord(value) ? value : {})
+  for (const [id, row] of entries) {
+    if (typeof id === 'string' && isRecord(row)) {
+      rows.set(id, row)
+    }
+  }
+  return rows
+}
+
+/** Top-level row keys in `keys` dropped where `drop` says so; nested values are never touched. */
+function withoutRowKeys(
+  value: unknown,
+  keys: readonly string[],
+  drop: (id: string, key: string) => boolean
+): unknown {
+  const next: unknown = structuredClone(value ?? null)
+  for (const [id, row] of rowsOf(next)) {
+    for (const key of keys) {
+      if (drop(id, key)) {
+        delete row[key]
+      }
+    }
+  }
+  return next
 }
 
 function withoutDefaultValues(
@@ -82,8 +109,14 @@ export function withoutParkedScrollbackRefs(
   return next
 }
 
-/** One projection with every allowed difference taken out; the same on both sides. */
-export function normalizeWslMoveRoundTripProjection(projection: unknown): unknown {
+/**
+ * One projection with every allowed difference taken out. `source` is the source projection when
+ * normalizing the destination: a filled-in key goes only where that source row lacked it.
+ */
+export function normalizeWslMoveRoundTripProjection(
+  projection: unknown,
+  source?: unknown
+): unknown {
   if (!isRecord(projection)) {
     return projection
   }
@@ -92,13 +125,21 @@ export function normalizeWslMoveRoundTripProjection(projection: unknown): unknow
     if (field === 'session') {
       continue
     }
-    const defaulted = DEFAULTED[field]
+    const sourceRows = rowsOf(isRecord(source) ? source[field] : undefined)
+    const filledIn = FILLED_IN[field]
+    const bothSides = BOTH_SIDES[field]
     next[field] =
       field === 'sparsePresetsByRepo'
         ? withoutEmptyLists(value)
-        : defaulted
-          ? withoutKeys(value, new Set(defaulted))
-          : value
+        : bothSides
+          ? withoutRowKeys(value, bothSides, () => true)
+          : filledIn && source !== undefined
+            ? withoutRowKeys(
+                value,
+                filledIn,
+                (id, key) => !Object.hasOwn(sourceRows.get(id) ?? {}, key)
+              )
+            : value
   }
   const session = isRecord(projection.session) ? projection.session : {}
   const nextSession: Record<string, unknown> = {}

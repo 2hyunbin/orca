@@ -53,8 +53,8 @@ export type WslMoveResetContext = {
   /** The WSL host's catalog; null while it is unreachable. */
   destination: OrcadMigrationDestinationCatalog | null
   /**
-   * The distro is proven unregistered: its disk, and any commit on it, is gone. A rename looks the
-   * same by name; then the renamed host keeps a copy and the desktop gets its rows back (R38).
+   * The distro is proven unregistered (name and recorded GUID gone): its disk, and any commit on
+   * it, went too. Residual: an unregister then re-import under a new name between two startups (R38).
    */
   destinationUnregistered?: boolean
   now?: () => Date
@@ -205,7 +205,7 @@ export async function recoverInterruptedWslMoves(
   userDataPath: string,
   warn: (message: string) => void = (message) => console.warn(message),
   /** Asked only for a move that may have committed; one whose distro is gone resets too. */
-  isDistroRegistered?: (distro: string) => Promise<boolean | null>
+  isDistroRegistered?: (distro: string, distroGuid?: string) => Promise<boolean | null>
 ): Promise<WslMoveStartupRecovery> {
   const result: WslMoveStartupRecovery = { reset: [], waitingForHost: [] }
   if (!wslHostsGateOpen()) {
@@ -225,7 +225,10 @@ export async function recoverInterruptedWslMoves(
     try {
       const destinationUnregistered =
         cutover.phase === WSL_MOVE_COMMIT_REQUEST_PHASE && isDistroRegistered
-          ? (await isDistroRegistered(cutover.manifest.source.distro).catch(() => null)) === false
+          ? (await isDistroRegistered(
+              cutover.manifest.source.distro,
+              cutover.manifest.source.distroGuid
+            ).catch(() => null)) === false
           : false
       const outcome = await resetWslMoveToZero(
         { userDataPath, destination: null, destinationUnregistered },

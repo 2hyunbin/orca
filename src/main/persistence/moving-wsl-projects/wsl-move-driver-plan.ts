@@ -117,7 +117,9 @@ async function resetForUnregisteredDistro(
     !head ||
     WSL_MOVE_CUTOVER_PHASES.indexOf(head.phase) >=
       WSL_MOVE_CUTOVER_PHASES.indexOf('destination-committed') ||
-    (await deps.isDistroRegistered(request.distro).catch(() => null)) !== false
+    (await deps
+      .isDistroRegistered(request.distro, head.manifest.source.distroGuid)
+      .catch(() => null)) !== false
   ) {
     return false
   }
@@ -163,7 +165,16 @@ export async function prepareWslMove(
   if (!wslHostsGateOpen()) {
     return refusal('wsl_move_unavailable')
   }
-  const host = await deps.connectHost(request.distro)
+  let host: WslMoveHost | null
+  try {
+    host = await deps.connectHost(request.distro)
+  } catch (error) {
+    // A kept host record whose distro is gone fails its connect rather than answering null.
+    if (settleInterrupted && (await resetForUnregisteredDistro(deps, request))) {
+      return refusal('wsl_move_host_unavailable', { detail: 'distro_unregistered' })
+    }
+    throw error
+  }
   if (!host) {
     if (settleInterrupted && (await resetForUnregisteredDistro(deps, request))) {
       return refusal('wsl_move_host_unavailable', { detail: 'distro_unregistered' })

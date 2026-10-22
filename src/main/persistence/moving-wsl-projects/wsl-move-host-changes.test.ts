@@ -69,7 +69,7 @@ function at(point: string, change: () => void): void {
   }
 }
 
-/** orcad replaced by a build whose staging format differs: it cannot read the older stage. */
+/** The stage is in a format this orcad cannot read, as when versions differ: it is dropped on load. */
 function replaceOrcadWithNewerStagingFormat(): void {
   const persisted: unknown = JSON.parse(readPersistedStateJson())
   const state = typeof persisted === 'object' && persisted !== null ? persisted : {}
@@ -171,6 +171,40 @@ describe('R38: the distro unregistered or renamed', () => {
     })
     expect(listWslMoveCutovers(rig.userDataPath)).toEqual([])
     expect(resolveWslMoveFence(rig.userDataPath).fenced.repoIds.size).toBe(0)
+  })
+
+  it('after the commit request, when the kept host record fails to connect: resets once proven gone', async () => {
+    at('commit:before', () => {
+      rig.hostPresent = false
+    })
+    await moveProjectsToWslHost(rig.world.deps, request)
+    // Production keeps the host record; its connect throws rather than answering null.
+    rig.world.deps.connectHost = async () => {
+      throw new Error('wsl_host_not_connected')
+    }
+    rig.world.deps.isDistroRegistered = async () => false
+
+    expect(await moveProjectsToWslHost(rig.world.deps, request)).toMatchObject({
+      outcome: 'refused',
+      detail: 'distro_unregistered'
+    })
+    expect(listWslMoveCutovers(rig.userDataPath)).toEqual([])
+  })
+
+  it('after the commit request, a renamed distro (its GUID still registered) keeps waiting', async () => {
+    at('commit:before', () => {
+      rig.hostPresent = false
+    })
+    await moveProjectsToWslHost(rig.world.deps, request)
+    const asked: (string | undefined)[] = []
+    rig.world.deps.isDistroRegistered = async (_distro, guid) => {
+      asked.push(guid)
+      return true
+    }
+
+    await moveProjectsToWslHost(rig.world.deps, request)
+    expect(outcomeOf(rig)).toBe('waiting-for-host')
+    expect(asked).toHaveLength(1)
   })
 
   it('after the commit request, across a restart: startup resets once the distro is proven gone', async () => {
