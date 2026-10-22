@@ -13,6 +13,7 @@ import { BridgePageRouteGrantsSchema } from './bridge/bridge-page-route-grants'
 import { BRIDGE_EXTERNAL_NAVIGATION_GRANT } from './cancelled-navigation-target'
 import { BRIDGE_HAPTICS_GRANT } from './bridge/bridge-haptics-notify'
 import {
+  BRIDGE_CHAT_DRAFT_STORAGE_GRANT,
   BRIDGE_NATIVE_METHOD_PREFIX,
   BRIDGE_NATIVE_VERB_NAMES,
   BRIDGE_NATIVE_VERBS
@@ -199,6 +200,7 @@ describe('the grants this app implements', () => {
       'screencastBinary',
       'haptics',
       'externalNavigation',
+      'chatDraftStorage',
       'native.clipboard.write',
       'native.clipboard.read',
       'native.media.pick',
@@ -231,14 +233,14 @@ describe('the grants this app implements', () => {
   })
 
   /**
-   * The set is the verb table plus three tokens, and nothing else.
+   * The set is the verb table plus the declared route capabilities.
    *
-   * The verb half is spread from the table and pinned below. This is the other half: a token is a
-   * shell behaviour with no request behind it, so nothing makes one appear except a line in this
-   * list -- and a page reads `init.grants.native` for all of them alike. Named against the modules
+   * The verb half is spread from the table and pinned below. This is the other half: explicit
+   * feature capabilities, including one that authorizes both draft-storage requests. The page
+   * reads `init.grants.native` for all of them alike. Named against the modules
    * that declare them rather than as strings, so a rename has to change both sides.
    */
-  it('names exactly three behaviours that are not verbs, each from its own module', () => {
+  it('names the capabilities that are not verbs, each from its own module', () => {
     const tokens = MOBILE_WEB_SHELL_GRANTS.filter(
       (grant) => !grant.startsWith(BRIDGE_NATIVE_METHOD_PREFIX)
     )
@@ -248,7 +250,8 @@ describe('the grants this app implements', () => {
       'externalLink',
       BRIDGE_SCREENCAST_BINARY_GRANT,
       BRIDGE_HAPTICS_GRANT,
-      BRIDGE_EXTERNAL_NAVIGATION_GRANT
+      BRIDGE_EXTERNAL_NAVIGATION_GRANT,
+      BRIDGE_CHAT_DRAFT_STORAGE_GRANT
     ])
     // Not a verb spelling, and not a notify's dotted name: the grammar would refuse either.
     expect(BRIDGE_EXTERNAL_NAVIGATION_GRANT).toBe('externalNavigation')

@@ -1,6 +1,6 @@
 import { mobileChatDraftLifecycle } from '../../session/mobile-native-chat-draft-store'
 import type { BridgeRpcClient } from './bridge-rpc-client'
-import { storageReadResultSchema } from './bridge-native-verbs'
+import { BRIDGE_CHAT_DRAFT_STORAGE_GRANT, storageReadResultSchema } from './bridge-native-verbs'
 import { draftWriteResultSchema } from './bridge-draft-storage'
 import {
   MOBILE_CHAT_DRAFT_CHUNK_CHARS,
@@ -10,7 +10,10 @@ import { publishMobileChatDraftStorage } from '../../session/mobile-native-chat-
 
 export function installPageChatDraftStorage(client: BridgeRpcClient): void {
   const grants = client.getShellSession()?.grants.native ?? []
-  if (!grants.includes('native.storage.write') || !grants.includes('native.storage.read')) {
+  if (
+    !grants.includes(BRIDGE_CHAT_DRAFT_STORAGE_GRANT) &&
+    (!grants.includes('native.storage.write') || !grants.includes('native.storage.read'))
+  ) {
     publishMobileChatDraftStorage(null)
     return
   }

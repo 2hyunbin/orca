@@ -47,6 +47,7 @@ describe('init and state', () => {
           'screencastBinary',
           'haptics',
           'externalNavigation',
+          'chatDraftStorage',
           'native.clipboard.write',
           'native.clipboard.read',
           'native.media.pick',
