@@ -216,14 +216,20 @@ describe('model catalog prewarm', () => {
 
     const prewarmed = service.prewarm()
     const opened = await service.read({ agent: 'opencode2', workspacePath: '/work/project' })
+    expect(opened).toEqual({ origin: 'unknown' })
+    expect(probe).not.toHaveBeenCalled()
     const waited = service.read({
       agent: 'opencode2',
       workspacePath: '/work/project',
       waitForListing: true
     })
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(1))
+    expect(await service.read({ agent: 'opencode2', workspacePath: '/work/project' })).toEqual({
+      origin: 'unknown',
+      listingInProgress: true
+    })
     versionChecked.resolve()
     await prewarmed
-    expect(opened).toEqual({ origin: 'unknown', listingInProgress: true })
     expect((await waited).origin).toBe('probe')
     expect(probe).toHaveBeenCalledTimes(1)
     expect(probe).toHaveBeenCalledWith(HOME('OPENCODE_HOME', '/homes/a'), {
@@ -296,8 +302,11 @@ describe('model catalog prewarm', () => {
 
   it('lists only agents used here: a saved catalog or a chat of it', async () => {
     const store = new AgentModelCatalogStore()
+    const piListed = deferred<AgentModelCatalogSuccess>()
     const probeFor = (agent: string) =>
-      vi.fn(async (_home: AgentSessionAccountHome) => listing(`${agent}-model`))
+      vi.fn(async (_home: AgentSessionAccountHome) =>
+        agent === 'pi' ? piListed.promise : listing(`${agent}-model`)
+      )
     const probes = { codex: probeFor('codex'), claude: probeFor('claude'), pi: probeFor('pi') }
     // Claude has a catalog saved under another account; Codex has a chat; Pi was never used.
     store.recordSuccess('claude-other-account', 'claude', listing('opus'), 'discovery')
@@ -314,12 +323,18 @@ describe('model catalog prewarm', () => {
     expect(probes.codex).toHaveBeenCalledTimes(1)
     expect(probes.claude).toHaveBeenCalledTimes(1)
     expect(probes.pi).not.toHaveBeenCalled()
+    expect(await service.read({ agent: 'pi' })).toEqual({ origin: 'unknown' })
+    expect(probes.pi).not.toHaveBeenCalled()
     // Its first chat still lists it on demand.
+    const demand = service.demand({ agent: 'pi' })
+    await vi.waitFor(() => expect(probes.pi).toHaveBeenCalledTimes(1))
     expect(await service.read({ agent: 'pi' })).toEqual({
       origin: 'unknown',
       listingInProgress: true
     })
-    await vi.waitFor(() => expect(probes.pi).toHaveBeenCalledTimes(1))
+    piListed.resolve(listing('pi-model'))
+    await demand
+    expect(await service.read({ agent: 'pi' })).toMatchObject({ models: [{ id: 'pi-model' }] })
   })
 
   it('on stop, starts no queued agent, stops the running listings and lists nothing more', async () => {

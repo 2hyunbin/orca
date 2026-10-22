@@ -245,21 +245,31 @@ describe('a catalog read that finds a held reason', () => {
   })
 
   it('never holds a read that does not ask to wait, even on a probe that hangs', async () => {
-    const { probed, pastTtl, answerWith, service } = rig()
+    const { probe, probed, pastTtl, answerWith, service } = rig()
     await probed()
     pastTtl()
-    answerWith(() => new Promise<AgentModelCatalogSuccess>(() => {}))
+    const hung = deferred<AgentModelCatalogSuccess>()
+    answerWith(() => hung.promise)
+    expect(await service.read({ agent: 'grok' })).toEqual({
+      origin: 'unknown',
+      unavailable: SIGNED_OUT
+    })
+    expect(probe).toHaveBeenCalledTimes(1)
+    const demand = service.demand({ agent: 'grok' })
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(2))
     expect(await service.read({ agent: 'grok' })).toEqual({
       origin: 'unknown',
       listingInProgress: true,
       unavailable: SIGNED_OUT
     })
+    hung.resolve(listing('gpt-probe', 'probe'))
+    await demand
   })
 })
 
 describe('a probe the host stops', () => {
   it('leaves a held reason as it was', async () => {
-    const { store, service, probed, answerWith, pastTtl } = rig()
+    const { store, probe, service, probed, answerWith, pastTtl } = rig()
     await probed()
     pastTtl()
     answerWith(
@@ -268,9 +278,14 @@ describe('a probe the host stops', () => {
           options?.signal?.addEventListener('abort', () => reject(new Error('session stopped')))
         )
     )
-    await service.read({ agent: 'grok' })
+    const demand = service.demand({ agent: 'grok' })
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(2))
+    expect(store.isListing(FINGERPRINT)).toBe(true)
+    const signal = probe.mock.calls[1]?.[1]?.signal
+    expect(signal?.aborted).toBe(false)
     service.stop()
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await demand
+    expect(signal?.aborted).toBe(true)
     expect(store.failure(FINGERPRINT)?.unavailable).toEqual(SIGNED_OUT)
     expect(store.hasActiveFailure(FINGERPRINT)).toBe(false)
   })
