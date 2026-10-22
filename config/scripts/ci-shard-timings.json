@@ -8022,7 +8022,7 @@
       "src/renderer/src/components/settings/RepositoryHostSetupsSection.workspace-window.test.tsx": 1452,
       "src/renderer/src/components/settings/RepositoryIconEmojiPicker.test.tsx": 252,
       "src/renderer/src/components/settings/RepositoryIconPicker.github-avatar-refresh.test.tsx": 494,
-      "src/renderer/src/components/settings/RepositoryJiraProjectSection.test.tsx": 309,
+      "src/renderer/src/components/settings/repository/RepositoryJiraProjectSection.test.tsx": 309,
       "src/renderer/src/components/settings/RepositoryPane.test.ts": 3208,
       "src/renderer/src/components/settings/RepositoryPaneDraftInput.test.tsx": 318,
       "src/renderer/src/components/settings/RepositorySourceControlAiSection.test.ts": 357,

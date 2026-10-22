@@ -1,21 +1,21 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Repo } from '../../../../shared/repo-types'
-import type { JiraProjectReference } from '../../../../shared/jira-project-reference'
+import type { Repo } from '../../../../../shared/repo-types'
+import type { JiraProjectReference } from '../../../../../shared/jira-project-reference'
 import { RepositoryJiraProjectSection } from './RepositoryJiraProjectSection'
 const project = { id: '10', key: 'ALP', name: 'Alpha', siteId: 'site-a' }
 const { state, inventory } = vi.hoisted(() => {
   const repos: Repo[] = []
   return { state: { repos, settingsSearchQuery: '' }, inventory: vi.fn() }
 })
-vi.mock('@/store', () => {
+vi.mock('@/store/index', () => {
   const useAppStore = (selector: (store: typeof state) => unknown) => selector(state)
   useAppStore.getState = () => state
   return { useAppStore }
 })
-vi.mock('../use-jira-project-inventory', () => ({ useJiraProjectInventory: inventory }))
-vi.mock('../jira-project-picker', () => ({
+vi.mock('../../use-jira-project-inventory', () => ({ useJiraProjectInventory: inventory }))
+vi.mock('../../jira-project-picker', () => ({
   JiraProjectPicker: ({ onChange }: { onChange: (next: JiraProjectReference | null) => void }) => (
     <button onClick={() => onChange(project)}>Choose Alpha</button>
   )
