@@ -3,6 +3,7 @@
 // server's default tabs (ledger L277).
 import { describe, expect, it, vi } from 'vitest'
 import type * as AgentStatusModule from '@/lib/agent-status'
+import type * as WebRuntimeSessionModule from '@/runtime/web-runtime-session-environment'
 import type { Repo } from '../../../shared/repo-types'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { createTestStore, makeWorktree } from '@/store/slices/store-test-helpers'
@@ -20,10 +21,9 @@ vi.mock('@/lib/agent-status', async (importOriginal) => {
   return { ...actual, detectAgentStatusFromTitle: vi.fn().mockReturnValue(null) }
 })
 vi.mock('@/runtime/web-runtime-session-environment', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/runtime/web-runtime-session-environment')>()),
+  ...(await importOriginal<typeof WebRuntimeSessionModule>()),
   // The paired server's session is up.
-  isWebRuntimeSessionActive: (environmentId: string | null | undefined) =>
-    environmentId === 'env-1'
+  isWebRuntimeSessionActive: (environmentId: string | null | undefined) => environmentId === 'env-1'
 }))
 
 const SERVER: ExecutionHostId = 'runtime:env-1'

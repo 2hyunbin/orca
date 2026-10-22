@@ -61,6 +61,10 @@ export async function executeWorktreeCreation(
   }
 
   const structuredLaunch = preparedRequest.agentLaunchRoute === 'structured-native-chat'
+  const creationHostId =
+    preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId
+  // Named to later steps, so a same-path twin on another host can't blur the owner (L277).
+  const onCreationHost = creationHostId ? { executionHostId: creationHostId } : {}
   let result: CreateWorktreeResult
   try {
     const provisionedRoot = getProvisionedRootCreateOptions(preparedRequest)
@@ -96,8 +100,7 @@ export async function executeWorktreeCreation(
         preparedRequest.compareBaseRef,
         {
           setupOnly: preparedRequest.setupOnly,
-          executionHostId:
-            preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId,
+          executionHostId: creationHostId,
           ...(preparedRequest.nameWasGenerated ? { nameWasGenerated: true } : {}),
           ...(preparedRequest.displayNameKind
             ? { displayNameKind: preparedRequest.displayNameKind }
@@ -176,16 +179,13 @@ export async function executeWorktreeCreation(
   // Why: the worktree exists past this point and nothing awaits this caller, so
   // each follow-up step is best-effort — an escaped throw would strand the
   // creation surface over the finished workspace instead of reaching completion.
-  // The host the create went to, so a same-path twin elsewhere cannot make its owner ambiguous.
-  const creationHostId =
-    preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId
   let activation: ActivateAndRevealResult | false = false
   let primaryTabId: string | null = null
   if (shouldActivateOnCompletion && !structuredLaunch) {
     try {
       activation = activateAndRevealWorktree(worktree.id, {
         sidebarRevealBehavior: 'auto',
-        ...(creationHostId ? { executionHostId: creationHostId } : {}),
+        ...onCreationHost,
         ...(preparedRequest.agent !== null ? { agent: preparedRequest.agent } : {}),
         ...(result.setup ? { setup: result.setup } : {}),
         ...(defaultTabs ? { defaultTabs } : {}),
@@ -220,12 +220,7 @@ export async function executeWorktreeCreation(
             preparedRequest.issueCommand,
             defaultTabs,
             // Activation failed before providing its promised surface, so recovery must seed one.
-            backendSpawned || creationHostId
-              ? {
-                  ...(backendSpawned ? { backendStartupTerminalSpawned: true } : {}),
-                  ...(creationHostId ? { executionHostId: creationHostId } : {})
-                }
-              : undefined
+            { ...onCreationHost, ...(backendSpawned && { backendStartupTerminalSpawned: true }) }
           )
         } catch (recoveryError) {
           console.error('worktree create: recovery seed failed', worktree.id, recoveryError)
@@ -264,7 +259,7 @@ export async function executeWorktreeCreation(
           defaultTabs,
           {
             activateCreatedTabs: false,
-            ...(creationHostId ? { executionHostId: creationHostId } : {}),
+            ...onCreationHost,
             ...(callerProvidesSurface ? { callerProvidesSurface: true } : {}),
             ...(backendSpawned ? { backendStartupTerminalSpawned: true } : {})
           }
@@ -324,10 +319,7 @@ export async function executeWorktreeCreation(
 
   if (!shouldActivateOnCompletion && useAppStore.getState().pendingWorktreeCreations[creationId]) {
     try {
-      showWorktreeCreationReadyToast(
-        worktree,
-        preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId
-      )
+      showWorktreeCreationReadyToast(worktree, creationHostId)
     } catch (error) {
       console.error('worktree create: ready toast failed', worktree.id, error)
     }
