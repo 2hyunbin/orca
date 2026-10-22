@@ -88,6 +88,30 @@ function outline(sections: ReturnType<typeof sectionsFor>): string[] {
 }
 
 describe('the phone list from the sidebar feed', () => {
+  it.each(['repo', 'none', 'workspace-status', 'pr-status'] as const)(
+    'uses host headers instead of repeated card badges in %s grouping',
+    (groupBy) => {
+      const view = phoneView({ groupBy })
+      const sections = sectionsFor({
+        ...view,
+        filters: { ...view.filters, visibleHostIds: ['local', 'ssh:gpu'] }
+      })
+      expect(
+        sections.filter((section) => section.key.startsWith('host:')).map((s) => s.title)
+      ).toEqual(['Local Mac', 'GPU box'])
+      const rows = sections.flatMap((section) => section.data)
+      expect(rows).toHaveLength(3)
+      expect(rows.every((row) => row.hostContextLabel === undefined)).toBe(true)
+
+      const mixed = sectionsFor(view).flatMap((section) => section.data)
+      expect(mixed.map((row) => row.hostContextLabel)).toEqual([
+        'Local Mac',
+        'Local Mac',
+        'GPU box'
+      ])
+    }
+  )
+
   it('draws the shared builder’s headers, order and nesting', () => {
     const lines = outline(sectionsFor(phoneView()))
     // The pinned parent carries its nested child.
