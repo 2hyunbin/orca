@@ -148,7 +148,7 @@ export function createAgentCompletionCoordinator(
   function consumePendingStampedTailForAgent(
     agentIdentity: string | null,
     completionIdentity: string | null,
-    payload?: AgentCompletionStatusSnapshot
+    payload?: Parameters<typeof identityScope.consumePendingStampedTailForAgent>[2]
   ): boolean {
     return identityScope.consumePendingStampedTailForAgent(
       agentIdentity,
