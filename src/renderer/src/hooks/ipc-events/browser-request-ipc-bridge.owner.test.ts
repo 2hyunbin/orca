@@ -1,7 +1,12 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-type CreateRequest = { requestId: string; worktreeId?: string; url: string }
+type CreateRequest = {
+  requestId: string
+  worktreeId?: string
+  url: string
+  browserPageId?: string
+}
 type CloseRequest = { requestId: string; tabId?: string | null; worktreeId?: string }
 type ScopeRequest = {
   requestId: string
@@ -130,6 +135,19 @@ describe('browser requests from this desktop follow the workspace owner (#22275)
     expect(mocks.replyTabCreate).toHaveBeenCalledWith({
       requestId: 'r4',
       browserPageId: 'page-new'
+    })
+
+    mocks.createListener?.({
+      requestId: 'r5',
+      worktreeId: LOCAL_WT,
+      url: 'about:blank',
+      browserPageId: 'page-asked'
+    })
+
+    // The page a paired client asked for, which the new tab opens under.
+    expect(mocks.replyTabCreate).toHaveBeenCalledWith({
+      requestId: 'r5',
+      browserPageId: 'page-asked'
     })
   })
 
