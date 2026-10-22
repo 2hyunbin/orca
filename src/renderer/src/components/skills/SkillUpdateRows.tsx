@@ -1,6 +1,10 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
+import type { BundledSkillOutcome, BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
+import {
+  bundledSkillOutcomeText,
+  bundledSkillPlanState
+} from '../../../../shared/bundled-skill-summary'
 import type {
-  BundledSkillOutcomeSummary,
   BundledSkillPlanSkillSummary,
   BundledSkillPlanState
 } from '../../../../shared/bundled-skill-summary'
@@ -19,8 +23,12 @@ const ROW_ORDER: readonly BundledSkillPlanState[] = [
 ]
 
 /** A finished run lists what it changed and what it left; untouched skills stay off. */
-function resultShowsRow(outcome: BundledSkillOutcomeSummary | undefined): boolean {
-  return Boolean(outcome && (outcome.text !== 'No change' || outcome.leftAlone.length > 0))
+function resultShowsRow(outcome: BundledSkillOutcome | undefined): boolean {
+  return Boolean(
+    outcome &&
+    (bundledSkillOutcomeText(outcome) !== 'No change' ||
+      outcome.ops.some((op) => op.kind === 'leave'))
+  )
 }
 
 function UpToDateLine({
@@ -52,6 +60,7 @@ function UpToDateLine({
 /** The skill rows plus, while reviewing, the up-to-date line and the locations toggle. */
 export function SkillUpdateRows({
   skills,
+  unforcedPlan,
   phase,
   outcomes,
   replace,
@@ -59,19 +68,25 @@ export function SkillUpdateRows({
   onToggleLocations
 }: {
   skills: readonly BundledSkillPlanSkillSummary[]
+  unforcedPlan: BundledSkillPlan | null
   phase: SkillRowPhase
-  outcomes: ReadonlyMap<string, BundledSkillOutcomeSummary>
+  outcomes: ReadonlyMap<string, BundledSkillOutcome>
   replace: SkillReplaceToggle
   showLocations: boolean
   onToggleLocations: () => void
 }): React.JSX.Element {
+  const unforcedStates = new Map(
+    unforcedPlan?.skills.map((entry) => [entry.name, bundledSkillPlanState(entry)])
+  )
   // Why: a result re-plans every skill as current, so it orders by what the run did instead.
-  const rowRank = (skill: BundledSkillPlanSkillSummary): number =>
-    phase === 'result'
-      ? outcomes.get(skill.name)?.text === 'No change'
+  const rowRank = (skill: BundledSkillPlanSkillSummary): number => {
+    const outcome = outcomes.get(skill.name)
+    return phase === 'result'
+      ? outcome && bundledSkillOutcomeText(outcome) === 'No change'
         ? 1
         : 0
-      : ROW_ORDER.indexOf(skill.state)
+      : ROW_ORDER.indexOf(unforcedStates.get(skill.name) ?? skill.state)
+  }
   return (
     <div className="min-w-0 border-t border-border/60">
       <TooltipProvider>

@@ -5186,6 +5186,7 @@
           "needsAttention": "需要处理",
           "other": "另一个技能已使用此名称",
           "replace": "替换",
+          "replacedWithBackup": "已替换 · 你的副本已保存为备份",
           "sharedNotCurrent": "此文件夹使用的共享副本不是 Orca 的",
           "unwritable": "Orca 无法写入此文件夹",
           "unreadable": "Orca 无法读取此副本中的所有文件",

@@ -5186,6 +5186,7 @@
           "needsAttention": "対応が必要",
           "other": "別のスキルがすでにこの名前を使っているため",
           "replace": "置き換え",
+          "replacedWithBackup": "置き換えました · 元のコピーはバックアップとして保存されました",
           "sharedNotCurrent": "このフォルダーが使う共有コピーは Orca のものではないため",
           "unwritable": "Orca はこのフォルダーに書き込めません",
           "unreadable": "Orca はこのコピーの一部のファイルを読み取れません",

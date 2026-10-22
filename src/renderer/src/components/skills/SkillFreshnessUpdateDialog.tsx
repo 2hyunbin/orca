@@ -1,10 +1,7 @@
 import { useState, useSyncExternalStore } from 'react'
 import { AlertTriangle, CheckCircle2, Loader2, RefreshCw } from 'lucide-react'
-import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
-import {
-  summarizeBundledSkillPlan,
-  type BundledSkillOutcomeSummary
-} from '../../../../shared/bundled-skill-summary'
+import type { BundledSkillOutcome, BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
+import { summarizeBundledSkillPlan } from '../../../../shared/bundled-skill-summary'
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { bundledSkillTargetKey } from '@/lib/bundled-skill-target'
@@ -109,9 +106,9 @@ function skillRowPhase(run: SkillUpdateRun): SkillRowPhase {
   return run.state === 'idle' ? 'plan' : run.state === 'running' ? 'pending' : 'result'
 }
 
-function runOutcomes(run: SkillUpdateRun): ReadonlyMap<string, BundledSkillOutcomeSummary> {
+function runOutcomes(run: SkillUpdateRun): ReadonlyMap<string, BundledSkillOutcome> {
   return new Map(
-    run.state === 'done' ? run.summary.skills.map((outcome) => [outcome.name, outcome]) : []
+    run.state === 'done' ? run.result.skills.map((outcome) => [outcome.name, outcome]) : []
   )
 }
 
@@ -338,6 +335,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
         {shownSummary && shownSummary.skills.length > 0 ? (
           <SkillUpdateRows
             skills={shownSummary.skills}
+            unforcedPlan={state.plan}
             phase={phase}
             outcomes={runOutcomes(run)}
             replace={replace}
