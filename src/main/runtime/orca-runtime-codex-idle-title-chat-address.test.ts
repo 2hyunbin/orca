@@ -6,6 +6,7 @@ import type { AgentStatusIpcPayload } from '../../shared/agent-status-types'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
 import { committingSpawn } from './bind-first-pane.test-fixture'
+import type { RuntimeStore } from './runtime-store-contract'
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromId: vi.fn(() => null) },
@@ -48,6 +49,27 @@ const title = (text: string): string => `\x1b]0;${text}\x07`
 const programState = (state: 'working' | 'idle'): string =>
   `\x1b]7501;state=${state}:app=codex\x1b\\`
 
+function layoutStore(): RuntimeStore {
+  return {
+    getRepos: () => [],
+    getRepo: () => undefined,
+    addRepo: vi.fn<RuntimeStore['addRepo']>(),
+    updateRepo: vi.fn<RuntimeStore['updateRepo']>(),
+    getAllWorktreeMeta: () => ({}),
+    getWorktreeMeta: () => undefined,
+    setWorktreeMeta: vi.fn<RuntimeStore['setWorktreeMeta']>(),
+    removeWorktreeMeta: vi.fn<RuntimeStore['removeWorktreeMeta']>(),
+    getGitHubCache: vi.fn<RuntimeStore['getGitHubCache']>(),
+    getSettings: () => ({
+      workspaceDir: '/workspaces',
+      nestWorkspaces: false,
+      refreshLocalBaseRefOnWorktreeCreate: false,
+      branchPrefix: 'none',
+      branchPrefixCustom: ''
+    })
+  }
+}
+
 async function codexPaneAfterOutput(
   rows: AgentStatusIpcPayload[],
   frames: string[],
@@ -56,9 +78,7 @@ async function codexPaneAfterOutput(
 ): Promise<unknown> {
   // Switch-on, main binds the pane in its layout before the terminal registers, so it needs a store.
   const runtime = new OrcaRuntimeService(
-    ORCA_LAYOUT_OWNER_IS_MAIN
-      ? ({ getSettings: () => ({}), getRepos: () => [], getRepo: () => undefined } as never)
-      : null,
+    ORCA_LAYOUT_OWNER_IS_MAIN ? layoutStore() : null,
     undefined,
     {
       getAgentStatusSnapshot: () => rows,

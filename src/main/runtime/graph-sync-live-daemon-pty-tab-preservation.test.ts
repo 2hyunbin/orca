@@ -135,17 +135,21 @@ function createHarness() {
     committingSpawn(
       runtime,
       async (args: {
-        worktreeId: string
-        tabId: string
-        leafId: string
+        worktreeId?: string
+        tabId?: string
+        leafId?: string
         persistHostSessionBinding?: boolean
       }) => {
-        const ptyId = PTY_ID_BY_WORKTREE[args.worktreeId]!
-        spawnedTabIdByWorktree.set(args.worktreeId, args.tabId)
+        const { worktreeId, tabId, leafId } = args
+        if (!worktreeId || !tabId || !leafId) {
+          throw new Error('pane spawn without a worktree, tab and leaf')
+        }
+        const ptyId = PTY_ID_BY_WORKTREE[worktreeId]!
+        spawnedTabIdByWorktree.set(worktreeId, tabId)
         // Why: only the host binding contract decides this — the test must not
         // hand the runtime an ownership signal the create path did not produce.
         if (args.persistHostSessionBinding) {
-          persistPtyBinding(args.worktreeId, args.tabId, args.leafId, ptyId)
+          persistPtyBinding(worktreeId, tabId, leafId, ptyId)
         }
         return { id: ptyId }
       }
@@ -162,7 +166,7 @@ function createHarness() {
     }),
     listProcesses: vi.fn(async () => []),
     getForegroundProcess: async () => null
-  } as never)
+  })
   // The host runs the full desktop app: a window IS attached.
   runtime.attachWindow(1)
 
