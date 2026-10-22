@@ -35,6 +35,7 @@ import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { warnAmbiguousOwnerOnce } from './ambiguous-owner-warning'
 import { hostRouteForAuthority } from '@/runtime/runtime-client-target'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 /** A worktree id, a `folder:` workspace key, or the floating workspace; `hostId` when the row names one. */
 export type WorkspaceOwnerRef = { workspaceId: string; hostId?: ExecutionHostId }
@@ -73,7 +74,7 @@ function isFolderTwin(state: WorktreeOperationRouteState, folderWorkspaceId: str
   return (
     !folder.owner.executionHostId?.trim() &&
     !folder.owner.connectionId?.trim() &&
-    resolveIndexedProjectGroupOwner(state.projectGroups, folder.owner.projectGroupId)
+    resolveIndexedProjectGroupOwner(selectProjectGroups(state), folder.owner.projectGroupId)
       .kind === 'ambiguous'
   )
 }
@@ -140,7 +141,7 @@ function nestedRepoTargetId(
   environmentId: string
 ): string | null {
   const repo = findIndexedRepoOwnerForHost(
-    state.repos,
+    selectRepos(state),
     getRepoIdFromWorktreeId(worktreeId),
     toRuntimeExecutionHostId(environmentId)
   )

@@ -9,6 +9,7 @@ import {
   getHostlessSourceRepoOwnerEnvironmentId,
   type RepoRuntimeOwnerState
 } from './repo-runtime-owner'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 export type GitHubRuntimeHost = Extract<ParsedExecutionHost, { kind: 'runtime' }>
 
@@ -45,7 +46,7 @@ export function getGitHubRepoRoutingTarget(
   }
   return runtimeTargetForOwnerEnvironment(
     sourceContext?.provider === 'github'
-      ? getHostlessSourceRepoOwnerEnvironmentId(state.repos, repoId)
+      ? getHostlessSourceRepoOwnerEnvironmentId(selectRepos(state), repoId)
       : getExplicitRuntimeOwnerEnvironmentId(state, repoId, hostId)
   )
 }

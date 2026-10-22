@@ -9,7 +9,7 @@ import { getUnreadBadgeCount } from './unread-badge-count'
 import { hasLiveTabMarker } from '@/store/slices/workspace-attention/workspace-live-markers'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
-import { selectProjectGroups } from '../store/project-catalog-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 type UnreadBadgeCountState = Pick<
   AppState,
@@ -71,8 +71,8 @@ function sameFolderAttention(
 function sameCountInputs(previous: UnreadBadgeCountState, next: UnreadBadgeCountState): boolean {
   return (
     selectFolderWorkspaces(previous) === selectFolderWorkspaces(next) &&
-    previous.projectGroups === next.projectGroups &&
-    previous.repos === next.repos &&
+    selectProjectGroups(previous) === selectProjectGroups(next) &&
+    selectRepos(previous) === selectRepos(next) &&
     previous.workspaceHostScope === next.workspaceHostScope &&
     previous.visibleWorkspaceHostIds === next.visibleWorkspaceHostIds &&
     previous.settings?.activeRuntimeEnvironmentId === next.settings?.activeRuntimeEnvironmentId &&

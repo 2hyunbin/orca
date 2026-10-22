@@ -63,9 +63,9 @@ export function useRuntimeGraphSync(): void {
       useAppStore.subscribe((state, previousState) => {
         // Why: the graph carries the sidebar's Project catalog to paired phones; republish on change.
         if (
-          selectRepos(state) !== previousState.repos ||
-          selectProjects(state) !== previousState.projects ||
-          selectProjectHostSetups(state) !== previousState.projectHostSetups ||
+          selectRepos(state) !== selectRepos(previousState) ||
+          selectProjects(state) !== selectProjects(previousState) ||
+          selectProjectHostSetups(state) !== selectProjectHostSetups(previousState) ||
           state.projectOrderBy !== previousState.projectOrderBy
         ) {
           scheduleRuntimeGraphSync()

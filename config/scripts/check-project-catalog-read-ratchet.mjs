@@ -7,15 +7,17 @@ import { readTrackedSources, runCountRatchet } from './ratchet-baseline.mjs'
 // (sidebar design §4 "Project catalog", P5a), so a reader that touches the store field directly
 // would keep reading the window's old copy, and a writer would keep writing one. Counts may only
 // shrink. A lower bound: reads are counted on store-state receivers (`s`, `state`, `get()`,
-// `….getState()`, `ownerState`, `currentState`, `store`), writes as catalog keys in object
+// `….getState()`, `ownerState`, `currentState`, `store`, `previous`, `previousState`,
+// `closedState`), writes as catalog keys in object
 // literals of files that call `set(`; destructuring and computed access are not seen.
 
 const BASELINE_PATH = 'config/project-catalog-read-baseline.txt'
 const SCAN_ROOTS = ['src/renderer/src/']
 const CATALOG_FIELDS = 'repos|projectGroups|projects|projectHostSetups'
-// `state.repos`, `get().projectGroups`, `useAppStore.getState().projects`; not `args.repos`.
+// `state.repos`, `previous.projects` (a subscriber's other state), `get().projectGroups`,
+// `useAppStore.getState().projects`; not `args.repos`.
 const RAW_READ = new RegExp(
-  `(?:(?:[A-Za-z_$][\\w$]*\\.)*getState\\(\\)|get\\(\\)|(?<![\\w$.])(?:s|state|ownerState|currentState|store))\\??\\.(?:${CATALOG_FIELDS})\\b`,
+  `(?:(?:[A-Za-z_$][\\w$]*\\.)*getState\\(\\)|get\\(\\)|(?<![\\w$.])(?:s|state|ownerState|currentState|store|previous|previousState|closedState))\\??\\.(?:${CATALOG_FIELDS})\\b`,
   'g'
 )
 // A catalog key in an object literal (`repos: next`, `{ projects, … }`) of a file that writes the store.

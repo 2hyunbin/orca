@@ -24,10 +24,10 @@ export function resolveLocalhostLabelRouteForPort(
   if (port.kind !== 'workspace') {
     return null
   }
-  const repo = (state.repos ?? []).find((entry) => entry.id === port.owner.repoId) ?? null
+  const repo = (selectRepos(state) ?? []).find((entry) => entry.id === port.owner.repoId) ?? null
   const worktree = state.getKnownWorktreeById?.(port.owner.worktreeId) ?? null
   const project = worktree?.projectId
-    ? ((state.projects ?? []).find((entry) => entry.id === worktree.projectId) ?? null)
+    ? ((selectProjects(state) ?? []).find((entry) => entry.id === worktree.projectId) ?? null)
     : null
   return localhostWorktreeLabelRouteForPort({ port, repo, project, settings: state.settings })
 }

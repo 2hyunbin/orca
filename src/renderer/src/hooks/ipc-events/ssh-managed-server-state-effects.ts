@@ -336,7 +336,7 @@ function rehomeActiveWorkspace(
   // The server holds no project for it, so the SSH owner it names is retired.
   state.setActiveWorktree(null, undefined, {
     stateTransition: (current) => ({
-      patch: current.repos.some((repo) => repo.id === current.activeRepoId)
+      patch: selectRepos(current).some((repo) => repo.id === current.activeRepoId)
         ? {}
         : { activeRepoId: null },
       activate: true

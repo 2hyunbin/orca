@@ -8,6 +8,7 @@ import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { Repo } from '../../../shared/repo-types'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 export type RepoRuntimeOwnerState = {
   repos?: readonly Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>[]
@@ -19,7 +20,7 @@ function findRepoOwner(
   state: RepoRuntimeOwnerState,
   repoId: string
 ): Pick<Repo, 'id' | 'connectionId' | 'executionHostId'> | null {
-  const matchingRepos = state.repos?.filter((entry) => entry.id === repoId) ?? []
+  const matchingRepos = selectRepos(state)?.filter((entry) => entry.id === repoId) ?? []
   return matchingRepos.length === 1 ? matchingRepos[0] : null
 }
 
@@ -33,7 +34,7 @@ function findTwinRepoOwner(
   repoId: string,
   hostId: ExecutionHostId | null | undefined
 ): Pick<Repo, 'id' | 'connectionId' | 'executionHostId'> | null {
-  const matchingRepos = state.repos?.filter((entry) => entry.id === repoId) ?? []
+  const matchingRepos = selectRepos(state)?.filter((entry) => entry.id === repoId) ?? []
   if (matchingRepos.length < 2) {
     return matchingRepos[0] ?? null
   }
@@ -44,7 +45,7 @@ function findTwinRepoOwner(
 
 /** Whether two rows (hosts) publish this repo id, so no host-less caller may pick one. */
 export function isTwinRepo(state: RepoRuntimeOwnerState, repoId: string | null | undefined) {
-  return (state.repos?.filter((entry) => entry.id === repoId).length ?? 0) > 1
+  return (selectRepos(state)?.filter((entry) => entry.id === repoId).length ?? 0) > 1
 }
 
 /**

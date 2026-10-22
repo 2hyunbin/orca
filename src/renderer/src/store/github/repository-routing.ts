@@ -99,7 +99,7 @@ export function findRepoForGitHubOwner(
   repoId: string | undefined,
   repoPath: string
 ): Repo | undefined {
-  return state.repos
-    ? getGitHubRepoLookupIndex(state.repos).findByIdOrPath(repoId, repoPath)
+  return selectRepos(state)
+    ? getGitHubRepoLookupIndex(selectRepos(state)).findByIdOrPath(repoId, repoPath)
     : undefined
 }

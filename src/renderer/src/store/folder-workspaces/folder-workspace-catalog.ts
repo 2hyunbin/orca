@@ -220,7 +220,7 @@ export async function reconcileFailedFolderWorkspaceUpdate(args: {
   try {
     const catalog = await fetchFolderWorkspaceCatalogForTarget(
       args.target,
-      args.get().projectGroups
+      selectProjectGroups(args.get())
     )
     const latestFields = args.coordinator.latestFields(args.updateIdentity, args.ticket)
     if (latestFields.length === 0) {

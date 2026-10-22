@@ -17,6 +17,7 @@ import {
   resolveIndexedRepoOwner,
   resolveIndexedWorktreeOwner
 } from './worktree-runtime-owner-index'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 export type TerminalWorktreeRoute = {
   runtimeEnvironmentId: string | null
@@ -181,7 +182,7 @@ export function isUnattributedTwinWorktree(
     !worktree.owner.runtimeOwnerEnvironmentId?.trim() &&
     !parseExecutionHostId(worktree.owner.hostId) &&
     !hasIndexedDetectedWorktree(state.detectedWorktreesByRepo, worktreeId) &&
-    resolveIndexedRepoOwner(state.repos, worktree.owner.repoId).kind === 'ambiguous'
+    resolveIndexedRepoOwner(selectRepos(state), worktree.owner.repoId).kind === 'ambiguous'
   )
 }
 

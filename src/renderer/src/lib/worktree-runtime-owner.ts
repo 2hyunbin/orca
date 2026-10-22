@@ -27,6 +27,7 @@ import type { ExecutionHostOwnerMatch } from '../../../shared/worktree-execution
 import { getFloatingWorkspaceOperationRoute } from './worktree-operation-route'
 import { resolveExplicitWorktreeOperationRouteResult } from './worktree-operation-catalog-route'
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 function getExecutionHostIdFromWorktreeHost(
   hostId: string | null | undefined
@@ -93,7 +94,7 @@ export function getKnownExecutionHostIdForWorktree(
     return worktreeHostId
   }
   const repoId = worktree?.repoId ?? getRepoIdFromWorktreeId(worktreeId)
-  const repo = findRepoRecord(state.repos, repoId)
+  const repo = findRepoRecord(selectRepos(state), repoId)
   if (!repo) {
     return null
   }

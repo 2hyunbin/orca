@@ -18,6 +18,7 @@ import {
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
 import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 function getResolvedFolderHost(
   state: WorktreeRuntimeOwnerState,
@@ -34,7 +35,7 @@ function getResolvedFolderHost(
   )
   const group = folder
     ? findIndexedProjectGroupOwner(
-        state.projectGroups,
+        selectProjectGroups(state),
         folder.projectGroupId,
         preferredHostId
       )
@@ -89,8 +90,8 @@ export function getResolvedExecutionHostIdForWorktree(
     return null
   }
   const repo = preferredHostId
-    ? findIndexedRepoOwnerForHost(state.repos, worktree.repoId, preferredHostId)
-    : findIndexedRepoOwner(state.repos, worktree.repoId)
+    ? findIndexedRepoOwnerForHost(selectRepos(state), worktree.repoId, preferredHostId)
+    : findIndexedRepoOwner(selectRepos(state), worktree.repoId)
   if (!repo) {
     return null
   }

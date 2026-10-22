@@ -49,26 +49,26 @@ export function resetAgentBucketCountStateForTests(): void {
 }
 
 export function selectAgentBucketCountState(s: AppState): AgentBucketCountState {
-  const previous = previousState
+  const memo = previousState
   if (
-    previous !== null &&
-    previous.repos === selectRepos(s) &&
-    selectWorktreesByRepo(previous) === selectWorktreesByRepo(s) &&
-    previous.tabsByWorktree === s.tabsByWorktree &&
-    previous.unifiedTabsByWorktree === s.unifiedTabsByWorktree &&
-    previous.agentStatusByPaneKey === s.agentStatusByPaneKey &&
-    previous.retainedAgentsByPaneKey === s.retainedAgentsByPaneKey &&
-    previous.migrationUnsupportedByPtyId === s.migrationUnsupportedByPtyId &&
-    previous.runtimeAgentOrchestrationByPaneKey === s.runtimeAgentOrchestrationByPaneKey &&
-    previous.terminalLayoutsByTabId === s.terminalLayoutsByTabId &&
-    previous.ptyIdsByTabId === s.ptyIdsByTabId &&
-    previous.runtimePaneTitlesByTabId === s.runtimePaneTitlesByTabId &&
-    previous.paneForegroundAgentByPaneKey === s.paneForegroundAgentByPaneKey &&
-    selectFolderWorkspaces(previous) === selectFolderWorkspaces(s) &&
-    previous.acknowledgedAgentsByPaneKey === s.acknowledgedAgentsByPaneKey &&
-    previous.agentStatusEpoch === s.agentStatusEpoch
+    memo !== null &&
+    memo.repos === selectRepos(s) &&
+    selectWorktreesByRepo(memo) === selectWorktreesByRepo(s) &&
+    memo.tabsByWorktree === s.tabsByWorktree &&
+    memo.unifiedTabsByWorktree === s.unifiedTabsByWorktree &&
+    memo.agentStatusByPaneKey === s.agentStatusByPaneKey &&
+    memo.retainedAgentsByPaneKey === s.retainedAgentsByPaneKey &&
+    memo.migrationUnsupportedByPtyId === s.migrationUnsupportedByPtyId &&
+    memo.runtimeAgentOrchestrationByPaneKey === s.runtimeAgentOrchestrationByPaneKey &&
+    memo.terminalLayoutsByTabId === s.terminalLayoutsByTabId &&
+    memo.ptyIdsByTabId === s.ptyIdsByTabId &&
+    memo.runtimePaneTitlesByTabId === s.runtimePaneTitlesByTabId &&
+    memo.paneForegroundAgentByPaneKey === s.paneForegroundAgentByPaneKey &&
+    selectFolderWorkspaces(memo) === selectFolderWorkspaces(s) &&
+    memo.acknowledgedAgentsByPaneKey === s.acknowledgedAgentsByPaneKey &&
+    memo.agentStatusEpoch === s.agentStatusEpoch
   ) {
-    return previous
+    return memo
   }
   previousState = {
     repos: selectRepos(s),

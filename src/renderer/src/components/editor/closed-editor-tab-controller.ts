@@ -11,6 +11,7 @@ import type { MonacoModelRegistry, DisposableMonacoModel } from './diff-monaco-m
 import { toEditorModelUri } from './editor-model-uri'
 import { getEditorModelOwnerKey } from './editor-model-owner'
 import type { WorktreeOperationRouteState } from '@/lib/worktree-operation-route'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 type EditorStore = Pick<
   StoreApi<WorktreeOperationRouteState & { openFiles: OpenFile[] }>,
@@ -211,11 +212,11 @@ export function attachClosedEditorTabCleanup(
     previousState = currentState
     if (
       openFiles === previous &&
-      currentState.repos === closedState.repos &&
+      selectRepos(currentState) === selectRepos(closedState) &&
       currentState.worktreesByRepo === closedState.worktreesByRepo &&
       currentState.detectedWorktreesByRepo === closedState.detectedWorktreesByRepo &&
       currentState.folderWorkspaces === closedState.folderWorkspaces &&
-      currentState.projectGroups === closedState.projectGroups &&
+      selectProjectGroups(currentState) === selectProjectGroups(closedState) &&
       currentState.restoredRuntimeHostIdByWorkspaceSessionKey ===
         closedState.restoredRuntimeHostIdByWorkspaceSessionKey &&
       currentState.runtimeEnvironmentCatalogHydrated ===

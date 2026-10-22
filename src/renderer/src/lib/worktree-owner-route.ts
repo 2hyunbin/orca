@@ -10,6 +10,7 @@ import type {
   WorktreeOperationRouteResolution,
   WorktreeOperationRouteState
 } from './worktree-operation-route'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 export function routeForOwner(owner: {
   hostId?: ExecutionHostId
@@ -75,7 +76,7 @@ export function resolveExactWorktreeRoute(
     return { kind: 'resolved', route }
   }
   // Recover an optional HUB transport only from the repo setup matching the worktree's SSH host.
-  const repoRoute = resolveRepoRouteForSshOwner(state.repos, owner)
+  const repoRoute = resolveRepoRouteForSshOwner(selectRepos(state), owner)
   if (repoRoute.kind === 'ambiguous') {
     return repoRoute
   }

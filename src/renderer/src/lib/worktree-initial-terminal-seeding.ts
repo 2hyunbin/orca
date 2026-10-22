@@ -27,6 +27,7 @@ import {
 import { applyDefaultTerminalTabs } from '@/lib/worktree-default-terminal-tabs'
 import { openDefaultAgentChatInEmptyWorkspace } from '@/lib/empty-workspace-default-agent-chat'
 import { isEmptyWorkspaceDefaultSurfacePending } from '@/lib/empty-workspace-default-surface-claims'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 function getSetupRunnerCommandPlatformForLaunch(setup: WorktreeSetupLaunch): 'windows' | 'posix' {
   return getSetupRunnerCommandPlatformForPath(
@@ -109,7 +110,7 @@ export function ensureWorktreeHasInitialTerminal(
   // Why: creating a terminal just because the legacy terminal slice is empty gives editor/browser-only worktrees an unexpected extra tab.
   const ownerState =
     store.settings !== undefined ||
-    store.repos !== undefined ||
+    selectRepos(store) !== undefined ||
     store.worktreesByRepo !== undefined
       ? store
       : useAppStore.getState()

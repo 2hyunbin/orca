@@ -22,6 +22,7 @@ import {
 } from './worktree-runtime-owner-index'
 import { resolveExplicitWorktreeOperationRouteResult } from './worktree-operation-catalog-route'
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 /**
  * Does this record's `--resume` locator belong to a different machine than the one the resume would
@@ -125,8 +126,8 @@ function currentExecutionHostIdForRecord(
     if (
       !folder.executionHostId &&
       !folder.connectionId &&
-      state.projectGroups?.some((group) => group.id === folder.projectGroupId) &&
-      !findIndexedProjectGroupOwner(state.projectGroups, folder.projectGroupId)
+      selectProjectGroups(state)?.some((group) => group.id === folder.projectGroupId) &&
+      !findIndexedProjectGroupOwner(selectProjectGroups(state), folder.projectGroupId)
     ) {
       return null
     }
@@ -149,7 +150,7 @@ function currentExecutionHostIdForRecord(
   }
   const worktree = findIndexedWorktreeOwner(state.worktreesByRepo, worktreeId)
   const repo = findIndexedRepoOwner(
-    state.repos,
+    selectRepos(state),
     worktree?.repoId ?? getRepoIdFromWorktreeId(worktreeId)
   )
   return repo ? getRepoExecutionHostId(repo) : null
@@ -165,7 +166,7 @@ function ownerExecutionHostIdForRecord(
   if (workspaceScope?.type === 'folder') {
     const folder = findFolderWorkspaceOwner(state, workspaceScope.folderWorkspaceId)
     const group = folder?.projectGroupId
-      ? findIndexedProjectGroupOwner(state.projectGroups, folder.projectGroupId)
+      ? findIndexedProjectGroupOwner(selectProjectGroups(state), folder.projectGroupId)
       : undefined
     const explicit = parseExecutionHostId(folder?.executionHostId ?? group?.executionHostId)?.id
     const connectionId = folder?.connectionId?.trim() || group?.connectionId?.trim()
@@ -177,7 +178,7 @@ function ownerExecutionHostIdForRecord(
     return worktreeHost
   }
   const repo = findIndexedRepoOwner(
-    state.repos,
+    selectRepos(state),
     worktree?.repoId ?? getRepoIdFromWorktreeId(record.worktreeId)
   )
   return repo && (repo.executionHostId?.trim() || repo.connectionId?.trim())

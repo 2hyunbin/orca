@@ -2,6 +2,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { isDefaultBranchWorkspace } from '../../../../shared/worktree/workspace-kinds'
 import { revealRepoInProjectFilter, type ProjectFilterRevealState } from './project-filter-reveal'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 export type AddRepoSkipFinalizationState = ProjectFilterRevealState & {
   activeRepoId: string | null
@@ -24,7 +25,7 @@ export function finalizeImportedRepoAfterSkip(
   const importedWorktrees = (state.worktreesByRepo[importedRepoId] ?? []).filter(
     (worktree) => !worktree.isArchived
   )
-  const importedRepo = state.repos.find((repo) => repo.id === importedRepoId)
+  const importedRepo = selectRepos(state).find((repo) => repo.id === importedRepoId)
 
   // Why: Skip means "do not open or create a worktree", not "hide the
   // imported project behind sidebar filters so it looks like nothing landed."

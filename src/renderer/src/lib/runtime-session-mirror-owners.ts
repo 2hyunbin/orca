@@ -1,5 +1,6 @@
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../shared/execution-host'
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 function addRuntimeExecutionHost(ids: Set<string>, hostId: string | null | undefined): void {
   const parsed = parseExecutionHostId(hostId)
@@ -26,7 +27,7 @@ export function getRuntimeSessionMirrorEnvironmentIds(state: WorktreeRuntimeOwne
   if (activeRuntimeEnvironmentId) {
     ids.add(activeRuntimeEnvironmentId)
   }
-  for (const repo of state.repos ?? []) {
+  for (const repo of selectRepos(state) ?? []) {
     addRuntimeExecutionHost(ids, getRepoExecutionHostId(repo))
   }
   for (const worktrees of Object.values(state.worktreesByRepo ?? {})) {
@@ -39,7 +40,7 @@ export function getRuntimeSessionMirrorEnvironmentIds(state: WorktreeRuntimeOwne
       addWorktreeOwner(ids, worktree)
     }
   }
-  for (const group of state.projectGroups ?? []) {
+  for (const group of selectProjectGroups(state) ?? []) {
     addRuntimeExecutionHost(ids, group.executionHostId)
   }
   for (const hostId of Object.values(state.restoredRuntimeHostIdByWorkspaceSessionKey ?? {})) {

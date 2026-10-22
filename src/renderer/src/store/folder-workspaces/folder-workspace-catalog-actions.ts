@@ -37,13 +37,13 @@ export function createFolderWorkspaceCatalogActions(
         getFolderWorkspaceCatalogReplacementIdentities(
           catalog,
           current.folderWorkspaces,
-          current.projectGroups
+          selectProjectGroups(current)
         )
       )
       const { folderWorkspaces } = mergeFetchedFolderWorkspaceCatalog(
         catalog,
         current.folderWorkspaces,
-        current.projectGroups
+        selectProjectGroups(current)
       )
       if (arrayElementsUnchanged(folderWorkspaces, current.folderWorkspaces)) {
         return current

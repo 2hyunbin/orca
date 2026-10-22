@@ -9,6 +9,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 function providerSessionEqual(
   left: AgentProviderSessionMetadata | undefined,
@@ -185,11 +186,11 @@ export function aiVaultTitleSyncInputsChanged(current: AppState, previous: AppSt
   }
 
   const ownerInputsChanged =
-    current.repos !== previous.repos ||
+    selectRepos(current) !== selectRepos(previous) ||
     selectWorktreesByRepo(current) !== selectWorktreesByRepo(previous) ||
     selectDetectedWorktreesByRepo(current) !== selectDetectedWorktreesByRepo(previous) ||
     selectFolderWorkspaces(current) !== selectFolderWorkspaces(previous) ||
-    current.projectGroups !== previous.projectGroups ||
+    selectProjectGroups(current) !== selectProjectGroups(previous) ||
     current.settings !== previous.settings ||
     current.activeWorktreeId !== previous.activeWorktreeId ||
     current.activeWorkspaceExecutionHostId !== previous.activeWorkspaceExecutionHostId ||

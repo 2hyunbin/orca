@@ -9,6 +9,7 @@ import type { WorkspacePort, WorkspacePortScanResult } from '../../../shared/wor
 import { toast } from 'sonner'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import { reselectWorkspaceKeepingHost } from './active-workspace-host'
+import { selectProjects, selectRepos } from '@/store/project-catalog-selectors'
 
 export type OpenHttpLinkOptions = {
   worktreeId?: string | null
@@ -283,14 +284,15 @@ function localhostLabelRouteForTerminalLink(
   if (!port) {
     return null
   }
-  const repo = state.repos?.find((entry) => entry.id === port.owner.repoId) ?? null
+  const repo = selectRepos(state)?.find((entry) => entry.id === port.owner.repoId) ?? null
   if (!repo) {
     return null
   }
   const worktree = findWorktreeById(state, port.owner.worktreeId)
+  const projects = selectProjects(state)
   const project =
-    worktree?.projectId && state.projects
-      ? (state.projects.find((entry) => entry.id === worktree.projectId) ?? null)
+    worktree?.projectId && projects
+      ? (projects.find((entry) => entry.id === worktree.projectId) ?? null)
       : null
   const projectSource = project ?? repo
   return {

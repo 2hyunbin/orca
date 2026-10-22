@@ -22,6 +22,7 @@ import type {
   WorktreeOperationRouteResolution,
   WorktreeOperationRouteState
 } from './worktree-operation-route'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 const repoOperationRouteIndexCache = new WeakMap<
   NonNullable<WorktreeOperationRouteState['repos']>,
@@ -67,7 +68,7 @@ export function resolveExplicitWorktreeOperationRouteResult(
   }
   const repoRoutes = new Map<string, WorktreeOperationRoute>()
   for (const repoId of exactRepoIds) {
-    const resolution = resolveIndexedRepoOperationRoute(state.repos, repoId)
+    const resolution = resolveIndexedRepoOperationRoute(selectRepos(state), repoId)
     if (resolution.kind === 'ambiguous') {
       return resolution
     }
@@ -113,13 +114,13 @@ function isUnstampedRowOfSharedLocalProject(
   if (
     owner.hostId ||
     owner.runtimeOwnerEnvironmentId?.trim() ||
-    resolveIndexedRepoOwner(state.repos, owner.repoId).kind !== 'ambiguous'
+    resolveIndexedRepoOwner(selectRepos(state), owner.repoId).kind !== 'ambiguous'
   ) {
     return false
   }
   let hasLocalRepoRow = false
   let hasRuntimeRepoRow = false
-  for (const repo of state.repos ?? []) {
+  for (const repo of selectRepos(state) ?? []) {
     if (repo.id !== owner.repoId) {
       continue
     }

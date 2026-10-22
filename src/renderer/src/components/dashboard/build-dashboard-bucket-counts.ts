@@ -21,7 +21,7 @@ import {
   type WorktreeAgentRowsCache
 } from './worktree-agent-rows-cache'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
-import { selectRepos } from '../../store/project-catalog-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 const EMPTY_COUNTS: Record<DashboardBucket, number> = {
   attention: 0,
@@ -80,7 +80,7 @@ function selectActiveDashboardWorkspaces(
     memo.repos === selectRepos(state) &&
     memo.worktreesByRepo === selectWorktreesByRepo(state) &&
     memo.folderWorkspaces === state.folderWorkspaces &&
-    memo.projectGroups === state.projectGroups
+    memo.projectGroups === selectProjectGroups(state)
   ) {
     return memo.workspaces
   }
@@ -90,7 +90,7 @@ function selectActiveDashboardWorkspaces(
       repos: selectRepos(state),
       worktreesByRepo: selectWorktreesByRepo(state),
       folderWorkspaces: state.folderWorkspaces,
-      projectGroups: state.projectGroups,
+      projectGroups: selectProjectGroups(state),
       workspaces
     }
   }

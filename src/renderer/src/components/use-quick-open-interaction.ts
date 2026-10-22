@@ -30,13 +30,13 @@ export function useQuickOpenInteraction(worktreeId: string | null): {
         state.activeWorktreeId !== previous.activeWorktreeId ||
         state.activeWorkspaceExecutionHostId !== previous.activeWorkspaceExecutionHostId ||
         ((state.settings !== previous.settings ||
-          selectRepos(state) !== previous.repos ||
+          selectRepos(state) !== selectRepos(previous) ||
           selectWorktreesByRepo(state) !== selectWorktreesByRepo(previous) ||
           selectDetectedWorktreesByRepo(state) !== selectDetectedWorktreesByRepo(previous) ||
           state.restoredRuntimeHostIdByWorkspaceSessionKey !==
             previous.restoredRuntimeHostIdByWorkspaceSessionKey ||
           selectFolderWorkspaces(state) !== selectFolderWorkspaces(previous) ||
-          selectProjectGroups(state) !== previous.projectGroups) &&
+          selectProjectGroups(state) !== selectProjectGroups(previous)) &&
           JSON.stringify(getFileExplorerOperationOwnerFromState(state, worktreeId)) !==
             JSON.stringify(getFileExplorerOperationOwnerFromState(previous, worktreeId)))
       ) {
