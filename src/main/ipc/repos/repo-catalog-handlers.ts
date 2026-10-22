@@ -10,6 +10,7 @@ import {
 import type { OrcaRuntimeService } from '../../runtime/orca-runtime'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { enrichRepoGitUsernames } from '../../repo-git-username-enrichment'
+import { onCatalogRecordsRead } from '../../runtime/sidebar-inputs/catalog-records-feed'
 import { enrichMissingRepoGitRemoteIdentities } from '../../repo-git-remote-identity-enrichment'
 import { invalidateAuthorizedRootsCache } from '../registered-worktree-roots-cache'
 import { notifyReposChanged } from './repos-changed-notification'
@@ -39,14 +40,9 @@ export function registerRepoCatalogHandlers(
       enrichMissingRepoGitRemoteIdentities(store, { onChanged: broadcastReposChanged })
       enrichRepoGitUsernames(store, { onChanged: broadcastReposChanged })
     }
-    enrich()
-    // Catalog writes are full saves; each enrichment reads only what is still missing.
+    // Why on each window catalog read: as repos:list did, so the git reads land when they did.
     detachEnrichment?.()
-    detachEnrichment = store.onStateWritten((domains) => {
-      if (domains === undefined) {
-        enrich()
-      }
-    })
+    detachEnrichment = onCatalogRecordsRead(enrich)
   }
 
   ipcMain.handle('repos:list', () => {

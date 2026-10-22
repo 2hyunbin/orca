@@ -6,7 +6,10 @@ import {
 } from '../../../shared/sidebar-list/catalog-records-feed-contract'
 import { watchProjectCatalogWrites, type CatalogWatchSources } from './catalog-watch'
 import { SidebarInputsFeed, type SidebarInputsFeedDomain } from './sidebar-inputs-feed'
-import { readSidebarCatalogRecords, type SidebarProjectCatalogStore } from './sidebar-project-catalog'
+import {
+  readSidebarCatalogRecords,
+  type SidebarProjectCatalogStore
+} from './sidebar-project-catalog'
 import type { SidebarInputsChangedEvent } from '../../../shared/sidebar-list/sidebar-inputs-feed-contract'
 import type { PairedServerRowsProducer } from './paired-server-rows-producer'
 
@@ -124,4 +127,17 @@ export function onCatalogRecordsChanged(
   const entry = entryOf(runtime)
   entry?.listeners.add(listener)
   return () => entry?.listeners.delete(listener)
+}
+
+// Process-wide: the desktop window is the catalog feed's only reader.
+const readListeners = new Set<() => void>()
+
+/** Runs on each read of the catalog feed, as repos:list ran for each window catalog fetch. */
+export function onCatalogRecordsRead(listener: () => void): () => void {
+  readListeners.add(listener)
+  return () => readListeners.delete(listener)
+}
+
+export function noteCatalogRecordsRead(): void {
+  readListeners.forEach((listener) => listener())
 }

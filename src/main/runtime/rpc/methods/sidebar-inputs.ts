@@ -9,7 +9,10 @@ import { SetCollapsedParams } from '../../../../shared/rpc-contract/workspace-vi
 import { setCollapsedSection } from '../../workspace-view-collapse-writes'
 import { ClientWorkspaceViewParams } from '../../../../shared/rpc-contract/client-workspace-view-params'
 import { PairedServerCatalogRefreshParams } from '../../../../shared/rpc-contract/paired-server-catalog-refresh-params'
-import { catalogRecordsFeedOf } from '../../sidebar-inputs/catalog-records-feed'
+import {
+  catalogRecordsFeedOf,
+  noteCatalogRecordsRead
+} from '../../sidebar-inputs/catalog-records-feed'
 
 // Registered only with ORCA_SIDEBAR_INPUTS=main, so the producers below always exist.
 
@@ -113,6 +116,7 @@ export const SIDEBAR_INPUT_METHODS = [
       if (context.signal?.aborted) {
         throw new Error('client_disconnected')
       }
+      noteCatalogRecordsRead()
       if (feed.acquire(connectionId)) {
         context.runtime.registerSubscriptionCleanup(
           `sidebar-catalog-feed-${connectionId}`,

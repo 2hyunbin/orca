@@ -60,6 +60,7 @@ import {
 import { installStoreListenerCensus } from './store-listener-census'
 import { installSettledSortEpoch } from './settled-sort-epoch'
 import { installProjectCatalogVersion } from './project-catalog-version'
+import { readMainProjectCatalog } from '@/lib/main-project-catalog'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
@@ -185,6 +186,7 @@ export {
 if ((import.meta.env.DEV || e2eConfig.exposeStore) && typeof window !== 'undefined') {
   const testWindow = window as unknown as Record<string, unknown>
   testWindow.__store = useAppStore
+  testWindow.__mainProjectCatalog = readMainProjectCatalog
   if (e2eConfig.exposeStore) {
     testWindow.__webRuntimeSessionE2E = {
       createTerminal: async (args: Parameters<typeof createWebRuntimeSessionTerminal>[0]) =>
