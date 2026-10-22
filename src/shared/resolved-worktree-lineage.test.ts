@@ -59,7 +59,12 @@ function publish(
   knownPeers: readonly Worktree[] = []
 ) {
   return projectWorktreeLineageWithHostPeers(
-    { getAllWorktreeLineage: () => edges, getRepos: () => [], getAllWorktreeMeta: () => ({}) },
+    {
+      getAllWorktreeLineage: () => edges,
+      getRepos: () => [],
+      getAllWorktreeMeta: () => ({}),
+      getWorktreeMeta: () => undefined
+    },
     { id: 'repo', path: 'workspace', displayName: 'repo', badgeColor: 'blue', addedAt: 1 },
     [...worktrees, ...knownPeers]
   )
