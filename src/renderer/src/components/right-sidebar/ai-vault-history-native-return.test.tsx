@@ -5,6 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
+import { createCompatibleRuntimeStatusResponse } from '@/runtime/runtime-compatibility-test-fixture'
+import { createGlobalSettingsFixture } from '../../../../shared/global-settings-test-fixture'
 import {
   refreshLocalRuntimeCapabilities,
   setLocalRuntimeCapabilitiesForTests
@@ -17,7 +19,7 @@ import { useAiVaultSessionLaunchActions } from './ai-vault-session-launch-action
 
 const mocks = vi.hoisted(() => ({
   probe: vi.fn<() => Promise<boolean>>(),
-  owner: vi.fn(() => 'local'),
+  owner: vi.fn<() => string | null>(() => 'local'),
   newChat: vi.fn(),
   fork: vi.fn(),
   startOwner: vi.fn(async () => false),
@@ -98,7 +100,7 @@ function History({ session }: { session: AiVaultSession }) {
     allWorktrees: [],
     workspaceId: 'workspace',
     resumeTargetState: targetState,
-    settings: { ...state.settings, experimentalNativeChat: true }
+    settings: createGlobalSettingsFixture({ ...state.settings, experimentalNativeChat: true })
   })
   const actions = useAiVaultSessionLaunchActions({
     activeWorktree: null,
@@ -162,14 +164,20 @@ beforeEach(async () => {
 })
 afterEach(cleanup)
 
+function pairedHistoryStatus() {
+  const response = createCompatibleRuntimeStatusResponse('paired')
+  if (!response.ok) {
+    throw new Error('Expected status fixture')
+  }
+  return { status: { ...response.result, capabilities: [HISTORY] }, checkedAt: 1 }
+}
+
 it.each(['local', 'runtime:paired'] as const)(
   'composes the owned %s row/details/menu and refreshes unknown capability',
   async (host) => {
     mocks.owner.mockReturnValue(host)
     useAppStore.setState({
-      runtimeStatusByEnvironmentId: new Map([
-        ['paired', { status: { capabilities: [HISTORY] }, checkedAt: 1 }]
-      ])
+      runtimeStatusByEnvironmentId: new Map([['paired', pairedHistoryStatus()]])
     })
     let answer = (_value: boolean) => {}
     mocks.probe.mockImplementationOnce(
@@ -206,9 +214,7 @@ it.each(['local', 'runtime:paired'] as const)(
 it('routes a capable paired unowned row with a matching terminal through the same return', async () => {
   mocks.owner.mockReturnValue('runtime:paired')
   useAppStore.setState({
-    runtimeStatusByEnvironmentId: new Map([
-      ['paired', { status: { capabilities: [HISTORY] }, checkedAt: 1 }]
-    ])
+    runtimeStatusByEnvironmentId: new Map([['paired', pairedHistoryStatus()]])
   })
   const session = {
     ...row,

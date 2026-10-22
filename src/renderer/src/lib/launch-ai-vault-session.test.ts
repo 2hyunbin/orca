@@ -15,13 +15,14 @@ const runtimeMocks = vi.hoisted(() => ({
   isWebRuntimeSessionActive: vi.fn(() => false)
 }))
 
+const unifiedTabsByWorktree: Record<string, { id: string; groupId: string }[]> = {}
 const mockState = {
   createTab: mockCreateTab,
   createEmptySplitGroup: mockCreateEmptySplitGroup,
   closeEmptyGroup: mockCloseEmptyGroup,
   setActiveTabType: mockSetActiveTabType,
   setTabBarOrder: mockSetTabBarOrder,
-  unifiedTabsByWorktree: {} as Record<string, { id: string; groupId: string }[]>,
+  unifiedTabsByWorktree,
   tabsByWorktree: {} as Record<string, { id: string }[]>,
   openFiles: [] as { id: string; worktreeId: string }[],
   browserTabsByWorktree: {} as Record<string, { id: string }[]>,

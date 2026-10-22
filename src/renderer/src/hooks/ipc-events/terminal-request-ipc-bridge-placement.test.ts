@@ -128,6 +128,7 @@ it('uses the source group while another group is active and keeps the slot after
           worktree: WT,
           publicationEpoch: 'headless:bridge-test',
           snapshotVersion: 1,
+          activeGroupId: right,
           activeTabId: null,
           activeTabType: null,
           tabs: []

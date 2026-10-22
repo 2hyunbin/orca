@@ -54,7 +54,8 @@ export async function startStructuredAgentSessionForSwitch(
     if (!selection.ok || !selection.child) {
       return selection.ok ? operationDidNotRun() : selection
     }
-    ;({ child, readiness } = selection)
+    child = selection.child
+    readiness = selection.readiness
   }
   const outcome = (await readiness?.wait(STRUCTURED_AGENT_SESSION_START_WAIT_MS)) ?? 'ready'
   const awaited = child

@@ -47,6 +47,7 @@ const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>(async ({ fence, 
 const open = vi.fn<StructuredAgentSessionAdapter['open']>(async () => ({
   reportedOptions: { model: '' }
 }))
+const closeSession = vi.fn<NonNullable<StructuredAgentSessionAdapter['closeSession']>>()
 const assertNoTerminalWriter = vi.fn(async () => {
   if (terminalWriting) {
     throw agentSessionRefusalError('agent_session_conflict', {
@@ -61,6 +62,7 @@ beforeEach(async () => {
   terminalWriting = false
   acquire.mockClear()
   open.mockClear()
+  closeSession.mockReset().mockResolvedValue(true)
   assertNoTerminalWriter.mockClear()
   store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
@@ -73,7 +75,7 @@ beforeEach(async () => {
         state: 'accepted' as const,
         providerIdentity: { provider: 'codex' as const, threadId: THREAD, turnId: 't', ordinal: 1 }
       })),
-      closeSession: vi.fn(async () => true),
+      closeSession,
       releaseAcquisition: vi.fn(async () => true),
       cancelTurn: vi.fn(async () => ({ cancelled: false })),
       answerPrompt: vi.fn(async () => undefined),
@@ -151,7 +153,6 @@ it('refuses the chat agent start while a terminal writes its conversation, once 
 // The switch is idle-only and proves the stop; subsequent sends use ordinary G-acquire.
 it('switches an idle chat to its terminal and a racing send starts no second writer', async () => {
   const order: string[] = []
-  const closeSession = vi.mocked(host.deps.adapter.closeSession)
   closeSession.mockImplementation(async () => {
     order.push('stop')
     return true
@@ -240,12 +241,12 @@ it('retires only after an explicit admitted launch without stopping a later nati
   }
   expect(await host.switchToChat(SESSION)).toEqual({ ok: true })
   const laterChild = host.collaboratorsForTests().sessions.get(SESSION)?.child
-  const closes = vi.mocked(host.deps.adapter.closeSession).mock.calls.length
+  const closes = closeSession.mock.calls.length
   await retireChatForAdmittedTerminalLaunch(runtime, args, { savedResumeDecision: decision })
   expect(store.getVisibleSessionTabIndex()?.sessionIds).not.toContain(SESSION)
   expect(runtime.retireStructuredAgentSessionTabFromSnapshot).toHaveBeenCalledWith(SESSION)
   expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBe(laterChild)
-  expect(host.deps.adapter.closeSession).toHaveBeenCalledTimes(closes)
+  expect(closeSession).toHaveBeenCalledTimes(closes)
 })
 
 it.each(['ready', 'failed', 'closed', 'replaced'] as const)(

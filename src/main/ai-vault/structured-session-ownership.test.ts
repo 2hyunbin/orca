@@ -9,6 +9,7 @@ import {
   projectStructuredAiVaultSessions
 } from './structured-session-ownership'
 import type { AiVaultSearchHit, AiVaultSearchResponse } from '../../shared/ai-vault-search-types'
+import type { AiVaultPrepareSessionResumeArgs } from '../../shared/ai-vault-resume-preparation'
 import {
   codexChatHolding,
   installChats,
@@ -117,8 +118,8 @@ describe('structured AI Vault ownership', () => {
       return projectStructuredAiVaultSessions(listResult(), OPENS_EVERY_STRUCTURED_CHAT).sessions[0]
         ?.structuredSession?.sessionId
     }
-    const resume = {
-      agent: 'codex' as const,
+    const resume: AiVaultPrepareSessionResumeArgs = {
+      agent: 'codex',
       filePath: `/sessions/rollout-${PROVIDER_SESSION}.jsonl`,
       codexHome: null,
       executionHostId: 'local'

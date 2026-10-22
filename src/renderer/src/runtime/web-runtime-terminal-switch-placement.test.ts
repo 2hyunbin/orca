@@ -2,6 +2,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
+import { createGlobalSettingsFixture } from '../../../shared/global-settings-test-fixture'
 import { createWebRuntimeSessionTerminalResult } from './web-runtime-terminal-create-operation'
 import { refreshWebRuntimeSessionTabsSnapshot } from './web-runtime-session-snapshot'
 import { applyWebSessionTabsSnapshot } from './web-session-tabs-sync/snapshot-api'
@@ -25,7 +26,10 @@ beforeEach(() => {
   useAppStore.setState({
     activeWorktreeId: WT,
     activeWorkspaceExecutionHostId: `runtime:${ENV}`,
-    settings: { ...useAppStore.getState().settings, activeRuntimeEnvironmentId: ENV }
+    settings: createGlobalSettingsFixture({
+      ...useAppStore.getState().settings,
+      activeRuntimeEnvironmentId: ENV
+    })
   })
   frame = {
     worktree: WT,
