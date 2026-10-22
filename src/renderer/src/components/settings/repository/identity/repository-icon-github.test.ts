@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Repo } from '../../../../shared/repo-types'
-import { githubAvatarIcon } from '../../../../shared/repo-icon'
+import type { Repo } from '../../../../../../shared/repo-types'
+import { githubAvatarIcon } from '../../../../../../shared/repo-icon'
 import {
   buildRepositoryGitHubAvatarUpdate,
   resolveRepositoryGitHubAvatar

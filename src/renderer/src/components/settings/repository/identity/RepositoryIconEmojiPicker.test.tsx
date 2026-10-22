@@ -3,7 +3,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppState } from '@/store'
+import type { AppState } from '@/store/types'
 import { RepositoryIconEmojiPicker } from './RepositoryIconEmojiPicker'
 
 const toastMocks = vi.hoisted(() => ({
@@ -19,7 +19,7 @@ const storeMocks = vi.hoisted(() => ({
   state: { settings: { theme: 'light' } } as Partial<AppState>
 }))
 
-vi.mock('@/store', () => ({
+vi.mock('@/store/index', () => ({
   useAppStore: (selector: (state: Partial<AppState>) => unknown) => selector(storeMocks.state)
 }))
 

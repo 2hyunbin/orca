@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { Repo } from '../../../../shared/repo-types'
+import type { Repo } from '../../../../../../shared/repo-types'
 import { RepositoryForkSyncSection } from './RepositoryForkSyncSection'
 
 const syncRuntimeGitForkDefaultBranch = vi.fn()
 
-vi.mock('../../runtime/runtime-git-sync-client', () => ({
+vi.mock('../../../../runtime/runtime-git-sync-client', () => ({
   syncRuntimeGitForkDefaultBranch: (...args: unknown[]) => syncRuntimeGitForkDefaultBranch(...args)
 }))
 
-vi.mock('../../store', () => ({
+vi.mock('@/store/index', () => ({
   useAppStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({ settingsSearchQuery: '', settings: { activeRuntimeEnvironmentId: 'env-1' } })
 }))

@@ -1,8 +1,8 @@
 import { toast } from 'sonner'
 import EmojiPicker, { EmojiStyle, Theme, type EmojiClickData } from 'emoji-picker-react'
-import type { RepoIcon } from '../../../../shared/repo-icon'
-import { sanitizeRepoIcon } from '../../../../shared/repo-icon'
-import { useAppStore } from '../../store'
+import type { RepoIcon } from '../../../../../../shared/repo-icon'
+import { sanitizeRepoIcon } from '../../../../../../shared/repo-icon'
+import { useAppStore } from '@/store/index'
 import { useSystemPrefersDark } from '@/components/terminal-pane/use-system-prefers-dark'
 import { translate } from '@/i18n/i18n'
 

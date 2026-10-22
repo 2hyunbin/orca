@@ -1,12 +1,12 @@
-import type { GhAccountBinding } from '../../../../shared/github/account-binding'
-import type { Repo } from '../../../../shared/repo-types'
+import type { GhAccountBinding } from '../../../../../../shared/github/account-binding'
+import type { Repo } from '../../../../../../shared/repo-types'
 import type {
   GhAccountBindingInventory,
   GhAccountBindingValidationResult
-} from '../../../../shared/github/auth-types'
-import { ghAccountBindingsEqual } from '../../../../shared/github/account-binding'
+} from '../../../../../../shared/github/auth-types'
+import { ghAccountBindingsEqual } from '../../../../../../shared/github/account-binding'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
 
 const LOCAL_GH_ACCOUNT_IPC_TIMEOUT_MS = 30_000
 
