@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const groupsByWorktree: Record<string, { id: string; tabOrder: string[] }[]> = {}
-  const unifiedTabsByWorktree: Record<string, { id: string; entityId: string }[]> = {}
   const noted: string[][] = []
   return {
-    state: { groupsByWorktree, unifiedTabsByWorktree },
+    state: { groupsByWorktree },
     frameDrawn: true,
+    routed: true,
     supported: true,
-    created: new Set<string>(),
+    /** Tabs the server's frames hold, by desktop id → server id. */
+    serverIds: new Map<string, string>(),
     noted
   }
 })
@@ -20,9 +21,11 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
 vi.mock('@/runtime/web-session-tabs-sync/frame-drawn-server-workspaces', () => ({
   isFrameDrawnServerWorkspace: () => mocks.frameDrawn
 }))
+vi.mock('@/runtime/server-layout-apply-routes', () => ({
+  serverLayoutApplyRoute: () =>
+    mocks.routed ? { serverTabId: (id: string) => mocks.serverIds.get(id) ?? null } : null
+}))
 vi.mock('./desktop-created-server-tabs', () => ({
-  isDesktopCreatedServerTab: (_tabs: unknown, _workspace: string, id: string) =>
-    mocks.created.has(id),
   noteDesktopCreatedServerTab: (...args: string[]) => mocks.noted.push(args)
 }))
 
@@ -54,23 +57,39 @@ describe('a chat opened in a frame-drawn server workspace (L270)', () => {
   beforeEach(() => {
     mocks.frameDrawn = true
     mocks.supported = true
-    mocks.created = new Set()
+    mocks.routed = true
+    mocks.serverIds = new Map([
+      ['web-terminal-pty-1', 'host-tab-1'],
+      ['editor-1', 'editor-1'],
+      ['editor-2', 'editor-2']
+    ])
     mocks.noted = []
     mocks.state.groupsByWorktree = {
       wt: [
-        { id: 'g-1', tabOrder: ['terminal-surface:pty-1'] },
+        { id: 'g-1', tabOrder: ['editor-0'] },
         { id: 'g-2', tabOrder: ['editor-1', 'sim-1', TAB, 'editor-2'] }
       ]
     }
-    mocks.state.unifiedTabsByWorktree = { wt: [] }
   })
 
-  it("names the tab's group and the server tab before it, skipping this desktop's own tabs", async () => {
-    mocks.created.add('sim-1')
+  it("names the tab's group and the server tab before it, skipping tabs the server lacks", async () => {
     await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toEqual({
       ...params,
       tabPlacement: { groupId: 'g-2', afterTabId: 'editor-1' }
     })
+  })
+
+  it("names the server's id for a terminal tab before the chat", async () => {
+    mocks.state.groupsByWorktree.wt[1].tabOrder = ['web-terminal-pty-1', TAB]
+    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toEqual({
+      ...params,
+      tabPlacement: { groupId: 'g-2', afterTabId: 'host-tab-1' }
+    })
+  })
+
+  it('sends no place while the server takes no layout intents for the workspace', async () => {
+    mocks.routed = false
+    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toBe(intent.params)
   })
 
   it('names the group alone when no server tab comes before the chat', async () => {

@@ -8,12 +8,9 @@ import { AGENT_SESSION_CREATE_TAB_PLACEMENT_RUNTIME_CAPABILITY } from '../../../
 import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
 import { useAppStore } from '@/store'
 import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
-import { serverTabIdOf } from '@/runtime/server-layout-frame-ids'
+import { serverLayoutApplyRoute } from '@/runtime/server-layout-apply-routes'
 import { isFrameDrawnServerWorkspace } from '@/runtime/web-session-tabs-sync/frame-drawn-server-workspaces'
-import {
-  isDesktopCreatedServerTab,
-  noteDesktopCreatedServerTab
-} from './desktop-created-server-tabs'
+import { noteDesktopCreatedServerTab } from './desktop-created-server-tabs'
 
 function frameDrawnEnvironment(
   target: RuntimeClientTarget | null,
@@ -39,18 +36,24 @@ export function holdFrameDrawnProvisionalChatTab(
 
 type TabPlacement = NonNullable<StructuredAgentSessionCreateParams['tabPlacement']>
 
-/** The chat tab's group, and the server tab before it there; this desktop's own tabs are skipped. */
-function chatTabPlacement(worktreeId: string, tabId: string): TabPlacement | undefined {
-  const state = useAppStore.getState()
-  const group = state.groupsByWorktree[worktreeId]?.find((entry) => entry.tabOrder.includes(tabId))
-  if (!group) {
+/** The chat tab's group, and the server tab before it there; tabs the server lacks are skipped. */
+function chatTabPlacement(
+  environmentId: string,
+  worktreeId: string,
+  tabId: string
+): TabPlacement | undefined {
+  const route = serverLayoutApplyRoute(environmentId, worktreeId)
+  const group = useAppStore
+    .getState()
+    .groupsByWorktree[worktreeId]?.find((entry) => entry.tabOrder.includes(tabId))
+  if (!route || !group) {
     return undefined
   }
-  const tabs = state.unifiedTabsByWorktree[worktreeId]
   const afterTabId = group.tabOrder
     .slice(0, group.tabOrder.indexOf(tabId))
-    .findLast((id) => !isDesktopCreatedServerTab(tabs, worktreeId, id))
-  return { groupId: group.id, ...(afterTabId ? { afterTabId: serverTabIdOf(afterTabId) } : {}) }
+    .map((id) => route.serverTabId(id))
+    .findLast((id) => id !== null)
+  return { groupId: group.id, ...(afterTabId ? { afterTabId } : {}) }
 }
 
 /** The create's params, with the tab's place when the host takes one. Read as the create is sent. */
@@ -74,7 +77,11 @@ export async function withFrameDrawnChatTabPlacement(intent: {
     // Unknown capability: an older host refuses the field.
   }
   const tabPlacement = supported
-    ? chatTabPlacement(intent.worktreeId, structuredAgentSessionTabId(intent.sessionId))
+    ? chatTabPlacement(
+        environmentId,
+        intent.worktreeId,
+        structuredAgentSessionTabId(intent.sessionId)
+      )
     : undefined
   return tabPlacement ? { ...intent.params, tabPlacement } : intent.params
 }
