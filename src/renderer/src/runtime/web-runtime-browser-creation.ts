@@ -136,10 +136,14 @@ export async function createWebRuntimeSessionBrowserTab(
     // unreconciled-cleanup path has always accepted, so no sweep is added for it.
     // Why: in a frame-drawn workspace the frames replace the staged rows with their own tab for
     // the page; that is the create landing, not the user's close (L284).
+    // Their tab gets no handle until its pane mounts, so the handover alone is the create landing.
+    const handedToFrames = (): boolean =>
+      stagedWorkspaceId !== undefined &&
+      wasStagedBrowserTabHandedToFrames(stagedWorkspaceId, created.browserPageId)
     const stagedClosedByUser = (): boolean =>
       context.staged !== null &&
       !isStagedWebRuntimeBrowserTabLive(context.staged, args.worktreeId) &&
-      !wasStagedBrowserTabHandedToFrames(context.staged.workspaceId, created.browserPageId)
+      !handedToFrames()
     if (stagedClosedByUser()) {
       throw new StagedWebRuntimeBrowserTabCancelledError()
     }
@@ -160,6 +164,7 @@ export async function createWebRuntimeSessionBrowserTab(
       })
     } catch (error) {
       if (
+        !handedToFrames() &&
         !hasMaterializedWebRuntimeBrowserPage(
           useAppStore.getState(),
           environmentId,
@@ -172,19 +177,22 @@ export async function createWebRuntimeSessionBrowserTab(
       }
     }
     const expectedGroupId = resolveExpectedGroupId()
-    let materialized = hasMaterializedWebRuntimeBrowserPage(
-      useAppStore.getState(),
-      environmentId,
-      args.worktreeId,
-      created.browserPageId,
-      expectedGroupId
-    )
+    let materialized =
+      handedToFrames() ||
+      hasMaterializedWebRuntimeBrowserPage(
+        useAppStore.getState(),
+        environmentId,
+        args.worktreeId,
+        created.browserPageId,
+        expectedGroupId
+      )
     if (!materialized) {
       materialized = await waitForWebRuntimeBrowserPageMaterialization({
         environmentId,
         worktreeId: args.worktreeId,
         remotePageId: created.browserPageId,
-        ...(expectedGroupId ? { expectedGroupId } : {})
+        ...(expectedGroupId ? { expectedGroupId } : {}),
+        handedToFrames
       })
     }
     if (!materialized && expectedGroupId) {

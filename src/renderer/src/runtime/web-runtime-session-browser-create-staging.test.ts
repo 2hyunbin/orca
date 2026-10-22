@@ -489,6 +489,24 @@ describe('createWebRuntimeSessionBrowserTab optimistic staging', () => {
       expect(wasStagedBrowserTabHandedToFrames('staged-workspace-1', 'host-page-1')).toBe(false)
     })
 
+    it('completes when the drawn tab has no handle yet, its pane not mounted', async () => {
+      await useRealMaterialization()
+      const runtimeCall = createAnswering(() => {
+        closeStagedWorkspace('staged-workspace-1')
+        noteStagedBrowserTabHandedToFrames('staged-workspace-1', 'host-page-1')
+      })
+      stubBrowserCreateRuntimeEnvironmentBridge(runtimeCall)
+
+      await expect(
+        createWebRuntimeSessionBrowserTab({
+          worktreeId: WORKTREE_ID,
+          environmentId: ENVIRONMENT_ID
+        })
+      ).resolves.toBe(true)
+
+      expect(closedHostPages(runtimeCall)).toEqual([])
+    })
+
     it('still cancels a staged tab the user closed before the frames drew the page', async () => {
       await useRealMaterialization()
       const runtimeCall = createAnswering(
@@ -537,23 +555,15 @@ describe('createWebRuntimeSessionBrowserTab optimistic staging', () => {
         forgetHostPage('host-workspace-9', 'host-page-1')
       })
       stubBrowserCreateRuntimeEnvironmentBridge(runtimeCall)
-      vi.useFakeTimers()
-      try {
-        const created = createWebRuntimeSessionBrowserTab({
+      await expect(
+        createWebRuntimeSessionBrowserTab({
           worktreeId: WORKTREE_ID,
           environmentId: ENVIRONMENT_ID
         })
-        await vi.advanceTimersByTimeAsync(10_000)
-        await expect(created).resolves.toBe(false)
-      } finally {
-        vi.useRealTimers()
-      }
+      ).resolves.toBe(true)
 
-      // Not read as a staged-tab cancel: no close before the materialization wait ran out.
-      expect(calledMethods(runtimeCall).slice(0, 2)).toEqual([
-        'browser.tabCreate',
-        'session.tabs.list'
-      ])
+      // Not read as a staged-tab cancel: the create sends no close of its own.
+      expect(closedHostPages(runtimeCall)).toEqual([])
     })
   })
 
