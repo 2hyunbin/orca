@@ -102,7 +102,7 @@ export function OrchestrationSkillAgentCoverage(props: {
     kind: 'local'
   })
   const loading = skillsLoading || agentsLoading || detectedIds === null
-  const missing = new Set(
+  const missing = new Set<string>(
     props.plan?.skills.flatMap((skill) =>
       skill.ops.flatMap((op) => (op.observed.kind === 'absent' ? op.agents : []))
     )

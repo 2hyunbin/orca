@@ -184,7 +184,9 @@ function BundledAgentSkillSetupPanel({
           </>
         ) : (
           <div className="flex items-center gap-4">
-            {leading}
+            {typeof leading === 'function'
+              ? leading(effectivelyInstalled && action.kind === 'none' && !failed)
+              : leading}
             {icon ? (
               <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-foreground">
                 {icon}
@@ -264,6 +266,9 @@ export function AgentSkillSetupPanel(props: AgentSkillSetupPanelProps): React.JS
     return (
       <WslAgentSkillSetupPanel
         {...props}
+        leading={
+          typeof props.leading === 'function' ? props.leading(props.installed) : props.leading
+        }
         footer={typeof props.footer === 'function' ? props.footer(undefined) : props.footer}
         command={buildSkillCommandForRuntime(
           buildAgentFeatureSkillInstallCommand(props.skillNames),

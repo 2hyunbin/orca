@@ -13,6 +13,7 @@ import {
   type BundledSkillSetupChanges
 } from './bundled-skill-setup-copy'
 import { translate } from '@/i18n/i18n'
+import { dirname } from '@/lib/path'
 
 const RESULT_HEADLINE_ORDER: readonly BundledSkillOutcomeText[] = [
   'Needs attention',
@@ -33,7 +34,7 @@ export function bundledSkillSetupAttentionMessage(plan: BundledSkillPlan): strin
       return translate(
         'auto.components.settings.bundledSkillSetupCopy.attentionUnwritable',
         "Needs attention · Orca can't write to {{folder}}",
-        { folder: collapseHomePath(blocked.path, plan.homeDirectory) }
+        { folder: collapseHomePath(dirname(blocked.path), plan.homeDirectory) }
       )
     case 'busy':
       return translate(

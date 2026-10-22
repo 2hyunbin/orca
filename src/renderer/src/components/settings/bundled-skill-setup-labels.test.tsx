@@ -212,10 +212,8 @@ it.each([
     />
   )
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Install', exact: true }).hasAttribute('disabled')
-    ).toBe(false)
+    expect(screen.getByRole('button', { name: 'Install' }).hasAttribute('disabled')).toBe(false)
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Install', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'Install' }))
   expect(await screen.findByText(result, { exact: true })).toBeDefined()
 })

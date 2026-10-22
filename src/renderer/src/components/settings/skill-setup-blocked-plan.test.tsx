@@ -226,7 +226,7 @@ for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {
         expect(
           screen.getByText(
             reason === 'unwritable'
-              ? `Needs attention · Orca can't write to ~/.agents/skills/${name}`
+              ? "Needs attention · Orca can't write to ~/.agents/skills"
               : 'Needs attention · Another skill install is still finishing here'
           )
         ).toBeDefined()

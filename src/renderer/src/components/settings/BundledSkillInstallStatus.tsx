@@ -48,7 +48,7 @@ export function BundledSkillInstallStatus(props: {
   const message =
     state.kind === 'failed' ? state.message : skillInstallResultLine(state.summary, state.changes)
   return (
-    <div className={cn('flex flex-wrap items-start gap-2', props.className)}>
+    <div className={cn('flex flex-wrap items-baseline gap-2', props.className)}>
       <p
         className={cn(
           'min-w-0 flex-1 whitespace-pre-line text-xs leading-snug',

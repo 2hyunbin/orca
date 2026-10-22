@@ -92,7 +92,7 @@ describe('setup result details', () => {
 
 describe('setup attention details', () => {
   it.each([
-    ['unwritable', "Needs attention · Orca can't write to ~/.claude/skills/orca-cli"],
+    ['unwritable', "Needs attention · Orca can't write to ~/.claude/skills"],
     ['busy', 'Needs attention · Another skill install is still finishing here'],
     ['unreadable', "Needs attention · Orca can't read every file in this copy"],
     ['edited', 'Needs attention · You edited this copy'],
@@ -114,7 +114,7 @@ describe('setup attention details', () => {
     ])
     plan.homeDirectory = 'c:\\users\\agent'
     expect(bundledSkillSetupAttentionMessage(plan)).toBe(
-      "Needs attention · Orca can't write to ~\\.claude\\skills\\orca-cli"
+      "Needs attention · Orca can't write to ~\\.claude\\skills"
     )
   })
 

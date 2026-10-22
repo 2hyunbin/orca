@@ -12,6 +12,10 @@ type Props = {
   onRecheck: () => void | Promise<unknown>
 }
 
+function browserSkillStepBadge(complete: boolean): React.JSX.Element {
+  return <StepBadge index={1} state={complete ? 'done' : 'pending'} />
+}
+
 export function BrowserUseSkillStep({
   skillDetected,
   skillLoading,
@@ -36,7 +40,7 @@ export function BrowserUseSkillStep({
       loading={skillLoading}
       error={skillError}
       installDisabled={disabled}
-      leading={<StepBadge index={1} state={skillDetected ? 'done' : 'pending'} />}
+      leading={browserSkillStepBadge}
       onBeforeInstall={onBeforeInstall}
       onRecheck={onRecheck}
     />

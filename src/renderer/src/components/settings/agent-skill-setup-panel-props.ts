@@ -19,7 +19,7 @@ export type AgentSkillSetupPanelProps = {
   loading: boolean
   error: string | null
   installDisabled?: boolean
-  leading?: ReactNode
+  leading?: ReactNode | ((complete: boolean) => ReactNode)
   icon?: ReactNode
   variant?: AgentSkillSetupPanelVariant
   className?: string
