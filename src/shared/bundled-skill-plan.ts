@@ -22,6 +22,7 @@ export const BUNDLED_SKILL_LEAVE_REASONS = Object.freeze([
   'edited',
   'other',
   'unwritable',
+  'unreadable',
   'busy',
   'shared-not-current'
 ] as const)

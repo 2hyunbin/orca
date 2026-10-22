@@ -40,6 +40,7 @@ export const BUNDLED_SKILL_LEAVE_REASON_TEXT: Readonly<Record<BundledSkillLeaveR
   edited: "You've changed this copy",
   other: 'A different skill already uses this name',
   unwritable: "Orca can't write to this folder",
+  unreadable: "Orca can't read all of this copy",
   busy: 'Another skill install is still finishing here',
   'shared-not-current': 'The shared copy this folder uses is not Orca\u2019s'
 }
