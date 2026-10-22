@@ -1,6 +1,5 @@
 import { Import } from 'lucide-react'
 import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-skill-names'
-import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { useMobileEmulatorAgentSetupState } from '../emulator-pane/use-mobile-emulator-agent-setup-state'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 import { MobileEmulatorExamples } from './MobileEmulatorExamples'
@@ -15,7 +14,7 @@ const EMULATOR_CLI_COMMANDS = [
 
 export function MobileEmulatorAgentControlRow(): React.JSX.Element {
   const setup = useMobileEmulatorAgentSetupState(true)
-  const activeSkillRuntime = useActiveProjectSkillRuntime()
+  const activeSkillRuntime = setup.skillRuntime
 
   return (
     <div className="rounded-2xl border border-border/60 bg-card/30 p-4">
@@ -48,8 +47,9 @@ export function MobileEmulatorAgentControlRow(): React.JSX.Element {
               'auto.components.settings.MobileEmulatorAgentControlRow.d94ca6a623',
               'Enables agents to use Orca CLI commands, including mobile emulator control.'
             )}
-            // Why no agentRuntime: detection here scans the host, so a WSL install would land unseen.
             skillNames={[ORCA_CLI_SKILL_NAME]}
+            target={activeSkillRuntime.bundledSkillTarget}
+            terminalRuntime={activeSkillRuntime.agentRuntime}
             installed={setup.cliSkillInstalled}
             loading={setup.cliSkillLoading}
             error={setup.cliSkillError}

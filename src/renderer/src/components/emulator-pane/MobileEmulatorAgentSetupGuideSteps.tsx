@@ -34,7 +34,8 @@ export function MobileEmulatorAgentSetupGuideSteps({
           'Teaches agents the orca emulator commands for this worktree.'
         )}
         skillNames={[ORCA_CLI_SKILL_NAME]}
-        target={setup.skillTarget}
+        target={setup.skillRuntime.bundledSkillTarget}
+        terminalRuntime={setup.skillRuntime.agentRuntime}
         installed={setup.cliSkillInstalled}
         loading={setup.cliSkillLoading || setup.setupRechecking}
         error={setup.cliSkillError}

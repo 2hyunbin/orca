@@ -1,4 +1,3 @@
-import { useActiveSkillDiscoveryRuntimeTarget } from '@/hooks/use-active-skill-discovery-runtime-target'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { FolderOpen, RefreshCw } from 'lucide-react'
@@ -74,11 +73,13 @@ export function CliSection({
       getSelectedAgentRuntime(settings, wslSupportedPlatform, wslAvailable, wslCapabilitiesLoading),
     [settings, wslAvailable, wslCapabilitiesLoading, wslSupportedPlatform]
   )
-  const runtimeTarget = useActiveSkillDiscoveryRuntimeTarget()
-  const cliSkillTarget = agentRuntime.runtime === 'wsl' ? null : runtimeTarget
   const cliSkillFreshnessName = useLocalCliSkillFreshnessName(agentRuntime)
-  const cliSkillDiscoveryTarget = useMemo(
-    () => getSkillDiscoveryTargetForRuntime(agentRuntime),
+  const skillRuntime = useMemo(
+    () => ({
+      discoveryTarget: getSkillDiscoveryTargetForRuntime(agentRuntime),
+      discoveryRuntimeTarget: { kind: 'local' } as const,
+      bundledSkillTarget: agentRuntime.runtime === 'wsl' ? null : ({ kind: 'local' } as const)
+    }),
     [agentRuntime]
   )
   const {
@@ -87,8 +88,8 @@ export function CliSection({
     error: cliSkillError,
     refresh: refreshCliSkill
   } = useInstalledAgentSkill(ORCA_CLI_SKILL_NAME, {
-    discoveryTarget: cliSkillDiscoveryTarget,
-    runtimeTarget,
+    discoveryTarget: skillRuntime.discoveryTarget,
+    runtimeTarget: skillRuntime.discoveryRuntimeTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
   const handleStatusChange = useCallback(
@@ -313,7 +314,7 @@ export function CliSection({
                 'Enables agents to use Orca workspace, terminal, and progress commands.'
               )}
               skillNames={[ORCA_CLI_SKILL_NAME]}
-              target={cliSkillTarget}
+              target={skillRuntime.bundledSkillTarget}
               // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
               terminalRuntime={agentRuntime}
               installed={cliSkillDetected}

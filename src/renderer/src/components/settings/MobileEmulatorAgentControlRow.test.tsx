@@ -29,7 +29,11 @@ vi.mock('../emulator-pane/use-mobile-emulator-agent-setup-state', () => ({
     refreshCliSkill: vi.fn(),
     setupComplete: true,
     setupRechecking: false,
-    statusReady: true
+    statusReady: true,
+    skillRuntime: {
+      canUseSkillFreshness: mocks.canUseSkillFreshness,
+      bundledSkillTarget: { kind: 'local' }
+    }
   })
 }))
 

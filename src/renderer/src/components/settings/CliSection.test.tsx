@@ -18,10 +18,12 @@ type CapturedPanelProps = {
 const capturedPanel = vi.hoisted(
   (): {
     canUseSkillFreshness: boolean
+    transportTarget: { kind: 'local' } | { kind: 'environment'; environmentId: string } | null
     props: CapturedPanelProps | null
     useInstalledAgentSkill: ReturnType<typeof vi.fn>
   } => ({
     canUseSkillFreshness: true,
+    transportTarget: { kind: 'local' },
     props: null,
     useInstalledAgentSkill: vi.fn()
   })
@@ -36,7 +38,7 @@ vi.mock('@/hooks/useInstalledAgentSkills', () => ({
 }))
 
 vi.mock('@/hooks/use-active-skill-discovery-runtime-target', () => ({
-  useActiveSkillDiscoveryRuntimeTarget: () => ({ kind: 'local' })
+  useActiveSkillDiscoveryRuntimeTarget: () => capturedPanel.transportTarget
 }))
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
@@ -56,6 +58,7 @@ capturedPanel.useInstalledAgentSkill.mockReturnValue({
 afterEach(() => {
   cleanup()
   capturedPanel.canUseSkillFreshness = true
+  capturedPanel.transportTarget = { kind: 'local' }
   toastError.mockReset()
   vi.unstubAllGlobals()
 })
@@ -80,6 +83,21 @@ vi.mock('./WslCliRegistration', () => ({
 }))
 
 describe('CliSection project runtime defaults', () => {
+  it.each([null, { kind: 'environment', environmentId: 'focused-remote' }] as const)(
+    'keeps explicit host setup local while the workspace transport is %j',
+    (transportTarget) => {
+      capturedPanel.transportTarget = transportTarget
+      renderToStaticMarkup(
+        <CliSection currentPlatform="darwin" settings={getDefaultSettings('/tmp')} />
+      )
+      expect(capturedPanel.useInstalledAgentSkill).toHaveBeenLastCalledWith(
+        'orca-cli',
+        expect.objectContaining({ runtimeTarget: { kind: 'local' }, discoveryTarget: undefined })
+      )
+      expect(capturedPanel.props?.target).toEqual({ kind: 'local' })
+      expect(capturedPanel.props?.terminalRuntime?.runtime).toBe('host')
+    }
+  )
   it('exposes freshness only for a resolved local host runtime', () => {
     const settings = getDefaultSettings('/tmp')
     renderToStaticMarkup(<CliSection currentPlatform="darwin" settings={settings} />)
