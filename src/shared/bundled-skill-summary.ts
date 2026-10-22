@@ -113,6 +113,25 @@ export function summarizeBundledSkillPlan(plan: BundledSkillPlan): BundledSkillP
   }
 }
 
+/**
+ * A setup screen's one button for a named-skill plan: run it when it would change something,
+ * offer Replace (backup kept) when only replaceable copies stand in the way, else nothing.
+ */
+export type BundledSkillInstallAction =
+  | { kind: 'run' }
+  | { kind: 'replace'; paths: string[] }
+  | { kind: 'none' }
+
+export function bundledSkillInstallAction(plan: BundledSkillPlan): BundledSkillInstallAction {
+  if (summarizeBundledSkillPlan(plan).hasWork) {
+    return { kind: 'run' }
+  }
+  const paths = plan.skills.flatMap((entry) =>
+    entry.ops.flatMap((op) => (op.kind === 'leave' && op.replaceable ? [op.path] : []))
+  )
+  return paths.length > 0 ? { kind: 'replace', paths } : { kind: 'none' }
+}
+
 const INSTALLS_FOR_AGENT = new Set<string>(['write', 'link', 'copy'])
 
 /** Agents a plan would newly give the skill: the "Install for <agent>" work. */

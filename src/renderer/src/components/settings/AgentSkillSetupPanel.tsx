@@ -13,6 +13,7 @@ import {
   recheckSurfacesAfterAgentSkillInstall,
   syncSurfacesAfterAgentSkillRecheck
 } from './agent-skill-recheck-surface-sync'
+import { useBundledSkillInstallAction } from '@/hooks/use-bundled-skill-install-action'
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 
@@ -56,6 +57,17 @@ export function AgentSkillSetupPanel({
   const installing = state.kind === 'installing'
   const failed = bundledSkillInstallNeedsAttention(state)
   const activeSkillNames = installed ? (installedSkillNames ?? skillNames) : skillNames
+  // Why only once installed: before that Install always has work; after, the plan says.
+  const action = useBundledSkillInstallAction(activeSkillNames, {
+    enabled: installed && showInstallWhenInstalled,
+    refreshKey: state.kind
+  })
+  const installedButton: 'update' | 'replace' | null =
+    action.kind === 'run' || action.kind === 'unknown'
+      ? 'update'
+      : action.kind === 'replace'
+        ? 'replace'
+        : null
 
   const startInstall = (): void => {
     if (installing) {
@@ -67,13 +79,16 @@ export function AgentSkillSetupPanel({
       } catch {
         return
       }
-      await install(activeSkillNames)
+      await install(
+        activeSkillNames,
+        installed && action.kind === 'replace' ? action.paths : undefined
+      )
     })()
   }
 
   const actionRow = (
     <div className="mt-3 flex flex-wrap items-center gap-2">
-      {(!installed || showInstallWhenInstalled) && !failed ? (
+      {(!installed || (showInstallWhenInstalled && installedButton)) && !failed ? (
         <Button
           type="button"
           variant={installVariant}
@@ -88,9 +103,14 @@ export function AgentSkillSetupPanel({
           )}
           {installing
             ? translate('auto.components.settings.AgentSkillSetupPanel.installing', 'Installing...')
-            : installed
-              ? resolvedInstalledInstallLabel
-              : resolvedInstallLabel}
+            : !installed
+              ? resolvedInstallLabel
+              : installedButton === 'replace'
+                ? translate(
+                    'auto.components.settings.AgentSkillSetupPanel.replaceWithOrcaCopy',
+                    "Replace with Orca's copy"
+                  )
+                : resolvedInstalledInstallLabel}
         </Button>
       ) : null}
       {!installed || showRecheckWhenInstalled ? (

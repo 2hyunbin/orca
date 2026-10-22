@@ -1860,6 +1860,21 @@
       },
       "duplicatePairedServers": {
         "ambiguousSameServer": "{{value0}} e {{value1}} são o mesmo servidor pareado duas vezes. Remova um em Configurações > Servidores Orca remotos."
+      },
+      "bundled": {
+        "skill": {
+          "install": {
+            "error": {
+              "message": {
+                "homeUnavailable": "O Orca não encontrou a pasta pessoal onde instalar as skills.",
+                "wslUnavailable": "O WSL não está disponível nesta máquina, então o Orca não conseguiu instalar as skills nele.",
+                "environmentMismatch": "Esta máquina não pode instalar skills no WSL.",
+                "wslDetectionFailed": "O Orca não conseguiu verificar quais agentes estão instalados no WSL. Verifique se a distribuição inicia e tente novamente.",
+                "unknown": "O Orca não conseguiu instalar as skills."
+              }
+            }
+          }
+        }
       }
     },
     "components": {
@@ -6644,7 +6659,9 @@
           "installLabel": "Instalar",
           "updateLabel": "Atualizar",
           "retrySetup": "Tentar novamente",
-          "hostUnavailable": "O Orca ainda não pode instalar skills na máquina deste espaço de trabalho."
+          "hostUnavailable": "O Orca ainda não pode instalar skills na máquina deste espaço de trabalho.",
+          "replaceWithOrcaCopy": "Substituir pela cópia do Orca",
+          "installing": "Instalando..."
         },
         "GrokAccountsSection": {
           "a1b2c3d4e5": "Grok (xAI)",
@@ -10577,7 +10594,8 @@
           "toastMissingSkill": "A skill do Linear está faltando",
           "toastInstallSkillDescription": "Instale a skill do Linear para permitir que seus agentes leiam e editem tarefas do Linear através da CLI do Orca.",
           "toastRemoteDescription": "{{value0}} Ambientes de agente remotos podem precisar de sua própria configuração.",
-          "toastWslDescription": "{{value0}} Esta configuração é executada no runtime de agente WSL selecionado."
+          "toastWslDescription": "{{value0}} Esta configuração é executada no runtime de agente WSL selecionado.",
+          "modalInstallDescription": "Instale a skill do Linear para seus agentes."
         },
         "WorktreeContextMenu": {
           "c39c37676a": "Crie um grupo e mova este projeto para dentro dele.",
@@ -14373,6 +14391,10 @@
             "d20ccf1e61": "concluído",
             "379d776971": "digitando",
             "0418f9becc": "aberto"
+          },
+          "CliSkillSetupPanel": {
+            "title": "Configuração de skills",
+            "description": "Instale as skills da CLI do Orca e de orquestração para seus agentes."
           }
         }
       },

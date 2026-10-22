@@ -6905,7 +6905,8 @@
           "updateLabel": "更新",
           "retrySetup": "再試行",
           "installing": "インストール中...",
-          "hostUnavailable": "このワークスペースのマシンにはまだスキルをインストールできません。"
+          "hostUnavailable": "このワークスペースのマシンにはまだスキルをインストールできません。",
+          "replaceWithOrcaCopy": "Orca のコピーに置き換える"
         },
         "AgentsPane": {
           "d83834f5e6": "インストールされている Agent を検出しています…",

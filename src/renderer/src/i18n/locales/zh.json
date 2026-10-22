@@ -6905,7 +6905,8 @@
           "updateLabel": "更新",
           "retrySetup": "重试",
           "installing": "正在安装...",
-          "hostUnavailable": "Orca 暂时无法在此工作区所在的机器上安装技能。"
+          "hostUnavailable": "Orca 暂时无法在此工作区所在的机器上安装技能。",
+          "replaceWithOrcaCopy": "替换为 Orca 的副本"
         },
         "AgentsPane": {
           "d83834f5e6": "检测已安装的智能体...",

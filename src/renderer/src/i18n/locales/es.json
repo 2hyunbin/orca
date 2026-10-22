@@ -6915,7 +6915,8 @@
           "updateLabel": "Actualizar",
           "retrySetup": "Reintentar",
           "installing": "Instalando...",
-          "hostUnavailable": "Orca todavía no puede instalar skills en la máquina de este espacio de trabajo."
+          "hostUnavailable": "Orca todavía no puede instalar skills en la máquina de este espacio de trabajo.",
+          "replaceWithOrcaCopy": "Reemplazar con la copia de Orca"
         },
         "AgentsPane": {
           "d83834f5e6": "Detectando agents instalados…",

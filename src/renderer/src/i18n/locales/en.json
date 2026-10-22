@@ -7216,7 +7216,7 @@
           "retrySetup": "Retry",
           "installing": "Installing...",
           "hostUnavailable": "Orca can't install skills on this workspace's machine yet.",
-          "needsAttention": "Needs attention"
+          "replaceWithOrcaCopy": "Replace with Orca's copy"
         },
         "AgentsPane": {
           "d83834f5e6": "Detecting installed agents…",

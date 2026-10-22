@@ -6,6 +6,7 @@ import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkillNames
 } from '@/hooks/useInstalledAgentSkills'
+import { useBundledSkillInstallAction } from '@/hooks/use-bundled-skill-install-action'
 import {
   bundledSkillInstallNeedsAttention,
   useBundledSkillInstall
@@ -62,6 +63,14 @@ export function LinearAgentSkillInstallCta({
   const skillInstall = useBundledSkillInstall({ onFinished: recheckAfterInstall })
   const { state, ready, install } = skillInstall
   const installing = state.kind === 'installing'
+  const action = useBundledSkillInstallAction([skillName], {
+    enabled: skill.installed,
+    refreshKey: state.kind
+  })
+  const replacePaths = skill.installed && action.kind === 'replace' ? action.paths : undefined
+  // Why: once installed, offer a button only when the plan would change something.
+  const showInstall =
+    !skill.installed || action.kind === 'run' || action.kind === 'unknown' || replacePaths
   const subordinateRowClass = useIntegrationSubordinateRowClass('space-y-1.5')
 
   return (
@@ -119,13 +128,15 @@ export function LinearAgentSkillInstallCta({
               )}
             </p>
           )}
-          {state.kind === 'unsupported' || bundledSkillInstallNeedsAttention(state) ? null : (
+          {!showInstall ||
+          state.kind === 'unsupported' ||
+          bundledSkillInstallNeedsAttention(state) ? null : (
             <Button
               type="button"
               variant="outline"
               size="xs"
               className="w-fit"
-              onClick={() => void install([skillName])}
+              onClick={() => void install([skillName], replacePaths)}
               disabled={installing || !ready}
             >
               {installing ? (
@@ -138,12 +149,20 @@ export function LinearAgentSkillInstallCta({
                     'auto.components.settings.AgentSkillSetupPanel.installing',
                     'Installing...'
                   )
-                : skill.installed
-                  ? translate('auto.components.settings.AgentSkillSetupPanel.updateLabel', 'Update')
-                  : translate(
-                      'auto.components.skills.SkillInstallDialog.39acb9e8f4',
-                      'Install skill'
-                    )}
+                : replacePaths
+                  ? translate(
+                      'auto.components.settings.AgentSkillSetupPanel.replaceWithOrcaCopy',
+                      "Replace with Orca's copy"
+                    )
+                  : skill.installed
+                    ? translate(
+                        'auto.components.settings.AgentSkillSetupPanel.updateLabel',
+                        'Update'
+                      )
+                    : translate(
+                        'auto.components.skills.SkillInstallDialog.39acb9e8f4',
+                        'Install skill'
+                      )}
             </Button>
           )}
           <BundledSkillInstallStatus install={skillInstall} buttonSize="xs" />

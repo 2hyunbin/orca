@@ -6905,7 +6905,8 @@
           "updateLabel": "업데이트",
           "retrySetup": "다시 시도",
           "installing": "설치 중...",
-          "hostUnavailable": "Orca가 아직 이 워크스페이스의 컴퓨터에 스킬을 설치할 수 없습니다."
+          "hostUnavailable": "Orca가 아직 이 워크스페이스의 컴퓨터에 스킬을 설치할 수 없습니다.",
+          "replaceWithOrcaCopy": "Orca 사본으로 교체"
         },
         "AgentsPane": {
           "d83834f5e6": "설치된 에이전트 감지 중…",

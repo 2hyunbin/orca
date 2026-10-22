@@ -1120,8 +1120,7 @@
           "0b810ec59f": "Press Enter to run the command.",
           "378ad26865": "Copied command.",
           "817d3f9f18": "Copy command",
-          "a31e2aa302": "Failed to copy command.",
-          "needsAttention": "Needs attention"
+          "a31e2aa302": "Failed to copy command."
         },
         "AgentsPane": {
           "9b175d0f5e": "Pre-selected agent when opening a new workspace.",

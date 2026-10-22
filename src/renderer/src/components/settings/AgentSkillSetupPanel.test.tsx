@@ -139,12 +139,26 @@ describe('AgentSkillSetupPanel', () => {
     container = null
   })
 
-  it('keeps the install action visible after the skill is detected', () => {
-    const html = renderPanel({ installed: true })
+  it('offers Update once installed only when the plan would change something', async () => {
+    mocks.plan.mockResolvedValue({
+      kind: 'plan',
+      plan: planOf([sharedEntry('orca-cli', 'update')])
+    })
+    await renderInteractivePanel({ installed: true })
 
-    expect(html).toContain('Installed')
-    expect(buttonLabels(html)).toContain('Update')
-    expect(buttonLabels(html)).toContain('Re-check')
+    expect(container?.textContent).toContain('Installed')
+    expect(findButton('Update')).toBeDefined()
+    expect(findButton('Re-check')).toBeDefined()
+  })
+
+  it('shows only Re-check when the installed copy is already current', async () => {
+    mocks.plan.mockResolvedValue({ kind: 'plan', plan: planOf([sharedEntry('orca-cli', 'keep')]) })
+    await renderInteractivePanel({ installed: true })
+
+    const labels = Array.from(container?.querySelectorAll('button') ?? [], (button) =>
+      button.textContent?.trim()
+    )
+    expect(labels).toEqual(['Re-check'])
   })
 
   it('surfaces skill freshness under hideHeader for guided setup hubs', () => {
@@ -167,12 +181,11 @@ describe('AgentSkillSetupPanel', () => {
     expect(html).not.toMatch(/<p class="text-\[13px\] leading-snug text-muted-foreground"><\/p>/)
   })
 
-  it('hides only re-check when installed re-checks are disabled', () => {
-    const html = renderPanel({ installed: true, showRecheckWhenInstalled: false })
+  it('hides only re-check when installed re-checks are disabled', async () => {
+    await renderInteractivePanel({ installed: true, showRecheckWhenInstalled: false })
 
-    expect(html).toContain('Installed')
-    expect(buttonLabels(html)).toContain('Update')
-    expect(buttonLabels(html)).not.toContain('Re-check')
+    expect(findButton('Update')).toBeDefined()
+    expect(container?.textContent).not.toContain('Re-check')
   })
 
   it('can hide install after the skill is detected', () => {
@@ -273,13 +286,38 @@ describe('AgentSkillSetupPanel', () => {
     expect(mocks.plan).toHaveBeenCalledWith({ kind: 'local' }, { names: ['linear-tickets'] })
   })
 
+  it('offers Replace for an edited copy and replaces only that path', async () => {
+    const edited = planOf([
+      sharedEntry('orca-cli', 'leave', { reason: 'edited', replaceable: true })
+    ])
+    const replaced = planOf([sharedEntry('orca-cli', 'replace')])
+    mocks.plan.mockResolvedValue({ kind: 'plan', plan: edited })
+    await renderInteractivePanel({ installed: true })
+    expect(container?.textContent).not.toContain('Update')
+
+    mocks.plan.mockResolvedValueOnce({ kind: 'plan', plan: replaced })
+    mocks.execute.mockResolvedValueOnce(doneResult(replaced))
+    await clickButton("Replace with Orca's copy")
+
+    const path = '/home/u/.agents/skills/orca-cli'
+    expect(mocks.plan).toHaveBeenCalledWith(
+      { kind: 'local' },
+      { names: ['orca-cli'], force: [path] }
+    )
+    expect(mocks.execute).toHaveBeenCalledWith({ kind: 'local' }, replaced.planDigest, {
+      names: ['orca-cli'],
+      force: [path]
+    })
+    expect(container?.textContent).toContain('Updated')
+  })
+
   it('says why an edited copy was left alone, without calling it a failure', async () => {
     const plan = planOf([sharedEntry('orca-cli', 'leave', { reason: 'edited', replaceable: true })])
-    mocks.plan.mockResolvedValueOnce({ kind: 'plan', plan })
+    mocks.plan.mockResolvedValue({ kind: 'plan', plan })
     mocks.execute.mockResolvedValueOnce(doneResult(plan))
-    await renderInteractivePanel({ installed: true })
+    await renderInteractivePanel()
 
-    await clickButton('Update')
+    await clickButton('Install')
 
     expect(container?.textContent).toContain("No change · 1 left alone: You've changed this copy")
     expect(container?.textContent).not.toContain('Needs attention')

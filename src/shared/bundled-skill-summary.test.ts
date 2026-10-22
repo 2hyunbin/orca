@@ -9,6 +9,7 @@ import {
 } from './bundled-skill-plan'
 import {
   BUNDLED_SKILL_LEAVE_REASON_TEXT,
+  bundledSkillInstallAction,
   bundledSkillInstallAgents,
   bundledSkillNudgeKey,
   bundledSkillPlanState,
@@ -170,5 +171,18 @@ describe('bundledSkillNudgeKey', () => {
     )
     expect(bundledSkillNudgeKey('local', plan([[op('link')]]))).toBeNull()
     expect(bundledSkillNudgeKey('local', plan([[op('update')]], 'workspace'))).toBeNull()
+  })
+})
+
+describe('bundledSkillInstallAction', () => {
+  it('runs work, offers Replace only for replaceable copies, else nothing', () => {
+    expect(bundledSkillInstallAction(plan([[op('keep'), op('link')]]))).toEqual({ kind: 'run' })
+    const edited = { ...op('leave', '/a'), reason: 'edited' as const, replaceable: true }
+    const unwritable = { ...op('leave', '/b'), reason: 'unwritable' as const }
+    expect(bundledSkillInstallAction(plan([[op('keep'), edited, unwritable]]))).toEqual({
+      kind: 'replace',
+      paths: ['/a']
+    })
+    expect(bundledSkillInstallAction(plan([[op('keep'), unwritable]]))).toEqual({ kind: 'none' })
   })
 })

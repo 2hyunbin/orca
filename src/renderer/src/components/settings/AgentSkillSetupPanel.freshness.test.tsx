@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   skillsRefreshed: vi.fn()
 }))
 
+// Why: these tests count the freshness plans; the button's own plan is covered elsewhere.
+vi.mock('@/hooks/use-bundled-skill-install-action', () => ({
+  useBundledSkillInstallAction: () => ({ kind: 'run' })
+}))
+
 vi.mock('@/hooks/useInstalledAgentSkills', () => ({
   notifyInstalledAgentSkillsChanged: mocks.skillsChanged,
   notifyInstalledAgentSkillsRefreshed: mocks.skillsRefreshed
