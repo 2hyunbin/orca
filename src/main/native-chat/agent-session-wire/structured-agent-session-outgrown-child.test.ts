@@ -130,7 +130,7 @@ const conversation = (
           visit(item.itemId, index, item.body, item.agentId ? { agentId: item.agentId } : {})
         ),
       itemFence: (itemId: string) => items.find((item) => item.itemId === itemId)?.fence,
-      itemBody: (itemId: string) => items.find((item) => item.itemId === itemId)?.body,
+      itemBody: (itemId: string) => items.find((item) => item.itemId === itemId)?.body ?? null,
       newestTurn: (): AgentJournalTurnLifecycle | null =>
         input.newestTurnEndedAt === undefined
           ? null
