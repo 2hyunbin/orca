@@ -1,3 +1,4 @@
+import { useTerminalInterfacePresentation } from '../native-chat/terminal-interface-presentation'
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import type { GitFileStatus } from '../../../../shared/git-status-types'
@@ -235,7 +236,7 @@ export function useTabBarRuntimeModel({
     tabAgentTypesByTabId,
     nativeChatTabWideFallbackUnsafeTabsById,
     nativeChatShellForegroundTabsById
-  } = useAppStore(useShallow(selectTabBarAgentProjections))
+  } = useTerminalInterfacePresentation(selectTabBarAgentProjections)
   const nativeChatTranscriptIsLocalReadable = useAppStore((s) =>
     isNativeChatTranscriptLocalReadable(getConnectionIdFromState(s, worktreeId))
   )

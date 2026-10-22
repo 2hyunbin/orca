@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { toWebTerminalSurfaceTabId } from '../../../../shared/terminal-surface-id'
 import { useAppStore } from '@/store'
@@ -26,6 +28,28 @@ export type TerminalInterfacePresentationState = Partial<
   >
 >
 
+const presentationListeners = new Set<() => void>()
+let presentationRevision = 0
+export function terminalInterfacePresentationRevision(): number {
+  return presentationRevision
+}
+
+export function subscribeTerminalInterfacePresentation(listener: () => void): () => void {
+  const releaseStore = useAppStore.subscribe(listener)
+  presentationListeners.add(listener)
+  return () => {
+    releaseStore()
+    presentationListeners.delete(listener)
+  }
+}
+
+export function useTerminalInterfacePresentation<T>(selector: (state: AppState) => T): T {
+  const select = useShallow(selector)
+  return useSyncExternalStore(subscribeTerminalInterfacePresentation, () =>
+    select(useAppStore.getState())
+  )
+}
+
 let refreshQueued = false
 /** Imperative startup owners notify derived policy; this queue stores no eligibility truth. */
 export function refreshTerminalInterfacePresentation(): void {
@@ -38,9 +62,10 @@ export function refreshTerminalInterfacePresentation(): void {
   refreshQueued = true
   queueMicrotask(() => {
     refreshQueued = false
-    useAppStore.setState((state) => ({
-      terminalInterfaceByPtyId: { ...state.terminalInterfaceByPtyId }
-    }))
+    presentationRevision += 1
+    for (const listener of presentationListeners) {
+      listener()
+    }
   })
 }
 subscribePaneStartupState(refreshTerminalInterfacePresentation)

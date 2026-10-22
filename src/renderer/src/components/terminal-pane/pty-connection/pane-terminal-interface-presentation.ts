@@ -1,6 +1,7 @@
 import {
   readTerminalInterface,
   registerTerminalInterfacePresentation,
+  subscribeTerminalInterfacePresentation,
   terminalInterfaceReleasesChat
 } from '../../native-chat/terminal-interface-presentation'
 import { pendingSpawnByPaneKey } from './pty-connect-limits'
@@ -56,7 +57,8 @@ export function installPaneTerminalInterfacePresentation(session: ConnectPanePty
     }
   })
   let appliedBinding: string | null = null
-  const releaseEffects = useAppStore.subscribe((state) => {
+  const releaseEffects = subscribeTerminalInterfacePresentation(() => {
+    const state = useAppStore.getState()
     const observation = readTerminalInterface(state, session.cacheKey)?.observation
     const binding =
       !session.disposed && observation && terminalInterfaceReleasesChat(state, session.cacheKey)

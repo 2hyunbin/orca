@@ -1,5 +1,6 @@
 import {
   nativeChatShellForeground,
+  terminalInterfacePresentationRevision,
   type TerminalInterfacePresentationState
 } from '../native-chat/terminal-interface-presentation'
 import type { AgentStatusEntry, AgentType } from '../../../../shared/agent-status-types'
@@ -179,7 +180,8 @@ export function createTabBarAgentProjectionSelector(
       state.agentLaunchConfigByPaneKey,
       state.pendingStartupByTabId,
       state.automaticAgentResumeClaimsByTabId,
-      state.suppressedPtyExitIds
+      state.suppressedPtyExitIds,
+      terminalInterfacePresentationRevision()
     ]
     if (
       layouts !== cachedGateLayoutsByTabId ||

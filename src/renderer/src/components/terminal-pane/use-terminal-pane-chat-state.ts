@@ -1,4 +1,8 @@
-import { nativeChatShellForeground } from '../native-chat/terminal-interface-presentation'
+import {
+  nativeChatShellForeground,
+  terminalInterfaceReleasesChat,
+  useTerminalInterfacePresentation
+} from '../native-chat/terminal-interface-presentation'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '../../store'
@@ -74,18 +78,18 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
     return [...new Set([...expectedLayoutLeafIds, ...mountedLeafIds])]
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- Preserve the pre-split dependency contract.
   }, [expectedLayoutLeafIds])
-  const [runtimePaneTitlesByPaneId, interfaceObservations, ...shellForegroundByLeaf] = useAppStore(
-    useShallow(
-      (store) =>
-        [
-          store.runtimePaneTitlesByTabId[tabId] ?? EMPTY_PANE_TITLES,
-          store.terminalInterfaceByPtyId,
-          ...getNativeChatLeafIds().map((leafId) =>
-            nativeChatShellForeground(store, `${tabId}:${leafId}`)
-          )
-        ] as const
-    )
+  const presentation = useTerminalInterfacePresentation(
+    (store) =>
+      [
+        store.runtimePaneTitlesByTabId[tabId] ?? EMPTY_PANE_TITLES,
+        ...getNativeChatLeafIds().flatMap((leafId) => [
+          leafId,
+          nativeChatShellForeground(store, `${tabId}:${leafId}`),
+          terminalInterfaceReleasesChat(store, `${tabId}:${leafId}`)
+        ])
+      ] as const
   )
+  const runtimePaneTitlesByPaneId = presentation[0]
   const getTabWideAgentHintLeafId = useCallback((): string | null => {
     if (tabWideAgentHintLeafId !== undefined) {
       return tabWideAgentHintLeafId
@@ -150,11 +154,10 @@ export function useTerminalPaneChatState(controller: TerminalPaneTitleController
         nativeChatTranscriptIsLocalReadable
       })
     },
-    // oxlint-disable-next-line react-hooks/exhaustive-deps -- shellForegroundByLeaf only re-derives eligibility; the body reads the store so a departure sees the shell before React commits.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- presentation only re-derives eligibility; the body reads the store so a departure sees the shell before React commits.
     [
       tabAgentTypeByLeaf,
-      shellForegroundByLeaf,
-      interfaceObservations,
+      presentation,
       tabId,
       nativeChatTranscriptIsLocalReadable,
       terminalTab?.launchAgent,

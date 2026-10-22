@@ -3,18 +3,18 @@ import { useNativeChatToggleShortcut } from '../native-chat/use-native-chat-togg
 import type { TerminalInterfaceObservation } from '../../../../shared/terminal-interface-observation'
 import {
   applyTerminalInterfaceSnapshot,
-  registerTerminalInterfacePresentation,
-  terminalInterfaceReleasesChat
+  registerTerminalInterfacePresentation
 } from '../native-chat/terminal-interface-presentation'
 import { notifyPaneStartupStateChanged } from '@/lib/pane-spawn-deferral-registry'
 import { selectTabBarAgentProjections } from '../tab-bar/tab-agent-types-by-tab-id'
 import { act, cleanup, renderHook } from '@testing-library/react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalLayoutSnapshot } from '../../../../shared/terminal-tab-types'
 import { useTerminalPaneChatState } from './use-terminal-pane-chat-state'
 import { useTerminalPaneLayoutPersistence } from './use-terminal-pane-layout-persistence'
-import { resolveNativeChatLeafRoute } from '../native-chat/native-chat-leaf-routing'
+import { useTerminalPaneProjection } from './use-terminal-pane-projection'
+import { createPaneForegroundAgentTracker } from './pane-foreground-agent-tracker'
 import { detachTerminalLayoutLeaf } from './terminal-layout-leaf-detach'
 import { parseWorkspaceSession } from '../../../../shared/workspace-session-schema'
 import type { RemotePaneLayoutPusher } from './remote-pane-layout-push'
@@ -125,31 +125,27 @@ function useFixture(fixture: ReturnType<typeof makeFixture>, initialOwner: strin
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: The fixture supplies every field read by the persistence hook.
     layoutInput as unknown as Parameters<typeof useTerminalPaneLayoutPersistence>[0]
   )
-  const activeLeafId = fixture.managerRef.current.getActivePane()?.leafId ?? null
-  const mounted = fixture.managerRef.current.getPanes().some((pane) => pane.leafId === chatLeafId)
-  const { applyNativeChatLeafRoute, isChatViewMode, isChatEligibleForLeaf } = chat
-  useEffect(() => {
-    applyNativeChatLeafRoute(
-      resolveNativeChatLeafRoute({
-        isChatViewMode,
-        chatLeafId,
-        activeLeafId,
-        chatLeafStillMounted: mounted,
-        chatLeafHasConfirmedAgentExit:
-          chatLeafId !== null &&
-          terminalInterfaceReleasesChat(useAppStore.getState(), `tab:${chatLeafId}`),
-        activeLeafIsEligible: isChatEligibleForLeaf(activeLeafId)
-      })
-    )
-  }, [
-    applyNativeChatLeafRoute,
-    isChatEligibleForLeaf,
-    isChatViewMode,
-    chatLeafId,
-    activeLeafId,
-    mounted
-  ])
-  return { ...chat, ...layout, chatLeafId, setChatLeafId }
+  const projectionInput = {
+    ...layoutInput,
+    contextMenu: { open: false, menuPaneId: null },
+    contextMenuLeafId: RIGHT,
+    getContextMenuLeafId: () => RIGHT,
+    settings: null,
+    isActive: true,
+    isVisible: true,
+    shouldMeasureHiddenStartup: false,
+    sshReconnectOwnsTerminalErrors: false,
+    systemPrefersDark: true,
+    terminalError: null,
+    terminalErrorsByPaneId: {},
+    setTerminalError: vi.fn(),
+    setTerminalErrorsByPaneId: vi.fn()
+  }
+  const projection = useTerminalPaneProjection(
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: supplies all fields read by the actual projection; unrelated controller actions are inert.
+    projectionInput as unknown as Parameters<typeof useTerminalPaneProjection>[0]
+  )
+  return { ...chat, ...layout, ...projection, chatLeafId, setChatLeafId }
 }
 
 beforeEach(() => {
@@ -173,7 +169,10 @@ beforeEach(() => {
     chatLeafId: RIGHT
   })
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe('terminal chat ownership lifecycle', () => {
   it('releases suspended chat, rejects a shell sibling, and restores eligibility after fg', () => {
@@ -426,4 +425,118 @@ it('converges a split Chat from rowless snapshots after slow launch settlement, 
   expect(remount.result.current.chatLeafId).toBeNull()
   expect(remount.result.current.canToggleChatForLeaf(RIGHT)).toBe(false)
   release()
+})
+
+it('keeps unchanged pane outputs quiet through real discovery, settlement and recognized-monitor notifications', async () => {
+  vi.useFakeTimers()
+  mocks.state.setTabViewMode('tab', 'terminal')
+  const fixture = makeFixture()
+  const publishUnrelated = (revision: number) =>
+    applyTerminalInterfaceSnapshot(
+      {
+        type: 'terminalInterfaces',
+        epoch: 'unrelated',
+        revision,
+        observations: [
+          {
+            ptyId: 'other-pty',
+            incarnationId: 'birth',
+            terminalHandle: 'other',
+            paneKey: `other:${LEFT}`,
+            worktreeId: 'wt',
+            epoch: 'unrelated',
+            revision,
+            inputRevision: 0,
+            owner: null,
+            executionLaunchToken: null,
+            state: 'agent',
+            basis: 'process'
+          }
+        ]
+      },
+      null
+    )
+  publishUnrelated(1)
+  let renders = 0
+  const hook = renderHook(() => {
+    renders += 1
+    return useFixture(fixture, null)
+  })
+  const originalRenders = renders
+  const callback = hook.result.current.isChatEligibleForLeaf
+  const facts = useAppStore.getState().terminalInterfaceByPtyId
+  const generic = vi.fn()
+  const off = useAppStore.subscribe(generic)
+  const tracker = createPaneForegroundAgentTracker({
+    getPtyId: () => 'pty',
+    isTrackablePtyId: () => true,
+    readForegroundProcess: async () => 'codex',
+    publish: vi.fn()
+  })
+  try {
+    await act(async () => {
+      tracker.onVisiblePtyBound()
+      await vi.advanceTimersByTimeAsync(350)
+      tracker.onForegroundAgentObserved({ agent: 'codex', processName: 'codex' })
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(useAppStore.getState().terminalInterfaceByPtyId).toBe(facts)
+    expect(generic).not.toHaveBeenCalled()
+    expect(renders).toBe(originalRenders)
+    act(() => publishUnrelated(2))
+    expect(renders).toBe(originalRenders)
+    hook.rerender()
+    expect(hook.result.current.isChatEligibleForLeaf).toBe(callback)
+  } finally {
+    off()
+    tracker.dispose()
+  }
+})
+
+it('releases a custom-title mounted Chat when only confirmed host release changes', () => {
+  const fixture = makeFixture()
+  mocks.state.runtimePaneTitlesByTabId.tab = { 1: 'My workspace', 2: 'My workspace' }
+  mocks.state.setTabLayout('tab', {
+    ...mocks.state.terminalLayoutsByTabId.tab,
+    ptyIdsByLeafId: { [RIGHT]: 'pty' }
+  })
+  useAppStore.setState({
+    paneForegroundAgentByPaneKey: {
+      [`tab:${RIGHT}`]: { agent: null, shellForeground: true }
+    }
+  })
+  const hook = renderHook(() => useFixture(fixture, RIGHT))
+  expect(hook.result.current.chatLeafId).toBe(RIGHT)
+  const callback = hook.result.current.isChatEligibleForLeaf
+  hook.rerender()
+  expect(hook.result.current.isChatEligibleForLeaf).toBe(callback)
+  act(() =>
+    applyTerminalInterfaceSnapshot(
+      {
+        type: 'terminalInterfaces',
+        epoch: 'custom-title',
+        revision: 1,
+        observations: [
+          {
+            ptyId: 'pty',
+            incarnationId: 'birth',
+            terminalHandle: 'handle',
+            paneKey: `tab:${RIGHT}`,
+            worktreeId: 'wt',
+            epoch: 'custom-title',
+            revision: 1,
+            inputRevision: 0,
+            owner: null,
+            executionLaunchToken: null,
+            state: 'shell',
+            basis: 'hook'
+          }
+        ]
+      },
+      null
+    )
+  )
+  expect(hook.result.current.isChatEligibleForLeaf).not.toBe(callback)
+  expect(hook.result.current.chatLeafId).toBeNull()
+  expect(mocks.state.runtimePaneTitlesByTabId.tab[2]).toBe('My workspace')
 })
