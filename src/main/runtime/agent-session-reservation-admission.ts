@@ -1,4 +1,9 @@
-import { listAgentSessionConversations } from './agent-session-store-state'
+import {
+  listAgentSessionConversations,
+  selectWritableAgentSessionRecord,
+  requireWritableAgentSessionRecord,
+  type AgentSessionStoreState
+} from './agent-session-store-state'
 /**
  * Reservation admission: what a reserve request means against the persisted state.
  *
@@ -47,11 +52,6 @@ import {
   reserveAgentSessionOwner,
   type AgentSessionReservation
 } from './agent-session-lease-transitions'
-import {
-  selectWritableAgentSessionRecord,
-  requireWritableAgentSessionRecord,
-  type AgentSessionStoreState
-} from './agent-session-store-state'
 import { agentSessionRecordIdentityFields } from './agent-session-record-founding'
 import { agentSessionAccountHomesEqual } from '../../shared/agent-session-account-home'
 import { assertReservedTabUnheld } from './agent-session-tab-table'

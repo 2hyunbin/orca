@@ -1,9 +1,11 @@
-import type { AgentModelCatalogLiveListing } from './agent-model-catalog-store'
+import type {
+  AgentModelCatalogLiveListing,
+  AgentModelCatalogStore
+} from './agent-model-catalog-store'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { isNativeLocalLocation } from '../../../shared/execution-host'
 import type { AgentModelCatalogConfiguredChoice } from './agent-model-catalog-entry'
-import type { AgentModelCatalogStore } from './agent-model-catalog-store'
 
 export type AgentModelCatalogRecord = Pick<
   AgentSessionRecord,
