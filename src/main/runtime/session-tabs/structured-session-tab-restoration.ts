@@ -1,3 +1,4 @@
+import { initialChatSelection } from '../../agent-launch/agent-launch-created-workspace'
 import type { OrcaRuntimeWithScheduleMobileSessionTabsChanged as ScheduleMobileSessionTabsChangedMethods } from './session-tabs-change-publication'
 import { defaultAgentChatLabel } from '../../../shared/agent-session-chat-label'
 import { OrcaRuntimeWithGetStructuredAgentSessionCreateSupport } from './structured-session-create-support'
@@ -106,6 +107,7 @@ export abstract class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce exten
     /** This machine's window made the create; its own open places the tab. */
     placedByWindow?: boolean
   }): Promise<void> {
+    input = initialChatSelection(this, input, this.mobileSessionTabsByWorktree)
     const host = getStructuredAgentSessionHost()
     if (typeof host?.setSessionTabVisibility === 'function') {
       // The restore index is bookkeeping: one that cannot be written (a newer Orca's records, a
@@ -322,10 +324,9 @@ export abstract class OrcaRuntimeWithRestoreStructuredAgentSessionTabsOnce exten
     agent: TuiAgent,
     scope?: TerminalWorkspaceLaunchScope
   ): ReturnType<typeof resolveStartupAgentLaunchRuntime> {
-    const store = this.requireStore()
     return resolveStartupAgentLaunchRuntime(
-      store,
-      scope ?? newWorktreeLaunchScope(repo, store.getSettings()),
+      this.requireStore(),
+      scope ?? newWorktreeLaunchScope(repo, this.requireStore().getSettings()),
       agent
     )
   }

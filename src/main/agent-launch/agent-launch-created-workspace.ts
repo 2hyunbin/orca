@@ -1,22 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
-import type { AgentLaunchExecution } from './agent-launch-execution'
 import type { AgentLaunchWorkspaceFactory } from './agent-launch-surface-factories'
 
 export type InitialSurfaceLaunch = NonNullable<
   RuntimeMobileSessionTabsResult['initialSurfaceLaunch']
 >
 
-type AgentLaunchRuntimeOwner = Pick<
-  AgentLaunchExecution['runtime'],
-  'getStructuredAgentSessionCreateSupport'
->
-
-const liveLaunches = new WeakMap<AgentLaunchRuntimeOwner, Map<string, InitialSurfaceLaunch>>()
+const liveLaunches = new WeakMap<object, Map<string, InitialSurfaceLaunch>>()
 
 export function beginCreatedWorkspaceLaunch(
-  runtime: AgentLaunchRuntimeOwner,
+  runtime: object,
   agent: TuiAgent
 ): {
   onWorkspaceCreated: (worktreeId: string) => void
@@ -53,7 +47,7 @@ export function beginCreatedWorkspaceLaunch(
 }
 
 export function readCreatedWorkspaceLaunch(
-  runtime: AgentLaunchRuntimeOwner,
+  runtime: object,
   worktreeId: string
 ): InitialSurfaceLaunch | undefined {
   return liveLaunches.get(runtime)?.get(worktreeId)
@@ -68,4 +62,16 @@ export async function recoverCreatedWorkspace(
   } catch (error) {
     console.warn('[agent-launch] Failed to create a recovery shell:', error)
   }
+}
+
+export function initialChatSelection<T extends { workspaceId: string; activate: boolean }>(
+  runtime: object,
+  input: T,
+  snapshots: ReadonlyMap<string, Pick<RuntimeMobileSessionTabsResult, 'tabs' | 'activeTabId'>>
+): T {
+  const snapshot = snapshots.get(input.workspaceId)
+  return readCreatedWorkspaceLaunch(runtime, input.workspaceId) &&
+    !snapshot?.tabs.some((tab) => tab.id === snapshot.activeTabId)
+    ? { ...input, activate: true }
+    : input
 }

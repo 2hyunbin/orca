@@ -61,7 +61,7 @@ export async function launchFederatedWorkerAgent(args: {
     onStage: (stage) =>
       args.onStage(stage === 'worktree_create' ? 'worktree_create' : 'terminal_create'),
     workspaces: {
-      createWorktree: async ({ startupAgent }) => {
+      createWorktree: async ({ startupAgent, initializeSurface, onWorkspaceCreated }) => {
         // Agent-first is the only create here; a structured pre-flight must not reach it.
         if (startupAgent === undefined) {
           throw new Error(TERMINAL_ONLY_MESSAGE)
@@ -88,6 +88,8 @@ export async function launchFederatedWorkerAgent(args: {
           setupDecision,
           awaitTerminalProvisioning: true,
           observeSetupCompletion: true,
+          initializeSurface,
+          onWorkspaceCreated,
           createdWithAgent: agent,
           startupAgent: agent,
           startupLaunchSource: 'orchestration',

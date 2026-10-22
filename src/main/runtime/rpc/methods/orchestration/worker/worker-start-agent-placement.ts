@@ -137,7 +137,12 @@ async function launchWorkerAgent(
             tabId: shell.tabId
           })
         },
-        createWorktree: async ({ startupAgent, promisedAgentChat, onWorkspaceCreated }) => {
+        createWorktree: async ({
+          startupAgent,
+          promisedAgentChat,
+          onWorkspaceCreated,
+          initializeSurface
+        }) => {
           created = await createWorkerWorktree({
             runtime: args.runtime,
             db: args.db,
@@ -150,6 +155,7 @@ async function launchWorkerAgent(
             withAgentTerminal: startupAgent !== undefined,
             promisedAgentChat,
             onWorkspaceCreated,
+            initializeSurface,
             ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
             effects: args.effects
           })

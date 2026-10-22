@@ -54,7 +54,11 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
     return {
       canSpawn: () => Boolean(this.ptyController?.spawn),
       createTerminal: (selector, options) =>
-        this.createTerminal(selector, options, createdWorktree),
+        this.createTerminal(
+          selector,
+          { ...options, initializeWorkspaceTopology: true },
+          createdWorktree
+        ),
       setTabTitle: async (handle, title) => {
         const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)
         // Why not renameTerminal: it writes the pane's title, stamped to outrank every later
@@ -90,7 +94,11 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
     return {
       canSpawn: () => Boolean(this.ptyController?.spawn),
       createTerminal: (selector, options) =>
-        this.createTerminal(selector, options, createdWorktree),
+        this.createTerminal(
+          selector,
+          { ...options, initializeWorkspaceTopology: true },
+          createdWorktree
+        ),
       setTabTitle: async (handle, title) => {
         const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)
         const ok = applied(

@@ -207,7 +207,7 @@ describe('the worktree factory', () => {
     const args = createArgs(runtime)
     expect(args.startupAgent).toBeUndefined()
     expect(args.awaitTerminalProvisioning).toBe(true)
-    expect(args.observeSetupCompletion).toBe(true)
+    expect(args.observeSetupCompletion).toBeUndefined()
     // Still recorded on the workspace: the launch owns the agent whichever surface it settles on.
     expect(args.createdWithAgent).toBe('claude')
     expect(result.outcome.kind).toBe('structured')
@@ -249,63 +249,14 @@ describe('the worktree factory', () => {
     expect(createStructuredSession).toHaveBeenCalledTimes(1)
   })
 
-  it('aborts the setup wait when its bounded timeout expires', async () => {
-    vi.useFakeTimers()
-    try {
-      const runtime = runtimeStub({
-        setupReceipt: {
-          startupPolicy: 'wait-for-setup',
-          state: 'running',
-          terminalHandle: 'setup-1'
-        }
-      })
-      let setupSignal: AbortSignal | undefined
-      runtime.waitForSetupTerminalCompletion.mockImplementation(
-        (_handle, signal) =>
-          new Promise<{ exitCode: number | null }>((_resolve, reject) => {
-            setupSignal = signal
-            signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
-          })
-      )
-
-      const result = await (async () => {
-        const pending = launch(CREATE_LAUNCH, runtime)
-        await vi.runAllTimersAsync()
-        return pending
-      })()
-
-      expect(result.outcome.kind).toBe('structured')
-      expect(setupSignal?.aborted).toBe(true)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('waits for a setup-gated structured workspace before creating its session', async () => {
+  it('creates a chat immediately while setup is still running', async () => {
     const runtime = runtimeStub({
-      setupReceipt: {
-        startupPolicy: 'wait-for-setup',
-        state: 'running',
-        terminalHandle: 'setup-1'
-      }
+      setupReceipt: { startupPolicy: 'wait-for-setup', state: 'running', terminalHandle: 'setup-1' }
     })
-    const order: string[] = []
-    runtime.waitForSetupTerminalCompletion.mockImplementation(async () => {
-      order.push('setup-complete')
-      return { exitCode: 0 }
-    })
-    createStructuredSession.mockImplementationOnce(async () => {
-      order.push('structured-create')
-      return { ok: true as const, value: { sessionId: 'sess-1' } }
-    })
-
-    await launch(CREATE_LAUNCH, runtime)
-
-    expect(order).toEqual(['setup-complete', 'structured-create'])
-    expect(runtime.waitForSetupTerminalCompletion).toHaveBeenCalledWith(
-      'setup-1',
-      expect.any(AbortSignal)
-    )
+    runtime.waitForSetupTerminalCompletion.mockImplementation(() => new Promise(() => {}))
+    const result = await launch(CREATE_LAUNCH, runtime)
+    expect(result.outcome.kind).toBe('structured')
+    expect(runtime.waitForSetupTerminalCompletion).not.toHaveBeenCalled()
   })
 
   it('keeps agent-first creation for a launch the user wants as a terminal', async () => {

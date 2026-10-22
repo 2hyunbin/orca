@@ -1,3 +1,4 @@
+import type { CreateWorktreeProgressEvent } from '../../shared/worktree/create-types'
 import type {
   RuntimeEditorTabReveal,
   RuntimeFileOpenPosition
@@ -22,6 +23,7 @@ import type {
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type {
+  RuntimeMobileSessionTabsResult,
   RuntimeBrowserDriverState,
   RuntimeMobileSessionTabMove,
   RuntimeTerminalDriverState,
@@ -31,6 +33,7 @@ import type {
 type DriverState = RuntimeTerminalDriverState
 
 export type RuntimeNotifier = {
+  worktreeCreationProgress?(event: CreateWorktreeProgressEvent): void
   automationsChanged?(payload: {
     selector?: { kind: 'self' } | { kind: 'ssh'; targetId: string } | { kind: 'orphan' }
     reason?: 'definition' | 'run' | 'usage'
@@ -66,6 +69,7 @@ export type RuntimeNotifier = {
     worktreeId: string,
     opts: {
       ptyId: string
+      initialWorkspaceTopology?: RuntimeMobileSessionTabsResult
       title?: string | null
       cwd?: string
       launchConfig?: SleepingAgentLaunchConfig

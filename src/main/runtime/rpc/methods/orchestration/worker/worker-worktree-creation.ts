@@ -1,3 +1,4 @@
+import type { AgentLaunchInitialSurfaceStage } from '../../../../../agent-launch/agent-launch-surface-factories'
 /**
  * Creating the worktree a `--worktree new-child` / `new-top-level` dispatch asks for.
  *
@@ -40,6 +41,7 @@ export async function createWorkerWorktree(args: {
   withAgentTerminal: boolean
   promisedAgentChat?: boolean
   onWorkspaceCreated?: (worktreeId: string) => void
+  initializeSurface?: AgentLaunchInitialSurfaceStage
   launchPreferences?: AgentLaunchPreferences
   effects: WorkerEffect[]
 }): Promise<{
@@ -65,6 +67,7 @@ export async function createWorkerWorktree(args: {
     createdWithAgent: args.agent,
     ...(args.promisedAgentChat ? { promisedAgentChat: true } : {}),
     ...(args.onWorkspaceCreated ? { onWorkspaceCreated: args.onWorkspaceCreated } : {}),
+    ...(args.initializeSurface ? { initializeSurface: args.initializeSurface } : {}),
     ...(args.withAgentTerminal
       ? {
           startupAgent: args.agent,

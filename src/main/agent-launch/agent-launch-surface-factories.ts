@@ -4,8 +4,13 @@
  * implements, not part of the sequencing it runs.
  */
 
-import type { AgentLaunchIntent, AgentLaunchPrompt } from '../../shared/agent-launch-intent'
+import type {
+  AgentLaunchIntent,
+  AgentLaunchPrompt,
+  AgentLaunchResult
+} from '../../shared/agent-launch-intent'
 import type { StructuredAgentId } from '../../shared/agent-session-provider-handle'
+import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { TuiAgent } from '../../shared/tui-agent'
 
 /** How a surface is built once the executor has decided which one. Injected because an
@@ -28,6 +33,7 @@ export type AgentLaunchSurfaceFactory = {
   }): Promise<AgentLaunchStructuredSurface>
   createTerminalAgent(args: {
     worktreeId: string
+    sequenceTerminalCommand?: AgentLaunchTerminalSequence
     agent: TuiAgent
     options?: Readonly<Record<string, unknown>>
     /** Offered only for an agent whose CLI takes the prompt on argv. It rides the launch command
@@ -103,6 +109,27 @@ export class AgentLaunchStructuredSessionRefusedError extends Error {
   }
 }
 
+export type AgentLaunchTerminalSequence = (command: string) => {
+  command: string
+  env?: Record<string, string>
+}
+
+export type AgentLaunchWorkspace = {
+  sequenceTerminalCommand?: AgentLaunchTerminalSequence
+  worktreeId: string
+  workspacePath?: string
+  connectionId?: string | null
+  startupTerminalHandle: string | undefined
+  startupTerminalPaneKey?: string
+  warning?: string
+  promptRodeLaunchCommand?: boolean
+  created?: CreateWorktreeResult
+}
+
+export type AgentLaunchInitialSurfaceStage = (
+  workspace: AgentLaunchWorkspace
+) => Promise<Pick<AgentLaunchResult, 'outcome'> | void>
+
 /** Creating the workspace, when the intent asks for one. Injected so orchestration keeps recording
  *  its own worktree stages and residual-resource effects around the same call. */
 export type AgentLaunchWorkspaceFactory = {
@@ -111,10 +138,10 @@ export type AgentLaunchWorkspaceFactory = {
     /** Main-internal registration at the metadata boundary, before the workspace is announced. */
     onWorkspaceCreated?: (worktreeId: string) => void
     promisedAgentChat?: boolean
+    initializeSurface?: AgentLaunchInitialSurfaceStage
     /** Set only when the settled mode is a terminal agent: agent-first creation sequences the
      *  agent's startup command behind the setup runner, which is how a PTY launch gets its
-     *  wait-for-setup gate for free. A structured launch has no startup command to sequence and
-     *  must await that gate explicitly instead. */
+     *  wait-for-setup gate. Chats are committed independently of setup. */
     startupAgent: TuiAgent | undefined
     /** Offered only alongside a `startupAgent` whose CLI takes the prompt on argv: agent-first
      *  creation builds the startup command, so that is where the typed line is measured. */
@@ -131,21 +158,8 @@ export type AgentLaunchWorkspaceFactory = {
     options?: Readonly<Record<string, unknown>>
     /** Account routing env merged over the startup agent's own. */
     accountEnv?: Readonly<Record<string, string>>
-  }): Promise<{
-    worktreeId: string
-    /** Actual host-resolved root, not a prediction from the create request. */
-    workspacePath?: string
-    /** The new workspace's SSH connection; `null` is local. The executor carries it but nothing
-     *  reads it yet; absent when the factory did not resolve it. */
-    connectionId?: string | null
-    startupTerminalHandle: string | undefined
-    /** The pane minted with the startup terminal, when the runtime reported one. */
-    startupTerminalPaneKey?: string
-    /** Created, but incomplete — surfaced on the launch result rather than dropped. */
-    warning?: string
-    /** Reported by the create that built the startup command's typed line. */
-    promptRodeLaunchCommand?: boolean
-  }>
+  }): Promise<AgentLaunchWorkspace>
+
   /** Leave a usable workspace when chat creation has an indeterminate outcome. */
   createRecoveryShell?: (worktreeId: string) => Promise<void>
   /** A folder workspace has no startup terminal: the launch starts its agent there afterwards.

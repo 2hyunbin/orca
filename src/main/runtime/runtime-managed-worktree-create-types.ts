@@ -1,3 +1,5 @@
+import type { WorkspaceCreateEntryPoint } from '../../shared/worktree/create-timing-vocabulary'
+import type { AgentLaunchInitialSurfaceStage } from '../agent-launch/agent-launch-surface-factories'
 import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
 import type { CreateWorktreeArgs } from '../../shared/worktree/create-types'
 import type {
@@ -41,6 +43,7 @@ export type RuntimeManagedWorktreeCreateArgs = {
   displayName?: string
   displayNameKind?: CreateWorktreeArgs['displayNameKind']
   telemetrySource?: WorkspaceCreateTelemetrySource
+  telemetryEntryPoint?: WorkspaceCreateEntryPoint
   workspaceStatus?: string
   manualOrder?: number
   nestWorkspaces?: boolean
@@ -61,6 +64,7 @@ export type RuntimeManagedWorktreeCreateArgs = {
   creationId?: string
   /** Main-internal launch registration before catalog notification or activation. */
   onWorkspaceCreated?: (worktreeId: string) => void
+  initializeSurface?: AgentLaunchInitialSurfaceStage
   startupAgent?: TuiAgent
   terminalImageViewerSupported?: boolean
   startupLaunchPreferences?: AgentLaunchPreferences

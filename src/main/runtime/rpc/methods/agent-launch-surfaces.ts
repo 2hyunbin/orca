@@ -136,6 +136,7 @@ export function agentLaunchSurfaceFactory(
       worktreeId,
       agent,
       startupPrompt,
+      sequenceTerminalCommand,
       agentArgs,
       cwd,
       launchSource,
@@ -155,6 +156,7 @@ export function agentLaunchSurfaceFactory(
         // The agent id is not a shell command — `cursor` is the desktop app, its CLI is
         // `cursor-agent` — so the runtime builds the configured launcher.
         startupAgent: agent,
+        ...(sequenceTerminalCommand ? { sequenceTerminalCommand } : {}),
         terminalImageViewerSupported: terminalImageViewerSupported(context),
         // Offered to that launcher's startup plan; it rides only when the typed line can carry it,
         // and the runtime reports which so an uncarried prompt is pasted once the agent is ready.

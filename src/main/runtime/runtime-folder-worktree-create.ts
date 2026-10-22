@@ -187,6 +187,14 @@ export async function createRuntimeFolderWorktree(args: {
       console.warn(`[worktree-create] ${warning}`)
     }
   }
+  await request.initializeSurface?.({
+    worktreeId: worktree.id,
+    workspacePath: worktree.path,
+    connectionId: repo.connectionId ?? null,
+    created: { worktree, ...(startupTerminal ? { startupTerminal } : {}) },
+    startupTerminalHandle: startupTerminal?.handle,
+    ...(startupTerminal?.paneKey ? { startupTerminalPaneKey: startupTerminal.paneKey } : {})
+  })
   if (shouldActivate) {
     deps.activate(
       repo.id,

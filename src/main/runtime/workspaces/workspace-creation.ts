@@ -1,3 +1,4 @@
+import type { CreateWorktreeProgressEvent } from '../../../shared/worktree/create-types'
 import type { Repo } from '../../../shared/repo-types'
 import type {
   WorktreeLineageInput,
@@ -30,6 +31,10 @@ import { getRepoExecutionHostId } from '../../../shared/execution-host'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
 
 export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWithGetWorktreeTerminalProvisioningHost {
+  notifyWorktreeCreationProgress(event: CreateWorktreeProgressEvent): void {
+    this.notifier?.worktreeCreationProgress?.(event)
+  }
+
   protected abstract resolveLineageForWorktreeCreate(
     input?: WorktreeLineageInput,
     childRepo?: Repo

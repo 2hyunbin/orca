@@ -58,7 +58,7 @@ import {
   agentLaunchCallerNavigationId,
   selectAgentLaunchTabForCaller
 } from './agent-launch-caller-selection'
-import { agentLaunchWorkspaceFactory } from './agent-launch-worktree-creation'
+import { agentLaunchWorkspaceCreation } from './agent-launch-worktree-creation'
 import { assertAgentLaunchTargetAuthorized } from './agent-launch-target-authorization'
 import { clientRendersStructuredAgent } from './structured-agent-session-policy'
 import { resolveUnlaunchedIntent } from './agent-launch-intent-resolution'
@@ -131,7 +131,7 @@ async function runAgentLaunch(
       replaySafe?.terminalSpawn,
       view
     ),
-    workspaces: agentLaunchWorkspaceFactory(context, intent.agent),
+    ...agentLaunchWorkspaceCreation(context, intent),
     ...(callerRendersLaunchedChat(context, intent.agent) ? {} : { callerRendersStructured: false }),
     // The tab is shown as it is published, not after a prompt that can take a minute to land.
     onSurfacePublished: (surface) => {

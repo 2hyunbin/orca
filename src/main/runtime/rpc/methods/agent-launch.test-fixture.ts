@@ -168,6 +168,7 @@ export function runtimeStub(options: AgentLaunchRuntimeStubOptions = {}) {
       return launchRecordStore
     }),
     waitForSetupTerminalCompletion,
+    notifyWorktreeCreationProgress: vi.fn(),
     canPublishAgentLaunchTab: vi.fn(() => options.publishAgentLaunchTab !== undefined),
     publishAgentLaunchTab: vi.fn(
       (request: Omit<AgentLaunchTabPublishRequest, 'requestId'>) =>
