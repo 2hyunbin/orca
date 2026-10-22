@@ -12,7 +12,6 @@ export function isOptionalUsageLimitContinueCancel(
       'turnItemId' in value &&
       typeof value.turnItemId === 'string' &&
       value.turnItemId.length > 0 &&
-      value.turnItemId.length <= 4096 &&
       'resetsAt' in value &&
       typeof value.resetsAt === 'number' &&
       Number.isFinite(value.resetsAt))

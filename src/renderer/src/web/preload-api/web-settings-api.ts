@@ -75,9 +75,9 @@ export function createWebSettingsApi(): Partial<PreloadApi> {
           )
         }
         const localUpdates = { ...sanitizedUpdates }
+        delete localUpdates.nativeChatAutoContinueAfterUsageLimit
         if (runtimeEnvironment) {
           delete localUpdates.worktreeVisibilityDefaults
-          delete localUpdates.nativeChatAutoContinueAfterUsageLimit
         }
         const next = mergeSettings(getStoredSettings(), localUpdates, {
           preserveAutoRenameBranchFromWorkUpdate: 'autoRenameBranchFromWork' in sanitizedUpdates

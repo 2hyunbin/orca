@@ -155,12 +155,13 @@ export async function rewindStructuredAgentSession(
             journal,
             fence,
             undefined,
-            (rewind, currentFence, cursor) => {
+            (rewind, currentFence, cursor, cancel) => {
               completionReceipt = store.conversationReceipts.rewind(
                 sessionId,
                 currentFence,
                 rewind,
-                cursor
+                cursor,
+                cancel
               )
               return ctx.operationReceipt!
             }
@@ -171,7 +172,7 @@ export async function rewindStructuredAgentSession(
             value: {
               itemId: params.itemId,
               epoch: journal.cursor().epoch,
-              ...(contextFloor ? { sequence: journal.cursor().sequence } : {})
+              sequence: journal.cursor().sequence
             }
           }
         }

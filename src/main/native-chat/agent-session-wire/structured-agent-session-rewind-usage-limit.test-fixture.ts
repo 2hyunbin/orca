@@ -1,11 +1,16 @@
-import { expect } from 'vitest'
+import { expect, vi } from 'vitest'
+import { structuredAgentSessionMessageSendMutation } from '../../../shared/structured-agent-session-send-mutation'
+import {
+  HOST_TEST_SESSION,
+  hostTestOperationId,
+  hostTestMessage
+} from './structured-agent-session-host-test-data'
 import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat-usage-limit-cut'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentSessionHost } from './structured-agent-session-host'
-import { HOST_TEST_SESSION } from './structured-agent-session-host-test-data'
 
 export async function expectUsageLimitRewindCancellation({
   host,
@@ -59,4 +64,27 @@ export async function expectUsageLimitRewindCancellation({
     resetsAt
   })
   expect(host.usageLimitContinue.readState(HOST_TEST_SESSION)?.state).toBe('cancelled')
+}
+
+export async function expectReopenedUsageLimitCancellation(
+  host: StructuredAgentSessionHost,
+  store: AgentSessionRecordStore
+) {
+  const sent = vi.spyOn(host, 'send')
+  await host.usageLimitContinue.tick()
+  expect(sent).not.toHaveBeenCalled()
+  expect(host.usageLimitContinue.readState(HOST_TEST_SESSION)?.state).toBe('cancelled')
+  const turnItemId = store.getRecord(HOST_TEST_SESSION)!.usageLimitContinueCancel!.turnItemId
+  expect(
+    await host.send(
+      { callerKey: 'desktop' },
+      structuredAgentSessionMessageSendMutation({
+        sessionId: HOST_TEST_SESSION,
+        clientOperationId: hostTestOperationId(),
+        expectedRuntimeFence: store.getRecord(HOST_TEST_SESSION)!.lease.runtimeFence,
+        body: hostTestMessage('Continue where you left off.'),
+        usageLimitContinuationOfTurnItemId: turnItemId
+      })
+    )
+  ).toMatchObject({ ok: true })
 }

@@ -1,3 +1,4 @@
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 // One plan per mutating method: what it fingerprints, what it does, and how its
 // answer is rebuilt on a replay.
 //
@@ -58,6 +59,7 @@ export type MutationPlan<TValue> = {
   method: string
   fields: Record<string, unknown>
   operationIdScope?: 'global'
+  acceptanceRecord?: (record: AgentSessionRecord) => AgentSessionRecord
   /** Admitted without the writer lease: see `admitAgentSessionMutation`. */
   conversationWrite?: true
   run: (ctx: AgentSessionTurnContext) => Promise<TurnOutcome<TValue>>

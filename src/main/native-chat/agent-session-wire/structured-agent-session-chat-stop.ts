@@ -1,3 +1,7 @@
+import {
+  cancelAgentSessionUsageLimitContinue,
+  type UsageLimitContinueIdentity
+} from '../../../shared/agent-session-usage-limit-continue'
 // The chat's Stop, however a client reached it: the Stop button or a question card's Cancel. One
 // body and one order: decide what it acts on, accept it (its receipt, its Stop event and every
 // queued send it settles, in one transaction), then, only while that target still stands, interrupt
@@ -63,6 +67,7 @@ export function mutateWithChatStop<TValue>(
   let windDown:
     | { owed: StructuredAgentSessionStopWindDown; ctx: AgentSessionTurnContext }
     | undefined
+  let withdrawnCut: UsageLimitContinueIdentity | undefined
   let reached = params.stoppedPrePrompt === true
   const named = turnId !== undefined ? { turnId } : {}
   // Its own step wrote the Stop's event first.
@@ -94,7 +99,7 @@ export function mutateWithChatStop<TValue>(
       ? {
           ok: true,
           value: {
-            settled: target.queued || reached,
+            settled: target.queued || reached || withdrawnCut !== undefined,
             turnId: accepted.value.turnId
           }
         }
@@ -146,26 +151,12 @@ export function mutateWithChatStop<TValue>(
     )
   }
   const stop = async (ctx: AgentSessionTurnContext): Promise<ChatStopOutcome> => {
-    let cancelledContinue = false
-    // An untargeted Stop also withdraws this idle turn's scheduled work; late named Stops do not.
+    // Capture once on the lane; the acceptance receipt owns the exact-cut withdrawal.
     if (turnId === undefined) {
       const snapshot = ctx.journal.snapshot()
       const cut = latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
       if (cut?.resetsAt !== undefined && Number.isFinite(cut.resetsAt)) {
-        try {
-          await context.deps.store.cancelUsageLimitContinue(sessionId, {
-            turnItemId: cut.turnItemId,
-            resetsAt: cut.resetsAt
-          })
-          cancelledContinue = true
-          context.publish(sessionId, ctx.journal)
-        } catch (error) {
-          context.deps.logger.warn('cancelling automatic continuation on Stop failed', {
-            scope: 'usage-limit-continue',
-            sessionId,
-            error
-          })
-        }
+        withdrawnCut = { turnItemId: cut.turnItemId, resetsAt: cut.resetsAt }
       }
     }
     const operations = context.acquireAborts.captureOperations(sessionId)
@@ -174,11 +165,12 @@ export function mutateWithChatStop<TValue>(
       child: context.sessions.get(ctx.sessionId)?.child ?? null,
       ...named,
       endsSession: ctx.adapter.stopEndsSession?.(ctx.sessionId) === true,
+      withdrawsContinue: withdrawnCut !== undefined,
       stoppedPrePrompt: reached || operations.length > 0 || flight !== undefined
     })
     if (!target) {
       // Late, or nothing to stop: answered as a no-op, its receipt committed before the answer.
-      return { ok: true, value: { ...named, cancelled: cancelledContinue } }
+      return { ok: true, value: { ...named, cancelled: false } }
     }
     const accepted = await accept(ctx, target)
     if (!accepted.ok) {
@@ -224,6 +216,8 @@ export function mutateWithChatStop<TValue>(
     envelope,
     {
       ...plan,
+      acceptanceRecord: (record) =>
+        withdrawnCut ? cancelAgentSessionUsageLimitContinue(record, withdrawnCut) : record,
       run: (ctx) =>
         run(ctx, async () => ({ outcome: await stop(ctx), endsSession: windDown !== undefined }))
     },

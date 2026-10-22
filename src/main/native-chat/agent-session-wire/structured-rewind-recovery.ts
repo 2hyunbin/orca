@@ -1,9 +1,9 @@
+import type { UsageLimitContinueIdentity } from '../../../shared/agent-session-usage-limit-continue'
+import { replayJournal } from '../agent-session-journal/journal-open'
+import { renderJournalState } from '../agent-session-journal/journal-reducer'
 import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat-usage-limit-cut'
-import {
-  agentJournalItemKey,
-  parseAgentJournalItemKey
-} from '../../../shared/agent-session-journal-item-key'
+import { parseAgentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { agentSessionProviderHandleChainHead } from '../../../shared/agent-session-provider-handle'
 import { isDeepStrictEqual } from 'node:util'
 import { structuredRewindCut, type StructuredRewindCut } from './structured-rewind-cut'
@@ -109,7 +109,8 @@ export async function recoverStructuredRewind(
   receipt?: (
     rewind: AgentSessionRewindRecord,
     fence: number,
-    cursor: AgentJournalCursor
+    cursor: AgentJournalCursor,
+    cancel?: UsageLimitContinueIdentity
   ) => JournalOperationReceipt,
   signal?: AbortSignal
 ): Promise<void> {
@@ -169,7 +170,8 @@ export async function applyStructuredRewindRecovery(
   receipt?: (
     rewind: AgentSessionRewindRecord,
     fence: number,
-    cursor: AgentJournalCursor
+    cursor: AgentJournalCursor,
+    cancel?: UsageLimitContinueIdentity
   ) => JournalOperationReceipt
 ): Promise<void> {
   const { store } = deps
@@ -228,70 +230,41 @@ export async function applyStructuredRewindRecovery(
     ) {
       throw new Error('agent_session_rewind:stale-context')
     }
-    await cancelRestoredUsageLimitContinue(deps, sessionId, journal, cut)
     const completed = rewind
     await journal.context.rewind(
       { epoch: completed.expectedEpoch, sequence: completed.contextClearSequence! },
       fence,
       cut!.kept,
-      (cursor) =>
-        receipt?.(completed, fence, cursor) ??
-        store.conversationReceipts.rewind(sessionId, fence, completed, cursor)
+      (cursor) => completion(completed, cursor)
     )
     return
   }
-  await cancelRestoredUsageLimitContinue(deps, sessionId, journal, cut)
   const cursor = alreadyReplaced
     ? journal.cursor()
     : await journal.replaceEpochItems('handle_forked', fence, cut!.kept)
-  await persistRewindRecord(store, sessionId, fence, {
-    ...rewind,
-    phase: 'completed',
-    epoch: cursor.epoch
-  })
-  await store.recordOperationOutcome({
-    callerKey: rewind.callerKey,
-    operationId: rewind.operationId,
-    outcome: {
-      status: 'succeeded',
-      sessionId,
-      rewind: { itemId: rewind.itemId, epoch: cursor.epoch }
-    }
-  })
-}
+  await store.commitOperationReceipt(completion(rewind, cursor))
 
-/** Cancel before publishing the restored prefix, including recovery after the epoch already moved. */
-async function cancelRestoredUsageLimitContinue(
-  { store, logger }: RewindRecoveryDeps,
-  sessionId: string,
-  journal: AgentSessionJournal,
-  cut: StructuredRewindCut | null
-): Promise<void> {
-  try {
-    const snapshot = cut
-      ? {
-          items: cut.kept.map((item, index) => ({
-            ...item,
-            itemId: agentJournalItemKey(item.identity),
-            revision: 1,
-            sequence: index + 1,
-            observedAt: item.observedAt ?? 0
-          })),
-          submissions: []
-        }
-      : journal.snapshot()
-    const restored = latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
-    if (restored?.resetsAt !== undefined && Number.isFinite(restored.resetsAt)) {
-      await store.cancelUsageLimitContinue(sessionId, {
-        turnItemId: restored.turnItemId,
-        resetsAt: restored.resetsAt
-      })
+  function completion(
+    completed: AgentSessionRewindRecord,
+    cursor: AgentJournalCursor
+  ): JournalOperationReceipt {
+    let staged: JournalOperationReceipt
+    return {
+      write: (db, row) => {
+        // Context rows are in this transaction; normal replacement has already committed.
+        const load = replayJournal(db, sessionId)!
+        const snapshot = renderJournalState(load.state)
+        const cut = latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
+        const cancel =
+          cut?.resetsAt !== undefined && Number.isFinite(cut.resetsAt)
+            ? { turnItemId: cut.turnItemId, resetsAt: cut.resetsAt }
+            : undefined
+        staged =
+          receipt?.(completed, fence, cursor, cancel) ??
+          store.conversationReceipts.rewind(sessionId, fence, completed, cursor, cancel)
+        staged.write(db, row)
+      },
+      committed: () => staged.committed()
     }
-  } catch (error) {
-    logger.warn('cancelling automatic continuation after rewind failed', {
-      scope: 'usage-limit-continue',
-      sessionId,
-      error
-    })
   }
 }

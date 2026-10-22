@@ -252,3 +252,15 @@ it('shows the automatic continuation switch only for a capable host and writes t
   fireEvent.click(supported.getByRole('switch', { name: label }))
   expect(updateSettings).toHaveBeenCalledWith({ nativeChatAutoContinueAfterUsageLimit: true })
 })
+
+it('disables the supported automatic continuation switch until host consent is known', () => {
+  setLocalRuntimeCapabilitiesForTests([AGENT_SESSION_USAGE_LIMIT_AUTO_CONTINUE_RUNTIME_CAPABILITY])
+  const updateSettings = vi.fn()
+  const view = renderSetting({ nativeChatAutoContinueAfterUsageLimit: undefined }, updateSettings)
+  const control = view.getByRole('switch', {
+    name: 'Toggle continuing chats when a usage limit resets'
+  })
+  expect(control).toHaveProperty('disabled', true)
+  fireEvent.click(control)
+  expect(updateSettings).not.toHaveBeenCalled()
+})

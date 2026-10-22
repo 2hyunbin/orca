@@ -94,6 +94,7 @@ export function ChatBehaviorSetting({
                   label={entries.autoContinueAfterUsageLimit.title}
                   description={entries.autoContinueAfterUsageLimit.description}
                   checked={autoContinueEnabled}
+                  disabled={settings.nativeChatAutoContinueAfterUsageLimit === undefined}
                   ariaLabel={translate(
                     'components.settings.nativeChat.usageLimitContinueToggleLabel',
                     'Toggle continuing chats when a usage limit resets'

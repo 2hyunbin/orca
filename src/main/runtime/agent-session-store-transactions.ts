@@ -163,6 +163,7 @@ export class AgentSessionStoreTransactions {
           // TEMPORARY: ledger co-write preserves cross-family identity until every mutation uses receipts.
           if (options.insertOperationsIfAbsent) {
             insertAgentSessionOperationRowsIfAbsent(db, writes.operations.upsert)
+            writeAgentSessionStoreRows(db, { ...writes, operations: { upsert: [], remove: [] } })
           } else {
             writeAgentSessionStoreRows(db, writes)
           }

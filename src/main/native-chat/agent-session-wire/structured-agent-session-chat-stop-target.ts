@@ -46,6 +46,7 @@ export function captureChatStopTarget(
     turnId?: string
     endsSession: boolean
     stoppedPrePrompt?: boolean
+    withdrawsContinue?: boolean
   }
 ): ChatStopTarget | null {
   const { child, turnId } = input
@@ -65,7 +66,7 @@ export function captureChatStopTarget(
     queued
   }
   if (child?.close) {
-    return { ...target, reach: 'close', marks: queued }
+    return { ...target, reach: 'close', marks: queued || input.withdrawsContinue === true }
   }
   if (child?.phase === 'starting') {
     return { ...target, reach: 'starting', marks: true }
@@ -73,7 +74,9 @@ export function captureChatStopTarget(
   // A Stop naming no turn ends nothing more unless the session reads working, by the rule every
   // session list and the chat's own Stop read it, over the fold as it stands.
   if (!child || (turnId === undefined && !isMainAgentWorking(ctx))) {
-    return queued || input.stoppedPrePrompt ? { ...target, reach: 'withdraw', marks: true } : null
+    return queued || input.stoppedPrePrompt || input.withdrawsContinue
+      ? { ...target, reach: 'withdraw', marks: true }
+      : null
   }
   // Repeating the Stop in force with nothing sent since writes no second event, so a card queued
   // between the presses sends normally, as after one Stop.

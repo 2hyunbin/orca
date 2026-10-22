@@ -28,6 +28,7 @@ import { zcodePlanSiteOwner, settingsForZcodePlanSiteOwner } from './web-zcode-p
 import { SETTINGS_STORAGE_KEY, UI_STORAGE_KEY, readJson, writeJson } from './web-storage'
 
 export type WebSettingsApi = NonNullable<PreloadApi['settings']>
+type SettingsResult = { settings: Partial<GlobalSettings> }
 
 export function getStoredSettings(): GlobalSettings {
   webRuntimeState.activeEnvironment =
@@ -43,6 +44,7 @@ export function getStoredSettings(): GlobalSettings {
     terminalCustomThemes: normalizeTerminalCustomThemes(stored.terminalCustomThemes),
     uiLanguage: normalizeUiLanguage(stored.uiLanguage)
   }
+  delete migratedStored.nativeChatAutoContinueAfterUsageLimit
   if (
     rawStoredSettings &&
     (stored.autoRenameBranchFromWork !== migratedStored.autoRenameBranchFromWork ||
@@ -85,6 +87,7 @@ export function getStoredSettings(): GlobalSettings {
     },
     migratedStored
   )
+  delete settings.nativeChatAutoContinueAfterUsageLimit
   delete settings.zcodePlanSite
   return settings
 }
@@ -94,6 +97,7 @@ export function writeStoredSettings(
   explicitActiveRuntimeEnvironmentId?: string | null
 ): void {
   const durable = { ...settings }
+  delete durable.nativeChatAutoContinueAfterUsageLimit
   if (explicitActiveRuntimeEnvironmentId !== undefined) {
     durable.activeRuntimeEnvironmentId = explicitActiveRuntimeEnvironmentId
   } else {
@@ -112,14 +116,10 @@ export async function getRuntimeBackedStoredSettings(): Promise<GlobalSettings> 
   const requestedEnvironment = requireActiveEnvironmentOrNull()
   const requestedSiteOwner = zcodePlanSiteOwner(requestedEnvironment)
   if (!requestedEnvironment) {
-    return local
+    return settingsForActiveVisibilityOwner(local)
   }
   try {
-    const result = await callRuntimeResult<{ settings: Partial<GlobalSettings> }>(
-      'settings.get',
-      undefined,
-      15_000
-    )
+    const result = await chatSettings.call<SettingsResult>(requestedEnvironment, 'settings.get')
     const runtimeSettings: Partial<GlobalSettings> = {}
     const currentEnvironment = requireActiveEnvironmentOrNull()
     if (currentEnvironment?.id === requestedEnvironment.id) {
@@ -131,12 +131,10 @@ export async function getRuntimeBackedStoredSettings(): Promise<GlobalSettings> 
         : null
       webRuntimeState.worktreeVisibilityDefaultsRuntimeValue = visibilityDefaults ?? null
     }
-    if (typeof result.settings.experimentalNewWorktreeCardStyle === 'boolean') {
-      runtimeSettings.experimentalNewWorktreeCardStyle =
-        result.settings.experimentalNewWorktreeCardStyle
-    }
-    if (typeof result.settings.compactWorktreeCards === 'boolean') {
-      runtimeSettings.compactWorktreeCards = result.settings.compactWorktreeCards
+    for (const key of ['experimentalNewWorktreeCardStyle', 'compactWorktreeCards'] as const) {
+      if (typeof result.settings[key] === 'boolean') {
+        runtimeSettings[key] = result.settings[key]
+      }
     }
     if (typeof result.settings.minimaxGroupId === 'string') {
       runtimeSettings.minimaxGroupId = result.settings.minimaxGroupId
@@ -162,8 +160,8 @@ export async function getRuntimeBackedStoredSettings(): Promise<GlobalSettings> 
       )
     }
     Object.assign(runtimeSettings, chatSettings.read(result.settings))
-    // Read-only mirror: the host owns this capability and `syncRuntimeBackedSettings` never
-    // sends it back, so web shows what the host enforces instead of a local value it ignores.
+    chatSettings.publish(requestedEnvironment, result.settings)
+    // Read-only mirror of the host's enforced sharing capabilities.
     if (typeof result.settings.artifactSharingEnabled === 'boolean') {
       runtimeSettings.artifactSharingEnabled = result.settings.artifactSharingEnabled
     }
@@ -181,7 +179,7 @@ export async function getRuntimeBackedStoredSettings(): Promise<GlobalSettings> 
 
 export function settingsForActiveVisibilityOwner(settings: GlobalSettings): GlobalSettings {
   const environment = requireActiveEnvironmentOrNull()
-  const ownedSettings = settingsForZcodePlanSiteOwner(settings, environment)
+  const ownedSettings = chatSettings.project(settingsForZcodePlanSiteOwner(settings, environment))
   if (!environment) {
     return ownedSettings
   }
@@ -231,32 +229,31 @@ export async function syncRuntimeBackedSettings(
       updates.prBotAuthorOverrides
     )
   }
-  Object.assign(runtimeUpdates, await chatSettings.updates(updates, requestedEnvironment.id))
+  Object.assign(runtimeUpdates, await chatSettings.updates(updates, requestedEnvironment))
   if (Object.keys(runtimeUpdates).length === 0) {
     return localNext
   }
   try {
-    const result = await callRuntimeResult<{ settings: Partial<GlobalSettings> }>(
+    const result = await chatSettings.call<SettingsResult>(
+      requestedEnvironment,
       'settings.update',
-      runtimeUpdates,
-      15_000
+      runtimeUpdates
     )
+    chatSettings.publish(requestedEnvironment, result.settings)
     const runtimeSettings = { ...result.settings }
+    delete runtimeSettings.nativeChatAutoContinueAfterUsageLimit
     delete runtimeSettings.activeRuntimeEnvironmentId
-    const updatedVisibilityDefaults = normalizeWorktreeVisibilityDefaults(
+    const visibility = normalizeWorktreeVisibilityDefaults(
       runtimeSettings.worktreeVisibilityDefaults
     )
-    if (
-      requireActiveEnvironmentOrNull()?.id === requestedEnvironment.id &&
-      updatedVisibilityDefaults
-    ) {
+    if (requireActiveEnvironmentOrNull()?.id === requestedEnvironment.id && visibility) {
       webRuntimeState.worktreeVisibilityDefaultsRuntimeEnvironmentId = requestedEnvironment.id
-      webRuntimeState.worktreeVisibilityDefaultsRuntimeValue = updatedVisibilityDefaults
+      webRuntimeState.worktreeVisibilityDefaultsRuntimeValue = visibility
     }
     delete runtimeSettings.worktreeVisibilityDefaults
     const next = mergeSettings(localNext, runtimeSettings)
     writeStoredSettings(next)
-    return next
+    return settingsForActiveVisibilityOwner(next)
   } catch (error) {
     if (
       visibilityDefaults ||

@@ -292,6 +292,9 @@ it('an ordinary Stop cancels the cut durably; late named Stop and manual Continu
   }
   expect(await stop('turn-1')).toMatchObject({ ok: true, value: { cancelled: false } })
   expect(sweep.readState(SESSION)?.state).toBe('scheduled')
+  vi.spyOn(current.store, 'cancelUsageLimitContinue').mockRejectedValue(
+    new Error('optional cancel unavailable')
+  )
   expect(await stop()).toMatchObject({ ok: true, value: { cancelled: true } })
   expect(current.store.getRecord(SESSION)?.usageLimitContinueCancel).toEqual({
     turnItemId,
