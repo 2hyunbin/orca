@@ -35,7 +35,7 @@ export function codexAcquireCatalogListing(
 /** Installed inventory supplies every session's capability choices. */
 export function codexSessionCapabilities(
   session: Pick<CodexSession, 'catalogAccess' | 'options'> &
-    Partial<Pick<CodexSession, 'reportedOptions'>>,
+    Partial<Pick<CodexSession, 'reportedOptions' | 'appliedTurnOptions'>>,
   model = session.options.get('model') ?? session.reportedOptions?.model
 ): ReturnType<typeof structuredAgentSessionCapabilityView> {
   return structuredAgentSessionCapabilityView(

@@ -99,7 +99,12 @@ export class RuntimeAccountController {
     const previous = this.hostLaunchEnv
     this.hostLaunchEnv = launchEnv
     if (JSON.stringify(previous) !== JSON.stringify(launchEnv)) {
-      agentModelCatalogStore.expireLaunchScopes()
+      agentModelCatalogStore.expireLaunchScopes(
+        (agent) =>
+          previous?.wslDistro !== this.hostLaunchEnv?.wslDistro ||
+          JSON.stringify(Object.entries(hostAccountLaunchEnvFor(previous, agent)).sort()) !==
+            JSON.stringify(Object.entries(this.hostLaunchEnvFor(agent)).sort())
+      )
       retireAtRestCommandContext()
     }
     try {
@@ -120,7 +125,12 @@ export class RuntimeAccountController {
       const previous = this.hostLaunchEnv
       this.hostLaunchEnv = saved
       if (JSON.stringify(previous) !== JSON.stringify(saved)) {
-        agentModelCatalogStore.expireLaunchScopes()
+        agentModelCatalogStore.expireLaunchScopes(
+          (agent) =>
+            previous?.wslDistro !== this.hostLaunchEnv?.wslDistro ||
+            JSON.stringify(Object.entries(hostAccountLaunchEnvFor(previous, agent)).sort()) !==
+              JSON.stringify(Object.entries(this.hostLaunchEnvFor(agent)).sort())
+        )
         retireAtRestCommandContext()
       }
     }

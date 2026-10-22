@@ -1,3 +1,4 @@
+import type { AgentModelCatalogSource } from '../agent-model-catalog/agent-model-catalog-service-contract'
 import type { StructuredAgentSessionStatusObserverOptions } from './structured-agent-session-status-observation'
 import type { SubmissionRejectionFact } from '../../../shared/agent-session-failure'
 import type { AgentSessionOwnerProbe } from '../../../shared/agent-session-lease-adjudication'
@@ -81,7 +82,7 @@ export type StructuredAgentSessionProviderChild = StructuredAgentSessionProvider
   readonly permissionMode?: AgentChatPermissionMode
   /** The adapter's `heldSends` for this conversation, read at each decision. */
   /** The launch source that may publish observations for this child. */
-  readonly catalogSource?: () => boolean
+  readonly catalogSource?: AgentModelCatalogSource
   readonly heldSends?: () => ReadonlySet<string> | undefined
   readonly exitObservation?: DeferredStructuredAgentSessionEventSink['exitObservation']
   close?: StructuredAgentSessionChildClose

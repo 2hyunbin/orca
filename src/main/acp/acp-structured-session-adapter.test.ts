@@ -5,6 +5,7 @@ import {
   SESSION
 } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
 import { AgentSessionAcquisitionRootExitObservedError } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
+import { acpLaunchSpecFor } from './acp-launch-specs'
 import { GENERIC_ACP_DIALECT } from './acp-dialects/acp-dialect'
 import { OPENCODE_ACP_DIALECT } from './acp-dialects/opencode-dialect'
 import { OMP_ACP_DIALECT } from './acp-dialects/omp-dialect'
@@ -237,8 +238,38 @@ describe('ACP structured session adapter: turns', () => {
     }
   )
 
-  it('passes unlisted literal controls and inherits omitted fields on the next prompt', async () => {
-    const rig = await openAcpAdapterRig()
+  it('inherits omitted effort after acquired and applied high when OMP offers no default effort', async () => {
+    const configOptions = [
+      {
+        id: 'model',
+        name: 'Model',
+        category: 'model',
+        type: 'select',
+        currentValue: 'google/gemini-3.1-pro-preview',
+        options: [
+          { value: 'google/gemini-3.1-pro-preview', name: 'Gemini' },
+          { value: 'team_lb/gpt-6.1-sol', name: 'GPT' }
+        ]
+      },
+      {
+        id: 'reasoning_effort',
+        name: 'Effort',
+        category: 'thought_level',
+        type: 'select',
+        currentValue: 'high',
+        options: [{ value: 'high', name: 'High' }]
+      }
+    ]
+    const rig = await openAcpAdapterRig({
+      spec: acpLaunchSpecFor('omp')!,
+      script: (agent) => {
+        agent.on('session/new', (frame) =>
+          agent.reply(frame, { sessionId: PROVIDER_SESSION, configOptions })
+        )
+        // The unchanged report does not echo or confirm the supplied control.
+        agent.on('session/set_config_option', (frame) => agent.reply(frame, { configOptions }))
+      }
+    })
     await rig.acquire()
     let promptIndex = 0
     const dispatch = async (id: string, executionOptions: Record<string, string>) => {
@@ -257,10 +288,22 @@ describe('ACP structured session adapter: turns', () => {
         expect(turns.filter((turn) => turn.state === 'completed')).toHaveLength(promptIndex)
       })
     }
+    const observed = await rig.adapter.readOptions({ sessionId: SESSION, fence: 1 })
+    expect(observed.current).toMatchObject({
+      model: 'google/gemini-3.1-pro-preview',
+      effort: 'high'
+    })
+    expect(observed.models?.find((model) => model.id === 'team_lb/gpt-6.1-sol')).not.toHaveProperty(
+      'defaultEffort'
+    )
+    await dispatch('acquired', { model: 'team_lb/gpt-6.1-sol' })
+    expect(rig.sent('session/set_config_option').map((frame) => frame.params)).toEqual([
+      expect.objectContaining({ configId: 'model', value: 'team_lb/gpt-6.1-sol' })
+    ])
     await dispatch('B', { model: 'unlisted-model', effort: 'high' })
     await rig.frame('session/prompt')
     let before = rig.child().agent.frames.length
-    await dispatch('A', { model: 'grok-4.6' })
+    await dispatch('A', { model: 'team_lb/gpt-6.1-sol' })
     expect(
       rig
         .child()

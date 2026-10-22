@@ -1,3 +1,6 @@
+import type { AgentSessionAccountHome } from '../../../shared/agent-session-record'
+import type { AgentModelCatalogBinding } from './agent-model-catalog-snapshot'
+import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { isLegacyAgentSessionAccountHome } from '../../../shared/agent-session-account-home'
 import { isNativeLocalLocation } from '../../../shared/execution-host'
@@ -98,5 +101,28 @@ export async function recordConfiguredDefault(
   }
   if (current()) {
     deps.store.recordConfiguredDefault(fingerprint, choice)
+  }
+}
+
+/** Default provenance belongs to the resolved binding and the operation projecting it. */
+export async function projectAgentModelCatalogDefault(
+  deps: AgentModelCatalogWorkspaceDeps,
+  agent: string,
+  bound: AgentModelCatalogBinding,
+  home: AgentSessionAccountHome | null,
+  current: () => boolean
+): Promise<void> {
+  const accountHomePath = home && isLegacyAgentSessionAccountHome(home) ? home.path : null
+  const path =
+    bound.workspacePath === null && independentAgentModelCatalog(agent)
+      ? undefined
+      : bound.workspacePath
+  try {
+    const keepDefault = await workspaceKeepsListedDefault(deps, agent, path, accountHomePath)
+    if (current()) {
+      bound.keepDefault = keepDefault
+    }
+  } catch {
+    /* A failed provenance read leaves the binding's conservative projection. */
   }
 }

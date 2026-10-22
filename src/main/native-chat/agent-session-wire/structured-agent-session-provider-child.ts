@@ -34,6 +34,9 @@ export function indexProviderChild(
   session: ChildBearer,
   child: StructuredAgentSessionProviderChild
 ): void {
+  if (session.child !== child) {
+    session.child?.catalogSource?.release?.()
+  }
   session.child = child
 }
 
@@ -105,6 +108,7 @@ export function recordProviderChildEnd(
   if (!child) {
     return false
   }
+  child.catalogSource?.release?.()
   session.lastEndedChild = {
     ...ended,
     ...(child.startedFor === undefined ? {} : { startedFor: child.startedFor }),

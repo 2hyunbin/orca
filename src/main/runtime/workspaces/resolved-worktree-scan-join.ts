@@ -16,7 +16,7 @@ import { getAgentLaunchPlatformForRepo } from '../runtime-agent-launch-resolutio
 import type { ResolvedWorktreeSnapshot } from '../runtime-resolved-worktree-cache'
 import type { RuntimeStore } from '../runtime-store-contract'
 import {
-  joinRepoWorktreeRows,
+  projectRepoWorktreeRows,
   scanRepoWorktreeRows,
   type RepoWorktreeRowDeps,
   type RepoWorktreeRowsScan
@@ -114,7 +114,7 @@ export function joinResolvedWorktreeScans(
     if (!scan && !isFolderRepo(repo)) {
       unscannedRepoKeys.add(key)
     }
-    const rows = joinRepoWorktreeRows(deps, repo, scan, metaById)
+    const rows = projectRepoWorktreeRows(deps, repo, scan, metaById)
     if (scan?.ok) {
       scannedRepoKeys.add(key)
       for (const row of rows) {

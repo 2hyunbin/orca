@@ -3,6 +3,7 @@ import { decodeStructuredAgentSessionOptionValue } from '../../../shared/structu
 import { finishedListingIds } from '../../../shared/structured-agent-session-options'
 import { savedEffectiveServiceTier } from '../../../shared/structured-agent-session-effective-tier'
 import { independentAgentModelCatalog } from '../agent-model-catalog/agent-model-catalog-discovery'
+import { AGENT_MODEL_CATALOG_PICKER_WAIT_MS } from '../agent-model-catalog/agent-model-catalog-listing-waiters'
 import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import {
   structuredAgentSessionOptionModels,
@@ -26,6 +27,9 @@ export async function readStructuredAgentSessionOptionsAtRest(
   if (!record) {
     throw new Error('agent_session_identity_required')
   }
+  const deadline = reader.readsWithoutModel
+    ? undefined
+    : Date.now() + AGENT_MODEL_CATALOG_PICKER_WAIT_MS
   const rules = deps.agents.definition(record.provider)?.restingOptions ?? null
   const readCatalog = async (
     inSessionWorkspace: boolean
@@ -43,21 +47,22 @@ export async function readStructuredAgentSessionOptionsAtRest(
             : {})
       })
       .catch(() => null)) ?? { origin: 'unknown' }
-  const demand = deps.modelCatalog?.demand?.({
-    agent: record.provider,
-    sessionId,
-    inSessionWorkspace: true
-  })
   if (!reader.readsWithoutModel) {
     await deps.modelCatalog?.read({
       agent: record.provider,
       sessionId,
+      deadline,
       inSessionWorkspace: true,
       waitForListing: true,
       legacyOptionsDisplay: true
     })
-  } else {
-    void demand
+    await deps.modelCatalog?.prepareSaved?.({
+      agent: record.provider,
+      sessionId,
+      deadline,
+      inSessionWorkspace: true,
+      legacyOptionsDisplay: true
+    })
   }
   const saved = record.options ?? {}
   // The chat's own folder decides its default, as its first frame did.
@@ -73,6 +78,7 @@ export async function readStructuredAgentSessionOptionsAtRest(
       ? (await deps.modelCatalog?.prepareSaved?.({
           agent: record.provider,
           sessionId,
+          deadline,
           legacyOptionsDisplay: true,
           ...(independentAgentModelCatalog(record.provider) ? { workspacePath: null } : {})
         }),

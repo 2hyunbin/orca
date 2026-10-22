@@ -197,6 +197,7 @@ describe('Codex captured message choices', () => {
     )
     const session = optionSession(request)
     session.reportedOptions = { model: 'model-a', effort: 'xhigh' }
+    session.appliedTurnOptions = { model: 'model-a', effort: 'low' }
     seedMessageDefaults(session)
     const send = async (id: string, choices: Record<string, string>) =>
       dispatchCodexTurn(
@@ -209,7 +210,7 @@ describe('Codex captured message choices', () => {
         },
         undefined
       )
-    const ran = { model: 'model-a', effort: 'xhigh' }
+    const ran = { model: 'model-a', effort: 'low' }
     expect(await send('first', { model: 'model-a' })).toMatchObject({ ranOptions: ran })
     expect(request.mock.calls[0]?.[1]).toMatchObject({ model: 'model-a' })
     expect(request.mock.calls[0]?.[1]).not.toHaveProperty('effort')
@@ -221,7 +222,9 @@ describe('Codex captured message choices', () => {
   })
 
   it('inherits untouched native tier and personality without a configuration probe', async () => {
-    const request = vi.fn(async (_method: string) => ({ turn: { id: 'native' } }))
+    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
+      turn: { id: 'native' }
+    }))
     const session = optionSession(request)
     session.reportedOptions = { model: 'model-a', serviceTier: 'flex', serviceTierKnown: true }
     const turnOptions = await resolvedCodexMessageOptions(session, {})
@@ -297,16 +300,19 @@ describe('Codex captured message choices', () => {
       })
     )
     known.options.set('model', 'prior')
+    known.appliedTurnOptions = { model: 'prior', effort: 'low', serviceTier: 'flex' }
     await expect(
       startCodexTurn(known, { clientMessageId: 'known', body, turnOptions: { model: 'attempted' } })
     ).rejects.toThrow('invalid model')
     expect(Object.fromEntries(known.options)).toEqual({ model: 'prior' })
+    expect(known.appliedTurnOptions).toEqual({ model: 'prior', effort: 'low', serviceTier: 'flex' })
     const unknown = optionSession(
       vi.fn(async () => {
         throw new Error('connection lost after write')
       })
     )
     unknown.options.set('model', 'prior')
+    unknown.appliedTurnOptions = { model: 'prior', effort: 'low', serviceTier: 'flex' }
     await expect(
       startCodexTurn(unknown, {
         clientMessageId: 'unknown',
@@ -315,5 +321,9 @@ describe('Codex captured message choices', () => {
       })
     ).rejects.toThrow('connection lost after write')
     expect(Object.fromEntries(unknown.options)).toEqual({ model: 'attempted' })
+    expect(unknown.appliedTurnOptions).toEqual({
+      effort: 'low',
+      serviceTier: 'flex'
+    })
   })
 })

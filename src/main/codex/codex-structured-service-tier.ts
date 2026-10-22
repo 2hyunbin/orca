@@ -108,6 +108,11 @@ export function codexOffersServiceTier(
   )
 }
 
+export const codexEffectiveModel = (
+  session: { appliedTurnOptions?: Readonly<Record<string, string>> },
+  options: Readonly<Record<string, string>>
+): string | undefined => options.model ?? session.appliedTurnOptions?.model
+
 /** A turn's options: an unoffered tier runs as standard; the chat's saved tier is kept. */
 export function codexTurnRequestOptions(
   session: Parameters<typeof codexSessionCapabilities>[0],
@@ -117,7 +122,7 @@ export function codexTurnRequestOptions(
   const reportedOptions = session.reportedOptions ?? {}
   const capabilities = codexSessionCapabilities(session)
   const models = capabilities.models
-  const model = models.find((entry) => entry.id === (options.model ?? reportedOptions.model))
+  const model = models.find((entry) => entry.id === codexEffectiveModel(session, options))
   const tier = options.serviceTier
   if (
     tier &&

@@ -1,5 +1,6 @@
 import { agentModelCatalogFingerprintForRecord } from './agent-model-catalog-fingerprint'
 import { agentSessionPinnedLaunchDirectory } from '../../runtime/agent-session-record-launch-directory'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionModelCatalogResult } from '../../../shared/agent-session-wire'
 import { agentModelCatalogResultFromEntry } from './agent-model-catalog-entry'
 import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
@@ -30,12 +31,11 @@ export function agentModelCatalogRequestKey(
 ): string {
   const record = params.sessionId ? deps.getRecord(params.sessionId) : undefined
   const inWorkspace =
-    params.inSessionWorkspace ||
-    (record &&
-      !params.workspace &&
-      params.workspacePath === undefined &&
-      independentAgentModelCatalog(params.agent) &&
-      !params.legacy)
+    record &&
+    !params.workspace &&
+    params.workspacePath === undefined &&
+    independentAgentModelCatalog(params.agent) &&
+    !params.legacy
   return JSON.stringify({
     agent: params.agent,
     account: record && [
@@ -103,7 +103,6 @@ export function agentModelCatalogMemoryBinding(
   if (
     deps.listsInChatFolder?.has(params.agent) ||
     params.workspace ||
-    params.inSessionWorkspace ||
     (params.workspacePath !== null && independentAgentModelCatalog(params.agent))
   ) {
     return
@@ -117,7 +116,30 @@ export function agentModelCatalogMemoryBinding(
     fingerprint,
     base: fingerprint,
     exact: false,
-    keepDefault: params.workspacePath === undefined || params.legacyOptionsDisplay === true
+    keepDefault:
+      (!params.inSessionWorkspace && params.workspacePath === undefined) ||
+      params.legacyOptionsDisplay === true ||
+      deps.agentReadsProjectModelConfig?.(params.agent) === false
+  }
+}
+
+export function createAgentModelCatalogSnapshot(
+  deps: AgentModelCatalogServiceDeps,
+  binding: (params: AgentModelCatalogReadParams) => AgentModelCatalogBinding | undefined,
+  resolving: (params: AgentModelCatalogReadParams, bound: boolean) => boolean,
+  stopped: () => boolean
+) {
+  return (params: AgentModelCatalogReadParams): AgentSessionModelCatalogResult => {
+    const bound = binding(params)
+    if (stopped() || !bound) {
+      return {
+        origin: 'unknown',
+        ...(!params.savedOnly && resolving(params, false)
+          ? { listingInProgress: true as const }
+          : {})
+      }
+    }
+    return projectAgentModelCatalogSnapshot(deps, params, bound, resolving(params, true))
   }
 }
 
@@ -175,23 +197,69 @@ export function projectAgentModelCatalogSnapshot(
 export function retireAgentModelCatalogRequests(
   deps: AgentModelCatalogServiceDeps,
   bindings: Map<string, AgentModelCatalogBinding>,
-  claims: Map<string, { params: AgentModelCatalogReadParams; controller: AbortController }>,
+  claims: Map<
+    string,
+    {
+      identity: string
+      params: AgentModelCatalogReadParams
+      controller: AbortController
+      current?: () => boolean
+    }
+  >,
   workspaceId?: string
 ): void {
   for (const [key, claim] of claims) {
     if (
-      workspaceId === undefined ||
-      !claim.params.sessionId ||
-      deps.getRecord(claim.params.sessionId)?.location.workspaceId === workspaceId
+      !(
+        claim.current?.() ?? claim.identity === agentModelCatalogScopeIdentity(deps, claim.params)
+      ) ||
+      (workspaceId !== undefined &&
+        claim.params.sessionId !== undefined &&
+        deps.getRecord(claim.params.sessionId)?.location.workspaceId === workspaceId)
     ) {
       claim.controller.abort()
       claims.delete(key)
     }
   }
   for (const [key, bound] of bindings) {
-    if (workspaceId === undefined || bound.workspaceId === workspaceId || !bound.workspaceId) {
+    if (
+      !bound.current() ||
+      bound.identity !== agentModelCatalogScopeIdentity(deps, bound.params) ||
+      (workspaceId !== undefined && bound.workspaceId === workspaceId)
+    ) {
       bound.cancel()
       bindings.delete(key)
     }
+  }
+}
+
+/** The invocation-qualified binding may differ from a live listing's account key. */
+export function expireAgentModelCatalogBoundFailure(
+  deps: AgentModelCatalogServiceDeps,
+  bindings: ReadonlyMap<string, AgentModelCatalogBinding>,
+  record: AgentSessionRecord,
+  source?: () => boolean
+): void {
+  const bound = bindings.get(
+    agentModelCatalogRequestKey(deps, {
+      agent: record.provider,
+      sessionId: record.sessionId,
+      inSessionWorkspace: true
+    })
+  )
+  if (bound?.current() && source?.() !== false) {
+    deps.store.expireFailure(bound.fingerprint)
+  }
+}
+
+export function agentModelCatalogSessionPeek(
+  deps: AgentModelCatalogServiceDeps,
+  binding: (params: AgentModelCatalogReadParams) => AgentModelCatalogBinding | undefined
+) {
+  return (sessionId: string, verifiedOnly?: boolean) => {
+    const record = deps.getRecord(sessionId)
+    const bound = record && binding({ agent: record.provider, sessionId, inSessionWorkspace: true })
+    const entry = bound ? deps.store.observation(bound.fingerprint) : null
+    return entry && (!verifiedOnly || deps.store.verified(entry)) ? entry : null
   }
 }

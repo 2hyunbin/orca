@@ -187,9 +187,13 @@ export async function startCodexTurn(
       host.options.set(key, value)
     }
   }
-  host.appliedTurnOptions = input.turnOptions ?? Object.fromEntries(host.options)
-  // host.options now holds this message's choices; an unoffered tier runs as standard.
+  // Sparse requests inherit prior native facts without adding them to the request.
   const requested = codexTurnRequestOptions(host)
+  const known = { ...previousApplied }
+  for (const key of Object.keys(requested)) {
+    delete known[key]
+  }
+  host.appliedTurnOptions = known
   let answer: unknown
   try {
     answer = await host.connection.request(
@@ -203,18 +207,18 @@ export async function startCodexTurn(
       { timeoutMs: input.timeoutMs, onReply: input.onReply }
     )
   } catch (error) {
-    if (
-      previousOptions &&
-      (isCodexAppServerRequestError(error) || isCodexAppServerUnsupportedError(error))
-    ) {
+    if (isCodexAppServerRequestError(error) || isCodexAppServerUnsupportedError(error)) {
       host.appliedTurnOptions = previousApplied
-      host.options.clear()
-      for (const [key, value] of previousOptions) {
-        host.options.set(key, value)
+      if (previousOptions) {
+        host.options.clear()
+        for (const [key, value] of previousOptions) {
+          host.options.set(key, value)
+        }
       }
     }
     throw error
   }
+  host.appliedTurnOptions = { ...previousApplied, ...requested }
   return { turnId: readCodexTurnId(answer), via: 'start' }
 }
 
@@ -300,14 +304,5 @@ export async function dispatchCodexTurn(
 /** What a turn on this child runs, a steer its running turn's: the request's model and effort over
  *  the thread's own, and the tier it runs as. */
 function codexRanOptions(session: CodexTurnHost): Record<string, string> {
-  const requested = codexTurnRequestOptions(session)
-  const thread = session.reportedOptions ?? {}
-  const model = requested.model ?? thread.model
-  const effort = requested.effort ?? (model === thread.model ? thread.effort : undefined)
-  const { serviceTier } = requested
-  return {
-    ...(model ? { model } : {}),
-    ...(effort ? { effort } : {}),
-    ...(serviceTier ? { serviceTier } : {})
-  }
+  return { ...session.appliedTurnOptions }
 }

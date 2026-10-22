@@ -84,21 +84,26 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
         }
         // A floating chat runs in the folder it was created in, not the floating setting's current one.
         const launchDirectory = record ? agentSessionPinnedLaunchDirectory(record) : undefined
-        if (launchDirectory) {
-          return catalog.read({ ...params, ...scope, workspacePath: launchDirectory })
-        }
-        if (worktree === undefined) {
-          return catalog.read({ ...params, ...scope })
-        }
-        return catalog.read({
+        const request = {
           ...params,
           ...scope,
-          workspace: {
-            selector: worktree,
-            identity: () => ctx.runtime.structuredAgentSessionCatalogWorkspaceIdentity(),
-            resolve: () => ctx.runtime.resolveStructuredAgentSessionLocalWorkspacePath(worktree)
-          }
-        })
+          ...(launchDirectory
+            ? { workspacePath: launchDirectory }
+            : worktree === undefined
+              ? {}
+              : {
+                  workspace: {
+                    selector: worktree,
+                    identity: () =>
+                      ctx.runtime.structuredAgentSessionCatalogWorkspaceIdentity(worktree),
+                    resolve: () => ctx.runtime.resolveStructuredAgentCatalogWorkspace(worktree)
+                  }
+                })
+        }
+        if (!params.savedOnly) {
+          void catalog.demand(request)
+        }
+        return catalog.read(request)
       }
       const listing = await read()
       const own = record?.provider === params.agent ? record : null

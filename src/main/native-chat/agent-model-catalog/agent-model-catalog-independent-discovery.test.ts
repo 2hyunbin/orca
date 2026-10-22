@@ -85,6 +85,7 @@ describe('independent installed CLI discovery', () => {
     const h = harness()
     await h.read('a', { waitForListing: true })
     h.update(listing('new', 'new'))
+    void h.service.demand({ agent: 'claude', sessionId: 'a' })
     const warm = await h.read()
     expect(warm).toMatchObject({ models: [{ id: 'old' }], listingInProgress: true })
     await h.read('a', { waitForListing: true })

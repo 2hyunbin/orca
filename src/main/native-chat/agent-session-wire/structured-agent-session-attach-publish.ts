@@ -1,3 +1,4 @@
+import type { AgentModelCatalogSource } from '../agent-model-catalog/agent-model-catalog-service-contract'
 // The attach's last commit: the child it spawned or kept becomes the session's, its sink the one
 // the session's events go through, and its open begins.
 
@@ -31,6 +32,15 @@ export type BoundAttach = {
   eventSink: DeferredStructuredAgentSessionEventSink
 }
 
+export type AttachAttempt = {
+  candidate: AttachCandidate | null
+  committed: boolean
+  catalogSource?: AgentModelCatalogSource
+  startup: StructuredAgentSessionStartupAttempt | null
+  bound: BoundAttach | null
+  rewind: StructuredRewindRecoveryEvidence
+}
+
 /** The provider's word on a rewind in doubt for the child this attach bound, read outside the
  *  commits so no send waits behind it. */
 export function readBoundChildRewind(
@@ -54,13 +64,7 @@ export async function publishAttachedChild(
   attached: AttachedJournal,
   input: {
     bound: BoundAttach | null
-    attempt: {
-      candidate: AttachCandidate | null
-      committed: boolean
-      catalogSource?: () => boolean
-      startup: StructuredAgentSessionStartupAttempt | null
-      rewind: StructuredRewindRecoveryEvidence
-    }
+    attempt: AttachAttempt
     attemptSink: DeferredStructuredAgentSessionEventSink
     fenceBefore: number | null
     startedFor: string | undefined

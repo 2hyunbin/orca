@@ -42,7 +42,11 @@ describe('agentSession.modelCatalog', () => {
     record = null
     setStructuredAgentSessionHost(
       Object.assign(hostStub(), {
-        deps: { modelCatalog: { read }, store: { getRecord: () => record }, adapter: {} }
+        deps: {
+          modelCatalog: { read, demand: vi.fn(async () => {}) },
+          store: { getRecord: () => record },
+          adapter: {}
+        }
       })
     )
   })
@@ -266,7 +270,11 @@ describe('agentSession.modelCatalog before anything built the host', () => {
   const installHost = vi.fn(async () => {
     setStructuredAgentSessionHost(
       Object.assign(hostStub(), {
-        deps: { modelCatalog: { read }, store: { getRecord: () => null }, adapter: {} }
+        deps: {
+          modelCatalog: { read, demand: vi.fn(async () => {}) },
+          store: { getRecord: () => null },
+          adapter: {}
+        }
       })
     )
   })
@@ -330,7 +338,11 @@ describe('agentSession.modelCatalog for a chat on a model its CLI stopped listin
   beforeEach(() => {
     setStructuredAgentSessionHost(
       Object.assign(hostStub(), {
-        deps: { modelCatalog: { read }, store: { getRecord: () => record }, adapter: {} }
+        deps: {
+          modelCatalog: { read, demand: vi.fn(async () => {}) },
+          store: { getRecord: () => record },
+          adapter: {}
+        }
       })
     )
   })

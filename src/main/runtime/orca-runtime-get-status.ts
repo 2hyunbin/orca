@@ -345,6 +345,7 @@ export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntime
   }
 
   protected notifyReposChanged(): void {
+    this.pruneUnregisteredWorktreeScans()
     wakeFolderRepoGitUpgradeWatch()
     this.notifier?.reposChanged()
     this.emitClientEvent({ type: 'reposChanged' })

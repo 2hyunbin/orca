@@ -268,8 +268,12 @@ describe('useMobileStructuredAgentOptions fast mode', () => {
     await act(async () => {
       outcome = await harness.current().setStructuredOption('fastMode', true)
     })
-    expect(outcome).toBe(false)
-    expect(calls).toEqual([])
+    expect(outcome).toBe(true)
+    expect(calls).toEqual([
+      expect.objectContaining({
+        fields: expect.objectContaining({ key: 'fastMode', value: 'true' })
+      })
+    ])
     await harness.unmount()
   })
 

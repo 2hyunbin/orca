@@ -1,9 +1,7 @@
-import type { StructuredRewindRecoveryEvidence } from './structured-rewind-recovery'
 import {
   publishAttachedChild,
   readBoundChildRewind,
-  type AttachCandidate,
-  type BoundAttach
+  type AttachAttempt
 } from './structured-agent-session-attach-publish'
 // The host's attach, lifted out of the host class.
 //
@@ -38,10 +36,7 @@ import type {
 export type { StructuredAgentSessionAttachOptions } from './structured-agent-session-attach-context'
 import { structuredAgentSessionConversationFence } from './structured-agent-session-provider-child'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
-import {
-  isStructuredAgentSessionStartupExpired,
-  type StructuredAgentSessionStartupAttempt
-} from './structured-agent-session-startup-attempt-contract'
+import { isStructuredAgentSessionStartupExpired } from './structured-agent-session-startup-attempt-contract'
 import {
   addAgentSessionCreatePhaseAttributes,
   withAgentSessionCreatePhase,
@@ -194,14 +189,17 @@ async function runAttachUnderAbort(
   // attach makes the child and its sink the session's; any other exit closes the sink with
   // whatever the child queued, and leaves the conversation's child as it was.
   const attemptSink = context.runtimeState.mintEventSink(sessionId)
-  const attempt: {
-    candidate: AttachCandidate | null
-    committed: boolean
-    catalogSource?: () => boolean
-    startup: StructuredAgentSessionStartupAttempt | null
-    bound: BoundAttach | null
-    rewind: StructuredRewindRecoveryEvidence
-  } = { candidate: null, committed: false, startup: null, bound: null, rewind: null }
+  const attempt: AttachAttempt = {
+    candidate: null,
+    committed: false,
+    startup: null,
+    bound: null,
+    rewind: null,
+    catalogSource: context.deps.modelCatalog?.captureSource?.({
+      provider: params.agent,
+      location: params.location
+    })
+  }
   const { startupAttempts } = context.runtimeState
   try {
     const attached = await performAttach({
@@ -238,9 +236,9 @@ async function runAttachUnderAbort(
       ...(options.startupAttemptId ? { startupAttemptId: options.startupAttemptId } : {}),
       onStartupAttempt: (startup) => {
         const record = context.deps.store.getRecord(sessionId)
-        attempt.catalogSource = record
-          ? context.deps.modelCatalog?.captureSource?.(record)
-          : undefined
+        if (record) {
+          attempt.catalogSource?.bind?.(record)
+        }
         attempt.startup = startup
         return startupAttempts.track(sessionId, startup)
       },
@@ -316,6 +314,7 @@ async function runAttachUnderAbort(
     return stampFailedCreateOwnerVerdict(context.deps.store, callerKey, params.envelope, attached)
   } finally {
     if (!attempt.committed) {
+      attempt.catalogSource?.release?.()
       attemptSink.close()
       if (attempt.startup) {
         startupAttempts.abandon(sessionId, attempt.startup.attemptId)

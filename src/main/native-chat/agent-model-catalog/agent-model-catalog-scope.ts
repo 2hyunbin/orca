@@ -21,7 +21,8 @@ export async function resolveAgentModelCatalogScope(
   params: Parameters<AgentModelCatalogService['read']>[0],
   record: AgentSessionRecord | undefined,
   base: string,
-  home: AgentSessionAccountHome | null
+  home: AgentSessionAccountHome | null,
+  current: () => boolean = () => true
 ): Promise<{
   base: string
   fingerprint: string
@@ -29,6 +30,9 @@ export async function resolveAgentModelCatalogScope(
   cwd?: string
   resolved?: AgentModelCatalogResolvedProbe
 } | null> {
+  if (!current()) {
+    return null
+  }
   if (!independentAgentModelCatalog(params.agent) || !home) {
     return { base, fingerprint: base, exact: false }
   }
@@ -38,6 +42,9 @@ export async function resolveAgentModelCatalogScope(
   const probe = deps.probes?.[params.agent]
   if (params.legacy) {
     const resolved = params.savedOnly ? null : await probe?.resolveLegacy?.(home).catch(() => null)
+    if (!current()) {
+      return null
+    }
     return {
       base,
       fingerprint: agentModelCatalogScopeFingerprint(base, 'legacy-account'),
@@ -49,6 +56,9 @@ export async function resolveAgentModelCatalogScope(
     params.workspacePath === null
       ? null
       : (params.workspacePath ?? (record ? await sessionWorkspacePath(deps, record) : homedir()))
+  if (!current()) {
+    return null
+  }
   if (!cwd) {
     return { base, fingerprint: base, exact: false }
   }
@@ -56,7 +66,7 @@ export async function resolveAgentModelCatalogScope(
     ? probe?.resolve?.(home, cwd, true)
     : probe?.resolve?.(home, cwd)
   const resolved = await resolution?.catch(() => null)
-  if (probe?.resolve && !resolved) {
+  if (!current() || (probe?.resolve && !resolved)) {
     return null
   }
   return {

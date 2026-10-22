@@ -1,16 +1,18 @@
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentModelCatalogLiveListing } from './agent-model-catalog-store'
-import type { AgentModelCatalogServiceDeps } from './agent-model-catalog-service-contract'
+import type {
+  AgentModelCatalogServiceDeps,
+  AgentModelCatalogSource
+} from './agent-model-catalog-service-contract'
 import { agentModelCatalogFingerprintForRecord } from './agent-model-catalog-fingerprint'
 import { catalogFolder, recordConfiguredDefault } from './agent-model-catalog-workspace'
 import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
-import { onAtRestCommandContextRetired } from '../agent-session-wire/at-rest-command-context'
 
 export function createAgentModelCatalogLiveListings(
   deps: AgentModelCatalogServiceDeps,
   signal: AbortSignal
 ) {
-  const workspaces = new Map<string, object>()
+  const workspaces = new Map<string, { holders: number }>()
   const retireContext = (workspaceId?: string): void => {
     if (workspaceId === undefined) {
       workspaces.clear()
@@ -18,19 +20,27 @@ export function createAgentModelCatalogLiveListings(
       workspaces.delete(workspaceId)
     }
   }
-  const unbind = onAtRestCommandContextRetired((workspaceId) => {
-    if (workspaceId !== undefined) {
-      retireContext(workspaceId)
+  const leaseWorkspace = (id?: string) => {
+    const epoch = id === undefined ? undefined : (workspaces.get(id) ?? { holders: 0 })
+    if (epoch && id !== undefined) {
+      epoch.holders += 1
+      workspaces.set(id, epoch)
     }
-  })
-  signal.addEventListener(
-    'abort',
-    () => {
-      unbind()
-      workspaces.clear()
-    },
-    { once: true }
-  )
+    let released = false
+    return {
+      current: () =>
+        !released && !signal.aborted && (id === undefined || workspaces.get(id) === epoch),
+      release: () => {
+        if (released) {
+          return
+        }
+        released = true
+        if (epoch && id !== undefined && --epoch.holders === 0 && workspaces.get(id) === epoch) {
+          workspaces.delete(id)
+        }
+      }
+    }
+  }
   const recordIdentity = (record: AgentSessionRecord): string =>
     JSON.stringify([
       record.provider,
@@ -39,20 +49,31 @@ export function createAgentModelCatalogLiveListings(
       record.launchDirectory,
       deps.drivesRecord(record)
     ])
-  const captureSource = (record: AgentSessionRecord): (() => boolean) => {
-    const workspace = record.location.workspaceId
-    const owner = workspaces.get(workspace) ?? {}
-    workspaces.set(workspace, owner)
-    if (workspaces.size > 256) {
-      workspaces.delete(workspaces.keys().next().value ?? '')
-    }
-    const revision = deps.store.retirementRevision(record.provider)
-    const identity = recordIdentity(record)
-    return () =>
-      !signal.aborted &&
-      workspaces.get(workspace) === owner &&
-      deps.store.retirementRevision(record.provider) === revision &&
-      recordIdentity(deps.getRecord(record.sessionId) ?? record) === identity
+  const captureSource = (
+    origin: Pick<AgentSessionRecord, 'provider' | 'location'>
+  ): AgentModelCatalogSource => {
+    const lease = leaseWorkspace(
+      deps.listsInChatFolder?.has(origin.provider) ? origin.location.workspaceId : undefined
+    )
+    const revision = deps.store.retirementRevision(origin.provider)
+    let bound: AgentSessionRecord | undefined =
+      'sessionId' in origin ? deps.getRecord(String(origin.sessionId)) : undefined
+    let identity = bound && recordIdentity(bound)
+    return Object.assign(
+      () =>
+        lease.current() &&
+        deps.store.retirementRevision(origin.provider) === revision &&
+        (!bound || recordIdentity(deps.getRecord(bound.sessionId) ?? bound) === identity),
+      {
+        release: lease.release,
+        bind: (record: AgentSessionRecord) => {
+          if (!bound) {
+            bound = record
+            identity = recordIdentity(record)
+          }
+        }
+      }
+    )
   }
   // Default projections retain report order without delaying inventory observations.
   const recordingDefaults = new Map<string, Promise<void>>()
@@ -70,9 +91,9 @@ export function createAgentModelCatalogLiveListings(
     listing: AgentModelCatalogLiveListing,
     fingerprint: string,
     current: () => boolean
-  ): void => {
+  ): Promise<void> => {
     if (!current()) {
-      return
+      return Promise.resolve()
     }
     const { configuredDefault, ...listed } = listing
     const saved = deps.store.recordSuccess(
@@ -92,21 +113,16 @@ export function createAgentModelCatalogLiveListings(
           }
         })
       recordingDefaults.set(fingerprint, recording)
+      return recording
     }
+    return Promise.resolve()
   }
   return {
     captureSource,
     retireContext,
     providerStarted(record: AgentSessionRecord, source?: () => boolean) {
-      const receipt = captureSource(record)
-      const current = () => receipt() && source?.() !== false
-      if (!current()) {
-        return
-      }
-      if (!deps.listsInChatFolder?.has(record.provider)) {
-        deps.store.expireFailure(agentModelCatalogFingerprintForRecord(record))
-        return
-      }
+      const receipt = leaseWorkspace(record.location.workspaceId)
+      const current = () => receipt.current() && source?.() !== false
       void sessionCatalogKey(record)
         .then((fingerprint) => {
           if (current()) {
@@ -114,6 +130,7 @@ export function createAgentModelCatalogLiveListings(
           }
         })
         .catch(() => {})
+        .finally(receipt.release)
     },
     recordLiveListing(
       sessionId: string,
@@ -124,13 +141,19 @@ export function createAgentModelCatalogLiveListings(
       if (!record || !deps.drivesRecord(record) || independentAgentModelCatalog(record.provider)) {
         return
       }
-      const receipt = captureSource(record)
-      const current = () => receipt() && source?.() !== false
+      const receipt = leaseWorkspace(record.location.workspaceId)
+      const current = () => receipt.current() && source?.() !== false
       if (!current()) {
+        receipt.release()
         return
       }
       if (!deps.listsInChatFolder?.has(record.provider)) {
-        saveLiveListing(record, listing, agentModelCatalogFingerprintForRecord(record), current)
+        void saveLiveListing(
+          record,
+          listing,
+          agentModelCatalogFingerprintForRecord(record),
+          current
+        ).finally(receipt.release)
         return
       }
       // In report order: a folder lookup that resolves late must not let an older listing land last.
@@ -142,6 +165,7 @@ export function createAgentModelCatalogLiveListings(
           console.warn('[agent-model-catalog] could not save a chat model list:', error)
         })
         .finally(() => {
+          receipt.release()
           if (liveWrites.get(sessionId) === writing) {
             liveWrites.delete(sessionId)
           }

@@ -55,39 +55,24 @@ function composeLiveCodexCatalog(
   session: CodexSession,
   listing: ReturnType<typeof codexSessionCapabilities>
 ): CodexSessionOptionCatalog {
-  const model = session.options.get('model') ?? session.reportedOptions.model
-  const effort = session.options.get('effort') ?? session.reportedOptions.effort
-  const serviceTier = session.options.get('serviceTier')
+  const { model, effort, serviceTier } = session.appliedTurnOptions ?? {}
   const catalog = composeCodexSessionOptionCatalog(listing, {
     current: {
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
       ...(serviceTier ? { serviceTier } : {})
     },
-    ...(session.reportedOptions.serviceTierKnown
-      ? {
-          reportedServiceTier: session.reportedOptions.serviceTier ?? null,
-          reportedServiceTierKnown: true
-        }
-      : {})
+    ...(serviceTier ? { reportedServiceTier: serviceTier, reportedServiceTierKnown: true } : {})
   })
   return { ...catalog, fastModeSupport: listing.fastModeSupport }
 }
 
+/** Current options compose only from the installed catalog and exact-child facts. */
 export async function readLiveCodexSessionOptions(
   session: CodexSession,
-  timeoutMs: number | undefined
-): Promise<StructuredAgentSessionLiveOptions> {
-  return (await prepareLiveCodexSessionOptions(session, timeoutMs))()
-}
-
-/** Demand discovery outside the session lane; compose from its installed snapshot inside it. */
-export async function prepareLiveCodexSessionOptions(
-  session: CodexSession,
   _timeoutMs: number | undefined
-): Promise<() => StructuredAgentSessionLiveOptions> {
-  await session.catalogAccess?.demand?.()
-  return () => composeLiveCodexCatalog(session, codexSessionCapabilities(session))
+): Promise<StructuredAgentSessionLiveOptions> {
+  return composeLiveCodexCatalog(session, codexSessionCapabilities(session))
 }
 
 export async function applyCodexStructuredSessionOption(

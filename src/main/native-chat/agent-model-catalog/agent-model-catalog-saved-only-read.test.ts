@@ -178,6 +178,9 @@ it('returns a snapshot before a cold worktree selector resolves', async () => {
     }
   }
   try {
+    expect(await service.read(request)).toEqual({ origin: 'unknown' })
+    expect(account).not.toHaveBeenCalled()
+    void service.demand(request)
     expect(await service.read(request)).toEqual({ origin: 'unknown', listingInProgress: true })
     expect(await service.read({ ...request, savedOnly: true })).toEqual({ origin: 'unknown' })
     expect(account).not.toHaveBeenCalled()
@@ -238,7 +241,9 @@ it.each(['success', 'failure'] as const)(
     })
     try {
       const first = service.demand({ agent: 'grok' })
+      store.expireLaunchScopes()
       service.retireContext()
+      store.expireLaunchScopes()
       service.retireContext()
       initial.resolve(HOME)
       await first
@@ -246,6 +251,7 @@ it.each(['success', 'failure'] as const)(
       resolving = false
       const old = service.demand({ agent: 'grok' })
       await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
+      store.expireLaunchScopes()
       service.retireContext()
       store.recordFailure(FINGERPRINT, 'new account failure', 'grok')
       if (outcome === 'success') {

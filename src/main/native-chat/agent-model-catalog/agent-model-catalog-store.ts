@@ -153,9 +153,11 @@ export class AgentModelCatalogStore {
     )
   }
 
-  expireLaunchScopes(): void {
+  expireLaunchScopes(affected: (agent: string) => boolean = () => true): void {
     for (const agent of agentModelCatalogLaunchAgents(this.retirementRevisions, this.entries)) {
-      this.expireAgent(agent)
+      if (affected(agent)) {
+        this.expireAgent(agent)
+      }
     }
   }
 

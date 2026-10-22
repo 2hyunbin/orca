@@ -28,12 +28,19 @@ export type AgentModelCatalogServiceDeps = AgentModelCatalogWorkspaceDeps & {
   hasChatRecords?: (agent: string) => boolean
 }
 
+export type AgentModelCatalogSource = (() => boolean) & {
+  bind?: (record: AgentSessionRecord) => void
+  release?: () => void
+}
+
 export type AgentModelCatalogService = {
   snapshot: (params: AgentModelCatalogReadParams) => AgentSessionModelCatalogResult
   demand: (params: AgentModelCatalogReadParams) => Promise<void>
   /** Explicitly resolves saved scope without listing or refreshing the environment. */
   prepareSaved: (params: AgentModelCatalogReadParams) => Promise<AgentSessionModelCatalogResult>
-  captureSource: (record: AgentSessionRecord) => () => boolean
+  captureSource: (
+    record: Pick<AgentSessionRecord, 'provider' | 'location'>
+  ) => AgentModelCatalogSource
   retireContext: (workspaceId?: string) => void
   peek: (sessionId: string, verifiedOnly?: boolean) => AgentModelCatalogEntry | null
   read: (params: AgentModelCatalogReadParams) => Promise<AgentSessionModelCatalogResult>
@@ -60,8 +67,14 @@ export type AgentModelCatalogService = {
 
 export type AgentModelCatalogReadParams = {
   agent: string
+  /** Original explicit operation budget, shared with compatibility saved-scope continuation. */
+  deadline?: number
   /** Internal selector resolution; never part of the wire contract. */
-  workspace?: { selector: string; identity: () => unknown; resolve: () => Promise<string | null> }
+  workspace?: {
+    selector: string
+    identity: () => unknown
+    resolve: () => Promise<string | null | { path: string | null; identity: unknown }>
+  }
   sessionId?: string
   /** Where a new chat would run; null when one was named but is not a local directory. */
   workspacePath?: string | null

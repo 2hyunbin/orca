@@ -108,7 +108,9 @@ describe('a chat permission mode', () => {
       const acquired = await acquire(input)
       return {
         ...acquired,
-        link: { ...acquired.link, handle: claudeProviderHandle(HOST_TEST_THREAD, null) }
+        ...(acquired.link
+          ? { link: { ...acquired.link, handle: claudeProviderHandle(HOST_TEST_THREAD, null) } }
+          : {})
       }
     })
     rig.adapter.dispatch.mockResolvedValue({

@@ -78,6 +78,10 @@ async function hostRuns(
     prompts: new CodexAcquisitionWindow().prompts,
     options: new Map(Object.entries(saved)),
     reportedOptions: child?.reported ? { serviceTier: child.reported, serviceTierKnown: true } : {},
+    appliedTurnOptions: {
+      ...(saved.model ? { model: saved.model } : {}),
+      ...(child?.reported ? { serviceTier: child.reported } : {})
+    },
     catalogAccess: { store, fingerprint: 'codex-account', accountHomePath: '/account' },
     dispatchEchoes: createCodexDispatchEchoes(),
     turnOpenWaits: createCodexTurnOpenWaits(),
@@ -131,7 +135,7 @@ describe("a Codex chat's speed, shown and sent", () => {
     ] as const) {
       await expect(hostRuns({ model: 'm2', serviceTier: tier }, 120_000, child)).resolves.toEqual({
         firstTurn: runs,
-        shown: runs,
+        shown: 'reported' in child ? child.reported : undefined,
         afterLiveRead: tier
       })
     }

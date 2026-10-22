@@ -105,7 +105,7 @@ export class ProfilePreferences {
         rollback: () => {
           const currentEntries = new Map(Object.entries(runtime.state.settings))
           const nextEntries = new Map(Object.entries(next))
-          const restoredUpdates = Object.fromEntries(
+          const restoredUpdates: Record<string, unknown> = Object.fromEntries(
             Object.entries(previous).filter(
               ([key]) =>
                 updateKeys.has(key) && Object.is(currentEntries.get(key), nextEntries.get(key))

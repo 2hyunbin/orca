@@ -389,6 +389,13 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
   setOption(
     input: StructuredAgentSessionSetOptionInput
   ): Promise<void | Readonly<Record<string, string>>>
+  /** Applied inputs for this exact child; observations never decide message admission. */
+  readAppliedInputOptions?(input: {
+    sessionId: string
+    fence: number
+    acquisitionGeneration: string | null
+    next: AgentSessionExecutionOptions | undefined
+  }): { active: AgentSessionExecutionOptions; next: AgentSessionExecutionOptions } | null
   /** Synchronous capability projection; never acquires inventory or changes saved intent. */
   projectOptions?(
     sessionId: string,
