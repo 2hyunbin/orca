@@ -1,5 +1,3 @@
-import { loadPairedE2EENativeBindings } from './paired-e2ee-native-bindings'
-
 /**
  * Inbound decode steps done natively instead of in Hermes JS: every v2 text frame the phone opens
  * (base64, secretbox, UTF-8), plus the gunzip of page-bundle ranges.
@@ -9,10 +7,25 @@ export type PairedE2EENativeCodec = {
   decodeBase64(value: string): Uint8Array | null
   /** XSalsa20-Poly1305 secretbox open; null for a box that fails authentication. */
   openSecretbox(box: Uint8Array, nonce: Uint8Array, key: Uint8Array): Uint8Array | null
-  /** Throws on a body that is not one well-formed gzip member. See OrcaGzipUtf8CodecModule. */
+  /** Throws on a body that is not one well-formed gzip member. See orca-gzip-utf8-codec. */
   gunzip(input: Uint8Array, outputLimit: number): Uint8Array
   /** Null where only TextDecoder's replacement or BOM rules give the answer, or native failed. */
   decodeUtf8(input: Uint8Array): string | null
+}
+
+/** The two react-native-libsodium JSI functions the phone needs; both throw on failure. */
+export type LibsodiumBindings = {
+  fromBase64: (value: string, variant: number) => ArrayBuffer
+  secretboxOpen: (box: ArrayBuffer, nonce: ArrayBuffer, key: ArrayBuffer) => ArrayBuffer
+}
+
+/** What the app entry hands over: libsodium plus the orca-gzip-utf8-codec module. */
+export type PairedE2EENativeBindings = {
+  codec: {
+    gunzip(input: Uint8Array, outputLimit: number): Uint8Array
+    decodeUtf8(input: Uint8Array): string | null
+  }
+  sodium: LibsodiumBindings
 }
 
 // libsodium's sodium_base64_VARIANT_ORIGINAL: the standard alphabet, padded.
@@ -23,11 +36,20 @@ const SECRETBOX_MAC_BYTES = 16
 const PROBE_BOX_BASE64 = 'sqQBX9c2fQaZ4F6j8gHDpjGU'
 const PROBE_GZIP_BASE64 = 'H4sIAAAAAAAAE8vPBgBH3dx5AgAAAA=='
 
+let loadBindings: (() => PairedE2EENativeBindings | null) | null = null
 let detected: PairedE2EENativeCodec | null | undefined
 
 /**
- * The native codec, or null when any part of it is missing or answers the probe wrongly; the
- * caller then runs the JS path for the whole download. Detected once, on first use.
+ * Called once by the app entry. Injected rather than imported so that this module, which shared,
+ * desktop and e2e code reach, never loads the native modules or their global types.
+ */
+export function providePairedE2EENativeBindings(load: () => PairedE2EENativeBindings | null): void {
+  loadBindings = load
+}
+
+/**
+ * The native codec, or null when none was provided or any part of it is missing or answers the
+ * probe wrongly; the caller then runs the JS path. Detected once, on first use.
  */
 export function pairedE2EENativeCodec(): PairedE2EENativeCodec | null {
   if (detected === undefined) {
@@ -38,7 +60,7 @@ export function pairedE2EENativeCodec(): PairedE2EENativeCodec | null {
 
 function detectPairedE2EENativeCodec(): PairedE2EENativeCodec | null {
   try {
-    const bindings = loadPairedE2EENativeBindings()
+    const bindings = loadBindings?.() ?? null
     if (!bindings) {
       return null
     }

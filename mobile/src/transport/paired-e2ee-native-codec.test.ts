@@ -11,16 +11,12 @@ import { sealMobileE2EEV2Frame } from '../../../src/shared/mobile-e2ee-v2-framin
 import type { PairedE2EEPrimitives } from '../../../src/shared/paired-e2ee-primitives'
 import { PairedE2EEV2ClientSession } from '../../../src/shared/paired-e2ee-v2-client-session'
 import { derivePairedE2EEV2KeySchedule } from '../../../src/shared/paired-e2ee-v2-key-schedule'
-import type { PairedE2EENativeBindings } from './paired-e2ee-native-bindings'
+import type { PairedE2EENativeBindings } from './paired-e2ee-native-codec'
 
 // Under Node, react-native-libsodium resolves to its web build: the same libsodium C, as wasm.
 // The codec module's half is a stand-in here; its own Kotlin and Swift tests pin it.
 const secretboxOpenCalls = vi.fn()
 let bindings: PairedE2EENativeBindings | null = null
-
-vi.mock('./paired-e2ee-native-bindings', () => ({
-  loadPairedE2EENativeBindings: () => bindings
-}))
 
 function libsodiumBindings(): PairedE2EENativeBindings {
   return {
@@ -57,8 +53,11 @@ function libsodiumBindings(): PairedE2EENativeBindings {
 async function load(withNative: boolean) {
   bindings = withNative ? libsodiumBindings() : null
   vi.resetModules()
-  const primitives = await import('./mobile-paired-e2ee-primitives')
   const codec = await import('./paired-e2ee-native-codec')
+  if (withNative) {
+    codec.providePairedE2EENativeBindings(() => bindings)
+  }
+  const primitives = await import('./mobile-paired-e2ee-primitives')
   return {
     primitives: primitives.MOBILE_PAIRED_E2EE_PRIMITIVES,
     native: codec.pairedE2EENativeCodec()

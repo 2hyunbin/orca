@@ -11,10 +11,4 @@ vi.mock('react-native-svg', () => ({
   Stop: 'Stop'
 }))
 
-// Node has neither libsodium's JSI functions nor the codec module, so tests run the JS path a
-// binary without them falls back to; paired-e2ee-native-codec.test.ts swaps in real libsodium.
-vi.mock('./src/transport/paired-e2ee-native-bindings', () => ({
-  loadPairedE2EENativeBindings: () => null
-}))
-
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })

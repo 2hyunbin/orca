@@ -1,8 +1,6 @@
 import { NativeModules } from 'react-native'
-import {
-  OrcaGzipUtf8Codec,
-  type OrcaGzipUtf8CodecModule
-} from '../../modules/orca-gzip-utf8-codec/src'
+import { OrcaGzipUtf8Codec } from '../../modules/orca-gzip-utf8-codec/src'
+import type { LibsodiumBindings, PairedE2EENativeBindings } from './paired-e2ee-native-codec'
 
 declare global {
   // Installed by react-native-libsodium's native install; unknown until checked.
@@ -10,18 +8,10 @@ declare global {
   var jsi_crypto_secretbox_open_easy: unknown
 }
 
-/** The two react-native-libsodium JSI functions the download needs; both throw on failure. */
-export type LibsodiumBindings = {
-  fromBase64: (value: string, variant: number) => ArrayBuffer
-  secretboxOpen: (box: ArrayBuffer, nonce: ArrayBuffer, key: ArrayBuffer) => ArrayBuffer
-}
-
-export type PairedE2EENativeBindings = {
-  codec: OrcaGzipUtf8CodecModule
-  sodium: LibsodiumBindings
-}
-
-/** Null when either native piece is missing from this binary. */
+/**
+ * Null when either native piece is missing from this binary. Only the app entry imports this file:
+ * shared, desktop and e2e code reach the transport modules and must not load native-module types.
+ */
 export function loadPairedE2EENativeBindings(): PairedE2EENativeBindings | null {
   const sodium = installLibsodium()
   return sodium && OrcaGzipUtf8Codec ? { codec: OrcaGzipUtf8Codec, sodium } : null
