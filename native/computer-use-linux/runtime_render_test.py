@@ -3,11 +3,15 @@ import sys
 import types
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 class FakeStateType:
     PROTECTED = 1
     SELECTED = 2
+    ACTIVE = 3
+    SHOWING = 4
+    FOCUSED = 5
 
 
 class FakeText:
@@ -103,10 +107,84 @@ class FailingChildrenAccessible(FakeAccessible):
 
 
 def render(root):
-    return runtime.render_accessibility_tree(root, None, [0])
+    return runtime.render_accessibility_tree(root, [0])
 
 
 class RuntimeRenderTest(unittest.TestCase):
+    def test_snapshot_keeps_semantics_when_child_geometry_stalls(self):
+        clock = [0.0]
+        timeout = [800, 15000]
+        stalled = []
+        calls = []
+        late = FakeAccessible("button", "Continue")
+        late.get_name = lambda: "" if stalled else "Continue"
+        late.get_n_actions = lambda: 1
+        late.get_action_name = lambda _: "click"
+        root = FakeAccessible("frame", "Editor", children=[
+            FakeAccessible("button", "Healthy"),
+            *[FakeAccessible("button", f"Slow {i}") for i in range(4)],
+            late,
+        ])
+        app = FakeAccessible("application", "Fixture", children=[root])
+        app.get_process_id = lambda: 42
+        nodes = [root, *root.children]
+        for node in nodes:
+            node.get_component_iface = lambda node=node: node
+
+        def set_timeout(value, startup):
+            timeout[:] = [value, startup]
+
+        def extents(node, _):
+            calls.append(node.name)
+            if node.name.startswith("Slow"):
+                stalled.append(node.name)
+                clock[0] += (max(timeout) if timeout[1] > 0 else timeout[0]) / 1000
+                raise TimeoutError("unresponsive geometry")
+            return runtime.Rect(100 if node is root else 110, 200 if node is root else 220, 300, 400)
+
+        with patch.object(runtime, "desktop_apps", return_value=iter([app])), \
+             patch.object(runtime.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(runtime.Atspi, "set_timeout", side_effect=set_timeout, create=True), \
+             patch.object(runtime.Atspi, "Component", types.SimpleNamespace(get_extents=extents), create=True), \
+             patch.object(runtime.Atspi, "CoordType", types.SimpleNamespace(SCREEN=0), create=True):
+            snapshot = runtime.make_snapshot("Fixture", False, window_index=0)
+
+        elements = snapshot["elements"]
+        self.assertEqual([item["name"] for item in elements], [node.name for node in nodes])
+        self.assertEqual([item["index"] for item in elements], list(range(len(nodes))))
+        self.assertEqual(elements[-1]["runtimeId"], [0, 5])
+        self.assertEqual(elements[-1]["actions"], ["click"])
+        self.assertEqual(snapshot["treeLines"][-1], "\t6 button Continue")
+        self.assertFalse(snapshot["truncation"]["truncated"])
+        self.assertEqual(snapshot["windowBounds"], runtime.Rect(100, 200, 300, 400).to_json())
+        self.assertEqual(elements[1]["frame"], runtime.Rect(10, 20, 300, 400).to_json())
+        self.assertTrue(all(item["frame"] is None for item in elements[2:]))
+        self.assertLessEqual(clock[0], 3)
+        self.assertEqual(calls.count("Editor"), 1)
+        self.assertEqual(timeout, [800, 15000])
+
+    def test_geometry_skips_insufficient_budget_and_restores_action_timeout(self):
+        clock = [0.0]
+        timeouts = []
+
+        def fail():
+            raise TimeoutError("unresponsive geometry")
+
+        with patch.object(runtime.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(runtime.Atspi, "set_timeout", side_effect=lambda *args: timeouts.append(args), create=True):
+            reader = runtime.GeometryReader()
+            clock[0] = 2.96
+            calls = []
+            self.assertIsNone(reader.read(lambda: calls.append("called")))
+            self.assertEqual(calls, [])
+            self.assertEqual(timeouts, [])
+            clock[0] = 2.9
+            self.assertIsNone(reader.read(fail))
+            self.assertGreaterEqual(timeouts[0][0], 50)
+            self.assertLessEqual(timeouts[0][0], 100)
+            self.assertEqual(timeouts[0][1], -1)
+            self.assertEqual(timeouts[-1], (800, 15000))
+
     def test_named_non_generic_node_skips_unused_summary_walk(self):
         root = FakeAccessible("button", "Save", children=[FakeAccessible("text", "unused")])
 
