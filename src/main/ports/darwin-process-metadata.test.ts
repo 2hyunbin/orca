@@ -57,16 +57,17 @@ describe('Darwin selected-PID cwd completion', () => {
   afterEach(() => vi.restoreAllMocks())
 
   it('keeps a live workspace holder attributable and Stop-authorizable when an unrelated requested PID exits', async () => {
+    let cwd = '/repo'
     spawnMock.mockImplementation(({ program, args }: { program: string; args: string[] }) => {
       if (program === '/usr/sbin/netstat') {
         return completedChild('')
       }
       if (program === '/bin/ps') {
-        return completedChild('123 node /repo/server.js\n')
+        return completedChild(`123 node ${cwd}/server.js\n`)
       }
       if (args.includes('cwd')) {
         expect(args).toEqual(cwdArgs)
-        return completedChild(survivingCwd, 1)
+        return completedChild(`p123\nfcwd\nn${cwd}\n`, 1)
       }
       return completedChild(
         'p123\ncnode\nf18\nd0x1\nn127.0.0.1:5173\np456\ncnode\nf19\nd0x2\nn127.0.0.1:8080\n'
@@ -81,6 +82,15 @@ describe('Darwin selected-PID cwd completion', () => {
     expect(scan.ports.find((port) => port.pid === 456)?.kind).toBe('external')
     expect(await killWorkspacePort(worktrees, { pid: 123, port: 5173 })).toEqual({ ok: true })
     expect(kill).toHaveBeenCalledExactlyOnceWith(123, 'SIGTERM')
+    cwd = '/elsewhere'
+    expect(await killWorkspacePort(worktrees, { pid: 123, port: 5173 })).toEqual({
+      ok: false,
+      reason: 'Only workspace-owned local processes can be stopped here.'
+    })
+    expect(kill).toHaveBeenCalledTimes(1)
+    expect(spawnMock.mock.calls.map(([spec]) => spec.program)).toEqual(
+      Array.from({ length: 3 }, () => ['/usr/sbin/lsof', '/usr/sbin/lsof', '/bin/ps']).flat()
+    )
   })
 
   it('still refuses failed or malformed cwd observations and nonzero results from other command roles', async () => {

@@ -121,11 +121,11 @@ async function dispatchPlatformListeningPortScan(
 async function scanDarwinLsofPorts(
   options: WorkspacePortScanOptions
 ): Promise<PlatformListeningPortScan> {
-  const listeners = await runPortScanCommand(
-    '/usr/sbin/netstat',
-    ['-aln', '-p', 'tcp'],
-    'listeners'
-  ).catch(() => null)
+  const listeners = options.requireMetadata
+    ? null
+    : await runPortScanCommand('/usr/sbin/netstat', ['-aln', '-p', 'tcp'], 'listeners').catch(
+        () => null
+      )
   try {
     const { stdout, spawnMs } = await runPortScanCommand(
       '/usr/sbin/lsof',
