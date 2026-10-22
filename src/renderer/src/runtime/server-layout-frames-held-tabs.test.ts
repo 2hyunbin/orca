@@ -24,6 +24,7 @@ import {
   _resetStagedBrowserFrameHandoversForTests,
   wasStagedBrowserTabHandedToFrames
 } from '@/lib/staged-browser-frame-handover'
+import { ensureSimulatorTab } from '@/lib/ensure-simulator-tab'
 import type { DragEndEvent } from '@dnd-kit/core'
 import { commitTabDragDrop } from '@/components/tab-group/tab-drag-drop-commit'
 import {
@@ -429,18 +430,45 @@ describe('a held tab and the split commands', () => {
   })
 })
 
-describe('a recorded tab the server then publishes', () => {
-  it('follows the server’s frames from then on: the server’s close drops it here', async () => {
+describe('a simulator tab opened on this desktop in a server’s frame-drawn workspace', () => {
+  it('opens as the user’s tab in the server group it would split beside, and is never sent', async () => {
+    const { store } = await appStoreFrameDrawn(serverSplit())
+    store.getState().focusGroup(WT, HOST_GROUP)
+
+    const simulator = ensureSimulatorTab(WT, { targetGroupId: GROUP_2, placement: 'rightSplit' })!
+    await settle()
+    expect(groupIds(store)).toEqual([HOST_GROUP, GROUP_2])
+    expect(groupOf(store, simulator)).toBe(GROUP_2)
+    expect(store.getState().activeGroupIdByWorktree[WT]).toBe(GROUP_2)
+    expect(shownIn(store, GROUP_2)).toBe(simulator)
+    expect(mentions(simulator)).toEqual([])
+  })
+
+  it('survives the next server frame and a reload’s first frame', async () => {
     const { store, stream, frames } = await appStoreFrameDrawn()
-    // Any kind of tab this desktop created: a simulator-style one.
-    store
-      .getState()
-      .createUnifiedTab(WT, 'simulator', { id: 'emulator-1', targetGroupId: HOST_GROUP })
-    noteDesktopCreatedServerTab(ENV, WT, 'emulator-1')
+    const simulator = ensureSimulatorTab(WT, { targetGroupId: HOST_GROUP })!
+    expect(groups(store)).toEqual([[TAB_1, simulator]])
+
+    streams.send(stream, frames.records(WT, WITH_TAB_2))
+    await settle()
+    // Presence: the frame's build ran and drew the server's new tab.
+    expect(check.workspaceBuilt).toContain(WT)
+    expect(groups(store)).toEqual([[TAB_1, simulator, TAB_2]])
+
+    reload()
+    await firstFrameAfterReload(store)
+    expect(groups(store)).toEqual([[TAB_1, simulator, TAB_2]])
+    expect(mentions(simulator)).toEqual([])
+  })
+
+  it('follows the server’s frames once the server publishes it: its close drops it here', async () => {
+    const { store, stream, frames } = await appStoreFrameDrawn()
+    const simulator = ensureSimulatorTab(WT, { targetGroupId: HOST_GROUP })!
+    expect(DESKTOP_CREATED_SERVER_TAB_HOLDS.isTabHeld(WT, simulator)).toBe(true)
     const published: PublishedTab = {
-      id: 'emulator-1',
+      id: simulator,
       kind: 'simulator',
-      entityId: 'emulator-1',
+      entityId: simulator,
       executionHostId: 'local',
       createdAt: 3,
       customTitle: null,
@@ -448,11 +476,28 @@ describe('a recorded tab the server then publishes', () => {
     }
     streams.send(stream, frames.records(WT, serverLayout([...SERVER_LAYOUT.tabs, published])))
     await settle()
-    expect(DESKTOP_CREATED_SERVER_TAB_HOLDS.isTabHeld(WT, 'emulator-1')).toBe(false)
+    expect(DESKTOP_CREATED_SERVER_TAB_HOLDS.isTabHeld(WT, simulator)).toBe(false)
 
     streams.send(stream, frames.records(WT, WITH_TAB_2))
     await settle()
     expect(tabIds(store)).toEqual([TAB_1, TAB_2])
+  })
+
+  it('is recorded only while a server’s frames draw it: a mirrored server workspace records nothing', async () => {
+    const store = useAppStore
+    hoisted.owners.set(WT, ENV)
+    mirrorSnapshot(store, ENV, sessionTabs([surface('host-tab-1', LEAF_ID, 'terminal-1')], 1))
+    const before = groupIds(store)
+
+    const simulator = ensureSimulatorTab(WT, { placement: 'rightSplit' })
+    await settle()
+    // Drawn here as today, in a split of its own: no server's frames draw this workspace.
+    expect(simulator).toBeTruthy()
+    expect(tabIds(store)).toContain(simulator)
+    expect(groupIds(store)).toHaveLength(before.length + 1)
+    expect(before).not.toContain(groupOf(store, simulator!))
+    expect(DESKTOP_CREATED_SERVER_TAB_HOLDS.isTabHeld(WT, simulator!)).toBe(false)
+    expect(storage.size).toBe(0)
   })
 })
 
