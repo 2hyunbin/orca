@@ -42,6 +42,16 @@ describe('disk write precondition', () => {
     expect(compareDiskWritePrecondition(precondition, current, decoded)).toBeNull()
   })
 
+  it('reports an external rewrite as changed before checking for U+FFFD', () => {
+    expect(
+      compareDiskWritePrecondition(
+        { expectedSignature: getDiskBaselineSignature('original'), requireLosslessUtf8: true },
+        'rewritten �',
+        'mine'
+      )
+    ).toBe('changed')
+  })
+
   it('treats anything but an explicit refusal from a host as a completed write', () => {
     expect(parseFileWriteResult({ ok: false, diskConflict: 'not-utf8' })).toEqual({
       ok: false,

@@ -41,6 +41,7 @@ import { editorSaveWriterView } from './editor-save-writer-view'
 import { createEditorSaveSlots, type EditorSaveRequest } from './editor-save-slots'
 import { EditorSaveDiscardedError, editorDiscardEpoch } from './editor-discard-epoch'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { releaseNonUtf8PausesWithoutDirtyTab } from './editor-non-utf8-autosave-pause'
 
 export type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -256,6 +257,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const syncAutoSave = (): void => {
     const state = store.getState()
     holds.flagOverdue(state)
+    releaseNonUtf8PausesWithoutDirtyTab(state.openFiles)
     const openFilesByKey = new Map(
       state.openFiles.map((file) => [editorBufferIdOfView(state, file.id), file])
     )

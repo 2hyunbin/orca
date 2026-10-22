@@ -61,11 +61,11 @@ export function compareDiskWritePrecondition(
   if (current === content && !current.includes('\uFFFD')) {
     return 'identical'
   }
-  // Why: decoded text can't tell a real U+FFFD from replaced bytes, so a reader of text stays conservative.
-  if (precondition.requireLosslessUtf8 && current.includes('\uFFFD')) {
-    return 'not-utf8'
+  if (getDiskBaselineSignature(current) !== precondition.expectedSignature) {
+    return 'changed'
   }
-  return getDiskBaselineSignature(current) === precondition.expectedSignature ? null : 'changed'
+  // Why: decoded text can't tell a real U+FFFD from replaced bytes, so a reader of text stays conservative.
+  return precondition.requireLosslessUtf8 && current.includes('\uFFFD') ? 'not-utf8' : null
 }
 
 /** Why: old hosts answer `{ ok: true }` or nothing; only an explicit `ok: false` is a refusal. */

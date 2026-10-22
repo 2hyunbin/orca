@@ -37,6 +37,21 @@ export function resumeAutosaveForNonUtf8File(file: PausedFile): void {
   pausedFiles.delete(pauseKey(file))
 }
 
+/** Why: a close, reload or discard ends the edits the pause held back, so the next edit asks the host again. */
+export function releaseNonUtf8PausesWithoutDirtyTab(
+  openFiles: readonly (PausedFile & Pick<OpenFile, 'isDirty'>)[]
+): void {
+  if (pausedFiles.size === 0) {
+    return
+  }
+  const dirty = new Set(openFiles.filter((file) => file.isDirty).map(pauseKey))
+  for (const key of pausedFiles) {
+    if (!dirty.has(key)) {
+      pausedFiles.delete(key)
+    }
+  }
+}
+
 export function __clearNonUtf8AutosavePausesForTests(): void {
   pausedFiles.clear()
 }

@@ -65,3 +65,36 @@ it('pauses autosave once for a non-UTF-8 file until an explicit save converts it
     queue.dispose()
   }
 })
+
+it.each(['close', 'reload'] as const)(
+  'lifts the pause on %s, so the next edit is asked about again',
+  async (ending) => {
+    const latin1 = Buffer.from([0x63, 0x61, 0x66, 0xe9]).toString('utf8')
+    const disk = stubGuardedDisk({ [GUARDED_PATH]: latin1 })
+    const store = createEditorStore()
+    openGuardedFile(store, { baseline: latin1, draft: `${latin1}!` })
+    const queue = createEditorSaveQueue(store)
+    try {
+      expect(await queue.queueSave(store.getState().openFiles[0]!, `${latin1}!`, 'autosave')).toBe(
+        'failed'
+      )
+      if (ending === 'close') {
+        // Why: the minimal fixture store lacks the layout state closeFile walks.
+        store.setState({ openFiles: [], editorBuffers: {}, editorDrafts: {} })
+      } else {
+        store.getState().markFileDirty(GUARDED_PATH, false)
+      }
+      queue.syncAutoSave()
+      openGuardedFile(store, { baseline: latin1, draft: `${latin1}?` })
+      queue.syncAutoSave()
+      expect(isAutosaveSuspendedForFile(store.getState().openFiles[0]!)).toBe(false)
+      expect(await queue.queueSave(store.getState().openFiles[0]!, `${latin1}?`, 'autosave')).toBe(
+        'failed'
+      )
+      expect(disk.writeFile).toHaveBeenCalledTimes(2)
+      expect(toast.warning).toHaveBeenCalledTimes(2)
+    } finally {
+      queue.dispose()
+    }
+  }
+)
