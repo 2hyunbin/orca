@@ -18,7 +18,11 @@ import {
   setWslMoveDesktopRewriteRegistryCompleteForTests
 } from './wsl-move-desktop-rewrite-stores'
 import { moveProjectsToWslHost } from './wsl-move-driver'
-import type { WslMoveExitProof, WslMoveExitProofScope } from './wsl-move-exit-proof'
+import {
+  proveWslMoveTerminalsExited,
+  type WslMoveExitProof,
+  type WslMoveExitProofScope
+} from './wsl-move-exit-proof'
 import {
   isWslMoveCwdFenced,
   loadWslMoveFence,
@@ -132,5 +136,63 @@ describe('the exit proof again before the commit', () => {
     expect(await moveProjectsToWslHost(world.deps, request)).toMatchObject({ outcome: 'moved' })
     // Read at the second proof, between the blobs and the commit request.
     expect(fencedAfterQuiesce).toEqual([true, true, false])
+  })
+})
+
+// Users with several projects in one distro open terminals in the others while a move copies.
+describe('the real exit proof, at the quiesce and again before the commit', () => {
+  type Census = { sessionId: string; cwd: string | null; wslDistro: string | null }[]
+
+  /** The census answers `atQuiesce` first, then `beforeCommit`. */
+  function census(atQuiesce: Census, beforeCommit: Census): void {
+    let calls = 0
+    world.deps.quiesce.proveExited = (scope) => {
+      calls += 1
+      const sessions = (calls === 1 ? atQuiesce : beforeCommit).map((session) => ({
+        ...session,
+        isAlive: true
+      }))
+      return proveWslMoveTerminalsExited(
+        {
+          listSessions: async () => sessions,
+          countFallbackSessions: () => 0,
+          isScopeFenced: () => true
+        },
+        scope
+      )
+    }
+  }
+
+  const otherProject = { sessionId: 'bare-1', cwd: '/home/dev/other', wslDistro: 'Ubuntu' }
+
+  it('moves past terminals in other folders of the distro, open before and during the copy', async () => {
+    census(
+      [otherProject],
+      [otherProject, { ...otherProject, sessionId: 'bare-2', cwd: '/home/dev' }]
+    )
+
+    expect(await moveProjectsToWslHost(world.deps, request)).toMatchObject({ outcome: 'moved' })
+  })
+
+  it.each<[string, Census[number], string]>([
+    [
+      'in a moving folder',
+      { sessionId: 'bare-3', cwd: '/home/dev/app/src', wslDistro: 'Ubuntu' },
+      'terminals-started-after-pause'
+    ],
+    [
+      'with no folder to place it by',
+      { sessionId: 'bare-4', cwd: null, wslDistro: 'Ubuntu' },
+      'exit-unverifiable: live terminals with no known workspace: bare-4'
+    ]
+  ])('still resets for a terminal that starts %s during the copy', async (_l, session, detail) => {
+    census([otherProject], [otherProject, session])
+
+    expect(await moveProjectsToWslHost(world.deps, request)).toEqual({
+      outcome: 'refused',
+      code: 'wsl_move_pause_failed',
+      detail
+    })
+    expect(listWslMoveCutovers(userDataPath)).toEqual([])
   })
 })

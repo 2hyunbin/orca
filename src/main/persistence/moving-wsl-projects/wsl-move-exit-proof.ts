@@ -128,16 +128,13 @@ function attributeByCwd(
   const path = comparableWslPath(cwd, distro)
   const underRoot = path !== null && roots.some((root) => isAtOrUnder(path, root))
   // A POSIX folder is a Linux path only inside WSL. A Git Bash `/c/...` is not, but a native-tagged
-  // `wsl.exe` shell's may be, so only a folder clear of the move rules it out.
+  // or untagged `wsl.exe` shell's may be, so only one in a moved folder stays unknown.
   if (isLinuxSpelled(cwd) && !inDistro) {
-    return wslDistro === undefined || (wslDistro === null && underRoot) ? 'unknown' : 'elsewhere'
+    return typeof wslDistro !== 'string' && underRoot ? 'unknown' : 'elsewhere'
   }
-  if (underRoot) {
-    return 'in-scope'
-  }
-  const distroRoot = comparableWslPath('/', distro)
-  const pathInDistro = path !== null && distroRoot !== null && isAtOrUnder(path, distroRoot)
-  return inDistro || pathInDistro ? 'unknown' : 'elsewhere'
+  // A known folder outside the move is outside it, even in the moving distro: other projects there
+  // keep their terminals open through a move.
+  return underRoot ? 'in-scope' : 'elsewhere'
 }
 
 function keyPath(key: string): string | null {
