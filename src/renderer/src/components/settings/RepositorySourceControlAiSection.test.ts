@@ -39,12 +39,12 @@ describe('RepositorySourceControlAiEnablement', () => {
 
 describe('RepositorySourceControlAiActionRows', () => {
   it.each(['codex', 'opencode'] as const)(
-    'shows one launch section for chats and terminals once detection settles (%s)',
+    'keeps saved-agent controls disabled until detection settles without replacing fields (%s)',
     async (agent) => {
       useAppStore.getState().clearLocalDetectedAgents()
       const settings = useAppStore.getState().settings!
       const recipe = {
-        agentId: null,
+        agentId: agent,
         launchPreferences: {
           agentId: agent,
           permissionMode: 'ask' as const,
@@ -114,15 +114,27 @@ describe('RepositorySourceControlAiActionRows', () => {
       expect(cards).toHaveLength(2)
       expect(ensure).toHaveBeenCalledTimes(2)
       expect(detectAgents).toHaveBeenCalledTimes(1)
+      const pendingContent = cards.map((card) => card.textContent)
       for (const card of cards) {
-        expect(card.textContent).not.toContain('Model')
-        expect(card.querySelectorAll('[aria-hidden="true"] .h-8')).toHaveLength(1)
+        expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
+        expect(card.textContent).toContain('Permissions')
+        const controls = Array.from(
+          card.querySelectorAll<HTMLButtonElement>('button[role="combobox"].min-w-0')
+        )
+        expect(controls.length).toBeGreaterThan(0)
+        expect(controls.every((control) => control.disabled)).toBe(true)
         expect(card.querySelector('input')?.value).toBe('--saved-cli')
       }
       await act(async () => {
         finish([agent])
       })
+      expect(cards.map((card) => card.textContent)).toEqual(pendingContent)
       for (const card of cards) {
+        const controls = Array.from(
+          card.querySelectorAll<HTMLButtonElement>('button[role="combobox"].min-w-0')
+        )
+        expect(controls.length).toBeGreaterThan(0)
+        expect(controls.every((control) => !control.disabled)).toBe(true)
         expect(card.textContent?.includes('Model')).toBe(agent === 'codex')
         expect(card.textContent).toContain('Permissions')
         // OpenCode's terminal has no permission flag, so its saved mode reaches chats only.
@@ -153,32 +165,31 @@ describe('RepositorySourceControlAiActionRows', () => {
         actions: { fixCommitFailure: { agentId: null, agentArgs: '--global' } }
       }
 
-      const markup = renderToStaticMarkup(
-        React.createElement(RepositorySourceControlAiActionRows, {
-          repoId: 'repo-1',
-          repoAi: {
-            actionOverrides: {
-              fixCommitFailure: {
-                agentId: null,
-                commandInputTemplate: '{basePrompt}\n\nrepo',
-                ...(repoAgentArgs !== undefined ? { agentArgs: repoAgentArgs } : {})
-              }
+      const rows = React.createElement(RepositorySourceControlAiActionRows, {
+        repoId: 'repo-1',
+        repoAi: {
+          actionOverrides: {
+            fixCommitFailure: {
+              agentId: null,
+              commandInputTemplate: '{basePrompt}\n\nrepo',
+              ...(repoAgentArgs !== undefined ? { agentArgs: repoAgentArgs } : {})
             }
-          },
-          source,
-          defaultTuiAgent: 'codex',
-          savingActionIds: {},
-          actionDirtyById,
-          onActionModeChange: () => {},
-          onActionAgentChange: () => {},
-          onActionLaunchPreferencesChange: () => {},
-          onActionTemplateChange: () => {},
-          onActionAgentArgsChange: () => {},
-          onAppendVariable: () => {},
-          onActionDiscard: () => {},
-          onActionSave: () => {}
-        })
-      )
+          }
+        },
+        source,
+        defaultTuiAgent: 'codex',
+        savingActionIds: {},
+        actionDirtyById,
+        onActionModeChange: () => {},
+        onActionAgentChange: () => {},
+        onActionLaunchPreferencesChange: () => {},
+        onActionTemplateChange: () => {},
+        onActionAgentArgsChange: () => {},
+        onAppendVariable: () => {},
+        onActionDiscard: () => {},
+        onActionSave: () => {}
+      })
+      const markup = renderToStaticMarkup(React.createElement(TooltipProvider, null, rows))
 
       expect(markup).toContain('Commit failure fixes')
       expect(markup).toContain('Push failure fixes')

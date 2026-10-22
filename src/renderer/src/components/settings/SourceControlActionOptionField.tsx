@@ -80,16 +80,6 @@ export function SourceControlActionExtraArgsField({
   )
 }
 
-export function SourceControlActionOptionsPlaceholder(): React.JSX.Element {
-  return (
-    <div aria-hidden="true">
-      <SourceControlActionOptionField label={'\u00a0'}>
-        <div className="h-8 rounded-md border border-border bg-muted/40" />
-      </SourceControlActionOptionField>
-    </div>
-  )
-}
-
 export function SourceControlActionOptionTrigger({
   label,
   disabled

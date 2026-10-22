@@ -44,8 +44,7 @@ import { translate } from '@/i18n/i18n'
 import { SourceControlActionModelPicker } from './SourceControlActionModelPicker'
 import {
   SourceControlActionExtraArgsField,
-  SourceControlActionOptionField,
-  SourceControlActionOptionsPlaceholder
+  SourceControlActionOptionField
 } from './SourceControlActionOptionField'
 import {
   useSourceControlActionAgentInventory,
@@ -118,6 +117,10 @@ export function RepositorySourceControlAiActionRows({
         })
         const effectiveAgent = recipe.agentId
         const actual = resolveAgent(effectiveAgent)
+        const pickerAgent =
+          effectiveAgent || actual.status === 'pending'
+            ? resolveAgentArgsPlaceholderAgent(effectiveAgent, source, actionId, defaultTuiAgent)
+            : actual.agent
         const isLaunchAction = !SOURCE_CONTROL_TEXT_ACTION_ID_SET.has(actionId)
         // Launch actions pick their model above, so only text actions get a `--model` example.
         const agentArgsPlaceholder =
@@ -246,16 +249,14 @@ export function RepositorySourceControlAiActionRows({
                 ) : agentSupportText ? (
                   <p className="text-[11px] text-muted-foreground">{agentSupportText}</p>
                 ) : null}
-                {!isLaunchAction ? null : actual.status === 'pending' ? (
-                  <SourceControlActionOptionsPlaceholder />
-                ) : (
+                {isLaunchAction ? (
                   <SourceControlActionModelPicker
-                    agent={actual.agent}
+                    agent={pickerAgent}
                     value={recipe.launchPreferences}
-                    disabled={!hasOverride}
+                    disabled={!hasOverride || actual.status === 'pending'}
                     onChange={(value) => onActionLaunchPreferencesChange(actionId, value)}
                   />
-                )}
+                ) : null}
                 {isLaunchAction ? (
                   <SourceControlActionExtraArgsField
                     value={agentArgsValue}
