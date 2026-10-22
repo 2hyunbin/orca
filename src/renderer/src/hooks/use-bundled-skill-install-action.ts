@@ -48,18 +48,12 @@ export function useBundledSkillInstallAction(
     void (async () => {
       try {
         const request = { names: namesKey.split(',') }
-        let planned = await planBundledSkillsOnTarget(target, request)
+        const planned = await planBundledSkillsOnTarget(target, request)
         let action: BundledSkillInstallActionState = UNKNOWN
         if (planned.kind === 'plan') {
-          const candidate = bundledSkillInstallAction(planned.plan)
-          if (candidate.kind === 'replace') {
-            planned = await planBundledSkillsOnTarget(target, {
-              ...request,
-              force: candidate.paths
-            })
-          }
-          if (planned.kind === 'plan') {
-            action = { ...candidate, changes: bundledSkillSetupChanges(planned.plan) }
+          action = {
+            ...bundledSkillInstallAction(planned.plan),
+            changes: bundledSkillSetupChanges(planned.plan)
           }
         }
         if (!ignore) {

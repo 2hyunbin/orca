@@ -74,8 +74,55 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+function renderSurface(surface: 'panel' | 'linear' | 'browser' | 'capabilities'): void {
+  render(
+    surface === 'panel' ? (
+      <AgentSkillSetupPanel
+        title="CLI skill"
+        description={null}
+        skillNames={['orca-cli']}
+        installed={false}
+        loading={false}
+        error={null}
+        onRecheck={mocks.refresh}
+      />
+    ) : surface === 'linear' ? (
+      <LinearAgentSkillInstallCta settings={null} />
+    ) : surface === 'browser' ? (
+      <BrowserAction done />
+    ) : (
+      <AgentCapabilitiesSetupAction
+        onOrchestrationSkillInstalledChange={vi.fn()}
+        onBrowserUseSkillInstalledChange={vi.fn()}
+      />
+    )
+  )
+}
+
 for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {
   describe(`${surface} blocked setup`, () => {
+    it.each(['edited', 'other'] as const)(
+      'offers Replace without forcing a preview of a %s copy',
+      async (reason) => {
+        const name = surface === 'linear' ? 'orca-linear' : 'orca-cli'
+        mocks.plan.mockResolvedValue({
+          kind: 'plan',
+          plan: planOf([sharedEntry(name, 'leave', { reason, replaceable: true })])
+        })
+
+        renderSurface(surface)
+
+        expect(
+          await screen.findByRole('button', { name: "Replace with Orca's copy" })
+        ).toBeDefined()
+        expect(mocks.plan.mock.calls.length).toBeGreaterThan(0)
+        for (const [, request] of mocks.plan.mock.calls) {
+          expect(request.force).toBeUndefined()
+        }
+        expect(mocks.execute).not.toHaveBeenCalled()
+      }
+    )
+
     it.each(['unwritable', 'busy'] as const)(
       'offers Retry when an absent skill is %s',
       async (reason) => {
@@ -84,28 +131,7 @@ for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {
           kind: 'plan',
           plan: planOf([sharedEntry(name, 'leave', { reason })])
         })
-        render(
-          surface === 'panel' ? (
-            <AgentSkillSetupPanel
-              title="CLI skill"
-              description={null}
-              skillNames={[name]}
-              installed={false}
-              loading={false}
-              error={null}
-              onRecheck={mocks.refresh}
-            />
-          ) : surface === 'linear' ? (
-            <LinearAgentSkillInstallCta settings={null} />
-          ) : surface === 'browser' ? (
-            <BrowserAction done />
-          ) : (
-            <AgentCapabilitiesSetupAction
-              onOrchestrationSkillInstalledChange={vi.fn()}
-              onBrowserUseSkillInstalledChange={vi.fn()}
-            />
-          )
-        )
+        renderSurface(surface)
 
         const retry = await screen.findByRole('button', { name: 'Retry' })
         expect(screen.getAllByText('Needs attention').length).toBeGreaterThan(0)
