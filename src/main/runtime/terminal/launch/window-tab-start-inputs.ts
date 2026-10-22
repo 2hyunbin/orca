@@ -70,7 +70,7 @@ export async function startWindowTabWithInputs(
 async function startPaneAgentLaunch(
   host: WindowTabStartHost,
   pane: Parameters<typeof startWindowTabWithInputs>[1],
-  request: unknown,
+  launchRequest: unknown,
   opts: CreateOptions,
   create: Create
 ): Promise<dependencies.RuntimeTerminalCreate> {
@@ -81,26 +81,32 @@ async function startPaneAgentLaunch(
     launchAgent: _agent,
     startupCommandDelivery: _delivery,
     telemetry: _telemetry,
-    env: _env,
+    env,
     ...paneOpts
   } = opts
   const began: { launch: PaneAgentLaunch | null } = { launch: null }
-  let planned: Awaited<ReturnType<typeof beginPaneAgentLaunch>>
+  let planned: CreateOptions
   try {
-    planned = await beginPaneAgentLaunch({
+    const request = await beginPaneAgentLaunch({
       runtime: host.runtime,
       store: host.store ?? undefined,
       worktreeId: pane.worktreeId,
       paneKey: makePaneKey(pane.tabId, pane.leafId),
-      request,
+      request: launchRequest,
       onTracked: (tracked) => {
         began.launch = tracked
       }
     })
     // It starts in the pane's own workspace, never one its request names instead.
-    if (planned.worktree !== pane.worktreeId) {
+    if (request.worktree !== pane.worktreeId) {
       throw new Error('agent_launch_request_invalid')
     }
+    // Planned here, as the pane's own spawn plans it, so the pane's env stays under the plan's.
+    const { startupAgent: _startupAgent, ...plan } = await host.runtime.planAgentPaneLaunch(
+      pane.worktreeId,
+      { ...paneOpts, ...request.options, cwd: request.options.cwd ?? paneOpts.cwd }
+    )
+    planned = { ...plan, ...(env || plan.env ? { env: { ...env, ...plan.env } } : {}) }
   } catch (error) {
     if (began.launch) {
       endPaneAgentLaunch(began.launch, { error })
@@ -117,9 +123,7 @@ async function startPaneAgentLaunch(
   const tracked = began.launch
   try {
     const terminal = await create({
-      ...paneOpts,
-      ...planned.options,
-      cwd: planned.options.cwd ?? paneOpts.cwd,
+      ...planned,
       onPtySpawnDispatched: () => {
         // Right before the provider spawn: a pane the user closed meanwhile starts nothing.
         tracked?.refuseIfClosed()

@@ -93,6 +93,27 @@ describe("the start inputs of the window's new tab, run by main (L252)", () => {
     expect(fixture.verdicts).toEqual([{ kind: 'proceed' }])
   })
 
+  it("keeps the pane's env under the plan's, as the pane's own spawn merges them", async () => {
+    fixture.plan.mockImplementationOnce(async (_workspace, opts) => ({
+      ...opts,
+      command: 'claude',
+      launchConfig: { agentCommand: 'claude', agentArgs: '', agentEnv: {} },
+      launchAgent: 'claude',
+      env: { SHARED: 'plan', PLANNED: '1' }
+    }))
+
+    await fixture.runtime.startWindowTabTerminal(WORKTREE_ID, PANE, {
+      env: { SHARED: 'window', WINDOW: '1' },
+      agentLaunch: CLAUDE_LAUNCH
+    })
+
+    // The planner refuses a caller env beside an agent it plans, so it is merged after.
+    expect(fixture.plan.mock.calls[0]![1]).not.toHaveProperty('env')
+    expect(fixture.spawn.mock.calls[0]![0]).toMatchObject({
+      env: expect.objectContaining({ SHARED: 'plan', PLANNED: '1', WINDOW: '1' })
+    })
+  })
+
   it('starts no shell when the plan fails, and the pane says why', async () => {
     fixture.plan.mockRejectedValueOnce(new Error('Could not build launch command for claude.'))
 
