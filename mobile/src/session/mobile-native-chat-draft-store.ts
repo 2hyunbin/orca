@@ -52,26 +52,33 @@ export function editMobileNativeChatDraft(scope: string, update: SetStateAction<
     writeDraft(owner, update, true)
   }
 }
+export function resolveMobileChatDraftSendOwner(captured: MobileChatDraftOwner | undefined) {
+  const current = captured && owners.get(captured.scope)
+  return current && current.logicalDraft === captured?.logicalDraft && live(current)
+    ? current
+    : undefined
+}
 export function clearMobileNativeChatDraftForSend(
-  scope: string,
+  captured: MobileChatDraftOwner | undefined,
   generation: number,
-  text: string,
-  captured = owners.get(scope)
+  text: string
 ): void {
-  if (!captured || !live(captured)) {
+  const owner = resolveMobileChatDraftSendOwner(captured)
+  if (!owner) {
     return
   }
-  const current = captured.draft
+  const current = owner.draft
   if (current.editGeneration === generation && current.text === text) {
-    replace(captured, { ...current, text: '', skills: undefined, editGeneration: generation + 1 })
+    replace(owner, { ...current, text: '', skills: undefined, editGeneration: generation + 1 })
   }
 }
 export function restoreMobileChatDraft(
-  owner: MobileChatDraftOwner,
+  captured: MobileChatDraftOwner,
   text: string,
   skills?: Draft['skills']
 ): void {
-  if (!live(owner)) {
+  const owner = resolveMobileChatDraftSendOwner(captured)
+  if (!owner) {
     return
   }
   const current = owner.draft
@@ -87,9 +94,8 @@ export function readMobileNativeChatDraft(scope: string): Draft {
   return owners.get(scope)?.draft ?? EMPTY
 }
 export function updateMobileNativeChatDraftImages(
-  scope: string,
+  captured: MobileChatDraftOwner | undefined,
   update: (images: PendingNativeChatImage[]) => PendingNativeChatImage[],
-  captured = owners.get(scope),
   previewOnly = false
 ): void {
   if (!captured || !live(captured)) {
@@ -195,7 +201,6 @@ export async function appendMobileNativeChatDraft(
     resolve = done
   })
   const copy: Copy = {
-    saved: false,
     expired: false,
     finish: (saved) => {
       clearTimeout(timer)
@@ -229,9 +234,7 @@ export async function appendMobileNativeChatDraft(
     owner.copy = undefined
   }
   notify()
-  return saved
-    ? { valid: () => copy.saved && !copy.expired && live(owner) && !removing(scope) }
-    : false
+  return saved ? { valid: () => !copy.expired && live(owner) && !removing(scope) } : false
 }
 export async function persistMobileNativeChatDraft(scope: string): Promise<void> {
   const owner = owners.get(scope)

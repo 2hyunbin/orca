@@ -203,12 +203,7 @@ export function useMobileNativeChatDrafts(args: {
   // composer that waits for settlement to empty reads as "my prompt didn't
   // send". Clear at send time; a definite rejection restores the text below.
   const clearDraftForSend = useCallback((origin: MobileNativeChatSendOrigin, text: string) => {
-    clearMobileNativeChatDraftForSend(
-      origin.draftKey,
-      origin.draftEditGeneration,
-      text,
-      origin.owner
-    )
+    clearMobileNativeChatDraftForSend(origin.owner, origin.draftEditGeneration, text)
   }, [])
 
   const restoreRejectedDraft = useCallback((origin: MobileNativeChatSendOrigin, text: string) => {

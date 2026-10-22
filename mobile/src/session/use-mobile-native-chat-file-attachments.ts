@@ -1,5 +1,6 @@
 import {
   captureMobileChatDraftOwner,
+  resolveMobileChatDraftSendOwner,
   mobileChatDraftOwnerLive
 } from './mobile-native-chat-draft-store'
 import {
@@ -28,6 +29,7 @@ export type MobileNativeChatFileAttachments = {
   /** Drops these files: a removed card, or the files a send carried (one attached while it was in
    *  flight stays). */
   readonly removeFiles: (ids: readonly string[]) => void
+  readonly consumeSubmittedFiles: (ids: readonly string[]) => void
 }
 
 /** Files attached to a structured chat, uploaded into the host's attachment store on pick. */
@@ -130,5 +132,16 @@ export function useMobileNativeChatFileAttachments(args: {
     [scopeKey, owner, updateScope]
   )
 
-  return { files, attachFiles, removeFiles }
+  const consumeSubmittedFiles = useCallback(
+    (ids: readonly string[]) => {
+      const target = resolveMobileChatDraftSendOwner(owner)
+      if (target) {
+        const removed = new Set(ids)
+        updateScope(target.scope, (current) => current.filter((file) => !removed.has(file.id)))
+      }
+    },
+    [owner, updateScope]
+  )
+
+  return { files, attachFiles, removeFiles, consumeSubmittedFiles }
 }

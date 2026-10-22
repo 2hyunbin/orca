@@ -175,7 +175,7 @@ it('owns the complete base before editing and protects unread drafts through mem
   await hydration
   editMobileNativeChatDraft(scope, 'sent during recovery')
   clearMobileNativeChatDraftForSend(
-    scope,
+    captureMobileChatDraftOwner(scope),
     readMobileNativeChatDraft(scope).editGeneration,
     'sent during recovery'
   )
@@ -451,7 +451,11 @@ it('expires public copy authority without releasing blocked physical work or iss
     const copy = appendMobileNativeChatDraft(scope, { text: 'exact copy', images: [] })
     await Promise.resolve()
     const captured = readMobileNativeChatDraft(scope)
-    clearMobileNativeChatDraftForSend(scope, captured.editGeneration, captured.text)
+    clearMobileNativeChatDraftForSend(
+      captureMobileChatDraftOwner(scope),
+      captured.editGeneration,
+      captured.text
+    )
     await vi.advanceTimersByTimeAsync(15_000)
     expect(await copy).toBe(false)
     expect(write).toHaveBeenCalledTimes(1)

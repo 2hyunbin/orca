@@ -4,6 +4,7 @@ import {
   readMobileNativeChatDraft,
   resetMobileNativeChatDraftStoreForTests
 } from './mobile-native-chat-draft-store'
+import { publishMobileChatDraftStorage } from './mobile-native-chat-draft-storage'
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -105,6 +106,7 @@ describe('useMobileNativeChatImageAttachments lifecycle', () => {
     act(() => renderer?.unmount())
     renderer = null
     hook = null
+    publishMobileChatDraftStorage(null)
   })
 
   function mount(args: HookArgs): void {
@@ -116,31 +118,50 @@ describe('useMobileNativeChatImageAttachments lifecycle', () => {
     })
   }
 
-  it('cannot attach a retired upload to a deliberately re-created draft', async () => {
-    let release = (_items: { base64: string; uri: string }[]) => {}
-    pick.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          release = resolve
-        })
-    )
-    const client = makeClient([methodNotFound('start'), ok('save', '/tmp/retired.png')])
-    mount(baseArgs({ client: client as unknown as RpcClient }))
-    let attaching: Promise<void>
-    await act(async () => {
-      attaching = hook!.attachImage('library')
-      await Promise.resolve()
-    })
-    await act(async () => {
-      await deleteMobileNativeChatDrafts('h', 'w')
-      await hydrateMobileNativeChatDraft(SCOPE_A)
-    })
-    await act(async () => {
-      release([{ base64: 'AAAA', uri: 'file:///old.jpg' }])
-      await attaching!
-    })
-    expect(readMobileNativeChatDraft(SCOPE_A).images).toEqual([])
-  })
+  it.each(['recreated', 'replaced'] as const)(
+    'rejects a retired upload with one failure after the draft is %s',
+    async (retirement) => {
+      let release = (_items: { base64: string; uri: string }[]) => {}
+      pick.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = resolve
+          })
+      )
+      const client = makeClient([methodNotFound('start'), ok('save', '/tmp/retired.png')])
+      const showToast = vi.fn()
+      const onAttachSuccess = vi.fn()
+      const onError = vi.fn()
+      mount(
+        baseArgs({ client: client as unknown as RpcClient, showToast, onAttachSuccess, onError })
+      )
+      let attaching: Promise<void>
+      await act(async () => {
+        attaching = hook!.attachImage('library')
+        await Promise.resolve()
+      })
+      await act(async () => {
+        if (retirement === 'recreated') {
+          await deleteMobileNativeChatDrafts('h', 'w')
+        } else {
+          publishMobileChatDraftStorage({
+            read: async () => null,
+            write: async () => {},
+            removeWorkspace: async () => {}
+          })
+        }
+        await hydrateMobileNativeChatDraft(SCOPE_A)
+      })
+      await act(async () => {
+        release([{ base64: 'AAAA', uri: 'file:///old.jpg' }])
+        await attaching!
+      })
+      expect(readMobileNativeChatDraft(SCOPE_A).images).toEqual([])
+      expect(showToast).toHaveBeenCalledExactlyOnceWith('Attach failed', 1500)
+      expect(onError).toHaveBeenCalledOnce()
+      expect(onAttachSuccess).not.toHaveBeenCalled()
+    }
+  )
 
   it('adds an uploaded image as a chip without pasting to the terminal', async () => {
     pick.mockResolvedValue([{ base64: 'AAAA', uri: 'file:///a.jpg' }])

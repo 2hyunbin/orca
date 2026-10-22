@@ -6,12 +6,13 @@ import Animated, {
   runOnJS,
   useAnimatedStyle,
   withSpring,
+  type DerivedValue,
   type SharedValue
 } from 'react-native-reanimated'
 import { colors, spacing } from '../theme/mobile-theme'
 import { triggerMediumImpact } from '../platform/haptics'
 import {
-  dragReorderTop,
+  type DragReorderLayout,
   orderedKeysFromDragReorderPositions,
   type DragReorderPositions
 } from './drag-reorder-positions'
@@ -19,7 +20,7 @@ const ROW_SPRING = { damping: 28, stiffness: 350 }
 const LONG_PRESS_ACTIVATION_MS = 200
 
 export type DragSharedState = {
-  sizes: SharedValue<Record<string, number>>
+  layout: DerivedValue<DragReorderLayout>
   initialPositions: SharedValue<DragReorderPositions>
   positions: SharedValue<DragReorderPositions>
   activeKey: SharedValue<string | null>
@@ -60,7 +61,7 @@ export function DragReorderRow({
   renderContent: (handle: ReactNode) => ReactNode
 }): React.JSX.Element {
   const {
-    sizes,
+    layout,
     initialPositions,
     positions,
     activeKey,
@@ -77,7 +78,7 @@ export function DragReorderRow({
     .shouldCancelWhenOutside(false)
     .onStart((event) => {
       initialPositions.value = { ...positions.value }
-      dragStartTop.value = dragReorderTop(positions.value, sizes.value, rowKey)
+      dragStartTop.value = layout.value.tops[rowKey] ?? 0
       dragStartScrollY.value = scrollOffsetY.value
       dragTranslationY.value = 0
       dragPointerAbsY.value = event.absoluteY
@@ -120,14 +121,14 @@ export function DragReorderRow({
       }
     }
     return {
-      top: ready ? withSpring(dragReorderTop(positions.value, sizes.value, rowKey), ROW_SPRING) : 0,
+      top: ready ? withSpring(layout.value.tops[rowKey] ?? 0, ROW_SPRING) : 0,
       zIndex: 0,
       elevation: 0,
       shadowOpacity: 0,
       backgroundColor: presentation === 'settings' ? colors.bgPanel : undefined,
       transform: [{ scale: 1 }]
     }
-  }, [positions, activeKey, activeTop, rowKey, ready, presentation, sizes])
+  }, [layout, activeKey, activeTop, rowKey, ready, presentation])
 
   const handle = movable ? (
     <GestureDetector gesture={pan}>

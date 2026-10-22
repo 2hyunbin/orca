@@ -11,6 +11,7 @@ import {
 import {
   readMobileNativeChatDraft,
   captureMobileChatDraftOwner,
+  resolveMobileChatDraftSendOwner,
   type MobileChatDraftOwner,
   updateMobileNativeChatDraftImages,
   useMobileNativeChatDraftImages
@@ -127,15 +128,9 @@ export function useMobileNativeChatImageAttachments({
   const attachments = useMobileNativeChatDraftImages(scopeKey)
 
   const addUploadedImages = useCallback(
-    (
-      scope: string,
-      uploadedImages: Omit<PendingNativeChatImage, 'id'>[],
-      owner: MobileChatDraftOwner
-    ) => {
-      updateMobileNativeChatDraftImages(
-        scope,
-        (current) => appendPendingNativeChatImages(current, uploadedImages, idCounter, idPrefix),
-        owner
+    (owner: MobileChatDraftOwner, uploadedImages: Omit<PendingNativeChatImage, 'id'>[]) => {
+      updateMobileNativeChatDraftImages(owner, (current) =>
+        appendPendingNativeChatImages(current, uploadedImages, idCounter, idPrefix)
       )
     },
     [idPrefix]
@@ -161,10 +156,8 @@ export function useMobileNativeChatImageAttachments({
       if (!scope || !owner || owner.state === 'unread') {
         return
       }
-      updateMobileNativeChatDraftImages(
-        scope,
-        (current) => current.filter((attachment) => attachment.id !== id),
-        owner
+      updateMobileNativeChatDraftImages(owner, (current) =>
+        current.filter((attachment) => attachment.id !== id)
       )
     },
     [scopeKey]
@@ -194,6 +187,18 @@ export function useMobileNativeChatImageAttachments({
       try {
         const scope = scopeKey
         const pendingImages = scope ? readMobileNativeChatDraft(scope).images : []
+        const consumeSubmittedImages = () =>
+          updateMobileNativeChatDraftImages(resolveMobileChatDraftSendOwner(owner), (current) =>
+            current.filter(
+              (held) =>
+                !pendingImages.some(
+                  (sent) =>
+                    sent.id === held.id &&
+                    sent.path === held.path &&
+                    JSON.stringify(sent.reference) === JSON.stringify(held.reference)
+                )
+            )
+          )
         // Only stored files: one still uploading holds Send in the composer.
         const storedFiles = structuredNativeChat
           ? files.flatMap((file) =>
@@ -213,12 +218,7 @@ export function useMobileNativeChatImageAttachments({
             [...pendingImages, ...storedFiles]
           )
           if (outcome !== 'rejected') {
-            const sentIds = new Set(pendingImages.map((attachment) => attachment.id))
-            updateMobileNativeChatDraftImages(
-              scope,
-              (current) => current.filter((attachment) => !sentIds.has(attachment.id)),
-              owner
-            )
+            consumeSubmittedImages()
             onFilesSent?.(storedFiles.map((file) => file.id))
           }
           return outcome !== 'rejected'
@@ -318,12 +318,7 @@ export function useMobileNativeChatImageAttachments({
             // Drop only what rode along — a chip attached while this send was in
             // flight keeps waiting for its own send. 'unknown' clears too: the
             // send usually DID land, and a kept chip would double-send the image.
-            const sentIds = new Set(pendingImages.map((attachment) => attachment.id))
-            updateMobileNativeChatDraftImages(
-              scope,
-              (current) => current.filter((attachment) => !sentIds.has(attachment.id)),
-              owner
-            )
+            consumeSubmittedImages()
           }
           return outcome !== 'rejected'
         } catch {

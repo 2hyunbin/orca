@@ -29,11 +29,7 @@ export function useMobileNativeChatImageUpload(args: {
   scopeKey: string | null
   structuredNativeChat: boolean
   showToast: ShowToast
-  onImagesUploaded: (
-    scope: string,
-    images: UploadedNativeChatImage[],
-    owner: MobileChatDraftOwner
-  ) => void
+  onImagesUploaded: (owner: MobileChatDraftOwner, images: UploadedNativeChatImage[]) => void
   onAttachSuccess?: () => void
   onError?: () => void
 }): {
@@ -100,8 +96,11 @@ export function useMobileNativeChatImageUpload(args: {
         }
       }
       if (uploadedImages.length > 0 && mobileChatDraftOwnerLive(owner)) {
-        onImagesUploaded(scope, uploadedImages, owner)
+        onImagesUploaded(owner, uploadedImages)
         onAttachSuccess?.()
+      }
+      if (uploadedImages.length > 0 && !mobileChatDraftOwnerLive(owner) && uploadError === null) {
+        uploadError = new Error('This draft session has ended')
       }
       if (uploadError !== null) {
         const message = uploadError instanceof Error ? uploadError.message : String(uploadError)

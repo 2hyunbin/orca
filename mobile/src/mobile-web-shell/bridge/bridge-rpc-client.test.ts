@@ -7,7 +7,6 @@ import type { RpcResponse } from '../../transport/types'
 import { createFakeRpcClient } from '../bridge-host-test-fakes'
 import { installPageChatDraftStorage } from './page-draft-storage'
 import { createBridgeDraftWriter } from './bridge-draft-storage'
-import { readBridgeHostMessage } from './bridge-envelope'
 import {
   mobileChatDraftStorage,
   publishMobileChatDraftStorage
@@ -21,7 +20,7 @@ import {
   resetMobileNativeChatDraftStoreForTests
 } from '../../session/mobile-native-chat-draft-store'
 import { BRIDGE_MAX_MESSAGE_BYTES, BRIDGE_MAX_SUBSCRIPTIONS } from './bridge-caps'
-import { BRIDGE_PROTOCOL_VERSION } from './bridge-envelope'
+import { BRIDGE_PROTOCOL_VERSION, readBridgeHostMessage } from './bridge-envelope'
 import { createFakeBridgePortPair, type BridgePortPair } from './bridge-port-pair-test-harness'
 
 /**

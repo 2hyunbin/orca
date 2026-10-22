@@ -10,7 +10,8 @@ const mocks = vi.hoisted(() => ({
   useMobileNativeChatFileAttachments: vi.fn(() => ({
     files: [],
     attachFiles: vi.fn(),
-    removeFiles: vi.fn()
+    removeFiles: vi.fn(),
+    consumeSubmittedFiles: vi.fn()
   }))
 }))
 

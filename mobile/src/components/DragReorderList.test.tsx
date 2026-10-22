@@ -7,6 +7,8 @@ type DragEvent = { absoluteY: number; translationY: number }
 type GestureCallbacks = Record<string, (event: DragEvent, success: boolean) => void>
 const probe = vi.hoisted(
   (): {
+    layouts: { value: unknown; inputs: unknown[] }[]
+    styleInputs: unknown[][]
     gestures: GestureCallbacks[]
     shared: { value: unknown }[]
     frameActive: ReturnType<typeof vi.fn>
@@ -16,6 +18,8 @@ const probe = vi.hoisted(
     scroll: ReturnType<typeof vi.fn>
     viewport: { pageY: number; height: number } | null
   } => ({
+    layouts: [],
+    styleInputs: [],
     gestures: [],
     shared: [],
     frameActive: vi.fn(),
@@ -81,7 +85,23 @@ vi.mock('react-native-reanimated', async () => {
       return held.current
     },
     useAnimatedRef: () => React.useRef(Object.assign(() => null, { current: null })).current,
-    useAnimatedStyle: (fn: () => unknown) => fn(),
+    useDerivedValue: (fn: () => unknown, inputs: unknown[]) => {
+      const layout = React.useMemo(
+        () => ({
+          get value() {
+            return fn()
+          },
+          inputs
+        }),
+        inputs
+      )
+      probe.layouts.push(layout)
+      return layout
+    },
+    useAnimatedStyle: (fn: () => unknown, inputs: unknown[]) => {
+      probe.styleInputs.push(inputs)
+      return fn()
+    },
     useFrameCallback: (fn: (frame: { timeSincePreviousFrame: number }) => void) => {
       probe.frame = fn
       return { setActive: probe.frameActive }
@@ -107,6 +127,8 @@ vi.mock('../platform/haptics', () => ({ triggerMediumImpact: vi.fn(), triggerSel
 import { DragReorderList } from './DragReorderList'
 
 beforeEach(() => {
+  probe.layouts.length = 0
+  probe.styleInputs.length = 0
   probe.gestures.length = 0
   probe.shared.length = 0
   probe.frameActive.mockClear()
@@ -439,4 +461,21 @@ it('keeps measured rows still on hold, restores cancellation, and drops by moved
   })
   expect(move).toHaveBeenCalledExactlyOnceWith({ movedId: 'a', afterId: 'c' })
   await act(async () => root!.unmount())
+})
+
+it('supplies geometry inputs to both Web mappers and recalculates layout after a slot change', async () => {
+  const fixture = await mounted()
+  const layout = probe.layouts.at(-1)!
+  expect(layout.inputs).toHaveLength(2)
+  expect(layout.inputs.every((input) => probe.shared.some((shared) => shared === input))).toBe(true)
+  expect(probe.styleInputs.every((inputs) => inputs.includes(layout))).toBe(true)
+  expect(layout.value).toEqual({ keys: ['a', 'b'], tops: { a: 0, b: 72 } })
+  await act(async () => {
+    fixture.gesture.start!({ absoluteY: 80, translationY: 0 }, true)
+    fixture.gesture.update!({ absoluteY: 160, translationY: 80 }, true)
+  })
+  expect(layout.value).toEqual({ keys: ['b', 'a'], tops: { b: 0, a: 72 } })
+  await act(async () => fixture.gesture.finalize!({ absoluteY: 160, translationY: 80 }, false))
+  expect(layout.value).toEqual({ keys: ['a', 'b'], tops: { a: 0, b: 72 } })
+  await act(async () => fixture.root.unmount())
 })

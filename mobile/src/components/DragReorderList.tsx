@@ -15,6 +15,7 @@ import Animated, {
   runOnUI,
   scrollTo,
   useFrameCallback,
+  useDerivedValue,
   useSharedValue,
   type AnimatedRef,
   type SharedValue
@@ -22,6 +23,7 @@ import Animated, {
 import { triggerSelection } from '../platform/haptics'
 import {
   dragReorderTarget,
+  dragReorderLayout,
   dragReorderMove,
   type DragReorderMove,
   dragReorderPositionsFromKeys,
@@ -91,6 +93,10 @@ export function DragReorderList<ItemT>({
     setMeasured((current) => (current[key] === height ? current : { ...current, [key]: height }))
   }, [])
   const positions = useSharedValue<DragReorderPositions>(dragReorderPositionsFromKeys(keys))
+  const layout = useDerivedValue(
+    () => dragReorderLayout(positions.value, sizes.value),
+    [positions, sizes]
+  )
   const activeKey = useSharedValue<string | null>(null)
   const activeTop = useSharedValue(0)
   const dragStartTop = useSharedValue(0)
@@ -119,7 +125,7 @@ export function DragReorderList<ItemT>({
       dragStartTop.value + dragTranslationY.value + (scrollOffsetY.value - dragStartScrollY.value)
     const top = Math.min(Math.max(rawTop, 0), Math.max(0, height - (sizes.value[key] ?? 0)))
     activeTop.value = top
-    const target = dragReorderTarget(positions.value, sizes.value, key, top)
+    const target = dragReorderTarget(positions.value, sizes.value, layout.value, key, top)
     if (positions.value[key] !== target) {
       positions.value = moveDragReorderKey(positions.value, key, target)
       runOnJS(triggerSelection)()
@@ -244,7 +250,7 @@ export function DragReorderList<ItemT>({
   }, [catalog, keySignature, positions, activeKey, handleDragActiveChange])
 
   const shared: DragSharedState = {
-    sizes,
+    layout,
     initialPositions,
     positions,
     activeKey,

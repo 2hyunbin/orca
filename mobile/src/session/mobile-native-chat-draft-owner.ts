@@ -19,12 +19,12 @@ export const EMPTY: Draft = { text: '', images: [], editGeneration: 0 }
 export const WAIT_MS = 15_000
 export type Copy = {
   draft?: Draft
-  saved: boolean
   expired: boolean
   finish: (saved: boolean) => void
 }
 export type MobileChatDraftOwner = {
   scope: string
+  logicalDraft: symbol
   storage: ReturnType<typeof mobileChatDraftStorage>
   draft: Draft
   state: 'unread' | 'recovery' | 'known'
@@ -58,6 +58,7 @@ export function activate(scope: string): MobileChatDraftOwner {
     const storage = mobileChatDraftStorage()
     owner = {
       scope,
+      logicalDraft: Symbol(),
       storage,
       draft: EMPTY,
       state: storage ? (removing(scope) ? 'recovery' : 'unread') : 'known',
@@ -89,6 +90,7 @@ subscribeMobileChatDraftStorage(() => {
   held.forEach(retire)
   for (const owner of held) {
     const next = activate(owner.scope)
+    next.logicalDraft = owner.logicalDraft
     next.draft = owner.draft
     next.state = owner.state === 'unread' ? 'recovery' : owner.state
     next.acknowledged = owner.acknowledged
@@ -170,7 +172,6 @@ export function pump(owner: MobileChatDraftOwner): void {
         owner.acknowledged = draft.editGeneration
         owner.error = null
         if (copy) {
-          copy.saved = true
           copy.finish(!copy.expired)
         }
       },
@@ -205,9 +206,9 @@ export function writeDraft(
   owner: MobileChatDraftOwner,
   update: SetStateAction<string>,
   userEdit: boolean
-): boolean {
+): void {
   if (!live(owner)) {
-    return false
+    return
   }
   const current = owner.draft
   const text = typeof update === 'function' ? update(current.text) : update
@@ -223,7 +224,6 @@ export function writeDraft(
     },
     true
   )
-  return true
 }
 
 export type Draft = {

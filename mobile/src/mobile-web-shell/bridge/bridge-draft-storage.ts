@@ -65,6 +65,17 @@ export function createBridgeDraftWriter(args: {
       }
     }
   })
+  const check = (key?: string) => {
+    if (closed) {
+      throw new Error('This draft writer has ended')
+    }
+    if (key !== undefined) {
+      args.check?.(key)
+      if (!args.mayWrite(key)) {
+        throw new Error('This page may not write that draft')
+      }
+    }
+  }
   return {
     dispose: () => {
       closed = true
@@ -75,13 +86,7 @@ export function createBridgeDraftWriter(args: {
     },
     write: async (params: unknown): Promise<{ committed: boolean }> => {
       const part = draftWriteParamsSchema.parse(params)
-      if (closed) {
-        throw new Error('This draft writer has ended')
-      }
-      args.check?.(part.key)
-      if (!args.mayWrite(part.key)) {
-        throw new Error('This page may not write that draft')
-      }
+      check(part.key)
       if (part.index === 0) {
         discard(part.key)
         if (pending.size >= 4) {
@@ -124,8 +129,10 @@ export function createBridgeDraftWriter(args: {
           throw new Error('Invalid draft removal')
         }
         await args.removeWorkspace(scope[0], scope[1])
+        check()
       } else {
         await args.commit(part.key, value)
+        check(part.key)
       }
       return { committed: true }
     }

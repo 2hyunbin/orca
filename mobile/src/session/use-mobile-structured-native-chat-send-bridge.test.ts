@@ -295,7 +295,19 @@ it.each(['rejected', 'unknown'] as const)(
         })
       }
       await act(async () => {
-        api.setComposerText('newer')
+        publishMobileChatDraftStorage(null)
+        for (let replacement = 0; replacement < 3; replacement++) {
+          publishMobileChatDraftStorage({
+            read: async () => null,
+            write: async () => {
+              if (blockSaves) {
+                await saveWait
+              }
+            },
+            removeWorkspace: async () => {}
+          })
+        }
+        api.setComposerText(outcome === 'rejected' ? '' : 'newer')
         await copyMobileQueuedMessageToDraft(scope, {
           messageId: 'newer',
           position: 2,
@@ -328,7 +340,9 @@ it.each(['rejected', 'unknown'] as const)(
         expect(await pending!).toBe(outcome)
       })
       const restored = readMobileNativeChatDraft(scope)
-      expect(restored.text).toBe(`newer\n\n$review\n\n${original}`)
+      expect(restored.text).toBe(
+        `${outcome === 'rejected' ? '' : 'newer\n\n'}$review\n\n${original}`
+      )
       const refs = outcome === 'rejected' ? [newer, selected] : [newer]
       expect(restored.skills).toEqual(refs)
       let retry: Promise<MobileNativeChatSendOutcome>

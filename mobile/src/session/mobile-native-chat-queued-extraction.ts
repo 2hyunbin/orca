@@ -96,12 +96,11 @@ export function copyMobileQueuedMessageToDraft(
           return
         }
         updateMobileNativeChatDraftImages(
-          scope,
+          owner,
           (current) =>
             current.map((held) =>
               held.id === image.id ? { ...held, previewUri: preview.dataUri } : held
             ),
-          owner,
           true
         )
       })().catch(() => undefined)
