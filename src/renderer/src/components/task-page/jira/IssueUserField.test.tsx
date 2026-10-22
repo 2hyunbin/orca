@@ -53,6 +53,11 @@ function CreateDialog({ field = reporter }: { field?: JiraCreateField }) {
     newJiraIssueTitle: 'Fix reporter selection',
     setNewJiraIssueTitle: vi.fn(),
     handleNewJiraIssueTitleChange: vi.fn(),
+    newJiraIssueSummaryAvailable: false,
+    newJiraIssueSummaryGenerating: false,
+    newJiraIssueSummaryError: null,
+    handleGenerateNewJiraIssueSummary: vi.fn(),
+    handleCancelNewJiraIssueSummaryGeneration: vi.fn(),
     newJiraIssueBody: '',
     setNewJiraIssueBody: vi.fn(),
     newJiraIssueSubmitting: submitting,
@@ -87,7 +92,8 @@ function CreateDialog({ field = reporter }: { field?: JiraCreateField }) {
   } satisfies Partial<TaskPageComposerActionsModel>
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Supplies all fields read by the shipping dialog and creation hook; unrelated task-page controls are inactive.
   const dialogModel = model as unknown as TaskPageComposerActionsModel
-  return <TaskPageJiraIssueDialog model={useTaskPageJiraIssueCreation(dialogModel)} />
+  useTaskPageJiraIssueCreation(dialogModel)
+  return <TaskPageJiraIssueDialog model={dialogModel} />
 }
 
 async function submitIdentity(key: string, id: string) {
