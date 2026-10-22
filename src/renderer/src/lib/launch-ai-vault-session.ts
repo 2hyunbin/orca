@@ -33,6 +33,10 @@ export function launchAiVaultSessionInNewTab(args: {
   resumeOrigin?: 'switch'
 }): LaunchAiVaultSessionInNewTabResult {
   const store = useAppStore.getState()
+  const slot = args.afterTabId
+    ? store.unifiedTabsByWorktree[args.worktreeId]?.find((tab) => tab.id === args.afterTabId)
+    : undefined
+  const sourceGroupId = args.targetGroupId ?? slot?.groupId
   const switchStart = args.resumeOrigin ? { resumeOrigin: args.resumeOrigin } : {}
   // Why both paths split: the runtime path used to return first and drop the split (#22791).
   const split =
@@ -48,7 +52,7 @@ export function launchAiVaultSessionInNewTab(args: {
     const splitGroupId = split
       ? store.createEmptySplitGroup(args.worktreeId, split.sourceGroupId, split.splitDirection)
       : null
-    const targetGroupId = splitGroupId ?? args.targetGroupId
+    const targetGroupId = splitGroupId ?? sourceGroupId
     const runtimeLaunch = createWebRuntimeSessionTerminal(
       {
         worktreeId: args.worktreeId,
@@ -81,10 +85,7 @@ export function launchAiVaultSessionInNewTab(args: {
     return { tabId: null, runtimeLaunch: observedRuntimeLaunch }
   }
 
-  const slot = args.afterTabId
-    ? store.unifiedTabsByWorktree[args.worktreeId]?.find((tab) => tab.id === args.afterTabId)
-    : undefined
-  const tab = store.createTab(args.worktreeId, slot?.groupId ?? args.targetGroupId, undefined, {
+  const tab = store.createTab(args.worktreeId, sourceGroupId, undefined, {
     ...(split ? { split } : {}),
     ...(args.cwd ? { startupCwd: args.cwd } : {}),
     pendingStartup: {
@@ -104,7 +105,7 @@ export function launchAiVaultSessionInNewTab(args: {
   store.setActiveTabType('terminal', args.worktreeId)
 
   persistAgentLaunchTabOrder(args.worktreeId, tab.id)
-  if (slot) {
+  if (slot && !split && (!args.targetGroupId || args.targetGroupId === slot.groupId)) {
     const order = (
       useAppStore.getState().groupsByWorktree[args.worktreeId]?.find((g) => g.id === slot.groupId)
         ?.tabOrder ?? []

@@ -1,4 +1,7 @@
 import { useAppStore } from '@/store'
+import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
+import { getIndexedWorktreeById } from '@/store/worktree-repo-index'
+import { resolveWorktreeDisplayName } from '@/lib/worktree-default-display-name'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { structuredLaunchFailure } from '@/lib/structured-agent-session-launch-failure'
@@ -43,11 +46,67 @@ export async function switchIntoOwner(
     await activateAiVaultStructuredSession({ structuredSession }, undefined, target)
     return false
   }
+  if (!(await startCliChatReturn(source, structuredSession.sessionId, target))) {
+    return false
+  }
+  const shown = await activateAiVaultStructuredSessionVerified(
+    { structuredSession },
+    undefined,
+    target
+  )
+  if (shown !== 'activated') {
+    return false
+  }
+  if (structuredSession.workspaceId !== source.workspaceId) {
+    const state = useAppStore.getState()
+    const scope = parseWorkspaceKey(structuredSession.workspaceId)
+    const folder =
+      scope?.type === 'folder'
+        ? state.folderWorkspaces.find((workspace) => workspace.id === scope.folderWorkspaceId)
+        : undefined
+    const worktree = getIndexedWorktreeById(state.worktreesByRepo, structuredSession.workspaceId)
+    const workspace =
+      folder?.name ??
+      (worktree ? resolveWorktreeDisplayName(worktree) : structuredSession.workspaceId)
+    toast.success(
+      translate('components.tab.bar.switch.openedInWorkspace', 'Opened chat in {{workspace}}.', {
+        workspace
+      })
+    )
+    return false
+  }
+  {
+    const state = useAppStore.getState()
+    const tabs = state.unifiedTabsByWorktree[source.workspaceId] ?? []
+    const chat = tabs.find(
+      (tab) => tab.contentType === 'agent-session' && tab.entityId === structuredSession.sessionId
+    )
+    const group = state.groupsByWorktree[source.workspaceId]?.find((g) =>
+      g.tabOrder.includes(source.tabId)
+    )
+    if (chat && group) {
+      const order = group.tabOrder.filter((id) => id !== chat.id)
+      const index = order.indexOf(source.tabId) + 1
+      if (chat.groupId === group.id) {
+        order.splice(index, 0, chat.id)
+        state.reorderUnifiedTabs(group.id, order)
+      } else {
+        state.moveUnifiedTabToGroup(chat.id, group.id, { index, activate: true })
+      }
+    }
+  }
+  return shown === 'activated'
+}
+
+/** Explicit returns await the selected child; ordinary lazy creation remains unchanged. */
+export async function startCliChatReturn(
+  source: Pick<CliChatResumeSource, 'agent'>,
+  sessionId: string,
+  target: RuntimeClientTarget
+): Promise<boolean> {
   const switched = await callStructuredAgentSession<
     { ok: true } | { ok: false; refusal: AgentSessionWireRefusal }
-  >(target, 'agentSession.switchToChat', { sessionId: structuredSession.sessionId }).catch(
-    () => null
-  )
+  >(target, 'agentSession.switchToChat', { sessionId }).catch(() => null)
   if (!switched?.ok) {
     const failure = switched
       ? structuredLaunchFailure(Object.assign(new Error(switched.refusal.message), switched))
@@ -63,28 +122,7 @@ export async function switchIntoOwner(
     )
     return false
   }
-  const shown = await activateAiVaultStructuredSessionVerified(
-    { structuredSession },
-    undefined,
-    target
-  )
-  if (shown === 'activated' && structuredSession.workspaceId === source.workspaceId) {
-    const state = useAppStore.getState()
-    const tabs = state.unifiedTabsByWorktree[source.workspaceId] ?? []
-    const chat = tabs.find(
-      (tab) => tab.contentType === 'agent-session' && tab.entityId === structuredSession.sessionId
-    )
-    const group = state.groupsByWorktree[source.workspaceId]?.find((g) =>
-      g.tabOrder.includes(source.tabId)
-    )
-    if (chat && group) {
-      state.moveUnifiedTabToGroup(chat.id, group.id, {
-        index: group.tabOrder.filter((id) => id !== chat.id).indexOf(source.tabId) + 1,
-        activate: true
-      })
-    }
-  }
-  return shown === 'activated'
+  return true
 }
 
 function toastCliChatResumeFailure(source: CliChatResumeSource, error: unknown): void {

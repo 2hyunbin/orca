@@ -1,5 +1,8 @@
 import { useAppStore } from '@/store'
-import { useInPlaceSwitchCapability } from '@/lib/in-place-switch-support'
+import {
+  useInPlaceSwitchCapability,
+  inPlaceSwitchSupportedNow
+} from '@/lib/in-place-switch-support'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { AppState } from '@/store/types'
 import {
@@ -7,7 +10,6 @@ import {
   panePtyId,
   resolvePaneLastAgentConversation
 } from '@/lib/ai-vault-tab-title-requests'
-import { inPlaceSwitchSupportedNow } from '@/lib/in-place-switch-support'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {

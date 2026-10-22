@@ -19083,7 +19083,8 @@
         "switch": {
           "toCli": "切换到 CLI",
           "toNativeChat": "切换到原生聊天",
-          "toCliTooltip": "切换到 CLI：在此停止 {{agent}}，并在此标签页的终端中继续同一对话。",
+          "toCliTooltip": "切换到 CLI：停止原生聊天中的 {{agent}}，并在终端中继续同一对话。",
+          "openedInWorkspace": "已在 {{workspace}} 中打开聊天。",
           "toNativeChatTooltip": "切换到原生聊天：在此标签页的聊天中继续同一对话。",
           "exitAgentFirst": "请先在此终端中退出 {{agent}}，然后再切换。",
           "waitForReply": "请等待回复完成或停止回复，然后再切换。",

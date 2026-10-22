@@ -124,6 +124,7 @@ export type StructuredAgentSessionRuntimeDeps = StructuredAgentSessionTransportO
   statusSink?: StructuredAgentSessionHostDeps['statusSink']
   /** See `StructuredAgentSessionHostDeps.hasOpenDispatch`. */
   hasOpenDispatch?: StructuredAgentSessionHostDeps['hasOpenDispatch']
+  hasOwedSwitchWork?: StructuredAgentSessionHostDeps['hasOwedSwitchWork']
   resolveCodexAccountKind?: (home: string) => AgentSessionAccountKind | undefined
   /** Launch prep's sync for a probed home; see `CodexModelCatalogProbeDeps.prepareHome`. */
   prepareCodexCatalogProbeHome?: (homePath: string) => void
@@ -315,6 +316,7 @@ async function installOnJournal(
     ...(deps.onSessionStatusChanged ? { onSessionStatusChanged: deps.onSessionStatusChanged } : {}),
     ...(deps.statusSink ? { statusSink: deps.statusSink } : {}),
     ...(deps.hasOpenDispatch ? { hasOpenDispatch: deps.hasOpenDispatch } : {}),
+    ...(deps.hasOwedSwitchWork ? { hasOwedSwitchWork: deps.hasOwedSwitchWork } : {}),
     ...(deps.startupLimits ? { startupLimits: deps.startupLimits } : {}),
     ...(deps.onSessionTabHidden ? { onSessionTabHidden: deps.onSessionTabHidden } : {}),
     ...(deps.assertNoTerminalWriter ? { assertNoTerminalWriter: deps.assertNoTerminalWriter } : {}),

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => {
     createCapability: vi.fn(),
     call: vi.fn(),
     toast: vi.fn(),
+    success: vi.fn(),
     activate: vi.fn(async () => true),
     activateVerified: vi.fn(async () => 'activated'),
     switchCapability: vi.fn(async () => false),
@@ -54,7 +55,7 @@ vi.mock('@/runtime/structured-session-tab-inventory', () => ({
 vi.mock('@/lib/structured-agent-session-create-hydration', () => ({
   publishStructuredAgentSessionCreateHydration: vi.fn()
 }))
-vi.mock('sonner', () => ({ toast: { error: mocks.toast } }))
+vi.mock('sonner', () => ({ toast: { error: mocks.toast, success: mocks.success } }))
 vi.mock('@/lib/activate-ai-vault-structured-session', () => ({
   activateAiVaultStructuredSession: mocks.activate,
   activateAiVaultStructuredSessionVerified: mocks.activateVerified
@@ -243,6 +244,89 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect(tabs().find((tab) => tab.id === chat.id)?.groupId).toBe(source.groupId)
   })
 
+  it('reorders an owner already in the source group and retains a cross-workspace source', async () => {
+    const [a, source, b] = seedTabs()
+    const chat = useAppStore
+      .getState()
+      .createUnifiedTab('wt-1', 'agent-session', { entityId: 'owner-chat' })
+    useAppStore.getState().reorderUnifiedTabs(source.groupId, [chat.id, a.id, source.id, b.id])
+    mocks.switchCapability.mockResolvedValue(true)
+    mocks.call.mockResolvedValue({ ok: true })
+    expect(
+      await switchIntoOwner(
+        { ...SOURCE, tabId: source.id },
+        { sessionId: 'owner-chat', workspaceId: 'wt-1' },
+        { kind: 'local' }
+      )
+    ).toBe(true)
+    useAppStore.getState().closeUnifiedTab(source.id)
+    expect(useAppStore.getState().groupsByWorktree['wt-1'][0].tabOrder).toEqual([
+      a.id,
+      chat.id,
+      b.id
+    ])
+    mocks.activateVerified.mockResolvedValueOnce('unconfirmed')
+    useAppStore.setState({
+      worktreesByRepo: {
+        repo: [
+          makeWorktree({ id: 'another-workspace', repoId: 'repo', displayName: 'Owner workspace' })
+        ]
+      }
+    })
+    const owner = { sessionId: 'owner-chat', workspaceId: 'another-workspace' }
+    expect(await switchIntoOwner(SOURCE, owner, { kind: 'local' })).toBe(false)
+    expect(mocks.success).not.toHaveBeenCalled()
+    expect(await switchIntoOwner(SOURCE, owner, { kind: 'local' })).toBe(false)
+    expect(mocks.success).toHaveBeenCalledExactlyOnceWith('Opened chat in Owner workspace.')
+    expect(mocks.rpc.mock.calls.filter(([, method]) => method === 'terminal.close')).toHaveLength(0)
+  })
+
+  it.each([true, false, null])(
+    'holds a new at-rest receipt until its selected child answers %s',
+    async (ready) => {
+      mocks.switchCapability.mockResolvedValue(true)
+      const start = deferred<unknown>()
+      mocks.call.mockImplementation(
+        async (_target, method, params: StructuredAgentSessionCreateParams) =>
+          method === 'agentSession.switchToChat'
+            ? start.promise
+            : { ok: true, value: { sessionId: params.envelope.sessionId, fence: 1 } }
+      )
+      const running = runCliChatResume(SOURCE)
+      await vi.waitFor(() =>
+        expect(
+          mocks.call.mock.calls.some(([, method]) => method === 'agentSession.switchToChat')
+        ).toBe(true)
+      )
+      expect(mocks.rpc.mock.calls.some(([, method]) => method === 'terminal.close')).toBe(false)
+      start.resolve(
+        ready === null
+          ? null
+          : ready
+            ? { ok: true }
+            : {
+                ok: false,
+                refusal: {
+                  code: 'agent_session_operation_invalid',
+                  details: { reason: 'conversationOpenElsewhere' },
+                  message: 'Cannot start'
+                }
+              }
+      )
+      await running
+      expect(mocks.rpc.mock.calls.filter(([, method]) => method === 'terminal.close')).toHaveLength(
+        ready ? 1 : 0
+      )
+      const created = mocks.call.mock.calls.find(
+        ([, method]) => method === 'agentSession.create'
+      )![2]
+      expect(created.firstMessage).toBeUndefined()
+      expect(
+        mocks.call.mock.calls.find(([, method]) => method === 'agentSession.switchToChat')![2]
+      ).toEqual({ sessionId: created.envelope.sessionId })
+    }
+  )
+
   it('retires an unsent click during create capability waiting, even if the same source returns', async () => {
     const capability = deferred<boolean>()
     mocks.createCapability.mockReturnValue(capability.promise)
@@ -311,7 +395,7 @@ describe('CLI identity resume through the existing launch owner', () => {
   })
 
   it('starts the chat that holds the conversation before the terminal closes; a refusal keeps it', async () => {
-    const owner = { sessionId: 'owner-chat', workspaceId: 'owner-workspace' }
+    const owner = { sessionId: 'owner-chat', workspaceId: 'wt-1' }
     let switched: unknown = {
       ok: false,
       refusal: {

@@ -13,7 +13,7 @@ import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { resolveCliChatResumeSource, type CliChatResumeSource } from './cli-chat-resume-source'
-import { reportCliChatResumeFailure } from './cli-chat-resume-feedback'
+import { reportCliChatResumeFailure, startCliChatReturn } from './cli-chat-resume-feedback'
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
 import { panePtyId } from '@/lib/ai-vault-tab-title-requests'
 import { subscribeToPtyExit } from '../terminal-pane/pty-dispatcher'
@@ -247,7 +247,9 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
     }
     const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
     if (result.kind === 'structured' && inPlace) {
-      await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+      if (await startCliChatReturn(source, result.sessionId, target)) {
+        await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+      }
     } else if (
       result.kind === 'failed' &&
       !result.notified &&

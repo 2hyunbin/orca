@@ -87,13 +87,6 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     )
   }
 
-  const hasOpenDispatch = (sessionId: string): boolean => {
-    const record = deps().store.getRecord(sessionId)
-    return record !== null && deps().hasOpenDispatch?.(record) === true
-  }
-  const providerHoldsDispatch = (sessionId: string): boolean =>
-    deps().adapter.holdsDispatch?.(sessionId) === true
-
   const holdStopClose = async <T>(
     sessionId: string,
     stop: () => Promise<T>,
@@ -185,8 +178,11 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       getRecord: (sessionId) => deps().store.getRecord(sessionId),
       replacedRuntime: (sessionId) => deps().store.replacedRuntime(sessionId)
     },
-    hasOpenDispatch,
-    providerHoldsDispatch,
+    hasOpenDispatch: (sessionId) => {
+      const record = deps().store.getRecord(sessionId)
+      return record !== null && deps().hasOpenDispatch?.(record) === true
+    },
+    providerHoldsDispatch: (sessionId) => deps().adapter.holdsDispatch?.(sessionId) === true,
     // The host puts an idle agent to rest: a turn it cuts short is news, not the user's Stop.
     stopAgent: (sessionId) => stopAgent(sessionId, { cause: 'evict', resting: true }),
     // A host stop: the child's end rejects what it was handed and writes the one error row, and
@@ -335,9 +331,14 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     switchToTerminal: (id: string): Promise<void> =>
       serialize(id, () =>
         switchAdmission.stopIdleStructuredAgentSessionForSwitch(
-          { session: sessions.get(id), delivering: host.deliveryActive(id), idleSweep },
+          {
+            session: sessions.get(id),
+            delivering: host.deliveryActive(id),
+            idleSweep
+          },
           () => holdStopClose(id, () => stopAgent(id, { cause: 'user-close' })),
-          () => deps().store.getRecord(id)
+          deps(),
+          id
         )
       )
   }

@@ -21,6 +21,7 @@ const mockState = {
   closeEmptyGroup: mockCloseEmptyGroup,
   setActiveTabType: mockSetActiveTabType,
   setTabBarOrder: mockSetTabBarOrder,
+  unifiedTabsByWorktree: {} as Record<string, { id: string; groupId: string }[]>,
   tabsByWorktree: {} as Record<string, { id: string }[]>,
   openFiles: [] as { id: string; worktreeId: string }[],
   browserTabsByWorktree: {} as Record<string, { id: string }[]>,
@@ -66,6 +67,7 @@ describe('launchAiVaultSessionInNewTab', () => {
     runtimeMocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin.mockReturnValue(null)
     runtimeMocks.isWebRuntimeSessionActive.mockReturnValue(false)
     runtimeMocks.createWebRuntimeSessionTerminal.mockResolvedValue({ status: 'created' })
+    mockState.unifiedTabsByWorktree = {}
     mockState.tabsByWorktree = {}
     mockState.openFiles = []
     mockState.browserTabsByWorktree = {}
@@ -232,6 +234,29 @@ describe('launchAiVaultSessionInNewTab', () => {
     }
     expect(mockCloseEmptyGroup).not.toHaveBeenCalled()
   })
+
+  it.each([undefined, 'explicit-group'])(
+    'derives the source group before the paired launch and preserves explicit target %s',
+    (targetGroupId) => {
+      runtimeMocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin.mockReturnValue('env-1')
+      runtimeMocks.isWebRuntimeSessionActive.mockReturnValue(true)
+      mockState.unifiedTabsByWorktree['wt-1'] = [{ id: 'chat-C', groupId: 'source-group' }]
+      launchAiVaultSessionInNewTab({
+        agent: 'codex',
+        worktreeId: 'wt-1',
+        afterTabId: 'chat-C',
+        targetGroupId,
+        command: 'codex resume session-2'
+      })
+      expect(runtimeMocks.createWebRuntimeSessionTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          afterTabId: 'chat-C',
+          targetGroupId: targetGroupId ?? 'source-group'
+        }),
+        { notifyFailure: false }
+      )
+    }
+  )
 
   it('removes the still-empty split group when the runtime create does not succeed', async () => {
     runtimeMocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin.mockReturnValue('env-1')

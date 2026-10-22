@@ -1,11 +1,13 @@
 import { switchIntoOwner } from '../tab-bar/cli-chat-resume-feedback'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
-import { cliConversationRowsShareAgent } from '../../../../shared/structured-agent-cli-conversation-adoption'
+import {
+  cliConversationRowsShareAgent,
+  adoptsCliConversations
+} from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { useAppStore } from '@/store'
 import { collectAgentPaneConversations } from '@/lib/ai-vault-tab-title-requests'
 import { inPlaceSwitchSupportedNow } from '@/lib/in-place-switch-support'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
-import { adoptsCliConversations } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { resolveCliChatResumeSource } from '../tab-bar/cli-chat-resume-source'
 import { runCliChatResume } from '../tab-bar/cli-chat-resume-run'
 import { runNativeChatCliSwitch } from '../tab-bar/native-chat-cli-switch-run'

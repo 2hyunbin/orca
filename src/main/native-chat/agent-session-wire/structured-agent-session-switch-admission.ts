@@ -4,9 +4,11 @@
 
 import { agentSessionLeaseOwnerVerdict } from '../../../shared/agent-session-lease-adjudication'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import { agentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
-import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
+import type {
+  StructuredAgentSessionHostDeps,
+  StructuredAgentSessionHostSession
+} from './structured-agent-session-host-types'
 
 /** In the chat's ordered step: refuses unless nothing is running, starting, queued or owed, then
  *  admits, stops through close's body, and proves the agent gone before anything starts elsewhere. */
@@ -19,11 +21,15 @@ export async function stopIdleStructuredAgentSessionForSwitch(
     }
   },
   stop: () => Promise<unknown>,
-  record: () => AgentSessionRecord | null
+  deps: StructuredAgentSessionHostDeps,
+  sessionId: string
 ): Promise<void> {
   const { session } = idle
+  const currentRecord = deps.store.getRecord(sessionId)
+  const owesWork = deps.hasOwedSwitchWork ?? deps.hasOpenDispatch
   if (
     idle.delivering ||
+    (currentRecord !== null && owesWork?.(currentRecord) === true) ||
     (session !== undefined &&
       (session.child?.phase === 'starting' ||
         session.journal.submissions().some(isQueuedAgentJournalSubmission) ||
@@ -33,7 +39,7 @@ export async function stopIdleStructuredAgentSessionForSwitch(
     throw agentSessionRefusalError('agent_session_operation_invalid', { reason: 'turnActive' })
   }
   await stop()
-  const lease = record()?.lease
+  const lease = deps.store.getRecord(sessionId)?.lease
   if (!lease || agentSessionLeaseOwnerVerdict(lease) !== 'exited') {
     throw agentSessionRefusalError('agent_session_ownership_unknown', { reason: 'ownerUnproven' })
   }

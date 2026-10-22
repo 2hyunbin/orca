@@ -158,6 +158,8 @@ export type StructuredAgentSessionHostDeps = {
   startupLimits?: Partial<StructuredAgentSessionStartupLimits>
   /** Whether an orchestration dispatch still owns this session's worker; absent answers no. */
   hasOpenDispatch?: (record: AgentSessionRecord) => boolean
+  /** Explicit switch admission also includes direct chat assignments, even at rest. */
+  hasOwedSwitchWork?: (record: AgentSessionRecord) => boolean
   /** A chat tab left the screen: closed, or its workspace removed. Advisory; a throw is logged. */
   onSessionTabHidden?: (sessionId: string) => void
   /** Throws while a terminal may still write the record's head conversation; run before a spawn. */

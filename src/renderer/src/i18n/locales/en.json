@@ -19405,7 +19405,8 @@
         "switch": {
           "toCli": "Switch to CLI",
           "toNativeChat": "Switch to native chat",
-          "toCliTooltip": "Switch to CLI: stops {{agent}} here and continues the same conversation in the terminal, in this tab.",
+          "toCliTooltip": "Switch to CLI: stops {{agent}} in native chat and continues the same conversation in a terminal.",
+          "openedInWorkspace": "Opened chat in {{workspace}}.",
           "toNativeChatTooltip": "Switch to native chat: continues the same conversation in a chat, in this tab.",
           "exitAgentFirst": "Exit {{agent}} in this terminal to switch.",
           "waitForReply": "Wait for the reply to finish or stop it, then switch.",

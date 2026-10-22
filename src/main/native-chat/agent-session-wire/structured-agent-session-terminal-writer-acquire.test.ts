@@ -247,3 +247,48 @@ it('retires only after an explicit admitted launch without stopping a later nati
   expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBe(laterChild)
   expect(host.deps.adapter.closeSession).toHaveBeenCalledTimes(closes)
 })
+
+it.each(['ready', 'failed', 'closed', 'replaced'] as const)(
+  'awaits provider open for the selected child, whose result is %s',
+  async (ending) => {
+    await host.close(SESSION, 'evict')
+    const held = Promise.withResolvers<void>()
+    open.mockImplementationOnce(async () => {
+      await held.promise
+      if (ending === 'failed') {
+        throw new AgentSessionAcquisitionRefusal('provider failed')
+      }
+      return { reportedOptions: { model: '' } }
+    })
+    let settled = false
+    const switching = host.switchToChat(SESSION).then((result) => {
+      settled = true
+      return result
+    })
+    await vi.waitFor(() => expect(open).toHaveBeenCalledTimes(2))
+    const child = host.collaboratorsForTests().sessions.get(SESSION)?.child
+    expect(child?.phase).toBe('starting')
+    expect(settled).toBe(false)
+    let replacement = child
+    if (ending === 'closed' || ending === 'replaced') {
+      await host.close(SESSION, 'evict')
+    }
+    if (ending === 'replaced') {
+      expect(await host.switchToChat(SESSION)).toEqual({ ok: true })
+      replacement = host.collaboratorsForTests().sessions.get(SESSION)?.child
+      expect(replacement?.generation).not.toBe(child?.generation)
+    }
+    held.resolve()
+    expect(await switching).toMatchObject({ ok: ending === 'ready' })
+    expect(vi.mocked(host.deps.adapter.dispatch)).not.toHaveBeenCalled()
+    if (ending === 'replaced') {
+      expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBe(replacement)
+    }
+    if (ending === 'closed') {
+      expect(await host.switchToChat(SESSION)).toEqual({ ok: true })
+      expect(host.collaboratorsForTests().sessions.get(SESSION)?.child?.generation).not.toBe(
+        child?.generation
+      )
+    }
+  }
+)

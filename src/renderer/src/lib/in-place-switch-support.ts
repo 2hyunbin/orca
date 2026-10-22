@@ -14,7 +14,11 @@ import type { AiVaultAgent } from '../../../shared/ai-vault-types'
 const known = new Map<string, boolean>()
 const asking = new Map<string, Promise<boolean>>()
 const listeners = new Set<() => void>()
-const changed = () => listeners.forEach((listener) => listener())
+let revision = 0
+const changed = () => {
+  revision += 1
+  listeners.forEach((listener) => listener())
+}
 const forget = () => {
   known.clear()
   asking.clear()
@@ -40,6 +44,14 @@ const subscribe = (listener: () => void) => {
       stopStatusSubscription = undefined
     }
   }
+}
+
+export function useInPlaceSwitchRevision(): number {
+  return useSyncExternalStore(
+    subscribe,
+    () => revision,
+    () => 0
+  )
 }
 
 /** The cached answer, asking in the background when there is none yet. */
