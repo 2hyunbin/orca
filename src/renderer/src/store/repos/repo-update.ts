@@ -23,7 +23,7 @@ import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-ident
 import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { mainCatalogShowsWrite } from '../main-project-catalog-writes'
-import { repoShowsUpdate } from './repo-update-shown'
+import { catalogRowShowsUpdate } from '../catalog-row-update-shown'
 
 export function sanitizeRepoUpdate(updates: RepoUpdate): RepoUpdate {
   const sanitized = { ...updates }
@@ -202,7 +202,7 @@ export function createRepoUpdateActions(
               catalog.repos.some(
                 (row) =>
                   repoMatchesHostIdentity(row, projectId, ownerHostId) &&
-                  repoShowsUpdate(row, expected, sanitizedUpdates)
+                  catalogRowShowsUpdate(row, expected, sanitizedUpdates)
               )
             )
           }

@@ -30,7 +30,9 @@ export function selectProjectGroups(
 export function selectProjectGroups<State extends { readonly projectGroups?: unknown }>(
   state: State
 ): State['projectGroups'] | AppState['projectGroups']
-export function selectProjectGroups(state: { readonly projectGroups?: unknown } & VersionedState): unknown {
+export function selectProjectGroups(
+  state: { readonly projectGroups?: unknown } & VersionedState
+): unknown {
   return ORCA_SIDEBAR_INPUTS_IS_MAIN ? mainCatalogOf(state).projectGroups : state.projectGroups
 }
 
@@ -48,7 +50,9 @@ export function selectProjectHostSetups(
 export function selectProjectHostSetups<State extends { readonly projectHostSetups?: unknown }>(
   state: State
 ): State['projectHostSetups'] | AppState['projectHostSetups']
-export function selectProjectHostSetups(state: { readonly projectHostSetups?: unknown } & VersionedState): unknown {
+export function selectProjectHostSetups(
+  state: { readonly projectHostSetups?: unknown } & VersionedState
+): unknown {
   return ORCA_SIDEBAR_INPUTS_IS_MAIN
     ? mainCatalogOf(state).projectHostSetups
     : state.projectHostSetups

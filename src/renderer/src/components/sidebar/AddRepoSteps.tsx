@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { useAppStore } from '@/store'
+import { selectRepos, useAppStore } from '@/store'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { addRuntimeSshRepo } from '@/runtime/runtime-ssh-target-management'
 import { connectRuntimeEnvironmentSshTarget } from '@/runtime/runtime-environment-ssh-state'
@@ -126,13 +126,16 @@ export function useRemoteRepo(
     setIsAddingRemote(true)
     setRemoteError(null)
     try {
+      const reposBefore = selectRepos(useAppStore.getState())
       const addedRepo = await addRuntimeSshRepo(serverEnvironmentId, {
         connectionId: selectedTargetId,
         remotePath: trimmedRemotePath
       })
-      const { alreadyPresent, repo } = upsertAddedRepoWithProjectHostSetup(addedRepo, {
-        runtimeEnvironmentId: serverEnvironmentId
-      })
+      const { alreadyPresent, repo } = await upsertAddedRepoWithProjectHostSetup(
+        addedRepo,
+        { runtimeEnvironmentId: serverEnvironmentId },
+        reposBefore
+      )
 
       if (alreadyPresent) {
         useAppStore.getState().clearOrcaHookTrustForRepo(repo.id)
