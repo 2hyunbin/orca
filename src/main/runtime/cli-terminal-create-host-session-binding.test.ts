@@ -94,8 +94,8 @@ it.each(['refused', 'adopted', 'stable-adopted', 'ensure-adopted', 'fresh-unavai
       tabId: 'owner-tab',
       leafId: '11111111-1111-4111-8111-111111111111'
     }
-    if (adopted) {
-      // The lower adopter registers its owner before returning the result.
+    if (adopted && kind !== 'adopted') {
+      // An adopted surface is registered; a bare provider reattach need not be.
       runtime.registerPty('effective-pty', ownerSurface.worktreeId, null, {
         tabId: ownerSurface.tabId,
         leafId: ownerSurface.leafId,
@@ -209,6 +209,11 @@ it.each(['refused', 'adopted', 'stable-adopted', 'ensure-adopted', 'fresh-unavai
           }
         : {}),
       warning: expect.any(String)
+    })
+    expect(runtime.resolveTerminalPane(result.paneKey ?? '', result.worktreeId)).toMatchObject({
+      handle: result.handle,
+      ptyId: 'effective-pty',
+      connected: true
     })
     expect(result.agentResumeRefused).toBe(kind === 'refused' ? 'chat-home' : undefined)
     expect(result.launchAgent).toBe(kind === 'refused' ? undefined : 'codex')
