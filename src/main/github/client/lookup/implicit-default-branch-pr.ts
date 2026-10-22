@@ -8,6 +8,7 @@ import type { GhExecOptions, HostedReviewLocalGitOptions } from './../github-exe
 import type { TrackedUpstreamBranch } from './tracked-upstream-cache'
 import {
   pullRequestHeadRepository,
+  pullRequestMatchesHeadRepository,
   type PullRequestLookupData,
   type PullRequestLookupPolicy
 } from './pull-request-lookup-data'
@@ -32,7 +33,15 @@ export function createImplicitDefaultBranchPRPolicy(
   return {
     rejectedPRUrls,
     async accepts(data, prRepo) {
-      const hidden = await shouldHideImplicitDefaultBranchPR({ ...context, data, prRepo })
+      const expectedHeads = [context.originHeadRepo, context.trackedUpstream?.headRepo].filter(
+        (head) => head != null
+      )
+      // Cached numbers must not revive a foreign head rejected by branch discovery.
+      const hidden =
+        (data.headRefName === context.branchName &&
+          expectedHeads.length > 0 &&
+          expectedHeads.every((head) => !pullRequestMatchesHeadRepository(data, prRepo, head))) ||
+        (await shouldHideImplicitDefaultBranchPR({ ...context, data, prRepo }))
       if (hidden && prRepo) {
         rejected.add(`${githubRepoIdentityKey(prRepo)}#${data.number}`)
         if (data.url) {
