@@ -10,7 +10,7 @@ import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shar
 import type { WorktreeLineage } from '../../../../../../shared/worktree/lineage-types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import type { RenderRow } from '../listing/render-row'
-import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
+import type { ProjectSectionModel } from '../../../../../../shared/project-section-grouping'
 import type {
   PinnedWorktreeDisplayPolicy,
   WorktreeGroupBy
@@ -44,7 +44,7 @@ export type PendingSidebarRevealArgs = {
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
   settings: AppState['settings']
   projectGroups: readonly ProjectGroup[]
-  projectGrouping?: ProjectGroupingModel
+  projectGrouping?: ProjectSectionModel
   flashRevealedRow: (rowKey: string) => void
   markRevealScroll: (targetTop: number) => void
   schedulePendingRevealFrame: (callback: FrameRequestCallback) => void

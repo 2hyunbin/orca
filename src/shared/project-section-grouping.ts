@@ -190,7 +190,7 @@ export function getProjectGroupingForRepo<R extends Pick<ProjectSectionRepo, 'di
 export function getProjectHeaderRevealTarget(
   repoId: string,
   repoMap: Map<string, Repo>,
-  projectGrouping?: ProjectGroupingModel
+  projectGrouping?: ProjectSectionModel
 ): ProjectHeaderRevealTarget {
   return getProjectGroupingForRepo(repoId, repoMap, buildProjectGroupingIndex(projectGrouping))
 }

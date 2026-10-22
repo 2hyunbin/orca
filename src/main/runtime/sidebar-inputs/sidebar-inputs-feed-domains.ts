@@ -233,15 +233,17 @@ export function sidebarInputsFeedDomains(
       name: 'projectCatalog',
       read: () => readSidebarProjectCatalog(requireStore(), pairedServerRows.catalogs()),
       watch: (changed) => {
+        // A catalog write is a request the sidebar shows only once main publishes it.
+        const changedNow = (): void => changed(urgent)
         const detaches = [
-          watchCatalog(changed),
+          watchCatalog(changedNow),
           pairedServerRows.revision.onChange(changed),
           // Manual repo order and project order live in the UI state.
-          sources.store()?.onUIChanged?.(() => changed()),
+          sources.store()?.onUIChanged?.(changedNow),
           // Catalog writes are full saves, and some (a project rename) announce no event.
           sources.store()?.onStateWritten?.((domains) => {
             if (domains === undefined) {
-              changed()
+              changedNow()
             }
           })
         ]

@@ -221,6 +221,10 @@ describe('sidebar inputs feed announcements', () => {
     expect(urgency('inProgress', 'lifecycle queue')).toBe(true)
     expect(urgency('desktop', 'pin write')).toBe(true)
     expect(urgency('view', 'ui write')).toBe(true)
+    // A catalog write is shown only once main publishes it.
+    expect(urgency('projectCatalog', 'catalog event')).toBe(true)
+    expect(urgency('projectCatalog', 'ui write')).toBe(true)
+    expect(urgency('projectCatalog', 'full save')).toBe(true)
   })
 
   it('follows a PR cache save on a quiet desktop into the phone’s PR grouping', async () => {
