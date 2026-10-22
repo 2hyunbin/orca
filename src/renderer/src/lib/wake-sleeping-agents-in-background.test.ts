@@ -315,6 +315,7 @@ describe('wakeSleepingAgentsForWorktreeInBackground', () => {
       paneKey: 'tab-slept:leaf-1',
       tabId: 'tab-slept',
       agent: 'claude',
+      prompt: '',
       state: 'done',
       origin: 'worktree-sleep',
       capturedAt: 1,
