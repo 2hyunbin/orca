@@ -4,6 +4,8 @@ import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { paneTerminalFact, type RuntimePtyRegistryView } from '../../runtime-leaf-record-projection'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { startedMainTerminalSurfaces } from './main-terminal-surfaces'
 
 /** A pane main owns: its bound terminal, and whether a status says that binding is not live. */
 export type MainPaneBinding = {
@@ -53,5 +55,23 @@ function provenAbsent(
     !isRemoteRuntimePtyId(ptyId) &&
     parseAppSshPtyId(ptyId) === null &&
     !host.controllerHasPty(ptyId)
+  )
+}
+
+/**
+ * Switch-on, a disconnected terminal main's layout still binds may run through a host's listing
+ * gap, as the window kept it connected; a certified exit, or the host saying it cannot tell, ends it.
+ */
+export function mainBindsUnendedTerminal(
+  runtime: object,
+  ptyId: string,
+  recorded: { verdict: { status: string } } | undefined
+): boolean {
+  const status = recorded?.verdict.status
+  return (
+    ORCA_LAYOUT_OWNER_IS_MAIN &&
+    status !== 'exited' &&
+    status !== 'unverifiable' &&
+    startedMainTerminalSurfaces(runtime)?.bindsTerminal(ptyId) === true
   )
 }

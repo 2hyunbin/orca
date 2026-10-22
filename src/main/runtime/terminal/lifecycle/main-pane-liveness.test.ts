@@ -15,6 +15,7 @@ const { OrcaRuntimeService } = await import('../../orca-runtime-test-mocks.spec'
 const { toAppSshPtyId } = await import('../../../../shared/ssh-pty-id')
 const {
   HEADLESS_LEAF_ID,
+  HEADLESS_SECOND_LEAF_ID,
   TEST_WORKTREE_ID,
   TEST_WORKTREE_PATH,
   makeFolderProjectGroup,
@@ -36,6 +37,7 @@ function hostController(host: Host, cwd: string, worktreeId: string) {
     write: () => true,
     kill: () => true,
     getForegroundProcess: async () => null,
+    hasPty: (ptyId: string) => host.live.has(ptyId),
     listProcesses: async (providerKey?: string) =>
       [...host.live]
         .filter((id) => (id === SSH_PTY) === (providerKey === 'ssh:ssh-target'))
@@ -53,7 +55,7 @@ async function sweepProvider(runtime: object, connectionId: string | null): Prom
 }
 
 /** A host whose saved `host-tab` pane binds `ptyId`, live until the test drops it from `host.live`. */
-function savedPaneHost(ptyId: string, opts: { windowed?: boolean } = {}) {
+function savedPaneHost(ptyId: string, opts: { windowed?: boolean; splitPtyId?: string } = {}) {
   const host: Host = { live: new Set([ptyId]) }
   const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
     makeWorkspaceSessionWithHeadlessTerminal({
@@ -72,7 +74,10 @@ function savedPaneHost(ptyId: string, opts: { windowed?: boolean } = {}) {
         ]
       },
       terminalLayoutsByTabId: {
-        'host-tab': makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: ptyId })
+        'host-tab': makeHeadlessTerminalLayout({
+          [HEADLESS_LEAF_ID]: ptyId,
+          ...(opts.splitPtyId ? { [HEADLESS_SECOND_LEAF_ID]: opts.splitPtyId } : {})
+        })
       }
     })
   )
@@ -242,6 +247,93 @@ describe('a launch into a pane through a listing gap (switch on)', () => {
 
     await runtime.onPtyExit('saved-pty', 0)
     expect(runtime.hasLiveTerminalForPaneKey(paneKey)).toBe(false)
+  })
+})
+
+describe('stopping a workspace through a listing gap (switch on)', () => {
+  it('still targets a disconnected terminal main binds, and never reports it stopped unproven', async () => {
+    const { runtime, host } = savedPaneHost('saved-pty', { windowed: true })
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    host.live.clear()
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    expect(record(runtime, 'saved-pty')?.connected).toBe(false)
+
+    const liveIds: unknown = Reflect.apply(
+      Reflect.get(runtime, 'getLivePtyIdsForWorktree'),
+      runtime,
+      [TEST_WORKTREE_ID]
+    )
+    expect(liveIds).toEqual(new Set(['saved-pty']))
+
+    // The host answered it has no such id, which cannot prove the shell gone (a restarted host can
+    // omit survivors), and the kill draws no exit: the shell may still run.
+    expect(runtime.getPtyLivenessVerdict('saved-pty')).toBeNull()
+    const result = await runtime.closeTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`)
+    expect(result).toMatchObject({ ptyStopVerdict: 'unverifiable' })
+  })
+})
+
+describe('an exit wait through a listing gap (switch on)', () => {
+  it('keeps waiting on a disconnected terminal main binds until its exit is certified', async () => {
+    const { runtime, host } = savedPaneHost('saved-pty', { windowed: true })
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    const handle = runtime.resolveTerminalPane(
+      `host-tab:${HEADLESS_LEAF_ID}`,
+      TEST_WORKTREE_ID
+    ).handle
+    host.live.clear()
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    expect(record(runtime, 'saved-pty')?.connected).toBe(false)
+
+    // A listing gap is no exit: the wait runs to the caller's timeout instead of answering `unknown`.
+    await expect(
+      runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 50 })
+    ).rejects.toThrow('timeout')
+
+    const waiting = runtime.waitForTerminal(handle, { condition: 'exit', timeoutMs: 5_000 })
+    await runtime.onPtyExit('saved-pty', 3)
+    await expect(waiting).resolves.toMatchObject({ satisfied: true })
+  })
+})
+
+describe('a terminal registered while a listing is in flight (switch on)', () => {
+  it('stays connected: the listing that started before it cannot prove it absent', async () => {
+    // Main's layout binds the split's pane before its shell registers, as the spawn commit does.
+    const { runtime, host } = savedPaneHost('saved-pty', {
+      windowed: true,
+      splitPtyId: 'split-pty'
+    })
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    let answer!: () => void
+    const answered = new Promise<void>((resolve) => {
+      answer = resolve
+    })
+    const listedBeforeSpawn = [...host.live]
+    Reflect.set(runtime, 'ptyController', {
+      ...hostController(host, TEST_WORKTREE_PATH, TEST_WORKTREE_ID),
+      hasPty: () => undefined,
+      listProcesses: async () => {
+        await answered
+        return listedBeforeSpawn.map((id) => ({
+          id,
+          title: 'shell',
+          cwd: TEST_WORKTREE_PATH,
+          worktreeId: TEST_WORKTREE_ID,
+          wslDistro: null
+        }))
+      }
+    })
+    const listing = sweepProvider(runtime, null)
+
+    // A split's shell commits while the host's answer, taken before it existed, is on its way.
+    runtime.registerPty('split-pty', TEST_WORKTREE_ID, null, {
+      tabId: 'host-tab',
+      leafId: HEADLESS_SECOND_LEAF_ID
+    })
+    answer()
+    await listing
+
+    expect(record(runtime, 'split-pty')?.connected).toBe(true)
   })
 })
 

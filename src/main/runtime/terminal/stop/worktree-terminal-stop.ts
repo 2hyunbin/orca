@@ -68,6 +68,11 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
         hostFence,
         true
       )
+      // Switch point: a terminal main binds as the close begins may run through a host's listing
+      // gap, as the window kept it connected; only its certified exit counts as stopped.
+      const mainBound = new Set(
+        ORCA_LAYOUT_OWNER_IS_MAIN ? withMainBoundLeaves(this, []).map((leaf) => leaf.ptyId) : []
+      )
       const parentTabIds = [
         ...new Set(
           snapshot.tabs.flatMap((tab) => (tab.type === 'terminal' ? [tab.parentTabId] : []))
@@ -95,6 +100,7 @@ export abstract class OrcaRuntimeWithStopTerminalsForWorktree extends OrcaRuntim
         (ptyId) => this.getPtyLivenessVerdict(ptyId),
         (ptyId) =>
           this.ptysById.get(ptyId)?.connected === true ||
+          mainBound.has(ptyId) ||
           (this.isSshOwnedPtyId(ptyId) && this.ptysById.has(ptyId))
       )
       return {
