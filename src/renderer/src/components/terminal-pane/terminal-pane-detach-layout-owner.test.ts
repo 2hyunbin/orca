@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
 import type {
   TerminalLeafMoveRequest,
@@ -48,6 +48,8 @@ beforeEach(() => {
 })
 
 describe('moveLeafThroughLayoutOwner', () => {
+  afterEach(() => useAppStore.setState({ terminalLayoutsByTabId: {} }))
+
   it('sends the drag-out with the window’s terminal and answers with main’s tab', async () => {
     const moving = moveLeafThroughLayoutOwner(request, { groupId: TARGET_GROUP_ID, index: 1 })
 
