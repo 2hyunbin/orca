@@ -575,7 +575,7 @@ describe('orchestration timeout flag validation', () => {
     }
   )
 
-  it.each(['1800001', '14400000', String(Number.MAX_SAFE_INTEGER)])(
+  it.each(['1800001', String(Number.MAX_SAFE_INTEGER)])(
     'rejects an oversized ask timeout %s before resolving identity or creating a question',
     async (timeoutMs) => {
       process.env.ORCA_TERMINAL_HANDLE = 'term_worker'

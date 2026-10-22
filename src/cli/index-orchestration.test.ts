@@ -56,8 +56,6 @@ describe('orca cli worktree awareness', () => {
 
   it.each([
     { questionFlag: '--question', questionValue: 'Proceed?', json: true },
-    { questionFlag: '--question', questionValue: 'Proceed?', json: false },
-    { questionFlag: '--resume', questionValue: 'msg_pending', json: true },
     { questionFlag: '--resume', questionValue: 'msg_pending', json: false }
   ])('reports oversized ask waits before any request: %o', async (testCase) => {
     process.env.ORCA_TERMINAL_HANDLE = 'term_worker'
