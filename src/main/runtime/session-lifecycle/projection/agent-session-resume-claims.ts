@@ -33,6 +33,7 @@ export type AgentSessionResumeClaim = {
  */
 export class AgentSessionResumeClaims {
   private readonly holds = new Set<Hold>()
+  private stopWatchingReports: (() => void) | null = null
 
   constructor(
     private readonly lifecycle: {
@@ -40,6 +41,8 @@ export class AgentSessionResumeClaims {
       reported: (hold: AgentSessionResumeHold) => boolean
       /** Calls `onExit` once the PTY proves exited; returns the unsubscribe. */
       watchExit: (ptyId: string, onExit: () => void) => () => void
+      /** Calls `onChange` whenever the hook store's sessions change; returns the unsubscribe. */
+      watchReports?: (onChange: () => void) => () => void
     }
   ) {}
 
@@ -62,6 +65,16 @@ export class AgentSessionResumeClaims {
       ptys: new Map()
     }
     this.holds.add(hold)
+    // Why eager: an agent that exits to its shell takes its hook row with it, so a check at the
+    // next claim would find nothing and hold the session for as long as the shell lives.
+    this.stopWatchingReports ??=
+      this.lifecycle.watchReports?.(() => {
+        for (const held of this.holds) {
+          if (this.lifecycle.reported(held)) {
+            this.end(held)
+          }
+        }
+      }) ?? null
     return this.share(hold)
   }
 
@@ -73,7 +86,7 @@ export class AgentSessionResumeClaims {
       ) {
         continue
       }
-      // Why: hook rows outlive the agent's exit, so reading them at the next claim is enough.
+      // Why here too: a host without report notifications ends holds only at the next claim.
       if (this.lifecycle.reported(hold)) {
         this.end(hold)
         continue
@@ -88,6 +101,10 @@ export class AgentSessionResumeClaims {
       stopWatching()
     }
     this.holds.delete(hold)
+    if (this.holds.size === 0) {
+      this.stopWatchingReports?.()
+      this.stopWatchingReports = null
+    }
   }
 
   private endIfSettled(hold: Hold): void {
