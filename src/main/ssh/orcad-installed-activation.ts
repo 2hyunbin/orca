@@ -20,7 +20,11 @@ import {
 } from '../managed-server/activation/orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from './orcad-candidate-launch-verdict'
 import { planOrcadUpdate } from './orcad-update-plan'
-import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
+import {
+  type OrcadTerminalCensus,
+  UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
+} from '../../shared/orcad-terminal-census'
+import { runFencedStop } from './orcad-fenced-stop'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'
 import { ORCAD_LOG_FILENAME } from '../managed-server/install/orcad-remote-host-support'
 import { orcadSnapshotFailureReason } from '../managed-server/host-state/orcad-state-snapshot-space'
@@ -62,13 +66,9 @@ import {
 } from './orcad-recovery-slot'
 import { orcadSnapshotPath } from './orcad-incumbent-recovery'
 import {
-  abandonIncumbentRestart,
-  commitIncumbentRestart,
-  incumbentRecountLapsed,
-  reserveIncumbentRestart,
   restartAfterSnapshotFailure,
   restoreAfterRejectedCandidate,
-  type OrcadIncumbentRestart
+  stopTransactionIncumbent
 } from './orcad-transaction-incumbent'
 import { withOrcadLogTail } from '../managed-server/install/orcad-remote-log-tail'
 import { orcadCandidateLaunchFailureCode } from '../orcad/orcad-host-unavailable'
@@ -78,12 +78,6 @@ type Outcome = Extract<OrcadDeployResult, { outcome: 'installed-not-activated' }
 
 /** The caller's `admitRecord` refused the record found under the fence; nothing was touched. */
 export const ORCAD_ACTIVATION_POLICY_REFUSED_CODE = 'orcad_activation_policy_refused'
-
-const UNVERIFIABLE_CENSUS: OrcadTerminalCensus = {
-  liveSessions: null,
-  startedSinceActivation: null,
-  daemonProtocolVersion: null
-}
 
 function countedLockedRecord(options: OrcadDeployOptions, record: OrcadActivationRecord): boolean {
   const counted = options.censusRecord
@@ -97,7 +91,7 @@ function censusForLockedRecord(
   options: OrcadDeployOptions,
   record: OrcadActivationRecord
 ): OrcadTerminalCensus {
-  return countedLockedRecord(options, record) ? options.census : UNVERIFIABLE_CENSUS
+  return countedLockedRecord(options, record) ? options.census : UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
 }
 
 export async function activateInstalledOrcad(
@@ -177,25 +171,10 @@ export async function activateInstalledOrcad(
     }
   }
 
-  // Before the restart reservation: a slow scan must not outdate the census that admits the stop.
+  // Before the recount: a slow scan must not outdate the census that admits the stop.
   const roomless = await orcadSnapshotRoomRefusal(options, record, fullVersion)
   if (roomless) {
     return notActivated(ORCAD_SNAPSHOT_SPACE_INSUFFICIENT_CODE, roomless)
-  }
-
-  // Last check before anything stops: the census above may predate a long upload.
-  let restart: (OrcadIncumbentRestart & { incumbent: OrcadSlotIdentity }) | null = null
-  if (incumbent) {
-    const reserved = await reserveIncumbentRestart(options, {
-      record,
-      candidateVersion: fullVersion,
-      counted: countedLockedRecord(options, record),
-      now: now().getTime()
-    })
-    if (reserved.action === 'defer') {
-      return notActivated(reserved.code, reserved.reason)
-    }
-    restart = { ...reserved, incumbent }
   }
 
   const startedAt = now()
@@ -207,46 +186,57 @@ export async function activateInstalledOrcad(
     snapshotDirName: orcadSnapshotDirName(fullVersion, startedAt.getTime()),
     now: startedAt
   })
-  try {
-    await writeOrcadActivationTransaction(options, transaction)
-  } catch (error) {
-    // Nothing stopped, so the incumbent keeps serving and must take new work again.
-    await abandonIncumbentRestart(options, restart)
-    throw error
+  const beginMutating = (): void => {
+    lock.retainOnError()
+    // Past the first mutation a cancel would strand a stopped host, so the run finishes or rolls back.
+    options = withoutAbortSignal(options)
   }
-  if (incumbentRecountLapsed(restart, now().getTime())) {
-    await abandonIncumbentRestart(options, restart)
-    return notActivated(
-      'orcad_update_terminal_census_unavailable',
-      'The terminal count went stale before the current server could be stopped, so nothing ' +
-        'was stopped. Orca will try the update again.'
-    )
-  }
-  lock.retainOnError()
-  // Past the first mutation a cancel would strand a stopped host, so the run finishes or rolls back.
-  options = withoutAbortSignal(options)
-
-  // Only after the journal is durable: from the commit on, the incumbent may already be exiting.
-  if (restart) {
-    const ended = await commitIncumbentRestart(options, restart.incumbent, lock, restart)
-    if (ended.outcome === 'refused') {
-      return notActivated(
-        'orcad_update_restart_not_reserved',
-        `New work started on orcad ${restart.incumbent.version} before it could restart, so ` +
-          'it kept serving. Once that work finishes, retry the update or reconnect.'
-      )
+  if (incumbent) {
+    // Last check before anything stops: the census above may predate a long upload.
+    const fenced = await runFencedStop({
+      recountCensus: () =>
+        countedLockedRecord(options, record)
+          ? options.recountCensus()
+          : Promise.reject(new Error('not the incumbent this update counted')),
+      releaseIncumbentAdmission: options.releaseIncumbentAdmission,
+      now: () => now().getTime(),
+      refuse: (census) => {
+        const plan = planOrcadUpdate({
+          record,
+          candidateVersion: fullVersion,
+          census,
+          candidateDaemonProtocol: CURRENT_ORCAD_DAEMON_PROTOCOL,
+          ...(options.force !== undefined ? { force: options.force } : {})
+        })
+        return plan.action === 'defer' ? notActivated(plan.code, plan.reason) : null
+      },
+      prepare: () => writeOrcadActivationTransaction(options, transaction),
+      stale: () =>
+        notActivated(
+          'orcad_update_terminal_census_unavailable',
+          'The terminal count went stale before the current server could be stopped, so nothing ' +
+            'was stopped. Orca will try the update again.'
+        ),
+      stop: () => {
+        beginMutating()
+        return stopTransactionIncumbent(options, incumbent, lock)
+      },
+      stopMayHaveBeenSent: (unstopped) => unstopped === null || unstopped.stopMayBeUnderway
+    })
+    if ('refused' in fenced) {
+      return fenced.refused
     }
-    if (ended.outcome === 'unconfirmed') {
-      // A stop that was never sent leaves the incumbent serving, so it takes new work again.
-      if (!ended.stopMayBeUnderway) {
-        await abandonIncumbentRestart(options, restart)
-      }
+    if (fenced.stopped) {
       return notActivated(
         'orcad_outgoing_stop_incomplete',
-        `${ended.reason} No snapshot was taken and the candidate was not started. Orca requires ` +
-          'confirmed exit before snapshotting.'
+        `${fenced.stopped.reason} No snapshot was taken and the candidate was not started. Orca ` +
+          'requires matching runtime readiness before signaling an incumbent and confirmed exit ' +
+          'before snapshotting.'
       )
     }
+  } else {
+    await writeOrcadActivationTransaction(options, transaction)
+    beginMutating()
   }
   transaction = withOrcadActivationIncumbentStopped(transaction, now())
   await writeOrcadActivationTransaction(options, transaction)

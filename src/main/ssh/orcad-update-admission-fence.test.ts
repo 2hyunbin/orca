@@ -1,6 +1,5 @@
-// An explicit Force update of a server older than restart admission is stopped from outside, so
-// its last census closes that server's terminal admission; it stays closed through the stop, and
-// reopens whenever the update leaves the incumbent serving. A capable server ends itself instead.
+// The update's last census closes the incumbent's terminal admission; it stays closed through the
+// stop, and reopens whenever the update leaves the incumbent serving.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as ExecCommandModule from './remote-exec/remote-exec-command'
 import type * as RecordFile from '../managed-server/install/orcad-remote-record-file'
@@ -60,10 +59,8 @@ let admission = new TerminalUpdateAdmission(async () => [])
 const IDLE = { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: 3 }
 const LIVE = { liveSessions: 1, startedSinceActivation: 1, daemonProtocolVersion: 3 }
 const UNREAD = { liveSessions: null, startedSinceActivation: null, daemonProtocolVersion: null }
-/** Proven older than restart admission, so only an explicit Force may stop it. */
-const OLDER = { restartAdmissionSupported: false }
 
-function deploy(recount: OrcadTerminalCensus | Error = { ...IDLE, ...OLDER }, capable = false) {
+function deploy(recount: OrcadTerminalCensus | Error = IDLE, force?: boolean) {
   const recountCensus = vi.fn(async () => {
     admission.close(ORCAD_UPDATE_ADMISSION_FENCE_MS)
     if (recount instanceof Error) {
@@ -87,12 +84,10 @@ function deploy(recount: OrcadTerminalCensus | Error = { ...IDLE, ...OLDER }, ca
     now: () => new Date(clockMs),
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc217',
-    census: capable
-      ? { ...IDLE, chatWork: 0, restartAdmissionSupported: true }
-      : { ...IDLE, ...OLDER },
+    census: IDLE,
     recountCensus,
     releaseIncumbentAdmission,
-    ...(capable ? { restartAdmission: host.restartAdmission(OLD) } : { force: true })
+    ...(force !== undefined ? { force } : {})
   })
   return { result, recountCensus, releaseIncumbentAdmission }
 }
@@ -130,19 +125,23 @@ describe("an update's terminal admission fence", () => {
   })
 
   it.each([
-    [{ ...LIVE, ...OLDER, inProcessSessions: 1 }, 'orcad_update_ends_in_process_terminals'],
-    [UNREAD, 'orcad_update_restart_not_reserved'],
-    [new Error('tunnel closed'), 'orcad_update_restart_not_reserved']
-  ])('defers on a recount of %j and reopens admission', async (recount, code) => {
-    const { result, recountCensus } = deploy(recount)
+    [LIVE, false, 'orcad_update_terminals_running'],
+    [{ ...LIVE, inProcessSessions: 1 }, true, 'orcad_update_ends_in_process_terminals'],
+    [UNREAD, true, 'orcad_update_daemon_protocol_unverifiable'],
+    [new Error('tunnel closed'), false, 'orcad_update_terminal_census_unavailable']
+  ])(
+    'defers on a recount of %j and reopens admission (force: %s)',
+    async (recount, force, code) => {
+      const { result, recountCensus } = deploy(recount, force)
 
-    await expect(result).resolves.toMatchObject({ outcome: 'installed-not-activated', code })
-    expect(recountCensus).toHaveBeenCalledTimes(1)
-    expect([...host.alive]).toEqual([OLD])
-    expect(host.commands.some((command) => command.includes('kill -TERM'))).toBe(false)
-    // The incumbent keeps serving, so it takes terminals again now, not when the fence lapses.
-    expect(admission.isClosed()).toBe(false)
-  })
+      await expect(result).resolves.toMatchObject({ outcome: 'installed-not-activated', code })
+      expect(recountCensus).toHaveBeenCalledTimes(1)
+      expect([...host.alive]).toEqual([OLD])
+      expect(host.commands.some((command) => command.includes('kill -TERM'))).toBe(false)
+      // The incumbent keeps serving, so it takes terminals again now, not when the fence lapses.
+      expect(admission.isClosed()).toBe(false)
+    }
+  )
 
   it('reopens admission when the first mutation after the recount fails before any stop', async () => {
     vi.mocked(writeAtomicOrcadRemoteRecord).mockImplementation(async (_target, path, contents) => {
@@ -174,15 +173,6 @@ describe("an update's terminal admission fence", () => {
       expect(admission.isClosed()).toBe(underway)
     }
   )
-
-  it('never recounts or fences a server that ends itself through its reservation', async () => {
-    const { result, recountCensus, releaseIncumbentAdmission } = deploy(IDLE, true)
-
-    await expect(result).resolves.toMatchObject({ outcome: 'installed-and-activated' })
-    expect(recountCensus).not.toHaveBeenCalled()
-    expect(releaseIncumbentAdmission).not.toHaveBeenCalled()
-    expect(admission.isClosed()).toBe(false)
-  })
 
   it('stops nothing once the fence may have lapsed before the stop could be sent', async () => {
     vi.mocked(writeAtomicOrcadRemoteRecord).mockImplementation(async (_target, path, contents) => {

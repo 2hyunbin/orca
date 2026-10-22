@@ -28,14 +28,6 @@ export function managedServerVersionLabel(
     : translate('auto.components.settings.managedServers.row.checking', 'Checking…')
 }
 
-/** Force is offered only for a deferral on a server confirmed too old to check for running chats. */
-export function managedServerOffersForce(status: OrcadManagedRuntimeStatus | null): boolean {
-  return (
-    status?.deferredUpdate?.forceable === true &&
-    status.terminals.restartAdmissionSupported === false
-  )
-}
-
 /** The one managed-server fact that should replace the row's meta line, if any. */
 export function getManagedServerSummary(lifecycle: ManagedServerLifecycle): string | null {
   const { status, recovery } = lifecycle
@@ -99,7 +91,7 @@ export function ManagedServerDetailLines({
                 'Update to {{version}} deferred.',
                 { version: status.deferredUpdate.candidateVersion }
               )}{' '}
-              {managedServerOutcomeLabel(status.deferredUpdate, managedServerOffersForce(status))}
+              {managedServerOutcomeLabel(status.deferredUpdate)}
             </p>
           ) : null}
         </>
@@ -281,15 +273,6 @@ export function ManagedServerMenuItems({
           'Update Orca on this host'
         )}
       </DropdownMenuItem>
-      {managedServerOffersForce(status) ? (
-        <DropdownMenuItem disabled={disabled} onSelect={() => void run('update', true)}>
-          <ArrowUpCircle />
-          {translate(
-            'auto.components.settings.managedServers.row.forceUpdateStopChats',
-            'Force update and stop chats'
-          )}
-        </DropdownMenuItem>
-      ) : null}
       {status?.rollbackAvailable ? (
         <DropdownMenuItem disabled={disabled} onSelect={() => void run('rollback')}>
           <RotateCcw />

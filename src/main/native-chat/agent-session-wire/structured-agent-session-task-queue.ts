@@ -1,4 +1,3 @@
-import { orcadRestartWorkAdmission } from '../../orcad/orcad-restart-work-admission'
 import { runKeyedSerializedOperation } from '../../cli/keyed-promise-queue'
 import type { AgentSessionExecutionLocation } from '../../../shared/agent-session-record'
 
@@ -14,17 +13,13 @@ export class StructuredAgentSessionTaskQueue {
   >()
 
   serialize<T>(sessionId: string, task: () => Promise<T>): Promise<T> {
-    return orcadRestartWorkAdmission.track(() =>
-      runKeyedSerializedOperation(this.chains, sessionId, task)
-    )
+    return runKeyedSerializedOperation(this.chains, sessionId, task)
   }
 
   trackAttach<T>(
     operation: Promise<T>,
     pending?: { sessionId: string; location: AgentSessionExecutionLocation }
   ): Promise<T> {
-    // Restart work is the operation itself: a start keeps counting after its conversation is evicted.
-    void orcadRestartWorkAdmission.track(() => operation)
     this.attaching.add(operation)
     if (pending) {
       this.pendingLocations.set(operation, pending)

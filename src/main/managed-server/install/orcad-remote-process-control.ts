@@ -16,7 +16,6 @@ import {
   posixProcessAliveShellFunction
 } from './orcad-remote-host-support'
 import {
-  ORCAD_STOP_NOW_REQUEST,
   ORCAD_STOP_REQUEST_FILENAME,
   ORCAD_STOP_REQUESTS_CAPABILITY
 } from '../../../shared/orcad-stop-request'
@@ -52,10 +51,9 @@ export function stopOrcadCommand(
   const readiness = quotePosixShell(
     joinRemotePath(host, remoteInstallDir, ORCAD_READINESS_FILENAME)
   )
-  const requestPath = joinRemotePath(host, remoteInstallDir, ORCAD_STOP_REQUEST_FILENAME)
-  const requestFile = quotePosixShell(requestPath)
-  // Its own name: the listener only reacts to the request's, so it never reads a partial write.
-  const requestTemp = `${quotePosixShell(`${requestPath}.`)}$$${quotePosixShell('.tmp')}`
+  const requestFile = quotePosixShell(
+    joinRemotePath(host, remoteInstallDir, ORCAD_STOP_REQUEST_FILENAME)
+  )
   const readRuntimePid = [
     `const r = JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8'));`,
     `const pid = r?.type === 'orca_server_ready' ? r.health?.pid : null;`,
@@ -79,9 +77,7 @@ export function stopOrcadCommand(
         ]),
     'orcad_alive "$pid" || { echo ALREADY_EXITED; exit 0; };',
     'if [ "$stop_mode" = request ]; then',
-    `( umask 077; printf %s ${quotePosixShell(ORCAD_STOP_NOW_REQUEST)} > ${requestTemp} && ` +
-      `mv -f ${requestTemp} ${requestFile} || { rm -f ${requestTemp}; exit 1; } ) 2>/dev/null || ` +
-      '{ echo SIGNAL_FAILED; exit 0; };',
+    `( umask 077; : > ${requestFile} ) 2>/dev/null || { echo SIGNAL_FAILED; exit 0; };`,
     'else kill -TERM "$pid" 2>/dev/null || { echo SIGNAL_FAILED; exit 0; }; fi;',
     // Past here the stop may be under way, so a lost or unknown answer must keep the fence.
     'echo SIGNALED;',

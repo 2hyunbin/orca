@@ -5,13 +5,10 @@
  * `orcad.js`, consumed by unlinking it) and the instance-bound managed request in the data
  * root, which is validated and kept as evidence until the completion command proves exit.
  */
-import { lstatSync, unlinkSync, watch, type FSWatcher } from 'node:fs'
+import { unlinkSync, watch, type FSWatcher } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
-import { readNodeFileSyncWithinLimit } from '../../shared/node-bounded-file-reader'
 import {
-  ORCAD_STOP_NOW_REQUEST,
   ORCAD_STOP_REQUEST_FILENAME,
-  ORCAD_STOP_REQUEST_MAX_BYTES,
   type OrcadManagedStopContext,
   type OrcadManagedStopRequest
 } from '../../shared/orcad-stop-request'
@@ -90,22 +87,6 @@ function listenForRequest<T>(
   }
 }
 
-/** Only the exact marker stops now; other contents take the chat-safe restart, and a directory,
- *  which cannot be unlinked, is refused and retried. */
-function plainRequestStopsNow(path: string): boolean {
-  const stats = lstatSync(path)
-  const contents =
-    stats.isFile() && stats.size <= ORCAD_STOP_REQUEST_MAX_BYTES
-      ? readNodeFileSyncWithinLimit(path, ORCAD_STOP_REQUEST_MAX_BYTES, {
-          regularFileOnly: true
-        }).buffer.toString('utf8')
-      : null
-  if (contents !== '' && contents !== ORCAD_STOP_NOW_REQUEST) {
-    console.error(`[orcad] unrecognized stop request at ${path}; restarting only when idle`)
-  }
-  return contents === ORCAD_STOP_NOW_REQUEST
-}
-
 export function installOrcadStopRequestListeners(
   onRequest: () => void,
   options: {
@@ -113,9 +94,6 @@ export function installOrcadStopRequestListeners(
     managedStop?: OrcadManagedStopContext
     /** Runs once for a validated managed request before the stop; it cannot prevent it. */
     beforeManagedStop?: (request: OrcadManagedStopRequest) => Promise<void>
-    /** An empty plain request: an older client's update, or its recovery stop. Two commands once
-     *  shared the empty file, so only the "stop now" contents newer clients write still stop. */
-    restartSlot?: () => Promise<void>
     pollIntervalMs?: number
   }
 ): OrcadStopRequestListener {
@@ -131,16 +109,7 @@ export function installOrcadStopRequestListeners(
     listenForRequest(
       join(options.installRoot, ORCAD_STOP_REQUEST_FILENAME),
       (path) => {
-        const stopNow = plainRequestStopsNow(path)
         unlinkSync(path)
-        if (!stopNow && options.restartSlot) {
-          void options
-            .restartSlot()
-            .catch((error: unknown) =>
-              console.error('[orcad] slot restart admission failed:', error)
-            )
-          return null
-        }
         return true
       },
       () => onRequest(),

@@ -19,10 +19,6 @@ export const OrcadTerminalCensusSchema = z.object({
    * daemon sessions these end with any orcad restart. Absent from hosts that predate it.
    */
   inProcessSessions: CountSchema.optional(),
-  /** Host-owned chat obligations; absent on older hosts, which cannot prove restart safety. */
-  chatWork: CountSchema.optional(),
-  /** Client status proof; absent when the peer's restart capability could not be verified. */
-  restartAdmissionSupported: z.boolean().optional(),
   /**
    * Epoch ms until which the server refuses new terminals, when the request asked it to close
    * admission; 0 once reopened. Absent from servers that cannot, so a client never assumes a fence.
@@ -31,6 +27,13 @@ export const OrcadTerminalCensusSchema = z.object({
 })
 
 export type OrcadTerminalCensus = z.infer<typeof OrcadTerminalCensusSchema>
+
+/** A daemon that could not answer: unknown, never zero. */
+export const UNVERIFIABLE_ORCAD_TERMINAL_CENSUS: Readonly<OrcadTerminalCensus> = Object.freeze({
+  liveSessions: null,
+  startedSinceActivation: null,
+  daemonProtocolVersion: null
+})
 
 /** The longest a census may close terminal admission; the stop that follows takes seconds. */
 export const ORCAD_TERMINAL_ADMISSION_MAX_FENCE_MS = 5 * 60_000

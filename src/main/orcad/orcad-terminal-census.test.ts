@@ -19,8 +19,7 @@ describe('orcad terminal census', () => {
       liveSessions: 3,
       startedSinceActivation: 2,
       daemonProtocolVersion: 7,
-      inProcessSessions: 0,
-      chatWork: 0
+      inProcessSessions: 0
     })
   })
 
@@ -35,8 +34,7 @@ describe('orcad terminal census', () => {
       liveSessions: 0,
       startedSinceActivation: 0,
       daemonProtocolVersion: null,
-      inProcessSessions: 0,
-      chatWork: 0
+      inProcessSessions: 0
     })
   })
 
@@ -88,8 +86,7 @@ describe('orcad terminal census', () => {
       liveSessions: 1,
       startedSinceActivation: null,
       daemonProtocolVersion: null,
-      inProcessSessions: 1,
-      chatWork: 0
+      inProcessSessions: 1
     })
   })
 

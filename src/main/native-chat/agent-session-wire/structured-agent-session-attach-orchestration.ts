@@ -1,4 +1,3 @@
-import { unlessStructuredAgentSessionRestarting } from './structured-agent-session-restart-admission'
 import type { StructuredRewindRecoveryEvidence } from './structured-rewind-recovery'
 import {
   publishAttachedChild,
@@ -149,24 +148,22 @@ async function runAttach(
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionAttachOptions
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
-  return unlessStructuredAgentSessionRestarting(async () => {
-    // Begun first, so a close or Stop during any phase below still stops the start. A start's lock
-    // carries the controller it registered before its first wait.
-    const acquire = options.lock
-      ? null
-      : context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
-    const lock = options.lock ?? heldStructuredAgentSessionAttachLock(acquire?.signal)
-    try {
-      return await runAttachUnderAbort(context, callerKey, params, options, lock)
-    } finally {
-      acquire?.end()
-      if (isStructuredAgentSessionStartupExpired(lock.signal.reason)) {
-        options.onStartupExpired?.()
-      } else if (lock.signal.aborted) {
-        options.onAborted?.()
-      }
+  // Begun first, so a close or Stop during any phase below still stops the start. A start's lock
+  // carries the controller it registered before its first wait.
+  const acquire = options.lock
+    ? null
+    : context.runtimeState.acquireAborts.begin(params.envelope.sessionId)
+  const lock = options.lock ?? heldStructuredAgentSessionAttachLock(acquire?.signal)
+  try {
+    return await runAttachUnderAbort(context, callerKey, params, options, lock)
+  } finally {
+    acquire?.end()
+    if (isStructuredAgentSessionStartupExpired(lock.signal.reason)) {
+      options.onStartupExpired?.()
+    } else if (lock.signal.aborted) {
+      options.onAborted?.()
     }
-  })
+  }
 }
 
 async function runAttachUnderAbort(

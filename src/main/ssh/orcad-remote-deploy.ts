@@ -18,7 +18,6 @@ import { readOrcadActivationRecord } from '../managed-server/activation/orcad-ac
 import type { OrcadActivationRecord } from '../managed-server/activation/orcad-activation-record'
 import type { OrcadActivationVerdict } from '../managed-server/activation/orcad-activation-gate'
 import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
-import type { OrcadRestartAdmissionPort } from './orcad-restart-admission-client'
 import type { RemoteHostPlatform } from './ssh-remote-platform'
 import { installOrcadBundle } from '../managed-server/install/orcad-remote-install'
 import { getAppEnvironment } from '../../shared/app-environment'
@@ -65,14 +64,9 @@ export type OrcadDeployOptions = {
    */
   censusRecord?: OrcadActivationRecord
   /**
-   * The counted incumbent's restart admission. Its reservation recounts under the fence after the
-   * upload, so work started meanwhile still defers; without it an active incumbent never restarts.
-   */
-  restartAdmission?: OrcadRestartAdmissionPort
-  /**
-   * Counts again under the fence just before an older host's explicit Force stop, so it is
-   * positively identified again after the upload. Called only while the incumbent is the one
-   * counted; any failure must read as unverifiable.
+   * Counts again under the fence just before the incumbent stops, so a terminal opened during
+   * the upload still defers the update. Required, since `census` may predate a long upload.
+   * Called only while the incumbent is the one counted; any failure must read as unverifiable.
    */
   recountCensus: () => Promise<OrcadTerminalCensus>
   /**

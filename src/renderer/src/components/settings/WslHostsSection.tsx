@@ -1,6 +1,10 @@
 import { useState } from 'react'
 import { Plus, TerminalSquare, Trash2 } from 'lucide-react'
-import type { WslHostStatus } from '../../../../shared/wsl-host-types'
+import {
+  ORCAD_HOST_NEWER_DEFERRAL_CODE,
+  type WslHostConnectIntent,
+  type WslHostStatus
+} from '../../../../shared/wsl-host-types'
 import { toast } from 'sonner'
 import {
   isWslHostRuntimeEnvironment,
@@ -89,15 +93,15 @@ export function WslHostsSection({
     return null
   }
 
-  const connect = async (environmentId: string, force = false): Promise<void> => {
+  const connect = async (environmentId: string, intent?: WslHostConnectIntent): Promise<void> => {
     const api = window.api.runtimeEnvironments?.wslHosts
     if (!api || connectingId) {
       return
     }
     setConnectingId(environmentId)
     try {
-      // A connect retries a deferred update; force takes it over the running terminals.
-      await api.connect({ environmentId, force })
+      // Update retries a deferred or skipped update behind the terminal check; Force passes it.
+      await api.connect({ environmentId, ...(intent ? { intent } : {}) })
       onChanged()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -168,36 +172,26 @@ export function WslHostsSection({
                 meta={
                   <span className="truncate">
                     {deferred
-                      ? translate(
+                      ? `${translate(
                           'auto.components.settings.managedServers.row.deferredVersion',
                           'Update to {{version}} deferred.',
                           { version: deferred.candidateVersion }
-                        )
+                        )} ${managedServerOutcomeLabel({ outcome: 'deferred', code: deferred.code })}`
                       : `${unavailableLabel ?? getWslHostRowDetail(status)}${
                           !unavailableLabel && status?.detail ? ` — ${status.detail}` : ''
                         }`}
                   </span>
                 }
-                // Why: the one-line meta truncates; what the user must do to let the update apply wraps here.
-                footer={
-                  deferred ? (
-                    <p className="text-xs text-muted-foreground">
-                      {managedServerOutcomeLabel(
-                        { outcome: 'deferred', code: deferred.code },
-                        deferred.forceable === true
-                      )}
-                    </p>
-                  ) : null
-                }
                 status={getWslHostRowStatus(status, unavailableLabel !== null)}
                 primaryAction={
-                  deferred ? (
+                  // A newer Orca's host refuses Update; Force stays in the menu.
+                  deferred && deferred.code !== ORCAD_HOST_NEWER_DEFERRAL_CODE ? (
                     <Button
                       type="button"
                       size="xs"
                       variant="outline"
                       disabled={connectingId !== null}
-                      onClick={() => void connect(environment.id)}
+                      onClick={() => void connect(environment.id, 'update')}
                     >
                       {translate('auto.components.settings.managedServers.row.update', 'Update')}
                     </Button>
@@ -221,20 +215,14 @@ export function WslHostsSection({
                     {deferred?.forceable ? (
                       <DropdownMenuItem
                         disabled={connectingId !== null}
-                        onSelect={() => void connect(environment.id, true)}
+                        onSelect={() => void connect(environment.id, 'force')}
                       >
-                        {deferred.code === 'orcad_update_legacy_host'
-                          ? translate(
-                              'auto.components.settings.wslHosts.forceUpdateStopChats',
-                              'Force update and stop chats'
-                            )
-                          : translate(
-                              'auto.components.settings.wslHosts.forceUpdate',
-                              'Force update'
-                            )}
+                        {translate('auto.components.settings.wslHosts.forceUpdate', 'Force update')}
                       </DropdownMenuItem>
                     ) : null}
-                    {deferred && !(ready && !unavailableLabel) ? (
+                    {deferred &&
+                    deferred.code !== ORCAD_HOST_NEWER_DEFERRAL_CODE &&
+                    !(ready && !unavailableLabel) ? (
                       <DropdownMenuItem
                         disabled={connectDisabled}
                         onSelect={() => void connect(environment.id)}

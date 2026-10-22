@@ -1,8 +1,7 @@
 /**
  * One hostile-host cell: on a fresh host, resolve the context, deploy orcad, and prove it picked
- * the cell's runtime, uploaded no other and ran no toolchain. An activated server must be live and
- * stop for recovery while refusing a restart; an unavailable host must fail with the classified
- * reason the connect reports.
+ * the cell's runtime, uploaded no other and ran no toolchain. An activated server must be live; an
+ * unavailable host must fail with the classified reason the connect reports.
  */
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -12,7 +11,6 @@ import { NODE_RUNTIME_ASSETS, pinnedNodeRuntimeAsset } from '../../../shared/nod
 import { ORCAD_MANAGED_REMOTE_PORT } from '../../../shared/orcad-managed-runtime'
 import { ORCAD_RUNTIMES_DIRNAME } from '../../../shared/orcad-artifacts'
 import type { SshTarget } from '../../../shared/ssh-types'
-import type { SshConnection } from '../connection/ssh-connection'
 import { readOrcadActivationRecord } from '../../managed-server/activation/orcad-activation-record-store'
 import { classifyOrcadHostUnavailable } from '../../orcad/orcad-host-unavailable'
 import { managedOrcadSlot } from '../../managed-server/lifecycle/orcad-managed-runtime-context'
@@ -38,7 +36,6 @@ import {
 } from './ssh-hostile-host-cells'
 import { connectHostileHost } from './ssh-hostile-host-test-harness'
 import { hostExec, hostExecStatus, type HostileHostTarget } from './ssh-hostile-host-test-fixture'
-import { proveRecoveryStopsRefusingOrcad } from './ssh-hostile-host-recovery-stop'
 
 const EMPTY_CENSUS = { liveSessions: 0, startedSinceActivation: 0, daemonProtocolVersion: null }
 
@@ -76,7 +73,7 @@ export async function proveManagedOrcadCell(
       expect(deployed, JSON.stringify(deployed)).toMatchObject({
         outcome: 'installed-and-activated'
       })
-      await assertLiveThenDecommissioned(conn, slot, slotDir, deployed.fullVersion)
+      await assertLiveThenDecommissioned(slot, slotDir, deployed.fullVersion)
     }
     if (desktop) {
       // With an empty cache and every fetch refused there was nothing to upload, so the host fetched it.
@@ -112,7 +109,6 @@ async function assertOnlyRuntimeUploaded(
 }
 
 async function assertLiveThenDecommissioned(
-  conn: SshConnection,
   slot: OrcadSlotOptions,
   slotDir: string,
   version: string
@@ -121,7 +117,6 @@ async function assertLiveThenDecommissioned(
     parseOrcadLiveness(await execOrcadRemote(slot, orcadLivenessProbeCommand(slot.host, slotDir)))
   expect(await liveness()).toBe('LIVE')
   await assertOrcadRunsAtLoginUmask(slot, slotDir)
-  await proveRecoveryStopsRefusingOrcad(conn, slot, slotDir, version)
   const decommission = await decommissionRemoteOrcad({
     ...slot,
     record: await readOrcadActivationRecord(slot),

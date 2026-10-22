@@ -2,14 +2,9 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  ORCAD_STOP_NOW_REQUEST,
-  ORCAD_STOP_REQUEST_FILENAME
-} from '../../shared/orcad-stop-request'
+import { ORCAD_STOP_REQUEST_FILENAME } from '../../shared/orcad-stop-request'
 import { acquireOrcadInstanceLock } from './orcad-instance-lock'
 import { orcadManagedStopRequestPath } from './orcad-managed-stop-request'
-import { OrcadRestartAdmission } from './orcad-restart-admission'
-import { OrcadRestartWorkAdmission } from './orcad-restart-work-admission'
 import {
   installOrcadStopRequestListeners,
   type OrcadStopRequestListener
@@ -53,56 +48,6 @@ function listen(
 }
 
 describe('orcad stop-request listeners', () => {
-  it('refuses an old updater while chats work, then accepts a later idle request', async () => {
-    const installRoot = directory()
-    const work = new OrcadRestartWorkAdmission()
-    let chatWork = 1
-    const shutdown = vi.fn(() => true)
-    const restart = new OrcadRestartAdmission(work, {
-      collect: async () => ({
-        liveSessions: 0,
-        startedSinceActivation: 0,
-        daemonProtocolVersion: null,
-        inProcessSessions: 0,
-        chatWork
-      }),
-      chatWork: () => chatWork,
-      hasProviders: () => false,
-      drain: async () => {},
-      shutdown: () => shutdown
-    })
-    const path = join(installRoot, ORCAD_STOP_REQUEST_FILENAME)
-    writeFileSync(path, '')
-    listen(shutdown, { installRoot, restartSlot: () => restart.restartLegacySlot() })
-    expect(existsSync(path)).toBe(false)
-    await work.admit(async () => {})
-    expect(shutdown).not.toHaveBeenCalled()
-    chatWork = 0
-    writeFileSync(path, '')
-    await vi.waitFor(() => expect(shutdown).toHaveBeenCalledOnce())
-    await expect(work.admit(async () => {})).rejects.toThrow('updating')
-  })
-
-  // Recovery stops must not wait for chats; anything but the marker still waits for idle.
-  it('stops on a "stop now" request without asking admission, and defers anything else', () => {
-    const installRoot = directory()
-    const path = join(installRoot, ORCAD_STOP_REQUEST_FILENAME)
-    const restartSlot = vi.fn(async () => {})
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
-    writeFileSync(path, 'stop-later')
-    const deferred = vi.fn()
-    listen(deferred, { installRoot, restartSlot }).close()
-    expect(deferred).not.toHaveBeenCalled()
-    expect(restartSlot).toHaveBeenCalledOnce()
-    expect(logged).toHaveBeenCalledOnce()
-    writeFileSync(path, ORCAD_STOP_NOW_REQUEST)
-    const onRequest = vi.fn()
-    listen(onRequest, { installRoot, restartSlot })
-    expect(onRequest).toHaveBeenCalledOnce()
-    expect(restartSlot).toHaveBeenCalledOnce()
-    expect(existsSync(path)).toBe(false)
-  })
-
   it('consumes a slot request written before the listener started', () => {
     const installRoot = directory()
     writeFileSync(join(installRoot, ORCAD_STOP_REQUEST_FILENAME), '')

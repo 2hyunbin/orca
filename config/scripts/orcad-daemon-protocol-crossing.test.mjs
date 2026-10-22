@@ -36,7 +36,6 @@ const record = {
 const live = (daemonProtocolVersion) => ({
   liveSessions: 2,
   startedSinceActivation: 0,
-  chatWork: 0,
   daemonProtocolVersion
 })
 

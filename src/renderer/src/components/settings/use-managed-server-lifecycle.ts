@@ -30,8 +30,7 @@ export type ManagedServerLifecycle = {
   setConfirmingForget: (value: boolean) => void
   setConfirmingRestore: (value: boolean) => void
   loadStatus: () => Promise<void>
-  /** `force` only for update: an older server that cannot check for running chats. */
-  run: (action: ManagedServerAction, force?: boolean) => Promise<void>
+  run: (action: ManagedServerAction) => Promise<void>
 }
 
 /** Turns a refusal or deferral into the one line the user acts on. */
@@ -84,13 +83,13 @@ export function useManagedServerLifecycle({
     void loadStatus()
   }, [loadStatus])
 
-  const run = async (action: ManagedServerAction, force = false): Promise<void> => {
+  const run = async (action: ManagedServerAction): Promise<void> => {
     setBusy(action)
     try {
       const selector = { selector: environment.id }
       const result =
         action === 'update'
-          ? await api.update(force ? { ...selector, force: true } : selector)
+          ? await api.update(selector)
           : action === 'rollback'
             ? await api.rollback(selector)
             : action === 'recover' || action === 'restoreSnapshot'

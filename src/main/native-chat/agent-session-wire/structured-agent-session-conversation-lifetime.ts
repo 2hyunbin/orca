@@ -31,7 +31,8 @@ import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
   stopWorkspaceSleepChat,
-  workspaceSleepStartAborts
+  workspaceSleepStartAborts,
+  type WorkspaceSleepCloseResult
 } from './structured-agent-session-workspace-sleep-stop'
 import type { StructuredAgentSessionExpiredStartup } from './structured-agent-session-startup-attempt'
 import {
@@ -122,7 +123,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     sessionId: string,
     workspaceId: string,
     executionHostId: ExecutionHostId
-  ): Promise<{ fence: number; stopped: boolean } | null> => {
+  ): Promise<WorkspaceSleepCloseResult | null> => {
     const matches = (): boolean => {
       const location = deps().store.getRecord(sessionId)?.location
       return location?.workspaceId === workspaceId && location.executionHostId === executionHostId
@@ -143,6 +144,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
         return null
       }
       const fence = record.lease.runtimeFence
+      const admittedSends = deps().store.admittedSendCount(sessionId)
       const session = sessions.get(sessionId)
       const child = session?.child
       const owned = deps().adapter.hasOwnedAcquisition?.(sessionId) === true
@@ -168,7 +170,11 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       )
       // Lease release advances the fence; preserve the value after this close for the caller's
       // final identity check against a later restart.
-      return { fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence, stopped }
+      return {
+        fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence,
+        stopped,
+        admittedSends
+      }
     })
     return starts.settle({ deps: deps(), sessions, sessionId }, await closed)
   }
@@ -222,12 +228,6 @@ export function createStructuredAgentSessionConversationLifetime(host: {
   }
   return {
     closeForWorkspaceSleep,
-    restartWorkCount: () =>
-      idleSweep.restartWorkCount() +
-      deps()
-        .store.listRecords()
-        .filter((record) => !sessions.has(record.sessionId) && hasOpenDispatch(record.sessionId))
-        .length,
     idleSweep,
     stopAgent,
     /** A host stop of the child the expired attempt published, if it is still that one and still

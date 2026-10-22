@@ -1,4 +1,3 @@
-import { structuredAgentSessionRestartRefusal } from './structured-agent-session-restart-admission'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import { isAgentSessionCreateAdmissionRefusal } from '../../../shared/agent-session-definitive-refusal'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
@@ -8,6 +7,7 @@ import {
   type AgentSessionAttachResult,
   type AgentSessionMutationResult
 } from '../../../shared/agent-session-wire'
+import type { StructuredAgentSessionCaller } from './structured-agent-session-host-types'
 import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import { journalOpenRefusalError } from '../agent-session-journal/journal-open-failure'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
@@ -27,6 +27,7 @@ import {
 } from './structured-agent-session-provider-support'
 import { performSend } from './structured-agent-session-turns'
 import { observedReceipt } from './structured-agent-session-operation-settlement'
+import { attachStructuredAgentSession } from './structured-agent-session-attach-orchestration'
 import { readAgentSessionHydrationPage } from './agent-session-history-page'
 import { resolveAgentSessionReplayOutcome } from './structured-agent-session-replay-outcome'
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
@@ -68,10 +69,6 @@ async function foundConversation(
   params: AgentSessionAttachParams,
   options: StructuredAgentSessionCreateOptions
 ): Promise<AgentSessionMutationResult<AgentSessionAttachResult>> {
-  const updating = structuredAgentSessionRestartRefusal()
-  if (updating) {
-    return updating
-  }
   const { deps } = context
   const { store } = deps
   const sessionId = params.envelope.sessionId
@@ -281,6 +278,24 @@ async function foundConversation(
     if (!committed && !existing) {
       await session.journal.close()
     }
+  }
+}
+
+/** Host entry points that open a chat: attach an existing one or create a new one. */
+export function structuredAgentSessionEntryDelegates(
+  context: () => StructuredAgentSessionAttachContext
+) {
+  return {
+    attach: (
+      caller: StructuredAgentSessionCaller,
+      params: AgentSessionAttachParams,
+      options?: Parameters<typeof attachStructuredAgentSession>[3]
+    ) => attachStructuredAgentSession(context(), caller.callerKey, params, options),
+    create: (
+      caller: StructuredAgentSessionCaller,
+      params: AgentSessionAttachParams,
+      options?: StructuredAgentSessionCreateOptions
+    ) => createStructuredAgentSession(context(), caller.callerKey, params, options)
   }
 }
 

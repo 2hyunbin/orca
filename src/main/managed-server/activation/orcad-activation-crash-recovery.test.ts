@@ -45,7 +45,7 @@ import { deployOrcad } from '../../ssh/orcad-remote-deploy'
 import { rollbackOrcad } from '../install/orcad-remote-rollback'
 import { recoverInterruptedOrcadActivation } from './orcad-activation-recovery'
 import { wakeStoppedManagedOrcad } from '../lifecycle/orcad-managed-wake'
-import { planManagedOrcadAutoUpdate } from '../lifecycle/orcad-managed-auto-update'
+import { planManagedOrcadAutoUpdate } from '../lifecycle/orcad-managed-update-decision'
 import { parseOrcadActivationRecord } from './orcad-activation-record'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import type { OrcadHostTransport } from '../../ssh/orcad-host-transport'
@@ -74,8 +74,7 @@ const slot = {
 const census = {
   liveSessions: 0,
   startedSinceActivation: 0,
-  daemonProtocolVersion: 3,
-  chatWork: 0
+  daemonProtocolVersion: 3
 }
 
 const deploy = (): Promise<unknown> =>
@@ -84,7 +83,6 @@ const deploy = (): Promise<unknown> =>
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc',
     census,
-    restartAdmission: host.restartAdmission(OLD),
     recountCensus: async () => census,
     releaseIncumbentAdmission: async () => {}
   })
@@ -94,7 +92,6 @@ const deployFromNewerApp = (): Promise<unknown> =>
     localOrcadDir: '/local/out/orcad',
     target: 'linux-x64-glibc',
     census,
-    restartAdmission: host.restartAdmission(OLD),
     recountCensus: async () => census,
     releaseIncumbentAdmission: async () => {},
     appVersion: '1.9.0'
@@ -104,6 +101,12 @@ const rollback = (): Promise<unknown> =>
     ...slot,
     record: FakeOrcadHost.newRecord(),
     census,
+    recountCensus: async () => ({
+      liveSessions: 0,
+      startedSinceActivation: 0,
+      daemonProtocolVersion: 3
+    }),
+    releaseIncumbentAdmission: async () => {},
     targetBuildHash: BUILD_HASH,
     targetDaemonProtocol: {
       protocolVersion: 3,
@@ -265,8 +268,7 @@ describe('recovery refusals keep the fence', () => {
       activeVersion: NEW
     })
     expect(host.data).toBe(data)
-    // The incumbent ended itself through its reservation, and recovery never signals the candidate.
-    expect(host.commands.filter((command) => command.includes('kill -TERM'))).toHaveLength(0)
+    expect(host.commands.filter((command) => command.includes('kill -TERM'))).toHaveLength(1)
     expectExactlyTheRecordedSlot()
     expect(host.record).toContain(`"previous": "${OLD}"`)
   })
