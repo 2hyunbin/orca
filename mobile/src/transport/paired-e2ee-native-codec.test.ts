@@ -193,6 +193,15 @@ describe('the native paired E2EE codec', () => {
     }
   })
 
+  it('uses native once provided, even after a lookup with no provider', async () => {
+    const { native: before } = await load(false)
+    expect(before).toBeNull()
+    const codec = await import('./paired-e2ee-native-codec')
+    bindings = libsodiumBindings()
+    codec.providePairedE2EENativeBindings(() => bindings)
+    expect(codec.pairedE2EENativeCodec()).not.toBeNull()
+  })
+
   it('agrees with tweetnacl on boxes either library sealed', async () => {
     const { native } = await load(true)
     for (let index = 0; index < 300; index++) {

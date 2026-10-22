@@ -45,6 +45,8 @@ let detected: PairedE2EENativeCodec | null | undefined
  */
 export function providePairedE2EENativeBindings(load: () => PairedE2EENativeBindings | null): void {
   loadBindings = load
+  // Why: a lookup that ran before this must not pin the JS path for the whole run.
+  detected = undefined
 }
 
 /**
