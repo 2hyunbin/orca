@@ -1,6 +1,7 @@
 import { parsePaneKey } from '../../shared/stable-pane-id'
 import { isAgentLaunchRunningIn } from '../agent-launch/agent-launch-pane-attachment'
 import type { TerminalInterfaceTarget } from '../agent-hooks/server/terminal-interface-authority'
+import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import { OrcaRuntimeWithAgentTransitions } from './orca-runtime-agent-transitions'
 import { OrcaRuntimeWithSidebarTemporal } from './sidebar-inputs/orca-runtime-sidebar-temporal'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../shared/sidebar-inputs-switch'
@@ -11,6 +12,11 @@ const OrcaRuntimeSidebarBase: typeof OrcaRuntimeWithAgentTransitions = ORCA_SIDE
   : OrcaRuntimeWithAgentTransitions
 
 export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSidebarBase {
+  getTerminalInterfaceClientEventSnapshot(): RuntimeClientEvent[] {
+    const authority = this.terminalInterfaces
+    return authority ? [authority.snapshotEvent()] : []
+  }
+
   protected installTerminalInterfaceHost(): void {
     if (this.terminalInterfaces) {
       const authority = this.terminalInterfaces
@@ -41,20 +47,21 @@ export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSideb
   }
   private terminalInterfaceInventory(): TerminalInterfaceTarget[] {
     return [...this.ptysById.values()].flatMap((pty) => {
-      if (!pty.connected || !pty.incarnationId || !pty.paneKey) {
+      const { paneKey } = this.paneOfPty(pty)
+      if (!pty.connected || !pty.incarnationId || !paneKey) {
         return []
       }
       const terminalHandle = this.handleByPtyId.get(pty.ptyId)
       if (!terminalHandle) {
         return []
       }
-      const pane = parsePaneKey(pty.paneKey)
+      const pane = parsePaneKey(paneKey)
       return [
         {
           binding: {
             ptyId: pty.ptyId,
             incarnationId: pty.incarnationId,
-            paneKey: pty.paneKey,
+            paneKey,
             worktreeId: pty.worktreeId,
             terminalHandle
           },
@@ -65,7 +72,7 @@ export abstract class OrcaRuntimeWithTerminalInterfaces extends OrcaRuntimeSideb
             this.intentionalPtyStops.hasStop(pty.ptyId, pty.incarnationId) ||
             (pane !== null && isAgentLaunchRunningIn(pty.worktreeId, { kind: 'pane', ...pane })) ||
             this.isWorktreeTerminalSleepHeld(pty.worktreeId) ||
-            this.terminalPaneRecoveryByIdentity.has(`${pty.worktreeId}\0${pty.paneKey}`)
+            this.terminalPaneRecoveryByIdentity.has(`${pty.worktreeId}\0${paneKey}`)
         }
       ]
     })

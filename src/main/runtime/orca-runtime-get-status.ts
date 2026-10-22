@@ -239,11 +239,6 @@ export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntime
     return this.clientEvents.countTerminalSideEffectConsumers()
   }
 
-  getTerminalInterfaceClientEventSnapshot(): RuntimeClientEvent[] {
-    const authority = this.terminalInterfaces
-    return authority ? [authority.snapshotEvent()] : []
-  }
-
   getTerminalSleepClientEventSnapshot(): RuntimeClientEvent[] {
     const statusHost = this.asRuntimeStatusHost()
     const events: RuntimeClientEvent[] = []
@@ -298,10 +293,11 @@ export abstract class OrcaRuntimeWithGetStatus extends OrcaRuntimeWithGetRuntime
       return { tabId: record.tabId, worktreeId: record.worktreeId }
     }
     const pty = record.ptyId ? this.ptysById.get(record.ptyId) : null
+    const pane = this.paneOfPty(pty)
     const tabId =
-      pty?.tabId && !pty.tabId.startsWith('pty:')
-        ? pty.tabId
-        : parsePaneKey(pty?.paneKey ?? '')?.tabId
+      pane.tabId && !pane.tabId.startsWith('pty:')
+        ? pane.tabId
+        : parsePaneKey(pane.paneKey ?? '')?.tabId
     if (!pty || !tabId || tabId.startsWith('pty:')) {
       return null
     }
