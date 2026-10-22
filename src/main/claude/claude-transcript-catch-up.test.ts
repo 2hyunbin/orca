@@ -343,7 +343,7 @@ describe('Claude chat catch-up', () => {
       if (!cut) {
         throw new Error('ordinary rewind unavailable')
       }
-      await c.journal.replaceEpochItems('rewind', 1, cut.kept)
+      await c.journal.replaceEpochItems('handle_forked', 1, cut.kept)
       expect(c.journal.item(key)?.turnScope).toEqual({ kind: 'unknown' })
       expect((await c.replay()).item(key)?.turnScope).toEqual({ kind: 'unknown' })
     }
