@@ -138,7 +138,11 @@ describe('startup hosts retain current runtime capabilities', () => {
     ) {
       expect(this).toBe(runtime)
       expect(arguments.length).toBe(3)
-      expect([selector, input, evidence]).toEqual(['id:created-worktree', options, created])
+      expect([selector, input, evidence]).toEqual([
+        'id:created-worktree',
+        { ...options, initializeWorkspaceTopology: true },
+        created
+      ])
       expect(evidence).toBe(created)
       return { handle: 'created-handle', worktreeId: created.id, title: null }
     })
