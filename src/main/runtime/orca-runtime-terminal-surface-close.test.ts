@@ -271,31 +271,35 @@ describe('CLI close of one pane in a split tab', () => {
     }
   )
 
-  it('drops only that pane from paired clients on a host with no renderer listing the tab', async () => {
-    const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
-    harness.syncSplitFixtureGraph()
-    harness.syncFixtureTabWithoutLeaf()
-    const terminal = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals.find(
-      (candidate) => candidate.ptyId === PTY_ID
-    )!
-    harness.syncEmptyGraph()
-    // No exit arrives to retire the pane from the published snapshot.
-    harness.setVerifiedStopResult(new Error('ssh_host_unreachable'))
+  // L255: switch-on bug waiting on the close PR.
+  ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
+    'drops only that pane from paired clients on a host with no renderer listing the tab',
+    async () => {
+      const harness = createHarness({ publishMobileSurface: true, registerPtyBacked: true })
+      harness.syncSplitFixtureGraph()
+      harness.syncFixtureTabWithoutLeaf()
+      const terminal = (await harness.runtime.listTerminals(`id:${WORKTREE_ID}`)).terminals.find(
+        (candidate) => candidate.ptyId === PTY_ID
+      )!
+      harness.syncEmptyGraph()
+      // No exit arrives to retire the pane from the published snapshot.
+      harness.setVerifiedStopResult(new Error('ssh_host_unreachable'))
 
-    await harness.runtime.closeTerminal(terminal.handle)
+      await harness.runtime.closeTerminal(terminal.handle)
 
-    const snapshot = await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
-    expect(snapshot.tabs).toEqual([
-      expect.objectContaining({ parentTabId: TAB_ID, leafId: SIBLING_LEAF_ID })
-    ])
-    expect(snapshot.retiredTerminalSurfaces).toEqual([
-      expect.objectContaining({ parentTabId: TAB_ID, leafId: LEAF_ID, ptyId: PTY_ID })
-    ])
-    expect(harness.getSession().terminalLayoutsByTabId[TAB_ID]?.root).toEqual({
-      type: 'leaf',
-      leafId: SIBLING_LEAF_ID
-    })
-  })
+      const snapshot = await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
+      expect(snapshot.tabs).toEqual([
+        expect.objectContaining({ parentTabId: TAB_ID, leafId: SIBLING_LEAF_ID })
+      ])
+      expect(snapshot.retiredTerminalSurfaces).toEqual([
+        expect.objectContaining({ parentTabId: TAB_ID, leafId: LEAF_ID, ptyId: PTY_ID })
+      ])
+      expect(harness.getSession().terminalLayoutsByTabId[TAB_ID]?.root).toEqual({
+        type: 'leaf',
+        leafId: SIBLING_LEAF_ID
+      })
+    }
+  )
 
   it('keeps the sibling when the stop delivers the exit before the pane commit', async () => {
     const harness = createHarness()

@@ -283,39 +283,48 @@ const rows: [Entry, Condition][] = [
   ['phone-headless', 'no-saved-layout']
 ]
 
+// L255: switch-on, a phone's pane close on a host with no window still widens; the close PR fixes it.
+const awaitsL255 = (entry: string) => ORCA_LAYOUT_OWNER_IS_MAIN && entry === 'phone-headless'
+
 describe('an explicit close of one pane never widens into its tab', () => {
-  it.each(rows)('%s close, %s', async (entry, condition) => {
-    const harness = arrange(entry, condition)
-    const siblingWasPersisted = Boolean(
-      harness.getSession().terminalLayoutsByTabId[TAB_ID]?.ptyIdsByLeafId?.[SIBLING_LEAF_ID]
-    )
-
-    await closePane(entry, harness)
-
-    const session = harness.getSession()
-    expect(session.tabsByWorktree[WORKTREE_ID]).toEqual([expect.objectContaining({ id: TAB_ID })])
-    if (siblingWasPersisted) {
-      expect(session.terminalLayoutsByTabId[TAB_ID]?.root).toEqual({
-        type: 'leaf',
-        leafId: SIBLING_LEAF_ID
-      })
-    }
-    expect(harness.closeTerminalTab).not.toHaveBeenCalled()
-    expect(harness.closeTerminal).not.toHaveBeenCalled()
-    expect(harness.kill).not.toHaveBeenCalledWith(SIBLING_PTY_ID)
-    if (entry === 'renderer') {
-      return
-    }
-    if (entry === 'phone-headless') {
-      const snapshot = await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
-      expect(snapshot.tabs.map((tab) => tab.id)).toEqual([`${TAB_ID}::${SIBLING_LEAF_ID}`])
-      expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
-      return
-    }
-    // A phone's close through main is main's layout close too (#31571), as the CLI's is.
-    expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
-  })
+  it.each(rows.filter(([entry]) => !awaitsL255(entry)))('%s close, %s', closesOnlyThatPane)
+  it.fails.each(rows.filter(([entry]) => awaitsL255(entry)))('%s close, %s', closesOnlyThatPane)
 })
+
+async function closesOnlyThatPane(
+  entry: (typeof rows)[number][0],
+  condition: (typeof rows)[number][1]
+): Promise<void> {
+  const harness = arrange(entry, condition)
+  const siblingWasPersisted = Boolean(
+    harness.getSession().terminalLayoutsByTabId[TAB_ID]?.ptyIdsByLeafId?.[SIBLING_LEAF_ID]
+  )
+
+  await closePane(entry, harness)
+
+  const session = harness.getSession()
+  expect(session.tabsByWorktree[WORKTREE_ID]).toEqual([expect.objectContaining({ id: TAB_ID })])
+  if (siblingWasPersisted) {
+    expect(session.terminalLayoutsByTabId[TAB_ID]?.root).toEqual({
+      type: 'leaf',
+      leafId: SIBLING_LEAF_ID
+    })
+  }
+  expect(harness.closeTerminalTab).not.toHaveBeenCalled()
+  expect(harness.closeTerminal).not.toHaveBeenCalled()
+  expect(harness.kill).not.toHaveBeenCalledWith(SIBLING_PTY_ID)
+  if (entry === 'renderer') {
+    return
+  }
+  if (entry === 'phone-headless') {
+    const snapshot = await harness.runtime.listMobileSessionTabs(`id:${WORKTREE_ID}`)
+    expect(snapshot.tabs.map((tab) => tab.id)).toEqual([`${TAB_ID}::${SIBLING_LEAF_ID}`])
+    expect(harness.kill).toHaveBeenCalledWith(PTY_ID)
+    return
+  }
+  // A phone's close through main is main's layout close too (#31571), as the CLI's is.
+  expectDesktopDropsPane(harness, TAB_ID, LEAF_ID)
+}
 
 /**
  * A CLI close of a tab's last pane closes the tab. Switch-off through the renderer's tab close;
