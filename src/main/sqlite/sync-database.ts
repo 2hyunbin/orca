@@ -119,7 +119,7 @@ class SyncDatabase {
   }
 
   function(name: string, callback: (...values: SQLOutputValue[]) => SQLInputValue): void {
-    this.db.function(name, { deterministic: true }, callback)
+    this.db.function(name, callback)
   }
 
   pragma(sql: string, options?: PragmaOptions): unknown {
