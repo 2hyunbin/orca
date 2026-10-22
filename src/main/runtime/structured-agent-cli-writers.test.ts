@@ -10,6 +10,10 @@ import {
   type CliWriterHost
 } from './structured-agent-cli-writers'
 import { OrcaRuntimeService } from './orca-runtime'
+import type { RuntimeStore } from './runtime-store-contract'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../shared/layout-owner-switch'
+import { getDefaultWorkspaceSession } from '../../shared/constants'
+import { bindPaneFirst } from './bind-first-pane.test-fixture'
 import {
   OPEN_CODE_WRITER_TOPOLOGY,
   tmuxCliWriterEvent
@@ -65,6 +69,28 @@ function inspection(verdict: AgentProcessVerdict | null = null) {
 }
 const refusal = {
   refusal: { code: 'agent_session_conflict', details: { reason: 'conversationHeldElsewhere' } }
+}
+
+/** Layout-owner builds: an empty store whose session holds main's layout, which binds the pane. */
+function writerLayoutStore(): RuntimeStore {
+  return {
+    getRepos: () => [],
+    getRepo: () => undefined,
+    addRepo: vi.fn<RuntimeStore['addRepo']>(),
+    updateRepo: vi.fn<RuntimeStore['updateRepo']>(),
+    getAllWorktreeMeta: () => ({}),
+    getWorktreeMeta: () => undefined,
+    setWorktreeMeta: vi.fn<RuntimeStore['setWorktreeMeta']>(),
+    removeWorktreeMeta: vi.fn<RuntimeStore['removeWorktreeMeta']>(),
+    getGitHubCache: vi.fn<RuntimeStore['getGitHubCache']>(),
+    getSettings: () => ({
+      workspaceDir: '/workspaces',
+      nestWorkspaces: false,
+      refreshLocalBaseRefOnWorktreeCreate: false,
+      branchPrefix: 'none',
+      branchPrefixCustom: ''
+    })
+  }
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -191,10 +217,11 @@ describe('execution-host conversation writer inspection', () => {
     const leaf = '11111111-1111-4111-8111-111111111111'
     const pane = `tab-a:${leaf}`
     let rows: AgentStatusIpcPayload[] = []
+    const store = ORCA_LAYOUT_OWNER_IS_MAIN ? writerLayoutStore() : null
     class WriterRuntime extends OrcaRuntimeService {
       readonly sleepStates = this.terminalSleepStateByHostWorktree
     }
-    const runtime = new WriterRuntime(null, undefined, {
+    const runtime = new WriterRuntime(store, undefined, {
       getAgentProviderSessionSnapshot: () => rows,
       readHookCliWriterObservation: () => ({
         current: () => true,
@@ -202,8 +229,12 @@ describe('execution-host conversation writer inspection', () => {
         presence: async () => null
       })
     })
-    const register = (tabId: string, incarnationId?: string, isWsl?: boolean) =>
+    const register = (tabId: string, incarnationId?: string, isWsl?: boolean) => {
+      // A move leaves only the new tab holding the pane, as main's layout does after the move.
+      store?.setWorkspaceSession?.(getDefaultWorkspaceSession())
+      bindPaneFirst(runtime, { worktreeId: 'workspace', tabId, leafId: leaf, ptyId: 'pty' })
       runtime.registerPty('pty', 'workspace', null, { tabId, leafId: leaf, incarnationId }, isWsl)
+    }
     register('tab-a', 'i1')
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the census reads only listProcesses.
     runtime.setPtyController({
