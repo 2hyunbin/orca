@@ -5188,6 +5188,7 @@
           "replace": "교체 예정",
           "sharedNotCurrent": "이 폴더가 사용하는 공유 사본은 Orca의 것이 아닙니다",
           "unwritable": "Orca가 이 폴더에 쓸 수 없습니다",
+          "unreadable": "Orca가 이 사본의 일부 파일을 읽을 수 없습니다",
           "update": "업데이트 예정",
           "updated": "업데이트됨",
           "write": "설치 예정",
