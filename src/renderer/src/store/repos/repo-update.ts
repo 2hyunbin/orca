@@ -96,53 +96,48 @@ export function sanitizeRepoUpdate(updates: RepoUpdate): RepoUpdate {
 
 /** A host that answers no row: the window applies the update to its row itself. */
 function mergeRepoUpdate(r: Repo, sanitizedUpdates: RepoUpdate): Repo {
-    let mergedRepo: Repo = r
-    const {
-      sourceControlAi,
-      externalWorktreeDiscoverySuppressedAt,
-      ghAccount,
-      externalWorktreeVisibility,
-      agentWorktreeVisibility,
-      ...updatesWithoutClearSentinels
-    } = sanitizedUpdates
-    mergedRepo = { ...mergedRepo, ...updatesWithoutClearSentinels }
-    if (sourceControlAi === null) {
-      const { sourceControlAi: _sourceControlAi, ...repoWithoutSourceControlAi } =
-        mergedRepo
-      mergedRepo = repoWithoutSourceControlAi
-    } else if (sourceControlAi !== undefined) {
-      mergedRepo = { ...mergedRepo, sourceControlAi }
-    }
-    if (externalWorktreeVisibility === null) {
-      const { externalWorktreeVisibility: _visibility, ...repoWithoutVisibility } =
-        mergedRepo
-      mergedRepo = { ...repoWithoutVisibility, externalWorktreeVisibilityLegacy: false }
-    } else if (externalWorktreeVisibility !== undefined) {
-      mergedRepo = { ...mergedRepo, externalWorktreeVisibility }
-    }
-    if (agentWorktreeVisibility === null) {
-      const { agentWorktreeVisibility: _agentVisibility, ...repoWithoutAgentVisibility } =
-        mergedRepo
-      mergedRepo = repoWithoutAgentVisibility
-    } else if (agentWorktreeVisibility !== undefined) {
-      mergedRepo = { ...mergedRepo, agentWorktreeVisibility }
-    }
-    if (externalWorktreeDiscoverySuppressedAt === null) {
-      const {
-        externalWorktreeDiscoverySuppressedAt: _suppressedAt,
-        ...repoWithoutSuppression
-      } = mergedRepo
-      mergedRepo = repoWithoutSuppression
-    } else if (externalWorktreeDiscoverySuppressedAt !== undefined) {
-      mergedRepo = { ...mergedRepo, externalWorktreeDiscoverySuppressedAt }
-    }
-    if (ghAccount === null) {
-      const { ghAccount: _ghAccount, ...repoWithoutGhAccount } = mergedRepo
-      mergedRepo = repoWithoutGhAccount
-    } else if (ghAccount !== undefined) {
-      mergedRepo = { ...mergedRepo, ghAccount }
-    }
-    return mergedRepo
+  let mergedRepo: Repo = r
+  const {
+    sourceControlAi,
+    externalWorktreeDiscoverySuppressedAt,
+    ghAccount,
+    externalWorktreeVisibility,
+    agentWorktreeVisibility,
+    ...updatesWithoutClearSentinels
+  } = sanitizedUpdates
+  mergedRepo = { ...mergedRepo, ...updatesWithoutClearSentinels }
+  if (sourceControlAi === null) {
+    const { sourceControlAi: _sourceControlAi, ...repoWithoutSourceControlAi } = mergedRepo
+    mergedRepo = repoWithoutSourceControlAi
+  } else if (sourceControlAi !== undefined) {
+    mergedRepo = { ...mergedRepo, sourceControlAi }
+  }
+  if (externalWorktreeVisibility === null) {
+    const { externalWorktreeVisibility: _visibility, ...repoWithoutVisibility } = mergedRepo
+    mergedRepo = { ...repoWithoutVisibility, externalWorktreeVisibilityLegacy: false }
+  } else if (externalWorktreeVisibility !== undefined) {
+    mergedRepo = { ...mergedRepo, externalWorktreeVisibility }
+  }
+  if (agentWorktreeVisibility === null) {
+    const { agentWorktreeVisibility: _agentVisibility, ...repoWithoutAgentVisibility } = mergedRepo
+    mergedRepo = repoWithoutAgentVisibility
+  } else if (agentWorktreeVisibility !== undefined) {
+    mergedRepo = { ...mergedRepo, agentWorktreeVisibility }
+  }
+  if (externalWorktreeDiscoverySuppressedAt === null) {
+    const { externalWorktreeDiscoverySuppressedAt: _suppressedAt, ...repoWithoutSuppression } =
+      mergedRepo
+    mergedRepo = repoWithoutSuppression
+  } else if (externalWorktreeDiscoverySuppressedAt !== undefined) {
+    mergedRepo = { ...mergedRepo, externalWorktreeDiscoverySuppressedAt }
+  }
+  if (ghAccount === null) {
+    const { ghAccount: _ghAccount, ...repoWithoutGhAccount } = mergedRepo
+    mergedRepo = repoWithoutGhAccount
+  } else if (ghAccount !== undefined) {
+    mergedRepo = { ...mergedRepo, ghAccount }
+  }
+  return mergedRepo
 }
 
 export const updateRepoChainsByStore = new WeakMap<() => AppState, Map<string, Promise<boolean>>>()

@@ -12,6 +12,7 @@ import {
   ipcOrRuntimeTargetForHostId
 } from '@/runtime/runtime-client-target'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
+import { selectProjectGroups } from '@/store/project-catalog-selectors'
 
 type ProjectGroupHostParts = Pick<ProjectGroup, 'connectionId' | 'executionHostId'>
 type ProjectGroupOwnerRecord = Pick<ProjectGroup, 'id' | 'connectionId' | 'executionHostId'>
@@ -51,7 +52,7 @@ export function resolveProjectGroupOwnerHostId(
   groupId: string,
   hostId?: ExecutionHostId
 ): ExecutionHostId | null {
-  const owner = findIndexedProjectGroupOwner(state.projectGroups, groupId, hostId)
+  const owner = findIndexedProjectGroupOwner(selectProjectGroups(state), groupId, hostId)
   if (!owner) {
     return null
   }
@@ -74,7 +75,7 @@ export function runtimeTargetForProjectGroupOwner(
   groupId: string,
   hostId?: ExecutionHostId
 ): RuntimeClientTarget | null {
-  const owner = findIndexedProjectGroupOwner(state.projectGroups, groupId, hostId)
+  const owner = findIndexedProjectGroupOwner(selectProjectGroups(state), groupId, hostId)
   return owner ? ipcOrRuntimeTargetForHostId(hostId ?? getProjectGroupHostId(owner)) : null
 }
 

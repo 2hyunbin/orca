@@ -23,6 +23,16 @@ describe('countProjectCatalogAccesses', () => {
     expect(countProjectCatalogAccesses(text)).toBe(2)
   })
 
+  it('counts catalog keys in a store module that builds the patch another file sets', () => {
+    const text = 'return { repos: nextRepos, activeRepoId: null }'
+    expect(countProjectCatalogAccesses(text, 'src/renderer/src/store/repos/patch.ts')).toBe(1)
+    expect(countProjectCatalogAccesses(text, 'src/renderer/src/lib/patch.ts')).toBe(0)
+  })
+
+  it("counts reads of a subscriber's previous state", () => {
+    expect(countProjectCatalogAccesses('previous.repos !== selectRepos(state)')).toBe(1)
+  })
+
   it('ignores other receivers, the preload API, comments, strings and selector calls', () => {
     const text = [
       'await window.api.repos.list()',

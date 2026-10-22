@@ -32,7 +32,6 @@ import { selectRepos } from '../project-catalog-selectors'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import { mainCatalogShowsWrite } from '../main-project-catalog-writes'
 
-
 type HostScopedWorktreeRef = { id: string; hostId?: string }
 
 type RepoWorktreeCatalog = {

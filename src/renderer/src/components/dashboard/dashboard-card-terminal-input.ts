@@ -12,6 +12,7 @@ import { resolveWindowsShiftEnterEncodingForPane } from '@/components/terminal-p
 import { hasCtrlEnterCsiUAuthorityForPane } from '@/components/terminal-pane/terminal-ctrl-enter'
 import { getRemoteRuntimePtyEnvironmentId } from '@/runtime/runtime-terminal-stream'
 import { resolveProtectedMultilinePasteOptionsForAgentEvidence } from '@/components/terminal-pane/terminal-agent-paste-bracketing'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 /** Store slices the pane's own input helpers read. */
 export type DashboardCardTerminalInputState = Pick<
@@ -42,11 +43,11 @@ function withHydratedSlices(
   state: Partial<DashboardCardTerminalInputState>
 ): DashboardCardTerminalInputState {
   return {
-    repos: state.repos ?? [],
+    repos: selectRepos(state) ?? [],
     worktreesByRepo: state.worktreesByRepo ?? EMPTY_RECORD,
     detectedWorktreesByRepo: state.detectedWorktreesByRepo ?? EMPTY_RECORD,
     folderWorkspaces: state.folderWorkspaces ?? [],
-    projectGroups: state.projectGroups ?? [],
+    projectGroups: selectProjectGroups(state) ?? [],
     settings: state.settings ?? null,
     sshConnectionStates: state.sshConnectionStates ?? new Map(),
     sshStateByEnvironment: state.sshStateByEnvironment ?? new Map(),

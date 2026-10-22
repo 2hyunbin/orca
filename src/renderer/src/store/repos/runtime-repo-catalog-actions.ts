@@ -45,37 +45,37 @@ export function createRuntimeRepoCatalogActions(
           return []
         }
         const visibilityPatch = (s: AppState): Partial<AppState> => ({
-              ...(visibilityDefaults === undefined
-                ? {}
+          ...(visibilityDefaults === undefined
+            ? {}
+            : {
+                worktreeVisibilityDefaultsByHost: {
+                  ...s.worktreeVisibilityDefaultsByHost,
+                  [targetHostId]: visibilityDefaults
+                }
+              }),
+          ...(visibilityDefaults !== undefined && s.settings
+            ? s.settings.activeRuntimeEnvironmentId === environmentId
+              ? visibilityDefaults
+                ? {
+                    settings: {
+                      ...s.settings,
+                      worktreeVisibilityDefaults: visibilityDefaults
+                    },
+                    worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId: environmentId,
+                    worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId:
+                      visibilitySnapshot.sourceDefaultsSupported ? environmentId : null
+                  }
                 : {
-                    worktreeVisibilityDefaultsByHost: {
-                      ...s.worktreeVisibilityDefaultsByHost,
-                      [targetHostId]: visibilityDefaults
-                    }
-                  }),
-              ...(visibilityDefaults !== undefined && s.settings
-                ? s.settings.activeRuntimeEnvironmentId === environmentId
-                  ? visibilityDefaults
-                    ? {
-                        settings: {
-                          ...s.settings,
-                          worktreeVisibilityDefaults: visibilityDefaults
-                        },
-                        worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId: environmentId,
-                        worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId:
-                          visibilitySnapshot.sourceDefaultsSupported ? environmentId : null
-                      }
-                    : {
-                        settings: Object.fromEntries(
-                          Object.entries(s.settings).filter(
-                            ([key]) => key !== 'worktreeVisibilityDefaults'
-                          )
-                        ) as GlobalSettings,
-                        worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId: null,
-                        worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId: null
-                      }
-                  : {}
-                : {})
+                    settings: Object.fromEntries(
+                      Object.entries(s.settings).filter(
+                        ([key]) => key !== 'worktreeVisibilityDefaults'
+                      )
+                    ) as GlobalSettings,
+                    worktreeVisibilityDefaultsSupportedRuntimeEnvironmentId: null,
+                    worktreeVisibilitySourceDefaultsSupportedRuntimeEnvironmentId: null
+                  }
+              : {}
+            : {})
         })
         // Switch point: main's catalog is the window's only catalog; only the visibility defaults land here.
         if (!catalog) {

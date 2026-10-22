@@ -16,6 +16,7 @@ import {
   hasIndexedDetectedWorktree
 } from '@/lib/worktree-runtime-owner-index'
 import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
+import { selectProjectGroups } from '@/store/project-catalog-selectors'
 
 /**
  * Who holds a workspace's terminals right now, in the same three-verdict vocabulary the renderer
@@ -86,8 +87,8 @@ export function resolveWorkspaceTerminalHostAuthority(
       owner &&
       !owner.executionHostId &&
       !owner.connectionId &&
-      state.projectGroups?.some((group) => group.id === owner.projectGroupId) &&
-      !findIndexedProjectGroupOwner(state.projectGroups, owner.projectGroupId)
+      selectProjectGroups(state)?.some((group) => group.id === owner.projectGroupId) &&
+      !findIndexedProjectGroupOwner(selectProjectGroups(state), owner.projectGroupId)
     ) {
       return 'unverifiable'
     }

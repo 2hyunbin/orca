@@ -7,6 +7,7 @@ import type { PublicKnownRuntimeEnvironment } from '../../../shared/runtime-envi
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { translate } from '@/i18n/i18n'
 import { WORKTREE_REMOVAL_AMBIGUOUS_ERROR } from '@/store/slices/worktrees/listing/worktree-slice-constants'
+import { selectProjectGroups } from '@/store/project-catalog-selectors'
 
 type DuplicateServerEnvironment = Pick<
   PublicKnownRuntimeEnvironment,
@@ -91,7 +92,7 @@ function workspacePublishers(
       // Why the group: an unstamped folder takes its host from its project group.
       const inherited =
         !folder.executionHostId?.trim() && !folder.connectionId?.trim()
-          ? (state.projectGroups ?? []).filter((group) => group.id === folder.projectGroupId)
+          ? (selectProjectGroups(state) ?? []).filter((group) => group.id === folder.projectGroupId)
           : []
       if (inherited.length > 0) {
         inherited.forEach((group) => add({ hostId: group.executionHostId }))

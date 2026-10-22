@@ -19,7 +19,7 @@ import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-ov
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
-import { selectRepos } from '../../store/project-catalog-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 export type ActiveDashboardWorkspace = {
   projectId: string
@@ -117,7 +117,7 @@ export function collectActiveDashboardWorkspaces(
   }
 
   const projectGroupsById = new Map(
-    (state.projectGroups ?? []).map((projectGroup) => [projectGroup.id, projectGroup])
+    (selectProjectGroups(state) ?? []).map((projectGroup) => [projectGroup.id, projectGroup])
   )
   for (const folderWorkspace of state.folderWorkspaces ?? []) {
     const worktree = folderWorkspaceToWorktree(folderWorkspace)

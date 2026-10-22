@@ -1,5 +1,6 @@
 import type { AppState } from '../../store/types'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 type AgentStatusPendingRetryState = Pick<
   AppState,
@@ -23,7 +24,7 @@ export function shouldRetryPendingAgentStatusesAfterStoreUpdate(
     current.unifiedTabsByWorktree !== previous.unifiedTabsByWorktree ||
     current.terminalLayoutsByTabId !== previous.terminalLayoutsByTabId ||
     selectWorktreesByRepo(current) !== selectWorktreesByRepo(previous) ||
-    current.repos !== previous.repos ||
+    selectRepos(current) !== selectRepos(previous) ||
     current.recentlyClosedAgentStatusTabIds !== previous.recentlyClosedAgentStatusTabIds ||
     current.recentlyRetiredAgentStatusPaneKeys !== previous.recentlyRetiredAgentStatusPaneKeys
   )

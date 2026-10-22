@@ -13,6 +13,7 @@ import {
 } from './worktree-runtime-owner-index'
 import type { SingleRuntimeLegacyOwnerState } from './single-runtime-legacy-owner'
 import { getPairedWebClientEnvironmentId } from './paired-web-client-host'
+import { selectProjectGroups } from '@/store/project-catalog-selectors'
 
 type RuntimeExecutionHost = Extract<ParsedExecutionHost, { kind: 'runtime' }>
 
@@ -70,7 +71,7 @@ function findFolderProjectGroup(
     return null
   }
   return findIndexedProjectGroupOwner(
-    state.projectGroups,
+    selectProjectGroups(state),
     folderWorkspace.projectGroupId,
     preferredHostId
   )

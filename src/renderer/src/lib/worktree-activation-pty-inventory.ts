@@ -11,6 +11,7 @@ import {
   resolveWorktreeOperationRouteResult,
   type WorktreeOperationRouteState
 } from './worktree-operation-route'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 /** Only a reachable execution-owner route can authorize activation from its inventory. */
 export function resolveActivationPtyListScope(
@@ -22,7 +23,7 @@ export function resolveActivationPtyListScope(
   }
   const resolution = resolveWorktreeOperationRouteResult(state, worktreeId)
   if (resolution.kind === 'missing' && !runtimeEnvironmentIdOrLocalUnlessTwin(state, worktreeId)) {
-    const repo = resolveIndexedRepoOwner(state.repos, getRepoIdFromWorktreeId(worktreeId))
+    const repo = resolveIndexedRepoOwner(selectRepos(state), getRepoIdFromWorktreeId(worktreeId))
     const worktree = resolveIndexedWorktreeOwner(state.worktreesByRepo, worktreeId)
     // A known native repo remains usable while the unrelated runtime catalog hydrates.
     if (

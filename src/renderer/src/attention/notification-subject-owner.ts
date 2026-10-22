@@ -17,6 +17,7 @@ import {
   getCatalogOwnerHostId
 } from '@/lib/worktree-runtime-owner-index'
 import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 type SubjectOwnerState = WorktreeRuntimeOwnerState &
   Partial<
@@ -42,7 +43,7 @@ export function resolveNotificationTabOwner(
       return explicitControllerOwner(hostId)
     }
     const group = findIndexedProjectGroupOwner(
-      state.projectGroups,
+      selectProjectGroups(state),
       folder.projectGroupId,
       hostId
     )
@@ -60,7 +61,7 @@ export function resolveNotificationTabOwner(
   if (!owner) {
     return explicitControllerOwner(hostId)
   }
-  const repo = !owner.hostId ? findIndexedRepoOwner(state.repos, owner.repoId) : null
+  const repo = !owner.hostId ? findIndexedRepoOwner(selectRepos(state), owner.repoId) : null
   const resolution = resolveExactWorktreeRoute(state, {
     ...owner,
     hostId: owner.hostId ?? (repo ? getCatalogOwnerHostId(repo) : hostId)

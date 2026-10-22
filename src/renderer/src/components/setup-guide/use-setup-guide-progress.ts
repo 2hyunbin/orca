@@ -1,6 +1,6 @@
 /* oxlint-disable react-doctor/no-adjust-state-on-prop-change -- Why: setup-guide readiness is driven by bounded IPC probes and browser focus events; the state cannot be derived synchronously from render inputs. */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useAppStore } from '@/store'
+import { selectRepos, useAppStore } from '@/store'
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { hasFeatureInteraction } from '../../../../shared/feature-interactions'
@@ -36,7 +36,6 @@ import {
   setSetupScriptProbeCache,
   subscribeSetupScriptProbeCache
 } from './setup-script-probe-cache'
-import { selectRepos } from '../../store/project-catalog-selectors'
 
 const SETUP_SCRIPT_PROBE_SETTLE_TIMEOUT_MS = 15_000
 

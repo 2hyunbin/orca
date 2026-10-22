@@ -220,7 +220,7 @@ export function visibleHostedReviewRefreshInputsChanged(
     state.workspaceHostScope !== previous.workspaceHostScope ||
     selectWorktreesByRepo(state) !== selectWorktreesByRepo(previous) ||
     selectDetectedWorktreesByRepo(state) !== selectDetectedWorktreesByRepo(previous) ||
-    selectRepos(state) !== previous.repos ||
+    selectRepos(state) !== selectRepos(previous) ||
     state.settings !== previous.settings ||
     state.sshConnectionStates !== previous.sshConnectionStates ||
     state.prCache !== previous.prCache ||

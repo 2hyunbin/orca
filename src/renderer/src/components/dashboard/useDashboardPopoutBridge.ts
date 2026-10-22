@@ -7,7 +7,7 @@ import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-das
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 import { launchDashboardAgent } from './launch-dashboard-agent'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
-import { selectRepos } from '../../store/project-catalog-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 // Why: cap snapshot rebuilds during bursts of agent-status pings. The board is a
 // glanceable surface, so ~4 updates/sec is plenty and keeps the cross-worktree
@@ -46,7 +46,7 @@ export function dashboardSnapshotInputsChanged(
   previousState: DashboardSnapshotWatchState
 ): boolean {
   return (
-    selectRepos(state) !== previousState.repos ||
+    selectRepos(state) !== selectRepos(previousState) ||
     selectWorktreesByRepo(state) !== selectWorktreesByRepo(previousState) ||
     state.tabsByWorktree !== previousState.tabsByWorktree ||
     state.unifiedTabsByWorktree !== previousState.unifiedTabsByWorktree ||
@@ -81,7 +81,7 @@ export function dashboardSnapshotInputsChanged(
     // Why: a folder workspace is not a git worktree — its host resolves through
     // these two instead of worktreesByRepo.
     state.folderWorkspaces !== previousState.folderWorkspaces ||
-    state.projectGroups !== previousState.projectGroups ||
+    selectProjectGroups(state) !== selectProjectGroups(previousState) ||
     state.sshTargetLabels !== previousState.sshTargetLabels ||
     state.restoredRuntimeHostIdByWorkspaceSessionKey !==
       previousState.restoredRuntimeHostIdByWorkspaceSessionKey ||

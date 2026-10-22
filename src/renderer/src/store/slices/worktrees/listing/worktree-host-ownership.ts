@@ -19,7 +19,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '../../../workspace-record-selectors'
-import { selectRepos } from '../../../project-catalog-selectors'
+import { selectProjectHostSetups, selectRepos } from '../../../project-catalog-selectors'
 
 export function withRepoHostOwnership<
   T extends {
@@ -127,7 +127,7 @@ export function getProjectHostSetupForRepoHost(
   repoId: string,
   hostId: ExecutionHostId
 ): ProjectHostSetup | undefined {
-  return state.projectHostSetups?.find(
+  return selectProjectHostSetups(state)?.find(
     (setup) => setup.repoId === repoId && setup.hostId === hostId
   )
 }

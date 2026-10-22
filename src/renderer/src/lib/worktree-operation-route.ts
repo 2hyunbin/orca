@@ -22,6 +22,7 @@ import {
   getExecutionHostIdForFolderWorkspace,
   type FolderWorkspaceRuntimeOwnerState
 } from './folder-workspace-runtime-owner'
+import { selectRepos } from '@/store/project-catalog-selectors'
 
 export type WorktreeOperationRoute = {
   executionHostId: ExecutionHostId | null
@@ -144,7 +145,7 @@ function isDirectListing(
   return (
     hubOwners.environmentIds.size === 0 &&
     Boolean(
-      state.repos?.some(
+      selectRepos(state)?.some(
         (repo) => repo.id === repoId && getRepoExecutionHostId(repo) === executionHostId
       )
     )
@@ -290,7 +291,7 @@ function resolveOwnerRouteResult(
     resolveIndexedWorktreeOwner(state.worktreesByRepo, worktreeId).kind !== 'missing' ||
     hasDetectedWorktree
   const repoId = getRepoIdFromWorktreeId(worktreeId)
-  const hasKnownRepo = resolveIndexedRepoOwner(state.repos, repoId).kind !== 'missing'
+  const hasKnownRepo = resolveIndexedRepoOwner(selectRepos(state), repoId).kind !== 'missing'
   if (!hasKnownWorktree && !hasKnownRepo) {
     return { kind: 'missing' }
   }
@@ -336,7 +337,7 @@ function resolveUnstampedLocalWorktreeRoute(
   state: WorktreeOperationRouteState,
   repoId: string
 ): WorktreeOperationRoute | null {
-  const hasUnstampedRepoRow = resolveIndexedRepoOwner(state.repos, repoId).kind !== 'missing'
+  const hasUnstampedRepoRow = resolveIndexedRepoOwner(selectRepos(state), repoId).kind !== 'missing'
   return hasUnstampedRepoRow
     ? { executionHostId: LOCAL_EXECUTION_HOST_ID, runtimeEnvironmentId: null }
     : null

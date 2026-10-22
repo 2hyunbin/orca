@@ -111,7 +111,7 @@ export function getGitHubWorkItemRowHostId(
   sourceContext?: TaskSourceContext | null
 ): ExecutionHostId | undefined {
   const sourceHostId = sourceContext?.provider === 'github' ? sourceContext.hostId : undefined
-  const rows = state.repos?.filter((entry) => entry.id === repoId) ?? []
+  const rows = selectRepos(state)?.filter((entry) => entry.id === repoId) ?? []
   // Why not by id alone: a twin would resolve to whichever row is listed first.
   const row =
     rows.find((entry) => getRepoExecutionHostId(entry) === sourceHostId) ??

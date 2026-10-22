@@ -38,6 +38,7 @@ import {
   extendWorktreeIdByTabId,
   type WorkspaceTabOwnerCatalog
 } from '../../../shared/workspace-session-host-records'
+import { selectProjectGroups, selectRepos } from '@/store/project-catalog-selectors'
 
 export type HostPersistenceState = WorkspaceTabOwnerCatalog & {
   repos: readonly Pick<Repo, 'id' | 'connectionId' | 'executionHostId'>[]
@@ -90,7 +91,7 @@ function getFolderWorkspacePartitionHostId(
   }
   const workspace = state.folderWorkspaces?.find((entry) => entry.id === scope.folderWorkspaceId)
   const group = workspace
-    ? state.projectGroups?.find((entry) => entry.id === workspace.projectGroupId)
+    ? selectProjectGroups(state)?.find((entry) => entry.id === workspace.projectGroupId)
     : null
   const parsed = parseExecutionHostId(workspace?.executionHostId ?? group?.executionHostId)
   if (parsed) {
@@ -150,7 +151,7 @@ function catalogReattributedAwayFrom(
  *  deterministic primary so the co-claimant's rows can be parked in the shadow instead of sharing
  *  one bucket with it. */
 export function buildHostSessionRouting(state: HostPersistenceState): HostSessionRouting {
-  const repoHostById = buildRepoHostById(state.repos)
+  const repoHostById = buildRepoHostById(selectRepos(state))
   const claims = indexWorktreeHostClaims(state.worktreesByRepo, repoHostById)
   const restoredPrimaryByWorktreeId = new Map<string, ExecutionHostId>()
   for (const [key, hostId] of Object.entries(state.contestedPrimaryHostBySessionKey ?? {})) {
