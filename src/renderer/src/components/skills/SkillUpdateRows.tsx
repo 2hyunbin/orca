@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { BundledSkillOutcome, BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
 import {
@@ -80,20 +81,33 @@ export function SkillUpdateRows({
   const unforcedStates = new Map(
     unforcedPlan?.skills.map((entry) => [entry.name, bundledSkillPlanState(entry)])
   )
-  // Why: a result re-plans every skill as current, so it orders by what the run did instead.
-  const rowRank = (skill: BundledSkillPlanSkillSummary): number => {
-    const outcome = outcomes.get(skill.name)
-    return phase === 'result'
-      ? outcome && bundledSkillOutcomeText(outcome) === 'No change'
-        ? 1
-        : 0
-      : ROW_ORDER.indexOf(unforcedStates.get(skill.name) ?? skill.state)
+  const plannedSkills = [...skills].sort(
+    (left, right) =>
+      ROW_ORDER.indexOf(unforcedStates.get(left.name) ?? left.state) -
+      ROW_ORDER.indexOf(unforcedStates.get(right.name) ?? right.state)
+  )
+  const [previewOrder, setPreviewOrder] = useState<string[]>([])
+  if (
+    phase === 'plan' &&
+    (previewOrder.length !== plannedSkills.length ||
+      plannedSkills.some((skill, index) => skill.name !== previewOrder[index]))
+  ) {
+    setPreviewOrder(plannedSkills.map((skill) => skill.name))
   }
+  // Why: completion refreshes the plan, but result rows must keep their preview positions.
+  const previewRanks = new Map(previewOrder.map((name, index) => [name, index]))
+  const orderedSkills =
+    phase === 'plan'
+      ? plannedSkills
+      : [...skills].sort(
+          (left, right) =>
+            (previewRanks.get(left.name) ?? previewOrder.length) -
+            (previewRanks.get(right.name) ?? previewOrder.length)
+        )
   return (
     <div className="min-w-0 border-t border-border/60">
       <TooltipProvider>
-        {[...skills]
-          .sort((left, right) => rowRank(left) - rowRank(right))
+        {orderedSkills
           .filter((skill) =>
             phase === 'result'
               ? resultShowsRow(outcomes.get(skill.name))
