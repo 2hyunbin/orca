@@ -1,4 +1,8 @@
-import type { WslHostServerStop, WslHostStatus } from '../../shared/wsl-host-types'
+import type {
+  WslHostConnectIntent,
+  WslHostServerStop,
+  WslHostStatus
+} from '../../shared/wsl-host-types'
 import type { WslHostDistroCandidate } from './wsl-host-distro-list'
 import type { WslOrcadConnection } from './wsl-orcad-connection'
 
@@ -7,8 +11,10 @@ export type WslHostConnector = {
   listDistros(): Promise<WslHostDistroCandidate[]>
   /** Runs in the distro, so it boots a stopped one: only after the user chose to. */
   readOrcadPublicKey(distro: string): Promise<string | null>
-  /** User-initiated; may boot the distro. `force` takes an update live terminals deferred. */
-  connect(distro: string, options?: { force?: boolean }): Promise<WslOrcadConnection>
+  /** User-initiated; may boot the distro. An intent retries or forces a skipped update. */
+  connect(distro: string, options?: { intent?: WslHostConnectIntent }): Promise<WslOrcadConnection>
+  /** The user asked again: a standing pairing-repair failure or spent cap must not answer it. */
+  forgetPairingFailures?(environmentId: string): void
   get(distro: string): WslOrcadConnection | null
   /** Checks the paired server without starting a stopped or unconfirmed distro. */
   isReachable(distro: string, environmentId: string): Promise<boolean>
