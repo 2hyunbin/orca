@@ -134,8 +134,8 @@ export async function replaceBundledSkillPath(
   const dropStaged = () =>
     staged ? removeBundledSkillSibling(filesystem, staged).catch(() => undefined) : undefined
   try {
-    await requireUnchanged(verify, target)
     await filesystem.ensureDirectory(dirname(backupPath))
+    await requireUnchanged(verify, target)
     await filesystem.moveToBackup(target, backupPath)
   } catch (error) {
     await dropStaged()

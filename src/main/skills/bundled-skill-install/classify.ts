@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import type { BundledSkillObserved } from '../../../shared/bundled-skill-plan'
 import { isOsMetadataSkillEntryName } from '../skill-package-identity'
 import type { BundledSkillSource } from './bundled-skill-sources'
-import type { BundledSkillFilesystem } from './filesystem'
+import { bundledSkillTreeSignature, type BundledSkillFilesystem } from './filesystem'
 
 export type BundledSkillFolderClass = 'absent' | 'current' | 'released' | 'edited' | 'other'
 
@@ -58,7 +58,14 @@ export async function classifyBundledSkillPath(
     }
   }
   if (stat.kind !== 'directory') {
-    return { folderClass: 'other', observed: { kind: 'file', mtimeMs: stat.mtimeMs } }
+    return {
+      folderClass: 'other',
+      observed: {
+        kind: 'file',
+        mtimeMs: stat.mtimeMs,
+        treeDigest: await bundledSkillTreeSignature(filesystem, path)
+      }
+    }
   }
   const listing = await filesystem.listEntries(path)
   if (!listing) {
@@ -84,6 +91,6 @@ export async function classifyBundledSkillPath(
   }
   return {
     folderClass: bytes && frontmatterName(bytes) === source.name ? 'edited' : 'other',
-    observed
+    observed: { ...observed, treeDigest: await bundledSkillTreeSignature(filesystem, path) }
   }
 }
