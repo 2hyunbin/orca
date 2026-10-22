@@ -10,7 +10,7 @@ import type {
 import { OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs } from './build-headless-mobile-session-browser-tabs'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { markResumedRecordLive } from './sleep-record-pane-claim'
+import { isUnclaimedRunningSleepRecord, markResumedRecordLive } from './sleep-record-pane-claim'
 import { isWorktreeTerminalsSleepingError } from '../../worktree-terminals-sleeping-error'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -29,7 +29,6 @@ import { reopenNewerDaemonTerminals } from '../../../daemon/daemon-newer-protoco
 import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
 import type { WorkspaceLayoutStream } from '../../workspace-layout-stream'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
-import { isUnclaimedRunningSleepRecord } from './sleep-record-pane-claim'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
 export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs {

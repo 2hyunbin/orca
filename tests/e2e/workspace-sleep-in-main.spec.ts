@@ -123,13 +123,31 @@ test.describe('Workspace sleep runs in main', () => {
     await switchToWorktree(orcaPage, first)
   })
 
-  test('sleep then an immediate wake ends awake', async ({ orcaPage }) => {
+  test('opening a workspace as soon as its sleep starts ends awake', async ({ orcaPage }) => {
     const { first, second } = await secondWorktree(orcaPage)
     await liveTerminalIn(orcaPage, second)
     await switchToWorktree(orcaPage, first)
-    await orcaPage.evaluate((id) => {
-      void window.api.runtime.call({ method: 'worktree.sleep', params: { worktree: `id:${id}` } })
-      window.__store!.getState().setActiveWorktree(id)
+    await orcaPage.evaluate(async (id) => {
+      const store = window.__store!
+      const windowPtys = (): number => {
+        const state = store.getState()
+        return (state.tabsByWorktree[id] ?? []).reduce(
+          (n, tab) => n + (state.ptyIdsByTabId[tab.id]?.length ?? 0),
+          0
+        )
+      }
+      const reply = window.api.runtime.call({
+        method: 'worktree.sleep',
+        params: { worktree: `id:${id}` }
+      })
+      // Why wait for the window's detach: a selection made before the sleep starts is dropped by it.
+      const deadline = Date.now() + 20_000
+      while (windowPtys() > 0 && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      store.getState().setActiveWorktree(id)
+      // Why after the reply: the sleep has stopped its terminal, so a live one is the open's.
+      await reply
     }, second)
     await expect
       .poll(() => readSleepState(orcaPage, second).then((state) => state.hostLiveTerminals > 0), {
