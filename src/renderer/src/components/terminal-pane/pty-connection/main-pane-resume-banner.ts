@@ -4,19 +4,16 @@
 import { useAppStore } from '@/store'
 import type { TerminalPaneResumeOutcome } from '@/store/terminals/terminal-state'
 import { mainStartsPane } from './main-starts-pane'
-import { resolveTerminalTabId } from './terminal-tab-id'
 import type { ConnectPanePtySession } from './connect-pane-pty-session'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 import type { PtyConnectResult } from '../pty-transport-types'
 
 type Outcomes = Record<string, TerminalPaneResumeOutcome>
-type AppState = ReturnType<typeof useAppStore.getState>
 
 // Why session storage: a reload reattaches the same start, which showed its banner already.
 const SHOWN_STARTS_KEY = 'orca.mainPaneResumeBannersShown'
 /** This document's shown starts, for when session storage is unavailable. */
 const shownHere = new Set<string>()
-const watching = new WeakMap<ConnectPanePtySession, () => void>()
 
 const startOf = ({ ptyId, ptyGeneration }: TerminalPaneResumeOutcome): string =>
   `${ptyId}#${ptyGeneration ?? ''}`
@@ -49,81 +46,45 @@ function noteShown(start: string, outcomes: Outcomes): boolean {
   return true
 }
 
-/** The terminal the store binds the view's pane to now. */
-function boundPtyId(session: ConnectPanePtySession, state: AppState): string | undefined {
-  const tabId = resolveTerminalTabId(state, session.deps.tabId)
-  return state.terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[session.pane.leafId]
-}
-
 /**
- * Whether the pane's attach to `ptyId` resumed its agent: the window's own resume, unless the
- * spawn said it could not, or, when main started the pane (`windowResume` null), main's outcome,
- * which rides the frame binding `ptyId`.
+ * At an attach's start, a check of whether the attach resumed the pane's agent: the window's own
+ * resume unless its spawn said it could not, or, when main starts the pane (`windowResume` null),
+ * a 'restored' outcome main published for the attached terminal since the attach began.
  */
-export function attachResumedAgent(
+export function attachResumeCheck(
   session: ConnectPanePtySession,
-  ptyId: string,
-  windowResume: ColdRestoreAgentResumeStartup | null,
-  connected?: PtyConnectResult | string | void
-): boolean {
-  if (!mainStartsPane(session) || windowResume) {
-    const unavailable = typeof connected === 'object' && connected.agentResumeUnavailable
-    return Boolean(windowResume) && !unavailable
+  windowResume: ColdRestoreAgentResumeStartup | null
+): (ptyId: string, connected?: PtyConnectResult | string | void) => boolean {
+  const outcomeNow = (): TerminalPaneResumeOutcome | undefined =>
+    useAppStore.getState().terminalPaneResumeOutcomesByPaneKey[session.cacheKey]
+  const mainStarts = !windowResume && mainStartsPane(session)
+  const before = mainStarts ? outcomeNow() : undefined
+  return (ptyId, connected) => {
+    const result = typeof connected === 'object' && connected !== null ? connected : null
+    if (!mainStarts) {
+      return Boolean(windowResume) && !result?.agentResumeUnavailable
+    }
+    const attached = result?.id ?? ptyId
+    const found = outcomeNow()
+    return (
+      found?.ptyId === attached &&
+      found.outcome === 'restored' &&
+      (before === undefined || startOf(before) !== startOf(found))
+    )
   }
-  const found = useAppStore.getState().terminalPaneResumeOutcomesByPaneKey[session.cacheKey]
-  return found?.ptyId === ptyId && found.outcome === 'restored'
 }
 
 /**
- * After the view attached `ptyId`: shows the banner of main's start of that terminal, once, now or
- * when its outcome arrives. An outcome for another terminal shows nothing.
+ * After the view attached `ptyId`: shows the banner of main's start of that terminal, once. Read
+ * at the attach: main's outcome rides the frame that binds the terminal, which the attach follows.
  */
 export function showMainPaneResumeOutcome(session: ConnectPanePtySession, ptyId: string): void {
   if (!mainStartsPane(session)) {
     return
   }
-  watching.get(session)?.()
-  const shown = (outcomes: Outcomes): boolean => {
-    const found = outcomes[session.cacheKey]
-    if (found?.ptyId !== ptyId) {
-      return false
-    }
-    if (noteShown(startOf(found), outcomes)) {
-      session.showSessionRestoredBanner(found.outcome)
-    }
-    return true
+  const outcomes = useAppStore.getState().terminalPaneResumeOutcomesByPaneKey
+  const found = outcomes[session.cacheKey]
+  if (found?.ptyId === ptyId && noteShown(startOf(found), outcomes)) {
+    session.showSessionRestoredBanner(found.outcome)
   }
-  let seen = useAppStore.getState()
-  if (shown(seen.terminalPaneResumeOutcomesByPaneKey)) {
-    return
-  }
-  // Why wait: main's outcome can land in a frame after the one that bound the pane.
-  const stop = (): void => {
-    unsubscribe()
-    watching.delete(session)
-    const index = session.waitTeardowns.indexOf(stop)
-    if (index !== -1) {
-      session.waitTeardowns.splice(index, 1)
-    }
-  }
-  const unsubscribe = useAppStore.subscribe((state) => {
-    if (
-      state.terminalPaneResumeOutcomesByPaneKey === seen.terminalPaneResumeOutcomesByPaneKey &&
-      state.terminalLayoutsByTabId === seen.terminalLayoutsByTabId
-    ) {
-      return
-    }
-    seen = state
-    const bound = boundPtyId(session, state)
-    // A pane bound to another terminal since will never show this start's outcome.
-    if (
-      session.disposed ||
-      shown(state.terminalPaneResumeOutcomesByPaneKey) ||
-      (bound && bound !== ptyId)
-    ) {
-      stop()
-    }
-  })
-  watching.set(session, stop)
-  session.waitTeardowns.push(stop)
 }
