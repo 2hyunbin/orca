@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useNavigation, useRouter } from 'expo-router'
+import { useNavigation, useNavigationContainerRef, useRouter } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   OrcaMobileWebShellView,
@@ -30,6 +30,7 @@ import { useMobileWebShellSession } from './use-mobile-web-shell-session'
 import { usePageHostSnapshot } from './use-page-host-snapshot'
 import { useReportedHostAreaServing } from './host-area-serving'
 import { isHostRouteOf } from './page-route-policy'
+import { nativeStackReturn } from './native-stack-return'
 import { PageRouteUnavailableScreen } from './PageRouteUnavailableScreen'
 import { useResponsiveLayout } from '../layout/responsive-layout'
 import { storageReadParamsSchema, type BridgeNativeVerb } from './bridge/bridge-native-verbs'
@@ -142,6 +143,7 @@ export function MobileWebShellScreen({
   const overlay = onOverlayLoad !== undefined
   const router = useRouter()
   const navigation = useNavigation()
+  const navigationContainer = useNavigationContainerRef()
   const popShellStack = useShellStackPop()
   const { isWideLayout } = useResponsiveLayout()
   const { droppedBinaryFrames, reportDroppedBinaryFrames } = useMobileWebShellDroppedFrames()
@@ -258,8 +260,25 @@ export function MobileWebShellScreen({
       if (overlay) {
         return void router.replace(href)
       }
-      // Wide, this host's route is the area-owning session below: back to it, or in place of this
-      // one from a cold deep link, never a second on top. `dismissTo` takes the href's params.
+      // A screen already on the stack is returned to, as system Back would: the page's own exits
+      // ask for the screen beneath it, and a push would stack a second copy over a live one.
+      const rootState = navigationContainer.getRootState()
+      const onStack = rootState ? nativeStackReturn(rootState, href) : null
+      if (onStack === 'current') {
+        return
+      }
+      if (onStack) {
+        navigation.dispatch({
+          type: 'POP',
+          payload: { count: onStack.count },
+          target: onStack.target,
+          source: onStack.source
+        })
+        return
+      }
+      // Wide, this host's route is the area-owning session even when it is not on the stack as
+      // asked: `dismissTo` pops to it by name with the href's params, or replaces this one after a
+      // cold deep link, so it is never a second on top.
       if (isWideLayout && isHostRouteOf(href, hostId)) {
         router.dismissTo(href)
         return

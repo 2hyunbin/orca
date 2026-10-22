@@ -7,6 +7,7 @@ import type {
   MobileWebShellUpdateNotice
 } from './mobile-web-shell-session-contract'
 import type { ShellPageFrame } from './shell-page-frame'
+import type { NativeStackState } from './native-stack-return'
 
 /**
  * Everything the screen's cases mock away, as one mutable record, plus the helpers that mount it.
@@ -28,6 +29,10 @@ export type ScreenDependencies = {
   back: Mock
   /** What the native stack answers: false is a page opened as the first screen on it. */
   canGoBack: boolean
+  /** The navigation container's whole state; undefined before it is ready. */
+  rootState: NativeStackState | undefined
+  /** Actions the screen dispatched onto its own place on the stack. */
+  dispatch: Mock
   pathname: string
   pageRoutes: readonly string[]
   routeGrants: readonly string[]
@@ -96,6 +101,8 @@ export function createScreenDependencies(): ScreenDependencies {
     push: vi.fn(),
     back: vi.fn(),
     canGoBack: true,
+    rootState: undefined,
+    dispatch: vi.fn(),
     pathname: '/h/host-1',
     pageRoutes: ['/h/[hostId]'],
     routeGrants: DEFAULT_ROUTE_GRANTS,
@@ -145,6 +152,8 @@ export function resetScreenDependencies(dependencies: ScreenDependencies): void 
   dependencies.openUrl.mockReset()
   dependencies.openUrl.mockImplementation(() => Promise.resolve(true))
   dependencies.canGoBack = true
+  dependencies.rootState = undefined
+  dependencies.dispatch.mockReset()
   dependencies.pathname = '/h/host-1'
   dependencies.updateNotice = null
   dependencies.backHandlers.clear()

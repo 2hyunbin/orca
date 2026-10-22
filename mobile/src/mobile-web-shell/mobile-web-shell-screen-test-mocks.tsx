@@ -107,7 +107,11 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
       // Read by the pop latch, which clears on the route this shell is mounted at changing.
       usePathname: () => dependencies.pathname,
       // The screen's own place on the stack, which is where the iOS swipe-back is taken away.
-      useNavigation: () => ({ setOptions: dependencies.setScreenOptions }),
+      useNavigation: () => ({
+        setOptions: dependencies.setScreenOptions,
+        dispatch: dependencies.dispatch
+      }),
+      useNavigationContainerRef: () => ({ getRootState: () => dependencies.rootState }),
       useFocusEffect: (effect: () => undefined | (() => void)) => React.useEffect(effect, [effect])
     }),
     // A component rather than a host string: the React key is what makes a retry a rebuilt WebView,
