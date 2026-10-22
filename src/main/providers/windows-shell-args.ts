@@ -78,10 +78,15 @@ export type WindowsShellWslContext = {
  * keep the older stdin delivery path.
  */
 function getCmdShellArgStartupCommand(command?: string): string | null {
+  if (command && /[\r\n]/.test(command.replace(/\r\n$|\r$|\n$/, ''))) {
+    throw new Error(
+      'cmd.exe cannot safely run a multiline startup command. Save it as a .cmd file and run that file instead.'
+    )
+  }
   if (!command || command.length > STARTUP_COMMAND_TEXT_MAX_CHARS) {
     return null
   }
-  // Why: /K truncates multiline scripts, and node-pty argv escaping changes quotes; stdin preserves both.
+  // Why: node-pty argv escaping changes quotes; stdin preserves them.
   if (command.includes('"') || /[\r\n]/.test(command)) {
     return null
   }
