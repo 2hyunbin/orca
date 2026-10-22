@@ -38,6 +38,9 @@ export function SearchFilters({
             {translate('fileSearch.filters.active', '{{count}} active', { count: activeCount })}
           </span>
         )}
+        <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {translate('fileSearch.filters.active', '{{count}} active', { count: activeCount })}
+        </span>
         <Tooltip>
           <TooltipTrigger asChild>
             <CollapsibleTrigger asChild>
