@@ -19804,7 +19804,7 @@
     },
     "claude": {
       "added": "Cuenta agregada. Selecciónala para usarla en el próximo Claude que inicies.",
-      "nextLaunch": "{{value0}} → {{value1}}. El próximo Claude que inicies la usará. Las sesiones en ejecución conservan su cuenta.",
+      "nextLaunch": "{{value0}} → {{value1}}. El próximo terminal de Claude que inicies usará esta cuenta. Los terminales de Claude en ejecución conservan su cuenta.",
       "profileSwitching": "El cambio se aplica al próximo Claude que inicies en cualquier pestaña. Las sesiones en ejecución conservan su cuenta.",
       "systemDefaultNamed": "Predeterminado del sistema: {{value0}}",
       "systemDefaultIsSaved": "Predeterminado del sistema ha iniciado sesión como {{value0}}, que también es una cuenta guardada. Puede que una versión anterior de Orca haya copiado ese inicio de sesión allí. Si no es tu propio inicio de sesión, selecciona Predeterminado del sistema y ejecuta claude /login.",
