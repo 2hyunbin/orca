@@ -18,30 +18,21 @@ export type JsonlRpcRequestOptions = {
   oversizedReply?: 'reject'
 }
 
-// The head Pi writes before any data (`{id, type, command, success, data}`), with Orca's own ids.
-const OVERSIZED_REPLY_HEAD = /^\{"id":"(orca-\d+)","type":"response","command":"([a-z_]+)"/
+// Pi echoes opaque ids before the response payload; the category survives its waiter's timeout.
+const OVERSIZED_REPLY_HEAD = /^\{"id":"(orca-optional-([1-9]\d*))","type":"response"(?=[,}])/
 
 /**
- * The request an oversized line answers, and the error it gets instead of the stream ending: only
- * a reply to a request that opted in, on a line the framer drops whole. Anything else could carry
- * session or tool lifecycle evidence. A paused reader's queue overflow reports its own limit, having
- * dropped complete records, so it never qualifies.
+ * Only an issued optional reply can be dropped alone. Complete-queue loss may also omit
+ * lifecycle records, even when its prefix identifies an optional reply.
  */
 export function oversizedReplyRequest(
   rejected: Extract<NdjsonRejectedRecord, { kind: 'line-too-long' }>,
-  lineLimit: number,
-  pending: ReadonlyMap<string, { command: string; oversizedReply?: 'reject' }>
-): { id: string; error: JsonlRpcReplyTooLargeError } | null {
+  highestOptionalAssigned: number
+): string | null {
   const head = OVERSIZED_REPLY_HEAD.exec(rejected.prefix)
-  const request = head ? pending.get(head[1]) : undefined
-  if (!head || rejected.maxLineBytes !== lineLimit || request?.oversizedReply !== 'reject') {
+  if (!head || rejected.droppedCompleteRecords) {
     return null
   }
-  if (request.command !== head[2]) {
-    return null
-  }
-  return {
-    id: head[1],
-    error: new JsonlRpcReplyTooLargeError(request.command, rejected.observedBytes, lineLimit)
-  }
+  const number = Number(head[2])
+  return Number.isSafeInteger(number) && number <= highestOptionalAssigned ? head[1] : null
 }

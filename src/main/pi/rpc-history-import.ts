@@ -4,10 +4,7 @@ import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalItemIdentity
 } from '../../shared/agent-session-journal-types'
-import {
-  LEGACY_IMPORT_BLOCK_LIMITS,
-  legacyItemBody
-} from '../native-chat/agent-session-journal/journal-legacy-import'
+import { legacyItemBody } from '../native-chat/agent-session-journal/journal-legacy-import'
 import { decodePiSessionEntryLine } from '../native-chat/agent-session-journal/journal-pi-active-branch'
 import { journalLifecycleItemMutation } from '../native-chat/agent-session-journal/journal-row-builders'
 import type { StructuredAgentSessionTransitionJournal } from '../native-chat/agent-session-wire/structured-agent-session-transition'
@@ -62,7 +59,7 @@ export function piBranchInTree(
     accounted.add(id)
   }
   const walked = walkFromLeaf(answer, (id) => accounted.has(id))
-  if (!walked || (walked.stop === null) !== (claim === null)) {
+  if (!walked) {
     return null
   }
   return { path: walked.path, rewound: walked.stop !== claim }
@@ -120,7 +117,7 @@ export function createPiHistoryImportPlan(input: {
     if (!message) {
       continue
     }
-    const body = legacyItemBody(message, LEGACY_IMPORT_BLOCK_LIMITS)
+    const body = legacyItemBody(message)
     if (entryIds.length === 0 && input.divider) {
       batch.push(
         journalLifecycleItemMutation(

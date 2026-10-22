@@ -1,5 +1,9 @@
 import { z } from 'zod'
-import { parseAgentJournalItemKey } from '../../shared/agent-session-journal-item-key'
+import {
+  agentJournalSubmissionKey,
+  parseAgentJournalItemKey
+} from '../../shared/agent-session-journal-item-key'
+import { isQueuedAgentJournalSubmission } from '../../shared/agent-session-queued-submission'
 import type { StructuredAgentSessionHistoryJournal } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 
 /**
@@ -46,6 +50,12 @@ export function readPiHistoryJournalView(
   lineage: ReadonlySet<string>
 ): PiHistoryJournalView {
   const accounted = new Set<string>()
+  const submissions = journal.submissions()
+  const queued = new Set(
+    submissions
+      .filter(isQueuedAgentJournalSubmission)
+      .map((submission) => agentJournalSubmissionKey(submission.clientMessageId))
+  )
   let hasRows = false
   let ownWorkSequence = 0
   journal.visitItems((itemId, sequence, body) => {
@@ -59,12 +69,15 @@ export function readPiHistoryJournalView(
       accounted.add(identity.recordId)
       return
     }
-    if (body.kind === 'turn' || (identity?.provider === 'orca' && body.kind === 'message')) {
+    if (
+      body.kind === 'turn' ||
+      (identity?.provider === 'orca' && body.kind === 'message' && !queued.has(itemId))
+    ) {
       ownWorkSequence = Math.max(ownWorkSequence, sequence)
     }
   })
   // A prompt Pi accepted before its turn row landed still counts from its acceptance.
-  for (const submission of journal.submissions()) {
+  for (const submission of submissions) {
     const receipt = journal.receiptFor(submission.clientMessageId)
     if (receipt?.cursor.epoch === journal.epoch) {
       ownWorkSequence = Math.max(ownWorkSequence, receipt.cursor.sequence)

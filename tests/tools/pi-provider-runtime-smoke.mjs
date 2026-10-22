@@ -135,22 +135,28 @@ try {
   createInterface({ input: rpc.stdout }).on('line', (line) => {
     const record = JSON.parse(line)
     if (record.type === 'response' && replies.has(record.id)) {
-      replies.get(record.id)(record)
+      replies.get(record.id)(record, line)
     } else if (record.type === 'agent_settled' || record.type === 'agent_end') {
       settled()
     }
   })
   let next = 0
-  const ask = (type, params = {}) =>
+  const ask = (type, params = {}, id = `smoke-${++next}`) =>
     new Promise((resolve) => {
-      const id = `smoke-${++next}`
-      replies.set(id, resolve)
+      replies.set(id, (record, line) => {
+        if (id === 'orca-optional-1') {
+          assert.ok(line.startsWith('{"id":"orca-optional-1","type":"response",'))
+          assert.equal(record.id, id)
+        }
+        resolve(record)
+      })
       rpc.stdin.write(`${JSON.stringify({ ...params, type, id })}\n`)
     })
   try {
     assert.equal((await ask('prompt', { message: 'hello' })).success, true)
     await settledOnce
-    const all = await ask('get_entries')
+    const all = await ask('get_entries', {}, 'orca-optional-1')
+    assert.equal((await ask('get_state')).success, true)
     assert.equal(all.success, true, all.error)
     const ids = all.data.entries.map((entry) => entry.id)
     assert.ok(ids.length >= 2 && ids.every((id) => typeof id === 'string' && id.length > 0))

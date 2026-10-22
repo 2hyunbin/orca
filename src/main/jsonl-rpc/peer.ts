@@ -11,7 +11,11 @@ import {
   resolveJsonlRpcPeerOptions,
   type JsonlRpcPeerOptions
 } from './peer-limits'
-import { oversizedReplyRequest, type JsonlRpcRequestOptions } from './peer-oversized-reply'
+import {
+  JsonlRpcReplyTooLargeError,
+  oversizedReplyRequest,
+  type JsonlRpcRequestOptions
+} from './peer-oversized-reply'
 
 const recordSchema = z.looseObject({ type: z.string() })
 const responseSchema = z.looseObject({
@@ -51,7 +55,6 @@ type PendingRequest = {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
   timer?: ReturnType<typeof setTimeout>
-  oversizedReply?: 'reject'
 }
 
 /** Transport only: a dialect owns turns, dialogs, and session handles. */
@@ -61,6 +64,7 @@ export class JsonlRpcPeer {
   private readonly writer: ProviderStdioWriteQueue
   private readonly framer: ReturnType<typeof createIncrementalNdjsonFramer>
   private nextId = 0
+  private nextOptionalId = 0
   private terminalError?: Error
   private inputEndError?: Error
   private readingPaused = false
@@ -85,9 +89,17 @@ export class JsonlRpcPeer {
       (record) => this.dispatch(record),
       (rejected) => {
         if (rejected.kind === 'line-too-long') {
-          const reply = oversizedReplyRequest(rejected, this.limits.maxLineBytes, this.pending)
-          if (reply) {
-            this.rejectPending(reply.id, reply.error)
+          const id = oversizedReplyRequest(rejected, this.nextOptionalId)
+          if (id) {
+            const request = this.pending.get(id)
+            if (request) {
+              const error = new JsonlRpcReplyTooLargeError(
+                request.command,
+                rejected.observedBytes,
+                this.limits.maxLineBytes
+              )
+              this.rejectPending(id, error)
+            }
           } else {
             this.close(new Error('JSON-lines RPC record exceeded the size limit'))
           }
@@ -162,7 +174,13 @@ export class JsonlRpcPeer {
     } catch (error) {
       return Promise.reject(error)
     }
-    const id = `orca-${++this.nextId}`
+    if (options.oversizedReply === 'reject' && this.nextOptionalId >= Number.MAX_SAFE_INTEGER) {
+      return Promise.reject(new Error('JSON-lines RPC optional request identity exhausted'))
+    }
+    const id =
+      options.oversizedReply === 'reject'
+        ? `orca-optional-${++this.nextOptionalId}`
+        : `orca-${++this.nextId}`
     const controller = new AbortController()
     return new Promise((resolve, reject) => {
       const timer =
@@ -175,13 +193,7 @@ export class JsonlRpcPeer {
               reject(error)
             }, timeoutMs)
       timer?.unref()
-      this.pending.set(id, {
-        command,
-        resolve,
-        reject,
-        timer,
-        oversizedReply: options.oversizedReply
-      })
+      this.pending.set(id, { command, resolve, reject, timer })
       void this.send({ ...params, type: command, id }, controller.signal).catch(
         (error: unknown) => {
           this.rejectPending(id, error instanceof Error ? error : new Error(String(error)))

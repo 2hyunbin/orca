@@ -10,6 +10,7 @@ import { AGENT_JOURNAL_THREAD_SCOPE } from '../../shared/agent-session-journal-t
 import { createTrackedJournalOpener } from '../native-chat/agent-session-journal/journal-host-database-test-support'
 import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { testEventSinkLogging } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+import { projectStructuredAgentSessionMessages } from '../../shared/structured-agent-session-message-projection'
 import { JsonlRpcResponseError } from '../jsonl-rpc/peer'
 import { catchUpPiSession } from './rpc-history-catch-up'
 import { PiHistoryCapture } from './rpc-history-capture'
@@ -152,6 +153,18 @@ async function chat() {
       )
       await deferred.sink.written?.()
     },
+    queuedPrompt: async (text: string) => {
+      await journal.appendSubmission({
+        clientMessageId: 'queued',
+        payloadFingerprint: 'queued',
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text }] },
+        fence: 1,
+        handoverRecorded: true
+      })
+    },
+    projected: () =>
+      projectStructuredAgentSessionMessages(journal.snapshot().items, [], journal.submissions()),
+    items: () => journal.snapshot().items,
     texts: () =>
       journal.snapshot().items.flatMap((item) => {
         if (item.body.kind === 'message') {
@@ -172,10 +185,11 @@ describe('Pi chat catch-up', () => {
     const own = [entry('u1', null, 'user', 'ask 1'), entry('a1', 'u1', 'assistant', 'answer ask 1')]
     await c.turn('ask 1', own, null)
 
+    const fullAnswer = `${'long answer '.repeat(2000)}TAIL`
     const outside = [
       ...own,
       entry('u2', 'a1', 'user', 'ask 2'),
-      entry('a2', 'u2', 'assistant', 'answer 2'),
+      entry('a2', 'u2', 'assistant', fullAnswer),
       entry('u3', 'a2', 'user', 'ask 3'),
       entry('a3', 'u3', 'assistant', 'answer 3')
     ]
@@ -185,7 +199,7 @@ describe('Pi chat catch-up', () => {
       'assistant:answer ask 1',
       '(continued-outside)',
       'user:ask 2',
-      'assistant:answer 2',
+      `assistant:${fullAnswer}`,
       'user:ask 3',
       'assistant:answer 3'
     ]
@@ -202,12 +216,95 @@ describe('Pi chat catch-up', () => {
       entry('a4', 'u4', 'assistant', 'answer 4')
     ]
     await c.open(rewound)
-    expect(c.texts()).toEqual([
+    const afterRewind = [
       ...caughtUp,
       '(continued-outside-rewound)',
       'user:ask 4',
       'assistant:answer 4'
+    ]
+    expect(c.texts()).toEqual(afterRewind)
+
+    // Re-editing the first prompt starts a new root in the same session tree.
+    const rootRewind = [
+      ...rewound,
+      entry('u5', null, 'user', 'ask 5'),
+      entry('a5', 'u5', 'assistant', 'answer 5')
+    ]
+    expect(await c.open(rootRewind)).toMatchObject({ claim: { entry: 'a5' }, current: true })
+    const afterRootRewind = [
+      ...afterRewind,
+      '(continued-outside-rewound)',
+      'user:ask 5',
+      'assistant:answer 5'
+    ]
+    expect(c.texts()).toEqual(afterRootRewind)
+    await c.open(rootRewind)
+    expect(c.texts()).toEqual(afterRootRewind)
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('keeps an image-only terminal prompt and its reply across repeated opens', async () => {
+    const c = await chat()
+    await c.open([])
+    const own = [entry('u1', null, 'user', 'ask 1'), entry('a1', 'u1', 'assistant', 'answer ask 1')]
+    await c.turn('ask 1', own, null)
+    const data =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lXcAAAAASUVORK5CYII='
+    const outside = [
+      ...own,
+      {
+        ...entry('u2', 'a1', 'user', ''),
+        message: {
+          role: 'user',
+          content: [
+            { type: 'text', text: '' },
+            { type: 'image', data, mimeType: 'image/png' }
+          ]
+        }
+      },
+      entry('a2', 'u2', 'assistant', 'A tiny image')
+    ]
+    expect(await c.open(outside)).toMatchObject({ claim: { entry: 'a2' }, current: true })
+    const imported = c.items()
+    expect(imported.slice(-3).map((item) => item.body)).toEqual([
+      expect.objectContaining({ kind: 'status', presentation: 'continued-outside' }),
+      {
+        kind: 'message',
+        role: 'user',
+        blocks: [{ type: 'image-ref', url: `data:image/png;base64,${data}` }]
+      },
+      { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'A tiny image' }] }
     ])
+    await c.open(outside)
+    expect(c.items()).toEqual(imported)
+    expect(logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('imports outside work above the queued prompt that starts a resting Pi', async () => {
+    const c = await chat()
+    await c.open([])
+    const own = [entry('u1', null, 'user', 'ask 1'), entry('a1', 'u1', 'assistant', 'answer ask 1')]
+    await c.turn('ask 1', own, null)
+    await c.queuedPrompt('ask next')
+    const outside = [
+      ...own,
+      entry('u2', 'a1', 'user', 'outside'),
+      entry('a2', 'u2', 'assistant', 'outside answer')
+    ]
+    expect(await c.open(outside)).toMatchObject({ claim: { entry: 'a2' }, current: true })
+    const projected = c.projected()
+    expect(
+      projected
+        .filter((message) => message.role === 'user' || message.role === 'assistant')
+        .map((message) =>
+          message.blocks
+            .filter((block) => block.type === 'text')
+            .map((block) => block.text)
+            .join('')
+        )
+    ).toEqual(['ask 1', 'answer ask 1', 'outside', 'outside answer', 'ask next'])
+    await c.open(outside)
+    expect(c.projected()).toEqual(projected)
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
