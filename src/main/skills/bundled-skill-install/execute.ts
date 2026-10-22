@@ -80,8 +80,15 @@ async function releaseAll(releases: readonly (() => Promise<void>)[]): Promise<v
 function verifier(run: SkillRun, path: string, expected: BundledSkillObserved) {
   return async () =>
     sameBundledSkillObserved(
-      (await classifyBundledSkillPath(run.input.filesystem, path, run.source, run.entry.digest))
-        .observed,
+      (
+        await classifyBundledSkillPath(
+          run.input.filesystem,
+          path,
+          run.source,
+          run.entry.digest,
+          'treeDigest' in expected
+        )
+      ).observed,
       expected
     )
 }

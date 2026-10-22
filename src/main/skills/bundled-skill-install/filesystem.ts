@@ -1,4 +1,4 @@
-import { constants } from 'node:fs'
+import { constants, createReadStream } from 'node:fs'
 import { createHash } from 'node:crypto'
 import {
   access,
@@ -35,6 +35,8 @@ export type BundledSkillFilesystem = {
   /** `[]` for a missing directory, null when it cannot be listed. */
   listEntries(directory: string): Promise<SkillDirectoryEntry[] | null>
   readFile(path: string): Promise<Buffer | null>
+  /** Streaming digest when supported; adapters without it fall back to readFile. */
+  hashFile?(path: string): Promise<string | null>
   /** Whether the nearest existing ancestor of `directory` accepts new entries. */
   canWrite(directory: string): Promise<boolean>
   /** Creates `path` (and missing parents) holding exactly `files`; dirs 0755, files 0644. */
@@ -87,8 +89,12 @@ export async function bundledSkillTreeSignature(
     if (stats.kind === 'symlink') {
       hash.update(JSON.stringify(requireRead(await filesystem.readLink(current))))
     } else if (stats.kind === 'file') {
-      const bytes = requireRead(await filesystem.readFile(current))
-      hash.update(`${bytes.length}:`).update(bytes)
+      const digest = filesystem.hashFile
+        ? requireRead(await filesystem.hashFile(current))
+        : createHash('sha256')
+            .update(requireRead(await filesystem.readFile(current)))
+            .digest('hex')
+      hash.update(digest)
     } else if (stats.kind === 'directory') {
       const names = requireRead(await filesystem.listEntries(current)).map((entry) => entry.name)
       for (const name of names.sort()) {
@@ -147,6 +153,20 @@ export const nativeBundledSkillFilesystem: BundledSkillFilesystem = {
     return listing?.get(directory) ?? null
   },
   readFile: (path) => readFile(path).catch(() => null),
+  hashFile: async (path) => {
+    try {
+      const hash = createHash('sha256')
+      for await (const chunk of createReadStream(path)) {
+        if (!Buffer.isBuffer(chunk)) {
+          return null
+        }
+        hash.update(chunk)
+      }
+      return hash.digest('hex')
+    } catch {
+      return null
+    }
+  },
   canWrite: async (directory) => {
     for (let current = directory; ; current = dirname(current)) {
       const writable = await access(current, constants.W_OK).then(

@@ -1,5 +1,5 @@
 import { chmod, mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { isSkillStagingEntryName } from '../skill-delete/staging-names'
 import { bundledSkillTextDigest, classifyBundledSkillPath } from './classify'
@@ -95,6 +95,42 @@ describe('classifyBundledSkillPath', () => {
 })
 
 describe('plan digest', () => {
+  it('does not traverse auxiliary content in edited or foreign copies left alone', async () => {
+    const home = await makeSkillHome()
+    await writeCopy(home.shared, `---\nname: ${NAME}\n---\nmine\n`, { 'notes.md': 'mine' })
+    await writeCopy(home.claude, 'another skill\n')
+    await mkdir(join(home.claude, 'scripts'))
+    await writeFile(join(home.claude, 'scripts', 'run.sh'), 'mine')
+    const reads: string[] = []
+    const filesystem = {
+      ...nativeBundledSkillFilesystem,
+      readFile: async (path: string) => {
+        reads.push(path)
+        return nativeBundledSkillFilesystem.readFile(path)
+      },
+      hashFile: async (path: string) => {
+        reads.push(path)
+        return nativeBundledSkillFilesystem.hashFile?.(path) ?? null
+      },
+      listEntries: async (path: string) => {
+        expect(path).not.toBe(join(home.claude, 'scripts'))
+        return nativeBundledSkillFilesystem.listEntries(path)
+      }
+    }
+    const { plan } = await buildBundledSkillPlan({
+      ...serviceInput(home),
+      filesystem,
+      sources: [NEW_SOURCE]
+    })
+    expect(plan.skills[0].ops.map((op) => [op.kind, op.reason])).toEqual([
+      ['leave', 'edited'],
+      ['leave', 'other']
+    ])
+    expect(reads.map((path) => basename(path))).toEqual(['SKILL.md', 'SKILL.md'])
+    expect(reads.map((path) => dirname(path))).toEqual([home.shared, home.claude])
+    expect(plan.skills[0].ops.every((op) => !('treeDigest' in op.observed))).toBe(true)
+  })
+
   it('is stable across previews of the same disk and moves when the disk does', async () => {
     const home = await makeSkillHome()
     await writeCopy(home.shared, OLD_TEXT)
