@@ -1,3 +1,4 @@
+import { projectWorktreeLineageWithHostPeers } from '../main/worktree-lineage-host-peers'
 import { buildRuntimeWorktreePsSummaries } from '../main/runtime/runtime-worktree-ps-summaries'
 import {
   normalizePairedServerRow,
@@ -52,6 +53,18 @@ function lineage(overrides: Partial<WorktreeLineage> = {}): WorktreeLineage {
   }
 }
 
+function publish(
+  worktrees: readonly Worktree[],
+  edges: Readonly<Record<string, WorktreeLineage>>,
+  knownPeers: readonly Worktree[] = []
+) {
+  return projectWorktreeLineageWithHostPeers(
+    { getAllWorktreeLineage: () => edges, getRepos: () => [], getAllWorktreeMeta: () => ({}) },
+    { id: 'repo', path: 'workspace', displayName: 'repo', badgeColor: 'blue', addedAt: 1 },
+    [...worktrees, ...knownPeers]
+  )
+}
+
 describe('sharesWorktreeLineageBoundary', () => {
   const boundary = (overrides: Partial<WorktreeLineageBoundary> = {}): WorktreeLineageBoundary => ({
     hostId: 'local',
@@ -76,26 +89,54 @@ describe('sharesWorktreeLineageBoundary', () => {
 
 describe('projectResolvedWorktreeLineage', () => {
   it('keeps base publication exact while held readers resolve saved rename intent', () => {
-    const c = worktree('child', 'child-instance', { hostId: 'local' })
-    const p = worktree('renamed', 'parent-instance', { hostId: 'local' })
     const edges = { child: lineage() }
+    const c = worktree('child', 'child-instance', { hostId: 'local', savedLineage: edges.child })
+    const p = worktree('renamed', 'parent-instance', { hostId: 'local' })
     expect(projectResolvedWorktreeLineage([c], edges, [p])[0].parentWorktreeId).toBe('renamed')
-    expect(
-      projectResolvedWorktreeLineage([c], edges, [p], undefined, 'publication')[0]
-    ).toMatchObject({ parentWorktreeId: null, savedLineage: edges.child })
+    expect(publish([c], edges, [p])[0]).toMatchObject({
+      parentWorktreeId: null,
+      savedLineage: edges.child
+    })
     edges.child.parentWorktreeId = p.id
+    expect(publish([c], edges, [p])[0].parentWorktreeId).toBe(p.id)
+    expect(publish([c], edges, [{ ...p, hostId: 'ssh:other' }])[0].parentWorktreeId).toBeNull()
+  })
+
+  it('publishes the base indexed graph and saved intent without resolving external edges', () => {
+    const childEdge = lineage()
+    const parentEdge = lineage({
+      worktreeId: 'parent',
+      worktreeInstanceId: 'parent-instance',
+      parentWorktreeId: 'peer',
+      parentWorktreeInstanceId: 'peer-instance'
+    })
+    const peer = worktree('peer', 'peer-instance')
+    const child = worktree('child', 'child-instance', { savedLineage: childEdge })
+    const parent = worktree('parent', 'parent-instance', { savedLineage: null })
+    const rows = publish(
+      [child, parent],
+      {
+        child: childEdge,
+        parent: parentEdge,
+        peer: lineage({ worktreeId: peer.id, worktreeInstanceId: peer.instanceId! })
+      },
+      [peer]
+    )
+    expect(rows).toMatchObject([
+      { parentWorktreeId: 'parent', childWorktreeIds: [], lineage: childEdge },
+      {
+        parentWorktreeId: null,
+        childWorktreeIds: ['child'],
+        lineage: null,
+        savedLineage: parentEdge
+      },
+      { parentWorktreeId: null, childWorktreeIds: [], lineage: null }
+    ])
+    expect(rows[0].savedLineage).toBe(childEdge)
+    const external = { ...childEdge, parentStore: 'external' as const }
     expect(
-      projectResolvedWorktreeLineage([c], edges, [p], undefined, 'publication')[0].parentWorktreeId
-    ).toBe(p.id)
-    expect(
-      projectResolvedWorktreeLineage(
-        [c],
-        edges,
-        [{ ...p, hostId: 'ssh:other' }],
-        undefined,
-        'publication'
-      )[0].parentWorktreeId
-    ).toBeNull()
+      publish([{ ...child, savedLineage: external }], { child: external }, [parent])[0]
+    ).toMatchObject({ parentWorktreeId: null, lineage: null, savedLineage: external })
   })
   const parent = worktree('parent', 'parent-instance')
   const child = worktree('child', 'child-instance')

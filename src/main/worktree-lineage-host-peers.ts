@@ -7,7 +7,9 @@ import { getRepoIdFromWorktreeId, splitWorktreeId } from '../shared/worktree/id'
 import { isFolderRepo } from '../shared/repo-kind'
 import {
   getConnectedWorktreeLineageIds,
-  projectResolvedWorktreeLineage,
+  getCyclicLineageChildKeys,
+  isValidResolvedWorktreeLineageEdge,
+  type WorktreeWithResolvedLineage,
   getSavedWorktreeLineage,
   worktreeLineageFromWorkspaceLineage
 } from '../shared/resolved-worktree-lineage'
@@ -77,7 +79,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
   const rows = withSavedWorktreeLineage(store, repo, input, lineageById, rawMetadata)
   const project = (peers: readonly Worktree[] = []) =>
-    projectResolvedWorktreeLineage(rows, lineageById, peers, rawMetadata, 'publication')
+    projectPublishedWorktreeLineage(rows, lineageById, peers)
   if (rows.length === 0) {
     return project()
   }
@@ -150,4 +152,59 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
     )
   }
   return project(peers)
+}
+
+function projectPublishedWorktreeLineage<T extends Worktree>(
+  worktrees: readonly T[],
+  lineageById: Readonly<Record<string, WorktreeLineage>>,
+  knownPeers: readonly Worktree[] = []
+): WorktreeWithResolvedLineage<T>[] {
+  const allWorktrees: readonly Worktree[] = [...worktrees, ...knownPeers]
+  const indicesById = new Map<string, number[]>()
+  allWorktrees.forEach((worktree, index) => {
+    const indices = indicesById.get(worktree.id) ?? []
+    indices.push(index)
+    indicesById.set(worktree.id, indices)
+  })
+  const validLineageByChildIndex = new Map<number, WorktreeLineage>()
+  const parentIndexByChildIndex = new Map<number, number>()
+  const childIdsByParentIndex = new Map<number, string[]>()
+
+  allWorktrees.forEach((child, childIndex) => {
+    const lineage = lineageById[child.id]
+    if (!lineage) {
+      return
+    }
+    const parentIndices = (indicesById.get(lineage.parentWorktreeId) ?? []).filter((index) =>
+      isValidResolvedWorktreeLineageEdge(child, allWorktrees[index], lineage)
+    )
+    // A locator can exist on several hosts. An ambiguous parent must not be selected by row order.
+    if (parentIndices.length !== 1) {
+      return
+    }
+    validLineageByChildIndex.set(childIndex, lineage)
+    parentIndexByChildIndex.set(childIndex, parentIndices[0])
+  })
+
+  for (const index of getCyclicLineageChildKeys(parentIndexByChildIndex)) {
+    validLineageByChildIndex.delete(index)
+    parentIndexByChildIndex.delete(index)
+  }
+
+  for (const [childIndex, parentIndex] of parentIndexByChildIndex) {
+    const children = childIdsByParentIndex.get(parentIndex) ?? []
+    children.push(allWorktrees[childIndex].id)
+    childIdsByParentIndex.set(parentIndex, children)
+  }
+
+  return worktrees.map((worktree, index) => {
+    const lineage = validLineageByChildIndex.get(index) ?? null
+    return {
+      ...worktree,
+      savedLineage: worktree.savedLineage ?? null,
+      parentWorktreeId: lineage?.parentWorktreeId ?? null,
+      childWorktreeIds: childIdsByParentIndex.get(index) ?? [],
+      lineage
+    }
+  })
 }
