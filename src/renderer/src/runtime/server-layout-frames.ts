@@ -234,6 +234,8 @@ function openServerFrames(
       } else {
         showServerLayoutHeldPanes(environmentId, [])
       }
+      // handBack started a fresh one, which a closed stream never uses.
+      handover.close()
     }
   }
 }
