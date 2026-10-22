@@ -3,6 +3,7 @@
  */
 import React, { createRef, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { act, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as I18n from '@/i18n/i18n'
 import type { NativeChatComposerHandle } from './NativeChatComposer'
@@ -12,6 +13,7 @@ type ItemProps = { onSelect?: () => void; children?: ReactNode }
 
 const items = vi.hoisted(() => ({ list: [] as ItemProps[] }))
 const callRuntimeRpc = vi.hoisted(() => vi.fn())
+const handOff = vi.hoisted(() => ({ options: vi.fn(), dialog: vi.fn() }))
 
 vi.mock('@/components/ui/dropdown-menu', () => {
   const Pass = ({ children }: { children?: ReactNode }) => children
@@ -47,7 +49,20 @@ vi.mock('@/components/tab-bar/tab-move-to-pane-column', () => ({
   canMoveTabToNewPaneColumn: () => false
 }))
 vi.mock('@/store', () => ({
-  useAppStore: (select: (state: { keybindings: object }) => unknown) => select({ keybindings: {} })
+  useAppStore: (select: (state: object) => unknown) =>
+    select({ keybindings: {}, unifiedTabsByWorktree: {} })
+}))
+vi.mock('@/runtime/structured-agent-session-client', () => ({
+  callStructuredAgentSession: handOff.options
+}))
+vi.mock('@/runtime/structured-conversation-name', () => ({
+  useStructuredChatTabConversationName: () => 'Fix the login bug'
+}))
+vi.mock('@/components/agent-session-continuation/AgentSessionContinuationDialog', () => ({
+  AgentSessionContinuationDialog: (props: object) => {
+    handOff.dialog(props)
+    return null
+  }
 }))
 vi.mock('../../runtime/runtime-rpc-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -69,16 +84,30 @@ function childrenText(children: ReactNode): string {
     .join('')
 }
 
-function StructuredChatTab(): ReactNode {
+function StructuredChatTab({ inWorkspace = false }: { inWorkspace?: boolean }): ReactNode {
   const { menu } = useStructuredNativeChatPaneCommands({
-    tabId: 'chat-tab',
-    groupId: 'group-1',
-    isVisible: true,
+    pane: {
+      tabId: 'chat-tab',
+      groupId: 'group-1',
+      isVisible: true,
+      isFocusedGroup: true,
+      sessionId: SESSION,
+      target: TARGET,
+      agent: 'codex'
+    },
+    messages: [],
     rootRef: createRef<HTMLDivElement>(),
     composerRef: createRef<NativeChatComposerHandle>(),
     questionAnswerInputRef: createRef<HTMLInputElement>(),
-    sessionId: SESSION,
-    target: TARGET
+    ...(inWorkspace
+      ? {
+          fileLinkContext: {
+            worktreeId: 'wt-1',
+            worktreePath: '/work/repo',
+            runtimeEnvironmentId: 'env_1'
+          }
+        }
+      : {})
   })
   return menu
 }
@@ -106,5 +135,35 @@ describe('a structured chat tab', () => {
         sessionId: SESSION
       })
     )
+  })
+
+  it("hands the conversation to another agent with the chat's saved transcript", async () => {
+    handOff.options.mockResolvedValue({ transcriptPath: '/work/codex.jsonl' })
+    render(<StructuredChatTab inWorkspace />)
+
+    const item = items.list.findLast(
+      (candidate) => childrenText(candidate.children) === 'Hand Off to Another Agent'
+    )
+    await act(async () => item?.onSelect?.())
+
+    expect(handOff.options).toHaveBeenCalledWith(TARGET, 'agentSession.options', {
+      sessionId: SESSION
+    })
+    await waitFor(() =>
+      expect(handOff.dialog).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          request: expect.objectContaining({
+            source: expect.objectContaining({
+              sourceAgent: 'codex',
+              sourceTitle: 'Fix the login bug',
+              transcriptPath: '/work/codex.jsonl'
+            }),
+            worktreeId: 'wt-1',
+            launchSource: 'native_chat'
+          })
+        })
+      )
+    )
+    expect(handOff.dialog.mock.lastCall?.[0].request).not.toHaveProperty('avoidSourceAgent')
   })
 })

@@ -166,15 +166,11 @@ export function NativeChatStructuredSession(
     { sessionId: props.sessionId, isVisible: props.isVisible }
   )
   const paneCommands = useStructuredNativeChatPaneCommands({
-    tabId: props.tabId,
-    groupId: props.groupId,
-    isVisible: props.isVisible,
+    pane: props,
+    messages: controller.messages,
     rootRef,
     composerRef,
     questionAnswerInputRef,
-    terminalPaneActions: props.contextMenuActions,
-    sessionId: props.sessionId,
-    target: props.target,
     messageListRef: submits.messageListRef,
     fileLinkContext,
     rewind: controller.rewind.surface,
