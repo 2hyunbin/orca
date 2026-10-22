@@ -16,6 +16,13 @@ const mocks = vi.hoisted(() => {
     ready: vi.fn(),
     complete: vi.fn(),
     refresh: vi.fn(),
+    terminalPrompt: vi.fn(),
+    subscribe: vi.fn(),
+    unsubscribe: vi.fn(),
+    takeBackPrompt: vi.fn(),
+    stagePrompt: vi.fn(),
+    discardPrompt: vi.fn(),
+    seedTerminal: vi.fn(),
     state: {
       repos: [{ id: 'repo-1', executionHostId: 'local' }],
       settings: {},
@@ -30,7 +37,9 @@ const mocks = vi.hoisted(() => {
     }
   }
 })
-vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.state } }))
+vi.mock('@/store', () => ({
+  useAppStore: { getState: () => mocks.state, subscribe: mocks.subscribe }
+}))
 vi.mock('@/runtime/local-runtime-capabilities', () => ({
   ensureLocalRuntimeCapabilities: mocks.capabilities
 }))
@@ -52,12 +61,25 @@ vi.mock('@/components/native-chat/native-chat-session-option-cache', () => ({
 vi.mock('@/components/native-chat/structured-agent-session-message-sender', () => ({
   sendStructuredAgentSessionMessage: mocks.send
 }))
+vi.mock('@/lib/structured-agent-session-launch-prompt', () => ({
+  stageStructuredLaunchPrompt: mocks.stagePrompt,
+  prepareLegacyStructuredLaunchPrompts: vi.fn(),
+  discardStructuredLaunchPrompts: mocks.discardPrompt,
+  takeBackLegacyStructuredLaunchPrompts: mocks.takeBackPrompt,
+  sendStagedStructuredLaunchPrompt: (sessionId: string, target: unknown) =>
+    mocks.send({ sessionId, target, text: 'Fix the bug' })
+}))
 vi.mock('@/runtime/structured-agent-session-tab-retirement', () => ({
   beginStructuredAgentSessionTabClose: mocks.close
 }))
-vi.mock('@/lib/agent-launch-prompt-delivery', () => ({ deliverLaunchPromptToAgentTab: vi.fn() }))
+vi.mock('@/lib/agent-launch-prompt-delivery', () => ({
+  deliverLaunchPromptToAgentTab: mocks.terminalPrompt
+}))
+vi.mock('@/runtime/web-runtime-session-tab-lifecycle', () => ({
+  closeWebRuntimeSessionTab: vi.fn()
+}))
 vi.mock('@/lib/worktree-initial-terminal-seeding', () => ({
-  ensureWorktreeHasInitialTerminal: vi.fn()
+  ensureWorktreeHasInitialTerminal: mocks.seedTerminal
 }))
 vi.mock('@/lib/worktree-creation-background-mount', () => ({
   mountCreatedWorktreeStartupTabsInBackground: vi.fn()
@@ -104,9 +126,12 @@ function request(): WorktreeCreationRequest {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.subscribe.mockReturnValue(mocks.unsubscribe)
   mocks.capabilities.mockResolvedValue(capabilities)
   mocks.rpc.mockResolvedValue(result)
-  mocks.send.mockReturnValue({})
+  mocks.send.mockResolvedValue({ delivered: true })
+  mocks.refresh.mockReset()
+  mocks.terminalPrompt.mockResolvedValue(true)
   mocks.state.pendingWorktreeCreations = { 'creation-1': {} }
   mocks.state.activePendingCreationId = 'creation-1'
   mocks.state.seedNativeChatLaunchDraft = mocks.draft
@@ -134,6 +159,7 @@ describe('desktop shared worktree create', () => {
       { timeoutMs: 600_000 }
     )
     expect(mocks.rpc.mock.calls[0]?.[2]).not.toHaveProperty('prompt')
+    expect(mocks.stagePrompt).toHaveBeenCalledBefore(mocks.rpc)
     expect(mocks.send).toHaveBeenCalledWith({
       sessionId: 'claude_created',
       target: { kind: 'local' },
@@ -166,9 +192,12 @@ describe('desktop shared worktree create', () => {
   it('closes a dismissed at-rest chat without sending or revealing the workspace', async () => {
     mocks.rpc.mockImplementation(async () => {
       mocks.state.pendingWorktreeCreations = {}
+      mocks.subscribe.mock.calls[0]?.[0](mocks.state)
+      expect(mocks.discardPrompt).toHaveBeenCalledWith(expect.stringMatching(/^claude_/))
       return result
     })
     await createWorktreeThroughHost('creation-1', request())
+    expect(mocks.unsubscribe).toHaveBeenCalledOnce()
     expect(mocks.close).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: 'claude_created', provisional: true })
     )
@@ -190,6 +219,67 @@ describe('desktop shared worktree create', () => {
     expect(mocks.ready).toHaveBeenCalledOnce()
   })
 
+  it.each(['before inventory', 'during inventory'])(
+    'closes the actual host terminal after dismissal %s, even without a local tab',
+    async (checkpoint) => {
+      mocks.rpc.mockImplementationOnce(async () => {
+        if (checkpoint === 'before inventory') {
+          mocks.state.pendingWorktreeCreations = {}
+        }
+        return terminalResult()
+      })
+      mocks.refresh.mockImplementationOnce(async () => {
+        mocks.state.pendingWorktreeCreations = {}
+      })
+      await createWorktreeThroughHost('creation-1', request())
+      expect(mocks.rpc).toHaveBeenLastCalledWith({ kind: 'local' }, 'session.tabs.close', {
+        worktree: 'id:wt-1',
+        tabId: 'terminal-created',
+        reason: 'user'
+      })
+      expect(mocks.terminalPrompt).not.toHaveBeenCalled()
+      expect(mocks.reveal).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['draft', 'auto-submit'] as const)(
+    'delivers %s input to the actual fallback terminal through its ordinary transport',
+    async (promptDelivery) => {
+      mocks.rpc.mockResolvedValueOnce(terminalResult())
+      await createWorktreeThroughHost('creation-1', {
+        ...request(),
+        launchDraftPrompt: 'Investigate https://example.test/task/123',
+        promptDelivery
+      })
+      expect(mocks.terminalPrompt).toHaveBeenCalledWith({
+        tabId: 'terminal-created',
+        agent: 'claude',
+        content: 'Investigate https://example.test/task/123',
+        submit: promptDelivery === 'auto-submit',
+        forcePaste: true
+      })
+      expect(mocks.send).not.toHaveBeenCalled()
+    }
+  )
+
+  it('passes returned unspawned Setup to the existing fallback without replacing the agent', async () => {
+    const setup = { runnerScriptPath: '/runner/setup', envVars: {} }
+    mocks.rpc.mockResolvedValueOnce({
+      ...result,
+      created: { ...result.created, setup }
+    })
+    await createWorktreeThroughHost('creation-1', request())
+    expect(mocks.seedTerminal).toHaveBeenCalledWith(
+      mocks.state,
+      'wt-1',
+      undefined,
+      setup,
+      undefined,
+      undefined,
+      { callerProvidesSurface: true, activateCreatedTabs: false }
+    )
+  })
+
   it('replays the same create after an unanswered call instead of minting another operation', async () => {
     mocks.rpc.mockRejectedValueOnce(
       new RuntimeRpcCallError({
@@ -205,7 +295,21 @@ describe('desktop shared worktree create', () => {
     await expect(createWorktreeThroughHost('creation-1', pending)).rejects.toThrow(
       'Could not confirm whether Claude created the workspace'
     )
+    expect(mocks.takeBackPrompt).toHaveBeenCalledWith(pending.hostAgentLaunch?.sessionId)
     await createWorktreeThroughHost('creation-1', pending)
+    expect(mocks.stagePrompt).toHaveBeenCalledOnce()
+    expect(mocks.unsubscribe).toHaveBeenCalledTimes(2)
     expect(mocks.rpc.mock.calls[1]?.[2]).toEqual(mocks.rpc.mock.calls[0]?.[2])
   })
 })
+
+function terminalResult(): AgentLaunchResult {
+  return {
+    ...result,
+    outcome: {
+      kind: 'terminal',
+      handle: 'term_created',
+      paneKey: 'terminal-created:11111111-1111-4111-8111-111111111111'
+    }
+  }
+}

@@ -261,6 +261,37 @@ describe('runtime keep-local-main-up-to-date choice', () => {
   })
 })
 
+it('reports actual fetch then checkout and Git meter through the runtime create route', async () => {
+  const onProgress = vi.fn()
+  const checkout = { percent: 45, completed: 45, total: 100 }
+  mocks.hasBase.mockResolvedValue(false)
+  mocks.consume.mockResolvedValue({ status: 'miss', reason: 'disabled' })
+  mocks.fetch.mockImplementation(async () => {
+    expect(onProgress.mock.calls).toEqual([[{ phase: 'fetching' }]])
+  })
+  mocks.add.mockImplementation(async (...inputs: unknown[]) => {
+    expect(onProgress.mock.calls.at(-1)).toEqual([{ phase: 'creating' }])
+    const options = inputs[6]
+    if (typeof options !== 'object' || options === null || !('onCheckoutProgress' in options)) {
+      throw new Error('missing checkout progress callback')
+    }
+    const report = options.onCheckoutProgress
+    if (typeof report !== 'function') {
+      throw new Error('invalid checkout progress callback')
+    }
+    report(checkout)
+    report(null)
+    return {}
+  })
+  await createWorktree({ onProgress })
+  expect(onProgress.mock.calls).toEqual([
+    [{ phase: 'fetching' }],
+    [{ phase: 'creating' }],
+    [{ phase: 'creating', checkout }],
+    [{ phase: 'creating', checkout: null }]
+  ])
+})
+
 describe('runtime prepared-worktree replenishment', () => {
   it('keeps a failed claim reserved through the normal-add fallback', async () => {
     mocks.consume.mockResolvedValue({

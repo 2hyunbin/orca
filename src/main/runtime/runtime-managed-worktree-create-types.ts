@@ -1,7 +1,10 @@
 import type { WorkspaceCreateEntryPoint } from '../../shared/worktree/create-timing-vocabulary'
 import type { AgentLaunchInitialSurfaceStage } from '../agent-launch/agent-launch-surface-factories'
 import type { AgentLaunchPreferences } from '../../shared/agent-session-host-authority'
-import type { CreateWorktreeArgs } from '../../shared/worktree/create-types'
+import type {
+  CreateWorktreeArgs,
+  CreateWorktreeProgressEvent
+} from '../../shared/worktree/create-types'
 import type {
   AutomationWorkspaceProvenance,
   CliWorkspaceProvenance,
@@ -62,6 +65,7 @@ export type RuntimeManagedWorktreeCreateArgs = {
   promisedAgentChat?: boolean
   /** Keys the host's in-progress creation; minted when the caller sends none. */
   creationId?: string
+  onProgress?: (progress: Omit<CreateWorktreeProgressEvent, 'creationId'>) => void
   /** Main-internal launch registration before catalog notification or activation. */
   onWorkspaceCreated?: (worktreeId: string) => void
   initializeSurface?: AgentLaunchInitialSurfaceStage

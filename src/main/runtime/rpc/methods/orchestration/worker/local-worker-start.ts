@@ -176,6 +176,7 @@ export async function startLocalWorker(args: {
   }
   let terminalHandle = params.terminal
   let placed: Awaited<ReturnType<typeof placeWorkerAgent>> | undefined
+  let createdSetupReceipt: NonNullable<typeof placed>['setupReceipt'] | undefined
   let failedStage = 'terminal_create'
   try {
     placed = await placeWorkerAgent({
@@ -191,6 +192,9 @@ export async function startLocalWorker(args: {
       agent,
       launchPreferences: launch.preferences,
       effects,
+      onSetupReceipt: (receipt) => {
+        createdSetupReceipt = receipt
+      },
       onStage: (stage) => {
         failedStage = stage
       }
@@ -303,7 +307,7 @@ export async function startLocalWorker(args: {
       dispatchId: started.dispatch.id,
       failedStage,
       error,
-      setup: placed?.setupReceipt ?? EXISTING_WORKTREE_SETUP,
+      setup: placed?.setupReceipt ?? createdSetupReceipt ?? EXISTING_WORKTREE_SETUP,
       launch: launch.receipt,
       mode
     })

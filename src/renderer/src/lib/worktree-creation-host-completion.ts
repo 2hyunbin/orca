@@ -7,8 +7,13 @@ import {
   materializeHostCreatedWorktree
 } from '@/lib/worktree-creation-host-result'
 import { seedNativeChatAppliedSessionOptions } from '@/components/native-chat/native-chat-session-option-cache'
-import { sendStructuredAgentSessionMessage } from '@/components/native-chat/structured-agent-session-message-sender'
+import {
+  discardStructuredLaunchPrompts,
+  sendStagedStructuredLaunchPrompt
+} from '@/lib/structured-agent-session-launch-prompt'
 import { beginStructuredAgentSessionTabClose } from '@/runtime/structured-agent-session-tab-retirement'
+import { closeWebRuntimeSessionTab } from '@/runtime/web-runtime-session-tab-lifecycle'
+import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { deliverLaunchPromptToAgentTab } from '@/lib/agent-launch-prompt-delivery'
 import { ensureWorktreeHasInitialTerminal } from '@/lib/worktree-initial-terminal-seeding'
 import { mountCreatedWorktreeStartupTabsInBackground } from '@/lib/worktree-creation-background-mount'
@@ -39,8 +44,30 @@ export async function completeHostWorktreeCreation(args: {
     return
   }
   const cancelled = (): boolean => !useAppStore.getState().pendingWorktreeCreations[creationId]
-  const closeCancelledChat = (): void => {
+  const closeCancelledSurface = async (): Promise<void> => {
+    if (request.hostAgentLaunch) {
+      discardStructuredLaunchPrompts(request.hostAgentLaunch.sessionId)
+    }
     if (launch.outcome.kind !== 'structured') {
+      const pane = parsePaneKey(launch.outcome.paneKey ?? '')
+      if (pane) {
+        try {
+          await (target.kind === 'environment'
+            ? closeWebRuntimeSessionTab({
+                environmentId: target.environmentId,
+                worktreeId: launch.worktreeId,
+                tabId: pane.tabId,
+                reason: 'user'
+              })
+            : callRuntimeRpc(target, 'session.tabs.close', {
+                worktree: `id:${launch.worktreeId}`,
+                tabId: pane.tabId,
+                reason: 'user'
+              }))
+        } catch (error) {
+          console.warn('worktree create: cancelled terminal close failed', error)
+        }
+      }
       return
     }
     const store = useAppStore.getState()
@@ -57,7 +84,7 @@ export async function completeHostWorktreeCreation(args: {
     })
   }
   if (cancelled()) {
-    closeCancelledChat()
+    await closeCancelledSurface()
     return
   }
   const created = await acceptHostCreatedWorktree(target, launch, request.repoId, executionHostId)
@@ -70,7 +97,7 @@ export async function completeHostWorktreeCreation(args: {
     console.warn('worktree create: surface refresh failed', error)
   }
   if (cancelled()) {
-    closeCancelledChat()
+    await closeCancelledSurface()
     return
   }
   const focusOnCompletion = isCreatedWorkspaceInView(
@@ -91,11 +118,14 @@ export async function completeHostWorktreeCreation(args: {
     }
   }
   if (cancelled()) {
-    closeCancelledChat()
+    await closeCancelledSurface()
     return
   }
   const terminal =
     launch.outcome.kind === 'terminal' ? parsePaneKey(launch.outcome.paneKey ?? '') : null
+  if (terminal && request.hostAgentLaunch) {
+    discardStructuredLaunchPrompts(request.hostAgentLaunch.sessionId)
+  }
   const tabId =
     launch.outcome.kind === 'structured'
       ? structuredAgentSessionTabId(launch.outcome.sessionId)
@@ -108,30 +138,22 @@ export async function completeHostWorktreeCreation(args: {
     seedNativeChatAppliedSessionOptions(tabId, agent, request.startupPlan?.sessionOptions)
     const text = request.launchDraftPrompt ?? request.quickPrompt
     if (text) {
-      if (request.promptDelivery === 'draft') {
+      if (request.promptDelivery === 'draft' && launch.outcome.kind === 'structured') {
         useAppStore
           .getState()
           .seedNativeChatLaunchDraft({ tabId, agent, text, createdAt: Date.now() })
       } else if (launch.outcome.kind === 'structured') {
-        const sent = sendStructuredAgentSessionMessage({
-          sessionId: launch.outcome.sessionId,
-          target,
-          text
-        })
-        if (!sent) {
-          useAppStore.getState().seedNativeChatLaunchDraft({
-            tabId,
-            agent,
-            text,
-            createdAt: Date.now()
-          })
-        }
+        void sendStagedStructuredLaunchPrompt(launch.outcome.sessionId, target)?.catch(
+          (error: unknown) => {
+            console.warn('worktree create: opening prompt delivery failed', error)
+          }
+        )
       } else {
         void deliverLaunchPromptToAgentTab({
           tabId,
           agent,
           content: text,
-          submit: true,
+          submit: request.promptDelivery !== 'draft',
           forcePaste: true
         }).catch((error: unknown) => {
           console.warn('worktree create: terminal prompt delivery failed', error)
@@ -139,13 +161,13 @@ export async function completeHostWorktreeCreation(args: {
       }
     }
   }
-  if (request.issueCommand) {
+  if (created.setup || request.issueCommand) {
     try {
       ensureWorktreeHasInitialTerminal(
         useAppStore.getState(),
         launch.worktreeId,
         undefined,
-        undefined,
+        created.setup,
         request.issueCommand,
         undefined,
         { callerProvidesSurface: true, activateCreatedTabs: false }

@@ -1,4 +1,5 @@
 import type { AgentLaunchIntent } from '../../../../shared/agent-launch-intent'
+import type { CreateWorktreeProgressEvent } from '../../../../shared/worktree/create-types'
 import type { AgentLaunchExecution } from '../../../agent-launch/agent-launch-execution'
 import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-code'
 /**
@@ -113,6 +114,15 @@ export function agentLaunchWorkspaceFactory(
           createdWithAgent: agent,
           ...(promisedAgentChat ? { promisedAgentChat } : {}),
           ...(onWorkspaceCreated ? { onWorkspaceCreated } : {}),
+          ...(context.clientKind === 'runtime'
+            ? {
+                onProgress: (progress: Omit<CreateWorktreeProgressEvent, 'creationId'>) =>
+                  runtime.notifyWorktreeCreationProgress({
+                    ...progress,
+                    creationId: params.creationId
+                  })
+              }
+            : {}),
           ...(initializeSurface
             ? {
                 initializeSurface: async (
@@ -210,18 +220,8 @@ function setupCompletion(
 export function agentLaunchWorkspaceCreation(
   context: RpcContext,
   intent: AgentLaunchIntent
-): Pick<AgentLaunchExecution, 'workspaces' | 'onStage'> {
+): Pick<AgentLaunchExecution, 'workspaces'> {
   return {
-    workspaces: agentLaunchWorkspaceFactory(context, intent.agent),
-    onStage: (stage) => {
-      if (context.clientKind !== 'runtime' || intent.target.kind !== 'create-worktree') {
-        return
-      }
-      const { creationId } = intent.target.create
-      context.runtime.notifyWorktreeCreationProgress({
-        creationId: typeof creationId === 'string' ? creationId : undefined,
-        phase: stage === 'worktree_create' ? 'fetching' : 'creating'
-      })
-    }
+    workspaces: agentLaunchWorkspaceFactory(context, intent.agent)
   }
 }

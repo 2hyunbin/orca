@@ -66,6 +66,7 @@ type WorkerAgentPlacementArgs = {
   effects: WorkerEffect[]
   /** Attributes a throw to the step that was running, the way the caller's own stages do. */
   onStage: (stage: string) => void
+  onSetupReceipt?: (receipt: WorkerSetupReceipt) => void
 }
 
 /** The setup receipt for a placement that creates no worktree, and the one a start reports if it
@@ -136,6 +137,13 @@ async function launchWorkerAgent(
             id: shell.handle,
             tabId: shell.tabId
           })
+          args.db.recordWorkerStage({
+            dispatchId: args.dispatchId,
+            stage: 'terminal_creating',
+            worktreeId,
+            effects: args.effects,
+            residualResources: args.effects
+          })
         },
         createWorktree: async ({
           startupAgent,
@@ -156,6 +164,7 @@ async function launchWorkerAgent(
             promisedAgentChat,
             onWorkspaceCreated,
             initializeSurface,
+            onSetupReceipt: args.onSetupReceipt,
             ...(args.launchPreferences ? { launchPreferences: args.launchPreferences } : {}),
             effects: args.effects
           })

@@ -1,5 +1,11 @@
 import { useAppStore } from '@/store'
 import { completeHostWorktreeCreation } from '@/lib/worktree-creation-host-completion'
+import {
+  stageStructuredLaunchPrompt,
+  prepareLegacyStructuredLaunchPrompts,
+  discardStructuredLaunchPrompts,
+  takeBackLegacyStructuredLaunchPrompts
+} from '@/lib/structured-agent-session-launch-prompt'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { repoOwnerHostId, runtimeTargetForRepoOwner } from '@/lib/repo-runtime-owner'
 import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
@@ -111,7 +117,17 @@ export async function createWorktreeThroughHost(
   const reservation = request.hostAgentLaunch
   useAppStore.getState().updatePendingWorktreeCreation(creationId, { request })
   const replayed = reservation.issued
+  const text = request.launchDraftPrompt ?? request.quickPrompt
+  if (!replayed && request.promptDelivery !== 'draft' && text?.trim()) {
+    stageStructuredLaunchPrompt(reservation.sessionId, text)
+    prepareLegacyStructuredLaunchPrompts(reservation.sessionId)
+  }
   reservation.issued = true
+  const unsubscribe = useAppStore.subscribe((current) => {
+    if (!current.pendingWorktreeCreations[creationId]) {
+      discardStructuredLaunchPrompts(reservation.sessionId)
+    }
+  })
   let launch: AgentLaunchResult
   try {
     launch = await callRuntimeRpc<AgentLaunchResult>(
@@ -139,9 +155,11 @@ export async function createWorktreeThroughHost(
       error instanceof RuntimeRpcCallError &&
       isAgentLaunchReplayUnsupportedRefusal(error)
     ) {
+      discardStructuredLaunchPrompts(reservation.sessionId)
       delete request.hostAgentLaunch
       return false
     }
+    takeBackLegacyStructuredLaunchPrompts(reservation.sessionId)
     if (
       error instanceof RuntimeRpcCallError &&
       (error.code === 'agent_session_operation_unknown' ||
@@ -156,6 +174,8 @@ export async function createWorktreeThroughHost(
       )
     }
     throw error
+  } finally {
+    unsubscribe()
   }
   await completeHostWorktreeCreation({
     creationId,

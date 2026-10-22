@@ -213,14 +213,20 @@ function handBackStagedPrompt(prompt: StagedStructuredLaunchPrompt): boolean {
 
 function sendStagedPrompt(
   prompt: StagedStructuredLaunchPrompt,
-  receipt: LaunchReceipt,
+  receipt: LaunchReceipt | null,
   target: RuntimeClientTarget
 ): Promise<StagedDelivery> {
   prompt.delivery ??= (async () => {
-    noteStructuredAgentSessionFence(prompt.sessionId, receipt.fence)
-    const sent =
-      prompt.slot?.send(target) ??
-      sendStructuredAgentSessionMessage({ sessionId: prompt.sessionId, target, text: prompt.text })
+    if (receipt) {
+      noteStructuredAgentSessionFence(prompt.sessionId, receipt.fence)
+    }
+    const sent = prompt.slot
+      ? prompt.slot.send(target)
+      : sendStructuredAgentSessionMessage({
+          sessionId: prompt.sessionId,
+          target,
+          text: prompt.text
+        })
     if (!sent) {
       // Another send of the chat holds its slot: the launch text waits in the composer instead.
       unstage(prompt)
@@ -239,6 +245,15 @@ function sendStagedPrompt(
     }
   })()
   return prompt.delivery
+}
+
+/** Delivers the create's reserved text, if Stop or close has not already handed it back. */
+export function sendStagedStructuredLaunchPrompt(
+  sessionId: string,
+  target: RuntimeClientTarget
+): Promise<StagedDelivery> | undefined {
+  const prompt = [...(staged.get(sessionId) ?? [])].find((candidate) => !candidate.discarded)
+  return prompt ? sendStagedPrompt(prompt, null, target) : undefined
 }
 
 export function settleStructuredAgentLaunchPrompt(args: {
