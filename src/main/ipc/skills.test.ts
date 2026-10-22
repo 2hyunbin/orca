@@ -261,12 +261,15 @@ describe('registerSkillsHandlers', () => {
       planned: true
     })
     await handlerFor('skills:bundledPlan')(null, { force })
-    await expect(handlerFor('skills:bundledExecute')(null, { force, planDigest })).resolves.toEqual(
-      { executed: true }
-    )
+    await expect(
+      handlerFor('skills:bundledExecute')(null, { planDigest, request: { force } })
+    ).resolves.toEqual({ executed: true })
 
     expect(runtime.planLocalBundledSkills.mock.calls).toEqual([[{}], [{ force }]])
-    expect(runtime.executeLocalBundledSkills).toHaveBeenCalledWith({ force, planDigest })
+    expect(runtime.executeLocalBundledSkills).toHaveBeenCalledWith({
+      planDigest,
+      request: { force }
+    })
     expect(getWslHomeMock).not.toHaveBeenCalled()
   })
 

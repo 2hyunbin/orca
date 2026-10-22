@@ -38,7 +38,8 @@ vi.mock('@/hooks/useInstalledAgentSkills', () => ({
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
-    canUseSkillFreshness: capturedPanel.canUseSkillFreshness
+    canUseSkillFreshness: capturedPanel.canUseSkillFreshness,
+    bundledSkillTarget: capturedPanel.canUseSkillFreshness ? { kind: 'local' } : null
   })
 }))
 
