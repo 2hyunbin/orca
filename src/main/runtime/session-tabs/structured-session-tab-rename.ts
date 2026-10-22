@@ -1,6 +1,14 @@
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { RuntimeMobileSessionTabsSnapshot } from '../../../shared/runtime-session-contracts'
 
+export type SessionTabProps = {
+  tabId: string
+  color?: string | null
+  isPinned?: boolean
+  viewMode?: 'terminal' | 'chat'
+  customTitle?: string | null
+}
+
 export async function renameStructuredSessionTab<Props extends { customTitle?: string | null }>(
   snapshot: RuntimeMobileSessionTabsSnapshot | undefined,
   tabId: string,

@@ -78,11 +78,11 @@ export function mobileWebAppBundleBudgetBytes(manifest) {
  * Scripts emitted at every prefix of the sorted route key list, and the route each prefix added.
  *
  * A chunk is emitted per distinct set of importers, not per route, so a route's marginal cost is
- * what it fails to share rather than what it weighs. Re-measured on this head by building
+ * what it fails to share rather than what it weighs. The recorded sweep was measured by building
  * `routes.slice(0, n)` for every n, which is what the fence below is derived from rather than
- * fitted to. The spread it shows is 1 to 12: `pr` adds one script, `tasks` adds twelve.
+ * fitted to. The spread it shows is 1 to 14: `pr` adds one script, `tasks` adds fourteen.
  * The root `./_layout.tsx` (the page's web sibling of the native root) sorts first; with it the
- * swept tree reads 78 scripts at 15 routes, with theme tokens in the entry.
+ * swept tree reads 91 scripts at 16 routes, with theme tokens in the entry.
  *
  * This table is the fence's only input, so a route added to the tree stales it and the pins beside
  * the fence fail until it is re-measured. That is the point: the bound is re-derived, never bumped.
@@ -96,13 +96,14 @@ export const MOBILE_WEB_APP_BUNDLE_SCRIPT_SWEEP = [
   ['./h/[hostId]/files/[worktreeId].tsx', 24],
   ['./h/[hostId]/files/preview/[worktreeId].tsx', 31],
   ['./h/[hostId]/history/[worktreeId].tsx', 34],
-  ['./h/[hostId]/index.tsx', 41],
-  ['./h/[hostId]/pr/[worktreeId].tsx', 42],
-  ['./h/[hostId]/review/[worktreeId].tsx', 49],
-  ['./h/[hostId]/session/[worktreeId].tsx', 59],
-  ['./h/[hostId]/source-control/[worktreeId].tsx', 63],
-  ['./h/[hostId]/tasks.tsx', 75],
-  ['./h/_layout.tsx', 78]
+  ['./h/[hostId]/index.tsx', 42],
+  ['./h/[hostId]/new-workspace.tsx', 49],
+  ['./h/[hostId]/pr/[worktreeId].tsx', 50],
+  ['./h/[hostId]/review/[worktreeId].tsx', 57],
+  ['./h/[hostId]/session/[worktreeId].tsx', 69],
+  ['./h/[hostId]/source-control/[worktreeId].tsx', 73],
+  ['./h/[hostId]/tasks.tsx', 87],
+  ['./h/_layout.tsx', 91]
 ]
 
 const sweptScripts = MOBILE_WEB_APP_BUNDLE_SCRIPT_SWEEP.map(([, scripts]) => scripts)
@@ -118,8 +119,8 @@ export const MOBILE_WEB_APP_BUNDLE_ROUTE_SCRIPT_SPREAD = sweptScripts
  * Measured, not chosen, and per head rather than cumulative: at 8, 10, 12 and 14 routes the head
  * that wrote the old `4r + 16` read 32, 43, 61 and 69, and one refactor with no route added moved
  * the 12-route prefix by four (61 to 57). Four is the worst step a refactor alone has cost. The
- * sweep before this branch read 34, 40, 58 and 71 and this head reads 34, 42, 59 and 75: four at
- * 14 routes, from main's own drift plus the server-workspace modules this head adds. A head
+ * sweep before this branch read 34, 40, 58 and 71; its measured 15-route source read 34, 42, 59
+ * and 75: four at 14 routes, from main's drift plus the server-workspace modules it added. A head
  * between them read 77 there, six past that sweep, and re-measured rather than fitting inside the
  * margin, which is what a step past four is meant to force.
  * Summing the steps instead would grow this number every head and loosen the fence for free.

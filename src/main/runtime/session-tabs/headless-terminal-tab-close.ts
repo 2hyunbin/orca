@@ -1,8 +1,8 @@
-import { renameStructuredSessionTab } from './structured-session-tab-rename'
+import { renameStructuredSessionTab, type SessionTabProps } from './structured-session-tab-rename'
 import type { RuntimeHeadlessTabProperties as HeadlessTabPropertiesMethods } from './headless-tab-properties'
 import type { RuntimeHeadlessTabGroups as HeadlessTabGroupsMethods } from './headless-tab-group-moves'
 import type { OrcaRuntimeWithPersistHeadlessTerminalTitle as PersistHeadlessTerminalTitleMethods } from '../workspaces/workspace-file-session-targets'
-import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
+import { OrcaRuntimeWithMainLayoutTabMoves } from './main-layout-session-tab-move'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type {
   RuntimeMobileSessionTabMove,
@@ -19,7 +19,7 @@ import type { TerminalPaneLayoutNode } from '../../../shared/terminal-tab-types'
 import type { RuntimeTerminalRename } from '../../../shared/runtime-terminal-contracts'
 import type { RuntimeSessionTabCloseReason } from '../../../shared/runtime-session-contracts'
 
-export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithMainLayoutRenames {
+export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends OrcaRuntimeWithMainLayoutTabMoves {
   protected abstract applyHeadlessSessionTabPropsToSnapshot(
     ...args: Parameters<HeadlessTabPropertiesMethods['applyHeadlessSessionTabPropsToSnapshot']>
   ): ReturnType<HeadlessTabPropertiesMethods['applyHeadlessSessionTabPropsToSnapshot']>
@@ -173,6 +173,10 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
     if (!snapshot) {
       throw new Error('tab_not_found')
     }
+    const movedInMain = await this.moveTabInMainLayout(worktreeId, snapshot, move)
+    if (movedInMain) {
+      return movedInMain
+    }
     if (!this.notifier?.moveSessionTab) {
       return this.moveHeadlessMobileSessionTab(worktreeId, snapshot, move)
     }
@@ -287,13 +291,7 @@ export abstract class OrcaRuntimeWithCloseHeadlessMobileTerminalTab extends Orca
 
   async setMobileSessionTabProps(
     worktreeSelector: string,
-    args: {
-      tabId: string
-      color?: string | null
-      isPinned?: boolean
-      viewMode?: 'terminal' | 'chat'
-      customTitle?: string | null
-    }
+    args: SessionTabProps
   ): Promise<{ updated: true }> {
     const explicitWorktreeId = this.getExplicitSessionWorktreeIdSelector(worktreeSelector)
     const worktreeId =
