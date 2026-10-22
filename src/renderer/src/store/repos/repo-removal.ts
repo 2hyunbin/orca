@@ -30,7 +30,6 @@ import {
 import { worktreePurgeClosedFileIds } from '../slices/worktrees/teardown/worktree-purge-closed-files'
 import { selectRepos } from '../project-catalog-selectors'
 
-
 type HostScopedWorktreeRef = { id: string; hostId?: string }
 
 type RepoWorktreeCatalog = {

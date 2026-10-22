@@ -170,8 +170,7 @@ export function buildCmdJQuickActionContext(args: {
     args.activeGroupSnapshot
   )
   const isLoading =
-    args.state.repos.length > 0 &&
-    Object.keys(selectWorktreesByRepo(args.state)).length === 0
+    args.state.repos.length > 0 && Object.keys(selectWorktreesByRepo(args.state)).length === 0
   const runtimeMode =
     (globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ &&
     args.state.settings?.activeRuntimeEnvironmentId?.trim()
