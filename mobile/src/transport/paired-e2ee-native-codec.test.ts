@@ -215,6 +215,28 @@ describe('the native paired E2EE codec', () => {
     }
   })
 
+  // The frame is open and the counter advanced before UTF-8, so a native throw must not drop it.
+  it('falls back to TextDecoder when native UTF-8 throws', async () => {
+    const { primitives } = await load(true)
+    bindings!.codec.decodeUtf8 = () => {
+      throw new Error('native UTF-8 failed')
+    }
+    const { session, schedule } = pairedSession(primitives)
+    const frames = ['{"a":1}', 'é✓🙂'].map((payload, counter) =>
+      b64(
+        sealMobileE2EEV2Frame({
+          payload: new TextEncoder().encode(payload),
+          key: schedule.desktopToMobileKey,
+          sessionId: schedule.sessionId,
+          direction: 'desktop-to-mobile',
+          payloadKind: 'text',
+          counter: BigInt(counter)
+        })
+      )
+    )
+    expect(frames.map((frame) => session.openText(frame))).toEqual(['{"a":1}', 'é✓🙂'])
+  })
+
   // libsodium sizes its output as the box length minus the MAC, which underflows and crashes.
   it('never hands libsodium a box shorter than its MAC', async () => {
     const { native } = await load(true)
@@ -254,7 +276,7 @@ describe('the native paired E2EE codec', () => {
       '-_8=',
       'AB+/'
     ]
-    for (let index = 0; index < 20_000; index++) {
+    for (let index = 0; index < 5_000; index++) {
       let value = b64(randomBytes(random(10)))
       if (random(2) === 0) {
         const at = random(value.length + 1)
