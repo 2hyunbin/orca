@@ -85,7 +85,7 @@ function makeStore(options: StoreOptions = {}) {
     [WORKTREE_ID]: makeMeta(),
     [MAIN_WORKTREE_ID]: makeMeta({ displayName: 'main', instanceId: 'parent-instance' })
   }
-  const lineageById = makeLineage()
+  const lineageById: Partial<ReturnType<typeof makeLineage>> = makeLineage()
   const listeners = new Set<(domains?: readonly string[]) => void>()
   const store = {
     onStateWritten: (listener: (domains?: readonly string[]) => void) => {
