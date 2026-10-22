@@ -3,7 +3,7 @@ import {
   bundledSkillInstallAction,
   type BundledSkillInstallAction
 } from '../../../shared/bundled-skill-summary'
-import { bundledSkillTargetKey } from '@/lib/bundled-skill-target'
+import { bundledSkillTargetKey, type BundledSkillTarget } from '@/lib/bundled-skill-target'
 import { planBundledSkillsOnTarget } from '@/runtime/runtime-bundled-skills-client'
 import { INSTALLED_AGENT_SKILLS_CHANGED_EVENT } from './installed-agent-skills-change-event'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
@@ -20,9 +20,10 @@ const UNKNOWN: BundledSkillInstallActionState = { kind: 'unknown' }
 /** What a setup screen's button would do for `skillNames` on the agents' host, from its plan. */
 export function useBundledSkillInstallAction(
   skillNames: readonly string[],
-  options: { enabled: boolean; refreshKey: string }
+  options: { enabled: boolean; refreshKey: string; target?: BundledSkillTarget | null }
 ): BundledSkillInstallActionState {
-  const target = useActiveProjectSkillRuntime().bundledSkillTarget
+  const activeTarget = useActiveProjectSkillRuntime().bundledSkillTarget
+  const target = options.target === undefined ? activeTarget : options.target
   const targetKey = target ? bundledSkillTargetKey(target) : null
   const namesKey = skillNames.join(',')
   const planKey = options.enabled && targetKey ? `${targetKey}|${namesKey}` : null

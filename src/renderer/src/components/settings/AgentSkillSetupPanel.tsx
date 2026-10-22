@@ -25,6 +25,7 @@ function BundledAgentSkillSetupPanel({
   title,
   description,
   skillNames,
+  target,
   installedSkillNames,
   installed,
   loading,
@@ -56,7 +57,7 @@ function BundledAgentSkillSetupPanel({
     () => recheckSurfacesAfterAgentSkillInstall(onRecheck, freshnessSkillName),
     [freshnessSkillName, onRecheck]
   )
-  const skillInstall = useBundledSkillInstall({ onFinished: recheckAfterInstall })
+  const skillInstall = useBundledSkillInstall({ onFinished: recheckAfterInstall, target })
   const { state, ready, install } = skillInstall
   const installing = state.kind === 'installing'
   const failed = bundledSkillInstallNeedsAttention(state)
@@ -64,7 +65,8 @@ function BundledAgentSkillSetupPanel({
   // Why only once installed: before that Install always has work; after, the plan says.
   const action = useBundledSkillInstallAction(activeSkillNames, {
     enabled: installed && showInstallWhenInstalled,
-    refreshKey: state.kind
+    refreshKey: state.kind,
+    target
   })
   const installedButton: 'update' | 'replace' | null =
     action.kind === 'run' || action.kind === 'unknown'
@@ -229,7 +231,8 @@ function BundledAgentSkillSetupPanel({
 
 export function AgentSkillSetupPanel(props: AgentSkillSetupPanelProps): React.JSX.Element {
   const activeRuntime = useActiveProjectSkillRuntime()
-  const runtime = props.terminalRuntime ?? activeRuntime.agentRuntime
+  const runtime =
+    props.terminalRuntime ?? (props.target === undefined ? activeRuntime.agentRuntime : undefined)
   // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
   if (runtime?.runtime === 'wsl') {
     return (
@@ -249,7 +252,7 @@ export function AgentSkillSetupPanel(props: AgentSkillSetupPanelProps): React.JS
         }
         terminalTitle={props.title}
         terminalAriaLabel={props.title}
-        terminalWorktreeId="wsl-agent-skill-setup"
+        terminalWorktreeId={`wsl-agent-skill-setup-${props.skillNames.join('-')}`}
         terminalRuntime={runtime}
         terminalShellOverride={activeRuntime.terminalShellOverride ?? 'powershell.exe'}
         installDisabled={props.installDisabled || Boolean(activeRuntime.installDisabledReason)}

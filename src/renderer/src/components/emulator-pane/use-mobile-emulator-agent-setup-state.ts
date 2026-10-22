@@ -1,3 +1,5 @@
+import { useActiveSkillDiscoveryRuntimeTarget } from '@/hooks/use-active-skill-discovery-runtime-target'
+import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { ORCA_CLI_SKILL_NAME } from '@/lib/agent-feature-skill-names'
@@ -10,6 +12,7 @@ import { translate } from '@/i18n/i18n'
 
 // Why: Orca terminals already provide the `orca` command, so agent control only needs the skill.
 export function useMobileEmulatorAgentSetupState(enabled = true): {
+  skillTarget: RuntimeClientTarget | null
   cliSkillError: string | null
   cliSkillInstalled: boolean
   cliSkillLoading: boolean
@@ -19,6 +22,7 @@ export function useMobileEmulatorAgentSetupState(enabled = true): {
   setupRechecking: boolean
   statusReady: boolean
 } {
+  const skillTarget = useActiveSkillDiscoveryRuntimeTarget()
   const [setupRechecking, setSetupRechecking] = useState(false)
   const mountedRef = useMountedRef()
   const {
@@ -28,6 +32,7 @@ export function useMobileEmulatorAgentSetupState(enabled = true): {
     refresh: refreshCliSkill
   } = useInstalledAgentSkill(ORCA_CLI_SKILL_NAME, {
     enabled,
+    runtimeTarget: skillTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
 
@@ -87,6 +92,7 @@ export function useMobileEmulatorAgentSetupState(enabled = true): {
   }, [mountedRef, refreshCliSkill, setupRechecking])
 
   return {
+    skillTarget,
     cliSkillError,
     cliSkillInstalled,
     cliSkillLoading,

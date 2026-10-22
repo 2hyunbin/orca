@@ -9,7 +9,8 @@ import { CliSection } from './CliSection'
 type CapturedPanelProps = {
   skillNames: readonly string[]
   installedSkillNames?: readonly string[]
-  agentRuntime?: { runtime: 'host' | 'wsl'; wslDistro?: string | null; label: string }
+  target?: { kind: string; environmentId?: string } | null
+  terminalRuntime?: { runtime: 'host' | 'wsl'; wslDistro?: string | null; label: string }
   freshnessSkillName?: string
   onBeforeInstall?: () => Promise<void>
 }
@@ -32,6 +33,10 @@ vi.mock('sonner', () => ({ toast: { error: toastError, success: vi.fn() } }))
 vi.mock('@/hooks/useInstalledAgentSkills', () => ({
   GLOBAL_AGENT_SKILL_SOURCE_KINDS: ['global'],
   useInstalledAgentSkill: capturedPanel.useInstalledAgentSkill
+}))
+
+vi.mock('@/hooks/use-active-skill-discovery-runtime-target', () => ({
+  useActiveSkillDiscoveryRuntimeTarget: () => ({ kind: 'local' })
 }))
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
@@ -132,10 +137,16 @@ describe('CliSection project runtime defaults', () => {
       'orca-cli',
       expect.objectContaining({
         discoveryTarget: { runtime: 'wsl', wslDistro: 'Ubuntu' },
+        runtimeTarget: { kind: 'local' },
         sourceKinds: ['global']
       })
     )
     expect(capturedPanel.props?.skillNames).toEqual(['orca-cli'])
+    expect(capturedPanel.props?.terminalRuntime).toMatchObject({
+      runtime: 'wsl',
+      wslDistro: 'Ubuntu'
+    })
+    expect(capturedPanel.props?.target).toBeNull()
     // An install re-copies, so the panel reuses the install names as its update.
     expect(capturedPanel.props?.installedSkillNames).toBeUndefined()
     expect(capturedPanel.props?.onBeforeInstall).toBeUndefined()

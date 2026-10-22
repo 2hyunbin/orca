@@ -468,6 +468,26 @@ describe('AgentSkillSetupPanel', () => {
     expect(mocks.execute).not.toHaveBeenCalled()
   })
 
+  it('plans and installs on an explicit surface target even when the active project is WSL', async () => {
+    mocks.target = null
+    mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }
+    const target = { kind: 'environment', environmentId: 'selected-host' } as const
+    await renderInteractivePanel({ target, installed: true })
+    expect(mocks.plan).toHaveBeenCalledWith(target, { names: ['orca-cli'] }, { background: true })
+    await clickButton('Update')
+    expect(mocks.execute).toHaveBeenCalledWith(target, WRITE_PLAN.planDigest, {
+      names: ['orca-cli']
+    })
+    expect(container?.querySelector('[data-testid="wsl-terminal"]')).toBeNull()
+  })
+
+  it('does not infer WSL from an explicitly unresolved surface target', async () => {
+    mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }
+    await renderInteractivePanel({ target: null })
+    expect(findButton('Install').disabled).toBe(true)
+    expect(mocks.plan).not.toHaveBeenCalled()
+  })
+
   it('keeps the main npx command in a legacy WSL terminal without invoking the bundled installer', async () => {
     mocks.target = null
     mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }

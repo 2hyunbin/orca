@@ -33,8 +33,8 @@ export function MobileEmulatorAgentSetupGuideSteps({
           'auto.components.emulator.pane.MobileEmulatorAgentSetupGuideSteps.64fb057667',
           'Teaches agents the orca emulator commands for this worktree.'
         )}
-        // Why no agentRuntime: detection here scans the host, so a WSL install would land unseen.
         skillNames={[ORCA_CLI_SKILL_NAME]}
+        target={setup.skillTarget}
         installed={setup.cliSkillInstalled}
         loading={setup.cliSkillLoading || setup.setupRechecking}
         error={setup.cliSkillError}

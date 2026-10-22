@@ -1,3 +1,4 @@
+import type { BundledSkillTarget } from '@/lib/bundled-skill-target'
 import type { ComponentProps, ReactNode } from 'react'
 import type { LocalAgentRuntime } from './CliSkillRuntimeSetup'
 import type { Button } from '../ui/button'
@@ -8,6 +9,7 @@ export type AgentSkillSetupPanelProps = {
   title: string
   description: ReactNode
   skillNames: readonly string[]
+  target?: BundledSkillTarget | null
   // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
   terminalRuntime?: LocalAgentRuntime
   // An installed copy may use another name (the legacy Linear skill).

@@ -4,7 +4,7 @@ import {
   type BundledSkillResultSummary
 } from '../../../shared/bundled-skill-summary'
 import type { BundledSkillPlanRequest } from '../../../shared/bundled-skill-plan'
-import { bundledSkillTargetKey } from '@/lib/bundled-skill-target'
+import { bundledSkillTargetKey, type BundledSkillTarget } from '@/lib/bundled-skill-target'
 import { bundledSkillInstallErrorMessage } from '@/lib/bundled-skill-install-error-message'
 import {
   executeBundledSkillsOnTarget,
@@ -49,10 +49,11 @@ export function bundledSkillInstallNeedsAttention(state: BundledSkillInstallStat
  * this machine, its WSL distro, or the paired server or SSH host (never this machine for it).
  */
 export function useBundledSkillInstall(
-  options: { onFinished?: () => void } = {}
+  options: { onFinished?: () => void; target?: BundledSkillTarget | null } = {}
 ): BundledSkillInstall {
   const { onFinished } = options
-  const target = useActiveProjectSkillRuntime().bundledSkillTarget
+  const activeTarget = useActiveProjectSkillRuntime().bundledSkillTarget
+  const target = options.target === undefined ? activeTarget : options.target
   const targetKey = target ? bundledSkillTargetKey(target) : null
   // Why per target: a result belongs to the host it ran on, not the one focused now.
   const [states, setStates] = useState<ReadonlyMap<string, BundledSkillInstallState>>(new Map())
