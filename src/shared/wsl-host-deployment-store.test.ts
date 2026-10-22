@@ -38,6 +38,7 @@ const pairing = {
   publicKeyB64: Buffer.alloc(32, 1).toString('base64'),
   deviceToken: 'private-device-token'
 }
+const WSL_PAIRING_KEY = Buffer.alloc(32, 2).toString('base64')
 const sshTunnel = {
   sshTargetId: 'target',
   sshTargetGeneration: 3,
@@ -87,7 +88,7 @@ describe('WSL host deployment store', () => {
       // Each pairing key identifies one server; duplicate keys are rejected.
       pairingCode: encodePairingOffer({
         ...pairing,
-        publicKeyB64: Buffer.alloc(32, 2).toString('base64'),
+        publicKeyB64: WSL_PAIRING_KEY,
         endpoint: `ws://127.0.0.1:${record.localPort}/runtime`
       }),
       now: 150
@@ -305,7 +306,7 @@ describe('WSL host deployment store', () => {
 
   it('ignores a record written for another server re-paired under the same id and port', () => {
     const wslId = addWslManaged(
-      wslRecord({ pairingPublicKeyB64: Buffer.alloc(32, 2).toString('base64') })
+      wslRecord({ pairingPublicKeyB64: Buffer.alloc(32, 3).toString('base64') })
     )
     const [environment] = listEnvironments(userDataPath)
     expect(environment?.id).toBe(wslId)
@@ -313,7 +314,7 @@ describe('WSL host deployment store', () => {
   })
 
   it('overlays a record bound to the pairing key (keyless records keep port-only binding)', () => {
-    addWslManaged(wslRecord({ pairingPublicKeyB64: pairing.publicKeyB64 }))
+    addWslManaged(wslRecord({ pairingPublicKeyB64: WSL_PAIRING_KEY }))
     expect(listEnvironments(userDataPath)[0]?.orcadDeployment).toEqual({
       kind: 'wsl',
       distro: 'Ubuntu-24.04',
