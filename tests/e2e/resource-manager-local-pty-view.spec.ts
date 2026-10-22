@@ -2,6 +2,12 @@ import { expect, test } from './helpers/orca-app'
 import { makeResourceManagerFixtureVisible } from './helpers/resource-manager-visible-fixture'
 import { waitForSessionReady } from './helpers/store'
 
+type PtyViewCounts = { listing: number; metrics: number; kills?: unknown[] }
+
+declare global {
+  var __ptyViewCounts: PtyViewCounts | undefined
+}
+
 test.use({ seedTestRepo: false })
 
 test('a real hidden window performs no Resource Manager diagnostics and vetoes forced tagged calls', async ({
@@ -14,8 +20,8 @@ test('a real hidden window performs no Resource Manager diagnostics and vetoes f
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Electron's private invoke registry is checked before wrapping the real handlers.
     const handlers = (ipcMain as unknown as { _invokeHandlers: Map<string, InvokeHandler> })
       ._invokeHandlers
-    const counts = { listing: 0, metrics: 0 }
-    Reflect.set(globalThis, '__ptyViewCounts', counts)
+    const counts: PtyViewCounts = { listing: 0, metrics: 0 }
+    globalThis.__ptyViewCounts = counts
     for (const [channel, key] of [
       ['pty:listSessions', 'listing'],
       ['memory:getSnapshot', 'metrics']
@@ -39,10 +45,14 @@ test('a real hidden window performs no Resource Manager diagnostics and vetoes f
   await orcaPage.getByRole('tab', { name: 'PTYs', exact: true }).click()
   await expect(orcaPage.getByText('Loading terminals…', { exact: true })).toBeVisible()
   await orcaPage.waitForTimeout(2_100)
-  expect(await electronApp.evaluate(() => Reflect.get(globalThis, '__ptyViewCounts'))).toEqual({
-    listing: 0,
-    metrics: 0
-  })
+  expect(
+    await electronApp.evaluate(() => {
+      if (!globalThis.__ptyViewCounts) {
+        throw new Error('PTY view counters missing')
+      }
+      return globalThis.__ptyViewCounts
+    })
+  ).toEqual({ listing: 0, metrics: 0 })
   expect(await orcaPage.evaluate(() => window.api.memory.resourceWindowVisible())).toBe(false)
   const veto = await orcaPage.evaluate(async () => {
     try {
@@ -73,12 +83,12 @@ for (const theme of ['dark', 'light'] as const) {
         agentOwnership: index === 0 ? 'unknown' : 'absent',
         fencedTermination: index !== 998
       }))
-      const counts: { listing: number; metrics: number; kills: unknown[] } = {
+      const counts: PtyViewCounts = {
         listing: 0,
         metrics: 0,
         kills: []
       }
-      Reflect.set(globalThis, '__ptyViewCounts', counts)
+      globalThis.__ptyViewCounts = counts
       for (const channel of [
         'pty:listSessions',
         'memory:getSnapshot',
@@ -117,7 +127,12 @@ for (const theme of ['dark', 'light'] as const) {
       })
     ).toBeVisible()
     const listMs = performance.now() - listStarted
-    const before = await electronApp.evaluate(() => Reflect.get(globalThis, '__ptyViewCounts'))
+    const before = await electronApp.evaluate(() => {
+      if (!globalThis.__ptyViewCounts) {
+        throw new Error('PTY view counters missing')
+      }
+      return globalThis.__ptyViewCounts
+    })
     const panel = orcaPage.getByRole('tabpanel', { name: /^PTYs/ })
     await expect(panel.getByRole('searchbox')).toHaveCount(0)
     await expect(panel.getByRole('combobox')).toHaveCount(0)
@@ -172,7 +187,12 @@ for (const theme of ['dark', 'light'] as const) {
     console.info(JSON.stringify({ theme, rows: 1_000, listMs }))
     await expect(body.getByText('Last seen process: node', { exact: false })).toBeVisible()
     await expect(body.getByText('/workspace/folder-999', { exact: false })).toBeVisible()
-    const after = await electronApp.evaluate(() => Reflect.get(globalThis, '__ptyViewCounts'))
+    const after = await electronApp.evaluate(() => {
+      if (!globalThis.__ptyViewCounts) {
+        throw new Error('PTY view counters missing')
+      }
+      return globalThis.__ptyViewCounts
+    })
     expect(after.listing).toBe(before.listing)
     expect(after.metrics).toBe(before.metrics)
     await lastTerminal.click()
@@ -183,7 +203,14 @@ for (const theme of ['dark', 'light'] as const) {
         .getByText('/workspace/folder-999', { exact: true })
     ).toBeVisible()
     expect(
-      (await electronApp.evaluate(() => Reflect.get(globalThis, '__ptyViewCounts'))).kills
+      (
+        await electronApp.evaluate(() => {
+          if (!globalThis.__ptyViewCounts) {
+            throw new Error('PTY view counters missing')
+          }
+          return globalThis.__ptyViewCounts
+        })
+      ).kills
     ).toHaveLength(0)
     await orcaPage.getByRole('button', { name: 'End terminal', exact: true }).click()
     await expect(
@@ -193,7 +220,14 @@ for (const theme of ['dark', 'light'] as const) {
       )
     ).toBeVisible()
     expect(
-      (await electronApp.evaluate(() => Reflect.get(globalThis, '__ptyViewCounts'))).kills
+      (
+        await electronApp.evaluate(() => {
+          if (!globalThis.__ptyViewCounts) {
+            throw new Error('PTY view counters missing')
+          }
+          return globalThis.__ptyViewCounts
+        })
+      ).kills
     ).toEqual([
       {
         id: 'local-pty-0999',

@@ -175,7 +175,7 @@ export async function startLateExitHarness() {
       if (!fencedKillHandler) {
         throw new Error('Fenced handler missing')
       }
-      return Reflect.apply(fencedKillHandler, null, [{}, request])
+      return fencedKillHandler({} as never, request)
     },
     stopAndWait: () => {
       const deps = {

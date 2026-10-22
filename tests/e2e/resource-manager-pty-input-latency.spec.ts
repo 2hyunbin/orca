@@ -20,6 +20,12 @@ import {
 } from './helpers/terminal-typing-benchmark'
 import { makeResourceManagerFixtureVisible } from './helpers/resource-manager-visible-fixture'
 
+type PtyInputCounts = { listing: number; metrics: number }
+
+declare global {
+  var __ptyInputCounts: PtyInputCounts | undefined
+}
+
 test('terminal input stays responsive with a slow 1,000-session inventory, and hidden open PTYs stop scanning', async ({
   electronApp,
   orcaPage,
@@ -39,8 +45,8 @@ test('terminal input stays responsive with a slow 1,000-session inventory, and h
     await sendToTerminal(orcaPage, id, `node ${JSON.stringify(script)}\r`)
     await waitForTerminalOutput(orcaPage, `TYPING_READY_${runId}`, 10_000)
     await electronApp.evaluate(({ ipcMain }) => {
-      const counts = { listing: 0, metrics: 0 }
-      Reflect.set(globalThis, '__ptyInputCounts', counts)
+      const counts: PtyInputCounts = { listing: 0, metrics: 0 }
+      globalThis.__ptyInputCounts = counts
       ipcMain.removeHandler('pty:listSessions')
       ipcMain.handle('pty:listSessions', async (_event, scope) => {
         counts.listing++
@@ -77,7 +83,12 @@ test('terminal input stays responsive with a slow 1,000-session inventory, and h
       }
       await focusActiveTerminalInput(orcaPage)
       const latencies: number[] = []
-      const before = await electronApp.evaluate(() => Reflect.get(globalThis, '__ptyInputCounts'))
+      const before = await electronApp.evaluate(() => {
+        if (!globalThis.__ptyInputCounts) {
+          throw new Error('PTY input counters missing')
+        }
+        return globalThis.__ptyInputCounts
+      })
       for (const char of KEY_LATENCY_SAMPLES) {
         const start = performance.now()
         await orcaPage.keyboard.type(char)
@@ -102,7 +113,12 @@ test('terminal input stays responsive with a slow 1,000-session inventory, and h
       if (state === 'hidden-open') {
         await orcaPage.waitForTimeout(2_100)
         expect(
-          await electronApp.evaluate(() => Reflect.get(globalThis, '__ptyInputCounts'))
+          await electronApp.evaluate(() => {
+            if (!globalThis.__ptyInputCounts) {
+              throw new Error('PTY input counters missing')
+            }
+            return globalThis.__ptyInputCounts
+          })
         ).toEqual(before)
         await expect(orcaPage.getByRole('tab', { name: 'PTYs 1000', exact: true })).toBeVisible()
       }
