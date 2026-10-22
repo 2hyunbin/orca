@@ -250,6 +250,7 @@ export function resolveRemoteOperationErrorMessage(
     return 'Pull blocked — move, remove, or add untracked files first.'
   }
 
+  // Why: the normalized auth message has no `fatal:` line and usually arrives IPC/RPC-wrapped.
   if (error.message.includes(GIT_AUTHENTICATION_FAILED_MESSAGE)) {
     const operationLabel = options?.publish
       ? 'Publish Branch'
@@ -259,10 +260,14 @@ export function resolveRemoteOperationErrorMessage(
           ? 'Force Push'
           : options?.isPush
             ? 'Push'
-            : null
-    if (operationLabel) {
-      return `${operationLabel} failed. ${GIT_AUTHENTICATION_FAILED_MESSAGE}`
-    }
+            : options?.isFetch
+              ? 'Fetch'
+              : options?.isFastForward
+                ? 'Fast-forward'
+                : options?.isRebase
+                  ? 'Rebase'
+                  : 'Pull'
+    return `${operationLabel} failed. ${GIT_AUTHENTICATION_FAILED_MESSAGE}`
   }
 
   if (options?.publish) {

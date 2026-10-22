@@ -147,6 +147,7 @@ export function normalizeGitErrorMessage(error: unknown, operation?: GitRemoteOp
 
   if (
     raw.includes('could not read Username') ||
+    raw.includes('could not read Password') ||
     raw.includes('Authentication failed') ||
     raw.includes('fatal: unable to get password from user')
   ) {

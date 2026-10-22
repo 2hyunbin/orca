@@ -14,10 +14,15 @@ describe('source-control remote error formatting', () => {
     { options: { isForcePush: true }, label: 'Force Push' },
     { options: { publish: true }, label: 'Publish Branch' },
     { options: { isSync: true }, label: 'Sync' },
-    { options: { isSync: true, isSyncPushStage: true }, label: 'Sync' }
+    { options: { isSync: true, isSyncPushStage: true }, label: 'Sync' },
+    { options: { isFetch: true }, label: 'Fetch' },
+    { options: { isFastForward: true }, label: 'Fast-forward' },
+    { options: { isRebase: true }, label: 'Rebase' },
+    { options: undefined, label: 'Pull' }
   ])('retains normalized authentication guidance for $label', ({ options, label }) => {
     for (const stderr of [
       "fatal: could not read Username for 'https://example.com': terminal prompts disabled",
+      "fatal: could not read Password for 'https://user@example.com': terminal prompts disabled",
       'fatal: unable to get password from user'
     ]) {
       const normalized = normalizeGitErrorMessage(new Error(stderr), 'push')

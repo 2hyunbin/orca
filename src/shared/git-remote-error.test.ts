@@ -17,9 +17,14 @@ describe('normalizeGitErrorMessage', () => {
   it.each(['push', 'pull', 'fetch', 'upstream'] as const)(
     'classifies noninteractive credential refusal for %s',
     (operation) => {
-      expect(
-        normalizeGitErrorMessage(new Error('fatal: unable to get password from user'), operation)
-      ).toBe('Authentication failed. Check your remote credentials.')
+      for (const stderr of [
+        'fatal: unable to get password from user',
+        "fatal: could not read Password for 'https://user@example.com': terminal prompts disabled"
+      ]) {
+        expect(normalizeGitErrorMessage(new Error(stderr), operation)).toBe(
+          'Authentication failed. Check your remote credentials.'
+        )
+      }
     }
   )
 
