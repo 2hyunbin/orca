@@ -9,7 +9,8 @@ import {
 } from '../lib/workspace-file-drag'
 import type {
   PrepareDroppedPathsRequest,
-  PreparedDroppedPaths
+  PreparedDroppedPaths,
+  StoreDroppedFileBytesRequest
 } from '../../../shared/native-file-drop-preparation'
 import { withFallback } from '../web/preload-api/web-fallback-api'
 import {
@@ -293,7 +294,7 @@ describe('useOsFileDropOwner', () => {
         { sourceIndex: 0, byteLength: 5, position: 3 }
       ]
     })
-    const storeDroppedFileBytes = vi.fn(async ({ name }: { name: string }) => ({
+    const storeDroppedFileBytes = vi.fn(async ({ name }: StoreDroppedFileBytesRequest) => ({
       paths: [`/store/${name}`],
       failures: []
     }))
@@ -306,7 +307,7 @@ describe('useOsFileDropOwner', () => {
       expect.objectContaining({ consumer: 'local-chat' })
     )
     expect(storeDroppedFileBytes).toHaveBeenCalledTimes(1)
-    expect(Array.from(storeDroppedFileBytes.mock.calls[0][0].bytes as Uint8Array)).toEqual(
+    expect(Array.from(storeDroppedFileBytes.mock.calls[0][0].bytes)).toEqual(
       Array.from(new TextEncoder().encode('image'))
     )
     expect(onDrop.mock.calls[0][0]).toEqual({
