@@ -23,6 +23,7 @@ export type JournalLifecycleMutationInput = JournalItemAddress &
         kind: 'item'
         echoOf?: unknown
         body: AgentJournalItemBody
+        observedAt?: number
         /** Who wrote the row. Absent ⇒ the session's own agent on a first write,
          *  and the row's existing producer on a revision. */
         linkage?: AgentJournalProducerLinkage
@@ -50,7 +51,7 @@ export function journalLifecycleMutationItemId(mutation: JournalItemAddress): st
  *  settled before any checkpoint landed — and one batch can mix producers.
  *  The session's own rows carry no key at all: absence is the claim. */
 export function journalLifecycleItemMutation(
-  attribution: AgentJournalRowAttribution & JournalItemEcho,
+  attribution: AgentJournalRowAttribution & JournalItemEcho & { observedAt?: number },
   identity: AgentJournalItemIdentity,
   body: AgentJournalItemBody
 ): JournalLifecycleIdentityMutationInput {
@@ -60,6 +61,7 @@ export function journalLifecycleItemMutation(
     identity,
     body,
     turnScope,
+    ...(attribution.observedAt === undefined ? {} : { observedAt: attribution.observedAt }),
     ...journalItemEchoFields(attribution),
     ...(namesAgentJournalProducer(attribution)
       ? { linkage: agentJournalLinkageFields(attribution) }
@@ -82,6 +84,7 @@ export function journalLifecycleMutationRow(
         itemId,
         revision,
         body: mutation.body,
+        ...(mutation.observedAt === undefined ? {} : { observedAt: mutation.observedAt }),
         ...journalItemEchoFields(mutation),
         turnScope: mutation.turnScope,
         ownerFence,

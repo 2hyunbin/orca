@@ -24,6 +24,7 @@ import { readAgentSessionHistory } from '../native-chat/agent-session-wire/agent
 import { projectJournalBatch } from '../native-chat/agent-session-wire/agent-session-journal-batch'
 import { replacePage, mergeItems } from '../../shared/structured-agent-session-history-state'
 import { AgentJournalRenderItemSchema } from '../../shared/agent-session-journal-schemas'
+import { projectStructuredItemToNativeChat } from '../../shared/structured-agent-session-projection'
 
 const SESSION = 'session-claude-catch-up'
 const SID = '402eff2b-84dc-4e05-8fe8-49fffb2cd3c3'
@@ -349,15 +350,22 @@ describe('Claude chat catch-up', () => {
     }
   )
 
-  it('keeps new queued input in the observed outside turn without splitting its work', async () => {
+  it('keeps outside message times and order without splitting queued work', async () => {
     const c = await chat()
     await c.live()
     await c.write([
       ...chatTurn,
       prompt('p2', 'a1', 'outside request', 3),
-      reply('a2', 'p2', 'msg_b', { type: 'text', text: 'working' }, 4),
+      reply(
+        'a2',
+        'p2',
+        'msg_b',
+        { type: 'tool_use', id: 'toolu_time', name: 'Read', input: {} },
+        4
+      ),
       {
         ...attachment('queued-row', 'a2'),
+        timestamp: at(5),
         attachment: {
           type: 'queued_command',
           source_uuid: 'cmd-1',
@@ -367,17 +375,55 @@ describe('Claude chat catch-up', () => {
           prompt: 'follow up'
         }
       },
-      reply('a3', 'queued-row', 'msg_c', { type: 'text', text: 'finished' }, 5)
+      reply('a3', 'queued-row', 'msg_c', { type: 'text', text: 'finished' }, 6),
+      {
+        ...prompt('r-time', 'a3', '', 7),
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_time', content: 'done' }]
+        }
+      },
+      {
+        ...reply('a5', 'r-time', 'msg_missing', { type: 'text', text: 'no source time' }, 8),
+        timestamp: undefined
+      }
     ])
     expect(await c.open('a1')).toBe(true)
-    const key = (uuid: string) => agentJournalItemKey({ provider: 'claude', sessionId: SID, uuid })
+    const key = (uuid: string) =>
+      agentJournalItemKey(
+        uuid === 'toolu_time'
+          ? { provider: 'orca', clientMessageId: `claude-tool:${SID}:${uuid}` }
+          : { provider: 'claude', sessionId: SID, uuid }
+      )
     const queued = c.journal.item(key('cmd-1'))
-    expect(queued?.turnScope).toEqual(c.journal.item(key('block:msg_b:0'))?.turnScope)
+    expect(queued?.turnScope).toEqual(c.journal.item(key('toolu_time'))?.turnScope)
     expect(queued?.turnScope).toMatchObject({ kind: 'turn' })
     expect(c.journal.item(key('block:msg_c:0'))?.turnScope).toEqual(queued?.turnScope)
     expect(c.journal.snapshot().items.filter((row) => row.body.kind === 'turn')).toHaveLength(2)
     expect(isStructuredRewindTarget(c.journal, key('cmd-1'))).toBe(false)
     expect(isStructuredRewindTarget(c.journal, key('p2'))).toBe(true)
+    const items = c.journal
+      .snapshot()
+      .items.filter((item) =>
+        ['p2', 'toolu_time', 'cmd-1', 'block:msg_c:0', 'block:msg_missing:0'].some(
+          (uuid) => item.itemId === key(uuid)
+        )
+      )
+    expect(items.map((item) => [item.itemId, item.observedAt])).toEqual([
+      [key('p2'), Date.parse(at(3))],
+      [key('toolu_time'), Date.parse(at(4))],
+      [key('cmd-1'), Date.parse(at(5))],
+      [key('block:msg_c:0'), Date.parse(at(6))],
+      [key('block:msg_missing:0'), 1_000]
+    ])
+    expect(items.map((item) => projectStructuredItemToNativeChat(item)?.timestamp)).toEqual(
+      items.map((item) => item.observedAt)
+    )
+    expect(new Set(items.map((item) => item.sequence)).size).toBe(1)
+    const imported = c.journal.snapshot().items
+    expect(await c.open('a1')).toBe(true)
+    expect(c.journal.snapshot().items).toEqual(imported)
+    expect((await c.replay()).snapshot().items).toEqual(imported)
   })
   it.each([
     ['-work', '/work', false],
@@ -431,11 +477,13 @@ describe('Claude chat catch-up', () => {
     const afterTool = c.journal.item(tool.itemId)!
     expect(afterText).toMatchObject({
       sequence: text.sequence,
+      observedAt: text.observedAt,
       turnScope: text.turnScope,
       body: { blocks: [{ type: 'text', text: 'final answer, normalized' }] }
     })
     expect(afterTool).toMatchObject({
       sequence: tool.sequence,
+      observedAt: tool.observedAt,
       turnScope: tool.turnScope,
       body: {
         name: 'Read',

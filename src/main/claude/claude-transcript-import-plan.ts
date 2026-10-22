@@ -56,6 +56,7 @@ export function createClaudeTranscriptImportPlan(input: {
   )
   const aliases = new Map<string, AgentJournalItemIdentity>()
   let historicalScope: AgentJournalTurnScope | null = null
+  let sourceObservedAt: number | undefined
   const matchSource = (identities: AgentJournalItemIdentity[]) => {
     const matches = identities.flatMap((identity) => {
       const item = saved(agentJournalItemKey(identity))
@@ -117,8 +118,9 @@ export function createClaudeTranscriptImportPlan(input: {
         return { accepted: true } as const
       }
     }
+    const observedAt = mutations.has(key) ? mutations.get(key)?.observedAt : sourceObservedAt
     mutations.set(key, {
-      ...journalLifecycleItemMutation({ ...options, turnScope }, identity, body),
+      ...journalLifecycleItemMutation({ ...options, turnScope, observedAt }, identity, body),
       ...(body.kind === 'message' && body.role === 'user' ? { echoOf: null } : {})
     })
     if (mutations.size > HISTORY_CATCH_UP_MAX_OPERATIONS) {
@@ -192,8 +194,8 @@ export function createClaudeTranscriptImportPlan(input: {
         }
       }
       const parsedAt = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN
-      const observedAt = Number.isFinite(parsedAt) ? parsedAt : undefined
-      lastAt = observedAt ?? lastAt
+      sourceObservedAt = Number.isFinite(parsedAt) ? parsedAt : undefined
+      lastAt = sourceObservedAt ?? lastAt
       const prompt =
         queued ||
         (envelope?.role === 'user' &&
@@ -211,13 +213,13 @@ export function createClaudeTranscriptImportPlan(input: {
           type: 'message',
           sessionId: input.sessionId,
           message: frame,
-          ...(observedAt === undefined ? {} : { observedAt })
+          ...(sourceObservedAt === undefined ? {} : { observedAt: sourceObservedAt })
         })
         return
       }
       // Folded input belongs to the ongoing turn; only a physical opener ends its predecessor.
       if (!queued) {
-        idle(observedAt)
+        idle(sourceObservedAt)
         historicalScope = null
       }
       const sourceUuid = queued ? claudeText(claudeRecord(row.attachment)?.source_uuid) : null
@@ -245,7 +247,7 @@ export function createClaudeTranscriptImportPlan(input: {
           sessionId: input.sessionId,
           message: frame,
           startsTurn: true,
-          ...(observedAt === undefined ? {} : { observedAt })
+          ...(sourceObservedAt === undefined ? {} : { observedAt: sourceObservedAt })
         })
       }
     },

@@ -13,6 +13,9 @@ export function dropUnusableRowAnnotations(record: Record<string, unknown>): voi
         dropUnusableProducerLinkage(mutation)
         dropUnusableTurnScope(mutation)
         dropUnusableOwnerFence(mutation)
+        if (mutation.observedAt !== undefined && !Number.isFinite(mutation.observedAt)) {
+          delete mutation.observedAt
+        }
       }
     }
   }

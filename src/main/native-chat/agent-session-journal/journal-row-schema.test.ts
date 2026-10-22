@@ -365,12 +365,14 @@ describe('producer linkage on the persisted row', () => {
       identity,
       body,
       linkage,
+      observedAt: 123,
       turnScope: AGENT_JOURNAL_THREAD_SCOPE
     })
 
     const parsed = parseJournalRow(JSON.stringify(row))
     const mutations = parsed.ok && parsed.row.kind === 'lifecycle-batch' ? parsed.row.mutations : []
-    expect(mutations[0]).toMatchObject(linkage)
+    expect(mutations[0]).toMatchObject({ ...linkage, observedAt: 123 })
+    expect(mutations[1] && 'observedAt' in mutations[1]).toBe(false)
     expect(mutations[1] && 'agentId' in mutations[1]).toBe(false)
     // The same batch without the stamp writes the same version: an older host
     // ignores the unknown keys rather than losing the chat to an unknown `v`.
@@ -379,7 +381,7 @@ describe('producer linkage on the persisted row', () => {
     )
   })
 
-  it('keeps a batch mutation but drops its unusable producer id', () => {
+  it('keeps a batch mutation but drops unusable producer and source time annotations', () => {
     // Same policy as the row base: sanitize, never reject — a rejected batch
     // would take every mutation in it out of the timeline.
     const parsed = parseJournalRow(
@@ -392,15 +394,16 @@ describe('producer linkage on the persisted row', () => {
         kind: 'lifecycle-batch',
         settlementId: 'settle-2',
         mutations: [
-          { kind: 'item', itemId: 'i-1', revision: 1, body, agentId: '' },
-          { kind: 'item', itemId: 'i-2', revision: 1, body, agentId: 'thread-child' }
+          { kind: 'item', itemId: 'i-1', revision: 1, body, agentId: '', observedAt: 'invalid' },
+          { kind: 'item', itemId: 'i-2', revision: 1, body, agentId: 'thread-child', observedAt: 0 }
         ]
       })
     )
     const mutations = parsed.ok && parsed.row.kind === 'lifecycle-batch' ? parsed.row.mutations : []
     expect(mutations).toHaveLength(2)
     expect(mutations[0] && 'agentId' in mutations[0]).toBe(false)
-    expect(mutations[1]).toMatchObject({ agentId: 'thread-child' })
+    expect(mutations[0] && 'observedAt' in mutations[0]).toBe(false)
+    expect(mutations[1]).toMatchObject({ agentId: 'thread-child', observedAt: 0 })
   })
 
   it("omits every key on a row the session's own agent produced", () => {

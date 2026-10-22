@@ -177,6 +177,7 @@ export function applyJournalRow(
         const producer = journalBatchMutationProducer(row, mutation)
         const scope = statedOrDerivedTurnScope(state, mutation)
         const item = journalRenderItem(itemId, revision, body, row, scope, producer, sequenceIndex)
+        item.observedAt = mutation.observedAt ?? row.ts
         upsertJournalItem(state, itemId, revision, item, {
           fence: row.fence,
           ownerFence: mutation.ownerFence

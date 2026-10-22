@@ -227,6 +227,8 @@ export type JournalLifecycleMutation =
         revision: number
         body: AgentJournalItemBody
         turnScope?: AgentJournalTurnScope
+        /** Source creation time; absent uses the batch row's timestamp. */
+        observedAt?: number
       })
   | { kind: 'tombstone'; itemId: string; revision: number }
 
