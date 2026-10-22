@@ -138,6 +138,12 @@ describe('SkillUpdateStatusSegment', () => {
       vi.advanceTimersByTime(SKILL_UPDATE_SUCCESS_LINGER_MS * 3)
     })
     expect(container?.textContent).toContain('Skills need attention')
+    expect(container?.querySelector('button')?.getAttribute('aria-label')).toBe(
+      'Some skill updates were skipped. Click to open details.'
+    )
+    expect(container?.textContent).toContain(
+      'Some skill updates were skipped — click to see details'
+    )
   })
 
   it('reopens the update dialog when clicked', async () => {

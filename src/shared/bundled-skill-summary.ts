@@ -37,12 +37,12 @@ const OP_PLAN_STATE: Readonly<Record<BundledSkillOpKind, BundledSkillPlanState>>
 }
 
 export const BUNDLED_SKILL_LEAVE_REASON_TEXT: Readonly<Record<BundledSkillLeaveReason, string>> = {
-  edited: 'you edited this copy',
-  other: 'a different skill already uses this name',
+  edited: 'Skill edited outside Orca',
+  other: 'A different skill uses this name',
   unwritable: "Orca can't write to this folder",
-  unreadable: "Orca can't read every file in this copy",
-  busy: 'another skill install is still finishing here',
-  'shared-not-current': 'the shared copy this folder uses is not Orca\u2019s'
+  unreadable: "Orca can't read every file",
+  busy: 'Another install is still running',
+  'shared-not-current': "The shared copy isn't Orca's"
 }
 
 /** What Update does at one location, for plain-text surfaces; the app translates its own. */
@@ -221,14 +221,14 @@ export type BundledSkillOutcomeSummary = {
   text: BundledSkillOutcomeText
   /** Printed as warnings; never part of the exit code. */
   leftAlone: BundledSkillLeftAlone[]
-  /** e.g. "Updated - 1 not updated: you edited this copy". */
+  /** e.g. "Updated - 1 skipped: Skill edited outside Orca". */
   line: string
 }
 
 function leaveReasonText(reason: string | undefined): string {
   return reason && isBundledSkillLeaveReason(reason)
     ? BUNDLED_SKILL_LEAVE_REASON_TEXT[reason]
-    : 'this copy was kept as it is'
+    : 'This copy was kept as it is'
 }
 
 export function summarizeBundledSkillOutcome(
@@ -247,7 +247,7 @@ export function summarizeBundledSkillOutcome(
     name: outcome.name,
     text,
     leftAlone,
-    line: leftAlone.length > 0 ? `${text} \u00B7 ${leftAlone.length} not updated: ${reasons}` : text
+    line: leftAlone.length > 0 ? `${text} \u00B7 ${leftAlone.length} skipped: ${reasons}` : text
   }
 }
 
@@ -255,7 +255,7 @@ export type BundledSkillResultSummary = {
   ok: boolean
   /** The CLI's exit code: 1 only when an op failed or found the disk changed. */
   exitCode: 0 | 1
-  /** Skills the run changed: "Updated N skills · M not updated". */
+  /** Skills the run changed: "Updated N skills · M skipped". */
   changedCount: number
   leftAloneCount: number
   skills: BundledSkillOutcomeSummary[]

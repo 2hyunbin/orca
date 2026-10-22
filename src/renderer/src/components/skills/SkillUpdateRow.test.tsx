@@ -61,6 +61,20 @@ describe('SkillUpdateRow', () => {
     expect(BUNDLED_SKILL_PLAN_OP_TEXT[kind]).toBe(label)
   })
 
+  it.each([
+    ['update', 'Update available'],
+    ['restore', 'Repair available'],
+    ['write', 'Install available'],
+    ['copy', 'Install available'],
+    ['link', 'Install available'],
+    ['replace', 'Replace']
+  ] as const)('shows the available %s row status', async (kind, label) => {
+    const view = await render(
+      <SkillUpdateRow skill={skillOf([planOp(kind, CLAUDE)])} phase="plan" showLocations={false} />
+    )
+    expect(row(view)).toBe(`orca-cli${label}`)
+  })
+
   it('reports an unknown reason without claiming the copy was updated', async () => {
     const view = await render(
       <SkillUpdateRow
@@ -69,16 +83,16 @@ describe('SkillUpdateRow', () => {
         showLocations={false}
       />
     )
-    expect(row(view)).toBe('orca-cliNot updated: this copy was kept as it is')
+    expect(row(view)).toBe('orca-cliUpdate skipped: This copy was kept as it is')
   })
 
   it.each([
-    ['edited', 'you edited this copy'],
-    ['other', 'a different skill already uses this name'],
+    ['edited', 'Skill edited outside Orca'],
+    ['other', 'A different skill uses this name'],
     ['unwritable', "Orca can't write to this folder"],
-    ['unreadable', "Orca can't read every file in this copy"],
-    ['busy', 'another skill install is still finishing here'],
-    ['shared-not-current', 'the shared copy this folder uses is not Orca’s']
+    ['unreadable', "Orca can't read every file"],
+    ['busy', 'Another install is still running'],
+    ['shared-not-current', "The shared copy isn't Orca's"]
   ] as const)(
     'explains %s copies without repeating the status on folder lines',
     async (reason, text) => {
@@ -89,7 +103,9 @@ describe('SkillUpdateRow', () => {
           showLocations
         />
       )
-      expect(row(view)).toBe(`orca-cliNot updated: ${text}Claude Code · ~/.claude/skills/orca-cli`)
+      expect(row(view)).toBe(
+        `orca-cliUpdate skipped: ${text}Claude Code · ~/.claude/skills/orca-cli`
+      )
     }
   )
 
@@ -97,7 +113,7 @@ describe('SkillUpdateRow', () => {
     const skill = skillOf([planOp('update', SHARED), planOp('keep', CLAUDE)])
     expect(
       row(await render(<SkillUpdateRow skill={skill} phase="plan" showLocations={false} />))
-    ).toBe('orca-cliUpdate')
+    ).toBe('orca-cliUpdate available')
     await act(async () => root?.unmount())
     const shown = row(await render(<SkillUpdateRow skill={skill} phase="plan" showLocations />))
     expect(shown).toContain('Shared folder · ~/.agents/skills/orca-cli')
@@ -106,7 +122,7 @@ describe('SkillUpdateRow', () => {
     expect(shown).not.toContain('No change')
   })
 
-  it('reports a copy not updated without an agent prefix and offers Replace only where it is allowed', async () => {
+  it('reports a copy skipped without an agent prefix and offers Replace only where it is allowed', async () => {
     const onReplaceChange = vi.fn()
     const view = await render(
       <SkillUpdateRow
@@ -119,8 +135,8 @@ describe('SkillUpdateRow', () => {
         replace={{ isReplaced: () => false, onReplaceChange }}
       />
     )
-    expect(row(view)).toContain("Not updated: Orca can't write to this folder")
-    expect(row(view)).toContain('Not updated: you edited this copy')
+    expect(row(view)).toContain("Update skipped: Orca can't write to this folder")
+    expect(row(view)).toContain('Update skipped: Skill edited outside Orca')
     expect(row(view)).not.toContain('Claude Code:')
     const checkboxes = view.querySelectorAll('[role="checkbox"]')
     expect(checkboxes).toHaveLength(1)
@@ -150,7 +166,7 @@ describe('SkillUpdateRow', () => {
         showLocations={false}
       />
     )
-    expect(row(view)).toBe('orca-cliUpdatedNot updated: you edited this copy')
+    expect(row(view)).toBe('orca-cliUpdatedUpdate skipped: Skill edited outside Orca')
   })
 
   it.each<{

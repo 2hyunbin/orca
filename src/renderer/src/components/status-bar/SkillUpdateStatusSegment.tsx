@@ -76,11 +76,11 @@ export function SkillUpdateStatusSegment({
       ),
       tooltip: translate(
         'auto.components.status.bar.SkillUpdateStatusSegment.attentionTooltip',
-        'Some skills were not updated — click to see details'
+        'Some skill updates were skipped — click to see details'
       ),
       ariaLabel: translate(
         'auto.components.status.bar.SkillUpdateStatusSegment.attentionAria',
-        'Some skills were not updated. Click to open details.'
+        'Some skill updates were skipped. Click to open details.'
       )
     }
   })()

@@ -141,7 +141,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'edited'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: 'No change · 2 not updated: you edited this copy; the shared copy this folder uses is not Orca’s',
+    text: "No change · 2 skipped: Skill edited outside Orca; The shared copy isn't Orca's",
     badge: null
   },
   {
@@ -158,7 +158,7 @@ const LAYOUTS: Layout[] = [
       ['claude', 'keep'],
       ['cursor', 'leave', 'other']
     ],
-    text: 'Updated · 1 not updated: a different skill already uses this name',
+    text: 'Updated · 1 skipped: A different skill uses this name',
     untouched: (home) => [join(home.root, 'elsewhere', NAME)]
   },
   {
@@ -173,7 +173,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'update'],
       ['claude', 'leave', 'other']
     ],
-    text: 'Updated · 1 not updated: a different skill already uses this name'
+    text: 'Updated · 1 skipped: A different skill uses this name'
   },
   {
     name: 'plugin-managed copy only',
@@ -198,7 +198,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'unwritable'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: "No change · 2 not updated: Orca can't write to this folder; the shared copy this folder uses is not Orca’s"
+    text: "No change · 2 skipped: Orca can't write to this folder; The shared copy isn't Orca's"
   },
   {
     name: 'npx shared copy with Claude and Cursor detected',
@@ -233,7 +233,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'other'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: 'No change · 2 not updated: a different skill already uses this name; the shared copy this folder uses is not Orca’s'
+    text: "No change · 2 skipped: A different skill uses this name; The shared copy isn't Orca's"
   },
   {
     name: 'host that cannot link gets a copy',
@@ -270,7 +270,7 @@ const LAYOUTS: Layout[] = [
       ['shared', 'leave', 'edited'],
       ['claude', 'leave', 'shared-not-current']
     ],
-    text: 'No change · 2 not updated: you edited this copy; the shared copy this folder uses is not Orca’s'
+    text: "No change · 2 skipped: Skill edited outside Orca; The shared copy isn't Orca's"
   },
   {
     name: '~/.claude/skills is a link to ~/.agents/skills (one target)',
