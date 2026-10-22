@@ -102,9 +102,12 @@ export function buildWebSessionTabsFinalPatch(
       ? adoptMirroredEditorBuffers(
           state.editorBuffers,
           nextOpenFiles,
-          // Why the same resolver as the record middleware: host views of one file share a record.
-          // `state` is the live store state, so it carries every route input the resolver reads.
-          buildEditorBufferViewIndex(nextOpenFiles, (file) => editorBufferIdForFile(file, state))
+          // Why the live index for existing views: it holds sticky detachments. New views take the
+          // resolver the record middleware uses (host views of one file share a record).
+          buildEditorBufferViewIndex(
+            nextOpenFiles,
+            (file) => state.editorBufferIdOf?.[file.id] ?? editorBufferIdForFile(file, state)
+          )
         )
       : {}),
     ...(nextTabsByWorktree !== state.tabsByWorktree ? { tabsByWorktree: nextTabsByWorktree } : {}),

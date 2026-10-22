@@ -1,8 +1,11 @@
+// @vitest-environment happy-dom
 // Why: a read-only tab renders raw Monaco source on the shared model whatever its file type, so it
 // must show a writable view's unsaved edits (one record), never push disk text over them.
-import { beforeEach, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it } from 'vitest'
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
+import { toEditorModelUri } from './editor-model-uri'
 import { mayPushTabTextIntoModel } from './editor-stale-mount-guard'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
 
@@ -19,6 +22,12 @@ function tab(id: string, filePath: string, patch: Partial<OpenFile> = {}): OpenF
     ...patch
   }
 }
+
+afterEach(() => {
+  for (const model of monaco.editor.getModels()) {
+    model.dispose()
+  }
+})
 
 beforeEach(() => {
   useAppStore.setState(useAppStore.getInitialState(), true)
@@ -47,6 +56,19 @@ it.each(['/repo/notes.md', '/repo/data.csv', '/repo/log.jsonl'])(
     expect(state.openFiles.find((file) => file.id === 'read-only')?.isDirty).toBe(true)
     expect(state.editorDrafts['read-only']).toBe('unsaved edits')
     expect(state.editorBufferIdOf['read-only']).toBe(state.editorBufferIdOf.writable)
+
+    // The shared model holds the unsaved edits; whatever the read-only view pushes keeps them.
+    const model = monaco.editor.createModel(
+      'unsaved edits',
+      'plaintext',
+      monaco.Uri.parse(toEditorModelUri(filePath))
+    )
+    const diskText = 'disk text'
+    const pushed = mayPushTabTextIntoModel('read-only') ? state.editorDrafts['read-only'] : diskText
+    if (pushed !== undefined) {
+      model.setValue(pushed)
+    }
+    expect(model.getValue()).toBe('unsaved edits')
   }
 )
 
@@ -59,4 +81,20 @@ it('a read-only view may still load disk text into a clean model', () => {
     markdownViewMode: { writable: 'source' }
   })
   expect(mayPushTabTextIntoModel('read-only')).toBe(true)
+})
+
+it('a dirty view with no draft never pushes its text over the shared model', () => {
+  useAppStore.setState({
+    openFiles: [tab('mirrored', '/repo/notes.md', { isDirty: true })],
+    editorDrafts: {}
+  })
+  expect(mayPushTabTextIntoModel('mirrored')).toBe(false)
+})
+
+it('a dirty view with a draft may push it', () => {
+  useAppStore.setState({
+    openFiles: [tab('writable', '/repo/notes.md', { isDirty: true })],
+    editorDrafts: { writable: 'edits' }
+  })
+  expect(mayPushTabTextIntoModel('writable')).toBe(true)
 })

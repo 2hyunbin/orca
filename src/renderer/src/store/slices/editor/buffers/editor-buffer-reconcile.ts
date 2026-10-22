@@ -280,11 +280,28 @@ function joinView(
     case 'rekey':
     case 'adopt':
       return adopt()
-    case 'attach':
-      write.showView(viewId, target)
+    case 'attach': {
+      // Why: a clean view that saw the file deleted must not lose the banner by joining a clean record.
+      const carriesDeleted =
+        joining.record.externalMutation === 'deleted' &&
+        target.record.externalMutation === undefined &&
+        !isDirtyEditorBufferSide(target)
+      const joined = carriesDeleted
+        ? { ...target, record: { ...target.record, externalMutation: 'deleted' as const } }
+        : target
+      if (carriesDeleted) {
+        write.setRecord(want, joined.record)
+        for (const targetView of targetViews) {
+          write.showView(targetView, joined)
+        }
+      }
+      write.showView(viewId, joined)
       index.place(viewId, want)
       return want
+    }
     case 'merge':
+      // Why: the joining view's mirror must read the record, including its dirty flag.
+      write.showView(viewId, target)
       index.place(viewId, want)
       return want
     case 'detach': {
