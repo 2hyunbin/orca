@@ -25,13 +25,9 @@ the validation required before rolling out the updated images and host pins.
   mutation lease, the Terraform checkout, and the narrow Compute mutation used
   when a registered target is superseded. The workflow that calls it holds read
   and invoke rights only, never those mutation permissions.
-- Private operator tooling: the relay operations console and the incident monitor
-  behind `pnpm ops:relay`, `pnpm incident:relay`, and
-  `pnpm incident:relay-preflight`.
 - `apps/push` and `packages/push-contract`: the mobile push gateway that holds
   the APNs key and sends to phones through APNs and FCM, and its wire contract.
-  It is deployed and operated from here but is not part of the relay data path;
-  see [docs/push-gateway.md](docs/push-gateway.md).
+  Deployment and operations are owned by the private `stablyai/orca-cloud` repository.
 
 ## Mobile push gateway
 
@@ -58,7 +54,7 @@ and local development. Configure it with `ORCA_PUSH_PUBLIC_URL`, `ORCA_PUSH_FCM_
 `ORCA_PUSH_APNS_KEY_ID`, `ORCA_PUSH_APPLE_TEAM_ID`, all three or none), and
 optionally `ORCA_PUSH_APNS_TOPIC`. The FCM credential comes from
 the runtime service account, so no key material is configured for Android. See
-[push gateway operations](docs/push-gateway.md) for deployment and recovery.
+[push gateway operations](https://github.com/stablyai/orca-cloud/blob/main/cloud/docs/push-gateway.md) for deployment and recovery.
 
 Logging is aggregate counters only. Tokens, notification titles, notification
 bodies, and full host fingerprints never reach a log line.
