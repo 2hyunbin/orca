@@ -31,7 +31,7 @@ export function SourceControlPanelContent(props: SourceControlPanelReadyProps) {
     handleAbortOperationForConflict,
     handleCommitAction,
     handleContextMenu,
-    openUncommittedFile,
+    handleOpenDiff,
     handleResolveConflictsWithAI,
     handleSelect,
     handleStage,
@@ -49,7 +49,7 @@ export function SourceControlPanelContent(props: SourceControlPanelReadyProps) {
     openAllDiffs,
     openBranchAllDiffs,
     openCommitFile,
-    openBranchFile,
+    openCommittedDiff,
     openConflictReview,
     openHistoryCommitDiff,
     refreshActiveGitStatus,
@@ -165,7 +165,7 @@ export function SourceControlPanelContent(props: SourceControlPanelReadyProps) {
           handleContextMenu={handleContextMenu}
           revealInExplorer={revealInExplorer}
           activeConnectionId={activeConnectionId}
-          openUncommittedFile={openUncommittedFile}
+          handleOpenDiff={handleOpenDiff}
           handleStage={handleStage}
           handleUnstage={handleUnstage}
           requestDiscardEntry={requestDiscardEntry}
@@ -202,7 +202,7 @@ export function SourceControlPanelContent(props: SourceControlPanelReadyProps) {
           worktreePath={worktreePath}
           revealInExplorer={revealInExplorer}
           activeConnectionId={activeConnectionId}
-          openBranchFile={openBranchFile}
+          openCommittedDiff={openCommittedDiff}
           openBranchAllDiffs={openBranchAllDiffs}
           diffCommentCountByPath={diffCommentCountByPath}
         />
