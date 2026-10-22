@@ -139,6 +139,9 @@ async function recoverySiblings(
       context.digest,
       true
     )
+    if (classified.observed.kind === 'unreadable') {
+      continue
+    }
     if (kind === 'stage') {
       cleanup.push({ path, action: 'delete', observed: classified.observed })
     } else {
@@ -203,6 +206,9 @@ async function planTarget(
   })
 
   const decide = async (): Promise<BundledSkillOp> => {
+    if (observed.kind === 'unreadable') {
+      return leave('unreadable', false)
+    }
     if (restoreFrom) {
       return { ...base, kind: 'restore', restoreFrom, cleanup }
     }

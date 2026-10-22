@@ -33,6 +33,22 @@ function frontmatterName(bytes: Buffer): string | null {
   return (frontmatter && FRONTMATTER_NAME.exec(frontmatter)?.[2]?.trim()) || null
 }
 
+async function observeTree(
+  filesystem: BundledSkillFilesystem,
+  path: string,
+  observed: Extract<BundledSkillObserved, { kind: 'file' | 'folder' }>,
+  includeTreeDigest: boolean
+): Promise<BundledSkillObserved> {
+  if (!includeTreeDigest) {
+    return observed
+  }
+  try {
+    return { ...observed, treeDigest: await bundledSkillTreeSignature(filesystem, path) }
+  } catch {
+    return { kind: 'unreadable' }
+  }
+}
+
 /**
  * The one reader of a target path. `plan` classifies with it and `execute` re-observes with
  * it, so both compare the same `observed` shape.
@@ -61,13 +77,12 @@ export async function classifyBundledSkillPath(
   if (stat.kind !== 'directory') {
     return {
       folderClass: 'other',
-      observed: {
-        kind: 'file',
-        mtimeMs: stat.mtimeMs,
-        ...(includeTreeDigest
-          ? { treeDigest: await bundledSkillTreeSignature(filesystem, path) }
-          : {})
-      }
+      observed: await observeTree(
+        filesystem,
+        path,
+        { kind: 'file', mtimeMs: stat.mtimeMs },
+        includeTreeDigest
+      )
     }
   }
   const listing = await filesystem.listEntries(path)
@@ -94,11 +109,6 @@ export async function classifyBundledSkillPath(
   }
   return {
     folderClass: bytes && frontmatterName(bytes) === source.name ? 'edited' : 'other',
-    observed: {
-      ...observed,
-      ...(includeTreeDigest
-        ? { treeDigest: await bundledSkillTreeSignature(filesystem, path) }
-        : {})
-    }
+    observed: await observeTree(filesystem, path, observed, includeTreeDigest)
   }
 }
