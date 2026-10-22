@@ -178,7 +178,10 @@ export class AgentSessionAttachmentStore {
         throw new Error('Attachment upload was cancelled')
       }
     } catch (error) {
-      await removeQuietly(uploadDir)
+      // Drop failures use the existing abandoned-part sweep; cleanup cannot hold their payload.
+      if (!signal) {
+        await removeQuietly(uploadDir)
+      }
       throw error
     }
     return finalPath

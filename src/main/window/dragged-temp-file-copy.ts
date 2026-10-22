@@ -1,5 +1,6 @@
+import { cleanupFailedDragCopy } from './failed-drag-copy-cleanup'
 import { constants, createWriteStream, type Stats } from 'node:fs'
-import { lstat, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, open, realpath, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type { NativeFileDropCopyFailureReason } from '../../shared/native-file-drop'
@@ -86,14 +87,11 @@ export async function materializeDragTempPaths(
     return paths.map((path) => completed.get(path)!)
   } catch (error) {
     completed.clear()
-    await removeCreatedDragTempCopies(batch.directories)
+    for (const directory of batch.directories) {
+      cleanupFailedDragCopy(directory)
+    }
+    batch.directories.clear()
     throw error
-  }
-}
-
-export async function removeCreatedDragTempCopies(directories: Iterable<string>): Promise<void> {
-  for (const directory of directories) {
-    await rm(directory, { recursive: true, force: true }).catch(() => undefined)
   }
 }
 
@@ -118,7 +116,8 @@ export async function stageCapturedDragTempBytes(
     return { sourcePath, status: 'imported', destPath, byteLength: bytes.length, directory }
   } catch (error) {
     if (directory) {
-      await removeCreatedDragTempCopies([directory])
+      batch.directories.delete(directory)
+      cleanupFailedDragCopy(directory)
     }
     signal?.throwIfAborted()
     return classifyFailure(sourcePath, error)
@@ -216,7 +215,8 @@ export async function materializeDragTempPath(
   } catch (error) {
     if (copyDir) {
       // Why: cleanup must not hide the original failure or stop later items.
-      await rm(copyDir, { recursive: true, force: true }).catch(() => undefined)
+      batch.directories.delete(copyDir)
+      cleanupFailedDragCopy(copyDir)
     }
     if (signal?.aborted) {
       throw error

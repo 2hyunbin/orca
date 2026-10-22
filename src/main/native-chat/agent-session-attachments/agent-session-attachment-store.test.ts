@@ -1,6 +1,15 @@
-import { mkdtemp, readdir, readFile, rm, stat, symlink, writeFile, mkdir } from 'node:fs/promises'
+import {
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+  mkdir,
+  rename
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { rename } from 'node:fs/promises'
 import type * as NodeFsPromises from 'node:fs/promises'
 import * as WindowsOperations from '../../../shared/windows-retry-file-operations'
 import { join } from 'node:path'
@@ -95,12 +104,21 @@ describe('AgentSessionAttachmentStore', () => {
       controller.abort(new Error('cancelled'))
       await expect(pending).rejects.toThrow('cancelled')
       expect(rename).toHaveBeenCalledTimes(1)
-      expect(await readdir(store.rootDir)).toEqual([])
+      const [abandoned] = await readdir(store.rootDir)
+      expect(await readdir(join(store.rootDir, abandoned))).toEqual(['.upload.part'])
     } finally {
       if (platform) {
         Object.defineProperty(process, 'platform', platform)
       }
     }
+  })
+
+  it('cleans a failed legacy two-argument write before rejecting', async () => {
+    vi.mocked(rename).mockRejectedValueOnce(new Error('rename refused'))
+    await expect(store.storeFile('legacy.png', Buffer.from('image'))).rejects.toThrow(
+      'rename refused'
+    )
+    expect(await readdir(store.rootDir)).toEqual([])
   })
 
   it('keeps only the last path segment of a name, never a path out of the store', async () => {

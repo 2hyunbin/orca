@@ -60,7 +60,7 @@ async function fixture(copyTimeoutMs = 150) {
     )
   }
   vi.stubGlobal('api', { fs: api })
-  return { root, paths, files, store, getStore, api, storeBytes, document }
+  return { root, paths, files, store, getStore, api, storeBytes, document, lane }
 }
 
 it('uses one deadline/store wait and one occurrence-counted aggregate across classification, reads and duplicates', async () => {
@@ -94,9 +94,15 @@ it('uses one deadline/store wait and one occurrence-counted aggregate across cla
   })
   expect(f.getStore).toHaveBeenCalledTimes(1)
   expect(f.api.storeDroppedFileBytes).toHaveBeenCalledTimes(1)
-  expect(sharedPromiseSettlementWaiters(host.promise).waiterCount).toBe(0)
+  await vi.waitFor(() => {
+    expect(f.lane.jobs.size).toBe(0)
+    expect(sharedPromiseSettlementWaiters(host.promise).waiterCount).toBe(0)
+  })
   await prepareOsFileDrop([f.paths[0]], [f.files[0]], 'local-chat')
-  expect(sharedPromiseSettlementWaiters(host.promise).waiterCount).toBe(0)
+  await vi.waitFor(() => {
+    expect(f.lane.jobs.size).toBe(0)
+    expect(sharedPromiseSettlementWaiters(host.promise).waiterCount).toBe(0)
+  })
   host.resolve(f.store)
   await vi.waitFor(() => expect(f.api.endDroppedFileIntake).toHaveBeenCalledTimes(2))
   expect(await readdir(f.store.rootDir).catch(() => [])).toEqual([])

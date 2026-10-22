@@ -306,7 +306,7 @@ describe('materializeDragTempPaths', () => {
     expect(await materializeDragTempPaths([source], env)).toEqual([
       { sourcePath: source, status: 'failed', reason: 'changed' }
     ])
-    expect(await readdir(env.copyRoot)).toEqual([])
+    await vi.waitFor(async () => expect(await readdir(env.copyRoot)).toEqual([]))
   })
 
   it('reports a full disk as a reason token, logging the errno, and leaves no copy behind', async () => {
@@ -319,7 +319,7 @@ describe('materializeDragTempPaths', () => {
     expect(await materializeDragTempPaths([source], env)).toEqual([
       { sourcePath: source, status: 'failed', reason: 'out-of-space' }
     ])
-    expect(await readdir(env.copyRoot)).toEqual([])
+    await vi.waitFor(async () => expect(await readdir(env.copyRoot)).toEqual([]))
     expect(warn).toHaveBeenCalledWith(expect.any(String), { code: 'ENOSPC' })
   })
 
@@ -402,7 +402,7 @@ describe('materializeDragTempPaths', () => {
     await expect(
       materializeDragTempPaths([first, second], env, controller.signal)
     ).rejects.toThrow()
-    expect(await copyDirs()).toEqual([])
+    await vi.waitFor(async () => expect(await copyDirs()).toEqual([]))
   })
 })
 
