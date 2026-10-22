@@ -96,19 +96,28 @@ export function SkillPlanStatusPill({
   skillName: string
 }): React.JSX.Element {
   const status = getSkillFreshnessDisplayStatus(plan, skillName)
+  const entry = plan?.skills.find((skill) => skill.name === skillName)
+  const needsAttention =
+    hasSkillCopyNeedingAttention(plan, skillName) ||
+    Boolean(
+      entry?.ops.some(
+        (op) => op.kind === 'leave' && (op.reason === 'edited' || op.reason === 'other')
+      )
+    )
   // Why: the dialog lists every location and what the update does there, so Details is
   // offered whenever the plan has anything for this skill, including an agent to link.
-  const hasDetails = skillPlanHasDetails(plan, skillName)
-  const needsAttention = hasSkillCopyNeedingAttention(plan, skillName)
+  const hasDetails = needsAttention || skillPlanHasDetails(plan, skillName)
   return (
     <span className="inline-flex items-center gap-2">
       {statusPill(
-        status === 'up-to-date' &&
-          plan?.skills
-            .find((skill) => skill.name === skillName)
-            ?.ops.some((op) => op.kind === 'write' || op.kind === 'link' || op.kind === 'copy')
-          ? 'installed'
-          : status
+        needsAttention
+          ? 'needs-attention'
+          : status === 'up-to-date' &&
+              entry?.ops.some(
+                (op) => op.kind === 'write' || op.kind === 'link' || op.kind === 'copy'
+              )
+            ? 'installed'
+            : status
       )}
       {hasDetails ? (
         <Button
