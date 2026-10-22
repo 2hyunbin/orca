@@ -131,14 +131,15 @@ function rig(agent = 'opencode') {
     setWorktreeMeta: writes
   }
   // Compose the same owner methods without creating a service, app, journal or process.
-  const runtime = {
+  const runtimeState: unknown = {
     store,
     resolvedWorktrees: new RuntimeResolvedWorktreeCache(),
     worktreeScanCache: new Map(),
     worktreeScanGenerations: new Map(),
     worktreeScanInFlight: new Map()
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: shipping prototypes are installed immediately below and the fixture supplies their observed dependency slice.
-  } as unknown as ScopeFixture
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: shipping prototypes are installed immediately below and the fixture supplies their observed dependency slice.
+  const runtime = runtimeState as ScopeFixture
   for (const owner of [
     OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree,
     RuntimeWorkspaceSelectors,
@@ -223,18 +224,20 @@ function rig(agent = 'opencode') {
       return catalog.read(params)
     }
   }
-  setStructuredAgentSessionHost({
+  const hostSlice: unknown = {
     deps: { store: { getRecord: () => undefined }, modelCatalog: exposed }
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the RPC accesses only the installed catalog and record lookup dependencies supplied here.
-  } as unknown as StructuredAgentSessionHost)
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the RPC accesses only the installed catalog and record lookup dependencies supplied here.
+  const host = hostSlice as StructuredAgentSessionHost
+  setStructuredAgentSessionHost(host)
   const method = STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS.find(
     (row) => row.name === 'agentSession.modelCatalog'
   )!
+  const contextSlice: unknown = { runtime }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this RPC reads only the composed runtime slice and has no transport dependencies.
+  const context = contextSlice as RpcContext
   const rpc = async (params = {}) =>
-    method.handler(method.params!.parse({ agent, worktree: 'name:W2', ...params }), {
-      runtime
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this RPC reads only the composed runtime slice and has no transport dependencies.
-    } as unknown as RpcContext)
+    method.handler(method.params!.parse({ agent, worktree: 'name:W2', ...params }), context)
   const current = () => rpc({ savedOnly: true })
   const counts = () => [
     scan.mock.calls.length,
