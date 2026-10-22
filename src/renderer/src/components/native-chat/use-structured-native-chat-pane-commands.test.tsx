@@ -6,6 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { act, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as I18n from '@/i18n/i18n'
+import type { AppState } from '@/store'
+import type { AgentSessionContinuationRequest } from '@/lib/agent-session-continuation'
 import type { NativeChatComposerHandle } from './NativeChatComposer'
 import { useStructuredNativeChatPaneCommands } from './use-structured-native-chat-pane-commands'
 
@@ -49,8 +51,9 @@ vi.mock('@/components/tab-bar/tab-move-to-pane-column', () => ({
   canMoveTabToNewPaneColumn: () => false
 }))
 vi.mock('@/store', () => ({
-  useAppStore: (select: (state: object) => unknown) =>
-    select({ keybindings: {}, unifiedTabsByWorktree: {} })
+  useAppStore: (
+    select: (state: Pick<AppState, 'keybindings' | 'unifiedTabsByWorktree'>) => unknown
+  ) => select({ keybindings: {}, unifiedTabsByWorktree: {} })
 }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: handOff.options
@@ -59,7 +62,7 @@ vi.mock('@/runtime/structured-conversation-name', () => ({
   useStructuredChatTabConversationName: () => 'Fix the login bug'
 }))
 vi.mock('@/components/agent-session-continuation/AgentSessionContinuationDialog', () => ({
-  AgentSessionContinuationDialog: (props: object) => {
+  AgentSessionContinuationDialog: (props: { request: AgentSessionContinuationRequest }) => {
     handOff.dialog(props)
     return null
   }
