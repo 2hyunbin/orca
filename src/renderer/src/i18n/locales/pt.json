@@ -19391,7 +19391,6 @@
         "couldNotRestart": "Não foi possível reiniciar {{agent}}.",
         "startTimedOut": "{{agent}} demorou demais para iniciar (sem resposta a {{method}} após {{seconds}}s).",
         "startTimedOutKeepsHappening": "Se isso continuar acontecendo, o computador que executa este chat pode estar sobrecarregado.",
-        "codexCliTooOld": "O Codex {{installedVersion}} é antigo demais para chats. Atualize para {{minimumVersion}} ou uma versão mais recente.",
         "notSignedIn": "{{agent}} não está conectado à conta.",
         "claudeSystemNotSignedIn": "O Claude não está conectado à conta. Execute `{{loginCommand}}` ou escolha uma conta nas configurações de Contas do Claude.",
         "claudeManagedNotSignedIn": "Esta conta do Claude não está conectada. Entre novamente nas configurações de Contas do Claude.",
