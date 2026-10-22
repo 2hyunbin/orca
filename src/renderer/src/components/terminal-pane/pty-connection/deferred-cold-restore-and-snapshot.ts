@@ -34,7 +34,8 @@ export function bindDeferredColdRestoreAndSnapshot(session: ConnectPanePtySessio
       agentType: startup.agent,
       launchToken: startup.launchToken,
       tabId: session.deps.tabId,
-      leafId: session.pane.leafId
+      leafId: session.pane.leafId,
+      providerSession: startup.resumeProviderSession
     })
     return true
   }
