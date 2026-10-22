@@ -26,6 +26,7 @@ const transforms = {
           const catalog = readFileSync(id.slice(0, -4)).toString('base64')
           return `export default ${JSON.stringify(`data:application/json;base64,${catalog}`)}`
         }
+        return null
       }
     }
   ],
