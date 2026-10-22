@@ -9,7 +9,7 @@ import {
 import { getTerminalBufferPositionForMouseEvent } from './terminal-mouse-buffer-position'
 import { extractTerminalHttpLinks } from './terminal-http-url-extraction'
 import { rangeForParsedFileLink } from './wrapped-terminal-link-ranges'
-import { buildTerminalHttpLogicalLines } from './terminal-http-logical-lines'
+import { buildTerminalHttpLogicalLines, hasHardWrappedRows } from './terminal-http-logical-lines'
 import { terminalLogicalLinkHasOscLink } from './terminal-osc-link-cells'
 import { isTerminalLinkifierHoverActive } from '@/lib/pane-manager/terminal-linkifier-hover-reset'
 import {
@@ -211,6 +211,7 @@ function findHttpLinkAtBufferPosition(
       )
       if (
         !range ||
+        (hasHardWrappedRows(logicalLine) && range.start.y === range.end.y) ||
         !rowRange ||
         !rangeContainsBufferPosition(rowRange, position, terminalColumns) ||
         terminalLogicalLinkHasOscLink(buffer, logicalLine, parsed.startIndex, parsed.endIndex)

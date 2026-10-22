@@ -189,6 +189,41 @@ describe('wrapped terminal HTTP link provider', () => {
     }
   )
 
+  it('preserves a soft-wrapped sibling after a hard-wrapped URL tail', async () => {
+    const first = `https://example.com/${'a'.repeat(50)}`
+    const sibling = `https://other.test/${'b'.repeat(40)}`
+    const { terminal } = await terminalWithRows(
+      [first.slice(0, 40), `${first.slice(40)} ${sibling}`],
+      40
+    )
+    const openUrl = vi.fn()
+    vi.stubGlobal('window', { api: { shell: { openUrl } } })
+    registerHttpLinkStoreAccessor(() => ({
+      settings: { openLinksInApp: false },
+      setActiveWorktree: vi.fn(),
+      createBrowserTab: vi.fn()
+    }))
+    try {
+      for (const position of [
+        { x: 34, y: 2 },
+        { x: 3, y: 3 },
+        { x: 3, y: 4 }
+      ]) {
+        openUrl.mockClear()
+        expect(
+          openHttpLinkAtBufferPosition(terminal.buffer.active, position, 40, {
+            worktreeId: 'test',
+            modifierHeld: true
+          })
+        ).toBe(true)
+        expect(openUrl).toHaveBeenCalledExactlyOnceWith(sibling)
+      }
+    } finally {
+      terminal.dispose()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('keeps a sibling URL outside the continued link range', async () => {
     const first = `https://example.com/${'a'.repeat(26)}`
     const sibling = 'https://other.test/'
