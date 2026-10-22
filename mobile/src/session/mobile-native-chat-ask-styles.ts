@@ -26,6 +26,7 @@ export const styles = StyleSheet.create({
   },
   identity: {
     flex: 1,
+    minWidth: 0,
     color: colors.textMuted,
     fontSize: typography.metaSize,
     fontWeight: '600'
@@ -33,12 +34,13 @@ export const styles = StyleSheet.create({
   progress: { color: colors.textMuted, fontSize: typography.metaSize },
   inlineActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   contextAction: {
+    flexShrink: 1,
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs
   },
-  contextActionText: { color: colors.textSecondary, fontSize: typography.metaSize },
+  contextActionText: { flexShrink: 1, color: colors.textSecondary, fontSize: typography.metaSize },
   tabs: {
     flexGrow: 0,
     flexShrink: 0,

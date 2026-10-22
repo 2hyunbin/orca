@@ -311,6 +311,11 @@ describeRender('native chat question answering surface', () => {
         } else {
           expect(layout.chat.height).toBe(0)
         }
+        await recordLayout(
+          page,
+          `${width}-${height}-keyboard-${keyboard}${steps ? '-steps' : ''}`,
+          layout
+        )
         expect(await scrollQuestionToEnd(page)).toBe(
           layout.prompt.scrollHeight - layout.prompt.clientHeight
         )
@@ -321,11 +326,6 @@ describeRender('native chat question answering surface', () => {
           layout.footer
         )
         expect(layout.documentHeight).toBeLessThanOrEqual(height)
-        await recordLayout(
-          page,
-          `${width}-${height}-keyboard-${keyboard}${steps ? '-steps' : ''}`,
-          layout
-        )
         expect(errors).toEqual([])
       } finally {
         await page.close()

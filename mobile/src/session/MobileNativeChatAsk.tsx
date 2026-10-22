@@ -67,6 +67,10 @@ export function MobileNativeChatAsk({
   const selectQuestion = (nextIndex: number): void => {
     autoAdvance.cancel()
     if (nextIndex !== index) {
+      if (editingOtherRef.current) {
+        editingOtherRef.current = false
+        Keyboard.dismiss()
+      }
       scrollRef.current?.scrollTo({ y: 0, animated: false })
       setIndex(nextIndex)
     }
