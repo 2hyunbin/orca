@@ -1,5 +1,6 @@
 // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
-import { useCallback } from 'react'
+import { useCallback, useMemo, useRef, type KeyboardEvent } from 'react'
+import { track } from '@/lib/telemetry'
 import { notifyInstalledAgentSkillsChanged } from '@/hooks/useInstalledAgentSkills'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import {
@@ -11,17 +12,25 @@ import {
   getOnboardingFeatureSetupAgentRuntime,
   type OnboardingFeatureSetupRuntimeContext
 } from './onboarding-feature-setup-runtime'
+import {
+  onboardingFeatureSetupTelemetrySelection,
+  type OnboardingFeatureSetupSelection
+} from './onboarding-feature-setup'
 import { translate } from '@/i18n/i18n'
 
 type FeatureSetupInlineTerminalProps = {
   command: string
   runtimeContext?: OnboardingFeatureSetupRuntimeContext
+  selection: OnboardingFeatureSetupSelection
 }
 
 export function FeatureSetupInlineTerminal({
   command,
-  runtimeContext
+  runtimeContext,
+  selection
 }: FeatureSetupInlineTerminalProps): React.JSX.Element {
+  const terminalOpenedTrackedRef = useRef(false)
+  const terminalInteractedTrackedRef = useRef(false)
   const activeSkillRuntime = useActiveProjectSkillRuntime()
   const setupRuntime = runtimeContext ?? activeSkillRuntime
   const agentRuntime = getOnboardingFeatureSetupAgentRuntime(setupRuntime)
@@ -30,6 +39,39 @@ export function FeatureSetupInlineTerminal({
     (terminalCommand: string, effectiveShell: string | undefined) =>
       buildSkillSetupTerminalCommand(terminalCommand, effectiveShell, agentRuntime),
     [agentRuntime]
+  )
+
+  const selectionTelemetry = useMemo(
+    () => onboardingFeatureSetupTelemetrySelection(selection),
+    [selection]
+  )
+
+  const trackTerminalOpened = useCallback(() => {
+    if (terminalOpenedTrackedRef.current) {
+      return
+    }
+    terminalOpenedTrackedRef.current = true
+    track('onboarding_feature_setup_terminal_opened', selectionTelemetry)
+  }, [selectionTelemetry])
+
+  const trackTerminalInteraction = useCallback(
+    (method: 'keyboard' | 'pointer', event?: KeyboardEvent<HTMLElement>) => {
+      if (terminalInteractedTrackedRef.current) {
+        return
+      }
+      const isMac = navigator.userAgent.includes('Mac')
+      const isContinueShortcut = event?.key === 'Enter' && (isMac ? event.metaKey : event.ctrlKey)
+      if (isContinueShortcut) {
+        return
+      }
+      // Why: auto-insert focuses programmatically; count only direct terminal activity.
+      terminalInteractedTrackedRef.current = true
+      track('onboarding_feature_setup_terminal_interacted', {
+        ...selectionTelemetry,
+        method
+      })
+    },
+    [selectionTelemetry]
   )
 
   return (
@@ -53,6 +95,8 @@ export function FeatureSetupInlineTerminal({
       terminalHeightPx={180}
       terminalTopMarginPx={16}
       autoScrollIntoView={false}
+      onOpened={trackTerminalOpened}
+      onInteracted={trackTerminalInteraction}
       onTerminalExit={notifyInstalledAgentSkillsChanged}
     />
   )

@@ -150,6 +150,21 @@ for (const surface of ['guide', 'settings'] as const) {
       )
     })
 
+    it('retains the repair gate when its selected runtime belongs to the active project', () => {
+      const path = String.raw`\\wsl.localhost\Debian\home\alice\repo`
+      const worktree = makeWorktree({ id: 'repo::/missing', repoId: 'repo', hostId: 'local', path })
+      useAppStore.setState({
+        activeRepoId: 'repo',
+        activeWorktreeId: worktree.id,
+        activeWorkspaceExecutionHostId: 'local',
+        repos: [{ id: 'repo', path, displayName: 'Repo', badgeColor: 'blue', addedAt: 1 }],
+        worktreesByRepo: { repo: [worktree] }
+      })
+      renderSurface()
+      expect(screen.getByRole('button', { name: 'Install' }).hasAttribute('disabled')).toBe(true)
+      expect(mocks.plan).not.toHaveBeenCalled()
+    })
+
     it.each(['worktree', 'folder'])(
       'scans the WSL %s and opens its legacy npx terminal',
       async (kind) => {

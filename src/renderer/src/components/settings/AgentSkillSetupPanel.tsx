@@ -265,8 +265,11 @@ export function AgentSkillSetupPanel(props: AgentSkillSetupPanelProps): React.JS
         terminalAriaLabel={props.title}
         terminalWorktreeId={`wsl-agent-skill-setup-${props.skillNames.join('-')}`}
         terminalRuntime={runtime}
-        terminalShellOverride={activeRuntime.terminalShellOverride ?? 'powershell.exe'}
-        installDisabled={props.installDisabled || Boolean(activeRuntime.installDisabledReason)}
+        terminalShellOverride="powershell.exe"
+        installDisabled={
+          props.installDisabled ||
+          (props.terminalRuntime === undefined && Boolean(activeRuntime.installDisabledReason))
+        }
         onBeforeOpenTerminal={props.onBeforeInstall}
       />
     )

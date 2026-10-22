@@ -66,6 +66,6 @@ describe('MobileEmulatorAgentControlRow freshness authority', () => {
     renderToStaticMarkup(<MobileEmulatorAgentControlRow />)
     expect(mocks.panelProps.onBeforeOpenTerminal).toBeUndefined()
     expect(mocks.panelProps.preInstallNotice).toBeUndefined()
-    expect(mocks.panelProps.installDisabled).toBeUndefined()
+    expect(mocks.panelProps.installDisabled).toBe(false)
   })
 })

@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => {
     execute: vi.fn(),
     target: localTarget(),
     agentRuntime: ((): ProjectAgentSkillRuntime | undefined => undefined)(),
+    installDisabledReason: ((): string | null => null)(),
+    terminalShellOverride: ((): string | undefined => undefined)(),
     skillsChanged: vi.fn(),
     skillsRefreshed: vi.fn(),
     freshnessRefresh: vi.fn()
@@ -32,7 +34,9 @@ vi.mock('@/runtime/runtime-bundled-skills-client', () => ({
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
     bundledSkillTarget: mocks.target,
-    agentRuntime: mocks.agentRuntime
+    agentRuntime: mocks.agentRuntime,
+    installDisabledReason: mocks.installDisabledReason,
+    terminalShellOverride: mocks.terminalShellOverride
   })
 }))
 
@@ -55,8 +59,16 @@ vi.mock('../skills/SkillFreshnessStatusPill', () => ({
 }))
 
 vi.mock('../onboarding/OnboardingInlineCommandTerminal', () => ({
-  OnboardingInlineCommandTerminal: ({ command }: { command: string }) => (
-    <pre data-testid="wsl-terminal">{command}</pre>
+  OnboardingInlineCommandTerminal: ({
+    command,
+    shellOverride
+  }: {
+    command: string
+    shellOverride?: string
+  }) => (
+    <pre data-testid="wsl-terminal" data-shell={shellOverride}>
+      {command}
+    </pre>
   )
 }))
 
@@ -138,6 +150,8 @@ describe('AgentSkillSetupPanel', () => {
     mocks.execute.mockReset()
     mocks.execute.mockResolvedValue(doneResult(WRITE_PLAN))
     mocks.agentRuntime = undefined
+    mocks.installDisabledReason = null
+    mocks.terminalShellOverride = undefined
     mocks.target = { kind: 'local' }
     mocks.skillsChanged.mockReset()
     mocks.skillsRefreshed.mockReset()
@@ -502,6 +516,40 @@ describe('AgentSkillSetupPanel', () => {
     )
     expect(mocks.plan).not.toHaveBeenCalled()
     expect(mocks.execute).not.toHaveBeenCalled()
+  })
+
+  it('uses the selected WSL runtime and shell even when another project needs repair', async () => {
+    mocks.target = null
+    mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }
+    mocks.installDisabledReason = 'Debian is missing'
+    mocks.terminalShellOverride = 'wsl.exe'
+    await renderInteractivePanel({
+      target: null,
+      terminalRuntime: { runtime: 'wsl', wslDistro: 'Ubuntu', label: 'WSL Ubuntu' }
+    })
+    expect(findButton('Install').disabled).toBe(false)
+    await clickButton('Install')
+    expect(
+      container?.querySelector('[data-testid="wsl-terminal"]')?.getAttribute('data-shell')
+    ).toBe('powershell.exe')
+    expect(mocks.plan).not.toHaveBeenCalled()
+  })
+
+  it('keeps the repair gate when setup targets the active project', async () => {
+    mocks.target = null
+    mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }
+    mocks.installDisabledReason = 'Debian is missing'
+    await renderInteractivePanel()
+    expect(findButton('Install').disabled).toBe(true)
+  })
+
+  it('honors the selected WSL surface disabled state', async () => {
+    await renderInteractivePanel({
+      target: null,
+      terminalRuntime: { runtime: 'wsl', wslDistro: 'Ubuntu', label: 'WSL Ubuntu' },
+      installDisabled: true
+    })
+    expect(findButton('Install').disabled).toBe(true)
   })
 
   it('asks for a newer Orca on a server without the installer, writing nothing here', async () => {

@@ -50,6 +50,7 @@ export function MobileEmulatorAgentControlRow(): React.JSX.Element {
             skillNames={[ORCA_CLI_SKILL_NAME]}
             target={activeSkillRuntime.bundledSkillTarget}
             terminalRuntime={activeSkillRuntime.agentRuntime}
+            installDisabled={Boolean(activeSkillRuntime.installDisabledReason)}
             installed={setup.cliSkillInstalled}
             loading={setup.cliSkillLoading}
             error={setup.cliSkillError}

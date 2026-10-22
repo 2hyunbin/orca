@@ -1,5 +1,5 @@
 // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Loader2 } from 'lucide-react'
 import TerminalPane from '@/components/terminal-pane/TerminalPane'
 import { PASTE_TERMINAL_TEXT_EVENT, type PasteTerminalTextDetail } from '@/constants/terminal'
@@ -33,6 +33,8 @@ type OnboardingInlineCommandTerminalProps = {
   worktreeId?: string
   shellOverride?: string
   forceHostRuntime?: boolean
+  onOpened?: () => void
+  onInteracted?: (method: 'keyboard' | 'pointer', event?: KeyboardEvent<HTMLElement>) => void
   onTerminalExit?: () => void
   // OSC 133;D reports the command outcome while the shell remains alive.
   onCommandFinished?: (bestEffortExitCode: number | null) => void
@@ -55,6 +57,8 @@ export function OnboardingInlineCommandTerminal({
   worktreeId: worktreeIdProp = ONBOARDING_INLINE_TERMINAL_WORKTREE_ID,
   shellOverride,
   forceHostRuntime = false,
+  onOpened,
+  onInteracted,
   onTerminalExit,
   onCommandFinished
 }: OnboardingInlineCommandTerminalProps): React.JSX.Element {
@@ -87,6 +91,10 @@ export function OnboardingInlineCommandTerminal({
   const [entered, setEntered] = useState(prefersReducedMotion)
   const terminalSectionRef = useRef<HTMLElement>(null)
   const autoInsertedRef = useRef<{ tabId: string; command: string } | null>(null)
+
+  useEffect(() => {
+    onOpened?.()
+  }, [onOpened])
 
   // Why: the branded id isolates command outcomes to this inline terminal.
   useEffect(() => {
@@ -316,7 +324,12 @@ export function OnboardingInlineCommandTerminal({
             <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>
           </div>
         ) : null}
-        <div className="relative min-h-0 bg-background" style={{ height: terminalHeightPx }}>
+        <div
+          className="relative min-h-0 bg-background"
+          style={{ height: terminalHeightPx }}
+          onKeyDownCapture={(event) => onInteracted?.('keyboard', event)}
+          onPointerDownCapture={() => onInteracted?.('pointer')}
+        >
           {cwd && tabId ? (
             <TerminalPane
               tabId={tabId}

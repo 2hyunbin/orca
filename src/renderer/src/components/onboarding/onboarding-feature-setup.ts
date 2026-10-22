@@ -109,6 +109,18 @@ const ONBOARDING_PROGRESS_FEATURE_SETUP_IDS: readonly OnboardingFeatureSetupId[]
   'orchestration'
 ]
 
+export function onboardingFeatureSetupTelemetrySelection(
+  selection: OnboardingFeatureSetupSelection
+): EventProps<'onboarding_feature_setup_terminal_opened'> {
+  return {
+    browser_use: selection.browserUse,
+    computer_use: selection.computerUse,
+    linear_tickets: selection.linearTickets,
+    orchestration: selection.orchestration,
+    selected_count: ONBOARDING_PROGRESS_FEATURE_SETUP_IDS.filter((id) => selection[id]).length
+  }
+}
+
 const SKILL_INSTALL_TELEMETRY_RESULT: Record<
   BundledSkillInstallState['kind'],
   EventProps<'onboarding_feature_setup_run'>['skill_install_result'] | null
@@ -136,11 +148,7 @@ export function onboardingFeatureSetupRunTelemetry(
     return null
   }
   return {
-    browser_use: selection.browserUse,
-    computer_use: selection.computerUse,
-    linear_tickets: selection.linearTickets,
-    orchestration: selection.orchestration,
-    selected_count: ONBOARDING_PROGRESS_FEATURE_SETUP_IDS.filter((id) => selection[id]).length,
+    ...onboardingFeatureSetupTelemetrySelection(selection),
     cli_touched: false,
     skill_install_result: installResult,
     computer_use_permissions_opened: result.computerUsePermissionsOpened,

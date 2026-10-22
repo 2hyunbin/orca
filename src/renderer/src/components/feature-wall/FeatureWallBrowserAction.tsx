@@ -188,7 +188,11 @@ function BrowserSkillInstallButton(): React.JSX.Element {
   // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
   if (wslSetup) {
     return (
-      <FeatureSetupInlineTerminal command={wslSetup.command} runtimeContext={wslSetup.runtime} />
+      <FeatureSetupInlineTerminal
+        command={wslSetup.command}
+        runtimeContext={wslSetup.runtime}
+        selection={BROWSER_ONLY_FEATURE_SETUP}
+      />
     )
   }
   if (

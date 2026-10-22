@@ -36,6 +36,7 @@ export function MobileEmulatorAgentSetupGuideSteps({
         skillNames={[ORCA_CLI_SKILL_NAME]}
         target={setup.skillRuntime.bundledSkillTarget}
         terminalRuntime={setup.skillRuntime.agentRuntime}
+        installDisabled={Boolean(setup.skillRuntime.installDisabledReason)}
         installed={setup.cliSkillInstalled}
         loading={setup.cliSkillLoading || setup.setupRechecking}
         error={setup.cliSkillError}

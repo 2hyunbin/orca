@@ -262,3 +262,21 @@ export const onboardingFeatureSetupRunSchema = z
     onboardingFeatureSetupSelectedCountRefinement
   )
   .strict()
+export const onboardingFeatureSetupTerminalOpenedSchema = z
+  .object({ ...onboardingFeatureSetupSelectionSchema, cohort: cohortSchema })
+  .refine(
+    hasMatchingOnboardingFeatureSetupSelectedCount,
+    onboardingFeatureSetupSelectedCountRefinement
+  )
+  .strict()
+export const onboardingFeatureSetupTerminalInteractedSchema = z
+  .object({
+    ...onboardingFeatureSetupSelectionSchema,
+    method: z.enum(['keyboard', 'pointer']),
+    cohort: cohortSchema
+  })
+  .refine(
+    hasMatchingOnboardingFeatureSetupSelectedCount,
+    onboardingFeatureSetupSelectedCountRefinement
+  )
+  .strict()

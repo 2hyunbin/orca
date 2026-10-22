@@ -70,6 +70,8 @@ import {
   onboardingCompletedSchema,
   onboardingDismissedSchema,
   onboardingFeatureSetupRunSchema,
+  onboardingFeatureSetupTerminalInteractedSchema,
+  onboardingFeatureSetupTerminalOpenedSchema,
   onboardingFeatureSetupToggledSchema,
   onboardingGhosttyDiscoveredSchema,
   onboardingGhosttyImportClickedSchema,
@@ -193,6 +195,8 @@ export const eventSchemas = {
   onboarding_ghostty_import_failed: onboardingGhosttyImportFailedSchema,
   onboarding_feature_setup_toggled: onboardingFeatureSetupToggledSchema,
   onboarding_feature_setup_run: onboardingFeatureSetupRunSchema,
+  onboarding_feature_setup_terminal_opened: onboardingFeatureSetupTerminalOpenedSchema,
+  onboarding_feature_setup_terminal_interacted: onboardingFeatureSetupTerminalInteractedSchema,
   activation_checklist_item_completed: activationChecklistItemCompletedSchema,
 
   contextual_tour_shown: contextualTourShownSchema,

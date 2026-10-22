@@ -57,6 +57,7 @@ export function AgentCapabilitiesSetupAction(props: {
   const [wslSetup, setWslSetup] = useState<{
     command: string
     runtime: OnboardingFeatureSetupRuntimeContext
+    selection: OnboardingFeatureSetupSelection
   } | null>(null)
   const legacyWsl = activeRuntime.agentRuntime?.runtime === 'wsl'
   const skillInstall = useBundledSkillInstall()
@@ -120,7 +121,7 @@ export function AgentCapabilitiesSetupAction(props: {
       if (legacyWsl) {
         const command = buildAgentFeatureSkillInstallCommand(result.skillNames)
         await window.api.ui.writeClipboardText(command)
-        setWslSetup({ command, runtime: activeRuntime })
+        setWslSetup({ command, runtime: activeRuntime, selection: featureSetup })
         return
       }
       const installState = await installSkills(
@@ -165,7 +166,11 @@ export function AgentCapabilitiesSetupAction(props: {
     <div className="space-y-5">
       {/* COMPAT(wsl-bridge): removed when WSL runs as an orcad host. */}
       {wslSetup ? (
-        <FeatureSetupInlineTerminal command={wslSetup.command} runtimeContext={wslSetup.runtime} />
+        <FeatureSetupInlineTerminal
+          command={wslSetup.command}
+          runtimeContext={wslSetup.runtime}
+          selection={wslSetup.selection}
+        />
       ) : (
         <AgentCapabilitySetupControls
           featureSetup={featureSetup}
