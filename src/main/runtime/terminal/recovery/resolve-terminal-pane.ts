@@ -93,6 +93,32 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
     }
   }
 
+  /** Whether the caller's handle still names the pane it asks to recover. */
+  private handleNamesRecoveredPane(
+    handle: string,
+    paneKey: string,
+    worktreeId: string,
+    pty: RuntimePtyWorktreeRecord
+  ): boolean {
+    const handlePaneKey = this.getPaneKeyForTerminalHandle(handle)
+    if (handlePaneKey === paneKey) {
+      return true
+    }
+    if (!ORCA_LAYOUT_OWNER_IS_MAIN || handlePaneKey !== null) {
+      return false
+    }
+    // Switch point: main's layout names no pane for a terminal its replacement unbound, so a handle
+    // resolved for this pane, whose terminal ended, learns the connected replacement (never spawns).
+    const staleRecord = this.handles.get(handle)
+    const stale = staleRecord?.ptyId ? this.ptysById.get(staleRecord.ptyId) : undefined
+    return (
+      staleRecord?.issuedForPaneKey === paneKey &&
+      !stale?.connected &&
+      pty.connected &&
+      this.getTerminalWorktreeIdForHandle(handle) === worktreeId
+    )
+  }
+
   async recoverTerminalPane(
     paneKey: string,
     expectedWorktreeId: string,
@@ -100,24 +126,12 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
   ): Promise<RuntimeTerminalResolvePane> {
     const parsed = parsePaneKey(paneKey)
     const pty = this.getPtyRecordForPaneKey(paneKey)
-    const handlePaneKey = expectedHandle ? this.getPaneKeyForTerminalHandle(expectedHandle) : null
-    const staleRecord = expectedHandle ? this.handles.get(expectedHandle) : undefined
-    const stale = staleRecord?.ptyId ? this.ptysById.get(staleRecord.ptyId) : undefined
-    // Switch point: main's layout names no pane for a terminal its replacement unbound, so a handle
-    // resolved for this pane, whose terminal ended, learns the connected replacement (never spawns).
-    const replacedHandle =
-      ORCA_LAYOUT_OWNER_IS_MAIN &&
-      handlePaneKey === null &&
-      staleRecord?.issuedForPaneKey === paneKey &&
-      !stale?.connected &&
-      pty?.connected === true &&
-      this.getTerminalWorktreeIdForHandle(expectedHandle ?? '') === expectedWorktreeId
     if (
       !parsed ||
       !pty ||
       !expectedHandle ||
       pty.worktreeId !== expectedWorktreeId ||
-      (handlePaneKey !== paneKey && !replacedHandle)
+      !this.handleNamesRecoveredPane(expectedHandle, paneKey, expectedWorktreeId, pty)
     ) {
       throw new Error('terminal_not_found')
     }
