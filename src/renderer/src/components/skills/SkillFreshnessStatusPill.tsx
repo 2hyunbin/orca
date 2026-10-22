@@ -1,4 +1,5 @@
 import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
+import type { BundledSkillUnsupportedReason } from '@/runtime/runtime-bundled-skills-client'
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { translate } from '@/i18n/i18n'
@@ -57,19 +58,7 @@ export function SkillFreshnessStatusPill({ skillName }: { skillName: string }): 
     useActiveProjectSkillRuntime().bundledSkillTarget
   )
   if (unsupported) {
-    return (
-      <IntegrationStatusPill tone="neutral">
-        {unsupported === 'connect-host'
-          ? translate(
-              'auto.components.skills.SkillFreshnessStatusPill.connectHost',
-              'Connect the SSH host'
-            )
-          : translate(
-              'auto.components.skills.SkillFreshnessStatusPill.updateServer',
-              'Update Orca on the server'
-            )}
-      </IntegrationStatusPill>
-    )
+    return <SkillUnsupportedStatusPill reason={unsupported} />
   }
   if (loading && !plan) {
     return (
@@ -86,6 +75,26 @@ export function SkillFreshnessStatusPill({ skillName }: { skillName: string }): 
     )
   }
   return <SkillPlanStatusPill plan={plan} skillName={skillName} />
+}
+
+export function SkillUnsupportedStatusPill({
+  reason
+}: {
+  reason: BundledSkillUnsupportedReason
+}): React.JSX.Element {
+  return (
+    <IntegrationStatusPill tone="neutral">
+      {reason === 'connect-host'
+        ? translate(
+            'auto.components.skills.SkillFreshnessStatusPill.connectHost',
+            'Connect the SSH host'
+          )
+        : translate(
+            'auto.components.skills.SkillFreshnessStatusPill.updateServer',
+            'Update Orca on the server'
+          )}
+    </IntegrationStatusPill>
+  )
 }
 
 export function SkillPlanStatusPill({

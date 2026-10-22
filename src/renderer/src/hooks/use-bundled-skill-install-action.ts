@@ -10,14 +10,17 @@ import {
   type BundledSkillInstallAction
 } from '../../../shared/bundled-skill-summary'
 import { bundledSkillTargetKey, type BundledSkillTarget } from '@/lib/bundled-skill-target'
-import { planBundledSkillsOnTarget } from '@/runtime/runtime-bundled-skills-client'
+import {
+  planBundledSkillsOnTarget,
+  type BundledSkillUnsupportedReason
+} from '@/runtime/runtime-bundled-skills-client'
 import {
   INSTALLED_AGENT_SKILLS_CHANGED_EVENT,
   INSTALLED_AGENT_SKILLS_REFRESHED_EVENT
 } from './installed-agent-skills-change-event'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
 
-/** `unknown`: the owning host could not plan, including servers that need an update. */
+/** `unknown`: the owning host's check failed. */
 export type BundledSkillInstallActionState =
   | (BundledSkillInstallAction & {
       changes?: BundledSkillSetupChanges
@@ -25,6 +28,7 @@ export type BundledSkillInstallActionState =
       plan?: BundledSkillPlan
     })
   | { kind: 'loading' }
+  | { kind: 'unsupported'; reason: BundledSkillUnsupportedReason }
   | { kind: 'unknown' }
 
 const LOADING: BundledSkillInstallActionState = { kind: 'loading' }
@@ -62,15 +66,15 @@ export function useBundledSkillInstallAction(
       try {
         const request = { names: namesKey.split(',') }
         const planned = await planBundledSkillsOnTarget(target, request)
-        let action: BundledSkillInstallActionState = UNKNOWN
-        if (planned.kind === 'plan') {
-          action = {
-            ...bundledSkillInstallAction(planned.plan),
-            plan: planned.plan,
-            changes: bundledSkillSetupChanges(planned.plan),
-            attentionMessage: bundledSkillSetupAttentionMessage(planned.plan)
-          }
-        }
+        const action: BundledSkillInstallActionState =
+          planned.kind === 'plan'
+            ? {
+                ...bundledSkillInstallAction(planned.plan),
+                plan: planned.plan,
+                changes: bundledSkillSetupChanges(planned.plan),
+                attentionMessage: bundledSkillSetupAttentionMessage(planned.plan)
+              }
+            : planned
         if (!ignore) {
           setAnswer({ key: planKey, action })
         }

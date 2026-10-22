@@ -15,7 +15,12 @@ import { LinearAgentSkillInstallCta } from './linear-agent-skill-install-cta'
 import { BrowserAction } from '../feature-wall/FeatureWallBrowserAction'
 import { AgentCapabilitiesSetupAction } from '../feature-wall/AgentCapabilitiesSetupAction'
 
-const mocks = vi.hoisted(() => ({ plan: vi.fn(), execute: vi.fn(), refresh: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  plan: vi.fn(),
+  execute: vi.fn(),
+  refresh: vi.fn(),
+  installed: false
+}))
 const TARGET = { kind: 'environment', environmentId: 'agents-host' } as const
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
@@ -28,7 +33,7 @@ vi.mock('@/hooks/installed-agent-skill-discovery', async (importOriginal) => ({
 vi.mock('@/hooks/useInstalledAgentSkills', async (importOriginal) => ({
   ...(await importOriginal()),
   useInstalledAgentSkillNames: () => ({
-    installed: false,
+    installed: mocks.installed,
     loading: false,
     error: null,
     skills: [],
@@ -78,17 +83,21 @@ beforeEach(() => {
   mocks.plan.mockReset()
   mocks.execute.mockReset()
   mocks.refresh.mockReset()
+  mocks.installed = false
 })
 afterEach(cleanup)
 
-function renderSurface(surface: 'panel' | 'linear' | 'browser' | 'capabilities'): void {
+function renderSurface(
+  surface: 'panel' | 'guided-panel' | 'linear' | 'browser' | 'capabilities'
+): void {
   render(
-    surface === 'panel' ? (
+    surface === 'panel' || surface === 'guided-panel' ? (
       <AgentSkillSetupPanel
         title="CLI skill"
         description={null}
         skillNames={['orca-cli']}
-        installed={false}
+        installed={mocks.installed}
+        hideHeader={surface === 'guided-panel'}
         loading={false}
         error={null}
         onRecheck={mocks.refresh}
@@ -104,6 +113,36 @@ function renderSurface(surface: 'panel' | 'linear' | 'browser' | 'capabilities')
       />
     )
   )
+}
+
+for (const surface of ['panel', 'guided-panel', 'linear', 'browser', 'capabilities'] as const) {
+  describe(`${surface} blocked setup`, () => {
+    describe.each([
+      [
+        'update-server',
+        'Update Orca on the server to install its skills.',
+        'Update Orca on the server'
+      ],
+      ['connect-host', 'Connect to this SSH host to install its skills.', 'Connect the SSH host']
+    ] as const)('%s', (reason, message, pill) => {
+      it.each(surface === 'browser' || surface === 'capabilities' ? [false] : [false, true])(
+        'explains the prerequisite before any click (installed: %s)',
+        async (installed) => {
+          mocks.installed = installed
+          mocks.plan.mockResolvedValue({ kind: 'unsupported', reason })
+          renderSurface(surface)
+
+          expect(await screen.findByText(message)).toBeDefined()
+          expect(screen.queryByRole('button', { name: /^(Install|Update|Replace)/ })).toBeNull()
+          expect(screen.queryByText('Check failed')).toBeNull()
+          if (surface === 'panel' || surface === 'guided-panel' || surface === 'linear') {
+            expect(screen.getByText(pill, { exact: true })).toBeDefined()
+          }
+          expect(mocks.execute).not.toHaveBeenCalled()
+        }
+      )
+    })
+  })
 }
 
 for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {

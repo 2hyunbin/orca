@@ -116,10 +116,10 @@ for (const surface of ['guide', 'settings'] as const) {
         'orca-cli',
         expect.objectContaining({ runtimeTarget: null })
       )
-      fireEvent.click(await screen.findByRole('button', { name: 'Install' }))
       expect(
         await screen.findByText('Connect to this SSH host to install its skills.')
       ).toBeDefined()
+      expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
       expect(mocks.plan).toHaveBeenCalledWith(
         { kind: 'ssh', targetId: 'box' },
         { names: ['orca-cli'] }
@@ -128,6 +128,7 @@ for (const surface of ['guide', 'settings'] as const) {
     })
 
     it('uses a paired owner even when the transport resolver falls back to local', async () => {
+      mocks.plan.mockResolvedValue({ kind: 'unsupported', reason: 'update-server' })
       const worktree = makeWorktree({
         id: 'repo::/remote',
         repoId: 'repo',
@@ -143,7 +144,8 @@ for (const surface of ['guide', 'settings'] as const) {
         'orca-cli',
         expect.objectContaining({ runtimeTarget: { kind: 'environment', environmentId: 'paired' } })
       )
-      fireEvent.click(await screen.findByRole('button', { name: 'Install' }))
+      await screen.findByText('Update Orca on the server to install its skills.')
+      expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
       expect(mocks.plan).toHaveBeenCalledWith(
         { kind: 'environment', environmentId: 'paired' },
         { names: ['orca-cli'] }

@@ -475,9 +475,8 @@ describe('AgentSkillSetupPanel', () => {
     mocks.plan.mockResolvedValue({ kind: 'unsupported', reason: 'connect-host' })
     await renderInteractivePanel()
 
-    await clickButton('Install')
-
     expect(container?.textContent).toContain('Connect to this SSH host to install its skills.')
+    expect(buttonLabels(container?.innerHTML ?? '')).not.toContain('Install')
     expect(mocks.execute).not.toHaveBeenCalled()
   })
 
@@ -553,9 +552,8 @@ describe('AgentSkillSetupPanel', () => {
     const onRecheck = vi.fn(async () => {})
     await renderInteractivePanel({ onRecheck })
 
-    await clickButton('Install')
-
     expect(container?.textContent).toContain('Update Orca on the server to install its skills.')
+    expect(buttonLabels(container?.innerHTML ?? '')).not.toContain('Install')
     expect(mocks.execute).not.toHaveBeenCalled()
     expect(onRecheck).not.toHaveBeenCalled()
   })

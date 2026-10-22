@@ -1,4 +1,5 @@
 import { RefreshCw } from 'lucide-react'
+import type { BundledSkillUnsupportedReason } from '@/runtime/runtime-bundled-skills-client'
 import { Button } from '../ui/button'
 import { skillInstallResultLine } from './bundled-skill-setup-result-copy'
 import {
@@ -14,17 +15,20 @@ export function BundledSkillInstallStatus(props: {
   buttonSize?: 'xs' | 'sm'
   className?: string
   attention?: { retry: () => void; message?: string }
+  unsupported?: BundledSkillUnsupportedReason
 }): React.JSX.Element | null {
   const previewAttention =
     props.attention && (props.install.state.kind === 'idle' || props.install.state.kind === 'done')
-  const state = previewAttention
-    ? {
-        kind: 'failed' as const,
-        message:
-          props.attention?.message ??
-          translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
-      }
-    : props.install.state
+  const state = props.unsupported
+    ? { kind: 'unsupported' as const, reason: props.unsupported }
+    : previewAttention
+      ? {
+          kind: 'failed' as const,
+          message:
+            props.attention?.message ??
+            translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
+        }
+      : props.install.state
   const retry = previewAttention ? props.attention?.retry : props.install.retry
   if (state.kind === 'idle' || state.kind === 'installing') {
     return null

@@ -6,7 +6,7 @@ import { WslAgentSkillSetupPanel } from './WslAgentSkillSetupPanel'
 import { useCallback } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { IntegrationStatusPill } from '../integration-status-pill'
-import { SkillPlanStatusPill } from '../skills/SkillFreshnessStatusPill'
+import { SkillPlanStatusPill, SkillUnsupportedStatusPill } from '../skills/SkillFreshnessStatusPill'
 import { BundledSkillInstallStatus } from './BundledSkillInstallStatus'
 import type { AgentSkillSetupPanelProps } from './agent-skill-setup-panel-props'
 import { Button } from '../ui/button'
@@ -68,7 +68,9 @@ function BundledAgentSkillSetupPanel({
     target
   })
   const effectivelyInstalled = installed || action.kind === 'none'
-  const failed = bundledSkillInstallNeedsAttention(state) || action.kind === 'attention'
+  const unsupported = action.kind === 'unsupported' ? action.reason : undefined
+  const failed =
+    !unsupported && (bundledSkillInstallNeedsAttention(state) || action.kind === 'attention')
   const installedButton: 'update' | 'replace' | null =
     action.kind === 'run' || action.kind === 'unknown'
       ? 'update'
@@ -77,22 +79,20 @@ function BundledAgentSkillSetupPanel({
         : null
 
   const plan = 'plan' in action ? action.plan : undefined
-  const freshnessPill =
-    action.kind === 'loading' || action.kind === 'unknown' ? (
-      <IntegrationStatusPill tone={action.kind === 'loading' ? 'neutral' : 'attention'}>
-        {action.kind === 'loading'
-          ? translate('auto.components.skills.SkillFreshnessStatusPill.checking', 'Checking...')
-          : translate(
-              'auto.components.skills.SkillFreshnessStatusPill.checkFailed',
-              'Check failed'
-            )}
-      </IntegrationStatusPill>
-    ) : (
-      <SkillPlanStatusPill
-        skillName={freshnessSkillName ?? activeSkillNames[0]}
-        plan={plan ?? null}
-      />
-    )
+  const freshnessPill = unsupported ? (
+    <SkillUnsupportedStatusPill reason={unsupported} />
+  ) : action.kind === 'loading' || action.kind === 'unknown' ? (
+    <IntegrationStatusPill tone={action.kind === 'loading' ? 'neutral' : 'attention'}>
+      {action.kind === 'loading'
+        ? translate('auto.components.skills.SkillFreshnessStatusPill.checking', 'Checking...')
+        : translate('auto.components.skills.SkillFreshnessStatusPill.checkFailed', 'Check failed')}
+    </IntegrationStatusPill>
+  ) : (
+    <SkillPlanStatusPill
+      skillName={freshnessSkillName ?? activeSkillNames[0]}
+      plan={plan ?? null}
+    />
+  )
 
   const startInstall = (): void => {
     if (installing) {
@@ -111,6 +111,7 @@ function BundledAgentSkillSetupPanel({
   const actionRow = (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       {action.kind !== 'none' &&
+      !unsupported &&
       (!installed || (showInstallWhenInstalled && installedButton)) &&
       !failed ? (
         <Button
@@ -180,7 +181,9 @@ function BundledAgentSkillSetupPanel({
           <>
             {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
             {/* hideHeader drops the title row; keep freshness so guided hubs still surface updates. */}
-            {effectivelyInstalled && !failed ? <div className="mb-2">{freshnessPill}</div> : null}
+            {(effectivelyInstalled || unsupported) && !failed ? (
+              <div className="mb-2">{freshnessPill}</div>
+            ) : null}
           </>
         ) : (
           <div className="flex items-center gap-4">
@@ -195,7 +198,9 @@ function BundledAgentSkillSetupPanel({
             <div className="min-w-0 flex-1 self-center">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h3 className="text-[15px] font-semibold leading-tight text-foreground">{title}</h3>
-                {failed ? (
+                {unsupported ? (
+                  freshnessPill
+                ) : failed ? (
                   <IntegrationStatusPill tone="attention">
                     {translate(
                       'auto.components.skills.skillPlanOpCopy.needsAttention',
@@ -236,6 +241,7 @@ function BundledAgentSkillSetupPanel({
           ) : null}
           <BundledSkillInstallStatus
             install={skillInstall}
+            unsupported={unsupported}
             attention={
               action.kind === 'attention'
                 ? { retry: startInstall, message: action.attentionMessage }

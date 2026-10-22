@@ -37,6 +37,24 @@ beforeEach(() => {
   mocks.execute.mockReset()
 })
 
+it('keeps Check failed when the plan request fails', async () => {
+  mocks.plan.mockRejectedValue(new Error('connection lost'))
+  render(
+    <AgentSkillSetupPanel
+      title="Orchestration"
+      description={null}
+      skillNames={['orchestration']}
+      installed
+      loading={false}
+      error={null}
+      onRecheck={vi.fn()}
+    />
+  )
+  expect(await screen.findByText('Check failed')).toBeDefined()
+  expect(screen.getByRole('button', { name: 'Update' })).toBeDefined()
+  expect(screen.queryByText('Update Orca on the server to install its skills.')).toBeNull()
+})
+
 it('uses the named plan for its pill when a detected agent still needs the skill', async () => {
   mocks.plan.mockResolvedValue({
     kind: 'plan',

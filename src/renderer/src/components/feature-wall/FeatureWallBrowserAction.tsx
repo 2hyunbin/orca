@@ -197,12 +197,14 @@ function BrowserSkillInstallButton(): React.JSX.Element {
   }
   if (
     skillInstall.state.kind === 'unsupported' ||
+    (!legacyWsl && installAction.kind === 'unsupported') ||
     bundledSkillInstallNeedsAttention(skillInstall.state) ||
     (!legacyWsl && installAction.kind === 'attention')
   ) {
     return (
       <BundledSkillInstallStatus
         install={skillInstall}
+        unsupported={installAction.kind === 'unsupported' ? installAction.reason : undefined}
         attention={
           installAction.kind === 'attention'
             ? { retry: () => void handleInstall(), message: installAction.attentionMessage }

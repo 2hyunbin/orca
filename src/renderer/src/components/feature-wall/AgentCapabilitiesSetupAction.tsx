@@ -263,6 +263,7 @@ function AgentCapabilitySetupControls(props: {
   const installState = props.skillInstall.state
   const showSetupAction =
     installState.kind !== 'unsupported' &&
+    props.installAction?.kind !== 'unsupported' &&
     !bundledSkillInstallNeedsAttention(installState) &&
     props.installAction?.kind !== 'attention'
   // Why: a disabled install button is noise once everything is set up.
@@ -318,6 +319,9 @@ function AgentCapabilitySetupControls(props: {
       ) : null}
       <BundledSkillInstallStatus
         install={props.skillInstall}
+        unsupported={
+          props.installAction?.kind === 'unsupported' ? props.installAction.reason : undefined
+        }
         attention={
           props.installAction?.kind === 'attention'
             ? { retry: props.onStartFeatureSetup, message: props.installAction.attentionMessage }

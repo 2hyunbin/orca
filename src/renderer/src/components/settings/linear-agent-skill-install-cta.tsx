@@ -4,6 +4,7 @@ import { WslLinearAgentSkillInstallCta } from './WslLinearAgentSkillInstallCta'
 import { useCallback, useMemo } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { IntegrationStatusPill } from '@/components/integration-status-pill'
+import { SkillUnsupportedStatusPill } from '../skills/SkillFreshnessStatusPill'
 import { Button } from '@/components/ui/button'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
@@ -64,10 +65,12 @@ function BundledLinearAgentSkillInstallCta({
     target: activeRuntime.bundledSkillTarget
   })
   const replacePaths = action.kind === 'replace' ? action.paths : undefined
+  const unsupported = action.kind === 'unsupported' ? action.reason : undefined
   const needsAttention = action.kind === 'attention'
   // Why: once installed, offer a button only when the plan would change something.
   const showInstall =
     action.kind !== 'none' &&
+    !unsupported &&
     !needsAttention &&
     (!skill.installed || action.kind === 'run' || action.kind === 'unknown' || replacePaths)
   const subordinateRowClass = useIntegrationSubordinateRowClass('space-y-1.5')
@@ -82,7 +85,9 @@ function BundledLinearAgentSkillInstallCta({
           )}{' '}
           <span className="font-mono text-[11px]">{ORCA_LINEAR_SKILL_NAME}</span>
         </p>
-        {needsAttention ? (
+        {unsupported ? (
+          <SkillUnsupportedStatusPill reason={unsupported} />
+        ) : needsAttention ? (
           <IntegrationStatusPill tone="attention">
             {translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')}
           </IntegrationStatusPill>
@@ -121,7 +126,7 @@ function BundledLinearAgentSkillInstallCta({
         </Button>
       </div>
       {skill.error ? <p className="text-xs text-destructive">{skill.error}</p> : null}
-      {!skill.loading && (
+      {(!skill.loading || unsupported) && (
         <>
           {skill.installed ? null : (
             <p className="text-xs text-muted-foreground">
@@ -172,6 +177,7 @@ function BundledLinearAgentSkillInstallCta({
           )}
           <BundledSkillInstallStatus
             install={skillInstall}
+            unsupported={unsupported}
             attention={
               needsAttention
                 ? { retry: () => void install([skillName]), message: action.attentionMessage }
