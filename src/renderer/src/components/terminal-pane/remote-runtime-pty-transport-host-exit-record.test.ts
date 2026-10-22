@@ -189,6 +189,49 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
     transport.destroy?.()
   })
 
+  it('leaves a stopped pane the host still publishes to be re-created on activation', async () => {
+    const onPtyExit = vi.fn()
+    const transport = await attachRestoredHostTab(onPtyExit)
+    const shown = answerShow({ connected: false, exitCause: { kind: 'operator_close' } })
+    const answer = runtimeCall.getMockImplementation()
+    runtimeCall.mockImplementation(async (args: { method: string; params?: unknown }) =>
+      args.method === 'session.tabs.list'
+        ? {
+            ok: true,
+            result: {
+              worktree: 'wt-1',
+              publicationEpoch: 'epoch-ready',
+              snapshotVersion: 3,
+              activeGroupId: null,
+              activeTabId: 'host-tab-1::pane:1',
+              activeTabType: 'terminal',
+              tabs: [
+                {
+                  type: 'terminal',
+                  id: 'host-tab-1::pane:1',
+                  parentTabId: 'host-tab-1',
+                  leafId: 'pane:1',
+                  title: 'Terminal',
+                  isActive: true,
+                  status: 'pending-handle',
+                  terminal: null
+                }
+              ]
+            }
+          }
+        : answer?.(args)
+    )
+
+    refuseStream('terminal_handle_stale')
+
+    await vi.waitFor(() => expect(shown).toEqual(['terminal-ended']))
+    // Why: let the probe's inventory read answer; a premature retirement lands within these turns.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(onPtyExit).not.toHaveBeenCalled()
+    expect(transport.getRecoveryState?.().phase).not.toBe('ended')
+    transport.destroy?.()
+  })
+
   it('settles a pane whose restore attach is refused as stale before it binds', async () => {
     const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
     const onPtyExit = vi.fn()
