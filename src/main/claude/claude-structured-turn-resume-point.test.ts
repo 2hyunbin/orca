@@ -401,19 +401,31 @@ describe('Claude durable resume point at turn end', () => {
     }
   })
 
-  it('ignores a result that trails the child exit', async () => {
+  it('keeps completed output drained through the same connection after its root exits', async () => {
     const persist = vi.fn(async () => {})
     const { adapter, claude, frame, persistedHandles, turn } = await liveOwner(persist)
     await turn('u1', 'a1')
     expect(persist).toHaveBeenCalledTimes(1)
-    claude.connections[0]!.handlers.onExit?.(new Error('claude crashed'))
-    frame({ type: 'user', uuid: 'u2' })
-    frame({ type: 'assistant', uuid: 'a2' })
+    const connection = claude.connections[0]!
+    const close = connection.close.bind(connection)
+    const drained = Promise.withResolvers<void>()
+    connection.close = async () => {
+      await drained.promise
+      return close()
+    }
+    connection.handlers.onExit?.(new Error('claude crashed'))
+    frame({ type: 'user', uuid: 'u2', message: { role: 'user', content: 'buffered ask' } })
+    frame({
+      type: 'assistant',
+      uuid: 'a2',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'buffered answer' }] }
+    })
     frame({ type: 'result', subtype: 'success', uuid: 'a2-result' })
+    drained.resolve()
     await adapter.drainObservedExits()
     await tick()
-    // A result with no owner behind it is not a completed turn; the exit keeps the last one.
+    // The exit handle owns this completed leaf; the removed owner does not promote it in place.
     expect(persist).toHaveBeenCalledTimes(1)
-    expect(persistedHandles).toEqual([expect.objectContaining({ leafUuid: 'a1' })])
+    expect(persistedHandles).toEqual([expect.objectContaining({ leafUuid: 'a2' })])
   })
 })

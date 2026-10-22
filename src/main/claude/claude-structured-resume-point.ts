@@ -41,9 +41,6 @@ function persistClaudeTurnResumePoint(
 ): void {
   // Ending a request never waits for optional history or durable bookkeeping.
   settleClaudeTurnEndWaiters(session)
-  if (session.closeFinalization || session.closeFinalized || !isCurrent()) {
-    return
-  }
   const translator = session.translator
   if (
     !session.initialization.history.covered ||
@@ -72,10 +69,11 @@ function persistClaudeTurnResumePoint(
         if (!result.ok) {
           throw result.error
         }
+        // Close and exit still consume this session's completed output after removing its owner.
+        session.turnEndLeafUuid = leafUuid
         if (!isCurrent()) {
           return
         }
-        session.turnEndLeafUuid = leafUuid
         await persist?.({
           sessionId,
           providerSessionId: session.providerSessionId,
