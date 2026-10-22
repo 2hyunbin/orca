@@ -12,9 +12,14 @@ import { BRIDGE_PROTOCOL_VERSION } from '../mobile-web-shell/bridge/bridge-frame
 
 export function createNativeDiagnosticsOperations(
   host: HostProfile,
-  context: RpcClientContextValue,
+  context: Pick<
+    RpcClientContextValue,
+    'getState' | 'getReconnectAttempt' | 'getLastConnectedAt' | 'getActivePath' | 'getPendingPath'
+  >,
   liveDesktopAppVersion?: string | null
 ): DiagnosticsDeviceOperations {
+  const versionConnectedAt =
+    context.getState(host.id) === 'connected' ? context.getLastConnectedAt(host.id) : null
   return {
     async report() {
       const appVersion = Constants.expoConfig?.version ?? 'unknown'
@@ -29,7 +34,10 @@ export function createNativeDiagnosticsOperations(
           lastConnectedAt: snapshot.lastConnectedAt,
           platform,
           appVersion,
-          desktopAppVersion: liveDesktopAppVersion,
+          desktopAppVersion:
+            versionConnectedAt !== null && snapshot.lastConnectedAt === versionConnectedAt
+              ? liveDesktopAppVersion
+              : null,
           entries: snapshot.entries,
           activePath: snapshot.activePath,
           pendingPath: snapshot.pendingPath,
