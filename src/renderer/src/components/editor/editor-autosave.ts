@@ -8,6 +8,7 @@ import {
   MIN_EDITOR_AUTO_SAVE_DELAY_MS
 } from '../../../../shared/constants'
 import { clampNumber } from '@/lib/terminal-theme'
+import { isAutosavePausedForNonUtf8File } from './editor-non-utf8-autosave-pause'
 
 export const ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT = 'orca:editor-quiesce-file-saves'
 export const ORCA_EDITOR_EXTERNAL_FILE_CHANGE_EVENT = 'orca:editor-external-file-change'
@@ -110,9 +111,16 @@ export function canAutoSaveOpenFile(file: OpenFile): boolean {
 // content. An unmarked conflict needs no pause: every save is guarded, and a refusal sets the mark.
 // One predicate so the save-queue gate and the timer scheduler cannot drift.
 export function isAutosaveSuspendedForFile(
-  file: Pick<OpenFile, 'externalMutation' | 'pendingOwnerMigration'>
+  file: Pick<
+    OpenFile,
+    'externalMutation' | 'pendingOwnerMigration' | 'filePath' | 'runtimeEnvironmentId'
+  >
 ): boolean {
-  return file.externalMutation === 'changed' || file.pendingOwnerMigration === true
+  return (
+    file.externalMutation === 'changed' ||
+    file.pendingOwnerMigration === true ||
+    isAutosavePausedForNonUtf8File(file)
+  )
 }
 
 export function normalizeAutoSaveDelayMs(value: unknown): number {

@@ -5,6 +5,7 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import type { AppState } from '@/store'
 import { attachRestoredTabConflictScan } from './editor-restored-tab-conflict-scan'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
+import { __clearSelfWriteRegistryForTests, recordSelfWrite } from './editor-self-write-registry'
 
 const mocks = vi.hoisted(() => ({
   readRuntimeFileContent: vi.fn(),
@@ -89,6 +90,22 @@ describe('attachRestoredTabConflictScan', () => {
       expect(mocks.readRuntimeFileContent).toHaveBeenCalledTimes(1)
     } finally {
       detach()
+    }
+  })
+
+  it('leaves a tab unmarked when disk holds its own just-written save', async () => {
+    mocks.readRuntimeFileContent.mockResolvedValue({ content: 'saved earlier', isBinary: false })
+    const store = createTestStore()
+    openRestoredDirtyTab(store, '/repo/file.ts', 'original baseline')
+    recordSelfWrite('/repo/file.ts', 'saved earlier')
+
+    const detach = attachRestoredTabConflictScan(store)
+    try {
+      await vi.advanceTimersByTimeAsync(10)
+      expect(store.getState().openFiles[0]?.externalMutation).toBeUndefined()
+    } finally {
+      detach()
+      __clearSelfWriteRegistryForTests()
     }
   })
 

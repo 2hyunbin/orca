@@ -10,8 +10,8 @@ import {
   compareDiskWritePrecondition,
   diskConflictFromReadFailure,
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
-  FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
+  hostEnforcesPrecondition,
   FILE_WRITE_UNCHANGED,
   parseFileWriteResult,
   type FileWriteDiskComparison,
@@ -208,7 +208,7 @@ export function createWebFileMutationMethods(
             if (!diskPrecondition) {
               return { method: 'files.write', params }
             }
-            if (capabilities.includes(FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY)) {
+            if (hostEnforcesPrecondition(capabilities, diskPrecondition)) {
               return {
                 method: FILE_WRITE_IF_UNCHANGED_METHOD,
                 params: { ...params, diskPrecondition }

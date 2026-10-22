@@ -105,7 +105,8 @@ export function reconcileEditorTabsAfterOverflow(target: OverflowTarget, resync:
             runtimeEnvironmentId: target.runtimeEnvironmentId ?? null
           },
           [file.id],
-          false
+          false,
+          true
         )
       }
       continue

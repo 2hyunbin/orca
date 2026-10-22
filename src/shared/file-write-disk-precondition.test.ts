@@ -38,11 +38,19 @@ describe('disk write precondition', () => {
     const precondition = { expectedSignature: getDiskBaselineSignature(decoded) }
     expect(
       compareDiskWritePrecondition({ ...precondition, requireLosslessUtf8: true }, current, decoded)
-    ).toBe('changed')
+    ).toBe('not-utf8')
     expect(compareDiskWritePrecondition(precondition, current, decoded)).toBeNull()
   })
 
   it('treats anything but an explicit refusal from a host as a completed write', () => {
+    expect(parseFileWriteResult({ ok: false, diskConflict: 'not-utf8' })).toEqual({
+      ok: false,
+      diskConflict: 'not-utf8'
+    })
+    expect(parseFileWriteResult({ ok: false, diskConflict: 'later' })).toEqual({
+      ok: false,
+      diskConflict: 'changed'
+    })
     expect(parseFileWriteResult(undefined)).toEqual({ ok: true })
     expect(parseFileWriteResult({ ok: true })).toEqual({ ok: true })
     expect(parseFileWriteResult({ ok: true, unchanged: true })).toEqual({

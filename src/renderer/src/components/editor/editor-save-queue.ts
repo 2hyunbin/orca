@@ -23,6 +23,7 @@ import { trackExternalChangeConflictAction } from './editor-external-change-tele
 import { editorTabFileAccess } from '@/lib/local-file-access'
 import { isEditorLargePasteInFlight } from './editor-large-paste-in-flight'
 import {
+  markEditorSaveRefusal,
   rebaselineAfterEditorWrite,
   setModelExternalMutation,
   waitForModelBaselineRestamps
@@ -175,13 +176,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     }
     if (!writeResult.ok) {
       clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
-      // Why: the banner (or deleted tombstone) explains the refusal and pauses autosave.
-      setModelExternalMutation(
-        store.getState(),
-        fileId,
-        writeResult.diskConflict === 'missing' ? 'deleted' : 'changed'
-      )
-      return 'blocked-stale'
+      markEditorSaveRefusal(store.getState(), liveFile, writeResult.diskConflict)
+      return writeResult.diskConflict === 'not-utf8' ? 'failed' : 'blocked-stale'
     }
 
     if (writeResult.unchanged) {

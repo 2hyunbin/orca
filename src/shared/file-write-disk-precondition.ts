@@ -9,16 +9,32 @@ export const FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY = 'files.write.identical-no
 
 export const FILE_WRITE_IF_UNCHANGED_METHOD = 'files.writeIfUnchanged'
 
+/**
+ * Whether the host's guarded write can be sent as is. A v1 host can't check bytes or skip identical
+ * text, so only automatic saves (which must refuse non-UTF-8 files) pay for a client-side read first.
+ */
+export function hostEnforcesPrecondition(
+  capabilities: readonly unknown[],
+  precondition: FileWriteDiskPrecondition
+): boolean {
+  return (
+    capabilities.includes(FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY) ||
+    (capabilities.includes(FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY) &&
+      precondition.requireLosslessUtf8 !== true)
+  )
+}
+
 /** Refuse the write unless disk still holds the content this signature was taken over. */
 export type FileWriteDiskPrecondition = {
   expectedSignature: string
   /** A missing file is written (recreated) instead of refused. */
   allowMissing?: boolean
-  /** Automatic saves must not trust a baseline comparison over replacement characters. */
+  /** Automatic saves refuse a file that isn't valid UTF-8 rather than convert it unasked. */
   requireLosslessUtf8?: boolean
 }
 
-export type FileWriteDiskConflict = 'changed' | 'missing'
+/** `not-utf8`: an automatic save met bytes it can't round-trip; older clients read it as `changed`. */
+export type FileWriteDiskConflict = 'changed' | 'missing' | 'not-utf8'
 
 export type FileWriteDiskComparison = FileWriteDiskConflict | 'identical' | null
 
@@ -45,8 +61,9 @@ export function compareDiskWritePrecondition(
   if (current === content && !current.includes('\uFFFD')) {
     return 'identical'
   }
+  // Why: decoded text can't tell a real U+FFFD from replaced bytes, so a reader of text stays conservative.
   if (precondition.requireLosslessUtf8 && current.includes('\uFFFD')) {
-    return 'changed'
+    return 'not-utf8'
   }
   return getDiskBaselineSignature(current) === precondition.expectedSignature ? null : 'changed'
 }
@@ -62,7 +79,11 @@ export function parseFileWriteResult(value: unknown): FileWriteResult {
       : FILE_WRITE_OK
   }
   const diskConflict = 'diskConflict' in value ? value.diskConflict : undefined
-  return { ok: false, diskConflict: diskConflict === 'missing' ? 'missing' : 'changed' }
+  return {
+    ok: false,
+    diskConflict:
+      diskConflict === 'missing' || diskConflict === 'not-utf8' ? diskConflict : 'changed'
+  }
 }
 
 /** Only a not-found answer proves the file is gone; a lost transport proves nothing. */

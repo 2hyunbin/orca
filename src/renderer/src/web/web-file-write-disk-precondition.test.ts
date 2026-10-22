@@ -95,7 +95,7 @@ describe('paired web client save precondition', () => {
   })
 
   it.each(['original', 'edited'])(
-    'skips identical content on a v1 guarded server (baseline %s)',
+    'skips identical content on a v1 guarded server for an automatic save (baseline %s)',
     async (baseline) => {
       const { methods, calledMethods } = methodsFor(
         [FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY],
@@ -105,14 +105,30 @@ describe('paired web client save precondition', () => {
         await methods.writeFile({
           filePath: '/hub/repo/readme.md',
           content: 'edited',
-          diskPrecondition: { expectedSignature: getDiskBaselineSignature(baseline) }
+          diskPrecondition: {
+            expectedSignature: getDiskBaselineSignature(baseline),
+            requireLosslessUtf8: true
+          }
         })
       ).toEqual({ ok: true, unchanged: true })
       expect(calledMethods()).toEqual(['files.readPreview'])
     }
   )
 
-  it('keeps the v1 server guard for non-identical saves', async () => {
+  it('keeps the v1 server guard for non-identical automatic saves', async () => {
+    const { methods, calledMethods } = methodsFor(
+      [FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY],
+      'original'
+    )
+    await methods.writeFile({
+      filePath: '/hub/repo/readme.md',
+      content: 'edited',
+      diskPrecondition: { ...precondition, requireLosslessUtf8: true }
+    })
+    expect(calledMethods()).toEqual(['files.readPreview', 'files.writeIfUnchanged'])
+  })
+
+  it('sends an explicit save straight to a v1 guarded server without reading first', async () => {
     const { methods, calledMethods } = methodsFor(
       [FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY],
       'original'
@@ -122,7 +138,7 @@ describe('paired web client save precondition', () => {
       content: 'edited',
       diskPrecondition: precondition
     })
-    expect(calledMethods()).toEqual(['files.readPreview', 'files.writeIfUnchanged'])
+    expect(calledMethods()).toEqual(['files.writeIfUnchanged'])
   })
 
   it('refuses an ambiguous automatic baseline before sending to a v1 server', async () => {
@@ -139,7 +155,7 @@ describe('paired web client save precondition', () => {
           requireLosslessUtf8: true
         }
       })
-    ).toEqual({ ok: false, diskConflict: 'changed' })
+    ).toEqual({ ok: false, diskConflict: 'not-utf8' })
     expect(calledMethods()).toEqual(['files.readPreview'])
   })
 

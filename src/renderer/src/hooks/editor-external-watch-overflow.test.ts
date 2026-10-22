@@ -118,7 +118,8 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     expect(harness.compareDirty).toHaveBeenCalledWith(
       { ...target, connectionId: undefined, runtimeEnvironmentId: null },
       ['dirty.ts'],
-      false
+      false,
+      true
     )
     expect(setExternalMutation).not.toHaveBeenCalled()
     expect(harness.runtimePathsExist).not.toHaveBeenCalled()

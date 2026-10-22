@@ -10,8 +10,8 @@ import {
   compareDiskWritePrecondition,
   diskConflictFromReadFailure,
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
-  FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
+  hostEnforcesPrecondition,
   FILE_WRITE_UNCHANGED,
   parseFileWriteResult,
   type FileWriteDiskComparison,
@@ -225,7 +225,7 @@ async function writeFileOnEnvironment(
     // Why `local`: the server writes only a workspace it runs itself, so the write never hops on.
     expectedExecutionHostId: 'local'
   }
-  if (capabilities.includes(FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY)) {
+  if (hostEnforcesPrecondition(capabilities, diskPrecondition)) {
     return parseFileWriteResult(
       await pinned(FILE_WRITE_IF_UNCHANGED_METHOD, { ...params, diskPrecondition })
     )

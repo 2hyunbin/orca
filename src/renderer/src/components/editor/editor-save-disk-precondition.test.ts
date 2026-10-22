@@ -179,9 +179,10 @@ describe('editor saves guarded by the disk precondition', () => {
       store.getState().markFileDirty(PATH, true)
       await vi.advanceTimersByTimeAsync(1500)
 
+      // Why: this host only sees decoded text, so a U+FFFD on disk pauses autosave conservatively.
       expect(disk.writeFile).toHaveBeenCalledTimes(2)
       expect(disk.files.get(PATH)).toBe('a�b')
-      expect(store.getState().openFiles[0]?.externalMutation).toBe('changed')
+      expect(store.getState().openFiles[0]?.externalMutation).toBeUndefined()
       await requestEditorFileSave({ fileId: PATH })
       expect(disk.files.get(PATH)).toBe('second edit')
     } finally {

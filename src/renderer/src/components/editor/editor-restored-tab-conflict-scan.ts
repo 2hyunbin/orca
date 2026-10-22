@@ -13,6 +13,7 @@ import { canAutoSaveOpenFile } from './editor-autosave'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
 import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
 import { runtimePathsExist } from '@/runtime/runtime-path-existence-batch'
+import { getRecentSelfWrite } from './editor-self-write-registry'
 
 type AppStoreApi = Pick<StoreApi<AppState>, 'getState' | 'subscribe'>
 
@@ -133,7 +134,9 @@ export function attachRestoredTabConflictScan(store: AppStoreApi): () => void {
         result.isBinary ||
         getDiskBaselineSignature(result.content) === file.lastKnownDiskSignature ||
         // Why: disk already holds the draft, so the next save goes through clean.
-        result.content === store.getState().editorDrafts[file.id]
+        result.content === store.getState().editorDrafts[file.id] ||
+        // Why: the tab's own save can land before it rebaselines.
+        getRecentSelfWrite(file.filePath, file.runtimeEnvironmentId)?.content === result.content
       ) {
         return
       }

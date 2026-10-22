@@ -1,3 +1,4 @@
+import { isUtf8 } from 'node:buffer'
 import { StringDecoder } from 'node:string_decoder'
 import {
   DiskBaselineSignatureBuilder,
@@ -27,26 +28,17 @@ import {
 const HASH_SLICE_BYTES = 1024 * 1024
 
 /** Why sliced: hashing tens of MB in one go stalls the main process; yielding keeps windows responsive. */
-export async function diskSignatureOfUtf8(
-  buffer: Buffer,
-  requireLosslessUtf8 = false
-): Promise<string | null> {
+export async function diskSignatureOfUtf8(buffer: Buffer): Promise<string> {
   if (buffer.length <= HASH_SLICE_BYTES) {
-    const text = buffer.toString('utf8')
-    return requireLosslessUtf8 && text.includes('\uFFFD') ? null : getDiskBaselineSignature(text)
+    return getDiskBaselineSignature(buffer.toString('utf8'))
   }
   const decoder = new StringDecoder('utf8')
   const signature = new DiskBaselineSignatureBuilder()
   for (let offset = 0; offset < buffer.length; offset += HASH_SLICE_BYTES) {
-    const text = decoder.write(buffer.subarray(offset, offset + HASH_SLICE_BYTES))
-    if (requireLosslessUtf8 && text.includes('\uFFFD')) {
-      return null
-    }
-    signature.update(text)
+    signature.update(decoder.write(buffer.subarray(offset, offset + HASH_SLICE_BYTES)))
     await new Promise<void>((resolve) => setImmediate(resolve))
   }
-  const tail = decoder.end()
-  return requireLosslessUtf8 && tail.includes('\uFFFD') ? null : signature.update(tail).digest()
+  return signature.update(decoder.end()).digest()
 }
 
 /** Reads the file the writer is about to replace and reports why it no longer matches the baseline. */
@@ -92,11 +84,11 @@ export async function checkLocalDiskWritePrecondition(
     if (buffer.equals(written)) {
       return 'identical'
     }
-    return baselineFits &&
-      (await diskSignatureOfUtf8(buffer, precondition.requireLosslessUtf8)) ===
-        precondition.expectedSignature
-      ? null
-      : 'changed'
+    if (!baselineFits || (await diskSignatureOfUtf8(buffer)) !== precondition.expectedSignature) {
+      return 'changed'
+    }
+    // Why bytes: a decoded U+FFFD may be a real character or replaced bytes; only the bytes tell.
+    return precondition.requireLosslessUtf8 && !isUtf8(buffer) ? 'not-utf8' : null
   } finally {
     await handle.close()
   }

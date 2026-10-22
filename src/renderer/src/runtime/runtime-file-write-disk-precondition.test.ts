@@ -222,30 +222,42 @@ describe('writeRuntimeFile disk precondition', () => {
   })
 
   it.each(['original', 'edited'])(
-    'skips identical content on a v1 guarded host (baseline %s)',
+    'skips identical content on a v1 guarded host for an automatic save (baseline %s)',
     async (baseline) => {
       serveHost({ enforcesPrecondition: true, identicalNoop: false, diskContent: 'edited' })
       expect(
         await writeRuntimeFile(remoteContext, '/remote/repo/file.ts', 'edited', undefined, {
-          expectedSignature: getDiskBaselineSignature(baseline)
+          expectedSignature: getDiskBaselineSignature(baseline),
+          requireLosslessUtf8: true
         })
       ).toEqual({ ok: true, unchanged: true })
       expect(writeCalls()).toHaveLength(0)
     }
   )
 
-  it('keeps the v1 host guard for non-identical saves after comparing locally', async () => {
+  it('keeps the v1 host guard for non-identical automatic saves after comparing locally', async () => {
     serveHost({ enforcesPrecondition: true, identicalNoop: false, diskContent: 'original' })
     runtimeEnvironmentCall.mockResolvedValue(rpcOk({ ok: false, diskConflict: 'changed' }))
     expect(
-      await writeRuntimeFile(
-        remoteContext,
-        '/remote/repo/file.ts',
-        'edited',
-        undefined,
-        precondition
-      )
+      await writeRuntimeFile(remoteContext, '/remote/repo/file.ts', 'edited', undefined, {
+        ...precondition,
+        requireLosslessUtf8: true
+      })
     ).toEqual({ ok: false, diskConflict: 'changed' })
+    expect(writeCalls()[0]?.method).toBe('files.writeIfUnchanged')
+  })
+
+  it('sends an explicit save straight to a v1 guarded host without reading first', async () => {
+    let reads = 0
+    serveHost({
+      enforcesPrecondition: true,
+      identicalNoop: false,
+      diskContent: 'edited',
+      onRead: () => (reads += 1)
+    })
+    runtimeEnvironmentCall.mockResolvedValue(rpcOk({ ok: true }))
+    await writeRuntimeFile(remoteContext, '/remote/repo/file.ts', 'edited', undefined, precondition)
+    expect(reads).toBe(0)
     expect(writeCalls()[0]?.method).toBe('files.writeIfUnchanged')
   })
 
@@ -256,7 +268,7 @@ describe('writeRuntimeFile disk precondition', () => {
         expectedSignature: getDiskBaselineSignature('a�'),
         requireLosslessUtf8: true
       })
-    ).toEqual({ ok: false, diskConflict: 'changed' })
+    ).toEqual({ ok: false, diskConflict: 'not-utf8' })
     expect(writeCalls()).toHaveLength(0)
   })
 

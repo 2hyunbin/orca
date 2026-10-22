@@ -141,7 +141,7 @@ describe('checkLocalDiskWritePrecondition', () => {
           expectedSignature,
           requireLosslessUtf8: true
         })
-      ).resolves.toEqual({ ok: false, diskConflict: 'changed' })
+      ).resolves.toEqual({ ok: false, diskConflict: 'not-utf8' })
       expect(await readFile(filePath)).toEqual(newer)
       await expect(
         writeLocalTextFileWithDiskPrecondition(filePath, decoded, { expectedSignature })
@@ -149,6 +149,33 @@ describe('checkLocalDiskWritePrecondition', () => {
       expect(await readFile(filePath)).toEqual(Buffer.from(decoded))
     }
   )
+
+  it.each([0, 1024 * 1024 + 2])(
+    'lets an automatic save edit valid UTF-8 that contains U+FFFD (%i padding)',
+    async (padding) => {
+      const filePath = join(base, 'replacement-char.ts')
+      const original = `${'a'.repeat(padding)}\uFFFD`
+      await writeFile(filePath, original)
+      await expect(
+        writeLocalTextFileWithDiskPrecondition(filePath, `${original}!`, {
+          expectedSignature: getDiskBaselineSignature(original),
+          requireLosslessUtf8: true
+        })
+      ).resolves.toEqual({ ok: true })
+      expect(await readFile(filePath, 'utf8')).toBe(`${original}!`)
+    }
+  )
+
+  it('reports an automatic save over a changed non-UTF-8 file as changed', async () => {
+    const filePath = join(base, 'latin1.ts')
+    await writeFile(filePath, Buffer.from([0x63, 0x61, 0x66, 0xe9]))
+    await expect(
+      writeLocalTextFileWithDiskPrecondition(filePath, 'x', {
+        expectedSignature: getDiskBaselineSignature('other'),
+        requireLosslessUtf8: true
+      })
+    ).resolves.toEqual({ ok: false, diskConflict: 'changed' })
+  })
 
   it('reports a same-size external rewrite as changed', async () => {
     const filePath = join(base, 'a.ts')
