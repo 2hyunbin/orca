@@ -100,12 +100,20 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
   ): Promise<RuntimeTerminalResolvePane> {
     const parsed = parsePaneKey(paneKey)
     const pty = this.getPtyRecordForPaneKey(paneKey)
+    const handlePaneKey = expectedHandle ? this.getPaneKeyForTerminalHandle(expectedHandle) : null
+    // Switch point: main's layout names no pane for a terminal its replacement unbound, so a stale
+    // handle of this workspace may still learn the connected replacement (never spawn one).
+    const replacedHandle =
+      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      handlePaneKey === null &&
+      pty?.connected === true &&
+      this.getTerminalWorktreeIdForHandle(expectedHandle ?? '') === expectedWorktreeId
     if (
       !parsed ||
       !pty ||
       !expectedHandle ||
       pty.worktreeId !== expectedWorktreeId ||
-      this.getPaneKeyForTerminalHandle(expectedHandle) !== paneKey
+      (handlePaneKey !== paneKey && !replacedHandle)
     ) {
       throw new Error('terminal_not_found')
     }
