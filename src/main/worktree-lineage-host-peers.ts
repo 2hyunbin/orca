@@ -38,7 +38,7 @@ export function withSavedWorktreeLineage<T extends Worktree>(
   rows: readonly T[]
 ) {
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
-  const raw = store.getAllWorktreeMeta()
+  const raw = store.getAllWorktreeMeta?.() ?? {}
   const workspaceEdges = store.getAllWorkspaceLineage?.() ?? {}
   return rows.map((row) => {
     const key = row.id.startsWith('folder:') ? row.id : worktreeWorkspaceKey(row.id)
@@ -68,7 +68,7 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
   input: readonly T[]
 ) {
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
-  const raw = store.getAllWorktreeMeta()
+  const raw = store.getAllWorktreeMeta?.() ?? {}
   const rows = withSavedWorktreeLineage(store, repo, input)
   const project = (peers: readonly Worktree[] = []) =>
     projectResolvedWorktreeLineage(rows, lineageById, peers, raw, 'publication')

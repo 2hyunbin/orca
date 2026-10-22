@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Repo } from '../shared/repo-types'
 import type { ExecutionHostId } from '../shared/execution-host'
+import { hostWorktreeTarget } from '../shared/worktree/host-qualified-identity'
 import type { WorktreeLineage } from '../shared/worktree/lineage-types'
 import type { GitWorktreeInfo } from '../shared/worktree/types'
 import { worktreeWorkspaceKey } from '../shared/workspace-scope'
@@ -186,6 +187,9 @@ describe('inferred lineage hydration under a WSL move', () => {
       lineage: null,
       git: { path, head: 'abc', branch: `refs/heads/${name}`, isBare: false, isMainWorktree: false }
     }
+    store.setWorktreeMeta(hostWorktreeTarget({ id: worktree.id, hostId }), {
+      instanceId: worktree.instanceId
+    })
     return worktree
   }
 

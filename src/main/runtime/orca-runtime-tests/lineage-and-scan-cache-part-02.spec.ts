@@ -175,14 +175,12 @@ describe('OrcaRuntimeService', () => {
     ).rejects.toThrow('lineage cycle')
     expect(setWorktreeLineage).not.toHaveBeenCalled()
 
-    await runtime.updateManagedWorktreeMeta(`id:${cId}`, {
-      lineage: { parentWorktree: `id:${dId}` }
-    })
-    expect(setWorktreeLineage).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: cId }),
-      expect.objectContaining({ parentWorktreeId: dId })
-    )
-    setWorktreeLineage.mockClear()
+    await expect(
+      runtime.updateManagedWorktreeMeta(`id:${cId}`, {
+        lineage: { parentWorktree: `id:${dId}` }
+      })
+    ).rejects.toThrow('lineage cycle')
+    expect(setWorktreeLineage).not.toHaveBeenCalled()
     await expect(
       runtime.updateManagedWorktreeMeta(`id:${hId}`, {
         lineage: { parentWorktree: `id:${fId}` }

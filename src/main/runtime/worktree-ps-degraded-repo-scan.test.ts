@@ -350,16 +350,29 @@ describe('worktree.ps on a degraded repo scan', () => {
     }
   })
 
-  it('does not re-read persisted worktree metadata on a healthy scan', async () => {
+  it('keeps saved lineage current while reusing a healthy scan', async () => {
     listWorktreesStrictMock.mockResolvedValue([
-      { path: REPO_PATH, head: 'abc', branch: 'main', isBare: false, isMainWorktree: true }
+      { path: REPO_PATH, head: 'abc', branch: 'main', isBare: false, isMainWorktree: true },
+      { path: WORKTREE_PATH, head: 'abc', branch: 'feature', isBare: false, isMainWorktree: false }
     ])
-    const store = makeStore()
+    const store = makeStore({
+      metaById: {
+        [WORKTREE_ID]: makeMeta({ instanceId: 'child-instance' }),
+        [MAIN_WORKTREE_ID]: makeMeta({ instanceId: 'parent-instance' })
+      }
+    })
     const runtime = new OrcaRuntimeService(store as never)
 
-    await runtime.getWorktreePs(10_000)
-
-    expect(store.getAllWorktreeMeta).toHaveBeenCalledTimes(1)
+    const first = await runtime.getWorktreePs(10_000)
+    expect(first.worktrees.find((row) => row.worktreeId === WORKTREE_ID)).toMatchObject({
+      parentWorktreeId: MAIN_WORKTREE_ID
+    })
+    delete store.getAllWorktreeLineage()[WORKTREE_ID]
+    const second = await runtime.getWorktreePs(10_000)
+    expect(second.worktrees.find((row) => row.worktreeId === WORKTREE_ID)).toMatchObject({
+      parentWorktreeId: null
+    })
+    expect(listWorktreesStrictMock).toHaveBeenCalledTimes(1)
   })
 
   it('lists restored worktrees while a scan is stalled and still hides agent scratch', async () => {

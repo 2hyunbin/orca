@@ -49,7 +49,7 @@ export function peekWorktreeMetaForHost(
   if (store.peekWorktreeMetaForHost) {
     return store.peekWorktreeMetaForHost(id, host)
   }
-  const meta = store.getAllWorktreeMeta()[id]
+  const meta = store.getAllWorktreeMeta?.()[id]
   return !meta?.hostId || meta.hostId === host ? meta : undefined
 }
 
