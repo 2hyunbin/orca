@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events'
 import type { BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +7,10 @@ import type { DragTempCopyItemResult } from './dragged-temp-file-copy'
 import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
 
 type IpcListener = (event: { sender: unknown }, payload: unknown) => void
-type InvokeHandler = (event: { sender: unknown }, payload: unknown) => Promise<unknown>
+type InvokeHandler = (
+  event: { sender: unknown; senderFrame?: unknown },
+  payload: unknown
+) => Promise<unknown>
 
 const { materializeMock, ipcListeners, ipcHandlers } = vi.hoisted(() => ({
   materializeMock: vi.fn(),
@@ -67,11 +71,17 @@ beforeEach(() => {
 function createWindow() {
   let destroyed = false
   const windowListeners = new Map<string, () => void>()
+  const events = new EventEmitter()
   const webContents = {
+    mainFrame: {},
     isDestroyed: () => destroyed,
     send: vi.fn(),
-    once: vi.fn<(event: string, listener: () => void) => void>(),
-    removeListener: vi.fn()
+    once: vi.fn((event: string, listener: () => void) => {
+      events.once(event, listener)
+    }),
+    removeListener: vi.fn((event: string, listener: () => void) => {
+      events.removeListener(event, listener)
+    })
   }
   const fake = {
     isDestroyed: () => destroyed,
@@ -87,9 +97,14 @@ function createWindow() {
       destroyed = true
       windowListeners.get('closed')?.()
     },
+    navigate: () => {
+      events.emit('did-navigate')
+    },
+    listenerCount: () =>
+      events.eventNames().reduce((count, event) => count + events.listenerCount(event), 0),
     destroy: () => {
       destroyed = true
-      webContents.once.mock.calls.find(([event]) => event === 'destroyed')?.[1]()
+      events.emit('destroyed')
     }
   }
 }
@@ -103,7 +118,11 @@ describe('registerDroppedPathPreparation', () => {
   it('registers only the preparation and dropped-bytes requests', () => {
     const { window } = createWindow()
     registerDroppedPathPreparation(window)
-    expect([...ipcHandlers.keys()]).toEqual(['fs:prepareDroppedPaths', 'fs:storeDroppedFileBytes'])
+    expect([...ipcHandlers.keys()]).toEqual([
+      'fs:endDroppedFileIntake',
+      'fs:prepareDroppedPaths',
+      'fs:storeDroppedFileBytes'
+    ])
     expect(ipcListeners.size).toBe(0)
   })
 
@@ -111,15 +130,26 @@ describe('registerDroppedPathPreparation', () => {
     const { window, webContents, close } = createWindow()
     registerDroppedPathPreparation(window, async () => null)
     const handler = ipcHandlers.get('fs:storeDroppedFileBytes')!
-    const request = { name: 'Shot.png', bytes: new Uint8Array([1]) }
+    const request = {
+      intakeId: 'shot',
+      sourceIndex: 0,
+      name: 'Shot.png',
+      bytes: new Uint8Array([1])
+    }
     expect(() => handler({ sender: {} }, request)).toThrow('owning window')
     for (const invalid of [
       null,
-      { name: '', bytes: new Uint8Array([1]) },
-      { name: 'Shot.png', bytes: [1] },
-      { name: 'Shot.png', bytes: new Uint8Array(AGENT_SESSION_ATTACHMENT_MAX_BYTES + 1) }
+      { ...request, name: '', bytes: new Uint8Array([1]) },
+      { ...request, name: 'Shot.png', bytes: [1] },
+      {
+        ...request,
+        name: 'Shot.png',
+        bytes: new Uint8Array(AGENT_SESSION_ATTACHMENT_MAX_BYTES + 1)
+      }
     ]) {
-      expect(() => handler({ sender: webContents }, invalid)).toThrow('Invalid')
+      expect(() =>
+        handler({ sender: webContents, senderFrame: webContents.mainFrame }, invalid)
+      ).toThrow('Invalid')
     }
     close()
     expect(ipcHandlers.has('fs:storeDroppedFileBytes')).toBe(false)
@@ -136,10 +166,15 @@ describe('registerDroppedPathPreparation', () => {
       { paths: [FINDER], consumer: 'other' },
       { paths: [42], consumer: 'agent' }
     ]) {
-      expect(() => handler({ sender: webContents }, invalid)).toThrow('Invalid')
+      expect(() =>
+        handler({ sender: webContents, senderFrame: webContents.mainFrame }, invalid)
+      ).toThrow('Invalid')
     }
     await expect(
-      handler({ sender: webContents }, { ...request, consumer: 'local-chat' })
+      handler(
+        { sender: webContents, senderFrame: webContents.mainFrame },
+        { ...request, consumer: 'local-chat' }
+      )
     ).resolves.toEqual({
       paths: [FINDER],
       failures: []
@@ -147,8 +182,47 @@ describe('registerDroppedPathPreparation', () => {
     expect(webContents.send).not.toHaveBeenCalled()
     close()
     expect(ipcHandlers.has('fs:prepareDroppedPaths')).toBe(false)
-    expect(() => handler({ sender: webContents }, request)).toThrow('owning window')
+    expect(() =>
+      handler({ sender: webContents, senderFrame: webContents.mainFrame }, request)
+    ).toThrow('owning window')
   })
+
+  it.skipIf(process.platform !== 'darwin')(
+    'revokes granted and queued continuations on navigation and accepts a fresh document',
+    async () => {
+      const f = createWindow()
+      registerDroppedPathPreparation(f.window, async () => null)
+      const prepare = ipcHandlers.get('fs:prepareDroppedPaths')!
+      const bytes = ipcHandlers.get('fs:storeDroppedFileBytes')!
+      const end = ipcHandlers.get('fs:endDroppedFileIntake')!
+      const event = { sender: f.webContents, senderFrame: f.webContents.mainFrame }
+      const request = { paths: [DRAG_TEMP], consumer: 'local-chat', intakeId: 'old' }
+      expect(() => prepare({ ...event, senderFrame: {} }, request)).toThrow('owning window')
+      materializeMock.mockResolvedValue([
+        { sourcePath: DRAG_TEMP, status: 'from-file', byteLength: 1 }
+      ])
+      await expect(prepare(event, request)).resolves.toMatchObject({ intake: { intakeId: 'old' } })
+      const queued = prepare(event, { ...request, intakeId: 'queued' })
+      const rejected = expect(queued).rejects.toThrow('went away')
+      f.navigate()
+      await rejected
+      expect(() =>
+        bytes(event, {
+          intakeId: 'old',
+          sourceIndex: 0,
+          name: 'Shot.png',
+          bytes: new Uint8Array([1])
+        })
+      ).toThrow('Invalid')
+      expect(f.listenerCount()).toBe(0)
+      await expect(prepare(event, { ...request, intakeId: 'fresh' })).resolves.toMatchObject({
+        intake: { intakeId: 'fresh' }
+      })
+      await end(event, { intakeId: 'fresh', disposition: 'complete' })
+      await end(event, { intakeId: 'fresh', disposition: 'abort' })
+      expect(f.listenerCount()).toBe(0)
+    }
+  )
 
   it('enforces both request caps before preparing any paths', async () => {
     const { window, webContents } = createWindow()
@@ -156,7 +230,7 @@ describe('registerDroppedPathPreparation', () => {
     const handler = ipcHandlers.get('fs:prepareDroppedPaths')!
     await expect(
       handler(
-        { sender: webContents },
+        { sender: webContents, senderFrame: webContents.mainFrame },
         { paths: Array.from({ length: 257 }, () => DRAG_TEMP), consumer: 'agent' }
       )
     ).resolves.toMatchObject({
@@ -164,7 +238,10 @@ describe('registerDroppedPathPreparation', () => {
       failures: [{ reason: 'too-many-paths', pathCount: 257 }]
     })
     await expect(
-      handler({ sender: webContents }, { paths: ['x'.repeat(256 * 1024 + 1)], consumer: 'agent' })
+      handler(
+        { sender: webContents, senderFrame: webContents.mainFrame },
+        { paths: ['x'.repeat(256 * 1024 + 1)], consumer: 'agent' }
+      )
     ).resolves.toMatchObject({ paths: [], failures: [{ reason: 'paths-too-large' }] })
     expect(materializeMock).not.toHaveBeenCalled()
   })
@@ -178,7 +255,10 @@ describe('registerDroppedPathPreparation', () => {
     first.close()
     expect(ipcHandlers.get('fs:prepareDroppedPaths')).toBe(handler)
     await expect(
-      handler({ sender: second.webContents }, { paths: [FINDER], consumer: 'main-reader' })
+      handler(
+        { sender: second.webContents, senderFrame: second.webContents.mainFrame },
+        { paths: [FINDER], consumer: 'main-reader' }
+      )
     ).resolves.toEqual({ paths: [FINDER], failures: [] })
   })
 
@@ -190,7 +270,10 @@ describe('registerDroppedPathPreparation', () => {
       const { window, webContents, destroy } = createWindow()
       registerDroppedPathPreparation(window)
       const handler = ipcHandlers.get('fs:prepareDroppedPaths')!
-      const pending = handler({ sender: webContents }, { paths: [DRAG_TEMP], consumer: 'agent' })
+      const pending = handler(
+        { sender: webContents, senderFrame: webContents.mainFrame },
+        { paths: [DRAG_TEMP], consumer: 'agent' }
+      )
       await settle()
       expect(materializeMock.mock.calls[0][1]).toMatchObject({
         platform: 'darwin',

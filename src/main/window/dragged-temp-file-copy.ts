@@ -3,6 +3,7 @@ import { lstat, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import type { NativeFileDropCopyFailureReason } from '../../shared/native-file-drop'
+import { hasDragTempMarker } from '../../shared/native-file-drop-preparation'
 import {
   formatByteCeiling,
   REMOTE_IMPORT_MAX_FILE_BYTES,
@@ -15,7 +16,6 @@ import { ensureOwnedTempStagingRoot, getOwnedTempStagingRoot } from './owned-tem
 // daemon is not, so agents in local terminals get EPERM on the original path.
 
 const TEMPORARY_ITEMS_SEGMENT = 'TemporaryItems'
-const DRAG_PROVIDER_DIR_PREFIX = 'NSIRD_'
 const COPY_DIR_PREFIX = 'orca-drop-'
 const DRAG_TEMP_COPY_ROOT_NAME = 'orca-drops'
 // Why no expiry: a copy may be what a terminal agent, a draft or a sent message still names, and
@@ -223,19 +223,6 @@ export async function materializeDragTempPath(
     }
     return { result: classifyFailure(sourcePath, error), copiedBytes: 0 }
   }
-}
-
-// True when the segments hold `TemporaryItems/NSIRD_*/<entry>`: something below the provider dir.
-function hasDragTempMarker(segments: readonly string[]): boolean {
-  for (let i = 0; i + 2 < segments.length; i += 1) {
-    if (
-      segments[i] === TEMPORARY_ITEMS_SEGMENT &&
-      segments[i + 1].startsWith(DRAG_PROVIDER_DIR_PREFIX)
-    ) {
-      return true
-    }
-  }
-  return false
 }
 
 /** Path segments of `candidate` below `root`, or [] when it is not inside it. */

@@ -1,19 +1,26 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import type * as NodeFsPromises from 'node:fs/promises'
+import { rename, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { randomUUID } from 'node:crypto'
 import { AgentSessionAttachmentStore } from '../native-chat/agent-session-attachments/agent-session-attachment-store'
 import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
-import { basename, dirname, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { DragTempCopyItemResult } from './dragged-temp-file-copy'
 import type * as DragTempFileCopy from './dragged-temp-file-copy'
 import {
   createDragTempCopyLane,
   createDroppedFileBytesIntake,
+  endDroppedFileIntake,
   createDroppedPathPreparationQueue,
   MAX_PENDING_DRAG_TEMP_COPIES
 } from './dropped-path-preparation'
 
 const materialize = vi.hoisted(() => vi.fn())
+vi.mock('node:fs/promises', async (original) => {
+  const actual = await original<typeof NodeFsPromises>()
+  return { ...actual, rename: vi.fn(actual.rename) }
+})
 vi.mock('electron', () => ({ app: {}, ipcMain: {} }))
 vi.mock('./dragged-temp-file-copy', async (original) => ({
   ...(await original<typeof DragTempFileCopy>()),
@@ -54,6 +61,7 @@ async function settle() {
 }
 beforeEach(() => {
   materialize.mockReset()
+  vi.mocked(rename).mockReset()
 })
 
 async function realDrop() {
@@ -87,92 +95,168 @@ function localIntake(
   const lane = createDragTempCopyLane()
   return {
     prepare: createDroppedPathPreparationQueue(deps, lane),
-    storeBytes: createDroppedFileBytesIntake(deps, lane)
+    storeBytes: createDroppedFileBytesIntake(deps, lane),
+    end: (intakeId: string) =>
+      endDroppedFileIntake(deps, lane, { intakeId, disposition: 'complete' }),
+    lane,
+    deps
   }
 }
 
 const listed = (dir: string) => readdir(dir).catch(() => [])
 
 describe('dropped path preparation through the shared copy queue', () => {
-  it('leaves a local chat its checked drag-temp files unread, in drop order', async () => {
+  it('grants checked small files in occurrence order, keeping the large-file path route', async () => {
     const { source, env } = await realDrop()
     const large = join(dirname(source), 'large.png')
     const bytes = Buffer.alloc(AGENT_SESSION_ATTACHMENT_MAX_BYTES + 1, 7)
     await writeFile(large, bytes)
     const getStore = vi.fn(async () => null)
-    const { prepare } = localIntake(env, getStore)
-    const result = await prepare({
+    const intake = localIntake(env, getStore)
+    const intakeId = randomUUID()
+    const result = await intake.prepare({
       paths: [ORDINARY, source, large, source],
-      consumer: 'local-chat'
+      consumer: 'local-chat',
+      intakeId
     })
     expect(result.fromDroppedFiles).toEqual([
       { sourceIndex: 1, byteLength: 5, position: 1 },
       { sourceIndex: 1, byteLength: 5, position: 3 }
     ])
+    expect(result.intake).toMatchObject({ intakeId })
     expect(result.paths[0]).toBe(ORDINARY)
-    // Over the store's limit: the checked private copy, as for every other consumer.
     expect((await readFile(result.paths[1])).equals(bytes)).toBe(true)
-    expect(await listed(env.copyRoot)).toHaveLength(1)
     expect(getStore).not.toHaveBeenCalled()
+    intake.end(intakeId)
   })
 
-  it("writes a dropped file's bytes once, straight into the chat store", async () => {
-    const { env, store } = await realDrop()
-    const { storeBytes } = localIntake(env, async () => store)
-    const result = await storeBytes({ name: '../Shot.png', bytes: Buffer.from('image') })
-    expect(result.failures).toEqual([])
-    const stored = result.paths[0]
-    expect(basename(stored)).toBe('Shot.png')
-    expect(dirname(dirname(stored))).toBe(store.rootDir)
-    expect(await readFile(stored, 'utf8')).toBe('image')
-    expect(await listed(env.copyRoot)).toEqual([])
-  })
-
-  it.each(['unavailable', 'refused', 'write fails'] as const)(
-    'keeps the received bytes as a private copy when the store %s',
+  it.each(['direct', 'unavailable', 'refused', 'write fails'] as const)(
+    'writes received bytes to the store or one private fallback: %s',
     async (mode) => {
-      const { env, store } = await realDrop()
+      const { source, env, store } = await realDrop()
       if (mode === 'write fails') {
         vi.spyOn(store, 'storeFile').mockRejectedValueOnce(new Error('ENOSPC'))
       }
-      const { storeBytes } = localIntake(env, async () => {
+      const getStore = vi.fn(async () => {
         if (mode === 'refused') {
           throw new Error('host refused')
         }
         return mode === 'unavailable' ? null : store
       })
-      const result = await storeBytes({ name: 'Shot.png', bytes: Buffer.from('image') })
+      const intake = localIntake(env, getStore)
+      const intakeId = randomUUID()
+      await intake.prepare({ paths: [source], consumer: 'local-chat', intakeId })
+      const result = await intake.storeBytes({
+        intakeId,
+        sourceIndex: 0,
+        name: 'Shot.png',
+        bytes: Buffer.from('image')
+      })
+      intake.end(intakeId)
       expect(result.failures).toEqual([])
-      expect(dirname(dirname(result.paths[0]))).toBe(env.copyRoot)
       expect(await readFile(result.paths[0], 'utf8')).toBe('image')
-      if (process.platform !== 'win32') {
+      expect(dirname(dirname(result.paths[0]))).toBe(
+        mode === 'direct' ? store.rootDir : env.copyRoot
+      )
+      expect(await listed(env.copyRoot)).toHaveLength(mode === 'direct' ? 0 : 1)
+      if (mode !== 'direct' && process.platform !== 'win32') {
         expect((await stat(result.paths[0])).mode & 0o777).toBe(0o600)
       }
-      expect(await listed(store.rootDir)).toEqual([])
+      expect(getStore).toHaveBeenCalledTimes(1)
     }
   )
 
-  it('gives up on a chat host that never starts and serves the next drop', async () => {
-    const { env, store } = await realDrop()
-    const never = deferred<AgentSessionAttachmentStore | null>()
-    const getStore = vi.fn().mockReturnValueOnce(never.promise).mockResolvedValue(store)
-    const write = vi.spyOn(store, 'storeFile')
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    onTestFinished(() => void vi.useRealTimers())
-    const { storeBytes } = localIntake(env, getStore, 100)
-    const abandoned = storeBytes({ name: 'First.png', bytes: Buffer.from('first') })
-    const following = storeBytes({ name: 'Next.png', bytes: Buffer.from('next') })
-    await vi.advanceTimersByTimeAsync(100)
-    await expect(abandoned).resolves.toEqual({
+  it('detaches one stalled host wait at the whole-drop deadline without late fallback', async () => {
+    const { source, env, store } = await realDrop()
+    const host = deferred<AgentSessionAttachmentStore | null>()
+    const getStore = vi.fn().mockReturnValueOnce(host.promise).mockResolvedValue(store)
+    const intake = localIntake(env, getStore, 100)
+    const intakeId = randomUUID()
+    await intake.prepare({ paths: [source, source], consumer: 'local-chat', intakeId })
+    const bytes = { intakeId, sourceIndex: 0, name: 'Shot.png', bytes: Buffer.from('image') }
+    const pending = intake.storeBytes(bytes)
+    await vi.waitFor(() => expect(getStore).toHaveBeenCalledTimes(1))
+    await expect(pending).resolves.toMatchObject({
       paths: [],
-      failures: [expect.objectContaining({ commonReason: 'timed-out' })]
+      failures: [{ commonReason: 'timed-out' }]
     })
-    vi.useRealTimers()
-    expect(await readFile((await following).paths[0], 'utf8')).toBe('next')
-    never.resolve(store)
+    expect(() => intake.storeBytes(bytes)).toThrow('Invalid')
+    intake.end(intakeId)
+    host.resolve(store)
     await settle()
-    expect(write).toHaveBeenCalledTimes(1)
-    expect(await listed(store.rootDir)).toHaveLength(1)
+    expect(await listed(env.copyRoot)).toEqual([])
+    expect(await listed(store.rootDir)).toEqual([])
+    const next = randomUUID()
+    await intake.prepare({ paths: [source], consumer: 'local-chat', intakeId: next })
+    expect((await intake.storeBytes({ ...bytes, intakeId: next })).paths).toHaveLength(1)
+    intake.end(next)
+  })
+
+  it('refuses a continuation past the fixed expiry even before the timer callback runs', async () => {
+    const { source, env } = await realDrop()
+    const getStore = vi.fn(async () => null)
+    const intake = localIntake(env, getStore, 1000)
+    const intakeId = randomUUID()
+    const result = await intake.prepare({ paths: [source], consumer: 'local-chat', intakeId })
+    expect(result.intake).toBeDefined()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(result.intake!.expiresAt + 1)
+    onTestFinished(() => clock.mockRestore())
+    expect(() =>
+      intake.storeBytes({ intakeId, sourceIndex: 0, name: 'Shot.png', bytes: Buffer.from('image') })
+    ).toThrow('timed-out')
+    expect(getStore).not.toHaveBeenCalled()
+    intake.end(intakeId)
+  })
+
+  it('retains admission through reads and physically drains an expired committed write before another grant', async () => {
+    const { source, env, store } = await realDrop()
+    const intake = localIntake(env, async () => store, 300)
+    const intakeId = randomUUID()
+    await intake.prepare({ paths: [source], consumer: 'local-chat', intakeId })
+    expect(() => intake.prepare({ paths: [source], consumer: 'local-chat', intakeId })).toThrow(
+      'already registered'
+    )
+    const bytes = { intakeId, sourceIndex: 0, name: 'Shot.png', bytes: Buffer.from('image') }
+    expect(() => createDroppedFileBytesIntake({ ...intake.deps }, intake.lane)(bytes)).toThrow(
+      'Invalid'
+    )
+    const waiting = Array.from({ length: 7 }, (_, index) =>
+      intake.prepare({ paths: [source], consumer: 'agent', intakeId: `queued-${index}` })
+    )
+    await expect(
+      Promise.resolve(intake.prepare({ paths: [ORDINARY, source], consumer: 'agent' }))
+    ).resolves.toMatchObject({ paths: [ORDINARY], failures: [{ commonReason: 'busy' }] })
+    await expect(
+      Promise.resolve(intake.prepare({ paths: [ORDINARY], consumer: 'agent' }))
+    ).resolves.toEqual({ paths: [ORDINARY], failures: [] })
+    const release = deferred<void>()
+    onTestFinished(() => release.resolve())
+    const issued = deferred<string>()
+    const actual = await vi.importActual<typeof NodeFsPromises>('node:fs/promises')
+    vi.mocked(rename).mockImplementationOnce(async (from, to) => {
+      issued.resolve(String(to))
+      await release.promise
+      return actual.rename(from, to)
+    })
+    const pending = intake.storeBytes(bytes)
+    const path = await issued.promise
+    await expect(pending).resolves.toMatchObject({
+      paths: [],
+      failures: [{ commonReason: 'timed-out' }]
+    })
+    intake.end(intakeId)
+    await settle()
+    intake.end('queued-0')
+    waiting.push(intake.prepare({ paths: [source], consumer: 'agent', intakeId: 'replacement' }))
+    expect(materialize).toHaveBeenCalledTimes(1)
+    await expect(readFile(path, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await listed(env.copyRoot)).toEqual([])
+    release.resolve()
+    await Promise.all(waiting)
+    expect(await readFile(path, 'utf8')).toBe('image')
+    expect(await listed(env.copyRoot)).toHaveLength(7)
+    expect(materialize).toHaveBeenCalledTimes(8)
+    expect(() => intake.storeBytes(bytes)).toThrow('Invalid')
   })
 
   it.each(['agent', 'main-reader'] as const)(
@@ -274,7 +358,8 @@ describe('dropped path preparation through the shared copy queue', () => {
   })
 
   it('aborts running and queued requests on reload and releases their listeners', async () => {
-    materialize.mockReturnValue(new Promise(() => undefined))
+    const raw = deferred()
+    materialize.mockReturnValue(raw.promise)
     const { enqueue, controller, dispose } = queue()
     const running = enqueue({ paths: [TEMP], consumer: 'agent' })
     const queued = enqueue({ paths: [TEMP], consumer: 'agent' })
@@ -287,20 +372,26 @@ describe('dropped path preparation through the shared copy queue', () => {
     await Promise.all(assertions)
     await settle()
     expect(materialize).toHaveBeenCalledTimes(1)
+    expect(dispose).toHaveBeenCalledTimes(1)
+    raw.resolve([])
+    await settle()
     expect(dispose).toHaveBeenCalledTimes(2)
   })
 
-  it('reports timeout, keeps ordinary paths, and serves the next copy', async () => {
+  it('keeps raw native copies counted after logical timeout, then advances after drain', async () => {
+    const raw = deferred()
     materialize
-      .mockReturnValueOnce(new Promise(() => undefined))
+      .mockReturnValueOnce(raw.promise)
       .mockResolvedValueOnce([{ sourcePath: TEMP, status: 'imported', destPath: COPY }])
-    const { enqueue } = queue(undefined, 5)
+    const { enqueue } = queue(undefined, 100)
     const first = enqueue({ paths: [ORDINARY, TEMP], consumer: 'agent' })
     const next = enqueue({ paths: [TEMP], consumer: 'agent' })
     await expect(first).resolves.toMatchObject({
       paths: [ORDINARY],
       failures: [{ commonReason: 'timed-out' }]
     })
+    expect(materialize).toHaveBeenCalledTimes(1)
+    raw.resolve([])
     await expect(next).resolves.toEqual({ paths: [COPY], failures: [] })
   })
   it('passes drag-temp-looking paths unchanged on Linux and Windows', () => {
@@ -336,7 +427,15 @@ describe('dropped path preparation through the shared copy queue', () => {
     })
     await expect(enqueue({ paths: [ORDINARY, TEMP], consumer: 'agent' })).resolves.toEqual({
       paths: [ORDINARY],
-      failures: [{ byteLength: 0, pathCount: 1, reason: 'temp-copy-failed', target: 'rejected' }]
+      failures: [
+        {
+          byteLength: 0,
+          pathCount: 1,
+          reason: 'temp-copy-failed',
+          target: 'rejected',
+          commonReason: 'copy-failed'
+        }
+      ]
     })
     materialize.mockResolvedValue([{ sourcePath: TEMP, status: 'imported', destPath: COPY }])
     await expect(enqueue({ paths: [TEMP], consumer: 'agent' })).resolves.toEqual({

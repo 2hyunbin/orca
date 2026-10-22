@@ -1,10 +1,18 @@
 import { mkdtemp, readdir, readFile, rm, stat, symlink, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { rename } from 'node:fs/promises'
+import type * as NodeFsPromises from 'node:fs/promises'
+import * as WindowsOperations from '../../../shared/windows-retry-file-operations'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentSessionAttachmentStore } from './agent-session-attachment-store'
 import { REMOTE_RPC_MAX_CONTENT_BYTES } from '../../../shared/remote-rpc-content-budget'
 import { isMobileE2EETextPayloadWithinLimit } from '../../runtime/rpc/mobile-e2ee-outbound-admission'
+
+vi.mock('node:fs/promises', async (original) => {
+  const actual = await original<typeof NodeFsPromises>()
+  return { ...actual, rename: vi.fn(actual.rename) }
+})
 
 let root: string
 let store: AgentSessionAttachmentStore
@@ -18,6 +26,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
+  vi.mocked(rename).mockReset()
   store.clearInFlightForTests()
   vi.useRealTimers()
   await rm(root, { recursive: true, force: true })
@@ -50,6 +60,47 @@ describe('AgentSessionAttachmentStore', () => {
     expect(await readFile(stored.path, 'utf8')).toBe('png-bytes')
     // The part file is gone once the name holds the whole file.
     expect(await readdir(join(stored.path, '..'))).toEqual(['screen shot.png'])
+  })
+
+  it('keeps legacy store callers compatible and treats a rename that wins abort as committed', async () => {
+    const legacy = await store.storeFile('legacy.png', Buffer.from('legacy'))
+    expect(await readFile(legacy, 'utf8')).toBe('legacy')
+    const controller = new AbortController()
+    const actual = WindowsOperations.renameFileWithWindowsRetryAsync
+    vi.spyOn(WindowsOperations, 'renameFileWithWindowsRetryAsync').mockImplementationOnce(
+      async (...args) => {
+        const committed = await actual(...args)
+        controller.abort(new Error('late abort'))
+        return committed
+      }
+    )
+    const committed = await store.storeFile(
+      'committed.png',
+      Buffer.from('image'),
+      controller.signal
+    )
+    expect(await readFile(committed, 'utf8')).toBe('image')
+    expect(await readdir(join(committed, '..'))).toEqual(['committed.png'])
+    expect(await readdir(store.rootDir)).toHaveLength(2)
+  })
+
+  it('aborts before commit and cancels Windows rename retries without publishing later', async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' })
+    try {
+      vi.mocked(rename).mockRejectedValueOnce(Object.assign(new Error('locked'), { code: 'EPERM' }))
+      const controller = new AbortController()
+      const pending = store.storeFile('shot.png', Buffer.from('image'), controller.signal)
+      await vi.waitFor(() => expect(rename).toHaveBeenCalledTimes(1), { interval: 1 })
+      controller.abort(new Error('cancelled'))
+      await expect(pending).rejects.toThrow('cancelled')
+      expect(rename).toHaveBeenCalledTimes(1)
+      expect(await readdir(store.rootDir)).toEqual([])
+    } finally {
+      if (platform) {
+        Object.defineProperty(process, 'platform', platform)
+      }
+    }
   })
 
   it('keeps only the last path segment of a name, never a path out of the store', async () => {

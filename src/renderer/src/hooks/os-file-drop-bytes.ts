@@ -1,98 +1,213 @@
-// A local chat takes a macOS drag-temp drop (a screenshot thumbnail) the way the common pattern
-// does: the page reads the dropped File's bytes and the chat's attachment store writes them once,
-// into a pending file in its own folder that is renamed into place. Main has already checked
-// which dropped paths are such files (`fromDroppedFiles`); everything else keeps its path.
-
+import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
+import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../../shared/agent-session-attachments'
+import { createBrowserUuid } from '../lib/browser-uuid'
 import type { NativeFileDropCopyFailureReason } from '../../../shared/native-file-drop'
-import type {
-  DroppedFileBytesSlot,
-  PreparedDroppedPaths
+import {
+  hasDragTempMarker,
+  copyFailure,
+  type DroppedPathConsumer,
+  type PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 
-// Why one at a time per window: a queued drop holds only File references, never a second payload.
-let byteIntakeTail: Promise<unknown> = Promise.resolve()
-
-/** Stores each file main asked for and puts its path in its place; failures join the drop's. */
-export function takeDroppedFileBytes(
-  prepared: PreparedDroppedPaths,
-  files: readonly File[]
-): Promise<PreparedDroppedPaths> {
-  const slots = prepared.fromDroppedFiles ?? []
-  if (slots.length === 0) {
-    return Promise.resolve(prepared)
-  }
-  const run = byteIntakeTail.then(() => storeSlots(prepared, slots, files))
-  byteIntakeTail = run.catch(() => undefined)
-  return run
-}
-
+let retainedDrops = 0
 type StoredFile = { path: string } | { reason: NativeFileDropCopyFailureReason }
-
-async function storeSlots(
-  prepared: PreparedDroppedPaths,
-  slots: readonly DroppedFileBytesSlot[],
-  files: readonly File[]
-): Promise<PreparedDroppedPaths> {
+/** Retain sources before awaiting; only main grants physical execution. */
+export async function prepareOsFileDrop(
+  paths: string[],
+  files: File[],
+  consumer: DroppedPathConsumer
+): Promise<PreparedDroppedPaths | undefined> {
+  const candidate = (path: string) =>
+    navigator.userAgent.includes('Mac') && hasDragTempMarker(path.split(/[\\/]/))
+  const bounded = paths.some(candidate)
+  if (bounded && retainedDrops >= 8) {
+    return {
+      paths: paths.filter((path) => !candidate(path)),
+      failures: [copyFailure(paths.filter(candidate).length, 'busy')]
+    }
+  }
+  if (bounded) {
+    retainedDrops++
+  }
+  const controller = new AbortController()
+  const gone = () => controller.abort(new DOMException('Window went away', 'AbortError'))
+  window.addEventListener('pagehide', gone, { once: true })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let prepared: PreparedDroppedPaths = { paths: [], failures: [] }
   const stored = new Map<number, StoredFile>()
-  for (const slot of slots) {
-    if (!stored.has(slot.sourceIndex)) {
-      stored.set(slot.sourceIndex, await storeFileBytes(files[slot.sourceIndex], slot.byteLength))
+  const work = (async () => {
+    prepared = await window.api.fs.prepareDroppedPaths({
+      paths,
+      consumer,
+      ...(bounded ? { intakeId: createBrowserUuid() } : {})
+    })
+    const intake = prepared.intake
+    if (!intake) {
+      return
     }
-  }
-  const slotAt = new Map(slots.map((slot) => [slot.position, slot]))
-  const paths: string[] = []
-  let nextPath = 0
-  for (let position = 0; position < prepared.paths.length + slots.length; position += 1) {
-    const slot = slotAt.get(position)
-    const outcome: StoredFile | undefined = slot
-      ? stored.get(slot.sourceIndex)
-      : { path: prepared.paths[nextPath++] }
-    if (outcome && 'path' in outcome) {
-      paths.push(outcome.path)
-    }
-  }
-  const lost = [...stored.values()].flatMap((outcome) =>
-    'reason' in outcome ? [outcome.reason] : []
-  )
-  if (lost.length === 0) {
-    return { paths, failures: prepared.failures }
-  }
-  const commonReason = lost.every((reason) => reason === lost[0]) ? lost[0] : undefined
-  return {
-    paths,
-    failures: [
-      ...prepared.failures,
-      {
-        target: 'rejected',
-        reason: 'temp-copy-failed',
-        pathCount: lost.length,
-        byteLength: 0,
-        ...(commonReason ? { commonReason } : {})
+    timer = setTimeout(
+      () => controller.abort(new Error('timed-out')),
+      Math.max(0, intake.expiresAt - Date.now())
+    )
+    for (const slot of prepared.fromDroppedFiles ?? []) {
+      if (stored.has(slot.sourceIndex)) {
+        continue
       }
-    ]
+      if (Date.now() >= intake.expiresAt) {
+        controller.abort(new Error('timed-out'))
+      }
+      controller.signal.throwIfAborted()
+      const outcome = await storeFileBytes(
+        files[slot.sourceIndex],
+        slot.byteLength,
+        intake.intakeId,
+        slot.sourceIndex,
+        controller.signal
+      )
+      if (!controller.signal.aborted && Date.now() < intake.expiresAt) {
+        stored.set(slot.sourceIndex, outcome)
+      }
+    }
+  })().finally(() => {
+    files.length = 0
+    if (bounded) {
+      retainedDrops--
+    }
+    clearTimeout(timer)
+    window.removeEventListener('pagehide', gone)
+    // This acknowledgement follows actual reader/invoke settlement, even after logical timeout.
+    if (prepared.intake) {
+      void window.api.fs
+        .endDroppedFileIntake({
+          intakeId: prepared.intake.intakeId,
+          disposition: controller.signal.aborted ? 'abort' : 'complete'
+        })
+        .catch(() => undefined)
+    }
+  })
+  await waitForPromiseWithSignal(work, controller.signal).catch((error: unknown) => {
+    if (!controller.signal.aborted) {
+      throw error
+    }
+  })
+  if (controller.signal.reason instanceof DOMException) {
+    return undefined
   }
+  return reduceDrop(prepared, stored)
 }
 
-async function storeFileBytes(file: File | undefined, byteLength: number): Promise<StoredFile> {
+function reduceDrop(
+  prepared: PreparedDroppedPaths,
+  stored: Map<number, StoredFile>
+): PreparedDroppedPaths {
+  const slots = prepared.fromDroppedFiles ?? []
+  const paths: string[] = []
+  const lost: (NativeFileDropCopyFailureReason | undefined)[] = []
+  const slotAt = new Map(slots.map((slot) => [slot.position, slot]))
+  let nextPath = 0
+  for (let position = 0; position < prepared.paths.length + slots.length; position++) {
+    const slot = slotAt.get(position)
+    const outcome: StoredFile = slot
+      ? (stored.get(slot.sourceIndex) ?? { reason: 'timed-out' })
+      : { path: prepared.paths[nextPath++] }
+    if ('path' in outcome) {
+      paths.push(outcome.path)
+    } else {
+      lost.push(outcome.reason)
+    }
+  }
+  const failures = prepared.failures.filter((failure) => failure.reason !== 'temp-copy-failed')
+  let count = lost.length
+  for (const failure of prepared.failures) {
+    if (failure.reason === 'temp-copy-failed') {
+      count += failure.pathCount
+      lost.push(failure.commonReason)
+    }
+  }
+  if (count) {
+    failures.push(
+      copyFailure(count, lost.every((reason) => reason === lost[0]) ? lost[0] : undefined)
+    )
+  }
+  return { paths, failures }
+}
+
+async function storeFileBytes(
+  file: File | undefined,
+  byteLength: number,
+  intakeId: string,
+  sourceIndex: number,
+  signal: AbortSignal
+): Promise<StoredFile> {
   if (!file) {
     return { reason: 'missing' }
   }
-  let bytes: Uint8Array
-  try {
-    bytes = new Uint8Array(await file.arrayBuffer())
-  } catch (error) {
-    // Why: the browser refuses a File whose file was removed or changed after the drop.
-    const missing = error instanceof DOMException && error.name === 'NotFoundError'
-    return { reason: missing ? 'missing' : 'changed' }
-  }
-  if (bytes.byteLength !== byteLength) {
+  if (
+    !Number.isFinite(file.size) ||
+    file.size < 0 ||
+    file.size > AGENT_SESSION_ATTACHMENT_MAX_BYTES ||
+    file.size !== byteLength
+  ) {
     return { reason: 'changed' }
   }
+  let reading = true
   try {
-    const result = await window.api.fs.storeDroppedFileBytes({ name: file.name, bytes })
-    const path = result.paths[0]
-    return path ? { path } : { reason: result.failures[0]?.commonReason ?? 'copy-failed' }
-  } catch {
-    return { reason: 'copy-failed' }
+    const bytes = new Uint8Array(await readDroppedFile(file, signal))
+    signal.throwIfAborted()
+    if (bytes.byteLength !== byteLength) {
+      return { reason: 'changed' }
+    }
+    reading = false
+    const result = await window.api.fs.storeDroppedFileBytes({
+      intakeId,
+      sourceIndex,
+      name: file.name,
+      bytes
+    })
+    return result.paths[0]
+      ? { path: result.paths[0] }
+      : { reason: result.failures[0]?.commonReason ?? 'copy-failed' }
+  } catch (error) {
+    signal.throwIfAborted()
+    return {
+      reason: !reading
+        ? 'copy-failed'
+        : error instanceof DOMException && error.name === 'NotFoundError'
+          ? 'missing'
+          : 'changed'
+    }
   }
+}
+
+function readDroppedFile(file: File, signal: AbortSignal): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    let settled = false
+    const finish = () => {
+      if (settled) {
+        return
+      }
+      settled = true
+      reader.onloadend = null
+      signal.removeEventListener('abort', abort)
+      if (signal.aborted) {
+        reject(signal.reason)
+      } else if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result)
+      } else {
+        reject(reader.error ?? new Error('File read failed'))
+      }
+    }
+    const abort = () => {
+      reader.abort()
+      finish()
+    }
+    reader.onloadend = finish
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) {
+      abort()
+    } else {
+      reader.readAsArrayBuffer(file)
+    }
+  })
 }

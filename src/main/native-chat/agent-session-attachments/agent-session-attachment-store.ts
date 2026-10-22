@@ -158,14 +158,25 @@ export class AgentSessionAttachmentStore {
 
   /** Stores bytes this process already holds as one committed upload; returns its path. Not in
    *  flight meanwhile: the sweep leaves a folder this new alone for an hour. */
-  async storeFile(name: string, bytes: Buffer): Promise<string> {
+  async storeFile(name: string, bytes: Buffer, signal?: AbortSignal): Promise<string> {
     const uploadDir = join(this.rootDir, randomUUID())
     const finalPath = join(uploadDir, sanitizeAgentSessionAttachmentName(name))
     try {
+      signal?.throwIfAborted()
       await mkdir(uploadDir, { recursive: true })
+      signal?.throwIfAborted()
       const partPath = join(uploadDir, AGENT_SESSION_ATTACHMENT_PART_FILE)
-      await writeFile(partPath, bytes, { flag: 'wx' })
-      await renameFileWithWindowsRetryAsync(partPath, finalPath)
+      await writeFile(partPath, bytes, { flag: 'wx', signal })
+      signal?.throwIfAborted()
+      const committed = await renameFileWithWindowsRetryAsync(
+        partPath,
+        finalPath,
+        () => !signal?.aborted
+      )
+      if (!committed) {
+        signal?.throwIfAborted()
+        throw new Error('Attachment upload was cancelled')
+      }
     } catch (error) {
       await removeQuietly(uploadDir)
       throw error

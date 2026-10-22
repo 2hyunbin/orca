@@ -11,7 +11,7 @@ import {
   type PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 import { hasOsFileDragTypes } from '../lib/os-file-drop-cancellation-guard'
-import { takeDroppedFileBytes } from './os-file-drop-bytes'
+import { prepareOsFileDrop } from './os-file-drop-bytes'
 
 export type OsFileDropSequence = { deliveryTail: Promise<void> }
 
@@ -122,12 +122,12 @@ export function useOsFileDropOwner<Destination = undefined>(
         const preparationConsumer =
           typeof consumer === 'function' ? consumer(context.destination) : consumer
         const queueDelivery = (
-          prepared: PreparedDroppedPaths | Promise<PreparedDroppedPaths>
+          prepared: PreparedDroppedPaths | Promise<PreparedDroppedPaths | undefined>
         ): void => {
           sequence.deliveryTail = sequence.deliveryTail
             .then(async () => {
               const result = await prepared
-              if (isDestinationLive || attached) {
+              if (result && (isDestinationLive || attached)) {
                 await deliver(
                   isDestinationLive && !isDestinationLive(context)
                     ? { ...result, paths: [] }
@@ -193,13 +193,10 @@ export function useOsFileDropOwner<Destination = undefined>(
           return
         }
 
-        const preparation = (async (): Promise<PreparedDroppedPaths> => {
-          let prepared: PreparedDroppedPaths
+        const preparation = (async (): Promise<PreparedDroppedPaths | undefined> => {
+          let prepared: PreparedDroppedPaths | undefined
           try {
-            prepared = await takeDroppedFileBytes(
-              await window.api.fs.prepareDroppedPaths({ paths, consumer: preparationConsumer }),
-              pathFiles
-            )
+            prepared = await prepareOsFileDrop(paths, pathFiles, preparationConsumer)
           } catch {
             prepared = {
               paths: [],
@@ -213,6 +210,9 @@ export function useOsFileDropOwner<Destination = undefined>(
                 }
               ]
             }
+          }
+          if (!prepared) {
+            return undefined
           }
           return { paths: prepared.paths, failures: [...resolutionFailures, ...prepared.failures] }
         })()

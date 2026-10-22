@@ -38,7 +38,8 @@ import type {
 import type {
   PrepareDroppedPathsRequest,
   PreparedDroppedPaths,
-  StoreDroppedFileBytesRequest
+  StoreDroppedFileBytesRequest,
+  EndDroppedFileIntakeRequest
 } from '../../shared/native-file-drop-preparation'
 
 export type ExportApi = {
@@ -55,6 +56,7 @@ export type FilesystemApi = {
     getPathForFile?: (file: File) => string
     prepareDroppedPaths: (args: PrepareDroppedPathsRequest) => Promise<PreparedDroppedPaths>
     storeDroppedFileBytes: (args: StoreDroppedFileBytesRequest) => Promise<PreparedDroppedPaths>
+    endDroppedFileIntake: (args: EndDroppedFileIntakeRequest) => Promise<void>
     readFileChunk: (args: {
       filePath: string
       connectionId?: string

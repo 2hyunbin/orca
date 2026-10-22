@@ -283,11 +283,11 @@ describe('useOsFileDropOwner', () => {
   it('sends a local chat its checked drag-temp files as bytes and keeps the drop order', async () => {
     const shot = new File(['image'], 'Shot.png')
     const gone = new File(['x'], 'Gone.png')
-    // Why: a File whose file changed after the drop refuses to read.
-    gone.arrayBuffer = () => Promise.reject(new DOMException('changed', 'NotReadableError'))
+    Object.defineProperty(gone, 'size', { value: 2 })
     prepareDroppedPaths.mockResolvedValueOnce({
       paths: ['/dropped/notes.txt'],
       failures: [],
+      intake: { intakeId: 'shot-drop', expiresAt: Date.now() + 3000 },
       fromDroppedFiles: [
         { sourceIndex: 0, byteLength: 5, position: 0 },
         { sourceIndex: 2, byteLength: 1, position: 2 },
@@ -298,7 +298,14 @@ describe('useOsFileDropOwner', () => {
       paths: [`/store/${name}`],
       failures: []
     }))
-    vi.stubGlobal('api', { fs: { getPathForFile, prepareDroppedPaths, storeDroppedFileBytes } })
+    vi.stubGlobal('api', {
+      fs: {
+        getPathForFile,
+        prepareDroppedPaths,
+        storeDroppedFileBytes,
+        endDroppedFileIntake: vi.fn(async () => undefined)
+      }
+    })
     const onDrop = vi.fn<DropHandler>()
     const view = render(<Owner onDrop={onDrop} consumer={() => 'local-chat'} />)
     drag(view.getByTestId('owner'), 'drop', [shot, new File(['n'], 'notes.txt'), gone, shot])
