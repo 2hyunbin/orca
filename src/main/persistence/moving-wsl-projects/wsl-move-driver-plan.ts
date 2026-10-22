@@ -22,6 +22,7 @@ import type {
 import { assertWslMoveManifestFits } from './wsl-move-manifest-budget'
 import { WslMoveScopeChangedError } from './wsl-move-manifest-export'
 import { wslMoveHostReadiness } from './wsl-move-preflight'
+import { settleWslMoveOwedHostAborts } from './wsl-move-owed-host-aborts'
 import { resetWslMoveToZero } from './wsl-move-reset'
 import { assessWslMoveTerminals, type WslMoveGateBlocker } from './wsl-move-terminal-gate'
 
@@ -75,7 +76,10 @@ async function settleInterruptedWslMove(
   host: WslMoveHost,
   request: WslMoveRequest
 ): Promise<WslMoveRefusal | null> {
-  const head = listWslMoveCutoverChain(deps.userDataPath, wslMoveJournalKey(request.distro)).at(-1)
+  const journalKey = wslMoveJournalKey(request.distro)
+  // Before this move stages: a leftover stage of an earlier reset would refuse it.
+  await settleWslMoveOwedHostAborts(deps.userDataPath, journalKey, host.catalog)
+  const head = listWslMoveCutoverChain(deps.userDataPath, journalKey).at(-1)
   if (
     !head ||
     WSL_MOVE_CUTOVER_PHASES.indexOf(head.phase) >=

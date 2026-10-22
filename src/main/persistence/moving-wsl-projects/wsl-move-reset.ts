@@ -28,6 +28,7 @@ import {
   removeUncommittedWslMoveCutover,
   writeWslMoveCutover
 } from './wsl-move-cutover-journal'
+import { recordWslMoveOwedHostAbort } from './wsl-move-owed-host-aborts'
 
 /** The only phase from which the desktop may ask the destination to commit. */
 export const WSL_MOVE_COMMIT_REQUEST_PHASE: WslMoveCutoverPhase = 'blobs-transferred'
@@ -53,6 +54,8 @@ export type WslMoveResetContext = {
 
 const phaseIndex = (phase: WslMoveCutoverPhase): number => WSL_MOVE_CUTOVER_PHASES.indexOf(phase)
 const COMMITTED_FROM = phaseIndex('destination-committed')
+// The stage request goes out from `quiesced`, so from there the host may hold one.
+const STAGE_MAY_EXIST_FROM = phaseIndex('quiesced')
 
 export async function resetWslMoveToZero(
   context: WslMoveResetContext,
@@ -68,7 +71,13 @@ export async function resetWslMoveToZero(
     return { outcome: 'committed', cutover }
   }
   const commitMayExist = cutover.phase === WSL_MOVE_COMMIT_REQUEST_PHASE
-  const release = (evidence: 'commit-never-requested' | 'catalog-absent'): WslMoveResetResult => {
+  const release = (
+    evidence: 'commit-never-requested' | 'catalog-absent',
+    hostConfirmedAbsent = false
+  ): WslMoveResetResult => {
+    if (!hostConfirmedAbsent && phaseIndex(cutover.phase) >= STAGE_MAY_EXIST_FROM) {
+      recordWslMoveOwedHostAbort(context.userDataPath, cutover)
+    }
     removeUncommittedWslMoveCutover(context.userDataPath, migrationId)
     return { outcome: 'reset', evidence }
   }
@@ -94,7 +103,7 @@ export async function resetWslMoveToZero(
     return commitMayExist ? byReference() : release('commit-never-requested')
   }
   if (state.state === 'absent') {
-    return release(commitMayExist ? 'catalog-absent' : 'commit-never-requested')
+    return release(commitMayExist ? 'catalog-absent' : 'commit-never-requested', true)
   }
   if (state.state !== 'committed') {
     return { outcome: 'unverifiable', reason: `catalog_${state.state}` }
@@ -114,7 +123,10 @@ async function resetByReference(
   context: WslMoveResetContext & { destination: OrcadMigrationDestinationCatalog },
   cutover: WslMoveCutover,
   commitMayExist: boolean,
-  release: (evidence: 'commit-never-requested' | 'catalog-absent') => WslMoveResetResult
+  release: (
+    evidence: 'commit-never-requested' | 'catalog-absent',
+    hostConfirmedAbsent?: boolean
+  ) => WslMoveResetResult
 ): Promise<WslMoveResetResult> {
   let aborted: OrcadMigrationCatalogReferenceAbortResult
   try {
@@ -125,7 +137,7 @@ async function resetByReference(
       : release('commit-never-requested')
   }
   if (aborted.state === 'absent') {
-    return release(commitMayExist ? 'catalog-absent' : 'commit-never-requested')
+    return release(commitMayExist ? 'catalog-absent' : 'commit-never-requested', true)
   }
   if (!commitMayExist) {
     return { outcome: 'unverifiable', reason: 'committed_without_commit_request' }
