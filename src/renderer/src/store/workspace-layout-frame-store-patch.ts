@@ -14,6 +14,7 @@ import {
   withHeldTabsAsDrawn,
   type HeldDrawnTabs
 } from './workspace-layout-frame-held-tabs'
+import { noteFramesTakingOverStagedBrowserTabs } from './workspace-layout-frame-browser-handover'
 
 /** Row fields this window owns: what its mounted panes are doing, and which terminal each row
  *  binds (main publishes the saved binding; the live one stays the window's until main owns it). */
@@ -258,6 +259,7 @@ export function buildLayoutFrameStorePatch(
     .flatMap((key) => state.browserTabsByWorktree[key] ?? [])
     .map((tab) => tab.id)
     .filter((id) => !builtBrowserTabIds.has(id))
+  noteFramesTakingOverStagedBrowserTabs(state, built, closedBrowserTabIds, builtBrowserTabIds)
   const closedPageIds = new Set(
     closedBrowserTabIds.flatMap((id) =>
       (state.browserPagesByWorkspace[id] ?? []).map((page) => page.id)
