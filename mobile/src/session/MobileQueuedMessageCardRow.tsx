@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pressable, Text, View, type LayoutRectangle } from 'react-native'
+import { Pressable, StyleSheet, Text, View, type LayoutRectangle } from 'react-native'
 import {
   AlertCircle,
   CornerDownRight,
@@ -10,6 +10,7 @@ import {
 } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { IconButton } from '../components/ui/IconButton'
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 import type { MobileQueuedMessageInlineEditor } from './use-mobile-structured-queued-edit'
@@ -67,6 +68,7 @@ function QueuedMessageCardContents({
 }: Omit<QueuedMessageCardRowProps, 'editor' | 'onEditorLayout'>): React.JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const returned = card.state === 'returned'
+  const returnedCaption = returned ? card.caption : undefined
   // "Steer" submits beside the running turn, the paused queue's cards too; a card whose own send
   // failed, or a returned one, is sent again.
   const steers = !returned && !card.paused && !card.command
@@ -136,23 +138,28 @@ function QueuedMessageCardContents({
           )}
         </View>
       </View>
-      {expanded || (returned && card.caption) ? (
+      <Collapsible open={expanded}>
+        <View style={[styles.expandedBody, returnedCaption ? localStyles.flushBottom : null]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: true }}
+            accessibilityHint="Shows less of the message"
+            onPress={() => setExpanded(false)}
+          >
+            <Text style={styles.bodyText}>{card.text}</Text>
+          </Pressable>
+        </View>
+      </Collapsible>
+      {returnedCaption ? (
         <View style={styles.expandedBody}>
-          {expanded ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ expanded: true }}
-              accessibilityHint="Shows less of the message"
-              onPress={() => setExpanded(false)}
-            >
-              <Text style={styles.bodyText}>{card.text}</Text>
-            </Pressable>
-          ) : null}
-          {returned && card.caption ? (
-            <Text style={[styles.caption, styles.captionReturned]}>{card.caption}</Text>
-          ) : null}
+          <Text style={[styles.caption, styles.captionReturned]}>{returnedCaption}</Text>
         </View>
       ) : null}
     </View>
   )
 }
+
+const localStyles = StyleSheet.create({
+  // The returned caption below carries the box's bottom padding.
+  flushBottom: { paddingBottom: 0 }
+})

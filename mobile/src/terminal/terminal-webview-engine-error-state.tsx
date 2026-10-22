@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { MonitorX, RefreshCw } from 'lucide-react-native'
 import { StyleSheet, Text, View } from 'react-native'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { colors, spacing, textStyles, typography } from '../theme/mobile-theme'
 
 export type NativeWebViewEngineEvent = {
@@ -88,11 +89,15 @@ export function TerminalWebViewEngineErrorOverlay({
         <Text style={styles.errorMessage}>
           Reload to bring it back. The session keeps running on your desktop.
         </Text>
-        {showDetails ? (
-          <Text style={styles.errorDetail} numberOfLines={6} selectable>
-            {message}
-          </Text>
-        ) : null}
+        {/* Stretched, as the centred column would give the clipping frame no width; it cancels the
+            column's gap while shut and carries it inside, so the gap eases in with the text. */}
+        <View style={styles.detailFrame}>
+          <Collapsible open={showDetails}>
+            <Text style={[styles.errorDetail, styles.detailGap]} numberOfLines={6} selectable>
+              {message}
+            </Text>
+          </Collapsible>
+        </View>
         <View style={styles.actions}>
           <Button
             label="Reload"
@@ -113,6 +118,8 @@ export function TerminalWebViewEngineErrorOverlay({
   )
 }
 
+const BODY_GAP = 10
+
 const styles = StyleSheet.create({
   errorOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -121,7 +128,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl + 16,
     backgroundColor: colors.terminalBg
   },
-  body: { maxWidth: 320, alignItems: 'center', gap: 10 },
+  body: { maxWidth: 320, alignItems: 'center', gap: BODY_GAP },
   errorTitle: {
     ...textStyles.title,
     fontSize: 20,
@@ -131,6 +138,8 @@ const styles = StyleSheet.create({
     marginTop: 6
   },
   errorMessage: { ...textStyles.callout, color: colors.textSecondary, textAlign: 'center' },
+  detailFrame: { alignSelf: 'stretch', marginTop: -BODY_GAP },
+  detailGap: { paddingTop: BODY_GAP },
   errorDetail: {
     fontFamily: typography.monoFamily,
     fontSize: 13,

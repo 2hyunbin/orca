@@ -39,6 +39,7 @@ import {
   type NativeChatToolCallBlock
 } from '../../../src/shared/native-chat-types'
 import { buildNativeChatTaskListRows } from '../../../src/shared/native-chat-task-list-history'
+import { Collapsible } from '../components/ui/Collapsible'
 import { colors } from '../theme/mobile-theme'
 import { MobileNativeChatToolGlyph } from './MobileNativeChatToolIcon'
 import { MobileNativeChatToolLine } from './MobileNativeChatToolLine'
@@ -294,7 +295,7 @@ export function ToolRun({
           </Text>
         ) : null}
       </MobileNativeChatDisclosureRow>
-      {open ? (
+      <Collapsible open={open}>
         <ToolRunMembers
           followKey={blocks.length + asideCount}
           startsAtEnd={live}
@@ -311,12 +312,12 @@ export function ToolRun({
             onOpenFile={onOpenFile}
           />
         </ToolRunMembers>
-      ) : null}
+      </Collapsible>
     </View>
   )
 }
 
-/** Desktop parity: `NativeChatToolRunMemberList`. Mounted only while the run is open,
+/** Desktop parity: `NativeChatToolRunMemberList`. Mounted only while the run is open or closing,
  *  so a collapsed run pays for none of the pairing. */
 function ToolRunMemberList({
   blocks,

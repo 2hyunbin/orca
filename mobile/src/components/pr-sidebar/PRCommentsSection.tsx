@@ -10,6 +10,7 @@ import { isPrSidebarDetailsPlaceholder } from '../../session/mobile-pr-sidebar-s
 import type { MobilePrCommentActions } from '../../session/use-mobile-pr-comment-actions'
 import { MobileSegmentedControl } from '../MobileSegmentedControl'
 import { Button } from '../ui/Button'
+import { Collapsible } from '../ui/Collapsible'
 import { slideTransition } from '../ui/transition-styles'
 import { PRSection } from './PRSection'
 import { CommentMarkdown } from './CommentMarkdown'
@@ -285,12 +286,10 @@ function CommentGroupView({
           </View>
         )}
       </Pressable>
-      {expanded ? (
-        <>
-          <View style={styles.separator} />
-          {thread}
-        </>
-      ) : null}
+      <Collapsible open={expanded}>
+        <View style={styles.separator} />
+        {thread}
+      </Collapsible>
     </View>
   )
 }

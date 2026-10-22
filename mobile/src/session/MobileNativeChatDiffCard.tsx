@@ -13,6 +13,7 @@ import {
 } from '../../../src/shared/native-chat-edit-model'
 import { NATIVE_CHAT_TOOL_ROW_VERB_COPY } from '../../../src/shared/native-chat-tool-line-label'
 import { MobileSourceCopyButton } from '../components/MobileSourceCopyButton'
+import { Collapsible } from '../components/ui/Collapsible'
 import { colors } from '../theme/mobile-theme'
 import { useMobileNativeChatOpenedDetail } from './mobile-native-chat-opened-detail'
 import { useMobileNativeChatDisclosure } from './mobile-native-chat-disclosure-store'
@@ -213,14 +214,14 @@ export function MobileNativeChatDiffCard({
           accessibilityLabel={NATIVE_CHAT_DIFF_CARD_COPY.copyDiff}
         />
       </View>
-      {hasBody && expanded ? (
+      <Collapsible open={hasBody && expanded}>
         <DiffCardRows
           file={file}
           fontScale={fontScale}
           disclosureKey={disclosureKey}
           rootIdentity={rootIdentity}
         />
-      ) : null}
+      </Collapsible>
     </View>
   )
 }

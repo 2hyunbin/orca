@@ -12,6 +12,7 @@ import {
   PickerModal
 } from './mobile-tasks-dependencies'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { ListGroup, LIST_LEADING_INSET } from '../components/ui/ListGroup'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
@@ -187,7 +188,7 @@ export function renderMobileTasksWorkspaceCreateDrawer(model: ConnectionPresenta
                 onToggle={() => setShowWorkspaceAdvanced((current) => !current)}
                 first
               />
-              {showWorkspaceAdvanced ? (
+              <Collapsible open={showWorkspaceAdvanced}>
                 <ListGroup style={workspaceStyles.flushGroup}>
                   <ListRow
                     title="Start from"
@@ -204,7 +205,7 @@ export function renderMobileTasksWorkspaceCreateDrawer(model: ConnectionPresenta
                     }}
                   />
                 </ListGroup>
-              ) : null}
+              </Collapsible>
             </View>
 
             {workspaceCreateTargetRepo ? null : (

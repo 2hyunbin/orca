@@ -3,6 +3,7 @@ import { Pressable, Text, View } from 'react-native'
 import { ChevronDown, Pencil, Play, Trash2 } from 'lucide-react-native'
 import { ActionSheetModal } from '../components/ActionSheetModal'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { slideTransition } from '../components/ui/transition-styles'
 import { colors } from '../theme/mobile-theme'
 import { useLargeSystemText } from '../theme/use-large-system-text'
@@ -161,7 +162,7 @@ export function MobileNativeChatQueuedMessages({
         {largeText && headerActions ? (
           <View style={[styles.headerActionsLine, styles.headerPaused]}>{headerActions}</View>
         ) : null}
-        {expanded ? (
+        <Collapsible open={expanded}>
           <MobileQueuedMessageScrollList
             messageIds={cards.map((card) => card.messageId)}
             newestIsPersons={!cards.at(-1)?.attribution}
@@ -186,7 +187,7 @@ export function MobileNativeChatQueuedMessages({
               })
             }
           </MobileQueuedMessageScrollList>
-        ) : null}
+        </Collapsible>
       </View>
       <ActionSheetModal
         visible={menuCard !== undefined}

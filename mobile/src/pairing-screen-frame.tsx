@@ -10,6 +10,7 @@ import {
   textStyles,
   typography
 } from './theme/mobile-theme'
+import { Collapsible } from './components/ui/Collapsible'
 import { NavBar } from './components/ui/NavBar'
 import { slideTransition } from './components/ui/transition-styles'
 import { ConnectionLog } from './components/ConnectionLog'
@@ -123,16 +124,19 @@ export function PairingDetails({ detail, logs }: { detail?: string; logs: Connec
           <ChevronDown size={16} color={colors.textMuted} strokeWidth={2.2} />
         </View>
       </Pressable>
-      {open ? (
-        <View style={styles.detailsBody}>
-          {detail ? (
-            <Text style={styles.detailText} selectable>
-              {detail}
-            </Text>
-          ) : null}
-          <ConnectionLog entries={logs} title="Pairing log" />
-        </View>
-      ) : null}
+      {/* Stretched: the centred column would give the clipping frame no width. */}
+      <View style={styles.detailsFrame}>
+        <Collapsible open={open}>
+          <View style={styles.detailsBody}>
+            {detail ? (
+              <Text style={styles.detailText} selectable>
+                {detail}
+              </Text>
+            ) : null}
+            <ConnectionLog entries={logs} title="Pairing log" />
+          </View>
+        </Collapsible>
+      </View>
     </View>
   )
 }
@@ -201,6 +205,7 @@ const styles = StyleSheet.create({
   detailsLabel: { ...textStyles.subhead, fontWeight: '500', color: colors.textSecondary },
   chevronOpen: { transform: [{ rotate: '180deg' }] },
   chevronClosed: { transform: [{ rotate: '0deg' }] },
+  detailsFrame: { alignSelf: 'stretch' },
   detailsBody: { width: '100%', gap: spacing.sm, marginTop: spacing.xs },
   detailText: {
     ...textStyles.footnote,

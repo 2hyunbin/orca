@@ -15,6 +15,7 @@ import { SmartWorkspaceAdvancedFields } from './SmartWorkspaceAdvancedFields'
 import { SmartWorkspaceSourceField } from './SmartWorkspaceSourceField'
 import { Banner } from './ui/Banner'
 import { Button } from './ui/Button'
+import { Collapsible } from './ui/Collapsible'
 import { LIST_LEADING_INSET, ListGroup } from './ui/ListGroup'
 import { ListRow } from './ui/ListRow'
 import { SectionHeader } from './ui/SectionHeader'
@@ -169,25 +170,28 @@ export function NewWorktreeFormSheet(props: {
                 onToggle={() => props.onShowAdvancedChange(!props.showAdvanced)}
               />
             </View>
-            {props.showAdvanced ? (
-              <>
-                <View style={styles.stack}>
-                  <SmartWorkspaceAdvancedFields
-                    composer={props.composer}
-                    selectedRepoIsGit={props.selectedRepoIsGit}
-                  />
-                  <TextField
-                    label="Note"
-                    value={props.note}
-                    onChangeText={props.onNoteChange}
-                    placeholder="Write a note"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
+            {/* Bled out and padded back, so the clipping frame keeps the setup field's bleeds. */}
+            <View style={styles.bleed}>
+              <Collapsible open={props.showAdvanced}>
+                <View style={styles.unbleed}>
+                  <View style={styles.stack}>
+                    <SmartWorkspaceAdvancedFields
+                      composer={props.composer}
+                      selectedRepoIsGit={props.selectedRepoIsGit}
+                    />
+                    <TextField
+                      label="Note"
+                      value={props.note}
+                      onChangeText={props.onNoteChange}
+                      placeholder="Write a note"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                  {setupBlocks ? null : setupField}
                 </View>
-                {setupBlocks ? null : setupField}
-              </>
-            ) : null}
+              </Collapsible>
+            </View>
           </View>
 
           {props.error ? (

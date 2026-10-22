@@ -1,6 +1,7 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { Text } from 'react-native'
 import { SquareTerminal } from 'lucide-react-native'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import {
   MobileNativeChatPromptCardFrame,
   promptCardStyles
@@ -106,17 +107,17 @@ export function MobileNativeChatPromptCard({
   // card keeps its selections.
   return (
     <>
-      <View style={collapsedPrompt ? styles.collapsed : undefined}>{card}</View>
-      {collapsedPrompt ? (
-        <MobileNativeChatPromptStrip
-          title={collapsedPrompt.title}
-          onExpand={collapsedPrompt.expand}
-        />
-      ) : null}
+      <Collapsible open={!collapsedPrompt} keepMounted>
+        {card}
+      </Collapsible>
+      <Collapsible open={Boolean(collapsedPrompt)}>
+        {collapsedPrompt ? (
+          <MobileNativeChatPromptStrip
+            title={collapsedPrompt.title}
+            onExpand={collapsedPrompt.expand}
+          />
+        ) : null}
+      </Collapsible>
     </>
   )
 }
-
-const styles = StyleSheet.create({
-  collapsed: { display: 'none' }
-})

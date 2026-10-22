@@ -10,6 +10,7 @@ const BLEED = -spacing.md
 export const newWorktreeFormStyles = StyleSheet.create({
   header: { marginHorizontal: -spacing.sm, marginTop: -spacing.xs },
   bleed: { marginHorizontal: BLEED },
+  unbleed: { paddingHorizontal: -BLEED },
   group: { marginHorizontal: GROUP_INSET },
   flush: { marginHorizontal: 0 },
   stack: { gap: spacing.lg, marginHorizontal: GROUP_INSET, marginTop: spacing.sm },

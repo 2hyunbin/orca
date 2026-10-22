@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { pressTransition, slideTransition } from '../components/ui/transition-styles'
 import { MobileAgentIcon } from '../components/MobileAgentIcon'
@@ -119,11 +120,6 @@ function AgentHistoryCardRow({
   onResume?: (session: AiVaultSession) => void | Promise<void>
   onPress: () => void
 }) {
-  const previewTurns = useMemo(
-    () => (expanded && session ? recentSessionConversationTurns(session, PREVIEW_TURN_LIMIT) : []),
-    [expanded, session]
-  )
-
   const resumable = session !== null && onResume !== undefined
   const resumeDisabled = resumeActionState?.disabled === true
   return (
@@ -192,22 +188,40 @@ function AgentHistoryCardRow({
                 />
               ) : null}
             </View>
-            {expanded && previewTurns.length > 0 ? (
-              <View style={styles.preview}>
-                {previewTurns.map((turn, index) => (
-                  <View key={`${card.id}-turn-${index}`} style={styles.previewTurn}>
-                    <Text style={styles.previewRole}>
-                      {turn.role === 'user' ? 'You' : card.agentLabel}
-                    </Text>
-                    <Text style={styles.previewText}>{turn.text}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
+            <Collapsible open={expanded && session !== null}>
+              {session ? <PreviewTurns card={card} session={session} /> : null}
+            </Collapsible>
           </View>
         </View>
       )}
     </Pressable>
+  )
+}
+
+// Mounted only while its card is open or closing, so a closed row reads no turns.
+function PreviewTurns({
+  card,
+  session
+}: {
+  card: MobileAgentHistoryCard
+  session: AiVaultSession
+}) {
+  const previewTurns = useMemo(
+    () => recentSessionConversationTurns(session, PREVIEW_TURN_LIMIT),
+    [session]
+  )
+  if (previewTurns.length === 0) {
+    return null
+  }
+  return (
+    <View style={styles.preview}>
+      {previewTurns.map((turn, index) => (
+        <View key={`${card.id}-turn-${index}`} style={styles.previewTurn}>
+          <Text style={styles.previewRole}>{turn.role === 'user' ? 'You' : card.agentLabel}</Text>
+          <Text style={styles.previewText}>{turn.text}</Text>
+        </View>
+      ))}
+    </View>
   )
 }
 

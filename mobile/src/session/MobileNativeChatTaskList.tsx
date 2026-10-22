@@ -8,6 +8,7 @@ import {
   type NativeChatTask,
   type NativeChatTaskList as TaskList
 } from '../../../src/shared/native-chat-task-list'
+import { Collapsible } from '../components/ui/Collapsible'
 import { colors } from '../theme/mobile-theme'
 import { useMobileNativeChatOpenedDetail } from './mobile-native-chat-opened-detail'
 import { TOOL_ICON_SIZE, toolStyles as styles, toolType } from './mobile-native-chat-tool-styles'
@@ -105,7 +106,9 @@ function FullList({
           {NATIVE_CHAT_TASK_LIST_COPY.showAll}
         </Text>
       </MobileNativeChatDisclosureRow>
-      {open ? <OpenedChecklist list={list} fontScale={fontScale} /> : null}
+      <Collapsible open={open}>
+        <OpenedChecklist list={list} fontScale={fontScale} />
+      </Collapsible>
     </View>
   )
 }

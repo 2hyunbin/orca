@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { View, Text, Pressable, StyleSheet } from 'react-native'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { IconButton } from '../components/ui/IconButton'
 import { LIST_LEADING_INSET, LIST_ROW_PADDING } from '../components/ui/ListGroup'
 import { pressTransition } from '../components/ui/transition-styles'
@@ -180,7 +181,7 @@ export function QuickCommandRow({
           />
         </View>
       </View>
-      {expanded ? (
+      <Collapsible open={expanded}>
         <View style={styles.actions}>
           <Button
             label="Edit"
@@ -206,7 +207,7 @@ export function QuickCommandRow({
             accessibilityLabel={`Delete ${command.label}`}
           />
         </View>
-      ) : null}
+      </Collapsible>
     </View>
   )
 }

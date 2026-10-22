@@ -4,6 +4,7 @@ import { nativeChatReasoningDisclosureKey } from '../../../src/shared/native-cha
 import { formatNativeChatActiveTurnLabel } from '../../../src/shared/native-chat-turn-status'
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
 import { LoadingSpinner } from '../components/LoadingSpinner'
+import { Collapsible } from '../components/ui/Collapsible'
 import { pressTransition } from '../components/ui/transition-styles'
 import { colors, MIN_TOUCH_TARGET, spacing, textStyles } from '../theme/mobile-theme'
 import { DISCLOSURE_BLEED, MobileNativeChatChevron } from './MobileNativeChatDisclosureRow'
@@ -61,17 +62,19 @@ export function MobileNativeChatLiveLine({
         </Text>
         {reasoning ? <MobileNativeChatChevron open={open} fontScale={fontScale} /> : null}
       </Pressable>
-      {reasoning && open ? (
-        <View style={styles.body}>
-          <MobileNativeChatReasoningBody
-            positionKey={nativeChatReasoningDisclosureKey(reasoning.message.id)}
-            markdown={reasoning.markdown}
-            fontScale={fontScale}
-            onOpenFile={onOpenFile}
-            onLongPress={INLINE_TEXT_SELECTION ? undefined : () => openActions(reasoning.message)}
-          />
-        </View>
-      ) : null}
+      <Collapsible open={open}>
+        {reasoning ? (
+          <View style={styles.body}>
+            <MobileNativeChatReasoningBody
+              positionKey={nativeChatReasoningDisclosureKey(reasoning.message.id)}
+              markdown={reasoning.markdown}
+              fontScale={fontScale}
+              onOpenFile={onOpenFile}
+              onLongPress={INLINE_TEXT_SELECTION ? undefined : () => openActions(reasoning.message)}
+            />
+          </View>
+        ) : null}
+      </Collapsible>
     </View>
   )
 }

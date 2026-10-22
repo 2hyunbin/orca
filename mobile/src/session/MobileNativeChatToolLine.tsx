@@ -23,6 +23,7 @@ import {
 import { MobileSyntaxSegments } from '../components/MobileSyntaxSegments'
 import { INLINE_TEXT_SELECTION } from '../components/inline-text-selection'
 import { openExternalLink } from '../platform/external-link'
+import { Collapsible } from '../components/ui/Collapsible'
 import { colors } from '../theme/mobile-theme'
 import { highlightMobileCode } from './mobile-file-syntax'
 import { MobileNativeChatToolGlyph } from './MobileNativeChatToolIcon'
@@ -246,7 +247,7 @@ export function MobileNativeChatToolLine({
           </View>
         ) : null}
       </MobileNativeChatDisclosureRow>
-      {hasDetail && expanded ? (
+      <Collapsible open={hasDetail && expanded}>
         <ToolLineDetail
           memberId={memberId}
           disclosureKey={disclosureKey}
@@ -257,7 +258,7 @@ export function MobileNativeChatToolLine({
           results={results}
           fontScale={fontScale}
         />
-      ) : null}
+      </Collapsible>
     </View>
   )
 }

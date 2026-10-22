@@ -12,6 +12,7 @@ import type {
   NativeChatSubagentGroupBlock,
   NativeChatSubagentState
 } from '../../../src/shared/native-chat-types'
+import { Collapsible } from '../components/ui/Collapsible'
 import { useNow } from '../hooks/use-now'
 import { colors, spacing, textStyles } from '../theme/mobile-theme'
 import { MobileNativeChatDisclosureRow } from './MobileNativeChatDisclosureRow'
@@ -108,28 +109,28 @@ export function MobileNativeChatSubagentGroup({
           {header.tokens !== null ? ` · ${header.tokens}` : null}
         </Text>
       </MobileNativeChatDisclosureRow>
-      {open
-        ? block.agents.map((agent) => {
-            const state = normalizeSubagentState(agent.state)
-            return (
-              <View key={agent.id} testID="subagent-group-entry" style={styles.entry}>
-                <View style={[styles.dot, stateDotStyle(state)]} />
-                <Text
-                  style={[styles.entryLabel, state === 'idle' && styles.entryLabelIdle]}
-                  numberOfLines={1}
-                >
-                  {agent.label}
-                </Text>
-                <Text style={styles.entryState} numberOfLines={1}>
-                  {subagentStateLabel(state, 1, 1, say)}
-                  {typeof agent.tokens === 'number'
-                    ? ` · ${formatSubagentTokens(agent.tokens)}`
-                    : null}
-                </Text>
-              </View>
-            )
-          })
-        : null}
+      <Collapsible open={open}>
+        {block.agents.map((agent) => {
+          const state = normalizeSubagentState(agent.state)
+          return (
+            <View key={agent.id} testID="subagent-group-entry" style={styles.entry}>
+              <View style={[styles.dot, stateDotStyle(state)]} />
+              <Text
+                style={[styles.entryLabel, state === 'idle' && styles.entryLabelIdle]}
+                numberOfLines={1}
+              >
+                {agent.label}
+              </Text>
+              <Text style={styles.entryState} numberOfLines={1}>
+                {subagentStateLabel(state, 1, 1, say)}
+                {typeof agent.tokens === 'number'
+                  ? ` · ${formatSubagentTokens(agent.tokens)}`
+                  : null}
+              </Text>
+            </View>
+          )
+        })}
+      </Collapsible>
     </View>
   )
 }

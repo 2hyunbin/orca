@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Text, View } from 'react-native'
+import { StyleSheet, Text, View } from 'react-native'
 import { AlertCircle, ChevronDown, ChevronRight, Sparkles } from 'lucide-react-native'
-import { colors } from '../theme/mobile-theme'
+import { colors, spacing } from '../theme/mobile-theme'
 import { AgentLaunchNotice } from '../components/AgentLaunchNotice'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import type { MobileCommitFailureRecovery } from './mobile-commit-failure-recovery'
 import type { MobileCommitFailureRecoveryAction } from './use-mobile-commit-failure-recovery'
 import { styles } from './mobile-source-control-styles'
@@ -52,11 +53,14 @@ export function MobileCommitFailurePanel({ failure, action }: Props) {
           />
         ) : null}
       </View>
-      {expanded && detailsText ? (
-        <Text style={styles.commitFailureDetailsText} selectable>
-          {detailsText}
-        </Text>
-      ) : null}
+      {/* Cancels the panel's gap while shut and carries it inside, so it eases in with the text. */}
+      <View style={localStyles.detailsFrame}>
+        <Collapsible open={expanded && detailsText.length > 0}>
+          <Text style={[styles.commitFailureDetailsText, localStyles.detailsGap]} selectable>
+            {detailsText}
+          </Text>
+        </Collapsible>
+      </View>
       <AgentLaunchNotice
         availability={action.availability}
         success={action.launchSuccess}
@@ -68,3 +72,8 @@ export function MobileCommitFailurePanel({ failure, action }: Props) {
     </View>
   )
 }
+
+const localStyles = StyleSheet.create({
+  detailsFrame: { marginTop: -spacing.sm },
+  detailsGap: { paddingTop: spacing.sm }
+})

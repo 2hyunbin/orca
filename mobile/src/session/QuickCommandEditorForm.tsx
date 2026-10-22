@@ -4,6 +4,7 @@ import { ChevronRight } from 'lucide-react-native'
 import { colors, spacing, radii, textStyles, typography } from '../theme/mobile-theme'
 import { Banner } from '../components/ui/Banner'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { ListGroup } from '../components/ui/ListGroup'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
@@ -180,7 +181,7 @@ export function QuickCommandEditorForm({
           expanded={advancedOpen}
           onToggle={() => setAdvancedOpen((open) => !open)}
         />
-        {advancedOpen ? (
+        <Collapsible open={advancedOpen}>
           <View style={styles.advancedBody}>
             {!isAgent ? (
               <ListGroup style={styles.group}>
@@ -225,7 +226,7 @@ export function QuickCommandEditorForm({
               </Text>
             </View>
           </View>
-        ) : null}
+        </Collapsible>
       </View>
 
       {error ? <Banner tone="error" message={error} /> : null}

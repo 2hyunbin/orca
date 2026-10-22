@@ -12,6 +12,7 @@ import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
 import { deriveNativeChatRowContent } from '../../../src/shared/native-chat-row-content'
 import { useMobileNativeChatFullMessage } from './MobileNativeChatFullContent'
 import { MobileMarkdown } from '../components/MobileMarkdown'
+import { Collapsible } from '../components/ui/Collapsible'
 import { colors, textStyles } from '../theme/mobile-theme'
 import { MobileNativeChatLongPressContent } from './MobileNativeChatLongPressContent'
 import { scaledText, styles } from './mobile-native-chat-message-styles'
@@ -84,7 +85,7 @@ export function MobileNativeChatReasoningRow({
           {headline}
         </Text>
       </MobileNativeChatDisclosureRow>
-      {expanded ? (
+      <Collapsible open={expanded}>
         <MobileNativeChatReasoningBody
           positionKey={nativeChatReasoningDisclosureKey(message.id)}
           markdown={markdown}
@@ -92,7 +93,7 @@ export function MobileNativeChatReasoningRow({
           onOpenFile={onOpenFile}
           onLongPress={onLongPress}
         />
-      ) : null}
+      </Collapsible>
     </View>
   )
 }

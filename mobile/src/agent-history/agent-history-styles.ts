@@ -23,6 +23,8 @@ export const styles = StyleSheet.create({
     marginHorizontal: -spacing.lg,
     gap: spacing.sm
   },
+  issueFrame: { marginTop: -spacing.sm },
+  issueGap: { paddingTop: spacing.sm },
   issueList: {
     marginHorizontal: spacing.lg,
     gap: spacing.sm,

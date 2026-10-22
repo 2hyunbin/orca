@@ -10,6 +10,7 @@ import {
 } from 'lucide-react-native'
 import { colors } from '../theme/mobile-theme'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { ListRow } from '../components/ui/ListRow'
 import { SectionHeader } from '../components/ui/SectionHeader'
 import { pressTransition, slideTransition } from '../components/ui/transition-styles'
@@ -102,7 +103,7 @@ function IssueRow({
           </View>
         )}
       </Pressable>
-      {expanded ? (
+      <Collapsible open={expanded}>
         <View style={styles.disclosureBody}>
           {section.steps.map((step) => (
             <View key={step} style={styles.stepRow}>
@@ -111,7 +112,7 @@ function IssueRow({
             </View>
           ))}
         </View>
-      ) : null}
+      </Collapsible>
     </View>
   )
 }

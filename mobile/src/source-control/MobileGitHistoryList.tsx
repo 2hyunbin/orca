@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from '
 import { ChevronRight, CloudOff, GitCommitHorizontal, History } from 'lucide-react-native'
 import { colors, spacing, textStyles, typography } from '../theme/mobile-theme'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { StateView } from '../components/ui/StateView'
 import { slideTransition } from '../components/ui/transition-styles'
 import { splitMobileFilePath } from './mobile-file-path-parts'
@@ -178,7 +179,7 @@ export const MobileGitHistoryList = memo(function MobileGitHistoryList({
               </View>
             )}
           </Pressable>
-          {isOpen ? (
+          <Collapsible open={isOpen}>
             <View style={styles.files}>
               {filesState?.error ? (
                 <View style={styles.filesNotice}>
@@ -242,7 +243,7 @@ export const MobileGitHistoryList = memo(function MobileGitHistoryList({
                 )
               ) : null}
             </View>
-          ) : null}
+          </Collapsible>
         </View>
       )
     },

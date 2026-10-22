@@ -36,6 +36,7 @@ import { AGENT_WORKING_COLOR, AgentStateDot } from '../components/AgentStateDot'
 import { useNow } from '../hooks/use-now'
 import { colors, MIN_TOUCH_TARGET, spacing, textStyles, typography } from '../theme/mobile-theme'
 import { Button } from '../components/ui/Button'
+import { Collapsible } from '../components/ui/Collapsible'
 import { pressTransition, slideTransition } from '../components/ui/transition-styles'
 import { composerTrayStyles } from './mobile-native-chat-composer-styles'
 import type { MobileStructuredBackgroundTasks } from './use-mobile-structured-background-tasks'
@@ -212,7 +213,7 @@ function MobileNativeChatBackgroundTasksImpl({
             <ChevronDown size={16} color={colors.textMuted} strokeWidth={2.2} />
           </View>
         </Pressable>
-        {expanded ? (
+        <Collapsible open={expanded}>
           <ScrollView style={styles.body} nestedScrollEnabled>
             {groups.length > 0 ? (
               groups.map((group) => (
@@ -249,7 +250,7 @@ function MobileNativeChatBackgroundTasksImpl({
               </View>
             ) : null}
           </ScrollView>
-        ) : null}
+        </Collapsible>
       </View>
     </View>
   )

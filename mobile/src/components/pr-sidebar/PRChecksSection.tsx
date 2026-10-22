@@ -12,6 +12,7 @@ import {
 } from 'lucide-react-native'
 import { colors } from '../../theme/mobile-theme'
 import { Button } from '../ui/Button'
+import { Collapsible } from '../ui/Collapsible'
 import { IconButton } from '../ui/IconButton'
 import { slideTransition } from '../ui/transition-styles'
 import type { PRCheckDetail } from '../../../../src/shared/github/check-types'
@@ -271,7 +272,9 @@ export function PRChecksSection({
                 </View>
               )}
             </Pressable>
-            {isOpen ? <PRCheckDetailView entry={detailCache[key]} /> : null}
+            <Collapsible open={isOpen}>
+              <PRCheckDetailView entry={detailCache[key]} />
+            </Collapsible>
           </View>
         )
       })}

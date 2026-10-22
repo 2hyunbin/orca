@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { openExternalLink } from '../../platform/external-link'
-import { ChevronDown, ChevronRight } from 'lucide-react-native'
+import { ChevronRight } from 'lucide-react-native'
 import { colors, radii, spacing, textStyles, typography } from '../../theme/mobile-theme'
 import { fontFamilies } from '../../theme/font-families'
+import { Collapsible } from '../ui/Collapsible'
+import { slideTransition } from '../ui/transition-styles'
 import { MermaidDiagram } from './MermaidDiagram'
 import { isAllowedMarkdownLinkUrl } from './markdown-link-scheme'
 import {
@@ -59,7 +61,6 @@ function DetailsBlock({
   base: number
 }) {
   const [open, setOpen] = useState(false)
-  const Chevron = open ? ChevronDown : ChevronRight
   return (
     <View style={styles.details}>
       <Pressable
@@ -68,16 +69,18 @@ function DetailsBlock({
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
       >
-        <Chevron size={14} color={colors.textSecondary} strokeWidth={2.2} />
+        <View style={[open ? styles.detailsChevronOpen : null, slideTransition]}>
+          <ChevronRight size={14} color={colors.textSecondary} strokeWidth={2.2} />
+        </View>
         <Text style={[styles.detailsSummaryText, { fontSize: base }]}>{summary}</Text>
       </Pressable>
-      {open ? (
+      <Collapsible open={open}>
         <View style={styles.detailsBody}>
           {body.map((b, i) => (
             <BlockView key={i} block={b} base={base} />
           ))}
         </View>
-      ) : null}
+      </Collapsible>
     </View>
   )
 }
@@ -305,6 +308,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.fill
   },
   detailsSummaryPressed: { backgroundColor: colors.fillPressed },
+  detailsChevronOpen: { transform: [{ rotate: '90deg' }] },
   detailsSummaryText: {
     ...fontFamilies.sans,
     color: colors.textPrimary,

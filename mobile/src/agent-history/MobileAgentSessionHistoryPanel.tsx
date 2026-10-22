@@ -8,6 +8,7 @@ import { MobileSearchField } from '../components/MobileSearchField'
 import { MobileNavRefreshButton } from '../components/MobileNavRefreshButton'
 import { NavBar } from '../components/ui/NavBar'
 import { Banner } from '../components/ui/Banner'
+import { Collapsible } from '../components/ui/Collapsible'
 import { StateView } from '../components/ui/StateView'
 import { useWorkspaceClient } from '../transport/use-workspace-client'
 import { useWorkspaceRouteHandoff } from '../navigation/workspace-route-handoff'
@@ -308,18 +309,23 @@ function MobileAgentSessionHistoryPanelContent({
               onPress: () => setIssuesShown((shown) => !shown)
             }}
           />
-          {issuesShown ? (
-            <View style={styles.issueList}>
-              {issues.map((issue) => (
-                <View key={`${issue.path}\n${issue.message}`} style={styles.issueRow}>
-                  <Text style={styles.issuePath} numberOfLines={2}>
-                    {issue.path}
-                  </Text>
-                  <Text style={styles.issueMessage}>{issue.message}</Text>
+          {/* Cancels the notice's gap while shut and carries it inside, so it eases in too. */}
+          <View style={styles.issueFrame}>
+            <Collapsible open={issuesShown}>
+              <View style={styles.issueGap}>
+                <View style={styles.issueList}>
+                  {issues.map((issue) => (
+                    <View key={`${issue.path}\n${issue.message}`} style={styles.issueRow}>
+                      <Text style={styles.issuePath} numberOfLines={2}>
+                        {issue.path}
+                      </Text>
+                      <Text style={styles.issueMessage}>{issue.message}</Text>
+                    </View>
+                  ))}
                 </View>
-              ))}
-            </View>
-          ) : null}
+              </View>
+            </Collapsible>
+          </View>
         </View>
       ) : null}
       {resumeNotice ? (
