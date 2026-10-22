@@ -88,7 +88,8 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('collapses duplicate mobile terminal entries when renderer and headless leaf ids diverge for the same pty', async () => {
-    const rendererLeafId = HEADLESS_SECOND_LEAF_ID
+    // Switch point: the window draws main's own panes, so its leaf ids are main's and never diverge.
+    const rendererLeafId = ORCA_LAYOUT_OWNER_IS_MAIN ? HEADLESS_LEAF_ID : HEADLESS_SECOND_LEAF_ID
     const ptyId = 'serve-persisted-pty'
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
       makeWorkspaceSessionWithHeadlessTerminal({
@@ -168,8 +169,13 @@ describe('OrcaRuntimeService', () => {
   })
 
   it('keeps distinct split mobile terminal ptys under the same parent tab', async () => {
-    const rendererLeftLeafId = '33333333-3333-4333-8333-333333333333'
-    const rendererRightLeafId = '44444444-4444-4444-8444-444444444444'
+    // Switch point: the window draws main's own panes, so its leaf ids are main's and never diverge.
+    const rendererLeftLeafId = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? HEADLESS_LEAF_ID
+      : '33333333-3333-4333-8333-333333333333'
+    const rendererRightLeafId = ORCA_LAYOUT_OWNER_IS_MAIN
+      ? HEADLESS_SECOND_LEAF_ID
+      : '44444444-4444-4444-8444-444444444444'
     const leftPtyId = 'serve-left'
     const rightPtyId = 'serve-right'
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession(
@@ -351,10 +357,13 @@ describe('OrcaRuntimeService', () => {
       id: `host-tab-${index}`,
       ptyId: `missing-pty-${index}`
     }))
+    // Each pane has its own leaf id, as every pane a layout mints does.
     const terminalLayoutsByTabId = Object.fromEntries(
       tabs.map((tab, index) => [
         tab.id,
-        makeHeadlessTerminalLayout({ [HEADLESS_LEAF_ID]: `missing-pty-${index}` })
+        makeHeadlessTerminalLayout({
+          [`${String(index).padStart(8, '0')}-1111-4111-8111-111111111111`]: `missing-pty-${index}`
+        })
       ])
     )
     const { runtimeStore } = makeRuntimeStoreWithWorkspaceSession({
