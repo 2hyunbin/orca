@@ -22,26 +22,13 @@ import type { ProjectRemovalFailure, RepoSlice } from '../repos/repo-state'
 import { mergeProjectCompatibilityForHostRepoChange } from '../repos/repo-catalog-identity'
 import { applyProjectGroupDeleteCascade } from './project-group-removal-state'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
-import { toast } from 'sonner'
-import { translate } from '@/i18n/i18n'
+import { notifyProjectGroupOnOtherHost } from './project-group-other-host-notice'
 import {
   selectProjectGroups,
   selectProjectHostSetups,
   selectProjects,
   selectRepos
 } from '../project-catalog-selectors'
-
-function notifyProjectGroupOnOtherHost(): void {
-  toast.error(
-    translate('auto.store.slices.repos.moveToGroupOtherHost', 'Could not move project to group'),
-    {
-      description: translate(
-        'auto.store.slices.repos.moveToGroupOtherHostDesc',
-        'The computer this project runs on does not have this group. A project can only join groups saved on its own computer.'
-      )
-    }
-  )
-}
 
 export function createProjectGroupMutationActions(
   set: Parameters<StateCreator<AppState>>[0],

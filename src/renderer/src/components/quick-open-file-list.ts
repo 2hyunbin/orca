@@ -30,7 +30,7 @@ import {
   nextCappedLocalListing,
   type CappedLocalListing
 } from '@/components/quick-open-capped-local-listing'
-import { useAppStore } from '@/store'
+import { selectProjectGroups, selectRepos, useAppStore } from '@/store'
 import { useKnownWorktreeById, useWorktreesForRepo } from '@/store/selectors'
 import type { FileExplorerOperationOwner } from '@/components/right-sidebar/file-explorer-types'
 import {
@@ -39,7 +39,6 @@ import {
   getFileExplorerOperationRoute
 } from '@/components/right-sidebar/file-explorer-operation-owner'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
-import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export type RuntimeFileListState = {
   files: string[]

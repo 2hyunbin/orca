@@ -66,17 +66,21 @@ export function stripCommentsAndQuotedStrings(text) {
   return out
 }
 
-export function countProjectCatalogAccesses(text) {
+// Store modules build the patches a `set(` elsewhere writes, so their catalog keys count too.
+const STORE_ROOT = 'src/renderer/src/store/'
+
+export function countProjectCatalogAccesses(text, rel = '') {
   const code = stripCommentsAndQuotedStrings(text)
   const reads = [...code.matchAll(RAW_READ)].length
-  const writes = /\bset(?:State)?\(/.test(code) ? [...code.matchAll(RAW_WRITE)].length : 0
+  const writesStore = rel.startsWith(STORE_ROOT) || /\bset(?:State)?\(/.test(code)
+  const writes = writesStore ? [...code.matchAll(RAW_WRITE)].length : 0
   return reads + writes
 }
 
 export function collectProjectCatalogAccesses(root = process.cwd()) {
   const counts = new Map()
   for (const [rel, text] of readTrackedSources(root, SCAN_ROOTS, isScannedFile)) {
-    const count = countProjectCatalogAccesses(text)
+    const count = countProjectCatalogAccesses(text, rel)
     if (count > 0) {
       counts.set(rel, count)
     }
@@ -94,8 +98,7 @@ export function main(root = process.cwd(), arg = undefined) {
         '# Renderer reads and writes of `repos` / `projectGroups` / `projects` / `projectHostSetups`',
         '# outside src/renderer/src/store/project-catalog-selectors.ts, as `<count> <file> # <why>`.',
         '# This is a RATCHET: counts may only go DOWN. Read through the selectors instead.',
-        '# Rows are the catalog writers (P5a gates each one) and readers whose state type is loosely',
-        '# typed or optional, which P5a must move with their writers.',
+        '# Rows are the catalog writers (P5a gates each one): catalog keys in the objects they write.',
         '# Prune after a fix: pnpm check:project-catalog-read-ratchet --prune'
       ],
       collect: collectProjectCatalogAccesses,

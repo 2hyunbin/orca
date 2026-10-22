@@ -15,7 +15,7 @@ import {
   toSshExecutionHostId
 } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
-import { useAppStore } from '../../store'
+import { selectRepos, useAppStore } from '../../store'
 import { withoutConvertedSshHostRows } from '../../store/repos/converted-ssh-host-rows'
 import { rekeyWorktreeVisitHost } from '@/lib/worktree-visit-recency'
 import { preserveConvertedSshBrowserPages } from '../../store/repos/converted-ssh-browser-pages'
@@ -23,7 +23,6 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
-import { selectRepos } from '../../store/project-catalog-selectors'
 
 type ManagedServerStatus = SshConnectionState['managedServer']
 

@@ -1,14 +1,9 @@
 import { beginEnclosingWorktreeRemoval } from '@/store/active-worktree-deselection-intent'
 import type { WorktreePurgeTarget, WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
-import type { ProjectHostSetup } from '../../../../../../shared/project-types'
-import type { Repo } from '../../../../../../shared/repo-types'
 import type { DetectedWorktreeListResult } from '../../../../../../shared/worktree/types'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
-import {
-  getRepoExecutionHostId,
-  toRuntimeExecutionHostId
-} from '../../../../../../shared/execution-host'
+import { toRuntimeExecutionHostId } from '../../../../../../shared/execution-host'
 import { getRepoIdFromWorktreeId } from '../../worktree-helpers'
 import { parseWorkspaceKey } from '../../../../../../shared/workspace-scope'
 import {
@@ -20,11 +15,8 @@ import { buildFullWorktreePurgeState } from './worktree-purge-state'
 import { removeWorktreeVisitEntriesForTargets } from '@/lib/worktree-visit-recency'
 import { settleAttentionRemovedBy } from '../../workspace-attention/attention-removal-follow-up'
 import { flushRetiredHostEdits } from './removed-workspace-unsaved-files'
-import {
-  selectProjectGroups,
-  selectProjectHostSetups,
-  selectRepos
-} from '../../../project-catalog-selectors'
+import { selectProjectGroups } from '../../../project-catalog-selectors'
+import { partitionCatalogByRemovedHosts } from './removed-host-catalog-partition'
 
 export function createPurgeStaleRuntimeHostState(
   set: WorktreeSliceSet,
@@ -44,37 +36,16 @@ export function createPurgeStaleRuntimeHostState(
       get,
       () =>
         set((s) => {
-          const repoIdsWithRemovedOwners = new Set<string>()
-          const survivingRepoIds = new Set<string>()
-          const repoIdsWithSurvivingOwners = new Set<string>()
-          const survivingRepos: Repo[] = []
-          for (const repo of selectRepos(s)) {
-            if (isRemovedRuntimeHostId(getRepoExecutionHostId(repo), removed)) {
-              repoIdsWithRemovedOwners.add(repo.id)
-            } else {
-              survivingRepos.push(repo)
-              survivingRepoIds.add(repo.id)
-              repoIdsWithSurvivingOwners.add(repo.id)
-            }
-          }
-          const reposChanged = survivingRepos.length !== selectRepos(s).length
-
-          // Why: a repoId-less setup on the removed host can still split a surviving project group, so drop every setup it owns.
-          const survivingSetups: ProjectHostSetup[] = []
-          for (const setup of selectProjectHostSetups(s)) {
-            if (isRemovedRuntimeHostId(setup.hostId, removed)) {
-              if (setup.repoId) {
-                repoIdsWithRemovedOwners.add(setup.repoId)
-              }
-            } else {
-              survivingSetups.push(setup)
-              if (setup.repoId) {
-                repoIdsWithSurvivingOwners.add(setup.repoId)
-              }
-            }
-          }
-          const setupsChanged = survivingSetups.length !== selectProjectHostSetups(s).length
-          const projectGroups = dropRuntimeHostedCatalogRows(selectProjectGroups(s), removed)
+          const {
+            repoIdsWithRemovedOwners,
+            survivingRepoIds,
+            repoIdsWithSurvivingOwners,
+            survivingRepos,
+            reposChanged,
+            survivingSetups,
+            setupsChanged,
+            survivingGroups: projectGroups
+          } = partitionCatalogByRemovedHosts(s, removed)
           const folderWorkspaces = dropRuntimeHostedCatalogRows(s.folderWorkspaces, removed)
           const groupsChanged =
             projectGroups !== selectProjectGroups(s) || folderWorkspaces !== s.folderWorkspaces
