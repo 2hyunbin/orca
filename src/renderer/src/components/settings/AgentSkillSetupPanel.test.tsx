@@ -52,12 +52,6 @@ vi.mock('@/hooks/useSkillFreshness', () => ({
   refreshSkillFreshness: mocks.freshnessRefresh
 }))
 
-vi.mock('../skills/SkillFreshnessStatusPill', () => ({
-  SkillPlanStatusPill: ({ skillName }: { skillName: string }) => (
-    <span data-testid="skill-freshness">{skillName}</span>
-  )
-}))
-
 vi.mock('../onboarding/OnboardingInlineCommandTerminal', () => ({
   OnboardingInlineCommandTerminal: ({
     command,
@@ -177,7 +171,7 @@ describe('AgentSkillSetupPanel', () => {
     })
     await renderInteractivePanel({ installed: true })
 
-    expect(container?.textContent).toContain('Installed')
+    expect(container?.textContent).toContain('Update available')
     expect(findButton('Update')).toBeDefined()
     expect(findButton('Re-check')).toBeDefined()
   })
@@ -221,7 +215,7 @@ describe('AgentSkillSetupPanel', () => {
   it('can hide install after the skill is detected', () => {
     const html = renderPanel({ installed: true, showInstallWhenInstalled: false })
 
-    expect(html).toContain('Installed')
+    expect(html).toContain('Checking...')
     expect(buttonLabels(html)).not.toContain('Install')
     expect(buttonLabels(html)).toContain('Re-check')
   })

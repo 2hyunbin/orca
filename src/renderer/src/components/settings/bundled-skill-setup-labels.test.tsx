@@ -129,7 +129,7 @@ for (const surface of ['panel', 'linear'] as const) {
       expect(mocks.execute).toHaveBeenCalledWith(TARGET, plan.planDigest, { names: [name] })
     })
 
-    it('shows Installed without an install button when every copy is current', async () => {
+    it('shows the current verdict without an install button when every copy is current', async () => {
       const name = surface === 'panel' ? 'orca-cli' : 'orca-linear'
       mocks.plan.mockResolvedValue({
         kind: 'plan',
@@ -153,7 +153,9 @@ for (const surface of ['panel', 'linear'] as const) {
       await waitFor(() =>
         expect(screen.queryByRole('button', { name: /^(Install|Update)/ })).toBeNull()
       )
-      expect(screen.getByText('Installed', { exact: true })).toBeDefined()
+      expect(
+        await screen.findByText(surface === 'panel' ? 'Up to date' : 'Installed', { exact: true })
+      ).toBeDefined()
       expect(mocks.execute).not.toHaveBeenCalled()
     })
   })

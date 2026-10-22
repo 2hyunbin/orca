@@ -63,7 +63,7 @@ function BundledAgentSkillSetupPanel({
   const installing = state.kind === 'installing'
   const activeSkillNames = installed ? (installedSkillNames ?? skillNames) : skillNames
   const action = useBundledSkillInstallAction(activeSkillNames, {
-    enabled: !installed || showInstallWhenInstalled,
+    enabled: true,
     refreshKey: state.kind,
     target
   })
@@ -180,9 +180,7 @@ function BundledAgentSkillSetupPanel({
           <>
             {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
             {/* hideHeader drops the title row; keep freshness so guided hubs still surface updates. */}
-            {installed && freshnessSkillName && !failed ? (
-              <div className="mb-2">{freshnessPill}</div>
-            ) : null}
+            {effectivelyInstalled && !failed ? <div className="mb-2">{freshnessPill}</div> : null}
           </>
         ) : (
           <div className="flex items-center gap-4">
@@ -210,16 +208,7 @@ function BundledAgentSkillSetupPanel({
                     )}
                   </IntegrationStatusPill>
                 ) : effectivelyInstalled ? (
-                  freshnessSkillName ? (
-                    freshnessPill
-                  ) : (
-                    <IntegrationStatusPill tone="connected">
-                      {translate(
-                        'auto.components.settings.AgentSkillSetupPanel.9fcebceb2a',
-                        'Installed'
-                      )}
-                    </IntegrationStatusPill>
-                  )
+                  freshnessPill
                 ) : (
                   <IntegrationStatusPill tone="attention">
                     {translate(
