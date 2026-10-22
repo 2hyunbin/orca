@@ -21,8 +21,8 @@ vi.mock('../../ipc/browser-tab-registration-wait', () => ({
   waitForTabRegistration: vi.fn(async () => {})
 }))
 
-/** A host with no window: the offscreen backend runs the page and served tabs save it. */
-function headlessCreation(window: object | null = null) {
+/** A host with no window unless `hasWindow`: the offscreen backend runs the page and served tabs save it. */
+function headlessCreation(hasWindow = false) {
   const opened = vi.fn()
   const createTab = vi.fn(async ({ browserPageId }: { browserPageId?: string }) => ({
     browserPageId: browserPageId ?? 'minted-page'
@@ -35,7 +35,7 @@ function headlessCreation(window: object | null = null) {
       resolveBrowserNetworkExecutionHost: vi.fn(),
       getBrowserHostLeaseRegistry: vi.fn(),
       getRuntimeBrowserPageRegistry: vi.fn(),
-      getAvailableAuthoritativeWindow: () => window,
+      getAvailableAuthoritativeWindow: () => (hasWindow ? {} : null),
       getOffscreenBrowserBackend: () => ({ createTab, closeTab: vi.fn() }),
       getAuthoritativeWindow: () => null,
       markHeadlessBrowserSessionTabActive: vi.fn(),
@@ -95,7 +95,7 @@ describe('a browser create on a host with a window', () => {
     mocks.isMain = true
     mocks.createBrowserTabInRenderer.mockClear()
 
-    await headlessCreation({}).creation.browserTabCreate({ ...join, browserTabId: 'tab-1' })
+    await headlessCreation(true).creation.browserTabCreate({ ...join, browserTabId: 'tab-1' })
 
     expect(mocks.createBrowserTabInRenderer).toHaveBeenCalledWith(
       expect.anything(),
@@ -113,7 +113,7 @@ describe('a browser create on a host with a window', () => {
     mocks.isMain = false
     mocks.createBrowserTabInRenderer.mockClear()
 
-    await headlessCreation({}).creation.browserTabCreate({ ...join, browserTabId: 'tab-1' })
+    await headlessCreation(true).creation.browserTabCreate({ ...join, browserTabId: 'tab-1' })
 
     expect(mocks.createBrowserTabInRenderer.mock.calls[0]?.[7]).toBeUndefined()
     mocks.isMain = true
