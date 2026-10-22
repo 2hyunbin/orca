@@ -140,6 +140,19 @@ describe('OrcaRuntimeService', () => {
           }
         ]
       })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Switch point: the desktop's tab name is main's own layout, renamed by main's command
+      // (#31571), not the window's published row; generated names: orca-runtime-desktop-tab-names.
+      const [{ handle }] = (await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)).terminals
+      await runtime.renameTerminal(handle, 'Build fixer')
+      runtime.onPtyData('renamed-pty', '\x1b]0;⠂ Claude Code\x07', 124)
+      const named = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+      expect(named.tabs[0]).toEqual(expect.objectContaining({ title: 'Build fixer' }))
+      await runtime.renameTerminal(handle, null)
+      const unnamed = await runtime.listMobileSessionTabs(`id:${TEST_WORKTREE_ID}`)
+      expect(unnamed.tabs[0]).toEqual(expect.objectContaining({ title: '⠂ Claude Code' }))
+      return
+    }
     publish(1, { customTitle: 'Build fixer' })
     runtime.onPtyData('renamed-pty', '\x1b]0;⠂ Claude Code\x07', 124)
 

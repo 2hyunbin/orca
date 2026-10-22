@@ -1,3 +1,4 @@
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import { describe, expect, it, vi } from 'vitest'
 import { bindPaneFirst, registerBoundPty } from '../bind-first-pane.test-fixture'
 import { OrcaRuntimeService, electronMocks, ipcMain } from '../orca-runtime-test-mocks.spec'
@@ -207,7 +208,16 @@ describe('OrcaRuntimeService', () => {
       // Let the create clear its pre-wait check and park in waitForMobileTerminalSurface before any identity arrives.
       await vi.advanceTimersByTimeAsync(50)
 
-      // Identity arrives via leaf graph-sync, NOT registerPty, so no rescue fires and the surface is never published.
+      // Switch point: a window leaf vouches for no terminal with the switch on (L80), so the shell
+      // that keeps the create alive is the one its spawn commit registers, as the rescue at :153.
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        registerBoundPty(runtime, 'pty-catch', TEST_WORKTREE_ID, null, {
+          tabId: 'tab-catch',
+          leafId
+        })
+        await vi.advanceTimersByTimeAsync(50)
+      }
+      // Switch-off, identity arrives via leaf graph-sync, NOT registerPty, so no rescue fires and the surface is never published.
       bindPaneFirst(runtime, {
         worktreeId: TEST_WORKTREE_ID,
         tabId: 'tab-catch',
@@ -227,8 +237,8 @@ describe('OrcaRuntimeService', () => {
         ]
       })
 
-      // Surface still unpublished, so the create is still pending.
-      expect(settled).toBe(false)
+      // Switch-off the surface is still unpublished, so the create is still pending.
+      expect(settled).toBe(ORCA_LAYOUT_OWNER_IS_MAIN)
 
       // Cross the 10s surface timeout: the catch path must rescue from the live PTY, not roll the session back destructively.
       await vi.advanceTimersByTimeAsync(11_000)
