@@ -1,4 +1,3 @@
-import './MobileNativeChatView.drag-stubs.test-fixture'
 import { vi } from 'vitest'
 
 const scrollToEnd = vi.hoisted(() => vi.fn())

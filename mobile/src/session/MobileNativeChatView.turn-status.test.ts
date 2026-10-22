@@ -1,4 +1,4 @@
-import './MobileNativeChatView.drag-stubs.test-fixture'
+import './MobileNativeChatView.harness.test-fixture'
 import { createElement } from 'react'
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

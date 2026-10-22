@@ -1,4 +1,5 @@
-import { createElement, type ComponentProps } from 'react'
+import { createElement, type ComponentProps, type ReactNode } from 'react'
+import { Pressable, TextInput } from 'react-native'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
 import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
@@ -25,7 +26,7 @@ vi.mock('react-native', async () => {
     Image: 'Image',
     Keyboard: { dismiss: vi.fn() },
     Pressable: 'Pressable',
-    ScrollView: ({ children, ...props }: { children?: unknown }) =>
+    ScrollView: ({ children, ...props }: { children?: ReactNode }) =>
       React.createElement('ScrollView', props, children),
     StyleSheet: {
       create: (styles: unknown) => styles,
@@ -104,10 +105,10 @@ it.each([false, true])(
       await act(async () => {
         renderer = create(createElement(Harness))
       })
-      const field = () => renderer!.root.findByType('TextInput')
+      const field = () => renderer!.root.findByType(TextInput)
       const button = (label: string) =>
         renderer!.root.find(
-          (node) => node.type === 'Pressable' && node.props.accessibilityLabel === label
+          (node) => node.type === Pressable && node.props.accessibilityLabel === label
         )
       expect(frames[0]).toBe(false)
       expect(field().props.editable).toBe(false)

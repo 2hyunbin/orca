@@ -173,11 +173,12 @@ export function collectTypecheckPass(root = process.cwd()) {
     compiler
   )
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
-  console.error(
+  fs.writeFileSync(
+    2,
     output
       .split('\n')
       .filter((line) => ERROR_LINE.test(line) || /^\s/.test(line))
-      .join('\n')
+      .join('\n') + '\n'
   )
   return {
     failing: parseFailingFiles(output),

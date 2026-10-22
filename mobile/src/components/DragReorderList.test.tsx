@@ -436,7 +436,7 @@ it('keeps measured rows still on hold, restores cancellation, and drops by moved
     root = create(createElement(Harness))
   })
   const rows = root!.root.findAll(
-    (node) => node.type === 'AnimatedView' && typeof node.props.onLayout === 'function'
+    (node) => node.type === Animated.View && typeof node.props.onLayout === 'function'
   )
   await act(async () =>
     rows.forEach((row, index) =>
