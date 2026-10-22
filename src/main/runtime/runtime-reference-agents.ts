@@ -19,6 +19,7 @@ import type { OrchestrationDb } from './orchestration/db'
 import { structuredSessionMailReach } from './orchestration/structured-session-mail-address'
 import {
   clearedInto,
+  conversationRecordReader,
   readAgentSessionRecordStore,
   type AgentSessionRecordReader
 } from './orchestration/structured-session-lineage'
@@ -51,7 +52,7 @@ export function createReferenceAgentIndex(
   runtime: ReferenceAgentSource,
   db: OrchestrationDb | null,
   sessions: AgentSessionRecordReader | null = readAgentSessionRecordStore() ??
-    peekOpenedAgentSessionRecordStore(),
+    coldConversationReader(),
   workspaceKeys?: ReadonlySet<string>,
   connectionHosts?: ReadonlyMap<string, ExecutionHostId | null>
 ): ReferenceAgentIndex {
@@ -180,4 +181,9 @@ export function createReferenceAgentIndex(
     })
   }
   return index
+}
+
+function coldConversationReader(): AgentSessionRecordReader | null {
+  const store = peekOpenedAgentSessionRecordStore()
+  return store ? conversationRecordReader(store) : null
 }

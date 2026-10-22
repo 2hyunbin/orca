@@ -56,16 +56,23 @@ export function listAgentSessionConversations(
     )
 }
 
+export function selectWritableAgentSessionRecord(state: AgentSessionStoreState, id: string) {
+  const record = state.records.get(id)
+  return record
+    ? { kind: 'writable' as const, record }
+    : { kind: state.unreadableRecords.has(id) ? ('unreadable' as const) : ('missing' as const) }
+}
+
 /** The shared authority boundary for any fresh effect, distinct from conversation presence. */
 export function requireWritableAgentSessionRecord(
   state: AgentSessionStoreState,
   id: string
 ): AgentSessionRecord {
-  const record = state.records.get(id)
-  if (record) {
-    return record
+  const selected = selectWritableAgentSessionRecord(state, id)
+  if (selected.kind === 'writable') {
+    return selected.record
   }
-  throw state.unreadableRecords.has(id)
+  throw selected.kind === 'unreadable'
     ? agentSessionRefusalError('execution_owner_reconciling', { reason: 'recordUnreadable' })
     : agentSessionRefusalError('agent_session_identity_required', { reason: 'recordMissing' })
 }

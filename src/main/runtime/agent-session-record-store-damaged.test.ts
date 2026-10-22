@@ -251,33 +251,33 @@ describe('damaged saved conversation observations', () => {
           reopened.session
         )
         expect(work.working()).toBe(false)
+        const card = journal.queuedMessages.list().find((row) => row.state === 'waiting')
+        if (!card) {
+          throw new Error('Expected a preserved waiting card')
+        }
         const next = nextStructuredQueuedMessage({
           journal,
           work,
           record: store.getRecord('session-alpha')
         })
-        expect(next?.messageId ?? null).toBe(
-          minimumNextFence === 'bad'
-            ? null
-            : journal.queuedMessages.list().find((card) => card.state === 'waiting')?.messageId
-        )
+        expect(next?.messageId ?? null).toBe(minimumNextFence === 'bad' ? null : card.messageId)
         // Direct receipt admission: publication is not authoritative proof.
 
         const fresh = journal.appendSubmission(
           {
             clientMessageId: operationId(),
             origin: 'host',
-            payloadFingerprint: 'card',
-            body: hostTestMessage('waiting message'),
+            payloadFingerprint: card.fingerprint,
+            body: card.body,
             fence: 1,
             handoverRecorded: true
           },
           {
-            messageId: 'kept-card',
+            messageId: card.messageId,
             expect: 'waiting',
             settledByOp: null,
             hostInstance: 'current-runtime',
-            yieldsToPause: false
+            yieldsToPause: true
           },
           store.submissionReceipt('session-alpha')
         )
@@ -285,11 +285,11 @@ describe('damaged saved conversation observations', () => {
           await expect(fresh).rejects.toMatchObject({
             refusal: { details: { reason: 'recordUnreadable' } }
           })
-          expect(journal.queuedMessages.get('kept-card')?.state).toBe('waiting')
+          expect(journal.queuedMessages.get(card.messageId)?.state).toBe('waiting')
           expect(journal.submissions()).toHaveLength(1)
         } else {
           await fresh
-          expect(journal.queuedMessages.get('kept-card')?.state).toBe('dispatched')
+          expect(journal.queuedMessages.get(card.messageId)?.state).toBe('dispatched')
           expect(journal.submissions()).toHaveLength(2)
         }
       } finally {

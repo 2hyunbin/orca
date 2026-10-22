@@ -756,6 +756,9 @@ describe('claim keys and unreadable rows', () => {
       await expect(reopened.reserveOwner(reserveRequest())).rejects.toMatchObject({
         refusal: { details: { reason: 'recordUnreadable' } }
       })
+      await expect(reopened.founding.commit(reserveRequest())).rejects.toMatchObject({
+        refusal: { details: { reason: 'recordUnreadable' } }
+      })
       await establishOwner(reopened, { sessionId: 'session-beta', claimKeyId: 'key-2' })
       expect((await open()).isSessionUnreadable('session-alpha')).toBe(true)
       const persisted = await readPersistedTestAgentSessionStore(directory)

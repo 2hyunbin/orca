@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
-import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
+import type { StructuredAgentSessionConversationOpenDeps } from './structured-agent-session-conversation-open'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import {
   closeTestJournalHostDatabases,
@@ -49,10 +49,11 @@ const RECORD: AgentSessionRecord = {
   ]
 }
 
-const store = {
+const store: StructuredAgentSessionConversationOpenDeps['store'] = {
   getConversation: (sessionId: string) =>
-    sessionId === SESSION_ID ? agentSessionConversationView(RECORD) : null
-} as unknown as AgentSessionRecordStore
+    sessionId === SESSION_ID ? agentSessionConversationView(RECORD) : null,
+  replacedRuntime: () => undefined
+}
 
 let journalRoot: string
 const openDeps = () => ({

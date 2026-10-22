@@ -39,10 +39,7 @@ export type StructuredAgentSessionCurrentWorkJournal = Pick<
 
 /** What the host knows of who runs the chat now. */
 export type StructuredAgentSessionWorkEvidence = {
-  record:
-    | Pick<AgentSessionRecord, 'lease'>
-    | Pick<AgentSessionConversationView, 'ownerObservation' | 'currentFence'>
-    | null
+  record: Pick<AgentSessionConversationView, 'ownerObservation' | 'currentFence'> | null
   /** The last child this host saw end (`StructuredAgentSessionHostSession.lastEndedChild`). */
   ended?: StructuredAgentSessionSeenEnd
   /** `StructuredAgentSessionHostSession.operationalRevision`. */
@@ -68,8 +65,8 @@ export function structuredAgentSessionLiveFence(
   evidence: StructuredAgentSessionWorkEvidence
 ): number | null {
   const record = evidence.record
-  const lease = record && ('lease' in record ? record.lease : record.ownerObservation)
-  const fence = record && ('lease' in record ? record.lease.runtimeFence : record.currentFence)
+  const lease = record?.ownerObservation
+  const fence = record?.currentFence
   if (!lease) {
     return 0
   }
@@ -93,8 +90,8 @@ export function structuredAgentSessionLiveFence(
  *  may still be running, so its turn is unverifiable, and nothing it left is current work. */
 function structuredAgentSessionOwnerUnverifiable(evidence: StructuredAgentSessionWorkEvidence) {
   const record = evidence.record
-  const lease = record && ('lease' in record ? record.lease : record.ownerObservation)
-  const fence = record && ('lease' in record ? record.lease.runtimeFence : record.currentFence)
+  const lease = record?.ownerObservation
+  const fence = record?.currentFence
   return (
     (lease?.unreconciled === true || lease?.handoffStage === 'recovering') &&
     evidence.child !== undefined &&

@@ -258,6 +258,18 @@ describe('same-conversation clear', () => {
     expect(await clearRows()).toHaveLength(2)
     expect(store.listRecords()).toHaveLength(1)
     expect(adapter.acquire).toHaveBeenCalledTimes(1)
+    await host.flushAllStreamedEvents()
+    openTestJournalHostDatabase(generationRoot())
+      .db.prepare(
+        "UPDATE agent_session_records SET record_json = json_set(record_json, '$.lease.minimumNextFence', 'bad') WHERE session_id = ?"
+      )
+      .run(HOST_TEST_SESSION)
+    await openHost()
+    expect(await host.conversationCommand(caller, params)).toMatchObject({
+      ok: true,
+      replayed: true
+    })
+    expect(adapter.acquire).toHaveBeenCalledTimes(1)
   })
 
   it('gives different callers distinct boundaries even when their operation IDs match', async () => {

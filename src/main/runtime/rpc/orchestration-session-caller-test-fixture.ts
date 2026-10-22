@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { vi } from 'vitest'
 import type { AgentSessionLease, AgentSessionRecord } from '../../../shared/agent-session-record'
 import {
@@ -80,7 +81,20 @@ export function createSessionCallerHarness(hostRef: SessionHostRef): SessionCall
     deps: {
       store: {
         getRecord: (sessionId: string) => records.get(sessionId) ?? null,
-        listRecords: () => [...records.values()]
+        getConversation: (id: string) => {
+          const record = records.get(id)
+          return record ? agentSessionConversationView(record) : null
+        },
+        listConversations: () => [...records.values()].map(agentSessionConversationView),
+        requireWritableRecord: (id: string) => {
+          const record = records.get(id)
+          if (!record) {
+            throw new Error('Missing test record')
+          }
+          return record
+        },
+        listRecords: () => [...records.values()],
+        getVisibleSessionTabIndex: () => ({ present: false, sessionIds: [] })
       }
     }
   }

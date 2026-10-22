@@ -31,7 +31,7 @@ export type StatusFeedSession = {
 
 export type StructuredAgentSessionStatusFeedDeps = {
   sessions: ReadonlyMap<string, StatusFeedSession>
-  getRecord: (sessionId: string) => AgentSessionConversationView | null
+  getConversation: (sessionId: string) => AgentSessionConversationView | null
   /** `AgentSessionConversationViewStore.replacedRuntime`; absent where no runtime was replaced. */
   replacedRuntime?: (sessionId: string) => { fence: number } | undefined
   now: () => number

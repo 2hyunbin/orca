@@ -18,13 +18,19 @@ export type AgentSessionRecordReader = {
 /** Null until the agent-session host is installed; callers that must see records ensure it first. */
 export function readAgentSessionRecordStore(): AgentSessionRecordReader | null {
   const store = getStructuredAgentSessionHost()?.deps.store
-  return store
-    ? {
-        getRecord: store.getConversation,
-        listRecords: store.listConversations,
-        getVisibleSessionTabIndex: store.getVisibleSessionTabIndex
-      }
-    : null
+  return store ? conversationRecordReader(store) : null
+}
+
+export function conversationRecordReader(store: {
+  getConversation: AgentSessionRecordReader['getRecord']
+  listConversations: AgentSessionRecordReader['listRecords']
+  getVisibleSessionTabIndex: NonNullable<AgentSessionRecordReader['getVisibleSessionTabIndex']>
+}): AgentSessionRecordReader {
+  return {
+    getRecord: store.getConversation,
+    listRecords: store.listConversations,
+    getVisibleSessionTabIndex: store.getVisibleSessionTabIndex
+  }
 }
 
 /** The session a committed `/clear` continued this one in, if any. */

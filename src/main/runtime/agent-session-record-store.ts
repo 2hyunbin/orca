@@ -62,6 +62,7 @@ import {
 } from './agent-session-reservation-admission'
 import {
   getAgentSessionConversation,
+  selectWritableAgentSessionRecord,
   listAgentSessionConversations,
   requireWritableAgentSessionRecord,
   heldAgentSessionIds,
@@ -128,6 +129,8 @@ export class AgentSessionRecordStore {
 
   getConversation = (sessionId: string) => getAgentSessionConversation(this.state, sessionId)
   listConversations = () => listAgentSessionConversations(this.state)
+  selectWritableRecord = (sessionId: string) =>
+    selectWritableAgentSessionRecord(this.state, sessionId)
   requireWritableRecord = (sessionId: string) =>
     requireWritableAgentSessionRecord(this.state, sessionId)
 

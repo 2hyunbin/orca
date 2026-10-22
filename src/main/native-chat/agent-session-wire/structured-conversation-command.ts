@@ -74,7 +74,7 @@ async function clearUnderSerialize(
   const { sessionId, clientOperationId } = envelope
   const store = context.deps.store
   const matching = () => {
-    const record = store.getRecord(sessionId)?.conversationCommand
+    const record = store.getConversation(sessionId)?.conversationCommand
     return record?.operationId === clientOperationId && record.callerKey === caller.callerKey
       ? record
       : null
@@ -121,7 +121,7 @@ async function clearUnderSerialize(
       // The commit is the only write, so a clear with no committed answer changed nothing.
       rerunWhenReplayMissing: () => true,
       run: async (ctx) => {
-        const record = store.getRecord(sessionId)!
+        const record = store.requireWritableRecord(sessionId)
         const blocked = conversationCommandBlocked(
           ctx,
           record,
@@ -132,7 +132,7 @@ async function clearUnderSerialize(
           return { ok: false, refusal: blocked }
         }
         await context.stopAgent(sessionId, { cause: 'context-clear' })
-        const stopped = store.getRecord(sessionId)!
+        const stopped = store.requireWritableRecord(sessionId)
         const fence = stopped.lease.runtimeFence
         const rechecked = conversationCommandBlocked(
           { ...ctx, fence },

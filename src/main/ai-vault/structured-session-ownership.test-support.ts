@@ -1,3 +1,4 @@
+import { agentSessionConversationView } from '../../shared/agent-session-conversation-view'
 import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import {
   agentSessionLeaseFixture,
@@ -83,6 +84,9 @@ export function installCopyingChat(
     deps: {
       store: {
         listRecords: () => [record, ...otherRecords],
+        listConversations: () => [record, ...otherRecords].map(agentSessionConversationView),
+        selectWritableRecord: () => ({ kind: 'writable', record }),
+        requireWritableRecord: () => record,
         getRecord: (sessionId: string) => (sessionId === record.sessionId ? record : null)
       },
       adapter: { copyConversation: copy }

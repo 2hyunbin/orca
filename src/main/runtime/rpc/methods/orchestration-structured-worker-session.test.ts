@@ -1,3 +1,4 @@
+import { agentSessionRecordFixture } from '../../../native-chat/agent-session-record-test-fixture'
 import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentJournalSubmission } from '../../../../shared/agent-session-journal-types'
@@ -33,10 +34,8 @@ function installHost(location = { executionHostId: 'local', wslDistro: null as s
     close: async () => {},
     deps: {
       store: {
-        getRecord: () => ({
-          location,
-          lease: { runtimeFence: 2, runtimeKind: 'native', claimStatus: 'live' }
-        })
+        requireWritableRecord: (sessionId: string) =>
+          agentSessionRecordFixture({ sessionId, location })
       }
     },
     subscribe
@@ -214,12 +213,7 @@ describe('structured worker session', () => {
   })
 
   it('refuses a session pinned to a non-local execution host', async () => {
-    installHost()
-    ;(hostRef.current as { deps: { store: { getRecord: () => unknown } } }).deps.store.getRecord =
-      () => ({
-        location: { executionHostId: 'ssh-1', wslDistro: null },
-        lease: { runtimeFence: 2, runtimeKind: 'native', claimStatus: 'live' }
-      })
+    installHost({ executionHostId: 'ssh-1', wslDistro: null })
     await expect(
       createStructuredWorkerSession({
         runtime: { ensureStructuredAgentSessionHost: async () => {} } as never,
@@ -250,7 +244,19 @@ describe('structured worker dispatch preamble', () => {
 
   function hostWithSubmission(submission: Settled, delivered?: Settled): PreambleHost {
     return {
-      deps: { store: { getRecord: () => ({ lease: { runtimeFence: 7 } }) } },
+      deps: {
+        store: {
+          selectWritableRecord: (sessionId) => ({
+            kind: 'writable',
+            record: agentSessionRecordFixture({ sessionId })
+          }),
+          requireWritableRecord: (sessionId) =>
+            agentSessionRecordFixture({
+              sessionId,
+              lease: { ...agentSessionRecordFixture({ sessionId }).lease, runtimeFence: 7 }
+            })
+        }
+      },
       send: async () => ({
         ok: true,
         replayed: false,

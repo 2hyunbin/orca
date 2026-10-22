@@ -1,8 +1,5 @@
 import { homedir } from 'node:os'
-import type {
-  AgentSessionAccountHome,
-  AgentSessionRecord
-} from '../../../shared/agent-session-record'
+import type { AgentSessionAccountHome } from '../../../shared/agent-session-record'
 import { isNativeLocalLocation } from '../../../shared/execution-host'
 import type {
   AgentModelCatalogService,
@@ -13,13 +10,13 @@ import {
   independentAgentModelCatalog,
   type AgentModelCatalogResolvedProbe
 } from './agent-model-catalog-discovery'
-import { sessionWorkspacePath } from './agent-model-catalog-workspace'
+import { sessionWorkspacePath, type AgentModelCatalogRecord } from './agent-model-catalog-workspace'
 
 /** Launch configuration determines discovery scope; a chat's choices never participate. */
 export async function resolveAgentModelCatalogScope(
   deps: AgentModelCatalogServiceDeps,
   params: Parameters<AgentModelCatalogService['read']>[0],
-  record: AgentSessionRecord | undefined,
+  record: AgentModelCatalogRecord | undefined,
   base: string,
   home: AgentSessionAccountHome | null
 ): Promise<{
@@ -52,9 +49,8 @@ export async function resolveAgentModelCatalogScope(
   if (!cwd) {
     return { base, fingerprint: base, exact: false }
   }
-  const resolution = params.savedOnly
-    ? probe?.resolve?.(home, cwd, true)
-    : probe?.resolve?.(home, cwd)
+  const savedOnly = params.savedOnly || !!(record && !deps.getRecord(record.sessionId))
+  const resolution = savedOnly ? probe?.resolve?.(home, cwd, true) : probe?.resolve?.(home, cwd)
   const resolved = await resolution?.catch(() => null)
   if (probe?.resolve && !resolved) {
     return null

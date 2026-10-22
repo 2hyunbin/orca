@@ -120,33 +120,33 @@ async function admitAndRunAgentSessionMutationUnchecked<TValue>(
   if (plan.commandReceipt) {
     return admitCommandReceiptMutation(request, hostFingerprint, plan.commandReceipt)
   }
+  const ledger = request.store.evaluateMutationOperation({
+    callerKey: request.callerKey,
+    envelope,
+    hostFingerprint,
+    now: request.now(),
+    ...(plan.operationIdScope ? { operationIdScope: plan.operationIdScope } : {})
+  })
+  if (!ledger) {
+    return refuseAgentSessionMutation(AGENT_SESSION_NOT_ATTACHED)
+  }
+  if (ledger.decision.decision === 'refused') {
+    // Nothing to read, prepare or write: a closed chat or a store that takes no write answers alike.
+    return refuseAgentSessionMutation(agentSessionLedgerRefusal(envelope, ledger.decision))
+  }
+  if (ledger.decision.decision === 'replay') {
+    const answered = await answerRecordedOperation(
+      request,
+      request.prepareSession,
+      ledger.decision.row,
+      ledger.record,
+      hostFingerprint
+    )
+    if (answered !== 'rerun') {
+      return answered
+    }
+  }
   if (request.prepareSession) {
-    const ledger = request.store.evaluateMutationOperation({
-      callerKey: request.callerKey,
-      envelope,
-      hostFingerprint,
-      now: request.now(),
-      ...(plan.operationIdScope ? { operationIdScope: plan.operationIdScope } : {})
-    })
-    if (!ledger) {
-      return refuseAgentSessionMutation(AGENT_SESSION_NOT_ATTACHED)
-    }
-    if (ledger.decision.decision === 'refused') {
-      // Nothing to read, prepare or write: a closed chat or a store that takes no write answers alike.
-      return refuseAgentSessionMutation(agentSessionLedgerRefusal(envelope, ledger.decision))
-    }
-    if (ledger.decision.decision === 'replay') {
-      const answered = await answerRecordedOperation(
-        request,
-        request.prepareSession,
-        ledger.decision.row,
-        ledger.record,
-        hostFingerprint
-      )
-      if (answered !== 'rerun') {
-        return answered
-      }
-    }
     const record = request.store.requireWritableRecord(envelope.sessionId)
     const prepared = await request.prepareSession(
       'admit',
@@ -189,10 +189,12 @@ async function admitAndRunAgentSessionMutationUnchecked<TValue>(
     return refuseAgentSessionMutation(admission.refusal)
   }
 
-  const fence = record.lease.runtimeFence
-  const context = mutationTurnContext(request, journal, record)
   if (admission.decision === 'replay') {
-    const replayed = replayRecordedOperation(request, context, admission.row)
+    const replayed = replayRecordedOperation(
+      request,
+      mutationReplayContext(request, journal, record),
+      admission.row
+    )
     if (replayed !== 'rerun') {
       return replayed
     }
@@ -204,7 +206,7 @@ async function admitAndRunAgentSessionMutationUnchecked<TValue>(
       envelope,
       hostFingerprint,
       ledger: { decision: 'admit', row: admission.row },
-      lease: record.lease,
+      lease: request.store.requireWritableRecord(envelope.sessionId).lease,
       ...(plan.conversationWrite ? { conversationWrite: true } : {})
     })
     if (rerun.decision === 'refused') {
@@ -212,6 +214,9 @@ async function admitAndRunAgentSessionMutationUnchecked<TValue>(
     }
   }
 
+  const current = request.store.requireWritableRecord(envelope.sessionId)
+  const fence = current.lease.runtimeFence
+  const context = mutationTurnContext(request, journal, current)
   const outcome = await runSettledAgentSessionMutation({
     store: request.store,
     // A global send replay can cross caller identities. Settlement still owns
@@ -233,7 +238,7 @@ async function admitAndRunAgentSessionMutationUnchecked<TValue>(
  */
 async function answerRecordedOperation<TValue>(
   request: AgentSessionMutationRequest<TValue>,
-  prepareSession: NonNullable<AgentSessionMutationRequest<TValue>['prepareSession']>,
+  prepareSession: AgentSessionMutationRequest<TValue>['prepareSession'],
   row: AgentSessionOperationRow,
   record: AgentSessionConversationView,
   hostFingerprint: string
@@ -249,8 +254,8 @@ async function answerRecordedOperation<TValue>(
       return refuseAgentSessionMutation(replay.refusal)
     }
   }
-  const prepared = await prepareSession('replay', record)
-  if (!prepared.ok) {
+  const prepared = await prepareSession?.('replay', record)
+  if (prepared && !prepared.ok) {
     return prepared
   }
   const journal = request.journal()

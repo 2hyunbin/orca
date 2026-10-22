@@ -37,6 +37,7 @@ import {
 } from './agent-session-account-home'
 
 export type { AgentSessionAccountHome } from './agent-session-account-home'
+export type { AgentSessionOptionsReplacement } from './agent-session-options-replacement'
 
 export const AGENT_SESSION_RECORD_SCHEMA_VERSION = 2 as const
 
@@ -169,14 +170,6 @@ export type AgentSessionRecord = {
   updatedAt: number
 }
 
-/** Replaces the provider options or sets the permission mode, never both, so neither write
- *  touches the other. */
-export type AgentSessionOptionsReplacement = {
-  sessionId: string
-  fence: number
-  now: number
-} & ({ options: Readonly<Record<string, string>> } | { permissionMode: string })
-
 const MAX_ID_LENGTH = 512
 /** A death evidence's `detail` past this fails a load, so whoever writes one cuts it here. */
 export const MAX_AGENT_SESSION_DEATH_DETAIL_CHARS = MAX_ID_LENGTH
@@ -302,19 +295,23 @@ function isAgentSessionDeathEvidence(value: unknown): value is AgentSessionDeath
   )
 }
 
+function isStoredRecordObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 function isPersistedAgentSessionObservationLease(
   value: unknown
 ): value is PersistedAgentSessionObservationLease {
-  if (typeof value !== 'object' || value === null) {
+  if (!isStoredRecordObject(value)) {
     return false
   }
-  // SAFETY: every field is checked below before the boundary admits an observation.
-  const lease = value as Partial<PersistedAgentSessionObservationLease>
+  const lease = value
   return (
     isAgentSessionId(lease.sessionId) &&
     isPersistedAgentSessionRuntimeKind(lease.runtimeKind) &&
+    typeof lease.runtimeFence === 'number' &&
     Number.isSafeInteger(lease.runtimeFence) &&
-    (lease.runtimeFence as number) >= 0 &&
+    lease.runtimeFence >= 0 &&
     (lease.handoffStage === null || isPersistedAgentSessionHandoffStage(lease.handoffStage)) &&
     (lease.provenHandleLinkId === null || isBoundedString(lease.provenHandleLinkId, 128)) &&
     (lease.ownerProcess === null || isAgentSessionProcessIdentity(lease.ownerProcess)) &&
@@ -338,55 +335,54 @@ function isPersistedAgentSessionObservationLease(
 export function isPersistedAgentSessionObservationRecord(
   value: unknown
 ): value is PersistedAgentSessionObservationRecord {
-  if (typeof value !== 'object' || value === null) {
+  if (!isStoredRecordObject(value)) {
     return false
   }
-  // SAFETY: the shared structural and cross-field checks below validate all non-floor fields.
-  const record = value as Partial<PersistedAgentSessionObservationRecord>
-  const fieldsValid =
-    record.schemaVersion === AGENT_SESSION_RECORD_SCHEMA_VERSION &&
-    isAgentSessionId(record.sessionId) &&
-    isAgentSessionExecutionLocation(record.location) &&
-    isStructuredAgentId(record.provider) &&
-    isAgentSessionAccountHome(record.accountHome) &&
-    (record.launchDirectory === undefined ||
-      isBoundedString(record.launchDirectory, MAX_PATH_LENGTH)) &&
-    (record.options === undefined || isAgentSessionOptions(record.options)) &&
-    (record.permissionMode === undefined ||
-      isBoundedString(record.permissionMode, MAX_ID_LENGTH)) &&
-    (record.rewind === undefined || isAgentSessionRewindRecord(record.rewind)) &&
-    (record.providerContextBoundary === undefined ||
-      isAgentSessionProviderContextBoundary(record.providerContextBoundary)) &&
-    (record.conversationCommand === undefined ||
-      isAgentSessionConversationCommandRecord(record.conversationCommand)) &&
-    (record.conversationName === undefined ||
-      isAgentSessionConversationName(record.conversationName)) &&
-    (record.launchArgs === undefined || isAgentSessionLaunchArgs(record.launchArgs)) &&
-    !Object.hasOwn(record, 'launchEnv') &&
-    isPersistedAgentSessionObservationLease(record.lease) &&
-    record.lease.sessionId === record.sessionId &&
-    Number.isSafeInteger(record.createdAt) &&
-    Number.isSafeInteger(record.updatedAt)
-  if (!fieldsValid) {
+  const record = value
+  if (
+    !(
+      record.schemaVersion === AGENT_SESSION_RECORD_SCHEMA_VERSION &&
+      isAgentSessionId(record.sessionId) &&
+      isAgentSessionExecutionLocation(record.location) &&
+      isStructuredAgentId(record.provider) &&
+      isAgentSessionAccountHome(record.accountHome) &&
+      (record.launchDirectory === undefined ||
+        isBoundedString(record.launchDirectory, MAX_PATH_LENGTH)) &&
+      (record.options === undefined || isAgentSessionOptions(record.options)) &&
+      (record.permissionMode === undefined ||
+        isBoundedString(record.permissionMode, MAX_ID_LENGTH)) &&
+      (record.rewind === undefined || isAgentSessionRewindRecord(record.rewind)) &&
+      (record.providerContextBoundary === undefined ||
+        isAgentSessionProviderContextBoundary(record.providerContextBoundary)) &&
+      (record.conversationCommand === undefined ||
+        isAgentSessionConversationCommandRecord(record.conversationCommand)) &&
+      (record.conversationName === undefined ||
+        isAgentSessionConversationName(record.conversationName)) &&
+      (record.launchArgs === undefined || isAgentSessionLaunchArgs(record.launchArgs)) &&
+      !Object.hasOwn(record, 'launchEnv') &&
+      isPersistedAgentSessionObservationLease(record.lease) &&
+      record.lease.sessionId === record.sessionId &&
+      Number.isSafeInteger(record.createdAt) &&
+      Number.isSafeInteger(record.updatedAt)
+    )
+  ) {
     return false
   }
-  // SAFETY: fieldsValid established the structure; the floor remains unknown.
-  const validated = record as PersistedAgentSessionObservationRecord
   // The row holds stored handles; validate the chain they decode to.
-  const chain = decodePersistedAgentSessionProviderHandleChain(validated.providerHandleChain)
+  const chain = decodePersistedAgentSessionProviderHandleChain(record.providerHandleChain)
   const head = chain?.at(-1)
   return (
     chain !== null &&
     // Chain validation already enforces one namespace.
-    (!head || head.handle.agent === validated.provider) &&
-    (validated.providerContextBoundary === undefined ||
-      validated.providerContextBoundary.afterFence <= validated.lease.runtimeFence) &&
-    (validated.lease.claimStatus !== 'live' ||
-      (validated.lease.ownerProcess !== null &&
+    (!head || head.handle.agent === record.provider) &&
+    (record.providerContextBoundary === undefined ||
+      record.providerContextBoundary.afterFence <= record.lease.runtimeFence) &&
+    (record.lease.claimStatus !== 'live' ||
+      (record.lease.ownerProcess !== null &&
         // Null: the owner's process is live and its provider has not answered with a handle yet.
-        (validated.lease.provenHandleLinkId === null ||
-          (head?.linkId === validated.lease.provenHandleLinkId &&
-            head.mintedAtFence === validated.lease.runtimeFence))))
+        (record.lease.provenHandleLinkId === null ||
+          (head?.linkId === record.lease.provenHandleLinkId &&
+            head.mintedAtFence === record.lease.runtimeFence))))
   )
 }
 

@@ -46,6 +46,9 @@ export async function admitCommandReceiptMutation<TValue>(
       })
     )
   }
+  if (store.selectWritableRecord(envelope.sessionId).kind === 'missing') {
+    return refuseAgentSessionMutation(AGENT_SESSION_NOT_ATTACHED)
+  }
   let read
   try {
     read = store.readCommandReceipt(
@@ -73,10 +76,10 @@ export async function admitCommandReceiptMutation<TValue>(
     return prepared
   }
   const journal = request.journal()
-  const current = store.requireWritableRecord(envelope.sessionId)
-  if (!journal || !current) {
+  if (!journal || store.selectWritableRecord(envelope.sessionId).kind === 'missing') {
     return refuseAgentSessionMutation(AGENT_SESSION_NOT_ATTACHED)
   }
+  const current = store.requireWritableRecord(envelope.sessionId)
   // A conversation write is fenced by its journal; anything the provider must carry needs the lease.
   const leaseRefusal = plan.conversationWrite ? null : refuseUnlessWriterAdmitted(current.lease)
   if (leaseRefusal) {

@@ -1,4 +1,9 @@
-import { afterEach, expect, it } from 'vitest'
+import {
+  composeStructuredLaunch,
+  composeStructuredLaunchRead
+} from '../../runtime/structured-agent-launch-composition'
+import { CODEX_STRUCTURED_AGENT } from '../../codex/codex-structured-agent-definition'
+import { afterEach, expect, it, vi } from 'vitest'
 import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-record-store-test-harness'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
@@ -24,6 +29,12 @@ afterEach(async () => {
 
 it('replays a saved send and its conflict but refuses fresh send, Stop and metadata before any new work', async () => {
   rig = await createQueuedMessageTestRig({ restartable: true })
+  await rig.store.replaceSessionOptions({
+    sessionId: SESSION,
+    fence: 1,
+    options: { model: 'kept-model', effort: 'high' },
+    now: 1800000000000
+  })
   const body = hostTestMessage('saved message')
   const envelope = rig.envelope({ body }, 'agentSession.send', hostTestOperationId())
   const params = { envelope, body, userSend: true as const }
@@ -39,6 +50,9 @@ it('replays a saved send and its conflict but refuses fresh send, Stop and metad
     verdict: 'readable'
   })
   restored = new StructuredAgentSessionHost({ ...rig.host.deps, store })
+  expect(await restored.readOptions(SESSION, { readsWithoutModel: true })).toMatchObject({
+    current: { model: 'kept-model', effort: 'high' }
+  })
   const starts = rig.starts.mock.calls.length
   const sends = rig.dispatch.mock.calls.length
   expect(await restored.revealSession(SESSION)).toMatchObject({ sessionId: SESSION })
@@ -73,6 +87,16 @@ it('replays a saved send and its conflict but refuses fresh send, Stop and metad
   expect(rig.starts).toHaveBeenCalledTimes(starts)
   expect(rig.dispatch).toHaveBeenCalledTimes(sends)
   expect((await restored.journalSnapshot(SESSION)).submissions).toHaveLength(1)
+  const close = vi.spyOn(restored.deps.adapter, 'closeSession')
+  const release = vi.spyOn(restored.deps.adapter, 'releaseAcquisition')
+  const closes = close.mock.calls.length
+  const releases = release.mock.calls.length
+  expect(await restored.sleepWorkspace('workspace-1', true)).toEqual({
+    stoppedSessionIds: [],
+    failures: [{ sessionId: SESSION, reason: 'stop-unverifiable' }]
+  })
+  expect(close).toHaveBeenCalledTimes(closes)
+  expect(release).toHaveBeenCalledTimes(releases)
 })
 
 it('answers a recorded ledger result without a preparation hook before requiring fresh authority', async () => {
@@ -90,6 +114,20 @@ it('answers a recorded ledger result without a preparation hook before requiring
     now: () => 1800000000000
   }
   expect(await admitAndRunAgentSessionMutation(request)).toMatchObject({ ok: true })
+  await rig.store.transitionHandoff(SESSION, (record) => ({
+    ...record,
+    lease: { ...record.lease, claimStatus: 'released', ownerProcess: null }
+  }))
+  const pendingEnvelope = { ...envelope, clientOperationId: hostTestOperationId() }
+  expect(
+    await rig.store.admitMutationOperation({
+      callerKey: CALLER.callerKey,
+      envelope: pendingEnvelope,
+      hostFingerprint: pendingEnvelope.payloadFingerprint,
+      now: request.now(),
+      conversationWrite: true
+    })
+  ).toMatchObject({ admission: { decision: 'admit' } })
   damageFloor(rig.root)
   const store = await openTestAgentSessionRecordStore(rig.root)
   expect(await admitAndRunAgentSessionMutation({ ...request, store })).toMatchObject({
@@ -97,6 +135,61 @@ it('answers a recorded ledger result without a preparation hook before requiring
     replayed: true,
     value: fields
   })
+  expect(
+    await admitAndRunAgentSessionMutation({ ...request, store, envelope: pendingEnvelope })
+  ).toMatchObject({ ok: false, refusal: { details: { reason: 'recordUnreadable' } } })
+  await store.recordOperationOutcome({
+    callerKey: CALLER.callerKey,
+    operationId: pendingEnvelope.clientOperationId,
+    outcome: { status: 'unknown' }
+  })
+  expect(
+    await admitAndRunAgentSessionMutation({ ...request, store, envelope: pendingEnvelope })
+  ).toMatchObject({ ok: false, refusal: { code: 'agent_session_operation_unknown' } })
+  await store.recordOperationOutcome({
+    callerKey: CALLER.callerKey,
+    operationId: pendingEnvelope.clientOperationId,
+    outcome: {
+      status: 'failed',
+      code: 'agent_session_conflict',
+      details: { reason: 'claimConflicted' }
+    }
+  })
+  expect(
+    await admitAndRunAgentSessionMutation({ ...request, store, envelope: pendingEnvelope })
+  ).toMatchObject({ ok: false, refusal: { code: 'agent_session_conflict' } })
+  const operation = {
+    callerKey: CALLER.callerKey,
+    envelope,
+    hostFingerprint: envelope.payloadFingerprint,
+    now: request.now()
+  }
+  expect(await store.admitMutationOperation(operation)).toMatchObject({
+    admission: { decision: 'replay' },
+    record: { currentFence: store.getConversation(SESSION)?.currentFence }
+  })
+  expect(
+    await store.admitMutationOperation({
+      ...operation,
+      hostFingerprint: 'changed',
+      envelope: { ...envelope, payloadFingerprint: 'changed' }
+    })
+  ).toMatchObject({
+    admission: { decision: 'refused', refusal: { code: 'agent_session_operation_conflict' } }
+  })
+  await expect(
+    store.admitMutationOperation({
+      ...operation,
+      envelope: { ...envelope, clientOperationId: hostTestOperationId() },
+      conversationWrite: true
+    })
+  ).rejects.toMatchObject({ refusal: { details: { reason: 'recordUnreadable' } } })
+  expect(
+    await store.admitMutationOperation({
+      ...operation,
+      envelope: { ...envelope, sessionId: 'missing-chat' }
+    })
+  ).toBeNull()
 })
 
 function damageFloor(root: string): void {
@@ -106,3 +199,41 @@ function damageFloor(root: string): void {
     )
     .run(SESSION)
 }
+
+it('refuses launch and probe results when saved authority changes during preparation', async () => {
+  rig = await createQueuedMessageTestRig()
+  const identity = {
+    sessionId: SESSION,
+    workspaceId: 'workspace-1',
+    hostId: 'local',
+    agent: 'codex',
+    providerHandle: null
+  }
+  let current = rig.store
+  const sources = {
+    store: {
+      selectWritableRecord: (id: string) => current.selectWritableRecord(id),
+      requireWritableRecord: (id: string) => current.requireWritableRecord(id),
+      pinLaunchDirectory: rig.store.pinLaunchDirectory
+    },
+    resolveWorkspacePath: async () => rig!.root,
+    resolveBaseEnvironment: async () => ({}),
+    resolveAgentEnvironment: async () => ({})
+  }
+  const part = async () => {
+    damageFloor(rig!.root)
+    current = await openTestAgentSessionRecordStore(rig!.root)
+    return { launch: { command: '/fixture/codex' }, env: {}, inheritedEnvToDelete: [] }
+  }
+  await expect(
+    composeStructuredLaunch(
+      CODEX_STRUCTURED_AGENT,
+      sources,
+      part
+    )({ identity, spawnToken: 'fixture-token' })
+  ).rejects.toMatchObject({ refusal: { details: { reason: 'recordUnreadable' } } })
+  current = rig.store
+  await expect(
+    composeStructuredLaunchRead(CODEX_STRUCTURED_AGENT, sources, part)(identity)
+  ).rejects.toMatchObject({ refusal: { details: { reason: 'recordUnreadable' } } })
+})

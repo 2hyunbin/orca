@@ -17,7 +17,7 @@ import {
   replayRecordedOperation,
   type AgentSessionMutationSessionPreparation
 } from './structured-agent-session-mutation-admission'
-import type { MutationPlan } from './structured-agent-session-mutation-plans'
+import type { ReadyOperationPlan } from './structured-agent-session-ready-operation-plan'
 import { mutationReplayContext } from './structured-agent-session-mutation-turn-context'
 import { commandReceiptScope } from '../agent-session-journal/command-receipt-schema'
 import { parseAgentSessionOperationTimestamp } from '../../../shared/agent-session-host-authority'
@@ -40,13 +40,6 @@ export {
   type ReadyOperationSelection
 } from './structured-agent-session-operation-child'
 
-type ReadyOperationPlan<T> = Pick<
-  MutationPlan<T>,
-  'method' | 'fields' | 'operationIdScope' | 'commandReceipt'
-> &
-  Partial<
-    Pick<MutationPlan<T>, 'replay' | 'rerunWhenReplayMissing' | 'recoverUnknownFromDurableState'>
-  >
 type QueuedReadyOperation<T> =
   | { result: AgentSessionMutationResult<T> }
   | {
@@ -198,13 +191,17 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
         if (!opened.ok) {
           return opened
         }
-        const checked = options.beforeAgent?.(context.deps.store.getRecord(envelope.sessionId))
+        const current = context.deps.store.requireWritableRecord(envelope.sessionId)
+        const checked = options.beforeAgent?.(current)
         if (checked && !checked.ok) {
           return checked
         }
         return selectStructuredAgentSessionOperationChild(context, envelope.sessionId)
       }
       const child = await select().catch((error: unknown) => {
+        if (isAgentSessionRefusalError(error)) {
+          return { ok: false as const, refusal: error.refusal }
+        }
         context.deps.logger.warn('selecting an agent for an operation failed', {
           scope: 'operation-agent-start',
           sessionId: envelope.sessionId,

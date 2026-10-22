@@ -32,9 +32,10 @@ export type PersistedAgentSessionLease = Omit<AgentSessionLease, 'runtimeKind' |
 /** A record as a row stores it. Decode through `decodePersistedAgentSessionRecord`. */
 export type PersistedAgentSessionRecord = Omit<
   AgentSessionRecord,
-  'lease' | 'providerHandleChain'
+  'lease' | 'providerHandleChain' | 'sleptAt'
 > & {
   lease: PersistedAgentSessionLease
+  sleptAt?: unknown
   providerHandleChain: PersistedAgentSessionProviderHandleLink[]
 }
 
@@ -82,8 +83,9 @@ export function leaseCarriesLegacyHandoffValues(
 /** Identity for every lease this build writes. */
 export function normalizeLegacyHandoffLease<L extends PersistedAgentSessionObservationLease>(
   lease: L
-) {
-  const { runtimeKind, handoffStage } = lease
+): Omit<L, 'runtimeKind' | 'handoffStage' | 'claimStatus'> &
+  Pick<AgentSessionLease, 'runtimeKind' | 'handoffStage' | 'claimStatus'> {
+  const { runtimeKind, handoffStage }: PersistedAgentSessionObservationLease = lease
   // Why: every one of these awaited proof about an owner, which is what `recovering` resolves.
   const stage = isLegacyHandoffStage(handoffStage) ? 'recovering' : handoffStage
   if (runtimeKind === 'native') {
@@ -91,11 +93,11 @@ export function normalizeLegacyHandoffLease<L extends PersistedAgentSessionObser
   }
   return {
     ...lease,
-    runtimeKind: 'native' as const,
+    runtimeKind: 'native',
     handoffStage: stage,
     // Why: a recorded terminal is the user's foreground agent. `conflicted` is the claim every
     // build probes but never stops; a plain native owner would be stopped by restart recovery.
-    claimStatus: lease.ownerProcess === null ? lease.claimStatus : ('conflicted' as const)
+    claimStatus: lease.ownerProcess === null ? lease.claimStatus : 'conflicted'
   }
 }
 

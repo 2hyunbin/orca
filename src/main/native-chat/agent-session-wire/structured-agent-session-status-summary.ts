@@ -98,10 +98,10 @@ function structuredSummaryConversationNaming(
 /** A closed chat's retained summary with current record annotations, or null if unchanged. */
 export function renamedStructuredStatusSummary(
   previous: AgentSessionStatusSummary,
-  deps: Pick<StructuredAgentSessionStatusFeedDeps, 'getRecord' | 'namingFailure'>,
+  deps: Pick<StructuredAgentSessionStatusFeedDeps, 'getConversation' | 'namingFailure'>,
   sessionId: string
 ): AgentSessionStatusSummary | null {
-  const record = deps.getRecord(sessionId)
+  const record = deps.getConversation(sessionId)
   const { conversationName: _name, namingError: _error, sleptAt: _sleptAt, ...rest } = previous
   const summary = {
     ...rest,

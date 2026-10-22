@@ -1,5 +1,6 @@
 import {
   getAgentSessionConversation,
+  selectWritableAgentSessionRecord,
   requireWritableAgentSessionRecord
 } from './agent-session-store-state'
 import type { AgentSessionConversationView } from '../../shared/agent-session-conversation-view'
@@ -26,7 +27,6 @@ import {
   type AgentSessionMutationAdmission
 } from '../../shared/agent-session-mutation-envelope'
 import type { AgentSessionMutationEnvelope } from '../../shared/agent-session-wire'
-import type { AgentSessionRecord } from '../../shared/agent-session-record'
 import type { AgentSessionStoreState } from './agent-session-store-state'
 import { AgentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 
@@ -90,7 +90,7 @@ export type AgentSessionMutationOperationAdmission = {
 
 export type AgentSessionMutationOperationDecision = {
   admission: AgentSessionMutationAdmission
-  record: AgentSessionRecord
+  record: AgentSessionConversationView
 } | null
 
 type EvaluatedOperationRows = { rows: OperationRows; decision: AgentSessionOperationDecision }
@@ -187,7 +187,13 @@ export function admitAgentSessionMutationOperation(
   state: AgentSessionStoreState,
   args: AgentSessionMutationOperationAdmission
 ): AgentSessionMutationOperationDecision {
-  const record = requireWritableAgentSessionRecord(state, args.envelope.sessionId)
+  const record = getAgentSessionConversation(state, args.envelope.sessionId)
+  if (!record) {
+    if (selectWritableAgentSessionRecord(state, args.envelope.sessionId).kind === 'unreadable') {
+      requireWritableAgentSessionRecord(state, args.envelope.sessionId)
+    }
+    return null
+  }
   const operation = mutationOperation(args)
   const ledger = args.operationIdScope
     ? admitAgentSessionGlobalOperationRow(state.operations, operation)
@@ -196,7 +202,7 @@ export function admitAgentSessionMutationOperation(
     envelope: args.envelope,
     hostFingerprint: args.hostFingerprint,
     ledger: ledger.decision,
-    lease: record.lease,
+    lease: () => requireWritableAgentSessionRecord(state, args.envelope.sessionId).lease,
     ...(args.conversationWrite ? { conversationWrite: true } : {})
   })
   if (ledger.decision.decision === 'admit' && admission.decision === 'refused') {

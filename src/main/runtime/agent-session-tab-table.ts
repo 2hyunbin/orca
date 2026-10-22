@@ -1,3 +1,5 @@
+import { isAgentSessionSurfaceTabId } from '../../shared/agent-session-surface-tab-id'
+import type { AgentSessionReserveRequest } from './agent-session-reservation-admission'
 import { getAgentSessionConversation } from './agent-session-store-state'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
@@ -128,3 +130,26 @@ export function showAgentSessionTabs(
 }
 
 export type PersistedAgentSessionTab = { tabId: string; sessionId: string }
+
+/**
+ * A tab id names one conversation, so a reserved id another session's tab holds is a conflict.
+ * Checked, not claimed: the id is taken when the chat's tab is published, so a create that never
+ * gets that far leaves nothing in the table to restore or release.
+ */
+export function assertReservedTabUnheld(
+  state: AgentSessionStoreState,
+  request: AgentSessionReserveRequest
+): void {
+  if (request.surfaceTabId === undefined) {
+    return
+  }
+  if (!isAgentSessionSurfaceTabId(request.surfaceTabId)) {
+    throw agentSessionRefusalError('agent_session_operation_invalid', {
+      reason: 'requestMalformed'
+    })
+  }
+  const holder = state.sessionTabs?.sessionIdFor(request.surfaceTabId)
+  if (holder !== undefined && holder !== request.sessionId) {
+    throw agentSessionRefusalError('agent_session_conflict', { reason: 'tabIdTaken' })
+  }
+}

@@ -123,7 +123,7 @@ export function structuredWorkerAddressable(
  */
 export function structuredWorkerOwesWork(
   db: OrchestrationDb | null,
-  record: AgentSessionConversationView
+  record: Pick<AgentSessionConversationView, 'sessionId' | 'location'>
 ): boolean {
   const incarnation = db && ownedWorkerIncarnation(db, record)
   return (
@@ -141,7 +141,7 @@ export function structuredWorkerOwesWork(
 /** The first task this worker still owes, which names its chat. */
 export function structuredWorkerOpenTaskTitle(
   db: OrchestrationDb | null,
-  record: AgentSessionConversationView
+  record: Pick<AgentSessionConversationView, 'sessionId' | 'location'>
 ): { title: string } | null {
   const incarnation = db && ownedWorkerIncarnation(db, record)
   if (!db || !incarnation) {
@@ -172,7 +172,7 @@ export function structuredWorkerOpenTaskTitle(
 
 function ownedWorkerIncarnation(
   db: OrchestrationDb,
-  record: AgentSessionConversationView
+  record: Pick<AgentSessionConversationView, 'sessionId' | 'location'>
 ): string | null {
   const hostScope = structuredWorkerHostScope(record.location)
   if (!hostScope) {
