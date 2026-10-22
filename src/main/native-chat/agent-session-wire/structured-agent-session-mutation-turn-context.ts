@@ -1,11 +1,13 @@
 import type { AgentSessionConversationView } from '../../../shared/agent-session-conversation-view'
-import type { AgentSessionReplayContext } from './structured-agent-session-turns'
 // The context an admitted mutation's plan runs in, built from the request that admitted it.
 
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import type { AgentSessionMutationRequest } from './structured-agent-session-mutation-admission'
-import type { AgentSessionTurnContext } from './structured-agent-session-turns'
+import type {
+  AgentSessionReplayContext,
+  AgentSessionTurnContext
+} from './structured-agent-session-turns'
 
 export function mutationTurnContext<TValue>(
   request: Omit<AgentSessionMutationRequest<TValue>, 'plan'>,

@@ -1,8 +1,8 @@
-import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 // Whether a session's record may start its agent on this host, read in the commit after the
 // lease is adjudicated and recovery concluded, so it sees the lease the resolver handed back.
 
 import {
+  isAgentSessionRefusalError,
   refuse,
   type AgentSessionRefusalDetailsByCode,
   type AgentSessionWireRefusalCode
