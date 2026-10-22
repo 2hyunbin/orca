@@ -313,7 +313,8 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       // Read per sweep tick from the orchestration database: a worker whose dispatch is open keeps
       // its agent running. No database answers no.
       hasOpenDispatch: (record) =>
-        structuredWorkerOwesWork(this.getOrchestrationDbIfAvailable?.() ?? null, record)
+        structuredWorkerOwesWork(this.getOrchestrationDbIfAvailable?.() ?? null, record),
+      setupHold: (workspaceId) => this.workspaceSetupAgentStarts.pending(workspaceId)
     })
   }
 }

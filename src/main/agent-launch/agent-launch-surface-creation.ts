@@ -35,7 +35,8 @@ export async function createLaunchSurface(
       ...(intent.sessionOptions ? { options: intent.sessionOptions } : {}),
       ...(intent.sessionId ? { sessionId: intent.sessionId } : {}),
       ...(reservedTabId ? { tabId: reservedTabId } : {}),
-      ...(intent.prompt ? {} : { withoutPrompt: true as const })
+      ...(intent.prompt ? {} : { withoutPrompt: true as const }),
+      ...(workspace.sequenceTerminalCommand ? { afterSetup: true as const } : {})
     })
     return {
       outcome: {

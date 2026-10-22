@@ -11,6 +11,7 @@ import type { WorktreeLineageWarning } from '../../../../shared/worktree/lineage
 import type { CreateWorktreeProgressEvent } from '../../../../shared/worktree/create-types'
 import { AgentLaunchPaneAlreadyLiveError } from '../../../../shared/agent-launch-pane-already-live'
 import type { RpcContext } from '../core'
+import { WorkspaceSetupAgentStartHolds } from '../../workspace-setup-agent-start-holds'
 import { resolveRpcCallerIdentity } from '../rpc-caller-identity'
 import type { AgentSessionRecordStore } from '../../agent-session-record-store'
 import type { TerminalWorkspaceLaunchScope } from '../../runtime-legacy-worker-terminal-recovery-types'
@@ -169,6 +170,7 @@ export function runtimeStub(options: AgentLaunchRuntimeStubOptions = {}) {
       return launchRecordStore
     }),
     waitForSetupTerminalCompletion,
+    workspaceSetupAgentStarts: new WorkspaceSetupAgentStartHolds(),
     notifyWorktreeCreationProgress: vi.fn((_event: CreateWorktreeProgressEvent) => {}),
     canPublishAgentLaunchTab: vi.fn(() => options.publishAgentLaunchTab !== undefined),
     publishAgentLaunchTab: vi.fn(

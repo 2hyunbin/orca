@@ -207,7 +207,7 @@ describe('the worktree factory', () => {
     const args = createArgs(runtime)
     expect(args.startupAgent).toBeUndefined()
     expect(args.awaitTerminalProvisioning).toBe(true)
-    expect(args.observeSetupCompletion).toBeUndefined()
+    expect(args.observeSetupCompletion).toBe(true)
     // Still recorded on the workspace: the launch owns the agent whichever surface it settles on.
     expect(args.createdWithAgent).toBe('claude')
     expect(result.outcome.kind).toBe('structured')
@@ -249,14 +249,39 @@ describe('the worktree factory', () => {
     expect(createStructuredSession).toHaveBeenCalledTimes(1)
   })
 
-  it('creates a chat immediately while setup is still running', async () => {
+  it('creates the chat at once, at rest, and holds its agent until setup ends', async () => {
     const runtime = runtimeStub({
       setupReceipt: { startupPolicy: 'wait-for-setup', state: 'running', terminalHandle: 'setup-1' }
     })
-    runtime.waitForSetupTerminalCompletion.mockImplementation(() => new Promise(() => {}))
+    const setup = Promise.withResolvers<{ exitCode: number | null }>()
+    runtime.waitForSetupTerminalCompletion.mockImplementation(() => setup.promise)
+    const create = runtime.createManagedWorktree.getMockImplementation()
+    runtime.createManagedWorktree.mockImplementationOnce(async (args) => {
+      // The runtime offers the sequence exactly when the project waits for setup.
+      const stage = args.initializeSurface
+      if (typeof stage === 'function') {
+        await stage({
+          worktreeId: 'wt-new',
+          startupTerminalHandle: undefined,
+          sequenceTerminalCommand: (command: string) => ({ command })
+        })
+      }
+      return create!(args)
+    })
+
     const result = await launch(CREATE_LAUNCH, runtime)
+
     expect(result.outcome.kind).toBe('structured')
-    expect(runtime.waitForSetupTerminalCompletion).not.toHaveBeenCalled()
+    expect(createStructuredSession).toHaveBeenCalledWith(expect.objectContaining({ atRest: true }))
+    expect(runtime.waitForSetupTerminalCompletion).toHaveBeenCalledWith(
+      'setup-1',
+      expect.any(AbortSignal)
+    )
+    const held = runtime.workspaceSetupAgentStarts.pending('wt-new')
+    expect(held).not.toBeNull()
+    setup.resolve({ exitCode: 0 })
+    await held
+    expect(runtime.workspaceSetupAgentStarts.pending('wt-new')).toBeNull()
   })
 
   it('keeps agent-first creation for a launch the user wants as a terminal', async () => {

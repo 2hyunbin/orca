@@ -124,8 +124,6 @@ export type StructuredAgentSessionRuntimeDeps = StructuredAgentSessionTransportO
   /** The agent-status store; see `StructuredAgentSessionHostDeps.statusSink`. */
   statusSink?: StructuredAgentSessionHostDeps['statusSink']
   conversationNaming?: StructuredAgentSessionHostDeps['conversationNaming']
-  /** See `StructuredAgentSessionHostDeps.hasOpenDispatch`. */
-  hasOpenDispatch?: StructuredAgentSessionHostDeps['hasOpenDispatch']
   resolveCodexAccountKind?: (home: string) => AgentSessionAccountKind | undefined
   /** Launch prep's sync for a probed home; see `CodexModelCatalogProbeDeps.prepareHome`. */
   prepareCodexCatalogProbeHome?: (homePath: string) => void
@@ -136,7 +134,7 @@ export type StructuredAgentSessionRuntimeDeps = StructuredAgentSessionTransportO
   /** The account home a structured launch would pin right now, for catalog
    *  reads with no session record. Absent disables the catalog surface. */
   resolveAgentAccountHome?: RuntimeAgentAccountHomeResolver
-}
+} & Pick<StructuredAgentSessionHostDeps, 'hasOpenDispatch' | 'setupHold'>
 
 let installing: Promise<InstalledRuntime> | null = null
 
@@ -316,6 +314,7 @@ async function installOnJournal(
     ...(deps.statusSink ? { statusSink: deps.statusSink } : {}),
     ...(deps.conversationNaming ? { conversationNaming: deps.conversationNaming } : {}),
     ...(deps.hasOpenDispatch ? { hasOpenDispatch: deps.hasOpenDispatch } : {}),
+    ...(deps.setupHold ? { setupHold: deps.setupHold } : {}),
     ...(deps.startupLimits ? { startupLimits: deps.startupLimits } : {}),
     ...(deps.onSessionTabHidden ? { onSessionTabHidden: deps.onSessionTabHidden } : {}),
     ...(await modelCatalogHostDeps({

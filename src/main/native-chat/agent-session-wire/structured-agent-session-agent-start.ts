@@ -133,7 +133,7 @@ export function claimOperationStart(
 }
 
 /** Inside the register step, before any wait: the controller a Stop, close or quit aborts, the
- *  startup clock, and quit's drain all cover the start from here. */
+ *  startup clock (once any setup hold ends), and quit's drain all cover the start from here. */
 function registerStart(
   context: StructuredAgentSessionAttachContext,
   sessionId: string,
@@ -142,7 +142,11 @@ function registerStart(
   const { runtimeState } = context
   const attemptId = randomUUID()
   const acquire = runtimeState.acquireAborts.begin(sessionId)
-  runtimeState.startupAttempts.begin(sessionId, attemptId)
+  const workspaceId = context.deps.store.getRecord(sessionId)?.location.workspaceId
+  const setup = workspaceId === undefined ? null : (context.deps.setupHold?.(workspaceId) ?? null)
+  if (!setup) {
+    runtimeState.startupAttempts.begin(sessionId, attemptId)
+  }
   const lock = structuredAgentSessionStartFlightLock({
     sessionId,
     attemptId,
@@ -152,7 +156,14 @@ function registerStart(
   })
   const outcome = context.tasks.trackAttach(
     Promise.resolve()
-      .then(() => runStart(context, sessionId, startedFor, lock, attemptId))
+      .then(async () => {
+        if (setup) {
+          // Setup's time is not the agent's: the startup clock starts once setup lets it go.
+          await lock.wait(setup)
+          runtimeState.startupAttempts.begin(sessionId, attemptId)
+        }
+        return runStart(context, sessionId, startedFor, lock, attemptId)
+      })
       .catch((error: unknown) => {
         if (!acquire.signal.aborted) {
           throw error

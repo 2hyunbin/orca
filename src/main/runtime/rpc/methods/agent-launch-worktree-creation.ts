@@ -14,6 +14,8 @@ import { hasRuntimeRpcErrorCode } from '../../../../shared/runtime-rpc-error-cod
 
 import { buildCliWorkspaceProvenance } from '../../../../shared/cli-workspace-provenance'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { WorkspaceSetupCompletion } from '../../workspace-setup-agent-start-holds'
 import {
   finishAutomationWorkspaceProvenanceRequest,
   releaseAutomationWorkspaceProvenanceRequest,
@@ -59,6 +61,7 @@ export function agentLaunchWorkspaceFactory(
     }) => {
       const startupLaunchPreferences = toAgentLaunchPreferences(options)
       let promptRodeLaunchCommand = false
+      let releaseSetupHold: ((completion: WorkspaceSetupCompletion | null) => void) | undefined
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: already validated by `AgentLaunch`; the executor only removed the reserved agent fields, so the rest of the payload is the parsed shape.
       const params = create as WorktreeCreateParams
       const { runtime } = context
@@ -114,14 +117,24 @@ export function agentLaunchWorkspaceFactory(
             ? {
                 initializeSurface: async (
                   workspace: Parameters<NonNullable<typeof initializeSurface>>[0]
-                ) =>
-                  initializeSurface({
+                ) => {
+                  // A workspace whose agent is sequenced behind setup holds a chat's agent too,
+                  // from before the chat exists, so no first message can start it early.
+                  if (workspace.sequenceTerminalCommand) {
+                    releaseSetupHold ??= runtime.workspaceSetupAgentStarts.hold(
+                      workspace.worktreeId
+                    )
+                  }
+                  return initializeSurface({
                     ...workspace,
                     ...(promptRodeLaunchCommand ? { promptRodeLaunchCommand } : {})
                   })
+                }
               }
             : {}),
-          awaitTerminalProvisioning: true
+          awaitTerminalProvisioning: true,
+          // Lets the hold see setup end even when its terminal's shell stays open.
+          observeSetupCompletion: true
         }
         let result
         try {
@@ -139,6 +152,7 @@ export function agentLaunchWorkspaceFactory(
             lineage: { noParent: true }
           })
         }
+        releaseSetupHold?.(setupCompletion(runtime, result.setupReceipt))
         finishAutomationWorkspaceProvenanceRequest(params.automationProvenanceRequest)
         const warning =
           result.warnings?.reduce(
@@ -158,6 +172,7 @@ export function agentLaunchWorkspaceFactory(
           ...(warning ? { warning } : {})
         }
       } catch (error) {
+        releaseSetupHold?.(null)
         releaseAutomationWorkspaceProvenanceRequest(params.automationProvenanceRequest)
         throw error
       }
@@ -178,6 +193,18 @@ function withoutHostActivation(params: WorktreeCreateParams): WorktreeCreatePara
     runHooks: false,
     ...(params.runHooks === true ? { setupDecision: 'run' as const } : {})
   }
+}
+
+/** What ends a setup hold: the setup terminal finishing, when a wait-for-setup setup is running. */
+function setupCompletion(
+  runtime: Pick<OrcaRuntimeService, 'waitForSetupTerminalCompletion'>,
+  receipt: Awaited<ReturnType<OrcaRuntimeService['createManagedWorktree']>>['setupReceipt']
+): WorkspaceSetupCompletion | null {
+  const handle =
+    receipt?.startupPolicy === 'wait-for-setup' && receipt.state === 'running'
+      ? receipt.terminalHandle
+      : undefined
+  return handle ? (signal) => runtime.waitForSetupTerminalCompletion(handle, signal) : null
 }
 
 export function agentLaunchWorkspaceCreation(

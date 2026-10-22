@@ -67,15 +67,18 @@ export function agentLaunchSurfaceFactory(
       options,
       sessionId: requested,
       tabId,
-      withoutPrompt
+      withoutPrompt,
+      afterSetup
     }) => {
       const sessionId = requested ?? createStructuredAgentSessionId(agent, randomUUID)
       const seeded = narrowStructuredLaunchSeedOptions(options)
-      // A client that creates chats without starting them starts this one on its first message.
+      // A client that creates chats without starting them starts this one on its first message;
+      // a setup hold rests every chat, so even the launch's own prompt starts it after setup.
       const atRest =
-        withoutPrompt === true &&
-        context.clientCapabilities?.includes(AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY) ===
-          true
+        afterSetup === true ||
+        (withoutPrompt === true &&
+          context.clientCapabilities?.includes(AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY) ===
+            true)
       const created = await createStructuredAgentSessionForWorktree({
         runtime: context.runtime,
         ensureHost: async () => {

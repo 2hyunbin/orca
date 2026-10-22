@@ -62,6 +62,7 @@ export async function createQueuedMessageTestRig(
     location?: AgentSessionExecutionLocation
     /** How the host probes a recorded owner; absent answers indeterminate. */
     probeOwner?: StructuredAgentSessionHostDeps['probeOwner']
+    setupHold?: StructuredAgentSessionHostDeps['setupHold']
   } = {}
 ) {
   const root = await mkdtemp(join(tmpdir(), 'orca-queued-messages-'))
@@ -80,6 +81,7 @@ export async function createQueuedMessageTestRig(
       mintSpawnToken: () => 'spawn-1',
       now: () => NOW,
       ...(options.probeOwner ? { probeOwner: options.probeOwner } : {}),
+      ...(options.setupHold ? { setupHold: options.setupHold } : {}),
       ...(options.idleSweep ? { idleSweep: options.idleSweep } : {}),
       ...(options.recoveryCapsule ? { recoveryCapsule: new AgentSessionRecoveryCapsule(root) } : {})
     })

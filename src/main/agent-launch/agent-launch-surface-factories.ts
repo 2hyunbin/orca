@@ -30,6 +30,9 @@ export type AgentLaunchSurfaceFactory = {
     /** The launch carries no prompt, so a caller that sends the first message itself may get the
      *  chat at rest, its agent started by that message. */
     withoutPrompt?: true
+    /** The workspace's setup holds the agent, so the chat is made at rest and its first message
+     *  starts the agent once setup ends. */
+    afterSetup?: true
   }): Promise<AgentLaunchStructuredSurface>
   createTerminalAgent(args: {
     worktreeId: string
