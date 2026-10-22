@@ -120,7 +120,10 @@ describe('structured chat naming runtime', () => {
     'names a %s chat with its own agent regardless of global selection',
     async (provider) => {
       const state = rig()
-      state.settings.sourceControlAi = { ...state.settings.sourceControlAi, agentId: 'codex' }
+      state.settings.sourceControlAi = {
+        ...normalizeSourceControlAiSettings(state.settings.sourceControlAi),
+        agentId: 'codex'
+      }
       const record = agentSessionRecordFixture()
       record.provider = provider
       record.accountHome =
@@ -257,7 +260,7 @@ describe('structured chat naming runtime', () => {
       const state = rig()
       state.settings.defaultTuiAgent = 'claude'
       state.settings.sourceControlAi = {
-        ...state.settings.sourceControlAi,
+        ...normalizeSourceControlAiSettings(state.settings.sourceControlAi),
         agentId: 'codex',
         actions: {
           conversationName: {

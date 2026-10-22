@@ -152,7 +152,7 @@ export function ChatNamingSetting({
       })
     : null
   const cliAgent = cliRecipe?.ok ? cliRecipe.value.params.agentId : null
-  const defaultAgentLabel = cliRecipe?.ok
+  const defaultAgentLabel = cliAgent
     ? translate('settings.chat.names.configuredCliAgent', 'Use configured CLI agent ({{agent}})', {
         agent:
           cliAgent === 'custom'
@@ -160,7 +160,7 @@ export function ChatNamingSetting({
                 'auto.components.settings.SourceControlAiActionRecipeDefaults.0740d30915',
                 'Custom command'
               )
-            : getAgentLabel(cliRecipe.value.params.agentId)
+            : getAgentLabel(cliAgent)
       })
     : cliRecipe
       ? translate('settings.chat.names.configuredCliAgentUnknown', 'Use configured CLI agent')

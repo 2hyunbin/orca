@@ -92,6 +92,7 @@ describe('Chat names setting', () => {
     const { settings, element, rerender } = renderSetting({
       defaultTuiAgent: 'claude',
       sourceControlAi: normalizeSourceControlAiSettings({
+        ...normalizeSourceControlAiSettings(undefined),
         agentId: 'pi',
         actions: { conversationName: { agentId: 'codex', agentArgs: '--model haiku' } }
       })

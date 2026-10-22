@@ -2,6 +2,7 @@ import {
   normalizeSourceControlAiSettings,
   resolveSourceControlActionRecipe
 } from '../../shared/source-control-ai'
+import { normalizeSourceControlActionRecipe } from '../../shared/source-control-ai-actions'
 import {
   renderConversationNamePrompt,
   sanitizeGeneratedConversationName
@@ -112,7 +113,10 @@ export function structuredChatNamingDeps(
                 ...source,
                 actions: {
                   ...source.actions,
-                  conversationName: { ...recipe, agentId: record.provider }
+                  conversationName: normalizeSourceControlActionRecipe({
+                    ...recipe,
+                    agentId: record.provider
+                  })
                 }
               }
             }
