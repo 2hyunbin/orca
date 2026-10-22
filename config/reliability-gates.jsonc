@@ -853,28 +853,23 @@
       "protection": "partial",
       "owner": "runtime-platform",
       "layer": "ipc-contract",
-      "surfaces": [
-        "desktop file explorer watchers",
-        "desktop editor file watchers",
-        "direct SSH file watchers"
-      ],
+      "surfaces": ["desktop file explorer watchers", "desktop editor file watchers"],
       "platforms": ["macos", "linux", "windows"],
-      "providers": ["local", "ssh", "wsl"],
+      "providers": ["local", "wsl"],
       "coveredPlatforms": ["macos"],
-      "coveredProviders": ["local", "ssh", "wsl"],
-      "coverageNotes": "Actual desktop local/WSL subscription and SSH watcher controller logic under mocked filesystem/provider handles on macOS. Document events use an EventEmitter sender. Live remote/native Windows/Linux/WSL and rendered reload reattachment are unproved; PTY/process liveness and wire formats are unaffected.",
+      "coveredProviders": ["local", "wsl"],
+      "coverageNotes": "Actual desktop local/WSL subscription logic under mocked filesystem handles on macOS. Document events use an EventEmitter sender. Native Windows/Linux/WSL and rendered reload reattachment are unproved; PTY/process liveness and wire formats are unaffected. SSH roots have no desktop watcher.",
       "motivatingLinks": [
         "https://github.com/stablyai/orca/blob/main/src/main/ipc/filesystem-watcher-listener-lifecycle.ts"
       ],
       "invariant": "A replaced or crashed renderer document retains no file watches or pending ownership and cannot recreate them from an old asynchronous continuation. Shared roots retain live sibling owners; blocked and same-document navigation retain the current document. Shutdown removes registered lifecycle listeners.",
-      "oracle": "Run repeated reloads/crash, pending local/SSH installation cancellation with late success, aborted-install joiners, reconnect retry snapshots, failed-removal restoration and shutdown/reopen. Require zero obsolete roots/intent/listeners, no stale setup/retry, physical handle disposal and preservation of sibling notifications and same-tick remote handoff.",
+      "oracle": "Run repeated reloads/crash, pending installation cancellation with late success, aborted-install joiners, failed-removal restoration and shutdown/reopen. Require zero obsolete roots/listeners, no stale setup, physical handle disposal and preservation of sibling notifications.",
       "commands": [
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher-document-lifetime.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-remote-cancellation.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts --reporter=dot"
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher-document-lifetime.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts --reporter=dot"
       ],
       "testFiles": [
         "src/main/ipc/filesystem-watcher-document-lifetime.test.ts",
         "src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts",
-        "src/main/ipc/filesystem-watcher-remote-cancellation.test.ts",
         "src/main/ipc/filesystem-watcher-native-capacity.test.ts"
       ],
       "assertionRefs": [
@@ -882,22 +877,21 @@
           "file": "src/main/ipc/filesystem-watcher-document-lifetime.test.ts",
           "assertions": [
             "retains zero roots and listeners across 15 reloads and a renderer crash",
-            "does not revive a cancelled %s setup for a joiner whose document reloaded",
-            "does not re-arm an old provider snapshot into the same WebContents after replacement",
-            "does not restore a replaced sibling document after an awaited %s removal recovery",
+            "does not revive a cancelled setup for a joiner whose document reloaded",
+            "does not restore a replaced sibling document after an awaited removal recovery",
             "keeps same-document and blocked navigations alive, and removes lifecycle listeners at shutdown"
           ]
         }
       ],
       "evidenceRuns": [
         {
-          "date": "2026-09-25",
+          "date": "2026-10-22",
           "runner": "local",
           "platform": "macos",
-          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher-document-lifetime.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-remote-cancellation.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts --reporter=dot",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/ipc/filesystem-watcher-document-lifetime.test.ts src/main/ipc/filesystem-watcher-local-unsubscribe.test.ts src/main/ipc/filesystem-watcher-native-capacity.test.ts --reporter=dot",
           "result": "passed",
-          "durationSeconds": 1.08,
-          "summary": "45 tests across four focused suites pass. Broader watcher suite passes 146 plus one existing skipped; isolated publication without sibling #22995 passes 145 plus one existing skipped."
+          "durationSeconds": 0.99,
+          "summary": "33 tests across three focused suites pass after the dead SSH watcher was removed."
         }
       ],
       "runtimeBudget": {
@@ -910,14 +904,14 @@
       },
       "redGreenEvidence": {
         "status": "complete",
-        "evidence": "Seven permanent regressions fail with HEAD source substituted: cancelled joiner resurrection for local and SSH, restoration into replaced local/SSH documents, stale provider retry, shutdown listener retention, and root retention. All 13 document ownership cases pass after the change."
+        "evidence": "Seven permanent regressions failed with HEAD source substituted when this gate landed: cancelled joiner resurrection, restoration into replaced documents, stale retry, shutdown listener retention and root retention. The SSH cases went with the dead SSH watcher; the local cases remain."
       },
       "performanceBudget": {
         "required": true,
-        "evidence": "15 reloads plus crash: retained local/SSH/desired roots 16→0 each; pending setup aborted; sender lifecycle listeners 1→0. Actual ownership modules with synthetic handles; no native process/heap/latency claim. No new timer, polling, process scan or provider fanout; existing root cleanup runs at document end."
+        "evidence": "15 reloads plus crash: retained local roots 16→0; pending setup aborted; sender lifecycle listeners 1→0. Actual ownership modules with synthetic handles; no native process/heap/latency claim. No new timer, polling, process scan or provider fanout; existing root cleanup runs at document end."
       },
       "knownGaps": [
-        "No native Windows/Linux/WSL or live SSH execution.",
+        "No native Windows/Linux/WSL execution.",
         "No rendered Electron reload-reattachment/paint run or CI soak; broader watcher process isolation is a separate gate."
       ],
       "promotionCriteria": [
@@ -4582,8 +4576,7 @@
             "linked index bursts produce zero notifyWorktreesChanged calls and one debounced status-only notification",
             "linked HEAD and locked metadata still produce a structural worktree notification",
             "status-only head moves emit head identities without structural fanout and only when heads actually changed",
-            "structural notifications re-baseline head identities silently and SSH watches never read identities",
-            "SSH-shaped index renames are status-only while overflow remains conservatively structural"
+            "structural notifications re-baseline head identities silently"
           ]
         },
         {
@@ -4643,8 +4636,7 @@
           "file": "src/main/ipc/watched-worktree-catalog-notification.test.ts",
           "assertions": [
             "the watcher authority refreshes the host renderer and paired clients from one boundary",
-            "remote publication failure cannot suppress the host renderer refresh",
-            "nested SSH discoveries remain host-local until the existing event can preserve their owner identity"
+            "remote publication failure cannot suppress the host renderer refresh"
           ]
         },
         {
