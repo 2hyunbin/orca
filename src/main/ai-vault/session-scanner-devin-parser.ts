@@ -5,18 +5,17 @@ import type { ExecutionHostId } from '../../shared/execution-host'
 import type { FileWithMtime, SessionAccumulator } from './session-scanner-types'
 import type { TranscriptMessageSink } from './session-transcript-consumers'
 import {
-  addPreviewContent,
   createAccumulator,
   finalizeSession,
   sessionIdFromFileName,
   updateTimeline
 } from './session-scanner-accumulator'
+import { addSessionContent } from './session-scanner-messages'
 import {
   arrayValue,
   asRecord,
   extractContentText,
   extractString,
-  normalizeTitleText,
   numberValue
 } from './session-scanner-values'
 
@@ -79,18 +78,17 @@ function parseDevinSessionRecord(
   return finalizeSession(accumulator, platform, options)
 }
 
-function extractDevinStepText(step: Record<string, unknown>): string | null {
+function extractDevinStepContent(step: Record<string, unknown>): unknown {
   // ATIF-v1.7 carries `message` as a plain string; older shapes wrap it as {content}.
-  const messageText = extractString(step.message)
-  if (messageText) {
-    return messageText
+  if (typeof step.message === 'string' && step.message.trim()) {
+    return step.message
   }
   const message = asRecord(step.message)
   if (message) {
-    return extractContentText(message.content) ?? extractString(message.content)
+    return message.content ?? step.text ?? step.content
   }
   // ATIF also allows `message` as an array of content parts.
-  return extractContentText(step.message) ?? extractString(step.text)
+  return Array.isArray(step.message) ? step.message : (step.text ?? step.content)
 }
 
 // Each bucket resolves from the first source that reports it. ATIF
@@ -154,25 +152,18 @@ export function consumeDevinSessionStep(accumulator: SessionAccumulator, step: u
   const isUser = !isSystem && (source === 'user' || metadata?.is_user_input === true)
   if (isUser) {
     accumulator.messageCount++
-    const text =
-      extractDevinStepText(stepRecord) ??
-      extractContentText(stepRecord.content) ??
-      extractString(stepRecord.text)
-    const titleCandidate = normalizeTitleText(text ?? '')
+    const content = extractDevinStepContent(stepRecord)
+    const titleCandidate = extractContentText(content)
     if (titleCandidate) {
       accumulator.title ??= titleCandidate
     }
-    addPreviewContent(accumulator, 'user', text ?? stepRecord.content)
+    addSessionContent(accumulator, 'user', content)
   } else if (
     !isSystem &&
     (source === 'agent' || extractString(stepRecord.role) === 'assistant' || stepRecord.tool_calls)
   ) {
     accumulator.messageCount++
-    addPreviewContent(
-      accumulator,
-      'assistant',
-      extractDevinStepText(stepRecord) ?? stepRecord.content
-    )
+    addSessionContent(accumulator, 'assistant', extractDevinStepContent(stepRecord))
   }
 }
 

@@ -1,5 +1,11 @@
 import { expect, it, vi } from 'vitest'
-import { boundedText, transcriptMessagesFromContent } from './session-transcript-message-content'
+import {
+  boundedText,
+  transcriptMessageFromText,
+  transcriptMessagesFromDecodedMessage,
+  transcriptMessagesFromContent
+} from './session-transcript-message-content'
+import { decodeSessionMessage } from './session-decoded-message'
 import { asRecord } from './session-scanner-record-value'
 
 const AT = '2026-05-01T10:00:00.000Z'
@@ -66,6 +72,78 @@ it('does not apply the list preview cap', () => {
   const long = 'x'.repeat(5000)
   const [message] = transcriptMessagesFromContent('user', [{ type: 'text', text: long }], AT)
   expect(message.text).toHaveLength(5000)
+})
+
+it.each([
+  { tail: [], truncated: false },
+  { tail: ['', null, { type: 'image', source: {} }], truncated: false },
+  {
+    tail: [
+      { type: 'image', source: {} },
+      { type: 'text', text: 'later' }
+    ],
+    truncated: true
+  }
+])(
+  'only flags a full tool result when later text is omitted: $truncated',
+  ({ tail, truncated }) => {
+    const [message] = transcriptMessagesFromContent(
+      'user',
+      [
+        {
+          type: 'tool_result',
+          content: [{ type: 'text', text: 'x'.repeat(MESSAGE_LIMIT) }, ...tail]
+        }
+      ],
+      AT
+    )
+    expect(message.text).toBe('x'.repeat(MESSAGE_LIMIT))
+    expect(message.textTruncated).toBe(truncated ? true : undefined)
+  }
+)
+
+it('reports size limits and preserves truncation from an earlier limit', () => {
+  expect(
+    transcriptMessageFromText('user', 'x'.repeat(MESSAGE_LIMIT), AT)?.textTruncated
+  ).toBeUndefined()
+  const clipped = transcriptMessageFromText('user', `${'x'.repeat(MESSAGE_LIMIT - 1)}😀`, AT)
+  expect(clipped?.text).toBe('x'.repeat(MESSAGE_LIMIT - 1))
+  expect(clipped?.textTruncated).toBe(true)
+  expect(transcriptMessageFromText('tool', 'short prefix', AT, true)?.textTruncated).toBe(true)
+  expect(
+    transcriptMessagesFromContent(
+      'assistant',
+      [{ type: 'tool_use', name: 'Bash', input: { command: 'x'.repeat(2001) } }],
+      AT
+    )[0]?.textTruncated
+  ).toBe(true)
+})
+
+it('reads tool-result parts lazily and can project the same decoded result again', () => {
+  const decoded = decodeSessionMessage(
+    'user',
+    [
+      {
+        type: 'tool_result',
+        content: [
+          { type: 'text', text: 'x'.repeat(MESSAGE_LIMIT) },
+          { type: 'text', text: 'omitted text' },
+          {
+            type: 'text',
+            get text() {
+              throw new Error('Read beyond the tool-result safety limit')
+            }
+          }
+        ]
+      }
+    ],
+    AT
+  )
+  for (let read = 0; read < 2; read++) {
+    expect(transcriptMessagesFromDecodedMessage(decoded)).toEqual([
+      { role: 'tool', text: 'x'.repeat(MESSAGE_LIMIT), timestamp: AT, textTruncated: true }
+    ])
+  }
 })
 
 it('bounds joins for a large multi-block turn and keeps its later tool messages', () => {

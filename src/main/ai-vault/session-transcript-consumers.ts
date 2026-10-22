@@ -12,6 +12,7 @@ export type TranscriptMessage = {
   role: TranscriptMessageRole
   /** Decoded text, subject to the reader's safety limits. */
   text: string
+  /** A size limit omitted some decoded text. */
   textTruncated?: true
   timestamp: string | null
 }

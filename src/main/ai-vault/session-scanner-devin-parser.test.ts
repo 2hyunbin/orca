@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { parseDevinSessionFile } from './session-scanner-devin-parser'
+import { withFullFirstUserPromptCapture } from './session-scanner-first-user-prompt-capture'
+import type { TranscriptMessage } from './session-transcript-consumers'
 
 let tempDirs: string[] = []
 
@@ -12,6 +14,67 @@ afterEach(async () => {
 })
 
 describe('parseDevinSessionFile', () => {
+  it.each(
+    [
+      { shape: 'string', fields: (text: string) => ({ message: text }) },
+      { shape: 'wrapped string', fields: (text: string) => ({ message: { content: text } }) },
+      {
+        shape: 'wrapped blocks',
+        fields: (text: string) => ({
+          message: { content: text.split('\n').map((text) => ({ type: 'text', text })) }
+        })
+      },
+      {
+        shape: 'array',
+        fields: (text: string) => ({
+          message: text.split('\n').map((text) => ({ type: 'text', text }))
+        })
+      },
+      {
+        shape: 'content',
+        fields: (text: string) => ({
+          content: text.split('\n').map((text) => ({ type: 'text', text }))
+        })
+      },
+      { shape: 'text', fields: (text: string) => ({ text }) }
+    ].flatMap((shape) => [5000, 256 * 1024 + 1].map((length) => ({ ...shape, length })))
+  )(
+    'preserves $length-character $shape messages before display limits',
+    async ({ fields, length }) => {
+      const dir = await mkdtemp(join(tmpdir(), 'orca-devin-content-'))
+      tempDirs.push(dir)
+      const path = join(dir, 'content.json')
+      const text = `  first line\n${'x'.repeat(length)}\nlast line  `
+      await writeFile(
+        path,
+        JSON.stringify({
+          session_id: 'content',
+          steps: ['user', 'agent'].map((source) => ({ source, ...fields(text) }))
+        })
+      )
+      const messages: TranscriptMessage[] = []
+      const session = await withFullFirstUserPromptCapture(() =>
+        parseDevinSessionFile(
+          { path, mtimeMs: 1, modifiedAt: '2026-05-01T00:00:00.000Z' },
+          'linux',
+          { active: true, push: (message) => messages.push(message) }
+        )
+      )
+
+      expect(messages).toEqual(
+        ['user', 'assistant'].map((role) => ({
+          role,
+          text: text.slice(0, 256 * 1024),
+          timestamp: null,
+          ...(text.length > 256 * 1024 ? { textTruncated: true } : {})
+        }))
+      )
+      expect(session?.firstUserPrompt).toBe(text.trim().slice(0, 256 * 1024))
+      expect(session?.title).toHaveLength(96)
+      expect(session?.previewMessages.map((message) => message.text.length)).toEqual([220, 220])
+    }
+  )
+
   it('parses minimal ATIF transcript fixture', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'orca-devin-parser-'))
     tempDirs.push(dir)
