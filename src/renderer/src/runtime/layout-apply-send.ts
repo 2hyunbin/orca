@@ -138,6 +138,8 @@ export type WindowLayoutCommand =
       /** Records how the panes' agents resume without stopping them (a live or quit capture). */
       recordOnly?: true
     }
+  /** Main starts the pane if its terminal is not live; the window then attaches. */
+  | { type: 'startPane'; tabId: string; paneKey: string }
   | { type: 'wake'; tabId: string; paneKeys: [string] }
   /** Drops the panes' resume records without starting them. */
   | { type: 'wake'; tabId: string; paneKeys: string[]; recordOnly: true }
@@ -206,6 +208,7 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
     case 'movePaneToNewTab':
     case 'sleep':
     case 'wake':
+    case 'startPane':
     case 'setDefaultTabsApplied':
       return []
   }

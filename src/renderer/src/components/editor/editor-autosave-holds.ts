@@ -4,15 +4,26 @@ import { joinPath } from '@/lib/path'
 import { getOpenFilesForExternalFileChange, type EditorPathMutationTarget } from './editor-autosave'
 import { resolveEditorModelOwner, resolvedEditorModelOwnerKey } from './editor-model-owner'
 import type { EditorModelOwner } from './editor-model-owner'
-import { editorBufferOwnerPathKey } from '@/store/slices/editor/buffers/editor-buffer-identity'
+import {
+  editorBufferOwnerPathKey,
+  isLocalWindowsEditorOwner
+} from '@/store/slices/editor/buffers/editor-buffer-identity'
+import { parseWslUncPath } from '../../../../shared/wsl-paths'
 
 // Why not the model URI: it normalizes paths by the client's rules, so on a Windows client
 // `/repo/a\b.ts` and `/repo/a/b.ts` on a POSIX host would collide.
 function physicalFileKey(owner: EditorModelOwner, filePath: string): string | null {
   const ownerKey = resolvedEditorModelOwnerKey(owner)
-  return ownerKey === null
-    ? null
-    : JSON.stringify([ownerKey, editorBufferOwnerPathKey(filePath, owner)])
+  if (ownerKey === null) {
+    return null
+  }
+  // Why: a discard via `\\wsl$` must hold a tab opened via `\\wsl.localhost`. A tuple can't
+  // equal a real path string, so a share literally named `wsl` stays apart.
+  const wsl = isLocalWindowsEditorOwner(owner) ? parseWslUncPath(filePath) : null
+  const pathKey = wsl
+    ? ['wsl', wsl.distro.toLowerCase(), wsl.linuxPath]
+    : editorBufferOwnerPathKey(filePath, owner)
+  return JSON.stringify([ownerKey, pathKey])
 }
 
 /**
