@@ -1,15 +1,13 @@
 import { OrcaRuntimeWithResolveMobileSessionTerminalCommand } from './mobile-terminal-startup'
-import type { WorktreeStartupLaunch } from '../../../../shared/worktree/launch-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import type * as AgentSessionResume from '../../../../shared/agent-session-resume'
-import type { SpawnIntent } from '../../../../shared/host-spawn-admission'
-import type { AgentLaunchRuntime } from '../../../../shared/agent-launch-runtime'
+import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
 import type {
   RuntimeMobileSessionCreateTerminalResult,
   RuntimeMobileSessionTabsSnapshot,
-  RuntimeMobileSessionTerminalTab,
-  RuntimeTerminalPresentation
+  RuntimeMobileSessionTerminalTab
 } from '../../../../shared/runtime-types'
+import type { OwnedMobileTerminalCreateOptions } from './mobile-terminal-create'
+export type { OwnedMobileTerminalCreateOptions } from './mobile-terminal-create'
 import { randomUUID } from 'node:crypto'
 import { copySleepingAgentLaunchConfig } from '../../runtime-agent-launch-resolution'
 import { deriveRemoteRuntimeTerminalCreateHandle } from '../../remote-runtime-terminal-create-identity'
@@ -27,36 +25,11 @@ import {
 
 const OWNED_MOBILE_DISPATCH_RECIPE_TTL_MS = 15 * 60_000
 
-export type OwnedMobileTerminalCreateOptions = {
-  command?: string
-  shellOverride?: string
-  cwd?: string
-  env?: Record<string, string>
-  envToDelete?: string[]
-  startupCommandDelivery?: WorktreeStartupLaunch['startupCommandDelivery']
-  identity?: { tabId: string; leafId: string; sessionId?: string }
-  createMutation?: { clientIdentity: string; id: string }
-  launchAgent?: TuiAgent
-  viewMode?: 'terminal' | 'chat'
-  targetGroupId?: string
-  afterDesktopTabId?: string
-  presentation?: RuntimeTerminalPresentation
-  supportsSplitGroupPlacement?: boolean
-  launchConfig?: AgentSessionResume.SleepingAgentLaunchConfig
-  resumeProviderSession?: AgentSessionResume.AgentProviderSessionMetadata
-  resumeOrigin?: 'saved' | 'switch'
-  spawnIntent?: SpawnIntent
-  launchRuntime?: AgentLaunchRuntime
-  signal?: AbortSignal
-  refuseSleptWorktree?: boolean
-  resumesSleepingRecord?: true
-}
-
 export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
   private readonly ownedMobileDispatchRecipes = new Map<
     string,
     {
-      launchConfig?: AgentSessionResume.SleepingAgentLaunchConfig
+      launchConfig?: SleepingAgentLaunchConfig
       launchAgent?: TuiAgent
       connectionId: string | null
       recordedAt: number
@@ -219,8 +192,9 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
         terminalHandle: terminal.handle
       })
     }
-    const parentTabId = livePty.pty.tabId ?? `pty:${livePty.pty.ptyId}`
-    const leafId = parsePaneKey(livePty.pty.paneKey ?? '')?.leafId ?? randomUUID()
+    const recorded = this.paneOfPty(livePty.pty)
+    const parentTabId = recorded.tabId ?? `pty:${livePty.pty.ptyId}`
+    const leafId = parsePaneKey(recorded.paneKey ?? '')?.leafId ?? randomUUID()
     const existing = this.mobileSessionTabsByWorktree.get(worktreeId)
     const existingSurface =
       existing?.tabs.find(

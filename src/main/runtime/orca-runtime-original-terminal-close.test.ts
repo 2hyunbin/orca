@@ -112,9 +112,7 @@ describe('original-aware terminal close owner transaction', () => {
           }
         }))
       }
-      // SAFETY: this invokes the actual archive removal to exercise earned exit with no PTY record.
-      const archive = harness.runtime as unknown as { dropDisconnectedPtyRecord(id: string): void }
-      archive.dropDisconnectedPtyRecord(PTY_ID)
+      harness.runtime.dropArchivedPtyRecord(PTY_ID)
       if (readable) {
         expect(
           harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID).handle

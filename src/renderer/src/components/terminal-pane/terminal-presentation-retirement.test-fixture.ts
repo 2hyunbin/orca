@@ -1,48 +1,87 @@
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
+import { renderHook } from '@testing-library/react'
+import { Terminal } from '@xterm/xterm'
+import { SearchAddon } from '@xterm/addon-search'
+import { SerializeAddon } from '@xterm/addon-serialize'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebglAddon } from '@xterm/addon-webgl'
+import { ImageAddon } from '@xterm/addon-image'
 import type { ManagedPaneInternal } from '@/lib/pane-manager/pane-manager-types'
-import type { PaneManager } from '@/lib/pane-manager/pane-manager'
+import { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { retireManagedPanePreservingPty } from '@/lib/pane-manager/pane-split-close'
 import { createTerminalPaneClosedHandler } from './terminal-pane-pane-closed'
 import { registerTerminalPaneMount } from './terminal-pane-mount-registration'
 import { cleanupTerminalPaneMount } from './terminal-pane-mount-cleanup'
 import { installTerminalPaneMountEvents } from './terminal-pane-mount-events'
 import type { PaneClosedHandlerContext } from './terminal-pane-mount-context'
+import { useTerminalPaneLifecycleRefs } from './use-terminal-pane-lifecycle-refs'
+import type { UseTerminalPaneLifecycleDeps } from './terminal-pane-lifecycle-types'
+import type { PtyTransport } from './pty-transport-types'
 import { useAppStore } from '@/store'
 
 export const LEAF = '11111111-1111-4111-8111-111111111111'
 export const SIBLING = '22222222-2222-4222-8222-222222222222'
 
+function disposable<T extends { dispose(): void }>(value: T): T {
+  return Object.assign(value, { dispose: vi.fn<() => void>() })
+}
+
 function pane(id: number, leafId: string): ManagedPaneInternal {
-  const terminal = {
-    dispose: vi.fn(),
-    clearSelection: vi.fn(),
-    focus: vi.fn(),
-    buffer: { active: { type: 'normal', viewportY: 0, baseY: 0 } }
-  }
-  const addon = () => ({ dispose: vi.fn() })
+  const terminal = disposable(new Terminal())
+  vi.spyOn(terminal, 'clearSelection').mockImplementation(() => {})
+  vi.spyOn(terminal, 'focus').mockImplementation(() => {})
   const container = document.createElement('div')
   container.classList.add('pane')
   container.dataset.leafId = leafId
-  // SAFETY: real disposal reads only the listed terminal/addon lifecycle and optional resources.
   return {
     id,
     leafId,
     stablePaneId: leafId,
     terminal,
     container,
-    searchAddon: addon(),
-    serializeAddon: addon(),
-    unicode11Addon: addon(),
-    webLinksAddon: addon(),
-    fitAddon: addon(),
-    webglAddon: addon(),
-    imageAddon: addon(),
+    xtermContainer: container,
+    linkTooltip: document.createElement('div'),
+    terminalGpuAcceleration: 'off',
+    gpuRenderingEnabled: false,
+    webglAttachmentDeferred: false,
+    webglDisabledAfterContextLoss: false,
+    hasComplexScriptOutput: false,
+    compositionHandler: null,
+    pendingSplitScrollState: null,
+    debugLabel: null,
+    searchAddon: disposable(new SearchAddon()),
+    serializeAddon: disposable(new SerializeAddon()),
+    unicode11Addon: disposable(new Unicode11Addon()),
+    webLinksAddon: disposable(new WebLinksAddon()),
+    fitAddon: disposable(new FitAddon()),
+    webglAddon: disposable(new WebglAddon()),
+    imageAddon: disposable(new ImageAddon()),
     ligaturesAddon: null,
     fitResizeObserver: null,
     pendingObservedFitRafId: null,
     paneDragCleanup: vi.fn(),
     focusClassSyncCleanup: vi.fn()
-  } as unknown as ManagedPaneInternal
+  }
+}
+
+type MountedOwner = {
+  source: ManagedPaneInternal
+  other: ManagedPaneInternal
+  panes: Map<number, ManagedPaneInternal>
+  sourceTransport: PtyTransport
+  transports: Map<number, PtyTransport>
+  binding: { dispose: Mock }
+  bindings: Map<number, { dispose: Mock }>
+  link: { dispose: Mock }
+  onLayoutChanged: Mock
+  manager: PaneManager
+  empty: Mock<() => void>
+  cancelResize: Mock
+  expandedElement: HTMLDivElement
+  setPaneCount: UseTerminalPaneLifecycleDeps['setPaneCount']
+  unregister: () => void
 }
 
 /** Uses the production tree teardown, real pane disposer and real mount closure callback. */
@@ -54,40 +93,34 @@ export function mountedOwner(
     leafId: LEAF,
     ptyId: 'pty-1'
   }
-) {
+): MountedOwner {
   const source = pane(1, address.leafId)
   const other = pane(2, SIBLING)
   const panes = new Map([[1, source], ...(split ? [[2, other] as const] : [])])
-  const sourceTransport = { getPtyId: () => address.ptyId, detach: vi.fn(), destroy: vi.fn() }
+  const sourceTransport: PtyTransport = {
+    getPtyId: () => address.ptyId,
+    detach: vi.fn(),
+    destroy: vi.fn(),
+    connect: vi.fn(),
+    attach: vi.fn(),
+    disconnect: vi.fn(),
+    sendInput: () => true,
+    sendInputImmediate: () => true,
+    resize: () => true,
+    isConnected: () => false
+  }
   const transports = new Map([[1, sourceTransport]])
   const binding = { dispose: vi.fn() }
   const bindings = new Map([[1, binding]])
-  const ref = () => ({ current: new Map() })
-  const refs = Object.fromEntries(
-    [
-      'linkProviderDisposablesRef',
-      'terminalHandleLinkDisposablesRef',
-      'linkifierClickPrimingDisposablesRef',
-      'linkPointerGesturesRef',
-      'fileLinkClickFallbackDisposablesRef',
-      'httpLinkClickFallbackDisposablesRef',
-      'selectionDisposablesRef',
-      'nativeCopyDisposablesRef',
-      'imeCompositionDisposablesRef',
-      'imeNativeTextForwarderDisposablesRef',
-      'selectionCaptureTimersRef',
-      'osc52DisposablesRef',
-      'osc7DisposablesRef',
-      'mouseHideDisposablesRef',
-      'restoredViewportBlankingPanesRef'
-    ].map((name) => [name, ref()])
-  )
+  const lifecycleRefs = renderHook(useTerminalPaneLifecycleRefs)
+  const refs = lifecycleRefs.result.current
+  const ref = <T>() => ({ current: new Map<number, T>() })
   const link = { dispose: vi.fn() }
   refs.linkProviderDisposablesRef.current.set(1, link)
   const state = useAppStore.getState()
   let manager: PaneManager
   const managerRef: { current: PaneManager | null } = { current: null }
-  const deps = {
+  const deps: UseTerminalPaneLifecycleDeps = {
     tabId: address.tabId,
     worktreeId: address.worktreeId,
     managerRef,
@@ -99,7 +132,7 @@ export function mountedOwner(
     paneLastThemeModeRef: ref(),
     paneCwdRef: ref(),
     paneFontSizesRef: ref(),
-    replayingPanesRef: ref(),
+    replayingPanesRef: refs.replayingPanesRef,
     clearRuntimePaneTitle: state.clearRuntimePaneTitle,
     syncPanePtyLayoutBinding: vi.fn(),
     clearTabPtyId: state.clearTabPtyId,
@@ -111,51 +144,77 @@ export function mountedOwner(
     setTabCanExpandPane: state.setTabCanExpandPane,
     updateTabTitle: state.updateTabTitle,
     persistLayoutSnapshot: vi.fn(),
-    getTabWideAgentHintLeafId: () => null
+    getTabWideAgentHintLeafId: () => null,
+    isActive: false,
+    isVisible: false,
+    systemPrefersDark: false,
+    settings: null,
+    settingsRef: { current: null },
+    requestOpenLinksInAppPreference: vi.fn(),
+    requestTerminalLinkAction: vi.fn(),
+    effectiveMacOptionAsAlt: 'false',
+    effectiveMacOptionAsAltRef: { current: 'false' },
+    initialLayoutRef: { current: { root: { type: 'leaf', leafId: address.leafId } } },
+    expandedStyleSnapshotRef: { current: new Map() },
+    isActiveRef: { current: false },
+    isVisibleRef: { current: false },
+    onPtyExitRef: { current: vi.fn() },
+    onAgentExitedRef: { current: vi.fn() },
+    consumeSuppressedPtyExit: () => false,
+    isPtyShutdownPending: () => false,
+    setRuntimePaneTitle: state.setRuntimePaneTitle,
+    updateTabPtyId: state.updateTabPtyId,
+    markTerminalBell: state.markTerminalBell,
+    onShowSessionRestoredBanner: vi.fn(),
+    dispatchNotification: vi.fn(),
+    setCacheTimerStartedAt: vi.fn(),
+    clearExitedPanePtyLayoutBinding: vi.fn(),
+    setExpandedPane: vi.fn(),
+    syncExpandedLayout: vi.fn(),
+    showPaneTitle: vi.fn(),
+    setPaneLayoutRevision: vi.fn()
   }
-  // SAFETY: this fixture exercises only registration and the concrete closure handler, using their dependencies above.
-  const context = {
+  const context: Pick<
+    PaneClosedHandlerContext,
+    'deps' | 'refs' | 'deferredSplitHandoffs' | 'getOwnedManager'
+  > = {
     deps,
     refs,
     deferredSplitHandoffs: new Map(),
     getOwnedManager: () => manager
-  } as unknown as Pick<
-    PaneClosedHandlerContext,
-    'deps' | 'refs' | 'deferredSplitHandoffs' | 'getOwnedManager'
-  >
+  }
   const onPaneClosed = createTerminalPaneClosedHandler(context)
   const onLayoutChanged = vi.fn()
-  // SAFETY: the mount's manager adapter delegates its permanent removal to the production mutation/disposer.
-  manager = {
-    getPanes: () => [...panes.values()],
-    getActivePane: () => panes.get(2) ?? panes.get(1) ?? null,
-    retirePanePreservingPty: (id: number, permanent: boolean, failures?: unknown[]) =>
-      retireManagedPanePreservingPty(
-        {
-          paneId: id,
-          failures,
-          activePaneId: 1,
-          panes,
-          root: document.createElement('div'),
-          styleOptions: {},
-          managerOptions: { linkOpenHint: () => '', onPaneClosed, onLayoutChanged },
-          getDragCallbacks: () => ({
-            getPanes: () => panes,
-            getRoot: () => source.container,
-            getStyleOptions: () => ({}),
-            isDestroyed: () => false,
-            safeFit: vi.fn(),
-            applyPaneOpacity: vi.fn(),
-            applyDividerStyles: vi.fn(),
-            refitPanesUnder: vi.fn()
-          }),
-          releasePaneIdentity: vi.fn(),
-          setActivePaneId: vi.fn()
-        },
-        permanent
-      ),
-    destroy: vi.fn()
-  } as unknown as PaneManager
+  manager = new PaneManager(document.createElement('div'), { linkOpenHint: () => '' })
+  vi.spyOn(manager, 'getPanes').mockImplementation(() => [...panes.values()])
+  vi.spyOn(manager, 'getActivePane').mockImplementation(() => panes.get(2) ?? panes.get(1) ?? null)
+  vi.spyOn(manager, 'retirePanePreservingPty').mockImplementation((id, permanent, failures) =>
+    retireManagedPanePreservingPty(
+      {
+        paneId: id,
+        failures,
+        activePaneId: 1,
+        panes,
+        root: document.createElement('div'),
+        styleOptions: {},
+        managerOptions: { linkOpenHint: () => '', onPaneClosed, onLayoutChanged },
+        getDragCallbacks: () => ({
+          getPanes: () => panes,
+          getRoot: () => source.container,
+          getStyleOptions: () => ({}),
+          isDestroyed: () => false,
+          safeFit: vi.fn(),
+          applyPaneOpacity: vi.fn(),
+          applyDividerStyles: vi.fn(),
+          refitPanesUnder: vi.fn()
+        }),
+        releasePaneIdentity: vi.fn(),
+        setActivePaneId: vi.fn()
+      },
+      permanent
+    )
+  )
+  vi.spyOn(manager, 'destroy')
   managerRef.current = manager
   const cancelResize = vi.fn()
   const expandedElement = document.createElement('div')
@@ -170,8 +229,7 @@ export function mountedOwner(
       syncCanExpandState: vi.fn(),
       queueResizeAll: vi.fn()
     },
-    // SAFETY: event installation only captures these dependencies; no split command is issued.
-    ptyDeps: {} as Parameters<typeof installTerminalPaneMountEvents>[0]['ptyDeps']
+    ptyDeps: { ...deps, mountFollowsTerminalPark: false }
   })
   const empty = vi.fn(() => {
     removeMountEvents()
@@ -208,6 +266,8 @@ export function mountedOwner(
     unregister: () => {
       removeMountEvents()
       registration.unregisterRuntimeTab()
+      manager.destroy()
+      lifecycleRefs.unmount()
     }
   }
 }

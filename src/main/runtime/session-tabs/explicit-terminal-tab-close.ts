@@ -64,7 +64,7 @@ export abstract class OrcaRuntimeWithExplicitTerminalTabClose extends OrcaRuntim
       }
       const tabId =
         this.resolvePtyTabCloseSurfaceAuthority(closeAuthority)?.surface.tab.parentTabId ??
-        pty.pty.tabId
+        this.paneOfPty(pty.pty).tabId
       if (!tabId) {
         return this.closeTerminal(handle)
       }

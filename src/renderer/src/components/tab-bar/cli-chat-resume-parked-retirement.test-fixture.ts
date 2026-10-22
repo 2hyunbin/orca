@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
 import { useAppStore } from '@/store'
 import type { CliChatResumeTestMocks } from './cli-chat-resume-mocks.test-fixture'
 import { LEAF_1, LEAF_2 } from '../terminal-pane/pty-connection-test-pane-fixtures'
@@ -10,7 +10,10 @@ import {
   parkedWatchersByTabId
 } from '../terminal-pane/terminal-parked-watcher-registry'
 
-export function installExitedPaneRetirement(mocks: CliChatResumeTestMocks) {
+export function installExitedPaneRetirement(mocks: CliChatResumeTestMocks): {
+  closed: Mock
+  siblingWatcher: Mock
+} {
   const closed = vi.fn()
   const siblingWatcher = vi.fn()
   capturedPanesByTabId.set('shell', {

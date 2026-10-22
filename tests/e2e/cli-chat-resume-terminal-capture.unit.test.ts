@@ -65,9 +65,7 @@ it('captures the authenticated original after earned shell exit and cleared rend
       [TAB_ID]: { ...state.terminalLayoutsByTabId[TAB_ID], ptyIdsByLeafId: {} }
     }
   }))
-  // SAFETY: exercise retained earned-exit authority after the actual archive owner releases its record.
-  const archive = harness.runtime as unknown as { dropDisconnectedPtyRecord(id: string): void }
-  archive.dropDisconnectedPtyRecord(PTY_ID)
+  harness.runtime.dropArchivedPtyRecord(PTY_ID)
   seed(harness)
   rpc.mockImplementation(async () => ({
     terminal: harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)

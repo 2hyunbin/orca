@@ -5,8 +5,12 @@ import type * as ResumeSourceModule from './cli-chat-resume-source'
 import type * as RuntimeRpcModule from '@/runtime/runtime-rpc-client'
 import type { AgentSessionWireRefusal } from '../../../../shared/agent-session-wire'
 import type { StructuredAgentSessionCreateParams } from '../../../../shared/structured-agent-session-create'
+import type * as FrameDrawnChatTabPlacementModule from '@/lib/frame-drawn-chat-tab-placement'
 
-import type { CliChatResumeTestMocks } from './cli-chat-resume-mocks.test-fixture'
+import {
+  seedCliChatResumeRpc,
+  type CliChatResumeTestMocks
+} from './cli-chat-resume-mocks.test-fixture'
 
 const mocks: CliChatResumeTestMocks = vi.hoisted(() => {
   const state: { source: CliChatResumeSource | null } = { source: null }
@@ -17,6 +21,7 @@ const mocks: CliChatResumeTestMocks = vi.hoisted(() => {
     createCapability: vi.fn(),
     call: vi.fn(),
     toast: vi.fn(),
+    frameDrawn: false,
     success: vi.fn(),
     activate: vi.fn(async () => true),
     activateVerified: vi.fn(async () => 'activated'),
@@ -77,6 +82,19 @@ vi.mock('@/lib/structured-agent-session-create-hydration', () => ({
   publishStructuredAgentSessionCreateHydration: vi.fn()
 }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toast, success: mocks.success } }))
+// A frame-drawn server workspace's create carries the tab's place, read as it is sent.
+vi.mock('@/lib/frame-drawn-chat-tab-placement', async (importOriginal) => {
+  const actual = await importOriginal<typeof FrameDrawnChatTabPlacementModule>()
+  return {
+    ...actual,
+    withFrameDrawnChatTabPlacement: (
+      intent: Parameters<typeof actual.withFrameDrawnChatTabPlacement>[0]
+    ) =>
+      mocks.frameDrawn
+        ? { ...intent.params, tabPlacement: { groupId: 'g-1' } }
+        : actual.withFrameDrawnChatTabPlacement(intent)
+  }
+})
 vi.mock('@/lib/activate-ai-vault-structured-session', () => ({
   activateAiVaultStructuredSession: mocks.activate,
   activateAiVaultStructuredSessionVerified: mocks.activateVerified
@@ -196,30 +214,8 @@ beforeEach(async () => {
   mocks.source = SOURCE
   mocks.realSource = false
   mocks.switchCapability.mockResolvedValue(false)
-  mocks.rpc.mockImplementation(async (_target, method) =>
-    method === 'terminal.resolvePane'
-      ? {
-          terminal: {
-            handle: 'handle-1',
-            ptyId: 'pty-1',
-            incarnationId: 'i1',
-            presentation: {
-              identity: {
-                worktreeId: 'wt-1',
-                tabId: mocks.source?.tabId ?? 'tab-1',
-                leafId: mocks.source?.paneKey.split(':')[1] ?? 'leaf-1',
-                createdAt: 1,
-                generation: 0,
-                hasLeaf: true,
-                ptyId: 'pty-1',
-                incarnationId: 'i1'
-              },
-              holders: []
-            }
-          }
-        }
-      : { close: { ptyKilled: true } }
-  )
+  seedCliChatResumeRpc(mocks)
+  mocks.frameDrawn = false
   mocks.sourceCapability.mockResolvedValue(true)
   mocks.createCapability.mockResolvedValue(true)
   mocks.call.mockImplementation(
@@ -611,31 +607,38 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect(tabs()).toHaveLength(1)
   })
 
-  it('still opens an eager History joiner after the terminal closes before create', async () => {
-    const capability = deferred<boolean>()
-    mocks.createCapability.mockReturnValue(capability.promise)
-    const running = runCliChatResume(SOURCE)
-    await vi.waitFor(() => expect(mocks.createCapability).toHaveBeenCalledOnce())
-    const eager = beginStructuredAgentSessionProvisionalLaunch({
-      hooks: {},
-      plan: adoptAgentSessionLaunchVerdict({
-        route: 'structured-native-chat',
-        requestId: newAgentLaunchRequestId(),
-        agent: 'claude',
-        worktreeId: 'wt-1',
-        executionHostId: 'local',
-        resumeFrom: { providerSessionId: 'provider-1' }
+  it.each([false, true])(
+    'still opens an eager History joiner after the terminal closes before create (frame-drawn: %s)',
+    async (frameDrawn) => {
+      mocks.frameDrawn = frameDrawn
+      const capability = deferred<boolean>()
+      mocks.createCapability.mockReturnValue(capability.promise)
+      const running = runCliChatResume(SOURCE)
+      await vi.waitFor(() => expect(mocks.createCapability).toHaveBeenCalledOnce())
+      const eager = beginStructuredAgentSessionProvisionalLaunch({
+        hooks: {},
+        plan: adoptAgentSessionLaunchVerdict({
+          route: 'structured-native-chat',
+          requestId: newAgentLaunchRequestId(),
+          agent: 'claude',
+          worktreeId: 'wt-1',
+          executionHostId: 'local',
+          resumeFrom: { providerSessionId: 'provider-1' }
+        })
       })
-    })
-    mocks.source = null
-    useAppStore.setState({})
-    capability.resolve(true)
-    await Promise.all([running, eager?.settlement])
-    expect(mocks.call).toHaveBeenCalledOnce()
-    expect(mocks.call.mock.calls[0][2].resumeFrom).toEqual({ providerSessionId: 'provider-1' })
-    expect(tabs()).toHaveLength(1)
-    expect(mocks.toast).not.toHaveBeenCalled()
-  })
+      mocks.source = null
+      useAppStore.setState({})
+      capability.resolve(true)
+      await Promise.all([running, eager?.settlement])
+      expect(mocks.call).toHaveBeenCalledOnce()
+      expect(mocks.call.mock.calls[0][2].resumeFrom).toEqual({ providerSessionId: 'provider-1' })
+      expect(mocks.call.mock.calls[0][2].tabPlacement).toEqual(
+        frameDrawn ? { groupId: 'g-1' } : undefined
+      )
+      expect(tabs()).toHaveLength(1)
+      expect(mocks.toast).not.toHaveBeenCalled()
+    }
+  )
 
   it.each([
     ['reply', 'B', 'B E S R', 'B E S D R'],
