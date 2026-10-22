@@ -464,6 +464,36 @@ describe('a desktop-only editor tab when the server’s frames take its workspac
     expect(openFileIds(store)).toEqual([kept.fileId])
   })
 
+  it('closes the server’s copy of a tab closed after its open applied, while another was in flight', async () => {
+    const store = mirroredStore()
+    const first = openDesktopFile(store, FILE_PATH)
+    const second = openDesktopFile(store, SECOND_PATH)
+    const server = serverWith()
+    server.answer = 'pending'
+    await connect(store, server)
+    server.release(1)
+    await settle()
+    await settle()
+    expect(server.layout(WT)?.tabs.map((tab) => tab.id)).toContain(first.tabId)
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+
+    store.getState().closeFile(first.fileId)
+    server.answer = 'apply'
+    server.release()
+    await settle()
+    await settle()
+    await settle()
+
+    expect(hoisted.closeSessionTab).toHaveBeenCalledTimes(1)
+    expect(hoisted.closeSessionTab).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreeId: WT, tabId: first.tabId, environmentId: ENV })
+    )
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+    expect(server.layout(WT)?.tabs.map((tab) => tab.id)).not.toContain(first.tabId)
+    expect(editorTabIds(store)).toEqual([second.tabId])
+    expect(openFileIds(store)).toEqual([second.fileId])
+  })
+
   it('stays mirror-drawn when the server’s copy of a tab closed mid-hand-over cannot be closed', async () => {
     const store = mirroredStore()
     const closed = openDesktopFile(store, FILE_PATH)
@@ -568,6 +598,43 @@ describe('closing a desktop editor tab after the hand-over', () => {
     expect(server.layout(WT)?.tabs.map((tab) => tab.id)).not.toContain(tabId)
     expect(editorTabIds(store)).toEqual([])
     expect(openFileIds(store)).toEqual([])
+  })
+
+  it('closes a tab the server opened, in the frame-drawn workspace, by session.tabs.close', async () => {
+    const store = mirroredStore()
+    const server = serverWith()
+    await connect(store, server)
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+    // Opened on the server itself (a phone, say): its frame draws it here.
+    await server.reply({
+      type: 'openEditorTab',
+      tabId: 'server-editor-tab',
+      fileId: serverFileId(FILE_PATH),
+      contentType: 'editor',
+      file: { filePath: FILE_PATH, relativePath: 'src/a.ts', language: 'typescript' },
+      groupId: HOST_GROUP,
+      workspace: WT
+    })
+    await settle()
+    expect(editorTabIds(store)).toEqual(['server-editor-tab'])
+    expect(openFileIds(store)).toEqual([desktopFileId(FILE_PATH)])
+
+    store.getState().closeFile(desktopFileId(FILE_PATH))
+    await settle()
+    await settle()
+
+    expect(hoisted.closeSessionTab).toHaveBeenCalledTimes(1)
+    expect(hoisted.closeSessionTab).toHaveBeenCalledWith(
+      expect.objectContaining({
+        worktreeId: WT,
+        tabId: 'server-editor-tab',
+        environmentId: ENV,
+        reason: 'user'
+      })
+    )
+    expect(layoutCloses()).toEqual([])
+    expect(server.layout(WT)?.tabs.map((tab) => tab.id)).not.toContain('server-editor-tab')
+    expect(editorTabIds(store)).toEqual([])
   })
 
   it.each([

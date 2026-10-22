@@ -61,7 +61,11 @@ function desktopOnlyEditorOpens(
 }
 
 /** Whether the window still shows the tab with this desktop's own file, not a mirror's copy. */
-function showsDesktopTab(state: AppState, key: string, open: EditorOpen): boolean {
+function showsDesktopTab(
+  state: AppState,
+  key: string,
+  open: Pick<EditorOpen, 'tabId' | 'fileId'>
+): boolean {
   return (state.unifiedTabsByWorktree[key] ?? []).some(
     (tab) => tab.id === open.tabId && tab.entityId === open.fileId
   )
@@ -71,8 +75,8 @@ function showsDesktopTab(state: AppState, key: string, open: EditorOpen): boolea
  * Hands a workspace's desktop-only editor tabs to the server's main, then reports when all have
  * answered. A resent open the server already applied answers ok (drawnTabOpen); any refusal, even
  * `tab_exists` (the id is another tab's there), or a failed call, keeps the workspace mirror-drawn
- * for the rest of this stream. A tab the user closed while its open was in flight is closed on the
- * server before the workspace gates, so its frames never draw it back.
+ * for the rest of this stream. A tab the user closed after its open was sent is closed on the server
+ * before the workspace gates, so its frames never draw it back.
  */
 export function createServerEditorHandover(options: {
   environmentId: string
@@ -81,7 +85,8 @@ export function createServerEditorHandover(options: {
   /** A workspace's hand-overs all answered: it may gate now. */
   onAnswered: () => void
 }): ServerEditorHandover {
-  const handedOver = new Map<string, Set<string>>()
+  /** Per workspace: each handed-over tab's id and this desktop's file id for it. */
+  const handedOver = new Map<string, Map<string, string>>()
   const waiting = new Map<string, number>()
   const notGateable = new Set<string>()
   let closed = false
@@ -96,7 +101,7 @@ export function createServerEditorHandover(options: {
     options.onAnswered()
   }
 
-  /** The server applied an open for a tab the user closed meanwhile: its close goes there too. */
+  /** The server holds a tab the user closed meanwhile: its close goes there too. */
   const closeOnServer = (key: string, tabId: string): void => {
     void closeWebRuntimeSessionTab({
       worktreeId: key,
@@ -127,8 +132,8 @@ export function createServerEditorHandover(options: {
         return
       }
       if (reply?.ok) {
-        const tabs = handedOver.get(key) ?? new Set()
-        handedOver.set(key, tabs.add(open.tabId))
+        const tabs = handedOver.get(key) ?? new Map<string, string>()
+        handedOver.set(key, tabs.set(open.tabId, open.fileId))
       } else {
         console.warn(
           '[layout-owner] an editor tab stays on this desktop:',
@@ -145,15 +150,23 @@ export function createServerEditorHandover(options: {
         return false
       }
       // Recomputed on each ask: a tab opened meanwhile goes too, and a tab closed meanwhile does not.
-      const opens = desktopOnlyEditorOpens(
-        options.getState(),
-        key,
-        options.serverLayout(key)
-      ).filter((open) => !handedOver.get(key)?.has(open.tabId))
-      if (opens.length === 0) {
+      const state = options.getState()
+      const tabs = handedOver.get(key)
+      const opens = desktopOnlyEditorOpens(state, key, options.serverLayout(key)).filter(
+        (open) => !tabs?.has(open.tabId)
+      )
+      // Handed over, then closed here before the gate: the server's frames would draw it back.
+      const closedSince = [...(tabs ?? [])].flatMap(([tabId, fileId]) =>
+        showsDesktopTab(state, key, { tabId, fileId }) ? [] : [tabId]
+      )
+      if (opens.length === 0 && closedSince.length === 0) {
         return true
       }
-      waiting.set(key, opens.length)
+      waiting.set(key, opens.length + closedSince.length)
+      for (const tabId of closedSince) {
+        tabs?.delete(tabId)
+        closeOnServer(key, tabId)
+      }
       for (const open of opens) {
         sendToServerMain(options.environmentId, key, serverEditorOpen(key, open), answer(key, open))
       }

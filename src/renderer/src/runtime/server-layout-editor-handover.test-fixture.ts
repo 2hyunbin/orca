@@ -104,9 +104,9 @@ export function createFakeServerMain(
       const reply = apply({ type: 'closeTabs', tabIds: [tabId], workspace })
       return reply.ok && reply.result.closed?.includes(tabId) ? 'applied' : 'unknown-tab'
     },
-    /** Applies every held command now and answers it. */
-    release: (): void => {
-      for (const { command, resolve } of held.splice(0)) {
+    /** Applies the first `count` held commands (all by default) now and answers them. */
+    release: (count = held.length): void => {
+      for (const { command, resolve } of held.splice(0, count)) {
         resolve(apply(command))
       }
     }
