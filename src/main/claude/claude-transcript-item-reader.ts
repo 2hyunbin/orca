@@ -33,5 +33,25 @@ export function createClaudeTranscriptItemReader(journal: StructuredAgentSession
     }
     return scope
   }
-  return { saved, scopeOf, dependencies }
+  const promptScope = (item: AgentJournalRenderItem, queued: boolean) => {
+    if (queued) {
+      const scope = scopeOf(item)
+      return scope.kind === 'turn' ? scope : undefined
+    }
+    let scope: AgentJournalTurnScope | undefined
+    journal.visitItems((itemId, _sequence, body) => {
+      if (
+        body.kind === 'turn' &&
+        body.userItemId &&
+        journal.canonicalItemId(body.userItemId) === item.itemId
+      ) {
+        const turn = saved(itemId)
+        if (turn) {
+          scope = scopeOf({ ...item, turnScope: { kind: 'turn', turnItemId: itemId } })
+        }
+      }
+    })
+    return scope
+  }
+  return { saved, scopeOf, promptScope, dependencies }
 }

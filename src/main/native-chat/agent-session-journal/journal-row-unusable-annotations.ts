@@ -49,6 +49,7 @@ function dropUnusableTurnScope(record: Record<string, unknown>): void {
     !(
       isPlainObject(scope) &&
       (scope.kind === 'thread' ||
+        scope.kind === 'unknown' ||
         (scope.kind === 'turn' &&
           typeof scope.turnItemId === 'string' &&
           scope.turnItemId.length > 0))

@@ -101,6 +101,7 @@ function sessionHoldingTurn(turnId: string | null): ReturnType<typeof sessionFor
       whenWritten: () => undefined
     },
     currentTurnId: turnId,
+    currentTurnScope: () => ({ kind: 'thread' }),
     commandTurnId: null,
     beginCommand: vi.fn(),
     forgetCommand: vi.fn(),

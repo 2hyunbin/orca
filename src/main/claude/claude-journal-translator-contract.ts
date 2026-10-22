@@ -1,6 +1,7 @@
 // What the rest of a Claude session asks of its journal translator.
 
 import type { AgentSessionContextReport } from '../../shared/agent-session-context-usage'
+import type { AgentJournalTurnScope } from '../../shared/agent-session-journal-types'
 import type { StructuredAgentSessionSinkAdmission } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import type { ClaudeChildToolQueries } from './claude-child-tool-queries'
 import type { ClaudeContextReportPart, ClaudeContextReportTarget } from './claude-context-facts'
@@ -17,6 +18,7 @@ export type ClaudeJournalTranslator = {
   /** The open turn's provider id — the same id its journal row carries, and the one
    *  a client's Stop names. Sole owner: no reader keeps a copy to disagree with. */
   readonly currentTurnId: string | null
+  readonly currentTurnScope: () => AgentJournalTurnScope
   /** The open turn's id while it is a conversation command's. */
   readonly commandTurnId: string | null
   /** Makes the host's command turn the open one until the command's result ends it. */

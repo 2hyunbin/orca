@@ -51,7 +51,9 @@ export function createClaudeTranscriptImportPlan(input: {
   check: () => void
 }) {
   const mutations = new Map<string, JournalLifecycleIdentityMutationInput>()
-  const { saved, scopeOf, dependencies } = createClaudeTranscriptItemReader(input.journal)
+  const { saved, scopeOf, promptScope, dependencies } = createClaudeTranscriptItemReader(
+    input.journal
+  )
   const aliases = new Map<string, AgentJournalItemIdentity>()
   let historicalScope: AgentJournalTurnScope | null = null
   const matchSource = (identities: AgentJournalItemIdentity[]) => {
@@ -71,7 +73,8 @@ export function createClaudeTranscriptImportPlan(input: {
       aliases.set(agentJournalItemKey(candidate), identity)
     }
     if (item) {
-      historicalScope = scopeOf(item)
+      const scope = scopeOf(item)
+      historicalScope = scope.kind === 'unknown' ? null : scope
     }
   }
   const append = (
@@ -87,7 +90,10 @@ export function createClaudeTranscriptImportPlan(input: {
       return { accepted: true } as const
     }
     let body = projected
-    let turnScope = historicalScope ?? options.turnScope
+    let turnScope =
+      projected.kind === 'message' && projected.role === 'user'
+        ? options.turnScope
+        : (historicalScope ?? options.turnScope)
     if (existing) {
       if (body.kind === 'message' && body.role === 'user') {
         return { accepted: true } as const
@@ -209,9 +215,11 @@ export function createClaudeTranscriptImportPlan(input: {
         })
         return
       }
-      // A prompt ends its predecessor before changing the historical turn context.
-      idle(observedAt)
-      historicalScope = null
+      // Folded input belongs to the ongoing turn; only a physical opener ends its predecessor.
+      if (!queued) {
+        idle(observedAt)
+        historicalScope = null
+      }
       const sourceUuid = queued ? claudeText(claudeRecord(row.attachment)?.source_uuid) : null
       const identity: AgentJournalItemIdentity = {
         provider: 'claude',
@@ -220,26 +228,16 @@ export function createClaudeTranscriptImportPlan(input: {
       }
       const existing = saved(agentJournalItemKey(identity))
       if (existing) {
-        const promptKey = existing.itemId
-        input.journal.visitItems((itemId, _sequence, body) => {
-          if (
-            body.kind === 'turn' &&
-            body.userItemId &&
-            input.journal.canonicalItemId(body.userItemId) === promptKey
-          ) {
-            const turn = saved(itemId)
-            if (turn) {
-              historicalScope = scopeOf({
-                ...existing,
-                turnScope: { kind: 'turn', turnItemId: itemId }
-              })
-            }
-          }
-        })
+        historicalScope = promptScope(existing, queued) ?? historicalScope
         return
       }
+      const scope = historicalScope ?? translator.currentTurnScope()
       append(identity, legacyItemBody(decoded, LEGACY_IMPORT_BLOCK_LIMITS), {
-        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+        turnScope: queued
+          ? scope.kind === 'turn'
+            ? scope
+            : { kind: 'unknown' }
+          : AGENT_JOURNAL_THREAD_SCOPE
       })
       if (envelope && decoded.role === 'user') {
         translator.handle({

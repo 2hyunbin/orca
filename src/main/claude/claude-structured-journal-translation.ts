@@ -288,6 +288,7 @@ export function createClaudeJournalTranslator(
     get currentTurnId() {
       return turn.id
     },
+    currentTurnScope: turnScope,
     get commandTurnId() {
       return turn.command ? turn.id : null
     },

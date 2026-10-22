@@ -245,6 +245,7 @@ describe('answerClaudePrompt', () => {
         whenWritten: () => undefined
       },
       currentTurnId: null,
+      currentTurnScope: () => ({ kind: 'thread' }),
       commandTurnId: null,
       beginCommand: vi.fn(),
       forgetCommand: vi.fn(),

@@ -15,6 +15,15 @@ import { createClaudeJournalTranslator } from './claude-structured-journal-trans
 import * as sessionFileResolver from '../native-chat/session-file-resolver'
 import * as transcriptTail from './claude-transcript-tail'
 import { catchUpClaudeTranscript } from './claude-transcript-catch-up'
+import {
+  isStructuredRewindTarget,
+  structuredRewindCut
+} from '../native-chat/agent-session-wire/structured-rewind-cut'
+import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
+import { readAgentSessionHistory } from '../native-chat/agent-session-wire/agent-session-history-page'
+import { projectJournalBatch } from '../native-chat/agent-session-wire/agent-session-journal-batch'
+import { replacePage, mergeItems } from '../../shared/structured-agent-session-history-state'
+import { AgentJournalRenderItemSchema } from '../../shared/agent-session-journal-schemas'
 
 const SESSION = 'session-claude-catch-up'
 const SID = '402eff2b-84dc-4e05-8fe8-49fffb2cd3c3'
@@ -103,14 +112,15 @@ async function chat(project = '-work', cwd = '/work') {
   await mkdir(projects, { recursive: true })
   const transcript = join(projects, `${SID}.jsonl`)
   await writeFile(transcript, '')
+  const identity = {
+    sessionId: SESSION,
+    workspaceId: 'workspace-1',
+    hostId: 'local',
+    agent: 'claude',
+    providerHandle: claudeProviderHandle(SID, 'a1')
+  } satisfies AgentSessionJournalIdentity
   const journal = await journals.open({
-    identity: {
-      sessionId: SESSION,
-      workspaceId: 'workspace-1',
-      hostId: 'local',
-      agent: 'claude',
-      providerHandle: claudeProviderHandle(SID, 'a1')
-    } satisfies AgentSessionJournalIdentity,
+    identity,
     stateDirectory: root,
     now: () => 1_000
   })
@@ -124,6 +134,7 @@ async function chat(project = '-work', cwd = '/work') {
   const warn = vi.fn()
   return {
     journal,
+    replay: () => journals.open({ identity, stateDirectory: root, now: () => 1_000 }),
     warn,
     deferred,
     write: (rows: readonly Record<string, unknown>[]) =>
@@ -243,6 +254,131 @@ async function chat(project = '-work', cwd = '/work') {
 }
 
 describe('Claude chat catch-up', () => {
+  it.each(['a1', 'missing-parent'])(
+    'keeps an unresolved queued prompt visible without inventing a turn after %s',
+    async (parent) => {
+      const c = await chat()
+      await c.live()
+      await c.journal.appendSubmission({
+        clientMessageId: 'new-native-send',
+        body: {
+          kind: 'message',
+          role: 'user',
+          blocks: [{ type: 'text', text: 'new native request' }]
+        },
+        payloadFingerprint: 'new-native-send',
+        handoverRecorded: true,
+        fence: 1
+      })
+      const submissions = c.journal.snapshot().submissions
+      const cursor = c.journal.cursor()
+      await c.write([
+        ...chatTurn,
+        {
+          ...attachment('queued-row', parent),
+          attachment: {
+            type: 'queued_command',
+            source_uuid: 'cmd-1',
+            commandMode: 'prompt',
+            origin: { kind: 'human' },
+            humanTurn: true,
+            prompt: 'follow up'
+          }
+        }
+      ])
+      const key = agentJournalItemKey({ provider: 'claude', sessionId: SID, uuid: 'cmd-1' })
+      expect(await c.open('a1')).toBe(true)
+      const held = c.journal.snapshot().items
+      expect(c.rows().filter((row) => row === 'user:follow up')).toHaveLength(1)
+      expect(c.journal.item(key)?.turnScope).toEqual({ kind: 'unknown' })
+      expect(isStructuredRewindTarget(c.journal, key)).toBe(false)
+      expect(held.filter((row) => row.body.kind === 'turn')).toHaveLength(1)
+      expect(await c.open('a1')).toBe(true)
+      expect(c.journal.snapshot().items).toEqual(held)
+      const reopened = await c.replay()
+      expect(reopened.item(key)).toEqual(c.journal.item(key))
+      expect(isStructuredRewindTarget(reopened, key)).toBe(false)
+      const page = readAgentSessionHistory(reopened, { sessionId: SESSION, direction: 'tail' })
+      const delta = reopened.readSince(cursor)
+      if (!page.ok || !delta.ok) {
+        throw new Error('history unavailable')
+      }
+      const batch = projectJournalBatch({
+        rows: delta.rows,
+        snapshot: reopened.snapshot(),
+        afterSequence: cursor.sequence
+      })
+      if (!batch.ok) {
+        throw new Error('batch unavailable')
+      }
+      const snapshotClient = replacePage(page.page, 1)
+      const liveClient = mergeItems([], batch.batch.items, [])
+      expect(snapshotClient.items.find((item) => item.itemId === key)).toEqual(c.journal.item(key))
+      expect(liveClient.find((item) => item.itemId === key)).toEqual(c.journal.item(key))
+      // The open wire schema used by older readers preserves the new scope and message content.
+      expect(
+        AgentJournalRenderItemSchema.parse(JSON.parse(JSON.stringify(c.journal.item(key))))
+      ).toMatchObject({ turnScope: { kind: 'unknown' }, body: { role: 'user' } })
+
+      await c.write([
+        reply('a2', 'queued-row', 'msg_b', { type: 'text', text: 'follow up answer' }, 4),
+        prompt('p3', 'a2', 'next request', 5),
+        reply('a3', 'p3', 'msg_c', { type: 'text', text: 'next answer' }, 6)
+      ])
+      expect(await c.open('a1')).toBe(true)
+      const items = c.journal.snapshot().items
+      expect(c.journal.item(key)).toEqual(held.find((row) => row.itemId === key))
+      const resumed = items.find((row) => row.body.kind === 'turn' && row.body.turnId === 'a2')
+      expect(resumed?.body).toMatchObject({ userItemId: resumed?.itemId })
+      const opener = agentJournalItemKey({ provider: 'claude', sessionId: SID, uuid: 'p3' })
+      expect(isStructuredRewindTarget(c.journal, opener)).toBe(true)
+      expect(c.journal.snapshot().submissions).toEqual(submissions)
+      expect(c.rows().filter((row) => row === 'user:follow up')).toHaveLength(1)
+      expect(c.warn).not.toHaveBeenCalled()
+      const cut = structuredRewindCut(c.journal, {
+        itemId: opener,
+        provider: 'claude',
+        nativeId: SID
+      })
+      if (!cut) {
+        throw new Error('ordinary rewind unavailable')
+      }
+      await c.journal.replaceEpochItems('rewind', 1, cut.kept)
+      expect(c.journal.item(key)?.turnScope).toEqual({ kind: 'unknown' })
+      expect((await c.replay()).item(key)?.turnScope).toEqual({ kind: 'unknown' })
+    }
+  )
+
+  it('keeps new queued input in the observed outside turn without splitting its work', async () => {
+    const c = await chat()
+    await c.live()
+    await c.write([
+      ...chatTurn,
+      prompt('p2', 'a1', 'outside request', 3),
+      reply('a2', 'p2', 'msg_b', { type: 'text', text: 'working' }, 4),
+      {
+        ...attachment('queued-row', 'a2'),
+        attachment: {
+          type: 'queued_command',
+          source_uuid: 'cmd-1',
+          commandMode: 'prompt',
+          origin: { kind: 'human' },
+          humanTurn: true,
+          prompt: 'follow up'
+        }
+      },
+      reply('a3', 'queued-row', 'msg_c', { type: 'text', text: 'finished' }, 5)
+    ])
+    expect(await c.open('a1')).toBe(true)
+    const key = (uuid: string) => agentJournalItemKey({ provider: 'claude', sessionId: SID, uuid })
+    const queued = c.journal.item(key('cmd-1'))
+    expect(queued?.turnScope).toEqual(c.journal.item(key('block:msg_b:0'))?.turnScope)
+    expect(queued?.turnScope).toMatchObject({ kind: 'turn' })
+    expect(c.journal.item(key('block:msg_c:0'))?.turnScope).toEqual(queued?.turnScope)
+    expect(c.journal.snapshot().items.filter((row) => row.body.kind === 'turn')).toHaveLength(2)
+    expect(isStructuredRewindTarget(c.journal, key('cmd-1'))).toBe(false)
+    expect(isStructuredRewindTarget(c.journal, key('p2'))).toBe(true)
+  })
   it.each([
     ['-work', '/work', false],
     ['-work-caf-', '/work/cafe\u0301', false],
@@ -412,6 +548,21 @@ describe('Claude chat catch-up', () => {
       clientMessageId: 'queued-send',
       body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'follow up' }] },
       payloadFingerprint: 'queued-send',
+      handoverRecorded: true,
+      fence: 1
+    })
+    const scope = c.journal
+      .snapshot()
+      .items.find(
+        (item) => item.body.kind === 'message' && item.body.role === 'assistant'
+      )?.turnScope
+    if (!scope || scope.kind !== 'turn') {
+      throw new Error('missing native turn')
+    }
+    await c.journal.resolveDispatch({
+      clientMessageId: 'queued-send',
+      state: 'pending',
+      turnScope: scope,
       fence: 1
     })
     await c.journal.resolveDispatch({
@@ -449,6 +600,17 @@ describe('Claude chat catch-up', () => {
     expect(await c.open('a1')).toBe(true)
     expect(c.journal.snapshot().items).toEqual(imported)
     expect(c.journal.snapshot().submissions).toEqual(submissions)
+    const answer = c.journal
+      .snapshot()
+      .items.find(
+        (item) =>
+          item.body.kind === 'message' &&
+          item.body.role === 'assistant' &&
+          item.itemId !==
+            agentJournalItemKey({ provider: 'claude', sessionId: SID, uuid: 'block:msg_a:0' })
+      )
+    expect(answer?.turnScope).toEqual(scope)
+    expect(c.journal.snapshot().items.filter((item) => item.body.kind === 'turn')).toHaveLength(1)
     expect(c.warn).not.toHaveBeenCalled()
   })
 
