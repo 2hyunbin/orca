@@ -41,6 +41,24 @@ describe('a stale handle of a replaced pane (switch on)', () => {
     expect(createTerminal).not.toHaveBeenCalled()
   })
 
+  it('still learns it after a listing re-issues the unbound terminal its handle', async () => {
+    const { runtime, paneKey, oldHandle, createTerminal, replace } =
+      paneWithHandle('tab-p4-reissue')
+    await dropFromHostInventory(runtime, 'pty-old')
+    replace()
+    // A listing re-issues the old terminal's handle while no pane holds it.
+    const reissue: unknown = Reflect.get(runtime, 'issuePtyHandle')
+    if (typeof reissue !== 'function') {
+      throw new Error('needs issuePtyHandle')
+    }
+    expect(Reflect.apply(reissue, runtime, [runtime['ptysById'].get('pty-old')])).toBe(oldHandle)
+
+    await expect(
+      runtime.recoverTerminalPane(paneKey, TEST_WORKTREE_ID, oldHandle)
+    ).resolves.toMatchObject({ ptyId: 'pty-new' })
+    expect(createTerminal).not.toHaveBeenCalled()
+  })
+
   it('is refused for another workspace', async () => {
     const { runtime, paneKey, oldHandle, createTerminal, replace } = paneWithHandle('tab-p4-ws')
     await dropFromHostInventory(runtime, 'pty-old')
