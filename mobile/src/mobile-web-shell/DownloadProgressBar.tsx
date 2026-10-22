@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Animated, Easing, Platform, StyleSheet, View } from 'react-native'
 import { useReducedMotionEnabled } from '../platform/use-reduced-motion'
 import { colors } from '../theme/mobile-theme'
@@ -36,30 +36,36 @@ export function DownloadProgressBar({
   testID?: string
 }) {
   const [fill] = useState(() => new Animated.Value(feed.current()))
-  // Unknown counts as reduced, the same as LoadingSpinner.
-  const reducedMotion = useReducedMotionEnabled() !== false
+  // Unread counts as motion allowed: the preference arrives with a React commit, which the download
+  // can hold off. Read through a ref, so its arrival never re-subscribes mid-download.
+  const reducedMotion = useReducedMotionEnabled() === true
+  const reducedMotionRef = useRef(reducedMotion)
   useEffect(() => {
-    fill.setValue(feed.current())
+    reducedMotionRef.current = reducedMotion
+  }, [reducedMotion])
+  useEffect(() => {
     let easing: Animated.CompositeAnimation | null = null
-    const unsubscribe = feed.subscribe((fraction) => {
-      if (reducedMotion) {
-        fill.setValue(fraction)
-        return
-      }
+    const follow = (fraction: number, duration: number): void => {
+      // Always the native driver, a jump included: a JS-side setValue only reaches the screen
+      // through a React commit, and the download keeps those from happening.
       easing = Animated.timing(fill, {
         toValue: fraction,
-        duration: FILL_EASE_MS,
+        duration,
         easing: Easing.out(Easing.quad),
         isInteraction: false,
         useNativeDriver
       })
       easing.start()
-    })
+    }
+    follow(feed.current(), 0)
+    const unsubscribe = feed.subscribe((fraction) =>
+      follow(fraction, reducedMotionRef.current ? 0 : FILL_EASE_MS)
+    )
     return () => {
       unsubscribe()
       easing?.stop()
     }
-  }, [feed, fill, reducedMotion])
+  }, [feed, fill])
   return (
     <View
       style={styles.track}
