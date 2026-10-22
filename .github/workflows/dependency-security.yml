@@ -1,0 +1,103 @@
+name: Dependency security
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - '**/package.json'
+      - '**/pnpm-lock.yaml'
+      - '**/pnpm-workspace.yaml'
+      - '**/.npmrc'
+      - 'native/**/Cargo.toml'
+      - 'native/**/Cargo.lock'
+      - 'config/dependency-security-exceptions.json'
+      - 'config/cargo-deny.toml'
+      - 'config/scripts/*dependency-security*'
+      - 'config/scripts/pnpm-cli-invocation.mjs'
+      - 'config/pnpmfile.cjs'
+      - '**/patches/**'
+      - '.github/workflows/dependency-security.yml'
+      - '.github/actions/install-node-dependencies/**'
+      - 'src/packages/process-host/**'
+  push:
+    branches: [main]
+    paths:
+      - '**/package.json'
+      - '**/pnpm-lock.yaml'
+      - '**/pnpm-workspace.yaml'
+      - '**/.npmrc'
+      - 'native/**/Cargo.toml'
+      - 'native/**/Cargo.lock'
+      - 'config/dependency-security-exceptions.json'
+      - 'config/cargo-deny.toml'
+      - 'config/scripts/*dependency-security*'
+      - 'config/scripts/pnpm-cli-invocation.mjs'
+      - 'config/pnpmfile.cjs'
+      - '**/patches/**'
+      - '.github/workflows/dependency-security.yml'
+      - '.github/actions/install-node-dependencies/**'
+      - 'src/packages/process-host/**'
+  schedule:
+    - cron: '37 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+
+jobs:
+  javascript:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - run: pnpm check:dependencies
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dependency-security-javascript
+          path: tmp/dependency-security/*.json
+          if-no-files-found: error
+
+  rust:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v5
+        id: scanner
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-0.20.2-${{ runner.os }}-${{ runner.arch }}
+      - if: steps.scanner.outputs.cache-hit != 'true'
+        run: cargo install cargo-deny --locked --version 0.20.2
+      - name: Audit native Rust lockfiles
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tmp/dependency-security
+          status=0
+          for manifest in native/*/Cargo.toml; do
+            name="$(basename "$(dirname "$manifest")")"
+            cargo deny --manifest-path "$manifest" --locked --config config/cargo-deny.toml check advisories 2>&1 | tee "tmp/dependency-security/$name.log" || status=1
+          done
+          exit "$status"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dependency-security-rust
+          path: tmp/dependency-security/*.log
+          if-no-files-found: error
