@@ -1,16 +1,9 @@
+import { NativeChatResumeDialogHeader } from './NativeChatResumeDialogHeader'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useNativeChatRestartOfferEnabled } from './native-chat-restart-offer-gate'
-import { RotateCcw } from 'lucide-react'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from './ui/dialog'
+import { Dialog, DialogContent, DialogFooter } from './ui/dialog'
 import { useAppStore } from '../store'
 import { translate } from '@/i18n/i18n'
 import { activateAiVaultStructuredSession } from '@/lib/activate-ai-vault-structured-session'
@@ -28,21 +21,16 @@ import {
   type ResumeFailure
 } from './native-chat-resume-on-restart-grouping'
 import {
-  consumeNativeChatResumeOnRestartDialogRequest,
-  getNativeChatResumeOnRestartDialogRequest,
-  subscribeNativeChatResumeOnRestartDialog
-} from './native-chat-resume-on-restart-dialog'
-import {
-  continueNativeChatRestartOffer,
-  dismissNativeChatRestartOffer,
-  markFinishedNativeChatRestartRunShown,
-  releaseFinishedNativeChatRestartRun,
+  localNativeChatRestartStore,
   useNativeChatRestartOffer,
   useNativeChatRestartResuming,
-  useNativeChatRestartRun
+  useNativeChatRestartRun,
+  type NativeChatRestartStore
 } from './native-chat-resume-on-restart-store'
+import { useManagedNativeChatRestartRuntimes } from './native-chat-restart-runtimes'
 import { useResumeRunPanel } from './NativeChatResumeRunPanel'
 import { NativeChatResumeAutoNote } from './NativeChatResumeAutoNote'
+import { NativeChatRemoteResumeActions } from './NativeChatRemoteResumeActions'
 import { moveInTree } from './native-chat-resume-tree-keys'
 
 /**
@@ -80,9 +68,44 @@ function selectedByDefault(failure: ResumeFailure | undefined): boolean {
   return guidance.primary === 'retry' || guidance.secondary === 'retry'
 }
 
-export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
-  const offerEnabled = useNativeChatRestartOfferEnabled()
-  const { candidates, failed, listedAt } = useNativeChatRestartOffer(offerEnabled)
+export function NativeChatResumeOnRestartModal(): React.JSX.Element {
+  const enabled = useNativeChatRestartOfferEnabled()
+  const runtimes = useManagedNativeChatRestartRuntimes()
+  return (
+    <>
+      <NativeChatResumeRuntimeModal store={localNativeChatRestartStore} offerEnabled={enabled} />
+      {runtimes.map(({ environment, store }) => (
+        <NativeChatResumeRuntimeModal
+          key={environment.id}
+          store={store}
+          machineName={environment.name}
+          offerEnabled
+        />
+      ))}
+    </>
+  )
+}
+
+export function NativeChatResumeRuntimeModal({
+  store,
+  machineName,
+  offerEnabled
+}: {
+  store: NativeChatRestartStore
+  machineName?: string
+  offerEnabled: boolean
+}): React.JSX.Element | null {
+  const {
+    continueNativeChatRestartOffer,
+    dismissNativeChatRestartOffer,
+    markFinishedNativeChatRestartRunShown,
+    releaseFinishedNativeChatRestartRun,
+    consumeNativeChatResumeOnRestartDialogRequest,
+    getNativeChatResumeOnRestartDialogRequest,
+    subscribeNativeChatResumeOnRestartDialog
+  } = store
+  const remote = store.target.kind === 'environment'
+  const { candidates, failed, listedAt } = useNativeChatRestartOffer(offerEnabled, store)
   const rows = useMemo<ResumeCandidate[]>(() => [...candidates, ...failed], [candidates, failed])
   const failureBySession = useMemo(
     () => new Map(failed.map((failure) => [failure.sessionId, failure])),
@@ -102,7 +125,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
   )
   const resumeButtonRef = useRef<HTMLButtonElement>(null)
   // The store's: the resume outlives this dialog, which can close or reopen mid-run.
-  const resuming = useNativeChatRestartResuming()
+  const resuming = useNativeChatRestartResuming(store)
   const busy = resuming.length > 0
   /** The user's own ticks and unticks, over each row's default. Tracked as OVERRIDES rather than a
    *  selection because the list is the host's and arrives — and shrinks — under an open dialog; a
@@ -146,7 +169,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     (sessionId: string) => failureBySession.get(sessionId),
     [failureBySession]
   )
-  const run = useNativeChatRestartRun()
+  const run = useNativeChatRestartRun(store)
   const runPanel = useResumeRunPanel({
     run,
     rows,
@@ -158,11 +181,17 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     if (offerEnabled && open && run && runPanel?.finishedRowsVisible) {
       markFinishedNativeChatRestartRunShown(run)
     }
-  }, [offerEnabled, open, run, runPanel?.finishedRowsVisible])
+  }, [
+    offerEnabled,
+    open,
+    run,
+    runPanel?.finishedRowsVisible,
+    markFinishedNativeChatRestartRunShown
+  ])
   const allSelection = resumeSelectionState(selectable, ticked)
   const choosing = runPanel?.choosing ?? true
   // While the setting is off the box stays, before and after Resume; an automatic run explains itself.
-  const showDontAskAgain = !autoResumeOn && runPanel?.startedBy !== 'launch'
+  const showDontAskAgain = !remote && !autoResumeOn && runPanel?.startedBy !== 'launch'
 
   const toggleSelected = useCallback((sessionId: string, checked: boolean) => {
     setOverrides((current) => new Map(current).set(sessionId, checked))
@@ -182,7 +211,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
       void persistPreference()
       await continueNativeChatRestartOffer(sessionIds)
     },
-    [persistPreference]
+    [persistPreference, continueNativeChatRestartOffer]
   )
 
   /** Closing is a snooze: the host keeps the offer and the status bar keeps the way back to it. */
@@ -190,7 +219,11 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     consumeNativeChatResumeOnRestartDialogRequest()
     releaseFinishedNativeChatRestartRun()
     void persistPreference()
-  }, [persistPreference])
+  }, [
+    persistPreference,
+    consumeNativeChatResumeOnRestartDialogRequest,
+    releaseFinishedNativeChatRestartRun
+  ])
 
   const dismissAll = useCallback(async (): Promise<void> => {
     void persistPreference()
@@ -199,7 +232,12 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     consumeNativeChatResumeOnRestartDialogRequest()
     releaseFinishedNativeChatRestartRun()
     await dismissNativeChatRestartOffer()
-  }, [persistPreference])
+  }, [
+    persistPreference,
+    consumeNativeChatResumeOnRestartDialogRequest,
+    releaseFinishedNativeChatRestartRun,
+    dismissNativeChatRestartOffer
+  ])
 
   const actOnFailure = async (action: ResumeFailureAction, sessionId: string): Promise<void> => {
     if (action === 'dismiss') {
@@ -218,9 +256,10 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
     // dialog gets out of the way of the chat it just opened.
     consumeNativeChatResumeOnRestartDialogRequest()
     releaseFinishedNativeChatRestartRun()
-    await activateAiVaultStructuredSession({
-      structuredSession: { workspaceId: failure.workspaceId, sessionId }
-    })
+    const session = { structuredSession: { workspaceId: failure.workspaceId, sessionId } }
+    await (remote
+      ? activateAiVaultStructuredSession(session, undefined, store.target)
+      : activateAiVaultStructuredSession(session))
   }
 
   if (!offerEnabled || !open || (rows.length === 0 && !runPanel)) {
@@ -258,33 +297,12 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
           }
         }}
       >
-        <DialogHeader>
-          <DialogTitle>
-            {/* Plain wrapper owns the icon spacing; DialogTitle owns its own. */}
-            {runPanel?.title ?? (
-              <span className="flex items-center gap-2">
-                <RotateCcw className="size-4 text-muted-foreground" />
-                {translate(
-                  'auto.components.NativeChatResumeOnRestartModal.title',
-                  'Resume interrupted chats?'
-                )}
-              </span>
-            )}
-          </DialogTitle>
-          <DialogDescription>
-            {runPanel?.description ??
-              (interruptedByUpdate
-                ? translate(
-                    'auto.components.NativeChatResumeOnRestartModal.updateBody',
-                    'These chats were working when Orca installed an update. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
-                  )
-                : translate(
-                    'auto.components.NativeChatResumeOnRestartModal.body',
-                    'These chats were working when Orca closed. Resuming restores each one where it stopped, with its full context, and asks the agent to check what it was doing before carrying on. Your own prompt is not re-sent.'
-                  ))}
-          </DialogDescription>
-          {runPanel?.summary}
-        </DialogHeader>
+        <NativeChatResumeDialogHeader
+          runPanel={runPanel}
+          machineName={machineName}
+          remote={remote}
+          interruptedByUpdate={interruptedByUpdate}
+        />
 
         <div
           role="tree"
@@ -306,7 +324,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
         >
           {/* Here, not in the groups: a list may hold one set of groups per machine. The tree's one
               divider sets it apart from the nodes. */}
-          {choosing && (
+          {choosing && !remote && (
             <div className="mb-1 border-b border-worktree-sidebar-border pb-0.5">
               <ResumeTreeRow
                 depth={0}
@@ -345,7 +363,7 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
             onFailureAction={(action, sessionId) => void actOnFailure(action, sessionId)}
             renderStatus={runPanel?.renderStatus}
             selectableIds={selectableIds}
-            selecting={choosing}
+            selecting={choosing && !remote}
           />
         </div>
 
@@ -384,6 +402,19 @@ export function NativeChatResumeOnRestartModal(): React.JSX.Element | null {
             <Button ref={resumeButtonRef} variant="default" size="sm" onClick={snooze}>
               {translate('auto.components.NativeChatResumeOnRestartModal.done', 'Done')}
             </Button>
+          ) : remote ? (
+            <NativeChatRemoteResumeActions
+              resumeButtonRef={resumeButtonRef}
+              store={store}
+              machineName={machineName ?? ''}
+              rows={rows}
+              busy={busy}
+              resume={(ids) => {
+                consumeNativeChatResumeOnRestartDialogRequest()
+                void resume(ids)
+              }}
+              dismiss={snooze}
+            />
           ) : (
             <>
               {/* Quiet, explicit cleanup of the durable records. */}
