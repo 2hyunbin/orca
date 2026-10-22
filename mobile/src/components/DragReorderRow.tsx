@@ -34,6 +34,7 @@ export function DragReorderRow({
   rowKey,
   rowHeight,
   ready,
+  movable,
   presentation,
   onMeasure,
   shared,
@@ -47,6 +48,7 @@ export function DragReorderRow({
   rowKey: string
   rowHeight?: number
   ready: boolean
+  movable: boolean
   presentation: 'settings' | 'plain'
   onMeasure: (key: string, height: number) => void
   shared: DragSharedState
@@ -70,7 +72,7 @@ export function DragReorderRow({
   } = shared
 
   const pan = Gesture.Pan()
-    .enabled(ready)
+    .enabled(ready && movable)
     .activateAfterLongPress(LONG_PRESS_ACTIVATION_MS)
     .shouldCancelWhenOutside(false)
     .onStart((event) => {
@@ -127,7 +129,7 @@ export function DragReorderRow({
     }
   }, [positions, activeKey, activeTop, rowKey, ready, presentation, sizes])
 
-  const handle = (
+  const handle = movable ? (
     <GestureDetector gesture={pan}>
       <Animated.View
         style={styles.handle}
@@ -151,12 +153,13 @@ export function DragReorderRow({
         <GripVertical size={18} color={colors.textMuted} />
       </Animated.View>
     </GestureDetector>
-  )
+  ) : null
   return (
     <Animated.View
       onLayout={(event) => onMeasure(rowKey, event.nativeEvent.layout.height)}
       style={[
         styles.row,
+        presentation === 'plain' && { flexDirection: 'column', alignItems: 'stretch' },
         { height: rowHeight, position: ready ? 'absolute' : 'relative' },
         rowStyle
       ]}

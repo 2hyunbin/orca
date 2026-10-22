@@ -1,3 +1,5 @@
+import { imageReferenceToken } from '../../../../shared/native-chat-image-reference'
+import { composerSkillOccurrences } from '../../../../shared/structured-agent-session-send-mutation'
 import { promptTextContent } from './native-chat-prompt-document-text'
 import type { NativeChatComposerDraftAddition } from './native-chat-composer-draft-addition'
 import type { AgentJournalMessageItem } from '../../../../shared/agent-session-journal-types'
@@ -49,40 +51,38 @@ export function returnMessageToComposer(
     imageIds
   )
   const document = options?.skills?.length ? promptTextContent(text) : undefined
+  const bindings = composerSkillOccurrences(text, options?.skills ?? [])
+  let offset = 0
   for (const paragraph of document?.content ?? []) {
     paragraph.content = paragraph.content?.flatMap((node) => {
       if (node.type !== 'text' || !node.text) {
+        offset += imageReferenceToken(String(node.attrs?.attachmentId)).length
         return [node]
       }
+      const start = offset
+      offset += node.text.length
       const parts = []
-      let remaining = node.text
-      while (remaining) {
-        const match = options?.skills
-          ?.map((skill) => {
-            const token = `$${skill.name}`
-            let at = remaining.indexOf(token)
-            while (at !== -1 && /[\w:-]/u.test(remaining.charAt(at + token.length))) {
-              at = remaining.indexOf(token, at + 1)
-            }
-            return { skill, at }
-          })
-          .filter(({ at }) => at >= 0)
-          .sort((left, right) => left.at - right.at)[0]
-        if (!match) {
-          parts.push({ type: 'text', text: remaining })
-          break
+      let from = 0
+      for (const { ref, at: position } of bindings) {
+        if (position < start || position >= offset) {
+          continue
         }
-        if (match.at > 0) {
-          parts.push({ type: 'text', text: remaining.slice(0, match.at) })
+        const at = position - start
+        if (at > from) {
+          parts.push({ type: 'text', text: node.text.slice(from, at) })
         }
         parts.push({
           type: 'nativeChatSkill',
-          attrs: { token: `$${match.skill.name}`, path: match.skill.path }
+          attrs: { token: `$${ref.name}`, path: ref.path }
         })
-        remaining = remaining.slice(match.at + match.skill.name.length + 1)
+        from = at + ref.name.length + 1
+      }
+      if (from < node.text.length) {
+        parts.push({ type: 'text', text: node.text.slice(from) })
       }
       return parts
     })
+    offset += 1
   }
   const addition: Pick<NativeChatComposerDraftAddition, 'document' | 'textPolicy'> = {
     ...(document ? { document } : {}),
@@ -106,6 +106,7 @@ export function handBackStructuredAgentSessionMessage(
     structuredAgentSessionDraftScopeKey(sessionId),
     `returned-${clientMessageId}`,
     body.blocks,
-    imageConnectionIds
+    imageConnectionIds,
+    { skills: body.skills }
   )
 }

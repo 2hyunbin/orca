@@ -195,7 +195,8 @@ function NativeChatImageThumbnail({
       : undefined,
     attachment.path,
     attachment.connectionId,
-    hostReadContext,
+    // A captured host path must never fall through to a file with the same name on this client.
+    hostEnvironmentId && attachment.reference?.path && !readEnvironmentId ? null : hostReadContext,
     // Why chat-image: a draft handed off from the host queue may carry paths a paired client chose.
     chatImageAccess()
   )

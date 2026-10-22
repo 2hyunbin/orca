@@ -1,3 +1,9 @@
+import { composerSkillOccurrences } from '../../../src/shared/structured-agent-session-send-mutation'
+import {
+  imageReferencesToPromptMarkers,
+  promptMarkersToImageReferences
+} from '../../../src/shared/native-chat-image-transcript-markers'
+import { appendReturnedDraftText } from '../../../src/shared/returned-draft-text'
 import { mobileChatDraftStorageKey, parseMobileChatDraft } from './mobile-native-chat-draft-data'
 import { mobileChatDraftStorage } from './mobile-native-chat-draft-storage'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
@@ -49,6 +55,9 @@ function writeDraft(draftKey: string, update: SetStateAction<string>, userEdit: 
   drafts.set(draftKey, {
     ...(current ?? EMPTY),
     text: next,
+    ...(userEdit
+      ? { skills: composerSkillOccurrences(next, current?.skills ?? []).map(({ ref }) => ref) }
+      : {}),
     editGeneration: (current?.editGeneration ?? 0) + 1
   })
   save(draftKey)
@@ -114,13 +123,67 @@ export function updateMobileNativeChatDraftImages(
     return
   }
   const current = readMobileNativeChatDraft(scope)
+  const images = update(current.images)
   drafts.set(scope, {
     ...current,
-    images: update(current.images),
+    text: imageReferencesToPromptMarkers(
+      promptMarkersToImageReferences(
+        current.text,
+        current.images.map((image) => image.id)
+      ),
+      images.map((image) => image.id)
+    ),
+    images,
     editGeneration: current.editGeneration + 1
   })
   save(scope)
   listeners.forEach((listener) => listener())
+}
+
+/** Appends one complete captured message and acknowledges its ordinary draft storage. */
+export async function appendMobileNativeChatDraft(
+  scope: string,
+  addition: Pick<Draft, 'text' | 'images' | 'skills'>
+): Promise<boolean> {
+  if (!mobileChatDraftStorage()) {
+    return false
+  }
+  await hydrateMobileNativeChatDraft(scope)
+  if (deleted.has(scope)) {
+    return false
+  }
+  const current = readMobileNativeChatDraft(scope)
+  textChanged.add(scope)
+  drafts.set(scope, {
+    text: imageReferencesToPromptMarkers(
+      appendReturnedDraftText(
+        promptMarkersToImageReferences(
+          current.text,
+          current.images.map((image) => image.id)
+        ),
+        addition.text,
+        'append-repeated'
+      ),
+      [...current.images, ...addition.images].map((image) => image.id)
+    ),
+    images: [...current.images, ...addition.images],
+    skills: [
+      ...(current.skills ?? []),
+      ...composerSkillOccurrences(addition.text, addition.skills ?? []).map(({ ref }) => ref)
+    ],
+    editGeneration: current.editGeneration + 1
+  })
+  listeners.forEach((listener) => listener())
+  await persistMobileNativeChatDraft(scope, readMobileNativeChatDraft(scope))
+  return true
+}
+
+export function consumeMobileNativeChatDraftSkills(scope: string, skills: Draft['skills']): void {
+  const current = readMobileNativeChatDraft(scope)
+  if (current.skills === skills) {
+    drafts.set(scope, { ...current, skills: undefined })
+    save(scope)
+  }
 }
 
 export function useMobileNativeChatDraftImages(scope: string | null): PendingNativeChatImage[] {
@@ -182,7 +245,7 @@ function save(scope: string): void {
 }
 
 /** Resolves only after the captured scope is hydrated and its latest draft has committed. */
-export function persistMobileNativeChatDraft(scope: string): Promise<void> {
+export function persistMobileNativeChatDraft(scope: string, captured?: Draft): Promise<void> {
   const storage = mobileChatDraftStorage()
   if (!storage) {
     return Promise.resolve()
@@ -194,7 +257,7 @@ export function persistMobileNativeChatDraft(scope: string): Promise<void> {
       if (deleted.has(scope)) {
         return
       }
-      const draft = readMobileNativeChatDraft(scope)
+      const draft = captured ?? readMobileNativeChatDraft(scope)
       const images = draft.images.map(({ previewUri, ...image }) => ({
         ...image,
         ...(/^(https?:|file:|content:)/i.test(previewUri) ? { previewUri } : {})

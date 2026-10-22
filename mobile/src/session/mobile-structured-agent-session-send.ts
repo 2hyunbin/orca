@@ -1,3 +1,4 @@
+import type { AgentJournalSkillRef } from '../../../src/shared/agent-session-journal-types'
 import type { AgentSessionSendResult } from '../../../src/shared/agent-session-wire'
 import type { AgentJournalCursor } from '../../../src/shared/agent-session-journal-types'
 import {
@@ -18,6 +19,7 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
   sessionId: string
   expectedRuntimeFence: number
   text: string
+  skills?: readonly AgentJournalSkillRef[]
   attachments: readonly StructuredAgentSessionAttachment[]
   /** Sent only when the host advertises `agent-session.queued-messages.v1`. */
   delivery?: 'queue-if-active'
@@ -42,7 +44,7 @@ export async function sendMobileStructuredAgentSessionMessage(input: {
     sessionId: input.sessionId,
     expectedRuntimeFence: input.expectedRuntimeFence,
     fields: {
-      body: structuredAgentSessionSendBody(input.text, input.attachments),
+      body: structuredAgentSessionSendBody(input.text, input.attachments, input.skills),
       ...(input.delivery ? { delivery: input.delivery } : {}),
       ...(input.options ? { options: input.options } : {})
     },

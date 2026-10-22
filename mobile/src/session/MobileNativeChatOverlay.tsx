@@ -101,6 +101,8 @@ export function MobileNativeChatOverlay({
       onClearAll: queued.clear,
       onEdit: queued.edit,
       editor: queued.editor,
+      editDisabledReason: queued.editDisabledReason,
+      onMove: queued.move,
       pause: queued.pause,
       onResume: queued.resume,
       sessionKey: queued.sessionKey,

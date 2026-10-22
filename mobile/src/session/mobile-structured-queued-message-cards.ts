@@ -26,6 +26,7 @@ import { agentMessageAttribution } from './mobile-agent-message-attribution'
 
 export type MobileQueuedMessageCard = {
   messageId: string
+  automatic?: true
   /** The draft's text blocks joined for display and for Edit's composer copy. */
   text: string
   state: 'waiting' | 'returned'
@@ -165,6 +166,7 @@ export function mobileQueuedMessageCards(
     )
     cards.push({
       messageId: draft.messageId,
+      ...(draft.body.from !== undefined ? { automatic: true as const } : {}),
       text: queuedMessageBodyText(draft.body),
       state: draft.state,
       paused,

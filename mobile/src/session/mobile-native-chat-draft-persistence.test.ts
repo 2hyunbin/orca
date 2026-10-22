@@ -1,3 +1,5 @@
+import { copyMobileQueuedMessageToDraft } from './mobile-native-chat-queued-extraction'
+import { structuredAgentSessionSendBody } from '../../../src/shared/structured-agent-session-send-mutation'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { afterEach, expect, it, vi } from 'vitest'
 import {
@@ -169,4 +171,29 @@ it('orders acknowledged writes to one key while letting another key commit', asy
   await Promise.all([first, second])
   expect(disk.get('ordered')).toBe('second')
   held.mockRestore()
+})
+
+it('binds extracted files to their own text and permanently prunes deleted tokens across reload', async () => {
+  installNativeMobileChatDraftStorage()
+  const scope = 'skills\0workspace\0tab'
+  const skills = [
+    { name: 'review', path: '/one' },
+    { name: 'review', path: '/two' }
+  ]
+  editMobileNativeChatDraft(scope, '$review existing')
+  await copyMobileQueuedMessageToDraft(scope, {
+    messageId: 'picked',
+    position: 1,
+    state: 'waiting',
+    body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: '$review' }], skills }
+  })
+  expect(readMobileNativeChatDraft(scope).skills).toEqual([skills[0]])
+  editMobileNativeChatDraft(scope, 'no selection')
+  editMobileNativeChatDraft(scope, '$review retyped')
+  await persistMobileNativeChatDraft(scope)
+  resetMobileNativeChatDraftStoreForTests()
+  await hydrateMobileNativeChatDraft(scope)
+  const draft = readMobileNativeChatDraft(scope)
+  expect(draft.text).toBe('$review retyped')
+  expect(structuredAgentSessionSendBody(draft.text, [], draft.skills).skills).toBeUndefined()
 })

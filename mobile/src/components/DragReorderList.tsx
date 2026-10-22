@@ -40,6 +40,7 @@ const AUTO_SCROLL_MAX_SPEED = 560
 export type DragReorderListProps<ItemT> = {
   items: ItemT[]
   itemKey: (item: ItemT) => string
+  canMove?: (item: ItemT) => boolean
   rowHeight?: number
   scopeKey?: string
   rowPresentation?: 'settings' | 'plain'
@@ -57,6 +58,7 @@ export type DragReorderListProps<ItemT> = {
 export function DragReorderList<ItemT>({
   items,
   itemKey,
+  canMove,
   rowHeight,
   scopeKey = '',
   rowPresentation = 'settings',
@@ -175,36 +177,52 @@ export function DragReorderList<ItemT>({
 
   const commitReorder = useCallback(
     (orderedKeys: string[], movedId: string) => {
-      // Why: a cancelled or no-op drag should not trigger a persisted write.
-      if (currentCatalog.current === catalog && orderedKeys.join(KEY_SEPARATOR) !== keySignature) {
-        onReorder?.(orderedKeys)
-        const move = dragReorderMove(orderedKeys, movedId)
+      if (currentCatalog.current !== catalog) {
+        return
+      }
+      const movableKeys = new Set(items.filter((item) => !canMove || canMove(item)).map(itemKey))
+      const nextMovable = orderedKeys.filter((key) => movableKeys.has(key))
+      let at = 0
+      const next = keys.map((key) => (movableKeys.has(key) ? nextMovable[at++]! : key))
+      // Protected rows retain their slots even when the drop needs no host move.
+      runOnUI((nextPositions: DragReorderPositions) => {
+        'worklet'
+        positions.value = nextPositions
+      })(dragReorderPositionsFromKeys(next))
+      if (next.join(KEY_SEPARATOR) !== keySignature) {
+        onReorder?.(next)
+        const move = dragReorderMove(nextMovable, movedId)
         if (move) {
           onMove?.(move)
         }
       }
     },
-    [onReorder, onMove, keySignature, catalog]
+    [onReorder, onMove, keySignature, catalog, canMove, items, itemKey, keys, positions]
   )
 
   // Why: screen-reader users can't long-press-drag; the handle exposes
   // move up/down accessibility actions that commit the same reorder.
   const moveRowByAccessibilityAction = useCallback(
     (key: string, delta: number) => {
-      const fromIndex = keys.indexOf(key)
+      const movableKeys = keys.filter(
+        (entry) => !canMove || items.some((item) => itemKey(item) === entry && canMove(item))
+      )
+      const fromIndex = movableKeys.indexOf(key)
       if (fromIndex === -1) {
         return
       }
-      const toIndex = Math.min(Math.max(fromIndex + delta, 0), keys.length - 1)
+      const toIndex = Math.min(Math.max(fromIndex + delta, 0), movableKeys.length - 1)
       if (toIndex === fromIndex) {
         return
       }
-      const next = [...keys]
-      next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, key)
+      const nextMovable = [...movableKeys]
+      nextMovable.splice(fromIndex, 1)
+      nextMovable.splice(toIndex, 0, key)
+      let at = 0
+      const next = keys.map((entry) => (movableKeys.includes(entry) ? nextMovable[at++]! : entry))
       commitReorder(next, key)
     },
-    [keys, commitReorder]
+    [keys, commitReorder, canMove, items, itemKey]
   )
 
   // A removed handle may never finalize its native gesture.
@@ -245,6 +263,7 @@ export function DragReorderList<ItemT>({
           rowKey={itemKey(item)}
           rowHeight={rowHeight}
           ready={ready}
+          movable={!canMove || canMove(item)}
           presentation={rowPresentation}
           onMeasure={onMeasure}
           shared={shared}

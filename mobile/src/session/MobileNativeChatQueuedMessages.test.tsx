@@ -19,6 +19,16 @@ vi.mock('react-native', () => ({
   View: 'View'
 }))
 
+vi.mock('../components/DragReorderList', () => ({ DragReorderList: 'DragReorderList' }))
+vi.mock('react-native-reanimated', async () => {
+  const { useRef } = await import('react')
+  return {
+    default: { ScrollView: 'ScrollView' },
+    useAnimatedRef: () => useRef(null),
+    useSharedValue: (value: unknown) => useRef({ value }).current
+  }
+})
+
 vi.mock('lucide-react-native', () => ({
   AlertCircle: 'AlertCircle',
   Check: 'Check',
@@ -52,6 +62,28 @@ function card(
     ...overrides
   }
 }
+
+it('keeps Edit disabled with an explanation until a question or approval is answered', async () => {
+  let root!: ReactTestRenderer
+  await act(async () => {
+    root = create(
+      createElement(MobileNativeChatQueuedMessages, {
+        cards: [card({ messageId: 'held' })],
+        onEdit: vi.fn(async () => true),
+        editDisabledReason: 'Answer the question or approval before editing this message.'
+      })
+    )
+  })
+  await act(async () =>
+    root.root.findByProps({ accessibilityLabel: 'More actions' }).props.onPress()
+  )
+  const actions = root.root.findByType('ActionSheetModal').props.actions
+  expect(actions[0]).toMatchObject({
+    disabled: true,
+    hint: 'Answer the question or approval before editing this message.'
+  })
+  await act(async () => root.unmount())
+})
 
 describe('MobileNativeChatQueuedMessages', () => {
   let renderer: ReactTestRenderer | null = null

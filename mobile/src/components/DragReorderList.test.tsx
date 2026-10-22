@@ -117,11 +117,18 @@ beforeEach(() => {
   probe.viewport = null
 })
 
-async function mounted() {
+async function mounted({
+  initialIds = ['a', 'b'],
+  canMove,
+  onMove
+}: {
+  initialIds?: string[]
+  canMove?: (item: { id: string }) => boolean
+  onMove?: (move: { movedId: string } & ({ beforeId: string } | { afterId: string })) => void
+} = {}) {
   const onReorder = vi.fn()
   const onActive = vi.fn()
   let root: ReturnType<typeof create>
-  const initialIds = ['a', 'b']
   function Harness({ ids = initialIds }: { ids?: string[] }) {
     const scrollRef = useAnimatedRef<Animated.ScrollView>()
     const scrollOffsetY = useSharedValue(0)
@@ -129,9 +136,11 @@ async function mounted() {
     return createElement(DragReorderList<{ id: string }>, {
       items: ids.map((id) => ({ id })),
       itemKey: (item) => item.id,
+      canMove,
       rowHeight: 72,
       renderRow: (item) => createElement('Text', null, item.id),
       onReorder,
+      onMove,
       onDragActiveChange: (active: boolean) => onActive(active),
       scrollRef,
       scrollOffsetY,
@@ -153,8 +162,14 @@ async function mounted() {
 }
 
 function positions() {
-  return probe.shared.find(
-    (held) => held.value && typeof held.value === 'object' && 'a' in held.value && 'b' in held.value
+  return probe.shared.findLast(
+    (held) =>
+      held.value &&
+      typeof held.value === 'object' &&
+      'a' in held.value &&
+      typeof held.value.a === 'number' &&
+      held.value.a >= 0 &&
+      held.value.a < 3
   )!.value
 }
 
@@ -193,6 +208,41 @@ describe('drag completion and cancellation', () => {
       fixture.gesture.finalize!({ absoluteY: 100, translationY: 0 }, true)
     })
     expect(fixture.onReorder).not.toHaveBeenCalled()
+    await act(async () => fixture.root.unmount())
+  })
+
+  it.each([
+    { ids: ['a', 'mail'], distance: 80, expected: { a: 0, mail: 1 }, changed: false },
+    { ids: ['a', 'mail', 'b'], distance: 80, expected: { a: 0, mail: 1, b: 2 }, changed: false },
+    { ids: ['a', 'mail', 'b'], distance: 160, expected: { b: 0, mail: 1, a: 2 }, changed: true }
+  ])('settles a drag across protected mail at $distance with $ids', async (test) => {
+    const onMove = vi.fn()
+    const fixture = await mounted({
+      initialIds: test.ids,
+      canMove: (item) => item.id !== 'mail',
+      onMove
+    })
+    await act(async () => {
+      fixture.gesture.start!({ absoluteY: 100, translationY: 0 }, true)
+      fixture.gesture.update!({ absoluteY: 100 + test.distance, translationY: test.distance }, true)
+    })
+    expect(positions()).not.toEqual(test.expected)
+    await act(async () =>
+      fixture.gesture.finalize!(
+        { absoluteY: 100 + test.distance, translationY: test.distance },
+        true
+      )
+    )
+    expect(positions()).toEqual(test.expected)
+    if (test.changed) {
+      expect(onMove).toHaveBeenCalledExactlyOnceWith({ movedId: 'a', afterId: 'b' })
+      await fixture.updateItems(['b', 'mail', 'a'])
+      await fixture.updateItems(test.ids)
+      expect(positions()).toEqual({ a: 0, mail: 1, b: 2 })
+    } else {
+      expect(onMove).not.toHaveBeenCalled()
+      expect(fixture.onReorder).not.toHaveBeenCalled()
+    }
     await act(async () => fixture.root.unmount())
   })
 })

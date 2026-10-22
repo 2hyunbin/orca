@@ -78,7 +78,7 @@ function localStoreAuthority(scopeKey: string): string | null {
 }
 
 function checkAuthority(image: NativeChatComposerDraftImage, local: string | null): string | null {
-  return isAgentSessionAttachmentStorePath(image.path)
+  return isAgentSessionAttachmentStorePath(image.path) || image.reference !== undefined
     ? image.connectionId
       ? null
       : local
