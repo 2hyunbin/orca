@@ -31,6 +31,39 @@ describe('OrcaRuntimeService', () => {
     expect(stopAndWait).not.toHaveBeenCalled()
   })
 
+  it('reports a PTY a sole-terminal sleep stopped before failing to persist its resume as committed', async () => {
+    const runtime = new OrcaRuntimeService(store)
+    const live = new Set(['pty-run'])
+    runtime.setPtyController({
+      write: () => true,
+      kill: () => false,
+      stopAndWait: async (ptyId) => live.delete(ptyId),
+      getForegroundProcess: async () => null,
+      listProcesses: async () =>
+        [...live].map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'Claude' }))
+    })
+    vi.spyOn(runtime['sleepResumeRecords'], 'persist').mockRejectedValueOnce(new Error('disk full'))
+    const committed = () =>
+      runtime
+        .getTerminalSleepClientEventSnapshot()
+        .flatMap((event) =>
+          event.type === 'worktreeTerminalSleepState' && event.phase === 'committed'
+            ? event.ptyIds.map((ptyId) => `${event.worktreeId}|${ptyId}`)
+            : []
+        )
+    expect(committed()).toEqual([])
+
+    await expect(
+      runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`, { soleLivePtyId: 'pty-run' })
+    ).rejects.toThrow('disk full')
+    expect(committed()).toEqual([`${TEST_WORKTREE_ID}|pty-run`])
+
+    await expect(
+      runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`, { soleLivePtyId: 'pty-run' })
+    ).resolves.toMatchObject({ livePtyIds: [] })
+    expect(committed()).toEqual([`${TEST_WORKTREE_ID}|pty-run`])
+  })
+
   it('rejects exact terminal stop when async PTY stop fails', async () => {
     const runtime = new OrcaRuntimeService(store)
     const stopped: string[] = []

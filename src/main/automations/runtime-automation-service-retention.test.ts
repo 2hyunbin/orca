@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AutomationRun } from '../../shared/automations-types'
+import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
 import { RUN_TERMINAL_GRACE_MS } from './headless-run-terminal-retention'
 
 vi.mock('./service', () => ({
@@ -45,12 +46,16 @@ function build(headless: boolean) {
     notifyAutomationsChanged: vi.fn(),
     getTerminalHandleForPaneKey: vi.fn((paneKey: string) => `handle:${paneKey}`),
     // Each run's pane still holds its own PTY unless a test restarts it.
-    getTerminalPtyIdForHandle: vi.fn((handle: string) => `pty-${handle.split('tab-')[1]?.[0]}`),
+    getTerminalPtyIdForHandle: vi.fn(
+      (handle: string): string | null => `pty-${handle.split('tab-')[1]?.[0]}`
+    ),
     // pty-1's terminal has a client on it: typed into or being viewed.
     readTerminalClientUse: vi.fn((ptyId: string) => (ptyId === 'pty-1' ? 'used' : 'unused')),
     closeTerminal: vi.fn(async (_handle: string) => ({})),
     confirmTerminalShellAlone: vi.fn(async (_ptyId: string) => false),
     closeTerminalTab: vi.fn(async (_handle: string) => ({})),
+    // PTYs a sleep stopped and still holds, even one that then failed.
+    getTerminalSleepClientEventSnapshot: vi.fn((): RuntimeClientEvent[] => []),
     sleepTerminalsForWorktree: vi.fn(
       async (
         _selector: string,
@@ -220,5 +225,55 @@ describe('headless automation service run terminal retention', () => {
       status: 'completed',
       terminalPtyId: null
     })
+  })
+
+  it('keeps the pane link of a run whose sleep stopped its PTY and then failed, and finishes it', async () => {
+    const { runtime, service, store } = build(true)
+    store.getWorktreeMeta.mockImplementation(firstRunOwnsWorkspace)
+    store.listAutomationRuns.mockReturnValue(finishedRuns(1))
+    runtime.sleepTerminalsForWorktree.mockImplementationOnce(async () => {
+      // Stopped pty-0, then failed persisting its resume record.
+      runtime.getTerminalPtyIdForHandle.mockReturnValue(null)
+      runtime.getTerminalSleepClientEventSnapshot.mockReturnValue([
+        {
+          type: 'worktreeTerminalSleepState',
+          worktreeId: 'wt-0',
+          generation: 1,
+          phase: 'committed',
+          ptyIds: ['pty-0'],
+          terminalHandles: ['handle:tab-0:1']
+        }
+      ])
+      throw new Error('resume record persistence failed')
+    })
+    runtime.sleepTerminalsForWorktree.mockResolvedValue({ livePtyIds: [], stoppedPtyIds: [] })
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked service exposes the drain hook it was given.
+    const drain = (service as unknown as { releaseFinishedRunTerminals: () => Promise<number> })
+      .releaseFinishedRunTerminals
+    await expect(drain()).resolves.toBe(0)
+    expect(service.markDispatchResult).not.toHaveBeenCalled()
+
+    await expect(drain()).resolves.toBe(1)
+    expect(service.markDispatchResult).toHaveBeenCalledTimes(1)
+    expect(service.markDispatchResult).toHaveBeenCalledWith({
+      runId: 'r0',
+      status: 'completed',
+      terminalPtyId: null
+    })
+  })
+
+  it('forgets a run whose PTY is gone when no sleep of its workspace holds it', async () => {
+    const { runtime, service, store } = build(true)
+    store.getWorktreeMeta.mockImplementation(firstRunOwnsWorkspace)
+    store.listAutomationRuns.mockReturnValue(finishedRuns(1))
+    runtime.getTerminalPtyIdForHandle.mockReturnValue(null)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked service exposes the drain hook it was given.
+    const drain = (service as unknown as { releaseFinishedRunTerminals: () => Promise<number> })
+      .releaseFinishedRunTerminals
+    await drain()
+    expect(runtime.sleepTerminalsForWorktree).not.toHaveBeenCalled()
+    expect(service.markDispatchResult).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: 'r0', terminalPaneKey: null, terminalPtyId: null })
+    )
   })
 })
