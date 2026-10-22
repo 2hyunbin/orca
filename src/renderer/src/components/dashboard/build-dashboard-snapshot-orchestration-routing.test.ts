@@ -62,7 +62,7 @@ function state(
   const worktrees = Array.from({ length: worktreeCount }, (_, index) => worktree(index))
   return {
     chatNames: new Map(),
-    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000' }],
+    repos: [{ id: 'r1', path: '/r1', displayName: 'Repo One', badgeColor: '#000', addedAt: 1 }],
     worktreesByRepo: { r1: worktrees },
     tabsByWorktree: Object.fromEntries(
       worktrees.map((currentWorktree, index) => [currentWorktree.id, [tab(index)]])
@@ -74,8 +74,9 @@ function state(
     terminalLayoutsByTabId: {},
     ptyIdsByTabId: {},
     runtimePaneTitlesByTabId: {},
-    acknowledgedAgentsByPaneKey: {}
-  } as unknown as DashboardSnapshotState
+    acknowledgedAgentsByPaneKey: {},
+    settings: null
+  }
 }
 
 describe('buildDashboardSnapshot orchestration routing', () => {

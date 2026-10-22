@@ -104,7 +104,7 @@ function state(): DashboardSnapshotState {
     runtimePaneTitlesByTabId: {},
     acknowledgedAgentsByPaneKey: {},
     settings: null
-  } as unknown as DashboardSnapshotState
+  }
 }
 
 describe('buildDashboardSnapshot folder workspaces', () => {
