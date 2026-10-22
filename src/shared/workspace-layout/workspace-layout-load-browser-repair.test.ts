@@ -69,8 +69,12 @@ function savedSession(): WorkspaceSessionState {
   }
 }
 
+// As main's projection loads it after a restart: its views carried, none held.
 const load = (session: WorkspaceSessionState) =>
-  loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, session, nameBasedLoadContext())
+  loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, session, {
+    ...nameBasedLoadContext(),
+    editorViewsOf: () => undefined
+  })
 
 describe("main's load of a browser record with no tab", () => {
   it('gives it a tab at the end of the active group, which a row id resolves to', () => {

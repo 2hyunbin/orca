@@ -64,8 +64,13 @@ describe("a window-owned build reading a session main's load rewrote", () => {
   it('restores the same tabs and groups as from the session before the rewrite', () => {
     layoutOwner.isMain = true
     const rewritten = saveWorkspaceLayout(
-      loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, savedSession(), nameBasedLoadContext())
+      // As main's command applies load it after a restart: its views carried, none held.
+      loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, savedSession(), {
+        ...nameBasedLoadContext(),
+        editorViewsOf: () => undefined
+      })
     )
+    expect(rewritten.unifiedTabs?.[KEY]).toHaveLength(3)
     layoutOwner.isMain = false
 
     const restore = (session: WorkspaceSessionState) => {

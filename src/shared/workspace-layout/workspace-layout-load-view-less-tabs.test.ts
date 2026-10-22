@@ -1,5 +1,5 @@
-// Layout-owner build (L286): main's layout load drops the saved tabs the window's restore drops
-// (restoresSavedContentTab), so main never holds a tab no window draws.
+// Layout-owner build (L286): main's layout load, given its views, drops the saved tabs the window's
+// restore drops (restoresSavedContentTab), so main never holds a tab no window draws.
 
 import { describe, expect, it, vi } from 'vitest'
 import { LOCAL_EXECUTION_HOST_ID } from '../execution-host'
@@ -58,8 +58,12 @@ function savedSession(): WorkspaceSessionState {
   }
 }
 
+// Main's projection and command applies carry its views; after a restart it holds none.
 const load = (session: WorkspaceSessionState) =>
-  loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, session, nameBasedLoadContext())
+  loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, session, {
+    ...nameBasedLoadContext(),
+    editorViewsOf: () => undefined
+  })
 
 describe("main's layout load of view-less saved editor tabs", () => {
   it('drops the tabs the window drops and keeps a diff of a saved edit file', () => {
@@ -75,6 +79,18 @@ describe("main's layout load of view-less saved editor tabs", () => {
     expect(saved.unifiedTabs?.[KEY]?.map((tab) => tab.id)).toEqual(['ed-a', 'kept-diff', 'ed-b'])
     expect(saved.tabGroups?.[KEY]?.[0]?.tabOrder).toEqual(['ed-a', 'kept-diff', 'ed-b'])
     expect(load(saved).changes).toEqual([])
+  })
+
+  // Main's own edits (a phone's browser tab, an agent tab) load without its views: they must not
+  // drop a live diff whose view only main's memory holds.
+  it('keeps every saved tab in a load that carries no views', () => {
+    const workspace = loadWorkspaceLayout(
+      LOCAL_EXECUTION_HOST_ID,
+      savedSession(),
+      nameBasedLoadContext()
+    ).layout.workspaces[KEY]!
+
+    expect(workspace.tabs).toHaveLength(7)
   })
 
   it('keeps a transient tab while main still holds its view', () => {

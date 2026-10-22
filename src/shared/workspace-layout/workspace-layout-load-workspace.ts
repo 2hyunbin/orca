@@ -106,7 +106,9 @@ function loadTabs(args: WorkspaceLoadArgs): {
     (session.openFilesByWorktree?.[key] ?? []).map((file) => file.filePath)
   )
   // A transient tab stays while a view is held for its file, as the window's frame build keeps it.
-  const heldViews = args.context.editorViewsOf?.(key) ?? {}
+  // Only a load that carries main's views drops one: a load without them keeps every stored tab.
+  const viewsOf = ORCA_LAYOUT_OWNER_IS_MAIN ? args.context.editorViewsOf : undefined
+  const heldViews = viewsOf?.(key) ?? {}
   const viewedEntities = new Set(
     (session.unifiedTabs?.[key] ?? []).flatMap((entry) =>
       heldViews[entry.id] ? [entry.entityId] : []
@@ -142,7 +144,7 @@ function loadTabs(args: WorkspaceLoadArgs): {
     }
     // Switch point: main drops the saved tabs the window's restore drops (L286).
     if (
-      ORCA_LAYOUT_OWNER_IS_MAIN &&
+      viewsOf &&
       entry.contentType !== 'terminal' &&
       !restoresSavedContentTab(entry, savedEditFilePaths, () => viewedEntities.has(entry.entityId))
     ) {
