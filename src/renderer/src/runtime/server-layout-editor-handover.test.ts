@@ -545,6 +545,55 @@ describe('a desktop-only editor tab when the server’s frames take its workspac
   })
 })
 
+/** Every layout.apply close this window sent anywhere. */
+const layoutCloses = () => hoisted.sent.filter(({ command }) => command.type === 'closeTabs')
+
+describe('closing a desktop editor tab after the hand-over', () => {
+  it('closes a handed-over tab in the gated workspace by session.tabs.close, as other closes go', async () => {
+    const store = mirroredStore()
+    const { fileId, tabId } = openDesktopFile(store, FILE_PATH)
+    const server = serverWith()
+    await connect(store, server)
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+
+    store.getState().closeFile(fileId)
+    await settle()
+    await settle()
+
+    expect(hoisted.closeSessionTab).toHaveBeenCalledTimes(1)
+    expect(hoisted.closeSessionTab).toHaveBeenCalledWith(
+      expect.objectContaining({ worktreeId: WT, tabId, environmentId: ENV, reason: 'user' })
+    )
+    expect(layoutCloses()).toEqual([])
+    expect(server.layout(WT)?.tabs.map((tab) => tab.id)).not.toContain(tabId)
+    expect(editorTabIds(store)).toEqual([])
+    expect(openFileIds(store)).toEqual([])
+  })
+
+  it.each([
+    { name: '`tab_exists`', answer: { refuse: 'tab_exists' } as const },
+    { name: 'another refusal', answer: { refuse: 'group_not_found' } as const }
+  ])('closes a tab kept on the mirror after $name here only', async ({ answer }) => {
+    const store = mirroredStore()
+    const { fileId, tabId } = openDesktopFile(store, FILE_PATH)
+    const server = serverWith()
+    server.answer = answer
+    await connect(store, server)
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+    const serverTabs = server.layout(WT)?.tabs.map((tab) => tab.id)
+
+    store.getState().closeFile(fileId)
+    await settle()
+    await settle()
+
+    expect(hoisted.closeSessionTab).not.toHaveBeenCalled()
+    expect(layoutCloses().filter(({ target }) => target.kind === 'environment')).toEqual([])
+    expect(server.layout(WT)?.tabs.map((tab) => tab.id)).toEqual(serverTabs)
+    expect(editorTabIds(store)).not.toContain(tabId)
+    expect(openFileIds(store)).toEqual([])
+  })
+})
+
 describe('workspaces the hand-over never touches', () => {
   it('leaves a local and an SSH workspace’s editor tabs alone, even under keys the server publishes', async () => {
     const store = mirroredStore()
