@@ -132,7 +132,7 @@
       "description": "Choisissez l’apparence et le comportement des chats.",
       "names": {
         "title": "Noms des chats",
-        "description": "Utilisez un agent pour nommer les nouveaux chats à partir de leur premier message. Sans nom généré, ils restent Claude Chat ou Codex Chat.",
+        "description": "Utilisez un agent pour nommer les nouveaux chats à partir de leur premier message. En attendant un nom généré, le chat affiche son premier message.",
         "enable": "Nommer automatiquement les chats",
         "recipe": "Nom du chat",
         "recipeDescription": "Génère un nom court à partir du premier message d’un nouveau chat.",
@@ -199,7 +199,8 @@
         "korean": "한국어",
         "japanese": "日本語",
         "spanish": "Español",
-        "french": "Français"
+        "french": "Français",
+        "portuguese": "Português (Brasil)"
       },
       "statusBar": {
         "claudeToggleDescription": "Afficher l'utilisation des tokens et des coûts de Claude pour l'espace de travail actif.",
@@ -314,6 +315,10 @@
       "readFailed": "Impossible de lire les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
       "saveFailed": "Impossible d’enregistrer les paramètres des agents. Vérifiez la connexion à l’hôte et réessayez.",
       "hostDefaults": "Paramètres par défaut des nouveaux agents sur l’hôte sélectionné.",
+      "defaultOpensAs": "Ouvrir {{value0}} en tant que",
+      "defaultOpensAsChat": "Chat",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "S’applique aux nouvelles sessions {{value0}} lancées depuis cet ordinateur, y compris sur les hôtes associés. Correspond à son interrupteur dans Fournisseurs.",
       "save": "Enregistrer",
       "clearDefault": "Effacer l'agent par défaut"
     },
@@ -1379,6 +1384,12 @@
       }
     },
     "components": {
+      "hostPicker": {
+        "searchHosts": "Rechercher des hôtes…",
+        "noHostsMatch": "Aucun hôte ne correspond.",
+        "moreHosts_one": "{{count}} autre hôte. Recherchez-le par son nom.",
+        "moreHosts_other": "{{count}} autres hôtes. Recherchez par nom pour en trouver un."
+      },
       "BrowserCookieImportDisclosure": {
         "title": "Connexions Google non importées",
         "description": "Connectez-vous à Google directement dans Orca."
@@ -3617,7 +3628,6 @@
         "bar": {
           "BrowserTab": {
             "6e0bc8f3a8": "Ouvrir dans le navigateur",
-            "9dd880bd56": "Fermer tous les onglets à droite",
             "1611a1324b": "Fermer",
             "5d6e89891f": "Dupliquer l'onglet",
             "966feb9ad5": "Scinder vers la droite",
@@ -3634,7 +3644,6 @@
             "52ce4f4605": "Copier le chemin relatif",
             "5b85754786": "Copier le chemin",
             "bfd5797ef4": "Ouvrir l'aperçu Markdown",
-            "e5ff31ccaf": "Fermer tous les onglets à droite",
             "ba1369dd24": "Fermer tous les onglets de l'éditeur",
             "1ba8492c5b": "Fermer",
             "68cc610e7f": "Renommer",
@@ -3667,7 +3676,6 @@
           "SortableTabContextMenu": {
             "35e8892fd0": "Couleur de l'onglet",
             "2f697b3c31": "Modifier le titre",
-            "c1ee099c7e": "Fermer tous les onglets à droite",
             "8d16f9cd30": "Fermer les autres",
             "89359a36f7": "Fermer",
             "21132389e9": "Scinder vers la droite",
@@ -3936,6 +3944,12 @@
             "connectedHostCount_one": "{{count}} hôte",
             "connectedHostCount_other": "{{count}} hôtes",
             "connecting": "Connexion…",
+            "searchSshHosts": "Rechercher des hôtes SSH…",
+            "noMatchingSshHosts": "Aucun hôte SSH ne correspond.",
+            "moreSshHostMatches_one": "{{count}} autre résultat. Continuez à taper pour affiner.",
+            "moreSshHostMatches_other": "{{count}} autres résultats. Continuez à taper pour affiner.",
+            "moreSshHosts_one": "Trouver {{count}} autre hôte SSH…",
+            "moreSshHosts_other": "Chercher parmi {{count}} autres hôtes SSH…",
             "runtime_unavailable_transport_up": "Orque indisponible"
           },
           "StatusBar": {
@@ -5552,7 +5566,8 @@
         },
         "PendingWorktreeRow": {
           "af21e953d1": "Annuler la création du worktree",
-          "188f6922a0": "Annuler"
+          "188f6922a0": "Annuler",
+          "creatingWorkspace": "Création de l'espace de travail…"
         },
         "ProjectGroupDeleteDialog": {
           "ca65b78f78": "Annuler",
@@ -6949,7 +6964,6 @@
           "4e32e030b2": "Stocké localement. Orca ne l'envoie qu'à platform.minimax.io pour les actualisations de consommation.",
           "remoteServerFallback": "le serveur distant",
           "loadAccountsFailed": "Impossible de charger les comptes du fournisseur.",
-          "remoteScopeAccounts": "Affiche les comptes gérés par {{value0}}. Ajoutez ou réauthentifiez les comptes sur ce serveur.",
           "accountScopePrefix": "Portée des comptes",
           "accountScopeRemoteServerUnnamed": "Serveur distant",
           "remoteScopeLocalAccountsKept": "Les comptes gérés sur ce bureau restent inchangés. Repassez le runtime par défaut sur Local desktop pour les voir.",
@@ -7202,8 +7216,6 @@
           "ee110e1830": "Aucun ref de base par défaut"
         },
         "BrowserDefaultZoomSetting": {
-          "2622126877": "Niveau de zoom appliqué aux nouveaux onglets du navigateur.",
-          "bbeec087d3": "Appliqué aux nouveaux onglets du navigateur.",
           "265597101f": "Zoom par défaut"
         },
         "BrowserHomePageSetting": {
@@ -12652,7 +12664,6 @@
         "sshManagedHostRemove": {
           "description": "Orca s’exécute sur {{label}}. Dans Orca sur vos hôtes SSH, utilisez Arrêter… pour retirer Orca de l’hôte, ou Oublier… si l’hôte n’existe plus. Vous pourrez ensuite supprimer cet hôte SSH.",
           "open": "Ouvrir Orca sur vos hôtes SSH",
-          "descriptionServers": "Orca tourne sur {{label}}. Dans Serveurs Orca distants, ouvrez le menu ⋯ d’Orca sur {{label}} et choisissez « Arrêter… » pour retirer Orca de l’hôte, ou « Oublier… » si l’hôte n’existe plus. Vous pourrez ensuite supprimer cet hôte SSH.",
           "openServers": "Ouvrir Serveurs Orca distants"
         },
         "managedServers": {
@@ -12676,7 +12687,6 @@
             "confirmForget": "Oublier sur ce poste",
             "keepLinked": "Garder lié",
             "forgetDescription": "Dissocie ce serveur ici sans contacter son hôte. Si l'hôte revient, le serveur y tourne peut-être encore.",
-            "title": "Orca sur {{host}}",
             "orcaVersion": "Orca sur cet hôte : {{version}}",
             "stopOrcaDescription": "Arrête Orca sur l’hôte SSH et le retire de cette liste.",
             "updateOrcaOnHost": "Mettre à jour Orca sur cet hôte"
@@ -12809,7 +12819,8 @@
           "behindRolledBack": "Exécute une version du serveur Orca plus ancienne que cette app ; la dernière mise à jour a été annulée. Utilisez Mettre à jour le serveur pour réessayer.",
           "behindNoTemplate": "Exécute une version du serveur Orca que cette app ne peut pas mettre à jour ; cette version d’Orca n’inclut pas de serveur pour cet hôte.",
           "behindMigrating": "Exécute le serveur Orca, qui se mettra à jour une fois le déplacement de ses projets terminé.",
-          "behindCheckFailed": "Exécute le serveur Orca ; Orca n’a pas pu vérifier s’il est en retard sur cette app."
+          "behindCheckFailed": "Exécute le serveur Orca ; Orca n’a pas pu vérifier s’il est en retard sur cette app.",
+          "refusedBlockedReason": "Orca n’est pas encore configuré sur cet hôte. {{reason}}"
         },
         "deltaMove": {
           "action": "Déplacer les nouveaux projets…",
@@ -13021,9 +13032,6 @@
           "emptyDescription": "Associez une machine de développement, une machine cloud ou un ordinateur chez vous. Ses sessions continuent de tourner quand cet ordinateur est en veille.",
           "movePaused": "Déplacement en pause",
           "shareTitle": "Partager cet ordinateur",
-          "shareDescriptionNamed": "Permettez à un navigateur, un téléphone ou un autre Orca de travailler sur {{name}}.",
-          "shareDescription": "Permettez à un navigateur, un téléphone ou un autre Orca de travailler sur cet ordinateur.",
-          "shareButton": "Partager…",
           "done": "Terminé",
           "unreachableLead": "Orca n’a pas pu joindre ce serveur.",
           "updateFailedLead": "La dernière mise à jour n’a pas abouti.",
@@ -14413,8 +14421,8 @@
             "deleteReasonUnsupportedAgent": "{{value0}} sessions ne peuvent pas être supprimées depuis Orca.",
             "resumeInNewNativeChat": "Reprendre dans un nouveau chat",
             "resumeInNewCli": "Reprendre dans un nouveau terminal",
-            "resumeInNewCliTooltipFork": "Forke cette conversation dans une nouvelle session CLI.",
-            "resumeInNewCliTooltipChat": "Le chat natif reste tel quel."
+            "resumeInNewCliTooltipFork": "Démarre une nouvelle session de l’agent de terminal avec une copie de cette conversation.",
+            "resumeInNewCliTooltipChat": "Ce chat reste inchangé."
           },
           "AiVaultSessionDeleteDialog": {
             "title": "Supprimer cette session ?",
@@ -16761,7 +16769,6 @@
             "95af781091": "Envoyer un retour à un agent",
             "ac39b9366b": "Envoyer",
             "a3508d7e6e": "{{value0}} annotation{{value1}} prête. Sélectionnez un autre élément ou copiez tous les retours.",
-            "f796c774a4": "Saisissez une URL ci-dessus pour commencer à naviguer.",
             "366bf5d62c": "Nouvel onglet",
             "1c78adc73d": "Ouvrir en externe",
             "da68d35f7b": "Ouvrir la page en erreur dans le navigateur par défaut",
@@ -16887,7 +16894,8 @@
               "bar": {
                 "suggestions": {
                   "87fcdd0da9": "Recherche {{value0}}"
-                }
+                },
+                "placeholder": "Rechercher ou saisir une URL"
               }
             }
           },
@@ -18433,9 +18441,9 @@
         "couldNotStart": "{{agent}} n'a pas pu démarrer.",
         "editSavedArguments": "Modifiez-les dans Paramètres > Agents > Arguments.",
         "couldNotRestart": "{{agent}} n'a pas pu redémarrer.",
+        "cliTooOld": "{{agent}} {{installedVersion}} est trop ancien pour les conversations. Mettez-le à jour vers {{minimumVersion}} ou une version ultérieure.",
         "startTimedOut": "{{agent}} a mis trop de temps à démarrer (aucune réponse à {{method}} après {{seconds}} s).",
         "startTimedOutKeepsHappening": "Si cela se reproduit, l'ordinateur qui exécute ce chat est peut-être surchargé.",
-        "codexCliTooOld": "Codex {{installedVersion}} est trop ancien pour les conversations. Mettez-le à jour vers {{minimumVersion}} ou une version ultérieure.",
         "notSignedIn": "{{agent}} n’est pas connecté.",
         "claudeSystemNotSignedIn": "Claude n’est pas connecté. Exécutez `{{loginCommand}}`, ou choisissez un compte dans les paramètres des Comptes Claude.",
         "claudeManagedNotSignedIn": "Ce compte Claude n’est pas connecté. Reconnectez-vous dans les paramètres des Comptes Claude.",
@@ -18703,6 +18711,7 @@
         "permissionFullAccessCodexDescription": "Ne demande jamais ; peut modifier n’importe quel fichier et utiliser le réseau",
         "permissionFullAccessSharedDescription": "Ne demande jamais avant les modifications ou les commandes",
         "pasteFailed": "Échec du collage.",
+        "tooManySkills": "Votre message n’a pas été envoyé à {{agent}}. Gardez au maximum {{limit}} fichiers de compétences sélectionnés et réessayez.",
         "commandAttachmentsUnsupported": "Retirez les pièces jointes avant d'utiliser une commande de session de chat.",
         "optionValueShort": {
           "minimal": "Min.",
@@ -18724,6 +18733,9 @@
         "interruptedCallsLabel": "Appels d'outil interrompus : {{value0}}",
         "runningPreview": "Exécution de {{preview}}",
         "runningCommand": "Commande en cours d'exécution",
+        "showFullOutput": "Afficher la sortie complète",
+        "fullOutputFailed": "Impossible de charger la sortie complète.",
+        "fullOutputPartial": "Affichage de {{shown}} sur {{total}}.",
         "runningNamedPreview": "En cours d'exécution {{toolName}} {{preview}}",
         "runningNamed": "Exécution de {{toolName}}",
         "ranCommandOneToolSummary": "Exécuté la commande {{commandCount}} et utilisé l'outil {{toolCount}}",
@@ -18929,6 +18941,8 @@
         "plan": "Plan",
         "historyRepaired": "Une partie de l'historique de ce chat n'a pas pu être chargée.",
         "historyItemTooLarge": "Cette partie du chat était trop volumineuse pour être affichée.",
+        "continuedOutside": "Poursuivi en dehors de ce chat.",
+        "continuedOutsideRewound": "Poursuivi en dehors de ce chat. Les réponses précédentes ne font plus partie de l'historique de cette conversation.",
         "stoppedBeforeStart": "Arrêté manuellement",
         "dismiss": "Ignorer",
         "copyError": "Copier l'erreur",
@@ -19174,17 +19188,14 @@
     "tab": {
       "bar": {
         "SortableTabContextMenu": {
-          "switchToTerminalView": "Passer à l’agent de terminal",
-          "switchToChatView": "Passer à l’interface de chat",
-          "closeTabsToLeft": "Fermer tous les onglets à gauche"
+          "switchToTerminalView": "Continuer avec l’agent de terminal",
+          "switchToChatView": "Continuer dans l’interface de chat"
         },
         "BrowserTab": {
-          "closeOthers": "Fermer les autres",
-          "closeTabsToLeft": "Fermer tous les onglets à gauche"
+          "closeOthers": "Fermer les autres"
         },
         "EditorFileTabContextMenu": {
-          "closeOthers": "Fermer les autres",
-          "closeTabsToLeft": "Fermer tous les onglets à gauche"
+          "closeOthers": "Fermer les autres"
         },
         "CopyTabIdMenuItem": {
           "copied": "ID de l'onglet copié",
@@ -19458,6 +19469,17 @@
           "checking": "Recherche de modifications…",
           "checkingDetails": "Vérification…",
           "unavailableDetails": "Détails indisponibles"
+        },
+        "unsavedEdits": {
+          "discarded_one": "Les modifications non enregistrées de {{count}} fichier seront ignorées :",
+          "discarded_other": "Les modifications non enregistrées de {{count}} fichiers seront ignorées :",
+          "moreFiles": "et {{value}} de plus",
+          "blocked_one": "Enregistrez ou fermez d'abord {{count}} fichier non enregistré dans {{name}}",
+          "blocked_other": "Enregistrez ou fermez d'abord {{count}} fichiers non enregistrés dans {{name}}",
+          "closedToast_one": "{{count}} fichier avec des modifications non enregistrées de {{workspace}} a été fermé",
+          "closedToast_other": "{{count}} fichiers avec des modifications non enregistrées de {{workspace}} ont été fermés",
+          "reopen": "Rouvrir",
+          "reopenFailed": "Certains fichiers n’ont pas pu être rouverts. Ouvrez un espace de travail et réessayez avec Rouvrir."
         }
       }
     },
@@ -20055,6 +20077,7 @@
       "empty": "Aucun sous-agent trouvé."
     },
     "antigravityReferenceDescription": "Continue dans une nouvelle conversation Antigravity CLI en utilisant cette transcription comme référence.",
+    "searchHitSourceHost": "Trouvée sur {{value0}}",
     "antigravityIdeToCli": "IDE → CLI",
     "antigravity2ToCli": "2.0 → CLI",
     "continueInCli": "Continuer en CLI",
@@ -20473,7 +20496,17 @@
   "tabHoverCard": {
     "browser": "Navigateur",
     "editor": "Éditeur",
-    "terminal": "Terminal"
+    "terminal": "Terminal",
+    "namingFailure": {
+      "regenerating": "Régénération…",
+      "regenerate": "Régénérer le nom",
+      "title": "Impossible de nommer ce chat",
+      "description": "L’agent de nommage des chats s’est arrêté sur une erreur ; le chat garde donc son premier message comme nom.",
+      "viewError": "voir l’erreur",
+      "dialogTitle": "Échec du nommage automatique du chat",
+      "dialogDescriptionStart": "Orca n’a pas pu générer de nom pour",
+      "dialogDescriptionEnd": "à partir de son premier message."
+    }
   },
   "jira": {
     "savedFilters": {

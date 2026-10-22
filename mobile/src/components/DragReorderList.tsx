@@ -12,6 +12,7 @@ import { View } from 'react-native'
 import Animated, {
   measure,
   runOnJS,
+  runOnUI,
   scrollTo,
   useFrameCallback,
   useSharedValue,
@@ -95,17 +96,23 @@ export function DragReorderList<ItemT>({
   const dragTranslationY = useSharedValue(0)
   const dragPointerAbsY = useSharedValue(0)
 
-  const signature = `${scopeKey}${KEY_SEPARATOR}${keySignature}`
-  const currentSignature = useRef(signature)
+  const catalog = useMemo(() => ({ keySignature, scopeKey }), [keySignature, scopeKey])
+  const currentCatalog = useRef<typeof catalog | null>(catalog)
   useLayoutEffect(() => {
-    currentSignature.current = signature
-  }, [signature])
+    currentCatalog.current = catalog
+    return () => {
+      currentCatalog.current = null
+    }
+  }, [catalog])
   useEffect(() => {
     sizes.value = rowSizes
   }, [rowSizes, sizes])
 
   const updateDragPosition = (key: string): void => {
     'worklet'
+    if (activeKey.value !== key) {
+      return
+    }
     const rawTop =
       dragStartTop.value + dragTranslationY.value + (scrollOffsetY.value - dragStartScrollY.value)
     const top = Math.min(Math.max(rawTop, 0), Math.max(0, height - (sizes.value[key] ?? 0)))
@@ -169,10 +176,7 @@ export function DragReorderList<ItemT>({
   const commitReorder = useCallback(
     (orderedKeys: string[], movedId: string) => {
       // Why: a cancelled or no-op drag should not trigger a persisted write.
-      if (
-        currentSignature.current === signature &&
-        orderedKeys.join(KEY_SEPARATOR) !== keySignature
-      ) {
+      if (currentCatalog.current === catalog && orderedKeys.join(KEY_SEPARATOR) !== keySignature) {
         onReorder?.(orderedKeys)
         const move = dragReorderMove(orderedKeys, movedId)
         if (move) {
@@ -180,7 +184,7 @@ export function DragReorderList<ItemT>({
         }
       }
     },
-    [onReorder, onMove, keySignature, signature]
+    [onReorder, onMove, keySignature, catalog]
   )
 
   // Why: screen-reader users can't long-press-drag; the handle exposes
@@ -203,16 +207,23 @@ export function DragReorderList<ItemT>({
     [keys, commitReorder]
   )
 
+  // A removed handle may never finalize its native gesture.
   useEffect(() => {
-    if (activeKey.value !== null) {
-      handleDragActiveChange(false)
+    const next = dragReorderPositionsFromKeys(keySignature ? keySignature.split(KEY_SEPARATOR) : [])
+    runOnUI((nextPositions: DragReorderPositions) => {
+      'worklet'
+      positions.value = nextPositions
+    })(next)
+    return () => {
+      runOnUI(() => {
+        'worklet'
+        if (activeKey.value !== null) {
+          activeKey.value = null
+          runOnJS(handleDragActiveChange)(false)
+        }
+      })()
     }
-    activeKey.value = null
-    positions.value = dragReorderPositionsFromKeys(
-      keySignature ? keySignature.split(KEY_SEPARATOR) : []
-    )
-  }, [signature, keySignature, positions, activeKey, handleDragActiveChange])
-  useEffect(() => () => handleDragActiveChange(false), [handleDragActiveChange])
+  }, [catalog, keySignature, positions, activeKey, handleDragActiveChange])
 
   const shared: DragSharedState = {
     sizes,

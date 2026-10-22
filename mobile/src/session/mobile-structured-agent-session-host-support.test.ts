@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY } from '../../../src/shared/structured-agent-session-surface-capabilities'
 import {
   AGENT_SESSION_ATTACHMENTS_RUNTIME_CAPABILITY,
   AGENT_SESSION_CONVERSATION_STOP_RUNTIME_CAPABILITY,
@@ -19,6 +20,7 @@ import { structuredAgentSessionHostSupport } from './mobile-structured-agent-ses
 describe('structuredAgentSessionHostSupport', () => {
   it('reads each structured-session feature from the host capability list', () => {
     const none = {
+      coherentModelCatalog: false,
       promptCancel: false,
       questionAnswers: false,
       queuedMessages: false,
@@ -30,9 +32,13 @@ describe('structuredAgentSessionHostSupport', () => {
       sendOptions: false,
       conversationStop: false,
       permissionModes: false,
+      itemDetail: false,
       phoneAttachments: false
     }
     expect(structuredAgentSessionHostSupport([])).toEqual(none)
+    expect(
+      structuredAgentSessionHostSupport([AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY])
+    ).toEqual({ ...none, coherentModelCatalog: true })
     expect(
       structuredAgentSessionHostSupport([AGENT_SESSION_QUESTION_ANSWERS_RUNTIME_CAPABILITY])
     ).toEqual({ ...none, questionAnswers: true })

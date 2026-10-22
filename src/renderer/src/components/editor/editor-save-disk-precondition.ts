@@ -10,11 +10,11 @@ import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-typ
 import { writeRuntimeFile } from '@/runtime/runtime-file-mutation-client'
 
 /**
- * `user`: an explicit desktop save (shortcut, save-and-close dialog). `mobile`: a save from the
- * mobile app. `restart`: the save-all before a restart. `overwrite`: the conflict banner's
- * Overwrite, the only consent to replace a disk change.
+ * `user`: an explicit desktop save (shortcut, save-and-close dialog). `restart`: the save-all
+ * before a restart. `overwrite`: the conflict banner's Overwrite, the only consent to replace a
+ * disk change.
  */
-export type EditorSaveTrigger = 'autosave' | 'user' | 'mobile' | 'restart' | 'overwrite'
+export type EditorSaveTrigger = 'autosave' | 'user' | 'restart' | 'overwrite'
 
 /**
  * `written`: disk holds the text. `blocked-stale`: the host refused because disk moved on since the
@@ -32,10 +32,14 @@ export function editorTabModelUri(state: AppState, file: OpenFile): string {
 }
 
 /** Whether the tab edits its Monaco model directly; rich, notebook, CSV and preview views don't. */
-function isCodeViewTab(state: AppState, file: OpenFile): boolean {
+export function isCodeViewTab(state: AppState, file: OpenFile): boolean {
   // Why: the Changes view renders its own diff model, not the shared text model.
   if (file.mode !== 'edit' || state.editorViewMode?.[file.id] === 'changes') {
     return false
+  }
+  // Why: a read-only tab always renders raw Monaco source (editor-panel-render-model), whatever its type.
+  if (file.readOnly === true) {
+    return true
   }
   const target = { language: detectLanguage(file.filePath), mode: file.mode }
   const views = getMarkdownViewModes(target)
@@ -78,14 +82,10 @@ export function isEditorModelDirty(state: AppState, file: OpenFile): boolean {
   return editorModelSiblingTabs(state, file).some((tab) => tab.isDirty)
 }
 
-/** Whether a store snapshot is whole enough to resolve a tab's model siblings. */
-export function isWholeEditorState(state: unknown): state is AppState {
-  return (
-    typeof state === 'object' &&
-    state !== null &&
-    'editorDrafts' in state &&
-    'worktreesByRepo' in state &&
-    'setLastKnownDiskSignature' in state
+/** The tab holding the model's unsaved text; it may be a sibling of `file`, not `file` itself. */
+export function editorModelDraftHolder(state: AppState, file: OpenFile): OpenFile | undefined {
+  return editorModelSiblingTabs(state, file).find(
+    (tab) => tab.isDirty && state.editorDrafts[tab.id] !== undefined
   )
 }
 
@@ -137,7 +137,8 @@ export function writeEditorSave(
   filePath: string,
   content: string,
   access: LocalFileAccess | undefined,
-  write: EditorSaveWrite
+  write: EditorSaveWrite,
+  beforeSend?: () => void
 ): Promise<FileWriteResult> {
   return writeRuntimeFile(
     context,
@@ -146,7 +147,8 @@ export function writeEditorSave(
     access,
     write.kind === 'guarded'
       ? { expectedSignature: write.signature, allowMissing: write.allowMissing }
-      : undefined
+      : undefined,
+    beforeSend
   )
 }
 
