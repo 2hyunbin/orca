@@ -1,11 +1,16 @@
 import { expect, it, vi } from 'vitest'
 import { DESKTOP_PRESENCE_REPORT_INTERVAL_MS } from '../../shared/desktop-client-presence'
+import {
+  clearSharedControlAnswerSource,
+  listReadySharedControlSockets,
+  setSharedControlAnswerSource
+} from '../ipc/runtime-environments/runtime-environment-shared-control-answers'
 import { createDesktopPresenceReporter } from './desktop-presence-reporter'
 
 it('reports on change, on a new socket and as a keepalive, and never reports unknown as present', async () => {
   let away: boolean | undefined = false
   let now = 0
-  let socket = 1
+  let socket = '1'
   const request = vi.fn(async (_method: string, _params: unknown, _timeoutMs: number) => ({
     ok: true
   }))
@@ -29,10 +34,10 @@ it('reports on change, on a new socket and as a keepalive, and never reports unk
   tick()
   expect(reported()).toHaveLength(3)
   away = false
-  socket = 2
+  socket = '2'
   now += 1
   tick()
-  socket = 3
+  socket = '3'
   tick()
   expect(reported()).toEqual([
     { away: false },
@@ -43,7 +48,7 @@ it('reports on change, on a new socket and as a keepalive, and never reports unk
   ])
 
   request.mockRejectedValueOnce(new Error('socket closed'))
-  socket = 4
+  socket = '4'
   tick()
   await Promise.resolve()
   await Promise.resolve()
@@ -57,4 +62,21 @@ it('reports on change, on a new socket and as a keepalive, and never reports unk
   expect(reported().at(-1)).toEqual({ away: true })
   reporter.setForcedAway(false)
   expect(reported().at(-1)).toEqual({ away: false })
+})
+
+it('keys a replaced connection apart from the one it replaced, though both start at generation 1', () => {
+  const connection = () => ({
+    isReady: () => true,
+    socketGeneration: { peek: () => 1 },
+    request: async () => ({ ok: true })
+  })
+  try {
+    setSharedControlAnswerSource('replaced-host', connection(), () => null)
+    const [before] = listReadySharedControlSockets()
+    setSharedControlAnswerSource('replaced-host', connection(), () => null)
+    const [after] = listReadySharedControlSockets()
+    expect(after.socket).not.toBe(before.socket)
+  } finally {
+    clearSharedControlAnswerSource('replaced-host')
+  }
 })

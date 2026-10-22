@@ -12,7 +12,7 @@ import {
 const SAMPLE_INTERVAL_MS = 5_000
 const REPORT_TIMEOUT_MS = 10_000
 
-type Sent = { socket: number; away: boolean; at: number }
+type Sent = { socket: string; away: boolean; at: number }
 
 export type DesktopPresenceReporterDeps = {
   readAway: () => boolean | undefined

@@ -8,24 +8,26 @@ export type SharedControlSocket = {
   request(method: string, params: unknown, timeoutMs: number): Promise<unknown>
 }
 
-/** A ready control socket; `socket` changes whenever it reconnects. */
+/** A ready control socket; `socket` changes whenever it reconnects or the connection is replaced. */
 export type ReadySharedControlSocket = {
   environmentId: string
-  socket: number
+  socket: string
   request: SharedControlSocket['request']
 }
 
 const sources = new Map<
   string,
-  { connection: SharedControlSocket; answeredAt: () => number | null }
+  { connection: SharedControlSocket; answeredAt: () => number | null; instance: number }
 >()
+// Why: a replacement connection restarts its socket generation, so the key needs the instance too.
+let nextInstance = 0
 
 export function setSharedControlAnswerSource(
   environmentId: string,
   connection: SharedControlSocket,
   answeredAt: () => number | null
 ): void {
-  sources.set(environmentId, { connection, answeredAt })
+  sources.set(environmentId, { connection, answeredAt, instance: ++nextInstance })
 }
 
 export function clearSharedControlAnswerSource(environmentId: string): void {
@@ -39,12 +41,12 @@ export function getRemoteRuntimeSharedControlAnsweredAt(environmentId: string): 
 
 /** Every ready control socket, without opening one. */
 export function listReadySharedControlSockets(): ReadySharedControlSocket[] {
-  return [...sources.entries()].flatMap(([environmentId, { connection }]) =>
+  return [...sources.entries()].flatMap(([environmentId, { connection, instance }]) =>
     connection.isReady()
       ? [
           {
             environmentId,
-            socket: connection.socketGeneration.peek(),
+            socket: `${instance}:${connection.socketGeneration.peek()}`,
             request: (method: string, params: unknown, timeoutMs: number) =>
               connection.request(method, params, timeoutMs)
           }
