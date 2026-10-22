@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { RelayHomeCellUnavailableError, type RelayAssignment } from './assignment-store.js'
-import type { RelayConfig } from './config.js'
+import { RelayHomeCellUnavailableError, type RelayAssignment } from '../assignment-store.js'
+import type { RelayConfig } from '../config.js'
 
 const fakes = vi.hoisted(() => ({
   verifyRelayToken: vi.fn(async (token: string) => ({
@@ -9,12 +9,13 @@ const fakes = vi.hoisted(() => ({
   }))
 }))
 
-vi.mock('./relay-token-verifier.js', () => ({
+vi.mock('../relay-token-verifier.js', () => ({
   createRelayTokenVerifier: () => fakes.verifyRelayToken,
   readBearer: (value: string | undefined) => value?.replace(/^Bearer /, '') ?? null
 }))
 
-import { createRelayApp, relayHostLogDigest } from './app.js'
+import { createRelayApp } from '../app.js'
+import { relayHostLogDigest } from '../relay-host-log-digest.js'
 
 describe('assignment rejection logging', () => {
   afterEach(() => {

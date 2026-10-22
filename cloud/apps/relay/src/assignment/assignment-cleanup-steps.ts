@@ -1,4 +1,4 @@
-import { runRelayBackgroundOperation } from './relay-background-operation.js'
+import { runRelayBackgroundOperation } from '../relay-background-operation.js'
 
 // The twelve periodic assignment sweeps the director runs every 30s. Each step
 // re-derives its state from the database and is idempotent, so they carry no

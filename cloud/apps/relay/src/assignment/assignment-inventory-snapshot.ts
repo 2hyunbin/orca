@@ -1,6 +1,6 @@
 import { RELAY_DEFAULT_REGION } from '@orca-cloud/relay-contract'
-import type { RelayDatabase, SqlRow } from './database.js'
-import { REGIONAL_REHOME_ABORT_REPORT_WINDOW_MS } from './regional-rehome-abort-reason.js'
+import type { RelayDatabase, SqlRow } from '../database.js'
+import { REGIONAL_REHOME_ABORT_REPORT_WINDOW_MS } from '../regional-rehome-abort-reason.js'
 
 export type CellInventorySnapshotRow = {
   cellId: string
