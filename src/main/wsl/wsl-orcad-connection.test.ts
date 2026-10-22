@@ -489,6 +489,33 @@ describe('a WSL host that refuses the enrolled pairing', () => {
     expect(getPreferredPairingOffer(store.stored()).deviceToken).toBe('fresh-token')
   })
 
+  it('still runs an Update queued behind a reconnect whose pairing failed', async () => {
+    const store = repairable(readiness(first.port, 'fresh-token'))
+    let hostLostRegistry = false
+    const { manager, deployAndLaunch } = setup({
+      verifyIdentity: async (pairingOffer: string) =>
+        !hostLostRegistry && parsePairingCode(pairingOffer)?.deviceToken === 'lost-token'
+          ? ({ verdict: 'verified' } as const)
+          : ({ verdict: 'unpaired', detail: 'access grant refused' } as const),
+      pairingRecovery: store.recovery,
+      getPairingOffer: () => getPreferredPairingOffer(store.stored())
+    })
+    await manager.ensure('Ubuntu', { environmentId: 'wsl:ubuntu' })
+    hostLostRegistry = true
+    const reconnect = manager.ensure('Ubuntu', { environmentId: 'wsl:ubuntu' })
+    const update = manager.ensure('Ubuntu', { environmentId: 'wsl:ubuntu', intent: 'update' })
+    await reconnect.catch(() => {})
+    const settled = await update.then(
+      () => null,
+      (error: unknown) => error
+    )
+    expect(settled).not.toBeInstanceOf(WslOrcadConnectionSupersededError)
+    expect(deployAndLaunch).toHaveBeenLastCalledWith(
+      'Ubuntu',
+      expect.objectContaining({ intent: 'update' })
+    )
+  })
+
   it('never gives the token to a server under another host key', async () => {
     const published = readiness(first.port, 'fresh-token')
     if (!published.pairing.available) {

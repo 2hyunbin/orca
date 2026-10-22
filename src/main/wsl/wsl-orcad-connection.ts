@@ -162,10 +162,17 @@ export class WslOrcadConnectionManager {
     if (!entry) {
       return
     }
-    this.active.delete(key)
+    await this.drop(key, entry)
+    this.dependencies.onChange?.(entry.connection.distro, null, { state: 'closed' })
+  }
+
+  /** Retires one bridge; unlike close, a connect queued behind it still runs. */
+  private async drop(key: string, entry: ActiveWslOrcadConnection): Promise<void> {
+    if (this.active.get(key) === entry) {
+      this.active.delete(key)
+    }
     await entry.forward.close()
     trackWslOrcadHostEnvironment(entry.connection, null)
-    this.dependencies.onChange?.(entry.connection.distro, null, { state: 'closed' })
   }
 
   async dispose(): Promise<void> {
@@ -227,7 +234,7 @@ export class WslOrcadConnectionManager {
       ).catch(async (error: unknown) => {
         // Why retire: this bridge holds a token the host refused, and a failure published with it
         // would store that token over a repair the gate already saved.
-        await this.closeEntry(key, current)
+        await this.drop(key, current)
         throw error
       })
       if (this.generation(key) !== generation) {
@@ -244,9 +251,7 @@ export class WslOrcadConnectionManager {
     // orcad moved ports (or this is the first connect): the old bridge dials a dead port.
     const preferredLocalPort = current?.connection.localPort ?? options.localPort ?? 0
     if (current) {
-      this.active.delete(key)
-      await current.forward.close()
-      trackWslOrcadHostEnvironment(current.connection, null)
+      await this.drop(key, current)
       this.dependencies.onChange?.(distro, null, status.pending)
     }
     const forward = await listenWslOrcadStdioBridgeOnPreferredPort(
