@@ -1,12 +1,8 @@
 import { useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import { BrowserPageZoomIndicator } from './assemble-chrome/browser-page-zoom-indicator'
 import { useAppStore } from '@/store'
-import type {
-  BrowserLoadError,
-  BrowserPage as BrowserPageState
-} from '../../../../shared/browser-workspace-types'
+import type { BrowserLoadError } from '../../../../shared/browser-workspace-types'
 import { toHttpsRecoveryUrl } from '../../../../shared/browser-url'
-import type { RuntimeBrowserClientPlacement } from '../../../../shared/runtime-browser-placement'
 import {
   readBrowserClientPageGuestMetadataIfLive,
   createBrowserClientPageLoadFailureHandler
@@ -50,11 +46,7 @@ import {
   getOpenableExternalUrl,
   toDisplayUrl
 } from './describe-page/browser-page-url-display'
-import type {
-  BrowserChromeShortcutScope,
-  BrowserPageUrlSetter,
-  BrowserTabPageState
-} from './describe-page/browser-page-types'
+import type { ClientHostedBrowserPagePaneProps } from './describe-page/browser-page-types'
 
 export function ClientHostedBrowserPagePane({
   browserTab,
@@ -66,18 +58,7 @@ export function ClientHostedBrowserPagePane({
   chromeShortcutScope,
   onUpdatePageState,
   onSetUrl
-}: {
-  browserTab: BrowserPageState
-  workspaceId: string
-  runtimeEnvironmentId: string
-  worktreeId: string
-  /** Null while the tab is still an optimistic stage: the host mints the placement, not this client. */
-  placement: RuntimeBrowserClientPlacement | null
-  isActive: boolean
-  chromeShortcutScope: BrowserChromeShortcutScope
-  onUpdatePageState: (tabId: string, updates: BrowserTabPageState) => void
-  onSetUrl: BrowserPageUrlSetter
-}): React.JSX.Element {
+}: ClientHostedBrowserPagePaneProps): React.JSX.Element {
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
   const addressBarInputRef = useRef<HTMLInputElement | null>(null)
