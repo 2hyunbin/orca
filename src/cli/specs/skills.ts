@@ -75,7 +75,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
       'Reads the bundled skill registry locally without contacting the Orca runtime, ' +
         'and needs no network, Node, Git or npx.',
       'Writes the copy this Orca build ships into the shared .agents/skills folder and ' +
-        'links it into each detected agent’s skills folder, the same way the app’s ' +
+        'links it into each detected agent\u2019s skills folder, the same way the app\u2019s ' +
         'Update skills does.',
       'Only copies Orca wrote and nobody changed are updated. A copy you changed, or a ' +
         'different skill with the same name, is left alone and reported; --force replaces ' +
