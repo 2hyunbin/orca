@@ -157,7 +157,23 @@ test.describe('Workspace sleep runs in main', () => {
   })
 
   test('a delete during a sleep waits for it and removes the workspace', async ({ orcaPage }) => {
-    const { first, second } = await secondWorktree(orcaPage)
+    const { first } = await secondWorktree(orcaPage)
+    // Why its own workspace: the seeded secondary one is shared by every later spec in this run.
+    const second = await orcaPage.evaluate(async (firstId) => {
+      const state = window.__store!.getState()
+      const repoId = state.getKnownWorktreeById(firstId)?.repoId
+      if (!repoId) {
+        throw new Error('no repo for the active workspace')
+      }
+      const created = await state.createWorktree(
+        repoId,
+        `e2e-sleep-delete-${Date.now()}`,
+        undefined,
+        'skip'
+      )
+      await state.fetchWorktrees(repoId)
+      return created.worktree.id
+    }, first)
     await liveTerminalIn(orcaPage, second)
     await switchToWorktree(orcaPage, first)
     const removed = await orcaPage.evaluate(async (id) => {
