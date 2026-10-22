@@ -1,6 +1,5 @@
 import type { AppState } from '../types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
-import type { EditorBufferKeepRequest } from '../slices/editor/buffers/editor-buffer-kept'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { buildTerminalTabRetirementPlans } from '../slices/terminal-tab-retirement'
 import { cancelStructuredLaunchesForWorktrees } from '../slices/worktrees/teardown/purged-structured-launch-retirement'
@@ -50,15 +49,13 @@ export function collectRemovedHostTwins(
 /**
  * Closes the surfaces attributed to the removed copy through their close actions, so chats,
  * previews and shells retire as on any close. Anything unattributed (mixed tabs, reopen history,
- * tabless sleeping records) stays: a stale entry, never the survivor's data lost. Each file close
- * carries `keepEditorBuffer`, so a dirty record it closes outlives the tab.
+ * tabless sleeping records) stays: a stale entry, never the survivor's data lost.
  */
 export function closeRemovedHostTwinState(
   get: () => AppState,
   set: (patch: (state: AppState) => Partial<AppState>) => void,
   twins: RemovedHostTwins,
-  preCall: RemovedHostTwins,
-  keepEditorBuffer?: EditorBufferKeepRequest
+  preCall: RemovedHostTwins
 ): void {
   const state = get()
   const presentTabIds = new Set([
@@ -143,7 +140,7 @@ export function closeRemovedHostTwinState(
     for (const fileId of removed?.fileIds ?? []) {
       // Why: a file a listing refresh already dropped would make closeFile reset the focused surface.
       if (get().openFiles.some((file) => file.id === fileId)) {
-        get().closeFile(fileId, { captureRecentlyClosed: false, keepEditorBuffer })
+        get().closeFile(fileId, { captureRecentlyClosed: false })
       }
     }
     for (const browserTabId of removed?.browserTabIds ?? []) {

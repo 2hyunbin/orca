@@ -222,12 +222,12 @@ export function createRepoRemovalActions(
         const purgeTargets = worktreeIds.map((id) => ({ id, hostId: ownerHostId }))
         flushPurgedWorkspaceEdits(get(), purgeTargets)
         // Why before the twin close: it closes tabs one by one; the purge below shares this batch.
-        const keepEditorBuffer = noticeRemovedUnsavedFiles(
+        noticeRemovedUnsavedFiles(
           get(),
           worktreePurgeClosedFileIds(get(), purgeTargets),
           options.confirmedDiscards
         )
-        closeRemovedHostTwinState(get, set, twins, preCallTwins, keepEditorBuffer)
+        closeRemovedHostTwinState(get, set, twins, preCallTwins)
         get().purgeWorktreeTerminalState(exclusiveWorktreeIds)
         deleteWorkspaceChatDrafts(chatDraftKeys)
         get().clearLocalDetectedAgentContextsForProjects(localAgentContextProjectIds)

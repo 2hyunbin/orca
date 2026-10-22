@@ -4,7 +4,10 @@ import type { WorkspaceSessionState } from '../../../../../../shared/workspace-s
 import type { AppState } from '../../../types'
 import type { OpenFile } from '../types/open-file'
 import { reconcileEditorBufferMembership } from '../buffers/editor-buffer-record'
-import { buildEditorBufferViewIndex } from '../buffers/editor-buffer-views'
+import {
+  EMPTY_EDITOR_BUFFER_VIEW_INDEX,
+  reconcileEditorBufferViewIndex
+} from '../buffers/editor-buffer-views'
 import { buildOwnedEditorFileId } from '../file-ids/editor-file-ids'
 import { resolveHydratedEditorFileSelection } from '../file-ids/hydrated-editor-file-selection'
 import { resolveHydratedEditorFrontmatter } from '../file-ids/hydrated-editor-frontmatter'
@@ -20,7 +23,6 @@ export type HydratedEditorSessionState = Pick<
   | 'editorBuffers'
   | 'editorBufferIdOf'
   | 'editorBufferViews'
-  | 'editorBufferDetached'
   | 'editorDrafts'
   | 'markdownFrontmatterVisible'
   | 'activeFileId'
@@ -151,15 +153,13 @@ export function buildHydratedEditorSessionState(
     editorFileIdMigrationsByWorktree
   )
 
-  // Why own records: the record middleware joins restored views once their identities resolve.
-  const viewIndex = buildEditorBufferViewIndex(openFiles, (file) => file.id)
+  const viewIndex = reconcileEditorBufferViewIndex(EMPTY_EDITOR_BUFFER_VIEW_INDEX, openFiles)
   return {
     state: {
       openFiles,
       // Why fresh: a restored tab's buffer state comes from the session, not a same-id tab it replaces.
       editorBuffers: reconcileEditorBufferMembership({}, openFiles, viewIndex),
       ...viewIndex,
-      editorBufferDetached: {},
       editorDrafts,
       markdownFrontmatterVisible,
       activeFileId: nextActiveFileId,

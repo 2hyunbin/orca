@@ -2,15 +2,12 @@ import type { OpenFile } from '../types/open-file'
 import {
   editorBufferIdOfView,
   editorBufferViewIds,
-  type EditorBufferDetachments,
   type EditorBufferViewIndex
 } from './editor-buffer-views'
-import type { EditorBufferKeepRequest, EditorBufferKeptRecords } from './editor-buffer-kept'
 
 /**
- * Source of truth for a file's buffer state, keyed by record id (the file identity, or the tab id
- * for views that never share). The same fields on every view's `OpenFile` are a mirror written in
- * the same store update so existing readers keep working.
+ * Source of truth for a tab's buffer state, keyed by `OpenFile.id`. The same fields on
+ * `OpenFile` are a mirror written in the same store update so existing readers keep working.
  */
 export type EditorBufferRecord = Pick<
   OpenFile,
@@ -23,12 +20,7 @@ export type EditorBufferRecords = Record<string, EditorBufferRecord>
 export type EditorBufferWrite = { openFiles: OpenFile[]; editorBuffers: EditorBufferRecords }
 
 export type EditorBufferState = EditorBufferWrite &
-  EditorBufferViewIndex & {
-    editorDrafts?: Record<string, string>
-    editorBufferDetached?: EditorBufferDetachments
-    editorBufferKept?: EditorBufferKeptRecords
-    editorBufferKeepRequest?: EditorBufferKeepRequest
-  }
+  EditorBufferViewIndex & { editorDrafts?: Record<string, string> }
 
 export const EDITOR_BUFFER_FIELDS = [
   'isDirty',
@@ -47,13 +39,8 @@ export function editorBufferRecordFromFile(file: OpenFile): EditorBufferRecord {
 }
 
 /** The file's record; a missing one is seeded from the tab, never from defaults. */
-export function editorBufferOf(
-  state: Pick<EditorBufferState, 'editorBuffers' | 'editorBufferIdOf' | 'editorBufferViews'>,
-  file: OpenFile
-): EditorBufferRecord {
-  return (
-    state.editorBuffers[editorBufferIdOfView(state, file.id)] ?? editorBufferRecordFromFile(file)
-  )
+export function editorBufferOf(records: EditorBufferRecords, file: OpenFile): EditorBufferRecord {
+  return records[file.id] ?? editorBufferRecordFromFile(file)
 }
 
 export function editorBufferMirrorMismatch(
@@ -99,31 +86,26 @@ export function updateEditorBuffer<TState extends EditorBufferState>(
   if (!file) {
     return state
   }
-  const record = editorBufferOf(state, file)
-  // Why the mirror too: a view must never keep showing a value its record no longer holds.
+  const record = editorBufferOf(state.editorBuffers, file)
   const changes = EDITOR_BUFFER_FIELDS.some(
-    (field) =>
-      Object.hasOwn(patch, field) &&
-      (!Object.is(record[field], patch[field]) || !Object.is(file[field], patch[field]))
+    (field) => Object.hasOwn(patch, field) && !Object.is(record[field], patch[field])
   )
   return changes ? writeEditorBuffer(state, fileId, patch) : state
 }
 
 /**
- * A host-mirrored tab carries the host's buffer state, so its record adopts it in the same write,
- * and every view mirrors the record's dirty flag. Dirty is the OR of the record's
- * mirrored views: an older host publishes it per tab. `views` is `openFiles` with that flag
- * mirrored; the caller's session-sync patch writes it.
+ * A host-mirrored tab carries the host's buffer state, so its record adopts it in the same write.
+ * Dirty is the OR of the record's mirrored views: an older host publishes it per tab.
  */
 export function adoptMirroredEditorBuffers(
   records: EditorBufferRecords,
-  openFiles: OpenFile[],
+  openFiles: readonly OpenFile[],
   index: EditorBufferViewIndex
-): { editorBuffers: EditorBufferRecords; views: OpenFile[] } {
+): EditorBufferRecords {
   const adopted = new Map<string, EditorBufferRecord>()
   for (const file of openFiles) {
     const recordId = editorBufferIdOfView(index, file.id)
-    if (file.mirroredFromRuntimeSession !== true) {
+    if (file.mirroredFromRuntimeSession !== true || !records[recordId]) {
       continue
     }
     const prior = adopted.get(recordId)
@@ -134,70 +116,53 @@ export function adoptMirroredEditorBuffers(
         : editorBufferRecordFromFile(file)
     )
   }
-  let editorBuffers = records
+  let next = records
   for (const [recordId, record] of adopted) {
-    const current = records[recordId]
-    if (
-      current &&
-      EDITOR_BUFFER_FIELDS.every((field) => Object.is(current[field], record[field]))
-    ) {
+    if (EDITOR_BUFFER_FIELDS.every((field) => Object.is(records[recordId][field], record[field]))) {
       continue
     }
-    editorBuffers = editorBuffers === records ? { ...records } : editorBuffers
-    editorBuffers[recordId] = record
+    next = next === records ? { ...records } : next
+    next[recordId] = record
   }
-  let mirrored = false
-  const nextOpenFiles = openFiles.map((file) => {
-    const record = adopted.get(editorBufferIdOfView(index, file.id))
-    // Why dirty only: it is the one field ORed across views; the rest each view publishes itself.
-    if (!record || file.isDirty === record.isDirty) {
-      return file
-    }
-    mirrored = true
-    return { ...file, isDirty: record.isDirty }
-  })
-  return { editorBuffers, views: mirrored ? nextOpenFiles : openFiles }
-}
-
-const MOVED_EDITOR_BUFFER_PREFIX = 'moved:'
-const CARRIED_EDITOR_BUFFER_PREFIX = 'carried:'
-
-/** A record a rename carried to its new path, before the middleware joins it there. */
-export function isMovedEditorBufferId(recordId: string): boolean {
-  return recordId.startsWith(MOVED_EDITOR_BUFFER_PREFIX)
+  return next
 }
 
 /**
- * Carries each migrated tab's record to its new tab id in the same update that re-keys the tab.
- * The record waits under a transient id; the record middleware then joins it to the record its new
- * identity names. `rename` marks the file's content as moved there, which wins over a clean
- * record already at the new path.
+ * A host-mirrored view may read clean while its record is dirty, but only because another
+ * host-owned view of the record reads dirty: the record ORs per-tab host values.
  */
+export function editorBufferViewMirrorMismatch(
+  file: OpenFile,
+  record: EditorBufferRecord,
+  hostSiblingDirty: boolean
+): keyof EditorBufferRecord | null {
+  const hostDirty = file.mirroredFromRuntimeSession === true && record.isDirty && hostSiblingDirty
+  return editorBufferMirrorMismatch(hostDirty ? { ...file, isDirty: true } : file, record)
+}
+
+/** Moves each migrated tab's record to its new id in the same update that re-keys the tab. */
 export function rekeyEditorBuffers(
-  state: Pick<EditorBufferState, 'editorBuffers' | 'editorBufferIdOf' | 'editorBufferViews'>,
+  records: EditorBufferRecords,
   openFiles: readonly OpenFile[],
   migrations: ReadonlyMap<string, string>,
-  kind: 'rename' | 'carry',
   patchFor?: (file: OpenFile) => Partial<EditorBufferRecord> | undefined
-): Pick<EditorBufferState, 'editorBuffers' | 'editorBufferIdOf'> {
+): EditorBufferRecords {
   const moved = openFiles.filter((file) => migrations.has(file.id))
   if (moved.length === 0) {
-    return { editorBuffers: state.editorBuffers, editorBufferIdOf: state.editorBufferIdOf }
+    return records
   }
-  const editorBuffers = { ...state.editorBuffers }
-  const editorBufferIdOf = { ...state.editorBufferIdOf }
-  const prefix = kind === 'rename' ? MOVED_EDITOR_BUFFER_PREFIX : CARRIED_EDITOR_BUFFER_PREFIX
+  const next = { ...records }
+  // Why two passes: a swap of two ids must not delete the record it just wrote.
   for (const file of moved) {
-    const carried = `${prefix}${editorBufferIdOfView(state, file.id)}`
-    editorBuffers[carried] ??= { ...editorBufferOf(state, file), ...patchFor?.(file) }
-    delete editorBufferIdOf[file.id]
+    delete next[file.id]
   }
-  // Why a second pass: a swap of two ids must not delete the entry it just wrote.
   for (const file of moved) {
-    const newId = migrations.get(file.id) ?? file.id
-    editorBufferIdOf[newId] = `${prefix}${editorBufferIdOfView(state, file.id)}`
+    next[migrations.get(file.id) ?? file.id] = {
+      ...editorBufferOf(records, file),
+      ...patchFor?.(file)
+    }
   }
-  return { editorBuffers, editorBufferIdOf }
+  return next
 }
 
 /** Keeps one record per record id of the open tabs: seeds a record from its first view, drops ones with no view. */

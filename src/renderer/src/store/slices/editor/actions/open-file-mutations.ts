@@ -15,13 +15,10 @@ import {
   writeEditorBuffer
 } from '../buffers/editor-buffer-record'
 import { getDiskBaselineSignature } from '../../../../../../shared/disk-baseline-signature'
-import { editorBufferSiblingViewIds } from '../buffers/editor-buffer-views'
 
-function withoutKeys<T>(record: Record<string, T>, keys: readonly string[]): Record<string, T> {
+function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
   const next = { ...record }
-  for (const key of keys) {
-    delete next[key]
-  }
+  delete next[key]
   return next
 }
 
@@ -90,7 +87,7 @@ export function createOpenFileMutations(
         if (file.readOnly === true || file.csvPreviewOnly === true) {
           return s
         }
-        const buffer = editorBufferOf(s, file)
+        const buffer = editorBufferOf(s.editorBuffers, file)
         const needsPreviewClear = dirty && file.isPreview
         // Why: a clean tab holds no draft of the disk text; a kept one could later restore stale
         // text into a shared model. A draft that differs from disk (whitespace a Markdown view
@@ -101,12 +98,7 @@ export function createOpenFileMutations(
           draft !== undefined &&
           (buffer.lastKnownDiskSignature === undefined ||
             getDiskBaselineSignature(draft) === buffer.lastKnownDiskSignature)
-        if (
-          buffer.isDirty === dirty &&
-          file.isDirty === dirty &&
-          !needsPreviewClear &&
-          !dropDraft
-        ) {
+        if (buffer.isDirty === dirty && !needsPreviewClear && !dropDraft) {
           return s
         }
         if (ORCA_LAYOUT_OWNER_IS_MAIN && needsPreviewClear) {
@@ -119,10 +111,7 @@ export function createOpenFileMutations(
             { isDirty: dirty },
             needsPreviewClear ? { isPreview: undefined } : undefined
           ),
-          // Why every view: views of one record share one draft.
-          ...(dropDraft
-            ? { editorDrafts: withoutKeys(s.editorDrafts, editorBufferSiblingViewIds(s, fileId)) }
-            : {}),
+          ...(dropDraft ? { editorDrafts: withoutKey(s.editorDrafts, fileId) } : {}),
           ...(needsPreviewClear
             ? {
                 unifiedTabsByWorktree: Object.fromEntries(

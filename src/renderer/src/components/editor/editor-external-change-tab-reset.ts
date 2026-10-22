@@ -3,7 +3,7 @@ import { getOpenFilesForExternalFileChange, type EditorPathMutationTarget } from
 import { markFileChangedOnDisk } from './editor-changed-on-disk-mark'
 import { hasRecentSelfWrite } from './editor-self-write-registry'
 import type { AppStoreApi } from './editor-save-queue'
-import { isEditorModelDirty } from './editor-save-disk-precondition'
+import { editorModelSiblingTabs, isEditorModelDirty } from './editor-save-disk-precondition'
 
 export function createEditorExternalChangeTabReset(store: AppStoreApi): (event: Event) => void {
   return (event: Event): void => {
@@ -13,8 +13,15 @@ export function createEditorExternalChangeTabReset(store: AppStoreApi): (event: 
     }
 
     const state = store.getState()
-    // Why no sibling expansion: views of one file share a record, so each matches by path itself.
-    const matchingFiles = getOpenFilesForExternalFileChange(state.openFiles, detail)
+    const pathMatches = getOpenFilesForExternalFileChange(state.openFiles, detail)
+    // Why: a tab of another workspace showing the same model shares the text this change touches.
+    const matchingFiles = [
+      ...new Map(
+        pathMatches
+          .flatMap((file) => (file.mode === 'edit' ? editorModelSiblingTabs(state, file) : [file]))
+          .map((file) => [file.id, file])
+      ).values()
+    ]
     if (matchingFiles.length === 0) {
       return
     }

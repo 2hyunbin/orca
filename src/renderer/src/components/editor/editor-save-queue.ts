@@ -119,8 +119,8 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
     const nothingToWrite = trigger === 'autosave' ? 'failed' : 'written'
     // Why: before the flush, which could republish discarded edits; no await follows before the write.
-    // Why the queued record: a rejoin since then moves the view to a record with its own epoch.
-    const discarded = (): boolean => editorDiscardEpoch(request.recordId) !== request.discardEpoch
+    const discarded = (): boolean =>
+      editorDiscardEpoch(recordKeyOf(request.fileId)) !== request.discardEpoch
     if (discarded()) {
       return nothingToWrite
     }
@@ -206,11 +206,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
     window.dispatchEvent(
       new CustomEvent<EditorFileSavedDetail>(ORCA_EDITOR_FILE_SAVED_EVENT, {
-        detail: {
-          fileId,
-          content: contentToSave,
-          recordViewIds: editorBufferViewIds(nextState, recordKeyOf(fileId))
-        }
+        detail: { fileId, content: contentToSave }
       })
     )
     return 'written'
@@ -247,7 +243,6 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       fallbackContent,
       trigger,
       requestedDirty,
-      recordId: key,
       discardEpoch
     })
   }

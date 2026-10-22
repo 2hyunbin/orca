@@ -1,141 +1,59 @@
 import type { StateCreator } from 'zustand'
 import {
-  editorBufferMirrorMismatch,
+  editorBufferViewMirrorMismatch,
+  reconcileEditorBufferMembership,
   type EditorBufferState
 } from './slices/editor/buffers/editor-buffer-record'
 import {
   editorBufferIdOfView,
   editorBufferViewIndexMismatch,
+  reconcileEditorBufferViewIndex,
   type EditorBufferViewIndex
 } from './slices/editor/buffers/editor-buffer-views'
-import {
-  editorBufferIdForFile,
-  editorBufferRouteInputsChanged,
-  type EditorBufferRouteState
-} from './slices/editor/buffers/editor-buffer-identity-cache'
-import { reconcileEditorBufferRecords } from './slices/editor/buffers/editor-buffer-reconcile'
-import {
-  reconciledEditorBufferState,
-  showEditorBufferView
-} from './slices/editor/buffers/editor-buffer-reconcile-write'
-import {
-  isEditorBufferRejoinDue,
-  mayRejoinAfterDraftWrite
-} from './slices/editor/buffers/editor-buffer-rejoin'
-
-type EditorBufferStoreState = EditorBufferState & EditorBufferRouteState
-
-const NO_DRAFTS: Record<string, string> = {}
-const NO_DETACHMENTS = {}
-const NO_KEPT = {}
 
 /**
- * Ties editor buffer records and their view index to `openFiles` membership and file identity
- * inside the same write: views of one file share a record, a view whose identity changes (opened,
- * hydrated, owner resolved, renamed, routes changed) joins by the join rules, and a record with no
- * view left is dropped. Field writes go through the record (`writeEditorBuffer`); with
- * `checkInvariant` a write that drifts a view from its record throws.
+ * Ties editor buffer records and their view index to `openFiles` membership inside the same
+ * write: a new tab joins (or seeds) its record and a record with no view left is dropped. Field
+ * writes go through the record (`writeEditorBuffer`); with `checkInvariant` a write that drifts
+ * a view from its record throws.
  */
-function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
+function reconcileEditorBuffers<TState extends EditorBufferState>(
   state: TState,
-  requested: TState | Partial<TState>,
-  checkInvariant: boolean,
-  scheduleRejoin: () => void
+  write: TState | Partial<TState>,
+  checkInvariant: boolean
 ): TState | Partial<TState> {
-  const keepRequest = requested.editorBufferKeepRequest
-  let write = requested
-  if (Object.hasOwn(write, 'editorBufferKeepRequest')) {
-    write = { ...write }
-    delete write.editorBufferKeepRequest
-  }
   const openFiles = write.openFiles ?? state.openFiles
   const records = write.editorBuffers ?? state.editorBuffers
   const drafts = write.editorDrafts ?? state.editorDrafts
-  const detachments = write.editorBufferDetached ?? state.editorBufferDetached
-  const kept = write.editorBufferKept ?? state.editorBufferKept
-  if (
-    openFiles === state.openFiles &&
-    records === state.editorBuffers &&
-    detachments === state.editorBufferDetached &&
-    kept === state.editorBufferKept &&
-    !editorBufferRouteInputsChanged(state, write)
-  ) {
+  if (openFiles === state.openFiles && records === state.editorBuffers) {
     // Why only drafts: this runs per keystroke, and nothing else about the views changed.
     if (checkInvariant && drafts !== state.editorDrafts) {
       assertEditorBufferDraftsAgree({ ...state, ...write }, drafts)
     }
-    // Why: clearing a draft can make a detached side clean, which rejoins it.
-    if (
-      drafts !== state.editorDrafts &&
-      mayRejoinAfterDraftWrite(state, detachments, state.editorDrafts, drafts) &&
-      isEditorBufferRejoinDue({
-        openFiles,
-        editorBuffers: records,
-        editorDrafts: drafts ?? NO_DRAFTS,
-        editorBufferIdOf: state.editorBufferIdOf,
-        editorBufferViews: state.editorBufferViews,
-        editorBufferDetached: detachments ?? NO_DETACHMENTS,
-        editorBufferKept: kept ?? NO_KEPT
-      })
-    ) {
-      scheduleRejoin()
-    }
     return write
   }
-  const routeState: EditorBufferRouteState = { ...state, ...write }
-  const input = {
-    openFiles,
-    editorBuffers: records,
-    editorDrafts: drafts ?? NO_DRAFTS,
-    editorBufferIdOf: write.editorBufferIdOf ?? state.editorBufferIdOf,
-    editorBufferViews: write.editorBufferViews ?? state.editorBufferViews,
-    editorBufferDetached: detachments ?? NO_DETACHMENTS,
-    editorBufferKept: kept ?? NO_KEPT
-  }
-  // Why only on an identity pass: callers settle a record in steps (clean, then clear the draft);
-  // a rejoin between them would let the second step clear the draft the rejoin adopted.
-  const rejoin = Object.hasOwn(write, 'editorBufferIdentityRevision')
-  const result = reconcileEditorBufferRecords(
-    input,
-    (file) => editorBufferIdForFile(file, routeState),
-    keepRequest && { ...keepRequest, drafts: state.editorDrafts ?? NO_DRAFTS },
-    rejoin
+  const index = reconcileEditorBufferViewIndex(
+    {
+      editorBufferIdOf: write.editorBufferIdOf ?? state.editorBufferIdOf,
+      editorBufferViews: write.editorBufferViews ?? state.editorBufferViews
+    },
+    openFiles
   )
-  const changed: Partial<EditorBufferState> = {}
-  const mirrors = result.viewMirrors
-  if (mirrors.size > 0) {
-    changed.openFiles = openFiles.map((file) => showEditorBufferView(file, mirrors.get(file.id)))
-  }
-  const next = reconciledEditorBufferState(result, changed.openFiles ?? openFiles)
-  if (!rejoin && isEditorBufferRejoinDue(next)) {
-    scheduleRejoin()
-  }
+  const next = reconcileEditorBufferMembership(records, openFiles, index)
   if (checkInvariant) {
-    assertEditorBufferInvariant(next)
+    assertEditorBufferInvariant({ openFiles, editorBuffers: next, editorDrafts: drafts, ...index })
   }
-  if (next.editorBuffers !== state.editorBuffers) {
-    changed.editorBuffers = next.editorBuffers
-  }
-  if (next.editorDrafts !== input.editorDrafts) {
-    changed.editorDrafts = next.editorDrafts
-  }
-  if (next.editorBufferIdOf !== state.editorBufferIdOf) {
-    changed.editorBufferIdOf = next.editorBufferIdOf
-  }
-  if (next.editorBufferViews !== state.editorBufferViews) {
-    changed.editorBufferViews = next.editorBufferViews
-  }
-  if (next.editorBufferDetached !== input.editorBufferDetached) {
-    changed.editorBufferDetached = next.editorBufferDetached
-  }
-  if (next.editorBufferKept !== input.editorBufferKept) {
-    changed.editorBufferKept = next.editorBufferKept
-  }
-  if (Object.keys(changed).length === 0) {
+  const indexChanged =
+    index.editorBufferIdOf !== state.editorBufferIdOf ||
+    index.editorBufferViews !== state.editorBufferViews
+  if (next === records && !indexChanged) {
     return write
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: every key in `changed` is an EditorBufferState field TState extends, holding that field's type.
-  return { ...write, ...(changed as Partial<TState>) }
+  return {
+    ...write,
+    editorBuffers: next,
+    ...(indexChanged ? index : {})
+  }
 }
 
 /** Every view of a shared record holds the same `editorDrafts` entry. */
@@ -162,9 +80,15 @@ export function assertEditorBufferRecordsMatchViews(state: EditorBufferState): v
   if (keys.length !== recordIds.size || keys.some((id) => !recordIds.has(id))) {
     throw new Error('Editor buffer records are not keyed by the open editor tabs')
   }
+  const hostDirtyRecords = new Set(
+    state.openFiles
+      .filter((file) => file.mirroredFromRuntimeSession === true && file.isDirty)
+      .map((file) => editorBufferIdOfView(state, file.id))
+  )
   for (const file of state.openFiles) {
-    const record = state.editorBuffers[editorBufferIdOfView(state, file.id)]
-    const field = editorBufferMirrorMismatch(file, record)
+    const recordId = editorBufferIdOfView(state, file.id)
+    const record = state.editorBuffers[recordId]
+    const field = editorBufferViewMirrorMismatch(file, record, hostDirtyRecords.has(recordId))
     if (field !== null) {
       throw new Error(`Editor buffer mirror "${field}" of ${file.id} differs from its record`)
     }
@@ -181,26 +105,11 @@ export function assertEditorBufferInvariant(state: EditorBufferState): void {
   assertEditorBufferRecordsMatchViews(state)
 }
 
-export function withEditorBufferRecords<TState extends EditorBufferStoreState>(
+export function withEditorBufferRecords<TState extends EditorBufferState>(
   createState: StateCreator<TState, [], []>,
   checkInvariant: boolean = import.meta.env.DEV
 ): StateCreator<TState, [], []> {
   return (set, get, api) => {
-    let rejoinQueued = false
-    const scheduleRejoin = (): void => {
-      if (rejoinQueued) {
-        return
-      }
-      rejoinQueued = true
-      queueMicrotask(() => {
-        rejoinQueued = false
-        const bump: Partial<EditorBufferStoreState> = {
-          editorBufferIdentityRevision: (api.getState().editorBufferIdentityRevision ?? 0) + 1
-        }
-        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: editorBufferIdentityRevision is an EditorBufferRouteState field TState extends.
-        api.setState(bump as Partial<TState>)
-      })
-    }
     const wrap = (write: typeof set): typeof set => {
       const wrapped = (
         partial: TState | Partial<TState> | ((state: TState) => TState | Partial<TState>),
@@ -212,8 +121,7 @@ export function withEditorBufferRecords<TState extends EditorBufferStoreState>(
             reconcileEditorBuffers(
               state,
               typeof partial === 'function' ? partial(state) : partial,
-              checkInvariant,
-              scheduleRejoin
+              checkInvariant
             ),
           replace
         )

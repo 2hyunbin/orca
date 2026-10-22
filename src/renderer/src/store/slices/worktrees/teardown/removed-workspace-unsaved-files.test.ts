@@ -219,8 +219,7 @@ describe('the closed-files notice', () => {
       makeOpenFile({ id, filePath: '/w/shared.ts', worktreeId: GONE, isDirty })
     store.setState({
       openFiles: [tab('first', true), tab('second', true)],
-      // One record: both views hold its one draft.
-      editorDrafts: { first: 'newer draft', second: 'newer draft' }
+      editorDrafts: { second: 'newer draft' }
     })
     const model = { isAttachedToEditor: () => attached, getValue: () => 'live model text' }
     const unregister = editorModelRegistry.register({

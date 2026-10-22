@@ -6,8 +6,6 @@ export type EditorSaveRequest = {
   trigger: EditorSaveTrigger
   /** Dirty when asked: finding the tab clean later means its edits were saved or dropped. */
   requestedDirty: boolean
-  /** The record the request was queued under; `discardEpoch` is its epoch then. */
-  recordId: string
   /** A discard since the request voids it, whatever the trigger. */
   discardEpoch: number
 }

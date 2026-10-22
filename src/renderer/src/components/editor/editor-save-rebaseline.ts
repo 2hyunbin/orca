@@ -14,13 +14,16 @@ import {
   waitForEditorBaselineRestamp
 } from './editor-save-disk-precondition'
 
-/** Conflict state is a record field, so it reaches every view of the record. */
+/** Conflict state describes the shared text, so it applies to every tab showing that model. */
 export function setModelExternalMutation(
   state: AppState,
   fileId: string,
   mutation: NonNullable<OpenFile['externalMutation']> | null
 ): void {
-  state.setExternalMutation(fileId, mutation)
+  const file = state.openFiles.find((openFile) => openFile.id === fileId)
+  for (const tab of file ? editorModelSiblingTabs(state, file) : []) {
+    state.setExternalMutation(tab.id, mutation)
+  }
 }
 
 /** The banner, deleted tombstone or non-UTF-8 notice explains a refused save and pauses autosave. */
@@ -56,16 +59,20 @@ export function rebaselineAfterEditorWrite(state: AppState, fileId: string, cont
     // Why: disk now holds this UTF-8 write, so a non-UTF-8 pause no longer applies.
     resumeAutosaveForNonUtf8File(file)
   }
-  // Why: views of one record share its draft. While it holds edits beyond this write, every view
-  // must show them, not disk; the written draft itself is about to be settled.
+  // Why: while any tab still has edits beyond this write, the model holds them; a sibling must
+  // show that, not disk. The saving tab's own written draft is about to be settled.
   const draft = state.editorDrafts[fileId]
-  const recordDirty = draft !== undefined && draft !== content
+  const modelDirty =
+    (draft !== undefined && draft !== content) ||
+    (file
+      ? editorModelSiblingTabs(state, file).some((tab) => tab.id !== fileId && tab.isDirty)
+      : false)
   for (const sibling of moved) {
     noteEditorBaselineWrite(sibling.id)
     if (sibling.externalMutation === 'changed') {
       state.setExternalMutation(sibling.id, null)
     }
-    if (!recordDirty) {
+    if (!modelDirty && state.editorDrafts[sibling.id] === undefined) {
       notifyEditorFileCacheStale(sibling.id)
     }
   }

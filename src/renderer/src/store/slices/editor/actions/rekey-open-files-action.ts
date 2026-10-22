@@ -114,7 +114,7 @@ export function rekeyOpenFilesPatch(
     ok: true,
     patch: {
       openFiles: nextOpenFiles,
-      ...rekeyEditorBuffers(s, s.openFiles, migrations, 'rename'),
+      editorBuffers: rekeyEditorBuffers(s.editorBuffers, s.openFiles, migrations),
       editorDrafts: rekeyFileIdRecord(s.editorDrafts, migrations),
       editorCursorLine: rekeyFileIdRecord(s.editorCursorLine, migrations),
       markdownViewMode: rekeyFileIdRecord(s.markdownViewMode, migrations),
