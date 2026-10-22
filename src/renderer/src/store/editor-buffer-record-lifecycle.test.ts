@@ -208,10 +208,7 @@ describe('editor buffer records', () => {
         const openFiles = state.openFiles.map((file) =>
           file.id === id ? { ...file, isDirty: !file.isDirty, mirroredFromRuntimeSession } : file
         )
-        return {
-          openFiles,
-          editorBuffers: adoptMirroredEditorBuffers(state.editorBuffers, openFiles, state)
-        }
+        return adoptMirroredEditorBuffers(state.editorBuffers, openFiles, state)
       })
 
     // Why: only host-owned tabs adopt; a local tab's buffer state is written through its record.

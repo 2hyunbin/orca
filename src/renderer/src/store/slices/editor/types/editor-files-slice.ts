@@ -22,7 +22,7 @@ import type {
   OpenFile
 } from './open-file'
 import type { EditorBufferRecords } from '../buffers/editor-buffer-record'
-import type { EditorBufferViewIndex } from '../buffers/editor-buffer-views'
+import type { EditorBufferDetachments, EditorBufferViewIndex } from '../buffers/editor-buffer-views'
 import type { EditorOpenLinkIntent, EditorOpenResult } from './editor-open-link-intent'
 import type { OpenFilePathRekey, RekeyOpenFilesResult } from './open-file-path-rekey'
 import type {
@@ -46,12 +46,20 @@ export type OpenFileOptions = {
 export type EditorFilesSlice = {
   // Open files / editor tabs
   openFiles: OpenFile[]
-  /** Buffer state per open tab id; the matching OpenFile fields mirror it. */
+  /** Buffer state per record (file identity, or tab id for views that never share); views mirror it. */
   editorBuffers: EditorBufferRecords
   /** View id → record id; maintained with `openFiles` by the record middleware. */
   editorBufferIdOf: EditorBufferViewIndex['editorBufferIdOf']
   /** Record id → view ids; maintained with `openFiles` by the record middleware. */
   editorBufferViews: EditorBufferViewIndex['editorBufferViews']
+  /** Views kept off the record their identity names (divergent dirty drafts, retired hosts). */
+  editorBufferDetached: EditorBufferDetachments
+  /** Bumped when runtime revisions change, so the record middleware re-resolves identities. */
+  editorBufferIdentityRevision: number
+  /** Re-resolves every view's file identity after a change the store can't see (revisions). */
+  reconcileEditorBufferIdentities: () => void
+  /** Keeps views on retired environments off every other record, with their drafts. */
+  detachRetiredEditorBuffers: (environmentIds: readonly string[]) => void
   activeFileId: string | null
   activeFileIdByWorktree: Record<string, string | null> // worktreeId -> last active file
   activeTabTypeByWorktree: Record<string, WorkspaceVisibleTabType> // worktreeId -> last active tab type

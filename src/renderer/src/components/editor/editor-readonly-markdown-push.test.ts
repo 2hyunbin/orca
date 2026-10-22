@@ -1,5 +1,5 @@
-// Why: a read-only tab renders raw Monaco source on the shared model whatever its file type, so a
-// clean read-only .md/.csv tab must never push disk text over a writable tab's unsaved edits.
+// Why: a read-only tab renders raw Monaco source on the shared model whatever its file type, so it
+// must show a writable view's unsaved edits (one record), never push disk text over them.
 import { beforeEach, expect, it } from 'vitest'
 import { useAppStore } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
@@ -31,18 +31,22 @@ beforeEach(() => {
 })
 
 it.each(['/repo/notes.md', '/repo/data.csv', '/repo/log.jsonl'])(
-  'a read-only %s view never pushes disk text over a dirty writable source view',
+  'a read-only %s view joins a dirty writable view and shows its edits, not disk text',
   (filePath) => {
     useAppStore.setState({
-      openFiles: [
-        tab('writable', filePath, { isDirty: true }),
-        tab('read-only', filePath, { readOnly: true })
-      ],
+      openFiles: [tab('writable', filePath, { isDirty: true })],
       editorDrafts: { writable: 'unsaved edits' },
       markdownViewMode: { writable: 'source' }
     })
+    useAppStore.setState((s) => ({
+      openFiles: [...s.openFiles, tab('read-only', filePath, { readOnly: true })]
+    }))
 
-    expect(mayPushTabTextIntoModel('read-only')).toBe(false)
+    // Views of one file share a record: the read-only view joins it and shows the unsaved edits.
+    const state = useAppStore.getState()
+    expect(state.openFiles.find((file) => file.id === 'read-only')?.isDirty).toBe(true)
+    expect(state.editorDrafts['read-only']).toBe('unsaved edits')
+    expect(state.editorBufferIdOf['read-only']).toBe(state.editorBufferIdOf.writable)
   }
 )
 

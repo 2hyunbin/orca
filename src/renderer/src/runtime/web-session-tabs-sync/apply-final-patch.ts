@@ -8,10 +8,8 @@ import {
 } from './agent-status-primitives'
 import { isWebSessionTabsWorktreeRemovalFrame } from './session-tabs-inventory-absence'
 import { adoptMirroredEditorBuffers } from '../../store/slices/editor/buffers/editor-buffer-record'
-import {
-  EMPTY_EDITOR_BUFFER_VIEW_INDEX,
-  reconcileEditorBufferViewIndex
-} from '../../store/slices/editor/buffers/editor-buffer-views'
+import { buildEditorBufferViewIndex } from '../../store/slices/editor/buffers/editor-buffer-views'
+import { editorBufferIdForFile } from '../../store/slices/editor/buffers/editor-buffer-identity-cache'
 
 type FinalPatchContext = ReturnType<typeof applyActiveStateUpdates>
 
@@ -101,14 +99,13 @@ export function buildWebSessionTabsFinalPatch(
     ...retractedTabSweepPatch,
     ...remirroredClosedTabLiftPatch,
     ...(nextOpenFiles !== state.openFiles
-      ? {
-          openFiles: nextOpenFiles,
-          editorBuffers: adoptMirroredEditorBuffers(
-            state.editorBuffers,
-            nextOpenFiles,
-            reconcileEditorBufferViewIndex(EMPTY_EDITOR_BUFFER_VIEW_INDEX, nextOpenFiles)
-          )
-        }
+      ? adoptMirroredEditorBuffers(
+          state.editorBuffers,
+          nextOpenFiles,
+          // Why the same resolver as the record middleware: host views of one file share a record.
+          // `state` is the live store state, so it carries every route input the resolver reads.
+          buildEditorBufferViewIndex(nextOpenFiles, (file) => editorBufferIdForFile(file, state))
+        )
       : {}),
     ...(nextTabsByWorktree !== state.tabsByWorktree ? { tabsByWorktree: nextTabsByWorktree } : {}),
     ...(nextBrowserTabsByWorktree !== state.browserTabsByWorktree

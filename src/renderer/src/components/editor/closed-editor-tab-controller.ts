@@ -11,9 +11,12 @@ import type { MonacoModelRegistry, DisposableMonacoModel } from './diff-monaco-m
 import { toEditorModelUri } from './editor-model-uri'
 import { getEditorModelOwnerKey } from './editor-model-owner'
 import type { WorktreeOperationRouteState } from '@/lib/worktree-operation-route'
+import type { EditorBufferViewIndex } from '@/store/slices/editor/buffers/editor-buffer-views'
 
 type EditorStore = Pick<
-  StoreApi<WorktreeOperationRouteState & { openFiles: OpenFile[] }>,
+  StoreApi<
+    WorktreeOperationRouteState & Partial<EditorBufferViewIndex> & { openFiles: OpenFile[] }
+  >,
   'getState' | 'subscribe'
 >
 type RetainedModel = {
@@ -211,6 +214,8 @@ export function attachClosedEditorTabCleanup(
     previousState = currentState
     if (
       openFiles === previous &&
+      // Why: a detach or rejoin changes a view's model owner without touching `openFiles`.
+      currentState.editorBufferIdOf === closedState.editorBufferIdOf &&
       currentState.repos === closedState.repos &&
       currentState.worktreesByRepo === closedState.worktreesByRepo &&
       currentState.detectedWorktreesByRepo === closedState.detectedWorktreesByRepo &&
