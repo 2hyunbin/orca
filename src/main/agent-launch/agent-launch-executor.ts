@@ -147,7 +147,8 @@ export async function executeAgentLaunch(
       }
     }
 
-    // No agent exists yet; the created workspace gets the same recovery as any failure here.
+    // No agent exists yet; only a cancel claims recovery here, so default failures are unchanged.
+    recoverableWorktreeId = execution.signal?.aborted ? placed.worktreeId : undefined
     assertAgentPromptRequestActive(execution.signal)
     const settlement: AgentLaunchModeSettlement = {
       phase: intent.target.kind === 'existing' ? 'before-effects' : 'created-workspace',
