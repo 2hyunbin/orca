@@ -12,7 +12,7 @@ import type { DarwinPortScanOperation } from './port-scan-command-protocol'
 /** The child inherits this open-file description; closing a duplicate never unlocks it. */
 export function openDarwinPortScanLock(operation: DarwinPortScanOperation): number {
   const uid = process.getuid?.()
-  const root = '/private/tmp'
+  const root = '/private/var/tmp'
   const parent = lstatSync(root)
   const filesystem = statfsSync(root)
   if (
