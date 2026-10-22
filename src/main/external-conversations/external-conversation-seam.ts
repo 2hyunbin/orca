@@ -58,8 +58,11 @@ export class ExternalConversationSeam {
   private readonly startedHere = new Set<string>()
   /** Conversations with work sent here, by the workspace their link was on. */
   private readonly linked = new Map<string, { key: ConversationKey; worktreeId: string }>()
-  /** The process each lane admitted first; its queued work goes there or nowhere. */
-  private readonly admitted = new WeakMap<AbortSignal, AgentPromptExpectedBinding>()
+  /**
+   * The process each lane admitted first, by a launch or a send; its queued work goes there or
+   * nowhere. Null: a launch published no process this lane can prove, so queued work goes nowhere.
+   */
+  private readonly admitted = new WeakMap<AbortSignal, AgentPromptExpectedBinding | null>()
   private readonly releaseRemovals: () => void
 
   constructor(private readonly deps: ExternalConversationSeamDeps) {
@@ -122,6 +125,13 @@ export class ExternalConversationSeam {
                 createdAt: Date.now()
               })
               this.startedHere.add(conversationId(key))
+            },
+            // Before link resolution or prompt delivery settle, so no follower adopts a successor.
+            (paneKey) => {
+              this.admitted.set(
+                signal,
+                (paneKey && bindPane(host.terminal, paneKey)?.binding) || null
+              )
             }
           )
         })
@@ -162,7 +172,7 @@ export class ExternalConversationSeam {
     const id = conversationId(key)
     this.linked.set(id, { key, worktreeId: workspace.worktreeId })
     const pane = bindPane(terminal, link.paneKey)
-    const admitted = this.admitted.get(signal) ?? pane?.binding
+    const admitted = this.admitted.has(signal) ? this.admitted.get(signal) : pane?.binding
     if (!pane || !admitted || !sameBinding(pane.binding, admitted)) {
       return this.lost(id, signal)
     }

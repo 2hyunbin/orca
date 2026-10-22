@@ -577,3 +577,81 @@ describe('ExternalConversationSeam twin removal', () => {
     }
   )
 })
+
+describe('ExternalConversationSeam start-headed lanes', () => {
+  async function startHeaded(delayLink: boolean) {
+    const h = harness()
+    const terminal = fakeTerminal()
+    const launched = deferred<void>()
+    const linkResolved = deferred<void>()
+    const { launcher, launch } = fakeLauncher(async () => {
+      await launched.promise
+      return launchResult('handed-to-terminal')
+    })
+    const resolveWorkspace = launcher.paneWorkspace
+    launcher.paneWorkspace = async (worktreeId) => {
+      if (delayLink) {
+        await linkResolved.promise
+      }
+      return resolveWorkspace(worktreeId)
+    }
+    const host = { launcher, terminal: terminal.terminal }
+    const start = h.seam.start(host, KEY, 'start', START)
+    await vi.waitFor(() => expect(launch).toHaveBeenCalled())
+    return { ...h, terminal, host, start, launched, linkResolved }
+  }
+
+  const GONE = { outcome: 'refused', reason: 'agent_not_reachable' }
+
+  it.each([
+    ['a new process on the same PTY id', false],
+    ['a new process on the same PTY id, link still resolving', true],
+    ['another PTY id', false],
+    ['another PTY id, link still resolving', true]
+  ])('keeps a follower queued behind the launch off %s', async (name, delayLink) => {
+    const { seam, host, terminal, start, launched, linkResolved } = await startHeaded(delayLink)
+    const follower = seam.send(host, KEY, 'd1', 'queued')
+    if (name.startsWith('another')) {
+      terminal.state.ptyId = 'pty-2'
+    } else {
+      terminal.replace()
+    }
+    launched.resolve()
+    linkResolved.resolve()
+    expect((await start).initial).toEqual({ outcome: 'accepted' })
+    expect(await follower).toEqual(GONE)
+    expect(terminal.writes).toEqual([])
+    // A later delivery opens a new lane on the process there now.
+    expect(await seam.send(host, KEY, 'd2', 'later')).toEqual({ outcome: 'accepted' })
+    expect(terminal.writes).toEqual(['later'])
+  })
+
+  it('sends a follower queued behind the launch to the process it launched', async () => {
+    const { seam, host, terminal, start, launched } = await startHeaded(false)
+    const follower = seam.send(host, KEY, 'd1', 'queued')
+    launched.resolve()
+    expect((await start).initial).toEqual({ outcome: 'accepted' })
+    expect(await follower).toEqual({ outcome: 'accepted' })
+    expect(terminal.writes).toEqual(['queued'])
+  })
+
+  it('lets no follower adopt a process when the launch published none it can prove', async () => {
+    const { seam } = harness()
+    const terminal = fakeTerminal()
+    terminal.state.ptyId = null
+    const launched = deferred<void>()
+    const { launcher, launch } = fakeLauncher(async () => {
+      await launched.promise
+      return launchResult('handed-to-terminal')
+    })
+    const host = { launcher, terminal: terminal.terminal }
+    const start = seam.start(host, KEY, 'start', START)
+    await vi.waitFor(() => expect(launch).toHaveBeenCalled())
+    const follower = seam.send(host, KEY, 'd1', 'queued')
+    terminal.state.ptyId = 'pty-2'
+    launched.resolve()
+    expect((await start).initial).toEqual({ outcome: 'accepted' })
+    expect(await follower).toEqual(GONE)
+    expect(terminal.writes).toEqual([])
+  })
+})
