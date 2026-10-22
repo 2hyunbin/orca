@@ -46,6 +46,8 @@ vi.mock('./structured-agent-runtime-metadata', () => ({
 
 import { installStructuredAgentAvailability } from './structured-agent-availability'
 
+const READY = { status: 'ready', version: '2.0.14' } as const
+const TOO_OLD = { status: 'tooOld', version: '2.0.13', minimumVersion: '2.0.14' } as const
 const opencodeAvailable = expect.objectContaining({ agent: 'opencode', state: 'available' })
 const found =
   (command: string, PATH = '/usr/bin') =>
@@ -62,7 +64,7 @@ beforeEach(() => {
     },
     opencode: found('opencode')
   }
-  mocks.observe.mockReset().mockResolvedValue('supported')
+  mocks.observe.mockReset().mockResolvedValue(READY)
   mocks.recapture.mockReset().mockResolvedValue(undefined)
 })
 
@@ -90,7 +92,7 @@ it('shares a host-home snapshot even if shell recapture fails, retaining it with
     if (agent === 'pi') {
       throw new Error('Command setting not runnable')
     }
-    return agent === 'opencode' ? 'unsupported' : 'supported'
+    return agent === 'opencode' ? TOO_OLD : READY
   })
   const { availability } = install()
   const first = vi.fn()
@@ -121,7 +123,7 @@ it('recaptures for settings and uses the completed capture on Refresh', async ()
   change({ agentCmdOverrides: { pi: '/opt/pi' } })
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2))
   const capture = Promise.withResolvers<void>()
-  let version = 'unsupported'
+  let version: typeof READY | typeof TOO_OLD = TOO_OLD
   mocks.observe.mockImplementation(async () => version)
   mocks.recapture.mockImplementation(() => capture.promise)
   mocks.refreshed.forEach((listener) => listener())
@@ -130,7 +132,7 @@ it('recaptures for settings and uses the completed capture on Refresh', async ()
   await new Promise<void>((resolve) => setImmediate(resolve))
   expect(read).toHaveBeenCalledTimes(2)
   expect(mocks.observe).toHaveBeenCalledTimes(9)
-  version = 'supported'
+  version = READY
   capture.resolve()
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(3))
   expect(read.mock.lastCall?.[0]).toContainEqual(opencodeAvailable)
@@ -138,7 +140,7 @@ it('recaptures for settings and uses the completed capture on Refresh', async ()
 
 it('captures fresh shell facts for a first subscriber even when Refresh had no listener', async () => {
   const capture = Promise.withResolvers<void>()
-  let version = 'unsupported'
+  let version: typeof READY | typeof TOO_OLD = TOO_OLD
   mocks.observe.mockImplementation(async () => version)
   mocks.recapture.mockImplementation(() => capture.promise)
   mocks.refreshed.forEach((listener) => listener())
@@ -147,7 +149,7 @@ it('captures fresh shell facts for a first subscriber even when Refresh had no l
   availability.subscribe(read)
   await new Promise<void>((resolve) => setImmediate(resolve))
   expect(mocks.observe).not.toHaveBeenCalled()
-  version = 'supported'
+  version = READY
   capture.resolve()
   await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1))
   expect(read.mock.lastCall?.[0]).toContainEqual(opencodeAvailable)
