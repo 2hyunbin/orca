@@ -4,7 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MOBILE_WEB_BUNDLE_CAPABILITY } from '../../../src/shared/mobile-web-bundle/mobile-web-bundle-capability'
 import type { MobileWebBundleFetchResult } from '../transport/mobile-web-bundle-fetch'
 import type { MobileWebBundleManifestRead } from '../transport/mobile-web-bundle-reply-schemas'
-import type { ActiveGeneration, GenerationStore, StagedGeneration } from './generation-store'
+import {
+  createGenerationStore,
+  type ActiveGeneration,
+  type GenerationStore,
+  type StagedGeneration
+} from './generation-store'
+import { createFakeGenerationFileSystem } from './generation-file-system-fake'
+import { deriveHostCacheKey } from './host-cache-key'
+import { computeMobileWebBundleId } from '../../../src/shared/mobile-web-bundle/manifest-contract'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 
@@ -136,6 +144,7 @@ function createFakeStore(): {
   let committed = 0
   let aborted = 0
   const store: GenerationStore = {
+    createOwner: () => ({ release: () => undefined }),
     readActiveGeneration: () =>
       new Promise<ActiveGeneration | null>((resolve) => {
         settleCacheRead = resolve
@@ -206,6 +215,7 @@ function createTimerSeam() {
 type Mounted = {
   tree: ReactTestRenderer
   retry: () => void
+  fail: () => void
   rerender: () => void
   states: () => readonly MobileWebShellSessionState[]
   /** Whether the page had spoken, as every render of the hook reported it. */
@@ -225,6 +235,7 @@ async function mount(store: GenerationStore): Promise<Mounted> {
   const timers = createTimerSeam()
   const handle: {
     retry: () => void
+    fail: () => void
     documentStarted: () => void
     documentLoaded: () => void
     pageReady: () => void
@@ -233,6 +244,7 @@ async function mount(store: GenerationStore): Promise<Mounted> {
     handshakes: boolean[]
   } = {
     retry: () => {},
+    fail: () => {},
     documentStarted: () => {},
     documentLoaded: () => {},
     pageReady: () => {},
@@ -251,6 +263,7 @@ async function mount(store: GenerationStore): Promise<Mounted> {
         setTimer: timers.setTimer
       }
     })
+    handle.fail = () => session.reportShellFailure('document-load-failed')
     handle.retry = session.retry
     handle.documentStarted = session.reportDocumentStarted
     handle.documentLoaded = session.reportDocumentLoaded
@@ -271,6 +284,7 @@ async function mount(store: GenerationStore): Promise<Mounted> {
   return {
     tree,
     retry: () => handle.retry(),
+    fail: () => handle.fail(),
     rerender: () => tree.update(createElement(Probe)),
     states: () => handle.states,
     handshakes: () => handle.handshakes,
@@ -683,4 +697,129 @@ describe('the wait for the page to speak', () => {
     // not fire at all.
     expect(mounted.timers.armed.every((timer) => timer.cancelled)).toBe(true)
   })
+})
+
+function ownedBundle(version: number): MobileWebBundleFetchResult {
+  const assets = [
+    {
+      path: 'index.html',
+      sha256: `${version}`.repeat(64),
+      byteLength: version,
+      contentType: 'text/html'
+    },
+    {
+      path: 'later-route.js',
+      sha256: '0'.repeat(64),
+      byteLength: 1,
+      contentType: 'text/javascript'
+    }
+  ]
+  const totalBytes = version + 1
+  return {
+    manifest: {
+      ...doubles.manifest,
+      buildId: computeMobileWebBundleId(assets),
+      assets,
+      totalBytes
+    },
+    assets: new Map(assets.map((asset) => [asset.path, new Uint8Array(asset.byteLength)])),
+    totalBytes,
+    elapsedMs: 0
+  }
+}
+
+describe('mounted shell generation ownership', () => {
+  it('keeps a retained screen’s cold route readable across another activation and document restart, then reclaims on unmount', async () => {
+    const fileSystem = createFakeGenerationFileSystem()
+    const store = createGenerationStore({ fileSystem })
+    const key = deriveHostCacheKey(HOST_ID)
+    const original = ownedBundle(1)
+    doubles.manifest = original.manifest
+    const first = await store.commitGeneration(await store.stageGeneration(key, original))
+    const mounted = await mount(store)
+    expect(mounted.states().at(-1)?.kind).toBe('ready')
+    await act(async () => {
+      await store.commitGeneration(await store.stageGeneration(key, ownedBundle(2)))
+      mounted.documentStarted()
+      mounted.documentLoaded()
+      mounted.pageReady()
+      mounted.pagePainted()
+    })
+    expect(mounted.states().at(-1)).toMatchObject({ kind: 'ready', buildId: first.buildId })
+    expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(true)
+    await act(async () => mounted.tree.unmount())
+    await store.readUpdateFailures()
+    expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(false)
+    expect((await store.readActiveGeneration(key))?.buildId).toBe(ownedBundle(2).manifest.buildId)
+  })
+
+  it('does not leak an owner when download activation finishes after the mounting screen retires', async () => {
+    const fileSystem = createFakeGenerationFileSystem()
+    const store = createGenerationStore({ fileSystem })
+    const key = deriveHostCacheKey(HOST_ID)
+    const original = ownedBundle(1)
+    doubles.manifest = original.manifest
+    const move = fileSystem.moveDirectory.bind(fileSystem)
+    let finishMove: (() => void) | undefined
+    fileSystem.moveDirectory = async (from, to) => {
+      await new Promise<void>((resolve) => {
+        finishMove = resolve
+      })
+      await move(from, to)
+    }
+    const mounted = await mount(store)
+    await act(async () => doubles.fetches.at(-1)?.settle(original))
+    expect(mounted.states().at(-1)?.kind).toBe('activating')
+    await act(async () => mounted.tree.unmount())
+    if (finishMove === undefined) {
+      throw new Error('activation did not reach the filesystem')
+    }
+    finishMove()
+    fileSystem.moveDirectory = move
+    await store.readUpdateFailures()
+    const first = await store.readActiveGeneration(key)
+    expect(first).not.toBeNull()
+    await store.commitGeneration(await store.stageGeneration(key, ownedBundle(2)))
+    expect(await fileSystem.fileExists(`${first?.directory}/later-route.js`)).toBe(false)
+  })
+})
+
+it('keeps a sibling shell’s older lazy chunk when the newer mounted shell invalidates its cache', async () => {
+  const fileSystem = createFakeGenerationFileSystem()
+  const store = createGenerationStore({ fileSystem })
+  const key = deriveHostCacheKey(HOST_ID)
+  const original = ownedBundle(1)
+  doubles.manifest = original.manifest
+  const first = await store.commitGeneration(await store.stageGeneration(key, original))
+  const older = await mount(store)
+  doubles.manifest = ownedBundle(2).manifest
+  const newer = await mount(store)
+  await act(async () => doubles.fetches.at(-1)?.settle(ownedBundle(2)))
+  expect(newer.states().at(-1)?.kind).toBe('ready')
+  await act(async () => newer.fail())
+  expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(true)
+  expect(older.states().at(-1)).toMatchObject({ kind: 'ready', buildId: first.buildId })
+  await act(async () => {
+    newer.tree.unmount()
+    older.tree.unmount()
+  })
+  await store.readUpdateFailures()
+  expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(false)
+})
+
+it('keeps ownership after retrying the same generation before a later update retires its cache', async () => {
+  const fileSystem = createFakeGenerationFileSystem()
+  const store = createGenerationStore({ fileSystem })
+  const key = deriveHostCacheKey(HOST_ID)
+  const original = ownedBundle(1)
+  doubles.manifest = original.manifest
+  const first = await store.commitGeneration(await store.stageGeneration(key, original))
+  const mounted = await mount(store)
+  await act(async () => mounted.retry())
+  expect(mounted.states().at(-1)).toMatchObject({ kind: 'ready', buildId: first.buildId })
+  await store.commitGeneration(await store.stageGeneration(key, ownedBundle(2)))
+  expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(true)
+  await act(async () => mounted.tree.unmount())
+  await store.readUpdateFailures()
+  expect(await fileSystem.fileExists(`${first.directory}/later-route.js`)).toBe(false)
 })
