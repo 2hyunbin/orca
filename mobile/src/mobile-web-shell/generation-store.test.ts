@@ -570,8 +570,6 @@ describe('generation store', () => {
   })
 })
 
-/** An older build rewrote the manifest through `manifest-next.json`; an interrupted rewrite can
- *  have left that file behind, and this build never reads it. */
 describe('reusable assets for the next download', () => {
   it("reads the active generation's bytes by content, and nothing it does not hold", async () => {
     const fs = createFakeFileSystem()
@@ -595,6 +593,8 @@ describe('reusable assets for the next download', () => {
   })
 })
 
+/** An older build rewrote the manifest through `manifest-next.json`; an interrupted rewrite can
+ *  have left that file behind, and this build never reads it. */
 describe('a pending manifest left by an older build', () => {
   const MANIFEST_PATH = `${HOST}/generations/${BUILD}/manifest.json`
   const NEXT_PATH = `${HOST}/generations/${BUILD}/manifest-next.json`
