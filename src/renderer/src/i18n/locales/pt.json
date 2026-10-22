@@ -13151,6 +13151,7 @@
           "replace": "Será substituída",
           "sharedNotCurrent": "A cópia compartilhada usada por esta pasta não é a do Orca",
           "unwritable": "O Orca não consegue gravar nesta pasta",
+          "unreadable": "O Orca não consegue ler todos os arquivos desta cópia",
           "update": "Será atualizada",
           "updated": "Atualizada",
           "write": "Será instalada",

@@ -5511,6 +5511,7 @@
           "replace": "Will replace",
           "sharedNotCurrent": "The shared copy this folder uses is not Orca’s",
           "unwritable": "Orca can't write to this folder",
+          "unreadable": "Orca can't read every file in this copy",
           "update": "Will update",
           "updated": "Updated",
           "write": "Will install",

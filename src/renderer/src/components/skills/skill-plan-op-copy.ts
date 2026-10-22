@@ -33,6 +33,11 @@ export function leaveReasonText(reason: string | null | undefined): string {
         'auto.components.skills.skillPlanOpCopy.unwritable',
         "Orca can't write to this folder"
       )
+    case 'unreadable':
+      return translate(
+        'auto.components.skills.skillPlanOpCopy.unreadable',
+        "Orca can't read every file in this copy"
+      )
     case 'busy':
       return translate(
         'auto.components.skills.skillPlanOpCopy.busy',

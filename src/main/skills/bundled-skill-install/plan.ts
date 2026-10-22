@@ -145,7 +145,7 @@ async function planTarget(
     path,
     context.source,
     context.digest,
-    context.force.has(bundledSkillPathKey(path))
+    context.force === 'all' || context.force.has(bundledSkillPathKey(path))
   )
   const { observed } = classified
   let folderClass: BundledSkillFolderClass = classified.folderClass

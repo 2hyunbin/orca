@@ -5198,6 +5198,7 @@
           "replace": "Se reemplazará",
           "sharedNotCurrent": "La copia compartida que usa esta carpeta no es la de Orca",
           "unwritable": "Orca no puede escribir en esta carpeta",
+          "unreadable": "Orca no puede leer todos los archivos de esta copia",
           "update": "Se actualizará",
           "updated": "Actualizada",
           "write": "Se instalará",
