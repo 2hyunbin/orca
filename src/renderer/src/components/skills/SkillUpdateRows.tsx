@@ -61,6 +61,7 @@ function UpToDateLine({
 export function SkillUpdateRows({
   skills,
   unforcedPlan,
+  hasWork,
   phase,
   outcomes,
   replace,
@@ -69,6 +70,7 @@ export function SkillUpdateRows({
 }: {
   skills: readonly BundledSkillPlanSkillSummary[]
   unforcedPlan: BundledSkillPlan | null
+  hasWork: boolean
   phase: SkillRowPhase
   outcomes: ReadonlyMap<string, BundledSkillOutcome>
   replace: SkillReplaceToggle
@@ -110,7 +112,7 @@ export function SkillUpdateRows({
       </TooltipProvider>
       {phase === 'plan' ? (
         <div className="flex flex-col items-start gap-1 pt-2.5">
-          {!showLocations ? <UpToDateLine skills={skills} /> : null}
+          {!showLocations && hasWork ? <UpToDateLine skills={skills} /> : null}
           <Button
             type="button"
             variant="link"

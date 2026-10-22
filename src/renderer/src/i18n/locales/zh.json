@@ -4202,9 +4202,9 @@
             "successOne": "Updated {{value0}}",
             "successMany": "Updated {{value0}} skills",
             "successAria": "技能已更新。点击查看详情。",
-            "attentionAria": "部分技能未更新。点击查看详情。",
+            "attentionAria": "已跳过部分技能更新。点击打开详情。",
             "attentionLabel": "技能需要处理",
-            "attentionTooltip": "部分技能未更新 — 点击查看详情"
+            "attentionTooltip": "已跳过部分技能更新 — 点击查看详情"
           },
           "RuntimeHostStatusRow": {
             "previous_connection_closed": "之前的连接关闭了",
@@ -4761,7 +4761,6 @@
           "updateOne": "可以安全更新 1 个技能",
           "updateMany": "可以安全更新 {{value0}} 个技能",
           "success": "所有已安装的 Orca 技能均为最新。",
-          "attention": "其余均已是最新",
           "checkNow": "立即检查",
           "close": "关闭",
           "progressAria": "Updating skills",
@@ -4776,9 +4775,12 @@
           "showFolders": "显示文件夹",
           "upToDateMany": "{{value0}} 个技能已是最新。",
           "upToDateOne": "{{value0}} 已是最新。",
-          "updatedNotUpdated": "{{value0}} · {{value1}} 处未更新",
           "updatedMany": "已更新 {{value0}} 个技能",
           "updatedOne": "已更新 1 个技能",
+          "updatedSkipped": "{{value0}} · 已跳过 {{value1}} 处",
+          "currentOne": "1 个技能已是最新",
+          "currentMany": "{{value0}} 个技能已是最新",
+          "noUpdates": "没有可用更新",
           "updateServer": "请在服务器上更新 Orca，才能更新其 Orca 技能。",
           "connectHost": "请连接此 SSH 主机，才能检查其 Orca 技能。"
         },
@@ -5173,29 +5175,32 @@
           "binaryFilesDescription": "包括不透明资产和可执行二进制文件。"
         },
         "skillPlanOpCopy": {
-          "busy": "另一个技能安装仍在此处进行",
-          "edited": "你编辑了此副本",
+          "busy": "另一个安装仍在运行",
+          "edited": "技能已在 Orca 外部编辑",
           "install": "安装",
           "installFor": "为 {{value0}} 安装",
           "installed": "已安装",
           "keep": "无变化",
-          "notUpdated": "未更新：{{value0}}",
           "leftAsIs": "此副本已保留原样",
           "link": "链接",
           "linked": "已链接",
           "needsAttention": "需要处理",
-          "other": "另一个技能已使用此名称",
+          "other": "另一个技能使用此名称",
           "replace": "替换",
           "replacedWithBackup": "已替换 · 你的副本已保存为备份",
-          "sharedNotCurrent": "此文件夹使用的共享副本不是 Orca 的",
+          "sharedNotCurrent": "共享副本不是 Orca 的",
           "unwritable": "Orca 无法写入此文件夹",
-          "unreadable": "Orca 无法读取此副本中的所有文件",
+          "unreadable": "Orca 无法读取所有文件",
           "update": "更新",
           "updated": "已更新",
           "write": "安装",
           "keepLink": "链接，无变化",
           "repair": "修复",
-          "sharedFolder": "共享文件夹"
+          "sharedFolder": "共享文件夹",
+          "updateSkipped": "已跳过更新：{{value0}}",
+          "updateAvailable": "有可用更新",
+          "repairAvailable": "可修复",
+          "installAvailable": "可安装"
         }
       },
       "sidebar": {
