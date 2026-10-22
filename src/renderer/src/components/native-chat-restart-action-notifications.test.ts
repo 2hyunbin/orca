@@ -141,9 +141,9 @@ it('counts every chat as unconfirmed when the answer carried no outcomes', () =>
 
 // The host retires an unconfirmed send once the agent is seen carrying on it; the resume must still
 // report the chat, and as resumed, not as a failure the list can no longer show.
-it('counts an unconfirmed chat the host no longer lists as resumed', () => {
+it('preserves normalized uncertainty when a pending-list read omits the chat', () => {
   announceRestartResults(['a'], [{ sessionId: 'a', outcome: 'unknown' }], [], show)
-  expect(titles()).toEqual(['Resumed 1 chat'])
+  expect(titles()).toEqual(['Couldn’t confirm 1 chat was resumed'])
 })
 
 // Unconfirmed means the agent may well be working; "couldn't be resumed" would invite a second send.

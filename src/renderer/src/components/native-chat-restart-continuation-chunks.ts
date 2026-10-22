@@ -2,6 +2,7 @@ import type { ResumeFailure } from './native-chat-resume-on-restart-grouping'
 import type { HostOfferRead } from './native-chat-restart-host-offer'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
+import { createRuntimeRpcAbortError } from '@/runtime/abortable-runtime-environment-call'
 import {
   failedFrom,
   type HostOfferPayload,
@@ -45,7 +46,18 @@ export async function continueRestartChunks(
           continued?: RestartContinuationOutcome[]
           skipped?: string[]
         }
-      >(target, 'agentSession.restartContinue', { sessionIds: chunk })
+      >(
+        target,
+        'agentSession.restartContinue',
+        { sessionIds: chunk },
+        {
+          beforeSend: () => {
+            if (!owner.current()) {
+              throw createRuntimeRpcAbortError()
+            }
+          }
+        }
+      )
       if (!owner.current()) {
         break
       }
@@ -73,11 +85,20 @@ export async function continueRestartChunks(
       if (!owner.current()) {
         break
       }
-      console.warn('[native-chat-resume] resume request failed before reaching the chats', error)
+      console.warn('[native-chat-resume] continuation reply unavailable', error)
+      result.continued.push(
+        ...chunk.map((sessionId) => ({ sessionId, outcome: 'unknown' as const }))
+      )
       owner.markUnsent(chunk, Date.now())
       const read = await owner.refresh()
       if (owner.current()) {
         result.failed = read.available ? owner.failures() : undefined
+        const failures = new Map(result.failed?.map((row) => [row.sessionId, row.outcome]))
+        result.continued = result.continued.map((entry) =>
+          chunk.includes(entry.sessionId) && failures.get(entry.sessionId) === 'refused'
+            ? { ...entry, outcome: 'refused' }
+            : entry
+        )
       }
       break
     }

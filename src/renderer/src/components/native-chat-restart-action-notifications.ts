@@ -169,18 +169,19 @@ export function announceRestartResults(
   /** Opens the dialog over a fresh read; never rejects. */
   show: () => Promise<void>
 ): void {
-  const results = restartContinuationHistory(requested, reportedResults, hostFailed)
+  const results =
+    reportedResults ?? requested.map((sessionId) => ({ sessionId, outcome: 'unknown' as const }))
   const notContinued = restartChatsNotContinued(requested, results)
   const failed = new Map(hostFailed?.map((failure) => [failure.sessionId, failure.outcome]))
   // A host that lists failures has already dropped chats that moved on by themselves or that the
   // user answered; counting those would report a failure nothing on screen can show.
-  const reported =
-    hostFailed === undefined
-      ? notContinued
-      : notContinued.filter((sessionId) => failed.has(sessionId))
   const outcomes = new Map(results.map((result) => [result.sessionId, result.outcome]))
   const sentUnconfirmed = (sessionId: string): boolean =>
     outcomes.get(sessionId) === 'pending' || outcomes.get(sessionId) === 'unknown'
+  const reported =
+    hostFailed === undefined
+      ? notContinued
+      : notContinued.filter((sessionId) => failed.has(sessionId) || sentUnconfirmed(sessionId))
   // The filed outcome is what the list shows, so the toast uses it too.
   const unconfirmed = (sessionId: string): boolean =>
     (failed.get(sessionId) ?? (sentUnconfirmed(sessionId) ? 'unconfirmed' : 'refused')) ===
@@ -191,6 +192,6 @@ export function announceRestartResults(
     continuedCount,
     reported.length - unconfirmedCount,
     unconfirmedCount,
-    hostFailed === undefined && continuedCount === 0 ? undefined : show
+    hostFailed === undefined && continuedCount === 0 && unconfirmedCount === 0 ? undefined : show
   )
 }

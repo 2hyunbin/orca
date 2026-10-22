@@ -6,6 +6,7 @@ import {
   useNativeChatTargetRestartResuming,
   useNativeChatRestartRuntimes
 } from './native-chat-restart-runtimes'
+import { resumeRunView } from './native-chat-resume-run-view'
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
 import {
   requestNativeChatResumeOnRestartDialog,
@@ -89,7 +90,8 @@ it.each([
     expect(rpc).toHaveBeenLastCalledWith(
       { kind: 'environment', environmentId: 'ssh' },
       'agentSession.restartContinue',
-      { sessionIds: ids }
+      { sessionIds: ids },
+      { beforeSend: expect.any(Function) }
     )
     expect(remote.startedHere(remote.getNativeChatRestartOffer().failed[0].sessionId)).toBe(true)
     expect(remote.startedHere(remote.getNativeChatRestartOffer().candidates[0].sessionId)).toBe(
@@ -276,24 +278,30 @@ it.each(['here', 'all'])(
   }
 )
 
-it.each([false, true])(
-  'stops the undispatched tail after uncertainty or retirement (retired: %s)',
-  async (retired) => {
+it.each(['available', 'unavailable', 'no-tail', 'retired'])(
+  'keeps accepted-but-lost outcomes and untouched choices distinct (%s)',
+  async (mode) => {
     const remote = store()
-    const many = Array.from({ length: 1025 }, (_, i) => ({ ...offered[0], sessionId: `chat-${i}` }))
+    const many = Array.from({ length: mode === 'no-tail' ? 1024 : 1025 }, (_, i) => ({
+      ...offered[0],
+      sessionId: `chat-${i}`
+    }))
     let remaining = many
     let chunks = 0
+    let failedRead = false
     const pending = Promise.withResolvers<unknown>()
     rpc.mockImplementation(async (_target, method, params) => {
       if (method === 'agentSession.restartResumable') {
-        return { sessions: remaining }
-      }
-      chunks++
-      if (chunks === 2) {
-        return pending.promise
+        if (failedRead) {
+          throw new Error('reconciliation unavailable')
+        }
+        return { sessions: remaining, failed: [] }
       }
       const ids = params?.sessionIds ?? []
       remaining = remaining.filter((row) => !ids.includes(row.sessionId))
+      if (++chunks === 2) {
+        return pending.promise
+      }
       return {
         sessions: remaining,
         failed: [],
@@ -307,24 +315,99 @@ it.each([false, true])(
     })
     expect(chunks).toBe(2)
     await act(async () => {
-      if (retired) {
+      if (mode === 'retired') {
         remote.dispose()
       }
-      pending.reject(new Error('reply lost'))
+      failedRead = mode === 'unavailable'
+      pending.reject(new Error('accepted reply lost'))
       await action!
     })
     expect(chunks).toBe(2)
-    if (retired) {
+    if (mode === 'retired') {
       expect(vi.mocked(toast)).not.toHaveBeenCalled()
       return
     }
-    expect(remote.getNativeChatRestartRun()?.entries).toHaveLength(1024)
-    expect(remote.getNativeChatRestartRun()?.continued).toHaveLength(512)
+    const run = remote.getNativeChatRestartRun()!
+    expect(run.entries).toHaveLength(1024)
+    expect(run.continued?.filter((row) => row.outcome === 'continued')).toHaveLength(512)
+    expect(run.continued?.filter((row) => row.outcome === 'unknown')).toHaveLength(512)
+    const view = resumeRunView(
+      run,
+      remote.getNativeChatRestartOffer().candidates,
+      () => undefined,
+      'all'
+    )
+    expect(view.counts).toMatchObject({ resumed: 512, attention: 512 })
+    expect(vi.mocked(toast).mock.calls).toEqual([
+      [
+        'Couldn’t confirm 512 chats were resumed',
+        expect.objectContaining({
+          description: 'Resumed 512 chats',
+          action: expect.objectContaining({ label: 'Review' })
+        })
+      ]
+    ])
+    await mount(<NativeChatResumeRuntimeModal store={remote} machineName="Server" offerEnabled />)
+    await act(async () => remote.reopenNativeChatRestartOffer())
+    if (mode === 'no-tail') {
+      // This run-only unknown also uses the existing lasting status/check presentation.
+      expect(remote.getNativeChatRestartOffer()).toMatchObject({ candidates: [], failed: [] })
+      expect(view.statusBySession.get('chat-512')?.kind).toBe('unconfirmed')
+      expect(document.body.textContent).toContain('Open the chat and check before sending another.')
+      expect(
+        [...document.querySelectorAll('button')].some((row) => row.textContent === 'Retry')
+      ).toBe(false)
+      return
+    }
     expect(remote.getNativeChatRestartOffer().candidates.map((row) => row.sessionId)).toEqual([
       'chat-1024'
     ])
-    expect(vi.mocked(toast)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(toast).mock.calls[0][0]).not.toContain('1025')
+    expect(button('Resume all 1 on Server').disabled).toBe(false)
+    failedRead = false
+    await act(async () => button('Resume all 1 on Server').click())
+    expect(chunks).toBe(3)
+    expect(
+      rpc.mock.calls.findLast((call) => call[1] === 'agentSession.restartContinue')?.[2]
+    ).toEqual({ sessionIds: ['chat-1024'] })
+  }
+)
+
+it.each(['failure', 'success', 'history'])(
+  'supersedes an older ordinary read through all awaits (%s)',
+  async (mode) => {
+    const remote = store()
+    rpc.mockResolvedValue({ sessions: offered })
+    await act(async () => remote.observeRuntimeStatus(ready('r1')))
+    const old = Promise.withResolvers<unknown>()
+    const history = Promise.withResolvers<string[]>()
+    if (mode === 'history') {
+      vi.stubGlobal('api', {
+        runtimeEnvironments: { desktopCreatedChatIds: () => history.promise }
+      })
+      rpc.mockResolvedValueOnce({ sessions: [] })
+      await act(async () => remote.refreshNativeChatRestartOffer())
+      rpc.mockResolvedValue({ sessions: offered })
+    } else {
+      rpc.mockReturnValueOnce(old.promise)
+    }
+    let read: Promise<void>
+    await act(async () => {
+      read = remote.refreshNativeChatRestartOffer()
+    })
+    rpc.mockResolvedValue({ sessions: mode === 'failure' ? offered : [] })
+    remote.observeRuntimeStatus(undefined)
+    await act(async () => remote.observeRuntimeStatus(ready('r1')))
+    await act(async () => {
+      if (mode === 'failure') {
+        old.reject(new Error('obsolete failure'))
+      } else {
+        old.resolve({ sessions: offered })
+      }
+      history.resolve(['a'])
+      await read!
+    })
+    expect(remote.getNativeChatRestartOffer().candidates).toHaveLength(mode === 'failure' ? 2 : 0)
+    expect(remote.getNativeChatResumeOnRestartDialogRequest()).toBe(mode === 'failure')
   }
 )
 

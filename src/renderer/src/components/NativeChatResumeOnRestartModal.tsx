@@ -31,6 +31,7 @@ import {
 } from './native-chat-resume-on-restart-store'
 import { useNativeChatRestartRuntimes } from './native-chat-restart-runtimes'
 import { useResumeRunPanel } from './NativeChatResumeRunPanel'
+import { resumeRunFailures } from './native-chat-resume-run-view'
 import { NativeChatResumeAutoNote } from './NativeChatResumeAutoNote'
 import { NativeChatRemoteResumeActions } from './NativeChatRemoteResumeActions'
 import { moveInTree } from './native-chat-resume-tree-keys'
@@ -108,11 +109,9 @@ export function NativeChatResumeOccurrenceModal({
   } = store
   const remote = store.target.kind === 'environment'
   const { candidates, failed, listedAt } = useNativeChatRestartOffer(offerEnabled, store)
+  const run = useNativeChatRestartRun(store)
   const rows = useMemo<ResumeCandidate[]>(() => [...candidates, ...failed], [candidates, failed])
-  const failureBySession = useMemo(
-    () => new Map(failed.map((failure) => [failure.sessionId, failure])),
-    [failed]
-  )
+  const failureBySession = useMemo(() => resumeRunFailures(run, failed), [run, failed])
   // Open is an external one-shot request, never mirrored into local state: the launch load and the
   // status-bar entry both raise it, and a copy here would go stale against whichever raised it last.
   const open = useSyncExternalStore(
@@ -171,7 +170,6 @@ export function NativeChatResumeOccurrenceModal({
     (sessionId: string) => failureBySession.get(sessionId),
     [failureBySession]
   )
-  const run = useNativeChatRestartRun(store)
   const runPanel = useResumeRunPanel({
     run,
     rows,

@@ -51,6 +51,7 @@ export function createNativeChatRestartOccurrence(
    *  a re-read that raced it must neither pre-empt nor undo. */
   let actionsBegun = 0
   let actionsSettled = 0
+  let readSequence = 0
   /** Memory-only history: retires after viewing and closing its finished summary, or on replacement. */
   let run: ResumeRun | null = null
   let releaseRunStatus: (() => void) | undefined
@@ -116,12 +117,6 @@ export function createNativeChatRestartOccurrence(
     }
   })
 
-  const getNativeChatRestartOffer = (): NativeChatRestartOffer => offer
-
-  const getNativeChatRestartResuming = (): readonly string[] => resuming
-
-  const getNativeChatRestartRun = (): ResumeRun | null => run
-
   /** A finished summary must be shown before closing can retire it. */
   function markFinishedNativeChatRestartRunShown(shown: ResumeRun): void {
     if (run === shown && !shown.inFlight && !shown.finishedViewShown) {
@@ -146,8 +141,13 @@ export function createNativeChatRestartOccurrence(
   ): Promise<HostOfferRead> {
     const issued = actionsBegun
     const settled = actionsSettled
+    const reading = ++readSequence
     const mayPublish = () =>
-      current() && allowed() && issued === actionsBegun && settled === actionsSettled
+      current() &&
+      allowed() &&
+      reading === readSequence &&
+      issued === actionsBegun &&
+      settled === actionsSettled
     if (!mayPublish()) {
       return { ...EMPTY, available: false }
     }
@@ -156,11 +156,6 @@ export function createNativeChatRestartOccurrence(
       return { ...EMPTY, available: false }
     }
     if (!read.available) {
-      createdHere = null
-      publish({ ...EMPTY, listedAt: Date.now() })
-      if (target.kind !== 'local') {
-        consumeNativeChatResumeOnRestartDialogRequest()
-      }
       return read
     }
     const ids = await readDesktopCreatedChatIds(target, read, createdHere, refreshAttribution)
@@ -237,7 +232,10 @@ export function createNativeChatRestartOccurrence(
         },
         refresh: readNativeChatRestartOffer,
         failures: () => offer.failed,
-        markUnsent: markUnsentResumes
+        markUnsent: (ids, at) => {
+          markUnsentResumes(ids, at)
+          publishAnswer(offer)
+        }
       })
     } finally {
       release()
@@ -328,9 +326,9 @@ export function createNativeChatRestartOccurrence(
   }
 
   return {
-    getNativeChatRestartOffer,
-    getNativeChatRestartResuming,
-    getNativeChatRestartRun,
+    getNativeChatRestartOffer: (): NativeChatRestartOffer => offer,
+    getNativeChatRestartResuming: (): readonly string[] => resuming,
+    getNativeChatRestartRun: (): ResumeRun | null => run,
     markFinishedNativeChatRestartRunShown,
     releaseFinishedNativeChatRestartRun,
     refreshNativeChatRestartOffer,

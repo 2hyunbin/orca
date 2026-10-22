@@ -227,9 +227,14 @@ function NativeChatRuntimeResumeStatusSegment({
   const inRun = new Set(running ? run.entries.map((entry) => entry.candidate.sessionId) : [])
   const waiting = failed.filter((failure) => !inRun.has(failure.sessionId))
   const pending = candidates.filter((candidate) => !inRun.has(candidate.sessionId)).length
-  const failures = waiting.length
+  const unknown = !running
+    ? [...(view?.statusBySession ?? [])].filter(
+        ([id, status]) => status.kind === 'unconfirmed' && !failureBySession.has(id)
+      ).length
+    : 0
+  const failures = waiting.length + unknown
   // An unconfirmed chat may be working, so "failed" would invite a duplicate "continue".
-  const unconfirmed = waiting.some((failure) => failure.outcome === 'unconfirmed')
+  const unconfirmed = unknown > 0 || waiting.some((failure) => failure.outcome === 'unconfirmed')
   // Only this run's own completed rows establish its success; older host failures are separate.
   const resumed =
     run !== null &&

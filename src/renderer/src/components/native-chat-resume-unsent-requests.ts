@@ -1,7 +1,6 @@
 import type { ResumeCandidate, ResumeFailure } from './native-chat-resume-on-restart-grouping'
 
-// A resume request that failed before the host reserved anything leaves it nothing to record, so
-// its chats are shown failed from here: by id, when it failed. Each host answer re-derives it.
+// A lost reply is not a delivery receipt; retain uncertainty until the host supplies current facts.
 
 export function createUnsentResumes() {
   const unsentResumes = new Map<string, number>()
@@ -42,7 +41,7 @@ export function createUnsentResumes() {
             {
               ...candidate,
               failedAt,
-              outcome: 'refused',
+              outcome: 'unconfirmed',
               reason: UNSENT_RESUME_REASON,
               retryable: true
             }
