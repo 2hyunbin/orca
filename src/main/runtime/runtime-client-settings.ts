@@ -18,6 +18,7 @@ import { getHostDisplayLabelOverrides } from '../../shared/host-setting-override
 import type { TerminalQuickCommand } from '../../shared/terminal-quick-command-types'
 import { recordManagedHookInstallFailure } from '../agent-hooks/install-telemetry'
 import { applyAgentStatusHooksEnabled } from '../agent-hooks/managed-agent-hook-controls'
+import { isWslHostOrcadProcess } from '../ipc/wsl-guest-windows-drive-path'
 import { isAgentStatusHooksEnabledForAgent } from '../../shared/agent-status-hooks-setting'
 import type { RuntimeStore } from './runtime-store-contract'
 import {
@@ -245,6 +246,8 @@ export class RuntimeClientSettingsController {
         return
       }
       await applyAgentStatusHooksEnabled(settings.agentStatusHooksEnabled !== false, settings, {
+        // R42: in a distro the WSL bridge still runs panes on these entries, as startup knows.
+        keepSharedEntries: isWslHostOrcadProcess(),
         shouldHydrateShellPath: getAppEnvironment().isPackaged(),
         onInstallError: recordManagedHookInstallFailure,
         shouldContinue: (agent) => {
