@@ -3,7 +3,14 @@ import type {
   AgentCompletionCoordinatorOptions,
   AgentCompletionStatusSnapshot
 } from './agent-completion-coordinator-types'
-import type { LastCompletionIdentity } from './agent-completion-identity-store'
+import {
+  createAgentCompletionIdentityScope,
+  type LastCompletionIdentity
+} from './agent-completion-identity-store'
+import {
+  createAgentCompletionNotificationController,
+  type CompletionState
+} from './agent-completion-notification-controller'
 
 type HookObserverState = {
   workingStatusObserved: boolean
@@ -24,7 +31,9 @@ type HookObserverOptions = {
   recordPaneActivity: () => void
   clearPendingHookDone: () => void
   dispatchAttention: (payload: AgentCompletionStatusSnapshot) => void
-  dispatchCompletion: (source: 'hook', title: string, override?: Record<string, unknown>) => boolean
+  dispatchCompletion: ReturnType<
+    typeof createAgentCompletionNotificationController
+  >['dispatchCompletion']
   scheduleHookDoneCompletion: (title: string, payload: AgentCompletionStatusSnapshot) => void
   doneShouldUseQuietWindow: (payload: AgentCompletionStatusSnapshot) => boolean
   hookCompletionIdentity: (payload: AgentCompletionStatusSnapshot) => string | null
@@ -33,7 +42,9 @@ type HookObserverOptions = {
   openStampedTail: (timestamp: number) => boolean
   rememberHandledTurnCompletedAt: (timestamp: number) => void
   turnCompletedAtAlreadyHandled: (timestamp: number) => boolean
-  consumePendingStampedTailForAgent: (agent: string | null, identity: string | null) => boolean
+  consumePendingStampedTailForAgent: ReturnType<
+    typeof createAgentCompletionIdentityScope
+  >['consumePendingStampedTailForAgent']
   consumeStampedTailForCurrentCoordinator: (timestamp: number) => void
   clearOriginStampedTail: () => void
   clearProcessExitCompletion: () => void
@@ -91,7 +102,6 @@ export function createAgentCompletionHookObserver({
           const completionSnapshot = {
             ...payload,
             state: 'done' as const,
-            stateStartedAt: turnCompletedAt,
             turnCompletedAt
           }
           const identity: LastCompletionIdentity = {
@@ -116,8 +126,7 @@ export function createAgentCompletionHookObserver({
         return
       }
       clearOriginStampedTail()
-      // Why: an exit identity names no turn, so kept past a new turn it matches (by agent) and
-      // swallows every later hook Done of that agent in this pane.
+      // Exit identity must not suppress later turns of the same agent.
       clearProcessExitCompletion()
       recordWorkingBoundary(payload.stateStartedAt)
       clearPendingHookDone()
@@ -147,7 +156,7 @@ export function createAgentCompletionHookObserver({
       : undefined
     if (
       turnCompletedAt === undefined &&
-      consumePendingStampedTailForAgent(hookCompletionAgentIdentity(payload), identity)
+      consumePendingStampedTailForAgent(hookCompletionAgentIdentity(payload), identity, payload)
     ) {
       state.lastCompletionIdentity = identity
         ? { source: 'hook', identity, agentIdentity: hookCompletionAgentIdentity(payload) }
@@ -205,6 +214,91 @@ export function createAgentCompletionHookObserver({
         rememberHandledTurnCompletedAt(turnCompletedAt)
       }
       observeHookStatus(unstampedPayload)
+    }
+  }
+}
+
+export function createHookOnlyCompletionObserver(input: {
+  paneKey: string
+  isLive: () => boolean
+  workingObserved?: boolean
+  dispatch: (snapshot: AgentCompletionStatusSnapshot) => void
+}) {
+  const identityScope = createAgentCompletionIdentityScope(input.paneKey, 'hook')
+  let current: AgentCompletionStatusSnapshot | undefined
+  let seeding = false
+  let disposed = false
+  const state: CompletionState = {
+    currentTurn: input.workingObserved ? 1 : 0,
+    workingStatusObserved: input.workingObserved === true,
+    requiresFreshWorking: false,
+    lastCompletionToken: null,
+    lastCompletionAt: 0,
+    lastCompletedTurn: null,
+    lastCompletionSource: null,
+    lastCompletionIdentity: null,
+    lastAttentionToken: null,
+    pendingHookDoneTimer: null,
+    pendingHookDoneTitle: null,
+    pendingHookDonePayload: null
+  }
+  const processState = { processSession: 0, lastForegroundAgent: null, hasAgentRunEvidence: false }
+  const dispatch = (snapshot: AgentCompletionStatusSnapshot | undefined): void => {
+    if (!seeding && !disposed && input.isLive() && snapshot) {
+      input.dispatch(snapshot)
+    }
+  }
+  const options: AgentCompletionCoordinatorOptions = {
+    paneKey: input.paneKey,
+    getPtyId: () => null,
+    inspectProcess: async () => ({ foregroundProcess: null, hasChildProcesses: false }),
+    isLive: () => !disposed && input.isLive(),
+    usesHookTurnEnds: (snapshot) => snapshot.turnEndDisposition === 'identified',
+    dispatchCompletion: (_title, meta) => dispatch(meta?.agentStatus ?? current),
+    dispatchAttention: (_title, meta) => dispatch(meta.agentStatus)
+  }
+  const notification = createAgentCompletionNotificationController({
+    options,
+    state,
+    processState,
+    identityScope
+  })
+  const observer = createAgentCompletionHookObserver({
+    options,
+    state,
+    establishAgentEvidence: () => {
+      processState.hasAgentRunEvidence = true
+    },
+    recordPaneActivity: () => {},
+    ...notification,
+    openStampedTail: identityScope.openStampedTail,
+    rememberHandledTurnCompletedAt: identityScope.rememberTurnCompletedAt,
+    turnCompletedAtAlreadyHandled: identityScope.turnCompletedAtAlreadyHandled,
+    consumePendingStampedTailForAgent: identityScope.consumePendingStampedTailForAgent,
+    consumeStampedTailForCurrentCoordinator: identityScope.consumeStampedTail,
+    clearOriginStampedTail: identityScope.clearOriginStampedTail,
+    clearProcessExitCompletion: identityScope.clearProcessExitCompletion,
+    recordWorkingBoundary: identityScope.recordWorkingBoundary,
+    dropPendingTitle: () => {}
+  })
+  return {
+    observeHookStatus: (snapshot: AgentCompletionStatusSnapshot) => {
+      current = snapshot
+      observer.observeHookStatus(snapshot)
+    },
+    seedHookStatus: (snapshot: AgentCompletionStatusSnapshot) => {
+      seeding = true
+      current = snapshot
+      observer.seedHookStatus(snapshot)
+      notification.clearPendingHookDone()
+      seeding = false
+    },
+    dispose: () => {
+      disposed = true
+      current = undefined
+      notification.clearPendingHookDone()
+      identityScope.clearWorkingBoundary()
+      identityScope.dispose(false)
     }
   }
 }

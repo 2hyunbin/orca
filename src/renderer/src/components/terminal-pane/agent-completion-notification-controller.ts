@@ -43,16 +43,28 @@ type CompletionControllerOptions = {
   identityScope: AgentCompletionIdentityScope
 }
 
+export function selectHookNotificationTimestamp(
+  payload: AgentCompletionStatusSnapshot
+): number | undefined {
+  if (typeof payload.turnCompletedAt === 'number' && Number.isFinite(payload.turnCompletedAt)) {
+    return payload.turnCompletedAt
+  }
+  if (
+    payload.state === 'done' &&
+    typeof payload.turnEndedAt === 'number' &&
+    Number.isFinite(payload.turnEndedAt)
+  ) {
+    return payload.turnEndedAt
+  }
+  return payload.stateStartedAt
+}
+
 export function createAgentCompletionNotificationController({
   options,
   state,
   processState,
   identityScope
 }: CompletionControllerOptions) {
-  function isFiniteTurnCompletedAt(value: number | undefined): value is number {
-    return typeof value === 'number' && Number.isFinite(value)
-  }
-
   function completionToken(source: CompletionSource): string {
     if (state.workingStatusObserved) {
       return `turn:${state.currentTurn}`
@@ -72,14 +84,7 @@ export function createAgentCompletionNotificationController({
   }
 
   function hookCompletionIdentity(payload: AgentCompletionStatusSnapshot): string | null {
-    // Why: `stateStartedAt` is pinned while the reported state does not change. A Claude pane held at `working` by background inventory would otherwise give every turn in the run the same identity.
-    // Why: `stateStartedAt` is also pinned across done→done, so a later turn end in one done
-    // segment is told from a restatement only by the host's turn-end stamp.
-    const timestamp = isFiniteTurnCompletedAt(payload.turnCompletedAt)
-      ? payload.turnCompletedAt
-      : payload.state === 'done' && isFiniteTurnCompletedAt(payload.turnEndedAt)
-        ? payload.turnEndedAt
-        : payload.stateStartedAt
+    const timestamp = selectHookNotificationTimestamp(payload)
     if (typeof timestamp !== 'number' || !Number.isFinite(timestamp)) {
       return null
     }
@@ -114,7 +119,8 @@ export function createAgentCompletionNotificationController({
   }
 
   function completionIdentityAlreadyNotified(
-    completionIdentity: LastCompletionIdentity | null | undefined
+    completionIdentity: LastCompletionIdentity | null | undefined,
+    payload?: AgentCompletionStatusSnapshot
   ): boolean {
     if (!completionIdentity) {
       return false
@@ -135,7 +141,8 @@ export function createAgentCompletionNotificationController({
         (completionIdentity.source === 'hook' &&
           identityScope.consumePendingStampedTailForAgent(
             completionIdentity.agentIdentity,
-            completionIdentity.identity
+            completionIdentity.identity,
+            payload
           ))
       )
     }
@@ -176,7 +183,12 @@ export function createAgentCompletionNotificationController({
     ) {
       return false
     }
-    if (completionIdentityAlreadyNotified(optionsOverride.completionIdentity)) {
+    if (
+      completionIdentityAlreadyNotified(
+        optionsOverride.completionIdentity,
+        optionsOverride.agentStatus
+      )
+    ) {
       return false
     }
     state.lastCompletionToken = token
@@ -273,6 +285,9 @@ export function createAgentCompletionNotificationController({
         })
       }
     }, HOOK_DONE_QUIET_MS)
+    if (typeof state.pendingHookDoneTimer === 'object') {
+      state.pendingHookDoneTimer.unref?.()
+    }
   }
 
   function clearPendingHookDone(): void {

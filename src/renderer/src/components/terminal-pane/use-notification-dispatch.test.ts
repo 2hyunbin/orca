@@ -92,7 +92,7 @@ describe('dispatchTerminalNotification', () => {
     })
   })
 
-  it('builds the notification id from a completion snapshot, not the pinned working row', () => {
+  it('builds a hook ID from its semantic end while preserving the pinned source clock', () => {
     const pinnedWorkingStartedAt = Date.now() - 60_000
     // Why: the stored row must name the event's agent, or it is dropped for identity mismatch
     // and the assertion would hold whichever side of the `??` wins.
@@ -112,8 +112,10 @@ describe('dispatchTerminalNotification', () => {
         state: 'done',
         prompt: 'review the PR',
         agentType: 'claude',
-        stateStartedAt: turnCompletedAt
-      }
+        stateStartedAt: pinnedWorkingStartedAt,
+        turnCompletedAt
+      },
+      agentCompletionSource: 'hook'
     })
 
     expect(window.api.notifications.dispatch).toHaveBeenCalledWith(
@@ -271,6 +273,8 @@ describe('dispatchTerminalNotification', () => {
   it('names the server running the workspace so a phone opens it there, and none for local work', () => {
     for (const workspaceOwner of [
       { executionHostId: 'local' as const, runtimeEnvironmentId: null },
+      { executionHostId: 'ssh:direct' as const, runtimeEnvironmentId: null },
+      { executionHostId: 'local' as const, runtimeEnvironmentId: null, wslDistro: 'Ubuntu' },
       // A server's own SSH target still runs behind that server.
       { executionHostId: 'ssh:qa' as const, runtimeEnvironmentId: 'env-1' },
       // A tab stamped with the server before its environment is known.
@@ -280,11 +284,15 @@ describe('dispatchTerminalNotification', () => {
         source: 'agent-task-complete',
         terminalTitle: 'codex',
         paneKey,
+        agentCompletionSource: 'hook',
         workspaceOwner
       })
     }
     const calls = vi.mocked(window.api.notifications.dispatch).mock.calls
+    expect(calls.every(([request]) => request.mobileDeliveredByHost !== true)).toBe(true)
     expect(calls.map(([request]) => request.executionHost)).toEqual([
+      undefined,
+      undefined,
       undefined,
       'runtime:env-1',
       'runtime:env-2'

@@ -1,3 +1,5 @@
+import type { HostTurnEndFacts } from '../../../../shared/agent-status-types'
+
 export type CompletionIdentitySource = 'hook' | 'title' | 'process-exit'
 
 export type LastCompletionIdentity = {
@@ -35,7 +37,8 @@ export type AgentCompletionIdentityScope = {
   openStampedTail: (turnCompletedAt: number) => boolean
   consumePendingStampedTailForAgent: (
     agentIdentity: string | null,
-    completionIdentity: string | null
+    completionIdentity: string | null,
+    end?: HostTurnEndFacts
   ) => boolean
   consumeStampedTail: (turnCompletedAt: number) => void
   hasUnconsumedStampedTail: () => boolean
@@ -94,7 +97,6 @@ export function createAgentCompletionIdentityScope(
       return true
     }
     const eligibleWorkingBoundaryByLane = new Map(workingBoundaryByPane.get(paneKey))
-    eligibleWorkingBoundaryByLane.delete(lane)
     pendingStampedTailByPane.set(paneKey, {
       turnCompletedAt,
       originLane: lane,
@@ -107,7 +109,8 @@ export function createAgentCompletionIdentityScope(
 
   function consumePendingStampedTailForAgent(
     agentIdentity: string | null,
-    completionIdentity: string | null
+    completionIdentity: string | null,
+    end?: HostTurnEndFacts
   ): boolean {
     const pending = pendingStampedTailByPane.get(paneKey)
     const stampedCompletion = lastCompletionByPane.get(paneKey)
@@ -115,6 +118,10 @@ export function createAgentCompletionIdentityScope(
     const eligibleWorkingBoundary = pending?.eligibleWorkingBoundaryByLane.get(lane)
     if (
       !pending ||
+      (end?.turnEndDisposition === 'identified' &&
+        end.turnEndedAt !== undefined &&
+        Number.isFinite(end.turnEndedAt) &&
+        end.turnEndedAt > pending.turnCompletedAt) ||
       stampedCompletion?.lastTurnCompletedAtNotified !== pending.turnCompletedAt ||
       agentIdentity === null ||
       stampedCompletion.agentIdentity !== agentIdentity ||

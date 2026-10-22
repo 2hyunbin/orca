@@ -63,6 +63,9 @@ it('uses actual receipt origin and live desktop proof, then retires only a genui
     onTurnStarted: (id, cursor, floor) => controller.retireLiveStructuredTurn(id, cursor, floor)
   })
   const events = h.acquire.mock.calls.at(-1)![0].events
+  if (!events) {
+    throw new Error('Provider events were not installed')
+  }
   const journal = h.host.collaboratorsForTests().sessions.get(SESSION)!.journal
   const notifications = () => sent.filter((event) => event.type === 'notification')
   const dismissals = () => sent.filter((event) => event.type === 'dismiss')

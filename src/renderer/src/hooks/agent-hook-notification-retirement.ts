@@ -1,12 +1,21 @@
 import type { LiveNotificationRetirement } from '../../../shared/notification-settings-types'
-import type {
-  AgentCompletionCoordinator,
-  AgentCompletionStatusSnapshot
-} from '@/components/terminal-pane/agent-completion-coordinator-types'
+import type { AgentCompletionStatusSnapshot } from '../components/terminal-pane/agent-completion-coordinator-types'
+import { selectHookNotificationTimestamp } from '../components/terminal-pane/agent-completion-notification-controller'
 
-export function createAgentHookNotificationRetirement(getPtyId: () => string | null) {
+type HookObservation = {
+  seedHookStatus: (payload: AgentCompletionStatusSnapshot) => void
+  observeHookStatus: (payload: AgentCompletionStatusSnapshot) => void
+  dispose: () => void
+  resetCompletionState?: (options?: { requireFreshWorking?: boolean }) => void
+}
+
+export function createAgentHookNotificationRetirement(
+  getPtyId: () => string | null,
+  retire: (alerts: LiveNotificationRetirement[]) => void
+) {
   let owed: { alert: LiveNotificationRetirement; source: string; at: number }[] = []
   let source = ''
+  let lastStartedAt: number | undefined
   const sourceFor = (payload: AgentCompletionStatusSnapshot): string =>
     payload.runId || payload.executionId
       ? JSON.stringify([
@@ -26,47 +35,56 @@ export function createAgentHookNotificationRetirement(getPtyId: () => string | n
       alert: LiveNotificationRetirement | undefined,
       payload: AgentCompletionStatusSnapshot | undefined
     ): void => {
-      if (alert && source && payload?.stateStartedAt !== undefined) {
-        owed = [...owed, { alert, source, at: payload.stateStartedAt }].slice(-20)
+      const at = payload ? selectHookNotificationTimestamp(payload) : undefined
+      if (alert && source && at !== undefined && Number.isFinite(at)) {
+        owed = [...owed, { alert, source, at }].slice(-20)
       }
     },
     observe: (payload: AgentCompletionStatusSnapshot): void => {
       const nextSource = sourceFor(payload)
       if (!nextSource || source !== nextSource || payload.isReplay || payload.restoredUnconfirmed) {
         owed = []
+        lastStartedAt = payload.turnStartedAt
       }
       source = nextSource
+      const newStart =
+        payload.state === 'working' &&
+        payload.turnStartedAt !== undefined &&
+        Number.isFinite(payload.turnStartedAt) &&
+        payload.turnStartedAt !== lastStartedAt
+      lastStartedAt = payload.turnStartedAt ?? lastStartedAt
       const retired = owed.filter(
         (item) =>
+          newStart &&
           item.source === source &&
           payload.turnStartedAt !== undefined &&
           payload.turnStartedAt > item.at
       )
       owed = owed.filter((item) => !retired.includes(item))
       if (retired.length) {
-        void window.api?.notifications
-          ?.dismiss?.(
-            [],
-            [],
-            undefined,
-            retired.map((item) => item.alert)
-          )
-          .catch((error: unknown) =>
-            console.warn('[agent-hook-completion] turn retirement failed', error)
-          )
+        retire(retired.map((item) => item.alert))
       }
     },
     clear: (): void => {
       owed = []
       source = ''
+      lastStartedAt = undefined
     },
-    wrapCoordinator: (coordinator: AgentCompletionCoordinator): AgentCompletionCoordinator => ({
+    wrapCoordinator: <T extends HookObservation>(coordinator: T): T => ({
       ...coordinator,
-      seedHookStatus: (payload) => {
+      ...(coordinator.resetCompletionState
+        ? {
+            resetCompletionState: (options?: { requireFreshWorking?: boolean }) => {
+              retirement.clear()
+              coordinator.resetCompletionState?.(options)
+            }
+          }
+        : {}),
+      seedHookStatus: (payload: AgentCompletionStatusSnapshot) => {
         retirement.clear()
         coordinator.seedHookStatus(payload)
       },
-      observeHookStatus: (payload) => {
+      observeHookStatus: (payload: AgentCompletionStatusSnapshot) => {
         retirement.observe(payload)
         coordinator.observeHookStatus(payload)
       },

@@ -4,7 +4,7 @@ import type {
   TurnEndDisposition
 } from '../../../../shared/agent-status-types'
 import type { RecognizedAgentProcess } from '../../../../shared/agent-process-recognition'
-import type { RuntimeTerminalProcessInspection } from '@/runtime/runtime-terminal-inspection'
+import type { TerminalProcessInspection } from '../../../../shared/terminal-process-inspection'
 
 export type AgentCompletionStatusSnapshot = ParsedAgentStatusPayload &
   Partial<
@@ -49,7 +49,7 @@ export type AgentCompletionCoordinatorOptions = {
   inspectProcess: (
     ptyId: string,
     options?: { expectedIncarnationId?: string; steadyState?: boolean }
-  ) => Promise<RuntimeTerminalProcessInspection>
+  ) => Promise<TerminalProcessInspection>
   dispatchCompletion: (title: string, meta?: AgentCompletionDispatchMeta) => void
   dispatchAttention?: (title: string, meta: AgentAttentionDispatchMeta) => void
   dispatchHookLifecycle?: (payload: AgentCompletionStatusSnapshot) => void

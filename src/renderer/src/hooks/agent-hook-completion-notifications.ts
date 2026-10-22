@@ -1,4 +1,4 @@
-import { createAgentHookNotificationRetirement } from './agent-hook-notification-retirement'
+import { createRendererHookRetirement } from './agent-hook-notification-dismissal'
 import { useAppStore } from '@/store'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { createAgentCompletionCoordinator } from '@/components/terminal-pane/agent-completion-coordinator'
@@ -207,7 +207,7 @@ function hookLaneOwnsTurnEnd(paneKey: string, snapshot: AgentCompletionStatusSna
 }
 
 function createCoordinator(paneKey: string, worktreeId: string): AgentCompletionCoordinator {
-  const retirement = createAgentHookNotificationRetirement(() => getPtyIdForPaneKey(paneKey))
+  const retirement = createRendererHookRetirement(() => getPtyIdForPaneKey(paneKey))
   const coordinator = createAgentCompletionCoordinator({
     paneKey,
     statusLane: 'hook',

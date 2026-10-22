@@ -90,7 +90,7 @@ export function registerNotificationHandlers(store: Store, runtime?: OrcaRuntime
     }
   )
 
-  const announced = createAnnouncedNotificationRegistry()
+  const announced = runtime?.announcedNotifications ?? createAnnouncedNotificationRegistry()
 
   ipcMain.removeHandler('notifications:dismiss')
   ipcMain.handle(

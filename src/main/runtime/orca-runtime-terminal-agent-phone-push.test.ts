@@ -10,6 +10,8 @@ import type { RuntimeStore } from './runtime-store-contract'
 // Switched on, as it ships next: that build's host reads hookless agents' titles itself.
 vi.mock('../../shared/sidebar-inputs-switch', () => ({ ORCA_SIDEBAR_INPUTS_IS_MAIN: true }))
 
+const cleanups: (() => void)[] = []
+
 const WT = 'repo-1::/tmp/worktree-a'
 const PANE = 'tab-1:11111111-1111-4111-8111-111111111111'
 
@@ -30,7 +32,7 @@ function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID) {
     runtime.syncWindowGraph(windowId, { tabs: [], leaves: [] })
   }
   const server = new AgentHookServer()
-  runtime.attachAgentStatusStore(server)
+  cleanups.push(runtime.attachAgentStatusStore(server))
   const alerts: MobileNotificationEvent[] = []
   runtime.onNotificationDispatched((event) => alerts.push(event))
   const report = (
@@ -50,7 +52,7 @@ function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID) {
         ? [event.agentState]
         : []
     )
-  return { runtime, report, agentAlerts, alerts }
+  return { runtime, server, report, agentAlerts, alerts }
 }
 
 describe('terminal agent phone push on a headless host', () => {
@@ -58,7 +60,43 @@ describe('terminal agent phone push on a headless host', () => {
     vi.useFakeTimers({ now: 100_000 })
   })
   afterEach(() => {
+    for (const cleanup of cleanups.splice(0)) {
+      cleanup()
+    }
     vi.useRealTimers()
+  })
+
+  it('publishes distinct identified host ends in one done segment, but not restatements or cancellation', () => {
+    const { server, alerts } = createHost()
+    const end = (at: number, sessionBoundary?: true, interrupted?: true) =>
+      server.ingestRemote(
+        {
+          paneKey: PANE,
+          tabId: 'tab-1',
+          worktreeId: WT,
+          source: 'codex',
+          turnEndedAt: at,
+          turnEndDisposition: 'identified',
+          payload: { state: 'done', prompt: '', agentType: 'codex', sessionBoundary, interrupted }
+        },
+        'remote-fixture'
+      )
+    end(100, true)
+    expect(alerts).toHaveLength(0)
+    end(200)
+    expect(alerts).toHaveLength(1)
+    const segment = server.getStatusSnapshot()[0]?.stateStartedAt
+    vi.advanceTimersByTime(6_000)
+    end(300)
+    expect(server.getStatusSnapshot()[0]?.stateStartedAt).toBe(segment)
+    expect(
+      alerts.filter((event) => event.type === 'notification').map((event) => event.notificationId)
+    ).toEqual([expect.stringMatching(/:200$/), expect.stringMatching(/:300$/)])
+    vi.advanceTimersByTime(6_000)
+    end(300)
+    expect(alerts).toHaveLength(2)
+    end(400, undefined, true)
+    expect(alerts).toHaveLength(2)
   })
 
   it('pushes a finish once it stays finished, a request for input at once, and never a prompt', () => {

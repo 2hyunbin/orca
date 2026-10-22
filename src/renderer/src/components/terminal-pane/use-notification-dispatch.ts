@@ -17,6 +17,7 @@ import {
   type AgentStatusEntry
 } from '../../../../shared/agent-status-types'
 import { isSupersededAgentCompletionSnapshot } from './agent-completion-snapshot-staleness'
+import { selectHookNotificationTimestamp } from './agent-completion-notification-controller'
 import type {
   AgentCompletionDispatchMeta,
   AgentCompletionStatusSnapshot
@@ -130,7 +131,9 @@ export function dispatchTerminalNotification(
     return false
   }
   const agentNotificationStateStartedAt =
-    eventAgentStatusSnapshot?.stateStartedAt ?? freshStoredAgentStatus?.stateStartedAt
+    event.agentCompletionSource === 'hook' && agentStatus
+      ? selectHookNotificationTimestamp(agentStatus)
+      : (eventAgentStatusSnapshot?.stateStartedAt ?? freshStoredAgentStatus?.stateStartedAt)
   const attentionDecision = resolveAgentAttention(
     {
       subject: { workspaceId: worktreeId, surfaceKey: event.paneKey },
@@ -193,9 +196,6 @@ export function dispatchTerminalNotification(
         ...(notificationId ? { notificationId } : {}),
         worktreeId: request.workspaceId,
         ...(executionHost ? { executionHost } : {}),
-        ...(event.agentCompletionSource === 'hook' && !executionHost
-          ? { mobileDeliveredByHost: true }
-          : {}),
         paneKey: request.subjectKey ?? undefined,
         ...getNotificationWorkspaceLabels(state, request.workspaceId, event.terminalTitle),
         notificationSourceId: notificationSourceForOwner(owner, state),

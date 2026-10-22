@@ -1,5 +1,3 @@
-import { createTerminalAgentMobileAttention } from './terminal-agent-mobile-attention'
-import { readStructuredAttentionWorkspaceLabels } from './structured-agent-session-mobile-attention'
 import { AgentTransitionDetector } from '../agent-hooks/agent-transition-detector'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { parsePaneKey } from '../../shared/stable-pane-id'
@@ -38,12 +36,9 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
     translate: (key, fallback) =>
       getRuntimeDesktopSurface().translateNotification?.(key, fallback) ?? fallback,
     dispatch: (event) => this.mobileNotifications.dispatch(event),
-    setTimer: (run, delayMs) => {
-      // A pending finish must never hold the process open at quit.
-      const timer = setTimeout(run, delayMs)
-      timer.unref?.()
-      return { cancel: () => clearTimeout(timer) }
-    },
+    retire: (alerts) => this.mobileNotifications.retireLiveNotifications(alerts),
+    recordAnnounced: (paneKey, id) =>
+      this.mobileNotifications.announcedNotifications.record(paneKey, id),
     now: Date.now
   })
 
@@ -54,22 +49,11 @@ export abstract class OrcaRuntimeWithAgentTransitions extends OrcaRuntimeWithMig
 
   /** Attaches the detector; layers above subscribe their readers first. */
   attachAgentStatusStore(store: AgentStatusStoreView): () => void {
-    const alerts = createTerminalAgentMobileAttention({
-      readRow: (key) => this.agentTransitions.latestRow(key),
-      readNotificationSettings: () => this.store?.getSettings().notifications,
-      readWorkspaceLabels: (workspaceId) =>
-        this.store ? readStructuredAttentionWorkspaceLabels(this.store, { workspaceId }) : {},
-      isWorkspaceMuted: (id) => this.isWorkspaceNotificationMuted(id),
-      dispatch: (event) => this.mobileNotifications.dispatch(event),
-      retire: (ids) => this.mobileNotifications.retireLiveNotifications(ids),
-      now: Date.now
-    })
-    const stopAlerts = this.agentTransitions.subscribe(alerts.observe)
+    this.terminalAgentPhonePush.dispose()
     const stop = this.agentTransitions.attach(store)
     return () => {
       stop()
-      stopAlerts()
-      alerts.dispose()
+      this.terminalAgentPhonePush.dispose()
     }
   }
 

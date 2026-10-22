@@ -1,3 +1,4 @@
+import { createAnnouncedNotificationRegistry } from '../notifications/announced-notification-registry'
 import type { LiveNotificationRetirement } from '../../shared/notification-settings-types'
 import { reserveNotificationCooldown } from '../../shared/notification-burst-cooldown'
 import type { AgentStatusState } from '../../shared/agent-status-types'
@@ -62,6 +63,7 @@ export type MobilePushRegistrar = {
 }
 
 export class RuntimeMobileNotificationController {
+  readonly announcedNotifications = createAnnouncedNotificationRegistry()
   isConnectedDesktop: (deviceId: string) => boolean = () => false
   private readonly listeners = new Set<(event: MobileNotificationEvent) => void>()
   private readonly legacyCooldown = new Map<string, number>()
