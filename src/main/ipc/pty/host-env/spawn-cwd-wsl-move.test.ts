@@ -60,8 +60,8 @@ describe('assertWorkspaceAcceptsNewPty under a WSL move', () => {
   })
 })
 
-// R46: a terminal that names no workspace would otherwise outlive the commit in a moved folder.
-describe('a spawn with no workspace, between quiesce and commit', () => {
+// R46: a terminal the workspace fence misses would otherwise outlive the commit in a moved folder.
+describe('a spawn by its folder, between quiesce and commit', () => {
   beforeEach(() => {
     seedWslMoveCutover(userDataPath, cutover('move-1', 'blobs-transferred'))
   })
@@ -95,9 +95,19 @@ describe('a spawn with no workspace, between quiesce and commit', () => {
     expect(listLiveDaemonPtyIds).not.toHaveBeenCalled()
   })
 
-  it('leaves a spawn that names its own workspace to the workspace fence', async () => {
-    await expect(acceptCwd('/home/dev/repo-1', 'repo-2::/x')).resolves.toBeUndefined()
-    await expect(acceptCwd('/home/dev/repo-1', 'folder:folder-9')).resolves.toBeUndefined()
+  it.each([
+    ['a floating terminal', 'global-floating-terminal'],
+    ['another project', 'repo-2::/x'],
+    ['a folder workspace', 'folder:folder-9']
+  ])('refuses %s that starts in a moving folder', async (_label, worktreeId) => {
+    await expect(acceptCwd('/home/dev/repo-1/src', worktreeId)).rejects.toBeInstanceOf(
+      WslMoveProjectFencedError
+    )
+  })
+
+  it('leaves another workspace alone that starts outside the moving folders', async () => {
+    await expect(acceptCwd('/home/dev/other', 'repo-2::/x')).resolves.toBeUndefined()
+    await expect(acceptCwd('C:\\work', 'folder:folder-9')).resolves.toBeUndefined()
   })
 
   it('never reads the folder of an SSH spawn, which runs on another machine', () => {

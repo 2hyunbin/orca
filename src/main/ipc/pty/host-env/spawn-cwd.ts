@@ -20,7 +20,8 @@ import { listLiveDaemonPtyIds } from '../../../daemon/daemon-provider-state'
 /**
  * A new PTY needs a workspace no WSL move is taking, and a folder that still exists. Reattaching to
  * a session the daemon still runs is not a new PTY: a reload mid-move must not orphan a live pane.
- * With no workspace, the requested folder decides: one inside a moving project is fenced too.
+ * The requested folder counts too: a terminal from anywhere that starts inside a moving project
+ * would outlive the move there (a floating terminal, a Windows project's WSL tab, `--cwd`).
  */
 export function assertWorkspaceAcceptsNewPty(
   store: Store | undefined,
@@ -28,7 +29,7 @@ export function assertWorkspaceAcceptsNewPty(
   sessionId?: string,
   cwd?: string
 ): Promise<void> | void {
-  const fencedByCwd = !worktreeId && !!cwd && isWslMoveCwdFenced(cwd)
+  const fencedByCwd = !!cwd && isWslMoveCwdFenced(cwd)
   if (fencedByCwd || isWslMoveWorkspaceBlocked(store, worktreeId)) {
     return assertReattachesLiveSession(sessionId).then(() =>
       assertFolderWorkspacePtyPathUsable(store, worktreeId)

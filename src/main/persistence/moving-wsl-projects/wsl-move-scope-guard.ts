@@ -260,9 +260,9 @@ export function isWslMoveWorkspaceBlocked(
 }
 
 /**
- * A spawn that names no workspace but starts in a folder a move is taking (a Windows project's WSL
- * tab, `orca terminal create --cwd`). A Linux-spelled folder names no distro, so it matches any
- * moving distro. An unreadable journal lets no move reach commit, so it fences nothing here.
+ * Whether a new terminal's folder is one a move is taking, whatever workspace it names. A
+ * Linux-spelled folder names no distro, so it matches any moving distro. An unreadable journal lets
+ * no move reach commit, so it fences nothing here.
  */
 export function isWslMoveCwdFenced(cwd: string): boolean {
   const fence = loaded?.view

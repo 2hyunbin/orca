@@ -73,19 +73,19 @@ describe('the exit proof again before the commit', () => {
     expect([...scopes[1].sessionIds]).toEqual(['session-1'])
   })
 
-  it.each<[string, WslMoveExitProof]>([
-    ['live', { verdict: 'live', sessionIds: ['bare-session'] }],
-    ['unverifiable', { verdict: 'unverifiable', reason: 'a daemon generation did not answer' }]
-  ])('blocks the commit and resets when a terminal reads %s', async (_label, proof) => {
+  it.each<[string, WslMoveExitProof, string]>([
+    ['live', { verdict: 'live', sessionIds: ['bare-session'] }, 'terminals-started-after-pause'],
+    [
+      'unverifiable',
+      { verdict: 'unverifiable', reason: 'a daemon generation did not answer' },
+      'exit-unverifiable: a daemon generation did not answer'
+    ]
+  ])('blocks the commit and resets when a terminal reads %s', async (_label, proof, detail) => {
     proofsThen(proof)
 
     const result = await moveProjectsToWslHost(world.deps, request)
 
-    expect(result).toEqual({
-      outcome: 'refused',
-      code: 'wsl_move_pause_failed',
-      detail: 'terminals-started-after-pause'
-    })
+    expect(result).toEqual({ outcome: 'refused', code: 'wsl_move_pause_failed', detail })
     expect(world.points).not.toContain('commit:before')
     // Back to zero on both sides: the journal record is gone and the host's staging aborted.
     expect(listWslMoveCutovers(userDataPath)).toEqual([])

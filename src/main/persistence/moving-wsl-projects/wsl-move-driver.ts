@@ -48,6 +48,8 @@ class WslMoveStop extends Error {}
 
 /** A terminal started in scope after the quiesce proved every one exited. */
 const WSL_MOVE_TERMINALS_STARTED = 'terminals-started-after-pause'
+/** The quiesce's own wording, so both proofs read alike in the result. */
+const WSL_MOVE_EXIT_UNVERIFIABLE = 'exit-unverifiable'
 
 type RunningMove = { controller: AbortController; commitRequested: boolean }
 
@@ -232,7 +234,7 @@ async function moveQuiesced(
   const bytesTotal = blobs.descriptors.reduce((sum, blob) => sum + blob.byteLength, 0)
   deps.progress({ distro, step: 'copying', migrationId, phase: staged.phase, bytesTotal })
   await sendWslMoveBlobs(host, staged, blobs)
-  // Still short of `blobs-transferred`, so a refusal here resets without asking the host.
+  // Still short of `blobs-transferred`: no commit can exist yet, so a refusal here always resets.
   await proveStillExited(deps, quiesced, prepared)
   stopIfCancelled()
   const transferred = advanceWslMove(deps, staged, 'blobs-transferred')
@@ -265,8 +267,11 @@ async function proveStillExited(
     workspaceKeys: prepared.scope.workspaceKeys,
     sessionIds: new Set(quiesced.provenExitedSessionIds)
   })
-  if (proof.verdict !== 'exited') {
+  if (proof.verdict === 'live') {
     throw new WslMoveStop(WSL_MOVE_TERMINALS_STARTED)
+  }
+  if (proof.verdict === 'unverifiable') {
+    throw new WslMoveStop(`${WSL_MOVE_EXIT_UNVERIFIABLE}: ${proof.reason}`)
   }
 }
 
@@ -321,7 +326,10 @@ async function putBack(
   if (detail === 'wsl_move_cancelled' || detail === 'wsl_move_scope_changed') {
     return refusal(detail)
   }
-  if (detail === WSL_MOVE_TERMINALS_STARTED) {
+  if (
+    detail === WSL_MOVE_TERMINALS_STARTED ||
+    detail.startsWith(`${WSL_MOVE_EXIT_UNVERIFIABLE}: `)
+  ) {
     return refusal('wsl_move_pause_failed', { detail })
   }
   return { outcome: 'reset', migrationId, detail }
