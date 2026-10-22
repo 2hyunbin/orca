@@ -7,7 +7,7 @@ import type { StructuredAgentSessionCreateParams } from '../../../shared/structu
 import { AGENT_SESSION_CREATE_TAB_PLACEMENT_RUNTIME_CAPABILITY } from '../../../shared/agent-session-create-capabilities'
 import { structuredAgentSessionTabId } from '../../../shared/structured-agent-session-projection'
 import { useAppStore } from '@/store'
-import { runtimeEnvironmentSupportsCapability } from '@/runtime/runtime-rpc-client'
+import { readCachedRuntimeEnvironmentCapability } from '@/runtime/runtime-rpc-client'
 import { serverLayoutApplyRoute } from '@/runtime/server-layout-apply-routes'
 import { isFrameDrawnServerWorkspace } from '@/runtime/web-session-tabs-sync/frame-drawn-server-workspaces'
 import { noteDesktopCreatedServerTab } from './desktop-created-server-tabs'
@@ -59,34 +59,24 @@ function chatTabPlacement(
   return { groupId: group.id, ...(afterTabId ? { afterTabId } : {}) }
 }
 
-/** Whether the create may carry a place: only in a workspace a server's frames draw. */
-export function mayPlaceFrameDrawnChatTab(intent: {
-  target: RuntimeClientTarget
-  worktreeId: string
-}): boolean {
-  return frameDrawnEnvironment(intent.target, intent.worktreeId) !== null
-}
-
-/** The create's params, with the tab's place when the host takes one. Read as the create is sent. */
-export async function withFrameDrawnChatTabPlacement(intent: {
+/** The create's params, with the tab's place when the host takes one. Read as the create is sent:
+ *  synchronously, since a tick here lets a retiring source drop the create. */
+export function withFrameDrawnChatTabPlacement(intent: {
   target: RuntimeClientTarget
   worktreeId: string
   sessionId: string
   params: StructuredAgentSessionCreateParams
-}): Promise<StructuredAgentSessionCreateParams> {
+}): StructuredAgentSessionCreateParams {
   const environmentId = frameDrawnEnvironment(intent.target, intent.worktreeId)
   if (!environmentId) {
     return intent.params
   }
-  let supported = false
-  try {
-    supported = await runtimeEnvironmentSupportsCapability(
+  // The admission call just probed this host, so its capabilities are cached; unknown sends no place.
+  const supported =
+    readCachedRuntimeEnvironmentCapability(
       environmentId,
       AGENT_SESSION_CREATE_TAB_PLACEMENT_RUNTIME_CAPABILITY
-    )
-  } catch {
-    // Unknown capability: an older host refuses the field.
-  }
+    ) === true
   const tabPlacement = supported
     ? chatTabPlacement(
         environmentId,

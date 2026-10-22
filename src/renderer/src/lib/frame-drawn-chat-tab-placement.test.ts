@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => {
     state: { groupsByWorktree },
     frameDrawn: true,
     routed: true,
-    supported: true,
+    supported: true as boolean | null,
     /** Tabs the server's frames hold, by desktop id → server id. */
     serverIds: new Map<string, string>(),
     noted
@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/store', () => ({ useAppStore: { getState: () => mocks.state } }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({
-  runtimeEnvironmentSupportsCapability: vi.fn(async () => mocks.supported)
+  readCachedRuntimeEnvironmentCapability: () => mocks.supported
 }))
 vi.mock('@/runtime/web-session-tabs-sync/frame-drawn-server-workspaces', () => ({
   isFrameDrawnServerWorkspace: () => mocks.frameDrawn
@@ -72,45 +72,48 @@ describe('a chat opened in a frame-drawn server workspace (L270)', () => {
     }
   })
 
-  it("names the tab's group and the server tab before it, skipping tabs the server lacks", async () => {
-    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toEqual({
+  it("names the tab's group and the server tab before it, skipping tabs the server lacks", () => {
+    expect(withFrameDrawnChatTabPlacement(intent)).toEqual({
       ...params,
       tabPlacement: { groupId: 'g-2', afterTabId: 'editor-1' }
     })
   })
 
-  it("names the server's id for a terminal tab before the chat", async () => {
+  it("names the server's id for a terminal tab before the chat", () => {
     mocks.state.groupsByWorktree.wt[1].tabOrder = ['web-terminal-pty-1', TAB]
-    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toEqual({
+    expect(withFrameDrawnChatTabPlacement(intent)).toEqual({
       ...params,
       tabPlacement: { groupId: 'g-2', afterTabId: 'host-tab-1' }
     })
   })
 
-  it('names the group alone while the server takes no layout intents for the workspace', async () => {
+  it('names the group alone while the server takes no layout intents for the workspace', () => {
     mocks.routed = false
-    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toEqual({
+    expect(withFrameDrawnChatTabPlacement(intent)).toEqual({
       ...params,
       tabPlacement: { groupId: 'g-2' }
     })
   })
 
-  it('names the group alone when no server tab comes before the chat', async () => {
+  it('names the group alone when no server tab comes before the chat', () => {
     mocks.state.groupsByWorktree.wt[1].tabOrder = [TAB, 'editor-2']
-    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toEqual({
+    expect(withFrameDrawnChatTabPlacement(intent)).toEqual({
       ...params,
       tabPlacement: { groupId: 'g-2' }
     })
   })
 
-  it('sends no place to a host without the capability', async () => {
-    mocks.supported = false
-    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toBe(intent.params)
-  })
+  it.each([false, null])(
+    "sends no place when the host's cached capability reads %s",
+    (supported) => {
+      mocks.supported = supported
+      expect(withFrameDrawnChatTabPlacement(intent)).toBe(intent.params)
+    }
+  )
 
-  it('sends no place, and holds nothing, outside a frame-drawn workspace', async () => {
+  it('sends no place, and holds nothing, outside a frame-drawn workspace', () => {
     mocks.frameDrawn = false
-    await expect(withFrameDrawnChatTabPlacement(intent)).resolves.toBe(intent.params)
+    expect(withFrameDrawnChatTabPlacement(intent)).toBe(intent.params)
     holdFrameDrawnProvisionalChatTab(intent.target, 'wt', TAB)
     holdFrameDrawnProvisionalChatTab({ kind: 'local' }, 'wt', TAB)
     expect(mocks.noted).toEqual([])
