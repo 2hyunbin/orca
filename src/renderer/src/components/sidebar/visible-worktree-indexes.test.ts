@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type * as ResolvedWorktreeLineage from '../../../../shared/resolved-worktree-lineage'
 import type { Repo } from '../../../../shared/repo-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
-import type { WorktreeLineage } from '../../../../shared/worktree/lineage-types'
+import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../shared/execution-host'
 
@@ -35,7 +35,6 @@ import {
 } from './visible-worktree-indexes'
 import { makeFolderWorkspace } from '@/store/slices/worktrees-slice-test-fixtures'
 import { folderWorkspaceKey, worktreeWorkspaceKey } from '../../../../shared/workspace-scope'
-import type { WorkspaceLineage } from '../../../../shared/worktree/lineage-types'
 
 type IdentifiedWorktree = Worktree & { instanceId: string }
 
