@@ -227,6 +227,24 @@ describe('a pane main owns does not vouch for its terminal (switch on)', () => {
   })
 })
 
+describe('a launch into a pane through a listing gap (switch on)', () => {
+  it('treats a disconnected terminal main still binds as running until its exit is certified', async () => {
+    const { runtime, host } = savedPaneHost('saved-pty', { windowed: true })
+    const paneKey = `host-tab:${HEADLESS_LEAF_ID}`
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    expect(runtime.hasLiveTerminalForPaneKey(paneKey)).toBe(true)
+
+    // The host omits the shell once: an agent launch must attach or refuse, never start a second.
+    host.live.clear()
+    await rowStatus(runtime, TEST_WORKTREE_ID)
+    expect(record(runtime, 'saved-pty')?.connected).toBe(false)
+    expect(runtime.hasLiveTerminalForPaneKey(paneKey)).toBe(true)
+
+    await runtime.onPtyExit('saved-pty', 0)
+    expect(runtime.hasLiveTerminalForPaneKey(paneKey)).toBe(false)
+  })
+})
+
 describe('switch off: a window leaf still vouches for its terminal', () => {
   it('keeps a windowed pane connected when the inventory stops listing it', async () => {
     layoutOwner.isMain = false
