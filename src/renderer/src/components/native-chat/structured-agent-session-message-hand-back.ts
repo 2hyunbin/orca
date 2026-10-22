@@ -1,3 +1,4 @@
+import type { JSONContent } from '@tiptap/react'
 import { imageReferenceToken } from '../../../../shared/native-chat-image-reference'
 import { composerSkillOccurrences } from '../../../../shared/structured-agent-session-send-mutation'
 import { promptTextContent } from './native-chat-prompt-document-text'
@@ -65,7 +66,7 @@ export function returnMessageToComposer(
       }
       const start = offset
       offset += node.text.length
-      const parts = []
+      const parts: JSONContent[] = []
       let from = 0
       for (const { ref, at: position } of bindings) {
         if (position < start || position >= offset) {

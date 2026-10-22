@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ActionSheetAction } from '../components/ActionSheetModal'
+import { ActionSheetModal, type ActionSheetAction } from '../components/ActionSheetModal'
 import { MobileNativeChatQueuedMessages } from './MobileNativeChatQueuedMessages'
 import type { MobileQueuedMessageCard } from './mobile-structured-queued-message-cards'
 
@@ -77,7 +77,7 @@ it('keeps Edit disabled with an explanation until a question or approval is answ
   await act(async () =>
     root.root.findByProps({ accessibilityLabel: 'More actions' }).props.onPress()
   )
-  const actions = root.root.findByType('ActionSheetModal').props.actions
+  const actions = root.root.findByType(ActionSheetModal).props.actions
   expect(actions[0]).toMatchObject({
     disabled: true,
     hint: 'Answer the question or approval before editing this message.'

@@ -119,7 +119,7 @@ it.each(['stored', 'pending', 'disposed'] as const)(
       })
       let edit: Promise<boolean>
       await act(async () => {
-        edit = actions.copyEdit('Q')
+        edit = actions.copyEdit!('Q')
         await pair.flush()
         await started
       })

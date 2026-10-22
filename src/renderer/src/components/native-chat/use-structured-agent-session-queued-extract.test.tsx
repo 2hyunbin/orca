@@ -229,7 +229,7 @@ it('retains the copied draft after Delete refusal and appends again on a deliber
 })
 
 it('keeps the card when draft storage refuses or a question/approval is open', async () => {
-  const write: StructuredAgentSessionWrite = vi.fn(async () => ({ kind: 'dropped' }))
+  const write: StructuredAgentSessionWrite = vi.fn(async () => ({ kind: 'dropped' as const }))
   const blocked = harness(write, true)
   await act(() => blocked.result.current.queue.edit('mail'))
   expect(blocked.result.current.queue.editDisabledReason).toContain('before editing')
@@ -270,7 +270,7 @@ it.each([true, false])(
     if (hydrated) {
       await hydrateNativeChatComposerDrafts()
     }
-    const deleted = vi.fn<StructuredAgentSessionWrite>(async () => ({ kind: 'dropped' }))
+    const deleted = vi.fn(async () => ({ kind: 'dropped' as const }))
     const pending = extractQueuedMessageToComposer(
       { sessionId: 'session', write: deleted },
       scope,
@@ -304,7 +304,7 @@ it('keeps the queue source after captured large-copy refusal even when replaceme
     })
   setNativeChatComposerDraftStorageForTests(storage)
   await hydrateNativeChatComposerDrafts()
-  const deleted = vi.fn<StructuredAgentSessionWrite>(async () => ({ kind: 'dropped' }))
+  const deleted = vi.fn(async () => ({ kind: 'dropped' as const }))
   const body = structuredAgentSessionSendBody(`${'\n'.repeat(24_000)}$review`, [], [skills[0]!])
   const pending = extractQueuedMessageToComposer({ sessionId: 'session', write: deleted }, scope, {
     ...message,
