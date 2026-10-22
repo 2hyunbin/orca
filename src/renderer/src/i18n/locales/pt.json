@@ -10369,7 +10369,6 @@
             "databaseCount_one": "{{value0}} banco de dados",
             "databaseCount_other": "{{value0}} bancos de dados",
             "scanning": "Verificando {{value0}}",
-            "reading": "Lendo {{value0}} arquivos",
             "scanned": "Verificação concluída: {{value0}}"
           }
         }

@@ -14600,7 +14600,7 @@
             "databaseCount_one": "{{value0}} base de données",
             "databaseCount_other": "{{value0}} bases de données",
             "scanning": "Analyse de {{value0}}",
-            "reading": "Lecture de {{value0}} fichiers",
+            "checking": "Vérification {{value0}}",
             "scanned": "{{value0}} analysés"
           }
         }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeAgentStatusPayload } from '../../../shared/agent-status-types'
+import { normalizeAgentStatusPayload } from './agent-status-types'
 import {
   getAgentRowGeneratedTitleText,
   getAgentRowPrimaryText,

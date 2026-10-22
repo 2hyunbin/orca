@@ -40,7 +40,14 @@ export type WindowLayoutCommand =
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }
   | { type: 'setPaneRatios'; tabId: string; ratios: SplitRatioIntent[] }
   | { type: 'setChatPane'; tabId: string; leafId: string | null }
-  | { type: 'moveTab'; tabId: string; toGroupId: string; index: number; isPinned?: boolean }
+  | {
+      type: 'moveTab'
+      tabId: string
+      toGroupId: string
+      index: number
+      afterTabId?: string | null
+      isPinned?: boolean
+    }
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; ratios: SplitRatioIntent[] }
   | { type: 'closeTabs'; tabIds: [string]; recordClose?: 'user' | 'cleanup' }
