@@ -38,6 +38,19 @@ describe('AgentSessionResumeClaims', () => {
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
   })
 
+  it('keeps a lost-reply attempt held unless a retry of the same request binds', () => {
+    const { claims, exits } = makeClaims()
+    claims.claim(SESSION, 'tab:a', 'request-1')?.settleFailure(true, new Error('reply lost'))
+    // Another request's spawn accounts only for itself.
+    claims.claim(SESSION, 'tab:a', 'request-2')?.bind('pty-2')
+    exits.get('pty-2')?.()
+    expect(claims.claim(SESSION, 'tab:b')).toBeNull()
+
+    claims.claim(SESSION, 'tab:a', 'request-1')?.bind('pty-1')
+    exits.get('pty-1')?.()
+    expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
+  })
+
   it('keeps a dispatched spawn with no identified PTY held', () => {
     const { claims } = makeClaims()
     claims.claim(SESSION, 'tab:a')?.settleFailure(true, new Error('spawn reply lost'))

@@ -15,8 +15,15 @@ export type AgentSessionResumeHold = ResumedAgentSession & {
   claimedAt: number
 }
 
-/** `unsettled`: shares whose create has neither bound a PTY nor released; `ptys`: exit watchers. */
-type Hold = AgentSessionResumeHold & { unsettled: number; ptys: Map<string, () => void> }
+/**
+ * `unsettled`: shares whose create has neither bound a PTY nor released; `ptys`: exit watchers;
+ * `ambiguous`: unsettled shares whose spawn may have run, by the request a retry reconciles.
+ */
+type Hold = AgentSessionResumeHold & {
+  unsettled: number
+  ptys: Map<string, () => void>
+  ambiguous: Map<string, number>
+}
 
 /** A resumer's share of a hold, settled only from its own create's evidence. */
 export type AgentSessionResumeClaim = {
@@ -47,7 +54,15 @@ export class AgentSessionResumeClaims {
   ) {}
 
   /** Null while another pane's resume of this conversation is unsettled. */
-  claim(session: ResumedAgentSession, paneKey: string): AgentSessionResumeClaim | null {
+  /**
+   * `request`: names one create, which every retry of it reconciles rather than spawning anew, so
+   * a retry's bound PTY also accounts for an earlier attempt whose reply was lost.
+   */
+  claim(
+    session: ResumedAgentSession,
+    paneKey: string,
+    request?: string
+  ): AgentSessionResumeClaim | null {
     const held = this.find(session)
     if (held) {
       // Why: overlapping opens of one pane resume alongside each other (claimWindowWakeRecordForPane).
@@ -55,14 +70,15 @@ export class AgentSessionResumeClaims {
         return null
       }
       held.unsettled += 1
-      return this.share(held)
+      return this.share(held, request)
     }
     const hold: Hold = {
       ...session,
       paneKey,
       claimedAt: Date.now(),
       unsettled: 1,
-      ptys: new Map()
+      ptys: new Map(),
+      ambiguous: new Map()
     }
     this.holds.add(hold)
     // Why eager: an agent that exits to its shell takes its hook row with it, so a check at the
@@ -77,7 +93,7 @@ export class AgentSessionResumeClaims {
           }
         }
       }) ?? null
-    return this.share(hold)
+    return this.share(hold, request)
   }
 
   private find(session: ResumedAgentSession): Hold | undefined {
@@ -115,7 +131,7 @@ export class AgentSessionResumeClaims {
     }
   }
 
-  private share(hold: Hold): AgentSessionResumeClaim {
+  private share(hold: Hold, request: string | undefined): AgentSessionResumeClaim {
     let open = true
     return {
       bind: (ptyId) => {
@@ -123,7 +139,10 @@ export class AgentSessionResumeClaims {
           return
         }
         open = false
-        hold.unsettled -= 1
+        hold.unsettled -= 1 + (request ? (hold.ambiguous.get(request) ?? 0) : 0)
+        if (request) {
+          hold.ambiguous.delete(request)
+        }
         // Why every PTY: overlapping opens of one pane can each spawn, and any may still write.
         if (this.holds.has(hold) && !hold.ptys.has(ptyId)) {
           hold.ptys.set(ptyId, () => {})
@@ -141,7 +160,15 @@ export class AgentSessionResumeClaims {
         // Why: a dispatched spawn with no identified PTY may still run (a lost SSH reply).
         const exitedDuringStart =
           error instanceof Error && error.message === 'agent_session_exited_during_start'
-        if (!open || (dispatched && !exitedDuringStart)) {
+        if (!open) {
+          return
+        }
+        if (dispatched && !exitedDuringStart) {
+          // Held until a retry of the same request binds the create it reconciles, or forever.
+          if (request) {
+            open = false
+            hold.ambiguous.set(request, (hold.ambiguous.get(request) ?? 0) + 1)
+          }
           return
         }
         open = false

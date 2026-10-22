@@ -431,6 +431,30 @@ describe('resumeAgentSessionInWorkspace', () => {
     expect(resumeSpawns(spawn)).toBe(2)
   })
 
+  it('settles a lost-reply attempt once a retry of the same request binds, and frees on its exit', async () => {
+    let calls = 0
+    const { runtime, resume } = makeRuntime(makeSleptWorkspace(), {
+      rows: () => [],
+      spawn: async () => {
+        calls += 1
+        if (calls === 1) {
+          throw new Error('lost reply')
+        }
+        return { id: 'retried-pty' }
+      }
+    })
+    await expect(resume()).resolves.toMatchObject({ ok: false })
+    await expect(resume()).resolves.toMatchObject({ ok: true })
+    await expect(resume({ mutationId: 'next' })).resolves.toEqual({
+      ok: false,
+      reason: 'held_elsewhere'
+    })
+
+    runtime.onPtyExit('retried-pty', 0)
+
+    await expect(resume({ mutationId: 'next' })).resolves.toMatchObject({ ok: true })
+  })
+
   it('lets at most one of two concurrent resumes own the session', async () => {
     const fixture = makeSleptWorkspace()
     const { spawn, resume } = makeRuntime(fixture)
