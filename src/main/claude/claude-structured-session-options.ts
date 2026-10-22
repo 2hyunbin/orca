@@ -155,13 +155,14 @@ export async function refreshClaudeStructuredSessionOptions(
   report: (options: StructuredAgentSessionLiveOptions) => void
 ): Promise<void> {
   const sequence = session.optionMutationSequence
-  const token = Symbol('settings')
+  const token = { pending: session.settingsObservation?.pending ?? false }
   session.settingsObservation = token
   const connection = session.connection
   const settings = await connection.getSettings({ timeoutMs }).catch(() => null)
   if (
     !current() ||
     connection.closed ||
+    token.pending ||
     session.settingsObservation !== token ||
     sequence !== session.optionMutationSequence
   ) {

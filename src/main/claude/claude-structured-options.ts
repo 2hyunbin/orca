@@ -44,7 +44,15 @@ export function beginClaudeInputWrite(session: ClaudeSession, key: string, value
     session.appliedInputOptions.delete(input)
     session.confirmedOptions.delete(input)
   }
-  return beginClaudeOptionMutation(session, key)
+  const sequence = beginClaudeOptionMutation(session, key)
+  session.settingsObservation = { pending: true }
+  return sequence
+}
+
+export function finishClaudeInputWrite(session: ClaudeSession, sequence: number): void {
+  if (sequence === session.optionMutationSequence) {
+    delete session.settingsObservation
+  }
 }
 
 /** A client's write to a live session. */
@@ -117,6 +125,8 @@ export async function setClaudeStructuredOption(
       throw new AgentSessionOptionRejectedError(error)
     }
     throw error
+  } finally {
+    finishClaudeInputWrite(session, mutationSequence)
   }
   if (mutationSequence === session.optionMutationSequence) {
     session.options.set(input.key, input.value)
@@ -136,7 +146,7 @@ async function confirmClaudeOption(
   mutationSequence: number,
   timeoutMs: number | undefined
 ): Promise<void> {
-  const token = Symbol('control-settings')
+  const token = { pending: false }
   session.settingsObservation = token
   const settings =
     (input.key === 'effort' && input.value !== 'max') || input.key === 'fastMode'

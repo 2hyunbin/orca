@@ -241,10 +241,10 @@ async function settleClaudeStartupSettings(
 ): Promise<void> {
   const { session } = input
   const sequence = session.optionMutationSequence
-  const token = Symbol('startup-settings')
+  const token = { pending: session.settingsObservation?.pending ?? false }
   session.settingsObservation = token
   const settings = await input.readSettings()
-  if (!input.isCurrent() || session.settingsObservation !== token) {
+  if (!input.isCurrent() || token.pending || session.settingsObservation !== token) {
     return
   }
   let init: ClaudeInitObservation | null

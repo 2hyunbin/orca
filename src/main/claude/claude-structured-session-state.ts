@@ -200,7 +200,7 @@ export type ClaudeSession = {
   /** Monotonic fence advanced when a dispatch starts, including unresolved dispatches. */
   dispatchSequence: number
   /** Fences overlapping option writes so a late completion cannot restore stale state. */
-  settingsObservation?: symbol
+  settingsObservation?: { pending: boolean }
   optionMutationSequence: number
   /** Latest resume point written at a turn end; close and exit persist after it settles. */
   resumePointWrite?: { leafUuid: string; settled: Promise<void> }

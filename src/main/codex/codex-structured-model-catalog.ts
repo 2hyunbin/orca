@@ -5,6 +5,10 @@ import type {
 } from '../../shared/agent-session-wire'
 import { effectiveServiceTier } from '../../shared/structured-agent-session-effective-tier'
 import type { CodexAppServerConnection } from './codex-app-server-connection'
+import {
+  assertStructuredAgentResolutionCurrent,
+  type StructuredAgentResolutionOperation
+} from '../native-chat/structured-agent-command-resolution'
 import { structuredAgentSessionOptionModels } from '../native-chat/agent-session-wire/structured-agent-session-option-models'
 import {
   CODEX_DEFAULT_SERVICE_TIER,
@@ -103,10 +107,15 @@ export async function fetchCodexModelCatalogListing(input: {
   timeoutMs?: number
   deadlineMs?: number
   cwd?: string
+  operation?: StructuredAgentResolutionOperation
 }): Promise<CodexModelCatalogListing> {
-  const deadline = input.deadlineMs === undefined ? null : Date.now() + input.deadlineMs
+  const deadline = Math.min(
+    input.operation?.deadline ?? Infinity,
+    input.deadlineMs === undefined ? Infinity : Date.now() + input.deadlineMs
+  )
   const remainingTimeout = (): number | undefined => {
-    if (deadline === null) {
+    assertStructuredAgentResolutionCurrent(input.operation)
+    if (!Number.isFinite(deadline)) {
       return input.timeoutMs
     }
     const remaining = deadline - Date.now()
@@ -126,6 +135,7 @@ export async function fetchCodexModelCatalogListing(input: {
         { timeoutMs: remainingTimeout() }
       )
     )
+    assertStructuredAgentResolutionCurrent(input.operation)
     if (!Array.isArray(response?.data)) {
       complete = false
     }
@@ -156,6 +166,7 @@ export async function fetchCodexModelCatalogListing(input: {
     remainingTimeout(),
     input.cwd
   )
+  assertStructuredAgentResolutionCurrent(input.operation)
   return {
     models: applyCodexConfiguredLaunchDefaults(parsedModels, configured),
     complete: complete && cursor === null && configured !== null,

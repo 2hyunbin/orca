@@ -97,13 +97,16 @@ export function createCodexModelCatalogProbe(
             ...(signal ? { signal } : {})
           },
           async (rpc) => {
+            assertStructuredAgentResolutionCurrent(operation)
             // Both at once, so the account check adds no latency.
-            const listed = fetchCodexModelCatalogListing({ connection: rpc, cwd })
+            const listed = fetchCodexModelCatalogListing({ connection: rpc, cwd, operation })
             void listed.catch(() => {})
+            assertStructuredAgentResolutionCurrent(operation)
             const response: unknown = await rpc
               .request('account/read', { refreshToken: false }, { timeoutMs: 2_000 })
               // Unknown account status says nothing.
               .catch(() => undefined)
+            assertStructuredAgentResolutionCurrent(operation)
             if (
               typeof response !== 'object' ||
               response === null ||
@@ -119,6 +122,7 @@ export function createCodexModelCatalogProbe(
             const signedOut = { reason: 'notSignedIn' as const, ...(account ? { account } : {}) }
             // The verdict can be wrong (a gateway in Arguments), so a list in hand still fills the picker.
             const inHand = await listed.catch(() => null)
+            assertStructuredAgentResolutionCurrent(operation)
             if (!inHand?.models.length) {
               throw new AgentModelCatalogUnavailableError(signedOut)
             }
@@ -130,6 +134,7 @@ export function createCodexModelCatalogProbe(
           }
           throw error
         })
+        assertStructuredAgentResolutionCurrent(operation)
         if (listing.models.length === 0) {
           throw new Error('codex app-server listed no models')
         }

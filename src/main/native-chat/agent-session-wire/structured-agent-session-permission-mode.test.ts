@@ -134,7 +134,16 @@ describe('a chat permission mode', () => {
       expect(rig.adapter.acquire).toHaveBeenLastCalledWith(
         expect.objectContaining({ permissionMode: 'auto' })
       )
-      expect(resolve).toHaveBeenCalledWith(home, '/project', true)
+      expect(resolve).toHaveBeenCalledWith(
+        home,
+        '/project',
+        true,
+        expect.objectContaining({
+          deadline: expect.any(Number),
+          current: expect.any(Function),
+          signal: expect.any(AbortSignal)
+        })
+      )
       expect(run).not.toHaveBeenCalled()
       await rig.host.send(CALLER, restTestSend('first', fence()))
       await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(1))
