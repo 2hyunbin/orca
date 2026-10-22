@@ -1,5 +1,4 @@
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
-import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { mainCatalogShowsWrite } from '../main-project-catalog-writes'
 import { projectGroupMatchesOwnerHost } from '../slices/project-group-owner-routing'
 import { repoMatchesHostIdentity } from '../slices/repo-host-identity'
@@ -11,7 +10,10 @@ import type {
   ProjectGroupImportResult
 } from '../../../../shared/project-group-types'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
-import { runtimeTargetForOwnerEnvironment } from '../../runtime/runtime-client-target'
+import {
+  getRuntimeTargetHostId,
+  runtimeTargetForOwnerEnvironment
+} from '../../runtime/runtime-client-target'
 import { translate } from '@/i18n/i18n'
 import type { RepoSlice } from '../repos/repo-state'
 

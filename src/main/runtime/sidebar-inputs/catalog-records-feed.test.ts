@@ -43,9 +43,7 @@ describe('catalogRecordEntities', () => {
       projects: [],
       projectHostSetups: []
     })
-    const order = entities.order as { repos: string[] }
-    expect(order.repos).toHaveLength(2)
-    expect(new Set(order.repos).size).toBe(2)
+    expect(entities.order).toMatchObject({ repos: ['repo:local\0a', 'repo:local\0a#1'] })
   })
 })
 

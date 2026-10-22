@@ -11,16 +11,15 @@ vi.mock('sonner', () => ({
 }))
 
 // Main's catalog as the window last installed it; a test installs the next one.
-const main = vi.hoisted(() => ({
-  catalog: { repos: [], projectGroups: [], projects: [], projectHostSetups: [] } as {
-    repos: unknown[]
-    projectGroups: unknown[]
-    projects: unknown[]
-    projectHostSetups: unknown[]
-  },
-  arrived: false,
-  listeners: new Set<() => void>()
-}))
+type FakeCatalog = Record<'repos' | 'projectGroups' | 'projects' | 'projectHostSetups', unknown[]>
+const main = vi.hoisted(() => {
+  const state: { catalog: FakeCatalog; arrived: boolean; listeners: Set<() => void> } = {
+    catalog: { repos: [], projectGroups: [], projects: [], projectHostSetups: [] },
+    arrived: false,
+    listeners: new Set()
+  }
+  return state
+})
 vi.mock('@/lib/main-project-catalog', () => ({
   readMainProjectCatalog: () => main.catalog,
   hasMainProjectCatalog: () => main.arrived,
