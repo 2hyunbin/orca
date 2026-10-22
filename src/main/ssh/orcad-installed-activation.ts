@@ -20,7 +20,10 @@ import {
 } from '../managed-server/activation/orcad-activation-record-store'
 import { launchAndJudgeOrcadSlot } from './orcad-candidate-launch-verdict'
 import { planOrcadUpdate } from './orcad-update-plan'
-import type { OrcadTerminalCensus } from '../../shared/orcad-terminal-census'
+import {
+  type OrcadTerminalCensus,
+  UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
+} from '../../shared/orcad-terminal-census'
 import { runFencedStop } from './orcad-fenced-stop'
 import { CURRENT_ORCAD_DAEMON_PROTOCOL } from './orcad-daemon-protocol-crossing'
 import { ORCAD_LOG_FILENAME } from '../managed-server/install/orcad-remote-host-support'
@@ -76,12 +79,6 @@ type Outcome = Extract<OrcadDeployResult, { outcome: 'installed-not-activated' }
 /** The caller's `admitRecord` refused the record found under the fence; nothing was touched. */
 export const ORCAD_ACTIVATION_POLICY_REFUSED_CODE = 'orcad_activation_policy_refused'
 
-const UNVERIFIABLE_CENSUS: OrcadTerminalCensus = {
-  liveSessions: null,
-  startedSinceActivation: null,
-  daemonProtocolVersion: null
-}
-
 function countedLockedRecord(options: OrcadDeployOptions, record: OrcadActivationRecord): boolean {
   const counted = options.censusRecord
   return (
@@ -94,7 +91,7 @@ function censusForLockedRecord(
   options: OrcadDeployOptions,
   record: OrcadActivationRecord
 ): OrcadTerminalCensus {
-  return countedLockedRecord(options, record) ? options.census : UNVERIFIABLE_CENSUS
+  return countedLockedRecord(options, record) ? options.census : UNVERIFIABLE_ORCAD_TERMINAL_CENSUS
 }
 
 export async function activateInstalledOrcad(

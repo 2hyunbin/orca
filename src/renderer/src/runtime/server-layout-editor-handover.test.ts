@@ -545,15 +545,7 @@ describe('a desktop-only editor tab when the server’s frames take its workspac
     })
     const { fileId } = openDesktopFile(store, FILE_PATH)
     // Loaded from the server's disk before the hand-over.
-    store.setState({
-      openFiles: store
-        .getState()
-        .openFiles.map((open) =>
-          open.id === fileId
-            ? { ...open, lastKnownDiskSignature: getDiskBaselineSignature('on disk') }
-            : open
-        )
-    })
+    store.getState().setLastKnownDiskSignature(fileId, getDiskBaselineSignature('on disk'))
     editDraft(store, fileId, 'unsaved')
     await connect(store, serverWith())
     expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)

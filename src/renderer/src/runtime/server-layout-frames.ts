@@ -21,6 +21,11 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import {
+  DESKTOP_CREATED_SERVER_TAB_HOLDS,
+  forgetPublishedServerTabs,
+  pruneDesktopCreatedServerTabs
+} from '@/lib/desktop-created-server-tabs'
 import { serverHeldPanes, showServerLayoutHeldPanes } from './server-held-panes'
 import { createServerViewReport, onServerControlConnected } from './server-layout-view-report'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
@@ -159,8 +164,16 @@ function openServerFrames(
       const ours = draws(state)
       return (key) => gated.has(key) && ours(key)
     },
+    heldTabs: DESKTOP_CREATED_SERVER_TAB_HOLDS,
     translate: (frame) => {
       const translated = translator.translate(frame)
+      // A tab this desktop created that the server now lists is the server's from here on.
+      for (const key of translator.keys()) {
+        forgetPublishedServerTabs(
+          key,
+          (translator.serverLayout(key)?.tabs ?? []).flatMap((tab) => [tab.id, tab.entityId])
+        )
+      }
       live ||= frame.type === 'snapshot'
       if (frame.type === 'snapshot') {
         viewReport.reset()
@@ -243,6 +256,8 @@ function openServerFrames(
 /** Opens one stream per reachable server advertising the capability; reopens on a new runtime or
  *  pairing, and closes when the server is removed or stops advertising it. */
 export function installServerLayoutFrames(store: FramesStore): () => void {
+  // Before any frame: a held tab the restored session no longer has must not come back.
+  pruneDesktopCreatedServerTabs(store.getState())
   const open = new Map<string, { identity: string; frames: ServerFrames }>()
   let inputs: unknown[] = []
   const reconcile = (state: AppState): void => {

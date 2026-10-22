@@ -3,12 +3,12 @@ import {
   runtimeEnvironmentIdForWorkspaceOwner,
   runtimeEnvironmentIdUnlessTwin
 } from '@/lib/resolve-owner'
-import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
-import { afterLayoutFrame, layoutFramePositionKey } from '@/runtime/layout-frame-position'
+import { callLayoutApply } from '@/runtime/layout-apply-call'
 import { holdTabPaneTree } from '@/runtime/layout-owner-pane-intents'
 import { holdDrawnTabs, type DrawnTabHold } from '@/runtime/layout-owner-drawn-tab-holds'
 import { holdsPaneTree, releaseLayoutApplyHolds } from '@/runtime/layout-apply-hold-release'
 import { handleServerLayoutReply, serverLayoutApplyFor } from '@/runtime/server-layout-apply'
+import type { ServerMoveDrawnTabs } from '@/runtime/server-layout-apply'
 import {
   LOCAL_LAYOUT_APPLY_ORIGIN,
   type LayoutApplyOrigin
@@ -46,7 +46,14 @@ export type WindowLayoutCommand =
   | { type: 'movePane'; tabId: string; leafId: string; targetLeafId: string; side: PaneSide }
   | { type: 'setPaneRatios'; tabId: string; ratios: SplitRatioIntent[] }
   | { type: 'setChatPane'; tabId: string; leafId: string | null }
-  | { type: 'moveTab'; tabId: string; toGroupId: string; index: number }
+  | {
+      type: 'moveTab'
+      tabId: string
+      toGroupId: string
+      index: number
+      afterTabId?: string | null
+      isPinned?: boolean
+    }
   | { type: 'splitGroup'; tabId: string; besideGroupId: string; direction: GroupSide }
   | { type: 'setGroupRatios'; ratios: SplitRatioIntent[] }
   | { type: 'closeTabs'; tabIds: [string]; recordClose?: 'user' | 'cleanup' }
@@ -77,8 +84,9 @@ export type WindowLayoutCommand =
       groupId?: string
       afterTabId?: string
       index?: number
-      createdAt: number
-      browserCreatedAt: number
+      /** Absent from a switch-on open: main stamps the tab's time. */
+      createdAt?: number
+      browserCreatedAt?: number
       split?: NewGroupSplit
     }
   | { type: 'openBrowserPage' | 'closeBrowserPage'; browserTabId: string; pageId: string }
@@ -111,7 +119,7 @@ export type WindowLayoutCommand =
       groupId: string
       afterTabId?: string
       index?: number
-      createdAt: number
+      createdAt?: number
       split?: NewGroupSplit
     }
   | { type: 'promotePreviewTab'; tabId: string }
@@ -121,7 +129,7 @@ export type WindowLayoutCommand =
       groupId: string
       afterTabId?: string
       index?: number
-      createdAt: number
+      createdAt?: number
       split?: NewGroupSplit
     }
   | {
@@ -144,6 +152,8 @@ export type WindowLayoutCommand =
       /** Records how the panes' agents resume without stopping them (a live or quit capture). */
       recordOnly?: true
     }
+  /** Main starts the pane if its terminal is not live; the window then attaches. */
+  | { type: 'startPane'; tabId: string; paneKey: string }
   | { type: 'wake'; tabId: string; paneKeys: [string] }
   /** Drops the panes' resume records without starting them. */
   | { type: 'wake'; tabId: string; paneKeys: string[]; recordOnly: true }
@@ -166,26 +176,24 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
   switch (command.type) {
     case 'closeTabs':
       return [{ workspace: worktreeId, ids: command.tabIds }]
-    case 'openBrowserTab':
-      return [{ workspace: worktreeId, ids: [command.tabId, command.browserTabId] }]
     case 'splitGroup':
       return [{ workspace: worktreeId, ids: [command.tabId], groupLayout: true }]
     case 'moveTab':
     case 'renameTab':
     case 'setTabProps':
-    case 'openAgentSessionTab':
-    case 'openSimulatorTab':
     case 'createTerminalTab':
       return [{ workspace: worktreeId, ids: [command.tabId] }]
+    case 'setGroupRatios':
+      return [{ workspace: worktreeId, ids: [], groupLayout: true }]
+    // Pane commands hold their tab's pane tree; records are not drawn from frames; editor, browser,
+    // chat and simulator opens and page changes are sent before the window draws them.
+    case 'openBrowserTab':
     case 'openBrowserPage':
     case 'closeBrowserPage':
     case 'replaceBrowserPage':
     case 'setBrowserTabProfile':
-      return [{ workspace: worktreeId, ids: [command.browserTabId] }]
-    case 'setGroupRatios':
-      return [{ workspace: worktreeId, ids: [], groupLayout: true }]
-    // Pane commands hold their tab's pane tree; records are not drawn from frames; editor opens,
-    // promotions, moves and renames are sent before the window draws them.
+    case 'openAgentSessionTab':
+    case 'openSimulatorTab':
     case 'openEditorTab':
     case 'promotePreviewTab':
     case 'moveTabToWorkspace':
@@ -200,6 +208,7 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
     case 'movePaneToNewTab':
     case 'sleep':
     case 'wake':
+    case 'startPane':
     case 'setDefaultTabsApplied':
       return []
   }
@@ -215,7 +224,7 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
  * caller acts as today.
  */
 export function sendLayoutApply(
-  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
+  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0] & ServerMoveDrawnTabs,
   worktreeId: string,
   command: WindowLayoutCommand,
   handlers: LayoutApplyHandlers
@@ -225,7 +234,9 @@ export function sendLayoutApply(
   // edits this window's layout, not either host, as the terminal-create path does.
   const environmentId = runtimeEnvironmentIdUnlessTwin(state, worktreeId)
   // A paired server's workspace: its main takes the intent when its frames draw the workspace.
-  const server = environmentId ? serverLayoutApplyFor(environmentId, worktreeId, command) : null
+  const server = environmentId
+    ? serverLayoutApplyFor(environmentId, worktreeId, command, state)
+    : null
   if (environmentId && !server) {
     return false
   }
@@ -255,8 +266,7 @@ export function sendLayoutApply(
 
 /**
  * Sends one intent to a paired server's main, never this window's: a workspace's editor tabs
- * handed over before that server's frames draw it (H5d). `answer` gets the reply once the frame
- * holding it is in, or null when the call failed.
+ * handed over before that server's frames draw it (H5d).
  */
 export function sendToServerMain(
   environmentId: string,
@@ -265,31 +275,6 @@ export function sendToServerMain(
   answer: (reply: LayoutApplyReply | null) => void
 ): void {
   callLayoutApply({ kind: 'environment', environmentId }, worktreeId, command, answer)
-}
-
-function callLayoutApply(
-  target: RuntimeClientTarget,
-  worktreeId: string,
-  command: WindowLayoutCommand,
-  answer: (reply: LayoutApplyReply | null) => void
-): void {
-  void callRuntimeRpc<LayoutApplyReply>(target, 'layout.apply', {
-    command: { ...command, workspace: worktreeId }
-  })
-    .then(
-      (reply) =>
-        afterLayoutFrame(reply.frameSeq, () => answer(reply), layoutFramePositionKey(target)),
-      (error: unknown) => {
-        // Why: a thrown write is rolled back. An indeterminate disk write is not, and may leave a
-        // pane main minted, which its frame then draws. Never sent again: main may have applied it.
-        console.warn(`[layout-owner] ${command.type} refused: call_failed`, errorMessage(error))
-        answer(null)
-      }
-    )
-    // A throwing handler is not a failed call; it must not run the fallback too.
-    .catch((error: unknown) => {
-      console.warn(`[layout-owner] ${command.type} handler threw:`, errorMessage(error))
-    })
 }
 
 function handleReply(
@@ -335,8 +320,4 @@ export function recordLayoutApply(
     asToday: keepWindowCopy,
     drawn: true
   })
-}
-
-function errorMessage(error: unknown): unknown {
-  return error instanceof Error ? error.message : error
 }
