@@ -405,13 +405,14 @@ describe('terminal close and handle incarnation continuity', () => {
 
   it('forwards the captured incarnation to the stop and never falls back after a refused stop', async () => {
     const harness = createHarness({ registerPtyBacked: true })
-    const terminal = (await harness.runtime.listTerminals()).terminals.find(
-      (row) => row.ptyId === PTY_ID
-    )!
+    const terminal = harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
+    const presentation = terminal.presentation
+    if (!presentation) {
+      throw new Error('Missing original source')
+    }
+    const close = () => harness.runtime.closeTerminal(terminal.handle, INCARNATION_ID, presentation)
     harness.setVerifiedStopResult(false)
-    await expect(harness.runtime.closeTerminal(terminal.handle, INCARNATION_ID)).rejects.toThrow(
-      'terminal_close_unverifiable'
-    )
+    await expect(close()).rejects.toThrow('terminal_close_unverifiable')
     expect(harness.stopAndWait).toHaveBeenCalledWith(
       PTY_ID,
       expect.objectContaining({ expectedIncarnationId: INCARNATION_ID })
@@ -421,9 +422,7 @@ describe('terminal close and handle incarnation continuity', () => {
     expect(harness.closeTerminalPane).not.toHaveBeenCalled()
     harness.setVerifiedStopResult(true)
     harness.acknowledged.resolve()
-    await expect(
-      harness.runtime.closeTerminal(terminal.handle, INCARNATION_ID)
-    ).resolves.toMatchObject({ ptyKilled: true })
+    await expect(close()).resolves.toMatchObject({ ptyKilled: true })
   })
 
   it('closes nothing when its handle now runs a later incarnation than the caller expected', async () => {
