@@ -114,6 +114,21 @@ describe("the start inputs of the window's new tab, run by main (L252)", () => {
     })
   })
 
+  it('refuses an OpenCode model start that would resume a session, as the window does', async () => {
+    await expect(
+      fixture.runtime.startWindowTabTerminal(WORKTREE_ID, PANE, {
+        startupAgent: 'opencode',
+        launchPreferences: { model: 'm' },
+        resumeProviderSession: { key: 'session_id', id: 'ses_1' }
+      })
+    ).rejects.toThrow('capability_unsupported')
+
+    expect(fixture.spawn).not.toHaveBeenCalled()
+    expect(fixture.runtime.startStatusOf(`${TAB_ID}:${LEAF_ID}`)).toMatchObject({
+      status: 'failed'
+    })
+  })
+
   it('starts no shell when the plan fails, and the pane says why', async () => {
     fixture.plan.mockRejectedValueOnce(new Error('Could not build launch command for claude.'))
 

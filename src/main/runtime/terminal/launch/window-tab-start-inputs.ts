@@ -57,6 +57,10 @@ export async function startWindowTabWithInputs(
   { agentLaunch, draftPaste, ...opts }: CreateOptions & WindowTabStartInputs,
   create: Create
 ): Promise<dependencies.RuntimeTerminalCreate> {
+  if (opts.startupAgent && opts.resumeProviderSession) {
+    // As the window's own model start refuses it: a model launch cannot resume a session.
+    return create({ ...opts, startFailure: new Error('capability_unsupported') })
+  }
   const terminal =
     agentLaunch === undefined
       ? await create(opts)
