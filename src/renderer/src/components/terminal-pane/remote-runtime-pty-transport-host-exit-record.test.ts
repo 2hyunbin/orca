@@ -144,10 +144,22 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
     transport.destroy?.()
   })
 
-  it('keeps a pane whose host already holds a replacement for the exited terminal', async () => {
+  it.each([
+    ['a new handle', { handle: 'terminal-restarted' }],
+    [
+      'a new incarnation under the same handle',
+      { handle: 'terminal-ended', incarnationId: 'inc-2' }
+    ],
+    ['a new PTY under the same handle', { handle: 'terminal-ended', ptyId: 'pty-2' }]
+  ])('keeps a pane the host already replaced with %s', async (_label, replacement) => {
     const onPtyExit = vi.fn()
     const transport = await attachRestoredHostTab(onPtyExit)
-    const shown = answerShow({ connected: false, verdict: 'exited' })
+    const shown = answerShow({
+      connected: false,
+      verdict: 'exited',
+      ptyId: 'pty-1',
+      incarnationId: 'inc-1'
+    })
     const answer = runtimeCall.getMockImplementation()
     runtimeCall.mockImplementation(async (args: { method: string; params?: unknown }) =>
       args.method === 'terminal.resolvePane'
@@ -155,10 +167,12 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
             ok: true,
             result: {
               terminal: {
-                handle: 'terminal-restarted',
                 tabId: 'host-tab-1',
                 leafId: 'pane:1',
-                worktreeId: 'wt-1'
+                worktreeId: 'wt-1',
+                ptyId: 'pty-1',
+                incarnationId: 'inc-1',
+                ...replacement
               }
             }
           }

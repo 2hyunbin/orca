@@ -58,7 +58,7 @@ import { toRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { getRemoteRuntimeTerminalMultiplexer } from '../../runtime/remote-runtime-terminal-multiplexer'
 import { REMOTE_TERMINAL_SNAPSHOT_TOO_LARGE } from '../../runtime/remote-runtime-terminal-snapshot-state'
 import { restoredSnapshotPaintsPrintableContent } from './restored-snapshot-coverage'
-import { hostRecordsTerminalExit } from './remote-terminal-host-exit-record'
+import { hostRecordsTerminalExit, sameWhenBothKnown } from './remote-terminal-host-exit-record'
 import type {
   RemoteRuntimeMultiplexedTerminal,
   RemoteRuntimeSnapshotOutcome
@@ -2252,23 +2252,28 @@ export function createRemoteRuntimePtyTransport(
     }
     hostExitProbeHandle = targetHandle
     const probeLifecycle = lifecycleEpoch
-    const stillCurrent = (): boolean =>
-      !destroyed && !terminalEnded && probeLifecycle === lifecycleEpoch && handle === targetHandle
+    // Why: an exit ends the pane only while it is still the pane's process, even under one handle.
+    const stillHolds = (exited: RuntimeTerminalShow): boolean =>
+      !destroyed &&
+      !terminalEnded &&
+      probeLifecycle === lifecycleEpoch &&
+      handle === targetHandle &&
+      sameWhenBothKnown(authoritativePtyIncarnationId, exited.incarnationId)
     void (async () => {
       const { terminal } = await callRuntime<{ terminal?: RuntimeTerminalShow }>('terminal.show', {
         terminal: targetHandle
       })
-      // Why: the old process's exit ends the pane only if the host has no replacement for it.
+      if (!terminal || !hostRecordsTerminalExit(terminal) || !stillHolds(terminal)) {
+        return
+      }
       if (
-        !stillCurrent() ||
-        !hostRecordsTerminalExit(terminal) ||
-        !(await hostPaneHasNoReplacement(targetHandle)) ||
-        !stillCurrent()
+        !(await hostPaneStillHoldsExitedTerminal(targetHandle, terminal)) ||
+        !stillHolds(terminal)
       ) {
         return
       }
       remotePtyId ??= exitedPtyId
-      const cause = terminal?.exitCause
+      const cause = terminal.exitCause
       retireRemoteTerminalId(cause?.kind === 'exited' ? cause.exitCode : undefined)
     })()
       .catch(() => {})
@@ -2279,7 +2284,10 @@ export function createRemoteRuntimePtyTransport(
       })
   }
 
-  async function hostPaneHasNoReplacement(targetHandle: string): Promise<boolean> {
+  async function hostPaneStillHoldsExitedTerminal(
+    targetHandle: string,
+    exited: Pick<RuntimeTerminalShow, 'ptyId' | 'incarnationId'>
+  ): Promise<boolean> {
     if (!tabId || !leafId || !worktreeId) {
       return true
     }
@@ -2289,7 +2297,12 @@ export function createRemoteRuntimePtyTransport(
         'terminal.resolvePane',
         { paneKey: `${paneTabId}:${leafId}`, worktreeId }
       )
-      return resolved.terminal?.handle === targetHandle
+      const pane = resolved.terminal
+      return (
+        pane?.handle === targetHandle &&
+        sameWhenBothKnown(pane.ptyId, exited.ptyId) &&
+        sameWhenBothKnown(pane.incarnationId, exited.incarnationId)
+      )
     } catch (error) {
       // Why: the host's own pane registry answering "no such pane" means nothing replaced it.
       return runtimeTerminalErrorMessage(error).includes('terminal_not_found')

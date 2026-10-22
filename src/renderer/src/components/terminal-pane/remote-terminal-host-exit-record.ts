@@ -25,3 +25,11 @@ export function hostRecordsTerminalExit(
   // Why: stop_unverified is a stop nobody saw land, so the process may still run.
   return !(cause.kind === 'unknown' && cause.reason === 'stop_unverified')
 }
+
+/** A same-handle restart shows up only as a new PTY or incarnation, so a known mismatch is a replacement. */
+export function sameWhenBothKnown(
+  left: string | null | undefined,
+  right: string | null | undefined
+): boolean {
+  return !left || !right || left === right
+}
