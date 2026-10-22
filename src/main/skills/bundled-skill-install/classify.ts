@@ -13,7 +13,7 @@ export type ClassifiedBundledSkillPath = {
 }
 
 const SKILL_FILE = 'SKILL.md'
-const FRONTMATTER = /^﻿?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u
+const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u
 const FRONTMATTER_NAME = /^name:[ \t]*(["']?)(.+?)\1[ \t]*$/mu
 
 /** sha256 of LF-normalised text, so a pre-#8624 CRLF clone still matches its release. */

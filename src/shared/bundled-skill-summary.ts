@@ -41,7 +41,7 @@ export const BUNDLED_SKILL_LEAVE_REASON_TEXT: Readonly<Record<BundledSkillLeaveR
   other: 'A different skill already uses this name',
   unwritable: "Orca can't write to this folder",
   busy: 'Another skill install is still finishing here',
-  'shared-not-current': 'The shared copy this folder uses is not Orca’s'
+  'shared-not-current': 'The shared copy this folder uses is not Orca\u2019s'
 }
 
 /** What Update does at one location, for plain-text surfaces; the app translates its own. */
@@ -192,7 +192,7 @@ export type BundledSkillOutcomeSummary = {
   text: BundledSkillOutcomeText
   /** Printed as warnings; never part of the exit code. */
   leftAlone: BundledSkillLeftAlone[]
-  /** e.g. "Updated · 1 left alone: You've changed this copy". */
+  /** e.g. "Updated - 1 left alone: You've changed this copy". */
   line: string
 }
 
@@ -218,7 +218,7 @@ export function summarizeBundledSkillOutcome(
     name: outcome.name,
     text,
     leftAlone,
-    line: leftAlone.length > 0 ? `${text} · ${leftAlone.length} left alone: ${reasons}` : text
+    line: leftAlone.length > 0 ? `${text} \u00B7 ${leftAlone.length} left alone: ${reasons}` : text
   }
 }
 
