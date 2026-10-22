@@ -516,6 +516,22 @@ describe('a WSL host that refuses the enrolled pairing', () => {
     )
   })
 
+  it('reuses the bridge of a host still being added, which has no stored pairing to repair', async () => {
+    const store = repairable(readiness(first.port, 'fresh-token'))
+    const resolve = vi.fn(() => {
+      throw new Error('no environment is recorded for this host yet')
+    })
+    const { manager } = setup({
+      pairingRecovery: { repairs: store.recovery.repairs, resolve },
+      getPairingOffer: () => null
+    })
+    const opened = await manager.ensure('Ubuntu', { environmentId: 'wsl:ubuntu' })
+    await expect(manager.ensure('Ubuntu', { environmentId: 'wsl:ubuntu' })).resolves.toMatchObject({
+      pairingOffer: opened.pairingOffer
+    })
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
   it('never gives the token to a server under another host key', async () => {
     const published = readiness(first.port, 'fresh-token')
     if (!published.pairing.available) {

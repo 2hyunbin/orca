@@ -15,13 +15,18 @@ import {
   ManagedOrcadPairingRepairs,
   type ManagedOrcadPairingRepairDeps
 } from '../managed-server/lifecycle/orcad-managed-pairing-repair'
+import type { WslOrcadHostTransport } from './wsl-orcad-host-transport'
 import { OrcadManagedPairingRepairFailedError } from '../managed-server/lifecycle/orcad-managed-pairing-repair-failure'
 import { notifyManagedOrcadPairingRepaired } from '../managed-server/lifecycle/orcad-managed-pairing-repaired-listener'
 import type { WslOrcadHostTarget } from './wsl-orcad-host-target'
 import { createWslOrcadHostTransport } from './wsl-orcad-host-transport'
 import type { WslOrcadPairingRecovery } from './wsl-orcad-pairing-identity'
 
-export function liveWslOrcadPairingRepairDeps(userDataPath: string): ManagedOrcadPairingRepairDeps {
+type WslOrcadHostAccess = { target: WslOrcadHostTarget; connection: WslOrcadHostTransport }
+
+export function liveWslOrcadPairingRepairDeps(
+  userDataPath: string
+): ManagedOrcadPairingRepairDeps<WslOrcadHostAccess> {
   const record = (environmentId: string) => {
     const found = findWslHostDeployment(userDataPath, environmentId)
     if (!found) {
@@ -44,10 +49,7 @@ export function liveWslOrcadPairingRepairDeps(userDataPath: string): ManagedOrca
       try {
         return await readActiveManagedOrcadReadiness(access)
       } finally {
-        const { connection } = access
-        if ('dispose' in connection && typeof connection.dispose === 'function') {
-          connection.dispose()
-        }
+        access.connection.dispose()
       }
     },
     ports: (environment) => {
@@ -70,7 +72,9 @@ export function liveWslOrcadPairingRepairDeps(userDataPath: string): ManagedOrca
 /** One gate per desktop, so the cap and a standing failure hold across every WSL connect. */
 export function createWslOrcadPairingRecovery(
   userDataPath: string,
-  deps: ManagedOrcadPairingRepairDeps = liveWslOrcadPairingRepairDeps(userDataPath)
+  deps: ManagedOrcadPairingRepairDeps<WslOrcadHostAccess> = liveWslOrcadPairingRepairDeps(
+    userDataPath
+  )
 ): Omit<WslOrcadPairingRecovery, 'environmentId'> {
   return { repairs: new ManagedOrcadPairingRepairs(deps), resolve: deps.resolve }
 }

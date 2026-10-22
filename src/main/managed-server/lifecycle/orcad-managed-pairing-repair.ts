@@ -32,13 +32,15 @@ export const PAIRING_REPAIR_WINDOW_MS = 10 * 60_000
 // Why remembered briefly: every reconnecting pane would otherwise re-read the host over SSH.
 export const PAIRING_REPAIR_FAILURE_HOLD_MS = 15_000
 
-type ManagedOrcadHostAccess = { target: OrcadHostTarget; connection: OrcadHostTransport }
+export type ManagedOrcadHostAccess = { target: OrcadHostTarget; connection: OrcadHostTransport }
 
 /** SSH reaches the host over SSH; WSL through its distro, the trust root of its own pairing. */
-export type ManagedOrcadPairingRepairDeps = {
+export type ManagedOrcadPairingRepairDeps<
+  Access extends ManagedOrcadHostAccess = ManagedOrcadHostAccess
+> = {
   resolve: (environmentId: string) => KnownRuntimeEnvironment
-  connect: (environment: KnownRuntimeEnvironment) => Promise<ManagedOrcadHostAccess>
-  readReadiness: (input: ManagedOrcadHostAccess) => Promise<ServeReadiness | null>
+  connect: (environment: KnownRuntimeEnvironment) => Promise<Access>
+  readReadiness: (input: Access) => Promise<ServeReadiness | null>
   /** The bridge or tunnel ports the pairing names; defaults to the SSH deployment's. */
   ports?: (environment: KnownRuntimeEnvironment) => { localPort: number; remotePort: number } | null
   refresh: (environmentId: string, pairingCode: string) => KnownRuntimeEnvironment
@@ -93,14 +95,16 @@ type StandingFailure = { error: Error; revision: number; until: number }
  * refused pairing. Keyed by the refused revision: a refusal seen under an older pairing than the
  * stored one was already answered, so it gets the stored pairing without reaching the host.
  */
-export class ManagedOrcadPairingRepairs {
+export class ManagedOrcadPairingRepairs<
+  Access extends ManagedOrcadHostAccess = ManagedOrcadHostAccess
+> {
   private readonly inFlight = new Map<string, Promise<KnownRuntimeEnvironment>>()
   private readonly attemptedAt = new Map<string, number[]>()
   private readonly standing = new Map<string, StandingFailure>()
   // Why: a repair that was already running when the user asked again must not undo that reset.
   private readonly resets = new Map<string, number>()
 
-  constructor(private readonly deps: ManagedOrcadPairingRepairDeps) {}
+  constructor(private readonly deps: ManagedOrcadPairingRepairDeps<Access>) {}
 
   /**
    * The failure that stands for this pairing now, or null. A build under it would cost SSH execs,
@@ -246,6 +250,12 @@ export class ManagedOrcadPairingRepairs {
     return error
   }
 }
+
+/** What callers of the gate use; independent of how a host is reached. */
+export type ManagedOrcadPairingGate = Pick<
+  ManagedOrcadPairingRepairs,
+  'standingFailure' | 'repair' | 'recordRefusedAfterRepair' | 'resetEpoch' | 'forgetFailures'
+>
 
 function capSpentError(attempts: number): Error {
   return new OrcadManagedPairingRepairFailedError(

@@ -216,10 +216,14 @@ export class WslOrcadConnectionManager {
       throw new WslOrcadConnectionSupersededError(distro)
     }
     const current = this.active.get(key)
-    const paired = this.enrolledOffer(key, environmentId)
-    const recovery = this.dependencies.pairingRecovery
-      ? { ...this.dependencies.pairingRecovery, environmentId }
-      : undefined
+    const persisted = this.dependencies.getPairingOffer?.(environmentId) ?? null
+    const paired = persisted ?? this.enrolledOffer(key, environmentId)
+    // Why only a persisted pairing: the gate re-pairs the stored record, which a host still being
+    // added has not written yet.
+    const recovery =
+      persisted && this.dependencies.pairingRecovery
+        ? { ...this.dependencies.pairingRecovery, environmentId }
+        : undefined
     if (
       current &&
       current.connection.remotePort === launch.port &&
