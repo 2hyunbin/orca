@@ -261,6 +261,7 @@ export function dispatcher(
     ...runtimeCalls,
     ...runtimeOverrides
   }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this partial runtime supplies the dispatcher methods under test and runtimeOverrides; a missing access fails the test.
   return new RpcDispatcher({ runtime: runtime as unknown as OrcaRuntimeService, methods })
 }
 
