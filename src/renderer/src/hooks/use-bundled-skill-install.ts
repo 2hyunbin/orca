@@ -4,6 +4,7 @@ import {
 } from '@/components/settings/bundled-skill-setup-copy'
 import { useCallback, useRef, useState } from 'react'
 import {
+  bundledSkillInstallAction,
   summarizeBundledSkillOutcomes,
   type BundledSkillResultSummary
 } from '../../../shared/bundled-skill-summary'
@@ -18,6 +19,7 @@ import {
 import { notifyInstalledAgentSkillsChanged } from './installed-agent-skill-discovery'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
 import { useMountedRef } from './useMountedRef'
+import { translate } from '@/i18n/i18n'
 
 export type BundledSkillInstallState =
   | { kind: 'idle' }
@@ -92,6 +94,14 @@ export function useBundledSkillInstall(
         const planned = await planBundledSkillsOnTarget(target, request)
         if (planned.kind === 'unsupported') {
           next = { kind: 'unsupported', reason: planned.reason }
+        } else if (bundledSkillInstallAction(planned.plan).kind === 'attention') {
+          next = {
+            kind: 'failed',
+            message: translate(
+              'auto.components.skills.skillPlanOpCopy.needsAttention',
+              'Needs attention'
+            )
+          }
         } else {
           const result = await executeBundledSkillsOnTarget(
             target,

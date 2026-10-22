@@ -183,6 +183,16 @@ describe('bundledSkillInstallAction', () => {
       kind: 'replace',
       paths: ['/a']
     })
-    expect(bundledSkillInstallAction(plan([[op('keep'), unwritable]]))).toEqual({ kind: 'none' })
+    expect(bundledSkillInstallAction(plan([[op('keep'), unwritable]]))).toEqual({
+      kind: 'attention'
+    })
+  })
+
+  it.each(['unwritable', 'busy'] as const)('needs attention when absent work is %s', (reason) => {
+    expect(bundledSkillInstallAction(plan([[{ ...op('leave'), reason }]]))).toEqual({
+      kind: 'attention'
+    })
+    expect(bundledSkillInstallAction(plan([[op('keep')]]))).toEqual({ kind: 'none' })
+    expect(bundledSkillInstallAction(plan([[]]))).toEqual({ kind: 'attention' })
   })
 })

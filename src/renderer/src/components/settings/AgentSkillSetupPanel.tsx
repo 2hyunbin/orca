@@ -61,7 +61,6 @@ function BundledAgentSkillSetupPanel({
   const skillInstall = useBundledSkillInstall({ onFinished: recheckAfterInstall, target })
   const { state, ready, install } = skillInstall
   const installing = state.kind === 'installing'
-  const failed = bundledSkillInstallNeedsAttention(state)
   const activeSkillNames = installed ? (installedSkillNames ?? skillNames) : skillNames
   const action = useBundledSkillInstallAction(activeSkillNames, {
     enabled: !installed || showInstallWhenInstalled,
@@ -69,6 +68,7 @@ function BundledAgentSkillSetupPanel({
     target
   })
   const effectivelyInstalled = installed || action.kind === 'none'
+  const failed = bundledSkillInstallNeedsAttention(state) || action.kind === 'attention'
   const installedButton: 'update' | 'replace' | null =
     action.kind === 'run' || action.kind === 'unknown'
       ? 'update'
@@ -227,7 +227,11 @@ function BundledAgentSkillSetupPanel({
               {translate('auto.components.skills.skillPlanOpCopy.installed', 'Installed')}
             </p>
           ) : null}
-          <BundledSkillInstallStatus install={skillInstall} className="mt-2" />
+          <BundledSkillInstallStatus
+            install={skillInstall}
+            attention={action.kind === 'attention' ? { retry: startInstall } : undefined}
+            className="mt-2"
+          />
           {actionHint ? <div className="mt-2">{actionHint}</div> : null}
         </div>
         {footer ? <div className="mt-5 border-t border-border/60 pt-5">{footer}</div> : null}

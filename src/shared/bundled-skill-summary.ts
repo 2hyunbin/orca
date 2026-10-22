@@ -115,11 +115,12 @@ export function summarizeBundledSkillPlan(plan: BundledSkillPlan): BundledSkillP
 
 /**
  * A setup screen's one button for a named-skill plan: run it when it would change something,
- * offer Replace (backup kept) when only replaceable copies stand in the way, else nothing.
+ * offer Replace for replaceable copies, or attention when needed locations remain blocked.
  */
 export type BundledSkillInstallAction =
   | { kind: 'run' }
   | { kind: 'replace'; paths: string[] }
+  | { kind: 'attention' }
   | { kind: 'none' }
 
 export function bundledSkillInstallAction(plan: BundledSkillPlan): BundledSkillInstallAction {
@@ -129,7 +130,15 @@ export function bundledSkillInstallAction(plan: BundledSkillPlan): BundledSkillI
   const paths = plan.skills.flatMap((entry) =>
     entry.ops.flatMap((op) => (op.kind === 'leave' && op.replaceable ? [op.path] : []))
   )
-  return paths.length > 0 ? { kind: 'replace', paths } : { kind: 'none' }
+  if (paths.length > 0) {
+    return { kind: 'replace', paths }
+  }
+  const current =
+    plan.skills.length > 0 &&
+    plan.skills.every(
+      (entry) => entry.ops.length > 0 && entry.ops.every((op) => op.kind === 'keep')
+    )
+  return { kind: current ? 'none' : 'attention' }
 }
 
 const INSTALLS_FOR_AGENT = new Set<string>(['write', 'link', 'copy'])

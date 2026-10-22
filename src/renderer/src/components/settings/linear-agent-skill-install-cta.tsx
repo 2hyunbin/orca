@@ -64,9 +64,11 @@ function BundledLinearAgentSkillInstallCta({
     target: activeRuntime.bundledSkillTarget
   })
   const replacePaths = action.kind === 'replace' ? action.paths : undefined
+  const needsAttention = action.kind === 'attention'
   // Why: once installed, offer a button only when the plan would change something.
   const showInstall =
     action.kind !== 'none' &&
+    !needsAttention &&
     (!skill.installed || action.kind === 'run' || action.kind === 'unknown' || replacePaths)
   const subordinateRowClass = useIntegrationSubordinateRowClass('space-y-1.5')
 
@@ -80,7 +82,11 @@ function BundledLinearAgentSkillInstallCta({
           )}{' '}
           <span className="font-mono text-[11px]">{ORCA_LINEAR_SKILL_NAME}</span>
         </p>
-        {skill.loading ? (
+        {needsAttention ? (
+          <IntegrationStatusPill tone="attention">
+            {translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')}
+          </IntegrationStatusPill>
+        ) : skill.loading ? (
           <IntegrationStatusPill tone="neutral">
             {translate(
               'auto.components.settings.linear.agent.skill.install.cta.checking',
@@ -164,7 +170,11 @@ function BundledLinearAgentSkillInstallCta({
                         )}
             </Button>
           )}
-          <BundledSkillInstallStatus install={skillInstall} buttonSize="xs" />
+          <BundledSkillInstallStatus
+            install={skillInstall}
+            attention={needsAttention ? { retry: () => void install([skillName]) } : undefined}
+            buttonSize="xs"
+          />
           {remote || agentRuntime.runtime === 'wsl' ? (
             <p className="text-[11px] text-muted-foreground/70">
               {getLinearAgentSkillSetupInlineRuntimeCopy(remote, agentRuntime)}

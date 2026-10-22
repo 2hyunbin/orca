@@ -14,8 +14,20 @@ export function BundledSkillInstallStatus(props: {
   install: Pick<BundledSkillInstall, 'state' | 'retry'>
   buttonSize?: 'xs' | 'sm'
   className?: string
+  attention?: { retry: () => void }
 }): React.JSX.Element | null {
-  const { state, retry } = props.install
+  const previewAttention =
+    props.attention && (props.install.state.kind === 'idle' || props.install.state.kind === 'done')
+  const state = previewAttention
+    ? {
+        kind: 'failed' as const,
+        message: translate(
+          'auto.components.skills.skillPlanOpCopy.needsAttention',
+          'Needs attention'
+        )
+      }
+    : props.install.state
+  const retry = previewAttention ? props.attention?.retry : props.install.retry
   if (state.kind === 'idle' || state.kind === 'installing') {
     return null
   }
