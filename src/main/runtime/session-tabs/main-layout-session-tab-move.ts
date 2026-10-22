@@ -8,7 +8,6 @@ import type {
   RuntimeMobileSessionTabsSnapshot
 } from '../../../shared/runtime-types'
 import { translateSessionTabMove } from '../../../shared/workspace-layout/old-client/old-client-method-translation'
-import { resolveSessionTabRow } from '../../../shared/workspace-layout/old-client/old-client-session-tab-rows'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
 import type { WorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-model'
@@ -37,8 +36,8 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
   }
 
   /**
-   * The move in main's layout, read against the rows the client was shown. Null when main does not
-   * own the workspace or cannot read the move: today's path moves it, or refuses it with its codes.
+   * The move in main's layout, checked against the rows the client was shown and refused with
+   * today's codes. Null for a workspace main does not own: today's path moves it.
    */
   protected async moveTabInMainLayout(
     worktreeId: string,
@@ -55,18 +54,14 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
     if (!workspace) {
       throw new Error('tab_not_found')
     }
-    const rows = this.toMobileSessionTabsResult(shown)
-    // A group showing a tab main's layout lacks (a diff, a preview) moves as today, and so does a
-    // move main cannot read as one: today's path checks it against those rows and answers.
-    // Bridge (ledger L280): goes once main's layout holds every tab a group shows.
-    const groupsHeld = (rows.tabGroups ?? [])
-      .filter((group) => group.id === move.targetGroupId || group.tabOrder.includes(move.tabId))
-      .every((group) => group.tabOrder.every((rowId) => resolveSessionTabRow(workspace, rowId)))
-    const translation = groupsHeld
-      ? translateSessionTabMove(worktreeId, workspace, rows, move)
-      : null
-    if (!translation?.ok) {
-      return null
+    const translation = translateSessionTabMove(
+      worktreeId,
+      workspace,
+      this.toMobileSessionTabsResult(shown),
+      move
+    )
+    if (!translation.ok) {
+      throw new Error(translation.code)
     }
     for (const command of translation.commands) {
       if (command.type !== 'moveTab' && command.type !== 'splitGroup') {

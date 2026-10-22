@@ -10,7 +10,7 @@ const SSH_KEYBOARD_INTERACTIVE_MAX_ROUNDS = 8
 const SSH_KEYBOARD_INTERACTIVE_READY_TIMEOUT_MS = SSH_CREDENTIAL_TIMEOUT_MS + 5_000
 
 /** What one ssh2 handshake reads from and hands back to its connection. */
-export type Ssh2HandshakeHost = {
+type Ssh2HandshakeHost = {
   label: string
   pendingClients: Set<SshClient>
   /** Not disposed, and still the newest connect attempt. */

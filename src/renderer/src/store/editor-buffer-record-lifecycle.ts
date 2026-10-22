@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import {
-  editorBufferMirrorMismatch,
+  editorBufferViewMirrorMismatch,
   reconcileEditorBufferMembership,
   type EditorBufferState
 } from './slices/editor/buffers/editor-buffer-record'
@@ -80,9 +80,15 @@ export function assertEditorBufferRecordsMatchViews(state: EditorBufferState): v
   if (keys.length !== recordIds.size || keys.some((id) => !recordIds.has(id))) {
     throw new Error('Editor buffer records are not keyed by the open editor tabs')
   }
+  const hostDirtyRecords = new Set(
+    state.openFiles
+      .filter((file) => file.mirroredFromRuntimeSession === true && file.isDirty)
+      .map((file) => editorBufferIdOfView(state, file.id))
+  )
   for (const file of state.openFiles) {
-    const record = state.editorBuffers[editorBufferIdOfView(state, file.id)]
-    const field = editorBufferMirrorMismatch(file, record)
+    const recordId = editorBufferIdOfView(state, file.id)
+    const record = state.editorBuffers[recordId]
+    const field = editorBufferViewMirrorMismatch(file, record, hostDirtyRecords.has(recordId))
     if (field !== null) {
       throw new Error(`Editor buffer mirror "${field}" of ${file.id} differs from its record`)
     }
