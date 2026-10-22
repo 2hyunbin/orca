@@ -41,7 +41,8 @@ export async function classifyBundledSkillPath(
   filesystem: BundledSkillFilesystem,
   path: string,
   source: BundledSkillSource,
-  currentDigest: string
+  currentDigest: string,
+  includeTreeDigest = false
 ): Promise<ClassifiedBundledSkillPath> {
   const stat = await filesystem.stat(path)
   if (!stat) {
@@ -63,7 +64,9 @@ export async function classifyBundledSkillPath(
       observed: {
         kind: 'file',
         mtimeMs: stat.mtimeMs,
-        treeDigest: await bundledSkillTreeSignature(filesystem, path)
+        ...(includeTreeDigest
+          ? { treeDigest: await bundledSkillTreeSignature(filesystem, path) }
+          : {})
       }
     }
   }
@@ -91,6 +94,11 @@ export async function classifyBundledSkillPath(
   }
   return {
     folderClass: bytes && frontmatterName(bytes) === source.name ? 'edited' : 'other',
-    observed: { ...observed, treeDigest: await bundledSkillTreeSignature(filesystem, path) }
+    observed: {
+      ...observed,
+      ...(includeTreeDigest
+        ? { treeDigest: await bundledSkillTreeSignature(filesystem, path) }
+        : {})
+    }
   }
 }

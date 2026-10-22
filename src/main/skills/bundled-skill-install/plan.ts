@@ -136,7 +136,8 @@ async function recoverySiblings(
       filesystem,
       path,
       context.source,
-      context.digest
+      context.digest,
+      true
     )
     if (kind === 'stage') {
       cleanup.push({ path, action: 'delete', observed: classified.observed })
@@ -168,7 +169,8 @@ async function planTarget(
     filesystem,
     path,
     context.source,
-    context.digest
+    context.digest,
+    context.force.has(bundledSkillPathKey(path))
   )
   const { observed } = classified
   let folderClass: BundledSkillFolderClass = classified.folderClass
