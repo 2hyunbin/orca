@@ -35,6 +35,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dependency-source:
+    if: github.repository == 'stablyai/orca'
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.qualification_only && github.sha || format('refs/tags/{0}', inputs.tag) }}
+          persist-credentials: false
+      - id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  dependency-security:
+    needs: dependency-source
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-dependency-security.yml
+    with:
+      sha: ${{ needs.dependency-source.outputs.sha }}
+
   qualification-template:
     if: inputs.qualification_only
     permissions:
@@ -45,8 +69,8 @@ jobs:
       ref: ${{ github.sha }}
 
   build-mac:
-    needs: qualification-template
-    if: ${{ !cancelled() && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'stablyai/orca' }}
+    needs: [qualification-template, dependency-source, dependency-security]
+    if: ${{ !cancelled() && needs.dependency-security.result == 'success' && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'stablyai/orca' }}
     # Why: this workflow is outside the SignPath signing run, so Blacksmith
     # cannot enter Windows artifact provenance while mac notarization gets the
     # faster runner.
@@ -63,7 +87,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.qualification_only && github.sha || format('refs/tags/{0}', inputs.tag) }}
+          ref: ${{ needs.dependency-source.outputs.sha }}
 
       # Why: a relay-era ref (before #27215) needs the Windows relay addon this build no longer compiles.
       - name: Refuse a ref that still ships the SSH relay

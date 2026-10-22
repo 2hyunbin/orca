@@ -1,0 +1,108 @@
+name: Dependency policy
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - '**/package.json'
+      - '**/pnpm-lock.yaml'
+      - '**/pnpm-workspace.yaml'
+      - 'native/**/Cargo.toml'
+      - 'native/**/Cargo.lock'
+      - 'config/dependency-policy.json'
+      - 'config/cargo-deny.toml'
+      - 'config/scripts/*dependenc*.mjs'
+      - 'config/scripts/pnpm-cli-invocation.mjs'
+      - 'config/pnpmfile.cjs'
+      - 'config/patches/**'
+      - 'mobile/patches/**'
+      - '.github/workflows/dependency-policy.yml'
+      - '.github/workflows/release-dependency-security.yml'
+      - '.github/workflows/release-cut.yml'
+      - '.github/actions/install-node-dependencies/**'
+      - 'src/packages/process-host/**'
+  push:
+    branches: [main]
+    paths:
+      - '**/package.json'
+      - '**/pnpm-lock.yaml'
+      - '**/pnpm-workspace.yaml'
+      - 'native/**/Cargo.toml'
+      - 'native/**/Cargo.lock'
+      - 'config/dependency-policy.json'
+      - 'config/cargo-deny.toml'
+      - 'config/scripts/*dependenc*.mjs'
+      - 'config/scripts/pnpm-cli-invocation.mjs'
+      - 'config/pnpmfile.cjs'
+      - 'config/patches/**'
+      - 'mobile/patches/**'
+      - '.github/workflows/dependency-policy.yml'
+      - '.github/workflows/release-dependency-security.yml'
+      - '.github/workflows/release-cut.yml'
+      - '.github/actions/install-node-dependencies/**'
+      - 'src/packages/process-host/**'
+  schedule:
+    - cron: '37 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-policy-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+
+jobs:
+  node:
+    name: JavaScript vulnerabilities and licenses (${{ matrix.os }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Check all pnpm workspaces
+        run: pnpm check:dependencies
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dependency-policy-node-${{ matrix.os }}
+          path: tmp/dependency-policy/*.json
+          if-no-files-found: error
+
+  rust:
+    name: Rust vulnerabilities, licenses, bans and sources
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Restore pinned scanner
+        id: scanner
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-0.20.2-${{ runner.os }}-${{ runner.arch }}
+      - name: Install pinned scanner
+        if: steps.scanner.outputs.cache-hit != 'true'
+        run: cargo install cargo-deny --locked --version 0.20.2
+      - name: Check every native Rust manifest
+        run: pnpm check:dependencies:rust
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dependency-policy-rust
+          path: tmp/dependency-policy/*.log
+          if-no-files-found: error

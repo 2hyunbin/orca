@@ -5,6 +5,16 @@ import { parse } from 'yaml'
 
 const RELEASE_WORKFLOW = '.github/workflows/release-cut.yml'
 const EXPECTED_MATRIX = {
+  ...Object.fromEntries(
+    ['.github/workflows/docs.yml', '.github/workflows/release-mac-build.yml'].flatMap((path) => [
+      [`${path}#dependency-security`, { contents: 'read' }],
+      ...['node', 'rust'].map((job) => [
+        `${path}#dependency-security -> .github/workflows/release-dependency-security.yml#${job}`,
+        { contents: 'read' }
+      ])
+    ])
+  ),
+  '.github/workflows/release-mac-build.yml#dependency-source': { contents: 'read' },
   '.github/workflows/docs.yml#check': { contents: 'read' },
   '.github/workflows/docs.yml#production': { contents: 'read' },
   '.github/workflows/docs.yml#release_gate': { contents: 'read' },
@@ -51,6 +61,12 @@ const EXPECTED_MATRIX = {
   [`${RELEASE_WORKFLOW}#verify-mac-build`]: { actions: 'read', contents: 'read' },
   [`${RELEASE_WORKFLOW}#create-release`]: { contents: 'write' },
   [`${RELEASE_WORKFLOW}#cut`]: { contents: 'write' },
+  [`${RELEASE_WORKFLOW}#dependency-source`]: { contents: 'read' },
+  [`${RELEASE_WORKFLOW}#dependency-security`]: { contents: 'read' },
+  [`${RELEASE_WORKFLOW}#dependency-security -> .github/workflows/release-dependency-security.yml#node`]:
+    { contents: 'read' },
+  [`${RELEASE_WORKFLOW}#dependency-security -> .github/workflows/release-dependency-security.yml#rust`]:
+    { contents: 'read' },
   [`${RELEASE_WORKFLOW}#docs-production-dispatch`]: { actions: 'write' },
   [`${RELEASE_WORKFLOW}#homebrew-bump`]: { contents: 'read' },
   [`${RELEASE_WORKFLOW}#homebrew-bump -> .github/workflows/homebrew-bump.yml#bump-cask`]: {
@@ -259,8 +275,13 @@ describe('release-cut token permissions', () => {
 
   it('keeps fork, tag, and reusable-workflow boundaries explicit', () => {
     expect(workflow.jobs.cut.if).toBe("github.repository == 'stablyai/orca'")
-    expect(checkoutRef(workflow.jobs.cut)).toBe(
+    expect(checkoutRef(workflow.jobs.cut)).toBe('${{ needs.dependency-source.outputs.sha }}')
+    expect(checkoutRef(workflow.jobs['dependency-source'])).toBe(
       "${{ github.event_name == 'schedule' && 'main' || inputs.ref }}"
+    )
+    expect(workflow.jobs.cut.needs).toEqual(['dependency-source', 'dependency-security'])
+    expect(workflow.jobs['dependency-security'].with.sha).toBe(
+      '${{ needs.dependency-source.outputs.sha }}'
     )
 
     for (const [jobName] of releaseTagExecutionJobs(workflow)) {
@@ -276,9 +297,12 @@ describe('release-cut token permissions', () => {
 
     const macWorkflow = readWorkflow('.github/workflows/release-mac-build.yml')
     expect(macWorkflow.jobs['build-mac'].if).toBe(
-      "${{ !cancelled() && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'stablyai/orca' }}"
+      "${{ !cancelled() && needs.dependency-security.result == 'success' && (!inputs.qualification_only || needs.qualification-template.result == 'success') && github.repository == 'stablyai/orca' }}"
     )
     expect(checkoutRef(macWorkflow.jobs['build-mac'])).toBe(
+      '${{ needs.dependency-source.outputs.sha }}'
+    )
+    expect(checkoutRef(macWorkflow.jobs['dependency-source'])).toBe(
       "${{ inputs.qualification_only && github.sha || format('refs/tags/{0}', inputs.tag) }}"
     )
 

@@ -38,7 +38,23 @@ export function isTagBuiltFromCurrentRef(tag, { cwd = process.cwd() } = {}) {
       return true
     }
 
-    return gitOutput(['rev-parse', `${tagCommit}^`], cwd) === currentCommit
+    if (gitOutput(['rev-parse', `${tagCommit}^`], cwd) !== currentCommit) {
+      return false
+    }
+    if (
+      gitOutput(
+        ['diff', '--name-only', currentCommit, tagCommit, '--', '.', ':(exclude)package.json'],
+        cwd
+      )
+    ) {
+      return false
+    }
+    const manifest = (commit) => {
+      const value = JSON.parse(gitOutput(['show', `${commit}:package.json`], cwd))
+      delete value.version
+      return JSON.stringify(value)
+    }
+    return manifest(currentCommit) === manifest(tagCommit)
   } catch {
     return false
   }

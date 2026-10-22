@@ -20,7 +20,16 @@ on:
         type: boolean
 
 jobs:
+  dependency-security:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-dependency-security.yml
+    with:
+      sha: ${{ github.sha }}
+      profile: mobile
+
   android-build:
+    needs: dependency-security
     runs-on: ubuntu-latest
 
     # Why: the "Create GitHub Release" step below uses the default GITHUB_TOKEN
@@ -41,6 +50,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -239,6 +250,7 @@ jobs:
       - name: Checkout orca
         uses: actions/checkout@v6
         with:
+          ref: ${{ github.sha }}
           sparse-checkout: config/scripts
 
       # Why the buf0-bot app, as in homebrew-bump.yml: GITHUB_TOKEN cannot push to another

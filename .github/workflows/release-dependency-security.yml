@@ -1,0 +1,101 @@
+name: Release dependency security
+
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: Immutable source commit being released
+        required: true
+        type: string
+      profile:
+        description: Release surface (desktop, mobile, docs, or cloud)
+        required: false
+        default: desktop
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  ORCA_BACKGROUND_LAUNCH: '1'
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Validate release source and scope
+        env:
+          SOURCE_SHA: ${{ inputs.sha }}
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          case "$PROFILE" in desktop|mobile|docs|cloud) ;; *) exit 1 ;; esac
+      - name: Checkout security tooling
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha }}
+          path: release-source
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Audit the release dependency graph
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          case "$PROFILE" in
+            desktop) pnpm check:dependencies --root release-source --security-only --workspace . --workspace mobile --workspace config/audit-tools ;;
+            mobile) pnpm check:dependencies --root release-source --security-only --workspace mobile ;;
+            docs) pnpm check:dependencies --root release-source --security-only --workspace docs/site ;;
+            cloud) pnpm check:dependencies --root release-source --security-only --workspace cloud ;;
+            *) exit 1 ;;
+          esac
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: release-dependency-security-node
+          path: tmp/dependency-policy/*.json
+          if-no-files-found: error
+
+  rust:
+    if: inputs.profile == 'desktop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate release source
+        env:
+          SOURCE_SHA: ${{ inputs.sha }}
+        run: '[[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 1'
+      - name: Checkout security tooling
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Checkout release source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha }}
+          path: release-source
+          persist-credentials: false
+      - uses: ./.github/actions/install-node-dependencies
+      - name: Restore pinned scanner
+        id: scanner
+        uses: actions/cache@v5
+        with:
+          path: ~/.cargo/bin/cargo-deny
+          key: cargo-deny-0.20.2-${{ runner.os }}-${{ runner.arch }}
+      - name: Install pinned scanner
+        if: steps.scanner.outputs.cache-hit != 'true'
+        run: cargo install cargo-deny --locked --version 0.20.2
+      - name: Audit native Rust dependencies
+        run: pnpm check:dependencies:rust --root release-source --security-only
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: release-dependency-security-rust
+          path: tmp/dependency-policy/*.log
+          if-no-files-found: error

@@ -31,8 +31,21 @@ defaults:
     working-directory: cloud
 
 jobs:
+  dependency-security:
+    if: vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && inputs.mode == 'publish'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-dependency-security.yml
+    with:
+      sha: ${{ github.sha }}
+      profile: cloud
+
   publish:
-    if: ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' }}
+    needs: dependency-security
+    if: >-
+      ${{ !cancelled() && vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' &&
+      ((inputs.mode == 'publish' && needs.dependency-security.result == 'success') ||
+      (inputs.mode == 'mirror-staging' && needs.dependency-security.result == 'skipped')) }}
     runs-on: blacksmith-2vcpu-ubuntu-2204
     environment: production
     env:
@@ -45,6 +58,8 @@ jobs:
       MIRROR_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
 
       - name: Validate the exact publish request before authentication
         shell: bash

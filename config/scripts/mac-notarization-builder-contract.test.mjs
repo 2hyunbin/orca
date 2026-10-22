@@ -137,7 +137,11 @@ describe('macOS build workflow policy', () => {
       './.github/workflows/qualified-orcad-template.yml'
     )
     const job = source.jobs['build-mac']
-    expect(job.needs).toBe('qualification-template')
+    expect(job.needs).toEqual([
+      'qualification-template',
+      'dependency-source',
+      'dependency-security'
+    ])
     expect(job.if).toContain('!cancelled()')
     expect(job.if).toContain("needs.qualification-template.result == 'success'")
     const publish = job.steps.find((step) => step.name === 'Publish release artifacts (macOS)')

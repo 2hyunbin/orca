@@ -60,7 +60,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  dependency-source:
+    if: github.repository == 'stablyai/orca'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'main' || inputs.ref }}
+          persist-credentials: false
+      - id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  dependency-security:
+    needs: dependency-source
+    uses: ./.github/workflows/release-dependency-security.yml
+    with:
+      sha: ${{ needs.dependency-source.outputs.sha }}
+
   cut:
+    needs: [dependency-source, dependency-security]
     # Why: this job bumps package.json and fast-forwards main. On a fork with
     # Actions enabled, the scheduled cut would run against the fork's main and
     # diverge it (version line) every slot, conflicting every PR back upstream.
@@ -106,7 +127,7 @@ jobs:
       - name: Checkout ref
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'schedule' && 'main' || inputs.ref }}
+          ref: ${{ needs.dependency-source.outputs.sha }}
           fetch-depth: 0
           # Version recovery needs complete history and tags, but not historical file contents.
           filter: blob:none
@@ -332,6 +353,13 @@ jobs:
           echo "Already ran this slot: ${{ steps.existing.outputs.already_ran }}"
           echo "Reason: ${{ steps.existing.outputs.reason }}"
 
+      - name: Checkout trusted release recovery checks
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-security
+          persist-credentials: false
+
       - name: Publish complete release-cut RC drafts from prior runs
         id: publish_drafts
         # Why: a manual RC dispatch should unstick any complete RC draft before
@@ -339,7 +367,7 @@ jobs:
         if: steps.window.outputs.allowed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node config/scripts/publish-complete-draft-releases.mjs
+        run: node .release-security/config/scripts/publish-complete-draft-releases.mjs
 
       - name: Compute next version
         id: version
@@ -440,19 +468,10 @@ jobs:
 
           tag_matches_current_ref() {
             local tag="$1"
-            local tag_commit
-            local head_commit
-            if ! tag_commit="$(git rev-parse "${tag}^{}" 2>/dev/null)"; then
-              return 1
-            fi
-            head_commit="$(git rev-parse HEAD)"
-            if [[ "$tag_commit" == "$head_commit" ]]; then
-              return 0
-            fi
-
-            local tag_parent
-            tag_parent="$(git rev-parse "${tag_commit}^" 2>/dev/null)" || return 1
-            [[ "$tag_parent" == "$head_commit" ]]
+            TAG_TO_RECOVER="$tag" node --input-type=module - <<'NODE'
+          import { isTagBuiltFromCurrentRef } from './.release-security/config/scripts/publish-complete-draft-releases.mjs'
+          process.exitCode = isTagBuiltFromCurrentRef(process.env.TAG_TO_RECOVER) ? 0 : 1
+          NODE
           }
 
           release_draft_state() {

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -24,6 +24,8 @@ function withGitRepo(run) {
     git(dir, ['init', '--initial-branch=main'])
     git(dir, ['config', 'user.name', 'Test Bot'])
     git(dir, ['config', 'user.email', 'test@example.com'])
+    writeFileSync(join(dir, 'package.json'), '{"version":"1.0.0","dependencies":{}}')
+    git(dir, ['add', 'package.json'])
     run(dir)
   } finally {
     rmSync(dir, { recursive: true, force: true })
@@ -92,6 +94,8 @@ describe('isTagBuiltFromCurrentRef', () => {
     withGitRepo((repo) => {
       commit(repo, 'initial')
       const source = git(repo, ['rev-parse', 'HEAD'])
+      writeFileSync(join(repo, 'package.json'), '{"version":"1.4.36-rc.6","dependencies":{}}')
+      git(repo, ['add', 'package.json'])
       commit(repo, 'release: v1.4.36-rc.6')
       git(repo, ['tag', 'v1.4.36-rc.6'])
       git(repo, ['checkout', source])
@@ -110,6 +114,25 @@ describe('isTagBuiltFromCurrentRef', () => {
       expect(isTagBuiltFromCurrentRef('v1.4.36-rc.6', { cwd: repo })).toBe(false)
     })
   })
+
+  it.each(['pnpm-lock.yaml', 'package.json', 'runtime.js'])(
+    'rejects a child tag that changes %s beyond the version bump',
+    (file) => {
+      withGitRepo((repo) => {
+        commit(repo, 'initial')
+        const source = git(repo, ['rev-parse', 'HEAD'])
+        writeFileSync(
+          join(repo, file),
+          '{"version":"1.4.36-rc.6","dependencies":{"unexpected":"1"}}'
+        )
+        git(repo, ['add', file])
+        commit(repo, 'release with extra changes')
+        git(repo, ['tag', 'v1.4.36-rc.6'])
+        git(repo, ['checkout', source])
+        expect(isTagBuiltFromCurrentRef('v1.4.36-rc.6', { cwd: repo })).toBe(false)
+      })
+    }
+  )
 })
 
 describe('publishCompleteDraftReleases', () => {

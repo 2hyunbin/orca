@@ -39,7 +39,12 @@ test('the whole surface stays inert until the owner enables cloud operations', (
   const guard = jobIf(deploy().text)
   assert.ok(guard.includes("vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true'"), guard)
   assert.ok(guard.includes("github.ref == 'refs/heads/main'"), guard)
-  assert.equal(jobs(workflow).length, 1, 'a second job would need its own gate')
+  assert.deepEqual(jobs(workflow).map((job) => job.id).sort(), ['dependency-security', 'deploy'])
+  const security = jobs(workflow).find((job) => job.id === 'dependency-security')
+  assert.ok(jobIf(security.text).includes("vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true'"))
+  assert.ok(jobIf(security.text).includes("github.ref == 'refs/heads/main'"))
+  assert.match(security.text, /contents: read/)
+  assert.match(deploy().text, /needs: dependency-security/)
 })
 
 test('it authenticates through Workload Identity and holds no repository secret', () => {

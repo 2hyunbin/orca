@@ -26,7 +26,17 @@ defaults:
     working-directory: cloud
 
 jobs:
+  dependency-security:
+    if: vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-dependency-security.yml
+    with:
+      sha: ${{ inputs.source_sha }}
+      profile: cloud
+
   deploy:
+    needs: dependency-security
     if: >-
       ${{ vars.ORCA_CLOUD_OPERATIONS_ENABLED == 'true' &&
       github.ref == 'refs/heads/main' }}
@@ -53,6 +63,8 @@ jobs:
       SOURCE_SHA: ${{ inputs.source_sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
 
       - name: Require the explicit deploy confirmation
         shell: bash

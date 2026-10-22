@@ -24,7 +24,16 @@ on:
         type: string
 
 jobs:
+  dependency-security:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-dependency-security.yml
+    with:
+      sha: ${{ github.sha }}
+      profile: mobile
+
   ios-build:
+    needs: dependency-security
     # GitHub-hosted macOS runner: required for Xcode. Expo SDK 55's
     # expo-modules-core declares swift_version 6.0 and uses Swift 6 syntax
     # (@MainActor isolation). Xcode 16.x (macos-15) can't even parse it
@@ -51,6 +60,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
@@ -172,6 +183,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
 
       - name: Setup Ruby and fastlane
         uses: ruby/setup-ruby@v1

@@ -198,13 +198,23 @@ jobs:
           fi
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
 
+  dependency-security:
+    needs: release_gate
+    if: needs.release_gate.outputs.deploy == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/release-dependency-security.yml
+    with:
+      sha: ${{ needs.release_gate.outputs.commit_sha }}
+      profile: docs
+
   production:
     name: Production
     if: >-
       (github.event_name == 'release' || github.event_name == 'workflow_dispatch') &&
       needs.release_gate.result == 'success' &&
       needs.release_gate.outputs.deploy == 'true'
-    needs: release_gate
+    needs: [release_gate, dependency-security]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
