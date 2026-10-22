@@ -196,17 +196,19 @@ describe('SkillFreshnessUpdateDialog', () => {
 
     expect(container.textContent).toContain('1 update available')
     expect(container.querySelector('[data-skill-row="orca-cli"]')?.textContent).toBe(
-      'orca-cliWill update'
+      'orca-cliUpdate'
     )
     expect(container.querySelector('[data-skill-row="orchestration"]')).toBeNull()
     expect(container.textContent).toContain('2 skills are up to date.')
     expect(button('Update 1 skill').disabled).toBe(false)
 
-    click(button('Show all locations'))
+    click(button('Show folders'))
     const row = container.querySelector('[data-skill-row="orca-cli"]')?.textContent ?? ''
-    expect(row).toContain('Shared folder~/.agents/skills/orca-cliWill update')
-    expect(row).toContain('Claude Code~/.claude/skills/orca-cliLink, no change')
+    expect(row).toContain('Shared folder · ~/.agents/skills/orca-cli')
+    expect(row).toContain('Claude Code · ~/.claude/skills/orca-cli')
     expect(container.querySelector('[data-skill-row="orchestration"]')).not.toBeNull()
+    click(button('Hide folders'))
+    expect(container.textContent).not.toContain('~/.agents/skills/orca-cli')
   })
 
   it.each([
@@ -238,7 +240,7 @@ describe('SkillFreshnessUpdateDialog', () => {
     render()
 
     const row = container.querySelector('[data-skill-row="orca-cli"]')
-    expect(row?.textContent).toContain("Claude Code: You've changed this copy")
+    expect(row?.textContent).toContain('Not updated: you edited this copy')
     expect(row?.textContent).toContain("Replace with Orca's copy (keeps a backup)")
   })
 
@@ -257,7 +259,7 @@ describe('SkillFreshnessUpdateDialog', () => {
       forced.resolve(forcedPlan())
       await forced.promise
     })
-    expect(container.textContent).toContain('Will replace')
+    expect(container.textContent).toContain('Replace')
     skillsApi.bundledExecute.mockResolvedValueOnce(doneResult(forcedPlan()))
     click(button('Update 1 skill'))
     await flush()
@@ -281,10 +283,10 @@ describe('SkillFreshnessUpdateDialog', () => {
       planDigest: plan.planDigest,
       request: { force: [] }
     })
-    expect(container.textContent).toContain('Updated 1 skill · 1 left alone')
+    expect(container.textContent).toContain('Updated 1 skill · 1 not updated')
     const row = container.querySelector('[data-skill-row="orca-cli"]')?.textContent ?? ''
     expect(row).toContain('Updated')
-    expect(row).toContain("Claude Code: You've changed this copy")
+    expect(row).toContain('Not updated: you edited this copy')
     expect(mocks.notifyChanged).toHaveBeenCalled()
     expect(button('Done')).toBeTruthy()
   })
@@ -350,6 +352,18 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(getSkillUpdateRun(LOCAL_SKILL_UPDATE_TARGET).state).toBe('idle')
     expect(container.querySelector('[data-dialog-open]')).toBeNull()
   })
+
+  it.each(['edited', 'other'] as const)(
+    'reports everything else current when only %s copies remain',
+    (reason) => {
+      mocks.plan = planOf([
+        planEntry('orca-cli', [planOp('leave', EDITED_PATH, { reason, replaceable: true })])
+      ])
+      render()
+      expect(container.textContent).toContain('Everything else is up to date')
+      expect(container.textContent).not.toContain('left alone')
+    }
+  )
 
   it('offers no Update when nothing would change', () => {
     mocks.plan = planOf([sharedEntry('orca-cli', 'keep')])

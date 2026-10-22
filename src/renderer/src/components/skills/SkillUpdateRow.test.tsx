@@ -5,11 +5,14 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BundledSkillOp, BundledSkillOutcome } from '../../../../shared/bundled-skill-plan'
 import {
+  BUNDLED_SKILL_PLAN_OP_TEXT,
   summarizeBundledSkillOutcome,
   summarizeBundledSkillPlan
 } from '../../../../shared/bundled-skill-summary'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { SkillUpdateRow } from './SkillUpdateRow'
+import { locationStateText } from './skill-plan-op-copy'
+import { bundledSkillLocation } from '../../../../shared/bundled-skill-locations'
 import { planEntry, planOf, planOp } from './bundled-skill-plan-fixtures.test-support'
 
 let root: Root | null = null
@@ -46,18 +49,65 @@ function row(view: HTMLElement): string {
 }
 
 describe('SkillUpdateRow', () => {
+  it.each([
+    ['update', 'Update'],
+    ['restore', 'Repair'],
+    ['write', 'Install'],
+    ['copy', 'Install'],
+    ['link', 'Link'],
+    ['replace', 'Replace']
+  ] as const)('uses the short %s action in the renderer and CLI', (kind, label) => {
+    const location = bundledSkillLocation(planOp(kind, CLAUDE), '/home/u')
+    expect(locationStateText(location)).toBe(label)
+    expect(BUNDLED_SKILL_PLAN_OP_TEXT[kind]).toBe(label)
+  })
+
+  it('reports an unknown reason without claiming the copy was updated', async () => {
+    const view = await render(
+      <SkillUpdateRow
+        skill={skillOf([planOp('leave', CLAUDE)])}
+        phase="plan"
+        showLocations={false}
+      />
+    )
+    expect(row(view)).toBe('orca-cliNot updated: this copy was kept as it is')
+  })
+
+  it.each([
+    ['edited', 'you edited this copy'],
+    ['other', 'a different skill already uses this name'],
+    ['unwritable', "Orca can't write to this folder"],
+    ['unreadable', "Orca can't read every file in this copy"],
+    ['busy', 'another skill install is still finishing here'],
+    ['shared-not-current', 'the shared copy this folder uses is not Orca’s']
+  ] as const)(
+    'explains %s copies without repeating the status on folder lines',
+    async (reason, text) => {
+      const view = await render(
+        <SkillUpdateRow
+          skill={skillOf([planOp('leave', CLAUDE, { reason })])}
+          phase="plan"
+          showLocations
+        />
+      )
+      expect(row(view)).toBe(`orca-cliNot updated: ${text}Claude Code · ~/.claude/skills/orca-cli`)
+    }
+  )
+
   it('says what Update does, and lists locations only on request', async () => {
     const skill = skillOf([planOp('update', SHARED), planOp('keep', CLAUDE)])
     expect(
       row(await render(<SkillUpdateRow skill={skill} phase="plan" showLocations={false} />))
-    ).toBe('orca-cliWill update')
+    ).toBe('orca-cliUpdate')
     await act(async () => root?.unmount())
     const shown = row(await render(<SkillUpdateRow skill={skill} phase="plan" showLocations />))
-    expect(shown).toContain('Shared folder~/.agents/skills/orca-cliWill update')
-    expect(shown).toContain('Claude Code~/.claude/skills/orca-cliNo change')
+    expect(shown).toContain('Shared folder · ~/.agents/skills/orca-cli')
+    expect(shown).toContain('Claude Code · ~/.claude/skills/orca-cli')
+    expect(shown.match(/Update/gu)).toHaveLength(1)
+    expect(shown).not.toContain('No change')
   })
 
-  it('names a copy left alone by agent and offers Replace only where it is allowed', async () => {
+  it('reports a copy not updated without an agent prefix and offers Replace only where it is allowed', async () => {
     const onReplaceChange = vi.fn()
     const view = await render(
       <SkillUpdateRow
@@ -70,8 +120,9 @@ describe('SkillUpdateRow', () => {
         replace={{ isReplaced: () => false, onReplaceChange }}
       />
     )
-    expect(row(view)).toContain("Shared folder: Orca can't write to this folder")
-    expect(row(view)).toContain("Claude Code: You've changed this copy")
+    expect(row(view)).toContain("Not updated: Orca can't write to this folder")
+    expect(row(view)).toContain('Not updated: you edited this copy')
+    expect(row(view)).not.toContain('Claude Code:')
     const checkboxes = view.querySelectorAll('[role="checkbox"]')
     expect(checkboxes).toHaveLength(1)
     await act(async () => {
@@ -100,6 +151,6 @@ describe('SkillUpdateRow', () => {
         showLocations={false}
       />
     )
-    expect(row(view)).toBe("orca-cliUpdatedClaude Code: You've changed this copy")
+    expect(row(view)).toBe('orca-cliUpdatedNot updated: you edited this copy')
   })
 })
