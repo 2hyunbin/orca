@@ -107,6 +107,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true
 
       - name: Initialize the exact staging backend
         if: ${{ inputs.mode != 'restore-admission' }}
@@ -649,12 +650,13 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.15.8
+          terraform_version: 1.17.0
           terraform_wrapper: false
 
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true
 
       - name: Initialize the exact staging backend
         run: node dev/scripts/infra.mjs init --env staging
