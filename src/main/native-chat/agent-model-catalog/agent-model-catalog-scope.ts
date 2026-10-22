@@ -60,13 +60,11 @@ export async function resolveAgentModelCatalogScope(
   }
   const resolve = (lookup: AgentModelCatalogLookup) =>
     probe?.resolve?.(home, cwd, lookup).catch(() => null)
+  const scopeKey = (resolved: AgentModelCatalogResolvedProbe | null | undefined) =>
+    agentModelCatalogScopeFingerprint(base, cwd, resolved?.identity)
   let resolved = await resolve(params.savedOnly ? 'saved' : 'snapshot')
   // Only a read that will list waits on a shell rerun to find a newly installed CLI, a new scope.
-  if (
-    !params.savedOnly &&
-    (!resolved ||
-      deps.store.probeDue(agentModelCatalogScopeFingerprint(base, cwd, resolved.identity)))
-  ) {
+  if (!params.savedOnly && (!resolved || deps.store.probeDue(scopeKey(resolved)))) {
     resolved = await resolve('recover')
   }
   if (probe?.resolve && !resolved) {
@@ -74,7 +72,7 @@ export async function resolveAgentModelCatalogScope(
   }
   return {
     base,
-    fingerprint: agentModelCatalogScopeFingerprint(base, cwd, resolved?.identity),
+    fingerprint: scopeKey(resolved),
     exact: true,
     cwd,
     ...(resolved ? { resolved } : {})

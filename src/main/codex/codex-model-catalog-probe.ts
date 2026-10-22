@@ -57,14 +57,11 @@ export function createCodexModelCatalogProbe(
   ) => {
     const accountHomePath = requireLegacyAgentSessionAccountHome(accountHome).path
     const overlay = { ...deps.resolveEnv?.() }
+    const readEnvironment =
+      lookup === 'saved' ? deps.resolveSavedEnvironment : deps.resolveEnvironment
     const { command, environment } = await resolveCodexStructuredInvocation({
       ...deps,
-      resolveEnvironment: async () => ({
-        ...(await (lookup === 'saved'
-          ? deps.resolveSavedEnvironment?.()
-          : deps.resolveEnvironment?.())),
-        ...overlay
-      }),
+      resolveEnvironment: async () => ({ ...(await readEnvironment?.()), ...overlay }),
       ...(lookup === 'recover' ? {} : { refreshEnvironmentAfterMiss: undefined }),
       ...(cwd ? { resolveWorkingDirectory: () => cwd } : {})
     })
