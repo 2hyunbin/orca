@@ -14,7 +14,8 @@ import { MobileNativeChatPromptStrip } from './MobileNativeChatPromptStrip'
  *  view toggle); `ask` arrives already nulled once answered. */
 export function MobileNativeChatPromptCard({
   ask,
-  onInteract,
+  expanded = false,
+  compact = false,
   askKey,
   onDismissAsk,
   onAnswerAsk,
@@ -30,7 +31,8 @@ export function MobileNativeChatPromptCard({
   question,
   onAnswerQuestion
 }: {
-  onInteract?: () => void
+  expanded?: boolean
+  compact?: boolean
   ask?: AskPrompt | null
   askKey?: string | null
   onDismissAsk?: () => void
@@ -72,7 +74,8 @@ export function MobileNativeChatPromptCard({
       <MobileNativeChatAsk
         key={askKey ?? 'ask'}
         prompt={ask}
-        onInteract={onInteract}
+        expanded={expanded}
+        compact={compact}
         onAnswer={async (selections) => {
           const accepted = (await onAnswerAsk?.(ask, selections)) ?? false
           if (accepted) {
@@ -111,7 +114,17 @@ export function MobileNativeChatPromptCard({
   // card keeps its selections.
   return (
     <>
-      <View style={collapsedPrompt ? styles.collapsed : ask ? styles.ask : undefined}>{card}</View>
+      <View
+        style={
+          collapsedPrompt
+            ? styles.collapsed
+            : ask
+              ? [styles.ask, expanded && styles.expanded]
+              : undefined
+        }
+      >
+        {card}
+      </View>
       {collapsedPrompt ? (
         <MobileNativeChatPromptStrip
           title={collapsedPrompt.title}
@@ -123,7 +136,8 @@ export function MobileNativeChatPromptCard({
 }
 
 const styles = StyleSheet.create({
-  ask: { maxHeight: '50%', flexShrink: 1, minHeight: 0 },
+  ask: { maxHeight: '65%', flexShrink: 1, minHeight: 0 },
+  expanded: { flex: 1, maxHeight: '100%' },
   collapsed: { display: 'none' },
   terminalScroll: { flexShrink: 1, minHeight: 0 },
   terminalCard: {

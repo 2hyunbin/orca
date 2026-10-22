@@ -96,7 +96,7 @@ async function openPrompt(viewport, query = '') {
 
 async function readPromptLayout(page, footerLabel = 'Submit') {
   return page.evaluate(
-    ({ question, footerLabel }) => {
+    ({ footerLabel }) => {
       const rect = (node) => {
         if (!node) {
           throw new Error('Missing chat layout element')
@@ -110,11 +110,9 @@ async function readPromptLayout(page, footerLabel = 'Submit') {
           clientHeight: node.clientHeight
         }
       }
-      const scrolls = [...document.querySelectorAll('*')].filter((node) =>
-        ['auto', 'scroll'].includes(getComputedStyle(node).overflowY)
-      )
-      const chat = scrolls.find((node) => node.textContent.includes('Chat context'))
-      const prompt = scrolls.find((node) => node.textContent.includes(question))
+      const chat = document.querySelector('[data-testid="native-chat-conversation-context"]')
+      const prompt = document.querySelector('[data-testid="native-chat-ask-body"]')
+      const header = document.querySelector('[data-testid="native-chat-ask-header"]')
       const text = [...document.querySelectorAll('*')].find(
         (node) => node.childElementCount === 0 && node.textContent === footerLabel
       )
@@ -123,8 +121,10 @@ async function readPromptLayout(page, footerLabel = 'Submit') {
       )
       return {
         chat: rect(chat),
+        header: rect(header),
         prompt: rect(prompt),
         footerInScroll: prompt.contains(text?.parentElement),
+        inlineActions: header.contains(text?.parentElement),
         footer: rect(text?.parentElement?.parentElement),
         submit: rect(text?.parentElement),
         cancel: rect(cancel?.parentElement),
@@ -133,7 +133,7 @@ async function readPromptLayout(page, footerLabel = 'Submit') {
         viewportHeight: innerHeight
       }
     },
-    { question: PROMPT_QUESTION, footerLabel }
+    { footerLabel }
   )
 }
 
@@ -146,15 +146,11 @@ async function recordLayout(page, name, layout) {
 }
 
 async function scrollQuestionToEnd(page) {
-  return page.evaluate((question) => {
-    const prompt = [...document.querySelectorAll('*')].find(
-      (node) =>
-        ['auto', 'scroll'].includes(getComputedStyle(node).overflowY) &&
-        node.textContent.includes(question)
-    )
+  return page.evaluate(() => {
+    const prompt = document.querySelector('[data-testid="native-chat-ask-body"]')
     prompt.scrollTop = prompt.scrollHeight
     return prompt.scrollTop
-  }, PROMPT_QUESTION)
+  })
 }
 
 const CASES = [
@@ -162,6 +158,7 @@ const CASES = [
   { width: 315, height: 540, keyboard: 0 },
   { width: 375, height: 350, keyboard: 0 },
   { width: 375, height: 650, keyboard: 300 },
+  { width: 874, height: 402, keyboard: 0 },
   { width: 375, height: 350, keyboard: 0, steps: true }
 ]
 
@@ -171,57 +168,64 @@ const INSET_CASES = [
   { width: 375, height: 650, keyboard: 300, bottom: 34, chrome: 88 }
 ]
 
-describeRender('native chat question cards in a constrained viewport', () => {
-  it('keeps an editable draft mounted while rotating an open question above the keyboard', async () => {
+const composerField = (page) =>
+  page.getByPlaceholder('Ask anything, @ to mention files, / for commands')
+const answerField = (page) => page.getByPlaceholder('Type your answer', { exact: true })
+const viewConversation = (page) =>
+  page.getByRole('button', { name: 'View conversation', exact: true })
+
+describeRender('native chat question answering surface', () => {
+  it('preserves composer identity, attachments and answer drafts through context viewing and rotation', async () => {
     const { page, errors } = await openPrompt(
       { width: 402, height: 874 },
-      '?keyboard=208&bottom=21&chrome=62'
+      '?keyboard=208&bottom=21&chrome=62&attachment=1'
     )
     try {
-      const composer = page.getByPlaceholder('Ask anything, @ to mention files, / for commands')
+      const composer = composerField(page)
+      expect(await composer.isVisible()).toBe(false)
+      await viewConversation(page).click({ timeout: 3000 })
       await composer.fill('Draft survives rotation\n'.repeat(8))
       await composer.evaluate((node) => {
         node.dataset.rotationWitness = 'same-field'
       })
-      await page.setViewportSize({ width: 874, height: 402 })
-      await expect.poll(async () => (await readPromptLayout(page)).chat.height).toBeGreaterThan(24)
-      const layout = await readPromptLayout(page)
-      expect(layout.composer.height).toBeLessThan(80)
-      expect(layout.prompt.height).toBeGreaterThanOrEqual(22)
-      expect(layout.composer.bottom).toBeLessThanOrEqual(402 - 208 - 21 + 1)
-      expect(layout.documentHeight).toBeLessThanOrEqual(402)
-      await composer.fill('Edited in landscape')
-      expect(await composer.getAttribute('data-rotation-witness')).toBe('same-field')
-      await page.getByText(PROMPT_QUESTION, { exact: true }).click()
-      await scrollQuestionToEnd(page)
+      expect(await page.getByLabel('Remove image', { exact: true }).isVisible()).toBe(true)
+      await page.getByLabel('Expand', { exact: true }).click({ timeout: 3000 })
       await page.getByText('Other…', { exact: true }).click()
-      await page.getByPlaceholder('Type your answer', { exact: true }).fill('Keep context')
-      expect(await composer.isVisible()).toBe(false)
-      await page.getByText('Submit', { exact: true }).click()
-      expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toEqual([
-        { indices: [], other: 'Keep context' }
-      ])
-      await page.evaluate(() => {
-        for (const node of document.querySelectorAll('*')) {
-          if (['auto', 'scroll'].includes(getComputedStyle(node).overflowY)) {
-            node.scrollTop = 0
-          }
-        }
-      })
-      await page.getByLabel('Collapse', { exact: true }).click()
-      expect(await composer.inputValue()).toBe('Edited in landscape')
-      await composer.focus()
-      expect(await composer.isVisible()).toBe(true)
-      await page.getByLabel('Expand', { exact: true }).click()
-      expect(await page.getByPlaceholder('Type your answer', { exact: true }).inputValue()).toBe(
-        'Keep context'
-      )
-      await scrollQuestionToEnd(page)
-      await page.getByText('Cancel', { exact: true }).click()
-      expect(await page.evaluate(() => globalThis.__orcaPromptViewportCancels)).toBe(1)
-      await page.setViewportSize({ width: 402, height: 874 })
+      await answerField(page).fill('Keep context')
+      await page.setViewportSize({ width: 874, height: 402 })
+      await expect.poll(async () => (await readPromptLayout(page)).chat.height).toBe(0)
+      await expect
+        .poll(async () => (await readPromptLayout(page)).prompt.height)
+        .toBeGreaterThanOrEqual(44)
+      const layout = await readPromptLayout(page)
+      expect(
+        layout.prompt.height,
+        'editing viewport above tall landscape IME'
+      ).toBeGreaterThanOrEqual(44)
+      expect(layout.composer.height).toBe(0)
+      expect(layout.header.bottom).toBeLessThanOrEqual(402 - 208 - 21)
+      expect(layout.documentHeight).toBeLessThanOrEqual(402)
+      await answerField(page).fill('Edited in landscape')
+      const input = await answerField(page).boundingBox()
+      expect(input.height).toBeGreaterThanOrEqual(44)
+      await expect
+        .poll(async () => {
+          const box = await answerField(page).boundingBox()
+          const body = await page.getByTestId('native-chat-ask-body').boundingBox()
+          return box.y + box.height <= body.y + body.height + 1 && box.y >= body.y - 1
+        })
+        .toBe(true)
+      await viewConversation(page).click({ timeout: 3000 })
       expect(await composer.getAttribute('data-rotation-witness')).toBe('same-field')
-      expect(await composer.inputValue()).toBe('Edited in landscape')
+      expect(await composer.inputValue()).toBe('Draft survives rotation\n'.repeat(8))
+      expect(await page.getByLabel('Remove image', { exact: true }).isVisible()).toBe(true)
+      expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toBeUndefined()
+      await page.getByLabel('Expand', { exact: true }).click({ timeout: 3000 })
+      expect(await answerField(page).inputValue()).toBe('Edited in landscape')
+      await recordLayout(page, 'landscape-keyboard-answer-controls', await readPromptLayout(page))
+      await page.setViewportSize({ width: 402, height: 874 })
+      expect(await answerField(page).inputValue()).toBe('Edited in landscape')
+      await recordLayout(page, 'portrait-keyboard-answer', await readPromptLayout(page))
       expect(errors).toEqual([])
     } finally {
       await page.close()
@@ -235,11 +239,11 @@ describeRender('native chat question cards in a constrained viewport', () => {
     )
     try {
       const answer = page.getByRole('button', { name: 'Answer in terminal', exact: true })
-      await answer.scrollIntoViewIfNeeded()
       await answer.click()
       expect(await page.evaluate(() => globalThis.__orcaPromptViewportTerminalNavigations)).toBe(1)
       const layout = await answer.boundingBox()
       expect(layout.y + layout.height).toBeLessThanOrEqual(650 - 300 - 34)
+      expect(await composerField(page).isVisible()).toBe(true)
       expect(errors).toEqual([])
     } finally {
       await page.close()
@@ -247,47 +251,38 @@ describeRender('native chat question cards in a constrained viewport', () => {
   })
 
   it.each(INSET_CASES)(
-    'keeps a readable question with safe area $bottom, keyboard $keyboard and session chrome $chrome',
+    'reserves readable answering space with safe area $bottom, keyboard $keyboard and chrome $chrome',
     async ({ width, height, keyboard, bottom, chrome }) => {
       const { page, errors } = await openPrompt(
         { width, height },
         `?keyboard=${keyboard}&bottom=${bottom}&chrome=${chrome}`
       )
       try {
-        await expect.poll(async () => (await readPromptLayout(page)).footerInScroll).toBe(true)
         const layout = await readPromptLayout(page)
-        await recordLayout(
-          page,
-          `${width}-${height}-keyboard-${keyboard}-bottom-${bottom}-chrome-${chrome}`,
-          layout
-        )
         expect(
           layout.prompt.height,
-          'the question retains a readable scroll viewport'
-        ).toBeGreaterThanOrEqual(44)
-        expect(layout.chat.height, 'some transcript context stays visible').toBeGreaterThanOrEqual(
-          24
-        )
-        expect(layout.composer.bottom).toBeLessThanOrEqual(height - keyboard - bottom + 1)
+          'answer body has room beyond one touch target'
+        ).toBeGreaterThanOrEqual(100)
+        expect(layout.chat.height).toBe(0)
+        expect(layout.composer.height).toBe(0)
+        expect(layout.footerInScroll).toBe(false)
+        expect(layout.submit.bottom).toBeLessThanOrEqual(height - keyboard - bottom + 1)
+        expect(layout.header.top).toBeGreaterThanOrEqual(chrome)
         expect(layout.documentHeight).toBeLessThanOrEqual(height)
-        expect(layout.footerInScroll).toBe(true)
-        expect(await scrollQuestionToEnd(page)).toBeGreaterThan(0)
-        const controls = await readPromptLayout(page)
+        await page.getByText('Other…', { exact: true }).click()
+        await answerField(page).fill('Readable above the keyboard')
+        const input = await answerField(page).boundingBox()
+        expect(input.y + input.height).toBeLessThanOrEqual(layout.footer.top + 1)
+        expect(input.y).toBeGreaterThanOrEqual(layout.header.bottom - 1)
+        expect(await viewConversation(page).isVisible()).toBe(true)
         await recordLayout(
           page,
-          `${width}-${height}-keyboard-${keyboard}-bottom-${bottom}-chrome-${chrome}-controls`,
-          controls
+          `${width}-${height}-keyboard-${keyboard}-chrome-${chrome}-editing`,
+          await readPromptLayout(page)
         )
-        for (const action of [controls.cancel, controls.submit]) {
-          expect(action.top).toBeGreaterThanOrEqual(controls.prompt.top)
-          expect(action.bottom).toBeLessThanOrEqual(controls.prompt.bottom)
-        }
-        await page.getByText('Cancel', { exact: true }).click()
-        expect(await page.evaluate(() => globalThis.__orcaPromptViewportCancels)).toBe(1)
-        await page.getByText('Persist across reload', { exact: true }).click()
-        await page.getByText('Submit', { exact: true }).click()
+        await page.getByText('Submit', { exact: true }).click({ timeout: 3000 })
         expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toEqual([
-          { indices: [0] }
+          { indices: [], other: 'Readable above the keyboard' }
         ])
         expect(errors).toEqual([])
       } finally {
@@ -297,40 +292,39 @@ describeRender('native chat question cards in a constrained viewport', () => {
   )
 
   it.each(CASES)(
-    'shares $width×$height with keyboard lift $keyboard and steps $steps',
-    async (testCase) => {
-      const { width, height, keyboard, steps } = testCase
+    'keeps one answer surface in $width×$height with keyboard $keyboard and steps $steps',
+    async ({ width, height, keyboard, steps }) => {
       const { page, errors } = await openPrompt(
         { width, height },
         `?keyboard=${keyboard}${steps ? '&steps=2' : ''}`
       )
       try {
         const layout = await readPromptLayout(page, steps ? 'Next' : 'Submit')
+        expect(layout.composer.height).toBe(0)
+        expect(layout.prompt.height).toBeGreaterThanOrEqual(44)
+        expect(layout.prompt.scrollHeight).toBeGreaterThanOrEqual(layout.prompt.clientHeight)
+        expect(layout.header.bottom).toBeLessThanOrEqual(layout.prompt.top + 1)
+        expect(layout.prompt.bottom).toBeLessThanOrEqual(layout.footer.top + 1)
+        expect(layout.submit.bottom).toBeLessThanOrEqual(height - keyboard + 1)
+        if (!keyboard && (width < height || width < 568)) {
+          expect(layout.chat.height).toBeGreaterThanOrEqual(height * 0.35 - 1)
+        } else {
+          expect(layout.chat.height).toBe(0)
+        }
+        expect(await scrollQuestionToEnd(page)).toBe(
+          layout.prompt.scrollHeight - layout.prompt.clientHeight
+        )
+        expect((await readPromptLayout(page, steps ? 'Next' : 'Submit')).header).toEqual(
+          layout.header
+        )
+        expect((await readPromptLayout(page, steps ? 'Next' : 'Submit')).footer).toEqual(
+          layout.footer
+        )
+        expect(layout.documentHeight).toBeLessThanOrEqual(height)
         await recordLayout(
           page,
           `${width}-${height}-keyboard-${keyboard}${steps ? '-steps' : ''}`,
           layout
-        )
-        const available = layout.composer.top - layout.chat.top
-        expect(
-          layout.chat.height,
-          'chat keeps at least half the space above the composer'
-        ).toBeGreaterThanOrEqual(available / 2 - 1)
-        expect(
-          layout.prompt.height,
-          'the scrollable body retains a usable reading area'
-        ).toBeGreaterThanOrEqual(44)
-        expect(layout.prompt.scrollHeight).toBeGreaterThan(layout.prompt.clientHeight)
-        expect(layout.chat.bottom).toBeLessThanOrEqual(layout.prompt.top + 1)
-        expect(layout.prompt.bottom).toBeLessThanOrEqual(layout.footer.top + 1)
-        expect(layout.submit.bottom).toBeLessThanOrEqual(layout.composer.top)
-        expect(layout.cancel.bottom).toBeLessThanOrEqual(layout.composer.top)
-        expect(layout.composer.bottom).toBeLessThanOrEqual(height - keyboard + 1)
-        expect(layout.documentHeight).toBeLessThanOrEqual(height)
-        const scrolled = await scrollQuestionToEnd(page)
-        expect(scrolled, 'the question body actually scrolls').toBeGreaterThan(0)
-        expect((await readPromptLayout(page, steps ? 'Next' : 'Submit')).footer).toEqual(
-          layout.footer
         )
         expect(errors).toEqual([])
       } finally {
@@ -339,20 +333,29 @@ describeRender('native chat question cards in a constrained viewport', () => {
     }
   )
 
-  it('returns to a fixed footer when space grows and settles again when it shrinks', async () => {
+  it('combines actions and context in short landscape and restores the footer after rotating', async () => {
     const { page, errors } = await openPrompt(
-      { width: 375, height: 650 },
-      '?keyboard=300&bottom=34&chrome=88'
+      { width: 874, height: 402 },
+      '?keyboard=225&bottom=21&chrome=62'
     )
     try {
-      expect((await readPromptLayout(page)).footerInScroll).toBe(true)
-      await page.setViewportSize({ width: 375, height: 950 })
-      await expect.poll(async () => (await readPromptLayout(page)).footerInScroll).toBe(false)
+      await recordLayout(page, 'exceptionally-short-slot', await readPromptLayout(page))
+      await expect.poll(async () => (await readPromptLayout(page)).inlineActions).toBe(true)
+      expect((await readPromptLayout(page)).prompt.height).toBeGreaterThanOrEqual(44)
+      await page.getByText('Persist across reload', { exact: true }).click({ timeout: 3000 })
+      await page.getByText('Submit', { exact: true }).click({ timeout: 3000 })
+      expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toEqual([
+        { indices: [0] }
+      ])
+      await viewConversation(page).click({ timeout: 3000 })
+      expect(await page.getByTestId('native-chat-prompt-strip').isVisible()).toBe(true)
+      await page.getByLabel('Expand', { exact: true }).click({ timeout: 3000 })
+      await page.setViewportSize({ width: 402, height: 874 })
+      await expect.poll(async () => (await readPromptLayout(page)).inlineActions).toBe(false)
       const expanded = await readPromptLayout(page)
-      expect(expanded.prompt.height).toBeGreaterThanOrEqual(44)
-      expect(expanded.footer.bottom).toBeLessThanOrEqual(expanded.composer.top)
-      await page.setViewportSize({ width: 375, height: 650 })
-      await expect.poll(async () => (await readPromptLayout(page)).footerInScroll).toBe(true)
+      expect(expanded.prompt.height).toBeGreaterThanOrEqual(100)
+      await page.setViewportSize({ width: 874, height: 402 })
+      await expect.poll(async () => (await readPromptLayout(page)).inlineActions).toBe(true)
       const settled = await readPromptLayout(page)
       for (let frame = 0; frame < 4; frame++) {
         await page.evaluate(() => new Promise(requestAnimationFrame))
@@ -364,51 +367,41 @@ describeRender('native chat question cards in a constrained viewport', () => {
     }
   })
 
-  it('keeps a short question compact instead of filling half the conversation', async () => {
+  it('keeps a short question compact while retaining conversation context', async () => {
     const { page, errors } = await openPrompt({ width: 375, height: 900 }, '?short=1')
     try {
-      const chatHeight = await page.evaluate(() => {
-        const chat = [...document.querySelectorAll('*')].find(
-          (node) =>
-            ['auto', 'scroll'].includes(getComputedStyle(node).overflowY) &&
-            node.textContent.includes('Chat context')
-        )
-        return chat.getBoundingClientRect().height
-      })
-      expect(chatHeight).toBeGreaterThan(550)
+      const chat = await page.getByTestId('native-chat-conversation-context').boundingBox()
+      expect(chat.height).toBeGreaterThan(550)
+      expect(await composerField(page).isVisible()).toBe(false)
       expect(errors).toEqual([])
     } finally {
       await page.close()
     }
   })
 
-  it.each(['', '?keyboard=300&bottom=34&chrome=88'])(
-    'retains selections and Other text after collapse and expand, with %s',
-    async (query) => {
-      const { page, errors } = await openPrompt(
-        query ? { width: 375, height: 650 } : { width: 315, height: 540 },
-        query
-      )
-      try {
-        await page.getByText('Persist across reload', { exact: true }).click()
-        await page.getByText('Other…', { exact: true }).click()
-        await page
-          .getByPlaceholder('Type your answer', { exact: true })
-          .fill('Keep this answer after folding')
-        await page.getByLabel('Collapse', { exact: true }).click()
-        expect(await page.getByTestId('native-chat-prompt-strip').isVisible()).toBe(true)
-        await page.getByLabel('Expand', { exact: true }).click()
-        expect(await page.getByPlaceholder('Type your answer', { exact: true }).inputValue()).toBe(
-          'Keep this answer after folding'
+  it('resets each wizard page to its question while retaining revisited selections and text', async () => {
+    const { page, errors } = await openPrompt({ width: 375, height: 650 }, '?steps=2&keyboard=300')
+    try {
+      await page.getByText('Other…', { exact: true }).click()
+      await answerField(page).fill('First answer draft')
+      await page.getByText('Next', { exact: true }).click()
+      await expect
+        .poll(async () =>
+          page.getByTestId('native-chat-ask-body').evaluate((node) => node.scrollTop)
         )
-        await page.getByText('Submit', { exact: true }).click()
-        expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toEqual([
-          { indices: [0], other: 'Keep this answer after folding' }
-        ])
-        expect(errors).toEqual([])
-      } finally {
-        await page.close()
-      }
+        .toBe(0)
+      await page.getByText('Session only', { exact: true }).click()
+      await page.getByRole('tab', { name: 'Workspace', exact: true }).click()
+      expect(await answerField(page).inputValue()).toBe('First answer draft')
+      await page.getByRole('tab', { name: 'Details', exact: true }).click()
+      await page.getByText('Submit', { exact: true }).click({ timeout: 3000 })
+      expect(await page.evaluate(() => globalThis.__orcaPromptViewportAnswers)).toEqual([
+        { indices: [], other: 'First answer draft' },
+        { indices: [1] }
+      ])
+      expect(errors).toEqual([])
+    } finally {
+      await page.close()
     }
-  )
+  })
 })

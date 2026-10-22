@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { nativeChatTaskListPredecessors } from '../../../src/shared/native-chat-task-list-history'
 import {
   MobileNativeChatDisclosureContext,
@@ -234,16 +234,9 @@ export function MobileNativeChatView({
   const insets = useSafeAreaInsets()
   // Lift the composer clear of the keyboard, plus the bottom safe-area so it
   // never sits under the home indicator / nav bar (mirrors the terminal dock).
-  const [activeQuestionKey, setActiveQuestionKey] = useState<string | null>(null)
-  const questionKey = ask ? JSON.stringify([sendSurfaceId, promptKey, askKey, ask]) : null
   const { isLandscapePhone } = useResponsiveLayout()
-  const compactComposer = isLandscapePhone && keyboardInset > 0 && ask != null
-  const hideComposer =
-    compactComposer && !collapsedPrompt && questionKey != null && activeQuestionKey === questionKey
-  const releaseQuestionFocus = (action: () => void) => () => {
-    setActiveQuestionKey(null)
-    action()
-  }
+  const hideComposer = ask != null && !askRequiresTerminal && !collapsedPrompt && !micActive
+  const expandedQuestion = hideComposer && (isLandscapePhone || keyboardInset > 0)
   const bottomPad = keyboardInset > 0 ? keyboardInset + insets.bottom : insets.bottom
   const { fontScale, pinchGesture } = useMobileNativeChatPinchGesture()
 
@@ -370,37 +363,52 @@ export function MobileNativeChatView({
   return (
     <View style={[styles.root, { paddingBottom: bottomPad }]}>
       <View style={styles.conversation}>
-        {status === 'loading' && messages.length === 0 ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={colors.textSecondary} />
-          </View>
-        ) : (
-          <GestureHandlerRootView style={styles.listWrap}>
-            <MobileNativeChatDisclosureContext.Provider value={disclosures}>
-              <MobileNativeChatScrollRootsBoundary
-                {...{ rowKeys, layoutKey }}
-                roots={disclosures.roots}
-                runPlacements={rowKeys.runPlacements}
-              >
-                <GestureDetector gesture={pinchGesture}>
-                  <MobileNativeChatRowList
-                    {...{ tail, rowKeys, renderItem, footer, emptyStateView, onScroll, layoutKey }}
-                    {...{ header, hasHeader: hasMore === true, onNearTop: loadEarlierNearTop }}
-                    rows={turns.listMessages}
-                    runs={turns.presentation.workRuns.heads}
-                    roots={disclosures.roots}
-                    contentContainerStyle={styles.listContent}
-                  />
-                </GestureDetector>
-              </MobileNativeChatScrollRootsBoundary>
-            </MobileNativeChatDisclosureContext.Provider>
-            <MobileNativeChatFloatingControls
-              showJumpToTail={tail.showJumpToTail}
-              onJumpToTail={jumpToTail}
-            />
-          </GestureHandlerRootView>
-        )}
+        <View
+          testID="native-chat-conversation-context"
+          style={expandedQuestion ? styles.hidden : styles.listWrap}
+        >
+          {status === 'loading' && messages.length === 0 ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={colors.textSecondary} />
+            </View>
+          ) : (
+            <GestureHandlerRootView style={styles.listWrap}>
+              <MobileNativeChatDisclosureContext.Provider value={disclosures}>
+                <MobileNativeChatScrollRootsBoundary
+                  {...{ rowKeys, layoutKey }}
+                  roots={disclosures.roots}
+                  runPlacements={rowKeys.runPlacements}
+                >
+                  <GestureDetector gesture={pinchGesture}>
+                    <MobileNativeChatRowList
+                      {...{
+                        tail,
+                        rowKeys,
+                        renderItem,
+                        footer,
+                        emptyStateView,
+                        onScroll,
+                        layoutKey
+                      }}
+                      {...{ header, hasHeader: hasMore === true, onNearTop: loadEarlierNearTop }}
+                      rows={turns.listMessages}
+                      runs={turns.presentation.workRuns.heads}
+                      roots={disclosures.roots}
+                      contentContainerStyle={styles.listContent}
+                    />
+                  </GestureDetector>
+                </MobileNativeChatScrollRootsBoundary>
+              </MobileNativeChatDisclosureContext.Provider>
+              <MobileNativeChatFloatingControls
+                showJumpToTail={tail.showJumpToTail}
+                onJumpToTail={jumpToTail}
+              />
+            </GestureHandlerRootView>
+          )}
+        </View>
         <MobileNativeChatPromptCard
+          expanded={expandedQuestion}
+          compact={isLandscapePhone}
           key={promptKey ?? undefined}
           {...{
             ask,
@@ -409,18 +417,12 @@ export function MobileNativeChatView({
             onAnswerAsk,
             onCancelAsk,
             onCancelPrompt,
-            onCollapseAsk: onCollapseAsk && releaseQuestionFocus(onCollapseAsk)
+            onCollapseAsk
           }}
-          onInteract={() => setActiveQuestionKey(questionKey)}
           requiresTerminal={askRequiresTerminal}
           onAnswerInTerminal={onAnswerInTerminal}
           {...{ permission, onRespondPermission, question, onAnswerQuestion, onCollapsePrompt }}
-          collapsedPrompt={
-            collapsedPrompt && {
-              ...collapsedPrompt,
-              expand: releaseQuestionFocus(collapsedPrompt.expand)
-            }
-          }
+          collapsedPrompt={collapsedPrompt}
         />
       </View>
       <Text
@@ -442,9 +444,8 @@ export function MobileNativeChatView({
       {/* Directly on the composer, which it tucks into. */}
       <View style={hideComposer ? styles.hidden : undefined}>{trayContent}</View>
       <MobileNativeChatComposer
-        compact={compactComposer}
+        compact={isLandscapePhone && keyboardInset > 0 && ask != null}
         hidden={hideComposer}
-        onFocus={() => setActiveQuestionKey(null)}
         structured={structuredActivityUi ? structuredComposer : null}
         value={composerText}
         onChangeText={onComposerTextChange}

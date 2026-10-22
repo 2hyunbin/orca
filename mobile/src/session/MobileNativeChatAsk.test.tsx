@@ -125,4 +125,36 @@ describe('MobileNativeChatAsk single-select auto-advance', () => {
 
     expect(onAnswer).not.toHaveBeenCalled()
   })
+  it('retains a rejected typed answer and permits one deliberate retry after delivery settles', async () => {
+    let finish: (accepted: boolean) => void = () => {}
+    const onAnswer = render(
+      { questions: [indent] },
+      vi.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            finish = resolve
+          })
+      )
+    )
+    press('Other…')
+    const input = () => tree.root.find((node) => isHost(node, 'TextInput'))
+    act(() => input().props.onChangeText('Use four spaces'))
+    const submit = () =>
+      tree.root.find(
+        (node) =>
+          isHost(node, 'Pressable') && node.findAll((n) => n.props.children === 'Submit').length > 0
+      )
+    act(() => {
+      submit().props.onPress()
+      submit().props.onPress()
+    })
+    expect(onAnswer).toHaveBeenCalledExactlyOnceWith([{ indices: [], other: 'Use four spaces' }])
+    expect(input().props.editable).toBe(false)
+    await act(async () => finish(false))
+    expect(input().props.value).toBe('Use four spaces')
+    expect(input().props.editable).toBe(true)
+    act(() => submit().props.onPress())
+    expect(onAnswer).toHaveBeenCalledTimes(2)
+    await act(async () => finish(true))
+  })
 })

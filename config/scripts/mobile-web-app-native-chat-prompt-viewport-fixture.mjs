@@ -68,6 +68,8 @@ function PromptViewportFixture() {
           composerText={draft}
           onComposerTextChange={setDraft}
           agent="claude"
+          attachments={params.has('attachment') ? [{ id: 'draft-image', path: '/tmp/draft-image.png', previewUri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==' }] : []}
+          onRemoveAttachment={() => {}}
           ask={prompt}
           askKey="fixture-ask"
           askRequiresTerminal={params.has('terminal')}

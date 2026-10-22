@@ -13,6 +13,32 @@ export const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderSubtle
   },
+  expanded: { flex: 1, maxHeight: '100%' },
+  header: {
+    minHeight: 44,
+    flexShrink: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderSubtle
+  },
+  identity: {
+    flex: 1,
+    color: colors.textMuted,
+    fontSize: typography.metaSize,
+    fontWeight: '600'
+  },
+  progress: { color: colors.textMuted, fontSize: typography.metaSize },
+  inlineActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  contextAction: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs
+  },
+  contextActionText: { color: colors.textSecondary, fontSize: typography.metaSize },
   tabs: {
     flexGrow: 0,
     flexShrink: 0,
@@ -29,14 +55,14 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    minHeight: 36,
+    minHeight: 44,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent'
   },
   tabActive: {
-    borderBottomColor: colors.statusGreen
+    borderBottomColor: colors.textPrimary
   },
   tabText: {
     color: colors.textSecondary,
@@ -53,11 +79,9 @@ export const styles = StyleSheet.create({
   body: {
     paddingHorizontal: spacing.md
   },
-  questionRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   questionText: {
-    flex: 1,
     color: colors.textPrimary,
-    fontSize: typography.bodySize + 1,
+    fontSize: typography.bodySize,
     fontWeight: '600',
     marginVertical: spacing.sm
   },
@@ -66,6 +90,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     padding: spacing.sm,
+    minHeight: 44,
     borderRadius: radii.card,
     backgroundColor: colors.bgRaised,
     borderWidth: 1,
@@ -73,7 +98,7 @@ export const styles = StyleSheet.create({
     marginBottom: spacing.xs
   },
   optionSelected: {
-    borderColor: colors.statusGreen
+    borderColor: colors.textPrimary
   },
   check: {
     width: 18,
@@ -90,8 +115,8 @@ export const styles = StyleSheet.create({
     borderRadius: 4
   },
   checkOn: {
-    backgroundColor: colors.statusGreen,
-    borderColor: colors.statusGreen
+    backgroundColor: colors.textPrimary,
+    borderColor: colors.textPrimary
   },
   optionBody: {
     flex: 1,
@@ -122,12 +147,15 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
     gap: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.borderSubtle
   },
   cancel: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm
   },
@@ -136,11 +164,9 @@ export const styles = StyleSheet.create({
     fontSize: typography.bodySize,
     fontWeight: '600'
   },
-  progress: {
-    color: colors.textMuted,
-    fontSize: typography.metaSize
-  },
   next: {
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.button,
