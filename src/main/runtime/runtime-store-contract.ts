@@ -180,7 +180,6 @@ export type RuntimeStore = {
     aiVaultSearch?: GlobalSettings['aiVaultSearch']
     sourceControlAi?: GlobalSettings['sourceControlAi']
     commitMessageAi?: GlobalSettings['commitMessageAi']
-    experimentalConnectors?: GlobalSettings['experimentalConnectors']
   }
   // Why: narrow to `unknown` return so test mocks can return void without
   // a cast. The runtime never reads the return value — the persisted value

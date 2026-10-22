@@ -350,8 +350,6 @@ describe('OrcaRuntimeService', () => {
         getProjects,
         getSettings
       } as never)
-      // Why: construction reads the connector flag once; the counts below are per listing.
-      getSettings.mockClear()
 
       const { worktrees } = await runtime.getWorktreePs()
 
