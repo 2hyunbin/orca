@@ -63,9 +63,7 @@ export class TerminalAgentPhonePush {
       }
       if (change.kind === 'moved' && change.to === 'rest') {
         this.titleWorking.delete(paneKey)
-        if (this.newsByPane.get(paneKey)?.worktreeId === change.workspace.worktreeId) {
-          this.forget(paneKey)
-        }
+        this.forget(paneKey)
       }
       if (!row && change.kind === 'observed') {
         this.forget(paneKey)

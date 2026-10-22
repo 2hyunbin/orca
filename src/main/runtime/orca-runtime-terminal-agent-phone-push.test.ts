@@ -1,6 +1,10 @@
 // Runs on plain Node, as orcad does: a server with no window pushes its phones from its own hooks.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_DONE_QUIET_MS } from '../../shared/agent-transitions'
+import { buildAgentNotificationId } from '../../shared/agent-notification-id'
+import type { ExecutionHostId } from '../../shared/execution-host'
+import type { WorktreeMeta } from '../../shared/worktree/meta-types'
+import type { HostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { AgentHookServer } from '../agent-hooks/server'
 import { OrcaRuntimeService } from './orca-runtime'
@@ -14,20 +18,42 @@ const cleanups: (() => void)[] = []
 
 const WT = 'repo-1::/tmp/worktree-a'
 const PANE = 'tab-1:11111111-1111-4111-8111-111111111111'
+type SidebarRecord = Pick<
+  WorktreeMeta,
+  'displayName' | 'hostId' | 'lastActivityAt' | 'smartTier' | 'smartAt' | 'isUnread'
+>
+
+class TestRuntime extends OrcaRuntimeService {
+  readonly announcements = this.mobileNotifications.announcedNotifications
+}
 
 function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID) {
+  const records = new Map<string, SidebarRecord>()
+  const addWorkspace = (id: string, hostId: ExecutionHostId): SidebarRecord => {
+    const record = { displayName: 'feature', hostId, lastActivityAt: 0, isUnread: false }
+    records.set(`${hostId}|${id}`, record)
+    return record
+  }
+  addWorkspace(WT, 'local')
   const store = {
     getRepos: () => [],
     getRepo: (id: string) =>
       id === 'repo-1' ? { id, connectionId: null, displayName: 'orca' } : undefined,
     getSettings: () => ({ notifications: { enabled: true, agentTaskComplete: true } }),
-    getWorktreeMeta: (id: string) => (id === WT ? { displayName: 'feature' } : undefined),
+    getWorktreeMeta: (id: string) => records.get(`local|${id}`),
+    getWorktreeMetaForHost: (id: string, hostId: ExecutionHostId) => records.get(`${hostId}|${id}`),
+    setWorktreeMeta: (target: HostWorktreeTarget, updates: Partial<SidebarRecord>) => {
+      const record = records.get(`${target.hostId}|${target.id}`)
+      if (record) {
+        Object.assign(record, updates)
+      }
+    },
     getAllWorktreeMeta: () => ({}),
     getFolderWorkspaces: () => [{ id: 'f1', name: 'Notes', projectGroupId: 'g1' }],
     getProjectGroups: () => [{ id: 'g1', name: 'Research' }]
   }
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the push path reads only these members.
-  const runtime = new OrcaRuntimeService(store as unknown as RuntimeStore)
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: backs the notification and sidebar paths exercised here.
+  const runtime = new TestRuntime(store as unknown as RuntimeStore)
   if (windowId !== null) {
     runtime.syncWindowGraph(windowId, { tabs: [], leaves: [] })
   }
@@ -52,7 +78,7 @@ function createHost(windowId: number | null = HEADLESS_RUNTIME_WINDOW_ID) {
         ? [event.agentState]
         : []
     )
-  return { runtime, server, report, agentAlerts, alerts }
+  return { runtime, server, report, agentAlerts, alerts, addWorkspace }
 }
 
 describe('terminal agent phone push on a headless host', () => {
@@ -177,5 +203,90 @@ describe('terminal agent phone push on a headless host', () => {
     report('done')
     vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
     expect(agentAlerts()).toEqual(['done'])
+  })
+
+  it('keeps replacement ownership through title history, completion, announcement and departure', () => {
+    const { runtime, server, alerts, addWorkspace } = createHost()
+    const otherWorktree = 'repo-1::/tmp/worktree-b'
+    const titleOwner = addWorkspace(WT, 'local')
+    const oldOwner = addWorkspace(WT, 'ssh:owner-a')
+    const currentOwner = addWorkspace(WT, 'ssh:owner-b')
+    const historicalOwner = addWorkspace(otherWorktree, 'ssh:owner-b')
+    const ingest = (state: 'working' | 'done', connectionId: string, worktreeId = WT): void => {
+      vi.advanceTimersByTime(1)
+      server.ingestRemote(
+        {
+          paneKey: PANE,
+          tabId: 'tab-1',
+          worktreeId,
+          payload: { state, prompt: '', agentType: 'claude' }
+        },
+        connectionId
+      )
+    }
+    runtime.syncWindowGraph(HEADLESS_RUNTIME_WINDOW_ID, {
+      tabs: [{ tabId: 'tab-1', worktreeId: WT, title: 'Agent', activeLeafId: null, layout: null }],
+      leaves: [
+        {
+          tabId: 'tab-1',
+          worktreeId: WT,
+          leafId: PANE.slice('tab-1:'.length),
+          paneRuntimeId: 1,
+          ptyId: 'pty-1',
+          paneTitle: null
+        }
+      ]
+    })
+    runtime.onPtyData('pty-1', '\x1b]0;⠋ Codex working\x07', 1)
+    expect(titleOwner.smartTier).toBe('working')
+    ingest('done', 'owner-b', otherWorktree)
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    expect(alerts).toHaveLength(0)
+    expect(runtime.announcements.take(PANE)).toEqual([])
+    expect(titleOwner.smartTier).toBeUndefined()
+    expect(historicalOwner.smartTier).toBeUndefined()
+    server.clearPaneState(PANE)
+
+    ingest('working', 'owner-a')
+    expect(oldOwner.smartTier).toBe('working')
+    ingest('working', 'owner-b')
+    expect(oldOwner.smartTier).toBeUndefined()
+    expect(currentOwner.smartTier).toBe('working')
+    ingest('done', 'owner-b')
+    const completedAt = Date.now()
+    expect(server.getStatusSnapshotForPane(PANE)[0]).toMatchObject({
+      connectionId: 'owner-b',
+      state: 'done',
+      stateStartedAt: completedAt
+    })
+    expect(currentOwner.smartTier).toBe('done')
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS - 1)
+    expect(alerts).toHaveLength(0)
+    expect(runtime.announcements.take(PANE)).toEqual([])
+    vi.advanceTimersByTime(1)
+    const id = buildAgentNotificationId({
+      worktreeId: WT,
+      paneKey: PANE,
+      stateStartedAt: completedAt
+    })
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toMatchObject({
+      type: 'notification',
+      agentState: 'done',
+      worktreeId: WT,
+      notificationId: id
+    })
+    expect(runtime.announcements.take(PANE).map((entry) => entry.id)).toEqual([id])
+
+    vi.advanceTimersByTime(6_000)
+    ingest('working', 'owner-b')
+    ingest('done', 'owner-b')
+    expect(currentOwner.smartTier).toBe('done')
+    server.clearPaneState(PANE)
+    expect(server.getStatusSnapshotForPane(PANE)).toEqual([])
+    expect(currentOwner.smartTier).toBeUndefined()
+    vi.advanceTimersByTime(AGENT_DONE_QUIET_MS)
+    expect(alerts).toHaveLength(1)
+    expect(runtime.announcements.take(PANE)).toEqual([])
   })
 })

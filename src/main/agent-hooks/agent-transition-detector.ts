@@ -205,21 +205,27 @@ export class AgentTransitionDetector {
       this.track(paneKey, workspace, observed)
       return
     }
-    this.emit({ kind: 'observed', paneKey, workspace, phase: observed, at: now })
-    this.advance(paneKey, row ? workspace : null, observed, now, (from, to) =>
-      row ? hookRowTransition(from, to, row) : null
+    this.advance(
+      paneKey,
+      row ? workspace : null,
+      observed,
+      now,
+      (from, to) => (row ? hookRowTransition(from, to, row) : null),
+      () => this.emit({ kind: 'observed', paneKey, workspace, phase: observed, at: now })
     )
   }
 
-  /** The pane observed in `observed`; a pane that left or changed workspace rests where it was. */
+  /** Leave the old owner, publish the current observation, then move the current phase. */
   private advance(
     paneKey: string,
     workspace: AgentPaneWorkspace | null,
     observed: AgentPhase,
     now: number,
-    transitionOf: (from: AgentPhase, to: AgentPhase) => AgentTransition | null
+    transitionOf: (from: AgentPhase, to: AgentPhase) => AgentTransition | null,
+    publishObservation?: () => void
   ): void {
     this.leaveIfMoved(paneKey, workspace, now)
+    publishObservation?.()
     if (!workspace) {
       return
     }
