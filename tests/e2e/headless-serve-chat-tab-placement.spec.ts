@@ -18,7 +18,7 @@ import { structuredAgentSessionTabId } from '../../src/shared/structured-agent-s
 import { HOST_TERMINAL_SURFACE_SEPARATOR } from '../../src/shared/terminal-surface-id'
 import { expect, test } from './helpers/orca-app'
 import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
-import { readServerLayout } from './helpers/server-published-layout'
+import { readServerLayout } from './helpers/paired-desktop-server-layout'
 
 const LAYOUT_OWNER_BUILD = existsSync(
   path.join(process.cwd(), 'out', 'main', 'ORCA_LAYOUT_OWNER_MAIN')

@@ -13,7 +13,7 @@ import { HOST_TERMINAL_SURFACE_SEPARATOR } from '../../src/shared/terminal-surfa
 import { LAYOUT_INTENTS_RUNTIME_CAPABILITY } from '../../src/shared/workspace-layout/layout-intents-capability'
 import type { PublishedWorkspaceLayout } from '../../src/shared/workspace-layout/workspace-layout-published'
 import { expect, test } from './helpers/orca-app'
-import { readServerLayout } from './helpers/server-published-layout'
+import { readServerLayout } from './helpers/paired-desktop-server-layout'
 import {
   launchHeadlessPairedRuntimeHost,
   type HeadlessPairedRuntimeHost
