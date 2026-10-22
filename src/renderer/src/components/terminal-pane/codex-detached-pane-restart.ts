@@ -32,18 +32,24 @@ import { buildPaneIdentityEnv, getWorkspacePath } from './detached-pane-restart-
 import { restartPaneOwner } from './codex-restart-main-pane'
 
 const inFlightPtyIds = new Set<string>()
+const MAX_CONCURRENT_RESTARTS = 4
 
 export function resetDetachedCodexPaneRestartClaimsForTests(): void {
   inFlightPtyIds.clear()
 }
 
-export async function sweepUnclaimedCodexPaneRestarts(): Promise<void> {
+export async function sweepUnclaimedCodexPaneRestarts(onSettled?: () => void): Promise<void> {
+  const restarts: Promise<void>[] = []
   for (const ptyId of Object.keys(useAppStore.getState().pendingPaneAccountRestarts)) {
-    await sweepUnclaimedCodexPaneRestart(ptyId)
+    if (inFlightPtyIds.size >= MAX_CONCURRENT_RESTARTS) {
+      break
+    }
+    restarts.push(restartUnclaimedPane(ptyId, onSettled))
   }
+  await Promise.all(restarts)
 }
 
-async function sweepUnclaimedCodexPaneRestart(ptyId: string): Promise<void> {
+async function restartUnclaimedPane(ptyId: string, onSettled?: () => void): Promise<void> {
   let located: LocatedCodexPane | null = null
   let claimed = false
   try {
@@ -104,6 +110,7 @@ async function sweepUnclaimedCodexPaneRestart(ptyId: string): Promise<void> {
   } finally {
     if (claimed) {
       inFlightPtyIds.delete(ptyId)
+      onSettled?.()
     }
   }
 }
