@@ -4774,7 +4774,9 @@
           "upToDateOne": "{{value0}}은(는) 최신 상태입니다.",
           "updatedLeftAlone": "{{value0}} · {{value1}}개는 그대로 둠",
           "updatedMany": "스킬 {{value0}}개를 업데이트했습니다",
-          "updatedOne": "스킬 1개를 업데이트했습니다"
+          "updatedOne": "스킬 1개를 업데이트했습니다",
+          "updateServer": "서버의 Orca를 업데이트하면 Orca 스킬을 업데이트할 수 있습니다.",
+          "connectHost": "이 SSH 호스트에 연결하면 Orca 스킬을 확인할 수 있습니다."
         },
         "SkillFreshnessStatusPill": {
           "updateAvailable": "업데이트 가능",
@@ -4783,7 +4785,9 @@
           "details": "Details",
           "needsAttention": "스킬 검토",
           "checking": "확인 중...",
-          "checkFailed": "확인 실패"
+          "checkFailed": "확인 실패",
+          "updateServer": "서버의 Orca 업데이트 필요",
+          "connectHost": "SSH 호스트 연결 필요"
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {
