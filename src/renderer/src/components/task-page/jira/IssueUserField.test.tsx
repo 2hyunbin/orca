@@ -161,7 +161,11 @@ it('preserves supplied scalar metadata choices (constructed contract fixture, no
   }
   render(<CreateDialog field={field} />)
   const user = userEvent.setup()
-  await user.click(screen.getByText('Select Reviewer'))
+  const trigger = screen.getByText('Select Reviewer').closest('button[role="combobox"]')
+  if (!trigger) {
+    throw new Error('Metadata Select trigger missing')
+  }
+  await user.click(trigger)
   await user.click(screen.getByRole('option', { name: 'ada.login' }))
   expect(search).not.toHaveBeenCalled()
   await submitIdentity('customfield_9', 'ada.login')
