@@ -196,12 +196,7 @@ function renderBlock(
         <MarkdownText
           key={key}
           selectable
-          style={[
-            styles.heading,
-            step,
-            scaledMarkdownText(step, ctx.textScale),
-            ctx.tone.text
-          ]}
+          style={[styles.heading, step, scaledMarkdownText(step, ctx.textScale), ctx.tone.text]}
         >
           {renderInline(node.children, ctx)}
         </MarkdownText>

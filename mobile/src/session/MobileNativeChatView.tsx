@@ -414,11 +414,7 @@ export function MobileNativeChatView({
       {sendErrorMessage ? (
         // This banner is the only channel for a send failure; Banner announces it as an alert.
         <View style={styles.banner} accessibilityLiveRegion="assertive">
-          <Banner
-            tone="error"
-            message={sendErrorMessage}
-            onDismiss={onClearSendError}
-          />
+          <Banner tone="error" message={sendErrorMessage} onDismiss={onClearSendError} />
         </View>
       ) : null}
       {/* Directly on the composer, which it tucks into. */}

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { CaseSensitive, GitBranch, Sparkles } from 'lucide-react-native'
+import { GitBranch, Sparkles } from 'lucide-react-native'
 import type { SmartWorkspaceSourceRow as SourceRow } from '../../../src/shared/new-workspace/smart-workspace-source-results'
 import { colors } from '../theme/mobile-theme'
 import { TaskProviderLogo } from './TaskProviderLogo'
@@ -69,8 +69,6 @@ function resolveRowContent(row: SourceRow): RowContent {
         subtitle: `${row.issue.key} · ${row.issue.project?.key ?? 'Jira'}`,
         status: row.issue.status?.name
       }
-    default:
-      return { icon: <CaseSensitive size={ICON_SIZE} color={ICON_COLOR} />, title: '' }
   }
 }
 

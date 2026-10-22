@@ -229,9 +229,9 @@ export function useMobileTasksProjectWorkspaceCommentActions(model: WorkspaceCre
         if (result.comment) {
           setProjectRowDetail((current) =>
             current?.provider === 'github'
-              ? // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the schema requires the comment's `id` and types its body/author/createdAt; the thread renderer owns the rest of the record, and the recorded reply carries `id` as a NUMBER, which DetailComment permits and a narrower requirement would refuse.
-                {
+              ? {
                   ...current,
+                  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the schema requires the comment's `id` and types its body/author/createdAt; the thread renderer owns the rest of the record, and the recorded reply carries `id` as a NUMBER, which DetailComment permits and a narrower requirement would refuse.
                   comments: [...current.comments, result.comment as DetailComment]
                 }
               : current

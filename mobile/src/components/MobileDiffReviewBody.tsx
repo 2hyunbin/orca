@@ -46,7 +46,9 @@ export function MobileDiffReviewBody({
     return (
       <CenteredState
         icon={AlertCircle}
-        title={screenState.kind === 'unavailable' ? 'Review unavailable' : 'Couldn’t load the review'}
+        title={
+          screenState.kind === 'unavailable' ? 'Review unavailable' : 'Couldn’t load the review'
+        }
         text={screenState.message}
         onRetry={onRetry}
       />
@@ -96,9 +98,7 @@ export function MobileDiffReviewBody({
           animated: true
         })
       }}
-      ListHeaderComponent={
-        <Text style={styles.diffHint}>Long-press a line to add a note.</Text>
-      }
+      ListHeaderComponent={<Text style={styles.diffHint}>Long-press a line to add a note.</Text>}
       ListFooterComponent={
         diffState.truncated ? (
           <Text style={styles.truncatedText}>Diff truncated for mobile preview.</Text>

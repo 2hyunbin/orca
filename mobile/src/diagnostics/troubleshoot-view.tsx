@@ -104,8 +104,8 @@ function IssueRow({
       </Pressable>
       {expanded ? (
         <View style={styles.disclosureBody}>
-          {section.steps.map((step, index) => (
-            <View key={index} style={styles.stepRow}>
+          {section.steps.map((step) => (
+            <View key={step} style={styles.stepRow}>
               <Text style={styles.bullet}>•</Text>
               <Text style={styles.stepText}>{step}</Text>
             </View>
@@ -165,7 +165,7 @@ export function TroubleshootView({
           <View style={styles.results} accessibilityLiveRegion="polite">
             <View style={styles.section}>
               {checks.map((check, index) => (
-                <View key={index}>
+                <View key={check.label}>
                   {index > 0 ? <View style={styles.iconSeparator} /> : null}
                   <CheckRow check={check} />
                 </View>

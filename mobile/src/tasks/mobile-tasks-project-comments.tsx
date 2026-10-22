@@ -82,8 +82,7 @@ export function renderMobileTasksProjectComments(model: ConnectionPresentationMo
                   }
                 >
                   <Text style={styles.resolvedCommentTitle} numberOfLines={1}>
-                    Resolved {group.kind === 'thread' ? 'thread' : 'comment'} by
-                    {' ' as string}
+                    Resolved {group.kind === 'thread' ? 'thread' : 'comment'} by{' '}
                     {commentAuthor(root)}
                   </Text>
                   <Text style={styles.resolvedCommentAction}>

@@ -60,7 +60,10 @@ export function MobileFileExplorerPanel(props: {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [legacyListTruncated, setLegacyListTruncated] = useState(false)
-  const [filter, setFilter] = useState('')
+  // Held with the scope it was typed in, so a new worktree starts unfiltered without an effect.
+  const [scopedFilter, setScopedFilter] = useState({ scope, text: '' })
+  const filter = scopedFilter.scope === scope ? scopedFilter.text : ''
+  const setFilter = useCallback((text: string) => setScopedFilter({ scope, text }), [scope])
   const [scrolled, setScrolled] = useState(false)
   const worktreeLabel = getWorktreeLabel(name, worktreeId)
 
@@ -208,7 +211,6 @@ export function MobileFileExplorerPanel(props: {
     setLoading(true)
     setError(null)
     setLegacyListTruncated(false)
-    setFilter('')
   }, [scope])
 
   useEffect(() => {

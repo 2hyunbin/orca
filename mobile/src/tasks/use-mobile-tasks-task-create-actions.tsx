@@ -3,7 +3,6 @@ import { colors, useCallback } from './mobile-tasks-dependencies'
 import { triggerSuccess } from '../platform/haptics'
 import {
   type RepoSummary,
-  type TaskItem,
   createGitHubTask,
   createGitLabTask,
   createLinearTask
@@ -144,7 +143,7 @@ export function useMobileTasksTaskCreateActions(model: LinearItemActionsModel) {
             labels: [],
             priority: 0,
             updatedAt: new Date().toISOString()
-          }) as Extract<TaskItem, { provider: 'linear' }>
+          })
         )
       }
       triggerSuccess()

@@ -310,8 +310,8 @@ function MobileAgentSessionHistoryPanelContent({
           />
           {issuesShown ? (
             <View style={styles.issueList}>
-              {issues.map((issue, index) => (
-                <View key={`${issue.path}:${index}`} style={styles.issueRow}>
+              {issues.map((issue) => (
+                <View key={`${issue.path}\n${issue.message}`} style={styles.issueRow}>
                   <Text style={styles.issuePath} numberOfLines={2}>
                     {issue.path}
                   </Text>

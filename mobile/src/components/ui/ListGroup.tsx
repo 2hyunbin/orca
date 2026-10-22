@@ -26,7 +26,8 @@ export function ListGroup({
   return (
     <View style={[appearance === 'inset' ? styles.inset : styles.plain, style]}>
       {rows.map((row, index) => (
-        <Fragment key={row.key ?? index}>
+        // Children.toArray gives every row a key.
+        <Fragment key={String(row.key)}>
           {index > 0 ? <View style={[styles.separator, { marginLeft: separatorInset }]} /> : null}
           {row}
         </Fragment>
