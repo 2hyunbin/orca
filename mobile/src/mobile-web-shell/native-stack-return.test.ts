@@ -54,6 +54,15 @@ describe('nativeStackReturn', () => {
     expect(nativeStackReturn(state, '/h/mac%2F1/session/wt-b?pane=1&tab=b')).toBeNull()
   })
 
+  it('treats a param cleared to empty as absent', () => {
+    const cleared = { ...SESSION, params: { ...SESSION.params, paneKey: '' } }
+    const state = rootStack(
+      HOME,
+      hostStack(HOST, cleared, { name: '[hostId]/files/[worktreeId]', params: SESSION.params })
+    )
+    expect(nativeStackReturn(state, '/h/mac%2F1/session/wt-a')).toMatchObject({ count: 1 })
+  })
+
   it('names the focused screen as current rather than a pop', () => {
     const state = rootStack(HOME, hostStack(HOST, SESSION))
     expect(nativeStackReturn(state, '/h/mac%2F1/session/wt-a')).toBe('current')

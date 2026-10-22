@@ -253,8 +253,8 @@ export function MobileWebShellScreen({
       console.warn('[web-shell] refused to open this screen', issue)
       reportShellFailure('document-load-failed')
     },
-    // Pushed, never replaced: the page stays mounted underneath, so Back reveals it with no
-    // download and no second `init`.
+    // A new screen is pushed, never replaced: the page stays mounted underneath, so Back reveals it
+    // with no download and no second `init`.
     onNavigate: (href: string) => {
       // An overlay hands its place to where the page went: Back there returns to the screen beneath.
       if (overlay) {

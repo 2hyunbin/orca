@@ -36,11 +36,15 @@ function decodeSegment(segment: string): string {
   }
 }
 
-/** One spelling per URL: decoded path segments and the query sorted, as expo-router parses both. */
+/** One spelling per URL: decoded path segments and the query sorted, as expo-router parses both.
+ *  An empty value is dropped because screens clear a param with `''` (session `paneKey`), and the
+ *  fragment because expo-router keeps it as a param no href spells the same way. */
 function canonicalHref(href: string): string {
-  const [path = '', search = ''] = href.split('?')
+  const [path = '', search = ''] = href.split('#')[0].split('?')
   const segments = path.split('/').filter(Boolean).map(decodeSegment)
-  const query = [...new URLSearchParams(search)].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  const query = [...new URLSearchParams(search)]
+    .filter(([, value]) => value !== '')
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
   return `/${segments.join('/')}?${new URLSearchParams(query).toString()}`
 }
 
