@@ -16,11 +16,13 @@ import { NativeChatMarkdownImageOwnerContext } from './native-chat-markdown-imag
 import { useNativeChatLinkActions } from './use-native-chat-link-actions'
 import { repoFixture, worktreeFixture } from './native-chat-workspace-test-fixtures'
 import type * as TerminalFileOpenRouting from '@/components/terminal-pane/terminal-file-open-routing'
+import type * as HttpLinkRouting from '@/lib/http-link-routing'
 import { getDefaultSettings } from '../../../../shared/constants'
 
 const mocks = vi.hoisted(() => ({
   readRuntimeFilePreview: vi.fn(),
-  openDetectedFilePath: vi.fn()
+  openDetectedFilePath: vi.fn(),
+  openHttpLink: vi.fn()
 }))
 
 vi.mock('@/runtime/runtime-file-read-client', () => ({
@@ -30,6 +32,44 @@ vi.mock('@/components/terminal-pane/terminal-file-open-routing', async (importOr
   ...(await importOriginal<typeof TerminalFileOpenRouting>()),
   openDetectedFilePath: mocks.openDetectedFilePath
 }))
+vi.mock('@/lib/http-link-routing', async (importOriginal) => ({
+  ...(await importOriginal<typeof HttpLinkRouting>()),
+  openHttpLink: mocks.openHttpLink
+}))
+
+class ImageVisibilityObserver implements IntersectionObserver {
+  static current: ImageVisibilityObserver
+  readonly root = null
+  readonly rootMargin = '128px'
+  readonly scrollMargin = '0px'
+  readonly thresholds = [0]
+  readonly observe = vi.fn()
+  readonly unobserve = vi.fn()
+  readonly disconnect = vi.fn()
+  readonly takeRecords = (): IntersectionObserverEntry[] => []
+
+  constructor(private readonly callback: IntersectionObserverCallback) {
+    ImageVisibilityObserver.current = this
+  }
+
+  emit(target: Element, isIntersecting: boolean): void {
+    const bounds = target.getBoundingClientRect()
+    this.callback(
+      [
+        {
+          target,
+          isIntersecting,
+          boundingClientRect: bounds,
+          intersectionRect: bounds,
+          rootBounds: null,
+          intersectionRatio: isIntersecting ? 1 : 0,
+          time: 0
+        }
+      ],
+      this
+    )
+  }
+}
 
 const localOwner = {
   fileLinkContext: {
@@ -88,6 +128,7 @@ function Transcript({
 
 beforeEach(() => {
   resetLocalImageSrcStateForTests()
+  vi.stubGlobal('IntersectionObserver', undefined)
   const worktree = worktreeFixture('wt-1', '/repo/worktree', { hostId: 'local' })
   useAppStore.setState({
     ...useAppStore.getInitialState(),
@@ -110,10 +151,211 @@ afterEach(() => {
   cleanup()
   resetLocalImageSrcStateForTests()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
 
 describe('native chat Markdown image preview', () => {
+  it.each([
+    ['chart%23v2.png', '/repo/worktree/chart#v2.png'],
+    ['chart%3Fv2.png', '/repo/worktree/chart?v2.png'],
+    ['chart%2520v2.png', '/repo/worktree/chart%20v2.png']
+  ])(
+    'reads the literal filename in %s without interpreting it a second time',
+    async (src, path) => {
+      render(<Transcript content={`![Chart](${src})`} />)
+      await screen.findByRole('img', { name: 'Chart' })
+      expect(mocks.readRuntimeFilePreview).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ worktreePath: '/repo/worktree' }),
+        path,
+        { kind: 'chat-image' }
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }), {
+        ctrlKey: true,
+        metaKey: true
+      })
+      expect(mocks.openDetectedFilePath).toHaveBeenCalledWith(path, null, null, expect.anything())
+    }
+  )
+
+  it('loads only visible nearby images and releases their bytes when they leave the viewport', async () => {
+    vi.stubGlobal('IntersectionObserver', ImageVisibilityObserver)
+    const { rerender } = render(<Transcript owner={{ ...localOwner, isVisible: false }} />)
+    const trigger = screen.getByRole('button', { name: 'View image: Chart' })
+    act(() => ImageVisibilityObserver.current.emit(trigger, true))
+    expect(mocks.readRuntimeFilePreview).not.toHaveBeenCalled()
+    rerender(<Transcript />)
+    expect(await screen.findByRole('img')).toHaveAttribute('src', 'blob:image-1')
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 640, 360))
+    act(() => ImageVisibilityObserver.current.emit(trigger, false))
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(trigger).toHaveStyle({ width: '640px', aspectRatio: '640 / 360' })
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:image-1')
+    act(() => ImageVisibilityObserver.current.emit(trigger, true))
+    const reloaded = await screen.findByRole('img')
+    expect(reloaded).toHaveAttribute('src', 'blob:image-2')
+    expect(trigger).toHaveStyle({ aspectRatio: '640 / 360' })
+    fireEvent.load(reloaded)
+    expect(trigger.style.width).toBe('')
+    expect(trigger.style.aspectRatio).toBe('')
+    rerender(<Transcript owner={{ ...localOwner, isVisible: false }} />)
+    expect(screen.queryByRole('img')).toBeNull()
+    expect(trigger).toHaveStyle({ width: '640px', aspectRatio: '640 / 360' })
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:image-2')
+    rerender(<Transcript />)
+    expect(await screen.findByRole('img')).toHaveAttribute('src', 'blob:image-3')
+    expect(trigger).toHaveStyle({ aspectRatio: '640 / 360' })
+  })
+
+  it('retries a cache-budget rejection on open after another image releases its lease', async () => {
+    vi.stubGlobal('IntersectionObserver', ImageVisibilityObserver)
+    const content = Array.from(
+      { length: 101 },
+      (_, index) => `![Chart ${index}](chart-${index}.png)`
+    ).join('\n\n')
+    const { container } = render(<Transcript content={content} />)
+    const triggers = screen.getAllByRole('button')
+    expect(mocks.readRuntimeFilePreview).not.toHaveBeenCalled()
+    await act(async () => {
+      for (const trigger of triggers) {
+        ImageVisibilityObserver.current.emit(trigger, true)
+      }
+    })
+    expect(container.querySelectorAll('img')).toHaveLength(100)
+    expect(mocks.readRuntimeFilePreview).toHaveBeenCalledTimes(101)
+    act(() => ImageVisibilityObserver.current.emit(triggers[0]!, false))
+    fireEvent.click(triggers[100]!)
+    const dialog = screen.getByRole('dialog', { name: 'Chart 100' })
+    expect(await within(dialog).findByRole('img')).toHaveAttribute('src', 'blob:image-102')
+    expect(mocks.readRuntimeFilePreview).toHaveBeenCalledTimes(102)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    act(() => {
+      for (const trigger of triggers) {
+        ImageVisibilityObserver.current.emit(trigger, false)
+      }
+    })
+    expect(container.querySelectorAll('img')).toHaveLength(0)
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(102)
+  })
+
+  it.each([false, true])(
+    'routes linked HTTP image middle-clicks with openLinksInApp=%s',
+    (openLinksInApp) => {
+      useAppStore.setState({ settings: { ...getDefaultSettings('/tmp'), openLinksInApp } })
+      render(
+        <Transcript content="[![Chart](data:image/png;base64,AA==)](https://example.com/details)" />
+      )
+      fireEvent(
+        screen.getByRole('button', { name: 'View image: Chart' }),
+        new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true })
+      )
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(screen.queryByRole('menu')).toBeNull()
+      expect(mocks.openHttpLink).toHaveBeenCalledExactlyOnceWith('https://example.com/details', {
+        allowRemoteInApp: true,
+        worktreeId: 'wt-1',
+        forceInApp: openLinksInApp,
+        forceSystemBrowser: !openLinksInApp,
+        sourceOwner: { kind: 'local' }
+      })
+    }
+  )
+
+  it('keeps file-linked image middle-clicks opening the outer file', () => {
+    render(<Transcript content="[![Chart](chart.png)](details.md)" />)
+    fireEvent(
+      screen.getByRole('button', { name: 'View image: Chart' }),
+      new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true })
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mocks.openDetectedFilePath).toHaveBeenCalledExactlyOnceWith(
+      '/repo/worktree/details.md',
+      null,
+      null,
+      expect.anything()
+    )
+  })
+
+  it('opens a linked HTTP image in a browser when the runtime owner is unresolved', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    render(
+      <Transcript
+        owner={{ ...localOwner, runtimeContext: null }}
+        content="[![Chart](data:image/png;base64,AA==)](https://example.com/details)"
+      />
+    )
+    fireEvent(
+      screen.getByRole('button', { name: 'View image: Chart' }),
+      new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true })
+    )
+    expect(open).toHaveBeenCalledExactlyOnceWith(
+      'https://example.com/details',
+      '_blank',
+      'noopener,noreferrer'
+    )
+    expect(mocks.openHttpLink).not.toHaveBeenCalled()
+  })
+
+  it('closes stale previews when session metadata resolves or the session changes', () => {
+    const { rerender } = render(<Transcript owner={{ ...localOwner, sessionId: null }} />)
+    fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    rerender(<Transcript owner={{ ...localOwner, sessionId: 'session-1' }} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
+    rerender(<Transcript owner={{ ...localOwner, sessionId: 'session-2' }} />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it.each(['http:', 'https:'])(
+    'loads network-path image references using the web page %s scheme',
+    async (protocol) => {
+      vi.spyOn(window.location, 'protocol', 'get').mockReturnValue(protocol)
+      render(<Transcript content="![Chart](//images.example.com/chart.png)" />)
+      expect(await screen.findByRole('img')).toHaveAttribute(
+        'src',
+        `${protocol}//images.example.com/chart.png`
+      )
+      expect(mocks.readRuntimeFilePreview).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
+      expect(within(screen.getByRole('dialog')).getByRole('img')).toHaveAttribute(
+        'src',
+        `${protocol}//images.example.com/chart.png`
+      )
+    }
+  )
+
+  it('preserves network share filesystem reads in a desktop file context', async () => {
+    vi.spyOn(window.location, 'protocol', 'get').mockReturnValue('file:')
+    render(<Transcript content="![Chart](//server/share/chart.png)" />)
+    expect(await screen.findByRole('img')).toHaveAttribute('src', 'blob:image-1')
+    expect(mocks.readRuntimeFilePreview).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      '//server/share/chart.png',
+      { kind: 'chat-image' }
+    )
+  })
+
+  it('preserves Windows drive filesystem reads in a web context', async () => {
+    vi.spyOn(window.location, 'protocol', 'get').mockReturnValue('https:')
+    render(
+      <Transcript
+        owner={{
+          ...localOwner,
+          fileLinkContext: { ...localOwner.fileLinkContext, worktreePath: 'C:\\repo' },
+          runtimeContext: { ...localOwner.runtimeContext, worktreePath: 'C:\\repo' }
+        }}
+        content="![Chart](chart.png)"
+      />
+    )
+    expect(await screen.findByRole('img')).toHaveAttribute('src', 'blob:image-1')
+    expect(mocks.readRuntimeFilePreview).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      'C:/repo/chart.png',
+      { kind: 'chat-image' }
+    )
+  })
+
   it.each(['actions', 'open', 'none'] as const)(
     'opens a table image immediately with %s link behavior and leaves text links unchanged',
     async (terminalLinkClickBehavior) => {

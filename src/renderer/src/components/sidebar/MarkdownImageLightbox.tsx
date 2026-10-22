@@ -9,12 +9,15 @@ type ExpandableMarkdownImageProps = {
   className?: string
   triggerClassName?: string
   onError?: () => void
+  onLoad?: React.ReactEventHandler<HTMLImageElement>
   open?: boolean
   onOpenChange?: (open: boolean) => void
   triggerLabel?: string
   onClick?: React.MouseEventHandler<HTMLButtonElement>
   onAuxClick?: React.MouseEventHandler<HTMLButtonElement>
   triggerAttributes?: Record<`data-${string}`, string | undefined>
+  triggerRef?: React.Ref<HTMLButtonElement>
+  triggerStyle?: React.CSSProperties
   dialogProps?: Omit<
     React.ComponentProps<typeof PanZoomImageDialog>,
     'open' | 'onOpenChange' | 'src' | 'title' | 'showTitle'
@@ -31,12 +34,15 @@ export function ExpandableMarkdownImage({
   className,
   triggerClassName,
   onError,
+  onLoad,
   open: controlledOpen,
   onOpenChange,
   triggerLabel,
   onClick,
   onAuxClick,
   triggerAttributes,
+  triggerRef,
+  triggerStyle,
   dialogProps
 }: ExpandableMarkdownImageProps): React.JSX.Element {
   const [internalOpen, setInternalOpen] = React.useState(false)
@@ -53,6 +59,8 @@ export function ExpandableMarkdownImage({
   return (
     <>
       <button
+        ref={triggerRef}
+        style={triggerStyle}
         type="button"
         {...triggerAttributes}
         className={cn(
@@ -79,6 +87,7 @@ export function ExpandableMarkdownImage({
             alt={alt ?? ''}
             className={cn(className, 'pointer-events-none')}
             onError={onError}
+            onLoad={onLoad}
           />
         ) : (
           <span className="text-sm text-muted-foreground">{label}</span>
