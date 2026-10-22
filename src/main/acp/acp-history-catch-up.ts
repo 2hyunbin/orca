@@ -19,8 +19,7 @@ import {
   continuedOutsideNotice,
   continuedOutsideRecordId,
   createHistoryCatchUpBatch,
-  runHistoryCatchUp,
-  type HistoryCatchUpTarget
+  runHistoryCatchUp
 } from '../native-chat/agent-session-wire/structured-agent-session-history-catch-up'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import {
@@ -71,7 +70,8 @@ export async function catchUpAcpHistory(input: AcpHistoryCatchUpInput): Promise<
         check
       )
       const batch = createHistoryCatchUpBatch()
-      const targets: HistoryCatchUpTarget[] = []
+      // The rows written name the import, so a later open's additions settle under their own id.
+      const written: string[] = []
       const read = (key: string) => baseline.items.get(key) ?? null
       let divided = false
       for (const { source, items } of candidates) {
@@ -107,18 +107,27 @@ export async function catchUpAcpHistory(input: AcpHistoryCatchUpInput): Promise<
             const dividerKey = agentJournalItemKey(divider.identity)
             if (!read(dividerKey)) {
               batch.push(divider)
-              targets.push({ key: dividerKey, canonicalItemId: dividerKey, revision: null })
+              written.push(dividerKey)
             }
             divided = true
           }
-          // Ordinary revisions retain the creating scope/position and an unstated producer.
-          batch.push(held ? { ...mutation, linkage: undefined } : mutation)
-          targets.push({ key, canonicalItemId: canonical, revision: held?.revision ?? null })
+          if (!held) {
+            batch.push(mutation)
+            written.push(key)
+          } else if (mutation.kind === 'item') {
+            // Ordinary revisions retain the creating scope/position and an unstated producer.
+            batch.revise(
+              { ...mutation, linkage: undefined },
+              { canonicalItemId: canonical, revision: held.revision }
+            )
+          } else {
+            throw new Error('unowned-history-target')
+          }
         }
         await yieldTurn()
       }
       return batch.size
-        ? batch.finish('acp-history-import', [journal.epoch, input.providerSessionId], targets)
+        ? batch.finish('acp-history-import', [journal.epoch, input.providerSessionId, written])
         : null
     }
   })
