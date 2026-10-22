@@ -25,6 +25,7 @@ vi.mock('@/runtime/runtime-terminal-inspection', () => ({
   inspectRuntimeTerminalProcess: vi.fn(),
   confirmRuntimeTerminalForegroundProcess: vi.fn()
 }))
+vi.mock('./renderer-app-platform', () => ({ getRendererAppPlatform: () => 'win32' }))
 vi.mock('@/lib/local-preflight-context', async (importOriginal) => ({
   ...(await importOriginal<typeof localPreflightContext>()),
   getLocalProjectExecutionRuntimeContext: () => undefined
@@ -218,6 +219,44 @@ describe('findMovableClaudeSessions', () => {
     vi.mocked(confirmRuntimeTerminalForegroundProcess).mockResolvedValue('zsh')
 
     expect(await movable()).toEqual([])
+  })
+
+  // Why these shapes: registration saves the UNC read path and the guest CLAUDE_CONFIG_DIR, the guest
+  // hook reports the guest transcript, and a Windows host sees only wsl.exe in a WSL pane's process tree.
+  it('finds WSL panes from the guest hook evidence the Windows process table cannot see', async () => {
+    const guestHome = (id: string): string =>
+      `/home/dev/.local/share/orca/claude-profiles/${id}/home`
+    const wslAccount = (id: string): ClaudeManagedAccount => ({
+      ...account(id, `\\\\wsl.localhost\\Ubuntu-24.04${guestHome(id).replace(/\//g, '\\')}`),
+      managedAuthRuntime: 'wsl',
+      wslDistro: 'Ubuntu-24.04',
+      wslLinuxAuthPath: guestHome(id)
+    })
+    seedPanes([
+      { n: 1, agentType: 'claude', configDir: guestHome('acct-a') },
+      { n: 2, agentType: 'claude', configDir: guestHome('acct-a') }
+    ])
+    laneByPtyId[ptyId(1)] = 'wsl:Ubuntu-24.04'
+    laneByPtyId[ptyId(2)] = 'wsl:Ubuntu-24.04'
+    useAppStore.setState((state) => ({
+      settings: {
+        ...state.settings!,
+        claudeManagedAccounts: [wslAccount('acct-a'), wslAccount('acct-b')]
+      },
+      // OSC 133;D from the guest shell: pane 2's Claude has exited.
+      paneForegroundAgentByPaneKey: {
+        [makePaneKey(tabId(2), leafId(2))]: { agent: null, shellForeground: true }
+      }
+    }))
+    vi.mocked(inspectRuntimeTerminalProcess).mockResolvedValue({
+      foregroundProcess: 'wsl.exe',
+      hasChildProcesses: true
+    })
+    vi.mocked(confirmRuntimeTerminalForegroundProcess).mockResolvedValue(null)
+
+    expect(await movable('acct-a', { runtime: 'wsl', wslDistro: 'Ubuntu-24.04' })).toEqual([
+      ptyId(1)
+    ])
   })
 })
 
