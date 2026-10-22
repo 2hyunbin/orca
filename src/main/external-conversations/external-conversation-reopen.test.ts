@@ -25,9 +25,12 @@ const START = {
 const REOPENED = { outcome: 'accepted', reopened: true }
 const UNREACHABLE = { outcome: 'refused', reason: 'agent_not_reachable' }
 
-async function started(records = fakeLinkStore(), sshHostId: ExecutionHostId | null = null) {
+async function started(
+  records = fakeLinkStore(),
+  sshHostId: ExecutionHostId | null = null,
+  terminal = fakeTerminal()
+) {
   const h = harness({}, records)
-  const terminal = fakeTerminal()
   const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'), {
     worktreeId: WORKTREE,
     sshHostId
@@ -39,6 +42,36 @@ async function started(records = fakeLinkStore(), sshHostId: ExecutionHostId | n
 }
 
 describe('ExternalConversationSeam reopen', () => {
+  it('captures a session already reported when the link is published', async () => {
+    const { seam, host, terminal } = await started()
+    terminal.exit()
+    terminal.state.rows = []
+    terminal.reopenable()
+    expect(await seam.send(host, KEY, 'early-report', 'next')).toEqual(REOPENED)
+  })
+
+  it('never adopts a replacement process while the reopened agent becomes ready', async () => {
+    const { seam, host, terminal, reportSessions } = await started()
+    reportSessions([{ paneKey: PANE, sessionId: SESSION.id }])
+    terminal.exit()
+    terminal.reopenable()
+    terminal.waitForFreshWorkerComposer.mockImplementationOnce(async () => {
+      terminal.replace()
+      return {
+        handle: 'term-2',
+        condition: 'tui-idle',
+        satisfied: true,
+        status: 'running',
+        exitCode: null
+      }
+    })
+    const head = seam.send(host, KEY, 'replacement-head', 'one')
+    const follower = seam.send(host, KEY, 'replacement-follower', 'two')
+    expect(await head).toEqual(UNREACHABLE)
+    expect(await follower).toEqual(UNREACHABLE)
+    expect(terminal.writes).toEqual([])
+  })
+
   it('reopens a closed tab’s agent from the session hooks reported, and sends to it', async () => {
     const { seam, host, terminal, reportSessions, link } = await started()
     reportSessions([{ paneKey: PANE, sessionId: SESSION.id }])
@@ -117,8 +150,9 @@ describe('ExternalConversationSeam reopen', () => {
   )
 
   it('refuses without asking the resume when no session id is known', async () => {
-    const { seam, host, terminal } = await started()
+    const terminal = fakeTerminal()
     terminal.state.rows = []
+    const { seam, host } = await started(undefined, null, terminal)
     terminal.exit()
     terminal.reopenable()
     expect(await seam.send(host, KEY, 'd1', 'x')).toEqual({

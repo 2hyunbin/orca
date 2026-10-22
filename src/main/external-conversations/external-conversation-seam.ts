@@ -142,7 +142,7 @@ export class ExternalConversationSeam {
                 createdAt: Date.now()
               })
               this.startedHere.add(conversationId(key))
-              this.sessions.watch(host.terminal, key, paneKey)
+              this.sessions.capture(host.terminal, key, paneKey)
             },
             // Before link resolution or prompt delivery settle, so no follower adopts a successor.
             (paneKey) => {
@@ -231,16 +231,13 @@ export class ExternalConversationSeam {
       (paneKey) => {
         relinked.paneKey = paneKey
         writeLink(this.deps.store, workspace, relinked)
-        this.sessions.watch(terminal, key, paneKey, link.providerSession?.id)
+        this.sessions.capture(terminal, key, paneKey)
       }
     )
     if (!reopened.ok) {
       return this.lost(id, signal, reopened.refusal)
     }
-    const pane = bindPane(terminal, reopened.paneKey)
-    if (!pane) {
-      return this.lost(id, signal)
-    }
+    const { pane } = reopened
     this.admitted.set(signal, pane.binding)
     const delivery = await this.write(terminal, key, relinked, pane, deliveryId, text, signal)
     if (delivery.outcome === 'accepted') {

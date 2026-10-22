@@ -4,6 +4,7 @@ import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { waitForStartedAgentReady } from '../runtime/rpc/methods/agent-launch-terminal-prompt'
 import type { AgentSessionResumeRefusal } from '../runtime/session-lifecycle/projection/resume-agent-session-in-workspace'
 import { refusalOf } from './external-conversation-chain'
+import { bindPane, type FollowUpTerminal } from './external-conversation-send'
 import type { ConnectorRefusal } from './external-conversation-types'
 
 /** What reopening reads and drives on the host: its hook rows, the safe resume, readiness. */
@@ -11,7 +12,8 @@ export type ReopenTerminal = Pick<
   OrcaRuntimeService,
   'resumeAgentSessionInWorkspace' | 'getAgentStatusRowsForPane'
 > &
-  LaunchedAgentReadinessRuntime
+  LaunchedAgentReadinessRuntime &
+  Pick<FollowUpTerminal, 'getTerminalHandleForPaneKey' | 'getTerminalPromptRequestBinding'>
 
 const REOPEN_REFUSALS: Record<Exclude<AgentSessionResumeRefusal, 'aborted'>, ConnectorRefusal> = {
   window_owns_wake: 'agent_asleep_in_window',
@@ -34,7 +36,10 @@ export async function reopenLinkedAgent(
   signal: AbortSignal,
   /** Called as soon as the resumed pane exists, before the readiness wait. */
   onReopened: (paneKey: string) => void
-): Promise<{ ok: true; paneKey: string } | { ok: false; refusal: ConnectorRefusal }> {
+): Promise<
+  | { ok: true; pane: NonNullable<ReturnType<typeof bindPane>> }
+  | { ok: false; refusal: ConnectorRefusal }
+> {
   const { providerSession, captureHostId } = link
   if (!providerSession || !captureHostId) {
     return { ok: false, refusal: 'no_session_to_reopen' }
@@ -53,6 +58,10 @@ export async function reopenLinkedAgent(
     }
   }
   onReopened(resumed.paneKey)
+  const pane = bindPane(terminal, resumed.paneKey)
+  if (!pane || pane.handle !== resumed.handle || pane.binding.ptyId !== resumed.ptyId) {
+    return { ok: false, refusal: 'agent_not_reachable' }
+  }
   const ready = await waitForStartedAgentReady(terminal, resumed.handle, link.agent, signal).catch(
     () => null
   )
@@ -62,5 +71,5 @@ export async function reopenLinkedAgent(
   // Why: a composer that never opened (a dialog, a dead process) must not take the message.
   return ready === null || (ready && !ready.satisfied)
     ? { ok: false, refusal: 'agent_not_reachable' }
-    : { ok: true, paneKey: resumed.paneKey }
+    : { ok: true, pane }
 }
