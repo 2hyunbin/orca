@@ -10,6 +10,7 @@ import type { SparsePreset } from '../../../../shared/worktree/create-types'
 import { translate } from '@/i18n/i18n'
 import type { SparsePresetDraft } from './SparseCheckoutPresetDraftForm'
 import { SparsePresetInlineEditor } from './SparsePresetInlineEditor'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type SparseCheckoutPresetSelectProps = {
   repoId: string
@@ -28,7 +29,7 @@ export default function SparseCheckoutPresetSelect({
   disabled = false,
   onEditingChange
 }: SparseCheckoutPresetSelectProps): React.JSX.Element {
-  const repo = useAppStore((s) => s.repos.find((entry) => entry.id === repoId))
+  const repo = useAppStore((s) => selectRepos(s).find((entry) => entry.id === repoId))
   const fetchSparsePresets = useAppStore((s) => s.fetchSparsePresets)
   const saveSparsePreset = useAppStore((s) => s.saveSparsePreset)
   const presetsForRepo = useAppStore((s) => s.sparsePresetsByRepo[repoId])

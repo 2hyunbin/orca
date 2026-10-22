@@ -26,6 +26,7 @@ import { mergeFetchedWorktrees } from './fetched-worktree-merge'
 import { notifyRuntimeScopeForbiddenIfNeeded } from './runtime-scope-forbidden-toast'
 import { refreshRemoteWorktreeLineageBestEffort } from '../metadata/worktree-lineage-refresh'
 import { selectWorktreesByRepo } from '../../../workspace-record-selectors'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export function createFetchWorktrees(
   set: WorktreeSliceSet,
@@ -54,7 +55,7 @@ export function createFetchWorktrees(
     try {
       const ownerState = get()
       const requestStartedWorktrees = selectWorktreesByRepo(ownerState)[repoId]
-      const repoOwners = ownerState.repos.filter((repo) => repo.id === repoId)
+      const repoOwners = selectRepos(ownerState).filter((repo) => repo.id === repoId)
       const ownerWasMissingAtStart = repoOwners.length === 0
       const hasLocalOwner = repoOwners.some(
         (repo) => getRepoExecutionHostId(repo) === LOCAL_EXECUTION_HOST_ID
@@ -67,7 +68,7 @@ export function createFetchWorktrees(
         ? LOCAL_EXECUTION_HOST_ID
         : repoHostId(ownerState, repoId, options?.executionHostId)
       const setup = getProjectHostSetupForRepoHost(ownerState, repoId, hostId)
-      const repoOwner = findRepoForHost(ownerState.repos, repoId, {
+      const repoOwner = findRepoForHost(selectRepos(ownerState), repoId, {
         hostId,
         settings: ownerState.settings
       })
@@ -99,13 +100,13 @@ export function createFetchWorktrees(
       if (options?.requireAuthoritative && !refresh.result.authoritative) {
         return directCallerAuthority ? (refresh.providerResult ?? false) : false
       }
-      const outcome = mergeFetchedWorktrees(set, {
+      const outcome = mergeFetchedWorktrees(set, get, {
         repoId,
         hostId,
         ownerWasMissingAtStart,
         missingDirectSshOwnerReposSnapshot:
           ownerWasMissingAtStart && options?.executionHostId === hostId
-            ? ownerState.repos
+            ? selectRepos(ownerState)
             : undefined,
         requestStartedWorktrees,
         setup,

@@ -26,6 +26,7 @@ import {
   getTerminalQuickCommandHostOptions,
   shouldShowTerminalQuickCommandHostOwnership
 } from '@/hooks/use-terminal-quick-command-hosts'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type QuickCommandsPaneProps = {
   settings: GlobalSettings
@@ -88,7 +89,7 @@ export function QuickCommandsPane({
   settings,
   addCommandIntentSignal
 }: QuickCommandsPaneProps): React.JSX.Element {
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const activeRepoId = useAppStore((s) => s.activeRepoId)
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   const runtimeStatuses = useAppStore((s) => s.runtimeStatusByEnvironmentId)

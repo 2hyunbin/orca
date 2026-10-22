@@ -19,6 +19,7 @@ import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-co
 import { translate } from '@/i18n/i18n'
 import { planAgentSessionLaunch } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type ForkAgentSessionFromPaneArgs = {
   pane: ManagedPane
@@ -200,7 +201,7 @@ export async function startAgentSessionFork(fork: PreparedAgentSessionFork): Pro
     )
     return false
   }
-  const sourceRepo = store.repos.find((repo) => repo.id === sourceWorktree.repoId)
+  const sourceRepo = selectRepos(store).find((repo) => repo.id === sourceWorktree.repoId)
   const sourceProjectRuntime = getLocalProjectExecutionRuntimeContext(store, fork.worktreeId)
   const sourceBranch = getUsableForkBase(sourceWorktree, sourceRepo, fork.worktreeId)
   if (!sourceBranch) {

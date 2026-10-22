@@ -19,6 +19,7 @@ import type {
 } from '../../../shared/agent-session-resume'
 import type { AccountRestartAgent } from '@/store/terminals/terminal-contracts'
 import { CODEX_ACCOUNT_RESTART_STARTUP } from './codex-session-restart'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export type AgentAccountRestartStartup = {
   command: string
@@ -65,7 +66,7 @@ export function resolveAgentAccountRestartResumeStartup(
     return null
   }
   const worktree = state.getKnownWorktreeById(args.worktreeId)
-  const repo = worktree ? state.repos.find((entry) => entry.id === worktree.repoId) : null
+  const repo = worktree ? selectRepos(state).find((entry) => entry.id === worktree.repoId) : null
   const launchConfig =
     (entry ? state.getAgentLaunchConfigForStatusEntry(entry) : undefined) ??
     (sleeping?.agent === agent ? sleeping.launchConfig : undefined)

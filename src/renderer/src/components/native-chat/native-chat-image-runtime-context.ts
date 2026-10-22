@@ -19,6 +19,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 /** The transcript must not read until ownership and its path are both known. */
 export type NativeChatImageRuntimeContext = RuntimeFileOperationArgs | null
@@ -50,13 +51,13 @@ type OwnerState = Pick<
 export function selectNativeChatImageOwnerState(state: AppState): OwnerState {
   return {
     settings: state.settings,
-    repos: state.repos,
+    repos: selectRepos(state),
     worktreesByRepo: selectWorktreesByRepo(state),
     detectedWorktreesByRepo: selectDetectedWorktreesByRepo(state),
     folderWorkspaces: selectFolderWorkspaces(state),
     floatingWorkspacePath: state.floatingWorkspacePath,
     structuredSessionLaunchDirectoryByTabId: state.structuredSessionLaunchDirectoryByTabId,
-    projectGroups: state.projectGroups,
+    projectGroups: selectProjectGroups(state),
     runtimeEnvironments: state.runtimeEnvironments,
     runtimeEnvironmentCatalogHydrated: state.runtimeEnvironmentCatalogHydrated,
     removedRuntimeEnvironmentIds: state.removedRuntimeEnvironmentIds,

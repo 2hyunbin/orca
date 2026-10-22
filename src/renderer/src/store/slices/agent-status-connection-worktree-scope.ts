@@ -4,6 +4,7 @@ import {
   getWorktreeExecutionHostId
 } from '../../../../shared/execution-host'
 import { selectWorktreesByRepo } from '../workspace-record-selectors'
+import { selectRepos } from '../project-catalog-selectors'
 
 // Why: relay/daemon teardown drops main's rows, but renderer entries whose connectionId stamp never
 // matched (unstamped over SSH) survive and stay "fresh" 30 min (#9030). Resolve each worktree's host
@@ -15,14 +16,14 @@ export function collectWorktreeIdsForConnection(
   connectionId: string
 ): Set<string> {
   const hostIdsOnConnection = new Set(
-    state.repos
+    selectRepos(state)
       .filter((repo) => repo.connectionId === connectionId)
       .map((repo) => getRepoExecutionHostId(repo))
   )
   if (hostIdsOnConnection.size === 0) {
     return new Set()
   }
-  const repoById = new Map(state.repos.map((repo) => [repo.id, repo] as const))
+  const repoById = new Map(selectRepos(state).map((repo) => [repo.id, repo] as const))
   const onConnection = new Set<string>()
   const onOtherHost = new Set<string>()
   for (const [repoId, worktrees] of Object.entries(selectWorktreesByRepo(state))) {

@@ -22,6 +22,7 @@ import { captureTerminalShutdownLayout } from './terminal-shutdown-layout-captur
 import { resolveLeafScrollbackBuffers } from './leaf-scrollback-resolution'
 import { shouldPreserveTerminalScrollbackBuffers } from '../../../../shared/workspace-session-terminal-buffers'
 import type { TerminalPaneCloseController } from './use-terminal-pane-close-actions'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function useTerminalPaneTitleEffects(controller: TerminalPaneCloseController): void {
   const {
@@ -181,7 +182,7 @@ export function useTerminalPaneTitleEffects(controller: TerminalPaneCloseControl
       const includeLocalBuffers = options?.includeLocalBuffers ?? true
       const shouldCaptureScrollbackBuffers = includeLocalBuffers
         ? true
-        : shouldPreserveTerminalScrollbackBuffers(worktreeId, state.repos)
+        : shouldPreserveTerminalScrollbackBuffers(worktreeId, selectRepos(state))
       const layout = captureTerminalShutdownLayout({
         manager,
         paneTransports: paneTransportsRef.current,

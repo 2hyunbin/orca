@@ -35,6 +35,7 @@ import {
 } from '../../../../shared/project-compatibility-merge'
 import { mergeFetchedHostProjectCatalog } from '../../../../shared/project-compatibility-host-merge'
 import { scheduleSafeAutoForkSync } from './safe-auto-fork-sync'
+import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
 
 export function createRepoCatalogActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -51,14 +52,21 @@ export function createRepoCatalogActions(
           s.pendingSshRepoReadoptions,
           readoptions
         )
-        const reconciliation = reconcileReadoptedSshRepoRows(s.repos, pendingSshRepoReadoptions)
+        const reconciliation = reconcileReadoptedSshRepoRows(
+          selectRepos(s),
+          pendingSshRepoReadoptions
+        )
         const repos = reconciliation.repos
         const worktreeState = reconcileReadoptedSshWorktreeState(s, pendingSshRepoReadoptions)
-        const remainingSetups = filterSetupsForPrunedRepoRows(s.projectHostSetups, s.repos, repos)
+        const remainingSetups = filterSetupsForPrunedRepoRows(
+          selectProjectHostSetups(s),
+          selectRepos(s),
+          repos
+        )
         const compatibility = mergeProjectHostSetupCompatibility(
           projectCompatibilityFromRepos(repos),
           {
-            projects: s.projects,
+            projects: selectProjects(s),
             setups: remainingSetups
           }
         )
@@ -68,12 +76,12 @@ export function createRepoCatalogActions(
         // hands the store arrays straight back when nothing moved, so writing them
         // unconditionally still leaves identity-keyed selectors untouched.
         const projects = reconcileCatalogRows(
-          s.projects,
+          selectProjects(s),
           compatibility.projects,
           (project) => project.id
         )
         const projectHostSetups = reconcileCatalogRows(
-          s.projectHostSetups,
+          selectProjectHostSetups(s),
           compatibility.projectHostSetups,
           getProjectHostSetupOwnerKey
         )
@@ -107,16 +115,16 @@ export function createRepoCatalogActions(
             return s
           }
           // Why: re-adoption leaves a stale row on the old SSH target id (a ghost that fails "SSH target not found"); drop rows a live-host sibling supersedes.
-          const result = mergeFetchedRepoCatalog(catalog, s.repos)
+          const result = mergeFetchedRepoCatalog(catalog, selectRepos(s))
           const reconciliation = reconcileSupersededSshRepos(result.repos, s)
           const prunedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
           const validRepoIds = new Set(prunedRepos.map((repo) => repo.id))
           const validRepoHostIdentities = new Set(prunedRepos.map(getRepoHostIdentity))
           const mergedProjectCompatibility = mergeFetchedHostProjectCatalog({
             previous: {
-              projects: s.projects,
+              projects: selectProjects(s),
               projectHostSetups: filterSetupsForPrunedRepoRows(
-                s.projectHostSetups,
+                selectProjectHostSetups(s),
                 result.repos,
                 prunedRepos
               )
@@ -133,7 +141,7 @@ export function createRepoCatalogActions(
             pendingSshRepoReadoptions: reconciliation.pendingReadoptions,
             ...reconcileReadoptedSshWorktreeState(s, s.pendingSshRepoReadoptions),
             ...mergedProjectCompatibility,
-            ...(arrayElementsUnchanged(prunedRepos, s.repos)
+            ...(arrayElementsUnchanged(prunedRepos, selectRepos(s))
               ? {}
               : { folderWorkspacePathStatuses: {} }),
             activeRepoId:

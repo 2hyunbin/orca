@@ -49,6 +49,11 @@ import {
 import { useAiVaultPanelHandle, type AiVaultPanelProps } from './ai-vault-panel-handle'
 import { aiVaultSearchHitHostLabels } from './ai-vault-search-hit-hosts'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import {
+  selectProjectGroups,
+  selectProjects,
+  selectRepos
+} from '../../store/project-catalog-selectors'
 
 export default function AiVaultPanel({
   ref,
@@ -69,11 +74,11 @@ export default function AiVaultPanel({
   const projectHostSetupProjection = useProjectHostSetupProjection()
   const resumeTargetState = useAppStore(
     useShallow((state) => ({
-      projects: state.projects,
+      projects: selectProjects(state),
       settings: state.settings,
       folderWorkspaces: selectFolderWorkspaces(state),
-      projectGroups: state.projectGroups,
-      repos: state.repos,
+      projectGroups: selectProjectGroups(state),
+      repos: selectRepos(state),
       worktreesByRepo: selectWorktreesByRepo(state)
     }))
   )

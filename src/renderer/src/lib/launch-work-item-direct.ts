@@ -45,6 +45,7 @@ import {
 } from '@/lib/agent-session-launch-plan'
 import { newAgentLaunchRequestId } from '@/lib/agent-launch-request-id'
 import { ensureDetectedAgentsForRepo } from '@/lib/agent-detection-target-inventory'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 /**
  * "Use" flow: create the workspace, activate it, launch the default agent,
@@ -70,7 +71,7 @@ export async function launchWorkItemDirect(args: LaunchWorkItemDirectArgs): Prom
     agentArgs
   } = args
   const store = useAppStore.getState()
-  const owner = resolveDirectLaunchOwnerRow(store.repos, repoId)
+  const owner = resolveDirectLaunchOwnerRow(selectRepos(store), repoId)
   if (!owner) {
     openModalFallback()
     return false

@@ -26,6 +26,7 @@ import {
 import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { mergeByIdentity, unchangedMergeSource } from '../catalog-identity'
+import { selectProjectGroups } from '../project-catalog-selectors'
 
 export type FetchedFolderWorkspaceCatalog = {
   folderWorkspaces: FolderWorkspace[]
@@ -154,7 +155,10 @@ export function clearRestoredFolderWorkspaceSessionOwners(
       continue
     }
     const workspace = state.folderWorkspaces.find((entry) => entry.id === scope.folderWorkspaceId)
-    if (workspace && !state.projectGroups.some((group) => group.id === workspace.projectGroupId)) {
+    if (
+      workspace &&
+      !selectProjectGroups(state).some((group) => group.id === workspace.projectGroupId)
+    ) {
       // Why: ownership resolves via the project group; if that catalog is still missing, keep the restored host owner so a session write doesn't move runtime tabs local.
       next[key] = hostId
     }
@@ -229,14 +233,14 @@ export async function reconcileFailedFolderWorkspaceUpdate(args: {
       folderWorkspaces: refreshed
         ? state.folderWorkspaces.map((workspace) =>
             workspace.id === args.folderWorkspaceId &&
-            getFolderWorkspaceHostId(workspace, state.projectGroups) === args.ownerHostId
+            getFolderWorkspaceHostId(workspace, selectProjectGroups(state)) === args.ownerHostId
               ? mergeFolderWorkspaceUpdateResponse(workspace, refreshed, latestFields)
               : workspace
           )
         : state.folderWorkspaces.filter(
             (workspace) =>
               workspace.id !== args.folderWorkspaceId ||
-              getFolderWorkspaceHostId(workspace, state.projectGroups) !== args.ownerHostId
+              getFolderWorkspaceHostId(workspace, selectProjectGroups(state)) !== args.ownerHostId
           ),
       ...(folderWorkspaceUpdateInvalidatesPathStatus(latestFields) || !refreshed
         ? { folderWorkspacePathStatuses: {} }

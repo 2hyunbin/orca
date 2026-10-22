@@ -26,6 +26,7 @@ import { addHydratedSshWorktreePlaceholders } from './workspace-terminal-ssh-pla
 import { retainUnverifiedPtyLossTabIds } from './terminal-unverified-pty-loss'
 import { restoreActiveTabIdByWorktree } from './workspace-terminal-active-tabs'
 import { retainPairedTerminalTabCloseIntentsForCatalog } from '../../runtime/paired-terminal-tab-close-intents'
+import { selectRepos } from '../project-catalog-selectors'
 
 export function createWorkspaceTerminalHydrationActions(
   set: TerminalStoreSet,
@@ -43,7 +44,7 @@ export function createWorkspaceTerminalHydrationActions(
       const ownershipTransfersByTabId = new Map<string, TerminalLayoutPtyOwnershipTransfer[]>()
       set((s) => {
         const runtimeSessionPlaceholders = buildRuntimeSessionPlaceholders({
-          repos: s.repos,
+          repos: selectRepos(s),
           runtimeHostIdByWorkspaceSessionKey: options?.runtimeHostIdByWorkspaceSessionKey ?? {},
           worktreesByRepo: s.worktreesByRepo
         })

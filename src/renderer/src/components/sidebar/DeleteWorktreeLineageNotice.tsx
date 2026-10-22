@@ -14,6 +14,7 @@ import type {
   DeleteWorktreeDirtyChangePreview
 } from './delete-worktree-dirty-change-counts'
 import { translate } from '@/i18n/i18n'
+import { selectProjectHostSetups, selectProjects } from '../../store/project-catalog-selectors'
 
 type DeleteWorktreeLineageNoticeProps = {
   descendants: readonly Worktree[]
@@ -32,8 +33,8 @@ export function DeleteWorktreeLineageNotice({
   dirtyChangePreviewsByWorktreeId,
   changeCheckStatesByWorktreeId
 }: DeleteWorktreeLineageNoticeProps): JSX.Element | null {
-  const projects = useAppStore((s) => s.projects)
-  const projectHostSetups = useAppStore((s) => s.projectHostSetups)
+  const projects = useAppStore((s) => selectProjects(s))
+  const projectHostSetups = useAppStore((s) => selectProjectHostSetups(s))
   const projectIndex = useMemo(
     () =>
       buildProjectGroupingIndex({

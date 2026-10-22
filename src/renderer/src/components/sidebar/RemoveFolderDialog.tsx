@@ -18,11 +18,13 @@ import {
 import { countOpenRepoTerminalTabs } from '@/store/repos/repo-removal'
 import { getRecipeVmSshTargetForHost } from '@/lib/recipe-vm-managed-host'
 import { RemovalUnsavedFilesNotice } from './RemovalUnsavedFilesNotice'
+import { confirmUnsavedDiscard } from '@/store/slices/worktrees/teardown/removed-workspace-unsaved-files'
 import { projectRemovalTargets } from './removal-unsaved-files'
 import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 // Why: interpolated into the sentence so locales control where the name sits;
 // U+0000 cannot appear in a real project name, so the split is unambiguous.
@@ -46,7 +48,7 @@ const RemoveFolderDialog = React.memo(function RemoveFolderDialog() {
   // and that re-adding that host recovers it.
   const sshConnectionId = useAppStore(
     (s) =>
-      s.repos
+      selectRepos(s)
         .find((repo) => repo.id === repoId && (!hostId || getRepoExecutionHostId(repo) === hostId))
         ?.connectionId?.trim() ?? null
   )
@@ -124,10 +126,14 @@ const RemoveFolderDialog = React.memo(function RemoveFolderDialog() {
   const handleConfirm = useCallback(() => {
     // Why: without the opener's host a bare id could remove another host's row (#13071).
     if (repoId && hostId) {
-      void removeProject(repoId, { hostId, errorFeedback: 'toast' })
+      void removeProject(repoId, {
+        hostId,
+        errorFeedback: 'toast',
+        confirmedDiscards: confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
+      })
     }
     closeModal()
-  }, [closeModal, hostId, removeProject, repoId])
+  }, [closeModal, hostId, removeProject, repoId, unsavedTargets])
 
   const handleOpenChange = useCallback(
     (open: boolean) => {

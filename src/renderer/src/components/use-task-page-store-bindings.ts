@@ -9,6 +9,7 @@ import {
 import { useRef } from 'react'
 import { getScreenSubmitShortcutLabel } from '@/lib/screen-submit-shortcut'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export function useTaskPageStoreBindings() {
   useTranslation()
@@ -20,7 +21,7 @@ export function useTaskPageStoreBindings() {
   const openTaskPage = useAppStore((s) => s.openTaskPage)
   const closeTaskPage = useAppStore((s) => s.closeTaskPage)
   const activeModal = useAppStore((s) => s.activeModal)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)

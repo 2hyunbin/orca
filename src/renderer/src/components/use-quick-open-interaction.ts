@@ -6,6 +6,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export function useQuickOpenInteraction(worktreeId: string | null): {
   opening: boolean
@@ -29,13 +30,13 @@ export function useQuickOpenInteraction(worktreeId: string | null): {
         state.activeWorktreeId !== previous.activeWorktreeId ||
         state.activeWorkspaceExecutionHostId !== previous.activeWorkspaceExecutionHostId ||
         ((state.settings !== previous.settings ||
-          state.repos !== previous.repos ||
+          selectRepos(state) !== previous.repos ||
           selectWorktreesByRepo(state) !== selectWorktreesByRepo(previous) ||
           selectDetectedWorktreesByRepo(state) !== selectDetectedWorktreesByRepo(previous) ||
           state.restoredRuntimeHostIdByWorkspaceSessionKey !==
             previous.restoredRuntimeHostIdByWorkspaceSessionKey ||
           selectFolderWorkspaces(state) !== selectFolderWorkspaces(previous) ||
-          state.projectGroups !== previous.projectGroups) &&
+          selectProjectGroups(state) !== previous.projectGroups) &&
           JSON.stringify(getFileExplorerOperationOwnerFromState(state, worktreeId)) !==
             JSON.stringify(getFileExplorerOperationOwnerFromState(previous, worktreeId)))
       ) {

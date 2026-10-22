@@ -11,6 +11,11 @@ import {
   setRuntimeGraphSyncEnabled
 } from '../runtime/sync-runtime-graph'
 import { useAppStore } from '../store'
+import {
+  selectProjectHostSetups,
+  selectProjects,
+  selectRepos
+} from '../store/project-catalog-selectors'
 
 /** Keeps the mobile runtime graph republished as the store's session-visible state changes. */
 export function useRuntimeGraphSync(): void {
@@ -58,9 +63,9 @@ export function useRuntimeGraphSync(): void {
       useAppStore.subscribe((state, previousState) => {
         // Why: the graph carries the sidebar's Project catalog to paired phones; republish on change.
         if (
-          state.repos !== previousState.repos ||
-          state.projects !== previousState.projects ||
-          state.projectHostSetups !== previousState.projectHostSetups ||
+          selectRepos(state) !== previousState.repos ||
+          selectProjects(state) !== previousState.projects ||
+          selectProjectHostSetups(state) !== previousState.projectHostSetups ||
           state.projectOrderBy !== previousState.projectOrderBy
         ) {
           scheduleRuntimeGraphSync()

@@ -32,6 +32,7 @@ import { usePullRequestDetails } from './use-details'
 import { PullRequestPageHeader } from './header'
 import { PullRequestPageTabs } from './tabs-shell'
 import { syncPullRequestFileViewed } from './viewed-sync'
+import { selectRepos } from '../../../store/project-catalog-selectors'
 
 export default function PullRequestPage({
   workItem,
@@ -83,8 +84,9 @@ export default function PullRequestPage({
     if (!repoPath && !effectiveRepoId) {
       return undefined
     }
-    return s.repos.find((r) => (effectiveRepoId ? r.id === effectiveRepoId : r.path === repoPath))
-      ?.issueSourcePreference
+    return selectRepos(s).find((r) =>
+      effectiveRepoId ? r.id === effectiveRepoId : r.path === repoPath
+    )?.issueSourcePreference
   })
   const canUseDetailsRepoContext = canUseGitHubRepoContext(repoPath, sourceContext)
   const { details, loading, error, detailsLoaded, detailsCacheKey, appendOptimisticComment } =

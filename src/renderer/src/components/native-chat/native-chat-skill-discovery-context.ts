@@ -15,6 +15,11 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import {
+  selectProjectGroups,
+  selectProjects,
+  selectRepos
+} from '../../store/project-catalog-selectors'
 
 export type NativeChatSkillStateInputs = Pick<
   AppState,
@@ -58,9 +63,9 @@ export function selectNativeChatSkillStateInputs(state: AppState): NativeChatSki
     detectedWorktreesByRepo: selectDetectedWorktreesByRepo(state),
     floatingWorkspacePath: state.floatingWorkspacePath,
     folderWorkspaces: selectFolderWorkspaces(state),
-    projectGroups: state.projectGroups,
-    projects: state.projects,
-    repos: state.repos,
+    projectGroups: selectProjectGroups(state),
+    projects: selectProjects(state),
+    repos: selectRepos(state),
     restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
     settings: state.settings,
     structuredSessionLaunchDirectoryByTabId: state.structuredSessionLaunchDirectoryByTabId,

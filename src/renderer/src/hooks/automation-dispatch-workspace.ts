@@ -21,6 +21,7 @@ import {
 import { resolveFolderWorkspaceHost } from '../../../shared/folder-workspace-execution-host'
 import type { Worktree } from '../../../shared/worktree/types'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 type AutomationDispatchStoreState = ReturnType<typeof useAppStore.getState>
 type MarkDispatchResult = (result: AutomationDispatchResult) => Promise<void>
@@ -37,7 +38,7 @@ export function resolveAutomationDispatchWorkspace(
   run: AutomationRun
 ) {
   const runRepoId = getAutomationRunRepoId(automation)
-  const repo = state.repos.find((entry) => entry.id === runRepoId)
+  const repo = selectRepos(state).find((entry) => entry.id === runRepoId)
   const automationWorkspaceScope = parseWorkspaceKey(automation.workspaceId ?? '')
   const automationWorktree = automation.workspaceId
     ? automationWorkspaceScope?.type === 'folder'

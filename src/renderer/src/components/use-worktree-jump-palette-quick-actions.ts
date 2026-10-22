@@ -20,17 +20,18 @@ import type { WorktreeJumpPaletteOpenTabs } from './use-worktree-jump-palette-op
 import type { WorktreeJumpPaletteProjectTargets } from './use-worktree-jump-palette-project-targets'
 import type { WorktreeJumpPaletteStoreState } from './use-worktree-jump-palette-store-state'
 import type { WorktreeJumpPaletteWorktrees } from './use-worktree-jump-palette-worktrees'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 function getComposerPrefetchRepoId(
   state: ReturnType<typeof useAppStore.getState>,
   initialRepoId?: string
 ): string | null {
   return resolveComposerGitRepoId({
-    eligibleRepos: getComposerEligibleRepos(state.repos),
+    eligibleRepos: getComposerEligibleRepos(selectRepos(state)),
     initialRepoId,
     activeRepoId: resolveComposerActiveRepoId(
-      state.repos,
-      getComposerEligibleRepos(state.repos),
+      selectRepos(state),
+      getComposerEligibleRepos(selectRepos(state)),
       state.activeRepoId
     ),
     focusedHostScope: state.workspaceHostScope

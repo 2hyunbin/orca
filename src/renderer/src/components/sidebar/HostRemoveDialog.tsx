@@ -18,6 +18,7 @@ import { getAllWorktreesFromState } from '@/store/selectors'
 import { translate } from '@/i18n/i18n'
 import { toSshExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { RemovalUnsavedFilesNotice } from './RemovalUnsavedFilesNotice'
+import { confirmUnsavedDiscard } from '@/store/slices/worktrees/teardown/removed-workspace-unsaved-files'
 import { projectRemovalTargets } from './removal-unsaved-files'
 import { clearHostRename } from './host-rename-remove'
 import type { HostRemovalTarget } from './host-rename-remove'
@@ -28,6 +29,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type HostRemoveDialogProps = {
   open: boolean
@@ -53,7 +55,7 @@ export function HostRemoveDialog({
   const [deleteWorkspaces, setDeleteWorkspaces] = useState(false)
   const mountedRef = useMountedRef()
 
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
   const detectedWorktreesByRepo = useAppStore((s) => selectDetectedWorktreesByRepo(s))
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
@@ -128,7 +130,8 @@ export function HostRemoveDialog({
         // Connected → real remote removal; offline/ghost → local forget.
         const { failedIds } = await clearSshHostWorkspaces(
           sshResolution,
-          isConnected ? 'delete-remote' : 'forget-local'
+          isConnected ? 'delete-remote' : 'forget-local',
+          confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
         )
         // Why: don't remove the SSH target (and report success) while some of its
         // workspaces failed to clear — that would strand ghost rows behind a

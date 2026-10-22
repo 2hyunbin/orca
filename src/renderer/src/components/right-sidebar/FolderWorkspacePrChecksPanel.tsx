@@ -15,6 +15,7 @@ import {
 } from './parent-pr-checks-refresh'
 import { createParentPrChecksProjectionSelector } from './parent-pr-checks-projection-selector'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type FolderWorkspacePrChecksPanelProps = {
   isVisible?: boolean
@@ -29,7 +30,7 @@ export default function FolderWorkspacePrChecksPanel({
   const workspaceLineageByChildKey = useAppStore((s) => s.workspaceLineageByChildKey)
   const worktreeLineageById = useAppStore((s) => s.worktreeLineageById)
   const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const settings = useAppStore((s) => s.settings)
   const fetchHostedReviewForBranch = useAppStore((s) => s.fetchHostedReviewForBranch)
   const fetchPRChecks = useAppStore((s) => s.fetchPRChecks)

@@ -34,6 +34,7 @@ import type {
   AgentPaneThread,
   ThreadReadFilter
 } from './activity-thread-types'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type AgentPaneThreadsStoreData = Pick<
   AppState,
@@ -128,7 +129,7 @@ export function useAgentPaneThreads(args: {
         tabProjectionRef.current = { raw: s.unifiedTabsByWorktree, projected }
         return projected
       })(),
-      repos: s.repos,
+      repos: selectRepos(s),
       worktreesByRepo: selectWorktreesByRepo(s),
       folderWorkspaces: selectFolderWorkspaces(s),
       floatingWorkspacePath: s.floatingWorkspacePath,

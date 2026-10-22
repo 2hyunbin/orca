@@ -35,6 +35,7 @@ import {
 import { createBackgroundAgentStatusConsumer } from '@/lib/background-agent-status-consumer'
 import { isWslUncPath } from '../../../shared/wsl-paths'
 import { runtimeWaitExitCode, settleTabPtyBinding } from '@/lib/agent-background-session-exit'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export async function launchAgentBackgroundSession(
   args: LaunchAgentBackgroundSessionArgs
@@ -43,7 +44,7 @@ export async function launchAgentBackgroundSession(
   const store = useAppStore.getState()
   // Folder workspaces exist only in getKnownWorktreeById (#2989).
   const worktree = store.getKnownWorktreeById(worktreeId)
-  const repo = worktree ? store.repos.find((entry) => entry.id === worktree.repoId) : null
+  const repo = worktree ? selectRepos(store).find((entry) => entry.id === worktree.repoId) : null
   if (!worktree) {
     throw new Error('The target workspace is no longer available.')
   }

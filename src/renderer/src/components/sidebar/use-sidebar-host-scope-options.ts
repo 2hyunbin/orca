@@ -7,6 +7,7 @@ import {
   type SidebarHostOption,
   type SidebarHostScopeOption
 } from './sidebar-host-options'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 /** Shared host-scope derivation for the sidebar scope strip and the workspace
  * options menu so both surfaces consume the same live runtime status without
@@ -15,7 +16,7 @@ export function useSidebarHostScopeOptions(): {
   hostOptions: SidebarHostOption[]
   hostScopeOptions: SidebarHostScopeOption[]
 } {
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
   const settings = useAppStore((s) => s.settings)

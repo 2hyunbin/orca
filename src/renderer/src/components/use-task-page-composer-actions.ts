@@ -15,6 +15,7 @@ import { shouldHideTaskPageListChrome } from '@/components/task-page-list-chrome
 import { getJiraIssueWorkspaceSeed } from './task-page-source-context'
 import { findJiraIssueDefaultRepo } from '../../../shared/jira-project-reference'
 import { getRepoWorkspaceCreationTargetHint } from '@/lib/project-host-workspace-target'
+import { selectProjectHostSetups } from '../store/project-catalog-selectors'
 export function useTaskPageComposerActions(model: TaskPageJiraListEffectsModel) {
   const {
     setTaskResumeState,
@@ -220,7 +221,10 @@ export function useTaskPageComposerActions(model: TaskPageJiraListEffectsModel) 
         taskSourceContext,
         initialRepoId: mappedRepo?.id,
         initialWorkspaceTarget: mappedRepo
-          ? getRepoWorkspaceCreationTargetHint(mappedRepo, useAppStore.getState().projectHostSetups)
+          ? getRepoWorkspaceCreationTargetHint(
+              mappedRepo,
+              selectProjectHostSetups(useAppStore.getState())
+            )
           : undefined,
         prefilledName: getJiraIssueWorkspaceSeed(issue),
         telemetrySource: 'sidebar'

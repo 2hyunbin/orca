@@ -18,6 +18,7 @@ import {
 import { useWindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
 import { useAppStore } from '@/store'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjects, selectRepos } from '../store/project-catalog-selectors'
 
 type ActiveProjectSkillRuntime = {
   projectRuntime?: ProjectExecutionRuntimeResolution
@@ -70,8 +71,8 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
     useShallow((state) => ({
       activeRepoId: state.activeRepoId,
       activeWorktreeId: state.activeWorktreeId,
-      projects: state.projects,
-      repos: state.repos,
+      projects: selectProjects(state),
+      repos: selectRepos(state),
       settings: state.settings,
       worktreesByRepo: selectWorktreesByRepo(state)
     }))

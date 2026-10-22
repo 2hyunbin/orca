@@ -36,6 +36,7 @@ import {
   setSetupScriptProbeCache,
   subscribeSetupScriptProbeCache
 } from './setup-script-probe-cache'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 const SETUP_SCRIPT_PROBE_SETTLE_TIMEOUT_MS = 15_000
 
@@ -62,7 +63,7 @@ export function useSetupGuideProgress(
   const jiraStatusChecked = useAppStore((s) => s.jiraStatusChecked)
   const jiraStatusContextKey = useAppStore((s) => s.jiraStatusContextKey)
   const checkJiraConnection = useAppStore((s) => s.checkJiraConnection)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const activeRepoId = useAppStore((s) => s.activeRepoId)
   const expectedPreflightContextKey = useAppStore((s) =>
     localPreflightContextKey(getLocalPreflightContext(s))

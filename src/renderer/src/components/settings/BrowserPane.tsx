@@ -35,6 +35,7 @@ import { isMacUserAgent } from '@/components/terminal-pane/pane-helpers'
 import { translate } from '@/i18n/i18n'
 import { resolveAvailableBrowserSessionHostId } from './browser-session-host-selection'
 import { motionSafeScrollBehavior } from '@/hooks/usePrefersReducedMotion'
+import { selectRepos } from '../../store/project-catalog-selectors'
 export { getBrowserPaneCombinedSearchEntries }
 
 type BrowserPaneProps = {
@@ -63,7 +64,7 @@ export function BrowserPane({
   const browserDefaultZoomLevel = useAppStore((s) => s.browserDefaultZoomLevel)
   const setBrowserDefaultZoomLevel = useAppStore((s) => s.setBrowserDefaultZoomLevel)
   const browserSessionProfiles = useAppStore((s) => s.browserSessionProfiles)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)

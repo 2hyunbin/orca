@@ -41,6 +41,7 @@ import {
   getWorktreeIdsWithStructuredChat
 } from '../../visible-worktree-activity-inputs'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../../../store/project-catalog-selectors'
 
 export type SidebarWorktreeFilters = ReturnType<typeof useSidebarWorktreeFilters>
 
@@ -138,7 +139,7 @@ function getRevealTargetHostId(state: AppState, worktree: Worktree, repo: Repo |
     if (folderWorkspace) {
       return getFolderWorkspaceExecutionHostIdForRows({
         folderWorkspace,
-        projectGroup: state.projectGroups.find(
+        projectGroup: selectProjectGroups(state).find(
           (candidate) => candidate.id === folderWorkspace.projectGroupId
         ),
         defaultHostId
@@ -154,7 +155,7 @@ export function useSidebarWorktreeFilters() {
 
   const revealWorkspaceFilters = useCallback((worktree: Worktree) => {
     const state = useAppStore.getState()
-    const repo = state.repos.find((candidate) => candidate.id === worktree.repoId)
+    const repo = selectRepos(state).find((candidate) => candidate.id === worktree.repoId)
     const context = {
       state,
       worktree,

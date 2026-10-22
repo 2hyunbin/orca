@@ -45,6 +45,7 @@ import {
   type ResumeWorkspaceGroup,
   type ResumeWorkspaceNode
 } from './native-chat-resume-on-restart-grouping'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export type { ResumeCandidate } from './native-chat-resume-on-restart-grouping'
 
@@ -203,8 +204,8 @@ function ProjectNode({
   depth: number
   tree: TreeProps
 }): React.JSX.Element {
-  const repos = useAppStore((store) => store.repos)
-  const projectGroups = useAppStore((store) => store.projectGroups)
+  const repos = useAppStore((store) => selectRepos(store))
+  const projectGroups = useAppStore((store) => selectProjectGroups(store))
   const header = resolveResumeGroupHeader(repoId, repos, projectGroups)
   return (
     <GroupNode

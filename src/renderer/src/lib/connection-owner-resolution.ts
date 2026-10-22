@@ -18,6 +18,7 @@ import {
   getFolderWorkspaceConnectionId
 } from './folder-workspace-connection'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 type ConnectionOwnerState = Pick<
   AppState,
@@ -37,16 +38,16 @@ export function createConnectionIdForFileSelector(
     }
     if (
       previousSlices?.folderWorkspaces === selectFolderWorkspaces(state) &&
-      previousSlices.projectGroups === state.projectGroups &&
-      previousSlices.repos === state.repos &&
+      previousSlices.projectGroups === selectProjectGroups(state) &&
+      previousSlices.repos === selectRepos(state) &&
       selectWorktreesByRepo(previousSlices) === selectWorktreesByRepo(state)
     ) {
       return previousResult
     }
     previousSlices = {
       folderWorkspaces: selectFolderWorkspaces(state),
-      projectGroups: state.projectGroups,
-      repos: state.repos,
+      projectGroups: selectProjectGroups(state),
+      repos: selectRepos(state),
       worktreesByRepo: selectWorktreesByRepo(state)
     }
     previousResult = getConnectionIdForFileFromState(state, worktreeId, filePath)
@@ -80,8 +81,8 @@ export function getConnectionIdFromState(
   // only the memoized index — unrelated store writes must not rescan every repository.
   const resolution = resolveWorktreeExecutionHost(
     {
-      byId: (id) => resolveIndexedRepoOwner(state.repos, id),
-      byHost: (id, hostId) => findIndexedRepoOwnerForHost(state.repos, id, hostId)
+      byId: (id) => resolveIndexedRepoOwner(selectRepos(state), id),
+      byHost: (id, hostId) => findIndexedRepoOwnerForHost(selectRepos(state), id, hostId)
     },
     { repoId, hostId: worktree?.hostId ?? null }
   )
@@ -101,7 +102,7 @@ export function getRepoConnectionIdFromState(
   if (!repoId) {
     return undefined
   }
-  const resolution = resolveIndexedRepoOwner(state.repos, repoId)
+  const resolution = resolveIndexedRepoOwner(selectRepos(state), repoId)
   return resolution.kind === 'resolved' ? getRepoSshConnectionId(resolution.owner) : undefined
 }
 

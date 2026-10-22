@@ -23,6 +23,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type ManagedServerStatus = SshConnectionState['managedServer']
 
@@ -170,7 +171,7 @@ async function loadManagedServerCatalogs(targetId: string, load: CatalogLoad): P
   }
   // Read before the source rows go: a linked project keeps the server's id, not this desktop's.
   const linkedRepoIds = linkedServerRepoIds(
-    useAppStore.getState().repos,
+    selectRepos(useAppStore.getState()),
     targetId,
     environmentId,
     load.linked
@@ -195,7 +196,9 @@ async function loadManagedServerCatalogs(targetId: string, load: CatalogLoad): P
 async function fetchServerWorktrees(environmentId: string): Promise<void> {
   const executionHostId = toRuntimeExecutionHostId(environmentId)
   const state = useAppStore.getState()
-  const repos = state.repos.filter((repo) => getRepoExecutionHostId(repo) === executionHostId)
+  const repos = selectRepos(state).filter(
+    (repo) => getRepoExecutionHostId(repo) === executionHostId
+  )
   await Promise.all(repos.map((repo) => state.fetchWorktrees(repo.id, { executionHostId })))
 }
 
@@ -285,7 +288,7 @@ function serverCopyOfWorkspace(
   if (!source) {
     return { kind: 'absent' }
   }
-  const serverRepoId = state.repos.some(
+  const serverRepoId = selectRepos(state).some(
     (repo) => repo.id === source.repoId && getRepoExecutionHostId(repo) === runtimeHostId
   )
     ? source.repoId

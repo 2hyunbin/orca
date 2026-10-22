@@ -9,6 +9,7 @@ import { getSparsePresetOperationErrorMessage } from './sparse-preset-operation-
 import { SparsePresetDraftEditor, type SparsePresetDraft } from './sparse-preset-draft-editor'
 import { SparsePresetSettingsRow } from './sparse-preset-settings-row'
 import { translate } from '@/i18n/i18n'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type SparsePresetSettingsSectionProps = {
   repoId: string
@@ -17,7 +18,7 @@ type SparsePresetSettingsSectionProps = {
 export function SparsePresetSettingsSection({
   repoId
 }: SparsePresetSettingsSectionProps): React.JSX.Element {
-  const repo = useAppStore((s) => s.repos.find((entry) => entry.id === repoId))
+  const repo = useAppStore((s) => selectRepos(s).find((entry) => entry.id === repoId))
   const presets = useAppStore((s) => s.sparsePresetsByRepo[repoId])
   const loadStatus = useAppStore((s) => s.sparsePresetsLoadStatusByRepo[repoId] ?? 'idle')
   const loadError = useAppStore((s) => s.sparsePresetsErrorByRepo[repoId])

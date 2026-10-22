@@ -9,6 +9,7 @@ import {
 import { PER_REPO_FETCH_LIMIT } from '../../../../../shared/work-items'
 import { isGitRepoKind } from '../../../../../shared/repo-kind'
 import { presetToQuery } from './ui-slice-hydration-sanitizers'
+import { selectRepos } from '../../project-catalog-selectors'
 
 const LINEAR_TASK_PREFETCH_LIMIT = 36
 
@@ -123,7 +124,7 @@ export function createUiTaskActions(set: UISliceSet, get: UISliceGet): Partial<U
       )
       const resolvedMode = state.taskResumeState?.githubMode ?? 'items'
       if (resolvedSource === 'github' && resolvedMode === 'items') {
-        const eligibleRepos = state.repos.filter((repo) => isGitRepoKind(repo) && repo.path)
+        const eligibleRepos = selectRepos(state).filter((repo) => isGitRepoKind(repo) && repo.path)
         const selectedRepos = (() => {
           const preferred = data.preselectedRepoId
           if (preferred) {

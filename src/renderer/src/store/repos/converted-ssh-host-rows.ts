@@ -4,6 +4,7 @@ import {
   parseExecutionHostId,
   toSshExecutionHostId
 } from '../../../../shared/execution-host'
+import { selectRepos } from '../project-catalog-selectors'
 
 type ConvertedHostRows = Pick<
   AppState,
@@ -30,7 +31,7 @@ export function withoutConvertedSshHostRows(
         parseExecutionHostId(state.contestedPrimaryHostBySessionKey[worktree.id])?.kind !==
           'runtime'
     )
-  const repos = state.repos.filter((repo) => getRepoExecutionHostId(repo) !== hostId)
+  const repos = selectRepos(state).filter((repo) => getRepoExecutionHostId(repo) !== hostId)
   const worktreesByRepo = withoutHostRows(state.worktreesByRepo, hostId)
   let detectedChanged = false
   const detectedWorktreesByRepo = Object.fromEntries(
@@ -44,7 +45,7 @@ export function withoutConvertedSshHostRows(
     })
   )
   return {
-    ...(repos.length === state.repos.length ? {} : { repos }),
+    ...(repos.length === selectRepos(state).length ? {} : { repos }),
     ...(worktreesByRepo === state.worktreesByRepo ? {} : { worktreesByRepo }),
     ...(detectedChanged ? { detectedWorktreesByRepo } : {}),
     ...(pinned.length > 0

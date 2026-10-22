@@ -38,6 +38,7 @@ import {
 } from '../../../../shared/workspace-view/workspace-view-options'
 import { translate } from '@/i18n/i18n'
 import { SidebarGroupByToggle } from './SidebarGroupByToggle'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function useWorkspaceOptionsFilterBadge(): {
   hasAnyFilter: boolean
@@ -45,7 +46,7 @@ export function useWorkspaceOptionsFilterBadge(): {
   activeFilterLabel: string
 } {
   const filterState = useAppStore(useShallow(selectSidebarFilterState))
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const activeFilterCount = useMemo(
     () =>
       countActiveWorkspaceFilters(
@@ -269,7 +270,7 @@ export function WorkspaceOptionsMenuItems({
 }: {
   preserveWorkspaceBoardOpen?: boolean
 }): JSX.Element {
-  const repoCount = useAppStore((s) => s.repos.length)
+  const repoCount = useAppStore((s) => selectRepos(s).length)
   const groupBy = useAppStore((s) => s.groupBy)
   const showSleepingWorkspaces = useAppStore((s) => s.showSleepingWorkspaces)
   const hideWorkspacesFromOtherDevices = useAppStore((s) => s.hideWorkspacesFromOtherDevices)

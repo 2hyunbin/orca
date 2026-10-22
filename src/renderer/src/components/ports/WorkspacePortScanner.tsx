@@ -16,6 +16,7 @@ import {
 } from '@/lib/workspace-port-scan-debounce'
 import type { WorkspacePortScanResult } from '../../../../shared/workspace-ports'
 import { buildExecutionHostRegistry } from '../../../../shared/execution-host-registry'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 const WORKSPACE_PORT_SCAN_INTERVAL_MS = 30_000
 const WORKSPACE_PORT_ADVERTISED_URL_SETTLE_MS = 1_000
@@ -39,7 +40,7 @@ function makeUnavailableScan(reason: string): WorkspacePortScanResult {
 
 export function WorkspacePortScanner({ enabled = true }: { enabled?: boolean }): null {
   const settings = useAppStore((s) => s.settings)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const hasWorktrees = useAppStore(getHasAnyWorktreesFromState)
   const setWorkspacePortScan = useAppStore((s) => s.setWorkspacePortScan)
   const setWorkspacePortScanProjection = useAppStore((s) => s.setWorkspacePortScanProjection)

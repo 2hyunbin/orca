@@ -33,6 +33,7 @@ import {
   isImeOwnedKeyboardEvent,
   useImeEnterGestureOwnership
 } from '@/lib/ime-composition-keyboard-event'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 const WorktreeMetaDialogDraft = React.memo(function WorktreeMetaDialogDraft() {
   const activeModal = useAppStore((s) => s.activeModal)
@@ -64,7 +65,7 @@ const WorktreeMetaDialogDraft = React.memo(function WorktreeMetaDialogDraft() {
   const repo = useAppStore((s) =>
     worktree && !isFolderWorkspace
       ? (findIndexedRepoOwnerForHost(
-          s.repos,
+          selectRepos(s),
           worktree.repoId,
           worktree.runtimeOwnerEnvironmentId
             ? toRuntimeExecutionHostId(worktree.runtimeOwnerEnvironmentId)

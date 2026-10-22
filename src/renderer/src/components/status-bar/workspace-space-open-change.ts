@@ -11,6 +11,7 @@ import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
 import { ipcOrRuntimeTargetForHostId } from '@/runtime/runtime-client-target'
 import { openWorkspaceFile } from '@/lib/workspace-file-open'
 import { translate } from '@/i18n/i18n'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function openWorkspaceSpaceChange(
   worktree: WorkspaceSpaceWorktree,
@@ -39,7 +40,7 @@ export async function revealWorkspaceSpaceChange(
     const ownerHostId = executionHostId ?? worktree?.hostId ?? LOCAL_EXECUTION_HOST_ID
     const repo =
       worktree &&
-      state.repos.find((repo) => repoMatchesHostIdentity(repo, worktree.repoId, ownerHostId))
+      selectRepos(state).find((repo) => repoMatchesHostIdentity(repo, worktree.repoId, ownerHostId))
     const target = ipcOrRuntimeTargetForHostId(ownerHostId)
     if (!worktree || !repo || !target) {
       throw new Error(

@@ -19,6 +19,7 @@ import {
 } from './worktree-repo-index'
 import { findKnownWorktreeById } from './slices/worktrees/listing/detected-worktree-meta'
 import { selectWorktreesByRepo } from './workspace-record-selectors'
+import { selectRepos } from './project-catalog-selectors'
 
 export { getProjectHostSetupProjectionFromState } from './project-host-setup-selector'
 export {
@@ -149,14 +150,14 @@ export function getHasAnyWorktreesFromState(state: Pick<AppState, 'worktreesByRe
 }
 
 export function getRepoMapFromState(state: Pick<AppState, 'repos'>): Map<string, Repo> {
-  return getCachedRepoMap(state.repos)
+  return getCachedRepoMap(selectRepos(state))
 }
 
 // ─── Repos ──────────────────────────────────────────────────────────
-export const useRepos = () => useAppStore((s) => s.repos)
+export const useRepos = () => useAppStore((s) => selectRepos(s))
 export const useActiveRepo = () =>
   useAppStore(useShallow((s) => selectRepoByIdForActiveWorkspace(s, s.activeRepoId)))
-export const useRepoMap = () => useAppStore((s) => getCachedRepoMap(s.repos))
+export const useRepoMap = () => useAppStore((s) => getCachedRepoMap(selectRepos(s)))
 
 type ActiveWorkspaceRepoState = Pick<
   AppState,
@@ -173,7 +174,7 @@ function resolveRepoOnActiveWorkspaceHost(
   repoId: string,
   activeWorkspaceExecutionHostId: ExecutionHostId
 ): Repo | null {
-  const repoCandidates = state.repos.filter((candidate) => candidate.id === repoId)
+  const repoCandidates = selectRepos(state).filter((candidate) => candidate.id === repoId)
   const hostMatch = repoCandidates.find(
     (candidate) => getRepoExecutionHostId(candidate) === activeWorkspaceExecutionHostId
   )
@@ -198,16 +199,16 @@ export function selectRepoByIdForActiveWorkspace(
   if (!repoId) {
     return null
   }
-  const repo = getCachedRepoMap(state.repos).get(repoId) ?? null
+  const repo = getCachedRepoMap(selectRepos(state)).get(repoId) ?? null
   const activeWorkspaceExecutionHostId = state.activeWorkspaceExecutionHostId
   if (repoId !== state.activeRepoId || !activeWorkspaceExecutionHostId) {
     return repo
   }
   // The branch below only fires for the active repo, so the host id fully keys it.
-  let byHost = activeWorkspaceRepoCache.get(state.repos)
+  let byHost = activeWorkspaceRepoCache.get(selectRepos(state))
   if (!byHost) {
     byHost = new Map()
-    activeWorkspaceRepoCache.set(state.repos, byHost)
+    activeWorkspaceRepoCache.set(selectRepos(state), byHost)
   }
   const cacheKey = `${activeWorkspaceExecutionHostId}\u0000${repoId}`
   const cached = byHost.get(cacheKey)

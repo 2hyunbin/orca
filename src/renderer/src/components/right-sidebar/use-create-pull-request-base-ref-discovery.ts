@@ -10,6 +10,7 @@ import {
   normalizeCreateReviewBaseSearchResults,
   stripBaseRef
 } from './create-pull-request-base-ref-normalization'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type CreatePullRequestBaseRefDiscoveryOptions = {
   open: boolean
@@ -38,7 +39,7 @@ export function useCreatePullRequestBaseRefDiscovery({
   const repoDefaultBaseRef = repoDefault?.repoId === repoId ? repoDefault.baseRef : null
   // Why: refs live on the repo's own host, not the focused one.
   const repoHostId = useAppStore((s) => {
-    const repo = findRepoForHost(s.repos, repoId, { settings: s.settings })
+    const repo = findRepoForHost(selectRepos(s), repoId, { settings: s.settings })
     return repo ? getRepoExecutionHostId(repo) : null
   })
 

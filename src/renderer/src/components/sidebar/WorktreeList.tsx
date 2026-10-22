@@ -39,6 +39,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectFolderWorkspaces
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 type WorktreeListProps = {
   scrollOffsetRef: React.MutableRefObject<number>
@@ -69,7 +70,7 @@ const WorktreeList = React.memo(function WorktreeList({
   const allWorktrees = useAllWorktrees()
   const repoMap = useRepoMap()
   const worktreeMap = useWorktreeMap()
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const worktreeLineageById = useAppStore((s) => s.worktreeLineageById)
   const workspaceLineageByChildKey = useAppStore((s) => s.workspaceLineageByChildKey)
   const detectedWorktreesByRepo = useAppStore((s) => selectDetectedWorktreesByRepo(s))
@@ -95,7 +96,7 @@ const WorktreeList = React.memo(function WorktreeList({
   const clearPendingRevealSidebarRow = useAppStore((s) => s.clearPendingRevealSidebarRow)
   const collapsedGroups = useAppStore((s) => s.collapsedGroups)
   const toggleGroup = useAppStore((s) => s.toggleCollapsedGroup)
-  const projectGroups = useAppStore((s) => s.projectGroups ?? EMPTY_PROJECT_GROUPS)
+  const projectGroups = useAppStore((s) => selectProjectGroups(s) ?? EMPTY_PROJECT_GROUPS)
   const folderWorkspaces = useAppStore((s) => selectFolderWorkspaces(s))
   const settings = useAppStore((s) => s.settings)
   const cardProps = useAppStore((s) => s.worktreeCardProperties)

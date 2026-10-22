@@ -41,7 +41,11 @@ export function resolveNotificationTabOwner(
     if (!folder) {
       return explicitControllerOwner(hostId)
     }
-    const group = findIndexedProjectGroupOwner(state.projectGroups, folder.projectGroupId, hostId)
+    const group = findIndexedProjectGroupOwner(
+      state.projectGroups,
+      folder.projectGroupId,
+      hostId
+    )
     return routeForOwner({
       hostId: getCatalogOwnerHostId({
         executionHostId: folder.executionHostId ?? group?.executionHostId,

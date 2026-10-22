@@ -39,6 +39,7 @@ import { runtimeTargetForWorktreeOwner } from '../listing/worktree-owner-target'
 import { runtimeTargetForWorkspaceOwner } from '@/lib/resolve-owner'
 
 import { findRepoForHost } from '../../repo-host-identity'
+import { selectRepos } from '../../../project-catalog-selectors'
 export function createUpdateWorktreeMeta(
   set: WorktreeSliceSet,
   get: WorktreeSliceGet
@@ -142,7 +143,7 @@ export function createUpdateWorktreeMeta(
       worktreeForUpdate && hasChangedHostedReviewLinkUpdates(normalizedUpdates, worktreeForUpdate)
     )
     const reviewRepo = shouldRefreshHostedReview
-      ? (findRepoForHost(get().repos, worktreeForUpdate?.repoId ?? '', {
+      ? (findRepoForHost(selectRepos(get()), worktreeForUpdate?.repoId ?? '', {
           hostId: executionHostId,
           settings: get().settings
         }) ?? undefined)

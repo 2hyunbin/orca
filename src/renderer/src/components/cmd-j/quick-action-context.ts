@@ -10,6 +10,7 @@ import {
 } from '@/components/native-chat/native-chat-layout-actions'
 import type { NativeChatSplitDirection } from '@/components/native-chat/native-chat-split-shortcut'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type CmdJUnavailableReason =
   | 'loading'
@@ -95,7 +96,7 @@ export function getActiveWorktreeSshStatus(
   if (!activeWorktree) {
     return null
   }
-  const repo = state.repos.find((entry) => entry.id === activeWorktree.repoId)
+  const repo = selectRepos(state).find((entry) => entry.id === activeWorktree.repoId)
   const connectionId = repo?.connectionId ?? null
   if (!connectionId) {
     return null
@@ -169,7 +170,8 @@ export function buildCmdJQuickActionContext(args: {
     args.activeGroupSnapshot
   )
   const isLoading =
-    args.state.repos.length > 0 && Object.keys(selectWorktreesByRepo(args.state)).length === 0
+    args.state.repos.length > 0 &&
+    Object.keys(selectWorktreesByRepo(args.state)).length === 0
   const runtimeMode =
     (globalThis as { __ORCA_WEB_CLIENT__?: boolean }).__ORCA_WEB_CLIENT__ &&
     args.state.settings?.activeRuntimeEnvironmentId?.trim()

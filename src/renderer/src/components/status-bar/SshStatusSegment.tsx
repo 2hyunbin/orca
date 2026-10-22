@@ -47,6 +47,7 @@ import {
   runtimeHostConnectionStateForEntry
 } from '@/runtime/runtime-host-connection-state'
 import { RuntimeRepairDialog } from '../settings/RuntimeRepairDialog'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function SshStatusSegment({
   compact,
@@ -57,7 +58,7 @@ export function SshStatusSegment({
 }): React.JSX.Element | null {
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const settings = useAppStore((s) => s.settings)
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   const runtimeStatusByEnvironmentId = useAppStore((s) => s.runtimeStatusByEnvironmentId)

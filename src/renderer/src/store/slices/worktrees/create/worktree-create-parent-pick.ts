@@ -15,6 +15,7 @@ import {
   type ExecutionHostId
 } from '../../../../../../shared/execution-host'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '../../../workspace-record-selectors'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export type WorktreeCreateParentPick = {
   /** Workspace the create attaches to. Undefined once a stale pick is dropped. */
@@ -36,7 +37,7 @@ export function resolveWorktreeCreateParent(
   const picked = requestedParentWorktreeId
     ? getIndexedWorktreesById(selectWorktreesByRepo(state), requestedParentWorktreeId).find(
         (candidate) => {
-          const repo = state.repos.find((owner) =>
+          const repo = selectRepos(state).find((owner) =>
             repoMatchesHostIdentity(owner, candidate.repoId, candidate.hostId ?? executionHostId)
           )
           return Boolean(repo && getWorktreeExecutionHostId(candidate, repo) === executionHostId)

@@ -16,6 +16,7 @@ import {
   type RequestContextualTourWhenReadyArgs
 } from '../contextual-tours/request-contextual-tour-when-ready'
 import { translate } from '@/i18n/i18n'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export const SETUP_GUIDE_PROJECT_PROMPT = "First add a project you'd like to work on."
 
@@ -50,7 +51,7 @@ export function AddReposAction(): React.JSX.Element {
 export function WorkspacesAction(props: { done: boolean }): React.JSX.Element | null {
   const openModal = useAppStore((s) => s.openModal)
   const activeRepoId = useAppStore((s) => s.activeRepoId)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const repo = getSetupGuideGitRepo(repos, activeRepoId)
   if (props.done) {
     return null
@@ -92,7 +93,7 @@ export function WorkspacesAction(props: { done: boolean }): React.JSX.Element | 
 }
 
 export function SetupScriptAction(): React.JSX.Element {
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const activeRepoId = useAppStore((s) => s.activeRepoId)
   const closeModal = useAppStore((s) => s.closeModal)
   const openSettingsPage = useAppStore((s) => s.openSettingsPage)

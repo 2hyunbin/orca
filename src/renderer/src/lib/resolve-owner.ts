@@ -73,8 +73,8 @@ function isFolderTwin(state: WorktreeOperationRouteState, folderWorkspaceId: str
   return (
     !folder.owner.executionHostId?.trim() &&
     !folder.owner.connectionId?.trim() &&
-    resolveIndexedProjectGroupOwner(state.projectGroups, folder.owner.projectGroupId).kind ===
-      'ambiguous'
+    resolveIndexedProjectGroupOwner(state.projectGroups, folder.owner.projectGroupId)
+      .kind === 'ambiguous'
   )
 }
 

@@ -19,6 +19,7 @@ import {
   getWorktreeCardDisplayOptions
 } from './sidebar-workspace-option-items'
 import { translate } from '@/i18n/i18n'
+import { selectProjectGroups } from '../../store/project-catalog-selectors'
 
 type CardMenuItemProps = {
   preserveWorkspaceBoardOpen: boolean
@@ -47,7 +48,7 @@ export function WorktreeCardDisplayMenuItem({
   preserveWorkspaceBoardOpen
 }: CardMenuItemProps): React.JSX.Element {
   const worktreeCardProperties = useAppStore((s) => s.worktreeCardProperties)
-  const hasProjectGroups = useAppStore((s) => s.projectGroups.length > 0)
+  const hasProjectGroups = useAppStore((s) => selectProjectGroups(s).length > 0)
   const toggleProperty = useToggleCardProperty()
   const options = useMemo(() => getWorktreeCardDisplayOptions(hasProjectGroups), [hasProjectGroups])
   return (

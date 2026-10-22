@@ -18,6 +18,7 @@ import {
 } from './editor-external-watch-target-rows'
 import { selectWatchEligibleWorkspaceIds } from './editor-external-watch-scope'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export type EditorExternalWatchTarget = {
   worktreeId: string
@@ -152,7 +153,7 @@ export function selectEditorExternalWatchTargets(
   if (
     cachedOpenFiles === state.openFiles &&
     cachedWorktreesByRepo === selectWorktreesByRepo(state) &&
-    cachedRepos === state.repos &&
+    cachedRepos === selectRepos(state) &&
     cachedActiveWorktreeId === state.activeWorktreeId &&
     cachedActiveWorkspaceExecutionHostId === activeWorkspaceExecutionHostId &&
     cachedRuntimeEnvironmentId === runtimeEnvironmentId &&
@@ -163,7 +164,7 @@ export function selectEditorExternalWatchTargets(
     cachedGitStatusHugeByWorktree === state.gitStatusHugeByWorktree &&
     cachedSshConnectionStates === state.sshConnectionStates &&
     cachedFolderWorkspaces === selectFolderWorkspaces(state) &&
-    cachedProjectGroups === state.projectGroups &&
+    cachedProjectGroups === selectProjectGroups(state) &&
     cachedLastVisitedAtByWorktreeId === state.lastVisitedAtByWorktreeId
   ) {
     return cachedWatchedTargetsSnapshot
@@ -196,10 +197,10 @@ export function selectEditorExternalWatchTargets(
   const activeWorktreeHost = parseExecutionHostId(activeWorktree?.hostId)
   const activeRepo = activeWorktree
     ? activeWorktreeHost?.kind === 'local'
-      ? (findRepoForHost(state.repos, activeWorktree.repoId, {
+      ? (findRepoForHost(selectRepos(state), activeWorktree.repoId, {
           hostId: activeWorktreeHost.id
         }) ?? undefined)
-      : state.repos.find((repo) => repo.id === activeWorktree.repoId)
+      : selectRepos(state).find((repo) => repo.id === activeWorktree.repoId)
     : undefined
   const sourceControlCanConsumeWatch =
     !!activeWorktreeId &&
@@ -240,7 +241,7 @@ export function selectEditorExternalWatchTargets(
   const unwatchedTargetsKey = [...unwatchedTargetKeys].sort().join('|')
   cachedOpenFiles = state.openFiles
   cachedWorktreesByRepo = selectWorktreesByRepo(state)
-  cachedRepos = state.repos
+  cachedRepos = selectRepos(state)
   cachedActiveWorktreeId = state.activeWorktreeId
   cachedActiveWorkspaceExecutionHostId = activeWorkspaceExecutionHostId
   cachedRuntimeEnvironmentId = runtimeEnvironmentId
@@ -251,7 +252,7 @@ export function selectEditorExternalWatchTargets(
   cachedGitStatusHugeByWorktree = state.gitStatusHugeByWorktree
   cachedSshConnectionStates = state.sshConnectionStates
   cachedFolderWorkspaces = selectFolderWorkspaces(state)
-  cachedProjectGroups = state.projectGroups
+  cachedProjectGroups = selectProjectGroups(state)
   cachedLastVisitedAtByWorktreeId = state.lastVisitedAtByWorktreeId
 
   if (

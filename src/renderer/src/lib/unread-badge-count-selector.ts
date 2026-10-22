@@ -9,6 +9,7 @@ import { getUnreadBadgeCount } from './unread-badge-count'
 import { hasLiveTabMarker } from '@/store/slices/workspace-attention/workspace-live-markers'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectGroups } from '../store/project-catalog-selectors'
 
 type UnreadBadgeCountState = Pick<
   AppState,
@@ -110,7 +111,7 @@ export function createUnreadBadgeCountSelector(): (state: UnreadBadgeCountState)
         tabsByWorktree: state.tabsByWorktree,
         unifiedTabsByWorktree: state.unifiedTabsByWorktree,
         unreadTerminalTabs: state.unreadTerminalTabs,
-        projectGroups: state.projectGroups,
+        projectGroups: selectProjectGroups(state),
         repoMap: getRepoMapFromState(state),
         visibleHostIds: getVisibleWorkspaceHostIdSet(state),
         defaultHostId: getSettingsFocusedExecutionHostId(state.settings),

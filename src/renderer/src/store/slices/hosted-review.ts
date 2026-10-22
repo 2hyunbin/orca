@@ -40,6 +40,7 @@ import {
   queueHostedReviewRevalidation,
   registerInflightHostedReviewRequest
 } from './hosted-review-request-state'
+import { selectRepos } from '../project-catalog-selectors'
 
 export type HostedReviewSlice = {
   hostedReviewCache: Record<string, HostedReviewCacheEntry<HostedReviewInfo>>
@@ -68,7 +69,7 @@ export const createHostedReviewSlice: StateCreator<AppState, [], [], HostedRevie
   hostedReviewCache: {},
 
   getHostedReviewCreationEligibility: async (args) => {
-    const repo = findHostedReviewRepoByPath(get().repos, args.repoPath, args.repoId)
+    const repo = findHostedReviewRepoByPath(selectRepos(get()), args.repoPath, args.repoId)
     const target = hostedReviewRepoOwnerTarget(repo)
     if (target.kind === 'environment') {
       const { repoPath: _repoPath, worktreePath, ...runtimeArgs } = args
@@ -94,7 +95,7 @@ export const createHostedReviewSlice: StateCreator<AppState, [], [], HostedRevie
   },
 
   createHostedReview: async (repoPath, input) => {
-    const repo = findHostedReviewRepoByPath(get().repos, repoPath, input.repoId)
+    const repo = findHostedReviewRepoByPath(selectRepos(get()), repoPath, input.repoId)
     const target = hostedReviewRepoOwnerTarget(repo)
     const { repoId: inputRepoId, ...hostedReviewInput } = input
     if (target.kind === 'environment') {
@@ -119,7 +120,7 @@ export const createHostedReviewSlice: StateCreator<AppState, [], [], HostedRevie
   },
 
   createStackedHostedReview: async (repoPath, input) => {
-    const repo = findHostedReviewRepoByPath(get().repos, repoPath, input.repoId)
+    const repo = findHostedReviewRepoByPath(selectRepos(get()), repoPath, input.repoId)
     const target = hostedReviewRepoOwnerTarget(repo)
     const { repoId: inputRepoId, ...hostedReviewInput } = input
     if (target.kind === 'environment') {
@@ -148,7 +149,7 @@ export const createHostedReviewSlice: StateCreator<AppState, [], [], HostedRevie
     branch,
     options
   ): Promise<HostedReviewInfo | null> => {
-    const repo = findHostedReviewRepoForFetch(get().repos, repoPath, options)
+    const repo = findHostedReviewRepoForFetch(selectRepos(get()), repoPath, options)
     if (repo === null) {
       return null
     }

@@ -8,6 +8,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 /**
  * Builds the dashboard snapshot directly from the live renderer store for the
@@ -18,7 +19,7 @@ import {
 export function useLiveDashboardSnapshot(): DashboardSnapshot {
   const rowsCacheRef = useRef<ReturnType<typeof createWorktreeAgentRowsCache>>(undefined!)
   rowsCacheRef.current ??= createWorktreeAgentRowsCache()
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
   const tabsByWorktree = useAppStore((s) => s.tabsByWorktree)
   const unifiedTabsByWorktree = useAppStore((s) => s.unifiedTabsByWorktree)
@@ -49,7 +50,7 @@ export function useLiveDashboardSnapshot(): DashboardSnapshot {
   // Why: a folder workspace is not a git worktree — its host resolves through
   // these two instead of worktreesByRepo.
   const folderWorkspaces = useAppStore((s) => selectFolderWorkspaces(s))
-  const projectGroups = useAppStore((s) => s.projectGroups)
+  const projectGroups = useAppStore((s) => selectProjectGroups(s))
   const sshTargetLabels = useAppStore((s) => s.sshTargetLabels)
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)
   const sshStateByEnvironment = useAppStore((s) => s.sshStateByEnvironment)

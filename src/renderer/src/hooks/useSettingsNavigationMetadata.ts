@@ -33,6 +33,7 @@ import { buildInterfaceSettingsSections } from './settings-navigation-interface-
 import { buildRemoteSettingsSections } from './settings-navigation-remote-sections'
 import { buildWorkflowSettingsSections } from './settings-navigation-workflow-sections'
 import { useWindowsTerminalCapabilityOwnerKey } from './useWindowsTerminalCapabilityOwnerKey'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export { isWebClientLocation } from '@/lib/web-client-location'
 
@@ -114,7 +115,7 @@ export function useSettingsNavigationMetadata(): SettingsNavSection[] {
   // stuck in the old language until Settings is remounted.
   const { i18n } = useTranslation()
   const activeLocale = i18n.language
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const projectHostSetupProjection = useProjectHostSetupProjection()
   const settings = useAppStore((state) => state.settings)
   const [managedBrowserCreationEnabled, mobileEmulatorCreationEnabled] = useAppStore(

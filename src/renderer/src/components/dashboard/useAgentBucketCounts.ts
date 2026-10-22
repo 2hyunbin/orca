@@ -7,6 +7,7 @@ import {
   createDashboardBucketCountsCache
 } from './build-dashboard-bucket-counts'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type AgentBucketCounts = Record<DashboardBucket, number>
 
@@ -51,7 +52,7 @@ export function selectAgentBucketCountState(s: AppState): AgentBucketCountState 
   const previous = previousState
   if (
     previous !== null &&
-    previous.repos === s.repos &&
+    previous.repos === selectRepos(s) &&
     selectWorktreesByRepo(previous) === selectWorktreesByRepo(s) &&
     previous.tabsByWorktree === s.tabsByWorktree &&
     previous.unifiedTabsByWorktree === s.unifiedTabsByWorktree &&
@@ -70,7 +71,7 @@ export function selectAgentBucketCountState(s: AppState): AgentBucketCountState 
     return previous
   }
   previousState = {
-    repos: s.repos,
+    repos: selectRepos(s),
     worktreesByRepo: selectWorktreesByRepo(s),
     tabsByWorktree: s.tabsByWorktree,
     unifiedTabsByWorktree: s.unifiedTabsByWorktree,

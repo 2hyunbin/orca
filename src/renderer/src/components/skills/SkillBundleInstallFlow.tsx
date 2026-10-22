@@ -26,6 +26,7 @@ import { summarizeSkillInstallRisk } from './skill-package-install-risk'
 import { retryableSkillIds } from './skill-bundle-retry-selection'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type BundleVersion = SkillCloudVersion & {
   manifest: Extract<SkillCloudVersion['manifest'], { skills: unknown }>
@@ -49,7 +50,7 @@ export function SkillBundleInstallFlow(props: {
   const runtimeEnvironments = useAppStore((state) => state.runtimeEnvironments)
   const runtimeStatus = useAppStore((state) => state.runtimeStatusByEnvironmentId)
   const worktreesByRepo = useAppStore((state) => selectWorktreesByRepo(state))
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const folderWorkspaces = useAppStore((state) => selectFolderWorkspaces(state))
   const sshConnectionStates = useAppStore((state) => state.sshConnectionStates)
   const sshTargetLabels = useAppStore((state) => state.sshTargetLabels)

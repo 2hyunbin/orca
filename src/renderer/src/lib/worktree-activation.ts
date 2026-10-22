@@ -40,6 +40,7 @@ import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktr
 import { revealFloatingWorkspacePanel } from './floating-workspace-panel-reveal'
 import { markVisited, readPreviousActive } from './worktree-activation-visit'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectProjectGroups } from '../store/project-catalog-selectors'
 
 /**
  * Shared activation sequence used by the worktree palette and add-repo/worktree dialogs.
@@ -154,7 +155,8 @@ export function activateAndRevealFolderWorkspace(
   if (opts?.revealInSidebar !== false) {
     state.revealWorktreeInSidebar(workspaceKey, {
       executionHostId:
-        opts?.executionHostId ?? getFolderWorkspaceHostId(folderWorkspace, state.projectGroups),
+        opts?.executionHostId ??
+        getFolderWorkspaceHostId(folderWorkspace, selectProjectGroups(state)),
       ...(opts?.sidebarRevealBehavior ? { behavior: opts.sidebarRevealBehavior } : {})
     })
   }

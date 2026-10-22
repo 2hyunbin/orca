@@ -13,6 +13,7 @@ import {
   normalizeExecutionHostId,
   parseExecutionHostId
 } from '../../../../shared/execution-host'
+import { selectRepos } from '../project-catalog-selectors'
 
 /** The server-side repo for a request already routed to `target`; `null` when it runs here. */
 export function getRuntimeRepoTarget(
@@ -23,7 +24,7 @@ export function getRuntimeRepoTarget(
   if (target.kind !== 'environment') {
     return null
   }
-  const repo = getGitHubRepoLookupIndex(state.repos).findByPath(repoPath)
+  const repo = getGitHubRepoLookupIndex(selectRepos(state)).findByPath(repoPath)
   return repo ? { target, repo } : null
 }
 

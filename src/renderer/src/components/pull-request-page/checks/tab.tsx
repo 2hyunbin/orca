@@ -38,6 +38,7 @@ import { ChecksCompactHeader, buildChecksToolbar } from './toolbar'
 import { CheckRow } from './row'
 import { ChecksFixDialog } from './fix-dialog'
 import { ChecksTabLayouts } from './layouts'
+import { selectProjects, selectRepos } from '../../../store/project-catalog-selectors'
 
 export function ChecksTab({
   item,
@@ -65,10 +66,12 @@ export function ChecksTab({
   const updateSettings = useAppStore((s) => s.updateSettings)
   const updateRepo = useAppStore((s) => s.updateRepo)
   const repo = useAppStore((s) =>
-    targetRepoId ? (s.repos.find((candidate) => candidate.id === targetRepoId) ?? null) : null
+    targetRepoId
+      ? (selectRepos(s).find((candidate) => candidate.id === targetRepoId) ?? null)
+      : null
   )
-  const repos = useAppStore((s) => s.repos)
-  const projects = useAppStore((s) => s.projects)
+  const repos = useAppStore((s) => selectRepos(s))
+  const projects = useAppStore((s) => selectProjects(s))
   const [fixingChecks, setFixingChecks] = useState(false)
   const [fixChecksComposerPrompt, setFixChecksComposerPrompt] = useState<string | null>(null)
   const mountedRef = useMountedRef()

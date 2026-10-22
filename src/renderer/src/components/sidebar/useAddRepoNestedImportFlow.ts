@@ -20,6 +20,7 @@ import { worktreeRefreshOptions } from './add-repo-runtime-owner'
 import { completeNestedFolderOpen } from './complete-nested-folder-open'
 import { defaultProjectGroupNameForPath } from './add-repo-dialog-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function useAddRepoNestedImportFlow({
   nestedAttemptId,
@@ -201,7 +202,7 @@ export function useAddRepoNestedImportFlow({
             }
           )
         }
-        const repo = useAppStore.getState().repos.find((entry) => entry.id === firstRepoId)
+        const repo = selectRepos(useAppStore.getState()).find((entry) => entry.id === firstRepoId)
         if (repo) {
           const source: AddRepoExistingWorkspaceSource = nestedConnectionId
             ? 'ssh_remote_path'

@@ -13,6 +13,7 @@ import {
   toRuntimeExecutionHostId,
   type ExecutionHostId
 } from '../../../shared/execution-host'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export type HookScriptKind = OrcaHookScriptKind
 
@@ -69,8 +70,10 @@ function getVmRecipeTrustContent(yamlHooks: OrcaHooks | null): string {
 
 function findHookRepo(state: AppState, repoId: string, hostId?: ExecutionHostId) {
   return hostId
-    ? state.repos.find((repo) => repo.id === repoId && getRepoExecutionHostId(repo) === hostId)
-    : state.repos.find((repo) => repo.id === repoId)
+    ? selectRepos(state).find(
+        (repo) => repo.id === repoId && getRepoExecutionHostId(repo) === hostId
+      )
+    : selectRepos(state).find((repo) => repo.id === repoId)
 }
 
 /**
@@ -87,7 +90,7 @@ function hookRepoOwnerHostId(
   if (ownerEnvironmentId) {
     return toRuntimeExecutionHostId(ownerEnvironmentId)
   }
-  const rows = hostId ? [] : state.repos.filter((entry) => entry.id === repoId)
+  const rows = hostId ? [] : selectRepos(state).filter((entry) => entry.id === repoId)
   // Why: with the id on two hosts, trusting one row's script could run the other's unseen.
   if (rows.length > 1) {
     throw new Error('The project exists on more than one host.')
@@ -101,7 +104,7 @@ function hookRepoOwnerHostId(
 }
 
 function canUseRepoWideTrust(state: AppState, repoId: string): boolean {
-  const hasDuplicateRepoId = state.repos.filter((repo) => repo.id === repoId).length > 1
+  const hasDuplicateRepoId = selectRepos(state).filter((repo) => repo.id === repoId).length > 1
   return Boolean(state.trustedOrcaHooks[repoId]?.all) && !hasDuplicateRepoId
 }
 

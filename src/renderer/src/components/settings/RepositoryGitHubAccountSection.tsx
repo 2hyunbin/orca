@@ -6,7 +6,7 @@ import type { GhAccountBindingInventory } from '../../../../shared/github/auth-t
 import { Button } from '../ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select'
 import { SearchableSetting } from './SearchableSetting'
-import { useAppStore } from '../../store'
+import { useAppStore } from '@/store/index'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { getRepoExecutionHostId, parseExecutionHostId } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
@@ -15,7 +15,8 @@ import {
   isGhAccountBindingEnforced,
   listRepositoryGhBindableAccounts,
   validateRepositoryGhAccountBinding
-} from './repository-github-account'
+} from './repository/identity/repository-github-account'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type RepositoryGitHubAccountSectionProps = {
   repo: Repo
@@ -154,7 +155,9 @@ export function RepositoryGitHubAccountSection({
         )
         return
       }
-      const echoed = useAppStore.getState().repos.find((entry) => entry.id === repo.id)?.ghAccount
+      const echoed = selectRepos(useAppStore.getState()).find(
+        (entry) => entry.id === repo.id
+      )?.ghAccount
       if (!isGhAccountBindingEnforced(resolved, echoed)) {
         setNotEnforced(true)
       }

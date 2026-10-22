@@ -11,6 +11,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 type TabEntryAbsolutePathOwnerState = Pick<
   ReturnType<typeof useAppStore.getState>,
@@ -96,11 +97,11 @@ export function createTabEntryAllowAbsolutePathsSelector(
     }
     if (
       previousSlices?.settings === state.settings &&
-      previousSlices.repos === state.repos &&
+      previousSlices.repos === selectRepos(state) &&
       selectWorktreesByRepo(previousSlices) === selectWorktreesByRepo(state) &&
       selectDetectedWorktreesByRepo(previousSlices) === selectDetectedWorktreesByRepo(state) &&
       selectFolderWorkspaces(previousSlices) === selectFolderWorkspaces(state) &&
-      previousSlices.projectGroups === state.projectGroups &&
+      previousSlices.projectGroups === selectProjectGroups(state) &&
       previousSlices.runtimeEnvironments === state.runtimeEnvironments &&
       previousSlices.runtimeEnvironmentCatalogHydrated ===
         state.runtimeEnvironmentCatalogHydrated &&
@@ -114,11 +115,11 @@ export function createTabEntryAllowAbsolutePathsSelector(
     }
     previousSlices = {
       settings: state.settings,
-      repos: state.repos,
+      repos: selectRepos(state),
       worktreesByRepo: selectWorktreesByRepo(state),
       detectedWorktreesByRepo: selectDetectedWorktreesByRepo(state),
       folderWorkspaces: selectFolderWorkspaces(state),
-      projectGroups: state.projectGroups,
+      projectGroups: selectProjectGroups(state),
       runtimeEnvironments: state.runtimeEnvironments,
       runtimeEnvironmentCatalogHydrated: state.runtimeEnvironmentCatalogHydrated,
       removedRuntimeEnvironmentIds: state.removedRuntimeEnvironmentIds,

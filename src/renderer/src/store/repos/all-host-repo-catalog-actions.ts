@@ -33,6 +33,7 @@ import {
 import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { mergeFetchedHostProjectCatalog } from '../../../../shared/project-compatibility-host-merge'
 import { scheduleSafeAutoForkSync } from './safe-auto-fork-sync'
+import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
 
 export function createAllHostRepoCatalogActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -63,14 +64,14 @@ export function createAllHostRepoCatalogActions(
           if (isRemovedRuntimeHostId(catalog.hostId, s.removedRuntimeEnvironmentIds)) {
             return s
           }
-          const result = mergeFetchedRepoCatalog(catalog, s.repos)
+          const result = mergeFetchedRepoCatalog(catalog, selectRepos(s))
           const reconciliation = reconcileSupersededSshRepos(result.repos, s)
           const finalizedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
           const mergedProjectCompatibility = mergeFetchedHostProjectCatalog({
             previous: {
-              projects: s.projects,
+              projects: selectProjects(s),
               projectHostSetups: filterSetupsForPrunedRepoRows(
-                s.projectHostSetups,
+                selectProjectHostSetups(s),
                 result.repos,
                 finalizedRepos
               )
@@ -87,7 +88,7 @@ export function createAllHostRepoCatalogActions(
             pendingSshRepoReadoptions: reconciliation.pendingReadoptions,
             ...reconcileReadoptedSshWorktreeState(s, s.pendingSshRepoReadoptions),
             ...mergedProjectCompatibility,
-            ...(arrayElementsUnchanged(finalizedRepos, s.repos)
+            ...(arrayElementsUnchanged(finalizedRepos, selectRepos(s))
               ? {}
               : { folderWorkspacePathStatuses: {} }),
             activeRepoId: s.activeRepoId,
@@ -101,8 +102,8 @@ export function createAllHostRepoCatalogActions(
       }
       const validateRepoScopedUi = (): void => {
         set((s) => {
-          const validRepoIds = new Set(s.repos.map((repo) => repo.id))
-          const validRepoHostIdentities = new Set(s.repos.map(getRepoHostIdentity))
+          const validRepoIds = new Set(selectRepos(s).map((repo) => repo.id))
+          const validRepoHostIdentities = new Set(selectRepos(s).map(getRepoHostIdentity))
           return {
             activeRepoId:
               s.activeRepoId && validRepoIds.has(s.activeRepoId) ? s.activeRepoId : null,

@@ -9,6 +9,7 @@ import type { WorkspaceCleanupCandidate } from '../../../../shared/workspace-cle
 import { isGitHubPRSuppressed } from '../../../../shared/worktree/github-pr-suppression'
 import { getWorkspaceCleanupCandidateHostId } from './workspace-cleanup-host-identity'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type WorkspaceCleanupSortKey = 'activity' | 'name' | 'repo' | 'review' | 'git'
 export type WorkspaceCleanupSortDirection = 'asc' | 'desc'
@@ -104,7 +105,7 @@ export function buildWorkspaceCleanupReviewLookup(
   state: Pick<WorkspaceCleanupRendererStateInputs, 'repos' | 'worktreesByRepo'>
 ): WorkspaceCleanupReviewLookup {
   const reposById = new Map<string, Repo[]>()
-  for (const repo of state.repos) {
+  for (const repo of selectRepos(state)) {
     const matches = reposById.get(repo.id) ?? []
     matches.push(repo)
     reposById.set(repo.id, matches)

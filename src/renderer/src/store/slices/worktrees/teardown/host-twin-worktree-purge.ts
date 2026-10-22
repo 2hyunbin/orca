@@ -27,11 +27,13 @@ import {
   retirePurgedTabLaunches
 } from './purged-structured-launch-retirement'
 import { buildWorktreePurgeSurfacePatch } from './worktree-purge-surface-patch'
+import { noticeRemovedUnsavedFiles } from './removed-workspace-unsaved-files'
 import {
   selectDetectedWorktreesByRepo,
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '../../../workspace-record-selectors'
+import { selectProjectGroups } from '../../../project-catalog-selectors'
 
 type PublisherRow = {
   id: string
@@ -52,7 +54,7 @@ function resolvePurgedPublishers(
   const scope = parseWorkspaceKey(workspaceId)
   const attributedHostIds = new Map([...purgedHosts].map((hostId) => [hostId, hostId]))
   if (scope?.type === 'folder') {
-    const groups = s.projectGroups ?? []
+    const groups = selectProjectGroups(s) ?? []
     const hosts = (selectFolderWorkspaces(s) ?? [])
       .filter((folder) => folder.id === scope.folderWorkspaceId)
       .flatMap((folder) => {
@@ -200,6 +202,7 @@ export function buildHostTwinPurgeState(
       }
     }
   }
+  noticeRemovedUnsavedFiles(s, doomed.removedFileIds)
   const omitters = createWorktreePurgeOmitters(s, new Set(), doomed)
   const tabPrefixedSleeping = {
     sleepingAgentSessionsByPaneKey: omitters.omitByPaneKeyTabPrefix(

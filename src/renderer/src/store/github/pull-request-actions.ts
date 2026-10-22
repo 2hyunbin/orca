@@ -18,13 +18,14 @@ import {
   shouldClearDivergedLinkedMergedPR
 } from './worktree-refresh'
 import { startPullRequestLookup } from './pull-request-execution'
+import { selectRepos } from '../project-catalog-selectors'
 
 export const createPullRequestActions = (
   set: Parameters<StateCreator<AppState>>[0],
   get: Parameters<StateCreator<AppState>>[1]
 ): Pick<GitHubSlice, 'fetchPRForBranch'> => ({
   fetchPRForBranch: async (repoPath, branch, options): Promise<PRInfo | null> => {
-    const repoLookup = getGitHubRepoLookupIndex(get().repos)
+    const repoLookup = getGitHubRepoLookupIndex(selectRepos(get()))
     const repo = options?.repoId
       ? repoLookup.findById(options.repoId)
       : repoLookup.findByPath(repoPath)

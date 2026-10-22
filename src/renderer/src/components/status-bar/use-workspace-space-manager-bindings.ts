@@ -8,6 +8,7 @@ import type {
 } from './workspace-space-presentation'
 import type { WorkspaceGitRefreshState } from './workspace-space-manager-state-types'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function useWorkspaceSpaceManagerBindings() {
   const analysis = useAppStore((state) => state.workspaceSpaceAnalysis)
@@ -20,7 +21,7 @@ export function useWorkspaceSpaceManagerBindings() {
   const removeWorktree = useAppStore((state) => state.removeWorktree)
   const deleteStateByWorktreeId = useAppStore((state) => state.deleteStateByWorktreeId)
   const repoMap = useAppStore((state) => getRepoMapFromState(state))
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const worktreeMap = useAppStore((state) => getWorktreeMapFromState(state))
   const worktreesByRepo = useAppStore((state) => selectWorktreesByRepo(state))
   const tabsByWorktree = useAppStore((state) => state.tabsByWorktree)

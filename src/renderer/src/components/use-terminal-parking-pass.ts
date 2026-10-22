@@ -21,6 +21,7 @@ import {
   collectTerminalParkingPassCandidates
 } from './terminal-parking-pass-candidates'
 import type { TerminalParkingFoundation } from './use-terminal-parking-foundation'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export function useTerminalParkingPass(controller: TerminalParkingFoundation): void {
   const {
@@ -88,7 +89,7 @@ export function useTerminalParkingPass(controller: TerminalParkingFoundation): v
         capturedParked.delete(id)
       }
     }
-    const repos = useAppStore.getState().repos
+    const repos = selectRepos(useAppStore.getState())
     // Why before the commit: the panes are still mounted in this flush, so this is the last moment
     // a remote-runtime pane's xterm — the only client-side copy of its scrollback — can be
     // serialized. The paired-parking capability that licenses the unmount says nothing about

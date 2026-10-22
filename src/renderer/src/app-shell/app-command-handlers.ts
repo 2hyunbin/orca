@@ -25,6 +25,7 @@ import type {
   PhysicalModifierToken
 } from '../../../shared/keybindings'
 import { shortcutPlatform } from './app-window-chrome'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 type AppStoreState = ReturnType<typeof useAppStore.getState>
 
@@ -284,7 +285,7 @@ export function createAppCommandHandlers(
       'view.tasks',
       () => {
         const store = useAppStore.getState()
-        if (activeView === 'settings' || !store.repos.some((repo) => isGitRepoKind(repo))) {
+        if (activeView === 'settings' || !selectRepos(store).some((repo) => isGitRepoKind(repo))) {
           return false
         }
         return claim('view.tasks', () => store.openTaskPage())

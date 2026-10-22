@@ -39,6 +39,7 @@ import {
 import { mapWithConcurrency } from '../../../shared/map-with-concurrency'
 import type { OnboardingState } from '../../../shared/onboarding-state-types'
 import { ensureLocalRuntimeCapabilities } from '../runtime/local-runtime-capabilities'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 async function listRuntimeSessionHostIdsForStartup(): Promise<ExecutionHostId[]> {
   try {
@@ -146,7 +147,7 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
           timeRendererStartupStep('session-get', () =>
             fetchWorkspaceSessionWithRuntimeHostOwners(
               window.api.session,
-              useAppStore.getState().repos,
+              selectRepos(useAppStore.getState()),
               startupRuntimeHostIds
             )
           )
@@ -157,7 +158,7 @@ export function useAppStartupHydration(onOnboardingLoaded: (state: OnboardingSta
             sessionRead.runtimeHostIdByWorkspaceSessionKey
           )
           const hydrationRepoIdSet = new Set(hydrationRepoIds)
-          const hydrationRepos = useAppStore.getState().repos.filter(
+          const hydrationRepos = selectRepos(useAppStore.getState()).filter(
             (repo) =>
               hydrationRepoIdSet.has(repo.id) &&
               // Why: disconnected SSH repos hydrate from local metadata; only runtime-owned repos use placeholders.

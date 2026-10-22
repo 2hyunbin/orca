@@ -15,6 +15,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '../../../workspace-record-selectors'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export function getWorktreeHostId(
   state: Pick<AppState, 'repos' | 'settings' | 'worktreesByRepo' | 'detectedWorktreesByRepo'>,
@@ -31,7 +32,7 @@ export function getWorktreeHostId(
   if (detected?.hostId) {
     return detected.hostId
   }
-  const repo = findRepoForHost(state.repos, repoId, { settings: state.settings })
+  const repo = findRepoForHost(selectRepos(state), repoId, { settings: state.settings })
   return repo ? getRepoExecutionHostId(repo) : null
 }
 

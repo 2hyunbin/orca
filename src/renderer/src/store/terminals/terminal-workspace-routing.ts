@@ -8,6 +8,7 @@ import { WINDOWS_GIT_BASH_SHELL } from '../../../../shared/windows-terminal-shel
 import { getFolderWorkspaceConnectionId } from '@/lib/folder-workspace-connection'
 import { getIndexedRepoMap, getIndexedWorktreeMap } from '../worktree-repo-index'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '../workspace-record-selectors'
+import { selectRepos } from '../project-catalog-selectors'
 
 export function isWindowsRendererRuntime(): boolean {
   return typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows')
@@ -74,7 +75,7 @@ export function worktreeUsesRemoteConnection(
   if (parsedWorkspaceKey?.type === 'folder') {
     return Boolean(getFolderWorkspaceConnectionId(state, parsedWorkspaceKey.folderWorkspaceId))
   }
-  const repoMap = getIndexedRepoMap(state.repos)
+  const repoMap = getIndexedRepoMap(selectRepos(state))
   const directRepo = repoMap.get(getRepoIdFromWorktreeId(worktreeId))
   if (directRepo) {
     return Boolean(directRepo.connectionId)
@@ -92,7 +93,7 @@ export function getRemoteConnectionIdForWorktree(
   if (parsedWorkspaceKey?.type === 'folder') {
     return getFolderWorkspaceConnectionId(state, parsedWorkspaceKey.folderWorkspaceId) ?? null
   }
-  const repoMap = getIndexedRepoMap(state.repos)
+  const repoMap = getIndexedRepoMap(selectRepos(state))
   const directRepo = repoMap.get(getRepoIdFromWorktreeId(worktreeId))
   if (directRepo) {
     return directRepo.connectionId?.trim() || null

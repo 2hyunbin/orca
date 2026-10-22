@@ -26,6 +26,7 @@ import {
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { useProjectHostSetupProjection } from '@/store/selectors'
 import { terminalQuickCommandMatchesWorkspaceProject } from '@/lib/terminal-quick-command-project-scope'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type TabBarQuickCommandsButtonProps = {
   worktreeId: string
@@ -39,7 +40,7 @@ export function TabBarQuickCommandsButton({
   isFocused
 }: TabBarQuickCommandsButtonProps): React.JSX.Element | null {
   const recentByGroup = useAppStore((s) => s.recentQuickCommandIdByGroup)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const projectHostSetupProjection = useProjectHostSetupProjection()
   const { executionHostId, hosts, refreshRemoteHost, remoteHostLoadFailed, remoteHostPending } =
     useTerminalQuickCommandHosts(worktreeId)

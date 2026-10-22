@@ -12,13 +12,14 @@ import {
   type AutomationListRow
 } from './automation-list-row-identity'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectHostSetups, selectRepos } from '../../store/project-catalog-selectors'
 
 const AGENTS = getAgentCatalog().map((agent) => agent.id)
 
 /** Store-backed values shared by the page's state and action hooks. */
 export function useAutomationsPageStoreState() {
-  const repos = useAppStore((s) => s.repos)
-  const projectHostSetups = useAppStore((s) => s.projectHostSetups)
+  const repos = useAppStore((s) => selectRepos(s))
+  const projectHostSetups = useAppStore((s) => selectProjectHostSetups(s))
   const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
   const folderWorkspaces = useAppStore((s) => selectFolderWorkspaces(s))
   const unifiedTabsByWorktree = useAppStore((s) => s.unifiedTabsByWorktree)

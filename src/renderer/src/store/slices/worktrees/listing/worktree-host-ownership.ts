@@ -19,6 +19,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '../../../workspace-record-selectors'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export function withRepoHostOwnership<
   T extends {
@@ -62,7 +63,7 @@ export function repoHostId(
   repoId: string,
   hostId?: ExecutionHostId | null
 ): ExecutionHostId {
-  const repo = findRepoForHost(state.repos, repoId, { hostId, settings: state.settings })
+  const repo = findRepoForHost(selectRepos(state), repoId, { hostId, settings: state.settings })
   if (repo) {
     return getRepoExecutionHostId(repo)
   }
@@ -80,7 +81,7 @@ export function repoHasExactlyOneExecutionHostOwner(
   hostId: ExecutionHostId,
   ownerWasMissingAtStart: boolean
 ): boolean {
-  const repoOwners = state.repos.filter((repo) => repo.id === repoId)
+  const repoOwners = selectRepos(state).filter((repo) => repo.id === repoId)
   if (repoOwners.length === 0) {
     return ownerWasMissingAtStart
   }
@@ -168,7 +169,7 @@ export function unhostedWorktreesMatchRefreshHost(
     return true
   }
 
-  const summary = getRepoHostSummaries(state.repos).get(repoId)
+  const summary = getRepoHostSummaries(selectRepos(state)).get(repoId)
   return summary?.count === 1 && summary.onlyHostId === hostId
 }
 

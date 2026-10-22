@@ -32,6 +32,7 @@ import { toSshExecutionHostId } from '../../../../shared/execution-host'
 import { translate } from '@/i18n/i18n'
 import { useSshAddTargetIntent } from './use-ssh-add-target-intent'
 import { syncSshConfigTargetsPassively } from '../../lib/ssh-config-passive-sync'
+import { selectRepos } from '../../store/project-catalog-selectors'
 export { getSshPaneSearchEntries } from './ssh-search'
 
 type SshPaneProps = { addTargetIntentSignal?: number }
@@ -187,7 +188,7 @@ export function SshPane({ addTargetIntentSignal }: SshPaneProps): React.JSX.Elem
     }
     const resolution = resolveSshHostRemoval({
       targetId: target.id,
-      repos: useAppStore.getState().repos,
+      repos: selectRepos(useAppStore.getState()),
       worktrees: getAllWorktreesFromState(useAppStore.getState()),
       sshConnectionStates: useAppStore.getState().sshConnectionStates
     })

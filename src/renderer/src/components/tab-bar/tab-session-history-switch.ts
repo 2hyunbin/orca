@@ -44,6 +44,7 @@ import { claimAiVaultForcedRescan } from '../right-sidebar/ai-vault-session-refr
 import { structuredAgentSessionLaunchFeasible } from '@/lib/agent-session-launch-plan'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { workspaceKindForWorktreeId } from '../../../../shared/workspace-launch-kind'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 /** What a tab's history row is found by: a native chat tab by the chat it shows, a terminal tab by
  *  the provider conversation its agent reported. */
@@ -201,13 +202,13 @@ export function resolveTabSessionSwitch(
     session,
     worktreeInfo: resolveAiVaultSessionWorktreeDisplay({
       session,
-      repos: state.repos,
+      repos: selectRepos(state),
       worktrees,
       activeWorktreeId: subject.workspaceId
     }),
     activeWorktreeId: subject.workspaceId,
     worktrees,
-    repos: state.repos,
+    repos: selectRepos(state),
     targetState: state,
     settings: state.settings
   })

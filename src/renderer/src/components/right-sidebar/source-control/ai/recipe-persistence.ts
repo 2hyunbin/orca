@@ -11,6 +11,7 @@ import {
   type SourceControlAiWriteTarget
 } from '../../../../../../shared/source-control-ai-recipe-save'
 import { generationParamsToActionRecipe } from './text-generation-defaults'
+import { selectRepos } from '../../../../store/project-catalog-selectors'
 
 type SourceControlAiRecipePersistenceStoreSnapshot = Pick<AppState, 'settings' | 'repos'>
 
@@ -38,7 +39,7 @@ export async function saveSourceControlAiActionRecipeForTarget({
   }
   const latestRepo =
     target.type === 'repo'
-      ? (state.repos.find((candidate) => candidate.id === target.repoId) ?? null)
+      ? (selectRepos(state).find((candidate) => candidate.id === target.repoId) ?? null)
       : null
   const result = saveSourceControlActionRecipe({
     target,

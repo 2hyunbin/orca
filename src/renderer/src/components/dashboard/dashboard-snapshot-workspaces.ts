@@ -19,6 +19,7 @@ import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-ov
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type ActiveDashboardWorkspace = {
   projectId: string
@@ -91,7 +92,7 @@ export function collectActiveDashboardWorkspaces(
       : label
   }
 
-  for (const repo of state.repos ?? []) {
+  for (const repo of selectRepos(state) ?? []) {
     for (const worktree of selectWorktreesByRepo(state)?.[repo.id] ?? []) {
       if (worktree.isArchived) {
         continue

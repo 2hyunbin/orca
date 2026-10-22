@@ -4,6 +4,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 export function pickSpaceWindowState(state: AppState) {
   return {
@@ -12,14 +13,14 @@ export function pickSpaceWindowState(state: AppState) {
     workspaceSpaceScanProgress: state.workspaceSpaceScanProgress,
     workspaceSpaceScanning: state.workspaceSpaceScanning,
     workspaceSpaceMeasurements: state.workspaceSpaceMeasurements,
-    repos: state.repos,
+    repos: selectRepos(state),
     worktreesByRepo: selectWorktreesByRepo(state),
     detectedWorktreesByRepo: selectDetectedWorktreesByRepo(state),
     runtimeEnvironments: state.runtimeEnvironments,
     runtimeEnvironmentCatalogHydrated: state.runtimeEnvironmentCatalogHydrated,
     removedRuntimeEnvironmentIds: state.removedRuntimeEnvironmentIds,
     folderWorkspaces: selectFolderWorkspaces(state),
-    projectGroups: state.projectGroups,
+    projectGroups: selectProjectGroups(state),
     restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
     settings: state.settings,
     tabsByWorktree: state.tabsByWorktree,

@@ -20,6 +20,7 @@ import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import type { TerminalPaneLayoutNode } from '../../../../shared/terminal-tab-types'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 type StoreSnapshot = ReturnType<typeof useAppStore.getState>
 
@@ -201,14 +202,14 @@ function findNotificationRepo(
   hostId: ExecutionHostId | null
 ): Repo | undefined {
   // One owner for the id means the id-keyed map already names it, at no extra cost.
-  if (resolveIndexedRepoOwner(state.repos, repoId).kind !== 'ambiguous') {
+  if (resolveIndexedRepoOwner(selectRepos(state), repoId).kind !== 'ambiguous') {
     return getRepoMapFromState(state).get(repoId)
   }
   const owningHost = hostId ?? getResolvedExecutionHostIdForWorktree(state, worktreeId)
   if (!owningHost) {
     return undefined
   }
-  return findIndexedRepoOwnerForHost(state.repos, repoId, owningHost) ?? undefined
+  return findIndexedRepoOwnerForHost(selectRepos(state), repoId, owningHost) ?? undefined
 }
 
 export function getNotificationWorkspaceLabels(
@@ -227,7 +228,7 @@ export function getNotificationWorkspaceLabels(
     const group =
       folder &&
       findIndexedProjectGroupOwner(
-        state.projectGroups,
+        selectProjectGroups(state),
         folder.projectGroupId,
         getCatalogOwnerHostId(folder)
       )

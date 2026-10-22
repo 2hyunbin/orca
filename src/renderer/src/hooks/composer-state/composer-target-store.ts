@@ -15,6 +15,12 @@ import type { LinkedWorkItemSummary } from '@/lib/new-workspace'
 import type { ComposerDecisions } from './composer-decisions'
 import type { WorkspaceCreationTargetHint } from '@/lib/project-host-workspace-target'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import {
+  selectProjectGroups,
+  selectProjectHostSetups,
+  selectProjects,
+  selectRepos
+} from '../../store/project-catalog-selectors'
 
 export type ComposerStateInput = {
   initialRepoId?: string
@@ -91,13 +97,13 @@ export function useComposerTargetStore(options: ComposerStateInput, decisions: C
     fetchSparsePresets
   } = actions
 
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
 
-  const projects = useAppStore((s) => s.projects)
+  const projects = useAppStore((s) => selectProjects(s))
 
-  const projectGroups = useAppStore((s) => s.projectGroups)
+  const projectGroups = useAppStore((s) => selectProjectGroups(s))
 
-  const projectHostSetups = useAppStore((s) => s.projectHostSetups)
+  const projectHostSetups = useAppStore((s) => selectProjectHostSetups(s))
 
   const activeRepoId = useAppStore((s) => s.activeRepoId)
 

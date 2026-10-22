@@ -7,6 +7,7 @@ import { issueCacheKey } from './cache-identity'
 import { CACHE_TTL } from './cache-policy'
 import { settingsForGitHubRepoOwner } from './work-item-routing'
 import { selectWorktreesByRepo } from '../workspace-record-selectors'
+import { selectRepos } from '../project-catalog-selectors'
 
 export const createStaleWorktreeRefreshActions = (
   get: Parameters<StateCreator<AppState>>[1]
@@ -25,7 +26,7 @@ export const createStaleWorktreeRefreshActions = (
       return
     }
 
-    const repo = state.repos.find((r) => r.id === worktree.repoId)
+    const repo = selectRepos(state).find((r) => r.id === worktree.repoId)
     if (!repo) {
       return
     }

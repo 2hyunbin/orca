@@ -33,6 +33,7 @@ import {
   getRepoSetupAgentStartupPolicy,
   buildSetupAgentStartupHookSettings
 } from './setup-policy-decisions'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function useComposerProviderRuntimeSync(input: ComposerProviderRuntimeSyncInput) {
   const {
@@ -79,7 +80,7 @@ export function useComposerProviderRuntimeSync(input: ComposerProviderRuntimeSyn
       policy: SetupAgentStartupPolicy = setupAgentStartupPolicyRef.current
     ): Promise<boolean> => {
       while (true) {
-        const currentRepo = useAppStore.getState().repos.find((repo) => repo.id === repoId)
+        const currentRepo = selectRepos(useAppStore.getState()).find((repo) => repo.id === repoId)
         if (!currentRepo || !isGitRepoKind(currentRepo)) {
           return true
         }

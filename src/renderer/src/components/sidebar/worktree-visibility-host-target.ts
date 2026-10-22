@@ -7,6 +7,7 @@ import {
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { selectDetectedWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function resolveWorktreeVisibilityHostTarget(
   state: Pick<AppState, 'repos' | 'settings' | 'detectedWorktreesByRepo'>,
@@ -15,7 +16,7 @@ export function resolveWorktreeVisibilityHostTarget(
 ) {
   const requestedHostId =
     typeof modalHostId === 'string' ? parseExecutionHostId(modalHostId)?.id : undefined
-  const repo = findRepoForHost(state.repos, repoId, {
+  const repo = findRepoForHost(selectRepos(state), repoId, {
     hostId: requestedHostId,
     settings: state.settings
   })

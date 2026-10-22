@@ -6,6 +6,7 @@ import { splitRepoReorderByHost } from '../slices/repo-reorder-host-split'
 import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import type { RepoSlice } from './repo-state'
+import { selectRepos } from '../project-catalog-selectors'
 
 export function createRepoOrderingActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -16,7 +17,7 @@ export function createRepoOrderingActions(
 
     reorderRepos: async (orderedIds) => {
       // Optimistically apply the new order for instant sidebar update; resync only if main rejects (racing add/remove).
-      const previous = get().repos
+      const previous = selectRepos(get())
       const remainingById = new Map<string, { repos: Repo[]; nextIndex: number }>()
       for (const repo of previous) {
         const existing = remainingById.get(repo.id)

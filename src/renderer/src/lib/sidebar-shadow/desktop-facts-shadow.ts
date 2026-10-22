@@ -9,6 +9,7 @@ import {
 import type { DesktopSidebarFacts } from '../../../../shared/sidebar-list/desktop-sidebar-facts'
 import { folderWorkspaceKey } from '../../../../shared/workspace-scope'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type WindowFactsState = Pick<
   AppState,
@@ -39,7 +40,7 @@ export function readWindowDesktopSidebarFacts(state: WindowFactsState): DesktopS
       worktreeId: state.activeWorktreeId ?? null
     },
     pinnedWorkspaceIds: [...new Set(pinned)].sort(),
-    repoOrder: state.repos
+    repoOrder: selectRepos(state)
       .map((repo) => ({ hostId: getRepoExecutionHostId(repo), repoId: repo.id }))
       .filter((entry) => parseExecutionHostId(entry.hostId)?.kind !== 'runtime'),
     workspaceHostOrder: [...state.workspaceHostOrder],

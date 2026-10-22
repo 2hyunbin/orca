@@ -31,6 +31,7 @@ import {
   resyncMirroredServerWorkspace,
   setFrameDrawnServerWorkspaces
 } from './web-session-tabs-sync/frame-drawn-server-workspaces'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 type FramesStore = {
   getState: () => AppState
@@ -268,10 +269,10 @@ export function installServerLayoutFrames(store: FramesStore): () => void {
 /** The store slices a workspace's owning server derives from. */
 function routingInputs(state: AppState): unknown[] {
   return [
-    state.repos,
+    selectRepos(state),
     selectWorktreesByRepo(state),
     selectDetectedWorktreesByRepo(state),
-    state.projectGroups,
+    selectProjectGroups(state),
     state.restoredRuntimeHostIdByWorkspaceSessionKey,
     state.runtimeEnvironments,
     state.runtimeStatusByEnvironmentId

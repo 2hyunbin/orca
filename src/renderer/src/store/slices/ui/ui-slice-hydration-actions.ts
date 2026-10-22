@@ -63,6 +63,7 @@ import {
 } from './ui-slice-hydration-sanitizers'
 import { hydrateAgentReadState, sanitizeTaskResumeState } from './ui-slice-hydration-values'
 import { hydrateStatusBarItems } from './ui-slice-hydration-status-bar-items'
+import { selectRepos } from '../../project-catalog-selectors'
 
 const MAX_LEFT_SIDEBAR_WIDTH = 500
 const MAX_RIGHT_SIDEBAR_WIDTH = 4000
@@ -73,9 +74,9 @@ export function createUiHydrationActions(set: UISliceSet, _get: UISliceGet): Par
     hydratePersistedUI: (ui, source = 'sync') =>
       set((s) => {
         const manualRepoOrder = normalizeManualRepoOrder(ui.manualRepoOrder)
-        const orderedRepos = applyManualRepoOrder(s.repos, manualRepoOrder)
-        const validRepoIds = new Set(s.repos.map((repo) => repo.id))
-        const validRepoHostIdentities = new Set(s.repos.map(getRepoHostIdentity))
+        const orderedRepos = applyManualRepoOrder(selectRepos(s), manualRepoOrder)
+        const validRepoIds = new Set(selectRepos(s).map((repo) => repo.id))
+        const validRepoHostIdentities = new Set(selectRepos(s).map(getRepoHostIdentity))
         const persistedFilterRepoIds = sanitizePersistedRepoIds(ui.filterRepoIds)
         const persistedAgentsFilterRepoIds = sanitizePersistedRepoIds(ui.agentsFilterRepoIds)
         // Why: pre-rename builds used sidekick* keys; read as fallback only so new pet* writes win after upgrade.

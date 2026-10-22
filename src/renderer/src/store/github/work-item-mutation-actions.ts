@@ -12,6 +12,7 @@ import { evictRepoCacheEntries, repoCacheEviction, type RepoCacheEviction } from
 import { ERROR_TOAST_DURATION } from './cache-policy'
 import { clearInflightWorkItemsForRepo } from './request-coordination'
 import { findRepoForGitHubOwner } from './repository-routing'
+import { selectRepos } from '../project-catalog-selectors'
 
 // Why: the row's own host is the bucket to drop; a same-id twin on another host keeps its own.
 function repoCacheEvictionForRow(
@@ -22,7 +23,7 @@ function repoCacheEvictionForRow(
 ): RepoCacheEviction {
   const row = hostId ? undefined : findRepoForGitHubOwner(state, repoId, repoPath ?? '')
   const evictedHostId = hostId ?? (row ? getRepoExecutionHostId(row) : null)
-  return repoCacheEviction(state.repos, repoId, repoPath, evictedHostId)
+  return repoCacheEviction(selectRepos(state), repoId, repoPath, evictedHostId)
 }
 
 export const createWorkItemMutationActions = (
@@ -77,7 +78,7 @@ export const createWorkItemMutationActions = (
     const issueSourcePreference = preference === 'auto' ? undefined : preference
     // Why: optimistically patch the row so the segmented control updates this frame; a twin's other row keeps its own.
     set((s) => ({
-      repos: s.repos.map((r) =>
+      repos: selectRepos(s).map((r) =>
         repoMatchesHostIdentity(r, repoId, hostId) ? { ...r, issueSourcePreference } : r
       )
     }))

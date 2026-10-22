@@ -23,6 +23,7 @@ import {
   runWorktreeDeleteWithToast
 } from './worktree-delete-execution'
 import { collectRemovalUnsavedFiles } from '@/components/editor/removal-unsaved-editor-files'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export { runWorktreeDeletesInParallel, runWorktreeDeleteWithToast }
 
@@ -51,7 +52,7 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
     return
   }
   if (target.isMainWorktree) {
-    const repo = findRepoForHost(state.repos, target.repoId, {
+    const repo = findRepoForHost(selectRepos(state), target.repoId, {
       hostId: target.hostId,
       settings: state.settings
     })
@@ -71,7 +72,7 @@ export function runWorktreeDelete(worktreeId: string, options: WorktreeDeleteOpt
 
   // Why: a disconnected SSH host has no provider, so worktrees:remove throws; route to reconnect-and-delete or local-only forget.
   // Skip on paired web/mobile clients: SSH state is desktop-only, so empty sshTargetLabels misclassifies SSH repos as ghosts; their worktree.rm RPC still handles the delete.
-  const matchingRepos = state.repos.filter((entry) => entry.id === target.repoId)
+  const matchingRepos = selectRepos(state).filter((entry) => entry.id === target.repoId)
   const repo = target.hostId
     ? findRepoForHost(matchingRepos, target.repoId, { hostId: target.hostId })
     : matchingRepos.length === 1

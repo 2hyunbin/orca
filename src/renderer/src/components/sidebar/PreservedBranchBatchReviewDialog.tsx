@@ -16,6 +16,7 @@ import {
 } from '../ui/dialog'
 import { Label } from '../ui/label'
 import { preservedBranchCleanupKey } from '@/lib/preserved-branch-cleanup'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type ActionablePreservedBranch = PreservedBranchCleanup & { expectedHead: string }
 
@@ -25,7 +26,9 @@ function selectionKey(branch: PreservedBranchCleanup): string {
 
 function getRepositoryLabel(branch: PreservedBranchCleanup): string {
   const repoId = getRepoIdFromWorktreeId(branch.worktreeId)
-  return useAppStore.getState().repos?.find((repo) => repo.id === repoId)?.displayName || repoId
+  return (
+    selectRepos(useAppStore.getState())?.find((repo) => repo.id === repoId)?.displayName || repoId
+  )
 }
 
 export function PreservedBranchBatchReviewDialog({

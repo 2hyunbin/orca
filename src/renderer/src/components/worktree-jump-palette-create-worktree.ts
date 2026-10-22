@@ -26,6 +26,7 @@ import type { WorktreeJumpPaletteQuickActions } from './use-worktree-jump-palett
 import type { WorktreeJumpPaletteSelectionLifecycle } from './use-worktree-jump-palette-selection-lifecycle'
 import type { WorktreeJumpPaletteStoreState } from './use-worktree-jump-palette-store-state'
 import type { WorktreeJumpPaletteTaskUrl } from './use-worktree-jump-palette-task-url'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 type WorktreeJumpPaletteCreateWorktreeInput = Pick<
   WorktreeJumpPaletteStoreState,
@@ -198,7 +199,7 @@ export function createWorktreeJumpPaletteWorktreeHandler({
 
     if (taskUrlCreatePreview) {
       const state = useAppStore.getState()
-      const eligibleRepos = state.repos.filter((repo) => isGitRepoKind(repo))
+      const eligibleRepos = selectRepos(state).filter((repo) => isGitRepoKind(repo))
       const repo =
         (state.activeRepoId &&
           eligibleRepos.find((candidate) => candidate.id === state.activeRepoId)) ||
@@ -217,7 +218,7 @@ export function createWorktreeJumpPaletteWorktreeHandler({
           worktreeMatchesGitHubNumber(
             worktree,
             ghNumber,
-            findRepoForHost(state.repos, worktree.repoId, {
+            findRepoForHost(selectRepos(state), worktree.repoId, {
               hostId: getPaletteWorktreeExecutionHostId(worktree),
               settings: state.settings
             }) ?? undefined

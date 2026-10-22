@@ -10,9 +10,10 @@ import {
   hasGitHubBackedProject,
   type PreflightIssue
 } from './landing-preflight-issues'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export function useLandingPreflightRuntime(): { preflightIssues: PreflightIssue[] } {
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const preflightStatus = useAppStore((s) => s.preflightStatus)
   const refreshPreflightStatus = useAppStore((s) => s.refreshPreflightStatus)
   const invalidatePreflightStatus = useAppStore((s) => s.invalidatePreflightStatus)
