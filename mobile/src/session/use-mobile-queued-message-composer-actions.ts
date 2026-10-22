@@ -50,9 +50,11 @@ export function useMobileQueuedMessageComposerActions(args: {
         return false
       }
       const expectedBodyFingerprint = agentSessionSendBodyFingerprint(args.sessionId, message.body)
+      let copied
       try {
-        if (!(await args.copyQueuedMessage(message))) {
-          return false
+        copied = await args.copyQueuedMessage(message)
+        if (!copied) {
+          throw new Error('Draft copy was not acknowledged')
         }
       } catch {
         if (currentScope.current === sessionKey) {
@@ -62,6 +64,12 @@ export function useMobileQueuedMessageComposerActions(args: {
       }
       if (currentScope.current === sessionKey) {
         onCopied?.()
+      }
+      if (!copied.valid()) {
+        if (currentScope.current === sessionKey) {
+          args.onSendError("Couldn't save this message to your draft. It is still queued.")
+        }
+        return false
       }
       const result = await mutate<AgentSessionQueuedMessageDeleteResult>(
         'agentSession.queuedMessageDelete',

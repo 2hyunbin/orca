@@ -1,3 +1,8 @@
+import {
+  captureMobileChatDraftOwner,
+  mobileChatDraftOwnerLive,
+  type MobileChatDraftOwner
+} from './mobile-native-chat-draft-store'
 import { useEffect, useCallback, useRef } from 'react'
 import { AppState } from 'react-native'
 import { useFocusEffect } from 'expo-router'
@@ -117,16 +122,21 @@ export function useMobileSessionNativeChatDictation(
     [setShowDictationSetup, showToast]
   )
 
+  const dictationOwner = useRef<{
+    owner: MobileChatDraftOwner
+    insert: (text: string) => void
+  } | null>(null)
   const dictation = useMobileDictation({
     client,
     enabled: canSend && dictationEnabled,
     onTranscript: (text) => {
-      // Why: dictation belongs to the visible composer — native chat consumes it locally, terminal mode keeps live-input routing.
-      if (showNativeChatRef.current) {
-        nativeChatController.setChatComposerText((current) =>
-          appendBufferedDictation(current, text)
-        )
-        showToast('Dictation inserted')
+      const destination = dictationOwner.current
+      dictationOwner.current = null
+      if (destination) {
+        if (mobileChatDraftOwnerLive(destination.owner)) {
+          destination.insert(text)
+          showToast('Dictation inserted')
+        }
         return
       }
       // Live mode inserts the transcript into its PTY as text (no Return); buffered mode appends to the command field.
@@ -157,12 +167,29 @@ export function useMobileSessionNativeChatDictation(
       showToast('Dictation inserted')
     },
     onError: (err) => {
+      dictationOwner.current = null
       dictationRouteContextRef.current = null
       reportDictationFailure(err)
     }
   })
 
   const startDictation = useCallback(() => {
+    const owner =
+      showNativeChatRef.current && nativeChatScopeKey
+        ? captureMobileChatDraftOwner(nativeChatScopeKey)
+        : undefined
+    if (showNativeChatRef.current && (!nativeChatController.draftAuthoringReady || !owner)) {
+      return
+    }
+    dictationOwner.current = owner
+      ? {
+          owner,
+          insert: (text) =>
+            nativeChatController.setChatComposerText((current) =>
+              appendBufferedDictation(current, text)
+            )
+        }
+      : null
     const routeContext = activeHandle
       ? { handle: activeHandle, liveInputEnabled: liveInputTerminalHandles.has(activeHandle) }
       : null
@@ -171,11 +198,21 @@ export function useMobileSessionNativeChatDictation(
       if (dictationRouteContextRef.current === routeContext) {
         dictationRouteContextRef.current = null
       }
+      dictationOwner.current = null
       reportDictationFailure(err)
     })
-  }, [activeHandle, dictation, liveInputTerminalHandles, reportDictationFailure])
+  }, [
+    activeHandle,
+    dictation,
+    liveInputTerminalHandles,
+    reportDictationFailure,
+    nativeChatController,
+    nativeChatScopeKey,
+    showNativeChatRef
+  ])
 
   const cancelDictation = useCallback(() => {
+    dictationOwner.current = null
     dictationRouteContextRef.current = null
     void dictation.cancel()
   }, [dictation])

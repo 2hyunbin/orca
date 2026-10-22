@@ -13,6 +13,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { StructuredAgentId } from '../../../src/shared/agent-session-provider-handle'
 import type { MobileNativeChatSendOutcome } from './mobile-native-chat-send'
 import type { MobileNativeChatSendOrigin } from './use-mobile-native-chat-drafts'
+import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
+import { useMobileStructuredSendWithOutcome } from './use-mobile-structured-send-with-outcome'
+import type { NativeChatMessage } from '../../../src/shared/native-chat-types'
+import { EMPTY_STRUCTURED_AGENT_SESSION } from '../../../src/shared/structured-agent-session-reducer'
+import { createFakeRpcClient, rpcSuccess } from '../mobile-web-shell/bridge-host-test-fakes'
 import { useMobileStructuredNativeChatSendBridge } from './use-mobile-structured-native-chat-send-bridge'
 
 const ORIGIN: MobileNativeChatSendOrigin = {
@@ -39,7 +44,6 @@ describe('useMobileStructuredNativeChatSendBridge', () => {
   function Harness({ agent }: { agent: StructuredAgentId }): null {
     sendWithOutcome = useMobileStructuredNativeChatSendBridge({
       agent,
-      draftScope: 'draft',
       captureSendOrigin,
       clearDraftForSend,
       onSendError,
@@ -56,6 +60,7 @@ describe('useMobileStructuredNativeChatSendBridge', () => {
   }
 
   beforeEach(() => {
+    captureSendOrigin.mockImplementation(() => ORIGIN)
     vi.clearAllMocks()
   })
 
@@ -120,6 +125,10 @@ describe('useMobileStructuredNativeChatSendBridge', () => {
     })
     clearDraftForSend.mockImplementationOnce(() => editMobileNativeChatDraft('draft', ''))
     sendStructured.mockResolvedValue('accepted')
+    captureSendOrigin.mockReturnValue({
+      ...ORIGIN,
+      skills: readMobileNativeChatDraft('draft').skills
+    })
     mount('codex')
     await expect(sendWithOutcome('$review')).resolves.toBe('accepted')
     expect(sendStructured).toHaveBeenCalledWith('$review', undefined, undefined, undefined, skills)
@@ -161,6 +170,7 @@ describe('useMobileStructuredNativeChatSendBridge', () => {
     editMobileNativeChatDraft(scope, (text) => `edited ${text}`)
     const captured = readMobileNativeChatDraft(scope)
     clearDraftForSend.mockImplementation(() => editMobileNativeChatDraft(scope, ''))
+    captureSendOrigin.mockReturnValue({ ...ORIGIN, skills: captured.skills })
     mount('codex')
     await expect(sendWithOutcome(captured.text)).resolves.toBe('rejected')
     expect(clearDraftForSend).not.toHaveBeenCalled()
@@ -178,3 +188,174 @@ describe('useMobileStructuredNativeChatSendBridge', () => {
     })
   })
 })
+
+it.each(['rejected', 'unknown'] as const)(
+  'recovers a captured %s Send through the real owner, bridge and wire builder',
+  async (outcome) => {
+    const scope = 'host\0workspace\0tab'
+    const selected = { name: 'review', path: '/a/review/SKILL.md' }
+    const newer = { name: 'review', path: '/b/review/SKILL.md' }
+    let blockSaves = false
+    let releaseSaves = () => {}
+    const saveWait = new Promise<void>((resolve) => {
+      releaseSaves = resolve
+    })
+    const client = createFakeRpcClient()
+    const onSendError = vi.fn()
+    const messages: NativeChatMessage[] = []
+    const stateRef = { current: { ...EMPTY_STRUCTURED_AGENT_SESSION, fence: 1 } }
+    let renderer: ReactTestRenderer | undefined
+    let api: ReturnType<typeof useMobileNativeChatDrafts> &
+      ReturnType<typeof useMobileStructuredNativeChatSendBridge>
+    function Harness() {
+      const drafts = useMobileNativeChatDrafts({
+        hostId: 'host',
+        worktreeId: 'workspace',
+        tabId: 'tab',
+        sessionId: 'session',
+        messages,
+        transcriptSettled: true
+      })
+      const sendStructured = useMobileStructuredSendWithOutcome({
+        agent: 'codex',
+        client,
+        sessionId: 'session',
+        enabled: true,
+        queueCapable: false,
+        commandsWait: false,
+        stateRef,
+        stopping: false,
+        accept: vi.fn(),
+        hold: vi.fn(),
+        commandPending: { current: false },
+        controller: {
+          snapshot: [],
+          setOption: async () => false,
+          invokeAction: async () => false,
+          conversationCommands: ['compact']
+        },
+        onSendError
+      })
+      api = {
+        ...drafts,
+        ...useMobileStructuredNativeChatSendBridge({
+          agent: 'codex',
+          ...drafts,
+          authoringReady: drafts.draftAuthoringReady,
+          sendStructured,
+          onSendError
+        })
+      }
+      return null
+    }
+    publishMobileChatDraftStorage({
+      read: async () => null,
+      write: async () => {
+        if (blockSaves) {
+          await saveWait
+        }
+      },
+      removeWorkspace: async () => {}
+    })
+    try {
+      await act(async () => {
+        renderer = create(createElement(Harness))
+      })
+      const original = outcome === 'rejected' ? '$review' : '/compact'
+      await act(async () => {
+        if (outcome === 'rejected') {
+          await copyMobileQueuedMessageToDraft(scope, {
+            messageId: 'original',
+            position: 1,
+            state: 'waiting',
+            body: {
+              kind: 'message',
+              role: 'user',
+              blocks: [{ type: 'text', text: original }],
+              skills: [selected]
+            }
+          })
+        } else {
+          api.setComposerText(original)
+        }
+      })
+      let pending: Promise<MobileNativeChatSendOutcome>
+      await act(async () => {
+        pending = api.sendWithOutcome(original)
+        await Promise.resolve()
+      })
+      expect(readMobileNativeChatDraft(scope).text).toBe('')
+      expect(readMobileNativeChatDraft(scope).skills).toBeUndefined()
+      expect(client.requests[0]?.method).toBe(
+        outcome === 'rejected' ? 'agentSession.send' : 'agentSession.conversationCommand'
+      )
+      if (outcome === 'rejected') {
+        expect(client.requests[0]?.args[1]).toMatchObject({
+          body: { skills: [selected] }
+        })
+      }
+      await act(async () => {
+        api.setComposerText('newer')
+        await copyMobileQueuedMessageToDraft(scope, {
+          messageId: 'newer',
+          position: 2,
+          state: 'waiting',
+          body: {
+            kind: 'message',
+            role: 'user',
+            blocks: [{ type: 'text', text: '$review' }],
+            skills: [newer]
+          }
+        })
+      })
+      blockSaves = true
+      await act(async () => {
+        client.requests[0]!.resolve(
+          rpcSuccess(
+            'first',
+            outcome === 'unknown'
+              ? { ok: true, value: { state: 'unknown' } }
+              : {
+                  ok: false,
+                  refusal: {
+                    code: 'agent_session_operation_invalid',
+                    details: { reason: 'turnActive' },
+                    message: 'definite refusal'
+                  }
+                }
+          )
+        )
+        expect(await pending!).toBe(outcome)
+      })
+      const restored = readMobileNativeChatDraft(scope)
+      expect(restored.text).toBe(`newer\n\n$review\n\n${original}`)
+      const refs = outcome === 'rejected' ? [newer, selected] : [newer]
+      expect(restored.skills).toEqual(refs)
+      let retry: Promise<MobileNativeChatSendOutcome>
+      await act(async () => {
+        retry = api.sendWithOutcome(restored.text)
+        await Promise.resolve()
+      })
+      expect(client.requests[1]?.method).toBe('agentSession.send')
+      expect(client.requests[1]?.args[1]).toMatchObject({ body: { skills: refs } })
+      await act(async () => {
+        client.requests[1]!.resolve(
+          rpcSuccess('retry', {
+            ok: false,
+            refusal: {
+              code: 'agent_session_operation_invalid',
+              details: { reason: 'turnActive' },
+              message: 'definite refusal'
+            }
+          })
+        )
+        expect(await retry!).toBe('rejected')
+      })
+    } finally {
+      releaseSaves()
+      act(() => renderer?.unmount())
+      resetMobileNativeChatDraftStoreForTests()
+      publishMobileChatDraftStorage(null)
+    }
+  }
+)

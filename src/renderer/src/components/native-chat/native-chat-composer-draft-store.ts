@@ -30,6 +30,7 @@ import {
 } from './native-chat-composer-draft-memory'
 import {
   deleteLoadingNativeChatComposerDraftsWhere,
+  nativeChatComposerDraftWriteSettled,
   persistNativeChatComposerDraft,
   resetNativeChatComposerDraftPersistenceForTests
 } from './native-chat-composer-draft-persistence'
@@ -193,7 +194,8 @@ function withAddition<T extends NativeChatComposerDraft>(
 export function appendToNativeChatComposerDraft(
   scopeKey: string,
   addition: NativeChatComposerDraftAddition,
-  owner?: NativeChatComposerDraftOwner
+  owner?: NativeChatComposerDraftOwner,
+  acknowledge?: (saved: Promise<boolean>) => void
 ): boolean {
   const before = records.get(scopeKey)
   const current = readNativeChatComposerDraft(scopeKey)
@@ -218,7 +220,12 @@ export function appendToNativeChatComposerDraft(
   if (after === before && !hasLocalChange(scopeKey) && !refusedScopes.has(scopeKey)) {
     return true
   }
-  return journalNativeChatComposerDraftAddition(scopeKey, placed, after.savedAt)
+  const journaled = journalNativeChatComposerDraftAddition(scopeKey, placed, after.savedAt)
+  // Capture this transaction before append subscribers can replace the draft.
+  if (!journaled) {
+    acknowledge?.(nativeChatComposerDraftWriteSettled(scopeKey))
+  }
+  return journaled
 }
 
 /**

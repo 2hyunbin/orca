@@ -10,6 +10,8 @@ import {
 } from './mobile-native-chat-image-attachment'
 import {
   readMobileNativeChatDraft,
+  captureMobileChatDraftOwner,
+  type MobileChatDraftOwner,
   updateMobileNativeChatDraftImages,
   useMobileNativeChatDraftImages
 } from './mobile-native-chat-draft-store'
@@ -125,9 +127,15 @@ export function useMobileNativeChatImageAttachments({
   const attachments = useMobileNativeChatDraftImages(scopeKey)
 
   const addUploadedImages = useCallback(
-    (scope: string, uploadedImages: Omit<PendingNativeChatImage, 'id'>[]) => {
-      updateMobileNativeChatDraftImages(scope, (current) =>
-        appendPendingNativeChatImages(current, uploadedImages, idCounter, idPrefix)
+    (
+      scope: string,
+      uploadedImages: Omit<PendingNativeChatImage, 'id'>[],
+      owner: MobileChatDraftOwner
+    ) => {
+      updateMobileNativeChatDraftImages(
+        scope,
+        (current) => appendPendingNativeChatImages(current, uploadedImages, idCounter, idPrefix),
+        owner
       )
     },
     [idPrefix]
@@ -149,11 +157,14 @@ export function useMobileNativeChatImageAttachments({
   const removeAttachment = useCallback(
     (id: string): void => {
       const scope = scopeKey
-      if (!scope) {
+      const owner = scope ? captureMobileChatDraftOwner(scope) : undefined
+      if (!scope || !owner || owner.state === 'unread') {
         return
       }
-      updateMobileNativeChatDraftImages(scope, (current) =>
-        current.filter((attachment) => attachment.id !== id)
+      updateMobileNativeChatDraftImages(
+        scope,
+        (current) => current.filter((attachment) => attachment.id !== id),
+        owner
       )
     },
     [scopeKey]
@@ -164,6 +175,10 @@ export function useMobileNativeChatImageAttachments({
       // Serialize clear/paste/submit ownership per terminal while allowing other
       // tabs to send. Shared with the prompt-card writes (answer/permission), so
       // a card tap can't interleave into a mid-flight paste sequence either.
+      const owner = scopeKey ? captureMobileChatDraftOwner(scopeKey) : undefined
+      if (!owner || owner.state === 'unread') {
+        return false
+      }
       const operationTerminal = activeHandleRef.current
       if (operationTerminal && !acquireMobileNativeChatTerminalWrite(operationTerminal)) {
         onError?.()
@@ -199,8 +214,10 @@ export function useMobileNativeChatImageAttachments({
           )
           if (outcome !== 'rejected') {
             const sentIds = new Set(pendingImages.map((attachment) => attachment.id))
-            updateMobileNativeChatDraftImages(scope, (current) =>
-              current.filter((attachment) => !sentIds.has(attachment.id))
+            updateMobileNativeChatDraftImages(
+              scope,
+              (current) => current.filter((attachment) => !sentIds.has(attachment.id)),
+              owner
             )
             onFilesSent?.(storedFiles.map((file) => file.id))
           }
@@ -302,8 +319,10 @@ export function useMobileNativeChatImageAttachments({
             // flight keeps waiting for its own send. 'unknown' clears too: the
             // send usually DID land, and a kept chip would double-send the image.
             const sentIds = new Set(pendingImages.map((attachment) => attachment.id))
-            updateMobileNativeChatDraftImages(scope, (current) =>
-              current.filter((attachment) => !sentIds.has(attachment.id))
+            updateMobileNativeChatDraftImages(
+              scope,
+              (current) => current.filter((attachment) => !sentIds.has(attachment.id)),
+              owner
             )
           }
           return outcome !== 'rejected'

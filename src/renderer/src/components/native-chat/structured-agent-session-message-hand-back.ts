@@ -21,7 +21,11 @@ export function returnMessageToComposer(
   blocks: AgentJournalMessageItem['blocks'],
   /** Each image's SSH connection, in block order. */
   imageConnectionIds?: readonly (string | null)[],
-  options?: { skills?: readonly { name: string; path: string }[]; textPolicy?: 'append-repeated' }
+  options?: {
+    skills?: readonly { name: string; path: string }[]
+    textPolicy?: 'append-repeated'
+    acknowledge?: (saved: Promise<boolean>) => void
+  }
 ): boolean {
   // Its `[Image #k]` markers become chips for its k-th image, by the ids its images get below.
   const imageIds = blocks.flatMap((block, index) =>
@@ -88,7 +92,10 @@ export function returnMessageToComposer(
     ...(document ? { document } : {}),
     ...(options?.textPolicy ? { textPolicy: options.textPolicy } : {})
   }
-  return appendNativeChatDraftCache(composerScopeKey, text, undefined, images, addition)
+  return appendNativeChatDraftCache(composerScopeKey, text, undefined, images, {
+    ...addition,
+    acknowledge: options?.acknowledge
+  })
 }
 
 /**

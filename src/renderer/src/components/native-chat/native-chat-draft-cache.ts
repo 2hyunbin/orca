@@ -51,14 +51,22 @@ export function appendNativeChatDraftCache(
   owner?: NativeChatComposerDraftOwner,
   /** A returned message's images, saved in the same step as the text whose chips name them. */
   images?: readonly NativeChatComposerDraftImage[],
-  options?: Pick<NativeChatComposerDraftAddition, 'document' | 'textPolicy'>
+  options?: Pick<NativeChatComposerDraftAddition, 'document' | 'textPolicy'> & {
+    acknowledge?: (saved: Promise<boolean>) => void
+  }
 ): boolean {
   if (text === '' && !images?.length) {
     return true
   }
   const previous = readNativeChatDraftCache(scopeKey)
   // Durable now: the copy it came from (a send handed back, a queued card) goes right after this.
-  const durable = appendToNativeChatComposerDraft(scopeKey, { text, images, ...options }, owner)
+  const { acknowledge, ...addition } = options ?? {}
+  const durable = appendToNativeChatComposerDraft(
+    scopeKey,
+    { text, images, ...addition },
+    owner,
+    acknowledge
+  )
   // Why: an addition the draft already held adds nothing, so a composer must not show it again.
   if (readNativeChatDraftCache(scopeKey) !== previous) {
     appendListeners.get(scopeKey)?.forEach((listener) => listener(text, previous))

@@ -4,7 +4,8 @@ import {
   readMobileNativeChatDraft,
   editMobileNativeChatDraft,
   resetMobileNativeChatDraftStoreForTests,
-  hydrateMobileNativeChatDraft
+  hydrateMobileNativeChatDraft,
+  deleteMobileNativeChatDrafts
 } from './mobile-native-chat-draft-store'
 import { publishMobileChatDraftStorage } from './mobile-native-chat-draft-storage'
 import { agentSessionSendBodyFingerprint } from '../../../src/shared/structured-agent-session-send-mutation'
@@ -183,6 +184,7 @@ describe('mobile structured queued messages', () => {
       write,
       removeWorkspace: async () => {}
     })
+    await hydrateMobileNativeChatDraft(scope)
     editMobileNativeChatDraft(scope, 'already typed')
     const message = queuedDraft({
       messageId: 'copy',
@@ -254,6 +256,31 @@ describe('mobile structured queued messages', () => {
     expect(sent).not.toHaveProperty('messageId')
     expect(calls('agentSession.queuedMessageUpdate')).toHaveLength(0)
     expect(calls('agentSession.attachmentUploadBegin')).toHaveLength(0)
+  })
+
+  it('does not Delete when removal retires the acknowledged copy before the final check', async () => {
+    const scope = 'copy-host\0workspace\0tab'
+    publishMobileChatDraftStorage({
+      read: async () => null,
+      write: async () => {},
+      removeWorkspace: async () => {}
+    })
+    await mountSession(
+      { ...CAPABLE, queuedMessageCopyDelete: true },
+      snapshotEvent({ queuedMessages: [queuedDraft({ messageId: 'removed' })] })
+    )
+    await act(async () => {
+      expect(
+        await hook!.queued.edit!('removed', () => {
+          void deleteMobileNativeChatDrafts('copy-host', 'workspace')
+        })
+      ).toBe(false)
+    })
+    expect(calls('agentSession.queuedMessageDelete')).toHaveLength(0)
+    expect(readMobileNativeChatDraft(scope).text).toBe('')
+    expect(onSendError).toHaveBeenLastCalledWith(
+      "Couldn't save this message to your draft. It is still queued."
+    )
   })
 
   it('keeps the copied draft after Delete refusal and reverts an optimistic relative move', async () => {

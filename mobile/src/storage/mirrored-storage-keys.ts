@@ -97,6 +97,10 @@ function note(key: string, value: string | null): void {
  */
 const writes = new Map<string, Promise<void>>()
 
+export function pendingMirroredStorageKeys(): string[] {
+  return [...writes.keys()]
+}
+
 export function persistMirrored(key: string, value: string | null): Promise<void> {
   const next = (writes.get(key) ?? Promise.resolve())
     .catch(() => undefined)

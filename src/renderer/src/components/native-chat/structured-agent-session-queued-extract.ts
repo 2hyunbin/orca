@@ -22,16 +22,26 @@ export async function extractQueuedMessageToComposer(
   const { messageId, body } = message
   const fingerprint = agentSessionSendBodyFingerprint(transport.sessionId, body)
   let saved = false
+  let committed: Promise<boolean> | undefined
   try {
     saved = returnMessageToComposer(
       scope,
       `queued-${messageId}-${fingerprint}-${structuredSessionOperationId()}`,
       body.blocks,
       undefined,
-      { skills: body.skills, textPolicy: 'append-repeated' }
+      {
+        skills: body.skills,
+        textPolicy: 'append-repeated',
+        acknowledge: (result) => {
+          committed = result
+        }
+      }
     )
   } catch {
     // The host copy remains the recovery source when local persistence refuses the addition.
+  }
+  if (!saved && committed) {
+    saved = await committed
   }
   if (!saved) {
     toast.error(

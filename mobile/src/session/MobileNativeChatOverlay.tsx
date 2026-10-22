@@ -179,6 +179,7 @@ export function MobileNativeChatOverlay({
                 getComposerEditGeneration={controller.getChatComposerEditGeneration}
                 pending={controller.chatPending}
                 imagePreviewsByMessageId={controller.chatImagePreviewsByMessageId}
+                draftAuthoringReady={controller.draftAuthoringReady}
                 composerText={controller.chatComposerText}
                 onComposerTextChange={controller.setChatComposerText}
                 onAttachImage={

@@ -1,4 +1,5 @@
-import { useCallback, useLayoutEffect, useRef } from 'react'
+import { useMobileNativeChatDraftError } from './use-mobile-native-chat-draft-error'
+import { useLayoutEffect, useRef } from 'react'
 import { useMobileNativeChatAskDismiss } from './use-mobile-native-chat-ask-dismiss'
 import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
 import { useMobileNativeChatFileSearch } from './use-mobile-native-chat-file-search'
@@ -17,10 +18,7 @@ import type {
 import { useMobileBridgeChatPromptWrites } from './use-mobile-bridge-chat-prompt-writes'
 import { useMobileNativeChatActiveResolution } from './use-mobile-native-chat-active-resolution'
 import { useMobileNativeChatPromptCards } from './use-mobile-native-chat-prompt-cards'
-import {
-  copyMobileQueuedMessageToDraft,
-  type MobileQueuedMessageCopy
-} from './mobile-native-chat-queued-extraction'
+import { useMobileQueuedMessageCopy } from './mobile-native-chat-queued-extraction'
 import { mobileNativeChatScopeKey } from './mobile-native-chat-scope-key'
 
 export type { MobileNativeChatController } from './mobile-native-chat-controller-contract'
@@ -67,11 +65,7 @@ export function useMobileNativeChatController(
   // append reaches the drafts state through this ref, set below once they exist.
   // Until the drafts mount, nothing is copied, so Edit deletes nothing.
   const draftScope = mobileNativeChatScopeKey(hostId, worktreeId, activeSessionTabId)
-  const copyQueuedMessage = useCallback<MobileQueuedMessageCopy>(
-    (message) =>
-      draftScope ? copyMobileQueuedMessageToDraft(draftScope, message) : Promise.resolve(false),
-    [draftScope]
-  )
+  const copyQueuedMessage = useMobileQueuedMessageCopy(draftScope, client)
   const appendComposerTextRef = useRef<(text: string) => boolean>(() => false)
   const { structuredSession: structuredNativeChat, session: nativeChatSession } =
     useMobileNativeChatSessionLane({
@@ -91,6 +85,8 @@ export function useMobileNativeChatController(
       onActionResolved: onSendResolved
     })
   const {
+    draftAuthoringReady,
+    draftError,
     composerText: chatComposerText,
     setComposerText: setChatComposerText,
     getComposerEditGeneration: getChatComposerEditGeneration,
@@ -119,6 +115,8 @@ export function useMobileNativeChatController(
     transcriptLoading: nativeChatSession.transcriptLoading,
     transcriptSettled: nativeChatSession.status === 'ready'
   })
+
+  useMobileNativeChatDraftError(draftScope, draftError, onSendError)
 
   // Deliberately not gated on the chat view being visible: the streaming gate
   // has to tell "hidden mid-turn" from "the turn ended".
@@ -196,6 +194,7 @@ export function useMobileNativeChatController(
     answerQuestion: legacyHandleNativeChatQuestionAnswer,
     dispatchCommand: handleNativeChatDispatchCommand
   } = useMobileNativeChatMessageSend({
+    authoringReady: draftAuthoringReady,
     client,
     enabled: inputSendable && !activeChatStructured,
     handleRef: activeHandleRef,
@@ -214,7 +213,7 @@ export function useMobileNativeChatController(
   const structuredNativeChatSend = useMobileStructuredNativeChatSendBridge({
     agent: activeChatResolution?.agent,
     sendStructured: structuredNativeChat.sendWithOutcome,
-    draftScope,
+    authoringReady: draftAuthoringReady,
     captureSendOrigin,
     clearDraftForSend,
     restoreRejectedDraft,
@@ -275,6 +274,7 @@ export function useMobileNativeChatController(
     showNativeChat,
     showNativeChatRef,
     nativeChatAgent: activeChatResolution?.agent ?? null,
+    draftAuthoringReady,
     chatComposerText,
     setChatComposerText,
     getChatComposerEditGeneration,

@@ -23,6 +23,7 @@ import {
   nativeChatComposerDraftWritesSettled,
   updateNativeChatComposerDraft
 } from './native-chat-composer-draft-store'
+import { extractQueuedMessageToComposer } from './structured-agent-session-queued-extract'
 import { clearNativeChatDraftCacheForTests } from './native-chat-draft-cache'
 import type { StructuredAgentSessionWrite } from './use-structured-agent-session-mutate'
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
@@ -240,4 +241,80 @@ it('keeps the card when draft storage refuses or a question/approval is open', a
   expect(write).not.toHaveBeenCalled()
   expect(toast.error).toHaveBeenCalledOnce()
   expect(hook.result.current.queue.cards[0]?.messageId).toBe('mail')
+})
+
+it.each([true, false])(
+  'acknowledges the captured large addition transaction before Delete (hydrated=%s)',
+  async (hydrated) => {
+    const storage = createMemoryNativeChatComposerDraftStorage()
+    const text = `${'\n'.repeat(24_000)}$review`
+    const body = structuredAgentSessionSendBody(text, [], [skills[0]!])
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const write = storage.write
+    const update = storage.update
+    if (hydrated) {
+      storage.write = async (...args) => {
+        await gate
+        return write(...args)
+      }
+    } else {
+      storage.update = async (...args) => {
+        await gate
+        return update(...args)
+      }
+    }
+    setNativeChatComposerDraftStorageForTests(storage)
+    if (hydrated) {
+      await hydrateNativeChatComposerDrafts()
+    }
+    const deleted = vi.fn<StructuredAgentSessionWrite>(async () => ({ kind: 'dropped' }))
+    const pending = extractQueuedMessageToComposer(
+      { sessionId: 'session', write: deleted },
+      scope,
+      { ...message, body }
+    )
+    updateNativeChatComposerDraft(scope, { text: 'new typing', document: undefined }, 'deferred')
+    await Promise.resolve()
+    expect(deleted).not.toHaveBeenCalled()
+    release()
+    await pending
+    expect(deleted).toHaveBeenCalledOnce()
+    expect(storage.drafts.get(scope)?.text.endsWith(text)).toBe(true)
+    expect(readNativeChatComposerDraft(scope).text).toBe('new typing')
+    await nativeChatComposerDraftWritesSettled()
+  }
+)
+
+it('keeps the queue source after captured large-copy refusal even when replacement text later saves', async () => {
+  const storage = createMemoryNativeChatComposerDraftStorage()
+  let refuse = (_reason: Error) => {}
+  storage.write = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          refuse = reject
+        })
+    )
+    .mockImplementation(async (key, draft) => {
+      storage.drafts.set(key, draft)
+    })
+  setNativeChatComposerDraftStorageForTests(storage)
+  await hydrateNativeChatComposerDrafts()
+  const deleted = vi.fn<StructuredAgentSessionWrite>(async () => ({ kind: 'dropped' }))
+  const body = structuredAgentSessionSendBody(`${'\n'.repeat(24_000)}$review`, [], [skills[0]!])
+  const pending = extractQueuedMessageToComposer({ sessionId: 'session', write: deleted }, scope, {
+    ...message,
+    body
+  })
+  updateNativeChatComposerDraft(scope, { text: 'replacement', document: undefined }, 'deferred')
+  refuse(new Error('copy refused'))
+  await pending
+  expect(deleted).not.toHaveBeenCalled()
+  expect(toast.error).toHaveBeenCalledOnce()
+  await nativeChatComposerDraftWritesSettled()
+  expect(readNativeChatComposerDraft(scope).text).toBe('replacement')
 })

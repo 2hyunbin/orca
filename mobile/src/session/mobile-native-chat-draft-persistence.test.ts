@@ -1,3 +1,8 @@
+import { createElement } from 'react'
+import { act, create, type ReactTestRenderer } from 'react-test-renderer'
+import { useMobileNativeChatDrafts } from './use-mobile-native-chat-drafts'
+import { useMobileNativeChatFileAttachments } from './use-mobile-native-chat-file-attachments'
+import { createFakeRpcClient } from '../mobile-web-shell/bridge-host-test-fakes'
 import { copyMobileQueuedMessageToDraft } from './mobile-native-chat-queued-extraction'
 import { structuredAgentSessionSendBody } from '../../../src/shared/structured-agent-session-send-mutation'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -8,17 +13,24 @@ import {
   persistMobileNativeChatDraft,
   readMobileNativeChatDraft,
   resetMobileNativeChatDraftStoreForTests,
-  updateMobileNativeChatDraftImages,
-  deleteMobileNativeChatDrafts
+  deleteMobileNativeChatDrafts,
+  appendMobileNativeChatDraft,
+  clearMobileNativeChatDraftForSend,
+  captureMobileChatDraftOwner
 } from './mobile-native-chat-draft-store'
 import {
   mobileChatDraftStorageKey,
   MOBILE_CHAT_DRAFT_CHUNK_CHARS
 } from './mobile-native-chat-draft-data'
+import * as draftStorage from './mobile-native-chat-draft-storage'
 import { publishMobileChatDraftStorage } from './mobile-native-chat-draft-storage'
 import {
   installNativeMobileChatDraftStorage,
-  removeStoredMobileChatDrafts
+  removeStoredMobileChatDrafts,
+  nativeChatDraftSession,
+  writeNativeMobileChatDraft,
+  readNativeMobileChatDraft,
+  closeNativeChatDraftSession
 } from './mobile-native-chat-draft-native-storage'
 import { persistMirrored } from '../storage/mirrored-storage-keys'
 import {
@@ -31,6 +43,23 @@ import {
   utf8ByteLength
 } from '../mobile-web-shell/bridge/bridge-caps'
 import { pageStorageKeysForRoute } from '../mobile-web-shell/page-storage-keys'
+
+const appState = vi.hoisted(() => new Set<(state: string) => void>())
+vi.mock('react-native', () => ({
+  AppState: {
+    addEventListener: (_event: string, listener: (state: string) => void) => {
+      appState.add(listener)
+      return { remove: () => appState.delete(listener) }
+    }
+  }
+}))
+
+const filePicker = vi.hoisted(() => vi.fn())
+const uploadFile = vi.hoisted(() => vi.fn())
+vi.mock('../platform/media-picker', () => ({ useMediaPicker: () => ({ pickFiles: filePicker }) }))
+vi.mock('./mobile-agent-session-attachment-upload', () => ({
+  uploadMobileAgentSessionAttachment: uploadFile
+}))
 
 const disk = vi.hoisted(() => new Map<string, string>())
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -46,6 +75,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
   }
 }))
 afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
   resetMobileNativeChatDraftStoreForTests()
   publishMobileChatDraftStorage(null)
 })
@@ -129,28 +160,34 @@ it('commits a large image/skill draft before acknowledgement, restores it, and d
   writer.dispose()
 })
 
-it('merges late hydration with new text and images and surfaces storage refusal', async () => {
+it('owns the complete base before editing and protects unread drafts through memory-only Send and recovery', async () => {
   const scope = 'race\0workspace\0tab'
-  let loaded: (value: string | null) => void = () => {}
-  const read = new Promise<string | null>((resolve) => {
+  let loaded = (_value: string | null) => {}
+  let read = new Promise<string | null>((resolve) => {
     loaded = resolve
   })
   const write = vi.fn(async () => {})
   publishMobileChatDraftStorage({ read: () => read, write, removeWorkspace: async () => {} })
   const hydration = hydrateMobileNativeChatDraft(scope)
-  editMobileNativeChatDraft(scope, 'new typing')
-  updateMobileNativeChatDraftImages(scope, (images) => [
-    ...images,
-    { id: 'new', path: '/host/new.png', previewUri: '' }
-  ])
-  loaded(JSON.stringify({ text: 'old', images: [{ id: 'saved', path: '/host/saved.png' }] }))
+  editMobileNativeChatDraft(scope, 'too early')
+  expect(readMobileNativeChatDraft(scope).text).toBe('')
+  loaded('unreadable')
   await hydration
+  editMobileNativeChatDraft(scope, 'sent during recovery')
+  clearMobileNativeChatDraftForSend(
+    scope,
+    readMobileNativeChatDraft(scope).editGeneration,
+    'sent during recovery'
+  )
+  editMobileNativeChatDraft(scope, 'currently unsent')
   await persistMobileNativeChatDraft(scope)
-  expect(readMobileNativeChatDraft(scope).text).toBe('new typing')
-  expect(readMobileNativeChatDraft(scope).images.map(({ id }) => id)).toEqual(['saved', 'new'])
+  expect(write).not.toHaveBeenCalled()
+  read = Promise.resolve(JSON.stringify({ text: '/clear', images: [] }))
+  await hydrateMobileNativeChatDraft(scope)
+  await persistMobileNativeChatDraft(scope)
+  expect(readMobileNativeChatDraft(scope).text).toBe('/clear\n\ncurrently unsent')
   write.mockRejectedValueOnce(new Error('disk full'))
   await expect(persistMobileNativeChatDraft(scope)).rejects.toThrow('disk full')
-  expect(readMobileNativeChatDraft(scope).images).toHaveLength(2)
 })
 
 it('orders acknowledged writes to one key while letting another key commit', async () => {
@@ -180,6 +217,7 @@ it('binds extracted files to their own text and permanently prunes deleted token
     { name: 'review', path: '/one' },
     { name: 'review', path: '/two' }
   ]
+  await hydrateMobileNativeChatDraft(scope)
   editMobileNativeChatDraft(scope, '$review existing')
   await copyMobileQueuedMessageToDraft(scope, {
     messageId: 'picked',
@@ -196,4 +234,357 @@ it('binds extracted files to their own text and permanently prunes deleted token
   const draft = readMobileNativeChatDraft(scope)
   expect(draft.text).toBe('$review retyped')
   expect(structuredAgentSessionSendBody(draft.text, [], draft.skills).skills).toBeUndefined()
+})
+
+it('fills accessible queued image previews through the existing resolver without changing references', async () => {
+  installNativeMobileChatDraftStorage()
+  const scope = 'preview\0workspace\0tab'
+  const reference = { type: 'image-ref' as const, path: '/repo/image.png', alt: 'diagram' }
+  let resolvePreview = (_value: unknown) => {}
+  const client = {
+    sendRequest: vi.fn(async (method: string) =>
+      method === 'files.resolveTerminalPath'
+        ? {
+            ok: true,
+            result: {
+              exists: true,
+              isDirectory: false,
+              worktree: 'workspace',
+              relativePath: 'image.png'
+            }
+          }
+        : new Promise<unknown>((resolve) => {
+            resolvePreview = resolve
+          })
+    )
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this fixture returns only the existing resolver and image-preview success envelopes.
+  const sender = client as Parameters<typeof copyMobileQueuedMessageToDraft>[2]
+  expect(
+    await copyMobileQueuedMessageToDraft(
+      scope,
+      {
+        messageId: 'image',
+        position: 1,
+        state: 'waiting',
+        body: { kind: 'message', role: 'user', blocks: [reference] }
+      },
+      sender
+    )
+  ).toBeTruthy()
+  await vi.waitFor(() =>
+    expect(client.sendRequest).toHaveBeenCalledWith('files.readPreview', {
+      worktree: 'id:workspace',
+      relativePath: 'image.png'
+    })
+  )
+  expect(readMobileNativeChatDraft(scope).images[0]?.previewUri).toBe('')
+  resolvePreview({
+    ok: true,
+    result: { isBinary: true, isImage: true, mimeType: 'image/png', content: 'eA==' }
+  })
+  await vi.waitFor(() =>
+    expect(readMobileNativeChatDraft(scope).images[0]?.previewUri).toBe(
+      'data:image/png;base64,eA=='
+    )
+  )
+  expect(readMobileNativeChatDraft(scope).images[0]?.reference).toEqual({
+    path: reference.path,
+    alt: reference.alt
+  })
+  await persistMobileNativeChatDraft(scope)
+})
+
+it('serializes admitted new keys with removal and fences scoped document authority across writer reconstruction', async () => {
+  installNativeMobileChatDraftStorage()
+  const a = mobileChatDraftStorageKey('native-race\0a\0tab')
+  const b = mobileChatDraftStorageKey('native-race\0b\0tab')
+  const c = mobileChatDraftStorageKey('native-race\0c\0tab')
+  const value = JSON.stringify({ text: 'saved', images: [] })
+  const check = nativeChatDraftSession('document-one')
+  const makeWriter = () =>
+    createBridgeDraftWriter({
+      mayWrite: () => true,
+      check,
+      commit: writeNativeMobileChatDraft,
+      removeWorkspace: removeStoredMobileChatDrafts
+    })
+  let writer = makeWriter()
+  await writer.write({ key: a, writeId: 'partial', index: 0, total: 2, value: '{' })
+  let release = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const held = vi.spyOn(AsyncStorage, 'setItem').mockImplementationOnce(async (key, text) => {
+    await gate
+    disk.set(key, text)
+  })
+  const admitted = writeNativeMobileChatDraft(a, value)
+  await Promise.resolve()
+  const removal = removeStoredMobileChatDrafts('native-race', 'a')
+  await expect(writeNativeMobileChatDraft(a, value)).rejects.toThrow()
+  await expect(
+    writer.write({ key: a, writeId: 'partial', index: 1, total: 2, value: '}' })
+  ).rejects.toThrow()
+  release()
+  await Promise.all([admitted, removal])
+  expect(disk.has(a)).toBe(false)
+  writer.dispose()
+  await expect(
+    writer.write({ key: b, writeId: 'closed', index: 0, total: 1, value })
+  ).rejects.toThrow()
+  writer = makeWriter()
+  await expect(
+    writer.write({ key: a, writeId: 'old-session', index: 0, total: 1, value })
+  ).rejects.toThrow()
+  await writer.write({ key: b, writeId: 'b', index: 0, total: 1, value })
+  await writer.write({ key: c, writeId: 'unopened-c', index: 0, total: 1, value })
+  expect(disk.get(b)).toBe(value)
+  expect(disk.get(c)).toBe(value)
+  const fresh = nativeChatDraftSession('document-two')
+  fresh(a)
+  await writeNativeMobileChatDraft(a, value)
+  await expect(readNativeMobileChatDraft(a, check)).rejects.toThrow()
+  expect(await readNativeMobileChatDraft(a, fresh)).toBe(value)
+  held.mockRestore()
+  const secondKey = mobileChatDraftStorageKey('native-race\0a\0other-tab')
+  await writeNativeMobileChatDraft(secondKey, value)
+  const stale = readNativeMobileChatDraft(a, fresh)
+  let finishCleanup = () => {}
+  const cleanupGate = new Promise<void>((resolve) => {
+    finishCleanup = resolve
+  })
+  const enumeration = vi.spyOn(AsyncStorage, 'getAllKeys')
+  const cleanup = vi.spyOn(AsyncStorage, 'removeItem').mockImplementation(async (key) => {
+    if (key === a) {
+      throw new Error('storage refused')
+    }
+    await cleanupGate
+    disk.delete(key)
+  })
+  const failedRemoval = deleteMobileNativeChatDrafts('native-race', 'a')
+  expect(removeStoredMobileChatDrafts('native-race', 'a')).toBe(failedRemoval)
+  await expect(stale).rejects.toThrow()
+  await vi.waitFor(() => expect(cleanup).toHaveBeenCalledTimes(2))
+  const duringCleanup = nativeChatDraftSession('document-during-cleanup')
+  await expect(readNativeMobileChatDraft(a, duringCleanup)).rejects.toThrow()
+  expect(removeStoredMobileChatDrafts('native-race', 'a')).toBe(failedRemoval)
+  expect(enumeration).toHaveBeenCalledTimes(1)
+  finishCleanup()
+  await expect(failedRemoval).rejects.toThrow('storage refused')
+  await expect(writeNativeMobileChatDraft(a, value)).rejects.toThrow()
+  expect(enumeration).toHaveBeenCalledTimes(1)
+  cleanup.mockImplementation(async (key) => {
+    disk.delete(key)
+  })
+  await hydrateMobileNativeChatDraft('native-race\0a\0tab')
+  await removeStoredMobileChatDrafts('native-race', 'a')
+  expect(enumeration).toHaveBeenCalledTimes(2)
+  expect(disk.has(a)).toBe(false)
+  expect(disk.has(secondKey)).toBe(false)
+  fresh(b)
+  fresh(c)
+  expect(() => fresh(a)).toThrow()
+  const afterCleanup = nativeChatDraftSession('document-after-cleanup')
+  await writeNativeMobileChatDraft(a, value)
+  expect(await readNativeMobileChatDraft(a, afterCleanup)).toBe(value)
+  writer.dispose()
+  closeNativeChatDraftSession('document-one')
+  closeNativeChatDraftSession('document-two')
+  closeNativeChatDraftSession('document-during-cleanup')
+  closeNativeChatDraftSession('document-after-cleanup')
+})
+
+it('coalesces typing around an exact copy and never authorizes a removed or expired copy', async () => {
+  const scope = 'pump\0workspace\0tab'
+  let release = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const write = vi.fn(async (_key: string, _value: string | null) => {})
+  write.mockImplementationOnce(() => gate)
+  publishMobileChatDraftStorage({ read: async () => null, write, removeWorkspace: async () => {} })
+  await hydrateMobileNativeChatDraft(scope)
+  editMobileNativeChatDraft(scope, 'old')
+  const active = persistMobileNativeChatDraft(scope)
+  await Promise.resolve()
+  for (let index = 0; index < 100; index++) {
+    editMobileNativeChatDraft(scope, 'typing ' + index)
+  }
+  const pending = appendMobileNativeChatDraft(scope, { text: 'copied', images: [] })
+  await Promise.resolve()
+  release()
+  const copy = await pending
+  await active
+  expect(copy && copy.valid()).toBe(true)
+  expect(write).toHaveBeenCalledTimes(2)
+  expect(JSON.parse(write.mock.calls[1]![1]!).text).toBe('typing 99\n\ncopied')
+  await deleteMobileNativeChatDrafts('pump', 'workspace')
+  expect(copy && copy.valid()).toBe(false)
+  await hydrateMobileNativeChatDraft(scope)
+  editMobileNativeChatDraft(scope, 'fresh owner')
+  expect(readMobileNativeChatDraft(scope).text).toBe('fresh owner')
+  await persistMobileNativeChatDraft(scope)
+  expect(captureMobileChatDraftOwner(scope)).toBeDefined()
+})
+
+it('expires public copy authority without releasing blocked physical work or issuing an expired pin', async () => {
+  vi.useFakeTimers()
+  for (const issued of [false, true]) {
+    const scope = `timeout-${issued}\0workspace\0tab`
+    let release = () => {}
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const write = vi.fn(async (_key: string, _value: string | null) => {})
+    write.mockImplementationOnce(() => blocked)
+    publishMobileChatDraftStorage({
+      read: async () => null,
+      write,
+      removeWorkspace: async () => {}
+    })
+    await hydrateMobileNativeChatDraft(scope)
+    if (!issued) {
+      editMobileNativeChatDraft(scope, 'old active')
+      void persistMobileNativeChatDraft(scope)
+    }
+    const copy = appendMobileNativeChatDraft(scope, { text: 'exact copy', images: [] })
+    await Promise.resolve()
+    const captured = readMobileNativeChatDraft(scope)
+    clearMobileNativeChatDraftForSend(scope, captured.editGeneration, captured.text)
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(await copy).toBe(false)
+    expect(write).toHaveBeenCalledTimes(1)
+    if (issued) {
+      expect(await appendMobileNativeChatDraft(scope, { text: 'another', images: [] })).toBe(false)
+    }
+    release()
+    await persistMobileNativeChatDraft(scope)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(write).toHaveBeenCalledTimes(2)
+    expect(write.mock.calls[1]?.[1]).toBeNull()
+  }
+})
+
+it('cancels incomplete files on runtime retirement, preserves completed files and disposes its listener', async () => {
+  let picked = 'complete-a.txt'
+  const releases = new Map<
+    string,
+    (value: { path: string; name: string; byteLength: number }) => void
+  >()
+  uploadFile.mockImplementation((_client, file: { name: string }) =>
+    file.name.startsWith('complete')
+      ? Promise.resolve({ path: `/stored/${file.name}`, name: file.name, byteLength: 1 })
+      : new Promise((resolve) => {
+          releases.set(file.name, resolve)
+        })
+  )
+  filePicker.mockImplementation(async function* () {
+    yield { name: picked, mime: 'text/plain', byteLength: 1, base64: 'YQ==' }
+  })
+  const storage = () => ({
+    read: async () => null,
+    write: async () => {},
+    removeWorkspace: async () => {}
+  })
+  publishMobileChatDraftStorage(storage())
+  const actualSubscribe = draftStorage.subscribeMobileChatDraftStorage
+  const disposed = vi.fn()
+  vi.spyOn(draftStorage, 'subscribeMobileChatDraftStorage').mockImplementation((listener) => {
+    const dispose = actualSubscribe(listener)
+    return () => {
+      disposed()
+      dispose()
+    }
+  })
+  const client = createFakeRpcClient()
+  const messages: import('../../../src/shared/native-chat-types').NativeChatMessage[] = []
+  const showToast = vi.fn()
+  let tab = 'a'
+  let files: ReturnType<typeof useMobileNativeChatFileAttachments>
+  let draft: ReturnType<typeof useMobileNativeChatDrafts>
+  let renderer: ReactTestRenderer | undefined
+  function Harness() {
+    draft = useMobileNativeChatDrafts({
+      hostId: 'files',
+      worktreeId: 'workspace',
+      tabId: tab,
+      sessionId: 'session',
+      messages,
+      transcriptSettled: true
+    })
+    files = useMobileNativeChatFileAttachments({
+      client,
+      sessionId: 'session',
+      scopeKey: `files\0workspace\0${tab}`,
+      enabled: true,
+      showToast
+    })
+    return null
+  }
+  try {
+    await act(async () => {
+      renderer = create(createElement(Harness))
+    })
+    await act(async () => files.attachFiles())
+    let pendingA: Promise<void>
+    picked = 'pending-a.txt'
+    await act(async () => {
+      pendingA = files.attachFiles()
+      await Promise.resolve()
+    })
+    tab = 'b'
+    await act(async () => renderer!.update(createElement(Harness)))
+    picked = 'complete-b.txt'
+    await act(async () => files.attachFiles())
+    let pendingB: Promise<void>
+    picked = 'pending-b.txt'
+    await act(async () => {
+      pendingB = files.attachFiles()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      draft.setComposerText('new scope typing')
+      publishMobileChatDraftStorage(storage())
+    })
+    expect(files!.files.map((file) => file.name)).toEqual(['complete-b.txt'])
+    expect(draft!.composerText).toBe('new scope typing')
+    await act(async () => {
+      for (const [name, resolve] of releases) {
+        resolve({ name, path: `/stored/${name}`, byteLength: 1 })
+      }
+      await Promise.all([pendingA!, pendingB!])
+    })
+    expect(files!.files.map((file) => file.name)).toEqual(['complete-b.txt'])
+    expect(showToast.mock.calls).toEqual([
+      ["Couldn't upload pending-a.txt"],
+      ["Couldn't upload pending-b.txt"]
+    ])
+    tab = 'a'
+    await act(async () => renderer!.update(createElement(Harness)))
+    expect(files!.files.map((file) => file.name)).toEqual(['complete-a.txt'])
+    act(() => renderer?.unmount())
+    renderer = undefined
+    expect(disposed).toHaveBeenCalledOnce()
+  } finally {
+    act(() => renderer?.unmount())
+  }
+})
+
+it('flushes current native drafting on background and disposes the adapter lifetime listener', async () => {
+  installNativeMobileChatDraftStorage()
+  const scope = 'background\0workspace\0tab'
+  await hydrateMobileNativeChatDraft(scope)
+  editMobileNativeChatDraft(scope, 'unsent before background')
+  expect(appState.size).toBe(1)
+  for (const listener of appState) {
+    listener('background')
+  }
+  await vi.waitFor(() =>
+    expect(JSON.parse(disk.get(mobileChatDraftStorageKey(scope))!)).toMatchObject({
+      text: 'unsent before background'
+    })
+  )
+  publishMobileChatDraftStorage(null)
+  expect(appState.size).toBe(0)
 })

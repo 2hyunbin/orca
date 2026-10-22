@@ -1,6 +1,11 @@
 import { createBridgeDraftWriter, pageMayAccessChatDraft } from './bridge/bridge-draft-storage'
-import { persistMirrored } from '../storage/mirrored-storage-keys'
-import { removeStoredMobileChatDrafts } from '../session/mobile-native-chat-draft-native-storage'
+import {
+  nativeChatDraftSession,
+  closeNativeChatDraftSession,
+  readNativeMobileChatDraft,
+  writeNativeMobileChatDraft,
+  removeStoredMobileChatDrafts
+} from '../session/mobile-native-chat-draft-native-storage'
 import { useCallback, useEffect, useState, useMemo } from 'react'
 import { loadHosts } from '../transport/host-store'
 import type { BridgeInitHost } from './bridge/bridge-envelope'
@@ -61,14 +66,24 @@ export function usePageHostSnapshot(
   hostArea = false,
   sessionId?: string | null
 ): PageHostSnapshotView {
+  const checkDraft = useMemo(() => nativeChatDraftSession(sessionId ?? ''), [sessionId])
+  useEffect(
+    () => () => {
+      if (sessionId) {
+        closeNativeChatDraftSession(sessionId)
+      }
+    },
+    [sessionId]
+  )
   const draftWriter = useMemo(
     () =>
       createBridgeDraftWriter({
         mayWrite: (key) => pageMayAccessChatDraft(key, hostId, routePathname, hostArea),
-        commit: persistMirrored,
+        check: checkDraft,
+        commit: writeNativeMobileChatDraft,
         removeWorkspace: removeStoredMobileChatDrafts
       }),
-    [hostId, routePathname, hostArea, sessionId]
+    [hostId, routePathname, hostArea, checkDraft]
   )
   useEffect(() => () => draftWriter.dispose(), [draftWriter])
   const [snapshot, setSnapshot] = useState<PageHostSnapshot | null>(null)
@@ -150,9 +165,11 @@ export function usePageHostSnapshot(
         throw new Error('this page may not read that key')
       }
       // The map first: every shell-side write lands there synchronously, before the store has it.
-      return readMirroredKeyOrStore(key)
+      return pageMayAccessChatDraft(key, hostId, routePathname, hostArea)
+        ? readNativeMobileChatDraft(key, checkDraft)
+        : readMirroredKeyOrStore(key)
     },
-    [hostArea, hostId, routePathname]
+    [hostArea, hostId, routePathname, checkDraft]
   )
 
   return {

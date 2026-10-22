@@ -1,4 +1,7 @@
-import { resetMobileNativeChatDraftStoreForTests } from './mobile-native-chat-draft-store'
+import {
+  hydrateMobileNativeChatDraft,
+  resetMobileNativeChatDraftStoreForTests
+} from './mobile-native-chat-draft-store'
 import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -98,6 +101,9 @@ describe('native chat image upload feedback', () => {
   })
 
   function mount(args: HookArgs): void {
+    if (args.scopeKey) {
+      void hydrateMobileNativeChatDraft(args.scopeKey)
+    }
     act(() => {
       renderer = create(createElement(Harness, { args }))
     })

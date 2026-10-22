@@ -1,7 +1,3 @@
-import {
-  readMobileNativeChatDraft,
-  consumeMobileNativeChatDraftSkills
-} from './mobile-native-chat-draft-store'
 import { formatAgentTypeLabel } from '../../../src/shared/agent-type-label'
 import { MAX_SKILL_REFS } from '../../../src/shared/rpc-contract/structured-agent-session-message-params'
 import {
@@ -26,7 +22,7 @@ export function useMobileStructuredNativeChatSendBridge(args: {
     attachments?: readonly StructuredMobileSendAttachment[],
     skills?: readonly AgentJournalSkillRef[]
   ) => Promise<MobileNativeChatSendOutcome>
-  draftScope?: string | null
+  authoringReady?: boolean
   captureSendOrigin: (text: string) => MobileNativeChatSendOrigin | null
   clearDraftForSend: (origin: MobileNativeChatSendOrigin, text: string) => void
   restoreRejectedDraft: (origin: MobileNativeChatSendOrigin, text: string) => void
@@ -44,7 +40,7 @@ export function useMobileStructuredNativeChatSendBridge(args: {
     agent,
     captureSendOrigin,
     clearDraftForSend,
-    draftScope,
+    authoringReady = true,
     onSendError,
     restoreRejectedDraft,
     sendStructured
@@ -56,13 +52,16 @@ export function useMobileStructuredNativeChatSendBridge(args: {
       deadline?: number,
       attachments?: readonly StructuredMobileSendAttachment[]
     ): Promise<MobileNativeChatSendOutcome> => {
+      if (!authoringReady) {
+        return 'rejected'
+      }
       const origin = captureSendOrigin(text.trimEnd())
       if (!origin) {
         onSendError('Message not sent (disconnected)')
         return 'rejected'
       }
       const isHostCommand = isStructuredAgentSessionComposerCommand(text, agent)
-      const skills = draftScope ? readMobileNativeChatDraft(draftScope).skills : undefined
+      const skills = origin.skills
       try {
         if (skills?.length) {
           structuredAgentSessionSendBody(
@@ -95,14 +94,11 @@ export function useMobileStructuredNativeChatSendBridge(args: {
       if (outcome === 'rejected' || (outcome === 'unknown' && isHostCommand)) {
         restoreRejectedDraft(origin, text)
       }
-      if (outcome !== 'rejected' && draftScope) {
-        consumeMobileNativeChatDraftSkills(draftScope, skills)
-      }
       return outcome
     },
     [
       agent,
-      draftScope,
+      authoringReady,
       captureSendOrigin,
       clearDraftForSend,
       onSendError,

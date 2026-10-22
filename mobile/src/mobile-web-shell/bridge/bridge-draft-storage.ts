@@ -6,6 +6,7 @@ import {
   mobileChatDraftKeyScope,
   parseMobileChatDraft
 } from '../../session/mobile-native-chat-draft-data'
+import { onMobileChatDraftRemoval } from '../../session/mobile-native-chat-draft-storage'
 import { pageRouteWorkspace } from '../page-storage-keys'
 
 export const draftWriteParamsSchema = z.strictObject({
@@ -34,6 +35,7 @@ export function pageMayAccessChatDraft(
 /** One page session's bounded transfer; incomplete drafts own no durable work. */
 export function createBridgeDraftWriter(args: {
   mayWrite(key: string): boolean
+  check?(key: string): void
   commit(key: string, value: string | null): Promise<void>
   removeWorkspace(hostId: string, workspaceId: string): Promise<void>
 }) {
@@ -54,14 +56,29 @@ export function createBridgeDraftWriter(args: {
     }
     pending.delete(key)
   }
+  let closed = false
+  const unsubscribe = onMobileChatDraftRemoval((host, workspace) => {
+    for (const key of pending.keys()) {
+      const scope = mobileChatDraftKeyScope(key)
+      if (scope?.[0] === host && (workspace === undefined || scope[1] === workspace)) {
+        discard(key)
+      }
+    }
+  })
   return {
     dispose: () => {
+      closed = true
+      unsubscribe()
       for (const key of pending.keys()) {
         discard(key)
       }
     },
     write: async (params: unknown): Promise<{ committed: boolean }> => {
       const part = draftWriteParamsSchema.parse(params)
+      if (closed) {
+        throw new Error('This draft writer has ended')
+      }
+      args.check?.(part.key)
       if (!args.mayWrite(part.key)) {
         throw new Error('This page may not write that draft')
       }

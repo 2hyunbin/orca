@@ -1,3 +1,4 @@
+import { mobileChatDraftLifecycle } from '../../session/mobile-native-chat-draft-store'
 import type { BridgeRpcClient } from './bridge-rpc-client'
 import { storageReadResultSchema } from './bridge-native-verbs'
 import { draftWriteResultSchema } from './bridge-draft-storage'
@@ -39,7 +40,27 @@ export function installPageChatDraftStorage(client: BridgeRpcClient): void {
       }
     }
   }
+  const visibility = () => mobileChatDraftLifecycle(document.visibilityState === 'visible')
+  const hidden = () => mobileChatDraftLifecycle(false)
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', visibility)
+    window.addEventListener('pagehide', hidden)
+  }
+  const retired = client.onRuntimeRetired?.((closed) => {
+    publishMobileChatDraftStorage(null)
+    if (!closed) {
+      queueMicrotask(() => installPageChatDraftStorage(client))
+    }
+  })
   publishMobileChatDraftStorage({
+    dispose: () => {
+      hidden()
+      retired?.()
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', visibility)
+        window.removeEventListener('pagehide', hidden)
+      }
+    },
     read: async (key) =>
       storageReadResultSchema.parse(
         (await client.callNativeVerb('native.storage.read', { key })).result

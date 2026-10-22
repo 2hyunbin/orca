@@ -1,6 +1,8 @@
-import type { AgentJournalSkillRef } from '../../../src/shared/agent-session-journal-types'
+import type {
+  AgentJournalSkillRef,
+  AgentJournalCursor
+} from '../../../src/shared/agent-session-journal-types'
 import type { AgentSessionSendResult } from '../../../src/shared/agent-session-wire'
-import type { AgentJournalCursor } from '../../../src/shared/agent-session-journal-types'
 import {
   structuredAgentSessionSendBody,
   type StructuredAgentSessionAttachment
