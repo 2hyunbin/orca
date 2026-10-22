@@ -24,7 +24,7 @@ import {
 } from '@/lib/bundled-skill-target'
 import { getResolvedExecutionHostIdForWorktree } from '@/lib/resolved-worktree-execution-host'
 import { useAppStore } from '@/store'
-import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 type ActiveProjectSkillRuntime = {
   projectRuntime?: ProjectExecutionRuntimeResolution
@@ -84,7 +84,7 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       activeWorktreeId: state.activeWorktreeId,
       projects: state.projects,
       repos: state.repos,
-      folderWorkspaces: state.folderWorkspaces,
+      folderWorkspaces: selectFolderWorkspaces(state),
       projectGroups: state.projectGroups,
       settings: state.settings,
       worktreesByRepo: selectWorktreesByRepo(state)

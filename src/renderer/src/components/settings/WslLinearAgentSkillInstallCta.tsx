@@ -38,12 +38,8 @@ type LinearAgentSkillInstallCtaProps = {
 // setups; this section bridges them so connecting the provider also surfaces
 // the skill agents need to read and edit Linear tasks.
 export function WslLinearAgentSkillInstallCta({
-  settings,
   runtime
 }: LinearAgentSkillInstallCtaProps): React.JSX.Element {
-  // Why: mirror the sidebar setup prompt's runtime resolution so both surfaces
-  // agree on which machine (host vs. WSL distro) is scanned and installed to.
-  const remote = Boolean(settings?.activeRuntimeEnvironmentId?.trim())
   const agentRuntime = useMemo(() => runtime, [runtime])
   const skillDiscoveryTarget = useMemo(
     () => getLinearPromptSkillDiscoveryTarget(agentRuntime),
@@ -175,9 +171,9 @@ export function WslLinearAgentSkillInstallCta({
               </TooltipContent>
             </Tooltip>
           </div>
-          {remote || agentRuntime.runtime === 'wsl' ? (
+          {agentRuntime.runtime === 'wsl' ? (
             <p className="text-[11px] text-muted-foreground/70">
-              {getLinearAgentSkillSetupInlineRuntimeCopy(remote, agentRuntime)}
+              {getLinearAgentSkillSetupInlineRuntimeCopy(false, agentRuntime)}
             </p>
           ) : null}
         </>
