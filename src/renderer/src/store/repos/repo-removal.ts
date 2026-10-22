@@ -27,9 +27,11 @@ import {
   captureWorkspaceChatDraftKeys,
   deleteWorkspaceChatDrafts
 } from '../slices/worktrees/teardown/removed-worktree-chat-drafts'
-import { flushAllPendingEditorBuffers } from '@/components/editor/editor-pending-flush'
+import {
+  flushPurgedWorkspaceEdits,
+  noticeRemovedUnsavedFiles
+} from '../slices/worktrees/teardown/removed-workspace-unsaved-files'
 import { worktreePurgeClosedFileIds } from '../slices/worktrees/teardown/worktree-purge-closed-files'
-import { noticeRemovedUnsavedFiles } from '../slices/worktrees/teardown/removed-workspace-unsaved-files'
 
 export function worktreeBelongsToHost(worktree: { hostId?: string }, hostId: string): boolean {
   return (worktree.hostId ?? LOCAL_EXECUTION_HOST_ID) === hostId
@@ -217,14 +219,13 @@ export function createRepoRemovalActions(
         }
 
         // Why: use the canonical per-worktree purge to evict all worktree-scoped maps (hand-deletion leaked most); runs before the set() below so it still sees tabsByWorktree.
-        flushAllPendingEditorBuffers()
-        // Why before the twin close: it closes tabs one by one, outside any purge's capture.
+        const purgeTargets = worktreeIds.map((id) => ({ id, hostId: ownerHostId }))
+        flushPurgedWorkspaceEdits(get(), purgeTargets)
+        // Why before the twin close: it closes tabs one by one; the purge below shares this batch.
         noticeRemovedUnsavedFiles(
           get(),
-          worktreePurgeClosedFileIds(
-            get(),
-            worktreeIds.map((id) => ({ id, hostId: ownerHostId }))
-          )
+          worktreePurgeClosedFileIds(get(), purgeTargets),
+          options.confirmedDiscards
         )
         closeRemovedHostTwinState(get, set, twins, preCallTwins)
         get().purgeWorktreeTerminalState(exclusiveWorktreeIds)

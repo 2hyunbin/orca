@@ -125,8 +125,11 @@ const RemoveFolderDialog = React.memo(function RemoveFolderDialog() {
   const handleConfirm = useCallback(() => {
     // Why: without the opener's host a bare id could remove another host's row (#13071).
     if (repoId && hostId) {
-      confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
-      void removeProject(repoId, { hostId, errorFeedback: 'toast' })
+      void removeProject(repoId, {
+        hostId,
+        errorFeedback: 'toast',
+        confirmedDiscards: confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
+      })
     }
     closeModal()
   }, [closeModal, hostId, removeProject, repoId, unsavedTargets])

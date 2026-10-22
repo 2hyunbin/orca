@@ -56,21 +56,25 @@ export function hasPendingEditorBufferChange(
 }
 
 /**
- * Before a purge: commits every mounted view's pending text, so closed tabs' drafts are current.
- * A CSV cell commits only when it holds a change, leaving other workspaces' idle cells open.
+ * Before tabs close: commits pending text from every pane of these files and the views sharing
+ * their records. Idle panes no-op; panes of other files are left alone, so their edits continue.
  */
-export function flushAllPendingEditorBuffers(): void {
-  for (const entries of pendingEditorFlushes.values()) {
-    const legacy = Array.from(entries).findLast((entry) => !entry.hasChange)
-    for (const entry of entries) {
-      try {
-        if (entry.hasChange ? entry.hasChange() : entry === legacy) {
-          entry.flush()
-        }
-      } catch (error) {
-        // Why: one view failing to flush must not block the purge that asked.
-        console.error('[editor] flushing pending edits before a purge failed', error)
-      }
+export function flushClosingEditorBuffers(
+  state: EditorBufferViewIndex,
+  fileIds: Iterable<string>
+): void {
+  const entries = new Set<PendingEditor>()
+  for (const fileId of fileIds) {
+    for (const entry of pendingEntriesOf(editorBufferSiblingViewIds(state, fileId))) {
+      entries.add(entry)
+    }
+  }
+  for (const entry of entries) {
+    try {
+      entry.flush()
+    } catch (error) {
+      // Why: one pane failing to flush must not block the close that asked.
+      console.error('[editor] flushing pending edits before tabs close failed', error)
     }
   }
 }

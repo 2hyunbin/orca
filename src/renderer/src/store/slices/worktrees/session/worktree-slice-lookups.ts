@@ -16,7 +16,7 @@ import type {
 } from '../../../terminals/terminal-tab-recovery-ledger'
 import { settleAttentionRemovedBy } from '../../workspace-attention/attention-removal-follow-up'
 import { selectWorktreesByRepo } from '../../../workspace-record-selectors'
-import { flushAllPendingEditorBuffers } from '@/components/editor/editor-pending-flush'
+import { flushPurgedWorkspaceEdits } from '../teardown/removed-workspace-unsaved-files'
 
 export function createSetRenamingWorktreeId(
   set: WorktreeSliceSet,
@@ -154,7 +154,12 @@ export function createPurgeWorktreeTerminalState(
       return
     }
     // Why before the purge: delayed views must commit text the purge may offer back.
-    flushAllPendingEditorBuffers()
+    flushPurgedWorkspaceEdits(
+      get(),
+      purgeableWorktreeTargets.map((target) =>
+        typeof target === 'string' ? { id: target } : target
+      )
+    )
     settleAttentionRemovedBy(set, get, () =>
       set((s) => buildWorktreePurgeState(s, purgeableWorktreeTargets))
     )

@@ -6,6 +6,7 @@ import { toRuntimeExecutionHostId } from '../../../../../../shared/execution-hos
 import { createHostTwinFixture } from '../../../host-twin.test-fixture'
 import { resetHostTwinModuleStores } from '../../../host-twin-state-projection.test-fixture'
 import { createTestStore, makeOpenFile, makeWorktree, TEST_REPO } from '../../store-test-helpers'
+import { createStoreCascadesMockApi } from '../../store-cascades-test-harness'
 import { mergeFetchedWorktrees } from '../listing/fetched-worktree-merge'
 import { applyRemoveWorktreeSuccessState } from './remove-worktree-store-cleanup'
 import { confirmUnsavedDiscard, noticeRemovedUnsavedFiles } from './removed-workspace-unsaved-files'
@@ -55,12 +56,12 @@ const edit = (store: Store, id: string, text: string): void =>
 const GONE = `${TEST_REPO.id}::/gone`
 
 /** Every way a workspace's tabs are purged, each closing `GONE`. */
-const purgePaths: [string, (store: Store) => void, ('local' | typeof RUNTIME)?][] = [
+const purgePaths: [string, (store: Store) => unknown, ('local' | typeof RUNTIME)?][] = [
   ['worktrees:changed purge', (store) => store.getState().purgeWorktreeTerminalState([GONE])],
   [
     'host announcement',
     (store) =>
-      mergeFetchedWorktrees(store.setState, {
+      mergeFetchedWorktrees(store.setState, store.getState, {
         repoId: TEST_REPO.id,
         hostId: 'local',
         ownerWasMissingAtStart: false,
@@ -73,8 +74,11 @@ const purgePaths: [string, (store: Store) => void, ('local' | typeof RUNTIME)?][
       })
   ],
   [
-    'removal teardown',
-    (store) => applyRemoveWorktreeSuccessState(store.setState, GONE, new Set(), 'local')
+    'unconfirmed removeWorktree',
+    async (store) => {
+      vi.stubGlobal('window', { api: createStoreCascadesMockApi() })
+      await store.getState().removeWorktree({ id: GONE, executionHostId: 'local' }, false)
+    }
   ],
   [
     'runtime host retirement',
@@ -83,49 +87,84 @@ const purgePaths: [string, (store: Store) => void, ('local' | typeof RUNTIME)?][
   ]
 ]
 
-describe('confirmed discards are a snapshot of the listed text', () => {
-  it.each(purgePaths)('%s: unchanged confirmed text closes quietly', async (_, purge, host) => {
-    const store = dirtyStore([GONE], host)
-    confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: host ?? 'local' }])
-    purge(store)
+describe('confirmed discards apply only to the confirmed removal', () => {
+  it('its own teardown drops unchanged text quietly', async () => {
+    const store = dirtyStore([GONE])
+    const confirmed = confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: 'local' }])
+    applyRemoveWorktreeSuccessState(store.setState, GONE, new Set(), 'local', confirmed)
     expect(store.getState().openFiles).toEqual([])
     await settle()
     expect(show).not.toHaveBeenCalled()
   })
 
-  it.each(purgePaths)('%s: an edit after confirming is offered back', async (_, purge, host) => {
-    const store = dirtyStore([GONE], host)
-    confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: host ?? 'local' }])
+  it('its own teardown offers back an edit made after confirming', async () => {
+    const store = dirtyStore([GONE])
+    const confirmed = confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: 'local' }])
     edit(store, GONE, 'typed after confirming')
-    purge(store)
+    applyRemoveWorktreeSuccessState(store.setState, GONE, new Set(), 'local', confirmed)
     await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
     expect(shownContents()).toEqual(['typed after confirming'])
   })
 
-  it('covers listed nested children, and only them', async () => {
-    const parent = `${TEST_REPO.id}::/p`
-    const child = `${TEST_REPO.id}::/p/child`
-    const unlisted = `${TEST_REPO.id}::/p/unlisted`
-    const store = dirtyStore([parent, child, unlisted])
-    confirmUnsavedDiscard(store.getState, [
-      { id: parent, hostId: 'local' },
-      { id: child, hostId: 'local' }
-    ])
-    store.getState().purgeWorktreeTerminalState([parent, child, unlisted])
-    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
-    expect(shownContents()).toEqual([`draft ${unlisted}`])
+  it('reaches the teardown through removeWorktree', async () => {
+    vi.stubGlobal('window', { api: createStoreCascadesMockApi() })
+    const store = dirtyStore([GONE])
+    const confirmed = confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: 'local' }])
+    await store.getState().removeWorktree({ id: GONE, executionHostId: 'local' }, false, {
+      confirmedDiscards: confirmed
+    })
+    expect(store.getState().openFiles).toEqual([])
+    await settle()
+    expect(show).not.toHaveBeenCalled()
   })
 
-  it('counts delayed view text committed after confirming as a new edit', async () => {
+  it.each(purgePaths)('%s still offers text a dialog confirmed', async (_, purge, host) => {
+    const store = dirtyStore([GONE], host)
+    confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: host ?? 'local' }])
+    await purge(store)
+    expect(store.getState().openFiles).toEqual([])
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
+    expect(shownContents()).toEqual([`draft ${GONE}`])
+  })
+
+  it('suppresses within its batch only, whichever purge of the batch runs first', async () => {
     const store = dirtyStore([GONE])
-    confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: 'local' }])
-    const unregister = registerPendingEditorFlush(`${GONE}/file.ts`, () =>
-      edit(store, GONE, 'late rich text')
-    )
+    const confirmed = confirmUnsavedDiscard(store.getState, [{ id: GONE, hostId: 'local' }])
+    const fileIds = new Set([`${GONE}/file.ts`])
+    noticeRemovedUnsavedFiles(store.getState(), fileIds)
+    noticeRemovedUnsavedFiles(store.getState(), fileIds, confirmed)
+    noticeRemovedUnsavedFiles(store.getState(), fileIds)
+    await settle()
+    expect(show).not.toHaveBeenCalled()
+    noticeRemovedUnsavedFiles(store.getState(), fileIds)
+    await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('delayed text is committed before a purge', () => {
+  it.each(purgePaths)('%s flushes every pane of the closing file', async (_, purge, host) => {
+    const store = dirtyStore([GONE], host)
+    const panes = [
+      registerPendingEditorFlush(`${GONE}/file.ts`, () => edit(store, GONE, 'late rich text')),
+      registerPendingEditorFlush(`${GONE}/file.ts`, () => {})
+    ]
     try {
-      store.getState().purgeWorktreeTerminalState([GONE])
+      await purge(store)
       await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
       expect(shownContents()).toEqual(['late rich text'])
+    } finally {
+      panes.forEach((unregister) => unregister())
+    }
+  })
+
+  it('leaves a surviving workspace’s CSV cell editing', () => {
+    const survivor = `${TEST_REPO.id}::/survivor`
+    const store = dirtyStore([GONE, survivor])
+    const cell = vi.fn()
+    const unregister = registerPendingEditorFlush(`${survivor}/file.ts`, cell, () => true)
+    try {
+      store.getState().purgeWorktreeTerminalState([GONE])
+      expect(cell).not.toHaveBeenCalled()
     } finally {
       unregister()
     }
@@ -171,24 +210,28 @@ describe('the closed-files notice', () => {
     }
   })
 
-  it('recovers the live text of a shared model, not one tab’s older draft', async () => {
+  it.each([
+    [true, 'live model text'],
+    [false, 'newer draft']
+  ])('reads a shared model only while mounted (attached=%s)', async (attached, expected) => {
     const store = dirtyStore([GONE])
     const tab = (id: string, isDirty: boolean) =>
       makeOpenFile({ id, filePath: '/w/shared.ts', worktreeId: GONE, isDirty })
     store.setState({
       openFiles: [tab('first', true), tab('second', true)],
-      editorDrafts: { first: 'older draft', second: 'newer draft' }
+      editorDrafts: { second: 'newer draft' }
     })
+    const model = { isAttachedToEditor: () => attached, getValue: () => 'live model text' }
     const unregister = editorModelRegistry.register({
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: capture reads only getModel(uri).getValue().
-      editor: { getModel: () => ({ getValue: () => 'live model text' }) } as never,
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: capture reads only getModel(uri) and the model's text.
+      editor: { getModel: () => model } as never,
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: capture only parses the model URI.
       Uri: { parse: (uri: string) => uri } as never
     })
     try {
       store.getState().purgeWorktreeTerminalState([GONE])
       await vi.waitFor(() => expect(show).toHaveBeenCalledTimes(1))
-      expect(shownContents()).toEqual(['live model text'])
+      expect(shownContents()).toEqual([expected])
     } finally {
       unregister()
     }

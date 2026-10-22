@@ -87,7 +87,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
     if (resolution.kind !== 'disconnected') {
       return
     }
-    confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
+    const confirmedDiscards = confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
     setBusy('reconnect')
     try {
       await window.api.ssh.connect({ targetId: resolution.targetId })
@@ -107,7 +107,7 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
     }
     // Close before the delete toast fires so the two don't overlap.
     closeModal()
-    void runWorktreeDeleteWithToast(removalTarget, displayName)
+    void runWorktreeDeleteWithToast(removalTarget, displayName, { confirmedDiscards })
     if (mountedRef.current) {
       setBusy(null)
     }
@@ -115,12 +115,12 @@ export function ForgetSshWorkspaceDialog(): React.JSX.Element | null {
 
   // Remove Orca's records only — never touches remote files, worktrees, or branches.
   const handleForget = async (): Promise<void> => {
-    confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
+    const confirmedDiscards = confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
     setBusy('forget')
     try {
       const result = await useAppStore
         .getState()
-        .removeWorktree(removalTarget, false, { mode: 'forget-local' })
+        .removeWorktree(removalTarget, false, { mode: 'forget-local', confirmedDiscards })
       if (!result.ok) {
         toast.error(result.error)
         if (mountedRef.current) {

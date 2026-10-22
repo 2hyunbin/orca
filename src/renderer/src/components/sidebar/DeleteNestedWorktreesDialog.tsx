@@ -82,7 +82,7 @@ export function DeleteNestedWorktreesDialog({
     if (!plan || deleting) {
       return
     }
-    confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
+    const confirmedDiscards = confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
     setDeleting(true)
     setOpen(false)
     setError(null)
@@ -98,7 +98,10 @@ export function DeleteNestedWorktreesDialog({
     })
     state.markWorktreesDeleting(nestedRows)
     try {
-      const result = await state.removeWorktree(target, true, { approvedNestedWorktrees: plan })
+      const result = await state.removeWorktree(target, true, {
+        approvedNestedWorktrees: plan,
+        confirmedDiscards
+      })
       if (!result.ok) {
         setPlan(null)
         toast.error(

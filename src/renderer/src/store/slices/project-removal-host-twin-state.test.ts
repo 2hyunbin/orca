@@ -259,13 +259,13 @@ describe('removing a remote project keeps its local twin', () => {
         })
       )
       try {
-        if (confirmed) {
-          confirmUnsavedDiscard(store.getState, [
-            { id: WORKTREE_ID, hostId: REMOTE_HOST },
-            { id: exclusive, hostId: REMOTE_HOST }
-          ])
-        }
-        await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST })
+        const confirmedDiscards = confirmed
+          ? confirmUnsavedDiscard(store.getState, [
+              { id: WORKTREE_ID, hostId: REMOTE_HOST },
+              { id: exclusive, hostId: REMOTE_HOST }
+            ])
+          : undefined
+        await store.getState().removeProject(PROJECT_ID, { hostId: REMOTE_HOST, confirmedDiscards })
         await layoutApplyTestTransport.settle()
         expect([...new Set(flushed)].sort()).toEqual(['editor:remote-file', exclusiveFile].sort())
         expect(store.getState().editorDrafts['/work/same/local.ts']).toBe('unsaved local edit')

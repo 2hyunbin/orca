@@ -198,12 +198,13 @@ export function useProjectGroupDialogs(args: {
     if (!deleteDialog) {
       return
     }
-    confirmUnsavedDiscard(useAppStore.getState, deleteUnsavedTargets)
+    const confirmedDiscards = confirmUnsavedDiscard(useAppStore.getState, deleteUnsavedTargets)
     try {
       reportProjectGroupDeleteFailures(
         await deleteProjectGroupWithContainedProjects(deleteDialog.groupId, {
           removeContainedProjects,
-          hostId: deleteDialog.hostId
+          hostId: deleteDialog.hostId,
+          confirmedDiscards
         })
       )
     } finally {

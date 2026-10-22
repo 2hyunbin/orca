@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest'
 import {
-  flushAllPendingEditorBuffers,
+  flushClosingEditorBuffers,
   flushPendingEditorBuffer,
   hasPendingEditorBufferChange,
   registerPendingEditorFlush
@@ -45,23 +45,26 @@ it('checks pending changes across panes and retains the remaining registration o
   expect(hasPendingEditorBufferChange(NO_SHARING, 'panes')).toBe(false)
 })
 
-it('flushes every view before a purge, leaving idle CSV cells open', () => {
+it('flushes every pane of closing files and leaves other files editing', () => {
   vi.spyOn(console, 'error').mockImplementation(() => {})
-  const rich = vi.fn(() => {
+  const failingPane = vi.fn(() => {
     throw new Error('serialize failed')
   })
-  const changedCell = vi.fn()
-  const idleCell = vi.fn()
+  const typingPane = vi.fn()
+  const closingCell = vi.fn()
+  const survivingCell = vi.fn()
   const removers = [
-    registerPendingEditorFlush('rich', rich),
-    registerPendingEditorFlush('changed', changedCell, () => true),
-    registerPendingEditorFlush('idle', idleCell, () => false)
+    registerPendingEditorFlush('rich', typingPane),
+    registerPendingEditorFlush('rich', failingPane),
+    registerPendingEditorFlush('csv', closingCell, () => false),
+    registerPendingEditorFlush('survivor', survivingCell, () => true)
   ]
   try {
-    flushAllPendingEditorBuffers()
-    expect(rich).toHaveBeenCalledTimes(1)
-    expect(changedCell).toHaveBeenCalledTimes(1)
-    expect(idleCell).not.toHaveBeenCalled()
+    flushClosingEditorBuffers(NO_SHARING, ['rich', 'csv'])
+    expect(typingPane).toHaveBeenCalledTimes(1)
+    expect(failingPane).toHaveBeenCalledTimes(1)
+    expect(closingCell).toHaveBeenCalledTimes(1)
+    expect(survivingCell).not.toHaveBeenCalled()
   } finally {
     removers.forEach((remove) => remove())
   }

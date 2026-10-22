@@ -253,7 +253,7 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
       if (!currentWorktrees) {
         return
       }
-      confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
+      const confirmedDiscards = confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
       // Why: force-delete is a recovery path taken after a failed first delete.
       // Saving "don't ask again" from that state would conflate the recovery
       // action with a broader preference. Only persist the preference on the
@@ -267,7 +267,8 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
           currentWorktrees,
           removeWorktree,
           closeModal,
-          onDeleted
+          onDeleted,
+          confirmedDiscards
         })
       } else {
         // Why: this modal is the destructive confirmation for the workspace
@@ -275,7 +276,8 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
         // a redundant Force Delete toast after the user already confirmed.
         const deletePromise = runWorktreeDeletesInParallel(currentWorktrees, {
           force: forceOnConfirm,
-          onForceDeleted: handleForceDeletedFromToast
+          onForceDeleted: handleForceDeletedFromToast,
+          confirmedDiscards
         })
         // Why: the workspace card owns the in-progress feedback, so the
         // confirmation should get out of the way as soon as deletion begins.
@@ -305,7 +307,6 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
   )
 
   const handleDeleteAll = (): void => {
-    confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
     runLineageDeleteAll({
       deleteAllTargetCount: lineageDelete.deleteAllTargets.length,
       lineageDeleteIdentities,
@@ -313,7 +314,8 @@ const DeleteWorktreeDialog = React.memo(function DeleteWorktreeDialog() {
       forceOnConfirm,
       onForceDeleted: handleForceDeletedFromToast,
       closeModal,
-      onDeleted
+      onDeleted,
+      confirmedDiscards: confirmUnsavedDiscard(useAppStore.getState, unsavedTargets)
     })
   }
 

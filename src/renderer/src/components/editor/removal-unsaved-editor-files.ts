@@ -4,7 +4,7 @@ import { editorBufferSiblingViewIds } from '@/store/slices/editor/buffers/editor
 import type { WorktreePurgeTarget } from '@/store/slices/worktree-helpers'
 import { worktreePurgeClosedFileIds } from '@/store/slices/worktrees/teardown/worktree-purge-closed-files'
 import { canAutoSaveOpenFile } from './editor-autosave'
-import { flushPendingEditorBuffer } from './editor-pending-flush'
+import { flushClosingEditorBuffers } from './editor-pending-flush'
 import {
   editorModelSiblingTabs,
   editorTabModelUri,
@@ -49,26 +49,27 @@ export function unsavedTextViewIds(state: AppState, file: OpenFile): string[] {
   ]
 }
 
-/** The freshest text of `file`: its live code model, else a draft any view sharing it holds. */
+/** The freshest text of `file`: its mounted code model, else a draft a sharing view holds. */
 export function currentUnsavedText(state: AppState, file: OpenFile): string | undefined {
   const registry = isCodeViewTab(state, file) ? editorModelRegistry.get() : null
   const model = registry?.editor.getModel(registry.Uri.parse(editorTabModelUri(state, file)))
-  if (model) {
+  // Why attached only: a retained model can hold older text than a restored draft.
+  if (model?.isAttachedToEditor()) {
     return model.getValue()
   }
-  return unsavedTextViewIds(state, file)
-    .map((id) => state.editorDrafts?.[id])
-    .find((draft) => draft !== undefined)
+  return (
+    unsavedTextViewIds(state, file)
+      .map((id) => state.editorDrafts?.[id])
+      .find((draft) => draft !== undefined) ?? model?.getValue()
+  )
 }
 
-/** Commits text delayed views (rich Markdown, CSV, notebook) still hold for these tabs. */
+/** Commits text every delayed view (rich Markdown, CSV, notebook pane) holds for these tabs. */
 export function flushRemovalPendingEdits(state: AppState, fileIds: Iterable<string>): void {
   try {
-    for (const fileId of fileIds) {
-      flushPendingEditorBuffer(state, fileId)
-    }
+    flushClosingEditorBuffers(state, fileIds)
   } catch (error) {
-    // Why: a view's flush failing must not block the removal that asked.
+    // Why: a flush failing must not block the removal that asked.
     console.error('[editor] flushing pending edits before a removal failed', error)
   }
 }
