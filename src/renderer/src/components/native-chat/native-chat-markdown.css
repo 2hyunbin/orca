@@ -23,6 +23,7 @@
 }
 
 .native-chat-markdown :is(th, td) {
+  min-width: calc(var(--spacing) * 18);
   overflow-wrap: break-word;
 }
 
