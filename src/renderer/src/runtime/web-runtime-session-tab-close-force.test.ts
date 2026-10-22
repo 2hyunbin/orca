@@ -17,6 +17,7 @@ import {
   resetWebSessionCloseIntentForTests
 } from './web-session-close-intent'
 import type * as RuntimeRpcClient from './runtime-rpc-client'
+import type * as WebRuntimeSessionEnvironment from './web-runtime-session-environment'
 import { ENVIRONMENT_ID, WORKTREE_ID, makeSnapshot } from './web-runtime-session-test-harness'
 import { SESSION_TAB_CLOSE_FORCE_RUNTIME_CAPABILITY } from '../../../shared/session-tabs-runtime-capabilities'
 import { stubRuntimeEnvironmentBridge } from './runtime-environment-bridge-fixture'
@@ -40,7 +41,13 @@ const mocks = vi.hoisted(() => ({
   deliverLaunchPromptToAgentTab: vi.fn(),
   seedNativeChatLaunchDraftForAgentTab: vi.fn(),
   hasMaterializedWebRuntimeBrowserPage: vi.fn(),
-  runtimeEnvironmentSupportsCapability: vi.fn()
+  runtimeEnvironmentSupportsCapability: vi.fn(),
+  isWebRuntimeSessionActive: vi.fn()
+}))
+
+vi.mock('./web-runtime-session-environment', async (importOriginal) => ({
+  ...(await importOriginal<typeof WebRuntimeSessionEnvironment>()),
+  isWebRuntimeSessionActive: mocks.isWebRuntimeSessionActive
 }))
 
 vi.mock('./runtime-rpc-client', async (importOriginal) => ({
@@ -122,6 +129,7 @@ function closeTab(force?: boolean) {
 
 describe('a confirmed close of a pinned server tab', () => {
   beforeEach(() => {
+    mocks.isWebRuntimeSessionActive.mockReturnValue(true)
     vi.stubGlobal('__ORCA_WEB_CLIENT__', true)
     const intents = createPairedTerminalTabCloseIntentTestStore()
     mocks.getState.mockImplementation(() => ({
@@ -228,5 +236,55 @@ describe('a confirmed close of a pinned server tab', () => {
       expect.objectContaining({ force: true }),
       expect.objectContaining({ tabId: HOST_TAB, reason: 'user', force: true })
     ])
+  })
+
+  it('keeps force on a close held while the session is inactive', async () => {
+    mocks.runtimeEnvironmentSupportsCapability.mockResolvedValue(true)
+    mocks.isWebRuntimeSessionActive.mockReturnValue(false)
+    const runtimeCall = vi
+      .fn()
+      .mockResolvedValueOnce({ id: 'c', ok: true, result: { closed: true } })
+      .mockResolvedValue({ id: 'list', ok: true, result: makeSnapshot() })
+    stubRuntimeEnvironmentBridge({ call: runtimeCall })
+
+    await expect(
+      closeWebRuntimeSessionTab({
+        worktreeId: WORKTREE_ID,
+        tabId: HOST_TAB,
+        environmentId: ENVIRONMENT_ID,
+        reason: 'user',
+        force: true
+      })
+    ).resolves.toBe('failed')
+    expect(closeCalls(runtimeCall)).toEqual([])
+    const due = takeDueWebSessionCloseReplays(
+      INTENTS,
+      ENVIRONMENT_ID,
+      WORKTREE_ID,
+      new Set([HOST_TAB])
+    )
+    expect(due).toEqual([expect.objectContaining({ force: true })])
+
+    mocks.isWebRuntimeSessionActive.mockReturnValue(true)
+    await replayWebSessionTabCloses(ENVIRONMENT_ID, due)
+    expect(closeCalls(runtimeCall)).toEqual([
+      expect.objectContaining({ tabId: HOST_TAB, reason: 'user', force: true })
+    ])
+  })
+
+  it('holds a close whose capability probe failed as undelivered, keeping its force', async () => {
+    mocks.runtimeEnvironmentSupportsCapability.mockRejectedValueOnce(new Error('socket hang up'))
+    const runtimeCall = vi.fn().mockResolvedValue({ id: 'list', ok: true, result: makeSnapshot() })
+    stubRuntimeEnvironmentBridge({ call: runtimeCall })
+
+    await expect(closeTab(true)).resolves.toBe('failed')
+
+    expect(closeCalls(runtimeCall)).toEqual([])
+    expect(isWebSessionCloseIntentPending(OWNER, WORKTREE_ID, HOST_TAB, Date.now() + 60_000)).toBe(
+      true
+    )
+    expect(
+      takeDueWebSessionCloseReplays(INTENTS, ENVIRONMENT_ID, WORKTREE_ID, new Set([HOST_TAB]))
+    ).toEqual([expect.objectContaining({ force: true })])
   })
 })

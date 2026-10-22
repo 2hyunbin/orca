@@ -4,30 +4,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_TAB_CLOSE_FORCE_RUNTIME_CAPABILITY } from '../../shared/session-tabs-runtime-capabilities'
 import { SESSION_TAB_CLOSE_INTENT_RUNTIME_CAPABILITY } from '../../shared/protocol-version'
 import { z } from 'zod'
+import { OrcaRuntimeService } from './orca-runtime'
+import { RpcDispatcher } from './rpc/dispatcher'
+import { SESSION_TAB_METHODS } from './rpc/methods/session-tabs'
+import {
+  ACK_TAB,
+  ACK_WORKTREE,
+  createAcknowledgedTabRetirementFixture
+} from './acknowledged-terminal-tab-retirement-fixture'
 
+// Read at each close, so one import serves both builds.
 const layoutOwner = vi.hoisted(() => ({ isMain: false }))
 vi.mock('../../shared/layout-owner-switch', () => ({
   get ORCA_LAYOUT_OWNER_IS_MAIN() {
     return layoutOwner.isMain
   }
 }))
-
-// Fresh modules, so the runtime and its close paths are built under this switch.
-async function switchedBuild(layoutOwnerIsMain: boolean) {
-  layoutOwner.isMain = layoutOwnerIsMain
-  vi.resetModules()
-  const [{ OrcaRuntimeService }, { RpcDispatcher }, { SESSION_TAB_METHODS }, fixtureModule] =
-    await Promise.all([
-      import('./orca-runtime'),
-      import('./rpc/dispatcher'),
-      import('./rpc/methods/session-tabs'),
-      import('./acknowledged-terminal-tab-retirement-fixture')
-    ])
-  return { OrcaRuntimeService, RpcDispatcher, SESSION_TAB_METHODS, fixtureModule }
-}
-
-// Each case loads the whole runtime afresh under its switch.
-vi.setConfig({ testTimeout: 120_000 })
 
 const Reply = z.object({ ok: z.boolean(), error: z.object({ code: z.string() }).optional() })
 
@@ -41,8 +33,7 @@ afterEach(async () => {
 })
 
 async function pinnedServerTab(layoutOwnerIsMain: boolean) {
-  const build = await switchedBuild(layoutOwnerIsMain)
-  const { ACK_TAB, ACK_WORKTREE, createAcknowledgedTabRetirementFixture } = build.fixtureModule
+  layoutOwner.isMain = layoutOwnerIsMain
   const f = createAcknowledgedTabRetirementFixture(true)
   disposers.push(() => f.dispose())
   const stopped: string[] = []
@@ -74,9 +65,9 @@ async function pinnedServerTab(layoutOwnerIsMain: boolean) {
     }
     await windowClose()
   })
-  const dispatcher = new build.RpcDispatcher({
+  const dispatcher = new RpcDispatcher({
     runtime: f.runtime,
-    methods: build.SESSION_TAB_METHODS
+    methods: SESSION_TAB_METHODS
   })
   const close = async (
     params: Record<string, unknown>,
@@ -106,7 +97,7 @@ async function pinnedServerTab(layoutOwnerIsMain: boolean) {
 
 describe.each([false, true])('ORCA_LAYOUT_OWNER_IS_MAIN=%s', (layoutOwnerIsMain) => {
   it('advertises the forced-close capability', async () => {
-    const { OrcaRuntimeService } = await switchedBuild(layoutOwnerIsMain)
+    layoutOwner.isMain = layoutOwnerIsMain
     expect(new OrcaRuntimeService().getStatus().capabilities).toContain(
       SESSION_TAB_CLOSE_FORCE_RUNTIME_CAPABILITY
     )

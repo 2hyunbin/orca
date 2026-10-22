@@ -112,4 +112,16 @@ describe('closing a pinned terminal tab of a server workspace', () => {
     expect(onCancel).toHaveBeenCalledTimes(1)
     expect(mocks.closeWebRuntimeSessionTab).not.toHaveBeenCalled()
   })
+
+  it('never forces a pinned lifecycle close, even with the confirmation off', () => {
+    mocks.getState.mockReturnValue(serverWorkspaceState(true, false))
+    closeTerminalTab('local-tab-1', {
+      hostCloseReason: 'pty-exit',
+      lifecyclePtyId: 'remote:server-env@@term-1'
+    })
+
+    expect(mocks.closeWebRuntimeSessionTab).toHaveBeenCalledTimes(1)
+    expect(mocks.closeWebRuntimeSessionTab.mock.calls[0][0]).toMatchObject({ reason: 'pty-exit' })
+    expect(mocks.closeWebRuntimeSessionTab.mock.calls[0][0]).not.toHaveProperty('force')
+  })
 })
