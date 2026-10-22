@@ -78,7 +78,7 @@ describe('Claude runtime account selection', () => {
     expect(selection.wsl.Ubuntu).toBe('a')
   })
 
-  it('does not choose an arbitrary account from conflicting legacy distro aliases', () => {
+  it('keeps exact legacy spellings and does not choose between conflicting aliases', () => {
     for (const wsl of [
       { Ubuntu: 'a', ubuntu: 'b' },
       { Ubuntu: 'a', ubuntu: null }
@@ -86,11 +86,11 @@ describe('Claude runtime account selection', () => {
       const settings = createSettings({
         activeClaudeManagedAccountIdsByRuntime: { host: null, wsl }
       })
-      for (const wslDistro of ['Ubuntu', 'ubuntu', 'UBUNTU']) {
-        expect(
-          getSelectedClaudeAccountIdForTarget(settings, { runtime: 'wsl', wslDistro })
-        ).toBeNull()
-      }
+      const lookup = (wslDistro: string) =>
+        getSelectedClaudeAccountIdForTarget(settings, { runtime: 'wsl', wslDistro })
+      expect(lookup('Ubuntu')).toBe('a')
+      expect(lookup('ubuntu')).toBe(wsl.ubuntu)
+      expect(lookup('UBUNTU')).toBeNull()
     }
   })
 

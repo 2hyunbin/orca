@@ -52,6 +52,10 @@ export function getSelectedClaudeAccountIdForTarget(
     return selection.host
   }
   if (normalizedTarget.wslDistro) {
+    // Why exact first: a saved spelling that matches keeps resolving as it did before aliasing.
+    if (Object.hasOwn(selection.wsl, normalizedTarget.wslDistro)) {
+      return selection.wsl[normalizedTarget.wslDistro] ?? null
+    }
     const matches = matchingWslSelectionKeys(selection.wsl, normalizedTarget.wslDistro)
     const ids = new Set(matches.map((key) => selection.wsl[key]))
     return ids.size === 1 ? (ids.values().next().value ?? null) : null
