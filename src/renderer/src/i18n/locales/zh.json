@@ -19968,8 +19968,12 @@
       "status": "PR #{{number}} 未链接"
     },
     "discard": {
+      "deleteUntrackedFileDescription": "这将永久删除此未跟踪文件。此操作无法撤销。",
+      "deleteUntrackedFilesDescription": "这将永久删除这 {{count}} 个未跟踪文件。此操作无法撤销。",
       "restoreStagedVersionDescription": "这将恢复最后一个暂存版本并放弃删除。此操作无法撤消。",
-      "unstagedChangesDescription": "这将恢复对此文件的未暂存更改。此操作无法撤消。"
+      "unstagedChangesDescription": "这将恢复对此文件的未暂存更改。此操作无法撤消。",
+      "unstagedSelectionIncludingUntrackedDescription": "这将还原未暂存的更改，并永久删除此选择中的任何未跟踪文件。此操作无法撤销。",
+      "unstagedFilesIncludingUntrackedDescription": "这将还原未暂存的更改，并永久删除这 {{count}} 个文件中的任何未跟踪文件。此操作无法撤销。"
     }
   },
   "rendererRecovery": {

@@ -19953,8 +19953,12 @@
       "status": "PR #{{number}} non lié"
     },
     "discard": {
+      "deleteUntrackedFileDescription": "Cela supprimera définitivement ce fichier non suivi. Cette action est irréversible.",
+      "deleteUntrackedFilesDescription": "Cela supprimera définitivement ces {{count}} fichiers non suivis. Cette action est irréversible.",
       "restoreStagedVersionDescription": "Cela restaurera la dernière version intermédiaire et annulera la suppression. Cela ne peut pas être annulé.",
-      "unstagedChangesDescription": "Cela annulera les modifications non planifiées apportées à ce fichier. Cela ne peut pas être annulé."
+      "unstagedChangesDescription": "Cela annulera les modifications non planifiées apportées à ce fichier. Cela ne peut pas être annulé.",
+      "unstagedSelectionIncludingUntrackedDescription": "Cela annulera les modifications non indexées et supprimera définitivement tous les fichiers non suivis de cette sélection. Cette action est irréversible.",
+      "unstagedFilesIncludingUntrackedDescription": "Cela annulera les modifications non indexées et supprimera définitivement tous les fichiers non suivis parmi ces {{count}} fichiers. Cette action est irréversible."
     }
   },
   "agentsSidebarIntro": {
