@@ -32,6 +32,7 @@ import { buildPaneIdentityEnv, getWorkspacePath } from './detached-pane-restart-
 import { restartPaneOwner } from './codex-restart-main-pane'
 
 const inFlightPtyIds = new Set<string>()
+// Why: one stalled spawn must not block the batch, but a large batch must not fan out every agent launch at once.
 const MAX_CONCURRENT_RESTARTS = 4
 
 export function resetDetachedCodexPaneRestartClaimsForTests(): void {
