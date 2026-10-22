@@ -4977,7 +4977,8 @@
           "updatedLeftAlone": "{{value0}} · {{value1}} left alone",
           "updatedMany": "Updated {{value0}} skills",
           "updatedOne": "Updated 1 skill",
-          "updateServer": "Update Orca on the server to update its Orca skills."
+          "updateServer": "Update Orca on the server to update its Orca skills.",
+          "connectHost": "Connect to this SSH host to check its Orca skills."
         },
         "SkillUpdateResultRows": {},
         "SkillUpdateRow": {
@@ -4991,7 +4992,8 @@
           "needsAttention": "Review skill",
           "checking": "Checking...",
           "checkFailed": "Check failed",
-          "updateServer": "Update Orca on the server"
+          "updateServer": "Update Orca on the server",
+          "connectHost": "Connect the SSH host"
         },
         "SkillShareDialog": {
           "reconnect": "Reconnect your Orca account before sharing.",

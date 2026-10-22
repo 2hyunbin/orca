@@ -27,7 +27,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
   plan: ((): BundledSkillPlan | null => null)(),
-  unsupported: false,
+  unsupported: ((): string | null => null)(),
   loading: false,
   error: null as string | null,
   refresh: vi.fn(),
@@ -154,7 +154,7 @@ function replaceCheckbox(): HTMLElement {
 
 beforeEach(() => {
   mocks.plan = null
-  mocks.unsupported = false
+  mocks.unsupported = null
   mocks.loading = false
   mocks.error = null
   mocks.refresh.mockReset()
@@ -207,6 +207,17 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(row).toContain('Shared folder~/.agents/skills/orca-cliWill update')
     expect(row).toContain('Claude Code~/.claude/skills/orca-cliLink, no change')
     expect(container.querySelector('[data-skill-row="orchestration"]')).not.toBeNull()
+  })
+
+  it.each([
+    ['update-server', 'Update Orca on the server to update its Orca skills.'],
+    ['connect-host', 'Connect to this SSH host to check its Orca skills.']
+  ])('explains a %s host instead of offering Update', (reason, text) => {
+    mocks.unsupported = reason
+    render()
+
+    expect(container.textContent).toContain(text)
+    expect(container.textContent).not.toMatch(/Update \d+ skills?/)
   })
 
   it('labels a link-only plan as installing for the agent, not an update', () => {

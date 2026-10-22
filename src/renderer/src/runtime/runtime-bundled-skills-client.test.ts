@@ -49,7 +49,10 @@ describe('planBundledSkillsOnTarget', () => {
   it('reads an older server that answered its status without the capability as unsupported', async () => {
     runtimeEnvironmentSupportsCapability.mockResolvedValue(false)
 
-    expect(await planBundledSkillsOnTarget(SERVER, {})).toEqual({ kind: 'unsupported' })
+    expect(await planBundledSkillsOnTarget(SERVER, {})).toEqual({
+      kind: 'unsupported',
+      reason: 'update-server'
+    })
     expect(callRuntimeRpc).not.toHaveBeenCalled()
     expect(bundledPlan).not.toHaveBeenCalled()
   })
@@ -72,6 +75,19 @@ describe('planBundledSkillsOnTarget', () => {
     await planBundledSkillsOnTarget({ kind: 'wsl', distro: 'Ubuntu' }, {}, { background: true })
 
     expect(bundledPlan).toHaveBeenCalledWith({ wsl: { distro: 'Ubuntu', onlyIfRunning: true } })
+  })
+
+  it('asks an SSH host no server serves to connect, and never plans this machine', async () => {
+    expect(await planBundledSkillsOnTarget({ kind: 'ssh', targetId: 'box' }, {})).toEqual({
+      kind: 'unsupported',
+      reason: 'connect-host'
+    })
+    await expect(
+      executeBundledSkillsOnTarget({ kind: 'ssh', targetId: 'box' }, 'd'.repeat(64), {})
+    ).rejects.toThrow('skill-install-ssh-host-not-served')
+    expect(bundledPlan).not.toHaveBeenCalled()
+    expect(bundledExecute).not.toHaveBeenCalled()
+    expect(runtimeEnvironmentSupportsCapability).not.toHaveBeenCalled()
   })
 
   it('plans this machine without a WSL target', async () => {

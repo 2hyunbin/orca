@@ -30,7 +30,7 @@ vi.mock('@/hooks/useSkillFreshness', () => ({
     mocks.freshnessEnabled = target !== null
     return {
       plan: mocks.plan,
-      unsupported: false,
+      unsupported: null,
       loading: false,
       error: mocks.error,
       refresh: vi.fn()
