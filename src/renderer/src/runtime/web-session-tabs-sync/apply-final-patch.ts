@@ -94,12 +94,10 @@ export function buildWebSessionTabsFinalPatch(
     mirroredTerminalIds
   )
 
-  const patch: Partial<WebSessionTabsSyncState> = {
-    ...agentStatusPatch,
-    ...retractedTabSweepPatch,
-    ...remirroredClosedTabLiftPatch,
-    ...(nextOpenFiles !== state.openFiles
-      ? adoptMirroredEditorBuffers(
+  const adoptedEditorBuffers =
+    nextOpenFiles === state.openFiles
+      ? null
+      : adoptMirroredEditorBuffers(
           state.editorBuffers,
           nextOpenFiles,
           // Why the live index for existing views: it holds sticky detachments. New views take the
@@ -109,6 +107,13 @@ export function buildWebSessionTabsFinalPatch(
             (file) => state.editorBufferIdOf?.[file.id] ?? editorBufferIdForFile(file, state)
           )
         )
+
+  const patch: Partial<WebSessionTabsSyncState> = {
+    ...agentStatusPatch,
+    ...retractedTabSweepPatch,
+    ...remirroredClosedTabLiftPatch,
+    ...(adoptedEditorBuffers
+      ? { openFiles: adoptedEditorBuffers.views, editorBuffers: adoptedEditorBuffers.editorBuffers }
       : {}),
     ...(nextTabsByWorktree !== state.tabsByWorktree ? { tabsByWorktree: nextTabsByWorktree } : {}),
     ...(nextBrowserTabsByWorktree !== state.browserTabsByWorktree

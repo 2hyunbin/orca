@@ -62,21 +62,37 @@ export class ReconcileWrite {
     }
   }
 
-  openFiles(): OpenFile[] {
-    if (this.mirrors.size === 0) {
-      return this.input.openFiles
-    }
-    let changed = false
-    const next = this.input.openFiles.map((file) => {
+  /** The views whose mirror fields now differ from their record, keyed by view id. */
+  viewMirrors(): ReadonlyMap<string, EditorBufferRecord> {
+    const changed = new Map<string, EditorBufferRecord>()
+    for (const file of this.input.openFiles) {
       const record = this.mirrors.get(file.id)
-      if (!record || EDITOR_BUFFER_FIELDS.every((field) => Object.is(file[field], record[field]))) {
-        return file
+      if (record && !EDITOR_BUFFER_FIELDS.every((field) => Object.is(file[field], record[field]))) {
+        changed.set(file.id, record)
       }
-      changed = true
-      return { ...file, ...record }
-    })
-    return changed ? next : this.input.openFiles
+    }
+    return changed
   }
+}
+
+/** Reconcile output: `viewMirrors` names content updates only, so `openFiles` membership stays put. */
+export type EditorBufferReconcileResult = Omit<EditorBufferReconcileState, 'openFiles'> & {
+  viewMirrors: ReadonlyMap<string, EditorBufferRecord>
+}
+
+export function showEditorBufferView(
+  file: OpenFile,
+  record: EditorBufferRecord | undefined
+): OpenFile {
+  return record ? { ...file, ...record } : file
+}
+
+/** The state after a reconcile, with `openFiles` as the caller wrote it. */
+export function reconciledEditorBufferState(
+  result: EditorBufferReconcileResult,
+  openFiles: OpenFile[]
+): EditorBufferReconcileState {
+  return { ...result, openFiles }
 }
 
 export class IndexBuilder {

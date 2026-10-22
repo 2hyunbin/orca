@@ -15,6 +15,10 @@ import {
 } from './slices/editor/buffers/editor-buffer-identity-cache'
 import { reconcileEditorBufferRecords } from './slices/editor/buffers/editor-buffer-reconcile'
 import {
+  reconciledEditorBufferState,
+  showEditorBufferView
+} from './slices/editor/buffers/editor-buffer-reconcile-write'
+import {
   isEditorBufferRejoinDue,
   mayRejoinAfterDraftWrite
 } from './slices/editor/buffers/editor-buffer-rejoin'
@@ -91,21 +95,23 @@ function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
   // Why only on an identity pass: callers settle a record in steps (clean, then clear the draft);
   // a rejoin between them would let the second step clear the draft the rejoin adopted.
   const rejoin = Object.hasOwn(write, 'editorBufferIdentityRevision')
-  const next = reconcileEditorBufferRecords(
+  const result = reconcileEditorBufferRecords(
     input,
     (file) => editorBufferIdForFile(file, routeState),
     keepRequest && { ...keepRequest, drafts: state.editorDrafts ?? NO_DRAFTS },
     rejoin
   )
+  const changed: Partial<EditorBufferState> = {}
+  const mirrors = result.viewMirrors
+  if (mirrors.size > 0) {
+    changed.openFiles = openFiles.map((file) => showEditorBufferView(file, mirrors.get(file.id)))
+  }
+  const next = reconciledEditorBufferState(result, changed.openFiles ?? openFiles)
   if (!rejoin && isEditorBufferRejoinDue(next)) {
     scheduleRejoin()
   }
   if (checkInvariant) {
     assertEditorBufferInvariant(next)
-  }
-  const changed: Partial<EditorBufferState> = {}
-  if (next.openFiles !== input.openFiles) {
-    changed.openFiles = next.openFiles
   }
   if (next.editorBuffers !== state.editorBuffers) {
     changed.editorBuffers = next.editorBuffers

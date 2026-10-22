@@ -13,6 +13,7 @@ import {
   ReconcileWrite,
   sameDetachments,
   sameIndex,
+  type EditorBufferReconcileResult,
   type EditorBufferReconcileState
 } from './editor-buffer-reconcile-write'
 
@@ -23,14 +24,14 @@ import {
  * file's new content, so it takes the key: a clean target's views attach to it, a dirty target
  * detaches. With `rejoin`, a detached view rejoins once its side or its partner is clean. `keep`
  * names closing views whose dirty record outlives them. Returns `state`'s own objects for whatever
- * did not change.
+ * did not change, and the mirror fields each view must now show.
  */
 export function reconcileEditorBufferRecords(
   state: EditorBufferReconcileState,
   identityOf: (file: OpenFile) => string,
   keep?: EditorBufferKeepRequest & { drafts: Readonly<Record<string, string>> },
   rejoin = false
-): EditorBufferReconcileState {
+): EditorBufferReconcileResult {
   const detached: EditorBufferDetachments = {}
   const desired = new Map<string, string>()
   const open = new Set(state.openFiles.map((file) => file.id))
@@ -138,7 +139,7 @@ export function reconcileEditorBufferRecords(
   const built = index.build()
   const indexSame = sameIndex(built, state)
   return {
-    openFiles: write.openFiles(),
+    viewMirrors: write.viewMirrors(),
     editorBuffers: write.records,
     editorDrafts: write.drafts,
     editorBufferIdOf: indexSame ? state.editorBufferIdOf : built.editorBufferIdOf,
