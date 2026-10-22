@@ -84,7 +84,8 @@ function headlessRuntimeWithChat() {
 
 async function openChat(runtime: OrcaRuntimeService): Promise<void> {
   await runtime.listMobileSessionTabs(WORKTREE)
-  runtime.projectStructuredAgentSessionTab({
+  // As every product path opens one: main's layout records the tab first.
+  await runtime.publishStructuredAgentSessionTab({
     workspaceId: TEST_WORKTREE_ID,
     sessionId: 'claude_29968',
     agent: 'claude',
@@ -124,7 +125,7 @@ describe('a chat tab on a host with no window', () => {
     ])
   })
 
-  // L283: switch-on, a headless host's phone tab list ignores main's group order.
+  // L283: in a main-owned workspace the phone's chat reorder does not survive a row rebuild.
   ;(ORCA_LAYOUT_OWNER_IS_MAIN ? it.fails : it)(
     'lists tabs to phones in the order desktop clients draw after a rebuild',
     async () => {
@@ -185,7 +186,8 @@ describe('a chat tab on a host with no window', () => {
       leaves: [],
       unchangedMobileSessionWorktrees: [TEST_WORKTREE_ID]
     })
-    runtime.projectStructuredAgentSessionTab({
+    // As every product path opens one: main's layout records the tab first.
+    await runtime.publishStructuredAgentSessionTab({
       workspaceId: TEST_WORKTREE_ID,
       sessionId: 'claude_29968',
       agent: 'claude',
