@@ -38,6 +38,7 @@ import { claudeAndCodexDeclared } from './structured-agent-session-adapter-route
 import { isStructuredAgentSessionMainAgentWorking } from '../../../shared/structured-agent-session-main-agent-working'
 import { DISPATCH_DOUBT_PROVIDER_IDLE } from '../agent-session-journal/journal-dispatch-doubt-reasons'
 import { claudeUnwrittenUserMessageError } from '../../claude/claude-agent-sdk-user-message-queue'
+import { claudeStructuredPermissionOptions } from '../../claude/claude-structured-launch-resolution'
 
 const CALLER = { callerKey: 'client-1' }
 const CAPABILITIES = ['interrupt_receipt_v1', 'interrupt_cancel_queued_v1', 'msg_lifecycle_v1']
@@ -47,20 +48,23 @@ let host: StructuredAgentSessionHost
 let adapter: ClaudeStructuredSessionAdapter
 let store: AgentSessionRecordStore
 let claude: ReturnType<typeof fakeClaude>
+let claudeFrames: { replayUuid: null; initProof?: 'none' }
 
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-claude-opening-send-'))
   resetHostTestOperationIds()
   const log = recordingStructuredAgentSessionLogger()
-  claude = fakeClaude({
-    replayUuid: null,
-    routes: { interrupt: () => ({ still_queued: [], cancelled: [] }) }
-  })
+  claudeFrames = { replayUuid: null }
+  claude = fakeClaude(
+    Object.assign(claudeFrames, {
+      routes: { interrupt: () => ({ still_queued: [], cancelled: [] }) }
+    })
+  )
   const lifecycle: Promise<void>[] = []
   adapter = new ClaudeStructuredSessionAdapter({
-    resolveLaunch: async () => ({
+    resolveLaunch: async ({ permissionMode }) => ({
       pathToClaudeCodeExecutable: 'claude',
-      options: {},
+      options: claudeStructuredPermissionOptions(permissionMode ?? 'ask'),
       cwd: root,
       claudeConfigDir: join(root, 'claude-home'),
       providerSessionId: PROVIDER_SESSION_ID,
@@ -94,6 +98,7 @@ beforeEach(async () => {
   const params = hostTestAttachParams(null, {
     provider: 'claude',
     agent: 'claude',
+    options: { model: 'haiku', permissionMode: 'auto' },
     accountHome: { variable: 'CLAUDE_CONFIG_DIR', path: join(root, 'claude-home') },
     providerHandle: { kind: 'claude', sessionId: PROVIDER_SESSION_ID, leafUuid: null }
   })
@@ -111,7 +116,7 @@ afterEach(async () => {
 const eventually = <T>(assertion: () => T | Promise<T>) =>
   vi.waitFor(assertion, { timeout: 10_000 })
 
-async function send(text: string): Promise<string> {
+async function send(text: string, options?: Record<string, string>): Promise<string> {
   const body = hostTestMessage(text)
   const sent = await host.send(CALLER, {
     envelope: {
@@ -121,10 +126,11 @@ async function send(text: string): Promise<string> {
       payloadFingerprint: computeAgentSessionPayloadFingerprint({
         method: 'agentSession.send',
         sessionId: SESSION,
-        fields: { body }
+        fields: { body, options }
       })
     },
-    body
+    body,
+    options
   })
   if (!sent.ok) {
     throw new Error(JSON.stringify(sent.refusal))
@@ -171,6 +177,121 @@ it('reads a send as accepted across its echo, never in doubt, so a worker start 
     parent_tool_use_id: null
   })
   expect(agentSessionSendSubmission((await answer)?.value)?.dispatchState).toBe('accepted')
+})
+
+it('protects an admitted unechoed input from a model transition, then reopens for a fresh choice', async () => {
+  claudeFrames.initProof = 'none'
+  const connection = claude.connections[0]!
+  expect(connection.launch.options).toMatchObject({ model: 'haiku', permissionMode: 'auto' })
+  frame(connection, {
+    type: 'system',
+    subtype: 'init',
+    uuid: 'haiku-root',
+    model: 'claude-haiku-4-5',
+    permissionMode: 'default'
+  })
+  const first = await send('ADMITTED prompt')
+  await eventually(() => expect(written(connection, 'ADMITTED prompt')).toBeDefined())
+  await eventually(() =>
+    expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(false)
+  )
+  const admitted = (await snapshot()).submissions.find((entry) => entry.clientMessageId === first)!
+  expect(admitted).toMatchObject({ dispatchState: 'pending', handedOverAt: expect.any(Number) })
+  expect(host.currentWork(SESSION)?.owesSend(admitted)).toBe(true)
+  expect(host.currentWork(SESSION)?.activeTurnId()).toBeNull()
+  expect(adapter.holdsDispatch(SESSION)).toBe(false)
+
+  const blocked = await send('BLOCKED transition', { model: 'opus' })
+  await eventually(() =>
+    expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(false)
+  )
+  expect(connection.closeCount).toBe(0)
+  expect(connection.calls.some(({ subtype }) => subtype === 'set_model')).toBe(false)
+  const submissions = (await snapshot()).submissions
+  expect(submissions.find((entry) => entry.clientMessageId === blocked)).toMatchObject({
+    dispatchState: 'rejected',
+    rejection: {
+      kind: 'restartFailed',
+      refusal: { code: 'agent_session_operation_invalid', details: { reason: 'messagesUnsettled' } }
+    }
+  })
+  expect(submissions.find((entry) => entry.clientMessageId === first)?.dispatchState).toBe(
+    'pending'
+  )
+  expect(host.currentWork(SESSION)?.owesSend(admitted)).toBe(true)
+  expect(written(connection, 'BLOCKED transition')).toBeUndefined()
+
+  async function reply(on: FakeConnection, prompt: string, text: string, id: string) {
+    const input = written(on, prompt)!
+    frame(on, { ...input, isReplay: true, parent_tool_use_id: null })
+    frame(on, {
+      type: 'assistant',
+      uuid: `assistant-${id}`,
+      parent_tool_use_id: null,
+      message: { id: `msg-${id}`, role: 'assistant', content: [{ type: 'text', text }] },
+      user_message_uuid: input.uuid,
+      user_message_uuids: [input.uuid]
+    })
+    frame(on, {
+      type: 'result',
+      subtype: 'success',
+      uuid: `result-${id}`,
+      is_error: false,
+      terminal_reason: 'completed',
+      result: text,
+      user_message_uuid: input.uuid,
+      user_message_uuids: [input.uuid]
+    })
+    frame(on, { type: 'system', subtype: 'session_state_changed', state: 'idle' })
+    await eventually(async () => {
+      expect(
+        (await snapshot()).submissions.find((entry) => entry.clientMessageId === id)
+      ).toMatchObject({ dispatchState: 'accepted' })
+      expect(host.currentWork(SESSION)?.activeTurnId()).toBeNull()
+    })
+  }
+  await reply(connection, 'ADMITTED prompt', 'Original result retained.', first)
+  expect((await drawn()).map(({ text }) => text)).toContain('Original result retained.')
+  expect(
+    (await snapshot()).submissions.find((entry) => entry.clientMessageId === blocked)?.dispatchState
+  ).toBe('rejected')
+
+  const fresh = await send('FRESH transition', { model: 'opus' })
+  await eventually(() => {
+    expect(claude.connections).toHaveLength(2)
+    expect(written(claude.connections[1]!, 'FRESH transition')).toBeDefined()
+  })
+  const resumed = claude.connections[1]!
+  expect(connection.closeCount).toBe(1)
+  expect(resumed.launch.options).toMatchObject({ model: 'opus', permissionMode: 'auto' })
+  expect(store.getRecord(SESSION)?.providerHandleChain).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        handle: expect.objectContaining({ nativeId: PROVIDER_SESSION_ID })
+      })
+    ])
+  )
+  frame(resumed, {
+    type: 'system',
+    subtype: 'init',
+    uuid: 'opus-root',
+    model: 'claude-opus-4-6',
+    permissionMode: 'default'
+  })
+  await reply(resumed, 'FRESH transition', 'First new-model reply.', fresh)
+  const repeated = await send('REPEATED choice', { model: 'opus' })
+  await eventually(() => expect(written(resumed, 'REPEATED choice')).toBeDefined())
+  await reply(resumed, 'REPEATED choice', 'Second new-model reply.', repeated)
+  expect(claude.connections).toHaveLength(2)
+  expect(resumed.calls.some(({ subtype }) => subtype === 'set_model')).toBe(false)
+  expect(claude.connections.some((child) => written(child, 'BLOCKED transition'))).toBe(false)
+  expect((await drawn()).map(({ text }) => text)).toEqual(
+    expect.arrayContaining([
+      'Original result retained.',
+      'First new-model reply.',
+      'Second new-model reply.'
+    ])
+  )
 })
 
 it('holds a follow-up until the echo opens the turn, then folds it in, drawn inside that turn', async () => {
