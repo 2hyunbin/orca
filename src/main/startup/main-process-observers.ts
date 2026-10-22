@@ -37,12 +37,16 @@ export function initializeMainProcessObservers(): void {
   state.stopDesktopPresenceReporter = startDesktopPresenceReporter({
     readAway: () => readDesktopAwayState(powerMonitor),
     listTargets: listCapableSharedControlSockets,
-    subscribeAwayEvents: (onAway) => {
-      powerMonitor.on('suspend', onAway)
-      powerMonitor.on('lock-screen', onAway)
+    subscribePowerEvents: ({ away, back }) => {
+      powerMonitor.on('suspend', away)
+      powerMonitor.on('lock-screen', away)
+      powerMonitor.on('resume', back)
+      powerMonitor.on('unlock-screen', back)
       return () => {
-        powerMonitor.off('suspend', onAway)
-        powerMonitor.off('lock-screen', onAway)
+        powerMonitor.off('suspend', away)
+        powerMonitor.off('lock-screen', away)
+        powerMonitor.off('resume', back)
+        powerMonitor.off('unlock-screen', back)
       }
     }
   })
