@@ -166,6 +166,7 @@ export abstract class OrcaRuntimeWithRunCreateMobileSessionTerminal extends Orca
           launchAgent: startupCommand.launchAgent,
           viewMode: opts.viewMode,
           targetGroupId: opts.targetGroupId,
+          ...this.mainPlacedAfter(afterDesktopTabId),
           supportsSplitGroupPlacement: opts.supportsSplitGroupPlacement,
           launchConfig: startupCommand.launchConfig,
           launchRuntime: startupCommand.launchRuntime,
