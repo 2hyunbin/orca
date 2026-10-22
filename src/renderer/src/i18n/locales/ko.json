@@ -211,6 +211,10 @@
       "readFailed": "에이전트 설정을 읽을 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
       "saveFailed": "에이전트 설정을 저장할 수 없습니다. 호스트 연결을 확인하고 다시 시도하세요.",
       "hostDefaults": "선택한 호스트의 새 에이전트 기본값입니다.",
+      "defaultOpensAs": "{{value0}} 여는 방식",
+      "defaultOpensAsChat": "채팅",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "이 컴퓨터에서 시작하는 새 {{value0}} 세션(페어링된 호스트 포함)에 적용됩니다. 공급자의 스위치와 같습니다.",
       "save": "저장",
       "clearDefault": "기본 에이전트 지우기"
     },
@@ -7089,8 +7093,6 @@
           "ee110e1830": "기본 기준 참조 없음"
         },
         "BrowserDefaultZoomSetting": {
-          "2622126877": "새로 열린 브라우저 탭에 적용되는 확대/축소 수준입니다.",
-          "bbeec087d3": "새로 열린 브라우저 탭에 적용됩니다.",
           "265597101f": "기본 줌"
         },
         "BrowserHomePageSetting": {
@@ -12709,7 +12711,8 @@
           "behindRolledBack": "이 앱보다 오래된 Orca 서버를 실행합니다. 마지막 업데이트가 롤백되었습니다. 서버 업데이트를 사용해 다시 시도하세요.",
           "behindNoTemplate": "이 앱이 업데이트할 수 없는 Orca 서버를 실행합니다. 이 빌드에는 이 호스트용 서버가 없습니다.",
           "behindMigrating": "Orca 서버를 실행합니다. 프로젝트 이동이 끝나면 업데이트됩니다.",
-          "behindCheckFailed": "Orca 서버를 실행합니다. Orca가 이 앱보다 뒤처졌는지 확인하지 못했습니다."
+          "behindCheckFailed": "Orca 서버를 실행합니다. Orca가 이 앱보다 뒤처졌는지 확인하지 못했습니다.",
+          "refusedBlockedReason": "아직 이 호스트에 Orca가 설정되지 않았습니다. {{reason}}"
         },
         "deltaMove": {
           "action": "새 프로젝트 이동…",
@@ -16658,7 +16661,6 @@
             "95af781091": "agent에게 피드백 보내기",
             "ac39b9366b": "보내기",
             "a3508d7e6e": "{{value0}} 주석{{value1}}이 준비되었습니다. 다른 요소를 선택하거나 모든 피드백을 복사하세요.",
-            "f796c774a4": "탐색을 시작하려면 위에 URL을 입력하세요.",
             "366bf5d62c": "새 탭",
             "1c78adc73d": "외부에서 열기",
             "da68d35f7b": "기본 브라우저에서 실패한 페이지 열기",
@@ -16784,7 +16786,8 @@
               "bar": {
                 "suggestions": {
                   "87fcdd0da9": "{{value0}} 검색"
-                }
+                },
+                "placeholder": "검색어 또는 URL 입력"
               }
             }
           },
@@ -19397,6 +19400,13 @@
           "checking": "변경 사항 확인 중…",
           "checkingDetails": "확인 중…",
           "unavailableDetails": "세부 정보를 사용할 수 없음"
+        },
+        "unsavedEdits": {
+          "discarded_one": "파일 {{count}}개의 저장되지 않은 편집 내용이 버려집니다:",
+          "discarded_other": "파일 {{count}}개의 저장되지 않은 편집 내용이 버려집니다:",
+          "moreFiles": "외 {{value}}개",
+          "blocked_one": "먼저 {{name}}에서 저장되지 않은 파일 {{count}}개를 저장하거나 닫으세요",
+          "blocked_other": "먼저 {{name}}에서 저장되지 않은 파일 {{count}}개를 저장하거나 닫으세요"
         }
       }
     },

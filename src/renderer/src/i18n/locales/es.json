@@ -211,6 +211,10 @@
       "readFailed": "No se pudo leer la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
       "saveFailed": "No se pudo guardar la configuración de agentes. Comprueba la conexión con el host e inténtalo de nuevo.",
       "hostDefaults": "Valores predeterminados para nuevos agentes en el host seleccionado.",
+      "defaultOpensAs": "Abrir {{value0}} como",
+      "defaultOpensAsChat": "Chat",
+      "defaultOpensAsCli": "CLI",
+      "defaultOpensAsScope": "Se aplica a las nuevas sesiones de {{value0}} iniciadas desde este equipo, incluso en hosts emparejados. Coincide con su interruptor en Proveedores.",
       "save": "Guardar",
       "clearDefault": "Borrar agente predeterminado"
     },
@@ -7099,8 +7103,6 @@
           "ee110e1830": "Sin ref base predeterminada"
         },
         "BrowserDefaultZoomSetting": {
-          "2622126877": "Nivel de zoom aplicado a nuevas pestañas del navegador.",
-          "bbeec087d3": "Se aplica a nuevas pestañas del navegador.",
           "265597101f": "Zoom predeterminado"
         },
         "BrowserHomePageSetting": {
@@ -12704,7 +12706,8 @@
           "behindRolledBack": "Ejecuta una versión del servidor de Orca más antigua que esta app; la última actualización se revirtió. Usa Actualizar servidor para intentarlo de nuevo.",
           "behindNoTemplate": "Ejecuta una versión del servidor de Orca que esta app no puede actualizar; esta compilación no incluye un servidor para este host.",
           "behindMigrating": "Ejecuta el servidor de Orca, que se actualizará cuando termine el traslado de sus proyectos.",
-          "behindCheckFailed": "Ejecuta el servidor de Orca; Orca no pudo comprobar si está por detrás de esta app."
+          "behindCheckFailed": "Ejecuta el servidor de Orca; Orca no pudo comprobar si está por detrás de esta app.",
+          "refusedBlockedReason": "Orca aún no está configurado en este host. {{reason}}"
         },
         "deltaMove": {
           "action": "Mover los proyectos nuevos…",
@@ -16653,7 +16656,6 @@
             "95af781091": "Enviar comentarios a un agente",
             "ac39b9366b": "Enviar",
             "a3508d7e6e": "{{value0}} anotación{{value1}} listo. Seleccione otro elemento o copie todos los comentarios.",
-            "f796c774a4": "Escriba una URL arriba para comenzar a navegar.",
             "366bf5d62c": "Nueva pestaña",
             "1c78adc73d": "Abrir externamente",
             "da68d35f7b": "Abrir página fallida en el navegador predeterminado",
@@ -16779,7 +16781,8 @@
               "bar": {
                 "suggestions": {
                   "87fcdd0da9": "{{value0}} Buscar"
-                }
+                },
+                "placeholder": "Busca o introduce una URL"
               }
             }
           },
@@ -19350,6 +19353,13 @@
           "checking": "Comprobando si hay cambios…",
           "checkingDetails": "Comprobando…",
           "unavailableDetails": "Detalles no disponibles"
+        },
+        "unsavedEdits": {
+          "discarded_one": "Se descartarán las ediciones sin guardar de {{count}} archivo:",
+          "discarded_other": "Se descartarán las ediciones sin guardar de {{count}} archivos:",
+          "moreFiles": "y {{value}} más",
+          "blocked_one": "Guarda o cierra antes {{count}} archivo sin guardar en {{name}}",
+          "blocked_other": "Guarda o cierra antes {{count}} archivos sin guardar en {{name}}"
         }
       }
     },
