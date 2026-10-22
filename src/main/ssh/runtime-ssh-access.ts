@@ -55,7 +55,10 @@ function sshAccessBlockerMessage(targetId: string, blocker: OrcadMigrationBlocke
       return 'This SSH target still owns terminal sessions. Close them before linking SSH access.'
     case 'orcad_migration_saved_port_forwards':
       return 'This SSH target has saved port forwards. Remove them, or link SSH access through another SSH target.'
-    default:
+    case 'orcad_migration_target_not_found':
+    case 'orcad_migration_target_owned':
+    case 'orcad_migration_owner_unrecorded':
+    case 'orcad_migration_dependency_unverifiable':
       return orcadTargetBlockerMessage(targetId, blocker)
   }
 }
