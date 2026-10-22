@@ -550,7 +550,7 @@ describe('captureAllSleepingAgentSessions', () => {
     })
   })
 
-  it("clears multiple sleeping records in one update and keeps live panes' launch configs", () => {
+  it('clears multiple sleeping records in one update and leaves launch configs untouched', () => {
     const store = createTestStore()
     const sleeping = {
       'tab-1:leaf-1': { paneKey: 'tab-1:leaf-1' },

@@ -187,8 +187,7 @@ export function createAgentStatusRuntime(
     }
   })
 
-  // Why: the launch-config registry is owned by pane retirement; a woken pane re-registers its
-  // config before consuming its record, so dropping it here strips flags from the next sleep.
+  // Why: launch configs retire with the pane; a woken pane registers its config before consuming this record.
   const clearSleepingAgentSessionsByPaneKey = (paneKeys: readonly string[]): void => {
     if (paneKeys.length === 0) {
       return
