@@ -16,6 +16,8 @@ import {
 } from '../../persistence-test-harness'
 import { wslMoveCutoverFixture } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
 import { wslMoverProfile } from '../__fixtures__/wsl-mover/wsl-mover-profiles'
+import { tabGroup, terminalTab, unifiedTab } from '../__fixtures__/wsl-mover/wsl-mover-profile-rows'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import {
   listWslMoveCutovers,
   wslMoveJournalDirectory,
@@ -32,7 +34,10 @@ import {
   listWslMoveDesktopRewriteStores,
   resetWslMoveDesktopRewriteStoresForTests
 } from './wsl-move-desktop-rewrite-stores'
-import { reapplyWslMoveFocusRewrites } from './wsl-move-focus-reapply'
+import {
+  reapplyWslMoveFocusRewrites,
+  reapplyWslMoveRewritesAtUnload
+} from './wsl-move-stale-window-reapply'
 import type { WslMoveHostAutomations } from './wsl-move-host-automations-rewrite'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import { runWslMoveRetentionPass } from './wsl-move-retention'
@@ -64,17 +69,57 @@ const MOVED = source.session.activeWorktreeId ?? ''
 const MOVED_ON_HOST = 'repo-a::/home/dev/app'
 
 const committedMove = (migrationId = 'move-1') =>
-  wslMoveCutoverFixture(migrationId, 'destination-committed', {}, { repoIds: ['repo-a'] })
+  wslMoveCutoverFixture(
+    migrationId,
+    'destination-committed',
+    {},
+    { repoIds: ['repo-a'] },
+    {
+      version: 1,
+      worktreeMeta: [],
+      worktreeLineage: [],
+      workspaceLineage: [],
+      sparsePresets: [],
+      retiredWorktreeNames: [],
+      retiredWorktreeNamespaces: [],
+      workspaceSession: carriedSession()
+    }
+  )
+
+/** What the manifest carries for repo-a: one terminal tab, unbound. */
+function carriedSession(): WorkspaceSessionState {
+  return {
+    ...getDefaultWorkspaceSession(),
+    tabsByWorktree: {
+      [MOVED_ON_HOST]: [terminalTab('tab-1', MOVED_ON_HOST, '/home/dev/app', null)]
+    },
+    terminalLayoutsByTabId: {
+      'tab-1': {
+        root: { type: 'leaf', leafId: 'leaf-1' },
+        activeLeafId: 'leaf-1',
+        expandedLeafId: null
+      }
+    },
+    unifiedTabs: { [MOVED_ON_HOST]: [unifiedTab('tab-1', MOVED_ON_HOST, 'group-1')] },
+    tabGroups: { [MOVED_ON_HOST]: [tabGroup('group-1', MOVED_ON_HOST, ['tab-1'])] },
+    activeGroupIdByWorktree: { [MOVED_ON_HOST]: 'group-1' }
+  }
+}
+
+const hostTabIds = (): string[] =>
+  store.getWorkspaceSession(HOST).tabsByWorktree[MOVED_ON_HOST]?.map((tab) => tab.id) ?? []
 
 const journal = () => listWslMoveCutovers(testState.dir)
 
 let store: Store
+let windowOpen = false
 let enableAutomations: Mock<WslMoveHostAutomations['enable']>
 
 /** Startup's registration, against this test's profile. */
 function registerRegistry(): void {
   registerWslMoveDesktopRewriteRegistry({
     profile: store,
+    windowOpen: () => windowOpen,
     orchestrationDatabasePath: join(testState.dir, 'orchestration.db'),
     hostAutomations: { enable: enableAutomations },
     browserCookies: {
@@ -149,6 +194,7 @@ beforeEach(() => {
     }
   })
   store = createStore()
+  windowOpen = false
   enableAutomations = vi.fn<WslMoveHostAutomations['enable']>(async () => {})
   registerRegistry()
 })
@@ -297,5 +343,40 @@ describe('WSL move with the complete desktop rewrite registry', () => {
     expect(reapplyWslMoveFocusRewrites(testState.dir, store)).toBe(0)
     expect(store.getUI().lastActiveWorktreeId).toBe(elsewhere)
     expect(store.getWorkspaceSession().activeWorkspaceExecutionHostId).toBe('local')
+  })
+
+  it('redoes the additive rewrites once, at the unload of a window open during the rewrite', async () => {
+    windowOpen = true
+    seedWslMoveCutover(testState.dir, committedMove())
+    loadWslMoveFence(testState.dir)
+    await runWslMoveDesktopRewritePass({ userDataPath: testState.dir })
+    recordRendererStores()
+    const [finished] = journal()
+    expect(finished?.phase).toBe('client-rewritten')
+    expect(store.getUI().visibleWorkspaceHostIds).toEqual(['local', HOST])
+    expect(hostTabIds()).toEqual(['tab-1'])
+
+    // The old window's state lands over the rewrite: its host list, and its host partition at unload.
+    store.updateUI({ visibleWorkspaceHostIds: ['local'] })
+    store.setWorkspaceSession(getDefaultWorkspaceSession(), HOST)
+    expect(reapplyWslMoveRewritesAtUnload(testState.dir, store)).toBeGreaterThan(0)
+    expect(store.getUI().visibleWorkspaceHostIds).toEqual(['local', HOST])
+    expect(hostTabIds()).toEqual(['tab-1'])
+
+    // Once only: a later choice to hide the WSL host stays.
+    store.updateUI({ visibleWorkspaceHostIds: ['local'] })
+    expect(reapplyWslMoveRewritesAtUnload(testState.dir, store)).toBe(0)
+    expect(store.getUI().visibleWorkspaceHostIds).toEqual(['local'])
+    expect(journal()).toEqual([finished])
+  })
+
+  it('leaves the additive rewrites alone at unload when no window saw the rewrite', async () => {
+    seedWslMoveCutover(testState.dir, committedMove())
+    loadWslMoveFence(testState.dir)
+    await runWslMoveDesktopRewritePass({ userDataPath: testState.dir })
+    store.updateUI({ visibleWorkspaceHostIds: ['local'] })
+
+    expect(reapplyWslMoveRewritesAtUnload(testState.dir, store)).toBe(0)
+    expect(store.getUI().visibleWorkspaceHostIds).toEqual(['local'])
   })
 })

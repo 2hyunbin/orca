@@ -17,6 +17,8 @@ import { registerWslMoveOrchestrationHistoryStore } from './wsl-move-orchestrati
 
 export type WslMoveDesktopRewriteRegistryDependencies = {
   profile: WslMoveMainRewriteProfile
+  /** Whether an app window is open, which hydrated before a rewrite running now. */
+  windowOpen: () => boolean
   orchestrationDatabasePath: string
   hostAutomations: WslMoveHostAutomations
   browserCookies: WslMoveBrowserCookieCopyDependencies
@@ -25,7 +27,7 @@ export type WslMoveDesktopRewriteRegistryDependencies = {
 export function registerWslMoveDesktopRewriteRegistry(
   dependencies: WslMoveDesktopRewriteRegistryDependencies
 ): void {
-  registerWslMoveMainRewriteStores(dependencies.profile)
+  registerWslMoveMainRewriteStores(dependencies.profile, dependencies.windowOpen)
   registerWslMoveOrchestrationHistoryStore(dependencies.orchestrationDatabasePath)
   registerWslMoveRendererRewriteStores()
   registerWslMoveHostAutomationsStore(dependencies.hostAutomations)

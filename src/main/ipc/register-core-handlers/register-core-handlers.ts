@@ -31,7 +31,7 @@ import {
 } from '../runtime-environments/runtime-environments'
 import { registerWslHostHandlers } from '../wsl-host-handlers'
 import { registerWslMoveHandlers } from '../wsl-move-handlers'
-import { reapplyWslMoveFocusRewrites } from '../../persistence/moving-wsl-projects/wsl-move-focus-reapply'
+import { reapplyWslMoveRewritesAtUnload } from '../../persistence/moving-wsl-projects/wsl-move-stale-window-reapply'
 import { registerEphemeralVmHandlers } from '../ephemeral-vm'
 import { registerAiVaultHandlers } from '../ai-vault'
 import { registerAiVaultSearchHandlers } from '../ai-vault-search'
@@ -183,9 +183,9 @@ export function registerCoreHandlers(
             runtime.shutdownReconnectFactsFor(session, partition)
         }
       : {}),
-    // The checkpoint writes the window's focus, which is stale for a project moved under it.
+    // The checkpoint writes the window's state, which is stale for a project moved under it.
     afterUnloadStage: () => {
-      reapplyWslMoveFocusRewrites(app.getPath('userData'), store)
+      reapplyWslMoveRewritesAtUnload(app.getPath('userData'), store)
     },
     onBeforeRelaunch: lifecycleOptions.onBeforeRelaunch,
     // Why here, not onBeforeRelaunch: restart and profile switches quit through will-quit, which closes it.

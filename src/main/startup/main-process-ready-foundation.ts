@@ -1,4 +1,4 @@
-import { app, session } from 'electron'
+import { app, BrowserWindow, session } from 'electron'
 import { electronApp, is } from '@electron-toolkit/utils'
 import { applyBackgroundActivationPolicy } from '../window/foreground-activation-policy'
 import { applyElectronProxySettings } from '../network/proxy-settings'
@@ -17,7 +17,7 @@ import { recoverInterruptedWslMoves } from '../persistence/moving-wsl-projects/w
 import { runWslMoveStartupRewrite } from '../persistence/moving-wsl-projects/wsl-move-startup-rewrite'
 import { installWslMoveRetention } from '../persistence/moving-wsl-projects/wsl-move-retention'
 import { registerWslMoveDesktopRewriteRegistry } from '../persistence/moving-wsl-projects/wsl-move-desktop-rewrite-registry'
-import { reapplyWslMoveFocusRewrites } from '../persistence/moving-wsl-projects/wsl-move-focus-reapply'
+import { reapplyWslMoveFocusRewrites } from '../persistence/moving-wsl-projects/wsl-move-stale-window-reapply'
 import { enableWslHostAutomations } from '../ipc/wsl-host-automation-enable'
 import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
 import { orchestrationDbFile } from '../runtime/orchestration/db/orchestration-db-file'
@@ -165,6 +165,7 @@ export async function initializeReadyFoundation(): Promise<void> {
   const userDataPath = getAppEnvironment().getPath('userData')
   registerWslMoveDesktopRewriteRegistry({
     profile: store,
+    windowOpen: () => BrowserWindow.getAllWindows().some((window) => !window.isDestroyed()),
     orchestrationDatabasePath: orchestrationDbFile(userDataPath),
     hostAutomations: {
       enable: (environmentId, ids) => enableWslHostAutomations(userDataPath, environmentId, ids)

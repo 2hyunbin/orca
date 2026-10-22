@@ -1,4 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { toPersistedAutomationHostFilter } from '../../../shared/automation-host-filter'
+import { getDefaultPersistedState, getDefaultWorkspaceSession } from '../../../shared/constants'
+import { toRuntimeExecutionHostId } from '../../../shared/execution-host'
+import type { PersistedUIState } from '../../../shared/persisted-ui-state-types'
+import { worktreeWorkspaceKey } from '../../../shared/workspace-scope'
+import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { WSL_MOVE_BROWSER_COOKIES_STORE_ID } from '../../../shared/wsl-move/wsl-move-browser-cookie-copy'
 import {
   PERSISTED_STATE_DISPOSITIONS,
@@ -17,8 +23,13 @@ import {
   isWslMoveDesktopRewriteRegistryComplete,
   listWslMoveDesktopRewriteStores,
   resetWslMoveDesktopRewriteStoresForTests,
-  WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE
+  WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE,
+  type WslMoveDesktopRewriteContext
 } from './wsl-move-desktop-rewrite-stores'
+import { registerWslMoveMainRewriteStores } from './wsl-move-main-rewrite-stores'
+import { createUncToLinuxPathRewriter } from './wsl-move-path-rewriter'
+import { wslMoveCutoverFixture } from '../__fixtures__/wsl-mover/wsl-move-cutover-fixture'
+import { wslMoverProfile } from '../__fixtures__/wsl-mover/wsl-mover-profiles'
 import { WSL_MOVE_HOST_AUTOMATIONS_STORE_ID } from './wsl-move-host-automations-rewrite'
 import { WSL_MOVE_ORCHESTRATION_HISTORY_STORE_ID } from './wsl-move-orchestration-history-rewrite'
 
@@ -40,6 +51,8 @@ const UI_ROUTING = 'ui-routing'
 const SESSION_GLOBALS = 'session-globals'
 const HOST_SESSION_SEED = 'host-session-seed'
 const renderer = (id: WslMoveRendererRewriteStoreId): string => id
+// Rows whose rewrite shows in another field: the scalar scope stays, the host list it resolves to grows.
+const WRITTEN_FIELD: Record<string, string> = { 'ui.workspaceHostScope': 'visibleWorkspaceHostIds' }
 
 /**
  * The store that carries out each disposition row it names. Keys are `<table>.<row>` after the
@@ -58,7 +71,6 @@ const STORE_BY_ROW: Record<string, string> = {
   'ui.showDotfilesByWorktree': UI_ROUTING,
   'ui.workspaceCleanup': UI_ROUTING,
   'ui.collapsedGroups': UI_ROUTING,
-  // The scalar stays; the visible host list it resolves to gains the WSL host.
   'ui.workspaceHostScope': UI_ROUTING,
   'ui.workspaceHostOrder': UI_ROUTING,
   'ui.visibleWorkspaceHostIds': UI_ROUTING,
@@ -96,6 +108,7 @@ const ROWS = new Map<string, WslMoveFieldDisposition>([
 /** The stores startup registers, through the same entry point. */
 function registeredStoreIds(): string[] {
   registerWslMoveDesktopRewriteRegistry({
+    windowOpen: () => false,
     profile: {
       getUI: vi.fn(),
       updateUI: vi.fn(),
@@ -149,4 +162,95 @@ describe('WSL move desktop rewrite registry coverage', () => {
     expect(WSL_MOVE_DESKTOP_REWRITE_REGISTRY_COMPLETE).toBe(true)
     expect(isWslMoveDesktopRewriteRegistryComplete()).toBe(true)
   })
+
+  it("has the profile's stores write every UI and session row they are mapped to", async () => {
+    const written = new Set<string>()
+    const context: WslMoveDesktopRewriteContext = {
+      cutover: wslMoveCutoverFixture(
+        'move-1',
+        'destination-committed',
+        {},
+        { repoIds: ['repo-a'] },
+        {
+          version: 1,
+          worktreeMeta: [],
+          worktreeLineage: [],
+          workspaceLineage: [],
+          sparsePresets: [],
+          retiredWorktreeNames: [],
+          retiredWorktreeNamespaces: [],
+          automations: wslMoverProfile('folders-and-automations', 'destination').state.automations
+        }
+      ),
+      rewritePath: createUncToLinuxPathRewriter('Ubuntu'),
+      destinationHostId: HOST,
+      recordSeededHostWorkspaceIds: () => {}
+    }
+    registerWslMoveMainRewriteStores({
+      getUI: () => ({ ...getDefaultPersistedState('/nowhere').ui, ...movedUi() }),
+      updateUI: (updates) => {
+        Object.keys(updates).forEach((key) => written.add(`ui.${key}`))
+      },
+      getWorkspaceSession: () => ({ ...getDefaultWorkspaceSession(), ...movedSession() }),
+      patchWorkspaceSession: (patch) => {
+        Object.keys(patch).forEach((key) => written.add(`session.${key}`))
+      },
+      setWorkspaceSession: vi.fn(),
+      flushPendingOrThrowAsync: vi.fn()
+    })
+    for (const store of listWslMoveDesktopRewriteStores()) {
+      if (store.side === 'main' && (store.id === UI_ROUTING || store.id === SESSION_GLOBALS)) {
+        await store.run(context)
+      }
+    }
+    const missing = Object.entries(STORE_BY_ROW)
+      .filter(([, storeId]) => storeId === UI_ROUTING || storeId === SESSION_GLOBALS)
+      .map(([row]) => {
+        const field = WRITTEN_FIELD[row]
+        return field ? `${row.slice(0, row.indexOf('.'))}.${field}` : row
+      })
+      .filter((row) => !written.has(row))
+    expect(missing).toEqual([])
+  })
 })
+
+const HOST = toRuntimeExecutionHostId('wsl:Ubuntu')
+const MOVED = 'repo-a::\\\\wsl.localhost\\Ubuntu\\home\\dev\\app'
+
+/** Every UI row the move rewrites, naming the moved project on this computer. */
+function movedUi(): Partial<PersistedUIState> {
+  return {
+    lastActiveWorktreeId: MOVED,
+    manualRepoOrder: [{ hostId: 'local', repoId: 'repo-a' }],
+    explorerDisplayRootByWorktree: { [MOVED]: '\\\\wsl.localhost\\Ubuntu\\home\\dev\\app\\src' },
+    showDotfilesByWorktree: { [MOVED]: true },
+    workspaceCleanup: {
+      dismissals: {
+        [`local\0${MOVED}`]: {
+          worktreeId: MOVED,
+          executionHostId: 'local',
+          dismissedAt: 1,
+          fingerprint: 'f',
+          classifierVersion: 1
+        }
+      }
+    },
+    collapsedGroups: [`lineage:local|${MOVED}`],
+    workspaceHostScope: 'local',
+    visibleWorkspaceHostIds: null,
+    workspaceHostOrder: ['local'],
+    agentsVisibleHostIds: ['local'],
+    automationHostFilter: toPersistedAutomationHostFilter({
+      kind: 'host',
+      host: { authority: { kind: 'desktop' }, selector: { kind: 'self' } }
+    })
+  }
+}
+
+function movedSession(): Partial<WorkspaceSessionState> {
+  return {
+    activeWorktreeId: MOVED,
+    activeWorkspaceKey: worktreeWorkspaceKey(MOVED),
+    activeWorkspaceExecutionHostId: 'local'
+  }
+}
