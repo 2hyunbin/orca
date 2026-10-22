@@ -178,6 +178,7 @@ jobs:
         background: true
         env:
           GOMAXPROCS: '2'
+          ORCA_MOBILE_TEST_TYPECHECK_CAPTURE_PATH: ${{ runner.temp }}/mobile-test-typecheck-result.json
         run: node scripts/check-tests-typecheck-ratchet.mjs
 
       # This includes the bridged replay of the whole recording corpus, which used to be a second
@@ -211,6 +212,14 @@ jobs:
 
       # All checks read the completed install; compilers need not hold up test workers.
       - wait: [production-types, test-types, ruby-tools]
+
+      - name: Upload mobile test typecheck result
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mobile-test-typecheck-result
+          path: ${{ runner.temp }}/mobile-test-typecheck-result.json
+          retention-days: 7
 
       # Reports, never gates: the goldens are content-addressed JSON, so their raw diff is hashes.
       # This decodes which recorded behaviour the pull request moves into the job summary, and runs

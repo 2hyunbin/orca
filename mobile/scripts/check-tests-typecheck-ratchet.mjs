@@ -173,13 +173,10 @@ export function collectTypecheckPass(root = process.cwd()) {
     compiler
   )
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
-  fs.writeFileSync(
-    2,
-    output
-      .split('\n')
-      .filter((line) => ERROR_LINE.test(line) || /^\s/.test(line))
-      .join('\n') + '\n'
-  )
+  const capturePath = process.env.ORCA_MOBILE_TEST_TYPECHECK_CAPTURE_PATH
+  if (capturePath) {
+    fs.writeFileSync(capturePath, JSON.stringify({ root, compiler, result }, null, 2))
+  }
   return {
     failing: parseFailingFiles(output),
     programTestFiles: parseProgramTestFiles(output, fs.realpathSync(root))
