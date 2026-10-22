@@ -103,4 +103,23 @@ describe("main's load of a browser record with no tab", () => {
     expect(ids(saveWorkspaceLayout(load(savedSession())))).toEqual(first)
     expect(first).toHaveLength(1)
   })
+
+  it('skips a saved active group this load empties, as the window picks a group that holds a tab', () => {
+    const session = savedSession()
+    // g1 holds only a diff tab whose document was never saved, so the load drops it.
+    session.unifiedTabs![KEY] = [
+      { ...editor('a', 'g1', 0), id: 'ghost', contentType: 'diff', entityId: '/w/gone.ts' },
+      editor('b', 'g2', 0)
+    ]
+    session.tabGroups![KEY] = [
+      { id: 'g1', worktreeId: KEY, activeTabId: 'ghost', tabOrder: ['ghost'] },
+      { id: 'g2', worktreeId: KEY, activeTabId: 'b', tabOrder: ['b'] }
+    ]
+    session.activeGroupIdByWorktree = { [KEY]: 'g1' }
+
+    const workspace = load(session).layout.workspaces[KEY]!
+    const tab = workspace.tabs.find((entry) => entry.kind === 'browser')!
+
+    expect(workspace.groups).toEqual([{ id: 'g2', tabOrder: ['b', tab.id] }])
+  })
 })

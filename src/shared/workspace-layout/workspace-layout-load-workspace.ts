@@ -7,6 +7,7 @@ import type { WorkspaceSessionState } from '../workspace-session-state-types'
 import { childRecord, pickStoredFields } from './stored-record-fields'
 import { readCanonicalPtyOwners, resolveCanonicalPtyClaim } from './legacy-terminal-row-claims'
 import { resolveGroupOrder, type OrderCandidate } from './workspace-layout-load-order'
+import { resolveTabGroupOwners } from './tab-group-owners'
 import {
   loadBrowserTabs,
   loadEditorFiles,
@@ -174,10 +175,13 @@ function loadTabs(args: WorkspaceLoadArgs): {
   // saved one while it holds a tab, as selectHydratedActiveGroupId picks it), the repair the
   // window's browser hydration makes (createUnifiedTab), so no window mints its own id.
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    const storedGroups = session.tabGroups?.[key] ?? []
+    const heldGroupIds = new Set(resolveTabGroupOwners(candidates, storedGroups).values())
     const savedActive = session.activeGroupIdByWorktree?.[key]
-    const activeGroupId = candidates.some((candidate) => candidate.groupId === savedActive)
-      ? savedActive
-      : undefined
+    const activeGroupId =
+      savedActive && heldGroupIds.has(savedActive)
+        ? savedActive
+        : storedGroups.find((group) => heldGroupIds.has(group.id))?.id
     for (const record of session.browserTabsByWorktree?.[key] ?? []) {
       if (tabs.some((tab) => tab.kind === 'browser' && tab.entityId === record.id)) {
         continue
