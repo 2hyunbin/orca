@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildJiraPresetJql } from './jira-preset-jql'
-import { normalizeJiraQuickFilterState } from './jira-quick-filters'
-import { JiraIssueListFiltersParam } from './rpc-contract/jira-quick-filter-params'
+import { normalizeJiraQuickFilterState } from '../jira-quick-filters'
+import { JiraIssueListFiltersParam } from '../rpc-contract/jira-quick-filter-params'
 
 describe('Jira preset status predicates', () => {
   it.each([

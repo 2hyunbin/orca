@@ -28,6 +28,7 @@ import {
 import { serverHeldPanes, showServerLayoutHeldPanes } from './server-held-panes'
 import { createServerViewReport, onServerControlConnected } from './server-layout-view-report'
 import { openWorkspaceLayoutFrameSync } from './workspace-layout-frame-sync'
+import { releaseHeldBrowserTabsTheServerLists } from './web-runtime-browser-tab-staging'
 import { provideServerLayoutApplyRoutes } from './server-layout-apply-routes'
 import { mirroredRuntimeEnvironmentIdForWorkspace } from './web-session-tabs-sync/mirrored-workspace-owner'
 import {
@@ -153,12 +154,19 @@ function openServerFrames(
     translate: (frame) => {
       const translated = translator.translate(frame)
       // A tab this desktop created that the server now lists is the server's from here on.
+      const serverPageIds = new Map<string, ReadonlySet<string>>()
       for (const key of translator.keys()) {
+        const layout = translator.serverLayout(key)
         forgetPublishedServerTabs(
           key,
-          (translator.serverLayout(key)?.tabs ?? []).flatMap((tab) => [tab.id, tab.entityId])
+          (layout?.tabs ?? []).flatMap((tab) => [tab.id, tab.entityId])
+        )
+        serverPageIds.set(
+          key,
+          new Set((layout?.browserTabs ?? []).flatMap((tab) => tab.pageIds ?? []))
         )
       }
+      releaseHeldBrowserTabsTheServerLists(environmentId, serverPageIds)
       live ||= frame.type === 'snapshot'
       if (frame.type === 'snapshot') {
         viewReport.reset()
