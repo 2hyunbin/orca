@@ -1,4 +1,3 @@
-import { toVisibleTabType } from '../../../shared/tab-types'
 // Today's store slices for the workspaces main's layout frames hold, built from the frames, the
 // content facts beside them and this window's view (design phase E2a). Not called yet: the switch
 // sets these slices from frames instead of restoring them from disk. Records come from the shared
@@ -15,6 +14,7 @@ import type {
   LayoutContentFacts
 } from '../../../shared/workspace-layout/workspace-layout-beside'
 import { workspaceLayoutModelFromPublished } from '../../../shared/workspace-layout/workspace-layout-from-published'
+import { editorTabShowsFile } from '../../../shared/workspace-layout/workspace-layout-editor-tab-file'
 import type {
   PublishedTab,
   PublishedWorkspaceLayout
@@ -23,6 +23,11 @@ import { saveWorkspaceLayout } from '../../../shared/workspace-layout/workspace-
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
 import { projectHydratedBrowserSession } from './slices/browser/browser-hydration-state'
 import { buildHydratedEditorSessionState } from './slices/editor/actions/hydrated-editor-session-state'
+import { openFileOfLayoutEditorView } from './slices/editor/tabs/open-file-layout-view'
+import type { OpenFile } from './slices/editor/types/open-file'
+import { editorTabLabelOf } from './slices/editor/tabs/editor-tab-label'
+import { isEditorTabContentType } from './slices/editor/tabs/editor-tab-content-type'
+import type { EditorTabView } from '../../../shared/editor-tab-view-types'
 import { migrateHydratedEditorTabsAndGroups } from './slices/editor/file-ids/hydrated-editor-file-ids'
 import { buildHydratedTabState } from './slices/tabs-hydration'
 import { buildByIdIndex } from './slices/worktree-by-id-index'
@@ -31,17 +36,12 @@ import { buildWorkspaceTerminalLayoutPlan } from './terminals/workspace-terminal
 import { buildWorkspaceTerminalRowPlan } from './terminals/workspace-terminal-row-plan'
 import type { AppState } from './types'
 import type { WorkspaceLayoutCache } from './workspace-layout-cache'
-import { desktopCreationDefaultTab } from './slices/tabs/desktop-tab-choice'
 
 export type LayoutFrameSliceInput = {
   /** Workspace key → its layout as the last frame published it. */
   layouts: WorkspaceLayoutCache
   facts: LayoutContentFacts
   view: DesktopLayoutView
-  /** Whether this window holds an editor file's record: frames carry only edit-mode files'. */
-  holdsEditorFile?: (worktreeId: string, fileId: string) => boolean
-  /** This window's tab choices: a workspace saved without one opens on its creation tab. */
-  choices?: Pick<AppState, 'desktopLayoutView' | 'worktreesByRepo' | 'folderWorkspaces'>
 }
 
 export type LayoutFrameSlices = Pick<
@@ -125,52 +125,108 @@ function stampExecutionHosts(
   )
 }
 
-/** A group shows the view's tab, else its creation tab or first, as the startup reconcile picks. */
+/** A group shows the view's tab, else its first, as the startup reconcile picks today. */
 function withShownTabs(
-  tabs: Pick<AppState, 'groupsByWorktree' | 'unifiedTabsByWorktree' | 'tabsByWorktree'>,
-  choices: LayoutFrameSliceInput['choices']
+  groupsByWorktree: AppState['groupsByWorktree']
 ): AppState['groupsByWorktree'] {
   return Object.fromEntries(
-    Object.entries(tabs.groupsByWorktree).map(([key, groups]) => {
-      const byId = new Map((tabs.unifiedTabsByWorktree[key] ?? []).map((tab) => [tab.id, tab]))
-      const creationTab = choices
-        ? desktopCreationDefaultTab(
-            { ...choices, tabsByWorktree: tabs.tabsByWorktree },
-            key,
-            groups.flatMap((group) => group.tabOrder.flatMap((id) => byId.get(id) ?? []))
-          )
-        : undefined
-      return [
-        key,
-        groups.map((group) =>
-          group.tabOrder.length > 0 &&
-          (group.activeTabId === null || (creationTab && group.tabOrder.includes(creationTab.id)))
-            ? {
-                ...group,
-                activeTabId:
-                  creationTab && group.tabOrder.includes(creationTab.id)
-                    ? creationTab.id
-                    : group.tabOrder[0]!
-              }
-            : group
-        )
-      ]
-    })
+    Object.entries(groupsByWorktree).map(([key, groups]) => [
+      key,
+      groups.map((group) =>
+        group.activeTabId === null && group.tabOrder.length > 0
+          ? { ...group, activeTabId: group.tabOrder[0]! }
+          : group
+      )
+    ])
   )
+}
+
+const fileKey = (worktreeId: string, fileId: string): string => `${worktreeId}\0${fileId}`
+
+type FramedViewFile = { view: EditorTabView; file: OpenFile }
+
+/** Each editor tab's open file as its frame's view rebuilds it, by workspace and file id. */
+function framedViewFiles(layouts: WorkspaceLayoutCache): Map<string, FramedViewFile> {
+  const files = new Map<string, FramedViewFile>()
+  for (const [key, layout] of Object.entries(layouts)) {
+    for (const tab of layout.tabs) {
+      if (tab.editorView && !files.has(fileKey(key, tab.entityId))) {
+        files.set(fileKey(key, tab.entityId), {
+          view: tab.editorView.view,
+          file: openFileOfLayoutEditorView(tab.editorView, { ...tab, worktreeId: key })
+        })
+      }
+    }
+  }
+  return files
+}
+
+/** A file a frame's view shows: its saved record takes the view, else the view rebuilds it. */
+function withFramedViewFiles(
+  openFiles: OpenFile[],
+  framed: ReadonlyMap<string, FramedViewFile>
+): OpenFile[] {
+  if (framed.size === 0) {
+    return openFiles
+  }
+  const placed = new Set<string>()
+  const files = openFiles.map((file) => {
+    const framedFile = framed.get(fileKey(file.worktreeId, file.id))
+    if (!framedFile) {
+      return file
+    }
+    placed.add(fileKey(file.worktreeId, file.id))
+    // An edit tab on a conflicted file: the saved record is the file, the view its conflict.
+    return { ...file, ...framedFile.view }
+  })
+  const rebuilt = [...framed].flatMap(([key, { file }]) => (placed.has(key) ? [] : [file]))
+  return [...files, ...rebuilt]
+}
+
+/** The label the window's own open gives a frame's editor tab, from its view or its file record. */
+function frameEditorTabLabel(tab: PublishedTab, layout: PublishedWorkspaceLayout): string | null {
+  if (tab.editorView) {
+    return editorTabLabelOf({
+      mode: tab.editorView.view.mode,
+      relativePath: tab.editorView.file.relativePath
+    })
+  }
+  const file = layout.editorFiles.find((entry) =>
+    editorTabShowsFile(tab.entityId, entry, layout.worktreeId)
+  )
+  return file ? file.relativePath : null
+}
+
+/** An editor tab only a frame drew (the window never opened it) takes the label its open would. */
+function withEditorTabLabels(
+  facts: LayoutContentFacts,
+  layouts: WorkspaceLayoutCache
+): LayoutContentFacts {
+  const tabLabels = { ...facts.tabLabels }
+  for (const [key, layout] of Object.entries(layouts)) {
+    for (const tab of layout.tabs) {
+      const label =
+        isEditorTabContentType(tab.kind) && !tabLabels[key]?.[tab.id]
+          ? frameEditorTabLabel(tab, layout)
+          : null
+      if (label) {
+        tabLabels[key] = { ...tabLabels[key], [tab.id]: label }
+      }
+    }
+  }
+  return { ...facts, tabLabels }
 }
 
 export function buildLayoutFrameSlices({
   layouts,
   facts,
-  view,
-  holdsEditorFile,
-  choices
+  view
 }: LayoutFrameSliceInput): LayoutFrameSlices {
   const liveTitles = liveTitlesByTabId(layouts, view)
   const saved = saveWorkspaceLayout({
     layout: workspaceLayoutModelFromPublished(LOCAL_EXECUTION_HOST_ID, layouts),
     desktopView: view,
-    facts: withLiveTitles(facts, liveTitles),
+    facts: withEditorTabLabels(withLiveTitles(facts, liveTitles), layouts),
     carried: NOTHING_CARRIED
   })
   const session = { ...saved, unifiedTabs: stampExecutionHosts(saved.unifiedTabs ?? {}, layouts) }
@@ -202,35 +258,37 @@ export function buildLayoutFrameSlices({
       view.activeTabId && rows.validTabIds.has(view.activeTabId) ? view.activeTabId : null
   })
 
-  const tabs = buildHydratedTabState(session, workspaceKeys, holdsEditorFile)
+  const framed = framedViewFiles(layouts)
+  // A diff, conflict or check tab is drawn from its view: every window open sends one.
+  const tabs = buildHydratedTabState(session, workspaceKeys, (worktreeId, fileId) =>
+    framed.has(fileKey(worktreeId, fileId))
+  )
   const editor = buildHydratedEditorSessionState(session, workspaceKeys, null)
+  const openFiles = withFramedViewFiles(editor.state.openFiles, framed)
   const browser = projectHydratedBrowserSession(
     {
       activeWorktreeId: null,
       activeTabType: 'terminal',
       activeTabTypeByWorktree: editor.state.activeTabTypeByWorktree,
-      openFiles: editor.state.openFiles,
+      openFiles,
       tabsByWorktree: rows.tabsByWorktree
     },
     session,
-    workspaceKeys
+    workspaceKeys,
+    // A frame redraws the window's own selection: one it never made stays none.
+    { unchosenStaysUnset: true }
   )
   const editorTabs = {
     ...tabs,
     ...migrateHydratedEditorTabsAndGroups(tabs, editor.editorFileIdMigrationsByWorktree)
   }
-  const slices: LayoutFrameSlices = {
+  return {
     tabsByWorktree: rows.tabsByWorktree,
     terminalLayoutsByTabId,
     activeTabIdByWorktree,
     ...editorTabs,
-    groupsByWorktree: withShownTabs(
-      { ...editorTabs, tabsByWorktree: rows.tabsByWorktree },
-      choices
-        ? { ...choices, desktopLayoutView: view }
-        : { desktopLayoutView: view, worktreesByRepo: {}, folderWorkspaces: [] }
-    ),
-    openFiles: editor.state.openFiles,
+    groupsByWorktree: withShownTabs(editorTabs.groupsByWorktree),
+    openFiles,
     editorDrafts: editor.state.editorDrafts,
     markdownFrontmatterVisible: editor.state.markdownFrontmatterVisible,
     activeFileIdByWorktree: editor.state.activeFileIdByWorktree,
@@ -240,20 +298,4 @@ export function buildLayoutFrameSlices({
     activeBrowserTabIdByWorktree: browser.activeBrowserTabIdByWorktree,
     activeTabTypeByWorktree: browser.activeTabTypeByWorktree
   }
-  for (const key of workspaceKeys) {
-    const selected = desktopCreationDefaultTab(
-      { ...choices, desktopLayoutView: view, tabsByWorktree: rows.tabsByWorktree },
-      key,
-      slices.unifiedTabsByWorktree[key] ?? []
-    )
-    if (selected) {
-      slices.activeGroupIdByWorktree[key] = selected.groupId
-      slices.activeTabTypeByWorktree[key] = toVisibleTabType(selected.contentType)
-      if (selected.contentType === 'terminal' || selected.contentType === 'agent-session') {
-        slices.activeTabIdByWorktree[key] =
-          selected.contentType === 'terminal' ? selected.entityId : selected.id
-      }
-    }
-  }
-  return slices
 }

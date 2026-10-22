@@ -14,6 +14,7 @@ import { nameBasedLoadContext } from '../../../../../shared/workspace-layout/wor
 import { LOCAL_EXECUTION_HOST_ID } from '../../../../../shared/execution-host'
 import type { AppState } from '../../types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { selectFolderWorkspaces } from '../../workspace-record-selectors'
 
 function replaceWorkspaceRecordKeys<T>(
   current: Record<string, T>,
@@ -90,7 +91,7 @@ export function createTabsSessionActions(
       const persistedWorktreeIds = collectPersistedWorktreeIdsForSessionHydration(session)
       const validWorktreeIds = buildValidWorktreeIdsForSessionHydration(state, persistedWorktreeIds)
       validWorktreeIds.add(FLOATING_TERMINAL_WORKTREE_ID)
-      for (const workspace of state.folderWorkspaces) {
+      for (const workspace of selectFolderWorkspaces(state)) {
         validWorktreeIds.add(folderWorkspaceKey(workspace.id))
       }
       addAdditionalValidWorkspaceKeys(validWorktreeIds, options)

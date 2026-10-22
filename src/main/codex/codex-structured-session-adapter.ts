@@ -1,3 +1,4 @@
+import { projectCodexSessionOptions } from './codex-structured-service-tier'
 import * as codexRewind from './codex-structured-rewind'
 import { waitForPromiseWithSignal } from '../../shared/abort-signal-reason'
 import type { AgentSessionBackgroundTaskState } from '../../shared/agent-session-wire'
@@ -240,6 +241,7 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
     try {
       await input.beforeDispatch?.()
       input.signal?.throwIfAborted()
+      input.onInputPreparation?.()
       const turnOptions = await waitForPromiseWithSignal(
         resolvedCodexMessageOptions(session, input.executionOptions),
         input.signal
@@ -319,6 +321,9 @@ export class CodexStructuredSessionAdapter implements StructuredAgentSessionAdap
 
   readOptions = (input: { sessionId: string; fence: number }) =>
     readLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)
+
+  projectOptions = (sessionId: string, options: Readonly<Record<string, string>>) =>
+    projectCodexSessionOptions(this.sessions.get(sessionId), options)
 
   prepareReadOptions = (input: { sessionId: string; fence: number }) =>
     prepareLiveCodexSessionOptions(this.session(input.sessionId), this.deps.requestTimeoutMs)

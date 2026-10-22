@@ -2,7 +2,7 @@ import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { resolveWorktreeOperationRouteResult } from '@/lib/worktree-operation-route'
 import { isWebClientLocation } from '@/lib/web-client-location'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
@@ -28,7 +28,7 @@ export function createActiveWorkspaceTerminalActions(
       }
       const runtimeEnvironmentId = worktreeRoute
         ? worktreeRoute.route.runtimeEnvironmentId
-        : runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(state, worktreeId)
+        : runtimeEnvironmentIdOrLocalUnlessTwin(state, worktreeId)
       if (runtimeEnvironmentId) {
         const { createWebRuntimeSessionTerminal } =
           await import('@/runtime/web-runtime-terminal-creation')

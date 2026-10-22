@@ -1,6 +1,6 @@
 import { chooseWorkspaceTab } from '@/lib/workspace-tab-commands'
 import { focusTerminalTabSurface } from '@/lib/focus-terminal-tab-surface'
-import { runtimeEnvironmentIdWithLegacyFallbackUnlessTwin } from '@/lib/worktree-runtime-owner'
+import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { activateWebRuntimeSessionTab } from '@/runtime/web-runtime-session-tab-lifecycle'
 import { isWebRuntimeSessionActive } from '@/runtime/web-runtime-session-environment'
 import { useAppStore } from '@/store'
@@ -120,10 +120,7 @@ export function activateWorkspaceTabPaletteResult(
     return { status: 'failed', reason: finalFailure }
   }
 
-  const runtimeEnvironmentId = runtimeEnvironmentIdWithLegacyFallbackUnlessTwin(
-    state,
-    result.worktreeId
-  )
+  const runtimeEnvironmentId = runtimeEnvironmentIdOrLocalUnlessTwin(state, result.worktreeId)
   state.focusGroup(result.worktreeId, result.groupId)
   chooseWorkspaceTab(result.worktreeId, result.tabId)
 

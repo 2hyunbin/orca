@@ -25,6 +25,7 @@ import {
 import { getStructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-registry'
 import type { StructuredAgentSessionHost } from '../../../native-chat/agent-session-wire/structured-agent-session-host'
 import type { RpcContext } from '../core'
+import { STARTUP_CWD_FALLBACK_SENTENCE } from '../../../../shared/startup-cwd-fallback'
 import { structuredCallerFor } from './structured-agent-session-gate'
 import { createStructuredAgentSessionForWorktree } from './structured-agent-session-create'
 import { commitStructuredAgentSessionLaunchPrompt } from './agent-launch-structured-prompt'
@@ -50,8 +51,8 @@ export function agentLaunchSurfaceFactory(
   context: RpcContext,
   attachOperationId?: string,
   operationCallerKey?: string,
-  // The paired caller selects and shows the tab itself, so the host's reveal warning is not its news.
-  callerShowsTab = false,
+  // True when the launch shows its surface to the paired caller itself rather than to everyone.
+  callerPresentsSurface = false,
   terminalSpawn: TerminalSpawnDispatch = trackTerminalSpawnDispatch(),
   // The tab shown before the launch ran; asked at spawn, since the window's answer and the user's
   // close can both land after admission.
@@ -99,9 +100,8 @@ export function agentLaunchSurfaceFactory(
         ...(seeded ? { options: seeded } : {}),
         ...(tabId ? { tabId } : {}),
         ...(atRest ? { atRest: true as const } : {}),
-        // A paired device never activates host-wide: its pick, or else the creation default, shows it.
         activate:
-          context.caller?.kind !== 'paired-device' &&
+          !callerPresentsSurface &&
           (presentation === undefined || (presentation === 'focused' && movesHostWindow))
       })
       if (!created.ok) {
@@ -201,8 +201,11 @@ export function agentLaunchSurfaceFactory(
         // The runtime already minted this pane and baked it into the PTY's env and its own reveal;
         // dropping it here was what left a client with no way to name the tab it just asked for.
         ...(terminal.paneKey ? { paneKey: terminal.paneKey } : {}),
-        // Its only warning is that the host could not reveal the tab, which the caller shows itself.
-        ...(terminal.warning && !callerShowsTab ? { warning: terminal.warning } : {}),
+        // A caller that shows the tab itself reports a failed reveal; the fallback it can't know.
+        ...launchWarning(
+          terminal.startupCwdFallback ? STARTUP_CWD_FALLBACK_SENTENCE : undefined,
+          callerPresentsSurface ? undefined : terminal.warning
+        ),
         ...(promptRodeLaunchCommand ? { promptRodeLaunchCommand } : {})
       }
     },
@@ -215,6 +218,11 @@ export function agentLaunchSurfaceFactory(
         text: prompt.text
       })
   }
+}
+
+function launchWarning(...parts: (string | undefined)[]): { warning?: string } {
+  const warning = parts.filter(Boolean).join(' ')
+  return warning ? { warning } : {}
 }
 
 function requireInstalledHost(): StructuredAgentSessionHost {
