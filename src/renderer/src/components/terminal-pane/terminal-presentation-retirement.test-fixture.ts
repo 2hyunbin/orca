@@ -8,6 +8,7 @@ import { WebLinksAddon } from '@xterm/addon-web-links'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { ImageAddon } from '@xterm/addon-image'
+import { isTerminalLeafId } from '../../../../shared/stable-pane-id'
 import type { ManagedPaneInternal } from '@/lib/pane-manager/pane-manager-types'
 import { PaneManager } from '@/lib/pane-manager/pane-manager'
 import { retireManagedPanePreservingPty } from '@/lib/pane-manager/pane-split-close'
@@ -29,6 +30,9 @@ function disposable<T extends { dispose(): void }>(value: T): T {
 }
 
 function pane(id: number, leafId: string): ManagedPaneInternal {
+  if (!isTerminalLeafId(leafId)) {
+    throw new Error('Expected a valid fixture leaf id')
+  }
   const terminal = disposable(new Terminal())
   vi.spyOn(terminal, 'clearSelection').mockImplementation(() => {})
   vi.spyOn(terminal, 'focus').mockImplementation(() => {})
@@ -154,7 +158,13 @@ export function mountedOwner(
     requestTerminalLinkAction: vi.fn(),
     effectiveMacOptionAsAlt: 'false',
     effectiveMacOptionAsAltRef: { current: 'false' },
-    initialLayoutRef: { current: { root: { type: 'leaf', leafId: address.leafId } } },
+    initialLayoutRef: {
+      current: {
+        root: { type: 'leaf', leafId: address.leafId },
+        activeLeafId: address.leafId,
+        expandedLeafId: null
+      }
+    },
     expandedStyleSnapshotRef: { current: new Map() },
     isActiveRef: { current: false },
     isVisibleRef: { current: false },
