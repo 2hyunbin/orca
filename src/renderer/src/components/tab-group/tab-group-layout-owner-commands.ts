@@ -39,8 +39,8 @@ export function dropTabThroughLayoutOwner(worktreeId: string, drop: TabDrop): bo
   const sent = sendLayoutCommandToOwner(worktreeId, command, {
     // The frame the answer waits for showed the move and the selection; with no stream, the
     // reconnect's snapshot will.
-    apply: () => {
-      if (layoutFramesFlowing()) {
+    apply: (_result, origin) => {
+      if (layoutFramesFlowing(origin.framesKey)) {
         forget()
       }
     },
