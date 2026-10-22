@@ -387,6 +387,71 @@ describe('Claude chat catch-up', () => {
     expect(c.warn).not.toHaveBeenCalled()
   })
 
+  it('imports a later outside batch from the retained leaf without reusing its old divider', async () => {
+    const c = await chat()
+    await c.live()
+    await c.write([...chatTurn, ...outsideTurn])
+    expect(await c.open('a1')).toBe(true)
+    const before = c.rows()
+    await c.write([
+      prompt('p3', 'a3', 'ask 3', 7),
+      reply('a4', 'p3', 'msg_d', { type: 'text', text: 'answer 3' }, 8)
+    ])
+    expect(await c.open('a1')).toBe(true)
+    expect(c.rows()).toEqual([...before, '(continued-outside)', 'user:ask 3', 'assistant:answer 3'])
+    const imported = c.journal.snapshot().items
+    expect(await c.open('a1')).toBe(true)
+    expect(c.journal.snapshot().items).toEqual(imported)
+    expect(c.warn).not.toHaveBeenCalled()
+  })
+
+  it('matches an accepted queued human prompt by its provider source UUID without settling it', async () => {
+    const c = await chat()
+    await c.live()
+    await c.journal.appendSubmission({
+      clientMessageId: 'queued-send',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'follow up' }] },
+      payloadFingerprint: 'queued-send',
+      fence: 1
+    })
+    await c.journal.resolveDispatch({
+      clientMessageId: 'queued-send',
+      state: 'accepted',
+      providerIdentity: { provider: 'claude', sessionId: SID, uuid: 'cmd-1' },
+      fence: 1
+    })
+    const submissions = c.journal.snapshot().submissions
+    await c.write([
+      ...chatTurn,
+      {
+        ...attachment('queued-row', 'a1'),
+        attachment: {
+          type: 'queued_command',
+          source_uuid: 'cmd-1',
+          delivery_id: 'delivery-1',
+          commandMode: 'prompt',
+          origin: { kind: 'human' },
+          humanTurn: true,
+          prompt: 'follow up'
+        }
+      },
+      reply('a2', 'queued-row', 'msg_b', { type: 'text', text: 'follow up answer' }, 3)
+    ])
+    expect(await c.open('a1')).toBe(true)
+    expect(c.rows()).toEqual([
+      'user:ask 1',
+      'assistant:answer 1',
+      'user:follow up',
+      '(continued-outside)',
+      'assistant:follow up answer'
+    ])
+    const imported = c.journal.snapshot().items
+    expect(await c.open('a1')).toBe(true)
+    expect(c.journal.snapshot().items).toEqual(imported)
+    expect(c.journal.snapshot().submissions).toEqual(submissions)
+    expect(c.warn).not.toHaveBeenCalled()
+  })
+
   it('marks turns that continue from an earlier message than the chat last showed', async () => {
     const c = await chat()
     await c.live()

@@ -212,10 +212,11 @@ export function createClaudeTranscriptImportPlan(input: {
       // A prompt ends its predecessor before changing the historical turn context.
       idle(observedAt)
       historicalScope = null
+      const sourceUuid = queued ? claudeText(claudeRecord(row.attachment)?.source_uuid) : null
       const identity: AgentJournalItemIdentity = {
         provider: 'claude',
         sessionId: input.providerSessionId,
-        uuid: decoded.id
+        uuid: sourceUuid ?? decoded.id
       }
       const existing = saved(agentJournalItemKey(identity))
       if (existing) {
@@ -259,11 +260,13 @@ export function createClaudeTranscriptImportPlan(input: {
       // A row that renders nothing (a thinking block saved without its text) adds no divider either.
       const rows = [...mutations.values()]
       const batch = createHistoryCatchUpBatch()
-      const created = rows.filter((row) => !dependencies.has(agentJournalItemKey(row.identity)))
-      if (
-        input.rewound !== null &&
-        created.some((row) => row.kind === 'item' && row.body.kind !== 'turn')
-      ) {
+      const firstCreated = rows.find(
+        (row) =>
+          row.kind === 'item' &&
+          row.body.kind !== 'turn' &&
+          !dependencies.has(agentJournalItemKey(row.identity))
+      )
+      if (input.rewound !== null && firstCreated) {
         batch.push(
           journalLifecycleItemMutation(
             { turnScope: AGENT_JOURNAL_THREAD_SCOPE },
@@ -271,7 +274,7 @@ export function createClaudeTranscriptImportPlan(input: {
               provider: 'legacy',
               agent: 'claude',
               sessionId: input.sessionId,
-              recordId: continuedOutsideRecordId(uuids[0] ?? '')
+              recordId: continuedOutsideRecordId(agentJournalItemKey(firstCreated.identity))
             },
             continuedOutsideNotice(input.rewound)
           )
