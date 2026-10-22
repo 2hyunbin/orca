@@ -17,6 +17,8 @@ function harness(options: {
   duringStructuredRefusal?: () => void
   /** Whether a terminal agent's typed line carried the prompt. */
   lineCarriesPrompt?: boolean
+  /** The create's startup terminal failed to spawn, so it returns none. */
+  startupSpawnFails?: boolean
 }) {
   const calls: string[] = []
   const carried = (startupPrompt: string | undefined) =>
@@ -34,7 +36,8 @@ function harness(options: {
         worktreeId: 'wt-new',
         workspacePath: '/repo/task',
         connectionId: null,
-        startupTerminalHandle: args.startupAgent ? 'term_agent_first' : undefined,
+        startupTerminalHandle:
+          args.startupAgent && !options.startupSpawnFails ? 'term_agent_first' : undefined,
         ...carried(args.startupPrompt)
       }
     }
@@ -120,6 +123,15 @@ describe('agent launch cancellation', () => {
     await expect(h.run(CREATE, controller.signal)).rejects.toThrow('request_aborted')
     // The created workspace gets the recovery any failure before a surface gets.
     expect(h.calls).toEqual(['createWorktree', 'createRecoveryShell'])
+  })
+
+  it('recovers a terminal-mode workspace whose startup spawn failed when cancelled after it', async () => {
+    const controller = new AbortController()
+    const h = harness({ startupSpawnFails: true, duringCreate: () => controller.abort() })
+
+    await expect(h.run(CREATE, controller.signal)).rejects.toThrow('request_aborted')
+    expect(h.calls).toEqual(['createWorktree', 'createRecoveryShell'])
+    expect(h.createTerminalAgent).not.toHaveBeenCalled()
   })
 
   it('creates no agent when cancelled while the host settles the mode', async () => {

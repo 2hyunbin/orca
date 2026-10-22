@@ -183,6 +183,32 @@ describe('ExternalConversationSeam start', () => {
 })
 
 describe('ExternalConversationSeam delivery ids', () => {
+  it.each([
+    ['its workspace cannot be resolved', 'resolve'],
+    ['its link cannot be written', 'write']
+  ] as const)(
+    'keeps an unknown answer, across a restart too, when %s after the launch',
+    async (_label, failing) => {
+      const { seam, restart, store } = harness()
+      const { launcher, launch } = fakeLauncher(async () => launchResult('handed-to-terminal'))
+      if (failing === 'resolve') {
+        launcher.paneWorkspace = async () => {
+          throw new Error('scope lost')
+        }
+      } else {
+        store.setWorktreeMeta = () => {
+          throw new Error('disk full')
+        }
+      }
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      expect((await seam.start({ launcher }, KEY, 'd1', START)).initial).toEqual(UNKNOWN)
+      expect((await seam.start({ launcher }, KEY, 'd1', START)).initial).toEqual(UNKNOWN)
+      expect((await restart().start({ launcher }, KEY, 'd1', START)).initial).toEqual(UNKNOWN)
+      expect(launch).toHaveBeenCalledTimes(1)
+      warn.mockRestore()
+    }
+  )
+
   it('shares one answer for a repeated id and payload, and refuses another payload', async () => {
     const { seam } = harness()
     const { launcher, launch } = fakeLauncher(async () => launchResult('handed-to-terminal'))

@@ -13,7 +13,10 @@ import type { OrcaRuntimeService } from '../../orca-runtime'
 import { defineMethod } from '../core'
 import { assertAgentLaunchTargetAuthorized } from './agent-launch-target-authorization'
 
-function requireSeam(runtime: OrcaRuntimeService): ExternalConversationSeam {
+/** Every `connector.*` handler's first step. */
+export function requireSeam(
+  runtime: Pick<OrcaRuntimeService, 'getExternalConversationSeam'>
+): ExternalConversationSeam {
   const seam = runtime.getExternalConversationSeam()
   if (!seam) {
     throw new Error('connectors_disabled')
