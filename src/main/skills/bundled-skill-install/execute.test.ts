@@ -1,10 +1,11 @@
-import { mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { acquireSkillInstallLock, skillInstallLockPath } from '../skill-install-lock'
 import { nativeBundledSkillFilesystem, type BundledSkillFilesystem } from './filesystem'
 import { installBundledSkills, previewBundledSkillInstall } from './service'
 import {
+  linkDirectory,
   leftoverSiblings,
   makeSkillHome,
   NAME,
@@ -25,7 +26,7 @@ afterEach(async () => {
 async function npxShared(home: SkillHome, agents: ('claude' | 'cursor')[] = ['claude']) {
   await writeCopy(home.shared, OLD_TEXT)
   await mkdir(dirname(home.claude), { recursive: true })
-  await symlink(home.shared, home.claude, 'dir')
+  await linkDirectory(home.shared, home.claude)
   return serviceInput(home, { agents })
 }
 
