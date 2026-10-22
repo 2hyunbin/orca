@@ -6,6 +6,8 @@ import {
   restoreTerminalTestGlobals
 } from '../pty-connection-test-environment'
 import { createReattachPayloadHandlers } from './apply-reattach-payload'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
+import { mainStartsPane } from './main-starts-pane'
 import type { ColdRestoreAgentResumeStartup } from './fresh-spawn-types'
 import type { ReattachPayloadContext } from './reattach-payload-context'
 import type { ReattachPayloadSession } from './reattach-payload-session'
@@ -14,6 +16,7 @@ function createSession(overrides: Record<string, unknown> = {}): ReattachPayload
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the handlers under test read only these session members.
   return {
     pane: createPane(1),
+    deps: { worktreeId: 'wt-1', tabId: 'tab-1' },
     rememberReattachPayloadAgentSignal: vi.fn(),
     writeReplayData: vi.fn(),
     writeInputModeGround: vi.fn(),
@@ -82,7 +85,7 @@ describe('reattach payload context', () => {
       sleepingRecordEntry: null
     } as ColdRestoreAgentResumeStartup
     const buildColdRestoreAgentResumeStartup = vi.fn()
-    const applyColdRestoreAgentResumeStartup = vi.fn(() => true)
+    const applyColdRestoreAgentResumeStartup = vi.fn((value) => Boolean(value))
     const schedulePendingStartupCommandDelivery = vi.fn()
     const session = createSession({
       buildColdRestoreAgentResumeStartup,
@@ -104,7 +107,14 @@ describe('reattach payload context', () => {
 
     await createReattachPayloadHandlers(session, context).applyReattachPayload()
 
-    expect(applyColdRestoreAgentResumeStartup).toHaveBeenCalledWith(startup)
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      // Main started the pane and resumed its agent; the window's paint applies no resume.
+      expect(applyColdRestoreAgentResumeStartup).toHaveBeenCalledExactlyOnceWith(null)
+      expect(session.clearSleepingRecordAfterColdRestoreSpawn).not.toHaveBeenCalled()
+      expect(session.showSessionRestoredBanner).not.toHaveBeenCalled()
+    } else {
+      expect(applyColdRestoreAgentResumeStartup).toHaveBeenCalledWith(startup)
+    }
     expect(buildColdRestoreAgentResumeStartup).not.toHaveBeenCalled()
     expect(schedulePendingStartupCommandDelivery).not.toHaveBeenCalled()
     expect(context.reattachPayloadApplied).toBe(true)
@@ -132,6 +142,8 @@ it.each(['missing', 'different', 'admitted'] as const)(
       const cancel = vi.fn()
       const schedule = vi.fn()
       const session = createSession({
+        // Main can hand a twin's start back to this renderer-owned launch path.
+        mainPaneStartHandedBack: true,
         buildColdRestoreAgentResumeStartup: () => startup,
         applyColdRestoreAgentResumeStartup: apply,
         cancelSavedResumeStartup: cancel,
@@ -141,6 +153,7 @@ it.each(['missing', 'different', 'admitted'] as const)(
         consumeRestoredViewportBlankingMarker: vi.fn(),
         writeFreshShellViewportBlanking: vi.fn()
       })
+      expect(mainStartsPane(session)).toBe(false)
       const context = createContext('', 1)
       context.connectResult = {
         id: 'pty-1',
@@ -226,7 +239,16 @@ it.each(['missing', 'admitted', 'prepared'] as const)(
       expect(session.writeReplayData).toHaveBeenCalledWith(
         expect.stringContaining('cached history')
       )
-      expect(window.api.pty.ackColdRestore).toHaveBeenCalledWith('pty-1')
+      expect(window.api.pty.ackColdRestore).toHaveBeenCalledOnce()
+      if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+        expect(window.api.pty.ackColdRestore).toHaveBeenCalledWith('pty-1', {
+          worktreeId: 'wt-1',
+          tabId: 'tab-1',
+          leafId: session.pane.leafId
+        })
+      } else {
+        expect(window.api.pty.ackColdRestore).toHaveBeenCalledWith('pty-1')
+      }
       expect(context.reattachPayloadApplied).toBe(true)
       expect(session.buildColdRestoreAgentResumeStartup).not.toHaveBeenCalled()
       expect(session.applyColdRestoreAgentResumeStartup).not.toHaveBeenCalled()

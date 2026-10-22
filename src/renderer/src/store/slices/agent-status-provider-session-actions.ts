@@ -1,3 +1,4 @@
+import { projectAgentPaneConversation } from './agent-pane-conversation'
 import type { AgentStatusSlice } from './agent-status-slice-contract'
 import type { AgentStatusRuntime } from './agent-status-runtime'
 import type {
@@ -151,6 +152,10 @@ export function createAgentStatusProviderSessionActions(
           }
           return {
             agentStatusByPaneKey: nextLive,
+            agentConversationsByPaneKey: projectAgentPaneConversation(s, {
+              ...record,
+              agentType: agent
+            }),
             retainedAgentsByPaneKey: nextRetained,
             sleepingAgentSessionsByPaneKey: {
               ...s.sleepingAgentSessionsByPaneKey,

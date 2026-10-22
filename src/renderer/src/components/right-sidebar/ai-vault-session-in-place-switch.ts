@@ -45,7 +45,9 @@ export function switchAiVaultSessionToNativeChat(session: AiVaultSession): boole
   }
   const agent = session.agent
   const state = useAppStore.getState()
-  const pane = collectAgentPaneConversations(state, adoptsCliConversations).find(
+  const pane = collectAgentPaneConversations(state, adoptsCliConversations, {
+    allPanes: true
+  }).find(
     (candidate) =>
       candidate.providerSession.id === session.sessionId &&
       cliConversationRowsShareAgent(candidate.agent, agent) &&

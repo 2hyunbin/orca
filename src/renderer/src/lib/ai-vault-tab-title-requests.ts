@@ -7,6 +7,8 @@ import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { AppState } from '@/store/types'
+import type { AgentPaneConversationIdentity } from '@/store/slices/agent-pane-conversation'
+import { resolvePaneKey } from './agent-status-pane-ownership'
 
 /** The conversation a tab's pane runs, for an agent `isAgent` accepts. */
 export type AgentPaneConversation<Agent extends AgentType> = {
@@ -50,7 +52,8 @@ function registerCandidate<Agent extends AgentType>(
     refresh: boolean
     tabId?: string
     worktreeId?: string
-  }
+  },
+  allPanes = false
 ): void {
   if (!isAgent(args.agent) || !args.providerSession?.id) {
     return
@@ -62,11 +65,12 @@ function registerCandidate<Agent extends AgentType>(
     return
   }
   const priority = args.priority + (activePaneKey(state, tabId) === args.paneKey ? 100 : 0)
-  if ((candidates.get(tabId)?.priority ?? -1) >= priority) {
+  const key = allPanes ? args.paneKey : tabId
+  if ((candidates.get(key)?.priority ?? -1) >= priority) {
     return
   }
   const executionHostId = getExecutionHostIdForWorktree(state, worktreeId)
-  candidates.set(tabId, {
+  candidates.set(key, {
     agent: args.agent,
     executionHostId,
     providerSession: args.providerSession,
@@ -90,19 +94,37 @@ function liveCandidate(entry: AgentStatusEntry): Parameters<typeof registerCandi
   }
 }
 
+function lastReportedCandidate(
+  state: AppState,
+  identity: AgentPaneConversationIdentity
+): Parameters<typeof registerCandidate>[4] | null {
+  const owner = resolvePaneKey(state, identity.paneKey)
+  if (
+    !owner.exists ||
+    owner.owningWorktreeId !== identity.worktreeId ||
+    identity.executionHostId !== getExecutionHostIdForWorktree(state, identity.worktreeId) ||
+    (owner.repoConnectionResolved && identity.connectionId !== owner.repoConnectionId)
+  ) {
+    return null
+  }
+  return { ...identity, priority: 0, refresh: false }
+}
+
 export function collectAiVaultTitleRequests(state: AppState): AiVaultTitleRequest[] {
   return collectAgentPaneConversations(state, isAiVaultTitleAgent).map(
     ({ paneKey: _paneKey, ...request }) => request
   )
 }
 
-/** Each tab's conversation of an agent `isAgent` accepts: live agent, then sleeping, then retained. */
+/** Each tab's conversation: live, sleeping, retained, then its last reported identity. */
 export function collectAgentPaneConversations<Agent extends AgentType>(
   state: AppState,
   isAgent: (agent: AgentType | null | undefined) => agent is Agent,
   options: {
     /** Skip retained and sleeping records: those remember a conversation after its agent exited. */
     runningAgentsOnly?: boolean
+    /** History addresses a conversation in any pane, including an inactive split. */
+    allPanes?: boolean
   } = {}
 ): AgentPaneConversation<Agent>[] {
   const tabsById = new Map(
@@ -116,30 +138,53 @@ export function collectAgentPaneConversations<Agent extends AgentType>(
     ? []
     : Object.values(state.sleepingAgentSessionsByPaneKey)
 
+  if (!options.runningAgentsOnly) {
+    for (const identity of Object.values(state.agentConversationsByPaneKey ?? {})) {
+      const candidate = lastReportedCandidate(state, identity)
+      if (candidate) {
+        registerCandidate(state, tabsById, candidates, isAgent, candidate, options.allPanes)
+      }
+    }
+  }
+
   for (const entry of retained) {
-    registerCandidate(state, tabsById, candidates, isAgent, {
-      agent: entry.agentType,
-      paneKey: entry.entry.paneKey,
-      priority: 10,
-      providerSession: entry.entry.providerSession,
-      refresh: false,
-      tabId: entry.entry.tabId,
-      worktreeId: entry.worktreeId
-    })
+    registerCandidate(
+      state,
+      tabsById,
+      candidates,
+      isAgent,
+      {
+        agent: entry.agentType,
+        paneKey: entry.entry.paneKey,
+        priority: 10,
+        providerSession: entry.entry.providerSession,
+        refresh: false,
+        tabId: entry.entry.tabId,
+        worktreeId: entry.worktreeId
+      },
+      options.allPanes
+    )
   }
   for (const record of sleeping) {
-    registerCandidate(state, tabsById, candidates, isAgent, {
-      agent: record.agent,
-      paneKey: record.paneKey,
-      priority: 20,
-      providerSession: record.providerSession,
-      refresh: false,
-      tabId: record.tabId,
-      worktreeId: record.worktreeId
-    })
+    registerCandidate(
+      state,
+      tabsById,
+      candidates,
+      isAgent,
+      {
+        agent: record.agent,
+        paneKey: record.paneKey,
+        priority: 20,
+        providerSession: record.providerSession,
+        refresh: false,
+        tabId: record.tabId,
+        worktreeId: record.worktreeId
+      },
+      options.allPanes
+    )
   }
   for (const entry of Object.values(state.agentStatusByPaneKey)) {
-    registerCandidate(state, tabsById, candidates, isAgent, liveCandidate(entry))
+    registerCandidate(state, tabsById, candidates, isAgent, liveCandidate(entry), options.allPanes)
   }
 
   return [...candidates.values()].map(({ priority: _priority, ...request }) => request)
@@ -174,8 +219,7 @@ export function panePtyId(state: AppState, paneKey: string): string | undefined 
   return pane ? state.terminalLayoutsByTabId[pane.tabId]?.ptyIdsByLeafId?.[pane.leafId] : undefined
 }
 
-/** As above, or the conversation the pane's agent last reported once it exited, or the one the
- *  host launched in the pane: its retained resume identity does not require a first prompt. */
+/** One pane's conversation survives occupancy cleanup after its agent exits. */
 export function resolvePaneLastAgentConversation<Agent extends AgentType>(
   state: AppState,
   pane: { worktreeId: string; paneKey: string },
@@ -193,19 +237,29 @@ export function resolvePaneLastAgentConversation<Agent extends AgentType>(
       : tab && saved?.worktreeId === pane.worktreeId
         ? { tab, agentType: saved.agent, entry: saved }
         : null
-  if (live || !source) {
+  if (live) {
     return live
   }
   const candidates = new Map<string, RequestCandidate<Agent>>()
-  registerCandidate(state, new Map([[source.tab.id, source.tab]]), candidates, isAgent, {
-    agent: source.agentType,
-    paneKey: pane.paneKey,
-    priority: 10,
-    providerSession: source.entry.providerSession,
-    refresh: false,
-    tabId: source.tab.id,
-    worktreeId: pane.worktreeId
-  })
+  const tabsById = new Map(source ? [[source.tab.id, source.tab]] : tab ? [[tab.id, tab]] : [])
+  if (source) {
+    registerCandidate(state, tabsById, candidates, isAgent, {
+      agent: source.agentType,
+      paneKey: pane.paneKey,
+      priority: 10,
+      providerSession: source.entry.providerSession,
+      refresh: false,
+      tabId: source.tab.id,
+      worktreeId: pane.worktreeId
+    })
+  }
+  const identity = state.agentConversationsByPaneKey?.[pane.paneKey]
+  if (identity?.worktreeId === pane.worktreeId && identity.paneKey === pane.paneKey) {
+    const candidate = lastReportedCandidate(state, identity)
+    if (candidate) {
+      registerCandidate(state, tabsById, candidates, isAgent, candidate)
+    }
+  }
   const [candidate] = candidates.values()
   if (!candidate) {
     return null

@@ -222,7 +222,8 @@ export abstract class OrcaRuntimeWithCreateTerminal extends OrcaRuntimeWithTermi
           paneKey = dependencies.makePaneKey(tabId, leafId)
         }
         this.assertCreatedPtyRegistrationAllowed(result.id, result.incarnationId)
-        if (!launch.adoptedStablePane) {
+        // Provider reattachment still needs this runtime's handle and workspace binding.
+        if (!result.stablePaneOwner) {
           this.registerPreAllocatedHandleForPty(result.id, preAllocatedHandle)
           if (result.wslDistro) {
             this.preparePtyExecutionContext(result.id, result.wslDistro)

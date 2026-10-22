@@ -1,3 +1,4 @@
+import { projectAgentPaneConversation } from './agent-pane-conversation'
 import type { AppState } from '../types'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import {
@@ -110,6 +111,7 @@ export function reduceAgentStatusLiveUpdate(
   }
   const patch: Partial<AppState> = {
     agentStatusByPaneKey: nextLive,
+    agentConversationsByPaneKey: projectAgentPaneConversation(state, entry),
     retainedAgentsByPaneKey: nextRetainedAgents,
     sleepingAgentSessionsByPaneKey: nextSleepingAgentSessions,
     agentLaunchConfigByPaneKey: nextLaunchConfigs,

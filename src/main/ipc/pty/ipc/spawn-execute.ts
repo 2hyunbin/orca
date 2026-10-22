@@ -15,6 +15,7 @@ import {
 import { excludeReplacedPaneOwner } from '../pane/replaced-pane-owner'
 import { assertSpawnReplyWasLive } from '../pane/agent-session-owners'
 import { failPtySpawnExecute } from '../spawn-execute-failure'
+import { attachOnlyViewOf, attachViewWithoutOwner } from '../pane/attach-only-view'
 import type { PtyIpcSpawnState } from './spawn-state'
 
 export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
@@ -106,8 +107,12 @@ export async function executePtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
     if (!ctx.preAdoptedStablePane && ctx.paneAgentLaunch) {
       ctx.paneAgentLaunch.dispatched = true
     }
-    await chooseFresh()
-    ctx.result = await ctx.provider.spawn(ctx.spawnOptions)
+    if (attachOnlyViewOf(args)) {
+      ctx.result = await attachViewWithoutOwner(ctx.provider, ctx.spawnOptions)
+    } else {
+      await chooseFresh()
+      ctx.result = await ctx.provider.spawn(ctx.spawnOptions)
+    }
     if (ctx.result.isReattach) {
       ctx.resumeAdmission = null
       Object.assign(ctx.result, ctx.deps.runtime?.getTerminalLaunchResult?.(ctx.result.id))
