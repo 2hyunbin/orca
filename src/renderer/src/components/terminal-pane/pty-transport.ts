@@ -3,9 +3,13 @@ import { createIpcPtyProcessDescription } from './ipc-pty-process-description'
 import { attachIpcPty } from './ipc-pty-attach'
 import { connectIpcPty } from './ipc-pty-connect'
 import { createIpcPtySessionHandlers } from './ipc-pty-session-handlers'
+import { ensurePtyDispatcher } from './pty-dispatcher'
 import { createPtyInputWriteQueue } from './pty-input-write-queue'
 import { createPtyOutputProcessor } from './pty-output-processor'
-import { createPtyPreconnectInputBuffer } from './pty-preconnect-input-buffer'
+import {
+  createPtyPreconnectInputBuffer,
+  dropPtyPreconnectInput
+} from './pty-preconnect-input-buffer'
 import type { IpcPtyTransportOptions, PtyTransport } from './pty-transport-types'
 import type { TerminalInputKind } from '../../../../shared/terminal-input-kind'
 
@@ -94,14 +98,6 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
   const setCallbacks = (callbacks: typeof storedCallbacks): void => {
     storedCallbacks = callbacks
   }
-  const dropPreconnectInput = (reason: string): void => {
-    if (preconnectInputBuffer?.hasPendingInput()) {
-      console.warn(
-        `[pty-transport] dropped keys typed while the terminal was connecting: ${reason}`
-      )
-    }
-    preconnectInputBuffer?.clear()
-  }
   const flushPreconnectInput = async (): Promise<void> => {
     if (!preconnectInputBuffer?.isBuffering()) {
       return
@@ -112,7 +108,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       if (destroyed) {
         preconnectInputBuffer.clear()
       } else {
-        dropPreconnectInput('the terminal did not attach')
+        dropPtyPreconnectInput(preconnectInputBuffer, 'the terminal did not attach')
       }
       return
     }
@@ -132,10 +128,11 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
   return {
     getPendingEscapeTailAnsi: outputProcessor.getPendingEscapeTailAnsi,
     connect: async (options) => {
-      const publishDescription = description.capture()
       const connectGeneration = advancePtyLifecycle()
       pendingConnectGeneration = connectGeneration
       try {
+        ensurePtyDispatcher()
+        const publishDescription = description.capture()
         return await connectIpcPty(options, {
           transportOptions: opts,
           handlers,
@@ -166,9 +163,10 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       !destroyed && ptyId === null && pendingConnectGeneration === lifecycleGeneration,
 
     attach: (options) => {
-      const publishDescription = description.capture()
       const attachGeneration = advancePtyLifecycle()
       try {
+        ensurePtyDispatcher()
+        const publishDescription = description.capture()
         attachIpcPty(options, {
           handlers,
           outputProcessor,
@@ -180,22 +178,22 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
             suppressAttentionEvents = value
           }
         })
+        description.hydrate(
+          options.existingPtyId,
+          publishDescription,
+          () => !destroyed && lifecycleGeneration === attachGeneration
+        )
       } catch (error) {
         preconnectInputBuffer?.clear()
         throw error
       }
-      description.hydrate(
-        options.existingPtyId,
-        publishDescription,
-        () => !destroyed && lifecycleGeneration === attachGeneration
-      )
       if (lifecycleGeneration === attachGeneration) {
         void flushPreconnectInput()
       }
     },
 
     abandonPreconnectInput() {
-      dropPreconnectInput('its pending connection was abandoned')
+      dropPtyPreconnectInput(preconnectInputBuffer, 'its pending connection was abandoned')
     },
 
     disconnect() {

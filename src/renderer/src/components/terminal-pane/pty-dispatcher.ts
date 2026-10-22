@@ -1,10 +1,10 @@
+import { ensurePtyDispatcher, pushListenerUnsubscribes } from './pty-dispatcher-subscriptions'
 import { observePtyProcessExit } from './pty-process-observation'
 /** Singleton PTY event dispatcher and eager buffer helpers, split out from pty-transport.ts. */
 import { TERMINAL_SCROLLBACK_SESSION_BUFFER_BYTE_LIMIT } from '../../../../shared/terminal-scrollback-limits'
 import {
   clearProcessedPtyCharTotal,
   deliverPtyDataWithDeferredAck,
-  exposeE2eTerminalPtyAckGate,
   getProcessedPtyCharTotals
 } from './terminal-pty-ack-gate'
 import { clampUtf8Tail, type EagerBufferChunk } from './pty-eager-buffer-clamp'
@@ -18,11 +18,8 @@ import { deliverPtyExitToHandlers } from './pty-exit-delivery'
 import {
   clearReceivedPtyCharTotal,
   isPtyPushDeliveryBlackholed,
-  recordPtyDataReceived,
-  startTerminalDeliveryWatchdog
+  recordPtyDataReceived
 } from './terminal-delivery-watchdog'
-import { recordTerminalFreezeBreadcrumb } from './terminal-freeze-breadcrumbs'
-import { installTerminalFreezeReport } from './terminal-freeze-report'
 import {
   bufferPtyShutdownData,
   bufferPtyShutdownReplayData,
@@ -33,6 +30,11 @@ import {
   ptyReplayHandlers
 } from './pty-shutdown-data-suspension'
 import { markCommittedPtyShutdowns } from './pty-shutdown-exit-deferral'
+
+export {
+  ensurePtyDispatcher,
+  reattachPtyDispatcherPushListeners
+} from './pty-dispatcher-subscriptions'
 
 export {
   ptyDataHandlers,
@@ -66,38 +68,7 @@ const ptyExitSidecars = new Map<
   Set<(code: number, context: { hadPrimary: boolean }) => void>
 >()
 export const ptyWriteUnavailableHandlers = new Map<string, () => void>()
-let ptyDispatcherAttached = false
-
-let pushListenerUnsubscribes: (() => void)[] = []
-
-/** Detach and re-subscribe every push-channel listener; called by the delivery watchdog on a confirmed wedge. */
-export function reattachPtyDispatcherPushListeners(): void {
-  recordTerminalFreezeBreadcrumb('push-listeners-reattach', {
-    staleListenerCount: pushListenerUnsubscribes.length
-  })
-  const stale = pushListenerUnsubscribes
-  pushListenerUnsubscribes = []
-  for (const unsubscribe of stale) {
-    unsubscribe()
-  }
-  attachPtyPushListeners()
-}
-
-export function ensurePtyDispatcher(): void {
-  if (ptyDispatcherAttached) {
-    return
-  }
-  ptyDispatcherAttached = true
-  exposeE2eTerminalPtyAckGate()
-  installTerminalFreezeReport()
-  attachPtyPushListeners()
-  startTerminalDeliveryWatchdog({
-    reattachPushListeners: reattachPtyDispatcherPushListeners,
-    hasAttachedPtys: () => ptyDataHandlers.size > 0 || eagerPtyHandles.size > 0
-  })
-}
-
-function attachPtyPushListeners(): void {
+export function attachPtyPushListeners(): void {
   const unsubscribes = pushListenerUnsubscribes
   unsubscribes.push(
     window.api.pty.onData((payload) => {
@@ -255,7 +226,7 @@ export function subscribeToPtyExit(
 // Why: PTYs spawn before TerminalPane mounts; buffer the early shell output (prompt/MOTD) so attach() can replay it.
 
 export type EagerPtyHandle = { flush: () => string; dispose: () => void }
-const eagerPtyHandles = new Map<string, EagerPtyHandle>()
+export const eagerPtyHandles = new Map<string, EagerPtyHandle>()
 
 export function getEagerPtyBufferHandle(ptyId: string): EagerPtyHandle | undefined {
   return eagerPtyHandles.get(ptyId)
