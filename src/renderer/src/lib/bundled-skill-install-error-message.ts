@@ -47,5 +47,8 @@ export function bundledSkillInstallErrorMessage(error: unknown): string {
   if (known) {
     return known()
   }
-  return /^skill-[a-z0-9-]+$/.test(detail) ? `${fallback} (${detail})` : detail
+  // Why `bundled-skill-unknown: <name>`: an older host that does not ship a newer skill.
+  return /^(?:bundled-)?skill-[a-z0-9-]+(?:: \S+)?$/.test(detail)
+    ? `${fallback} (${detail})`
+    : detail
 }

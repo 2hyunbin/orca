@@ -171,7 +171,7 @@ function BrowserSkillInstallButton(): React.JSX.Element {
       size="sm"
       variant="outline"
       className="w-fit gap-2"
-      disabled={busy}
+      disabled={busy || !skillInstall.ready}
       onClick={() => void handleInstall()}
     >
       {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}

@@ -12,7 +12,7 @@ const CLI_TIP_SKILL_NAMES = [ORCA_CLI_SKILL_NAME, ORCHESTRATION_SKILL_NAME] as c
 
 export function CliSkillSetupPanel(): React.JSX.Element {
   const activeSkillRuntime = useActiveProjectSkillRuntime()
-  // Why: a repair-required runtime resolves to a missing WSL distro, so install on the host.
+  // Why: a repair-required runtime has no distro to scan; Install stays disabled for it.
   const agentRuntime = activeSkillRuntime.installDisabledReason
     ? undefined
     : activeSkillRuntime.agentRuntime

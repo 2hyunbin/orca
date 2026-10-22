@@ -14,7 +14,7 @@ export function BrowserUseSkillSetupCard(props: {
   const { compact, skill } = props
   const activeSkillRuntime = useActiveProjectSkillRuntime()
 
-  const handleBeforeOpenTerminal = (): void => {
+  const handleBeforeInstall = (): void => {
     useAppStore.getState().recordFeatureInteraction('agent-browser-setup')
     localStorage.setItem(BROWSER_USE_ENABLED_STORAGE_KEY, '1')
   }
@@ -35,7 +35,7 @@ export function BrowserUseSkillSetupCard(props: {
       loading={skill.loading}
       error={activeSkillRuntime.installDisabledReason ?? skill.error}
       installDisabled={Boolean(activeSkillRuntime.installDisabledReason)}
-      onBeforeInstall={handleBeforeOpenTerminal}
+      onBeforeInstall={handleBeforeInstall}
       showRecheckWhenInstalled={false}
       onRecheck={skill.refresh}
       freshnessSkillName={activeSkillRuntime.canUseSkillFreshness ? ORCA_CLI_SKILL_NAME : undefined}

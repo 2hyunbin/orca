@@ -6,7 +6,6 @@ import {
   useInstalledAgentSkillNames
 } from '@/hooks/useInstalledAgentSkills'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
-import type { LocalAgentRuntime } from './CliSkillRuntimeSetup'
 
 // Shared install/update wiring for Task Sources + Linear settings.
 export function useLinearAgentSkillSetup(): {
@@ -22,7 +21,6 @@ export function useLinearAgentSkillSetup(): {
   skillUnverifiable: boolean
   installDisabled: boolean
   error: string | null
-  agentRuntime: LocalAgentRuntime | undefined
   refreshSkill: () => Promise<boolean>
 } {
   const activeSkillRuntime = useActiveProjectSkillRuntime()
@@ -59,7 +57,6 @@ export function useLinearAgentSkillSetup(): {
     skillUnverifiable,
     installDisabled,
     error: activeSkillRuntime.installDisabledReason ?? skillError,
-    agentRuntime: activeSkillRuntime.agentRuntime,
     refreshSkill
   }
 }

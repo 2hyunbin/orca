@@ -16,8 +16,7 @@ const mocks = vi.hoisted(
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
-    canUseSkillFreshness: mocks.canUseSkillFreshness,
-    terminalShellOverride: undefined
+    canUseSkillFreshness: mocks.canUseSkillFreshness
   })
 }))
 

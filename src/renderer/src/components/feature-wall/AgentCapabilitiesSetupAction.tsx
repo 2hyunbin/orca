@@ -230,7 +230,9 @@ function AgentCapabilitySetupControls(props: {
             type="button"
             variant="default"
             className="shrink-0"
-            disabled={!hasSelectedFeatures || Boolean(props.setupBusyLabel)}
+            disabled={
+              !hasSelectedFeatures || Boolean(props.setupBusyLabel) || !props.skillInstall.ready
+            }
             onClick={props.onStartFeatureSetup}
           >
             {props.setupBusyLabel ? (
