@@ -5184,6 +5184,7 @@
           "replace": "置き換えます",
           "sharedNotCurrent": "このフォルダーが使う共有コピーは Orca のものではありません",
           "unwritable": "Orca はこのフォルダーに書き込めません",
+          "unreadable": "Orca はこのコピーの一部のファイルを読み取れません",
           "update": "更新します",
           "updated": "更新済み",
           "write": "インストールします",

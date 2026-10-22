@@ -5184,6 +5184,7 @@
           "replace": "将替换",
           "sharedNotCurrent": "此文件夹使用的共享副本不是 Orca 的",
           "unwritable": "Orca 无法写入此文件夹",
+          "unreadable": "Orca 无法读取此副本中的所有文件",
           "update": "将更新",
           "updated": "已更新",
           "write": "将安装",
