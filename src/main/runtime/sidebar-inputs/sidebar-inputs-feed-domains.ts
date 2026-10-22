@@ -10,7 +10,7 @@ import { WORKTREE_METADATA_DOMAINS } from '../../persistence/loading-store/workt
 import type { PersistedUIState } from '../../../shared/persisted-ui-state-types'
 import type { OrcaRuntimeWithSidebarTemporal } from './orca-runtime-sidebar-temporal'
 import type { PairedServerRowsProducer } from './paired-server-rows-producer'
-import type { WorkspaceCreationRegistry } from './workspace-creation-registry'
+import type { WorkspaceLifecycleQueue } from '../workspaces/workspace-lifecycle-queue'
 import type { WorkspaceRowsProducer } from './workspace-rows-producer'
 import type { RepoIconDataUrls } from './repo-icon-data-urls'
 import type { SidebarInputsFeedDomain } from './sidebar-inputs-feed'
@@ -68,7 +68,7 @@ const DESKTOP_WRITE_DOMAINS = [...WORKTREE_METADATA_DOMAINS, 'settings', 'ui']
 export type SidebarInputsFeedSources = {
   facts: OrcaRuntimeWithSidebarTemporal
   pairedServerRows: PairedServerRowsProducer
-  workspaceCreations: WorkspaceCreationRegistry
+  workspaceLifecycle: WorkspaceLifecycleQueue
   workspaceRows: WorkspaceRowsProducer
   repoIcons: Pick<RepoIconDataUrls, 'idsByRepo'>
   store: () => RuntimeStore | null
@@ -82,7 +82,7 @@ export type SidebarInputsFeedSources = {
 export function sidebarInputsFeedDomains(
   sources: SidebarInputsFeedSources
 ): SidebarInputsFeedDomain[] {
-  const { facts, pairedServerRows, workspaceCreations, workspaceRows } = sources
+  const { facts, pairedServerRows, workspaceLifecycle, workspaceRows } = sources
   const urgent = { urgent: true }
   const watchCatalog = (changed: () => void): (() => void) =>
     sources.onClientEvent(
@@ -142,10 +142,17 @@ export function sidebarInputsFeedDomains(
       watch: (changed) => facts.onSidebarTemporalChange(changed)
     },
     {
+      // The queue's creates, as the creations readers read them.
       name: 'creations',
-      read: () => workspaceCreations.snapshot().creations,
+      read: () => workspaceLifecycle.creationsSnapshot().creations,
       // An accepted command shows at once.
-      watch: (changed) => workspaceCreations.revision.onChange(() => changed(urgent))
+      watch: (changed) => workspaceLifecycle.revision.onChange(() => changed(urgent))
+    },
+    {
+      // Each workspace's running, waiting or paused lifecycle command, keyed host-qualified.
+      name: 'inProgress',
+      read: () => workspaceLifecycle.hints(),
+      watch: (changed) => workspaceLifecycle.revision.onChange(() => changed(urgent))
     },
     {
       name: 'workspaces',
