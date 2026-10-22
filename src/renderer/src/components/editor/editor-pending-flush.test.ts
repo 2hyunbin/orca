@@ -51,11 +51,13 @@ it('flushes every pane of closing files and leaves other files editing', () => {
     throw new Error('serialize failed')
   })
   const typingPane = vi.fn()
+  const keepFailedInput = vi.fn()
+  const keepTypedInput = vi.fn()
   const closingCell = vi.fn()
   const survivingCell = vi.fn()
   const removers = [
-    registerPendingEditorFlush('rich', typingPane),
-    registerPendingEditorFlush('rich', failingPane),
+    registerPendingEditorFlush('rich', typingPane, undefined, keepTypedInput),
+    registerPendingEditorFlush('rich', failingPane, undefined, keepFailedInput),
     registerPendingEditorFlush('csv', closingCell, () => false),
     registerPendingEditorFlush('survivor', survivingCell, () => true)
   ]
@@ -63,6 +65,8 @@ it('flushes every pane of closing files and leaves other files editing', () => {
     flushClosingEditorBuffers(NO_SHARING, ['rich', 'csv'])
     expect(typingPane).toHaveBeenCalledTimes(1)
     expect(failingPane).toHaveBeenCalledTimes(1)
+    expect(keepFailedInput).toHaveBeenCalledTimes(1)
+    expect(keepTypedInput).not.toHaveBeenCalled()
     expect(closingCell).toHaveBeenCalledTimes(1)
     expect(survivingCell).not.toHaveBeenCalled()
   } finally {
