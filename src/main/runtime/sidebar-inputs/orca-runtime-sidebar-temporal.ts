@@ -1,3 +1,4 @@
+import { getRepoRegistrationHostIds } from '../../../shared/repo-host-identity'
 import { isRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
 import { OrcaRuntimeWithDetectedCheckoutsAndLiveContent } from './orca-runtime-detected-checkouts-live-content'
 import type { OrcaRuntimeWithAgentTransitions } from '../orca-runtime-agent-transitions'
@@ -5,7 +6,6 @@ import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-swit
 import { DEFAULT_HIDE_SLEEPING_WORKSPACES } from '../../../shared/constants'
 import {
   getConnectionExecutionHostId,
-  getRepoExecutionHostId,
   isLocalExecutionHost,
   LOCAL_EXECUTION_HOST_ID,
   parseExecutionHostId,
@@ -202,12 +202,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithDete
       return false
     }
     const repoId = getRepoIdFromWorktreeId(worktreeId)
-    const hosts = new Set(
-      (this.store?.getRepos() ?? [])
-        .filter((repo) => repo.id === repoId)
-        .map(getRepoExecutionHostId)
-    )
-    return hosts.size > 1
+    return getRepoRegistrationHostIds(this.store?.getRepos() ?? [], repoId).size > 1
   }
 
   private workspaceHostId(worktreeId: string): ExecutionHostId | null {
@@ -247,7 +242,6 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithDete
   private readSidebarRetentionCandidates(): SidebarRetentionCandidates {
     const { facts } = this.workspaceActivityFacts.snapshot()
     return {
-      ids: Object.keys(facts),
       isActive: (worktreeId) => worktreeId in facts,
       isUnverifiableGap: (worktreeId) =>
         !anySleepKeyNames(this.terminalSleepByHostWorktree.keys(), worktreeId) &&

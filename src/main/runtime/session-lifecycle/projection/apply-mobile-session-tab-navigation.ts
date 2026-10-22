@@ -13,7 +13,7 @@ import {
   activateClientSessionTabSelection,
   deriveClientSessionTabSelection,
   projectClientSessionTabSelection
-} from '../../client-session-tab-selection'
+} from '../../client-session-tab-selection-projection'
 import {
   agentProviderSessionsEqual,
   type SleepingAgentSessionRecord
