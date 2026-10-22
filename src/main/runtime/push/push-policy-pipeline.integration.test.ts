@@ -6,6 +6,10 @@ import { readDesktopAwayState } from '../../notifications/desktop-away-state'
 import { DeviceRegistry } from '../device-registry'
 import { RuntimeMobileNotificationController } from '../runtime-mobile-notification-controller'
 import { setRuntimeDesktopSurface } from '../runtime-desktop-surface'
+import { RuntimeSubscriptionRegistry } from '../runtime-subscription-registry'
+import { NOTIFICATION_METHODS } from '../rpc/methods/notifications'
+import type { RpcContext, RpcMethod } from '../rpc/core'
+import { DESKTOP_PRESENCE_TTL_MS } from '../../../shared/desktop-client-presence'
 import { DesktopPushService } from './desktop-push-service'
 import { PushUnregisterOutbox } from './push-unregister-outbox'
 import { createPushHostKeypair } from './push-host-challenge-fixtures'
@@ -103,15 +107,53 @@ it('carries the native idle boundary through replay and push dispatch', async ()
   )
 })
 
-it('keeps headless presence unknown and legacy socket events readable', async () => {
+it('decides headless away from attached desktops, so the away-only filter holds on orca serve', async () => {
+  const now = 1_800_000_000_000
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
   setRuntimeDesktopSurface(null)
   const h = await pipeline()
-  const events: unknown[] = []
-  h.controller.onDispatched((event) => events.push(JSON.parse(JSON.stringify(event))))
-  h.dispatch()
-  await flush()
-  expect(events[0]).not.toHaveProperty('desktopAway')
-  expect(h.client.send).toHaveBeenCalledTimes(1)
+  const subscriptions = new RuntimeSubscriptionRegistry()
+  const report = NOTIFICATION_METHODS.find(
+    (method) => method.name === 'notifications.reportDesktopPresence'
+  ) as RpcMethod
+  const runtime = {
+    reportDesktopClientPresence: h.controller.reportDesktopClientPresence.bind(h.controller),
+    forgetDesktopClientPresence: h.controller.forgetDesktopClientPresence.bind(h.controller),
+    registerSubscriptionCleanup: subscriptions.register.bind(subscriptions)
+  }
+  const desktop = { runtime, clientKind: 'runtime', connectionId: 'desktop-socket' }
+  const sends = async () => {
+    h.dispatch()
+    await flush()
+    return h.client.send.mock.calls.length
+  }
+
+  // No desktop has ever reported: nobody is at one.
+  expect(await sends()).toBe(1)
+  // A phone cannot vouch for a desktop.
+  await report.handler({ away: false }, {
+    ...desktop,
+    clientKind: 'mobile'
+  } as unknown as RpcContext)
+  expect(await sends()).toBe(2)
+  await report.handler({ away: false }, desktop as unknown as RpcContext)
+  expect(await sends()).toBe(2)
+  await report.handler({ away: true }, desktop as unknown as RpcContext)
+  expect(await sends()).toBe(3)
+  await report.handler({ away: false }, desktop as unknown as RpcContext)
+  expect(await sends()).toBe(3)
+  // A desktop that stops reporting (or an older one that never did) lapses to away.
+  clock.mockReturnValue(now + DESKTOP_PRESENCE_TTL_MS)
+  expect(await sends()).toBe(4)
+  await report.handler({ away: false }, desktop as unknown as RpcContext)
+  expect(await sends()).toBe(4)
+  subscriptions.cleanupForConnection('desktop-socket')
+  expect(await sends()).toBe(5)
+  expect(
+    h.controller
+      .getMissedSince(0)
+      .map((event) => (event.type === 'notification' ? event.desktopAway : null))
+  ).toEqual([true, true, false, true, false, true, false, true])
 })
 
 it('expires persisted registration at seven days despite host activity and renews explicitly', async () => {

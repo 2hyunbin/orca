@@ -3,6 +3,7 @@ import { defineStreamingMethod, defineMethod } from '../core'
 import {
   NotificationGetMissedSinceParams,
   NotificationRegisterPushParams,
+  NotificationReportDesktopPresenceParams,
   NotificationUnsubscribeParams,
   NotificationsSubscribeParams
 } from '../../../../shared/rpc-contract/notifications-params'
@@ -74,6 +75,25 @@ export const NOTIFICATION_METHODS = [
           ? { dismissedPushes: runtime.reconcileDismissedPushes(params.deliveredPushes) }
           : {})
       }
+    }
+  }),
+  defineMethod({
+    name: 'notifications.reportDesktopPresence',
+    permission: 'workspace',
+    params: NotificationReportDesktopPresenceParams,
+    // Why: only a paired desktop's own socket speaks for a desktop; the report lives as long as it.
+    handler: async (params, { runtime, clientKind, connectionId }) => {
+      if (clientKind !== 'runtime' || !connectionId) {
+        return { recorded: false }
+      }
+      if (runtime.reportDesktopClientPresence(connectionId, params.away)) {
+        runtime.registerSubscriptionCleanup(
+          `desktop-presence-${connectionId}`,
+          () => runtime.forgetDesktopClientPresence(connectionId),
+          connectionId
+        )
+      }
+      return { recorded: true }
     }
   }),
   defineMethod({
