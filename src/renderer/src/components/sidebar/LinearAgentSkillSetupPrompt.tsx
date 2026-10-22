@@ -203,6 +203,7 @@ export function LinearAgentSkillSetupPrompt({
         successDescription={successDescription}
         missingLabel={missingLabel}
         updateSkillName={updateSkillName}
+        terminalRuntime={agentRuntime}
         installed={skill.installed}
         loading={showCheckingModal || skill.loading}
         error={skill.error}

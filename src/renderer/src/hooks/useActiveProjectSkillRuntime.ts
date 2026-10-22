@@ -10,6 +10,7 @@ import {
 } from '@/lib/local-preflight-context'
 import {
   getProjectAgentSkillRuntime,
+  getProjectAgentSkillTerminalShellOverride,
   getProjectSkillDiscoveryTarget,
   getProjectSkillInstallDisabledReason,
   type ProjectAgentSkillRuntime
@@ -28,6 +29,8 @@ type ActiveProjectSkillRuntime = {
   projectRuntime?: ProjectExecutionRuntimeResolution
   discoveryTarget?: SkillDiscoveryTarget
   agentRuntime?: ProjectAgentSkillRuntime
+  // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+  terminalShellOverride?: string
   installDisabledReason: string | null
   canUseSkillFreshness: boolean
   /** Where Update skills plans Orca's skills; null while that host is unknown. */
@@ -132,6 +135,12 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       projectRuntime,
       discoveryTarget: getProjectSkillDiscoveryTarget(projectRuntime),
       agentRuntime,
+      // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+      terminalShellOverride: getProjectAgentSkillTerminalShellOverride(
+        currentPlatform,
+        runtimeState.settings,
+        agentRuntime
+      ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
       canUseSkillFreshness:
         bundledSkillTarget !== null && shouldUseSkillFreshness(runtimeTarget, agentRuntime),

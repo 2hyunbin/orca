@@ -1,3 +1,7 @@
+import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
+import { FeatureSetupInlineTerminal } from '../onboarding/FeatureSetupInlineTerminal'
+import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
+import type { OnboardingFeatureSetupRuntimeContext } from '../onboarding/onboarding-feature-setup-runtime'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Check, Download, Globe2, Loader2, MonitorCog, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
@@ -43,6 +47,12 @@ export function AgentCapabilitiesSetupAction(props: {
   )
   const [setupBusyLabel, setSetupBusyLabel] = useState<string | null>(null)
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
+  const activeRuntime = useActiveProjectSkillRuntime()
+  const [wslSetup, setWslSetup] = useState<{
+    command: string
+    runtime: OnboardingFeatureSetupRuntimeContext
+  } | null>(null)
+  const legacyWsl = activeRuntime.agentRuntime?.runtime === 'wsl'
   const skillInstall = useBundledSkillInstall()
   const installSkills = skillInstall.install
   useEffect(() => {
@@ -93,6 +103,13 @@ export function AgentCapabilitiesSetupAction(props: {
           }
         )
       }
+      // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+      if (legacyWsl) {
+        const command = buildAgentFeatureSkillInstallCommand(result.skillNames)
+        await window.api.ui.writeClipboardText(command)
+        setWslSetup({ command, runtime: activeRuntime })
+        return
+      }
       const installState = await installSkills(result.skillNames)
       const telemetry =
         installState && onboardingFeatureSetupRunTelemetry(featureSetup, result, installState)
@@ -118,19 +135,35 @@ export function AgentCapabilitiesSetupAction(props: {
     } finally {
       setSetupBusyLabel(null)
     }
-  }, [featureSetup, installSkills, recordFeatureInteraction, setupBusyLabel])
+  }, [
+    activeRuntime,
+    featureSetup,
+    installSkills,
+    legacyWsl,
+    recordFeatureInteraction,
+    setupBusyLabel
+  ])
 
   return (
     <div className="space-y-5">
-      <AgentCapabilitySetupControls
-        featureSetup={featureSetup}
-        onFeatureSetupChange={handleFeatureSetupChange}
-        skillInstall={skillInstall}
-        setupBusyLabel={setupBusyLabel}
-        onStartFeatureSetup={() => void handleStartFeatureSetup()}
-        allReady={isAgentCapabilityReadinessComplete(readiness)}
-        installStatus={capabilitySetupStatus.installStatus}
-      />
+      {/* COMPAT(wsl-bridge): removed when WSL runs as an orcad host. */}
+      {wslSetup ? (
+        <FeatureSetupInlineTerminal command={wslSetup.command} runtimeContext={wslSetup.runtime} />
+      ) : (
+        <AgentCapabilitySetupControls
+          featureSetup={featureSetup}
+          onFeatureSetupChange={handleFeatureSetupChange}
+          skillInstall={
+            legacyWsl
+              ? { ...skillInstall, ready: !activeRuntime.installDisabledReason }
+              : skillInstall
+          }
+          setupBusyLabel={setupBusyLabel}
+          onStartFeatureSetup={() => void handleStartFeatureSetup()}
+          allReady={isAgentCapabilityReadinessComplete(readiness)}
+          installStatus={capabilitySetupStatus.installStatus}
+        />
+      )}
     </div>
   )
 }

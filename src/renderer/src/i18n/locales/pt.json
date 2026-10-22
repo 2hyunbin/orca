@@ -2040,6 +2040,11 @@
               }
             }
           }
+        },
+        "FeatureSetupInlineTerminal": {
+          "789b59936e": "Pressione Enter para executar o comando e confirme o npx se solicitado. Você também pode configurar isso depois em Configurações.",
+          "47fc6cc6dc": "Comando de configuração de skill",
+          "c767ab7061": "Configuração de skill"
         }
       },
       "status": {
@@ -6665,7 +6670,16 @@
           "retrySetup": "Tentar novamente",
           "hostUnavailable": "O Orca ainda não pode instalar skills na máquina deste espaço de trabalho.",
           "replaceWithOrcaCopy": "Substituir pela cópia do Orca",
-          "installing": "Instalando..."
+          "installing": "Instalando...",
+          "copyCommandAria": "Copiar comando",
+          "ed197f59a2": "Copiar comando",
+          "failedToCopyCommand": "Falha ao copiar o comando.",
+          "copiedCommand": "Comando copiado.",
+          "5f818f12ab": "Preparando...",
+          "setupFailed": "Falha na configuração",
+          "runCommandDescription": "Pressione Enter para executar o comando.",
+          "4c05b9d7cb": "Preparando o terminal de configuração.",
+          "setupCommandFailed": "O comando de configuração terminou com o código {{value0}}. Este erro será removido após uma nova tentativa bem-sucedida."
         },
         "GrokAccountsSection": {
           "a1b2c3d4e5": "Grok (xAI)",
@@ -6991,7 +7005,11 @@
                   "installed": "Instalado",
                   "notInstalled": "Não instalado",
                   "recheck": "Verificar novamente",
-                  "description": "Permita que agentes leiam e editem tarefas do Linear. A configuração guiada completa (conectar + skill + visibilidade) está em Configurações → Origens de Tarefas."
+                  "description": "Permita que agentes leiam e editem tarefas do Linear. A configuração guiada completa (conectar + skill + visibilidade) está em Configurações → Origens de Tarefas.",
+                  "copyFailed": "Falha ao copiar o comando.",
+                  "copyCommand": "Copiar comando",
+                  "installedDescription": "Skill de agente instalada. Para atualizá-la, execute:",
+                  "copiedCommand": "Comando copiado."
                 }
               },
               "search": {
@@ -7397,7 +7415,13 @@
           "c47127f222": "Padrão do WSL",
           "0c9f3cf9da": "Escolha onde o Orca verifica e instala skills de agente globais.",
           "f00d6aa9b5": "O WSL não está disponível nesta máquina.",
-          "7c776ff9d8": "wsl"
+          "7c776ff9d8": "wsl",
+          "3728a94fb6": "O comando de shell do WSL precisa de atenção",
+          "refreshCliRegistration": "Atualize o status de registro da CLI e tente novamente.",
+          "0ed08febc5": "Falha ao registrar o comando de shell do WSL.",
+          "775a4cfbb8": "O registro do comando de shell do WSL não está disponível",
+          "fc0fcf72fd": "Registre o comando de shell do WSL antes da configuração da skill.",
+          "windowsPathUnknown": "Não foi possível verificar o PATH do comando de shell do WSL"
         },
         "AdvancedNetworkSettingsSection": {
           "3e431564b5": "localhost, 127.0.0.1, *.internal",
@@ -7620,7 +7644,8 @@
           "2aacdb0517": "Coordene agentes de código em transferências, transferências de worktree e trabalho de agentes filhos.",
           "191ac34567": "Orquestração de Agentes",
           "nestedWorkerDepthTitle": "Profundidade de worker aninhado",
-          "nestedWorkerDepthDescription": "Quantas gerações de workers despachados podem gerar seus próprios workers. 1 mantém a árvore de agentes plana: um coordenador despacha workers, e esses workers não despacham."
+          "nestedWorkerDepthDescription": "Quantas gerações de workers despachados podem gerar seus próprios workers. 1 mantém a árvore de agentes plana: um coordenador despacha workers, e esses workers não despacham.",
+          "7bc082f4de": "Copiar comando de instalação"
         },
         "RuntimeAccessGrantList": {
           "8b82879581": "Qualquer pessoa com uma concessão ativa pode se conectar até que você a revogue. Revogar o acesso compartilhado desconecta clientes ativos imediatamente.",
@@ -8812,6 +8837,15 @@
         "BundledSkillInstallStatus": {
           "updateServer": "Atualize o Orca no servidor para instalar as skills dele.",
           "connectHost": "Conecte-se a este host SSH para instalar as skills dele."
+        },
+        "OrchestrationSkillPromptDialog": {
+          "d3dc559225": "Falha ao copiar o comando de instalação.",
+          "f08d45293d": "Copiar comando",
+          "b99f375eb2": "Execute este comando em um terminal para instalar a skill de orquestração para seus agentes.",
+          "35550f3b3b": "Concluído",
+          "2914abcfa2": "Instalar skill de orquestração",
+          "1bdce1911e": "Copiar comando de instalação da skill de orquestração",
+          "239bf9132b": "Comando de instalação copiado."
         }
       },
       "right": {
@@ -14404,6 +14438,15 @@
           "CliSkillSetupPanel": {
             "title": "Configuração de skills",
             "description": "Instale as skills da CLI do Orca e de orquestração para seus agentes."
+          },
+          "CliSkillSetupTerminal": {
+            "6ff813fc1d": "Falha ao copiar o comando da skill.",
+            "1953e90447": "Pressione Enter para instalar a skill de orquestração da CLI do Orca para seus agentes.",
+            "84e9576dac": "Configuração da skill",
+            "43b60ec5c3": "Terminal de instalação da CLI do Orca e da skill de orquestração",
+            "5c3aee22c0": "Copiar comando",
+            "5eca672aac": "Copiar comando de instalação da skill",
+            "b8ad063571": "Comando de instalação da skill copiado."
           }
         }
       },

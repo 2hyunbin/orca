@@ -1,3 +1,4 @@
+import { CliSkillSetupTerminal } from './CliSkillSetupTerminal'
 import { AgentSkillSetupPanel } from '@/components/settings/AgentSkillSetupPanel'
 import { ORCA_CLI_SKILL_NAME, ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
@@ -10,7 +11,7 @@ import { translate } from '@/i18n/i18n'
 
 const CLI_TIP_SKILL_NAMES = [ORCA_CLI_SKILL_NAME, ORCHESTRATION_SKILL_NAME] as const
 
-export function CliSkillSetupPanel(): React.JSX.Element {
+function BundledCliSkillSetupPanel(): React.JSX.Element {
   const activeSkillRuntime = useActiveProjectSkillRuntime()
   // Why: a repair-required runtime has no distro to scan; Install stays disabled for it.
   const agentRuntime = activeSkillRuntime.installDisabledReason
@@ -41,5 +42,15 @@ export function CliSkillSetupPanel(): React.JSX.Element {
       showRecheckWhenInstalled={false}
       onRecheck={skill.refresh}
     />
+  )
+}
+
+export function CliSkillSetupPanel(): React.JSX.Element {
+  const runtime = useActiveProjectSkillRuntime()
+  // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+  return runtime.agentRuntime?.runtime === 'wsl' ? (
+    <CliSkillSetupTerminal />
+  ) : (
+    <BundledCliSkillSetupPanel />
   )
 }

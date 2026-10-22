@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { OrchestrationSkillPromptDialog } from './OrchestrationSkillPromptDialog'
+import { ORCHESTRATION_SKILL_INSTALL_COMMAND } from '@/lib/agent-feature-install-commands'
 import { ArrowRightLeft, GitBranch, ListChecks, Workflow, type LucideIcon } from 'lucide-react'
 import { ORCHESTRATION_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 import type { SkillUsageExample } from '@/lib/skill-usage-example'
@@ -45,6 +48,7 @@ export function OrchestrationPane({
   settings,
   updateSettings
 }: OrchestrationPaneProps): React.JSX.Element {
+  const [skillPromptOpen, setSkillPromptOpen] = useState(false)
   const searchQuery = useAppStore((s) => s.settingsSearchQuery)
   const showNestedWorkerDepth = !isPairedWebClientWindow()
   const searchEntries = getOrchestrationPaneSearchEntries({
@@ -101,6 +105,21 @@ export function OrchestrationPane({
         onBeforeInstall={() => {
           useAppStore.getState().recordFeatureInteraction('agent-orchestration-setup')
         }}
+        // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+        actionHint={
+          activeSkillRuntime.agentRuntime?.runtime === 'wsl' && !orchestrationSkillDetected ? (
+            <button
+              type="button"
+              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+              onClick={() => setSkillPromptOpen(true)}
+            >
+              {translate(
+                'auto.components.settings.OrchestrationPane.7bc082f4de',
+                'Copy install command'
+              )}
+            </button>
+          ) : undefined
+        }
         footer={
           <OrchestrationSkillAgentCoverage
             embedded
@@ -128,6 +147,14 @@ export function OrchestrationPane({
         />
       ) : null}
 
+      {/* COMPAT(wsl-bridge): removed when WSL runs as an orcad host. */}
+      {activeSkillRuntime.agentRuntime?.runtime === 'wsl' ? (
+        <OrchestrationSkillPromptDialog
+          command={ORCHESTRATION_SKILL_INSTALL_COMMAND}
+          open={skillPromptOpen}
+          onOpenChange={setSkillPromptOpen}
+        />
+      ) : null}
       <SkillUsageExamplesSection
         heading={translate(
           'auto.components.settings.OrchestrationPane.ae79504732',

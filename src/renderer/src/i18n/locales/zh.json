@@ -6914,7 +6914,16 @@
           "retrySetup": "重试",
           "installing": "正在安装...",
           "hostUnavailable": "Orca 暂时无法在此工作区所在的机器上安装技能。",
-          "replaceWithOrcaCopy": "替换为 Orca 的副本"
+          "replaceWithOrcaCopy": "替换为 Orca 的副本",
+          "copyCommandAria": "复制命令",
+          "ed197f59a2": "复制命令",
+          "failedToCopyCommand": "复制命令失败。",
+          "copiedCommand": "已复制命令。",
+          "5f818f12ab": "正在准备...",
+          "setupFailed": "设置失败",
+          "runCommandDescription": "按 Enter 运行命令。",
+          "4c05b9d7cb": "正在准备设置终端。",
+          "setupCommandFailed": "设置命令退出，代码为 {{value0}}。重试成功后，此错误将会清除。"
         },
         "AgentsPane": {
           "d83834f5e6": "检测已安装的智能体...",
@@ -7212,7 +7221,13 @@
           "c47127f222": "WSL 默认值",
           "0c9f3cf9da": "选择 Orca 检查和安装全局智能体技能的位置。",
           "f00d6aa9b5": "WSL 在此计算机上不可用。",
-          "7c776ff9d8": "wsl"
+          "7c776ff9d8": "wsl",
+          "3728a94fb6": "WSL shell命令需要注意的地方",
+          "refreshCliRegistration": "请刷新 CLI 注册状态后重试。",
+          "0ed08febc5": "无法注册 WSL shell 命令。",
+          "775a4cfbb8": "WSL shell 命令注册不可用",
+          "fc0fcf72fd": "在技​​能设置之前注册 WSL shell 命令。",
+          "windowsPathUnknown": "无法检查 WSL shell 命令 PATH"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "由未自定义源代码控制 AI 的存储库使用。",
@@ -7944,7 +7959,8 @@
           "2aacdb0517": "跨切换、工作树切换和子智能体工作协调编码智能体。",
           "191ac34567": "智能体编排",
           "nestedWorkerDepthTitle": "嵌套工人深度",
-          "nestedWorkerDepthDescription": "多少代的派遣工可能会产生自己的工人。 1 保持智能体树平坦：协调者调度工人，而那些工人不调度。"
+          "nestedWorkerDepthDescription": "多少代的派遣工可能会产生自己的工人。 1 保持智能体树平坦：协调者调度工人，而那些工人不调度。",
+          "7bc082f4de": "复制安装命令"
         },
         "OrchestrationSetupCard": {
           "e7d2a5146c": "使智能体能够通过 Orca 传递上下文并协调工作。",
@@ -11590,7 +11606,11 @@
                   "installed": "已安装",
                   "notInstalled": "未安装",
                   "recheck": "重新检查",
-                  "description": "让智能体读取和编辑 Linear 任务。完整引导设置（连接 + 技能 + 可见性）位于设置 → 任务来源。"
+                  "description": "让智能体读取和编辑 Linear 任务。完整引导设置（连接 + 技能 + 可见性）位于设置 → 任务来源。",
+                  "copyFailed": "复制命令失败。",
+                  "copyCommand": "复制命令",
+                  "installedDescription": "智能体技能已安装。要更新，请运行：",
+                  "copiedCommand": "命令已复制。"
                 }
               },
               "search": {
@@ -12915,6 +12935,15 @@
         "BundledSkillInstallStatus": {
           "updateServer": "请更新服务器上的 Orca 以安装其技能。",
           "connectHost": "请连接此 SSH 主机，才能安装其技能。"
+        },
+        "OrchestrationSkillPromptDialog": {
+          "d3dc559225": "无法复制安装命令。",
+          "f08d45293d": "复制命令",
+          "b99f375eb2": "在终端中运行此命令来为您的智能体安装编排技能。",
+          "35550f3b3b": "完成",
+          "2914abcfa2": "安装编排技能",
+          "1bdce1911e": "复制编排技能安装命令",
+          "239bf9132b": "复制安装命令。"
         }
       },
       "right": {
@@ -14666,6 +14695,11 @@
               }
             }
           }
+        },
+        "FeatureSetupInlineTerminal": {
+          "789b59936e": "按 Enter 运行命令并在询问时确认 npx。您也可以稍后在“设置”中进行设置。",
+          "47fc6cc6dc": "技能设置命令",
+          "c767ab7061": "技能设置"
         }
       },
       "new": {
@@ -15477,6 +15511,15 @@
           "CliSkillSetupPanel": {
             "title": "技能设置",
             "description": "为你的智能体安装 Orca CLI 和编排技能。"
+          },
+          "CliSkillSetupTerminal": {
+            "6ff813fc1d": "复制技能命令失败。",
+            "1953e90447": "按 Enter 为您的智能体安装 Orca CLI 编排技能。",
+            "84e9576dac": "技能设置",
+            "43b60ec5c3": "Orca CLI 和编排技能安装终端",
+            "5c3aee22c0": "复制命令",
+            "5eca672aac": "复制技能安装命令",
+            "b8ad063571": "复制技能安装命令。"
           }
         }
       },

@@ -6914,7 +6914,16 @@
           "retrySetup": "다시 시도",
           "installing": "설치 중...",
           "hostUnavailable": "Orca가 아직 이 워크스페이스의 컴퓨터에 스킬을 설치할 수 없습니다.",
-          "replaceWithOrcaCopy": "Orca 사본으로 교체"
+          "replaceWithOrcaCopy": "Orca 사본으로 교체",
+          "copyCommandAria": "명령 복사",
+          "ed197f59a2": "명령 복사",
+          "failedToCopyCommand": "명령 복사 실패.",
+          "copiedCommand": "명령 복사됨.",
+          "5f818f12ab": "준비 중...",
+          "setupFailed": "설정 실패",
+          "runCommandDescription": "Enter를 눌러 명령을 실행하세요.",
+          "4c05b9d7cb": "설정 터미널을 준비하고 있습니다.",
+          "setupCommandFailed": "설정 명령이 {{value0}} 코드로 종료되었습니다. 이 오류는 재시도에 성공하면 사라집니다."
         },
         "AgentsPane": {
           "d83834f5e6": "설치된 에이전트 감지 중…",
@@ -7212,7 +7221,13 @@
           "c47127f222": "WSL 기본값",
           "0c9f3cf9da": "Orca가 글로벌 agent 스킬을 확인하고 설치하는 위치를 선택합니다.",
           "f00d6aa9b5": "이 컴퓨터에서는 WSL을 사용할 수 없습니다.",
-          "7c776ff9d8": "wsl"
+          "7c776ff9d8": "wsl",
+          "3728a94fb6": "WSL 셸 명령에 주의가 필요함",
+          "refreshCliRegistration": "CLI 등록 상태를 새로 고친 후 다시 시도하세요.",
+          "0ed08febc5": "WSL 셸 명령을 등록하지 못했습니다.",
+          "775a4cfbb8": "WSL 셸 명령 등록을 사용할 수 없습니다.",
+          "fc0fcf72fd": "스킬 설정 전 WSL 쉘 명령어를 등록하세요.",
+          "windowsPathUnknown": "WSL 셸 명령의 PATH를 확인할 수 없습니다"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "소스 제어 AI를 사용자 정의하지 않은 리포지토리에서 사용됩니다.",
@@ -7944,7 +7959,8 @@
           "2aacdb0517": "핸드오프, 작업 트리 핸드오버, 하위 에이전트 작업 전반에 걸쳐 코딩 에이전트를 조율합니다.",
           "191ac34567": "에이전트 오케스트레이션",
           "nestedWorkerDepthTitle": "하위 에이전트 최대 생성 단계",
-          "nestedWorkerDepthDescription": "하위 에이전트를 몇 단계까지 생성할 수 있는지 설정합니다. 1이면 조율 에이전트만 하위 에이전트를 생성할 수 있고, 생성된 하위 에이전트는 자신의 하위 에이전트를 생성할 수 없습니다."
+          "nestedWorkerDepthDescription": "하위 에이전트를 몇 단계까지 생성할 수 있는지 설정합니다. 1이면 조율 에이전트만 하위 에이전트를 생성할 수 있고, 생성된 하위 에이전트는 자신의 하위 에이전트를 생성할 수 없습니다.",
+          "7bc082f4de": "설치 명령 복사"
         },
         "OrchestrationSetupCard": {
           "e7d2a5146c": "에이전트가 Orca를 통해 컨텍스트를 인계하고 작업을 조율할 수 있습니다.",
@@ -11590,7 +11606,11 @@
                   "installed": "설치됨",
                   "notInstalled": "설치되지 않음",
                   "recheck": "다시 확인",
-                  "description": "에이전트가 Linear 작업을 읽고 편집할 수 있도록 합니다. 전체 가이드 설정(연결 + 스킬 + 표시)은 설정 → 작업 소스에 있습니다."
+                  "description": "에이전트가 Linear 작업을 읽고 편집할 수 있도록 합니다. 전체 가이드 설정(연결 + 스킬 + 표시)은 설정 → 작업 소스에 있습니다.",
+                  "copyFailed": "명령 복사 실패.",
+                  "copyCommand": "명령 복사",
+                  "installedDescription": "에이전트 스킬이 설치되었습니다. 업데이트하려면 다음을 실행하세요:",
+                  "copiedCommand": "명령이 복사되었습니다."
                 }
               },
               "search": {
@@ -12915,6 +12935,15 @@
         "BundledSkillInstallStatus": {
           "updateServer": "스킬을 설치하려면 서버의 Orca를 업데이트하세요.",
           "connectHost": "이 SSH 호스트에 연결하면 스킬을 설치할 수 있습니다."
+        },
+        "OrchestrationSkillPromptDialog": {
+          "d3dc559225": "설치 명령을 복사하지 못했습니다.",
+          "f08d45293d": "명령 복사",
+          "b99f375eb2": "에이전트용 오케스트레이션 스킬을 설치하려면 터미널에서 이 명령을 실행하세요.",
+          "35550f3b3b": "완료",
+          "2914abcfa2": "오케스트레이션 스킬 설치",
+          "1bdce1911e": "오케스트레이션 스킬 설치 명령 복사",
+          "239bf9132b": "설치 명령을 복사했습니다."
         }
       },
       "right": {
@@ -14666,6 +14695,11 @@
               }
             }
           }
+        },
+        "FeatureSetupInlineTerminal": {
+          "789b59936e": "Enter를 눌러 명령을 실행하고 요청 시 npx를 확인합니다. 나중에 설정에서 설정할 수도 있습니다.",
+          "47fc6cc6dc": "스킬 설정 명령어",
+          "c767ab7061": "스킬 설정"
         }
       },
       "new": {
@@ -15477,6 +15511,15 @@
           "CliSkillSetupPanel": {
             "title": "스킬 설정",
             "description": "에이전트용 Orca CLI 및 오케스트레이션 스킬을 설치합니다."
+          },
+          "CliSkillSetupTerminal": {
+            "6ff813fc1d": "스킬 명령어 복사에 실패했습니다.",
+            "1953e90447": "Enter를 눌러 agents 용 Orca CLI 오케스트레이션 스킬을 설치하세요.",
+            "84e9576dac": "스킬 설정",
+            "43b60ec5c3": "Orca CLI 및 오케스트레이션 스킬 설치 terminal",
+            "5c3aee22c0": "명령 복사",
+            "5eca672aac": "스킬 설치 명령어 복사",
+            "b8ad063571": "스킬 설치 명령어를 복사했습니다."
           }
         }
       },

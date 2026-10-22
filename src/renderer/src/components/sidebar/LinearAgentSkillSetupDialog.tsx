@@ -22,6 +22,7 @@ type LinearAgentSkillSetupDialogProps = {
   showSuccess: boolean
   successDescription: string
   missingLabel: string
+  terminalRuntime?: AgentSkillSetupPanelProps['terminalRuntime']
   updateSkillName: string
   installed: boolean
   loading: boolean
@@ -38,6 +39,7 @@ export function LinearAgentSkillSetupDialog({
   successDescription,
   missingLabel,
   updateSkillName,
+  terminalRuntime,
   installed,
   loading,
   error,
@@ -115,6 +117,7 @@ export function LinearAgentSkillSetupDialog({
               description={missingLabel}
               skillNames={[ORCA_LINEAR_SKILL_NAME]}
               installedSkillNames={[updateSkillName]}
+              terminalRuntime={terminalRuntime}
               installed={installed}
               loading={loading}
               error={error}

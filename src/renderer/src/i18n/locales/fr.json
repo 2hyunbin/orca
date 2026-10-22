@@ -7037,7 +7037,16 @@
           "retrySetup": "Réessayer",
           "installing": "Installation...",
           "hostUnavailable": "Orca ne peut pas encore installer de skills sur la machine de cet espace de travail.",
-          "replaceWithOrcaCopy": "Remplacer par la copie d'Orca"
+          "replaceWithOrcaCopy": "Remplacer par la copie d'Orca",
+          "copyCommandAria": "Copier la commande",
+          "ed197f59a2": "Copier la commande",
+          "failedToCopyCommand": "Échec de la copie de la commande.",
+          "copiedCommand": "Commande copiée.",
+          "5f818f12ab": "Préparation...",
+          "setupFailed": "Échec de la configuration",
+          "runCommandDescription": "Appuyez sur Entrée pour lancer la commande.",
+          "4c05b9d7cb": "Préparation du terminal de configuration.",
+          "setupCommandFailed": "La commande de configuration s'est terminée avec le code {{value0}}. Cette erreur disparaîtra après une nouvelle tentative réussie."
         },
         "AgentsPane": {
           "d83834f5e6": "Détection des agents installés…",
@@ -7335,7 +7344,13 @@
           "c47127f222": "WSL par défaut",
           "0c9f3cf9da": "Choisissez où Orca vérifie et installe les skills globales des agents.",
           "f00d6aa9b5": "WSL n'est pas disponible sur cette machine.",
-          "7c776ff9d8": "wsl"
+          "7c776ff9d8": "wsl",
+          "3728a94fb6": "La commande shell WSL demande votre attention",
+          "refreshCliRegistration": "Actualisez le statut d'enregistrement du CLI et réessayez.",
+          "0ed08febc5": "Échec de l'enregistrement de la commande shell WSL.",
+          "775a4cfbb8": "L'enregistrement de la commande shell WSL est indisponible",
+          "fc0fcf72fd": "Enregistrez la commande shell WSL avant la configuration des skills.",
+          "windowsPathUnknown": "Le PATH de la commande shell WSL n'a pas pu être vérifié"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "Utilisé par les dépôts qui n'ont pas personnalisé Source Control AI.",
@@ -8099,7 +8114,8 @@
           "2aacdb0517": "Coordonnez les agents de codage entre passations, transferts de worktree et travaux d'agents enfants.",
           "191ac34567": "Orchestration d'agents",
           "nestedWorkerDepthTitle": "Profondeur du travailleur imbriqué",
-          "nestedWorkerDepthDescription": "Combien de générations de travailleurs détachés peuvent engendrer leurs propres travailleurs. 1 maintient l'arborescence des agents à plat : un coordinateur répartit les travailleurs, et ces travailleurs ne répartissent pas."
+          "nestedWorkerDepthDescription": "Combien de générations de travailleurs détachés peuvent engendrer leurs propres travailleurs. 1 maintient l'arborescence des agents à plat : un coordinateur répartit les travailleurs, et ces travailleurs ne répartissent pas.",
+          "7bc082f4de": "Copier la commande d'installation"
         },
         "OrchestrationSetupCard": {
           "e7d2a5146c": "Permet aux agents de transmettre le contexte et de coordonner le travail via Orca.",
@@ -11676,7 +11692,11 @@
                   "installed": "Installés",
                   "notInstalled": "Non installé",
                   "recheck": "Revérifier",
-                  "description": "Permet aux agents de lire et modifier les tâches Linear. La configuration guidée complète (connexion + skill + visibilité) se trouve dans Paramètres → Task Sources."
+                  "description": "Permet aux agents de lire et modifier les tâches Linear. La configuration guidée complète (connexion + skill + visibilité) se trouve dans Paramètres → Task Sources.",
+                  "copyFailed": "Échec de la copie de la commande.",
+                  "copyCommand": "Copier la commande",
+                  "installedDescription": "Skill d'agent installée. Pour la mettre à jour, exécutez :",
+                  "copiedCommand": "Commande copiée."
                 }
               },
               "search": {
@@ -13023,6 +13043,15 @@
         "BundledSkillInstallStatus": {
           "updateServer": "Mettez à jour Orca sur le serveur pour installer ses skills.",
           "connectHost": "Connectez-vous à cet hôte SSH pour installer ses skills."
+        },
+        "OrchestrationSkillPromptDialog": {
+          "d3dc559225": "Échec de la copie de la commande d'installation.",
+          "f08d45293d": "Copier la commande",
+          "b99f375eb2": "Exécutez cette commande dans un terminal pour installer le skill d'orchestration pour vos agents.",
+          "35550f3b3b": "Terminé",
+          "2914abcfa2": "Installer le skill d'orchestration",
+          "1bdce1911e": "Copier la commande d'installation du skill d'orchestration",
+          "239bf9132b": "Commande d'installation copiée."
         }
       },
       "right": {
@@ -14774,6 +14803,11 @@
               }
             }
           }
+        },
+        "FeatureSetupInlineTerminal": {
+          "789b59936e": "Appuyez sur Entrée pour exécuter la commande et confirmez npx si demandé. Vous pouvez aussi configurer cela plus tard dans les paramètres.",
+          "47fc6cc6dc": "Commande de configuration du skill",
+          "c767ab7061": "Configuration du skill"
         }
       },
       "new": {
@@ -15585,6 +15619,15 @@
           "CliSkillSetupPanel": {
             "title": "Configuration du skill",
             "description": "Installez les skills de la CLI Orca et d'orchestration pour vos agents."
+          },
+          "CliSkillSetupTerminal": {
+            "6ff813fc1d": "Impossible de copier la commande de la skill.",
+            "1953e90447": "Appuyez sur Entrée pour installer la skill d'orchestration Orca CLI destinée à vos agents.",
+            "84e9576dac": "Configuration du skill",
+            "43b60ec5c3": "Terminal d'installation de l'Orca CLI et de la skill d'orchestration",
+            "5c3aee22c0": "Copier la commande",
+            "5eca672aac": "Copier la commande d'installation de la skill",
+            "b8ad063571": "Commande d'installation de la skill copiée."
           }
         }
       },

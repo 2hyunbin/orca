@@ -7243,7 +7243,16 @@
           "retrySetup": "Retry",
           "installing": "Installing...",
           "hostUnavailable": "Orca can't install skills on this workspace's machine yet.",
-          "replaceWithOrcaCopy": "Replace with Orca's copy"
+          "replaceWithOrcaCopy": "Replace with Orca's copy",
+          "copyCommandAria": "Copy command",
+          "ed197f59a2": "Copy command",
+          "failedToCopyCommand": "Failed to copy command.",
+          "copiedCommand": "Copied command.",
+          "5f818f12ab": "Preparing...",
+          "setupFailed": "Setup failed",
+          "runCommandDescription": "Press Enter to run the command.",
+          "4c05b9d7cb": "Preparing setup terminal.",
+          "setupCommandFailed": "The setup command exited with code {{value0}}. This error will clear after a successful retry."
         },
         "AgentsPane": {
           "d83834f5e6": "Detecting installed agents…",
@@ -7542,7 +7551,13 @@
           "c47127f222": "WSL default",
           "0c9f3cf9da": "Choose where Orca checks and installs global agent skills.",
           "f00d6aa9b5": "WSL is not available on this machine.",
-          "7c776ff9d8": "wsl"
+          "7c776ff9d8": "wsl",
+          "3728a94fb6": "WSL shell command needs attention",
+          "refreshCliRegistration": "Refresh CLI registration status and try again.",
+          "0ed08febc5": "Failed to register the WSL shell command.",
+          "775a4cfbb8": "WSL shell command registration is unavailable",
+          "fc0fcf72fd": "Register the WSL shell command before skill setup.",
+          "windowsPathUnknown": "WSL shell command PATH could not be checked"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "Used by repositories that have not customized Source Control AI.",
@@ -8316,7 +8331,8 @@
           "2aacdb0517": "Coordinate coding agents across handoffs, worktree handovers, and child-agent work.",
           "191ac34567": "Agent Orchestration",
           "nestedWorkerDepthTitle": "Nested worker depth",
-          "nestedWorkerDepthDescription": "How many generations of dispatched workers may spawn their own workers. 1 keeps the agent tree flat: a coordinator dispatches workers, and those workers do not dispatch."
+          "nestedWorkerDepthDescription": "How many generations of dispatched workers may spawn their own workers. 1 keeps the agent tree flat: a coordinator dispatches workers, and those workers do not dispatch.",
+          "7bc082f4de": "Copy install command"
         },
         "OrchestrationSetupCard": {
           "e7d2a5146c": "Enables agents to hand off context and coordinate work through Orca.",
@@ -11896,7 +11912,11 @@
                   "installed": "Installed",
                   "notInstalled": "Not installed",
                   "recheck": "Re-check",
-                  "description": "Let agents read and edit Linear tasks. Full guided setup (connect + skill + visibility) is under Settings → Task Sources."
+                  "description": "Let agents read and edit Linear tasks. Full guided setup (connect + skill + visibility) is under Settings → Task Sources.",
+                  "copyFailed": "Failed to copy command.",
+                  "copyCommand": "Copy command",
+                  "installedDescription": "Agent skill installed. To update it, run:",
+                  "copiedCommand": "Copied command."
                 }
               },
               "search": {
@@ -13247,6 +13267,15 @@
         "BundledSkillInstallStatus": {
           "updateServer": "Update Orca on the server to install its skills.",
           "connectHost": "Connect to this SSH host to install its skills."
+        },
+        "OrchestrationSkillPromptDialog": {
+          "d3dc559225": "Failed to copy install command.",
+          "f08d45293d": "Copy command",
+          "b99f375eb2": "Run this command in a terminal to install the orchestration skill for your agents.",
+          "35550f3b3b": "Done",
+          "2914abcfa2": "Install orchestration skill",
+          "1bdce1911e": "Copy orchestration skill install command",
+          "239bf9132b": "Copied install command."
         }
       },
       "right": {
@@ -15015,6 +15044,11 @@
               }
             }
           }
+        },
+        "FeatureSetupInlineTerminal": {
+          "789b59936e": "Press Enter to run the command and confirm npx if asked. You can also set this up later in Settings.",
+          "47fc6cc6dc": "Skill setup command",
+          "c767ab7061": "Skill setup"
         }
       },
       "new": {
@@ -15826,6 +15860,15 @@
           "CliSkillSetupPanel": {
             "title": "Skill setup",
             "description": "Install the Orca CLI and orchestration skills for your agents."
+          },
+          "CliSkillSetupTerminal": {
+            "6ff813fc1d": "Failed to copy skill command.",
+            "1953e90447": "Press Enter to install the Orca CLI orchestration skill for your agents.",
+            "84e9576dac": "Skill setup",
+            "43b60ec5c3": "Orca CLI and orchestration skill install terminal",
+            "5c3aee22c0": "Copy command",
+            "5eca672aac": "Copy skill install command",
+            "b8ad063571": "Copied the skill install command."
           }
         }
       },

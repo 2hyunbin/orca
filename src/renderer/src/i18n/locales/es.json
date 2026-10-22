@@ -6924,7 +6924,16 @@
           "retrySetup": "Reintentar",
           "installing": "Instalando...",
           "hostUnavailable": "Orca todavía no puede instalar skills en la máquina de este espacio de trabajo.",
-          "replaceWithOrcaCopy": "Reemplazar con la copia de Orca"
+          "replaceWithOrcaCopy": "Reemplazar con la copia de Orca",
+          "copyCommandAria": "Copiar comando",
+          "ed197f59a2": "Copiar comando",
+          "failedToCopyCommand": "No se pudo copiar el comando.",
+          "copiedCommand": "Comando copiado.",
+          "5f818f12ab": "Preparando...",
+          "setupFailed": "Error de configuración",
+          "runCommandDescription": "Presiona Enter para ejecutar el comando.",
+          "4c05b9d7cb": "Preparando el terminal de configuración.",
+          "setupCommandFailed": "El comando de configuración salió con el código {{value0}}. Este error desaparecerá después de un reintento exitoso."
         },
         "AgentsPane": {
           "d83834f5e6": "Detectando agents instalados…",
@@ -7222,7 +7231,13 @@
           "c47127f222": "WSL predeterminado",
           "0c9f3cf9da": "Elige dónde Orca comprueba e instala agent skills globales.",
           "f00d6aa9b5": "WSL no está disponible en esta máquina.",
-          "7c776ff9d8": "wsl"
+          "7c776ff9d8": "wsl",
+          "3728a94fb6": "El comando de shell de WSL necesita atención",
+          "refreshCliRegistration": "Actualiza el estado de registro de la CLI e inténtalo de nuevo.",
+          "0ed08febc5": "No se pudo registrar el comando de shell de WSL.",
+          "775a4cfbb8": "El registro del comando de shell de WSL no está disponible",
+          "fc0fcf72fd": "Registra el comando de shell de WSL antes de configurar el skill.",
+          "windowsPathUnknown": "WSL shell command PATH could not be checked"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "Usado por repositorios que no han personalizado Source Control AI.",
@@ -7954,7 +7969,8 @@
           "2aacdb0517": "Coordina agentes de programación en handoffs, handoffs de worktree y trabajo de agentes secundarios.",
           "191ac34567": "Orquestación de agentes",
           "nestedWorkerDepthTitle": "Profundidad del trabajador anidado",
-          "nestedWorkerDepthDescription": "¿Cuántas generaciones de trabajadores despedidos pueden engendrar sus propios trabajadores? 1 mantiene el árbol de agentes plano: un coordinador envía trabajadores y esos trabajadores no envían."
+          "nestedWorkerDepthDescription": "¿Cuántas generaciones de trabajadores despedidos pueden engendrar sus propios trabajadores? 1 mantiene el árbol de agentes plano: un coordinador envía trabajadores y esos trabajadores no envían.",
+          "7bc082f4de": "Copiar comando de instalación"
         },
         "OrchestrationSetupCard": {
           "e7d2a5146c": "Permite a los agentes transferir contexto y coordinar el trabajo a través de Orca.",
@@ -11585,7 +11601,11 @@
                   "installed": "Instalado",
                   "notInstalled": "No instalado",
                   "recheck": "Reverificar",
-                  "description": "Permite que los agentes lean y editen tareas de Linear. La configuración guiada completa (conexión + habilidad + visibilidad) está en Ajustes → Fuentes de tareas."
+                  "description": "Permite que los agentes lean y editen tareas de Linear. La configuración guiada completa (conexión + habilidad + visibilidad) está en Ajustes → Fuentes de tareas.",
+                  "copyFailed": "Error al copiar el comando.",
+                  "copyCommand": "Copiar comando",
+                  "installedDescription": "Habilidad del agente instalada. Para actualizarla, ejecuta:",
+                  "copiedCommand": "Comando copiado."
                 }
               },
               "search": {
@@ -12910,6 +12930,15 @@
         "BundledSkillInstallStatus": {
           "updateServer": "Actualiza Orca en el servidor para instalar sus skills.",
           "connectHost": "Conéctate a este host SSH para instalar sus skills."
+        },
+        "OrchestrationSkillPromptDialog": {
+          "d3dc559225": "No se pudo copiar el comando de instalación.",
+          "f08d45293d": "Copiar comando",
+          "b99f375eb2": "Ejecuta este comando en una terminal para instalar el skill de orquestación para tus agentes.",
+          "35550f3b3b": "Hecho",
+          "2914abcfa2": "Instalar skill de orquestación",
+          "1bdce1911e": "Copiar comando de instalación del skill de orquestación",
+          "239bf9132b": "Comando de instalación copiado."
         }
       },
       "right": {
@@ -14661,6 +14690,11 @@
               }
             }
           }
+        },
+        "FeatureSetupInlineTerminal": {
+          "789b59936e": "Pulsa Enter para ejecutar el comando y confirma npx si se te solicita. También puedes configurarlo más tarde en Configuración.",
+          "47fc6cc6dc": "Comando de configuración de skills",
+          "c767ab7061": "Configuración de skills"
         }
       },
       "new": {
@@ -15472,6 +15506,15 @@
           "CliSkillSetupPanel": {
             "title": "Configuración de skill",
             "description": "Instala las habilidades de la CLI de Orca y de orquestación para tus agentes."
+          },
+          "CliSkillSetupTerminal": {
+            "6ff813fc1d": "No se pudo copiar el comando de skill.",
+            "1953e90447": "Presiona Enter para instalar el skill de orquestación de la CLI de Orca para tus agentes.",
+            "84e9576dac": "Configuración de skill",
+            "43b60ec5c3": "Terminal de instalación de CLI de Orca y skill de orquestación",
+            "5c3aee22c0": "Copiar comando",
+            "5eca672aac": "Copiar comando de instalación de skill",
+            "b8ad063571": "Comando de instalación de skill copiado."
           }
         }
       },

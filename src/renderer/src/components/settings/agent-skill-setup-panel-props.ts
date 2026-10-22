@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
+import type { LocalAgentRuntime } from './CliSkillRuntimeSetup'
 import type { Button } from '../ui/button'
 
 type AgentSkillSetupPanelVariant = 'card' | 'inline'
@@ -7,6 +8,8 @@ export type AgentSkillSetupPanelProps = {
   title: string
   description: ReactNode
   skillNames: readonly string[]
+  // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+  terminalRuntime?: LocalAgentRuntime
   // An installed copy may use another name (the legacy Linear skill).
   installedSkillNames?: readonly string[]
   installed: boolean

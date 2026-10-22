@@ -5,8 +5,10 @@ import { createRoot, type Root } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BundledSkillInstallResult } from '../../../../shared/bundled-skill-plan'
+import type { ProjectAgentSkillRuntime } from '@/lib/project-skill-runtime'
 import type { BundledSkillTarget } from '@/lib/bundled-skill-target'
 import { doneResult, planOf, sharedEntry } from '../skills/bundled-skill-plan-fixtures.test-support'
+import { TooltipProvider } from '../ui/tooltip'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 
 const mocks = vi.hoisted(() => {
@@ -15,6 +17,7 @@ const mocks = vi.hoisted(() => {
     plan: vi.fn(),
     execute: vi.fn(),
     target: localTarget(),
+    agentRuntime: ((): ProjectAgentSkillRuntime | undefined => undefined)(),
     skillsChanged: vi.fn(),
     skillsRefreshed: vi.fn(),
     freshnessRefresh: vi.fn()
@@ -27,7 +30,10 @@ vi.mock('@/runtime/runtime-bundled-skills-client', () => ({
 }))
 
 vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
-  useActiveProjectSkillRuntime: () => ({ bundledSkillTarget: mocks.target })
+  useActiveProjectSkillRuntime: () => ({
+    bundledSkillTarget: mocks.target,
+    agentRuntime: mocks.agentRuntime
+  })
 }))
 
 vi.mock('@/hooks/installed-agent-skill-discovery', () => ({
@@ -45,6 +51,12 @@ vi.mock('@/hooks/useSkillFreshness', () => ({
 vi.mock('../skills/SkillFreshnessStatusPill', () => ({
   SkillFreshnessStatusPill: ({ skillName }: { skillName: string }) => (
     <span data-testid="skill-freshness">{skillName}</span>
+  )
+}))
+
+vi.mock('../onboarding/OnboardingInlineCommandTerminal', () => ({
+  OnboardingInlineCommandTerminal: ({ command }: { command: string }) => (
+    <pre data-testid="wsl-terminal">{command}</pre>
   )
 }))
 
@@ -94,7 +106,11 @@ async function renderInteractivePanel(
   document.body.appendChild(container)
   root = createRoot(container)
   await act(async () => {
-    root?.render(<AgentSkillSetupPanel {...panelProps(overrides)} />)
+    root?.render(
+      <TooltipProvider>
+        <AgentSkillSetupPanel {...panelProps(overrides)} />
+      </TooltipProvider>
+    )
   })
   await act(async () => {})
   return container
@@ -121,6 +137,7 @@ describe('AgentSkillSetupPanel', () => {
     mocks.plan.mockResolvedValue({ kind: 'plan', plan: WRITE_PLAN })
     mocks.execute.mockReset()
     mocks.execute.mockResolvedValue(doneResult(WRITE_PLAN))
+    mocks.agentRuntime = undefined
     mocks.target = { kind: 'local' }
     mocks.skillsChanged.mockReset()
     mocks.skillsRefreshed.mockReset()
@@ -386,14 +403,22 @@ describe('AgentSkillSetupPanel', () => {
 
     mocks.target = { kind: 'environment', environmentId: 'env-2' }
     await act(async () => {
-      root?.render(<AgentSkillSetupPanel {...panelProps()} />)
+      root?.render(
+        <TooltipProvider>
+          <AgentSkillSetupPanel {...panelProps()} />
+        </TooltipProvider>
+      )
     })
     expect(container?.textContent).not.toContain('Needs attention')
     expect(findButton('Install').disabled).toBe(false)
 
     mocks.target = { kind: 'local' }
     await act(async () => {
-      root?.render(<AgentSkillSetupPanel {...panelProps()} />)
+      root?.render(
+        <TooltipProvider>
+          <AgentSkillSetupPanel {...panelProps()} />
+        </TooltipProvider>
+      )
     })
     expect(container?.textContent).toContain('Needs attention')
   })
@@ -440,6 +465,18 @@ describe('AgentSkillSetupPanel', () => {
     await clickButton('Install')
 
     expect(container?.textContent).toContain('Connect to this SSH host to install its skills.')
+    expect(mocks.execute).not.toHaveBeenCalled()
+  })
+
+  it('keeps the main npx command in a legacy WSL terminal without invoking the bundled installer', async () => {
+    mocks.target = null
+    mocks.agentRuntime = { runtime: 'wsl', wslDistro: 'Debian', label: 'WSL Debian' }
+    await renderInteractivePanel()
+    await clickButton('Install')
+    expect(container?.querySelector('[data-testid="wsl-terminal"]')?.textContent).toBe(
+      `npx skills@1.7.2 add https://github.com/stablyai/orca/tree/${'0'.repeat(40)} --skill orca-cli --global`
+    )
+    expect(mocks.plan).not.toHaveBeenCalled()
     expect(mocks.execute).not.toHaveBeenCalled()
   })
 

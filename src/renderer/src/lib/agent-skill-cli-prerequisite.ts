@@ -57,7 +57,7 @@ export async function ensureOrcaCliAvailableForAgentSkillTerminal({
   }
 }
 
-async function showOrcaCliRegistrationPromptToast(delayMs = 700): Promise<void> {
+export async function showOrcaCliRegistrationPromptToast(delayMs = 700): Promise<void> {
   toast.message(CLI_PREREQUISITE_REGISTRATION_TOAST, {
     description: CLI_PREREQUISITE_REGISTRATION_TOAST_DESCRIPTION
   })

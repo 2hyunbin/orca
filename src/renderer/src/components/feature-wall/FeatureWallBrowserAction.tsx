@@ -1,3 +1,7 @@
+import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
+import { FeatureSetupInlineTerminal } from '../onboarding/FeatureSetupInlineTerminal'
+import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
+import type { OnboardingFeatureSetupRuntimeContext } from '../onboarding/onboarding-feature-setup-runtime'
 import { useCallback, useState } from 'react'
 import { ArrowUpRight, Download, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -98,6 +102,12 @@ const BROWSER_ONLY_FEATURE_SETUP: OnboardingFeatureSetupSelection = {
 function BrowserSkillInstallButton(): React.JSX.Element {
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
   const [busy, setBusy] = useState(false)
+  const activeRuntime = useActiveProjectSkillRuntime()
+  const [wslSetup, setWslSetup] = useState<{
+    command: string
+    runtime: OnboardingFeatureSetupRuntimeContext
+  } | null>(null)
+  const legacyWsl = activeRuntime.agentRuntime?.runtime === 'wsl'
   const skillInstall = useBundledSkillInstall()
   const installSkills = skillInstall.install
 
@@ -109,6 +119,13 @@ function BrowserSkillInstallButton(): React.JSX.Element {
     try {
       const result = await runOnboardingFeatureSetup(BROWSER_ONLY_FEATURE_SETUP)
       recordFeatureInteraction('agent-browser-setup')
+      // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+      if (legacyWsl) {
+        const command = buildAgentFeatureSkillInstallCommand(result.skillNames)
+        await window.api.ui.writeClipboardText(command)
+        setWslSetup({ command, runtime: activeRuntime })
+        return
+      }
       const installState = await installSkills(result.skillNames)
       const telemetry =
         installState &&
@@ -156,8 +173,14 @@ function BrowserSkillInstallButton(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
-  }, [busy, installSkills, recordFeatureInteraction])
+  }, [activeRuntime, busy, installSkills, legacyWsl, recordFeatureInteraction])
 
+  // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+  if (wslSetup) {
+    return (
+      <FeatureSetupInlineTerminal command={wslSetup.command} runtimeContext={wslSetup.runtime} />
+    )
+  }
   if (
     skillInstall.state.kind === 'unsupported' ||
     bundledSkillInstallNeedsAttention(skillInstall.state)
@@ -171,7 +194,9 @@ function BrowserSkillInstallButton(): React.JSX.Element {
       size="sm"
       variant="outline"
       className="w-fit gap-2"
-      disabled={busy || !skillInstall.ready}
+      disabled={
+        busy || (legacyWsl ? Boolean(activeRuntime.installDisabledReason) : !skillInstall.ready)
+      }
       onClick={() => void handleInstall()}
     >
       {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}

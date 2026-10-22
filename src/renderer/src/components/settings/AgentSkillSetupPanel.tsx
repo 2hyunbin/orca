@@ -1,3 +1,7 @@
+import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
+import { buildAgentFeatureSkillInstallCommand } from '@/lib/agent-feature-install-commands'
+import { buildSkillCommandForRuntime } from './CliSkillRuntimeSetup'
+import { WslAgentSkillSetupPanel } from './WslAgentSkillSetupPanel'
 import { useCallback } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { IntegrationStatusPill } from '../integration-status-pill'
@@ -17,7 +21,7 @@ import { useBundledSkillInstallAction } from '@/hooks/use-bundled-skill-install-
 import { cn } from '@/lib/utils'
 import { translate } from '@/i18n/i18n'
 
-export function AgentSkillSetupPanel({
+function BundledAgentSkillSetupPanel({
   title,
   description,
   skillNames,
@@ -221,4 +225,37 @@ export function AgentSkillSetupPanel({
       </div>
     </div>
   )
+}
+
+export function AgentSkillSetupPanel(props: AgentSkillSetupPanelProps): React.JSX.Element {
+  const activeRuntime = useActiveProjectSkillRuntime()
+  const runtime = props.terminalRuntime ?? activeRuntime.agentRuntime
+  // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+  if (runtime?.runtime === 'wsl') {
+    return (
+      <WslAgentSkillSetupPanel
+        {...props}
+        command={buildSkillCommandForRuntime(
+          buildAgentFeatureSkillInstallCommand(props.skillNames),
+          runtime
+        )}
+        installedCommand={
+          props.installedSkillNames
+            ? buildSkillCommandForRuntime(
+                buildAgentFeatureSkillInstallCommand(props.installedSkillNames),
+                runtime
+              )
+            : undefined
+        }
+        terminalTitle={props.title}
+        terminalAriaLabel={props.title}
+        terminalWorktreeId="wsl-agent-skill-setup"
+        terminalRuntime={runtime}
+        terminalShellOverride={activeRuntime.terminalShellOverride ?? 'powershell.exe'}
+        installDisabled={props.installDisabled || Boolean(activeRuntime.installDisabledReason)}
+        onBeforeOpenTerminal={props.onBeforeInstall}
+      />
+    )
+  }
+  return <BundledAgentSkillSetupPanel {...props} />
 }

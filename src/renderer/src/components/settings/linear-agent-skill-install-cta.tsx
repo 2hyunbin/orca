@@ -1,3 +1,5 @@
+import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
+import { WslLinearAgentSkillInstallCta } from './WslLinearAgentSkillInstallCta'
 import { useCallback, useMemo } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { IntegrationStatusPill } from '@/components/integration-status-pill'
@@ -33,7 +35,7 @@ type LinearAgentSkillInstallCtaProps = {
 // Why: the Linear task provider and the orca-linear agent skill are decoupled
 // setups; this section bridges them so connecting the provider also surfaces
 // the skill agents need to read and edit Linear tasks.
-export function LinearAgentSkillInstallCta({
+function BundledLinearAgentSkillInstallCta({
   settings
 }: LinearAgentSkillInstallCtaProps): React.JSX.Element {
   // Why: mirror the sidebar setup prompt's runtime resolution so both surfaces
@@ -175,4 +177,15 @@ export function LinearAgentSkillInstallCta({
       )}
     </div>
   )
+}
+
+export function LinearAgentSkillInstallCta(
+  props: LinearAgentSkillInstallCtaProps
+): React.JSX.Element {
+  const activeRuntime = useActiveProjectSkillRuntime()
+  // COMPAT(wsl-bridge): removed when WSL runs as an orcad host.
+  if (activeRuntime.agentRuntime?.runtime === 'wsl') {
+    return <WslLinearAgentSkillInstallCta {...props} runtime={activeRuntime.agentRuntime} />
+  }
+  return <BundledLinearAgentSkillInstallCta {...props} />
 }
