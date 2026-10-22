@@ -10,6 +10,7 @@ import {
   compareDiskWritePrecondition,
   diskConflictFromReadFailure,
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
+  FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
   FILE_WRITE_UNCHANGED,
   parseFileWriteResult,
@@ -224,7 +225,7 @@ async function writeFileOnEnvironment(
     // Why `local`: the server writes only a workspace it runs itself, so the write never hops on.
     expectedExecutionHostId: 'local'
   }
-  if (capabilities.includes(FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY)) {
+  if (capabilities.includes(FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY)) {
     return parseFileWriteResult(
       await pinned(FILE_WRITE_IF_UNCHANGED_METHOD, { ...params, diskPrecondition })
     )
@@ -236,7 +237,11 @@ async function writeFileOnEnvironment(
   if (diskConflict) {
     return { ok: false, diskConflict }
   }
-  return parseFileWriteResult(await pinned('files.write', params))
+  return parseFileWriteResult(
+    capabilities.includes(FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY)
+      ? await pinned(FILE_WRITE_IF_UNCHANGED_METHOD, { ...params, diskPrecondition })
+      : await pinned('files.write', params)
+  )
 }
 
 /** For a server that would write unguarded: a read that cannot prove the disk fails the save. */

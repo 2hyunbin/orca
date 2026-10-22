@@ -16,6 +16,7 @@ import {
 } from './editor-external-watch-targets'
 import {
   scheduleDebouncedEditorExternalReload,
+  scheduleEditorSelfMoveEchoVerification,
   type EditorExternalWatchNotification
 } from './editor-external-watch-disk-verification'
 
@@ -94,8 +95,19 @@ export function reconcileEditorTabsAfterOverflow(target: OverflowTarget, resync:
     ) {
       continue
     }
-    // Why: a dirty tab is never reloaded; its next guarded save catches a change the watch missed.
+    // Why: compare dirty tabs asynchronously; autosave stays free to run its own guarded check.
     if (file.isDirty) {
+      if (resync) {
+        scheduleEditorSelfMoveEchoVerification(
+          {
+            ...target,
+            connectionId: target.connectionId,
+            runtimeEnvironmentId: target.runtimeEnvironmentId ?? null
+          },
+          [file.id],
+          false
+        )
+      }
       continue
     }
     const notification: EditorExternalWatchNotification = {

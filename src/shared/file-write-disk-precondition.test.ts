@@ -32,6 +32,16 @@ describe('disk write precondition', () => {
     expect(compareDiskWritePrecondition(precondition, 'a�', 'a�')).toBe('changed')
   })
 
+  it('refuses ambiguous automatic baseline matches but preserves explicit saves', () => {
+    const decoded = Buffer.from([0x61, 0xfe]).toString('utf8')
+    const current = Buffer.from([0x61, 0xff]).toString('utf8')
+    const precondition = { expectedSignature: getDiskBaselineSignature(decoded) }
+    expect(
+      compareDiskWritePrecondition({ ...precondition, requireLosslessUtf8: true }, current, decoded)
+    ).toBe('changed')
+    expect(compareDiskWritePrecondition(precondition, current, decoded)).toBeNull()
+  })
+
   it('treats anything but an explicit refusal from a host as a completed write', () => {
     expect(parseFileWriteResult(undefined)).toEqual({ ok: true })
     expect(parseFileWriteResult({ ok: true })).toEqual({ ok: true })

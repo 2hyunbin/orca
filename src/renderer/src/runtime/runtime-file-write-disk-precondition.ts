@@ -2,6 +2,7 @@ import {
   compareDiskWritePrecondition,
   diskConflictFromReadFailure,
   FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
+  FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY,
   FILE_WRITE_IF_UNCHANGED_METHOD,
   FILE_WRITE_OK,
   FILE_WRITE_UNCHANGED,
@@ -103,7 +104,7 @@ export async function writeRemoteFileIfUnchanged(
         context.target,
         'files.write',
         async (capabilities) => {
-          if (capabilities.includes(FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY)) {
+          if (capabilities.includes(FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY)) {
             return {
               method: FILE_WRITE_IF_UNCHANGED_METHOD,
               params: { ...params, diskPrecondition: precondition }
@@ -118,7 +119,15 @@ export async function writeRemoteFileIfUnchanged(
           if (diskConflict === 'identical') {
             return { result: FILE_WRITE_UNCHANGED }
           }
-          return diskConflict ? { result: { ok: false, diskConflict } } : { params }
+          if (diskConflict) {
+            return { result: { ok: false, diskConflict } }
+          }
+          return capabilities.includes(FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY)
+            ? {
+                method: FILE_WRITE_IF_UNCHANGED_METHOD,
+                params: { ...params, diskPrecondition: precondition }
+              }
+            : { params }
         },
         15_000,
         pairingRevision,

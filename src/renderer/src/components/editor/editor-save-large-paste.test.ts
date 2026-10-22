@@ -125,7 +125,11 @@ it('holds autosave while a chunked paste is in flight, then saves the pasted tex
   expect(files.get(PATH)).toBe(`${pasted}base`)
   expect(writeFile).toHaveBeenCalledWith(
     expect.objectContaining({
-      diskPrecondition: { expectedSignature: getDiskBaselineSignature('base'), allowMissing: false }
+      diskPrecondition: {
+        expectedSignature: getDiskBaselineSignature('base'),
+        allowMissing: false,
+        requireLosslessUtf8: true
+      }
     })
   )
   queue.dispose()

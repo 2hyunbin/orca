@@ -6,6 +6,7 @@ const harness = vi.hoisted(() => {
     state,
     runtimePathsExist: vi.fn(),
     scheduleReload: vi.fn(),
+    compareDirty: vi.fn(),
     forgetCombinedBodies: vi.fn()
   }
 })
@@ -18,7 +19,8 @@ vi.mock('@/lib/file-owner-runtime-target', () => ({
   getRuntimeTargetForFileOwner: () => ({ kind: 'local' })
 }))
 vi.mock('./editor-external-watch-disk-verification', () => ({
-  scheduleDebouncedEditorExternalReload: harness.scheduleReload
+  scheduleDebouncedEditorExternalReload: harness.scheduleReload,
+  scheduleEditorSelfMoveEchoVerification: harness.compareDirty
 }))
 vi.mock('@/components/editor/combined-diff/remember-view/combined-diff-view-cache', () => ({
   forgetCombinedDiffViewBodiesForWorktree: harness.forgetCombinedBodies
@@ -109,10 +111,15 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     expect(setExternalMutation).not.toHaveBeenCalledWith('a.ts', 'deleted')
   })
 
-  it('leaves dirty tabs to their guarded save, neither pausing nor reloading them', () => {
+  it('compares dirty tabs asynchronously without reloading them', () => {
     setTabs(tab('dirty.ts', { isDirty: true, lastKnownDiskSignature: 'sig' }))
     reconcileEditorTabsAfterOverflow(target, true)
 
+    expect(harness.compareDirty).toHaveBeenCalledWith(
+      { ...target, connectionId: undefined, runtimeEnvironmentId: null },
+      ['dirty.ts'],
+      false
+    )
     expect(setExternalMutation).not.toHaveBeenCalled()
     expect(harness.runtimePathsExist).not.toHaveBeenCalled()
     expect(harness.scheduleReload).not.toHaveBeenCalled()
@@ -129,6 +136,7 @@ describe('reconcileEditorTabsAfterOverflow', () => {
     expect(setExternalMutation).toHaveBeenCalledWith('a.md', null)
     expect(harness.runtimePathsExist).not.toHaveBeenCalled()
     expect(harness.forgetCombinedBodies).not.toHaveBeenCalled()
+    expect(harness.compareDirty).not.toHaveBeenCalled()
   })
 
   it('a storm overflow supersedes a pending resync probe', async () => {

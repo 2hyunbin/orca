@@ -18,6 +18,7 @@ import { basename, dirname, join, normalize, resolve } from 'node:path'
 import { runKeyedSerializedOperation } from '../../cli/keyed-promise-queue'
 import { serializedParentDirectoryKey } from '../../destination-serialized-local-rename'
 import {
+  assertLocalWriteTargetIsRegularFile,
   FileTooLargeError,
   openLocalRegularFile,
   readLocalFileBounded
@@ -26,17 +27,26 @@ import {
 const HASH_SLICE_BYTES = 1024 * 1024
 
 /** Why sliced: hashing tens of MB in one go stalls the main process; yielding keeps windows responsive. */
-export async function diskSignatureOfUtf8(buffer: Buffer): Promise<string> {
+export async function diskSignatureOfUtf8(
+  buffer: Buffer,
+  requireLosslessUtf8 = false
+): Promise<string | null> {
   if (buffer.length <= HASH_SLICE_BYTES) {
-    return getDiskBaselineSignature(buffer.toString('utf8'))
+    const text = buffer.toString('utf8')
+    return requireLosslessUtf8 && text.includes('\uFFFD') ? null : getDiskBaselineSignature(text)
   }
   const decoder = new StringDecoder('utf8')
   const signature = new DiskBaselineSignatureBuilder()
   for (let offset = 0; offset < buffer.length; offset += HASH_SLICE_BYTES) {
-    signature.update(decoder.write(buffer.subarray(offset, offset + HASH_SLICE_BYTES)))
+    const text = decoder.write(buffer.subarray(offset, offset + HASH_SLICE_BYTES))
+    if (requireLosslessUtf8 && text.includes('\uFFFD')) {
+      return null
+    }
+    signature.update(text)
     await new Promise<void>((resolve) => setImmediate(resolve))
   }
-  return signature.update(decoder.end()).digest()
+  const tail = decoder.end()
+  return requireLosslessUtf8 && tail.includes('\uFFFD') ? null : signature.update(tail).digest()
 }
 
 /** Reads the file the writer is about to replace and reports why it no longer matches the baseline. */
@@ -82,7 +92,9 @@ export async function checkLocalDiskWritePrecondition(
     if (buffer.equals(written)) {
       return 'identical'
     }
-    return baselineFits && (await diskSignatureOfUtf8(buffer)) === precondition.expectedSignature
+    return baselineFits &&
+      (await diskSignatureOfUtf8(buffer, precondition.requireLosslessUtf8)) ===
+        precondition.expectedSignature
       ? null
       : 'changed'
   } finally {
@@ -161,6 +173,7 @@ export async function writeLocalTextFileWithDiskPrecondition(
 ): Promise<FileWriteResult> {
   // Why: an unguarded write has nothing to compare, so it skips the locks a stuck guarded save holds.
   if (!precondition) {
+    await assertLocalWriteTargetIsRegularFile(filePath)
     await writeFile(filePath, content, 'utf-8')
     return FILE_WRITE_OK
   }
@@ -172,6 +185,7 @@ export async function writeLocalTextFileWithDiskPrecondition(
     if (diskConflict) {
       return { ok: false, diskConflict }
     }
+    await assertLocalWriteTargetIsRegularFile(filePath)
     await writeFile(filePath, content, 'utf-8')
     return FILE_WRITE_OK
   }

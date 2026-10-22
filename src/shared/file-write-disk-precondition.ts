@@ -4,6 +4,9 @@ import { getDiskBaselineSignature, getWrittenContentDiskSignature } from './disk
 export const FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY =
   'files.write.disk-precondition.v1' as const
 
+// Why separate: v1 hosts can rewrite identical text and cannot enforce lossless automatic saves.
+export const FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY = 'files.write.identical-noop.v1' as const
+
 export const FILE_WRITE_IF_UNCHANGED_METHOD = 'files.writeIfUnchanged'
 
 /** Refuse the write unless disk still holds the content this signature was taken over. */
@@ -11,6 +14,8 @@ export type FileWriteDiskPrecondition = {
   expectedSignature: string
   /** A missing file is written (recreated) instead of refused. */
   allowMissing?: boolean
+  /** Automatic saves must not trust a baseline comparison over replacement characters. */
+  requireLosslessUtf8?: boolean
 }
 
 export type FileWriteDiskConflict = 'changed' | 'missing'
@@ -39,6 +44,9 @@ export function compareDiskWritePrecondition(
   // Why: U+FFFD may stand for bytes a decode dropped, so decoded equality proves nothing.
   if (current === content && !current.includes('\uFFFD')) {
     return 'identical'
+  }
+  if (precondition.requireLosslessUtf8 && current.includes('\uFFFD')) {
+    return 'changed'
   }
   return getDiskBaselineSignature(current) === precondition.expectedSignature ? null : 'changed'
 }

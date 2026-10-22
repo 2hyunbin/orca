@@ -17,7 +17,8 @@ import type { RuntimeStore } from '../../runtime/runtime-store-contract'
 import { createLocalFilesystemProvider } from '../../providers/local-filesystem-provider'
 import {
   checkLocalDiskWritePrecondition,
-  diskSignatureOfUtf8
+  diskSignatureOfUtf8,
+  writeLocalTextFileWithDiskPrecondition
 } from './local-disk-write-precondition'
 import type * as LocalRegularFileRead from './local-regular-file-read'
 import type * as NodeFsPromises from 'node:fs/promises'
@@ -123,6 +124,31 @@ describe('checkLocalDiskWritePrecondition', () => {
       )
     ).resolves.toBeNull()
   })
+
+  it.each([2, 1024 * 1024 + 2])(
+    'refuses lossy automatic baseline matches (%i bytes)',
+    async (size) => {
+      const filePath = join(base, 'invalid.ts')
+      const old = Buffer.alloc(size, 0x61)
+      old[size - 1] = 0xfe
+      const newer = Buffer.from(old)
+      newer[size - 1] = 0xff
+      await writeFile(filePath, newer)
+      const decoded = old.toString('utf8')
+      const expectedSignature = getDiskBaselineSignature(decoded)
+      await expect(
+        writeLocalTextFileWithDiskPrecondition(filePath, decoded, {
+          expectedSignature,
+          requireLosslessUtf8: true
+        })
+      ).resolves.toEqual({ ok: false, diskConflict: 'changed' })
+      expect(await readFile(filePath)).toEqual(newer)
+      await expect(
+        writeLocalTextFileWithDiskPrecondition(filePath, decoded, { expectedSignature })
+      ).resolves.toEqual({ ok: true })
+      expect(await readFile(filePath)).toEqual(Buffer.from(decoded))
+    }
+  )
 
   it('reports a same-size external rewrite as changed', async () => {
     const filePath = join(base, 'a.ts')

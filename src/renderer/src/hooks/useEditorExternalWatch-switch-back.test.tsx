@@ -177,14 +177,13 @@ describe('switching back to a workspace that was not watched', () => {
     await act(async () => vi.advanceTimersByTimeAsync(200))
   }
 
-  it('reloads clean tabs, leaves a dirty tab to its guarded save, and refreshes git status/Files once', async () => {
+  it('reloads clean tabs, flags a changed dirty tab without pausing it, and refreshes git status/Files once', async () => {
     harness.readRuntimeFileContent.mockResolvedValue({ content: 'v2 agent write', isBinary: false })
     await switchBack()
 
     expect(reloads).toEqual(['clean.ts'])
-    expect(harness.readRuntimeFileContent).not.toHaveBeenCalled()
-    expect(file(DIRTY)).toMatchObject({ isDirty: true })
-    expect(isAutosaveSuspendedForFile(file(DIRTY))).toBe(false)
+    expect(harness.readRuntimeFileContent).toHaveBeenCalledTimes(1)
+    expect(file(DIRTY)).toMatchObject({ isDirty: true, externalMutation: 'changed' })
     expect(file(CLEAN).externalMutation).toBeFalsy()
     expect(fileChangeEvents).toBe(1)
   })
@@ -243,7 +242,9 @@ describe('switching back to a workspace that was not watched', () => {
     harness.readRuntimeFileContent.mockResolvedValue({ content: 'v1', isBinary: false })
     await switchBack()
 
+    expect(harness.readRuntimeFileContent).toHaveBeenCalledTimes(1)
     expect(file(DIRTY).externalMutation).toBeFalsy()
+    expect(isAutosaveSuspendedForFile(file(DIRTY))).toBe(false)
   })
 
   it('does not re-read tabs of a workspace that was never dropped', async () => {

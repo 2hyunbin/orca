@@ -11,7 +11,10 @@ import {
   getDiskBaselineSignature,
   getWrittenContentDiskSignature
 } from '../../../../shared/disk-baseline-signature'
-import { FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY } from '../../../../shared/file-write-disk-precondition'
+import {
+  FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY,
+  FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY
+} from '../../../../shared/file-write-disk-precondition'
 import { GUARDED_PATH, openGuardedFile, stubGuardedDisk } from './editor-save-guarded-disk-fixture'
 import {
   createCompatibleRuntimeStatusResponse,
@@ -107,7 +110,8 @@ describe('editor saves guarded by the disk precondition', () => {
           content: 'user edit',
           diskPrecondition: {
             expectedSignature: getDiskBaselineSignature('original'),
-            allowMissing: false
+            allowMissing: false,
+            requireLosslessUtf8: true
           }
         })
       )
@@ -176,8 +180,10 @@ describe('editor saves guarded by the disk precondition', () => {
       await vi.advanceTimersByTimeAsync(1500)
 
       expect(disk.writeFile).toHaveBeenCalledTimes(2)
+      expect(disk.files.get(PATH)).toBe('a�b')
+      expect(store.getState().openFiles[0]?.externalMutation).toBe('changed')
+      await requestEditorFileSave({ fileId: PATH })
       expect(disk.files.get(PATH)).toBe('second edit')
-      expect(store.getState().openFiles[0]?.externalMutation).toBeUndefined()
     } finally {
       cleanup()
     }
@@ -512,7 +518,9 @@ describe('editor saves through a remote host without the guarded write (client c
         throw new Error('fixture status must succeed')
       }
       const capabilities = (status.result.capabilities ?? []).filter(
-        (capability) => capability !== FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY
+        (capability) =>
+          capability !== FILE_WRITE_DISK_PRECONDITION_RUNTIME_CAPABILITY &&
+          capability !== FILE_WRITE_IDENTICAL_RUNTIME_CAPABILITY
       )
       const olderStatus = { ...status, result: { ...status.result, capabilities } }
       const meta = { _meta: { runtimeId: 'runtime-env-1' } }
