@@ -272,7 +272,7 @@ it.each([true, false])(
     }
     const deleted = vi.fn(async () => ({ kind: 'dropped' as const }))
     const pending = extractQueuedMessageToComposer(
-      { sessionId: 'session', write: deleted },
+      { target: { kind: 'local' }, sessionId: 'session', capable: true, write: deleted },
       scope,
       { ...message, body }
     )
@@ -306,10 +306,14 @@ it('keeps the queue source after captured large-copy refusal even when replaceme
   await hydrateNativeChatComposerDrafts()
   const deleted = vi.fn(async () => ({ kind: 'dropped' as const }))
   const body = structuredAgentSessionSendBody(`${'\n'.repeat(24_000)}$review`, [], [skills[0]!])
-  const pending = extractQueuedMessageToComposer({ sessionId: 'session', write: deleted }, scope, {
-    ...message,
-    body
-  })
+  const pending = extractQueuedMessageToComposer(
+    { target: { kind: 'local' }, sessionId: 'session', capable: true, write: deleted },
+    scope,
+    {
+      ...message,
+      body
+    }
+  )
   updateNativeChatComposerDraft(scope, { text: 'replacement', document: undefined }, 'deferred')
   refuse(new Error('copy refused'))
   await pending
