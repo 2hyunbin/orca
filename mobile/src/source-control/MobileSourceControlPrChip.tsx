@@ -45,8 +45,8 @@ export function MobileSourceControlPrChip({ summary, onPress }: Props) {
         />
       ) : summary.kind === 'none' ? (
         <ListRow
-          title="Create pull request"
-          leading={<GitPullRequest size={18} color={colors.textSecondary} strokeWidth={2.1} />}
+          title="No pull request"
+          leading={<GitPullRequest size={18} color={colors.textMuted} strokeWidth={2.1} />}
           navigates
           onPress={onPress}
           accessibilityLabel={label}
@@ -93,7 +93,7 @@ function chipAccessibilityLabel(summary: MobilePrChipSummary): string {
     case 'loading':
       return 'Loading pull request'
     case 'none':
-      return 'Create pull request'
+      return 'No pull request. Opens the pull request tab'
     case 'unavailable':
       return `Pull request unavailable: ${summary.message}`
     case 'ready': {

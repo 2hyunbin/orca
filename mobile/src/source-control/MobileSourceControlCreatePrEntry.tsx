@@ -9,7 +9,8 @@ type Props = {
 }
 
 export function MobileSourceControlCreatePrEntry({ action }: Props) {
-  if (!action.visible) {
+  // Blocked, it says nothing here: the PR row above opens the tab that explains why.
+  if (!action.visible || action.disabled) {
     return null
   }
   // Ready to open a PR straight away, it is the screen's one primary; the commit bar steps back.

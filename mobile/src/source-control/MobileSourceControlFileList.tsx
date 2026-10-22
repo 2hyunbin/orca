@@ -81,7 +81,8 @@ export function MobileSourceControlFileList({ state }: { state: FileListState })
       }
       ItemSeparatorComponent={RowSeparator}
       renderSectionHeader={({ section }) => {
-        const first = section.key === sections[0]?.key
+        // The branch block sits above the list, so even the first section keeps its full top space.
+        const first = false
         return section.key === 'committed' ? (
           <BranchCompareHeader state={state} first={first} />
         ) : (
