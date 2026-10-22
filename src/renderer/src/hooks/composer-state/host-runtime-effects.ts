@@ -29,7 +29,7 @@ type HostRuntimeEffectsInput = Pick<
 import { useEffect, useCallback } from 'react'
 import { filterEnabledTuiAgents, isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import { getAgentCatalog } from '@/lib/agent-catalog'
-import { useAppStore } from '@/store'
+import { selectRepos, useAppStore } from '@/store'
 import { isSshConnectInProgress } from '@/lib/new-workspace-ssh-gate'
 import {
   connectRepoSshConnection,
@@ -144,7 +144,7 @@ export function useHostRuntimeEffects(input: HostRuntimeEffectsInput) {
       return
     }
     const liveState = useAppStore.getState()
-    const liveRepo = liveState.repos.find(
+    const liveRepo = selectRepos(liveState).find(
       (repo) =>
         repo.id === repoIdRef.current &&
         getRepoExecutionHostId(repo) === selectedRepoExecutionHostId &&

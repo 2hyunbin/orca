@@ -163,7 +163,7 @@ export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promis
     // Why: the agent runs on the workspace's execution host, so its OS decides quoting (#27971).
     const latestStore = useAppStore.getState()
     const targetRepo =
-      latestStore.repos.find((candidate) => candidate.id === targetWorktree.repoId) ?? repo
+      selectRepos(latestStore).find((candidate) => candidate.id === targetWorktree.repoId) ?? repo
     const launchPlatform = targetRepo
       ? resolveRepoWorktreeLaunchPlatform(latestStore, targetRepo, targetWorktree)
       : undefined

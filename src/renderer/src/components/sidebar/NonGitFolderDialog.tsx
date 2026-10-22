@@ -9,7 +9,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { useAppStore } from '@/store'
+import { selectRepos, useAppStore } from '@/store'
 import {
   resolveDismissedOnboardingFolderAgentLaunch,
   revealOnboardingFolderWithAgentLaunch
@@ -94,7 +94,7 @@ const NonGitFolderDialog = React.memo(function NonGitFolderDialog() {
             displayName
           })
           const state = useAppStore.getState()
-          const hadProjectBeforeAdd = stateBeforeAdd.repos.length > 0
+          const hadProjectBeforeAdd = selectRepos(stateBeforeAdd).length > 0
           await markOnboardingProjectAdded('addedFolder')
           await state.fetchWorktrees(repo.id, ownerOptions)
           // Why: mirror the local non-git folder flow — without this the
