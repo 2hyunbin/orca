@@ -10,17 +10,18 @@ export const NativeChatMarkdownImageOwnerContext = createContext<{
   fileLinkContext: NativeChatFileLinkContext | null
   runtimeContext: NativeChatImageRuntimeContext
   isVisible: boolean
+  sessionId?: string | null
 } | null>(null)
 
 export function NativeChatMarkdownImageOwnerProvider({
   tabId,
-  sessionId,
   isVisible,
+  sessionId,
   children
 }: {
   tabId: string
-  sessionId: string | null
   isVisible: boolean
+  sessionId: string | null
   children: ReactNode
 }): React.JSX.Element {
   const fileLinkContext = useNativeChatFileLinkContext(tabId, sessionId)
@@ -34,8 +35,8 @@ export function NativeChatMarkdownImageOwnerProvider({
     [ownerRuntimeContext, tabId, sessionId]
   )
   const value = useMemo(
-    () => ({ fileLinkContext, runtimeContext, isVisible }),
-    [fileLinkContext, runtimeContext, isVisible]
+    () => ({ fileLinkContext, runtimeContext, isVisible, sessionId }),
+    [fileLinkContext, runtimeContext, isVisible, sessionId]
   )
   return (
     <NativeChatMarkdownImageOwnerContext.Provider value={value}>

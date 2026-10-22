@@ -289,14 +289,20 @@ export abstract class OrcaRuntimeWithResolveAuthoritativeTerminalWaitPermission 
     return pty?.launchAgent ?? pty?.foregroundAgent ?? null
   }
 
+  protected isAgentPromptPermissionBlocked(
+    baseline: AgentPromptActivity,
+    current: AgentPromptActivity
+  ): boolean {
+    return (
+      current.status === 'permission' || current.permissionSequence > baseline.permissionSequence
+    )
+  }
+
   protected assertAgentPromptPermissionSafe(
     baseline: AgentPromptActivity,
     current: AgentPromptActivity
   ): void {
-    if (
-      current.status === 'permission' ||
-      current.permissionSequence > baseline.permissionSequence
-    ) {
+    if (this.isAgentPromptPermissionBlocked(baseline, current)) {
       throw new Error('agent_prompt_blocked')
     }
   }

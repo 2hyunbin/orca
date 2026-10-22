@@ -2,23 +2,53 @@
 
 import '@testing-library/jest-dom/vitest'
 
-import { afterEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useContext, useRef } from 'react'
 import type * as React from 'react'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { NativeChatSessionGate } from './NativeChatSessionGate'
 import { useNativeChatDraft } from './use-native-chat-draft'
 import { clearNativeChatDraftCacheForTests } from './native-chat-draft-cache'
-import {
-  NativeChatMarkdownImageOwnerContext,
-  NativeChatMarkdownImageOwnerProvider
-} from './native-chat-markdown-image-owner'
-import { useAppStore } from '@/store'
+import { NativeChatMarkdownImageOwnerContext } from './native-chat-markdown-image-owner'
+import { NativeChatMarkdownImage } from './NativeChatMarkdownImage'
 import {
   repoFixture,
   terminalTabFixture,
   worktreeFixture
 } from './native-chat-workspace-test-fixtures'
+import NativeChatView from './NativeChatView'
+import { useNativeChatFind } from './use-native-chat-find'
+import { useAppStore } from '@/store'
+import type { NativeChatResolvedViewProps } from './native-chat-view-types'
+
+vi.mock('./NativeChatResolvedView', () => ({ NativeChatResolvedView: ResolvedFindProbe }))
+
+function ResolvedFindProbe({ paneKey, sessionId }: NativeChatResolvedViewProps): React.JSX.Element {
+  const owner = useContext(NativeChatMarkdownImageOwnerContext)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef(null)
+  const messageListRef = useRef(null)
+  const find = useNativeChatFind(true, rootRef, composerRef, messageListRef)
+  return (
+    <div ref={rootRef}>
+      <DraftProbe paneKey={paneKey} sessionId={sessionId} />
+      <output aria-label="File session">
+        {owner?.runtimeContext?.nativeChatContext?.sessionId ?? 'no-session'}:
+        {owner?.fileLinkContext?.chatSessionId ?? 'no-session'}
+      </output>
+      <NativeChatMarkdownImage src="https://example.com/chart.png" alt="Chart" />
+      <button onClick={() => find.open?.()}>Find</button>
+      {find.isOpen ? (
+        <input
+          aria-label="Find in chat"
+          value={find.query}
+          onChange={(event) => find.setQuery(event.target.value)}
+        />
+      ) : null}
+    </div>
+  )
+}
 
 function entry(overrides: Partial<AgentStatusEntry> & Pick<AgentStatusEntry, 'paneKey'>) {
   return {
@@ -65,6 +95,40 @@ describe('NativeChatSessionGate', () => {
   afterEach(() => {
     cleanup()
     clearNativeChatDraftCacheForTests()
+    useAppStore.setState(useAppStore.getInitialState())
+  })
+
+  it('keeps Find open with its query when the bridge first receives session metadata', () => {
+    useAppStore.setState(useAppStore.getInitialState())
+    const paneKey = 'tab-1:leaf-1'
+    render(
+      <NativeChatView
+        terminalTabId="tab-1"
+        paneKey={paneKey}
+        launchAgent="codex"
+        isVisible
+        isFocusedGroup
+        ownsTabWideLaunchDraft
+      />
+    )
+    expect(screen.getByText('Session none')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Find' }))
+    const input = screen.getByRole('textbox', { name: 'Find in chat' })
+    fireEvent.change(input, { target: { value: 'keep this search' } })
+    act(() => {
+      useAppStore.setState({
+        agentStatusByPaneKey: {
+          [paneKey]: entry({
+            paneKey,
+            agentType: 'codex',
+            providerSession: { key: 'session_id', id: 'codex-session' }
+          })
+        }
+      })
+    })
+    expect(screen.getByText('Session codex-session')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Find in chat' })).toBe(input)
+    expect(input).toHaveValue('keep this search')
   })
 
   it('keeps the startup pane usable without inventing a chat file session identity', () => {
@@ -74,25 +138,39 @@ describe('NativeChatSessionGate', () => {
       worktreesByRepo: { repo: [worktreeFixture('wt-1', '/repo', { hostId: 'local' })] },
       tabsByWorktree: { 'wt-1': [terminalTabFixture('tab-1', 'wt-1')] }
     })
-    const pane = (sessionId: string | null) => (
-      <NativeChatMarkdownImageOwnerProvider tabId="tab-1" sessionId={sessionId} isVisible>
-        <NativeChatMarkdownImageOwnerContext.Consumer>
-          {(owner) => (
-            <output>
-              {owner?.runtimeContext?.nativeChatContext?.sessionId ?? 'no-session'}:
-              {owner?.fileLinkContext?.chatSessionId ?? 'no-session'}
-            </output>
-          )}
-        </NativeChatMarkdownImageOwnerContext.Consumer>
-        <DraftProbe paneKey="tab-1:leaf-1" sessionId={sessionId} />
-      </NativeChatMarkdownImageOwnerProvider>
+    const paneKey = 'tab-1:leaf-1'
+    render(
+      <NativeChatView
+        terminalTabId="tab-1"
+        paneKey={paneKey}
+        launchAgent="codex"
+        isVisible
+        isFocusedGroup
+        ownsTabWideLaunchDraft
+      />
     )
-    const view = render(pane(null))
-    expect(screen.getByRole('status')).toHaveTextContent('no-session:no-session')
+    expect(screen.getByRole('status', { name: 'File session' })).toHaveTextContent(
+      'no-session:no-session'
+    )
     const composer = screen.getByRole('textbox', { name: 'Message draft' })
     fireEvent.change(composer, { target: { value: 'startup draft' } })
-    view.rerender(pane('known-session'))
-    expect(screen.getByRole('status')).toHaveTextContent('known-session:known-session')
+    fireEvent.click(screen.getByRole('button', { name: 'View image: Chart' }))
+    expect(screen.getByRole('dialog', { name: 'Chart' })).toBeInTheDocument()
+    act(() => {
+      useAppStore.setState({
+        agentStatusByPaneKey: {
+          [paneKey]: entry({
+            paneKey,
+            agentType: 'codex',
+            providerSession: { key: 'session_id', id: 'known-session' }
+          })
+        }
+      })
+    })
+    expect(screen.getByRole('status', { name: 'File session' })).toHaveTextContent(
+      'known-session:known-session'
+    )
+    expect(screen.queryByRole('dialog', { name: 'Chart' })).toBeNull()
     expect(screen.getByRole('textbox', { name: 'Message draft' })).toBe(composer)
     expect(composer).toHaveValue('startup draft')
   })
