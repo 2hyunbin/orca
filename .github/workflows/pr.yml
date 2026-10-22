@@ -371,6 +371,8 @@ jobs:
             src/shared/ephemeral-vm-runtimes.ts \
             src/shared/ephemeral-vm-recipes.ts \
             src/shared/orca-yaml-hook-types.ts \
+            config/scripts/run-ephemeral-vm-runtime-store-rollback-repro.mjs \
+            config/scripts/ephemeral-vm-runtime-store-cross-version.test.ts \
             src/main/ephemeral-vm-runtime-service.ts \
             src/main/ephemeral-vm-runtime-provisioning-persistence.ts \
             src/main/ephemeral-vm-failed-start-cleanup.ts; then
@@ -755,6 +757,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+          check-latest: true
           package-manager-cache: false
 
       # Rebuild both pristine and patched bundles; reuse only the pinned toolchain.
@@ -1383,7 +1386,7 @@ jobs:
         run: |
           $files = node config/scripts/pr-package-test-paths.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm exec vitest run --config config/vitest.config.ts $files
+          node node_modules/vitest/vitest.mjs run --config config/vitest.config.ts @files
 
       # Why its own step: the CPU burners that make taskkill slow would starve
       # every other test file sharing the runner.
@@ -1529,12 +1532,11 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: package.json
+          check-latest: true
           package-manager-cache: false
 
       - name: Setup pnpm
-        uses: pnpm/setup@v2
-        with:
-          install: false
+        uses: ./.github/actions/setup-pnpm
 
       - name: Install with every package isolated in its own store slot
         run: |
