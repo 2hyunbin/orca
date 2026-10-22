@@ -178,7 +178,7 @@ describe('onboarding feature setup runner', () => {
     expect(deps.getComputerUsePermissionStatus).not.toHaveBeenCalled()
   })
 
-  it('skips openSetup and warns when the macOS Computer Use helper app is unavailable', async () => {
+  it('keeps main’s skill selection but skips permissions when the Computer Use helper is unavailable', async () => {
     // Why: getComputerUsePermissionStatus reports helperUnavailableReason with
     // all permissions set to not-granted when the helper app is missing (e.g.
     // a dev build that never ran `pnpm build:computer-macos`). The runner must
@@ -203,6 +203,7 @@ describe('onboarding feature setup runner', () => {
       deps
     )
 
+    expect(result.skillNames).toEqual(['orca-cli', 'computer-use', 'orchestration', 'orca-linear'])
     expect(result.computerUsePermissionsOpened).toBe(false)
     expect(openComputerUsePermissionSetup).not.toHaveBeenCalled()
     expect(result.warnings).toContainEqual({
