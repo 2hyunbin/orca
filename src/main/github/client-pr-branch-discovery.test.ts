@@ -27,6 +27,7 @@ vi.mock('./github-api-repository', async (importOriginal) =>
 
 import { getPRForBranch } from './client/lookup/get-pr-for-branch'
 import { resetPRForBranchMocks } from './client-test-harness'
+import { canShowGitHubPRAutoMergeControl } from '../../shared/github/pull-request-auto-merge-availability'
 
 const {
   execFileAsyncMock,
@@ -38,6 +39,90 @@ const {
 describe('getPRForBranch', () => {
   beforeEach(() => {
     resetPRForBranchMocks(clientMocks)
+  })
+
+  it.each([
+    ['unstable', true, false],
+    ['unstable', null, false],
+    ['blocked', true, true],
+    ['behind', true, true],
+    ['dirty', false, false],
+    ['unknown', null, false]
+  ] as const)(
+    'preserves REST %s eligibility when exact GraphQL lookup fails (mergeable=%s)',
+    async (mergeable_state, mergeable, autoMergeAvailable) => {
+      getOwnerRepoMock.mockResolvedValue({ owner: 'stablyai', repo: 'orca' })
+      ghExecFileAsyncMock
+        .mockRejectedValueOnce(new Error('network unavailable'))
+        .mockResolvedValueOnce({
+          stdout: JSON.stringify({
+            number: 31259,
+            title: 'fix(i18n): restore localized editor safety copy',
+            state: 'open',
+            html_url: 'https://github.com/stablyai/orca/pull/31259',
+            updated_at: '2026-10-21T16:31:00Z',
+            draft: false,
+            mergeable,
+            mergeable_state,
+            auto_merge: null,
+            base: { ref: 'main', sha: 'base-oid' },
+            head: {
+              ref: 'fix/editor-safety-copy',
+              sha: 'e4353ead012043474fc723e50aea198a76d32979'
+            }
+          })
+        })
+        .mockResolvedValue({
+          stdout: JSON.stringify({
+            data: {
+              repository: {
+                autoMergeAllowed: true,
+                mergeQueue: null,
+                ref: { rules: { nodes: [{ type: 'PULL_REQUEST' }] } }
+              }
+            }
+          })
+        })
+
+      const pr = await getPRForBranch('/repo-root', 'fix/editor-safety-copy', 31259)
+      expect(pr).toMatchObject({
+        mergeStateStatus: mergeable_state.toUpperCase(),
+        autoMergeEnabled: false
+      })
+      if (!pr) {
+        throw new Error('Expected a discovered PR')
+      }
+      expect(canShowGitHubPRAutoMergeControl(pr)).toBe(autoMergeAvailable)
+    }
+  )
+
+  it('does not infer auto-merge eligibility from a branch list result when exact lookup fails', async () => {
+    getOwnerRepoMock.mockResolvedValue({ owner: 'stablyai', repo: 'orca' })
+    ghExecFileAsyncMock
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify([
+          {
+            number: 31259,
+            title: 'fix(i18n): restore localized editor safety copy',
+            state: 'open',
+            html_url: 'https://github.com/stablyai/orca/pull/31259',
+            updated_at: '2026-10-21T16:31:00Z',
+            draft: false,
+            auto_merge: null,
+            base: { ref: 'main', sha: 'base-oid' },
+            head: { ref: 'fix/editor-safety-copy', sha: 'e4353ead012043474fc723e50aea198a76d32979' }
+          }
+        ])
+      })
+      .mockRejectedValueOnce(new Error('network unavailable'))
+
+    const pr = await getPRForBranch('/repo-root', 'fix/editor-safety-copy')
+    expect(pr).toMatchObject({ number: 31259, mergeable: 'UNKNOWN', autoMergeEnabled: false })
+    expect(pr?.mergeStateStatus).toBeUndefined()
+    if (!pr) {
+      throw new Error('Expected a discovered PR')
+    }
+    expect(canShowGitHubPRAutoMergeControl(pr)).toBe(false)
   })
 
   it('queries GitHub by head branch when the remote is on github.com', async () => {
