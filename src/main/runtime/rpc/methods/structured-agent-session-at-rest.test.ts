@@ -1,7 +1,13 @@
+import * as fileOperations from 'node:fs/promises'
 import { readFile, rm } from 'node:fs/promises'
 import * as contextSnapshots from '../../../native-chat/agent-session-context-snapshots'
 import * as recoveryOptions from '../../structured-session-recovery-options'
 import '../unused-default-rpc-methods.test-fixture'
+import type {
+  AgentJournalItemBody,
+  AgentJournalResolution,
+  AgentJournalQuestionItem
+} from '../../../../shared/agent-session-journal-types'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../../shared/agent-session-journal-types'
 // A chat at rest, through the RPC surface a client actually calls: opening it starts nothing, what
 // it can answer without an agent it answers, and the first send is what starts one.
@@ -37,6 +43,9 @@ import {
   updateTestJournalRowJson
 } from '../../../native-chat/agent-session-journal/journal-host-database-test-support'
 import { claudeAndCodexDeclared } from '../../../native-chat/agent-session-wire/structured-agent-session-adapter-router-test-support'
+
+vi.mock('node:fs/promises', { spy: true })
+const actualFiles = await vi.importActual<typeof fileOperations>('node:fs/promises')
 
 const CLIENT = {
   clientId: 'device-1',
@@ -502,15 +511,18 @@ describe('every close withdraws what is queued (P2-29)', () => {
 it('hands off the reduced saved chat after clear and rewind, budgets only the starter and overwrites its file', async () => {
   await restingChat()
   await rig.host.journalSnapshot(SESSION)
-  const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  let journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
   const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
   const receipt = { write: () => {}, committed: () => {} }
   let ordinal = 100
-  const append = (text: string) =>
+  const append = (text: string | AgentJournalItemBody) =>
     journal.appendItem(
       { provider: 'codex', threadId: 'saved-thread', turnId: 'saved-turn', ordinal: ordinal++ },
-      hostTestMessage(text),
-      { fence, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+      typeof text === 'string' ? hostTestMessage(text) : text,
+      {
+        fence: rig.store.getRecord(SESSION)!.lease.runtimeFence,
+        turnScope: AGENT_JOURNAL_THREAD_SCOPE
+      }
     )
   await append('PRE_CLEAR_SECRET')
   await journal.context.clear(
@@ -525,9 +537,98 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
   const floor = journal.cursor()
   await append('DISCARDED_REWIND_SECRET')
   await journal.context.rewind(floor, fence, [], () => receipt)
+  const resolution = (
+    state: AgentJournalResolution['state'],
+    selectedOptionId: string | null = null
+  ): AgentJournalResolution => ({ state, selectedOptionId, resolvedBy: null, resolvedAt: null })
+  const question = (name: string, answer?: string): AgentJournalQuestionItem => ({
+    kind: 'question',
+    question: name,
+    options: [],
+    freeTextQuestionId: 'input',
+    freeTextInput: { allowEmpty: true },
+    resolution: {
+      ...resolution('resolved'),
+      ...(answer !== undefined
+        ? { answers: [{ questionId: 'input', optionIds: [], other: answer }] }
+        : {})
+    }
+  })
+  for (const [name, value] of [
+    ['deployment', '  deploy to staging  '],
+    ['explicit empty', ''],
+    ['whitespace', ' \t']
+  ]) {
+    await append(question(name, value))
+  }
+  await append(question('unreadable'))
+  await append({ ...question('cancelled ask'), resolution: resolution('cancelled') })
+  await append({
+    ...question('legacy answer'),
+    resolution: resolution('resolved', 'input:legacy%20deployment')
+  })
+  await append({
+    kind: 'question',
+    question: 'Release choices',
+    options: [],
+    questions: [
+      {
+        id: 'regions',
+        header: 'Region group',
+        question: 'Which regions?',
+        multiSelect: true,
+        options: [
+          { id: 'east', label: 'East', description: 'Primary region' },
+          { id: 'west', label: 'West' }
+        ]
+      },
+      {
+        id: 'details',
+        question: 'Release detail?',
+        multiSelect: true,
+        options: [{ id: 'known', label: 'Known' }],
+        freeTextQuestionId: 'details'
+      }
+    ],
+    resolution: {
+      ...resolution('resolved'),
+      answers: [
+        { questionId: 'regions', optionIds: ['east', 'west'] },
+        { questionId: 'details', optionIds: ['known', 'missing'], other: 'partial text' }
+      ]
+    }
+  })
+  for (const choice of ['yes', 'no']) {
+    await append({
+      kind: 'approval',
+      title: `Confirm ${choice}`,
+      detail: 'Deploy?',
+      options: [
+        { id: 'yes', label: 'Yes' },
+        { id: 'no', label: 'No' }
+      ],
+      resolution: resolution('resolved', choice)
+    })
+  }
+  await append({
+    kind: 'approval',
+    title: 'Review plan',
+    description: 'Saved description',
+    decisionReason: 'Saved reason',
+    blockedPath: '/work/target',
+    detail: 'Clipped detail',
+    subject: { kind: 'plan', text: 'RETAINED_PLAN_MARKER', filePath: '/work/plan.md' },
+    options: [
+      { id: 'plan', label: 'Approve plan' },
+      { id: 'keep', label: 'Keep planning' }
+    ],
+    resolution: resolution('resolved', 'keep')
+  })
   await rig.restart()
   setStructuredAgentSessionHost(rig.host)
   const snapshot = await rig.host.journalSnapshot(SESSION)
+  journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  await append({ ...question('pending ask'), resolution: resolution('pending') })
   const params = {
     sessionId: SESSION,
     workspaceId: 'workspace-1',
@@ -537,13 +638,11 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
   await call('agentSession.options', { sessionId: SESSION })
   expect(locate).not.toHaveBeenCalled()
   const gate = Promise.withResolvers<void>()
-  const write = contextSnapshots.writeAgentSessionContextSnapshot
-  const writing = vi
-    .spyOn(contextSnapshots, 'writeAgentSessionContextSnapshot')
-    .mockImplementationOnce(async (...args) => {
-      await gate.promise
-      return write(...args)
-    })
+  const write = actualFiles.writeFile
+  const writing = vi.spyOn(fileOperations, 'writeFile').mockImplementationOnce(async (...args) => {
+    await gate.promise
+    return write(...args)
+  })
   const pending = rig.host.continuationContext(params)
   await vi.waitFor(() => expect(writing).toHaveBeenCalledOnce())
   const currentJournal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
@@ -568,6 +667,25 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
     expect(first.capturedText?.length).toBeLessThanOrEqual(36_000)
     expect(first.capturedText).toContain('Earlier saved chat messages omitted')
     expect(first.capturedText).not.toContain('EARLY_SAVED_MARKER')
+    for (const text of [file, first.capturedText ?? '']) {
+      expect(text).toContain('deployment\nFree text: "  deploy to staging  "')
+      expect(text).toContain('explicit empty\nFree text: ""')
+      expect(text).toContain('whitespace\nFree text: " \\t"')
+      expect(text).toContain('unreadable\nSubmitted answer: unavailable')
+      expect(text).toContain('Prompt state: pending\npending ask')
+      expect(text).toContain('Prompt state: cancelled\ncancelled ask')
+      expect(text).toContain('legacy answer\nFree text: "legacy deployment"')
+      expect(text).toContain(
+        'Which regions?\nOffered choice: East — Primary region\nOffered choice: West\nSelected choice: East\nSelected choice: West'
+      )
+      expect(text).toContain(
+        'Selected choice: Known\nSelected choice: unavailable\nFree text: "partial text"'
+      )
+      expect(text).toMatch(/Confirm yes[\s\S]*Selected choice: Yes/)
+      expect(text).toMatch(/Confirm no[\s\S]*Selected choice: No/)
+      expect(text).toContain('RETAINED_PLAN_MARKER\nPlan file: /work/plan.md')
+      expect(text).toContain('Selected choice: Keep planning')
+    }
     expect(await call('agentSession.continuationContext', params)).toMatchObject([
       {
         ok: true,
@@ -598,4 +716,98 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
       force: true
     })
   }
+})
+
+it('publishes captures in ownership order despite slow staging, dispatched rename, cleanup and a newer failure', async () => {
+  const write = actualFiles.writeFile
+  const rename = actualFiles.rename
+  const remove = actualFiles.rm
+  const snapshot = (text: string) =>
+    contextSnapshots.writeAgentSessionContextSnapshot(rig.root, SESSION, text)
+  const stage = Promise.withResolvers<void>()
+  const staged = Promise.withResolvers<void>()
+  const writing = vi.spyOn(fileOperations, 'writeFile').mockImplementationOnce(async (...args) => {
+    staged.resolve()
+    await stage.promise
+    return write(...args)
+  })
+  const old = snapshot('old capture').then(
+    () => 'success',
+    () => 'replaced'
+  )
+  await staged.promise
+  const path = await snapshot('new capture')
+  stage.resolve()
+  expect(await old).toBe('replaced')
+  expect(await readFile(path, 'utf8')).toBe('new capture')
+  const dispatched = Promise.withResolvers<void>()
+  const finishRename = Promise.withResolvers<void>()
+  const cleaning = Promise.withResolvers<void>()
+  const finishCleanup = Promise.withResolvers<void>()
+  const successorStaged = Promise.withResolvers<void>()
+  let oldPart = ''
+  let oldRenameSettled = false
+  const renaming = vi
+    .spyOn(fileOperations, 'rename')
+    .mockImplementationOnce(async (from, to) => {
+      oldPart = String(from)
+      dispatched.resolve()
+      await finishRename.promise
+      await rename(from, to)
+      oldRenameSettled = true
+    })
+    .mockImplementation(async (from, to) => {
+      expect(oldRenameSettled).toBe(true)
+      return rename(from, to)
+    })
+  renaming.mockClear()
+  vi.spyOn(fileOperations, 'rm').mockImplementation(async (target, options) => {
+    if (String(target) === oldPart) {
+      cleaning.resolve()
+      await finishCleanup.promise
+    }
+    return remove(target, options)
+  })
+  writing.mockImplementation(async (...args) => {
+    await write(...args)
+    if (args[1] === 'queued successor') {
+      successorStaged.resolve()
+    }
+  })
+  const prior = snapshot('dispatched predecessor').then(
+    () => 'success',
+    () => 'replaced'
+  )
+  await dispatched.promise
+  const next = snapshot('queued successor')
+  await successorStaged.promise
+  expect(renaming).toHaveBeenCalledOnce()
+  finishRename.resolve()
+  await cleaning.promise
+  expect(await next).toBe(path)
+  expect(await readFile(path, 'utf8')).toBe('queued successor')
+  finishCleanup.resolve()
+  expect(await prior).toBe('replaced')
+  const failedStage = Promise.withResolvers<void>()
+  const oldStaged = Promise.withResolvers<void>()
+  writing
+    .mockImplementationOnce(async (...args) => {
+      oldStaged.resolve()
+      await failedStage.promise
+      return write(...args)
+    })
+    .mockRejectedValueOnce(new Error('newer stage failed'))
+  const revoked = snapshot('must not revive').then(
+    () => 'success',
+    () => 'replaced'
+  )
+  await oldStaged.promise
+  await expect(snapshot('failed newer capture')).rejects.toThrow('newer stage failed')
+  failedStage.resolve()
+  expect(await revoked).toBe('replaced')
+  expect(await readFile(path, 'utf8')).toBe('queued successor')
+  await remove(contextSnapshots.agentSessionContextSnapshotRoot(rig.root), {
+    recursive: true,
+    force: true
+  })
 })

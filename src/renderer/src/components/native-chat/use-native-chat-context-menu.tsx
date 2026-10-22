@@ -74,6 +74,7 @@ type UseNativeChatContextMenuArgs = {
   /** A structured chat tab's Orca session ID; a chat in a terminal pane is that terminal's agent. */
   resolveOrcaSessionId?: () => Promise<string | null>
   /** A structured chat tab's hand-off; a chat in a terminal pane uses the pane's row instead. */
+  handOffDisabled?: boolean
   onHandOff?: () => void
 } & NativeChatContextMenuTargetArgs
 
@@ -146,6 +147,7 @@ export function useNativeChatContextMenu({
   workspaceLayout,
   resolveOrcaSessionId,
   onHandOff,
+  handOffDisabled = false,
   messageListRef,
   fileLinkContext = null,
   rewind,
@@ -285,7 +287,9 @@ export function useNativeChatContextMenu({
           ) : null}
           {hasEditItems && hasSessionItems ? <DropdownMenuSeparator /> : null}
           {onFind ? <NativeChatFindMenuItem onSelect={() => onFind(state.returnFocusTo)} /> : null}
-          {onHandOff ? <AgentSessionContinuationMenuItem onSelect={onHandOff} /> : null}
+          {onHandOff ? (
+            <AgentSessionContinuationMenuItem disabled={handOffDisabled} onSelect={onHandOff} />
+          ) : null}
           {showTerminalPaneActions ? (
             <>
               {onSwitchToTerminal ? (

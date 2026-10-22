@@ -55,7 +55,8 @@ export function useNativeChatHandOff({
     epoch,
     directory
   ])
-  type Attempt = { key: string } & (
+  const operationSerial = useRef(0)
+  type Attempt = { key: string; operation: number } & (
     | { phase: 'preparing' }
     | { phase: 'prepared'; request: AgentSessionContinuationRequest }
   )
@@ -96,7 +97,11 @@ export function useNativeChatHandOff({
       if (active.current) {
         return
       }
-      const current: Attempt = { key: intentKey, phase: 'preparing' }
+      const current: Attempt = {
+        key: intentKey,
+        operation: ++operationSerial.current,
+        phase: 'preparing'
+      }
       active.current = current
       setAttempt(current)
       const context = await withTimeout(
@@ -124,8 +129,8 @@ export function useNativeChatHandOff({
       if (active.current !== current || current.phase !== 'preparing') {
         return
       }
-      retire()
       if (context?.status === 'superseded') {
+        retire()
         return
       }
       const saved = context?.status === 'current' && typeof context.capturedText === 'string'
@@ -162,6 +167,7 @@ export function useNativeChatHandOff({
         active.current = prepared
         setAttempt(prepared)
       } else {
+        retire()
         toast.error(
           translate(
             'components.agentSessionContinuation.noContext',
@@ -198,8 +204,9 @@ export function useNativeChatHandOff({
     preparing: currentAttempt?.phase === 'preparing',
     open,
     reset: retire,
-    dialog: request ? (
+    dialog: currentAttempt ? (
       <AgentSessionContinuationDialog
+        key={currentAttempt.operation}
         open
         request={request}
         onOpenChange={(isOpen) => {

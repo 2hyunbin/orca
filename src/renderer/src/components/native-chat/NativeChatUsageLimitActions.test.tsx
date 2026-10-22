@@ -12,7 +12,6 @@ import {
 } from './native-chat-orca-stop-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
-import { buildAgentSessionContinuationPrompt } from '@/lib/agent-session-continuation'
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -207,7 +206,7 @@ it('offers host-owned recovery actions for the current usage-limit cut', async (
       })
     )
     fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
-    await waitFor(() => expect(mocks.dialog).toHaveBeenCalled())
+    await waitFor(() => expect(mocks.dialog.mock.lastCall?.[0].request).toBeTruthy())
     expect(mocks.dialog.mock.lastCall?.[0].request).toMatchObject({
       worktreeId: 'folder',
       avoidSourceAgent: true,
@@ -309,12 +308,8 @@ it('hands off database-backed chats using labelled recent messages when no nativ
     ])
   )
   fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
-  await waitFor(() => expect(mocks.dialog).toHaveBeenCalled())
+  await waitFor(() => expect(mocks.dialog.mock.lastCall?.[0].request).toBeTruthy())
   const source = mocks.dialog.mock.lastCall?.[0].request.source
-  expect(source.transcriptPath).toBeUndefined()
-  expect(buildAgentSessionContinuationPrompt(source, 'focused')).toContain(
-    'A saved session transcript was unavailable, so use these recent chat messages:'
-  )
-  expect(source.capturedText).toContain('user: Keep the recent task context')
-  expect(buildAgentSessionContinuationPrompt(source, 'full')).toBeNull()
+  expect(mocks.dialog.mock.lastCall?.[0].request.avoidSourceAgent).toBe(true)
+  expect(source).toMatchObject({ sourceAgent: 'opencode', transcriptPath: undefined })
 })

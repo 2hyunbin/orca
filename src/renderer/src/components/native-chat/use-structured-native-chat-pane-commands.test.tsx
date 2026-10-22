@@ -18,7 +18,7 @@ import { emptyNativeChatContextMenuActions } from './use-native-chat-context-men
 import { useNativeChatHandOff } from './use-native-chat-hand-off'
 import { useStructuredNativeChatPaneCommands } from './use-structured-native-chat-pane-commands'
 
-type ItemProps = { onSelect?: () => void; children?: ReactNode }
+type ItemProps = { disabled?: boolean; onSelect?: () => void; children?: ReactNode }
 
 const items = vi.hoisted(() => ({ list: [] as ItemProps[] }))
 const callRuntimeRpc = vi.hoisted(() => vi.fn())
@@ -77,7 +77,7 @@ vi.mock('@/runtime/structured-conversation-name', () => ({
 }))
 vi.mock('@/components/agent-session-continuation/AgentSessionContinuationDialog', () => ({
   AgentSessionContinuationDialog: (props: {
-    request: AgentSessionContinuationRequest
+    request: AgentSessionContinuationRequest | null
     onOpenChange: (open: boolean) => void
   }) => {
     handOff.dialog(props)
@@ -295,7 +295,7 @@ describe('a structured chat tab', () => {
         transcriptPath: '/discarded.jsonl'
       })
     )
-    expect(handOff.dialog).not.toHaveBeenCalled()
+    expect(screen.queryByText('Close hand-off')).toBeNull()
     const historical = Promise.withResolvers<{
       status: 'current'
       capturedText: string
@@ -304,7 +304,11 @@ describe('a structured chat tab', () => {
     handOff.options.mockReturnValue(historical.promise)
     await act(async () => openMenuHandOff())
     view.rerender(<StructuredChatTab inWorkspace />)
-    expect(screen.queryByText('Close hand-off')).toBeNull()
+    expect(handOff.dialog.mock.lastCall?.[0].request).toBeNull()
+    expect(
+      items.list.findLast((item) => childrenText(item.children) === 'Hand Off to Another Agent')
+        ?.disabled
+    ).toBe(true)
     await act(async () =>
       historical.resolve({
         status: 'current',
@@ -410,7 +414,7 @@ describe('a structured chat tab', () => {
         fireEvent.click(screen.getByText('Close hand-off'))
       } else {
         expect(handOff.error).toHaveBeenCalledOnce()
-        expect(handOff.dialog).not.toHaveBeenCalled()
+        expect(screen.queryByText('Close hand-off')).toBeNull()
       }
       await act(async () => openMenuHandOff())
       await act(async () => expired.resolve(true))

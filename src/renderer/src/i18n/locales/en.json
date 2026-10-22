@@ -19465,6 +19465,7 @@
       }
     },
     "agentSessionContinuation": {
+      "preparingContext": "Preparing saved chat context…",
       "handOffToAnotherAgent": "Hand Off to Another Agent",
       "dialogTitle": "Hand Off to Another Agent",
       "dialogDescription": "Start a fresh Agent session from this stopping point. The original session stays unchanged.",

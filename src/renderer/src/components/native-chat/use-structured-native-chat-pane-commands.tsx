@@ -48,6 +48,7 @@ export function useStructuredNativeChatPaneCommands({
   const contextMenu = useNativeChatContextMenu({
     ...menuTargets,
     // A chat in a terminal pane already hands off through that pane's own menu row.
+    handOffDisabled: handOff.preparing || handOff.dialog !== null,
     onHandOff: terminalPaneActions === undefined && handOff.available ? handOff.open : undefined,
     rootRef,
     actions: {

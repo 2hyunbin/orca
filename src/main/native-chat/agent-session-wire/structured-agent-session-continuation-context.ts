@@ -1,3 +1,4 @@
+import { projectSavedChatContextItems } from '../agent-session-saved-prompt-text'
 import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionContinuationContext } from '../../../shared/agent-session-wire'
 import { agentSessionCurrentContextRows } from '../../../shared/agent-session-context-clear'
@@ -42,7 +43,12 @@ export function continuationContextReader(
       return { status: 'superseded' }
     }
     const context = agentSessionCurrentContextRows(snapshot.items, snapshot.submissions)
-    const text = projectStructuredAgentSessionMessages(context.items, [], context.submissions)
+    const text = projectStructuredAgentSessionMessages(
+      context.items,
+      [],
+      context.submissions,
+      projectSavedChatContextItems
+    )
       .map(formatWorkerTranscriptMessage)
       .join('\n\n')
     const capturedText = trimAgentSessionContext(text, 'saved chat messages')
