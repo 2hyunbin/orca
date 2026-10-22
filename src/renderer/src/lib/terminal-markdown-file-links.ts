@@ -1,3 +1,4 @@
+import { isWindowsAbsolutePathLike } from '../../../shared/cross-platform-path'
 import { routeNativeChatHref } from '../../../shared/native-chat-href-routing'
 import { parseExplicitFileLinkTarget } from './explicit-file-link-target'
 import { detectTerminalFileUriLinks } from './terminal-file-uri-link'
@@ -5,6 +6,8 @@ import type { ParsedTerminalFileLink } from './terminal-links'
 
 const MAX_DESTINATION_LENGTH = 2048
 const ESCAPABLE_PUNCTUATION = /^[!"#$%&'()*+,\-./:;<=>?@[\]\\^_`{|}~]$/
+const MARKDOWN_ESCAPE = /\\([!"#$%&'()*+,\-./:;<=>?@[\]\\^_`{|}~])/g
+const NON_ESCAPE_BACKSLASH = /\\(?![!"#$%&'()*+,\-./:;<=>?@[\]\\^_`{|}~])/
 
 type MarkdownDestination = { start: number; end: number; closingIndex: number }
 
@@ -73,12 +76,24 @@ function readDestination(text: string, openingIndex: number): MarkdownDestinatio
   return null
 }
 
+// Why: Windows destinations use backslash as a separator, so `C:\me\.config` is not an escape.
+function unescapeMarkdownDestination(destination: string): string {
+  if (
+    isWindowsAbsolutePathLike(destination) ||
+    !destination.includes('/') ||
+    NON_ESCAPE_BACKSLASH.test(destination)
+  ) {
+    return destination
+  }
+  return destination.replace(MARKDOWN_ESCAPE, '$1')
+}
+
 function toMarkdownFileLink(
   text: string,
   destination: MarkdownDestination
 ): ParsedTerminalFileLink | null {
   const displayText = text.slice(destination.start, destination.end)
-  const href = displayText.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\]\\^_`{|}~])/g, '$1')
+  const href = unescapeMarkdownDestination(displayText)
   if (/^file:/i.test(href)) {
     const link = detectTerminalFileUriLinks(href).find(
       (candidate) => candidate.startIndex === 0 && candidate.endIndex === href.length

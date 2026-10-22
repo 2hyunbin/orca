@@ -45,6 +45,12 @@ for (const extract of [extractTerminalFileLinks, extractTerminalFileLinkCandidat
         'C:\\repo\\src\\file.ts:12:3',
         'C:\\repo\\src\\file.ts'
       ],
+      [
+        '[cfg](C:\\Users\\me\\.config\\app.json)',
+        'C:\\Users\\me\\.config\\app.json',
+        'C:\\Users\\me\\.config\\app.json'
+      ],
+      ['[ci](src\\.github\\ci.yml)', 'src\\.github\\ci.yml', 'src\\.github\\ci.yml'],
       ['[source](README.md:12:3)', 'README.md:12:3', 'README.md'],
       ['[PDF](/tmp/100%/report.pdf)', '/tmp/100%/report.pdf', '/tmp/100%/report.pdf']
     ])('extracts only destination from %s', (text, displayText, pathText) => {
