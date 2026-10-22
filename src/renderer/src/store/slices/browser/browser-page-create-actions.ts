@@ -33,7 +33,7 @@ export function createBrowserPageCreateActions(
         url,
         options?.title,
         options?.browserRuntimeEnvironmentId,
-        undefined,
+        options?.browserPageId,
         options?.docLocation
       )
       if (!options?.browserRuntimeEnvironmentId && !options?.docLocation) {

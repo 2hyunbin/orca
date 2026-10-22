@@ -464,6 +464,22 @@ describe('createBrowserSlice annotations', () => {
     expect(store.getState().setTabLabel).not.toHaveBeenCalled()
   })
 
+  it('opens a page under the id its caller allocated', async () => {
+    const { store, main } = await createTestStoreDrawnFromMain()
+    const tab = store.getState().createBrowserTab('wt-1', 'https://example.com')
+    await main.settle()
+
+    const page = store.getState().createBrowserPage(tab.id, 'https://example.com/b', {
+      browserPageId: 'page-asked'
+    })
+    await main.settle()
+
+    expect(page?.id).toBe('page-asked')
+    expect(store.getState().browserPagesByWorkspace[tab.id]?.map((entry) => entry.id)).toContain(
+      'page-asked'
+    )
+  })
+
   it('updates inactive browser pages without relabeling or rebuilding the workspace map', async () => {
     const { store, main } = await createTestStoreDrawnFromMain()
     const tab = store.getState().createBrowserTab('wt-1', 'https://example.com', {
