@@ -36,11 +36,19 @@ export type EditorPathMutationTarget = {
   }
 }
 
-export type EditorSaveQuiesceTarget = { fileId: string } | EditorPathMutationTarget
+export type EditorSaveQuiesceTarget =
+  | {
+      fileId: string
+      /** Don't Save: no flush, and autosave held until the release runs. */ discard?: true
+    }
+  | EditorPathMutationTarget
 
 export type EditorSaveQuiesceDetail = EditorSaveQuiesceTarget & {
   claim: () => void
   resolve: () => void
+  reject?: (message: string) => void
+  /** A path or discard quiesce holds autosave of that file in every workspace until this release runs. */
+  onHold?: (release: () => void) => void
 }
 
 export type EditorSaveFileTarget = {
@@ -48,8 +56,6 @@ export type EditorSaveFileTarget = {
   fallbackContent?: string
   /** Only the conflict banner's Overwrite sets this. */
   overwrite?: true
-  /** A save sent from the mobile app; its refusal is reported to mobile, not the desktop banner. */
-  origin?: 'mobile'
 }
 
 export type EditorSaveAndCloseDetail = {
@@ -172,8 +178,12 @@ export function getOpenFilesForExternalFileChange(
   })
 }
 
-export async function requestEditorSaveQuiesce(target: EditorSaveQuiesceTarget): Promise<void> {
-  await new Promise<void>((resolve) => {
+/** Resolves to a release for the autosave hold a path quiesce takes; call it once git finishes. */
+export async function requestEditorSaveQuiesce(
+  target: EditorSaveQuiesceTarget
+): Promise<() => void> {
+  let release = (): void => {}
+  await new Promise<void>((resolve, reject) => {
     let claimed = false
     window.dispatchEvent(
       new CustomEvent<EditorSaveQuiesceDetail>(ORCA_EDITOR_QUIESCE_FILE_SAVES_EVENT, {
@@ -182,7 +192,11 @@ export async function requestEditorSaveQuiesce(target: EditorSaveQuiesceTarget):
           claim: () => {
             claimed = true
           },
-          resolve
+          resolve,
+          reject: (message) => reject(new Error(message)),
+          onHold: (hold) => {
+            release = hold
+          }
         }
       })
     )
@@ -193,6 +207,7 @@ export async function requestEditorSaveQuiesce(target: EditorSaveQuiesceTarget):
       resolve()
     }
   })
+  return release
 }
 
 export async function requestEditorFileSave(target: EditorSaveFileTarget): Promise<void> {

@@ -10,10 +10,7 @@ import { snapshotCodexPaneHomeRoutes } from '../host-env/codex-home'
 import { getAppPtyId } from '../provider/registry'
 import {
   makePaneSpawnReservationKey,
-  reservePaneSpawn,
-  paneSpawnReservationsByOwnerKey,
-  pendingRuntimePaneCreatesByOwnerKey,
-  type PaneSpawnReservationResult
+  pendingRuntimePaneCreatesByOwnerKey
 } from '../pane/spawn-reservation'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
 import { excludeReplacedPaneOwner } from '../pane/replaced-pane-owner'
@@ -37,9 +34,7 @@ export function resolveEarlyPaneSpawnReservationKey(args: PtySpawnIpcArgs): stri
   return makePaneSpawnReservationKey(args.worktreeId, args.connectionId, resolveEarlyPaneKey(args))
 }
 
-export async function beginPtyIpcSpawn(
-  ctx: PtyIpcSpawnState
-): Promise<PaneSpawnReservationResult | null> {
+export async function beginPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
   const args = ctx.args
   // A pane an agent launch laid out attaches to its agent or says why it can't, never runs a shell.
   // A replacing spawn already holds the pane: the user restarted it, and that is theirs to run.
@@ -111,12 +106,6 @@ export async function beginPtyIpcSpawn(
     if (pendingRuntimeCreate) {
       await pendingRuntimeCreate.promise
     }
-    const existingPaneSpawn = earlyReservationKey
-      ? paneSpawnReservationsByOwnerKey.get(earlyReservationKey)
-      : undefined
-    if (existingPaneSpawn) {
-      return { ...(await existingPaneSpawn.promise), isReattach: true }
-    }
   }
   ctx.earlyStablePaneOwner =
     initialPaneKey && args.worktreeId
@@ -134,9 +123,7 @@ export async function beginPtyIpcSpawn(
   ctx.earlyWorktreeId = args.worktreeId
   // Reserve early so renderer/runtime materialization cannot start duplicate provider spawns.
   ctx.paneSpawnReservationKey = earlyReservationKey
-  ctx.paneSpawnReservation =
-    heldReservation ??
-    (ctx.paneSpawnReservationKey ? reservePaneSpawn(ctx.paneSpawnReservationKey) : null)
+  ctx.paneSpawnReservation = heldReservation ?? null
   ctx.finishTerminalInstall = (): void => {}
   ctx.stablePaneOwner = null
   ctx.stablePaneBindingPersisted = false
@@ -152,6 +139,4 @@ export async function beginPtyIpcSpawn(
   // have scanned from those bytes live.
   ctx.snapshotKittyFlagsCoverReconciledSeq = true
   ctx.preparedProvisionalExecutionContext = false
-
-  return null
 }

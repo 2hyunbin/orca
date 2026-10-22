@@ -24,7 +24,8 @@ import { providerExecutableMissing } from '../../provider-process/provider-execu
 import { providerRequestTimeoutOf } from '../../provider-process/provider-request-timeout'
 import { findInErrorChain } from '../../provider-process/provider-error-chain'
 import { argumentProblemOf } from '../structured-agent-arguments-error'
-import { codexInstallationProblemOf } from '../../codex/codex-cli-installation-error'
+import { agentCliInstallationProblemOf } from '../agent-cli-installation-error'
+import { agentCliInstallationFacts } from '../../../shared/agent-cli-installation-problem'
 
 /** Start refusals whose situation is itself what the person reads, with its own next step. */
 const TYPED_START_REFUSALS = [
@@ -87,12 +88,12 @@ export function startupAcquisitionRefusal(
 /** A failed start keeps its typed refusal or observed exit and private provider diagnostic. */
 export function providerStartupFailureFact(cause?: unknown): SubmissionRejectionFact {
   cause = startupAcquisitionRefusal(cause) ?? cause
-  const codexInstallation = codexInstallationProblemOf(cause)
-  if (codexInstallation) {
+  const installation = agentCliInstallationProblemOf(cause)
+  if (installation) {
     return agentSessionFailureFact('startFailed', {
       refusal: {
         code: 'agent_session_operation_invalid',
-        details: { reason: 'attachFailed', codexInstallation }
+        details: { reason: 'attachFailed', ...agentCliInstallationFacts(installation) }
       }
     })
   }

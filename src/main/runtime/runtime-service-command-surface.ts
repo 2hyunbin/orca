@@ -60,6 +60,7 @@ export type RuntimeServiceCommandSurface = {
   beginClaudeSignIn: RuntimeAccountController['beginClaudeSignIn']
   finishClaudeSignIn: RuntimeAccountController['finishClaudeSignIn']
   cancelClaudeSignIn: RuntimeAccountController['cancelClaudeSignIn']
+  runHostAccountSignIn: RuntimeAccountController['runHostSignIn']
   removeCodexAccount: RuntimeAccountController['removeCodex']
   addCodexAccountFromHome: RuntimeAccountController['addCodexFromHome']
   addDataAccountFromHome: RuntimeAccountController['addDataFromHome']
@@ -72,6 +73,9 @@ export type RuntimeServiceCommandSurface = {
   downloadMobileSpeechModel: RuntimeMobileSpeechCatalog['download']
   deleteMobileSpeechModel: RuntimeMobileSpeechCatalog['delete']
   configureMobileDictation: RuntimeMobileSpeechCatalog['configure']
+  getOpenAiSpeechKeyStatus: RuntimeMobileSpeechCatalog['openAiKeyStatus']
+  setOpenAiSpeechKey: RuntimeMobileSpeechCatalog['setOpenAiKey']
+  clearOpenAiSpeechKey: RuntimeMobileSpeechCatalog['clearOpenAiKey']
   startMobileDictation: RuntimeMobileDictationController['start']
   feedMobileDictation: RuntimeMobileDictationController['feed']
   finishMobileDictation: RuntimeMobileDictationController['finish']
@@ -167,6 +171,7 @@ export function installRuntimeServiceCommandSurface(
     beginClaudeSignIn: accounts.beginClaudeSignIn.bind(accounts),
     finishClaudeSignIn: accounts.finishClaudeSignIn.bind(accounts),
     cancelClaudeSignIn: accounts.cancelClaudeSignIn.bind(accounts),
+    runHostAccountSignIn: accounts.runHostSignIn.bind(accounts),
     removeCodexAccount: accounts.removeCodex.bind(accounts),
     addCodexAccountFromHome: accounts.addCodexFromHome.bind(accounts),
     addDataAccountFromHome: accounts.addDataFromHome.bind(accounts),
@@ -179,6 +184,9 @@ export function installRuntimeServiceCommandSurface(
     downloadMobileSpeechModel: speech.download.bind(speech),
     deleteMobileSpeechModel: speech.delete.bind(speech),
     configureMobileDictation: speech.configure.bind(speech),
+    getOpenAiSpeechKeyStatus: speech.openAiKeyStatus.bind(speech),
+    setOpenAiSpeechKey: speech.setOpenAiKey.bind(speech),
+    clearOpenAiSpeechKey: speech.clearOpenAiKey.bind(speech),
     startMobileDictation: dictation.start.bind(dictation),
     feedMobileDictation: dictation.feed.bind(dictation),
     finishMobileDictation: dictation.finish.bind(dictation),
