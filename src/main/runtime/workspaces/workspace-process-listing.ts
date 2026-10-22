@@ -96,6 +96,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       tabs: this.tabs,
       session,
       getPaneKey: (leaf) => this.makeRuntimePaneKey(leaf),
+      paneOf: (pty) => this.paneOfPty(pty),
       getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId),
       getSummary
     })
@@ -113,6 +114,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         repoById,
         ptysById: this.ptysById,
         tabs: this.tabs,
+        paneOf: (pty) => this.paneOfPty(pty),
         getTerminalHandlesForPty: (ptyId) => this.getExistingTerminalHandlesForPtyId(ptyId),
         getSummary
       })
