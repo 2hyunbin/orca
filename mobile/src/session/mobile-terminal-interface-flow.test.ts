@@ -1,4 +1,4 @@
-import { createElement, useCallback, useState } from 'react'
+import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
 import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
@@ -7,32 +7,43 @@ import {
   type MobileNativeChatTab
 } from './mobile-native-chat-eligibility'
 import { useMobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-launch-draft-seed'
-import { mobileNativeChatLaunchDraftSeeds } from './mobile-native-chat-draft-store'
+import {
+  editMobileNativeChatDraft,
+  resetMobileNativeChatDraftStoreForTests,
+  setMobileNativeChatDraftText,
+  useMobileNativeChatDraft
+} from './mobile-native-chat-draft-store'
+import {
+  loadDefaultSessionView,
+  readSessionViewOverridesPreference,
+  updateSessionViewOverride
+} from '../storage/session-view-preferences'
 import { mobileSessionTabsEqual, type MobileTerminalSessionTab } from './mobile-terminal-records'
 
 vi.mock('lucide-react-native', () => ({ MessageSquare: () => null, SquareTerminal: () => null }))
-vi.mock('./use-mobile-session-view-mode', async () => {
-  const { useCallback, useState } = await import('react')
-  return {
-    useMobileSessionViewMode: () => {
-      const [chat, setChat] = useState(true)
-      const setTabView = useCallback((_id: string, view: string) => setChat(view === 'chat'), [])
-      return {
-        ready: true,
-        isTabChatView: () => chat,
-        setTabView,
-        toggleTabChatView: () => setChat((value) => !value)
-      }
-    }
-  }
+vi.mock('expo-router', async () => {
+  const { useEffect } = await import('react')
+  return { useFocusEffect: (callback: () => void) => useEffect(callback, [callback]) }
 })
+vi.mock('../storage/session-view-preferences', () => ({
+  loadDefaultSessionView: vi.fn(),
+  readSessionViewOverridesPreference: vi.fn(),
+  updateSessionViewOverride: vi.fn()
+}))
 import { useMobileNativeChatActiveResolution } from './use-mobile-native-chat-active-resolution'
 import { getMobileNativeChatToggleActions } from './mobile-native-chat-toggle-action'
 
 it.each([undefined, 'Keep this editable'])(
-  'moves active Chat and its stream back to the terminal on qualified rowless host release, while real producer pending shapes and old-host tabs remain usable (draft=%s)',
+  'preserves the phone Chat choice and edited draft through shell availability and same-terminal relaunch (draft=%s)',
   async (launchDraft) => {
-    mobileNativeChatLaunchDraftSeeds.clear()
+    resetMobileNativeChatDraftStoreForTests()
+    vi.mocked(loadDefaultSessionView)
+      .mockReset()
+      .mockResolvedValue(launchDraft ? 'terminal' : 'chat')
+    vi.mocked(readSessionViewOverridesPreference)
+      .mockReset()
+      .mockResolvedValue({ overrides: new Map(), loaded: true })
+    vi.mocked(updateSessionViewOverride).mockReset().mockResolvedValue(undefined)
     const observation: TerminalInterfaceObservation = {
       ptyId: 'physical',
       incarnationId: 'birth',
@@ -61,15 +72,8 @@ it.each([undefined, 'Keep this editable'])(
     }
     const values: ReturnType<typeof useMobileNativeChatActiveResolution>[] = []
     let draftText = ''
-    let editDraft: (text: string) => void = () => {}
     function Probe() {
-      const [draft, setDraft] = useState('')
-      draftText = draft
-      editDraft = setDraft
-      const setDraftText = useCallback(
-        (_key: string, update: import('react').SetStateAction<string>) => setDraft(update),
-        []
-      )
+      draftText = useMobileNativeChatDraft('terminal-interface-flow')
       const resolution = useMobileNativeChatActiveResolution({
         hostId: 'host',
         worktreeId: 'folder:one',
@@ -84,7 +88,7 @@ it.each([undefined, 'Keep this editable'])(
         messages: [],
         launchDraft: tab.launchDraft,
         chatActive: resolution.showNativeChat,
-        setDraftText
+        setDraftText: setMobileNativeChatDraftText
       })
       return null
     }
@@ -93,48 +97,72 @@ it.each([undefined, 'Keep this editable'])(
       getMobileNativeChatToggleActions({
         terminalHandle: 'handle',
         tabs: [tab],
-        isTabChatView: () => false,
+        isTabChatView: (id) => values.at(-1)?.isTabChatView(id) ?? false,
         nativeChatTranscriptIsLocalReadable: true,
         onClose: () => {},
-        onToggle: () => {}
+        onToggle: (id) => values.at(-1)?.toggleTabChatView(id)
       })
     try {
       await act(async () => {
         renderer = create(createElement(Probe))
       })
-      expect(values.at(-1)?.showNativeChat).toBe(true)
+      expect(values.at(-1)?.sessionViewReady).toBe(true)
+      expect(values.at(-1)?.showNativeChat).toBe(!launchDraft)
       expect(menu()).toEqual([])
       // These are the pending-handle and new cold binding shapes exercised through
       // the real new-tab/folder producers and host projection in the root flow tests.
       tab = { ...tab, terminal: 'handle', status: 'ready', terminalInterface: observation }
       await act(async () => renderer?.update(createElement(Probe)))
-      expect(values.at(-1)?.showNativeChat).toBe(true)
       expect(menu()).toHaveLength(1)
+      if (launchDraft) {
+        expect(menu()[0]?.label).toBe('Switch to chat view')
+        await act(async () => menu()[0]?.onPress())
+        expect(updateSessionViewOverride).toHaveBeenLastCalledWith(
+          'host',
+          'folder:one',
+          'tab',
+          'chat'
+        )
+      }
+      expect(values.at(-1)?.showNativeChat).toBe(true)
+      vi.mocked(updateSessionViewOverride).mockClear()
       tab = {
         ...tab,
-        terminalInterface: { ...observation, revision: 2, state: 'agent', basis: 'hook' }
+        terminalInterface: { ...observation, revision: 2, state: 'agent', basis: 'hook' },
+        agentStatus: {
+          agentType: 'codex',
+          state: 'done',
+          prompt: 'Reply with OK',
+          updatedAt: 1,
+          stateStartedAt: 1,
+          stateHistory: [],
+          paneKey: observation.paneKey,
+          providerSession: { key: 'session_id', id: 'original-session' }
+        }
       }
       await act(async () => renderer?.update(createElement(Probe)))
       expect(values.at(-1)?.showNativeChat).toBe(true)
       expect(draftText).toBe(launchDraft ?? '')
-      if (launchDraft) {
-        await act(async () => editDraft('My edited context'))
-      }
+      await act(async () =>
+        editMobileNativeChatDraft('terminal-interface-flow', 'My edited context')
+      )
       tab = {
         ...tab,
-        terminalInterface: { ...observation, revision: 3, state: 'shell', basis: 'hook' }
+        terminalInterface: { ...observation, revision: 3, state: 'shell', basis: 'hook' },
+        agentStatus: null
       }
       await act(async () => renderer?.update(createElement(Probe)))
       expect(values.at(-1)?.showNativeChat).toBe(false)
       expect(values.at(-1)?.showNativeChatRef.current).toBe(false)
-      expect(values.at(-1)?.isTabChatView('tab')).toBe(false)
+      expect.soft(values.at(-1)?.isTabChatView('tab')).toBe(true)
+      expect.soft(updateSessionViewOverride).not.toHaveBeenCalled()
       expect(menu()).toEqual([])
       expect(mobileTerminalInterfaceReleasesChat(tab)).toBe(true)
       expect(mobileTerminalInterfaceReleasesChat({ ...tab, launchDraft: 'unsent context' })).toBe(
         true
       )
       expect(tab.launchDraft).toBe(launchDraft)
-      expect(draftText).toBe(launchDraft ? 'My edited context' : '')
+      expect(draftText).toBe('My edited context')
       expect(values.at(-1)?.activeChatAgentRef.current).toBeNull()
       expect(values.at(-1)?.activeChatResolution).toBeNull()
       const projected = { ...tab, terminal: 'handle', title: 'Shell', isActive: true }
@@ -142,6 +170,51 @@ it.each([undefined, 'Keep this editable'])(
       expect(
         mobileSessionTabsEqual([projected], [{ ...projected, terminalInterface: undefined }])
       ).toBe(false)
+      tab = {
+        ...tab,
+        terminalInterface: { ...observation, revision: 4, state: 'agent', basis: 'hook' },
+        agentStatus: {
+          agentType: 'codex',
+          state: 'done',
+          prompt: 'Reply with OK',
+          updatedAt: 2,
+          stateStartedAt: 2,
+          stateHistory: [],
+          paneKey: observation.paneKey,
+          providerSession: { key: 'session_id', id: 'relaunched-session' }
+        }
+      }
+      await act(async () => renderer?.update(createElement(Probe)))
+      expect(values.at(-1)?.showNativeChat).toBe(true)
+      expect(values.at(-1)?.showNativeChatRef.current).toBe(true)
+      expect(values.at(-1)?.activeChatAgentRef.current).toBe('codex')
+      expect(values.at(-1)?.activeChatSessionId).toBe('relaunched-session')
+      expect(values.at(-1)?.streamIdentity).toContain('relaunched-session')
+      expect(menu()[0]?.label).toBe('Switch to terminal view')
+      expect(draftText).toBe('My edited context')
+      expect(updateSessionViewOverride).not.toHaveBeenCalled()
+      await act(async () => menu()[0]?.onPress())
+      expect(updateSessionViewOverride).toHaveBeenLastCalledWith(
+        'host',
+        'folder:one',
+        'tab',
+        'terminal'
+      )
+      tab = {
+        ...tab,
+        terminalInterface: { ...observation, revision: 5, basis: 'hook' },
+        agentStatus: null
+      }
+      await act(async () => renderer?.update(createElement(Probe)))
+      expect(menu()).toEqual([])
+      tab = {
+        ...tab,
+        terminalInterface: { ...observation, revision: 6, state: 'agent', basis: 'hook' }
+      }
+      await act(async () => renderer?.update(createElement(Probe)))
+      expect(values.at(-1)?.isTabChatView('tab')).toBe(false)
+      expect(values.at(-1)?.showNativeChat).toBe(false)
+      expect(draftText).toBe('My edited context')
       // Omitted old-host field preserves the prior launch/transcript resolver and toggle.
       tab = { ...tab, terminalInterface: undefined }
       expect(menu()).toHaveLength(1)
