@@ -9,6 +9,7 @@ import { holdTabPaneTree } from '@/runtime/layout-owner-pane-intents'
 import { holdDrawnTabs, type DrawnTabHold } from '@/runtime/layout-owner-drawn-tab-holds'
 import { holdsPaneTree, releaseLayoutApplyHolds } from '@/runtime/layout-apply-hold-release'
 import { handleServerLayoutReply, serverLayoutApplyFor } from '@/runtime/server-layout-apply'
+import type { ServerMoveDrawnTabs } from '@/runtime/server-layout-apply'
 import {
   LOCAL_LAYOUT_APPLY_ORIGIN,
   type LayoutApplyOrigin
@@ -224,7 +225,7 @@ function drawnTabHolds(worktreeId: string, command: WindowLayoutCommand): DrawnT
  * caller acts as today.
  */
 export function sendLayoutApply(
-  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0],
+  state: Parameters<typeof runtimeEnvironmentIdUnlessTwin>[0] & ServerMoveDrawnTabs,
   worktreeId: string,
   command: WindowLayoutCommand,
   handlers: LayoutApplyHandlers
@@ -234,7 +235,9 @@ export function sendLayoutApply(
   // edits this window's layout, not either host, as the terminal-create path does.
   const environmentId = runtimeEnvironmentIdUnlessTwin(state, worktreeId)
   // A paired server's workspace: its main takes the intent when its frames draw the workspace.
-  const server = environmentId ? serverLayoutApplyFor(environmentId, worktreeId, command) : null
+  const server = environmentId
+    ? serverLayoutApplyFor(environmentId, worktreeId, command, state)
+    : null
   if (environmentId && !server) {
     return false
   }

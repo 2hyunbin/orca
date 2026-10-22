@@ -10,6 +10,7 @@ import type {
   LayoutApplyReply,
   LayoutCommandResult
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
+import type { AppState } from '@/store/types'
 import type { LayoutApplyHandlers, WindowLayoutCommand } from './layout-apply-send'
 import { serverLayoutApplyRoute, type ServerLayoutApplyRoute } from './server-layout-apply-routes'
 
@@ -57,12 +58,18 @@ export type ServerLayoutApply = {
   command: WindowLayoutCommand
 }
 
+/** The window's drawn tabs, which place a routed move among the server's tabs. */
+export type ServerMoveDrawnTabs = Partial<
+  Pick<AppState, 'groupsByWorktree' | 'unifiedTabsByWorktree'>
+>
+
 /** Null when the intent keeps today's path: off the list, a workspace no server frames draw, or a
  *  tab the server's frames do not hold. */
 export function serverLayoutApplyFor(
   environmentId: string,
   worktreeId: string,
-  command: WindowLayoutCommand
+  command: WindowLayoutCommand,
+  drawn: ServerMoveDrawnTabs = {}
 ): ServerLayoutApply | null {
   if (!isServerRouted(command)) {
     return null
@@ -79,16 +86,67 @@ export function serverLayoutApplyFor(
   if (!tabId) {
     return null
   }
-  if (command.type === 'moveTab' && command.afterTabId) {
-    // An anchor the server does not hold is dropped, never sent raw: its main then uses `index`.
-    const { afterTabId, ...rest } = command
-    const serverAnchor = route.serverTabId(afterTabId)
+  if (command.type === 'moveTab') {
+    const order = drawnGroupOrder(drawn, worktreeId, command.toGroupId)
     return {
       route,
-      command: { ...rest, tabId, ...(serverAnchor ? { afterTabId: serverAnchor } : {}) }
+      command: order ? serverMove(command, tabId, route, order) : anchored(command, tabId, route)
     }
   }
   return { route, command: { ...command, tabId } }
+}
+
+type MoveTab = Extract<WindowLayoutCommand, { type: 'moveTab' }>
+
+/** A group's tabs that have a row: a hidden launch slot is not one. */
+function drawnGroupOrder(
+  drawn: ServerMoveDrawnTabs,
+  worktreeId: string,
+  groupId: string
+): string[] | undefined {
+  const order = drawn.groupsByWorktree?.[worktreeId]?.find(
+    (group) => group.id === groupId
+  )?.tabOrder
+  const rows = drawn.unifiedTabsByWorktree?.[worktreeId]
+  if (!order || !rows) {
+    return undefined
+  }
+  const ids = new Set(rows.map((tab) => tab.id))
+  return order.filter((id) => ids.has(id))
+}
+
+/**
+ * A move placed among the server's tabs: this desktop's own tabs and any the server does not hold
+ * are skipped, so the anchor is the nearest server tab before the slot and the index counts only
+ * server tabs.
+ */
+function serverMove(
+  command: MoveTab,
+  tabId: string,
+  route: ServerLayoutApplyRoute,
+  desktopOrder: readonly string[]
+): MoveTab {
+  const others = desktopOrder.filter((id) => id !== command.tabId)
+  const after = command.afterTabId ? others.indexOf(command.afterTabId) : -1
+  const slot =
+    command.afterTabId === null
+      ? 0
+      : after !== -1
+        ? after + 1
+        : Math.min(Math.max(command.index, 0), others.length)
+  const serverBefore = others.slice(0, slot).flatMap((id) => route.serverTabId(id) ?? [])
+  return { ...command, tabId, index: serverBefore.length, afterTabId: serverBefore.at(-1) ?? null }
+}
+
+/** With no drawn order: an anchor the server does not hold is dropped, never sent raw, so its main
+ *  uses `index`. */
+function anchored(command: MoveTab, tabId: string, route: ServerLayoutApplyRoute): MoveTab {
+  if (!command.afterTabId) {
+    return { ...command, tabId }
+  }
+  const { afterTabId, ...rest } = command
+  const serverAnchor = route.serverTabId(afterTabId)
+  return serverAnchor ? { ...rest, tabId, afterTabId: serverAnchor } : { ...rest, tabId }
 }
 
 /**

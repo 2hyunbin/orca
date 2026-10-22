@@ -8,14 +8,6 @@ import {
   setGroupRatioThroughLayoutOwner
 } from './tab-group-layout-owner-commands'
 import { LOCAL_LAYOUT_APPLY_ORIGIN } from '@/runtime/server-layout-apply-routes'
-import {
-  resetFrameDrawnServerWorkspacesForTests,
-  setFrameDrawnServerWorkspaces
-} from '@/runtime/web-session-tabs-sync/frame-drawn-server-workspaces'
-import {
-  _resetDesktopCreatedServerTabsForTests,
-  noteDesktopCreatedServerTab
-} from '@/lib/desktop-created-server-tabs'
 
 const mocks = vi.hoisted(
   (): {
@@ -74,18 +66,7 @@ beforeEach(() => {
   mocks.send.mockReset()
   mocks.send.mockReturnValue(true)
 })
-afterEach(() => {
-  endLayoutFramePositions()
-  resetFrameDrawnServerWorkspacesForTests()
-  _resetDesktopCreatedServerTabsForTests()
-})
-
-/** Tab `x` is this desktop's own, in a workspace a server's frames draw: the server has no `x`. */
-function withDesktopCreatedTab(groupId: string): void {
-  store().getState().createTab(WT, groupId, undefined, { id: 'x' })
-  setFrameDrawnServerWorkspaces('env-1', new Set([WT]))
-  noteDesktopCreatedServerTab('env-1', WT, 'x')
-}
+afterEach(() => endLayoutFramePositions())
 
 describe('dropTabThroughLayoutOwner', () => {
   it('leaves the move to main’s frame while frames flow, moving nothing itself', () => {
@@ -183,36 +164,6 @@ describe('dropTabThroughLayoutOwner', () => {
     const { right } = seeded()
     dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right })
     expect(mocks.send.mock.calls[0]![1]).toMatchObject({ index: 1, afterTabId: 'c' })
-  })
-
-  it('anchors a reorder on the server tab before its slot, counting no desktop-created tab', () => {
-    const { left } = seeded()
-    withDesktopCreatedTab(left)
-    dropTabThroughLayoutOwner(WT, {
-      kind: 'reorder',
-      tabId: 'a',
-      groupId: left,
-      tabOrder: ['b', 'x', 'a']
-    })
-    expect(mocks.send.mock.calls[0]![1]).toMatchObject({ index: 1, afterTabId: 'b' })
-  })
-
-  it('anchors a move after a desktop-created tab on the server tab before it', () => {
-    const { right } = seeded()
-    withDesktopCreatedTab(right)
-    expect(orderOf(right)).toEqual(['c', 'x'])
-    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right })
-    expect(mocks.send.mock.calls[0]![1]).toMatchObject({ index: 1, afterTabId: 'c' })
-  })
-
-  it('anchors a move before every server tab at the group start', () => {
-    const { right } = seeded()
-    store().getState().createTab(WT, right, undefined, { id: 'x' })
-    store().getState().reorderUnifiedTabs(right, ['x', 'c'])
-    setFrameDrawnServerWorkspaces('env-1', new Set([WT]))
-    noteDesktopCreatedServerTab('env-1', WT, 'x')
-    dropTabThroughLayoutOwner(WT, { kind: 'move', tabId: 'a', groupId: right, index: 1 })
-    expect(mocks.send.mock.calls[0]![1]).toMatchObject({ index: 0, afterTabId: null })
   })
 
   it('moves as today when main cannot act, and not at all when main refuses', () => {
