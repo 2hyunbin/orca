@@ -1,8 +1,8 @@
 import { useEffect, type MutableRefObject } from 'react'
-import { conflictOverviewFileId } from '@/store/slices/editor/file-ids/editor-file-ids'
+import { conflictOverviewView } from '@/store/slices/editor/buffers/editor-buffer-conflict-overview'
 import type { OpenFile } from '@/store/slices/editor'
 import { joinPath } from '@/lib/path'
-import type { useAppStore } from '@/store'
+import { useAppStore } from '@/store'
 import type { DiffContent, FileContent } from './editor-panel-content-types'
 import { isReloadableSingleFileDiffTab } from './editor-panel-diff-reload'
 import type { EditorPanelDiffContentLoader } from './useEditorPanelDiffContentLoader'
@@ -14,7 +14,6 @@ type GitStatusByWorktree = ReturnType<typeof useAppStore.getState>['gitStatusByW
 type UseEditorPanelActiveTabContentLoadParams = {
   activeFile: OpenFile | null
   selectedConflictReviewFile: OpenFile | null
-  openFiles: readonly OpenFile[]
   isVisible: boolean
   isChangesMode: boolean
   gitStatusEntries: GitStatusByWorktree[string] | undefined
@@ -43,7 +42,6 @@ function hasLiveRead(
 export function useEditorPanelActiveTabContentLoad({
   activeFile,
   selectedConflictReviewFile,
-  openFiles,
   isVisible,
   isChangesMode,
   gitStatusEntries,
@@ -99,9 +97,16 @@ export function useEditorPanelActiveTabContentLoad({
         }
 
         const absolutePath = joinPath(activeFile.filePath, entry.path)
-        const fileId = conflictOverviewFileId(openFiles, activeFile.worktreeId, absolutePath)
-        if (needsFileRead(fileId)) {
-          void loadFileContent(absolutePath, fileId, activeFile.worktreeId, entry.path)
+        const view = conflictOverviewView(
+          useAppStore.getState(),
+          activeFile.worktreeId,
+          absolutePath
+        )
+        // Why the view's own owner: another workspace's view must load as it would, never re-owned.
+        if (view ? needsFileRead(view.id) : needsFileRead(absolutePath)) {
+          void (view
+            ? loadFileContent(view.filePath, view.id, view.worktreeId, view.relativePath)
+            : loadFileContent(absolutePath, absolutePath, activeFile.worktreeId, entry.path))
         }
       }
       return

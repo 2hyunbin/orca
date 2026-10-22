@@ -1,9 +1,12 @@
 import type { AppState } from '@/store'
 import { joinPath } from '@/lib/path'
 import type { OpenFile } from '@/store/slices/editor'
-import { conflictOverviewFileId } from '@/store/slices/editor/file-ids/editor-file-ids'
+import {
+  conflictOverviewView,
+  type ConflictOverviewState
+} from '@/store/slices/editor/buffers/editor-buffer-conflict-overview'
 
-type EditorDraftState = Pick<AppState, 'editorDrafts' | 'openFiles'>
+type EditorDraftState = Pick<AppState, 'editorDrafts'> & ConflictOverviewState
 type EditorPanelDraftSelector = (state: EditorDraftState) => Record<string, string>
 
 const EMPTY_EDITOR_PANEL_DRAFTS = Object.freeze({}) as Record<string, string>
@@ -26,15 +29,15 @@ export function createEditorPanelDraftSelector(
           joinPath(activeFile.filePath, entry.path)
         )
       : []
-  // Why: an overview file open in a tab shows under that tab's id (a server file's is not its path).
+  // Why: an overview file shows under its record's view id (a server file's is not its path).
   const selectedFileIds = (state: EditorDraftState): string[] =>
     overviewPaths.length === 0 || !activeFile
       ? fileIds
       : Array.from(
           new Set([
             ...fileIds,
-            ...overviewPaths.map((path) =>
-              conflictOverviewFileId(state.openFiles, activeFile.worktreeId, path)
+            ...overviewPaths.map(
+              (path) => conflictOverviewView(state, activeFile.worktreeId, path)?.id ?? path
             )
           ])
         )

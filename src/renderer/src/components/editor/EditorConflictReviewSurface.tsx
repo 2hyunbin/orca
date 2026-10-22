@@ -1,5 +1,5 @@
 import React from 'react'
-import { conflictOverviewFileId } from '@/store/slices/editor/file-ids/editor-file-ids'
+import { conflictOverviewView } from '@/store/slices/editor/buffers/editor-buffer-conflict-overview'
 import { detectLanguage } from '@/lib/language-detect'
 import { joinPath } from '@/lib/path'
 import { useAppStore } from '@/store'
@@ -40,6 +40,8 @@ export function EditorConflictReviewSurface({
   const openConflictReviewFile = useAppStore((s) => s.openConflictReviewFile)
   const openConflictReview = useAppStore((s) => s.openConflictReview)
   const closeFile = useAppStore((s) => s.closeFile)
+  // Why: re-render when a record gains or loses views, so the overview follows the record.
+  useAppStore((s) => s.editorBufferViews)
   const setRightSidebarTab = useAppStore((s) => s.setRightSidebarTab)
   const selectedConflictReviewFile = activeFile.conflictReview?.selectedFileId
     ? (openFiles.find((file) => file.id === activeFile.conflictReview?.selectedFileId) ?? null)
@@ -60,6 +62,12 @@ export function EditorConflictReviewSurface({
 
   const createContentFile = (entry: GitStatusEntry): OpenFile => {
     const absolutePath = joinPath(activeFile.filePath, entry.path)
+    // Why: an open view of the file lends its id, so the overview mounts its record's model and draft.
+    const recordView = conflictOverviewView(
+      useAppStore.getState(),
+      activeFile.worktreeId,
+      absolutePath
+    )
     const conflict =
       entry.conflictKind && entry.conflictStatus && entry.conflictStatusSource
         ? entry.status === 'deleted'
@@ -83,8 +91,8 @@ export function EditorConflictReviewSurface({
         : undefined
 
     return {
-      id: conflictOverviewFileId(openFiles, activeFile.worktreeId, absolutePath),
-      filePath: absolutePath,
+      id: recordView?.id ?? absolutePath,
+      filePath: recordView?.filePath ?? absolutePath,
       relativePath: entry.path,
       worktreeId: activeFile.worktreeId,
       language: detectLanguage(entry.path),
