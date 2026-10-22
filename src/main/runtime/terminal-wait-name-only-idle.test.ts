@@ -69,6 +69,7 @@ function createWait(options: {
       ...shared,
       defaultTimeoutMs: 60_000,
       getLivePty: () => (options.pty ? { pty: options.pty } : null),
+      exitUnsettled: () => false,
       getLiveLeaf: () => ({ leaf: options.leaf ?? makeTuiIdleLeaf() }),
       startVisibleReadProbe
     },
