@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
+import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import { detectUiLanguage, setRendererLanguageDetection } from '../../../../shared/ui-locale'
 import { useAppStore } from '@/store'
 import { i18n } from '@/i18n/i18n'
@@ -123,13 +124,15 @@ describe('onboarding language request', () => {
           finishRequest = resolve
         })
     )
-    const save = vi.fn(async () => {
-      const settings = useAppStore.getState().settings
-      if (settings) {
-        useAppStore.setState({ settings: { ...settings, uiLanguage: 'fr' } })
-      }
+    let settings = getDefaultSettings('/tmp')
+    const save = vi.fn(async (updates: Partial<GlobalSettings>) => {
+      settings = { ...settings, ...updates }
+      return settings
     })
-    useAppStore.setState({ updateSettingsOrThrow: save })
+    Object.defineProperty(window, 'api', {
+      configurable: true,
+      value: { feedback: { submit }, telemetryTrack, settings: { set: save } }
+    })
     await openRequest()
     fireEvent.click(screen.getByRole('button', { name: 'Request language' }))
     fireEvent.click(screen.getByRole('button', { name: 'Languages' }))

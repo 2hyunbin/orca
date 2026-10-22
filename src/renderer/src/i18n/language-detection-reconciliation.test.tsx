@@ -5,7 +5,39 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { GlobalSettings } from '../../../shared/global-settings-types'
 import type { UiLanguageDetection } from '../../../shared/ui-locale'
 
-beforeEach(() => vi.resetModules())
+async function loadLanguageRuntime() {
+  const [constants, locale, store, packs, readiness, provider, rendererI18n, onboarding] =
+    await Promise.all([
+      import('../../../shared/constants'),
+      import('../../../shared/ui-locale'),
+      import('@/store'),
+      import('@/store/plugin-language-packs'),
+      import('./language-readiness'),
+      import('./I18nProvider'),
+      import('./i18n'),
+      import('@/components/onboarding/OnboardingLanguageSwitcher')
+    ])
+  return {
+    getDefaultSettings: constants.getDefaultSettings,
+    detectUiLanguage: locale.detectUiLanguage,
+    useAppStore: store.useAppStore,
+    usePluginLanguagePackStore: packs.usePluginLanguagePackStore,
+    useLanguageReadiness: readiness.useLanguageReadiness,
+    I18nProvider: provider.I18nProvider,
+    i18n: rendererI18n.i18n,
+    loadRendererUiLanguage: rendererI18n.loadRendererUiLanguage,
+    OnboardingLanguageSwitcher: onboarding.OnboardingLanguageSwitcher
+  }
+}
+
+let runtime: Awaited<ReturnType<typeof loadLanguageRuntime>>
+
+beforeEach(async () => {
+  vi.resetModules()
+  runtime = await loadLanguageRuntime()
+  await Promise.all([runtime.loadRendererUiLanguage('fr'), runtime.loadRendererUiLanguage('ja')])
+  await runtime.i18n.changeLanguage('en')
+})
 
 afterEach(() => {
   cleanup()
@@ -16,17 +48,16 @@ afterEach(() => {
 it.each(['system', 'explicit'] as const)(
   'reconciles late native detection while preserving the %s preference',
   async (preference) => {
-    const { getDefaultSettings } = await import('../../../shared/constants')
-    const { detectUiLanguage } = await import('../../../shared/ui-locale')
-    const { useAppStore } = await import('@/store')
-    const { usePluginLanguagePackStore } = await import('@/store/plugin-language-packs')
-    const { useLanguageReadiness } = await import('./language-readiness')
-    const { I18nProvider } = await import('./I18nProvider')
-    const { i18n, loadRendererUiLanguage } = await import('./i18n')
-    const { OnboardingLanguageSwitcher } =
-      await import('@/components/onboarding/OnboardingLanguageSwitcher')
-    await Promise.all([loadRendererUiLanguage('fr'), loadRendererUiLanguage('ja')])
-    await i18n.changeLanguage('en')
+    const {
+      getDefaultSettings,
+      detectUiLanguage,
+      useAppStore,
+      usePluginLanguagePackStore,
+      useLanguageReadiness,
+      I18nProvider,
+      i18n,
+      OnboardingLanguageSwitcher
+    } = runtime
     vi.useFakeTimers()
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     Object.defineProperty(navigator, 'languages', { configurable: true, value: ['fr-FR'] })
