@@ -181,7 +181,10 @@ export async function runPtyIpcSpawn(deps: PtySpawnIpcDeps, args: PtySpawnIpcArg
       })
     }
     triggerPtySpawnPushTargetMaterialization(deps, args)
-    await beginPtyIpcSpawn(ctx)
+    const early = await beginPtyIpcSpawn(ctx)
+    if (early) {
+      return early
+    }
     const paneKey = resolveEarlyPaneKey(args)
     if (!paneKey || !args.worktreeId || !args.tabId || !args.leafId) {
       return await fresh({ mustExist: false })

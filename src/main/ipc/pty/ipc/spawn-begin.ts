@@ -12,7 +12,8 @@ import { snapshotCodexPaneHomeRoutes } from '../host-env/codex-home'
 import { getAppPtyId } from '../provider/registry'
 import {
   makePaneSpawnReservationKey,
-  pendingRuntimePaneCreatesByOwnerKey
+  pendingRuntimePaneCreatesByOwnerKey,
+  type PaneSpawnReservationResult
 } from '../pane/spawn-reservation'
 import { resolveStablePaneOwner } from '../pane/stable-owner'
 import { excludeReplacedPaneOwner } from '../pane/replaced-pane-owner'
@@ -36,7 +37,9 @@ export function resolveEarlyPaneSpawnReservationKey(args: PtySpawnIpcArgs): stri
   return makePaneSpawnReservationKey(args.worktreeId, args.connectionId, resolveEarlyPaneKey(args))
 }
 
-export async function beginPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<void> {
+export async function beginPtyIpcSpawn(
+  ctx: PtyIpcSpawnState
+): Promise<PaneSpawnReservationResult | void> {
   const args = ctx.args
   // A pane an agent launch laid out attaches to its agent or says why it can't, never runs a shell.
   // A replacing spawn already holds the pane: the user restarted it, and that is theirs to run.
