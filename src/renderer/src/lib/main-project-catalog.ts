@@ -1,102 +1,203 @@
+import { z } from 'zod'
+import type { ProjectGroup } from '../../../shared/project-group-types'
+import type { Project, ProjectHostSetup } from '../../../shared/project-types'
 import type { Repo } from '../../../shared/repo-types'
-import type { SidebarFeedDomains } from '../../../shared/sidebar-list/sidebar-feed-domains'
+import { ProjectGroupSchema } from '../../../shared/project-section-catalog-schema'
+import { catalogRowWith } from '../../../shared/sidebar-list/paired-server-catalog'
+import {
+  CATALOG_RECORDS_DOMAIN,
+  type CatalogRecordsOrder
+} from '../../../shared/sidebar-list/catalog-records-feed-contract'
+import { SidebarInputsReadResultSchema } from '../../../shared/sidebar-list/sidebar-inputs-feed-contract'
 import type { SidebarProjectCatalogRecords } from '../../../shared/sidebar-list/sidebar-project-catalog'
 import {
   MAX_REPO_ICON_IDS_PER_READ,
   repoIconFeedKey
 } from '../../../shared/sidebar-list/repo-icon-data-urls-contract'
-import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-switch'
-import { z } from 'zod'
 import {
-  onDesktopSidebarFeedInstalled,
-  readDesktopSidebarFeed,
-  refreshDesktopSidebarFeed,
-  startDesktopSidebarFeed,
-  type DesktopSidebarFeed
-} from './desktop-sidebar-feed'
+  SidebarFeedReader,
+  type SidebarFeedReaderRead,
+  type SidebarFeedTransport
+} from '../../../shared/sidebar-feed-client/sidebar-feed-reader'
+import { readDesktopSidebarFeed, onDesktopSidebarFeedInstalled } from './desktop-sidebar-feed'
 
-/** Main's catalog rows as the window holds them: uploaded icons joined back in. */
-export type InstalledProjectCatalog = SidebarProjectCatalogRecords
+/** Main's project catalog as this window reads it: main's rows, the window holds no copy. */
+export type MainProjectCatalog = SidebarProjectCatalogRecords
 
-type CatalogSink = (catalog: InstalledProjectCatalog) => void
+const EMPTY_CATALOG: MainProjectCatalog = {
+  repos: [],
+  projectGroups: [],
+  projects: [],
+  projectHostSetups: []
+}
+
+// A failed read (main still starting) retries on its own.
+const RETRY_MS = 1_000
+
+// The installer keeps an unchanged entity's raw object, so each row is parsed once and keeps its
+// identity: one group rename re-creates that group, not every repo.
+function rowParser<Row>(schema: z.ZodType<Row>): (raw: unknown) => Row | null {
+  const parsedByRaw = new WeakMap<object, Row | null>()
+  return (raw) => {
+    const remembered = typeof raw === 'object' && raw !== null ? parsedByRaw.get(raw) : undefined
+    if (remembered !== undefined) {
+      return remembered
+    }
+    const parsed = schema.safeParse(raw)
+    const row = parsed.success ? parsed.data : null
+    if (typeof raw === 'object' && raw !== null) {
+      parsedByRaw.set(raw, row)
+    }
+    return row
+  }
+}
+
+const parsers = {
+  repos: rowParser(catalogRowWith<Repo>('id', 'path', 'displayName')),
+  projectGroups: rowParser<ProjectGroup>(ProjectGroupSchema),
+  projects: rowParser(catalogRowWith<Project>('id')),
+  projectHostSetups: rowParser(catalogRowWith<ProjectHostSetup>('id', 'projectId'))
+}
+const OrderSchema = z.object({
+  repos: z.array(z.string()),
+  projectGroups: z.array(z.string()),
+  projects: z.array(z.string()),
+  projectHostSetups: z.array(z.string())
+}) satisfies z.ZodType<CatalogRecordsOrder>
+
+// Main withholds an upload's data URL (repoIcon null); its image arrives by id.
+const iconDataUrls = new Map<string, string | null>()
+const iconsAsked = new Set<string>()
+const withIconByRepo = new WeakMap<Repo, { dataUrl: string; repo: Repo }>()
+
+function withIcon(repo: Repo): Repo {
+  if (repo.repoIcon !== null) {
+    return repo
+  }
+  const id = readDesktopSidebarFeed()?.domains.repoIcons.get(repoIconFeedKey(repo))
+  const dataUrl = id ? iconDataUrls.get(id) : undefined
+  if (!dataUrl) {
+    return repo
+  }
+  const cached = withIconByRepo.get(repo)
+  if (cached?.dataUrl === dataUrl) {
+    return cached.repo
+  }
+  const joined: Repo = { ...repo, repoIcon: { type: 'image', source: 'upload', src: dataUrl } }
+  withIconByRepo.set(repo, { dataUrl, repo: joined })
+  return joined
+}
 
 const IconReplySchema = z.object({
   icons: z.array(z.object({ id: z.string(), dataUrl: z.string().nullable() }))
 })
 
-let sink: CatalogSink | null = null
-let installedFrom: { records: SidebarProjectCatalogRecords; iconsSeen: number } | null = null
-let installed: InstalledProjectCatalog | null = null
-// Ids are content hashes, so a changed icon arrives as a new id; each is read once.
-const iconDataUrls = new Map<string, string | null>()
-const iconsAsked = new Set<string>()
-let iconsAnswered = 0
-const waiters = new Set<() => void>()
-
-function withIcon(repo: Repo, iconIds: SidebarFeedDomains['repoIcons']): Repo {
-  // Main sends an upload as null (its data URL is too large to resend); the image arrives by id.
-  if (repo.repoIcon !== null) {
-    return repo
-  }
-  const id = iconIds.get(repoIconFeedKey(repo))
-  const dataUrl = id ? iconDataUrls.get(id) : undefined
-  return dataUrl ? { ...repo, repoIcon: { type: 'image', source: 'upload', src: dataUrl } } : repo
-}
-
-function readMissingIcons(domains: SidebarFeedDomains): void {
-  const wanted = [...new Set(domains.repoIcons.values())].filter((id) => !iconsAsked.has(id))
+function readMissingIcons(): void {
+  const ids = readDesktopSidebarFeed()?.domains.repoIcons.values() ?? []
+  const wanted = [...new Set(ids)].filter((id) => !iconsAsked.has(id))
   for (let start = 0; start < wanted.length; start += MAX_REPO_ICON_IDS_PER_READ) {
-    const ids = wanted.slice(start, start + MAX_REPO_ICON_IDS_PER_READ)
-    ids.forEach((id) => iconsAsked.add(id))
+    const batch = wanted.slice(start, start + MAX_REPO_ICON_IDS_PER_READ)
+    batch.forEach((id) => iconsAsked.add(id))
     void window.api.runtime
-      .call({ method: 'sidebarInputs.repoIcons', params: { ids } })
+      .call({ method: 'sidebarInputs.repoIcons', params: { ids: batch } })
       .then((response) => {
         const reply = response.ok ? IconReplySchema.safeParse(response.result) : null
         if (!reply?.success) {
-          ids.forEach((id) => iconsAsked.delete(id))
+          batch.forEach((id) => iconsAsked.delete(id))
           return
         }
         reply.data.icons.forEach(({ id, dataUrl }) => iconDataUrls.set(id, dataUrl))
-        iconsAnswered += 1
-        const feed = readDesktopSidebarFeed()
-        if (feed) {
-          install(feed)
-        }
+        rebuild()
       })
-      .catch(() => ids.forEach((id) => iconsAsked.delete(id)))
+      .catch(() => batch.forEach((id) => iconsAsked.delete(id)))
   }
 }
 
-function install(feed: DesktopSidebarFeed): void {
-  const records = feed.domains.catalogRecords
-  if (!records) {
+let rawDomain: ReadonlyMap<string, unknown> | null = null
+let catalog: MainProjectCatalog | null = null
+let readId = 0
+const listeners = new Set<() => void>()
+
+function listOf<Row>(keys: readonly string[], parse: (raw: unknown) => Row | null): Row[] {
+  return keys.flatMap((key) => parse(rawDomain?.get(key)) ?? [])
+}
+
+function rebuild(): void {
+  const order = rawDomain ? OrderSchema.safeParse(rawDomain.get('order')) : null
+  if (!order?.success) {
     return
   }
-  readMissingIcons(feed.domains)
-  if (installedFrom?.records !== records || installedFrom.iconsSeen !== iconsAnswered) {
-    installedFrom = { records, iconsSeen: iconsAnswered }
-    installed = {
-      ...records,
-      repos: records.repos.map((repo) => withIcon(repo, feed.domains.repoIcons))
+  catalog = {
+    repos: listOf(order.data.repos, parsers.repos).map(withIcon),
+    projectGroups: listOf(order.data.projectGroups, parsers.projectGroups),
+    projects: listOf(order.data.projects, parsers.projects),
+    projectHostSetups: listOf(order.data.projectHostSetups, parsers.projectHostSetups)
+  }
+  listeners.forEach((listener) => listener())
+}
+
+function installed({ snapshot, settledBy }: SidebarFeedReaderRead): void {
+  if (!snapshot || settledBy === null) {
+    return
+  }
+  readId = settledBy
+  const domain = snapshot.installed.domains.get(CATALOG_RECORDS_DOMAIN) ?? null
+  if (domain !== rawDomain || catalog === null) {
+    rawDomain = domain
+    rebuild()
+  } else {
+    // Nothing changed, but a write's wait reads the install's read id.
+    listeners.forEach((listener) => listener())
+  }
+  readMissingIcons()
+}
+
+const readCatalogFromMain: SidebarFeedTransport = async (params) => {
+  const response = await window.api.runtime
+    .call({ method: 'sidebarInputs.readCatalog', params })
+    .catch(() => null)
+  const reply = response?.ok ? SidebarInputsReadResultSchema.safeParse(response.result) : null
+  return reply?.success ? { kind: 'answered', reply: reply.data } : { kind: 'failed' }
+}
+
+let reader: SidebarFeedReader | null = null
+
+/** Follows main's catalog for the window's life, from the first caller. */
+export function followMainProjectCatalog(): void {
+  if (reader) {
+    return
+  }
+  const started = new SidebarFeedReader(
+    readCatalogFromMain,
+    { retryDelayMs: () => RETRY_MS },
+    installed
+  )
+  reader = started
+  window.api.runtime.onSidebarCatalogChanged((notice) => started.changed(notice))
+  // An uploaded icon's id arrives with the sidebar feed.
+  onDesktopSidebarFeedInstalled(() => {
+    if (catalog) {
+      rebuild()
     }
-    sink?.(installed)
-  }
-  waiters.forEach((waiter) => waiter())
+    readMissingIcons()
+  })
+  started.refresh()
 }
 
-/** Switch point: main's catalog is the window's; `write` is its only writer. Call once. */
-export function followMainProjectCatalog(write: CatalogSink): void {
-  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN || sink) {
-    return
-  }
-  sink = write
-  onDesktopSidebarFeedInstalled(install)
-  startDesktopSidebarFeed()
-  // The sidebar may have started the reader, and installed main's feed, before this follows it.
-  const feed = readDesktopSidebarFeed()
-  if (feed) {
-    install(feed)
-  }
+/** Main's catalog as last installed; empty before main's first answer. */
+export function readMainProjectCatalog(): MainProjectCatalog {
+  return catalog ?? EMPTY_CATALOG
+}
+
+/** True once main's catalog has been installed at least once. */
+export function hasMainProjectCatalog(): boolean {
+  return catalog !== null
+}
+
+/** Runs on every install (and icon join), after the catalog it reads has changed. */
+export function onMainProjectCatalogChanged(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
 }
 
 function waitFor(done: () => boolean, timeoutMs: number): Promise<boolean> {
@@ -104,51 +205,42 @@ function waitFor(done: () => boolean, timeoutMs: number): Promise<boolean> {
     return Promise.resolve(true)
   }
   return new Promise((resolve) => {
-    const check = (): void => {
-      if (done()) {
-        waiters.delete(check)
-        clearTimeout(timer)
-        resolve(true)
-      }
-    }
     const timer = setTimeout(() => {
-      waiters.delete(check)
+      detach()
       resolve(false)
     }, timeoutMs)
-    waiters.add(check)
+    const detach = onMainProjectCatalogChanged(() => {
+      if (done()) {
+        clearTimeout(timer)
+        detach()
+        resolve(true)
+      }
+    })
   })
 }
 
-// Main starting up can take a while to answer its first read; nothing is shown before it.
-const FIRST_CATALOG_LIMIT_MS = 60_000
-// A paired server's change reaches main's catalog only after that server announces it.
-const REMOTE_WRITE_LIMIT_MS = 10_000
+// Main's first answer can wait on its startup; nothing in the catalog waits on git.
+const FIRST_CATALOG_LIMIT_MS = 30_000
+// A paired server's change reaches main's catalog only after main reads that server again.
+export const CATALOG_WRITE_LIMIT_MS = 10_000
 
-/** Resolves once main's catalog is installed (false if main never answers within the limit). */
+/** Resolves true once main's catalog is installed, false if main never answers in time. */
 export function awaitMainProjectCatalog(): Promise<boolean> {
-  startDesktopSidebarFeed()
-  return waitFor(() => installed !== null, FIRST_CATALOG_LIMIT_MS)
+  followMainProjectCatalog()
+  return waitFor(() => catalog !== null, FIRST_CATALOG_LIMIT_MS)
 }
 
 /**
- * After a catalog write main has answered: resolves once main's catalog shows it. A write main
- * made itself shows on the next read; `shows` waits for a paired server's to come back through main.
+ * After a catalog write main (or a paired server through main) answered: resolves true once main's
+ * catalog shows `shows`, read after the write; false when it never does within the limit.
  */
-export function awaitMainProjectCatalogWrite(
-  shows?: (catalog: InstalledProjectCatalog) => boolean
+export function awaitMainProjectCatalogShows(
+  shows: (catalog: MainProjectCatalog) => boolean
 ): Promise<boolean> {
-  if (!ORCA_SIDEBAR_INPUTS_IS_MAIN) {
-    return Promise.resolve(true)
-  }
-  startDesktopSidebarFeed()
-  const readId = refreshDesktopSidebarFeed()
-  return waitFor(() => {
-    const feed = readDesktopSidebarFeed()
-    return (
-      feed !== null &&
-      feed.readId >= readId &&
-      installed !== null &&
-      (shows ? shows(installed) : true)
-    )
-  }, REMOTE_WRITE_LIMIT_MS)
+  followMainProjectCatalog()
+  const after = reader ? reader.refresh() : 0
+  return waitFor(
+    () => catalog !== null && readId >= after && shows(catalog),
+    CATALOG_WRITE_LIMIT_MS
+  )
 }

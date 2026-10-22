@@ -9,7 +9,6 @@ import { callRuntimeRpc } from '../../runtime/runtime-rpc-client'
 import { runtimeTargetForOwnerEnvironment } from '../../runtime/runtime-client-target'
 import { translate } from '@/i18n/i18n'
 import type { RepoSlice } from '../repos/repo-state'
-import { awaitMainProjectCatalogWrite } from '@/lib/main-project-catalog'
 
 export function normalizeNestedRepoScanResult(scan: NestedRepoScanResult): NestedRepoScanResult {
   return {
@@ -103,8 +102,6 @@ export function createNestedRepositoryActions(
         await (args.runtimeEnvironmentId
           ? get().fetchRuntimeEnvironmentRepos(args.runtimeEnvironmentId)
           : get().fetchRepos(catalogOptions))
-        // The catalog part shows once main publishes it; this window holds only main's.
-        await awaitMainProjectCatalogWrite()
         set({ folderWorkspacePathStatuses: {} })
         return result
       } catch (err) {

@@ -10,7 +10,7 @@ import type { WorkspaceStatusDefinition, Worktree } from '../../../../../../shar
 import { getHostSectionCollapseKey } from '../../../../../../shared/sidebar-list/host-section-collapse'
 import { getWorktreeHostIdentity } from '../../../../../../shared/worktree/host-qualified-identity'
 import { getWorktreeLineageGroupKey } from '../../../../../../shared/sidebar-list/group-keys'
-import type { ProjectSectionModel } from '../../../../../../shared/project-section-grouping'
+import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
 import type { WorktreeOccurrencePlan } from '../../../../../../shared/worktree-occurrence-plan'
 import type {
   PinnedWorktreeDisplayPolicy,
@@ -35,7 +35,7 @@ export function getWorktreeRevealCollapsedGroupKeys(args: {
   prCache: AppState['prCache'] | null
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
   projectGroups: readonly ProjectGroup[]
-  projectGrouping?: ProjectSectionModel
+  projectGrouping?: ProjectGroupingModel
 }): string[] {
   const hostId = getWorktreeExecutionHostId(
     args.worktree,

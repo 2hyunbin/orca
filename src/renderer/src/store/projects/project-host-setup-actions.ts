@@ -1,4 +1,3 @@
-import { awaitMainProjectCatalogWrite } from '@/lib/main-project-catalog'
 import type { StateCreator } from 'zustand'
 import { toast } from 'sonner'
 import type { AppState } from '../types'
@@ -68,8 +67,6 @@ export function createProjectHostSetupActions(
           row: result.setup
         })
         const project = normalizeProjectRow(result.project)
-        // The catalog part shows once main publishes it; this window holds only main's.
-        await awaitMainProjectCatalogWrite()
         set((s) => {
           const nextRepos = s.repos.some((entry) =>
             repoMatchesHostIdentity(entry, repo.id, repoHostId)
@@ -125,8 +122,6 @@ export function createProjectHostSetupActions(
           row: result.setup
         })
         const project = normalizeProjectRow(result.project)
-        // The catalog part shows once main publishes it; this window holds only main's.
-        await awaitMainProjectCatalogWrite()
         set((s) => ({
           projects: s.projects.some((entry) => entry.id === project.id)
             ? s.projects.map((entry) => (entry.id === project.id ? project : entry))
@@ -171,8 +166,6 @@ export function createProjectHostSetupActions(
           ? adoptFromEndpoint(target, { kind: 'repo', row: result.repo })
           : undefined
         const repoHostId = repo ? getRepoExecutionHostId(repo) : null
-        // The catalog part shows once main publishes it; this window holds only main's.
-        await awaitMainProjectCatalogWrite()
         set((s) => ({
           repos: repo
             ? s.repos.some((entry) => repoMatchesHostIdentity(entry, repo.id, repoHostId!))
@@ -223,8 +216,6 @@ export function createProjectHostSetupActions(
           kind: 'projectHostSetup',
           row: result.setup
         })
-        // The catalog part shows once main publishes it; this window holds only main's.
-        await awaitMainProjectCatalogWrite()
         set((s) => {
           const projectHostSetups = s.projectHostSetups.filter(
             (setup) => !isSameProjectHostSetup(setup, removedSetup)

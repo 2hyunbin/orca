@@ -156,11 +156,6 @@ async function host() {
           createdAt: 1
         })
     },
-    catalogRecords: {
-      'catalog event': catalogEvent,
-      'paired server rows': () => revisions.paired.bump(),
-      'ui write': () => store.updateUI({ projectOrderBy: 'manual' })
-    },
     repoIcons: {
       'catalog event': catalogEvent,
       'paired server rows': () => revisions.paired.bump()
@@ -233,7 +228,6 @@ describe('sidebar inputs feed announcements', () => {
     expect(urgency('projectCatalog', 'catalog event')).toBe(true)
     expect(urgency('projectCatalog', 'ui write')).toBe(true)
     expect(urgency('projectCatalog', 'full save')).toBe(true)
-    expect(urgency('catalogRecords', 'catalog event')).toBe(true)
   })
 
   it('follows a PR cache save on a quiet desktop into the phone’s PR grouping', async () => {

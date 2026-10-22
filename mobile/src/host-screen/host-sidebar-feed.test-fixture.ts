@@ -89,7 +89,6 @@ export function feedDomains(overrides: Partial<SidebarFeedDomains> = {}): Sideba
       wslHosts: {}
     },
     projectCatalog: null,
-    catalogRecords: null,
     retention: null,
     ...overrides
   }

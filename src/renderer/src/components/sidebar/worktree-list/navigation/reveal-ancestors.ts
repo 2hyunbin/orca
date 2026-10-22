@@ -1,7 +1,7 @@
 import type { ProjectGroup } from '../../../../../../shared/project-group-types'
 import type { Repo } from '../../../../../../shared/repo-types'
 import { getProjectGroupHeaderKey } from '../../../../../../shared/sidebar-list/group-keys'
-import type { ProjectSectionModel } from '../../../../../../shared/project-section-grouping'
+import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
 
 function getProjectIdFromHeaderRowKey(rowKey: string): string | null {
   if (!rowKey.startsWith('project:')) {
@@ -15,7 +15,7 @@ function getProjectIdFromHeaderRowKey(rowKey: string): string | null {
 function getRepoIdsFromHeaderRowKey(
   rowKey: string,
   repoMap: Map<string, Repo>,
-  projectGrouping?: ProjectSectionModel
+  projectGrouping?: ProjectGroupingModel
 ): string[] {
   if (rowKey.startsWith('repo:')) {
     return [rowKey.slice('repo:'.length)]
@@ -36,9 +36,7 @@ function getRepoIdsFromHeaderRowKey(
     }
   }
   const project = projectGrouping?.projects.find((candidate) => candidate.id === projectId)
-  // Main's catalog lists a project's repos only through its setups.
-  const sourceRepoIds = project && 'sourceRepoIds' in project ? project.sourceRepoIds : []
-  for (const repoId of Array.isArray(sourceRepoIds) ? sourceRepoIds : []) {
+  for (const repoId of project?.sourceRepoIds ?? []) {
     if (repoMap.has(repoId)) {
       repoIds.add(repoId)
     }
@@ -70,7 +68,7 @@ export function getSidebarRowRevealAncestorKeys(args: {
   rowKey: string
   repoMap: Map<string, Repo>
   projectGroups: readonly ProjectGroup[]
-  projectGrouping?: ProjectSectionModel
+  projectGrouping?: ProjectGroupingModel
 }): string[] {
   if (args.rowKey.startsWith('project-group:')) {
     const groupId = args.rowKey.slice('project-group:'.length)

@@ -16,7 +16,6 @@ import type { SidebarWorktreeFilters } from './use-filters'
 import type { useSidebarExternalWorktreeCards } from './use-external-worktree-cards'
 import type { useSidebarHostVisibleScope } from './use-host-visible-scope'
 import type { useSidebarSectionRows } from './use-section-rows'
-import type { MainSidebarCatalog } from './main-sidebar-catalog'
 
 /** What WorktreeList hands the list model: the store's view settings, catalog and screen state. */
 export type SidebarListModelArgs = {
@@ -44,8 +43,6 @@ export type SidebarListModelArgs = {
 
 /** The rows WorktreeList renders and what its reveal, selection and cards read beside them. */
 export type SidebarListModel = {
-  /** The catalog the rows were built from, for the headers, menus and dialogs beside them. */
-  catalog: MainSidebarCatalog
   visibleWorktrees: Worktree[]
   visibleScope: ReturnType<typeof useSidebarHostVisibleScope>
   externalWorktreeCards: ReturnType<typeof useSidebarExternalWorktreeCards>

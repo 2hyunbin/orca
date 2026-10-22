@@ -1,4 +1,3 @@
-import { awaitMainProjectCatalogWrite } from '@/lib/main-project-catalog'
 import { runEnclosingWorktreeRemoval } from '@/store/active-worktree-deselection-intent'
 import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import type { StateCreator } from 'zustand'
@@ -220,8 +219,6 @@ export function createRepoRemovalActions(
         deleteWorkspaceChatDrafts(chatDraftKeys)
         get().clearLocalDetectedAgentContextsForProjects(localAgentContextProjectIds)
 
-        // The catalog part shows once main publishes it; this window holds only main's.
-        await awaitMainProjectCatalogWrite()
         set((s) => {
           const nextWorktrees = { ...s.worktreesByRepo }
           const remainingWorktrees = (nextWorktrees[projectId] ?? []).filter(

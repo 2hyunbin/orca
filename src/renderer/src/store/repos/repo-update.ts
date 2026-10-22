@@ -20,7 +20,6 @@ import type { RepoSlice, RepoUpdate } from './repo-state'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { getProjectSetupRuntimeTarget } from '../projects/project-host-routing'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
-import { awaitMainProjectCatalogWrite } from '@/lib/main-project-catalog'
 
 export function sanitizeRepoUpdate(updates: RepoUpdate): RepoUpdate {
   const sanitized = { ...updates }
@@ -144,8 +143,6 @@ export function createRepoUpdateActions(
                     { timeoutMs: 15_000 }
                   )
                 ).repo
-          // The catalog part shows once main publishes it; this window holds only main's.
-          await awaitMainProjectCatalogWrite()
           set((s) => {
             const nextRepos = s.repos.map((r) => {
               const matchesOwner = ownerHasExplicitHost

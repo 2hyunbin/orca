@@ -120,29 +120,28 @@ const WorktreeList = React.memo(function WorktreeList({
     () => buildWorktreeManualOrderCatalog({ worktrees: allWorktrees, folderWorkspaces }),
     [allWorktrees, folderWorkspaces]
   )
-  const { catalog, visibleWorktrees, visibleScope, externalWorktreeCards, rowModel } =
-    useSidebarListModel({
-      filterState,
-      sortBy,
-      groupBy,
-      projectOrderBy,
-      pinnedDisplayPolicy,
-      defaultHostId,
-      workspaceStatuses,
-      settings,
-      collapsedGroups,
-      repos,
-      repoMap,
-      allWorktrees,
-      worktreeMap,
-      worktreeLineageById,
-      projectGroups,
-      folderWorkspaces,
-      projectGrouping,
-      detectedWorktreesByRepo,
-      prCache,
-      agentSendTargetWorktreeId
-    })
+  const { visibleWorktrees, visibleScope, externalWorktreeCards, rowModel } = useSidebarListModel({
+    filterState,
+    sortBy,
+    groupBy,
+    projectOrderBy,
+    pinnedDisplayPolicy,
+    defaultHostId,
+    workspaceStatuses,
+    settings,
+    collapsedGroups,
+    repos,
+    repoMap,
+    allWorktrees,
+    worktreeMap,
+    worktreeLineageById,
+    projectGroups,
+    folderWorkspaces,
+    projectGrouping,
+    detectedWorktreesByRepo,
+    prCache,
+    agentSendTargetWorktreeId
+  })
   const visibleProjectRepoIdsBySection = useMemo(
     () => new Map(rowModel.occurrencePlan.sections.map(({ key, group }) => [key, group.repoIds])),
     [rowModel.occurrencePlan]
@@ -157,7 +156,7 @@ const WorktreeList = React.memo(function WorktreeList({
     workspaceStatuses,
     sortBy
   })
-  const projectGroupDialogs = useProjectGroupDialogs(catalog)
+  const projectGroupDialogs = useProjectGroupDialogs({ repos, repoMap, projectGroups })
 
   const handleImmediateWorktreeActivate = useCallback((worktreeId: string, rowKey?: string) => {
     // Why: re-rendering the virtualized sidebar on the pointer path adds visible latency; mutate the row directly and let store state reconcile after.
@@ -236,7 +235,7 @@ const WorktreeList = React.memo(function WorktreeList({
     <>
       <SidebarWorktreeListDialogs
         dialogs={projectGroupDialogs}
-        repos={catalog.repos}
+        repos={repos}
         settings={settings}
         suppressExternalWorktreeInboxRepoId={
           externalWorktreeCards.suppressExternalWorktreeInboxRepoId
@@ -302,7 +301,7 @@ const WorktreeList = React.memo(function WorktreeList({
         onSelectionGesture={selection.updateSelectionForGesture}
         onImmediateWorktreeActivate={handleImmediateWorktreeActivate}
         onContextMenuSelect={selection.selectForContextMenu}
-        repoMap={catalog.repoMap}
+        repoMap={repoMap}
         defaultHostId={defaultHostId}
         worktreeMap={worktreeMap}
         worktreeLineageById={worktreeLineageById}
@@ -313,8 +312,8 @@ const WorktreeList = React.memo(function WorktreeList({
         prCache={prCache}
         hostedReviewCache={hostedReviewCache}
         workspaceStatuses={workspaceStatuses}
-        projectGrouping={catalog.projectGrouping}
-        projectGroups={catalog.projectGroups}
+        projectGrouping={projectGrouping}
+        projectGroups={projectGroups}
         visibleProjectGroups={visibleScope.visibleProjectGroupsForRows}
         onMoveWorktreeToStatus={statusMutations.moveWorktreeToStatus}
         onMoveWorktreesToStatus={statusMutations.moveWorktreesToStatus}

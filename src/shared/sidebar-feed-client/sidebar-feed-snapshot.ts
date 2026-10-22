@@ -22,7 +22,6 @@ export const EMPTY_SIDEBAR_FEED_DOMAINS: SidebarFeedDomains = {
   repoIcons: new Map(),
   desktop: null,
   projectCatalog: null,
-  catalogRecords: null,
   retention: null
 }
 

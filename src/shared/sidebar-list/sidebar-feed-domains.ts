@@ -22,22 +22,9 @@ import {
   type HostScopedWorktreeKey
 } from '../worktree/host-qualified-identity'
 import {
-  ProjectGroupSchema,
   ProjectSectionCatalogSchema,
   type ServedProjectSections
 } from '../project-section-catalog-schema'
-import type { Project, ProjectHostSetup } from '../project-types'
-import type { Repo } from '../repo-types'
-import { salvagingArray } from '../zod-salvage'
-import type { SidebarProjectCatalogRecords } from './sidebar-project-catalog'
-import { catalogRowWith } from './paired-server-catalog'
-
-const CatalogRecordsSchema = z.object({
-  repos: salvagingArray(catalogRowWith<Repo>('id', 'path', 'displayName')),
-  projectGroups: salvagingArray(ProjectGroupSchema),
-  projects: salvagingArray(catalogRowWith<Project>('id')),
-  projectHostSetups: salvagingArray(catalogRowWith<ProjectHostSetup>('id', 'projectId'))
-})
 
 /** One installed feed, typed per domain; an entity this build cannot parse is left out. */
 export type SidebarFeedDomains = {
@@ -57,8 +44,6 @@ export type SidebarFeedDomains = {
   desktop: DesktopSidebarFacts | null
   /** Every host's repos, project groups and projects, in header order; null from a host that predates it. */
   projectCatalog: ServedProjectSections | null
-  /** The full rows behind projectCatalog, which the desktop window reads; null until whole. */
-  catalogRecords: SidebarProjectCatalogRecords | null
   /** Retained rows by identity; an entry that is not one (a bare id) keeps nothing. */
   retention: SidebarFeedRetention | null
 }
@@ -168,12 +153,6 @@ export function readSidebarFeedDomains(
       Object.fromEntries(installed.domains.get('projectCatalog') ?? [])
     ).data ??
     null
-  const catalogRecords =
-    unchanged('catalogRecords')?.catalogRecords ??
-    CatalogRecordsSchema.safeParse(
-      Object.fromEntries(installed.domains.get('catalogRecords') ?? [])
-    ).data ??
-    null
   const temporal = SidebarTemporalSnapshotSchema.pick({ retention: true }).safeParse(
     Object.fromEntries(installed.domains.get('temporal') ?? [])
   )
@@ -200,7 +179,6 @@ export function readSidebarFeedDomains(
       readDomain(installed, 'repoIcons', entityParsers.repoIcons),
     desktop: desktop.success ? desktop.data : null,
     projectCatalog,
-    catalogRecords,
     retention: temporal.success ? readRetention(temporal.data.retention) : null
   }
 }

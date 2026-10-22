@@ -27,7 +27,7 @@ import type {
   WorktreeReorderArgs,
   WorktreeStatusDropAtIndexArgs
 } from '../drag/drop-commit-context'
-import type { ProjectSectionModel } from '../../../../../../shared/project-section-grouping'
+import type { ProjectGroupingModel } from '../../../../../../shared/project-section-grouping'
 import type {
   PinnedWorktreeDisplayPolicy,
   WorktreeGroupBy
@@ -90,7 +90,7 @@ export type VirtualizedWorktreeViewportProps = {
   prCache: AppState['prCache'] | null
   hostedReviewCache: AppState['hostedReviewCache'] | null
   workspaceStatuses: readonly WorkspaceStatusDefinition[]
-  projectGrouping?: ProjectSectionModel
+  projectGrouping?: ProjectGroupingModel
   projectGroups?: readonly ProjectGroup[]
   /** The host-filtered groups the rows were built from; reveal must walk the same parents. */
   visibleProjectGroups?: readonly ProjectGroup[]

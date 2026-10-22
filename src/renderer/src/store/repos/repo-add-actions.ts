@@ -22,7 +22,6 @@ import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-ident
 import { warnIfProjectKnownInAnotherProfile } from '../projects/project-profile-presence'
 import { warnIfProjectCrossesWslFilesystemBoundary } from '../projects/project-wsl-filesystem-boundary-advisory'
 import { selectWorktreesByRepo } from '../workspace-record-selectors'
-import { awaitMainProjectCatalogWrite } from '@/lib/main-project-catalog'
 
 export function createRepoAddActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -100,8 +99,6 @@ export function createRepoAddActions(
         if (alreadyAdded) {
           get().clearOrcaHookTrustForRepo(repo.id)
         }
-        // The catalog part shows once main publishes it; this window holds only main's.
-        await awaitMainProjectCatalogWrite()
         set((s) => {
           if (s.repos.some((r) => getRepoHostIdentity(r) === repoIdentity)) {
             return s

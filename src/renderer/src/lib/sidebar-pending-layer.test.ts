@@ -47,7 +47,6 @@ function domains(
     repoIcons: new Map(),
     desktop: null,
     projectCatalog: null,
-    catalogRecords: null,
     retention: null
   }
 }

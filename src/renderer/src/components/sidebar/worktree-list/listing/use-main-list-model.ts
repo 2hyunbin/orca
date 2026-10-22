@@ -44,7 +44,6 @@ import { useEffectiveCollapsedGroups } from './use-collapsed-groups'
 import { useSidebarExternalWorktreeCards } from './use-external-worktree-cards'
 import { useOrderHeldWhileEngaged, useProjectRecencyHeldWhileEngaged } from './use-order-hold'
 import { useReusedArrayIdentity } from './use-reused-array-identity'
-import { joinMainSidebarCatalog } from './main-sidebar-catalog'
 
 // The window renders its own collapse, so planning never re-runs on a toggle.
 const PLANNED_UNCOLLAPSED: ReadonlySet<string> = new Set()
@@ -98,13 +97,9 @@ function windowFolderRecordOf(
  * the window's own records for the rows main lists.
  */
 export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarListModel {
-  const { filterState, sortBy, groupBy, defaultHostId, settings } = args
+  const { filterState, sortBy, groupBy, repos, defaultHostId, settings } = args
   useSidebarListSession()
   const feed = useDesktopSidebarFeed()
-  // Main's catalog only; the window's repos answer only for what a header or card shows.
-  const served = feed?.domains.projectCatalog ?? null
-  const catalog = useMemo(() => joinMainSidebarCatalog(served, args.repos), [served, args.repos])
-  const { repos } = catalog
   const pending = useSyncExternalStore(subscribeSidebarPendingLayer, readSidebarPendingLayer)
   const endedCreationIds = useSyncExternalStore(subscribeEndedCreations, readEndedCreations)
   const pendingCreationKeys = useAppStore(
@@ -123,6 +118,10 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
         endedCreationIds
       ),
     [feed, pending, pendingCreationKeys, endedCreationIds, repos, args.worktreeLineageById]
+  )
+  const catalog = useMemo(
+    () => ({ repos, projectGroups: args.projectGroups, projectGrouping: args.projectGrouping }),
+    [repos, args.projectGroups, args.projectGrouping]
   )
   const view: SidebarFeedView = useMemo(
     () => ({
@@ -206,11 +205,11 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
     () =>
       new Map(
         args.folderWorkspaces.map((folder) => [
-          folderRecordKey(folder.id, getFolderWorkspaceHostId(folder, catalog.projectGroups)),
+          folderRecordKey(folder.id, getFolderWorkspaceHostId(folder, args.projectGroups)),
           folder
         ])
       ),
-    [args.folderWorkspaces, catalog.projectGroups]
+    [args.folderWorkspaces, args.projectGroups]
   )
   const visibleWorktrees = useReusedArrayIdentity(
     useMemo(
@@ -243,7 +242,7 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
     prCache: args.prCache,
     workspaceStatuses: args.workspaceStatuses,
     projectGroups: planned.visibleProjectGroups,
-    projectGrouping: catalog.projectGrouping,
+    projectGrouping: args.projectGrouping,
     folderWorkspaces: planned.visibleFolderWorkspaces,
     defaultHostId
   })
@@ -286,7 +285,6 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
   )
 
   return {
-    catalog,
     visibleWorktrees,
     visibleScope: {
       visibleReposForRows,

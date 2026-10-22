@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import type { SidebarListModel, SidebarListModelArgs } from './sidebar-list-model'
 import { useSidebarExternalWorktreeCards } from './use-external-worktree-cards'
 import { useSidebarHostVisibleScope } from './use-host-visible-scope'
@@ -62,14 +61,5 @@ export function useWindowSidebarListModel(args: SidebarListModelArgs): SidebarLi
     visibleWorkspaceHostIds: filterState.visibleWorkspaceHostIds,
     workspaceHostScope: filterState.workspaceHostScope
   })
-  const catalog = useMemo(
-    () => ({
-      repos,
-      repoMap,
-      projectGroups: args.projectGroups,
-      projectGrouping: args.projectGrouping
-    }),
-    [repos, repoMap, args.projectGroups, args.projectGrouping]
-  )
-  return { catalog, visibleWorktrees, visibleScope, externalWorktreeCards, rowModel }
+  return { visibleWorktrees, visibleScope, externalWorktreeCards, rowModel }
 }

@@ -11,7 +11,7 @@ import {
 import {
   buildProjectGroupingIndex,
   getProjectGroupingForRepo,
-  type ProjectSectionModel
+  type ProjectGroupingModel
 } from '../../../../../../shared/project-section-grouping'
 import type { Repo } from '../../../../../../shared/repo-types'
 import type { HostSectionRow } from '../../../../../../shared/sidebar-list/host-section-rows'
@@ -32,7 +32,7 @@ export function getProjectHeaderHostContexts(args: {
   runtimeEnvironments?: readonly ManagedOrcadEnvironmentSummary[]
   sshConnectionStates?: ReadonlyMap<string, Pick<SshConnectionState, 'managedServer'>>
   repoMap: Map<string, Repo>
-  projectGrouping?: ProjectSectionModel
+  projectGrouping?: ProjectGroupingModel
 }): ReadonlyMap<string, ProjectHeaderHostContext> {
   const hostRegistry = new Map(args.hosts.map((host) => [host.id, host]))
   annotateManagedOrcadExecutionHosts({

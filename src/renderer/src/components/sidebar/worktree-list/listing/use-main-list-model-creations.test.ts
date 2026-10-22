@@ -14,7 +14,6 @@ function domainsWith(creations: SidebarFeedDomains['creations']): SidebarFeedDom
     repoIcons: new Map(),
     desktop: null,
     projectCatalog: null,
-    catalogRecords: null,
     retention: null
   }
 }
