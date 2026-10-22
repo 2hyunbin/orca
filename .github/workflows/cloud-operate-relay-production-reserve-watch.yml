@@ -114,7 +114,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          check-latest: true
 
       - id: google-auth-1
         uses: google-github-actions/auth@v2
@@ -277,7 +276,6 @@ jobs:
         if: ${{ always() }}
         with:
           node-version: 24
-          check-latest: true
 
       - id: google-auth
         if: ${{ always() }}

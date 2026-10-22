@@ -14,7 +14,6 @@ import { dirname, join } from 'node:path'
 import { runInNewContext } from 'node:vm'
 import { afterEach, expect, it, vi } from 'vitest'
 import { parse } from 'yaml'
-import { NODE_RUNTIME_PIN } from '../../src/shared/node-runtime-pin.ts'
 import { sha256Of } from './orcad-prebuild-slot-contents.mjs'
 import { peImage } from './windows-pe-image-fixture.mjs'
 import {
@@ -94,7 +93,7 @@ function windows(arch = 'x64') {
     ...process,
     platform: 'win32',
     arch,
-    versions: { ...process.versions, node: NODE_RUNTIME_PIN.version }
+    versions: { ...process.versions, node: '24.21.0' }
   })
   vi.stubEnv('SOURCE_SHA', sourceSha)
   vi.stubEnv('BENCHMARK_RUNNER', arch === 'x64' ? 'windows-2022' : 'windows-11-arm')
