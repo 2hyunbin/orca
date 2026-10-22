@@ -55,6 +55,7 @@ export const WSL_MOVE_BYTES_BUCKETS = [
   'gte_100mb'
 ] as const
 
+// `started` counts attempts (it precedes refusals too) and carries placeholder buckets.
 export const wslMoveSchema = z
   .object({
     outcome: z.enum(['started', 'finished', 'reset', 'refused', 'waiting_for_host']),

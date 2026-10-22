@@ -101,6 +101,27 @@ describe('WSL move telemetry', () => {
     })
   })
 
+  it('reports why a pause refusal after a reset happened', async () => {
+    const events = await tracked({
+      outcome: 'refused',
+      code: 'wsl_move_pause_failed',
+      detail: 'terminals-started-after-pause'
+    })
+    expect(events[1]).toMatchObject({
+      refusal: 'pause_failed',
+      reset_reason: 'terminals_started'
+    })
+  })
+
+  it('reports an outcome even when the run throws', async () => {
+    await expect(
+      runTrackedWslMove(fakeDeps().deps, async () => {
+        throw new Error('boom')
+      })
+    ).rejects.toThrow('boom')
+    expect(track.mock.calls.map(([, props]) => props.outcome)).toEqual(['started', 'reset'])
+  })
+
   it('reports a move left waiting for its host', async () => {
     const events = await tracked(
       { outcome: 'waiting-for-host', migrationId: 'm-1', detail: 'x; destination_unreachable' },
@@ -126,6 +147,7 @@ describe('WSL move telemetry', () => {
     ['terminals-started-after-pause', 'terminals_started'],
     ['exit-unverifiable: census_unavailable', 'exit_unverifiable'],
     ['wsl_move_commit_not_committed:absent', 'commit_rejected'],
+    ['database connection is closed', 'other'],
     ['something new', 'other']
   ])('narrows %s to %s', (detail, reason) => {
     expect(wslMoveResetReason(detail)).toBe(reason)

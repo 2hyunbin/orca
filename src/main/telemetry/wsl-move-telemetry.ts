@@ -61,7 +61,9 @@ function phaseValue(phase: WslMoveCutoverPhase | null): Props['phase'] {
     case 'client-rewritten':
     case 'retained':
       return 'destination_committed'
-    default:
+    case 'prepared':
+    case 'source-fenced':
+    case 'quiesced':
       return 'before_stage'
   }
 }
@@ -76,10 +78,7 @@ const RESET_REASON_PATTERNS: readonly [RegExp, Props['reset_reason']][] = [
   [/wsl_move_stage_not_staged/u, 'stage_rejected'],
   [/orcad_migration_blob/u, 'blob_rejected'],
   [/wsl_move_commit_not_committed|orcad_migration_catalog_not_staged/u, 'commit_rejected'],
-  [
-    /destination_unreachable|ECONNREFUSED|ECONNRESET|socket|timed? ?out|closed/iu,
-    'host_unreachable'
-  ]
+  [/destination_unreachable|ECONNREFUSED|ECONNRESET|EPIPE/u, 'host_unreachable']
 ]
 
 /** Only the matched code leaves, never the detail text itself. */
@@ -110,7 +109,8 @@ export function wslMoveOutcomeProps(
         outcome: 'refused',
         refusal: pick(WSL_MOVE_REFUSAL_VALUES, result.code.replace(/^wsl_move_/u, ''), 'other'),
         phase: phaseValue(observed.phase),
-        reset_reason: result.detail === 'distro_unregistered' ? 'distro_unregistered' : 'none',
+        // A pause refusal after a reset carries the reason in its detail.
+        reset_reason: result.detail ? wslMoveResetReason(result.detail) : 'none',
         ...base
       }
     case 'reset':
@@ -160,7 +160,20 @@ export async function runTrackedWslMove(
     duration_bucket: 'lt_5s',
     bytes_bucket: '0'
   })
-  const result = await run(tracked)
+  let result: WslMoveResult
+  try {
+    result = await run(tracked)
+  } catch (error) {
+    safeTrack({
+      outcome: 'reset',
+      refusal: 'none',
+      phase: phaseValue(observed.phase),
+      reset_reason: 'other',
+      duration_bucket: durationBucket(Math.max(0, deps.now().getTime() - startedAt)),
+      bytes_bucket: bytesBucket(observed.bytesTotal)
+    })
+    throw error
+  }
   safeTrack(
     wslMoveOutcomeProps(result, {
       ...observed,
