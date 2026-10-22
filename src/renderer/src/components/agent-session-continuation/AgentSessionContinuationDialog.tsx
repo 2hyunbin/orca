@@ -40,6 +40,7 @@ import {
 type AgentSessionContinuationDialogProps = {
   open: boolean
   request: AgentSessionContinuationRequest | null
+  sourceWorkingDirectory?: string
   onOpenChange: (open: boolean) => void
   /** Fires after the new session launched, so a host can step aside for the new tab. */
   onStarted?: () => void
@@ -50,6 +51,7 @@ const EMPTY_DISABLED_AGENTS: TuiAgent[] = []
 export function AgentSessionContinuationDialog({
   open,
   request,
+  sourceWorkingDirectory,
   onOpenChange,
   onStarted
 }: AgentSessionContinuationDialogProps): React.JSX.Element {
@@ -176,6 +178,7 @@ export function AgentSessionContinuationDialog({
     ? getAgentLabel(request.source.sourceAgent)
     : null
   const startDisabled = controlsDisabled || !agents.some((agent) => agent.id === selectedAgent)
+  const workingDirectory = sourceWorkingDirectory ?? request?.initialCwd
 
   return (
     <Dialog
@@ -320,10 +323,10 @@ export function AgentSessionContinuationDialog({
           </div>
 
           <div className="min-h-4 text-[11px] text-muted-foreground">
-            {request?.initialCwd ? (
+            {workingDirectory ? (
               <>
                 {translate('components.agentSessionContinuation.startsIn', 'Starts in:')}{' '}
-                <span className="break-all font-mono text-foreground/80">{request.initialCwd}</span>
+                <span className="break-all font-mono text-foreground/80">{workingDirectory}</span>
               </>
             ) : null}
           </div>

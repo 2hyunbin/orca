@@ -115,7 +115,11 @@ describe('AgentSessionContinuationDialog', () => {
         root.render(
           <AgentSessionContinuationDialog
             open
-            request={{ ...request('wt'), source: { ...request('wt').source, sourceKind } }}
+            request={{
+              ...request('wt'),
+              initialCwd: '/inherited',
+              source: { ...request('wt').source, sourceKind }
+            }}
             onOpenChange={vi.fn()}
           />
         )
@@ -124,6 +128,7 @@ describe('AgentSessionContinuationDialog', () => {
         sourceKind === 'chat' ? 'recent messages currently loaded' : 'captured text'
       )
       expect(container.textContent).not.toContain('reading older transcript details')
+      expect(container.textContent).toContain('Starts in: /inherited')
     }
   )
 
@@ -195,6 +200,7 @@ describe('AgentSessionContinuationDialog', () => {
   )
 
   it('keeps the replacement chooser open when an earlier accepted launch completes', async () => {
+    const cwd = `/repo/${'long-workspace-directory/'.repeat(12)}project`
     function Chat({ epoch }: { epoch: string }) {
       const handOff = useNativeChatHandOff({
         pane: {
@@ -204,7 +210,7 @@ describe('AgentSessionContinuationDialog', () => {
           isVisible: true,
           target: { kind: 'local' }
         },
-        directory: { worktreeId: 'folder', worktreePath: '/repo', runtimeEnvironmentId: null },
+        directory: { worktreeId: 'folder', worktreePath: cwd, runtimeEnvironmentId: null },
         epoch,
         messages: [
           {
@@ -236,6 +242,7 @@ describe('AgentSessionContinuationDialog', () => {
     await act(async () => root.render(<Chat epoch="a" />))
     await act(async () => click('Open hand-off'))
     expect(container.textContent).toContain('Preparing saved chat context')
+    expect(container.textContent).toContain(`Starts in: ${cwd}`)
     expect(container.textContent).not.toMatch(
       /Detecting Agents|Uses captured|recent messages currently loaded/
     )
@@ -252,7 +259,12 @@ describe('AgentSessionContinuationDialog', () => {
     await act(async () => capability.resolve(false))
     expect(container.textContent).not.toContain('Start New Session')
     expect(mocks.detectAgents).not.toHaveBeenCalled()
+    const replacementCapability = Promise.withResolvers<boolean>()
+    mocks.capability.mockReturnValueOnce(replacementCapability.promise)
     await act(async () => click('Open hand-off'))
+    expect(container.textContent).toContain(`Starts in: ${cwd}`)
+    await act(async () => replacementCapability.resolve(false))
+    expect(container.textContent).toContain(`Starts in: ${cwd}`)
     expect(start()?.disabled).toBe(false)
     await act(async () => click('Start New Session'))
     expect(container.querySelector('[data-agent]')?.getAttribute('data-disabled')).toBe('true')

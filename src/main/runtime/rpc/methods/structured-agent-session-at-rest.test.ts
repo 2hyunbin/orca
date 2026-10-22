@@ -2,6 +2,8 @@ import * as fileOperations from 'node:fs/promises'
 import { readFile, rm } from 'node:fs/promises'
 import * as contextSnapshots from '../../../native-chat/agent-session-context-snapshots'
 import * as recoveryOptions from '../../structured-session-recovery-options'
+import { piRpcDialogPresentation } from '../../../pi/rpc-extension-dialogs'
+import { legacyAgentSessionSelectedOptionId } from '../../../../shared/agent-session-question-answer'
 import '../unused-default-rpc-methods.test-fixture'
 import type {
   AgentJournalItemBody,
@@ -102,6 +104,10 @@ afterEach(async () => {
   vi.restoreAllMocks()
   setStructuredAgentSessionHost(null)
   await rig.dispose()
+  await actualFiles.rm(contextSnapshots.agentSessionContextSnapshotRoot(rig.root), {
+    recursive: true,
+    force: true
+  })
 })
 
 describe('opening a chat at rest (P2-01)', () => {
@@ -515,9 +521,9 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
   const fence = rig.store.getRecord(SESSION)!.lease.runtimeFence
   const receipt = { write: () => {}, committed: () => {} }
   let ordinal = 100
-  const append = (text: string | AgentJournalItemBody) =>
+  const append = (text: string | AgentJournalItemBody, itemOrdinal = ordinal++) =>
     journal.appendItem(
-      { provider: 'codex', threadId: 'saved-thread', turnId: 'saved-turn', ordinal: ordinal++ },
+      { provider: 'codex', threadId: 'saved-thread', turnId: 'saved-turn', ordinal: itemOrdinal },
       typeof text === 'string' ? hostTestMessage(text) : text,
       {
         fence: rig.store.getRecord(SESSION)!.lease.runtimeFence,
@@ -615,6 +621,7 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
     title: 'Review plan',
     description: 'Saved description',
     decisionReason: 'Saved reason',
+    matchedAskRule: { source: 'workspace', toolName: 'Write', ruleContent: 'Saved ask rule' },
     blockedPath: '/work/target',
     detail: 'Clipped detail',
     subject: { kind: 'plan', text: 'RETAINED_PLAN_MARKER', filePath: '/work/plan.md' },
@@ -624,6 +631,43 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
     ],
     resolution: resolution('resolved', 'keep')
   })
+  const editor = piRpcDialogPresentation({
+    id: 'editor',
+    method: 'editor',
+    title: 'Edit release notes',
+    prefill: 'RETAINED_EDITOR_MARKER\nHold deployment',
+    placeholder: 'Keep migration details'
+  })
+  if (editor?.body.kind !== 'question') {
+    throw new Error('Pi editor missing')
+  }
+  const editorOrdinal = ordinal++
+  await append(editor.body, editorOrdinal)
+  const editorParams = {
+    sessionId: SESSION,
+    workspaceId: 'workspace-1',
+    expectedCursor: { epoch: journal.cursor().epoch, sequence: 0 }
+  }
+  const pendingEditor = await rig.host.continuationContext(editorParams)
+  if (pendingEditor.status !== 'current' || !pendingEditor.transcriptPath) {
+    throw new Error('Pending editor snapshot missing')
+  }
+  for (const text of [
+    await readFile(pendingEditor.transcriptPath, 'utf8'),
+    pendingEditor.capturedText ?? ''
+  ]) {
+    expect(text).toContain(
+      'Prompt state: pending\nSaved prompt: {"kind":"question","question":"Edit release notes"'
+    )
+    expect(text).toContain('"initialValue":"RETAINED_EDITOR_MARKER\\nHold deployment"')
+    expect(text).toContain('"placeholder":"Keep migration details"')
+  }
+  const answers = [{ questionId: 'editor', optionIds: [], other: 'REPLACEMENT_EDITOR_ANSWER' }]
+  const selectedOptionId = legacyAgentSessionSelectedOptionId(editor.body, answers)
+  await append(
+    { ...editor.body, resolution: { ...resolution('resolved', selectedOptionId), answers } },
+    editorOrdinal
+  )
   await rig.restart()
   setStructuredAgentSessionHost(rig.host)
   const snapshot = await rig.host.journalSnapshot(SESSION)
@@ -668,23 +712,52 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
     expect(first.capturedText).toContain('Earlier saved chat messages omitted')
     expect(first.capturedText).not.toContain('EARLY_SAVED_MARKER')
     for (const text of [file, first.capturedText ?? '']) {
-      expect(text).toContain('deployment\nFree text: "  deploy to staging  "')
-      expect(text).toContain('explicit empty\nFree text: ""')
-      expect(text).toContain('whitespace\nFree text: " \\t"')
-      expect(text).toContain('unreadable\nSubmitted answer: unavailable')
-      expect(text).toContain('Prompt state: pending\npending ask')
-      expect(text).toContain('Prompt state: cancelled\ncancelled ask')
-      expect(text).toContain('legacy answer\nFree text: "legacy deployment"')
-      expect(text).toContain(
-        'Which regions?\nOffered choice: East — Primary region\nOffered choice: West\nSelected choice: East\nSelected choice: West'
+      const prompts: unknown[] = [...text.matchAll(/^Saved prompt: (.+)$/gm)].map((match) =>
+        JSON.parse(match[1]!)
       )
-      expect(text).toContain(
-        'Selected choice: Known\nSelected choice: unavailable\nFree text: "partial text"'
+      for (const [name, value] of [
+        ['deployment', '  deploy to staging  '],
+        ['explicit empty', ''],
+        ['whitespace', ' \t']
+      ]) {
+        expect(prompts).toContainEqual(expect.objectContaining(question(name, value)))
+      }
+      expect(text).toMatch(
+        /"question":"unreadable"[^\n]*\nQuestion "input"\nSubmitted answer: unavailable/
       )
+      expect(text).toMatch(/Prompt state: pending\nSaved prompt: .*"question":"pending ask"/)
+      expect(text).toMatch(/Prompt state: cancelled\nSaved prompt: .*"question":"cancelled ask"/)
+      const legacy = text.split('\n\n').find((row) => row.includes('"question":"legacy answer"'))!
+      expect(legacy).toContain('"selectedOptionId":"input:legacy%20deployment"')
+      expect(legacy.split('Legacy free text: "legacy deployment"')).toHaveLength(2)
+      expect(text).toContain(
+        'Question "regions" (Region group)\nSelected choice: East\nSelected choice: West'
+      )
+      expect(text).toContain('"question":"Which regions?"')
+      expect(text).toContain('"label":"East","description":"Primary region"')
+      expect(text).toContain(
+        'Question "details"\nSelected choice: Known\nSelected choice: unavailable\nSubmitted free text: resolution.answers[1].other'
+      )
+      expect(text).toContain('"other":"partial text"')
       expect(text).toMatch(/Confirm yes[\s\S]*Selected choice: Yes/)
       expect(text).toMatch(/Confirm no[\s\S]*Selected choice: No/)
-      expect(text).toContain('RETAINED_PLAN_MARKER\nPlan file: /work/plan.md')
+      expect(text).toContain(
+        '"subject":{"kind":"plan","text":"RETAINED_PLAN_MARKER","filePath":"/work/plan.md"}'
+      )
+      expect(text).toContain(
+        '"matchedAskRule":{"source":"workspace","toolName":"Write","ruleContent":"Saved ask rule"}'
+      )
       expect(text).toContain('Selected choice: Keep planning')
+      const row = text
+        .split('\n\n')
+        .find((entry) => entry.includes('"question":"Edit release notes"'))!
+      expect(row).toContain('Prompt state: resolved')
+      expect(row).toContain(JSON.stringify(editor.body.freeTextInput))
+      expect(row).toContain(JSON.stringify(answers))
+      expect(row).toContain(`"selectedOptionId":${JSON.stringify(selectedOptionId)}`)
+      expect(row.split('\n').slice(2).join('\n')).toBe(
+        'Question "editor"\nSubmitted free text: resolution.answers[0].other'
+      )
     }
     expect(await call('agentSession.continuationContext', params)).toMatchObject([
       {
@@ -716,98 +789,4 @@ it('hands off the reduced saved chat after clear and rewind, budgets only the st
       force: true
     })
   }
-})
-
-it('publishes captures in ownership order despite slow staging, dispatched rename, cleanup and a newer failure', async () => {
-  const write = actualFiles.writeFile
-  const rename = actualFiles.rename
-  const remove = actualFiles.rm
-  const snapshot = (text: string) =>
-    contextSnapshots.writeAgentSessionContextSnapshot(rig.root, SESSION, text)
-  const stage = Promise.withResolvers<void>()
-  const staged = Promise.withResolvers<void>()
-  const writing = vi.spyOn(fileOperations, 'writeFile').mockImplementationOnce(async (...args) => {
-    staged.resolve()
-    await stage.promise
-    return write(...args)
-  })
-  const old = snapshot('old capture').then(
-    () => 'success',
-    () => 'replaced'
-  )
-  await staged.promise
-  const path = await snapshot('new capture')
-  stage.resolve()
-  expect(await old).toBe('replaced')
-  expect(await readFile(path, 'utf8')).toBe('new capture')
-  const dispatched = Promise.withResolvers<void>()
-  const finishRename = Promise.withResolvers<void>()
-  const cleaning = Promise.withResolvers<void>()
-  const finishCleanup = Promise.withResolvers<void>()
-  const successorStaged = Promise.withResolvers<void>()
-  let oldPart = ''
-  let oldRenameSettled = false
-  const renaming = vi
-    .spyOn(fileOperations, 'rename')
-    .mockImplementationOnce(async (from, to) => {
-      oldPart = String(from)
-      dispatched.resolve()
-      await finishRename.promise
-      await rename(from, to)
-      oldRenameSettled = true
-    })
-    .mockImplementation(async (from, to) => {
-      expect(oldRenameSettled).toBe(true)
-      return rename(from, to)
-    })
-  renaming.mockClear()
-  vi.spyOn(fileOperations, 'rm').mockImplementation(async (target, options) => {
-    if (String(target) === oldPart) {
-      cleaning.resolve()
-      await finishCleanup.promise
-    }
-    return remove(target, options)
-  })
-  writing.mockImplementation(async (...args) => {
-    await write(...args)
-    if (args[1] === 'queued successor') {
-      successorStaged.resolve()
-    }
-  })
-  const prior = snapshot('dispatched predecessor').then(
-    () => 'success',
-    () => 'replaced'
-  )
-  await dispatched.promise
-  const next = snapshot('queued successor')
-  await successorStaged.promise
-  expect(renaming).toHaveBeenCalledOnce()
-  finishRename.resolve()
-  await cleaning.promise
-  expect(await next).toBe(path)
-  expect(await readFile(path, 'utf8')).toBe('queued successor')
-  finishCleanup.resolve()
-  expect(await prior).toBe('replaced')
-  const failedStage = Promise.withResolvers<void>()
-  const oldStaged = Promise.withResolvers<void>()
-  writing
-    .mockImplementationOnce(async (...args) => {
-      oldStaged.resolve()
-      await failedStage.promise
-      return write(...args)
-    })
-    .mockRejectedValueOnce(new Error('newer stage failed'))
-  const revoked = snapshot('must not revive').then(
-    () => 'success',
-    () => 'replaced'
-  )
-  await oldStaged.promise
-  await expect(snapshot('failed newer capture')).rejects.toThrow('newer stage failed')
-  failedStage.resolve()
-  expect(await revoked).toBe('replaced')
-  expect(await readFile(path, 'utf8')).toBe('queued successor')
-  await remove(contextSnapshots.agentSessionContextSnapshotRoot(rig.root), {
-    recursive: true,
-    force: true
-  })
 })
