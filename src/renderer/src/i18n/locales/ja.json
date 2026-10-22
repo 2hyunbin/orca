@@ -3465,7 +3465,7 @@
             "restoring": "ターミナルを復元中…"
           },
           "AgentLaunchPaneNotice": {
-            "agent": "エージェント",
+            "agent": "Agent",
             "commandNotFound": "このマシンでコマンドが見つからないため、{{agent}} を起動できませんでした。",
             "copyPrompt": "プロンプトをコピー",
             "exitedDuringStart": "{{agent}} は起動中に終了しました。",
