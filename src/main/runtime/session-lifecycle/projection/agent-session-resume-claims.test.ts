@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { AgentSessionResumeClaims } from './agent-session-resume-claims'
+import {
+  AgentSessionResumeClaims,
+  type AgentSessionResumeClaim
+} from './agent-session-resume-claims'
 
 const SESSION = { agent: 'claude', providerSession: { key: 'session_id', id: 'one' } } as const
 
@@ -92,12 +95,12 @@ describe('AgentSessionResumeClaims', () => {
     expect(exits.has('pty-1')).toBe(false)
   })
 
-  it('ends a hold once the hook store reports it, even if the row is gone by the next claim', () => {
-    let reported = false
+  function makeReportedClaims() {
+    const state = { reported: false }
     const listeners = new Set<() => void>()
     const exits = new Map<string, () => void>()
     const claims = new AgentSessionResumeClaims({
-      reported: () => reported,
+      reported: () => state.reported,
       watchExit: (ptyId, onExit) => {
         exits.set(ptyId, onExit)
         return () => exits.delete(ptyId)
@@ -107,12 +110,37 @@ describe('AgentSessionResumeClaims', () => {
         return () => listeners.delete(onChange)
       }
     })
+    const report = (): void => {
+      state.reported = true
+      listeners.forEach((onChange) => onChange())
+      // The reporting agent exits to its shell: its row is gone, its PTY stays.
+      state.reported = false
+    }
+    return { claims, listeners, exits, report }
+  }
+
+  it.each([
+    ['a second open has not spawned yet', (second: AgentSessionResumeClaim | null) => second],
+    [
+      'a second open spawned its own PTY',
+      (second: AgentSessionResumeClaim | null) => {
+        second?.bind('pty-2')
+        return null
+      }
+    ]
+  ])('keeps a same-pane hold through one report while %s', (_case, settleSecond) => {
+    const { claims, report } = makeReportedClaims()
+    claims.claim(SESSION, 'tab:a')?.bind('pty-1')
+    settleSecond(claims.claim(SESSION, 'tab:a'))
+    report()
+    expect(claims.claim(SESSION, 'tab:b')).toBeNull()
+  })
+
+  it('ends a hold once the hook store reports it, even if the row is gone by the next claim', () => {
+    const { claims, listeners, exits, report } = makeReportedClaims()
     claims.claim(SESSION, 'tab:a')?.bind('pty-1')
     expect(listeners.size).toBe(1)
-    // The resumed agent reports, then exits to its shell, which drops its row; the PTY lives on.
-    reported = true
-    listeners.forEach((onChange) => onChange())
-    reported = false
+    report()
     expect(listeners.size).toBe(0)
     expect(exits.has('pty-1')).toBe(false)
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()

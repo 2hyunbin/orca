@@ -70,7 +70,9 @@ export class AgentSessionResumeClaims {
     this.stopWatchingReports ??=
       this.lifecycle.watchReports?.(() => {
         for (const held of this.holds) {
-          if (this.lifecycle.reported(held)) {
+          // Why one bound spawn only: the report names a pane, not a spawn, so it cannot cover a
+          // second overlapping open's spawn that has not reported yet.
+          if (held.unsettled === 0 && held.ptys.size === 1 && this.lifecycle.reported(held)) {
             this.end(held)
           }
         }
