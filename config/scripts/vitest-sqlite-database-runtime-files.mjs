@@ -55,6 +55,7 @@ export const SQLITE_DATABASE_RUNTIME_INCLUDE = [
   'src/main/runtime/orchestration/coordinator-escalation-triage.test.ts',
   'src/main/runtime/orchestration/coordinator-terminal-census-unavailable.test.ts',
   'src/main/runtime/orchestration/coordinator.test.ts',
+  'src/main/runtime/orchestration/chat-assignee.test.ts',
   'src/main/runtime/orchestration/db-empty-dispatch-shortcircuit.benchmark.test.ts',
   'src/main/runtime/orchestration/db-heartbeat-straggler-guard.test.ts',
   'src/main/runtime/orchestration/db-message-timestamp.test.ts',

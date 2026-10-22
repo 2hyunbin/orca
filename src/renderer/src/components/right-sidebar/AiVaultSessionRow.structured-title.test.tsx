@@ -8,9 +8,14 @@ import type { AiVaultSearchHit } from '../../../../shared/ai-vault-search-types'
 import type { ExecutionHostId } from '../../../../shared/execution-host'
 import type { Tab } from '../../../../shared/tab-types'
 
-const mocks = vi.hoisted(() => ({ subscribe: vi.fn(), supports: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  subscribe: vi.fn(),
+  supports: vi.fn(),
+  supportsInPlaceSwitch: vi.fn(async () => false)
+}))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
-  subscribeStructuredAgentSessionStatus: mocks.subscribe
+  subscribeStructuredAgentSessionStatus: mocks.subscribe,
+  supportsInPlaceSwitch: mocks.supportsInPlaceSwitch
 }))
 vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
