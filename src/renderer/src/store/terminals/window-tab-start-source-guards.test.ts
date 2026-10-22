@@ -1,7 +1,7 @@
 // Source guards for the window tab's start in main (L252): what the window sends is its own main's,
 // and main alone records the start's telemetry.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const RENDERER_SRC = join(__dirname, '..', '..')
@@ -18,7 +18,7 @@ function rendererSources(dir = RENDERER_SRC): string[] {
 
 describe('window tab start source guards', () => {
   const sources = rendererSources().map((path) => ({
-    path: relative(RENDERER_SRC, path),
+    path: relative(RENDERER_SRC, path).split(sep).join('/'),
     text: readFileSync(path, 'utf8')
   }))
 

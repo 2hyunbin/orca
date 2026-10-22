@@ -55,7 +55,6 @@ function createPaneDraftSession(agent?: 'codex') {
     disposed: false,
     connectionId: null,
     ownsStartupDraftPaste: true,
-    shouldDeliverStartupViaTerminalPaste: false,
     startupDraftPrompt: DRAFT,
     startupDraftAgent: agent,
     startupDraftAgentConfig: agent ? TUI_AGENT_CONFIG[agent] : undefined,
