@@ -1,6 +1,4 @@
-// Layout-owner build: the start inputs of a window tab's first terminal that need more than main's
-// create options. An agent launch runs as its pane's own pty:spawn runs it (tracked, refused once
-// closed, one verdict); a draft its agent takes only once ready is pasted by main, its one owner.
+// Layout-owner build: a window tab's agent launch and startup draft, run by main as its pane would.
 import {
   beginPaneAgentLaunch,
   endPaneAgentLaunch,

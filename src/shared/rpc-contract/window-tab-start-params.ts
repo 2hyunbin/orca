@@ -5,12 +5,7 @@ import { AgentArgs, LaunchPreferences, PromptDelivery } from './agent-session-pa
 
 const TuiAgentParam = z.string().refine(isTuiAgent)
 
-/**
- * Layout-owner build: the start inputs a window's own new tab hands main, read only with
- * `windowTab` (main ignores them on any other create). Only the window sends them, to its own
- * main process, so no older host ever reads them. A value that does not parse is dropped, as
- * before these keys existed, so another caller's create is never refused over one.
- */
+/** Read only with `windowTab`, from this machine's own window; a bad value drops, never refuses. */
 export const WindowTabStartInputParams = {
   /** `agent_started` for this start; main records it once the spawn commits. */
   telemetry: z

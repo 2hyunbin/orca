@@ -1,6 +1,4 @@
-// A pane's own agent launch, from either start lane: the window pane's pty:spawn, or main's create
-// of a window tab's first terminal. Tracked while it runs, refused once the user closed the pane,
-// planned by the host's planner, and ended with one verdict to the window. No launch record.
+// A pane's own agent launch (pty:spawn or a window tab's create): tracked, closable, one verdict.
 
 import { AgentLaunch } from '../../shared/rpc-contract/agent-launch-params'
 import { toAgentLaunchPreferences } from '../../shared/agent-launch-preferences'

@@ -1,8 +1,7 @@
-// Layout-owner build: the `terminal.create` params a window tab's first start sends main, carrying
-// every start input its own pane's spawn would have carried (ledger L252).
+// Layout-owner build: the start inputs a window tab's `terminal.create` hands main (L252).
 
 import { toAgentLaunchPreferences } from '../../../../shared/agent-launch-preferences'
-import { TUI_AGENT_CONFIG } from '../../../../shared/tui-agent-config'
+import { agentDeliversDraftViaNativePrefill } from '@/lib/agent-native-draft-prefill'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { AppState } from '../types'
 import {
@@ -19,13 +18,11 @@ export function startupDraftPaste(
   startup: TabStartup | undefined
 ): { agent: TuiAgent; content: string } | null {
   const agent = startup?.launchAgent ?? startup?.initialAgentStatus?.agent
-  const config = agent ? TUI_AGENT_CONFIG[agent] : null
   // As the pane's own paste: only a launch-bound draft, never one the command already carries.
   return agent &&
     startup?.launchConfig &&
     startup.draftPrompt?.trim() &&
-    !config?.draftPromptFlag &&
-    !config?.draftPromptEnvVar
+    !agentDeliversDraftViaNativePrefill(agent, false)
     ? { agent, content: startup.draftPrompt }
     : null
 }

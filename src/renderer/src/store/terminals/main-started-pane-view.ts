@@ -1,6 +1,4 @@
-// Layout-owner build: the view facts of a window tab's first start main runs. The pane attaches to
-// main's terminal instead of spawning, so nothing it spawns seeds these; they are kept by pane key.
-// Session-only and bounded: a pane that never attaches leaves at most a few entries behind.
+// Layout-owner build: view facts of a start main runs, by pane key, for the pane that attaches to it.
 
 import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
 import type { TuiAgent } from '../../../../shared/tui-agent'

@@ -16,7 +16,7 @@ import {
   handStartupToMain,
   takeStartupBackFromMain,
   windowTabStartupParams
-} from './window-tab-start-params'
+} from './window-tab-start-request'
 
 type StartStore = {
   getState: () => AppState

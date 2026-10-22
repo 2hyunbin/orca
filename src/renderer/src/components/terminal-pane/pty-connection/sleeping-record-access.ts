@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store'
 import type { PtyConnectResult } from '../pty-transport-types'
 import { createBrowserUuid } from '@/lib/browser-uuid'
+import { agentDeliversDraftViaNativePrefill } from '@/lib/agent-native-draft-prefill'
 import {
   peekMainStartedPaneView,
   takeMainGaveBackPane
@@ -110,8 +111,7 @@ export function installSleepingRecordAccess(session: ConnectPanePtySession): voi
       : null
   session.startupDraftPromptNeedsPaste =
     session.startupDraftPrompt !== null &&
-    !session.startupDraftAgentConfig?.draftPromptFlag &&
-    !session.startupDraftAgentConfig?.draftPromptEnvVar
+    !agentDeliversDraftViaNativePrefill(session.startupDraftAgent, false)
   session.startupDraftDeliveryClaimed = false
   session.startupDraftPasteAttempted = false
   session.claimStartupDraftPasteDelivery = (): boolean => {

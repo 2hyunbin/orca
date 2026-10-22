@@ -27,7 +27,7 @@ import {
   startWindowTabInMain,
   windowTabStartsInMain
 } from './window-tab-start-in-main'
-import { handStartupToMain, takeStartupBackFromMain } from './window-tab-start-params'
+import { handStartupToMain, takeStartupBackFromMain } from './window-tab-start-request'
 
 /**
  * The row a tab main made itself is drawn with: main's time, title and the creation fields main
