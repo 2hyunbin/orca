@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../constants'
-import { LOCAL_EXECUTION_HOST_ID } from '../execution-host'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../execution-host'
 import type { Tab } from '../tab-types'
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
 import { resolveSessionTabRow } from './old-client/old-client-session-tab-rows'
@@ -70,8 +70,8 @@ function savedSession(): WorkspaceSessionState {
 }
 
 // As main's projection loads it after a restart: its views carried, none held.
-const load = (session: WorkspaceSessionState) =>
-  loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, session, {
+const load = (session: WorkspaceSessionState, hostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID) =>
+  loadWorkspaceLayout(hostId, session, {
     ...nameBasedLoadContext(),
     editorViewsOf: () => undefined
   })
@@ -106,6 +106,24 @@ describe("main's load of a browser record with no tab", () => {
     expect(ids(savedSession())).toEqual(first)
     expect(ids(saveWorkspaceLayout(load(savedSession())))).toEqual(first)
     expect(first).toHaveLength(1)
+  })
+
+  // The load reads only the saved partition: no host contact, so a direct SSH host that is down
+  // (unverifiable, not gone) gets the same repair and loses nothing but the window's drop.
+  it('repairs and drops the same in a direct SSH partition, whose host it never contacts', () => {
+    const session = savedSession()
+    session.unifiedTabs![KEY]!.push({
+      ...editor('ghost', 'g2', 1),
+      contentType: 'diff',
+      entityId: '/w/gone.ts'
+    })
+    const tabsOf = (hostId: ExecutionHostId) =>
+      load(session, hostId).layout.workspaces[KEY]!.tabs.map((tab) => [tab.id, tab.kind])
+
+    expect(tabsOf('ssh:box')).toEqual(tabsOf(LOCAL_EXECUTION_HOST_ID))
+    expect(tabsOf('ssh:box')).toContainEqual([expect.any(String), 'browser'])
+    expect(tabsOf('ssh:box').map(([id]) => id)).toEqual(expect.arrayContaining(['a', 'b']))
+    expect(tabsOf('ssh:box').map(([id]) => id)).not.toContain('ghost')
   })
 
   it('skips a saved active group this load empties, as the window picks a group that holds a tab', () => {
