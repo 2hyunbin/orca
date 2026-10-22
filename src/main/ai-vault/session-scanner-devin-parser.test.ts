@@ -16,18 +16,18 @@ afterEach(async () => {
 describe('parseDevinSessionFile', () => {
   it.each([
     {
-      shape: 'message array',
+      payloadKind: 'message array',
       fields: (text: string) => ({ message: [], content: [{ type: 'text', text }] })
     },
     {
-      shape: 'wrapped content',
+      payloadKind: 'wrapped content',
       fields: (text: string) => ({ message: { content: '' }, text })
     },
     {
-      shape: 'text',
+      payloadKind: 'text',
       fields: (text: string) => ({ text: '', content: [{ type: 'text', text }] })
     }
-  ])('falls back from empty $shape without shortening content', async ({ fields }) => {
+  ])('falls back from empty $payloadKind without shortening content', async ({ fields }) => {
     const dir = await mkdtemp(join(tmpdir(), 'orca-devin-fallback-'))
     tempDirs.push(dir)
     const path = join(dir, 'fallback.json')
@@ -61,30 +61,30 @@ describe('parseDevinSessionFile', () => {
 
   it.each(
     [
-      { shape: 'string', fields: (text: string) => ({ message: text }) },
-      { shape: 'wrapped string', fields: (text: string) => ({ message: { content: text } }) },
+      { payloadKind: 'string', fields: (text: string) => ({ message: text }) },
+      { payloadKind: 'wrapped string', fields: (text: string) => ({ message: { content: text } }) },
       {
-        shape: 'wrapped blocks',
+        payloadKind: 'wrapped blocks',
         fields: (text: string) => ({
           message: { content: text.split('\n').map((text) => ({ type: 'text', text })) }
         })
       },
       {
-        shape: 'array',
+        payloadKind: 'array',
         fields: (text: string) => ({
           message: text.split('\n').map((text) => ({ type: 'text', text }))
         })
       },
       {
-        shape: 'content',
+        payloadKind: 'content',
         fields: (text: string) => ({
           content: text.split('\n').map((text) => ({ type: 'text', text }))
         })
       },
-      { shape: 'text', fields: (text: string) => ({ text }) }
-    ].flatMap((shape) => [5000, 256 * 1024 + 1].map((length) => ({ ...shape, length })))
+      { payloadKind: 'text', fields: (text: string) => ({ text }) }
+    ].flatMap((payloadKind) => [5000, 256 * 1024 + 1].map((length) => ({ ...payloadKind, length })))
   )(
-    'preserves $length-character $shape messages before display limits',
+    'preserves $length-character $payloadKind messages before display limits',
     async ({ fields, length }) => {
       const dir = await mkdtemp(join(tmpdir(), 'orca-devin-content-'))
       tempDirs.push(dir)
