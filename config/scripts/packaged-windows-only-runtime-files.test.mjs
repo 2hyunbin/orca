@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,11 +10,13 @@ const require = createRequire(import.meta.url)
 const { copyFiles, FileMatcher } = require('app-builder-lib/out/fileMatcher')
 const { createPackagedRuntimeNodeModuleResources } = require('../packaged-runtime-node-modules.cjs')
 const {
+  RUNTIME_PACKAGE_EXCLUDED_FILES,
   assertNoWindowsExecutablesInRuntimeNodeModules,
   runtimePackageExcludeFilter
 } = require('../packaged-windows-only-runtime-files.cjs')
 
 const ssh2Target = join('node_modules', 'ssh2')
+const { everyPlatform, nonWindows } = RUNTIME_PACKAGE_EXCLUDED_FILES.ssh2
 
 async function withTempDir(prefix, run) {
   const dir = await mkdtemp(join(tmpdir(), prefix))
@@ -25,13 +27,12 @@ async function withTempDir(prefix, run) {
   }
 }
 
-// Copies the installed ssh2 package the way electron-builder applies an extraResources entry.
-async function copiedSsh2UtilFiles(resource, destinationRoot) {
+// Copies the installed ssh2 package the way electron-builder applies an extraResources entry,
+// then reports which of its excluded files survived.
+async function copiedSsh2ExcludedFiles(resource, destinationRoot) {
   const destination = join(destinationRoot, resource.to)
   await copyFiles([new FileMatcher(resource.from, destination, (value) => value, resource.filter)])
-  // Why tolerate a missing util/: the Pageant files are all it holds, so excluding them drops it.
-  const utilDir = join(destination, 'util')
-  return existsSync(utilDir) ? (await readdir(utilDir)).sort() : []
+  return [...everyPlatform, ...nonWindows].filter((file) => existsSync(join(destination, file)))
 }
 
 function peImage() {
@@ -48,13 +49,13 @@ describe('Windows-only runtime files', () => {
     const resource = createPackagedRuntimeNodeModuleResources(platform).find(
       (entry) => entry.to === ssh2Target
     )
-    // Why: the fixture must be the real package, so a bump that moves pagent.exe is noticed here.
-    expect(existsSync(join(resource.from, 'util', 'pagent.exe'))).toBe(true)
+    // Why: the fixture must be the real package, so a bump that moves these files is noticed here.
+    for (const file of [...everyPlatform, ...nonWindows]) {
+      expect(existsSync(join(resource.from, file)), file).toBe(true)
+    }
+    expect(nonWindows).toContain('util/pagent.exe')
     await withTempDir('orca-ssh2-copy-', async (dir) => {
-      const files = await copiedSsh2UtilFiles(resource, dir)
-      expect(files).not.toContain('pagent.exe')
-      expect(files).not.toContain('pagent.c')
-      expect(files).not.toContain('build_pagent.bat')
+      expect(await copiedSsh2ExcludedFiles(resource, dir)).toEqual([])
       expect(existsSync(join(dir, ssh2Target, 'lib', 'agent.js'))).toBe(true)
     })
   })
@@ -66,10 +67,7 @@ describe('Windows-only runtime files', () => {
     )
     const resource = { from, to: ssh2Target, filter: runtimePackageExcludeFilter('ssh2', 'win32') }
     await withTempDir('orca-ssh2-copy-win-', async (dir) => {
-      const files = await copiedSsh2UtilFiles(resource, dir)
-      expect(files).toContain('pagent.exe')
-      expect(files).not.toContain('pagent.c')
-      expect(files).not.toContain('build_pagent.bat')
+      expect(await copiedSsh2ExcludedFiles(resource, dir)).toEqual(nonWindows)
     })
   })
 

@@ -56,6 +56,7 @@ function assertNoWindowsExecutablesInRuntimeNodeModules(resourcesDir, electronPl
 }
 
 module.exports = {
+  RUNTIME_PACKAGE_EXCLUDED_FILES,
   assertNoWindowsExecutablesInRuntimeNodeModules,
   runtimePackageExcludeFilter
 }
