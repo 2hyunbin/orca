@@ -1,3 +1,8 @@
+import {
+  agentSessionLeaseFixture,
+  agentSessionRecordFixture
+} from '../../../shared/agent-session-record.test-fixture'
+import { agentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -28,7 +33,16 @@ afterAll(() => {
 })
 
 const NO_OPEN_DEPS = {
-  store: { getRecord: () => null, listRecords: () => [], replacedRuntime: () => undefined },
+  store: {
+    getRecord: (sessionId: string) =>
+      agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId })),
+    getConversation: (sessionId: string) =>
+      agentSessionConversationView(
+        agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId }))
+      ),
+    listConversations: () => [],
+    replacedRuntime: () => undefined
+  },
   journalDatabase: openTestJournalHostDatabase(stateDirectory),
   logger: recordingStructuredAgentSessionLogger().logger
 }

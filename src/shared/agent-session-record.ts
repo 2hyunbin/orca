@@ -4,7 +4,8 @@ import { isAgentSessionConversationName } from './agent-session-conversation-nam
 import {
   isPersistedAgentSessionHandoffStage,
   isPersistedAgentSessionRuntimeKind,
-  type PersistedAgentSessionLease,
+  type PersistedAgentSessionObservationLease,
+  type PersistedAgentSessionObservationRecord,
   type PersistedAgentSessionRecord
 } from './agent-session-legacy-handoff-lease'
 /**
@@ -301,19 +302,19 @@ function isAgentSessionDeathEvidence(value: unknown): value is AgentSessionDeath
   )
 }
 
-function isPersistedAgentSessionLease(value: unknown): value is PersistedAgentSessionLease {
+function isPersistedAgentSessionObservationLease(
+  value: unknown
+): value is PersistedAgentSessionObservationLease {
   if (typeof value !== 'object' || value === null) {
     return false
   }
-  const lease = value as Partial<AgentSessionLease>
-  const { minimumNextFence } = lease
+  // SAFETY: every field is checked below before the boundary admits an observation.
+  const lease = value as Partial<PersistedAgentSessionObservationLease>
   return (
     isAgentSessionId(lease.sessionId) &&
     isPersistedAgentSessionRuntimeKind(lease.runtimeKind) &&
     Number.isSafeInteger(lease.runtimeFence) &&
     (lease.runtimeFence as number) >= 0 &&
-    (minimumNextFence === undefined ||
-      (Number.isSafeInteger(minimumNextFence) && minimumNextFence >= 0)) &&
     (lease.handoffStage === null || isPersistedAgentSessionHandoffStage(lease.handoffStage)) &&
     (lease.provenHandleLinkId === null || isBoundedString(lease.provenHandleLinkId, 128)) &&
     (lease.ownerProcess === null || isAgentSessionProcessIdentity(lease.ownerProcess)) &&
@@ -334,13 +335,14 @@ function isPersistedAgentSessionLease(value: unknown): value is PersistedAgentSe
 }
 
 /** Stored identity is independent of registrations; availability is checked only at start. */
-export function isPersistedAgentSessionRecord(
+export function isPersistedAgentSessionObservationRecord(
   value: unknown
-): value is PersistedAgentSessionRecord {
+): value is PersistedAgentSessionObservationRecord {
   if (typeof value !== 'object' || value === null) {
     return false
   }
-  const record = value as Partial<AgentSessionRecord>
+  // SAFETY: the shared structural and cross-field checks below validate all non-floor fields.
+  const record = value as Partial<PersistedAgentSessionObservationRecord>
   const fieldsValid =
     record.schemaVersion === AGENT_SESSION_RECORD_SCHEMA_VERSION &&
     isAgentSessionId(record.sessionId) &&
@@ -361,14 +363,15 @@ export function isPersistedAgentSessionRecord(
       isAgentSessionConversationName(record.conversationName)) &&
     (record.launchArgs === undefined || isAgentSessionLaunchArgs(record.launchArgs)) &&
     !Object.hasOwn(record, 'launchEnv') &&
-    isPersistedAgentSessionLease(record.lease) &&
+    isPersistedAgentSessionObservationLease(record.lease) &&
     record.lease.sessionId === record.sessionId &&
     Number.isSafeInteger(record.createdAt) &&
     Number.isSafeInteger(record.updatedAt)
   if (!fieldsValid) {
     return false
   }
-  const validated = record as AgentSessionRecord
+  // SAFETY: fieldsValid established the structure; the floor remains unknown.
+  const validated = record as PersistedAgentSessionObservationRecord
   // The row holds stored handles; validate the chain they decode to.
   const chain = decodePersistedAgentSessionProviderHandleChain(validated.providerHandleChain)
   const head = chain?.at(-1)
@@ -384,5 +387,18 @@ export function isPersistedAgentSessionRecord(
         (validated.lease.provenHandleLinkId === null ||
           (head?.linkId === validated.lease.provenHandleLinkId &&
             head.mintedAtFence === validated.lease.runtimeFence))))
+  )
+}
+
+/** Writable records require the complete observation and a safe next-grant floor. */
+export function isPersistedAgentSessionRecord(
+  value: unknown
+): value is PersistedAgentSessionRecord {
+  if (!isPersistedAgentSessionObservationRecord(value)) {
+    return false
+  }
+  const floor = value.lease.minimumNextFence
+  return (
+    floor === undefined || (typeof floor === 'number' && Number.isSafeInteger(floor) && floor >= 0)
   )
 }

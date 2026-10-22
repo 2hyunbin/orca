@@ -11,7 +11,7 @@ import type {
   StructuredAgentId
 } from '../../shared/agent-session-provider-handle'
 import type { AgentSessionLease, AgentSessionRecord } from '../../shared/agent-session-record'
-import { agentSessionLeaseAdmitsWriter } from '../../shared/agent-session-lease-adjudication'
+import { agentSessionOwnerObservationIsLive } from '../../shared/agent-session-lease-adjudication'
 import {
   agentSessionAccountHomesEqual,
   type AgentSessionAccountHome
@@ -106,7 +106,7 @@ export function structuredAdoptionConflictError(
   ownership: StructuredAgentSessionAdoptionOwnership
 ): Error {
   return agentSessionRefusalError(
-    agentSessionLeaseAdmitsWriter(ownership.lease)
+    agentSessionOwnerObservationIsLive(ownership.ownerObservation)
       ? 'agent_session_conflict'
       : 'agent_session_ownership_unknown',
     {

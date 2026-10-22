@@ -1,3 +1,8 @@
+import {
+  getAgentSessionConversation,
+  requireWritableAgentSessionRecord
+} from './agent-session-store-state'
+import type { AgentSessionConversationView } from '../../shared/agent-session-conversation-view'
 // Ledger admission for mutations that are not reservations — send, cancel, an
 // approval answer. Split from the store so the store keeps only the transaction.
 
@@ -152,10 +157,10 @@ export function admitAgentSessionGlobalOperationRow(
 /** The ledger's answer for a mutation, placing nothing and checking no lease: what a call must
  *  know before it decides whether to give the session an owner. Null when no record exists. */
 export function evaluateAgentSessionMutationOperation(
-  state: Pick<AgentSessionStoreState, 'records' | 'operations'>,
+  state: AgentSessionStoreState,
   args: AgentSessionMutationOperationAdmission
-): { decision: AgentSessionOperationDecision; record: AgentSessionRecord } | null {
-  const record = state.records.get(args.envelope.sessionId)
+): { decision: AgentSessionOperationDecision; record: AgentSessionConversationView } | null {
+  const record = getAgentSessionConversation(state, args.envelope.sessionId)
   if (!record) {
     return null
   }
@@ -182,10 +187,7 @@ export function admitAgentSessionMutationOperation(
   state: AgentSessionStoreState,
   args: AgentSessionMutationOperationAdmission
 ): AgentSessionMutationOperationDecision {
-  const record = state.records.get(args.envelope.sessionId)
-  if (!record) {
-    return null
-  }
+  const record = requireWritableAgentSessionRecord(state, args.envelope.sessionId)
   const operation = mutationOperation(args)
   const ledger = args.operationIdScope
     ? admitAgentSessionGlobalOperationRow(state.operations, operation)

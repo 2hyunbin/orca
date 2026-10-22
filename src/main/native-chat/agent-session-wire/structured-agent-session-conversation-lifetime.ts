@@ -88,7 +88,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
   }
 
   const hasOpenDispatch = (sessionId: string): boolean => {
-    const record = deps().store.getRecord(sessionId)
+    const record = deps().store.getConversation(sessionId)
     return record !== null && deps().hasOpenDispatch?.(record) === true
   }
   const providerHoldsDispatch = (sessionId: string): boolean =>
@@ -125,7 +125,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     executionHostId: ExecutionHostId
   ): Promise<WorkspaceSleepCloseResult | null> => {
     const matches = (): boolean => {
-      const location = deps().store.getRecord(sessionId)?.location
+      const location = deps().store.getConversation(sessionId)?.location
       return location?.workspaceId === workspaceId && location.executionHostId === executionHostId
     }
     const starts = workspaceSleepStartAborts(() => host.context().runtimeState, sessionId)
@@ -139,11 +139,11 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       }
       readRefusals.forget(sessionId)
       starts.abort()
-      const record = deps().store.getRecord(sessionId)
+      const record = deps().store.getConversation(sessionId)
       if (!record) {
         return null
       }
-      const fence = record.lease.runtimeFence
+      const fence = record.currentFence
       const admittedSends = deps().store.admittedSendCount(sessionId)
       const session = sessions.get(sessionId)
       const child = session?.child
@@ -171,7 +171,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
       // Lease release advances the fence; preserve the value after this close for the caller's
       // final identity check against a later restart.
       return {
-        fence: deps().store.getRecord(sessionId)?.lease.runtimeFence ?? fence,
+        fence: deps().store.getConversation(sessionId)?.currentFence ?? fence,
         stopped,
         admittedSends
       }
@@ -187,7 +187,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
     deliveryActive: host.deliveryActive,
     childWorkOpen: host.childWorkOpen,
     store: {
-      getRecord: (sessionId) => deps().store.getRecord(sessionId),
+      getRecord: (sessionId) => deps().store.getConversation(sessionId),
       replacedRuntime: (sessionId) => deps().store.replacedRuntime(sessionId)
     },
     hasOpenDispatch,
@@ -265,7 +265,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
               startKey: child.generation,
               ...structuredAgentSessionStartFailure(
                 { failure },
-                structuredAgentSessionFailureWordsContext(deps().store.getRecord(sessionId))
+                structuredAgentSessionFailureWordsContext(deps().store.getConversation(sessionId))
               )
             }
           ).catch((writeError: unknown) =>
@@ -302,7 +302,7 @@ export function createStructuredAgentSessionConversationLifetime(host: {
         readRefusals.forget(sessionId)
         return open
       }
-      const record = deps().store.getRecord(sessionId)
+      const record = deps().store.getConversation(sessionId)
       if (!record) {
         throw agentSessionRefusalError('agent_session_identity_required', {
           reason: 'recordMissing'

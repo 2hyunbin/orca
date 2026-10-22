@@ -1,3 +1,4 @@
+import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 // Whether a session's record may start its agent on this host, read in the commit after the
 // lease is adjudicated and recovery concluded, so it sees the lease the resolver handed back.
 
@@ -28,7 +29,15 @@ export function structuredAgentSessionStartParams(
       params: NonNullable<ReturnType<typeof structuredAgentSessionResumeParams>>
       startupOptions?: Readonly<Record<string, string>>
     } {
-  const record = context.deps.store.getRecord(sessionId)
+  let record
+  try {
+    record = context.deps.store.requireWritableRecord(sessionId)
+  } catch (error) {
+    if (isAgentSessionRefusalError(error)) {
+      return { ok: false, refusal: error.refusal }
+    }
+    throw error
+  }
   if (!record) {
     return refusedStructuredAgentSessionStart(
       'agent_session_identity_required',

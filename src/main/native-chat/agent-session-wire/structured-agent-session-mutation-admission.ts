@@ -1,3 +1,4 @@
+import type { AgentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 // The one route every mutating agent-session call takes: recompute the fingerprint,
 // accept a plan that declares a command receipt through it, otherwise admit
 // through the ledger and check the lease. Methods cannot grow their own admission rules.
@@ -21,7 +22,6 @@ import type {
   AgentSessionOperationDecision,
   AgentSessionOperationRow
 } from '../../../shared/agent-session-operation-ledger'
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type {
   AgentSessionMutationEnvelope,
   AgentSessionMutationResult,
@@ -46,8 +46,11 @@ import {
   agentSessionOperationOutcomeUnknown,
   resolveAgentSessionReplayOutcome
 } from './structured-agent-session-replay-outcome'
-import type { AgentSessionTurnContext } from './structured-agent-session-turns'
-import { mutationTurnContext } from './structured-agent-session-mutation-turn-context'
+import type { AgentSessionReplayContext } from './structured-agent-session-turns'
+import {
+  mutationTurnContext,
+  mutationReplayContext
+} from './structured-agent-session-mutation-turn-context'
 import type { StructuredAgentSessionLogger } from './structured-agent-session-logger'
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import { admitCommandReceiptMutation } from './structured-agent-session-command-admission'
@@ -81,7 +84,7 @@ export type AgentSessionMutationRequest<TValue> = {
    *  session ready for itself. Answers with the refusal that ends the call, if any. */
   prepareSession?: (
     ledger: Exclude<AgentSessionOperationDecision['decision'], 'refused'>,
-    record: AgentSessionRecord
+    record: AgentSessionConversationView
   ) => Promise<AgentSessionMutationSessionPreparation>
   publish: (journal: AgentSessionJournal) => void
   wakeDelivery?: (sessionId: string) => void
@@ -89,6 +92,19 @@ export type AgentSessionMutationRequest<TValue> = {
 }
 
 export async function admitAndRunAgentSessionMutation<TValue>(
+  request: AgentSessionMutationRequest<TValue>
+): Promise<AgentSessionMutationResult<TValue>> {
+  try {
+    return await admitAndRunAgentSessionMutationUnchecked(request)
+  } catch (error) {
+    if (isAgentSessionRefusalError(error)) {
+      return refuseAgentSessionMutation(error.refusal)
+    }
+    throw error
+  }
+}
+
+async function admitAndRunAgentSessionMutationUnchecked<TValue>(
   request: AgentSessionMutationRequest<TValue>
 ): Promise<AgentSessionMutationResult<TValue>> {
   const { plan, envelope } = request
@@ -131,8 +147,11 @@ export async function admitAndRunAgentSessionMutation<TValue>(
         return answered
       }
     }
-    const record = request.store.getRecord(envelope.sessionId) ?? ledger.record
-    const prepared = await request.prepareSession('admit', record)
+    const record = request.store.requireWritableRecord(envelope.sessionId)
+    const prepared = await request.prepareSession(
+      'admit',
+      request.store.getConversation(record.sessionId)!
+    )
     if (!prepared.ok) {
       return prepared
     }
@@ -216,7 +235,7 @@ async function answerRecordedOperation<TValue>(
   request: AgentSessionMutationRequest<TValue>,
   prepareSession: NonNullable<AgentSessionMutationRequest<TValue>['prepareSession']>,
   row: AgentSessionOperationRow,
-  record: AgentSessionRecord,
+  record: AgentSessionConversationView,
   hostFingerprint: string
 ): Promise<AgentSessionMutationResult<TValue> | 'rerun'> {
   const { plan, envelope } = request
@@ -255,7 +274,7 @@ async function answerRecordedOperation<TValue>(
     // The row is gone since: the first-run path decides it from scratch.
     return 'rerun'
   }
-  const context = mutationTurnContext(request, journal, current.record)
+  const context = mutationReplayContext(request, journal, current.record)
   return replayRecordedOperation(request, context, current.decision.row)
 }
 
@@ -271,7 +290,7 @@ export function replayRecordedOperation<TValue>(
     >
     envelope: AgentSessionMutationEnvelope
   },
-  context: AgentSessionTurnContext,
+  context: AgentSessionReplayContext,
   row: AgentSessionOperationRow
 ): AgentSessionMutationResult<TValue> | 'rerun' {
   const replay = resolveAgentSessionReplayOutcome({

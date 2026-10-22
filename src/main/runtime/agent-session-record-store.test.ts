@@ -739,6 +739,20 @@ describe('claim keys and unreadable rows', () => {
       })
       const reopened = await open()
       expect(reopened.isSessionUnreadable('session-alpha')).toBe(true)
+      expect(reopened.getRecord('session-alpha')).toBeNull()
+      expect(reopened.getConversation('session-alpha')).toMatchObject({
+        currentFence: 1,
+        neverStarted: false,
+        ownerObservation: { unreconciled: true }
+      })
+      expect(reopened.getConversation('session-alpha')).not.toHaveProperty('lease')
+      expect(reopened.getVisibleSessionTabIndex().sessionIds).toEqual(['session-alpha'])
+      await expect(reopened.setConversationName('session-alpha', 'new')).rejects.toMatchObject({
+        refusal: { details: { reason: 'recordUnreadable' } }
+      })
+      await expect(
+        reopened.renewLease({ sessionId: 'session-alpha', fence: 1, childProbe: UNUSED, now: NOW })
+      ).rejects.toThrow('execution_owner_reconciling')
       await expect(reopened.reserveOwner(reserveRequest())).rejects.toMatchObject({
         refusal: { details: { reason: 'recordUnreadable' } }
       })

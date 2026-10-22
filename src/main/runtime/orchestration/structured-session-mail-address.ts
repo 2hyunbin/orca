@@ -10,7 +10,7 @@
  * points its mail starts it again. For mail, a conversation has ended only when its chat was closed.
  */
 
-import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import type { AgentSessionConversationView } from '../../../shared/agent-session-conversation-view'
 import { isOrcaSessionId, type OrcaSessionId } from '../../../shared/orca-session-address'
 import { ORCHESTRATION_SESSION_CALLER_ERROR_CODES as CODES } from '../../../shared/orchestration-session-caller-codes'
 import type { OrchestrationDb } from './db'
@@ -22,7 +22,7 @@ import {
 } from './structured-session-lineage'
 
 export type OrcaAgentSessionLookup =
-  | { kind: 'found'; record: AgentSessionRecord }
+  | { kind: 'found'; record: AgentSessionConversationView }
   /** The id is a provider's own session id, which rotates on `/clear`; this names the Orca id. */
   | { kind: 'provider-id'; orcaSessionId: string }
   | { kind: 'unknown' }
@@ -43,7 +43,7 @@ export function lookupOrcaAgentSession(
 
 export type StructuredSessionMailReach =
   /** `session` is the conversation's live session, the one its mail reaches now. */
-  | { kind: 'reachable'; session: AgentSessionRecord }
+  | { kind: 'reachable'; session: AgentSessionConversationView }
   | { kind: 'other-host' }
   /** The lineage names a session with no record, or loops: not being able to look, not an end. */
   | { kind: 'unverifiable'; reason: string }
@@ -52,7 +52,7 @@ export type StructuredSessionMailReach =
 /** Whether mail to `record`'s conversation can reach the session that runs it now. */
 export function structuredSessionMailReach(
   store: AgentSessionRecordReader,
-  record: AgentSessionRecord,
+  record: AgentSessionConversationView,
   db: OrchestrationDb | null | undefined
 ): StructuredSessionMailReach {
   const running = resolveLineageRunningSession(store, record.sessionId)

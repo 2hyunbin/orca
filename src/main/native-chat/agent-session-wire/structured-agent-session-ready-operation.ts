@@ -1,3 +1,4 @@
+import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 import {
   agentSessionFingerprintConflict,
   computeAgentSessionPayloadFingerprint
@@ -17,7 +18,7 @@ import {
   type AgentSessionMutationSessionPreparation
 } from './structured-agent-session-mutation-admission'
 import type { MutationPlan } from './structured-agent-session-mutation-plans'
-import { mutationTurnContext } from './structured-agent-session-mutation-turn-context'
+import { mutationReplayContext } from './structured-agent-session-mutation-turn-context'
 import { commandReceiptScope } from '../agent-session-journal/command-receipt-schema'
 import { parseAgentSessionOperationTimestamp } from '../../../shared/agent-session-host-authority'
 import { waitForStructuredAgentSessionStart } from './structured-agent-session-start-readiness'
@@ -78,9 +79,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
   plan: ReadyOperationPlan<T>,
   run: (selection: ReadyOperationSelection) => Promise<AgentSessionMutationResult<T>>,
   options: {
-    beforeAgent?: (
-      record: AgentSessionRecord | null
-    ) => AgentSessionMutationSessionPreparation | null
+    beforeAgent?: (row: AgentSessionRecord | null) => AgentSessionMutationSessionPreparation | null
     goal?: boolean
     needsAgent?: (record: AgentSessionRecord | null) => boolean
   } = {}
@@ -173,7 +172,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
           if (current?.decision.decision !== 'replay') {
             return { result: await run({ ok: true, child: null, replay: true }) }
           }
-          const turn = mutationTurnContext(request, journal, current.record)
+          const turn = mutationReplayContext(request, journal, current.record)
           const answer = replayRecordedOperation(
             { envelope, plan: { ...plan, replay: plan.replay } },
             turn,
@@ -183,13 +182,16 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
             return { result: await run({ ok: true, child: null, replay: true }) }
           }
         } else if (!evaluated || evaluated.decision.decision !== 'admit') {
-          return {
-            result: await run({
-              ok: true,
-              child: null
-            })
-          }
+          return { result: await run({ ok: true, child: null }) }
         }
+      }
+      try {
+        context.deps.store.requireWritableRecord(envelope.sessionId)
+      } catch (error) {
+        if (isAgentSessionRefusalError(error)) {
+          return { result: { ok: false as const, refusal: error.refusal } }
+        }
+        throw error
       }
       const select = async () => {
         const opened = await openForWrite(context, envelope)()

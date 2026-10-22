@@ -38,6 +38,17 @@ export type PersistedAgentSessionRecord = Omit<
   providerHandleChain: PersistedAgentSessionProviderHandleLink[]
 }
 
+/** Checked stored facts before the independent next-grant floor has been validated. */
+export type PersistedAgentSessionObservationLease = Omit<
+  PersistedAgentSessionLease,
+  'minimumNextFence'
+> & {
+  minimumNextFence?: unknown
+}
+export type PersistedAgentSessionObservationRecord = Omit<PersistedAgentSessionRecord, 'lease'> & {
+  lease: PersistedAgentSessionObservationLease
+}
+
 export function isPersistedAgentSessionRuntimeKind(
   value: unknown
 ): value is PersistedAgentSessionRuntimeKind {
@@ -62,12 +73,16 @@ function isLegacyHandoffStage(
   return stage === 'preparing' || stage === 'old-owner-stopped' || stage === 'manual-recovery'
 }
 
-export function leaseCarriesLegacyHandoffValues(lease: PersistedAgentSessionLease): boolean {
+export function leaseCarriesLegacyHandoffValues(
+  lease: PersistedAgentSessionObservationLease
+): boolean {
   return lease.runtimeKind === 'tui' || isLegacyHandoffStage(lease.handoffStage)
 }
 
 /** Identity for every lease this build writes. */
-export function normalizeLegacyHandoffLease(lease: PersistedAgentSessionLease): AgentSessionLease {
+export function normalizeLegacyHandoffLease<L extends PersistedAgentSessionObservationLease>(
+  lease: L
+) {
   const { runtimeKind, handoffStage } = lease
   // Why: every one of these awaited proof about an owner, which is what `recovering` resolves.
   const stage = isLegacyHandoffStage(handoffStage) ? 'recovering' : handoffStage
@@ -76,11 +91,11 @@ export function normalizeLegacyHandoffLease(lease: PersistedAgentSessionLease): 
   }
   return {
     ...lease,
-    runtimeKind: 'native',
+    runtimeKind: 'native' as const,
     handoffStage: stage,
     // Why: a recorded terminal is the user's foreground agent. `conflicted` is the claim every
     // build probes but never stops; a plain native owner would be stopped by restart recovery.
-    claimStatus: lease.ownerProcess === null ? lease.claimStatus : 'conflicted'
+    claimStatus: lease.ownerProcess === null ? lease.claimStatus : ('conflicted' as const)
   }
 }
 

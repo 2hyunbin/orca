@@ -1,3 +1,4 @@
+import { getAgentSessionConversation } from './agent-session-store-state'
 import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { structuredAgentSessionTabId } from '../../shared/structured-agent-session-projection'
 import type { AgentSessionStoreState } from './agent-session-store-state'
@@ -86,7 +87,9 @@ export class AgentSessionTabTable {
 
 /** The sessions whose chat tab is shown, in tab order, skipping any without a record. */
 export function listVisibleAgentSessionIds(state: AgentSessionStoreState): string[] {
-  return (state.sessionTabs?.sessionIds() ?? []).filter((sessionId) => state.records.has(sessionId))
+  return (state.sessionTabs?.sessionIds() ?? []).filter((sessionId) =>
+    getAgentSessionConversation(state, sessionId)
+  )
 }
 
 export function agentSessionVisibleTabIndex(state: AgentSessionStoreState): {
@@ -102,7 +105,7 @@ export function setAgentSessionTabVisibility(
   visible: boolean,
   tabId?: string
 ): void {
-  if (visible && !state.records.has(sessionId)) {
+  if (visible && !getAgentSessionConversation(state, sessionId)) {
     throw agentSessionRefusalError('agent_session_identity_required', { reason: 'recordMissing' })
   }
   state.sessionTabs ??= new AgentSessionTabTable()
@@ -118,7 +121,7 @@ export function showAgentSessionTabs(
   sessionIds: readonly string[]
 ): void {
   for (const sessionId of sessionIds) {
-    if (state.records.has(sessionId)) {
+    if (getAgentSessionConversation(state, sessionId)) {
       setAgentSessionTabVisibility(state, sessionId, true)
     }
   }

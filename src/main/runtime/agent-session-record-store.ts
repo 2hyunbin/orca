@@ -2,7 +2,6 @@
  *  journal database. */
 
 import { backfillAgentSessionPermissionModes } from './agent-session-permission-backfill'
-import { agentSessionRefusalError } from '../../shared/agent-session-wire-refusals'
 import { createAgentSessionConversationReceipts } from './agent-session-conversation-receipts'
 import { pinAgentSessionRecordLaunchDirectory } from './agent-session-record-launch-directory'
 import {
@@ -61,7 +60,13 @@ import {
   type AgentSessionReserveRequest,
   type AgentSessionReserveResult
 } from './agent-session-reservation-admission'
-import { heldAgentSessionIds, type AgentSessionStoreState } from './agent-session-store-state'
+import {
+  getAgentSessionConversation,
+  listAgentSessionConversations,
+  requireWritableAgentSessionRecord,
+  heldAgentSessionIds,
+  type AgentSessionStoreState
+} from './agent-session-store-state'
 import {
   agentSessionVisibleTabIndex,
   listVisibleAgentSessionIds,
@@ -120,6 +125,11 @@ export class AgentSessionRecordStore {
 
   getRecord = (sessionId: string): AgentSessionRecord | null =>
     this.state.records.get(sessionId) ?? null
+
+  getConversation = (sessionId: string) => getAgentSessionConversation(this.state, sessionId)
+  listConversations = () => listAgentSessionConversations(this.state)
+  requireWritableRecord = (sessionId: string) =>
+    requireWritableAgentSessionRecord(this.state, sessionId)
 
   listRecords = (): AgentSessionRecord[] => [...this.state.records.values()]
 
@@ -328,12 +338,7 @@ export class AgentSessionRecordStore {
     apply: (record: AgentSessionRecord) => AgentSessionRecord
   ): Promise<AgentSessionRecord> {
     return this.transact((draft) => {
-      const record = draft.records.get(sessionId)
-      if (!record) {
-        throw draft.unreadableRecords.has(sessionId)
-          ? agentSessionRefusalError('execution_owner_reconciling', { reason: 'recordUnreadable' })
-          : agentSessionRefusalError('agent_session_identity_required', { reason: 'recordMissing' })
-      }
+      const record = requireWritableAgentSessionRecord(draft, sessionId)
       const next = apply(record)
       draft.records.set(sessionId, next)
       return next

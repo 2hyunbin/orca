@@ -1,3 +1,4 @@
+import { listAgentSessionConversations } from './agent-session-store-state'
 /**
  * Reservation admission: what a reserve request means against the persisted state.
  *
@@ -246,7 +247,7 @@ export function assertAdoptedConversationUnowned(
     return
   }
   const root = agentSessionProviderHandleRoot(adopted.handle)
-  for (const record of state.records.values()) {
+  for (const record of listAgentSessionConversations(state)) {
     if (record.sessionId === request.sessionId) {
       continue
     }
