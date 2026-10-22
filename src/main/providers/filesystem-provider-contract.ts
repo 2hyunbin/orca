@@ -46,7 +46,7 @@ export type IFilesystemProvider = {
   readFile(filePath: string, limits?: FileReadLimits): Promise<FileReadResult>
   readDocPreviewFile?(request: DocPreviewFileAccessRequest): Promise<DocPreviewFileAccessResult>
   /** Positional read. Optional because an older remote host cannot serve one.
-   *  Strict by design: it throws `FileRangeReadUnsupportedError` rather than
+   *  Strict by design: it throws when unsupported rather than
    *  silently degrading, so a caller cannot accidentally pay a whole-file
    *  transfer per chunk while tailing.
    *

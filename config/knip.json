@@ -31,7 +31,7 @@
     "config/electron-builder.config.cjs",
     "config/oxlint-plugins/**/*.{js,mjs,ts}",
     "tests/**/*.{ts,tsx,mjs}",
-    "**/*.test.{ts,tsx}",
+    "**/*.test.{ts,tsx,mjs}",
     "src/preload/doc-preview-link.ts",
     "src/main/ai-vault/session-scanner-service-entry.ts",
     "src/main/native-chat/wsl-transcript-fs-process-entry.ts",
@@ -54,7 +54,7 @@
     "src/main/runtime/rpc/methods/ui-state-schema-parity-checks.ts",
     "src/renderer/src/components/editor/monaco-internal-test-module-types.ts",
     "mobile/**/*.{ts,tsx}",
-    "cloud/**/*.{ts,tsx}"
+    "cloud/**/*.{ts,tsx,mjs}"
   ],
   "project": [
     "src/**/*.{ts,tsx}",

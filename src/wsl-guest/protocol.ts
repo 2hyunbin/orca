@@ -128,6 +128,10 @@ export function parseHandshakeMessage(payload: Buffer): HandshakeMessage {
 export const KEEPALIVE_SEND_MS = 5_000
 export const TIMEOUT_MS = 20_000
 
+export const STREAM_CHUNK_SIZE = 256 * 1024
+export const MAX_CONCURRENT_STREAMS = 16
+export const STREAM_ACK_WINDOW_CHUNKS = 4
+
 /** Sentinel result returned in place of a large git response: the real payload
  * follows as git.responseChunk frames on the bulk lane. Old relays never emit
  * this, so a new client falls back to the plain result they return. */
