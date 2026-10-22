@@ -103,7 +103,10 @@ describe('independent installed CLI discovery', () => {
       h.read('b', { waitForListing: true })
     ])
     expect(h.run).toHaveBeenCalledTimes(1)
-    expect(h.resolve.mock.calls.every((call) => call.length === 2)).toBe(true)
+    // Both chats resolve from the account and folder alone; neither saved pick reaches the probe.
+    expect(new Set(h.resolve.mock.calls.map(([home, cwd]) => JSON.stringify([home, cwd])))).toEqual(
+      new Set([JSON.stringify([HOME, '/project'])])
+    )
     expect(h.service.peek('a', true)).toBe(h.service.peek('b', true))
     expect(await h.read('b')).toMatchObject({
       models: [{ id: 'old', isDefault: true, defaultEffort: 'high' }]
