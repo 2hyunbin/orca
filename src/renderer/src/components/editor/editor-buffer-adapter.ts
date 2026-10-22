@@ -32,23 +32,26 @@ export function applyEditorBufferText(
     if (!model || model.isDisposed() || model.isAttachedToEditor() || model.getValue() === text) {
       continue
     }
+    // Why the stops: each commit is its own undo step, not merged into the previous one.
+    model.pushStackElement()
     model.pushEditOperations([], [{ range: model.getFullModelRange(), text }], () => null)
+    model.pushStackElement()
   }
 }
 
 /**
- * Panel content sync: a write landed `content` on disk for `savedViewId`'s record, so every other
- * view of the record this panel has loaded now reads that disk text. Without it a view's dirty
- * check compares against older disk text and can mark the record clean over unsaved edits.
+ * Panel content sync: a write landed `content` on disk for the record whose views were `viewIds`,
+ * so every other view of it this panel has loaded now reads that disk text. Without it a view's
+ * dirty check compares against older disk text and can mark the record clean over unsaved edits.
  */
 export function withRecordDiskText(
   prev: Record<string, FileContent>,
-  state: AppState,
+  viewIds: readonly string[],
   savedViewId: string,
   content: string
 ): Record<string, FileContent> {
   let next = prev
-  for (const viewId of editorBufferSiblingViewIds(state, savedViewId)) {
+  for (const viewId of viewIds) {
     const loaded = prev[viewId]
     if (
       viewId === savedViewId ||

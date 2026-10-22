@@ -5,7 +5,7 @@ import {
   type EditorBufferDetachments,
   type EditorBufferViewIndex
 } from './editor-buffer-views'
-import type { EditorBufferKeptRecords } from './editor-buffer-kept'
+import type { EditorBufferKeepRequest, EditorBufferKeptRecords } from './editor-buffer-kept'
 
 /**
  * Source of truth for a file's buffer state, keyed by record id (the file identity, or the tab id
@@ -27,6 +27,7 @@ export type EditorBufferState = EditorBufferWrite &
     editorDrafts?: Record<string, string>
     editorBufferDetached?: EditorBufferDetachments
     editorBufferKept?: EditorBufferKeptRecords
+    editorBufferKeepRequest?: EditorBufferKeepRequest
   }
 
 export const EDITOR_BUFFER_FIELDS = [

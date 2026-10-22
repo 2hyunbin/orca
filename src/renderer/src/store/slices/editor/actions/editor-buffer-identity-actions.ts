@@ -44,10 +44,10 @@ export function createEditorBufferIdentityActions(
         return detached ? { editorBufferDetached: detached } : s
       }),
 
-    releaseKeptEditorBuffers: (viewIds) =>
+    releaseKeptEditorBuffers: (notice) =>
       set((s) => {
-        const released = Object.entries(s.editorBufferKept).filter(([, entry]) =>
-          entry.viewIds.some((id) => viewIds.includes(id))
+        const released = Object.entries(s.editorBufferKept).filter(
+          ([, entry]) => entry.notice === notice
         )
         if (released.length === 0) {
           return s

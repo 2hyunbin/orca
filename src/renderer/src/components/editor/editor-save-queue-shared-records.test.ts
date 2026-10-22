@@ -6,6 +6,8 @@ import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signa
 import { createEditorSaveQueue, type EditorSaveQueue } from './editor-save-queue'
 import { createEditorRestartSaveHandlers } from './editor-restart-save-handlers'
 import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
+import { bumpEditorDiscardEpoch } from './editor-discard-epoch'
+import { isDetachedEditorBufferId } from '@/store/slices/editor/buffers/editor-buffer-views'
 import {
   createEditorStore,
   createFakeEditorDisk,
@@ -87,6 +89,43 @@ describe('editor save queue: shared records', () => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it("a save queued on a detached record keeps that record's discard epoch after a rejoin", async () => {
+    // Restored divergent drafts: w2 is kept off w1's record.
+    store.setState({
+      openFiles: [tab('w1', { isDirty: true }), tab('w2', { worktreeId: 'wt-2', isDirty: true })],
+      editorDrafts: { w1: 'mine', w2: 'theirs' }
+    })
+    expect(isDetachedEditorBufferId(recordOf('w2'))).toBe(true)
+    // An earlier Don't Save on w1's record; it never touched w2's.
+    bumpEditorDiscardEpoch(recordOf('w1'))
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    disk.fs.writeFile.mockImplementationOnce(
+      async ({ filePath, content }: { filePath: string; content: string }) => {
+        await gate
+        disk.files.set(filePath, content)
+        return { ok: true }
+      }
+    )
+    const first = queue.queueSave(view('w2'), 'theirs')
+    await vi.advanceTimersByTimeAsync(0)
+    const second = queue.queueSave(view('w2'), 'theirs')
+    // w1 goes clean, so w2 rejoins it, then types more before its queued save runs.
+    store.getState().markFileDirty('w1', false)
+    store.getState().clearEditorDraft('w1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(recordOf('w2')).toBe(recordOf('w1'))
+    store.getState().setEditorDraft('w2', 'theirs, more')
+    store.getState().markFileDirty('w2', true)
+
+    release()
+    await expect(first).resolves.toBe('written')
+    await expect(second).resolves.toBe('written')
+    expect(writes()).toEqual(['theirs', 'theirs, more'])
   })
 
   describe('a read-only sibling joining a dirty record', () => {

@@ -14,8 +14,10 @@ import {
   type EditorBufferRouteState
 } from './slices/editor/buffers/editor-buffer-identity-cache'
 import { reconcileEditorBufferRecords } from './slices/editor/buffers/editor-buffer-reconcile'
-import { isEditorBufferRejoinDue } from './slices/editor/buffers/editor-buffer-rejoin'
-import { takeEditorBufferKeepRequests } from './slices/editor/buffers/editor-buffer-kept'
+import {
+  isEditorBufferRejoinDue,
+  mayRejoinAfterDraftWrite
+} from './slices/editor/buffers/editor-buffer-rejoin'
 
 type EditorBufferStoreState = EditorBufferState & EditorBufferRouteState
 
@@ -32,10 +34,16 @@ const NO_KEPT = {}
  */
 function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
   state: TState,
-  write: TState | Partial<TState>,
+  requested: TState | Partial<TState>,
   checkInvariant: boolean,
   scheduleRejoin: () => void
 ): TState | Partial<TState> {
+  const keepRequest = requested.editorBufferKeepRequest
+  let write = requested
+  if (Object.hasOwn(write, 'editorBufferKeepRequest')) {
+    write = { ...write }
+    delete write.editorBufferKeepRequest
+  }
   const openFiles = write.openFiles ?? state.openFiles
   const records = write.editorBuffers ?? state.editorBuffers
   const drafts = write.editorDrafts ?? state.editorDrafts
@@ -55,7 +63,7 @@ function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
     // Why: clearing a draft can make a detached side clean, which rejoins it.
     if (
       drafts !== state.editorDrafts &&
-      Object.keys(detachments ?? NO_DETACHMENTS).length > 0 &&
+      mayRejoinAfterDraftWrite(state, detachments, state.editorDrafts, drafts) &&
       isEditorBufferRejoinDue({
         openFiles,
         editorBuffers: records,
@@ -86,7 +94,7 @@ function reconcileEditorBuffers<TState extends EditorBufferStoreState>(
   const next = reconcileEditorBufferRecords(
     input,
     (file) => editorBufferIdForFile(file, routeState),
-    { viewIds: takeEditorBufferKeepRequests(), drafts: state.editorDrafts ?? NO_DRAFTS },
+    keepRequest && { ...keepRequest, drafts: state.editorDrafts ?? NO_DRAFTS },
     rejoin
   )
   if (!rejoin && isEditorBufferRejoinDue(next)) {

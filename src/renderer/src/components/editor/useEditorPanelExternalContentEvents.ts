@@ -191,13 +191,17 @@ export function useEditorPanelExternalContentEvents({
         return
       }
       const file = openFilesRef.current.find((openFile) => openFile.id === detail.fileId)
+      const recordViewIds = detail.recordViewIds ?? [detail.fileId]
       if (!file) {
+        // Why: the saving tab closed mid-save; the record's other views still move to the disk text.
+        setFileContents((prev) =>
+          withRecordDiskText(prev, recordViewIds, detail.fileId, detail.content)
+        )
         return
       }
       if (file.mode === 'edit' || file.mode === 'markdown-preview') {
-        const state = useAppStore.getState()
         setFileContents((prev) => ({
-          ...withRecordDiskText(prev, state, file.id, detail.content),
+          ...withRecordDiskText(prev, recordViewIds, file.id, detail.content),
           [file.id]: { content: detail.content, isBinary: false }
         }))
       }

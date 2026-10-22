@@ -22,7 +22,10 @@ import type {
   OpenFile
 } from './open-file'
 import type { EditorBufferRecords } from '../buffers/editor-buffer-record'
-import type { EditorBufferKeptRecords } from '../buffers/editor-buffer-kept'
+import type {
+  EditorBufferKeepRequest,
+  EditorBufferKeptRecords
+} from '../buffers/editor-buffer-kept'
 import type { EditorBufferDetachments, EditorBufferViewIndex } from '../buffers/editor-buffer-views'
 import type { EditorOpenLinkIntent, EditorOpenResult } from './editor-open-link-intent'
 import type { OpenFilePathRekey, RekeyOpenFilesResult } from './open-file-path-rekey'
@@ -57,8 +60,10 @@ export type EditorFilesSlice = {
   editorBufferDetached: EditorBufferDetachments
   /** Dirty records whose last view closed without a prompt, by record id; reopening joins them. */
   editorBufferKept: EditorBufferKeptRecords
-  /** Drops the kept records these closed views left behind (their removal notice went away). */
-  releaseKeptEditorBuffers: (viewIds: readonly string[]) => void
+  /** Write-only: a closing write asks to keep its views' dirty records; never stored. */
+  editorBufferKeepRequest?: EditorBufferKeepRequest
+  /** Drops the kept records a removal notice left behind (the notice went away). */
+  releaseKeptEditorBuffers: (notice: number) => void
   /** Bumped when runtime revisions change, so the record middleware re-resolves identities. */
   editorBufferIdentityRevision: number
   /** Re-resolves every view's file identity after a change the store can't see (revisions). */
@@ -108,8 +113,14 @@ export type EditorFilesSlice = {
   ) => void
   makePreviewFilePermanent: (fileId: string, tabId?: string) => void
   pinFile: (fileId: string, tabId?: string) => void
-  /** captureRecentlyClosed false keeps a cleanup close out of the reopen stack. */
-  closeFile: (fileId: string, opts?: { captureRecentlyClosed?: boolean }) => void
+  /**
+   * captureRecentlyClosed false keeps a cleanup close out of the reopen stack; keepEditorBuffer
+   * keeps a no-prompt removal's dirty record past the close.
+   */
+  closeFile: (
+    fileId: string,
+    opts?: { captureRecentlyClosed?: boolean; keepEditorBuffer?: EditorBufferKeepRequest }
+  ) => void
   closeAllFiles: () => void
   /** Most recently closed editor tabs per worktree (for Cmd/Ctrl+Shift+T). */
   recentlyClosedEditorTabsByWorktree: Record<string, ClosedEditorTabSnapshot[]>

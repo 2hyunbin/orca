@@ -9,31 +9,30 @@ export type EditorBufferKept = {
   draft: string | undefined
   /** The views that closed; their model stays alive while the record is kept. */
   viewIds: readonly string[]
+  /** The removal notice offering the text back; dismissing it releases only its own records. */
+  notice: number
 }
 
 export type EditorBufferKeptRecords = Record<string, EditorBufferKept>
 
-/** Closing views whose dirty records outlive them, with the drafts they held before closing. */
+/**
+ * Carried by the write that closes these views (`editorBufferKeepRequest`): their dirty records
+ * outlive them. The record middleware consumes it; it is never stored.
+ */
 export type EditorBufferKeepRequest = {
   viewIds: ReadonlySet<string>
-  drafts: Readonly<Record<string, string>>
+  notice: number
 }
 
-// Why module state: purges close tabs inside a store updater, which can't write the store again;
-// the record middleware runs in that same write and takes the requests.
-let keepRequests = new Set<string>()
-
-/** Asks the record middleware to keep these views' dirty records when the current write closes them. */
-export function requestKeepEditorBuffers(viewIds: Iterable<string>): void {
-  for (const viewId of viewIds) {
-    keepRequests.add(viewId)
+/** One write can close views two purges asked to keep. */
+export function mergeEditorBufferKeepRequests(
+  a: EditorBufferKeepRequest | undefined,
+  b: EditorBufferKeepRequest | undefined
+): EditorBufferKeepRequest | undefined {
+  if (!a || !b) {
+    return a ?? b
   }
-}
-
-export function takeEditorBufferKeepRequests(): ReadonlySet<string> {
-  const taken = keepRequests
-  keepRequests = new Set()
-  return taken
+  return { viewIds: new Set([...a.viewIds, ...b.viewIds]), notice: b.notice }
 }
 
 /** Whether `viewId` closed into a kept record, so its model must stay alive. */

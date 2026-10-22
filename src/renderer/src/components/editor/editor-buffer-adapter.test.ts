@@ -1,16 +1,21 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js'
 import type { StoreApi } from 'zustand'
 import type { AppState } from '@/store'
 import { createEditorModelRegistry } from '@/lib/editor-model-registry'
 import { makeWorktree } from '@/store/slices/worktrees-slice-test-fixtures'
-import { requestKeepEditorBuffers } from '@/store/slices/editor/buffers/editor-buffer-kept'
 import { createEditorStore } from './editor-autosave-controller-test-fixture'
 import { applyEditorBufferText, withRecordDiskText } from './editor-buffer-adapter'
 import { editorTabModelUri } from './editor-save-disk-precondition'
 import { attachClosedEditorTabCleanup } from './closed-editor-tab-controller'
 import { attachModelLifetimeView } from './editor-model-lifetime-fixture'
+import { showClosedUnsavedFilesToast } from './closed-unsaved-files-toast'
+
+const storeRef = vi.hoisted((): { current: StoreApi<AppState> | null } => ({ current: null }))
+const toastWarning = vi.hoisted(() => vi.fn())
+vi.mock('@/store', () => ({ useAppStore: { getState: () => storeRef.current?.getState() } }))
+vi.mock('sonner', () => ({ toast: { warning: toastWarning, dismiss: vi.fn(), error: vi.fn() } }))
 
 const PATH = '/repo/notes.md'
 const bridge = createEditorModelRegistry()
@@ -77,6 +82,17 @@ describe('applyEditorBufferText', () => {
     expect(model.getValue()).toBe('disk')
   })
 
+  it('makes each commit its own undo step, apart from typing before it', () => {
+    const model = modelOf(store, a)
+    model.pushEditOperations([], [{ range: model.getFullModelRange(), text: 'typed' }], () => null)
+    applyEditorBufferText(store.getState(), file(store, b), 'first commit', bridge)
+    applyEditorBufferText(store.getState(), file(store, b), 'second commit', bridge)
+    model.undo()
+    expect(model.getValue()).toBe('first commit')
+    model.undo()
+    expect(model.getValue()).toBe('typed')
+  })
+
   it('leaves a shown model to its editor and ignores commits from a code view', () => {
     const model = modelOf(store, a)
     const detach = attachModelLifetimeView(model)
@@ -96,35 +112,39 @@ describe('withRecordDiskText (panel content sync)', () => {
       [b]: { content: 'old', isBinary: false },
       other: { content: 'other', isBinary: false }
     }
-    const next = withRecordDiskText(prev, store.getState(), a, 'saved')
+    const views = store.getState().editorBufferViews[store.getState().editorBufferIdOf[a]]
+    const next = withRecordDiskText(prev, views, a, 'saved')
     expect(next[b]?.content).toBe('saved')
     // The saver's own entry is written by the saved event itself.
     expect(next[a]?.content).toBe('old')
     expect(next.other?.content).toBe('other')
-    expect(withRecordDiskText({ [a]: prev[a] }, store.getState(), a, 'saved')).toEqual({
+    expect(withRecordDiskText({ [a]: prev[a] }, views, a, 'saved')).toEqual({
       [a]: prev[a]
     })
   })
 })
 
 describe('a kept dirty record owns its model', () => {
-  it('keeps the model past its last view until the record is released', async () => {
+  it('keeps the model past its last view until its removal notice is dismissed', async () => {
     const { store, a, b } = twoViews()
+    storeRef.current = store
     store.setState((s) => ({ openFiles: s.openFiles.filter((tab) => tab.id !== b) }))
     store.getState().setEditorDraft(a, 'unsaved')
     store.getState().markFileDirty(a, true)
     const model = modelOf(store, a, 'unsaved')
     const detach = attachClosedEditorTabCleanup(store, bridge)
     try {
-      store.setState((s) => {
-        requestKeepEditorBuffers([a])
-        return { openFiles: s.openFiles.filter((tab) => tab.id !== a) }
-      })
+      store.setState((s) => ({
+        openFiles: s.openFiles.filter((tab) => tab.id !== a),
+        editorBufferKeepRequest: { viewIds: new Set([a]), notice: 1 }
+      }))
       await Promise.resolve()
       await Promise.resolve()
       expect(model.isDisposed()).toBe(false)
 
-      store.getState().releaseKeptEditorBuffers([a])
+      showClosedUnsavedFilesToast([{ fileId: a, filePath: PATH, content: 'unsaved' }], 'wt-1', 1)
+      toastWarning.mock.calls[0][1].onDismiss()
+      expect(store.getState().editorBufferKept).toEqual({})
       await Promise.resolve()
       await Promise.resolve()
       expect(model.isDisposed()).toBe(true)

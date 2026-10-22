@@ -28,7 +28,7 @@ import {
 export function reconcileEditorBufferRecords(
   state: EditorBufferReconcileState,
   identityOf: (file: OpenFile) => string,
-  keep: EditorBufferKeepRequest = { viewIds: new Set(), drafts: {} },
+  keep?: EditorBufferKeepRequest & { drafts: Readonly<Record<string, string>> },
   rejoin = false
 ): EditorBufferReconcileState {
   const detached: EditorBufferDetachments = {}
@@ -119,13 +119,17 @@ export function reconcileEditorBufferRecords(
       const viewIds = state.editorBufferViews[recordId] ?? []
       const record = state.editorBuffers[recordId]
       // Why the drafts before this write: the closing write drops the closed views' drafts.
-      const side = { record, draft: viewIds[0] === undefined ? undefined : keep.drafts[viewIds[0]] }
+      const side = {
+        record,
+        draft: viewIds[0] === undefined ? undefined : keep?.drafts[viewIds[0]]
+      }
       if (
+        keep &&
         viewIds.length > 0 &&
         viewIds.every((id) => keep.viewIds.has(id)) &&
         isDirtyEditorBufferSide(side)
       ) {
-        write.setKept(recordId, { ...side, viewIds })
+        write.setKept(recordId, { ...side, viewIds, notice: keep.notice })
       }
       write.records = write.records === state.editorBuffers ? { ...write.records } : write.records
       delete write.records[recordId]
@@ -158,18 +162,22 @@ function joinView(
 ): string {
   const targetViews = [...(index.views[want] ?? [])]
   if (targetViews.length === 0) {
-    // Why not a rename: the moved file replaced the kept text's file on disk.
-    const kept =
-      source !== undefined && isMovedEditorBufferId(source) ? undefined : write.kept[want]
+    const kept = write.kept[want]
     const join = kept ? decideEditorBufferJoin(kept, joining) : 'rekey'
-    // Why attach or merge only: divergent text reopening a kept record leaves the kept text alone.
-    if (kept && (join === 'attach' || join === 'merge')) {
+    if (kept && source !== undefined && isMovedEditorBufferId(source)) {
+      // Why: the moved file replaced the kept text's file on disk; the notice still offers the text.
+      write.setKept(want, undefined)
+    } else if (kept && (join === 'attach' || join === 'merge')) {
       write.setKept(want, undefined)
       write.setRecord(want, kept.record)
       write.showView(viewId, kept)
-    } else {
-      write.setRecord(want, joining.record)
+      index.place(viewId, want)
+      return want
+    } else if (kept) {
+      // Why detached: divergent text leaves the kept record, and the model at its address, alone.
+      return detachView(viewId, want, joining, write, index, detached)
     }
+    write.setRecord(want, joining.record)
     index.place(viewId, want)
     return want
   }
@@ -228,12 +236,22 @@ function joinView(
       write.showView(viewId, target)
       index.place(viewId, want)
       return want
-    case 'detach': {
-      const keptOff = detachedEditorBufferId(viewId)
-      write.setRecord(keptOff, joining.record)
-      detached[viewId] = { recordId: keptOff, key: want }
-      index.place(viewId, keptOff)
-      return keptOff
-    }
+    case 'detach':
+      return detachView(viewId, want, joining, write, index, detached)
   }
+}
+
+function detachView(
+  viewId: string,
+  want: string,
+  joining: EditorBufferJoinSide,
+  write: ReconcileWrite,
+  index: IndexBuilder,
+  detached: EditorBufferDetachments
+): string {
+  const keptOff = detachedEditorBufferId(viewId)
+  write.setRecord(keptOff, joining.record)
+  detached[viewId] = { recordId: keptOff, key: want }
+  index.place(viewId, keptOff)
+  return keptOff
 }
