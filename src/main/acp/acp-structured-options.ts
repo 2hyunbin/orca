@@ -79,6 +79,10 @@ export class AcpStructuredOptions {
     this.configOptions = response.configOptions ?? []
     this.models = response.models ?? null
     this.resolvesConfig = origin === 'new'
+    this.adoptOwnChoice()
+  }
+
+  private adoptOwnChoice(): void {
     this.initialChoice = this.reported()
     this.currentProof = new Set(Object.keys(this.initialChoice))
   }
@@ -98,7 +102,7 @@ export class AcpStructuredOptions {
       // Until Orca writes a choice, a later report is still the agent's own (OpenCode's start
       // answers before its catalog loads).
       if (!this.picked.has('model') && !this.picked.has('effort')) {
-        this.initialChoice = this.reported()
+        this.adoptOwnChoice()
       }
     }
   }

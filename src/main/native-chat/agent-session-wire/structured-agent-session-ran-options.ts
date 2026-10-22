@@ -147,7 +147,7 @@ export async function recordStructuredAgentSessionRanOptions(
   // A report only completes an agent's own evidence of the dispatch, never stands in for it.
   const newerModel = checkpoint && reported !== checkpoint.reported ? reported?.model : undefined
   const model = executed ? (executed.model ?? message?.model ?? newerModel) : message?.model
-  childRuns.set(child, { ...childRuns.get(child), owed: model || !executed ? undefined : handed })
+  childRuns.set(child, { ...childRuns.get(child), owed: executed && !model ? handed : undefined })
   if (!model) {
     return
   }
