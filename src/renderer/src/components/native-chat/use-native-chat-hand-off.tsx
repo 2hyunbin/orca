@@ -1,7 +1,6 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { withTimeout } from '../../../../shared/promise-timeout-fallback'
-import type { AgentJournalCursor } from '../../../../shared/agent-session-journal-types'
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useAppStore } from '@/store'
 import { useStructuredChatTabConversationName } from '@/runtime/structured-conversation-name'
@@ -29,8 +28,6 @@ export type NativeChatHandOff = {
   open: (policy?: { avoidSourceAgent?: boolean }) => void
   /** Drops a pending or open hand-off, e.g. when the conversation it describes moves on. */
   reset: () => void
-  /** Identity of the current cut; another async check compares it to detect a superseded one. */
-  currentIntent: () => object | null
   dialog: ReactNode
 }
 
@@ -38,9 +35,7 @@ export function useNativeChatHandOff({
   pane,
   directory,
   messages,
-  invalidation = [],
-  cursor,
-  sourceBoundary,
+  epoch,
   focusComposer
 }: {
   pane: Pick<
@@ -49,10 +44,7 @@ export function useNativeChatHandOff({
   >
   directory: NativeChatFileLinkContext | null
   messages: readonly NativeChatMessage[]
-  /** Facts whose change makes a pending hand-off describe a conversation that moved on. */
-  invalidation?: readonly unknown[]
-  cursor: AgentJournalCursor | null
-  sourceBoundary: object
+  epoch: string | null
   focusComposer: () => void
 }): NativeChatHandOff {
   const intentKey = JSON.stringify([
@@ -60,62 +52,51 @@ export function useNativeChatHandOff({
     pane.sessionId,
     pane.agent,
     pane.isVisible,
-    directory,
-    ...invalidation
+    epoch,
+    directory
   ])
-  type Attempt = { key: string; boundary: object } & (
+  type Attempt = { key: string } & (
     | { phase: 'preparing' }
     | { phase: 'prepared'; request: AgentSessionContinuationRequest }
   )
   const active = useRef<Attempt | null>(null)
   const [attempt, setAttempt] = useState<Attempt | null>(null)
-  // Account checks still use scope identity independently of a click's lifetime.
-  const idleIdentity = useRef<object | null>(null)
   const retire = useCallback(() => {
     active.current = null
     setAttempt(null)
   }, [])
   useLayoutEffect(() => {
-    idleIdentity.current = {}
     retire()
     return () => {
-      idleIdentity.current = null
       retire()
     }
-  }, [intentKey, sourceBoundary, retire])
+  }, [intentKey, retire])
   const chatTab = useAppStore((state) =>
     directory
       ? state.unifiedTabsByWorktree[directory.worktreeId]?.find((tab) => tab.id === pane.tabId)
       : undefined
   )
   const conversationName = useStructuredChatTabConversationName(chatTab)
-  const currentAttempt =
-    attempt === active.current && attempt?.key === intentKey && attempt.boundary === sourceBoundary
-      ? attempt
-      : null
+  const currentAttempt = attempt === active.current && attempt?.key === intentKey ? attempt : null
   const request = currentAttempt?.phase === 'prepared' ? currentAttempt.request : null
   // The dialog launches in the chat's workspace, so it must be the same host the chat runs on.
   const available = Boolean(
     pane.isVisible &&
-    cursor &&
+    epoch &&
     directory &&
     isTuiAgent(pane.agent) &&
     directory.runtimeEnvironmentId ===
       (pane.target.kind === 'environment' ? pane.target.environmentId : null)
   )
-  const reset = useCallback(() => {
-    idleIdentity.current = {}
-    retire()
-  }, [retire])
   const prepare = useCallback(
     async (policy: { avoidSourceAgent?: boolean } = {}): Promise<void> => {
-      if (!available || !directory || !cursor || !isTuiAgent(pane.agent)) {
+      if (!available || !directory || !epoch || !isTuiAgent(pane.agent)) {
         return
       }
       if (active.current) {
         return
       }
-      const current: Attempt = { key: intentKey, boundary: sourceBoundary, phase: 'preparing' }
+      const current: Attempt = { key: intentKey, phase: 'preparing' }
       active.current = current
       setAttempt(current)
       const context = await withTimeout(
@@ -130,7 +111,11 @@ export function useNativeChatHandOff({
           return callStructuredAgentSession<AgentSessionContinuationContext>(
             pane.target,
             'agentSession.continuationContext',
-            { sessionId: pane.sessionId, workspaceId: directory.worktreeId, expectedCursor: cursor }
+            {
+              sessionId: pane.sessionId,
+              workspaceId: directory.worktreeId,
+              expectedCursor: { epoch, sequence: 0 }
+            }
           )
         })(),
         30_000,
@@ -143,15 +128,16 @@ export function useNativeChatHandOff({
       if (context?.status === 'superseded') {
         return
       }
-      const transcriptPath = context?.transcriptPath
+      const saved = context?.status === 'current' && typeof context.capturedText === 'string'
+      const transcriptPath = saved ? context.transcriptPath : undefined
       const source = {
         sourceKind: 'chat' as const,
         sourceAgent: pane.agent,
         sourceTitle: chatTab?.customLabel?.trim() || conversationName || chatTab?.label,
         sourceWorkingDirectory: directory.worktreePath,
         transcriptPath,
-        capturedText: transcriptPath
-          ? ''
+        capturedText: saved
+          ? (context.capturedText ?? '')
           : messages
               .flatMap((message) => {
                 const text = nativeChatMessageCopyText(message).trim()
@@ -188,9 +174,8 @@ export function useNativeChatHandOff({
     [
       available,
       intentKey,
-      sourceBoundary,
       retire,
-      cursor,
+      epoch,
       focusComposer,
       directory,
       pane.agent,
@@ -212,15 +197,14 @@ export function useNativeChatHandOff({
     available,
     preparing: currentAttempt?.phase === 'preparing',
     open,
-    reset,
-    currentIntent: () => idleIdentity.current,
+    reset: retire,
     dialog: request ? (
       <AgentSessionContinuationDialog
         open
         request={request}
         onOpenChange={(isOpen) => {
-          if (!isOpen) {
-            reset()
+          if (!isOpen && active.current === currentAttempt) {
+            retire()
           }
         }}
       />

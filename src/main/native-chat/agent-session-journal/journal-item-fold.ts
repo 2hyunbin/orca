@@ -14,7 +14,6 @@ import {
   namesAgentJournalProducer
 } from '../../../shared/agent-session-journal-producer'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
-import { isAgentSessionContextHistory } from '../../../shared/agent-session-context-clear'
 import type { JournalReducerState } from './journal-reducer'
 
 export function statedOrDerivedTurnScope(
@@ -90,12 +89,6 @@ export function removeJournalItem(
     return
   }
   if (existing) {
-    if (isAgentSessionContextHistory(existing.body)) {
-      state.contextHistoryRemovalSequence = Math.max(
-        state.contextHistoryRemovalSequence,
-        state.lastSequence
-      )
-    }
     state.derivedTurnScope.observe(
       itemId,
       isRootAgentJournalItem(existing),

@@ -3,6 +3,7 @@
 import React, { type ReactNode, act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useNativeChatHandOff } from '../native-chat/use-native-chat-hand-off'
 import type { AgentSessionContinuationRequest } from '@/lib/agent-session-continuation'
 
 const mocks = vi.hoisted(() => ({
@@ -12,11 +13,18 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/store', () => ({
-  useAppStore: (selector: (state: unknown) => unknown) => selector({ settings: mocks.settings })
+  useAppStore: (selector: (state: unknown) => unknown) =>
+    selector({ settings: mocks.settings, unifiedTabsByWorktree: {} })
 }))
 vi.mock('@/lib/launch-agent-session-continuation', () => ({
   detectAgentSessionContinuationAgents: mocks.detectAgents,
   launchAgentSessionContinuation: mocks.launchContinuation
+}))
+vi.mock('@/runtime/structured-agent-session-client', () => ({
+  supportsStructuredAgentSessionContinuationContext: async () => false
+}))
+vi.mock('@/runtime/structured-conversation-name', () => ({
+  useStructuredChatTabConversationName: () => 'Saved chat'
 }))
 vi.mock('@/lib/agent-catalog', () => ({
   getAgentCatalog: () => ['claude', 'claude-agent-teams', 'codex'].map((id) => ({ id, label: id })),
@@ -179,6 +187,50 @@ describe('AgentSessionContinuationDialog', () => {
       }
     }
   )
+
+  it('keeps the replacement chooser open when an earlier accepted launch completes', async () => {
+    function Chat({ epoch }: { epoch: string }) {
+      const handOff = useNativeChatHandOff({
+        pane: {
+          tabId: 'tab',
+          sessionId: 'chat',
+          agent: 'codex',
+          isVisible: true,
+          target: { kind: 'local' }
+        },
+        directory: { worktreeId: 'folder', worktreePath: '/repo', runtimeEnvironmentId: null },
+        epoch,
+        messages: [
+          { id: '1', role: 'user', timestamp: 1, blocks: [{ type: 'text', text: 'Saved task' }] }
+        ],
+        focusComposer: () => {}
+      })
+      return (
+        <>
+          <button onClick={() => handOff.open()}>Open hand-off</button>
+          {handOff.dialog}
+        </>
+      )
+    }
+    const launchA = Promise.withResolvers<boolean>()
+    mocks.detectAgents.mockResolvedValue(['codex'])
+    mocks.launchContinuation.mockReturnValueOnce(launchA.promise).mockResolvedValueOnce(true)
+    const click = (text: string) =>
+      Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent === text)
+        ?.click()
+    await act(async () => root.render(<Chat epoch="a" />))
+    await act(async () => click('Open hand-off'))
+    await act(async () => click('Start New Session'))
+    expect(mocks.launchContinuation).toHaveBeenCalledOnce()
+    await act(async () => root.render(<Chat epoch="b" />))
+    await act(async () => click('Open hand-off'))
+    await act(async () => launchA.resolve(true))
+    expect(container.textContent).toContain('Start New Session')
+    await act(async () => click('Start New Session'))
+    expect(mocks.launchContinuation).toHaveBeenCalledTimes(2)
+    expect(container.textContent).not.toContain('Start New Session')
+  })
 
   it('clears a prior detection failure while detecting a new request', async () => {
     let resolveSecond: (agents: ['codex']) => void = () => {}

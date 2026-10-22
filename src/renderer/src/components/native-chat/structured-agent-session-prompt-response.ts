@@ -61,17 +61,3 @@ export async function cancelStructuredAgentSessionPrompt(
     ...(promptSupported ? { prompt } : {})
   })
 }
-
-export function structuredAgentSessionPromptActions(
-  target: RuntimeClientTarget,
-  mutate: StructuredAgentSessionMutate
-) {
-  return {
-    cancel: (
-      turnId: string | undefined,
-      prompt?: Parameters<typeof cancelStructuredAgentSessionPrompt>[3]
-    ) => cancelStructuredAgentSessionPrompt(target, mutate, turnId, prompt),
-    respond: (item: StructuredPromptItem, response: AgentSessionPromptResponse) =>
-      respondToStructuredAgentSessionPrompt({ item, response, target, mutate })
-  }
-}

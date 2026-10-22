@@ -1,11 +1,15 @@
 // @vitest-environment happy-dom
+import { useContext } from 'react'
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useNativeChatHandOff } from './use-native-chat-hand-off'
 import { NativeChatUsageLimitActionsProvider } from './NativeChatUsageLimitActions'
 import { NativeChatNoticeRow } from './NativeChatNoticeRow'
-import type { NativeChatOrcaStopView } from './native-chat-orca-stop-context'
+import {
+  NativeChatOrcaStopContext,
+  type NativeChatOrcaStopView
+} from './native-chat-orca-stop-context'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore } from '@/store'
 import { buildAgentSessionContinuationPrompt } from '@/lib/agent-session-continuation'
@@ -17,7 +21,8 @@ const mocks = vi.hoisted(() => ({
   readSnapshot: {
     status: 'current',
     canSwitchAccount: true,
-    transcriptPath: '/work/chat.jsonl'
+    transcriptPath: '/work/chat.txt',
+    capturedText: 'Saved context'
   },
   follows: true,
   watch: vi.fn(),
@@ -84,6 +89,10 @@ afterEach(() => {
   mocks.follows = true
 })
 
+function ContinueNow() {
+  const view = useContext(NativeChatOrcaStopContext)
+  return <button onClick={() => view?.continueUsageLimit()}>Continue cut</button>
+}
 function Row({
   target,
   offered,
@@ -111,10 +120,8 @@ function Row({
       runtimeEnvironmentId: target.kind === 'environment' ? target.environmentId : null
     },
     messages,
-    cursor: { epoch: 'epoch', sequence: 1 },
-    sourceBoundary: boundary,
-    focusComposer: () => {},
-    invalidation: [offered]
+    epoch: 'epoch',
+    focusComposer: () => {}
   })
   const view: NativeChatOrcaStopView = {
     hostLabel: null,
@@ -133,6 +140,7 @@ function Row({
         pane={pane}
         handOffState={handOff}
       >
+        <ContinueNow />
         <NativeChatNoticeRow
           agentName="Claude"
           block={{
@@ -148,7 +156,6 @@ function Row({
     </TooltipProvider>
   )
 }
-const boundary = {}
 function row(
   target: RuntimeClientTarget = { kind: 'local' },
   offered = true,
@@ -205,7 +212,7 @@ it('offers host-owned recovery actions for the current usage-limit cut', async (
       worktreeId: 'folder',
       avoidSourceAgent: true,
       launchSource: 'native_chat',
-      source: { transcriptPath: '/work/chat.jsonl', sourceAgent: 'claude', sourceTitle: 'My chat' }
+      source: { transcriptPath: '/work/chat.txt', sourceAgent: 'claude', sourceTitle: 'My chat' }
     })
     view.rerender(row(target, false))
     expect(screen.queryByRole('button', { name: 'Continue Now' })).toBeNull()
@@ -243,30 +250,49 @@ it('offers host-owned recovery actions for the current usage-limit cut', async (
   }
 })
 
-it('admits one preparation and discards it after Continue supersedes the cut', async () => {
-  let answer: (value: typeof mocks.readSnapshot) => void = () => {}
-  mocks.options.mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        answer = resolve
-      })
+it('keeps a deferred account check independent of hand-off and retires it on Continue', async () => {
+  mocks.snapshot.mockResolvedValue(snapshot(2))
+  mocks.select.mockResolvedValue(snapshot(2).claude)
+  const first = Promise.withResolvers<typeof mocks.readSnapshot>()
+  const second = Promise.withResolvers<typeof mocks.readSnapshot>()
+  let checks = 0
+  mocks.options.mockImplementation((_target, method) =>
+    method === 'agentSession.options'
+      ? ++checks === 1
+        ? first.promise
+        : second.promise
+      : Promise.resolve(mocks.readSnapshot)
   )
-  mocks.follows = false
-  const view = render(row())
-  const button = screen.getByRole('button', { name: 'Hand Off to Another Agent' })
-  fireEvent.click(button)
-  fireEvent.click(button)
-  await waitFor(() => expect(mocks.options).toHaveBeenCalledTimes(1))
-  expect(button).toBeDisabled()
-  view.rerender(row({ kind: 'local' }, false))
-  answer(mocks.readSnapshot)
-  await waitFor(() => expect(mocks.dialog).not.toHaveBeenCalled())
-  view.rerender(row())
-  mocks.options.mockResolvedValue(mocks.readSnapshot)
+  render(row({ kind: 'environment', environmentId: 'chat-host' }))
+  const switchAccount = async () => {
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Switch Account' })).toBeEnabled()
+    )
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'Switch Account' }), {
+      button: 0,
+      ctrlKey: false,
+      pointerType: 'mouse'
+    })
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'account1@example.com' }))
+    await waitFor(() => expect(checks).toBeGreaterThan(0))
+  }
   fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
   await screen.findByText('Cancel hand-off')
+  await switchAccount()
   fireEvent.click(screen.getByText('Cancel hand-off'))
-  expect(screen.queryByText('Cancel hand-off')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: 'Hand Off to Another Agent' }))
+  await screen.findByText('Cancel hand-off')
+  first.resolve(mocks.readSnapshot)
+  await waitFor(() => expect(mocks.select).toHaveBeenCalledOnce())
+  fireEvent.click(screen.getByText('Cancel hand-off'))
+  cleanup()
+  render(row({ kind: 'environment', environmentId: 'chat-host' }))
+  await switchAccount()
+  await waitFor(() => expect(checks).toBe(2))
+  fireEvent.click(screen.getByText('Continue cut'))
+  second.resolve(mocks.readSnapshot)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Switch Account' })).toBeEnabled())
+  expect(mocks.select).toHaveBeenCalledOnce()
 })
 
 it('hands off database-backed chats using labelled recent messages when no native file exists', async () => {

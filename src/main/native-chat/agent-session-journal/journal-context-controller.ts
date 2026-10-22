@@ -17,14 +17,6 @@ export class JournalContextController {
     }
   ) {}
 
-  destructiveFrontier(): AgentJournalCursor {
-    const state = this.deps.state()
-    return {
-      epoch: state.epoch,
-      sequence: Math.max(this.floor()?.sequence ?? 0, state.contextHistoryRemovalSequence)
-    }
-  }
-
   floor(): AgentJournalCursor | null {
     const state = this.deps.state()
     const sequence = latestAgentSessionContextClearSequence(state.items.values())

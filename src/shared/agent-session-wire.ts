@@ -459,5 +459,5 @@ export type AgentSessionSlashCommand = {
 export type AgentSessionCommandsResult = { commands?: AgentSessionSlashCommand[] }
 
 export type AgentSessionContinuationContext =
-  | { status: 'current'; transcriptPath?: string }
+  | { status: 'current'; capturedText?: string; transcriptPath?: string }
   | { status: 'superseded' }

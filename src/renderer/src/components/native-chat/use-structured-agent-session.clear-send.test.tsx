@@ -7,7 +7,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
 
-const mocks = vi.hoisted(() => ({ call: vi.fn(), superseded: vi.fn() }))
+const mocks = vi.hoisted(() => ({ call: vi.fn() }))
 
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.call,
@@ -82,8 +82,7 @@ function view(sessionId: string) {
         agent: 'codex',
         target: { kind: 'local' },
         isVisible: true,
-        composerScopeKey: structuredAgentSessionDraftScopeKey(id),
-        onSourceSuperseded: mocks.superseded
+        composerScopeKey: structuredAgentSessionDraftScopeKey(id)
       }),
     { initialProps: { id: sessionId } }
   )
@@ -120,7 +119,6 @@ it('takes no send while a /clear is out: the text stays in the box and nothing i
   })
   await act(async () => {})
   expect(result.current.sendOut).toBe(true)
-  expect(mocks.superseded).not.toHaveBeenCalled()
   expect(structuredAgentSessionSendOut('session-a')).toBe(true)
 
   let sent: boolean | 'queued' = true
@@ -136,7 +134,6 @@ it('takes no send while a /clear is out: the text stays in the box and nothing i
     clears[0].resolve(cleared())
   })
   expect(result.current.sendOut).toBe(false)
-  expect(mocks.superseded).toHaveBeenCalledOnce()
 })
 
 it('keeps a conversation a /clear moved away from taking no send until the view leaves it', async () => {

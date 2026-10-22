@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
   AGENT_SESSION_JOURNAL_SCHEMA_VERSION
@@ -30,24 +30,6 @@ import {
   codexProviderHandle
 } from '../../../shared/agent-session-provider-handle-encoding'
 
-import {
-  readAgentSessionHydrationPage,
-  readAgentSessionHistory
-} from './agent-session-history-page'
-import {
-  getStructuredAgentSessionReadOwner,
-  resetStructuredAgentSessionReadOwnersForTests
-} from '../../../renderer/src/components/native-chat/structured-agent-session-read-owner'
-import { BOUNDED_FRAME_CONTENT_BUDGET_BYTES } from './agent-session-history-page-bounds'
-import { MOBILE_BRIDGE_MAX_FRAME_BYTES } from '../../../shared/mobile-bridge-frame-bytes'
-const client = vi.hoisted(() => ({ subscribe: vi.fn() }))
-vi.mock('@/runtime/structured-agent-session-client', () => ({
-  subscribeStructuredAgentSession: client.subscribe
-}))
-vi.mock('@/runtime/runtime-host-contact-regained', () => ({
-  subscribeRuntimeHostContactRegained: vi.fn()
-}))
-
 const SESSION = 'subscriber-session'
 
 let root: string
@@ -58,167 +40,11 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
-  resetStructuredAgentSessionReadOwnersForTests()
   await journals.closeAll()
   await rm(root, { recursive: true, force: true })
 })
 
 describe('AgentSessionSubscribers', () => {
-  it('carries meaningful removals across bounded catch-up through the read owner and shared replacement reducer', async () => {
-    const journal = await journals.open({
-      stateDirectory: join(root, 'pr-31782-catch-up'),
-      identity: {
-        sessionId: SESSION,
-        workspaceId: 'workspace-1',
-        hostId: 'local',
-        agent: 'codex',
-        providerHandle: codexProviderHandle('thread-1')
-      }
-    })
-    const receipt = { write() {}, committed() {} }
-    const identity = { provider: 'orca' as const, clientMessageId: 'pr-31782-early' }
-    const options = { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
-    const early = await journal.appendItem(
-      identity,
-      { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'early' }] },
-      options
-    )
-    const owner = getStructuredAgentSessionReadOwner(SESSION, { kind: 'local' })
-    owner.publishCreated(readAgentSessionHydrationPage(journal, 1))
-    let receive: (event: AgentSessionSubscribeEvent) => void = () => {
-      throw new Error('subscription not opened')
-    }
-    client.subscribe.mockImplementation(async (_target, _params, onEvent) => {
-      receive = onEvent
-      return { unsubscribe() {} }
-    })
-    const stop = owner.activate()
-    try {
-      const initialBoundary = owner.getSnapshot().sourceBoundary
-      const initialEpoch = journal.cursor().epoch
-      const gap = async (prefix: string) => {
-        for (let i = 0; i < 205; i++) {
-          await journal.appendItem(
-            { provider: 'orca', clientMessageId: `${prefix}-${i}` },
-            { kind: 'message', role: 'user', blocks: [{ type: 'text', text: prefix }] },
-            options
-          )
-        }
-      }
-      const catchUp = (type: 'snapshot' | 'reset') => {
-        const events: AgentSessionSubscribeEvent[] = []
-        new AgentSessionSubscribers().open({
-          id: 'pr-31782-reader',
-          sessionId: SESSION,
-          journal,
-          fence: 1,
-          cursor: owner.getSnapshot().state.cursor!,
-          emit(event) {
-            events.push(event)
-            receive(event)
-          }
-        })
-        const frame = events.find((event) => event.type === type)
-        if (frame?.type !== 'snapshot' && frame?.type !== 'reset') {
-          throw new Error('expected catch-up replacement')
-        }
-        return frame
-      }
-      for (const cursor of [
-        { epoch: 'wrong-epoch', sequence: 100 },
-        { epoch: initialEpoch, sequence: 0 }
-      ]) {
-        receive({
-          type: 'batch',
-          sessionId: SESSION,
-          fence: 1,
-          queuedMessages: [],
-          batch: { cursor, items: [], removedItemIds: [early.itemId], submissions: [] }
-        })
-        expect(owner.getSnapshot().sourceBoundary).toBe(initialBoundary)
-      }
-      await gap('pr-31782-append')
-      catchUp('snapshot')
-      expect(owner.getSnapshot().sourceBoundary).toBe(initialBoundary)
-      expect(owner.getSnapshot().state.items.some((item) => item.itemId === early.itemId)).toBe(
-        false
-      )
-      const observed = owner.getSnapshot().state.cursor!
-      await gap('pr-31782-before-clear')
-      await journal.context.clear(
-        { operationId: 'pr-31782-peer-clear', afterFence: 1, clearedAt: 2 },
-        receipt,
-        'pr-31782-peer-clear'
-      )
-      const clear = journal.context.floor()!
-      expect(clear.sequence).toBe(observed.sequence + 206)
-      await gap('pr-31782-after-clear')
-      const first = readAgentSessionHistory(journal, {
-        sessionId: SESSION,
-        direction: 'after',
-        cursor: observed,
-        limit: 200
-      })
-      expect(first.page.window.newest?.sequence).toBe(observed.sequence + 200)
-      const cleared = catchUp('reset')
-      expect(cleared).toMatchObject({ reset: 'cursor_compacted' })
-      expect(cleared.page.epoch).toBe(initialEpoch)
-      expect(cleared.page.liveCursor?.sequence).toBe(observed.sequence + 412)
-      expect(cleared.page.window.oldest?.sequence).toBe(observed.sequence + 213)
-      expect(cleared.page.items.some((item) => item.sequence === clear.sequence)).toBe(false)
-      expect(cleared.page.removedItemIds).toEqual([])
-      expect(owner.getSnapshot().sourceBoundary).not.toBe(initialBoundary)
-      const coveredBoundary = owner.getSnapshot().sourceBoundary
-      await gap('pr-31782-covered-clear')
-      catchUp('snapshot')
-      expect(owner.getSnapshot().sourceBoundary).toBe(coveredBoundary)
-      await journal.appendTombstone(identity, { fence: 1 })
-      await gap('pr-31782-removed')
-      const removed = catchUp('reset')
-      expect(removed.page.removedItemIds).toEqual([])
-      expect(owner.getSnapshot().sourceBoundary).not.toBe(coveredBoundary)
-      expect(owner.getSnapshot().state.epoch).toBe(initialEpoch)
-      const boundary = owner.getSnapshot().sourceBoundary
-      await journal.appendItem(
-        identity,
-        { kind: 'message', role: 'assistant', blocks: [] },
-        options
-      )
-      await journal.appendTombstone(identity, { fence: 1 })
-      await gap('pr-31782-recreated')
-      await journal.appendItem(
-        identity,
-        {
-          kind: 'message',
-          role: 'assistant',
-          blocks: [
-            {
-              type: 'subagent-group',
-              groupId: 'group',
-              agents: [{ id: 'helper', label: 'Helper', state: 'completed' }]
-            }
-          ]
-        },
-        options
-      )
-      const recreated = catchUp('reset')
-      expect(owner.getSnapshot().sourceBoundary).not.toBe(boundary)
-      expect(owner.getSnapshot().state.items.some((item) => item.itemId === early.itemId)).toBe(
-        true
-      )
-      expect(owner.getSnapshot().state.subagentRoster?.has('helper')).toBe(true)
-      expect(
-        readAgentSessionHistory(journal, {
-          sessionId: SESSION,
-          direction: 'before',
-          cursor: recreated.page.window.oldest!
-        }).page.removedItemIds
-      ).toEqual([])
-    } finally {
-      stop()
-    }
-  })
-
   it('bounds retained turn activity across session churn', async () => {
     const journal = await journals.open({
       identity: {
@@ -569,7 +395,7 @@ describe('AgentSessionSubscribers', () => {
     expect(events.at(-1)).toMatchObject({ activity: null })
   })
 
-  it.each([false, true])('bounds legacy removal, phone=%s', async (phone) => {
+  it('catches a subscriber up past a pre-existing unsendable removal with a bounded reset', async () => {
     const journalDir = join(root, 'oversized-removal-journal')
     const seeded = await journals.open({
       identity: {
@@ -581,8 +407,9 @@ describe('AgentSessionSubscribers', () => {
       },
       stateDirectory: journalDir
     })
-    // Older writers admitted oversized IDs; the phone also skips a destructive gap.
-    const hugeItemId = `codex:thread-1:${'h'.repeat(phone ? BOUNDED_FRAME_CONTENT_BUDGET_BYTES - 100 : 5 * 1024 * 1024)}:1`
+    // A row admitted before identity bounding: its removal id alone exceeds
+    // the outbound cap, so no catch-up batch can ever carry it.
+    const hugeItemId = `codex:thread-1:${'h'.repeat(5 * 1024 * 1024)}:1`
     const resumeCursor = seeded.cursor()
     const seq = resumeCursor.sequence
     const rows: JournalRow[] = [
@@ -608,21 +435,6 @@ describe('AgentSessionSubscribers', () => {
         ts: 2_001
       }
     ]
-    if (phone) {
-      rows.splice(
-        1,
-        0,
-        ...Array.from({ length: 205 }, (_, index): JournalRow => ({
-          ...rows[0],
-          kind: 'item',
-          itemId: `orca:pr-31782-gap-${index}`,
-          revision: 1,
-          body: { kind: 'status', text: 'Gap' },
-          seq: seq + index + 2
-        }))
-      )
-      rows.at(-1)!.seq = seq + 207
-    }
     // Staged straight into the session database, exactly as a previous writer
     // would have committed them.
     await seeded.close()
@@ -654,19 +466,19 @@ describe('AgentSessionSubscribers', () => {
       sessionId: SESSION,
       journal,
       fence: 1,
-      cursor: phone ? { ...resumeCursor, sequence: seq + 1 } : resumeCursor,
-      boundedFrames: phone,
+      cursor: resumeCursor,
       emit: (event) => events.push(event)
     })
 
     // Every event a remote subscriber receives must fit the outbound channel.
     for (const event of events) {
       expect(Buffer.byteLength(serializeRemoteRuntimePayload(event), 'utf8')).toBeLessThanOrEqual(
-        phone ? MOBILE_BRIDGE_MAX_FRAME_BYTES : REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES
+        REMOTE_RUNTIME_MAX_OUTBOUND_JSON_BYTES
       )
     }
     const reset = events.find((event) => event.type === 'reset')
-    expect(reset).toMatchObject({ reset: 'cursor_compacted' })
+    expect(reset).toBeDefined()
+
     // Forward progress: the reset advanced the subscriber past the unsendable
     // row, so the next publish has nothing stale to re-deliver.
     const settled = events.length

@@ -81,8 +81,6 @@ export function NativeChatStructuredSession(
   // Paste target while a question card replaces the composer.
   const questionAnswerInputRef = useRef<HTMLInputElement>(null)
   const { rewindHost, focusComposer } = useNativeChatRewindHost(props, composerRef)
-  const supersedeHandOff = useRef<() => void>(() => {})
-  const supersede = () => supersedeHandOff.current()
   const controller = useStructuredAgentSession({
     ...props,
     // Why: Stop and a queued card's Edit give text back to the conversation's draft, as the composer keeps it.
@@ -93,8 +91,7 @@ export function NativeChatStructuredSession(
     providerStarting: hostExecution.phase === 'starting',
     // A start's own verdict (a signed-out agent) exists only once that start is proven.
     providerRunning: hostExecution.phase === 'ready',
-    rewind: { ...rewindHost, beforeRewind: supersede },
-    onSourceSuperseded: supersede,
+    rewind: rewindHost,
     transportEnabled: provisionalLaunch.transportEnabled,
     ...(provisionalLaunch.launch ? { launch: provisionalLaunch.launch } : {})
   })
@@ -128,7 +125,7 @@ export function NativeChatStructuredSession(
   const hostPermission = useNativeChatHostPermissionGate(props.target, props.agent, agentLabel)
   const hostHeld = hostPermission.sendBlockedReason !== null
   const submits = useStructuredNativeChatSubmitReveal(controller, provisionalLaunch.retry, hostHeld)
-  const promptResponse = useStructuredPromptResponseHold(submits.respond, controller, props.agent)
+  const promptResponse = useStructuredPromptResponseHold(submits.respond)
   const needsFailureFacts =
     submits.queuedMessages.cards.some((card) => card.state === 'returned') ||
     controller.submissions.some(
@@ -152,8 +149,7 @@ export function NativeChatStructuredSession(
       : null
   // A read no retry gets past (damage, a newer Orca's chat) takes the whole pane, whatever was
   // already on screen: nothing in it can act, and its words say why once.
-  const readFailedFinally = readFailure?.final === true
-  const viewState = selectNativeChatViewState(session, { readRetries: !readFailedFinally })
+  const viewState = selectNativeChatViewState(session, { readRetries: readFailure?.final !== true })
   const paneActive = props.isVisible && props.isFocusedGroup
   useNativeChatFontSize(viewState.kind === 'ready' && paneActive, rootRef)
   const find = useNativeChatFind(paneActive, rootRef, composerRef, submits.messageListRef)
@@ -168,11 +164,9 @@ export function NativeChatStructuredSession(
     pane: props,
     directory: fileLinkContext,
     messages: controller.messages,
-    cursor: controller.cursor,
-    focusComposer,
-    sourceBoundary: controller.sourceBoundary
+    epoch: controller.epoch,
+    focusComposer
   })
-  supersedeHandOff.current = handOff.reset
   const paneCommands = useStructuredNativeChatPaneCommands({
     pane: props,
     handOff,
@@ -188,11 +182,19 @@ export function NativeChatStructuredSession(
   // Prompts this build cannot answer leave the composer open: a send starts a turn, whose card
   // cancel then works.
   const promptsUnanswerable = pendingPromptsAllUnanswerableHere(controller.prompts)
-  const composerShown = (prompt === null || promptsUnanswerable) && !readFailedFinally
+  const composerShown = (prompt === null || promptsUnanswerable) && readFailure?.final !== true
   // An owned prompt keeps its card; otherwise a missing program leaves the composer disabled.
   const installLayout = viewState.kind === 'empty' ? 'hero' : 'strip'
   const install = useNativeChatInstallSlot(props, agentLabel, installLayout)
   const approval = prompt?.body.kind === 'approval' ? chatApprovalFromJournal(prompt.body) : null
+  const cancelPrompt = () => {
+    if (prompt && (controller.turnId || props.agent === 'pi')) {
+      void controller.cancel(controller.turnId ?? undefined, {
+        itemId: prompt.itemId,
+        expectedRevision: prompt.revision
+      })
+    }
+  }
   const rootInput = useNativeChatRootInputRouting({
     tabId: props.tabId,
     rootRef,
@@ -284,9 +286,7 @@ export function NativeChatStructuredSession(
       <NativeChatContextClearFade clearing={controller.contextClear.clearing}>
         {find.isOpen ? <NativeChatFindBar find={find} isVisible={props.isVisible} /> : null}
         {viewState.kind === 'loading' || (viewState.kind === 'error' && !readFailure) ? (
-          historyPhase === 'unread' ? null : (
-            <NativeChatLoadingCue />
-          )
+          historyPhase !== 'unread' && <NativeChatLoadingCue />
         ) : viewState.kind === 'error' ? (
           <NativeChatEmptyState
             kind="error"
@@ -333,7 +333,7 @@ export function NativeChatStructuredSession(
           </NativeChatRewindContext.Provider>
         )}
       </NativeChatContextClearFade>
-      {readFailedFinally ? null : (
+      {readFailure?.final ? null : (
         <>
           {/* Host-held drafts, never transcript rows. Above the status area, so running shells and agents sit next to the composer. */}
           <NativeChatQueuedMessageList
@@ -372,7 +372,7 @@ export function NativeChatStructuredSession(
                 void promptResponse.respond(prompt, { kind: 'option', optionId })
               }
               isSubmitting={promptResponse.holds(prompt)}
-              onCancel={promptResponse.cancel}
+              onCancel={cancelPrompt}
               shouldFocus={!promptsUnanswerable && props.isVisible && props.isFocusedGroup}
               onLinkClick={onLinkClick}
               allowFileUriLinks={onLinkClick !== undefined}
@@ -384,7 +384,7 @@ export function NativeChatStructuredSession(
               questions={agentSessionPromptQuestions(questionBody)}
               onAnswer={(response) => void promptResponse.respond(prompt, response)}
               isSubmitting={promptResponse.holds(prompt)}
-              onCancel={promptResponse.cancel}
+              onCancel={cancelPrompt}
               shouldFocus={!promptsUnanswerable && props.isVisible && props.isFocusedGroup}
               answerInputRef={questionAnswerInputRef}
             />

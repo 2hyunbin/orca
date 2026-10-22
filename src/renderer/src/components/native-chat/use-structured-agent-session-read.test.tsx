@@ -52,21 +52,6 @@ function providerFrame(id: string, sequence: number): AgentJournalRenderItem {
   }
 }
 
-function clearDivider(sequence: number): AgentJournalRenderItem {
-  return {
-    itemId: 'clear',
-    sequence,
-    revision: 1,
-    observedAt: sequence,
-    body: {
-      kind: 'status',
-      text: 'Context cleared',
-      presentation: 'context-cleared',
-      contextClear: { operationId: 'clear', afterFence: 1, clearedAt: sequence }
-    }
-  }
-}
-
 function page(
   direction: 'tail' | 'before',
   items: AgentJournalRenderItem[],
@@ -150,14 +135,13 @@ describe('useStructuredAgentSessionRead history window', () => {
     expect(result.current.state.fence).toBeNull()
   })
 
-  it.each([false, true])('keeps the source for an old clear, automatic=%s', async (automatic) => {
+  it('loads each earlier page at the wire maximum', async () => {
     const tailItems = Array.from({ length: 200 }, (_, index) =>
       message(`tail-${index}`, 301 + index, 'assistant')
     )
-    const initialOlderItems = Array.from({ length: automatic ? 99 : 100 }, (_, index) =>
+    const initialOlderItems = Array.from({ length: 100 }, (_, index) =>
       message(`middle-${index}`, 201 + index, 'assistant')
     )
-    const older = Promise.withResolvers<{ ok: true; page: AgentSessionHistoryPage }>()
     mocks.call
       .mockResolvedValueOnce({
         ok: true,
@@ -167,37 +151,26 @@ describe('useStructuredAgentSessionRead history window', () => {
         ok: true,
         page: page('before', initialOlderItems, true)
       })
-      .mockReturnValueOnce(older.promise)
+      .mockResolvedValueOnce({
+        ok: true,
+        page: page('before', [message('oldest', 1, 'user')], false)
+      })
 
     const { result } = renderHook(() =>
       useStructuredAgentSessionRead({ sessionId: 'session-a', target: LOCAL_TARGET })
     )
-    await waitFor(() => expect(result.current.state.items).toHaveLength(automatic ? 299 : 300))
-    const sourceBoundary = result.current.sourceBoundary
-    const cursor = result.current.state.cursor
-    let pending: Promise<string> = Promise.resolve('applied')
-    act(() => {
-      if (!automatic) {
-        pending = result.current.loadOlder()
-      }
-    })
-    await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(result.current.state.hasOlder).toBe(true))
+
+    await act(async () => result.current.loadOlder())
 
     expect(mocks.call).toHaveBeenLastCalledWith(LOCAL_TARGET, 'agentSession.history', {
       sessionId: 'session-a',
       direction: 'before',
       cursor: { epoch: 'epoch-a', sequence: 201 },
-      limit: automatic ? 1 : AGENT_SESSION_HISTORY_MAX_LIMIT
+      limit: AGENT_SESSION_HISTORY_MAX_LIMIT
     })
-    await act(async () => {
-      older.resolve({ ok: true, page: page('before', [clearDivider(100)], false) })
-      await pending
-    })
-    await waitFor(() => expect(result.current.state.items).toHaveLength(automatic ? 300 : 301))
-    expect(result.current.state.items[0]?.sequence).toBe(100)
-    expect(result.current.state.cursor).toEqual(cursor)
-    expect(result.current.state.cursor?.sequence).toBe(500)
-    expect(result.current.sourceBoundary).toBe(sourceBoundary)
+    expect(result.current.state.items).toHaveLength(301)
+    expect(result.current.state.items[0]?.itemId).toBe('oldest')
   })
 
   it('shares one in-flight older page, and its result, with every caller', async () => {
@@ -374,71 +347,6 @@ describe('useStructuredAgentSessionRead currency', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     resetStructuredAgentSessionReadOwnersForTests()
-  })
-
-  it('retires a source replaced inside a snapshot window, preserving bounded append-only tails', async () => {
-    const clear = clearDivider(5)
-    const retained = message('retained', 10, 'user')
-    const discarded = message('discarded', 20, 'assistant')
-    const later = message('later', 30, 'user')
-    mocks.call.mockResolvedValue({
-      ok: true,
-      page: {
-        ...page(
-          'tail',
-          [message('outside-tail', 1, 'user'), clear, retained, discarded, later],
-          false
-        ),
-        fence: 1
-      }
-    })
-    mocks.subscribe.mockResolvedValue({ unsubscribe: vi.fn() })
-    const { result } = renderHook(() =>
-      useStructuredAgentSessionRead({ sessionId: 'session-a', target: LOCAL_TARGET })
-    )
-    await waitFor(() => expect(mocks.subscribe).toHaveBeenCalledOnce())
-    const onEvent = mocks.subscribe.mock.calls[0]![2]
-    const before = result.current.sourceBoundary
-    const appended = message('appended', 40, 'assistant')
-    const replace = (items: AgentJournalRenderItem[], sequence: number) =>
-      act(() =>
-        onEvent({
-          type: 'snapshot',
-          sessionId: 'session-a',
-          fence: 1,
-          page: { ...page('tail', items, true), liveCursor: { epoch: 'epoch-a', sequence } }
-        })
-      )
-    replace([clear, retained, discarded, later, appended], 600)
-    // A bounded tail omits the item before its oldest sequence; that is not a tombstone.
-    expect(result.current.state.items.some((item) => item.itemId === 'outside-tail')).toBe(false)
-    expect(result.current.sourceBoundary).toBe(before)
-    replace(
-      [
-        clear,
-        retained,
-        {
-          ...discarded,
-          itemId: 'bounded-placeholder',
-          body: {
-            kind: 'status',
-            presentation: 'history-item-too-large',
-            text: 'Too large'
-          }
-        },
-        later,
-        appended
-      ],
-      650
-    )
-    expect(result.current.sourceBoundary).toBe(before)
-    replace([clear, retained, discarded, later, appended], 675)
-    replace([clear, retained, later, appended, message('after-rewind', 50, 'user')], 700)
-    // The accepted replacement omits a known message inside the covered sequence window.
-    expect(result.current.state.epoch).toBe('epoch-a')
-    expect(result.current.state.items.find((item) => item.itemId === 'clear')?.sequence).toBe(5)
-    expect(result.current.state.items.some((item) => item.itemId === 'discarded')).toBe(false)
-    expect(result.current.sourceBoundary).not.toBe(before)
   })
 
   it('is current only once a run has been caught up with the host', async () => {

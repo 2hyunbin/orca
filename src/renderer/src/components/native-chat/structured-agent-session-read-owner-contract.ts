@@ -5,7 +5,6 @@ import type { NativeChatOlderPageResult } from './native-chat-pagination'
 
 export type StructuredAgentSessionReadSnapshot = {
   state: StructuredAgentSessionState
-  sourceBoundary: object
   loadingOlder: boolean
   /** Bumped whenever older-page reads are invalidated (open, snapshot, reset, dispose). */
   olderHistoryGeneration: number

@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react'
+import { createContext, useContext, useMemo, useRef, useLayoutEffect, type ReactNode } from 'react'
 import { MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { translate } from '@/i18n/i18n'
@@ -43,6 +43,25 @@ export function NativeChatUsageLimitActionsProvider({
   const loading = !recovery.readCurrent
   const canSwitchAccount = recovery.canSwitchAccount
   const active = view.usageLimitTurnItemId !== null
+  const accountKey = JSON.stringify([
+    executionHostIdForStructuredTarget(pane.target),
+    pane.sessionId,
+    pane.agent,
+    recovery.epoch,
+    view.usageLimitTurnItemId,
+    recovery.readCurrent,
+    pane.isVisible
+  ])
+  const accountIntent = useRef<object | null>(null)
+  useLayoutEffect(() => {
+    const current = {}
+    accountIntent.current = current
+    return () => {
+      if (accountIntent.current === current) {
+        accountIntent.current = null
+      }
+    }
+  }, [accountKey])
   const disabled = loading || handOffState.preparing
   const canHandOff = active && handOffState.available
   let account: ReactNode = null
@@ -59,7 +78,7 @@ export function NativeChatUsageLimitActionsProvider({
           chatAction={{
             target: pane.target,
             canSwitch: async () => {
-              const current = handOffState.currentIntent()
+              const current = accountIntent.current
               if (!current || !active) {
                 return false
               }
@@ -68,20 +87,22 @@ export function NativeChatUsageLimitActionsProvider({
                 'agentSession.options',
                 { sessionId: pane.sessionId }
               )
-              return handOffState.currentIntent() === current && result.canSwitchAccount === true
+              return accountIntent.current === current && result.canSwitchAccount === true
             }
           }}
         />
       )
     }
   }
-  const openHandOff = () => handOffState.open({ avoidSourceAgent: true })
+  const openHandOff = handOffState.open
   const actions = useMemo<UsageLimitActions>(
     () => ({
       account,
       reserveAccount: pane.agent === 'claude',
       disabled,
-      ...(canHandOff || (loading && isTuiAgent(pane.agent)) ? { handOff: openHandOff } : {})
+      ...(canHandOff || (loading && isTuiAgent(pane.agent))
+        ? { handOff: () => openHandOff({ avoidSourceAgent: true }) }
+        : {})
     }),
     [account, canHandOff, disabled, loading, openHandOff, pane.agent]
   )
@@ -90,6 +111,7 @@ export function NativeChatUsageLimitActionsProvider({
     () => ({
       ...view,
       continueUsageLimit: (hadFocus?: boolean) => {
+        accountIntent.current = {}
         resetHandOff()
         view.continueUsageLimit(hadFocus)
       }

@@ -1,4 +1,3 @@
-import { structuredSessionSourceWasReplaced } from './structured-agent-session-source-boundary'
 import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
 import type { AgentProviderSessionMetadata } from '../../../../shared/agent-session-resume'
 import { agentProviderSessionsEqual } from '../../../../shared/agent-session-resume'
@@ -53,13 +52,13 @@ function createReadOwner(
 ): StructuredAgentSessionReadOwner {
   let snapshot: StructuredAgentSessionReadSnapshot = {
     state: EMPTY_STRUCTURED_AGENT_SESSION,
-    sourceBoundary: {},
     loadingOlder: false,
     olderHistoryGeneration: 0,
     current: false
   }
   let stopActiveRun: (() => void) | null = null
-  let captureActiveHistoryReadGuard: () => () => boolean = () => () => true
+  const retiredHistoryRead = (): boolean => true
+  let captureActiveHistoryReadGuard = (): (() => boolean) => retiredHistoryRead
   const activations = new Set<symbol>()
   const listeners = new Set<() => void>()
 
@@ -84,13 +83,7 @@ function createReadOwner(
         action.event.type !== 'end' &&
         !(action.event.type === 'batch' && action.event.hasNewer))
     if (state !== snapshot.state || current !== snapshot.current) {
-      const replaced = structuredSessionSourceWasReplaced(snapshot.state, state, action)
-      setSnapshot({
-        ...snapshot,
-        state,
-        current,
-        sourceBoundary: replaced ? {} : snapshot.sourceBoundary
-      })
+      setSnapshot({ ...snapshot, state, current })
     }
   }
   const markStale = (): void => {
@@ -100,7 +93,7 @@ function createReadOwner(
   }
   const setProviderSession = (providerSession: AgentProviderSessionMetadata | undefined): void => {
     if (!agentProviderSessionsEqual(undefined, snapshot.providerSession, providerSession)) {
-      setSnapshot({ ...snapshot, providerSession, sourceBoundary: {} })
+      setSnapshot({ ...snapshot, providerSession })
     }
   }
   const clearLoadingOlder = (): void => {
@@ -221,7 +214,7 @@ function createReadOwner(
     })
     captureActiveHistoryReadGuard = transport.captureHistoryReadGuard
     stopActiveRun = () => {
-      captureActiveHistoryReadGuard = () => () => true
+      captureActiveHistoryReadGuard = () => retiredHistoryRead
       transport.dispose()
       stopActiveRun = null
       markStale()

@@ -167,7 +167,7 @@ export class StructuredAgentSessionHost {
       closeStatus: (sessionId, options) => this.clientDelivery.closeSession(sessionId, options),
       childWorkOpen: this.clientDelivery.childWorkOpen
     })
-    this.continuationContext = contextReader(deps, this.lifetime.conversation, this.sessions)
+    this.continuationContext = contextReader(deps, this.lifetime.conversation)
     this.runtimeState.startLeaseRenewal()
     this.lifetime.idleSweep.start()
   }
