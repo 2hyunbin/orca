@@ -1,5 +1,6 @@
 import type { LinearItemActionsModel } from './use-mobile-tasks-linear-item-actions'
 import { colors, useCallback } from './mobile-tasks-dependencies'
+import { triggerSuccess } from '../platform/haptics'
 import {
   type RepoSummary,
   type TaskItem,
@@ -134,7 +135,11 @@ export function useMobileTasksTaskCreateActions(model: LinearItemActionsModel) {
             title: result.title ?? title,
             description: createBody.trim(),
             url: result.url ?? '',
-            state: { name: 'Open', type: 'unstarted', color: colors.accentBlue },
+            state: {
+              name: 'Open',
+              type: 'unstarted',
+              color: colors.accentBlue
+            },
             team,
             labels: [],
             priority: 0,
@@ -142,6 +147,7 @@ export function useMobileTasksTaskCreateActions(model: LinearItemActionsModel) {
           }) as Extract<TaskItem, { provider: 'linear' }>
         )
       }
+      triggerSuccess()
       setShowCreateTask(false)
       setCreateTitle('')
       setCreateBody('')
