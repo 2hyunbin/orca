@@ -70,8 +70,9 @@
 
       window.addEventListener('message', function (event) {
         var data = event.data
-        if (event.source !== window.parent || !data || data.type !== 'orca-panel-action-result')
+        if (event.source !== window.parent || !data || data.type !== 'orca-panel-action-result') {
           return
+        }
         var resolve = pending.get(data.requestId)
         if (!resolve) return
         pending.delete(data.requestId)
