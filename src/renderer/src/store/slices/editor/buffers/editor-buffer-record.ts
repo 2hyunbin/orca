@@ -127,12 +127,16 @@ export function adoptMirroredEditorBuffers(
   return next
 }
 
-/** A host-mirrored view may read clean while its record is dirty: the record ORs per-tab host values. */
+/**
+ * A host-mirrored view may read clean while its record is dirty, but only because another
+ * host-owned view of the record reads dirty: the record ORs per-tab host values.
+ */
 export function editorBufferViewMirrorMismatch(
   file: OpenFile,
-  record: EditorBufferRecord
+  record: EditorBufferRecord,
+  hostSiblingDirty: boolean
 ): keyof EditorBufferRecord | null {
-  const hostDirty = file.mirroredFromRuntimeSession === true && record.isDirty
+  const hostDirty = file.mirroredFromRuntimeSession === true && record.isDirty && hostSiblingDirty
   return editorBufferMirrorMismatch(hostDirty ? { ...file, isDirty: true } : file, record)
 }
 

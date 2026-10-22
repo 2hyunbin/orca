@@ -19,8 +19,8 @@ export const EMPTY_EDITOR_BUFFER_VIEW_INDEX: EditorBufferViewIndex = {
 const DETACHED_EDITOR_BUFFER_PREFIX = 'detached:'
 
 /**
- * A record id no identity key can equal. Records on a retired environment, and divergent dirty
- * drafts of one file, move here and are never merged into another record.
+ * A record id no identity key can equal. Divergent dirty drafts of one file move here until they
+ * rejoin; records on a retired environment move here for good.
  */
 export function detachedEditorBufferId(viewId: string): string {
   return `${DETACHED_EDITOR_BUFFER_PREFIX}${viewId}`

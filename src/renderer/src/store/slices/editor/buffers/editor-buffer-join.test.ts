@@ -22,11 +22,12 @@ function side(
   }
 }
 
+const CONFLICT = { externalMutation: 'changed' } as const
+
 describe('editor buffer join rules', () => {
   it('re-keys the view when no record holds the identity yet', () => {
     const joining = side('abc')
     expect(decideEditorBufferJoin(null, joining)).toBe('rekey')
-    expect(joinedEditorBuffer(null, joining, 'rekey')).toBe(joining)
   })
 
   it('attaches a clean view, keeping the target baseline', () => {
@@ -66,10 +67,29 @@ describe('editor buffer join rules', () => {
       'equal drafts on different baselines',
       side('abc'),
       side('abc', { lastKnownDiskSignature: 'disk-2' })
+    ],
+    ['equal drafts, only the joining side in conflict', side('abc'), side('abc', CONFLICT)],
+    ['equal drafts, only the target in conflict', side('abc', CONFLICT), side('abc')],
+    [
+      'equal drafts, one side migrating its owner',
+      side('abc'),
+      side('abc', { pendingOwnerMigration: true })
+    ],
+    [
+      'two dirty sides whose text is still pending',
+      side(undefined, { isDirty: true }),
+      side(undefined, { isDirty: true })
     ]
-  ])('detaches %s, so neither draft is dropped', (_name, target, joining) => {
+  ])('detaches %s, so neither draft nor pause is dropped', (_name, target, joining) => {
     expect(decideEditorBufferJoin(target, joining)).toBe('detach')
     expect(joinedEditorBuffer(target, joining, 'detach')).toBeNull()
+  })
+
+  it('counts a clean-flagged side that still holds a draft as dirty', () => {
+    const cleanFlagged = side('text ', { isDirty: false })
+    expect(decideEditorBufferJoin(side(undefined), cleanFlagged)).toBe('adopt')
+    expect(decideEditorBufferJoin(cleanFlagged, side(undefined))).toBe('attach')
+    expect(decideEditorBufferJoin(cleanFlagged, side('other'))).toBe('detach')
   })
 })
 

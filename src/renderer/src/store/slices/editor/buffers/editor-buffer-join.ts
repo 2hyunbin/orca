@@ -8,32 +8,44 @@ export type EditorBufferJoinSide = { record: EditorBufferRecord; draft: string |
  * - `rekey`: no record holds it yet, so the view's record takes the key.
  * - `attach`: the target stands (both clean, or only the target dirty).
  * - `adopt`: only the joining side is dirty, so its draft, baseline and conflict state win.
- * - `merge`: both dirty with the same draft and baseline.
+ * - `merge`: both dirty with the same draft, baseline and pause state.
  * - `detach`: divergent dirty drafts; the joining view keeps its own record and model.
  */
 export type EditorBufferJoin = 'rekey' | 'attach' | 'adopt' | 'merge' | 'detach'
 
+export type EditorBufferJoinOnto = Exclude<EditorBufferJoin, 'rekey'>
+
+// Why the draft counts: a clean-flagged tab can still hold a real unsaved draft (Markdown whitespace).
 function isDirtySide(side: EditorBufferJoinSide): boolean {
-  return side.record.isDirty
+  return side.record.isDirty || side.draft !== undefined
 }
 
-export function decideEditorBufferJoin(
-  target: EditorBufferJoinSide | null,
+function joinOnto(
+  target: EditorBufferJoinSide,
   joining: EditorBufferJoinSide
-): EditorBufferJoin {
-  if (!target) {
-    return 'rekey'
-  }
+): EditorBufferJoinOnto {
   if (!isDirtySide(joining)) {
     return 'attach'
   }
   if (!isDirtySide(target)) {
     return 'adopt'
   }
+  // Why every field: a merge must not drop either side's conflict or owner-migration pause, and an
+  // undefined draft (a rich view's edit still pending) is unknown text, not equal text.
   const identical =
+    joining.draft !== undefined &&
     target.draft === joining.draft &&
-    target.record.lastKnownDiskSignature === joining.record.lastKnownDiskSignature
+    target.record.lastKnownDiskSignature === joining.record.lastKnownDiskSignature &&
+    target.record.externalMutation === joining.record.externalMutation &&
+    target.record.pendingOwnerMigration === joining.record.pendingOwnerMigration
   return identical ? 'merge' : 'detach'
+}
+
+export function decideEditorBufferJoin(
+  target: EditorBufferJoinSide | null,
+  joining: EditorBufferJoinSide
+): EditorBufferJoin {
+  return target ? joinOnto(target, joining) : 'rekey'
 }
 
 /**
@@ -43,26 +55,22 @@ export function decideEditorBufferJoin(
 export function decideEditorBufferRejoin(
   detached: EditorBufferJoinSide,
   partner: EditorBufferJoinSide
-): Exclude<EditorBufferJoin, 'rekey' | 'merge' | 'detach'> | null {
-  if (isDirtySide(detached) && isDirtySide(partner)) {
-    return null
-  }
-  return isDirtySide(detached) ? 'adopt' : 'attach'
+): EditorBufferJoinOnto | null {
+  return isDirtySide(detached) && isDirtySide(partner) ? null : joinOnto(partner, detached)
 }
 
 /** The record and draft the joined record holds; null when the sides stay apart. */
 export function joinedEditorBuffer(
-  target: EditorBufferJoinSide | null,
+  target: EditorBufferJoinSide,
   joining: EditorBufferJoinSide,
-  join: EditorBufferJoin
+  join: EditorBufferJoinOnto
 ): EditorBufferJoinSide | null {
   switch (join) {
-    case 'rekey':
     case 'adopt':
       return joining
     case 'attach':
     case 'merge':
-      return target ?? joining
+      return target
     case 'detach':
       return null
   }

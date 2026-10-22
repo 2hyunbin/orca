@@ -71,4 +71,16 @@ describe('mirrored editor buffer dirty state', () => {
       /"externalMutation" of b/
     )
   })
+
+  it('does not tolerate a clean host-owned view when no other host-owned view reads dirty', () => {
+    const record = editorBufferRecordFromFile(tab('a', { isDirty: true }))
+    expect(() =>
+      assertEditorBufferRecordsMatchViews({
+        editorBufferIdOf: { a: 'rec' },
+        editorBufferViews: { rec: ['a'] },
+        openFiles: [tab('a')],
+        editorBuffers: { rec: record }
+      })
+    ).toThrow(/"isDirty" of a/)
+  })
 })
