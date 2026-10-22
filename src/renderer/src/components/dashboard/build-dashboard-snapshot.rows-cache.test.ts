@@ -110,7 +110,9 @@ describe('buildDashboardSnapshot rows cache', () => {
       })
       const changed = {
         ...state,
-        ptyProcessMetadataById: { ['local\0pty-tab1']: { shellPath: 'cmd.exe', wslDistro: null } }
+        ptyProcessMetadataById: {
+          ['local\0pty-tab1']: { shellPath: 'cmd.exe', wslDistro: null, observationRevision: 1 }
+        }
       }
       expect(dashboardSnapshotInputsChanged(changed, state)).toBe(true)
       const after = buildDashboardSnapshot(changed, NOW, { rowsCache: cache, rowsGeneration: 1 })

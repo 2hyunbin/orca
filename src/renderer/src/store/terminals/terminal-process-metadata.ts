@@ -24,7 +24,7 @@ export function terminalProcessMetadataKey(host: ExecutionHostId, id: string): s
 }
 
 export function readTerminalProcessMetadata(
-  state: TerminalProcessMetadataState,
+  state: Pick<TerminalState, 'ptyProcessMetadataById'>,
   host: ExecutionHostId,
   id: string
 ) {

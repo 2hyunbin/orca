@@ -29,6 +29,8 @@ describe('IPC process description lifetime', () => {
       }) => void)
     | undefined
   beforeEach(async () => {
+    data = undefined
+    exit = undefined
     vi.resetModules()
     const { useAppStore } = await import('@/store')
     useAppStore.setState({ ptyProcessMetadataById: {}, ptyProcessObservationRevision: 0 })
@@ -57,7 +59,7 @@ describe('IPC process description lifetime', () => {
     vi.mocked(window.api.pty.spawn).mockReturnValueOnce(pending.promise)
     const first = createIpcPtyTransport({ retainDisposedSpawn: () => true })
     const starting = first.connect({ url: '', callbacks: {} })
-    first.detach()
+    first.detach?.()
     first.destroy?.()
     pending.resolve({
       id: 'survivor',
@@ -69,27 +71,33 @@ describe('IPC process description lifetime', () => {
     data?.({ id: 'survivor', data: 'initial replay' })
     const next = createIpcPtyTransport({ cwd: 'C:\\src', shellOverride: 'cmd.exe' })
     const order: string[] = []
+    const metadata = vi.fn(() => next.getLocalSessionMetadata?.())
+    const replayMetadata = vi.fn(() => next.getLocalSessionMetadata?.())
+    const sendInput = vi.fn(() => next.sendInput('typed', 'driving'))
     next.attach({
       existingPtyId: 'survivor',
       callbacks: {
         onSessionMetadataChanged: () => {
           order.push('metadata')
-          expect(next.getLocalSessionMetadata?.()).toMatchObject({
-            wslDistro: 'Debian',
-            shellOverride: 'C:\\Windows\\System32\\wsl.exe'
-          })
+          metadata()
         },
         onData: () => {
           order.push('data')
-          expect(next.getLocalSessionMetadata?.()?.wslDistro).toBe('Debian')
+          replayMetadata()
         },
         onConnect: () => {
           order.push('connect')
-          expect(next.sendInput('typed', 'driving')).toBe(true)
+          sendInput()
         }
       }
     })
     expect(order).toEqual(['metadata', 'data', 'connect'])
+    expect(metadata.mock.results[0]?.value).toMatchObject({
+      wslDistro: 'Debian',
+      shellOverride: 'C:\\Windows\\System32\\wsl.exe'
+    })
+    expect(replayMetadata.mock.results[0]?.value?.wslDistro).toBe('Debian')
+    expect(sendInput.mock.results[0]?.value).toBe(true)
     const { ptyShutdownLifecycleHandlers } = await import('./pty-dispatcher')
     const { captureLocalPtyProcessDescription } = await import('./ipc-pty-process-description')
     captureLocalPtyProcessDescription(true)({
@@ -113,7 +121,7 @@ describe('IPC process description lifetime', () => {
     vi.mocked(window.api.pty.spawn).mockReturnValueOnce(oldSpawn.promise)
     const pending = createIpcPtyTransport({ retainDisposedSpawn: () => true })
     const starting = pending.connect({ url: '', callbacks: {} })
-    pending.detach()
+    pending.detach?.()
     const unknown = createIpcPtyTransport({ shellOverride: 'wsl.exe' })
     unknown.attach({ existingPtyId: 'reused', callbacks: {} })
     expect(unknown.sendInput('before inventory', 'driving')).toBe(true)
@@ -160,7 +168,7 @@ describe('IPC process description lifetime', () => {
     ).toBe('new')
     exit?.({ id: 'reused', code: 0, incarnationId: 'new' })
     expect(readTerminalProcessMetadata(useAppStore.getState(), 'local', 'reused')).toBeUndefined()
-    unknown.detach()
+    unknown.detach?.()
     pending.destroy?.()
     replacement.disconnect()
   })
@@ -215,7 +223,7 @@ describe('IPC process description lifetime', () => {
     await transport.connect({ url: '', callbacks: {} })
     const lateExit = ptyExitHandlers.get('rebound')
     const [stop] = unregisterPtyDataHandlers(['rebound'])
-    transport.detach()
+    transport.detach?.()
     vi.mocked(window.api.pty.spawn).mockResolvedValueOnce({
       id: 'rebound',
       incarnationId: 'new',
@@ -236,7 +244,7 @@ describe('IPC process description lifetime', () => {
     const restored = createIpcPtyTransport({ shellOverride: 'wsl.exe' })
     restored.attach({ existingPtyId: 'rebound', callbacks: {} })
     expect(restored.getLocalSessionMetadata?.()?.wslDistro).toBeNull()
-    restored.detach()
+    restored.detach?.()
     expect(read()?.incarnationId).toBe('new')
     restored.attach({ existingPtyId: 'rebound', callbacks: {} })
     vi.mocked(window.api.pty.kill).mockResolvedValueOnce(undefined)
@@ -284,7 +292,7 @@ describe('IPC process description lifetime', () => {
       })
       expect(first.getLocalSessionMetadata?.()?.shellPath).toBeUndefined()
       stopA.commit()
-      first.detach({ preserveExitObserver: false })
+      first.detach?.({ preserveExitObserver: false })
       expect(read()?.incarnationId).toBe('B')
       const stale = captureLocalPtyProcessDescription(true)
       const delivered = vi.fn()
@@ -346,7 +354,10 @@ describe('IPC process description lifetime', () => {
       shellPath: 'cmd.exe',
       wslDistro: null
     }
-    window.api.pty.listSessions = vi.fn(async () => [row])
+    window.api.pty.listSessions = vi.fn(async () => {
+      expect(exit).toBeTypeOf('function')
+      return [row]
+    })
     useAppStore.setState({ ptyIdsByTabId: { inactive: ['cold'] }, activeWorktreeId: 'other' })
     await listActivationPtySessions({ repos: [{ id: 'repo' }] }, 'repo::/src')
     expect(
@@ -361,11 +372,20 @@ describe('IPC process description lifetime', () => {
     await listActivationPtySessions({ repos: [{ id: 'repo' }] }, 'repo::/src')
     expect(readTerminalProcessMetadata(useAppStore.getState(), 'local', 'foreign')).toBeUndefined()
     expect(readTerminalProcessMetadata(useAppStore.getState(), 'local', 'exiting')).toBeUndefined()
-    // Install the existing ingress without attaching a pane.
-    const { ensurePtyDispatcher } = await import('./pty-dispatcher')
-    ensurePtyDispatcher()
     exit?.({ id: 'cold', code: 0, incarnationId: 'live' })
     expect(readTerminalProcessMetadata(useAppStore.getState(), 'local', 'cold')).toBeUndefined()
+    const pending = Promise.withResolvers<PtyListedSession[]>()
+    vi.mocked(window.api.pty.listSessions).mockImplementationOnce(() => {
+      expect(exit).toBeTypeOf('function')
+      return pending.promise
+    })
+    const listing = listActivationPtySessions({ repos: [{ id: 'repo' }] }, 'repo::/src')
+    exit?.({ id: 'during-list', code: 0, incarnationId: 'ended' })
+    pending.resolve([{ ...row, id: 'during-list', incarnationId: 'ended' }])
+    await listing
+    expect(
+      readTerminalProcessMetadata(useAppStore.getState(), 'local', 'during-list')
+    ).toBeUndefined()
   })
 
   it('leaves a restored terminal usable when descriptive inventory fails', async () => {

@@ -16,5 +16,5 @@ export function useTerminalTabShell(
     : shell
       ? basename(shell)
       : translate('tabHoverCard.terminal', 'Terminal')
-  return { shell, programName }
+  return { shell: shell ?? undefined, programName }
 }

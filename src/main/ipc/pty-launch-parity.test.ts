@@ -1,14 +1,3 @@
-vi.mock('@/store', async () => {
-  const { create } = await import('zustand')
-  return {
-    useAppStore: create(() => ({
-      tabsByWorktree: {},
-      ptyProcessMetadataById: {},
-      ptyProcessObservationRevision: 0,
-      agentStatusByPaneKey: {}
-    }))
-  }
-})
 import { registerWorkspaceRuntimeParityTests } from './pty-workspace-runtime-parity.spec'
 import * as spawnRouting from './pty/host-env/fresh-spawn-routing'
 import * as teamsShim from '../runtime/claude-agent-teams-shim-env'

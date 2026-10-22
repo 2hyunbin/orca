@@ -1,4 +1,5 @@
 import { useAppStore } from '@/store'
+import { ensurePtyDispatcher } from './pty-dispatcher'
 import {
   adoptTerminalProcessMetadata,
   readTerminalProcessMetadata,
@@ -12,13 +13,17 @@ function describe<T>(action: () => T): T | undefined {
     return action()
   } catch (error) {
     console.warn('[pty] could not update process description', error)
+    return undefined
   }
 }
 
 /** Pending requests retain only the observation clock, never the payload map. */
 export function captureLocalPtyProcessDescription(isLocal: boolean) {
   const baseline = isLocal
-    ? describe(() => useAppStore.getState().ptyProcessObservationRevision)
+    ? describe(() => {
+        ensurePtyDispatcher()
+        return useAppStore.getState().ptyProcessObservationRevision
+      })
     : undefined
   return (facts: TerminalProcessFacts & { id: string }): void => {
     if (baseline !== undefined) {

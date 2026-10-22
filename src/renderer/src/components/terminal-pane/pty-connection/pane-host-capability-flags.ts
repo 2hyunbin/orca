@@ -1,4 +1,3 @@
-import { buildWindowsPtyCompatibilityOptions } from '@/lib/pane-manager/windows-pty-compatibility'
 import { shouldDisableKittyKeyboardForTerminal } from '@/lib/pane-manager/terminal-keyboard-protocol'
 import { resolvePaneKeyboardProtocolAgent } from '../terminal-keyboard-protocol-pane-agent'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
@@ -13,6 +12,7 @@ import {
 import { requestTerminalWritePipelineProbe } from '@/lib/pane-manager/terminal-write-pipeline-health'
 import { subscribeToTerminalUserInput } from '../terminal-user-input-signal'
 import {
+  buildWindowsPtyCompatibilityOptions,
   isLocalNativeWindowsConpty,
   resolveWindowsShellOverride
 } from '@/lib/pane-manager/windows-pty-compatibility'
@@ -289,7 +289,7 @@ export function refreshPaneProcessCapabilities(session: ConnectPanePtySession): 
   const context = {
     userAgent: navigator.userAgent,
     osRelease: window.api.platform?.get?.()?.osRelease,
-    connectionId: session.transport.getConnectionId(),
+    connectionId: session.transport.getConnectionId?.(),
     ...metadata,
     executionHostId: session.transport.getExecutionHostId?.() ?? session.executionHostId,
     tuiAgent: resolvePaneKeyboardProtocolAgent(session.paneStartup, session.tab?.launchAgent)

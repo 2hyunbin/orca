@@ -21,6 +21,7 @@ const mockUpdateTabPtyId = vi.fn()
 const mockCloseTab = vi.fn()
 const mockSetTabLayout = vi.fn()
 const mockRegisterAgentLaunchConfig = vi.fn()
+const mockEnsurePtyDispatcher = vi.fn()
 const mockRegisterEagerPtyBuffer = vi.fn()
 const mockSubscribeToPtyData = vi.fn()
 const mockSubscribeToPtyExit = vi.fn()
@@ -74,6 +75,7 @@ vi.mock('@/lib/execution-host-facts', async (importOriginal) => {
 })
 
 vi.mock('@/components/terminal-pane/pty-dispatcher', () => ({
+  ensurePtyDispatcher: mockEnsurePtyDispatcher,
   registerEagerPtyBuffer: mockRegisterEagerPtyBuffer,
   subscribeToPtyExit: mockSubscribeToPtyExit
 }))
@@ -84,6 +86,7 @@ vi.mock('@/components/terminal-pane/pty-data-sidecar-subscriptions', () => ({
 
 describe('launchAgentBackgroundSession', () => {
   beforeEach(() => {
+    mockEnsurePtyDispatcher.mockReset()
     currentStoreState = state
     mockHostKind.mockReturnValue('local')
     Object.assign(state, { ptyProcessMetadataById: {}, ptyProcessObservationRevision: 0 })
@@ -299,7 +302,7 @@ describe('launchAgentBackgroundSession', () => {
     )
   })
 
-  it.each(['local', 'ssh', 'publication-failure'] as const)(
+  it.each(['local', 'ssh', 'initialization-failure', 'publication-failure'] as const)(
     'keeps successful %s provider ownership through descriptive publication',
     async (kind) => {
       const { useAppStore } = await import('@/store')
@@ -309,6 +312,11 @@ describe('launchAgentBackgroundSession', () => {
       if (kind === 'ssh') {
         state.repos[0].connectionId = 'box'
         mockHostKind.mockReturnValue('ssh')
+      }
+      if (kind === 'initialization-failure') {
+        mockEnsurePtyDispatcher.mockImplementationOnce(() => {
+          throw new Error('description initialization failed')
+        })
       }
       if (kind === 'publication-failure') {
         vi.mocked(useAppStore.setState).mockImplementationOnce(() => {
@@ -334,6 +342,13 @@ describe('launchAgentBackgroundSession', () => {
         worktreeId: 'wt-1',
         prompt: 'run'
       })
+      if (kind === 'ssh') {
+        expect(mockEnsurePtyDispatcher).not.toHaveBeenCalled()
+      } else {
+        expect(mockEnsurePtyDispatcher.mock.invocationCallOrder[0]).toBeLessThan(
+          mockSpawn.mock.invocationCallOrder[0]
+        )
+      }
       expect(result?.ptyId).toBe('pty-1')
       expect(mockCreateTab).toHaveBeenCalledOnce()
       expect(mockKill).not.toHaveBeenCalled()
