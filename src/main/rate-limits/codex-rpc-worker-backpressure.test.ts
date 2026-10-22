@@ -48,16 +48,28 @@ rl.on('line', async line => {
 `
 
 const EOF_SCRIPT = `
+const rl = require('readline').createInterface({input: process.stdin});
 let stopping = false;
-process.stdin.resume();
+let noisy = false;
 process.stdin.on('end', () => stopping = true);
-process.stdin.once('data', async () => {
-  if (process.argv[1] === 'reply-init') {
-    process.stdout.write(JSON.stringify({id: 1, result: {}}) + '\\n');
-  }
+async function writeNoise() {
+  if (noisy) return;
+  noisy = true;
   while (!stopping) {
     await new Promise(resolve => process.stderr.write(Buffer.alloc(65536, 97), resolve));
     await new Promise(setImmediate);
+  }
+}
+rl.on('line', line => {
+  const request = JSON.parse(line);
+  if (request.method === 'initialize') {
+    if (process.argv[1] === 'reply-init') {
+      process.stdout.write(JSON.stringify({id: request.id, result: {}}) + '\\n');
+    } else {
+      void writeNoise();
+    }
+  } else if (request.method === 'initialized') {
+    void writeNoise();
   }
 });
 `
@@ -115,7 +127,10 @@ describe('Codex RPC over backpressured worker output', () => {
       if (stop === 'abort') {
         abort.abort()
       } else {
-        await vi.advanceTimersByTimeAsync(stop === 'initialization deadline' ? 30_000 : 10_000)
+        const deadlineMs = stop === 'initialization deadline' ? 30_000 : 10_000
+        await vi.advanceTimersByTimeAsync(deadlineMs - 1)
+        expect(terminate).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1)
       }
       expect(terminate).toHaveBeenCalledOnce()
       expect(child.stdout.listenerCount('data')).toBe(0)
