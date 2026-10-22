@@ -43,9 +43,10 @@ export function resolveCliChatResumeSource(
     )
   const conversation = args.paneKey
     ? paneConversation(args.paneKey)
-    : (collectAgentPaneConversations(state, adoptsCliConversations).find(
-        (candidate) => candidate.tabId === args.tab.id
-      ) ?? (activeLeafId ? paneConversation(makePaneKey(args.tab.id, activeLeafId)) : null))
+    : (collectAgentPaneConversations(state, adoptsCliConversations, {
+        tab: { worktreeId: args.tab.worktreeId, tabId: args.tab.id }
+      }).find((candidate) => candidate.tabId === args.tab.id) ??
+      (activeLeafId ? paneConversation(makePaneKey(args.tab.id, activeLeafId)) : null))
   if (
     !conversation ||
     conversation.tabId !== args.tab.id ||

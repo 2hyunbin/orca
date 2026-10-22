@@ -1,3 +1,7 @@
+import {
+  captureTerminalSurfaceCloseIdentity,
+  captureAddressedTerminalPresentation
+} from '../../workspace-session-terminal-tab-retirement-identity'
 import { terminalLaunchFacts } from '../../../../shared/agent-session-resume'
 import type { OrcaRuntimeWithCreateTerminal } from '../launch/terminal-create'
 import { OrcaRuntimeWithRestoredHandlePaneStart } from '../surface/restored-handle-pane-start'
@@ -20,11 +24,7 @@ import type {
 } from '../../runtime-terminal-state-records'
 import type { ResolvedWorktree } from '../../runtime-worktree-path-identity'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
-import {
-  buildVisibleSnapshotReadFallback,
-  labelTerminalReadSource,
-  readTerminalTail
-} from '../../terminal-tail-read'
+import { labelTerminalReadSource, readTerminalTail } from '../../terminal-tail-read'
 import { getTerminalState } from '../../terminal-wait-results'
 import { readStructuredWorkerTerminal } from '../../structured-worker-terminal-read'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
@@ -83,14 +83,54 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
       // Why: pane coordinates restored by a paired client must not cross workspace ownership.
       throw new Error('terminal_not_found')
     }
+    const holders =
+      worktreeId && parsed
+        ? this.getWorkspaceSessionHostIdsForTab(worktreeId, parsed.tabId).map((hostId) => ({
+            hostId,
+            identity: captureTerminalSurfaceCloseIdentity(
+              this.store?.getWorkspaceSession?.(hostId),
+              worktreeId,
+              parsed.tabId,
+              parsed.leafId
+            )
+          }))
+        : []
+    const routedHostId =
+      worktreeId && parsed ? this.getWorkspaceSessionHostIdForTab(worktreeId, parsed.tabId) : null
+    const rowIdentity = holders.find((holder) => holder.hostId === routedHostId)?.identity
+    const executionPtyId = pty?.ptyId ?? record?.ptyId ?? leaf?.ptyId ?? null
+    const retained = executionPtyId ? this.handleByPtyIncarnation.get(executionPtyId) : null
+    const execution = this.getPtyExecutionHostMetadata(executionPtyId)
+    if (
+      !execution.incarnationId &&
+      retained?.handle === handle &&
+      executionPtyId &&
+      this.getPtyLivenessVerdict(executionPtyId)?.status === 'exited'
+    ) {
+      execution.incarnationId = retained.incarnationId ?? undefined
+    }
+    const identity =
+      parsed && worktreeId
+        ? captureAddressedTerminalPresentation({
+            runtimeId: this.runtimeId,
+            record,
+            currentPty: pty,
+            leaf,
+            row: rowIdentity,
+            address: { worktreeId, ...parsed },
+            ptyId: executionPtyId,
+            incarnationId: execution.incarnationId
+          })
+        : null
     return {
+      ...(identity ? { presentation: { identity, holders } } : {}),
       handle,
       tabId: parsed?.tabId ?? record?.tabId ?? '',
       leafId: parsed?.leafId ?? record?.leafId ?? '',
-      ptyId: record?.ptyId ?? null,
+      ptyId: executionPtyId,
       connected: pty?.connected === true,
       ...(worktreeId ? { worktreeId } : {}),
-      ...this.getPtyExecutionHostMetadata(record?.ptyId ?? pty?.ptyId ?? null)
+      ...execution
     }
   }
 
@@ -275,26 +315,5 @@ export abstract class OrcaRuntimeWithResolveTerminalPane extends OrcaRuntimeWith
       : await this.withVisibleSnapshotFallback(leaf.ptyId, read, opts, providerSnapshot)
     this.assertLiveTerminalHandleTargetsPty(handle, leaf.ptyId)
     return labelTerminalReadSource(visibleRead)
-  }
-
-  protected async readRenderedScreen(
-    ptyId: string,
-    read: RuntimeTerminalRead,
-    opts: { limit?: number } = {}
-  ): Promise<RuntimeTerminalRead> {
-    const visibleState = await this.readVisibleTerminalState(ptyId)
-    const projection =
-      visibleState ??
-      (await this.readProviderTerminalTailLines(ptyId, opts.limit, { visibleScreenOnly: true }))
-    if (projection.lines.length === 0) {
-      return { ...read, source: 'screen-unavailable' }
-    }
-    return buildVisibleSnapshotReadFallback(
-      read,
-      projection.lines,
-      opts.limit,
-      projection.draft,
-      projection.tailRows
-    )
   }
 }

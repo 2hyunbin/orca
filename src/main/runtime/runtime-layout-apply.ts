@@ -91,7 +91,8 @@ export async function applyWindowLayoutCommand(
     const terminalTabId = terminalIdOf(store, hostIds[0], command.workspace, command.tabIds[0])
     const reply = await store.applyLayoutCommand(
       { ...command, force: command.refusePinned ? command.force === true : true },
-      holders
+      holders,
+      run
     )
     // Only a tab the close took: a refused (pinned) tab's launches still finish into it.
     if (
@@ -148,10 +149,13 @@ export async function applyWindowLayoutCommand(
   }
   const { workspace, tabId, leafId } = command
   // A launch still starting in the pane the user closed stops, and says so (as the legacy close).
-  markAgentLaunchesClosedByUser(workspace, { kind: 'pane', tabId, leafId })
+  if (!run?.originalPresentation) {
+    markAgentLaunchesClosedByUser(workspace, { kind: 'pane', tabId, leafId })
+  }
   return store.applyLayoutCommand(
     { type: 'closePane', workspace, tabId, leafId, userPaneClose: true },
-    holders
+    holders,
+    run
   )
 }
 

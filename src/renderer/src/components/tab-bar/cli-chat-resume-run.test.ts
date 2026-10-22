@@ -1,26 +1,12 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliChatResumeSource } from './cli-chat-resume-source'
 import type * as ResumeSourceModule from './cli-chat-resume-source'
 import type * as RuntimeRpcModule from '@/runtime/runtime-rpc-client'
 import type { AgentSessionWireRefusal } from '../../../../shared/agent-session-wire'
 import type { StructuredAgentSessionCreateParams } from '../../../../shared/structured-agent-session-create'
 
-export type CliChatResumeTestMocks = {
-  source: CliChatResumeSource | null
-  realSource: boolean
-  sourceCapability: Mock
-  createCapability: Mock
-  call: Mock
-  toast: Mock
-  success: Mock
-  activate: Mock<() => Promise<boolean>>
-  activateVerified: Mock<() => Promise<string>>
-  switchCapability: Mock<() => Promise<boolean>>
-  exitWatchers: Map<string, () => void>
-  rpc: Mock<(...args: unknown[]) => Promise<object>>
-  inspect: Mock<(ptyId: string) => Promise<{ foregroundProcessEvidence?: unknown }>>
-}
+import type { CliChatResumeTestMocks } from './cli-chat-resume-mocks.test-fixture'
 
 const mocks: CliChatResumeTestMocks = vi.hoisted(() => {
   const state: { source: CliChatResumeSource | null } = { source: null }
@@ -211,7 +197,26 @@ beforeEach(async () => {
   mocks.switchCapability.mockResolvedValue(false)
   mocks.rpc.mockImplementation(async (_target, method) =>
     method === 'terminal.resolvePane'
-      ? { terminal: { handle: 'handle-1', ptyId: 'pty-1', incarnationId: 'i1' } }
+      ? {
+          terminal: {
+            handle: 'handle-1',
+            ptyId: 'pty-1',
+            incarnationId: 'i1',
+            presentation: {
+              identity: {
+                worktreeId: 'wt-1',
+                tabId: mocks.source?.tabId ?? 'tab-1',
+                leafId: mocks.source?.paneKey.split(':')[1] ?? 'leaf-1',
+                createdAt: 1,
+                generation: 0,
+                hasLeaf: true,
+                ptyId: 'pty-1',
+                incarnationId: 'i1'
+              },
+              holders: []
+            }
+          }
+        }
       : { close: { ptyKilled: true } }
   )
   mocks.sourceCapability.mockResolvedValue(true)
@@ -427,7 +432,26 @@ describe('CLI identity resume through the existing launch owner', () => {
     mocks.switchCapability.mockResolvedValue(false)
     mocks.rpc.mockImplementation(async (_target, method) =>
       method === 'terminal.resolvePane'
-        ? { terminal: { handle: 'handle-1', ptyId: 'pty-1', incarnationId: 'i1' } }
+        ? {
+            terminal: {
+              handle: 'handle-1',
+              ptyId: 'pty-1',
+              incarnationId: 'i1',
+              presentation: {
+                identity: {
+                  worktreeId: 'wt-1',
+                  tabId: mocks.source?.tabId ?? 'tab-1',
+                  leafId: mocks.source?.paneKey.split(':')[1] ?? 'leaf-1',
+                  createdAt: 1,
+                  generation: 0,
+                  hasLeaf: true,
+                  ptyId: 'pty-1',
+                  incarnationId: 'i1'
+                },
+                holders: []
+              }
+            }
+          }
         : { close: { ptyKilled: true } }
     )
     capability.resolve(true)
@@ -531,46 +555,37 @@ describe('CLI identity resume through the existing launch owner', () => {
     expect(closed).not.toHaveBeenCalled()
 
     switched = { ok: true, sessionId: 'owner-chat' }
-    // The source PTY exits during the chat's readiness: a reused id is another execution, so it stays.
-    mocks.activateVerified.mockImplementationOnce(async () => {
-      mocks.exitWatchers.get('pty-1')?.()
-      return 'activated'
-    })
+    // A bookkeeping refusal after READY settles once and leaves the existing chat usable.
+    mocks.rpc
+      .mockImplementationOnce(async () => ({
+        terminal: {
+          handle: 'handle-1',
+          ptyId: 'pty-1',
+          incarnationId: 'i1',
+          presentation: {
+            identity: {
+              worktreeId: 'wt-1',
+              tabId: 'tab-1',
+              leafId,
+              createdAt: 1,
+              generation: 0,
+              hasLeaf: true,
+              ptyId: 'pty-1',
+              incarnationId: 'i1'
+            },
+            holders: []
+          }
+        }
+      }))
+      .mockRejectedValueOnce(new Error('required write failed'))
     await runCliChatResume(mocks.source)
-    expect(closed).not.toHaveBeenCalled()
-    await runCliChatResume(mocks.source)
-    window.removeEventListener('orca-close-terminal-pane', closed)
-    const switches = mocks.call.mock.calls.filter(
-      ([, method]) => method === 'agentSession.switchToChat'
-    )
-    expect(switches).toHaveLength(3)
+    expect(mocks.rpc.mock.calls.filter(([, method]) => method === 'terminal.close')).toHaveLength(1)
+    expect(mocks.toast).toHaveBeenCalledTimes(2)
     expect(mocks.activateVerified).toHaveBeenCalledWith({ structuredSession: owner }, undefined, {
       kind: 'local'
     })
-    expect(closed).toHaveBeenCalledOnce()
-    expect(closed.mock.calls[0]?.[0].detail).toEqual({
-      tabId: 'tab-1',
-      leafId,
-      expectedPtyId: 'pty-1',
-      preservePty: true,
-      retireSurface: true
-    })
-    expect(tabs()).toEqual([])
-
-    // A paired source is closed by its host, fenced on the incarnation it started with, so a
-    // replacement under the same handle stays open; the renderer never closes it by tab.
-    const remote = 'remote:env@@handle-1'
-    mocks.source = { ...mocks.source, ptyId: remote }
-    mocks.inspect.mockResolvedValueOnce({ foregroundProcessEvidence: { ptyIncarnationId: 'i1' } })
-    window.addEventListener('orca-close-terminal-pane', closed)
-    await runCliChatResume(mocks.source)
+    expect(closed).not.toHaveBeenCalled()
     window.removeEventListener('orca-close-terminal-pane', closed)
-    expect(closed).toHaveBeenCalledOnce()
-    expect(mocks.rpc).toHaveBeenCalledWith(
-      { kind: 'environment', environmentId: 'env' },
-      'terminal.close',
-      { terminal: 'handle-1', expectedIncarnationId: 'i1' }
-    )
   })
 
   it('keeps the eager History joiner failed and retryable after the hidden starter is refused', async () => {

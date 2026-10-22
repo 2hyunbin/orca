@@ -1,3 +1,4 @@
+import type { TerminalSurfaceCloseCapture } from './terminal-tab-close'
 import type { TerminalLaunchResult } from './agent-session-resume'
 import type * as AgentSessionResume from './agent-session-resume'
 import type { StartupCommandDelivery } from './codex-startup-delivery'
@@ -285,6 +286,8 @@ export type RuntimeTerminalSplit = {
 }
 
 export type RuntimeTerminalResolvePane = TerminalLaunchResult & {
+  presentation?: TerminalSurfaceCloseCapture
+
   handle: string
   /** Host-owned PTY incarnation used to fence remote identity observations. */
   incarnationId?: string | null

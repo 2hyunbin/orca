@@ -7,16 +7,16 @@ import {
   supportsInPlaceSwitch,
   supportsStructuredAgentSessionCliSource
 } from '@/runtime/structured-agent-session-client'
-import { CLOSE_TERMINAL_PANE_EVENT, type CloseTerminalPaneDetail } from '@/constants/terminal'
-import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { structuredAgentSessionTargetForHost } from '@/runtime/structured-agent-session-owner'
 import { waitForPromiseWithSignal } from '../../../../shared/abort-signal-reason'
 import { CLI_CONVERSATION_ADOPTING_AGENTS } from '../../../../shared/structured-agent-cli-conversation-adoption'
 import { resolveCliChatResumeSource, type CliChatResumeSource } from './cli-chat-resume-source'
-import { reportCliChatResumeFailure, startCliChatReturn } from './cli-chat-resume-feedback'
+import {
+  reportCliChatResumeFailure,
+  startCliChatReturn,
+  toastCliChatResumeFailure
+} from './cli-chat-resume-feedback'
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
-import { panePtyId } from '@/lib/ai-vault-tab-title-requests'
-import { subscribeToPtyExit } from '../terminal-pane/pty-dispatcher'
 import type { RuntimeTerminalResolvePane } from '../../../../shared/runtime-types'
 import { getRemoteRuntimePtyOwner } from '@/runtime/runtime-terminal-stream'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
@@ -38,11 +38,13 @@ async function captureSourceTerminal(source: CliChatResumeSource) {
         worktreeId: source.workspaceId
       }
     )
-    return terminal.incarnationId && (owner || terminal.ptyId === source.ptyId)
+    return terminal.incarnationId &&
+      (owner ? terminal.handle === owner.terminal : terminal.ptyId === source.ptyId)
       ? {
           target,
           handle: owner?.terminal ?? terminal.handle,
-          incarnationId: terminal.incarnationId
+          incarnationId: terminal.incarnationId,
+          presentation: terminal.presentation
         }
       : null
   } catch {
@@ -52,42 +54,17 @@ async function captureSourceTerminal(source: CliChatResumeSource) {
 
 /** The execution host closes only the captured shell; refused or unknown closes leave it alone. */
 async function retireSwitchedTerminalPane(
-  source: CliChatResumeSource,
-  sourceExited: () => boolean,
   expected: ReturnType<typeof captureSourceTerminal>
 ): Promise<void> {
   const captured = await expected
-  if (!captured || sourceExited()) {
-    return
+  if (!captured?.presentation) {
+    throw new Error('terminal_close_unverifiable')
   }
-  try {
-    const { close } = await callRuntimeRpc<{ close: { ptyKilled: boolean } }>(
-      captured.target,
-      'terminal.close',
-      {
-        terminal: captured.handle,
-        expectedIncarnationId: captured.incarnationId
-      }
-    )
-    const pane = parsePaneKey(source.paneKey)
-    if (
-      captured.target.kind === 'local' &&
-      close.ptyKilled &&
-      pane &&
-      panePtyId(useAppStore.getState(), source.paneKey) === source.ptyId
-    ) {
-      const detail: CloseTerminalPaneDetail = {
-        tabId: pane.tabId,
-        leafId: pane.leafId,
-        expectedPtyId: source.ptyId,
-        preservePty: true,
-        retireSurface: true
-      }
-      window.dispatchEvent(new CustomEvent(CLOSE_TERMINAL_PANE_EVENT, { detail }))
-    }
-  } catch {
-    /* The source stays readable when its close is unconfirmed. */
-  }
+  await callRuntimeRpc(captured.target, 'terminal.close', {
+    terminal: captured.handle,
+    expectedIncarnationId: captured.incarnationId,
+    originalPresentation: captured.presentation
+  })
 }
 
 const pending = new Map<string, AbortController>()
@@ -152,14 +129,7 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
   }
   pending.set(key, controller)
   changed()
-  // Why any exit: a reused id's next incarnation starts only after this one exits.
-  let sourceExited = false
   const sourceIncarnation = captureSourceTerminal(source)
-  const stopExitWatch = source.ptyId
-    ? subscribeToPtyExit(source.ptyId, () => {
-        sourceExited = true
-      })
-    : () => {}
   const stopSource = useAppStore.subscribe(() => {
     if (!isCurrent()) {
       controller.abort()
@@ -185,94 +155,97 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
   }
   let inPlace = false
   try {
-    await waitForPromiseWithSignal(sourceIncarnation, controller.signal)
-    if (!isCurrent()) {
-      return
-    }
-    inPlace = await waitForPromiseWithSignal(
-      supportsInPlaceSwitch(target, source.agent),
-      controller.signal
-    )
-    if (target.kind !== 'local' && !inPlace) {
-      return
-    }
-    const cliSourceSupported = await waitForPromiseWithSignal(
-      supportsStructuredAgentSessionCliSource(target),
-      controller.signal
-    )
-    if (!isCurrent()) {
-      return
-    }
-    const agent = await waitForPromiseWithSignal(
-      adoptingAgentOnHost(source.agent, source.workspaceId),
-      controller.signal
-    )
-    if (!isCurrent()) {
-      return
-    }
-    const plan = adoptAgentSessionLaunchVerdict({
-      route: 'structured-native-chat',
-      requestId: newAgentLaunchRequestId(),
-      agent,
-      worktreeId: source.workspaceId,
-      executionHostId: source.executionHostId,
-      resumeFrom: {
-        providerSessionId: source.providerSessionId,
-        ...(cliSourceSupported
-          ? { cliSource: { workspaceId: source.workspaceId, paneKey: source.paneKey } }
-          : {})
+    let retireSource = false
+    try {
+      await waitForPromiseWithSignal(sourceIncarnation, controller.signal)
+      if (!isCurrent()) {
+        return
       }
-    })
-    const state = useAppStore.getState()
-    const group = state.groupsByWorktree[source.workspaceId]?.find((g) =>
-      g.tabOrder.includes(source.tabId)
-    )
-    const launch = beginStructuredAgentSessionProvisionalLaunch({
-      plan,
-      hooks: { beforeCreate: handoff },
-      afterTabId: source.tabId,
-      target: group
-        ? {
-            surfaceAddress: {
-              worktreeId: source.workspaceId,
-              targetGroupId: group.id,
-              precedingTabIds: group.tabOrder.slice(0, group.tabOrder.indexOf(source.tabId) + 1)
+      inPlace = await waitForPromiseWithSignal(
+        supportsInPlaceSwitch(target, source.agent),
+        controller.signal
+      )
+      if (target.kind !== 'local' && !inPlace) {
+        return
+      }
+      const cliSourceSupported = await waitForPromiseWithSignal(
+        supportsStructuredAgentSessionCliSource(target),
+        controller.signal
+      )
+      if (!isCurrent()) {
+        return
+      }
+      const agent = await waitForPromiseWithSignal(
+        adoptingAgentOnHost(source.agent, source.workspaceId),
+        controller.signal
+      )
+      if (!isCurrent()) {
+        return
+      }
+      const plan = adoptAgentSessionLaunchVerdict({
+        route: 'structured-native-chat',
+        requestId: newAgentLaunchRequestId(),
+        agent,
+        worktreeId: source.workspaceId,
+        executionHostId: source.executionHostId,
+        resumeFrom: {
+          providerSessionId: source.providerSessionId,
+          ...(cliSourceSupported
+            ? { cliSource: { workspaceId: source.workspaceId, paneKey: source.paneKey } }
+            : {})
+        }
+      })
+      const state = useAppStore.getState()
+      const group = state.groupsByWorktree[source.workspaceId]?.find((g) =>
+        g.tabOrder.includes(source.tabId)
+      )
+      const launch = beginStructuredAgentSessionProvisionalLaunch({
+        plan,
+        hooks: { beforeCreate: handoff },
+        afterTabId: source.tabId,
+        target: group
+          ? {
+              surfaceAddress: {
+                worktreeId: source.workspaceId,
+                targetGroupId: group.id,
+                precedingTabIds: group.tabOrder.slice(0, group.tabOrder.indexOf(source.tabId) + 1)
+              }
             }
-          }
-        : undefined,
-      deferPublication: true
-    })
-    if (!launch) {
-      return
-    }
-    const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
-    if (result.kind === 'structured' && inPlace) {
-      if (await startCliChatReturn(source, result.sessionId, target)) {
-        await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+          : undefined,
+        deferPublication: true
+      })
+      if (!launch) {
+        return
       }
-    } else if (
-      result.kind === 'failed' &&
-      !result.notified &&
-      pending.get(key) === controller &&
-      (await reportCliChatResumeFailure(source, result.error, target))
-    ) {
-      if (inPlace) {
-        await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+      const result = await waitForPromiseWithSignal(launch.settlement, controller.signal)
+      if (result.kind === 'structured' && inPlace) {
+        retireSource = await startCliChatReturn(source, result.sessionId, target)
+      } else if (
+        result.kind === 'failed' &&
+        !result.notified &&
+        pending.get(key) === controller &&
+        (await reportCliChatResumeFailure(source, result.error, target))
+      ) {
+        retireSource = inPlace
+      }
+    } catch (error) {
+      if (
+        pending.get(key) === controller &&
+        (await reportCliChatResumeFailure(source, error, target))
+      ) {
+        retireSource = inPlace
       }
     }
-  } catch (error) {
-    if (
-      pending.get(key) === controller &&
-      (await reportCliChatResumeFailure(source, error, target))
-    ) {
-      if (inPlace) {
-        await retireSwitchedTerminalPane(source, () => sourceExited, sourceIncarnation)
+    if (retireSource) {
+      try {
+        await retireSwitchedTerminalPane(sourceIncarnation)
+      } catch (error) {
+        toastCliChatResumeFailure(source, error)
       }
     }
   } finally {
     clearTimeout(timer)
     stopSource()
-    stopExitWatch()
     release()
   }
 }

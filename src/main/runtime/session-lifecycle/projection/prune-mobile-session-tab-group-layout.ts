@@ -317,6 +317,11 @@ export abstract class OrcaRuntimeWithPruneMobileSessionTabGroupLayout extends Or
     if (leaf?.ptyId) {
       return this.issueHandle(leaf)
     }
-    return panePty ? this.issuePtyHandle(panePty) : null
+    if (panePty) {
+      return this.issuePtyHandle(panePty)
+    }
+    const ended = leaf ? this.handleByLeafKey.get(this.getLeafKey(leaf.tabId, leaf.leafId)) : null
+    const ptyId = ended ? this.handles.get(ended)?.ptyId : null
+    return ptyId && this.getPtyLivenessVerdict(ptyId)?.status === 'exited' ? (ended ?? null) : null
   }
 }

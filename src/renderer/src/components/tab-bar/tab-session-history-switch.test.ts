@@ -4,7 +4,11 @@ import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import { makeRepo, makeTerminalTab, makeWorktree } from '../worktree-jump-palette-test-fixtures'
 import { makeAgentStatusEntry } from '@/runtime/sync-runtime-graph-test-harness'
-import { collectAiVaultTitleRequests } from '@/lib/ai-vault-tab-title-requests'
+import {
+  collectAgentPaneConversations,
+  resolvePaneLastAgentConversation,
+  collectAiVaultTitleRequests
+} from '@/lib/ai-vault-tab-title-requests'
 import { resolveCliChatResumeSource } from './cli-chat-resume-source'
 import { applyProviderSessionOnlyUpdate } from '@/hooks/ipc-events/agent-status-partial-updates'
 import type { AiVaultListArgs, AiVaultSession } from '../../../../shared/ai-vault-types'
@@ -474,7 +478,7 @@ describe('one pane of a terminal tab', () => {
       const exited = useAppStore.getState()
       expect(paneSubject(exited, claudePane)).toBeNull()
       // The pane's switch to native chat stays offered after the agent exits: that is when it works.
-      expect(paneGate(exited, claudePane)).toBe(kind === 'retained')
+      expect(paneGate(exited, claudePane)).toBe(true)
       expect(
         resolveTabSessionHistorySubject(exited, { tab: { id: 'term-1', worktreeId: WORKTREE_ID } })
       ).toBeNull()
@@ -800,3 +804,47 @@ it.each(['local', 'runtime:paired-host'] as const)(
     mocks.inPlaceSwitch = false
   }
 )
+
+it('uses one same-pane evidence order in History, the pane action and its feasibility gate', () => {
+  makeState()
+  const paneKey = 'term-1:11111111-1111-4111-8111-111111111111'
+  const sleeping = exitedAgentRecords.sleeping.sleepingAgentSessionsByPaneKey!['term-1:leaf-1']
+  const retained = exitedAgentRecords.retained.retainedAgentsByPaneKey!['term-1:leaf-1']
+  useAppStore.setState({
+    sleepingAgentSessionsByPaneKey: {
+      [paneKey]: { ...sleeping, paneKey, providerSession: { key: 'session_id', id: 'C' } }
+    },
+    retainedAgentsByPaneKey: {
+      [paneKey]: {
+        ...retained,
+        entry: { ...retained.entry, paneKey, providerSession: { key: 'session_id', id: 'X' } }
+      }
+    }
+  })
+  const isClaude = (agent: unknown): agent is 'claude' => agent === 'claude'
+  const state = useAppStore.getState()
+  const pane = { worktreeId: WORKTREE_ID, paneKey }
+  const collected = collectAgentPaneConversations(state, isClaude, { allPanes: true })
+  expect(collected).toHaveLength(1)
+  expect(collected[0].providerSession.id).toBe('C')
+  const layouts = { ...state.terminalLayoutsByTabId }
+  Object.defineProperty(layouts, 'unrelated-tab', {
+    get: () => {
+      throw new Error('Exact-pane lookup scanned an unrelated layout')
+    }
+  })
+  const addressedState = {
+    ...state,
+    terminalLayoutsByTabId: layouts,
+    tabsByWorktree: {
+      ...state.tabsByWorktree,
+      [WORKTREE_ID]: [
+        ...state.tabsByWorktree[WORKTREE_ID],
+        { ...state.tabsByWorktree[WORKTREE_ID][0], id: 'unrelated-tab' }
+      ]
+    }
+  }
+  expect(resolvePaneLastAgentConversation(addressedState, pane, isClaude)).toEqual(collected[0])
+  expect(canPaneOfferResumeInNewChat(state, pane)).toBe(true)
+  expect(collectAgentPaneConversations(state, isClaude, { runningAgentsOnly: true })).toEqual([])
+})

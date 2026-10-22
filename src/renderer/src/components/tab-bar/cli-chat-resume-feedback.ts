@@ -131,7 +131,7 @@ export async function startCliChatReturn(
   return true
 }
 
-function toastCliChatResumeFailure(source: CliChatResumeSource, error: unknown): void {
+export function toastCliChatResumeFailure(source: CliChatResumeSource, error: unknown): void {
   const refusal = structuredLaunchFailure(error)
   if (
     refusal?.code === 'agent_session_conflict' ||

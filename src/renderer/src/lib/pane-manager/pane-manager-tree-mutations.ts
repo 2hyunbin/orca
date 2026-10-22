@@ -94,18 +94,25 @@ export function detachPaneForExternalMoveOnManager(host: PaneManagerHost, paneId
   })
 }
 
-export function retirePanePreservingPtyOnManager(host: PaneManagerHost, paneId: number): boolean {
-  return retireManagedPanePreservingPty({
-    paneId,
-    activePaneId: host.getActivePaneId(),
-    panes: host.panes,
-    root: host.root,
-    styleOptions: host.getStyleOptions(),
-    managerOptions: host.options,
-    getDragCallbacks: () => host.getDragCallbacks(),
-    releasePaneIdentity: (numericPaneId) => host.identities.release(numericPaneId),
-    setActivePaneId: (id) => {
-      host.setActivePaneId(id)
-    }
-  })
+export function retirePanePreservingPtyOnManager(
+  host: PaneManagerHost,
+  paneId: number,
+  permanent = false
+): boolean {
+  return retireManagedPanePreservingPty(
+    {
+      paneId,
+      activePaneId: host.getActivePaneId(),
+      panes: host.panes,
+      root: host.root,
+      styleOptions: host.getStyleOptions(),
+      managerOptions: host.options,
+      getDragCallbacks: () => host.getDragCallbacks(),
+      releasePaneIdentity: (numericPaneId) => host.identities.release(numericPaneId),
+      setActivePaneId: (id) => {
+        host.setActivePaneId(id)
+      }
+    },
+    permanent
+  )
 }

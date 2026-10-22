@@ -20,42 +20,62 @@ export abstract class OrcaRuntimeWithExplicitCloseTabPtyStops extends OrcaRuntim
     for (const ptyId of ptyIds) {
       this.markPtyStopRequested(ptyId)
       const expectedIncarnationId = capturedIncarnationId ?? this.ptysById.get(ptyId)?.incarnationId
-      let stopped = false
-      if (this.ptyController?.stopAndWait) {
-        try {
-          stopped = await this.ptyController.stopAndWait(ptyId, {
-            deadlineMs,
-            ...(capturedIncarnationId ? { expectedIncarnationId: capturedIncarnationId } : {})
-          })
-        } catch (error) {
-          this.markPtyLivenessUnverifiable(ptyId, errorMessage(error))
-        }
-        // Preserve an observed exit when a broader inventory check could not finish.
-        if (
-          !stopped &&
-          expectedIncarnationId &&
-          this.ptysById.get(ptyId)?.incarnationId === expectedIncarnationId &&
-          this.getPtyLivenessVerdict(ptyId)?.status === 'exited'
-        ) {
-          stopped = true
-        }
-        if (!stopped && !capturedIncarnationId) {
-          const verdict = this.getPtyLivenessVerdict(ptyId)
-          const providerAlreadyRetiredPty =
-            verdict?.status === 'unverifiable' &&
-            verdict.reason === SSH_PROVIDER_UNREGISTERED_REASON
-          if (!providerAlreadyRetiredPty) {
-            this.ptyController.kill(ptyId)
-            if (!verdict || verdict.status === 'live') {
-              this.markPtyLivenessUnverifiable(
-                ptyId,
-                'a follow-up stop was issued but its outcome could not be verified'
-              )
+      const current = this.ptysById.get(ptyId)
+      const replacement = this.pendingPtyHandleReplacementFences.get(ptyId)
+      let stopped =
+        !!capturedIncarnationId &&
+        (!current || current.incarnationId === capturedIncarnationId) &&
+        (!replacement || replacement.incarnationId === capturedIncarnationId) &&
+        this.getPtyLivenessVerdict(ptyId)?.status === 'exited'
+      const settle = capturedIncarnationId
+        ? this.intentionalPtyStops.mark(ptyId, 'closing', capturedIncarnationId)
+        : null
+      try {
+        if (!stopped && this.ptyController?.stopAndWait) {
+          try {
+            stopped = await this.ptyController.stopAndWait(ptyId, {
+              deadlineMs,
+              ...(capturedIncarnationId ? { expectedIncarnationId: capturedIncarnationId } : {})
+            })
+          } catch (error) {
+            this.markPtyLivenessUnverifiable(ptyId, errorMessage(error))
+          }
+          // Preserve an observed exit when a broader inventory check could not finish.
+          if (
+            !stopped &&
+            expectedIncarnationId &&
+            (!this.ptysById.has(ptyId) ||
+              this.ptysById.get(ptyId)?.incarnationId === expectedIncarnationId) &&
+            (!this.pendingPtyHandleReplacementFences.has(ptyId) ||
+              this.pendingPtyHandleReplacementFences.get(ptyId)?.incarnationId ===
+                expectedIncarnationId) &&
+            this.getPtyLivenessVerdict(ptyId)?.status === 'exited'
+          ) {
+            stopped = true
+          }
+          if (!stopped && !capturedIncarnationId) {
+            const verdict = this.getPtyLivenessVerdict(ptyId)
+            const providerAlreadyRetiredPty =
+              verdict?.status === 'unverifiable' &&
+              verdict.reason === SSH_PROVIDER_UNREGISTERED_REASON
+            if (!providerAlreadyRetiredPty) {
+              this.ptyController.kill(ptyId)
+              if (!verdict || verdict.status === 'live') {
+                this.markPtyLivenessUnverifiable(
+                  ptyId,
+                  'a follow-up stop was issued but its outcome could not be verified'
+                )
+              }
             }
           }
+        } else if (!capturedIncarnationId) {
+          stopped = this.ptyController?.kill(ptyId) ?? false
         }
-      } else if (!capturedIncarnationId) {
-        stopped = this.ptyController?.kill(ptyId) ?? false
+      } finally {
+        settle?.(stopped)
+        if (capturedIncarnationId && !stopped) {
+          this.clearPtyStopRequest(ptyId)
+        }
       }
       if (ptyId === addressedPtyId) {
         addressedPtyStop = { stopped }

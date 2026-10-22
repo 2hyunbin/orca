@@ -1,3 +1,9 @@
+import type { TerminalSurfaceCloseCapture } from '../../shared/terminal-tab-close'
+import type {
+  RuntimeMobileSessionRetiredTerminalSurface,
+  RuntimeSessionTabCloseReason
+} from '../../shared/runtime-types'
+import type { RuntimePtyTabCloseAuthority } from './runtime-terminal-state-records'
 import type { RuntimeMobileSessionTabCloseResult } from '../../shared/runtime-types'
 import type { ClientSessionTabSelectionStore } from './client-session-tab-selection'
 
@@ -55,4 +61,17 @@ export function refusedMobileSessionTabClose(
     refusalReason,
     ...(options.snapshotRepublished ? { snapshotRepublished: true as const } : {})
   } as MobileSessionTabCloseOutcome
+}
+
+export type MobileSessionTabCloseOptions = {
+  originalPresentation?: TerminalSurfaceCloseCapture
+  rendererOwnsPresentation?: boolean
+  retirementProofs?: RuntimeMobileSessionRetiredTerminalSurface[]
+  reason?: RuntimeSessionTabCloseReason
+  expectedPublicationEpoch?: string
+  expectedTerminalHandle?: string
+  clientNavigationId?: string
+  localPtyTeardownOwnedExternally?: boolean
+  expectedPtyCloseAuthority?: RuntimePtyTabCloseAuthority
+  force?: boolean
 }

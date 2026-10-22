@@ -12,7 +12,7 @@ import {
   makeWorktree
 } from '@/store/slices/worktrees-slice-test-fixtures'
 import type { StructuredAgentSessionCreateParams } from '../../../../shared/structured-agent-session-create'
-import type { CliChatResumeTestMocks } from './cli-chat-resume-run.test'
+import type { CliChatResumeTestMocks } from './cli-chat-resume-mocks.test-fixture'
 import { resolveCliChatResumeSource } from './cli-chat-resume-source'
 import { canPaneOfferResumeInNewChat } from './tab-session-history-switch'
 import { collectAgentPaneConversations } from '@/lib/ai-vault-tab-title-requests'
@@ -25,7 +25,11 @@ import type { ConnectPanePtySession } from '../terminal-pane/pty-connection/conn
 import { LEAF_1, LEAF_2 } from '../terminal-pane/pty-connection-test-pane-fixtures'
 import { createExitReturnTransport } from './cli-chat-resume-transport.test-fixture'
 import type { AiVaultSession } from '../../../../shared/ai-vault-types'
-import { CLOSE_TERMINAL_PANE_EVENT, type CloseTerminalPaneDetail } from '@/constants/terminal'
+import { installExitedPaneRetirement } from './cli-chat-resume-parked-retirement.test-fixture'
+import {
+  capturedPanesByTabId,
+  parkedWatchersByTabId
+} from '../terminal-pane/terminal-parked-watcher-registry'
 
 export async function verifyExitedPaneHistoryReturn(
   mocks: CliChatResumeTestMocks,
@@ -232,30 +236,7 @@ export async function verifyExitedPaneHistoryReturn(
         ? ready.promise
         : { ok: true, value: { sessionId: params.envelope.sessionId, fence: 1 } }
   )
-  const closed = vi.fn((event: Event) => {
-    if (!(event instanceof CustomEvent)) {
-      return
-    }
-    const detail: CloseTerminalPaneDetail = event.detail
-    expect(detail).toMatchObject({
-      tabId: 'shell',
-      leafId: LEAF_1,
-      expectedPtyId: 'pty-1',
-      retireSurface: true
-    })
-    useAppStore.getState().retireAgentPaneAuthority(paneKey)
-    useAppStore.setState({
-      terminalLayoutsByTabId: {
-        shell: {
-          root: { type: 'leaf', leafId: LEAF_2 },
-          activeLeafId: LEAF_2,
-          expandedLeafId: null,
-          ptyIdsByLeafId: { [LEAF_2]: 'pty-2' }
-        }
-      }
-    })
-  })
-  window.addEventListener(CLOSE_TERMINAL_PANE_EVENT, closed)
+  const { closed, siblingWatcher } = installExitedPaneRetirement(mocks)
   try {
     expect(switchAiVaultSessionToNativeChat(history)).toBe(true)
     await vi.waitFor(() =>
@@ -283,8 +264,12 @@ export async function verifyExitedPaneHistoryReturn(
       collectAgentPaneConversations(useAppStore.getState(), adoptsCliConversations)
     ).toMatchObject([{ paneKey: sibling }])
     expect(useAppStore.getState().agentConversationsByPaneKey[paneKey]).toBeUndefined()
+    expect(siblingWatcher).not.toHaveBeenCalled()
+    expect(capturedPanesByTabId.get('shell')?.panes.map((pane) => pane.leafId)).toEqual([LEAF_2])
+    expect([...parkedWatchersByTabId.get('shell')!.paneIdByPtyId.keys()]).toEqual(['pty-2'])
   } finally {
-    window.removeEventListener(CLOSE_TERMINAL_PANE_EVENT, closed)
+    capturedPanesByTabId.delete('shell')
+    parkedWatchersByTabId.delete('shell')
     connection.paneForegroundAgentTracker.dispose()
     connection.commandLifecycle.dispose()
     manager.destroy()

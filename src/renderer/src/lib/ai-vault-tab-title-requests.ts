@@ -8,7 +8,9 @@ import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { getExecutionHostIdForWorktree } from '@/lib/worktree-runtime-owner'
 import type { AppState } from '@/store/types'
 import type { AgentPaneConversationIdentity } from '@/store/slices/agent-pane-conversation'
-import { resolvePaneKey } from './agent-status-pane-ownership'
+import { collectLeafIdsInOrder } from '@/components/terminal-pane/terminal-layout-leaf-ids'
+import { getIndexedRepoMap, getIndexedWorktreeMap } from '@/store/worktree-repo-index'
+import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
 /** The conversation a tab's pane runs, for an agent `isAgent` accepts. */
 export type AgentPaneConversation<Agent extends AgentType> = {
@@ -26,6 +28,8 @@ export type AiVaultTitleRequest = Omit<
   'paneKey'
 >
 
+type ConversationTab = TerminalTab & { worktreeId: string; leafIds?: ReadonlySet<string> }
+
 type RequestCandidate<Agent extends AgentType> = AgentPaneConversation<Agent> & {
   priority: number
 }
@@ -41,7 +45,7 @@ function activePaneKey(state: AppState, tabId: string): string | null {
 
 function registerCandidate<Agent extends AgentType>(
   state: AppState,
-  tabsById: ReadonlyMap<string, TerminalTab>,
+  tabsById: ReadonlyMap<string, ConversationTab>,
   candidates: Map<string, RequestCandidate<Agent>>,
   isAgent: (agent: AgentType | null | undefined) => agent is Agent,
   args: {
@@ -60,8 +64,15 @@ function registerCandidate<Agent extends AgentType>(
   }
   const tabId = tabIdFromPaneKey(args.paneKey, args.tabId)
   const tab = tabId ? tabsById.get(tabId) : undefined
-  const worktreeId = args.worktreeId ?? tab?.worktreeId
-  if (!tabId || !tab || !worktreeId) {
+  const worktreeId = tab?.worktreeId
+  const pane = parsePaneKey(args.paneKey)
+  if (
+    !tabId ||
+    !tab ||
+    !worktreeId ||
+    (pane && (pane.tabId !== tabId || (tab.leafIds && !tab.leafIds.has(pane.leafId)))) ||
+    (args.worktreeId !== undefined && args.worktreeId !== worktreeId)
+  ) {
     return
   }
   const priority = args.priority + (activePaneKey(state, tabId) === args.paneKey ? 100 : 0)
@@ -96,18 +107,28 @@ function liveCandidate(entry: AgentStatusEntry): Parameters<typeof registerCandi
 
 function lastReportedCandidate(
   state: AppState,
-  identity: AgentPaneConversationIdentity
+  identity: AgentPaneConversationIdentity,
+  tabsById: ReadonlyMap<string, ConversationTab>
 ): Parameters<typeof registerCandidate>[4] | null {
-  const owner = resolvePaneKey(state, identity.paneKey)
+  const pane = parsePaneKey(identity.paneKey)
+  const tab = pane ? tabsById.get(pane.tabId) : undefined
+  const worktree = getIndexedWorktreeMap(selectWorktreesByRepo(state)).get(identity.worktreeId)
+  const repo = worktree ? getIndexedRepoMap(state.repos).get(worktree.repoId) : undefined
   if (
-    !owner.exists ||
-    owner.owningWorktreeId !== identity.worktreeId ||
+    !pane ||
+    tab?.worktreeId !== identity.worktreeId ||
+    (tab.leafIds && !tab.leafIds.has(pane.leafId)) ||
     identity.executionHostId !== getExecutionHostIdForWorktree(state, identity.worktreeId) ||
-    (owner.repoConnectionResolved && identity.connectionId !== owner.repoConnectionId)
+    (repo !== undefined && identity.connectionId !== (repo.connectionId ?? null))
   ) {
     return null
   }
   return { ...identity, priority: 0, refresh: false }
+}
+
+function conversationRecords<T>(records: Record<string, T> | undefined, paneKey?: string): T[] {
+  const addressed = paneKey ? records?.[paneKey] : undefined
+  return paneKey ? (addressed ? [addressed] : []) : Object.values(records ?? {})
 }
 
 export function collectAiVaultTitleRequests(state: AppState): AiVaultTitleRequest[] {
@@ -125,24 +146,60 @@ export function collectAgentPaneConversations<Agent extends AgentType>(
     runningAgentsOnly?: boolean
     /** History addresses a conversation in any pane, including an inactive split. */
     allPanes?: boolean
+    pane?: { worktreeId: string; paneKey: string }
+    tab?: { worktreeId: string; tabId: string }
   } = {}
 ): AgentPaneConversation<Agent>[] {
-  const tabsById = new Map(
-    Object.values(state.tabsByWorktree)
-      .flat()
-      .map((tab) => [tab.id, tab] as const)
-  )
+  const addressed = options.pane
+    ? {
+        worktreeId: options.pane.worktreeId,
+        tabId: tabIdFromPaneKey(
+          options.pane.paneKey,
+          state.agentStatusByPaneKey[options.pane.paneKey]?.tabId ??
+            state.sleepingAgentSessionsByPaneKey[options.pane.paneKey]?.tabId ??
+            state.retainedAgentsByPaneKey[options.pane.paneKey]?.entry.tabId
+        )
+      }
+    : options.tab
+  const partitions = addressed
+    ? [
+        [
+          addressed.worktreeId,
+          (state.tabsByWorktree[addressed.worktreeId] ?? []).filter(
+            (tab) => tab.id === addressed.tabId
+          )
+        ] as const
+      ]
+    : Object.entries(state.tabsByWorktree)
+  const tabsById = new Map<string, ConversationTab>()
+  for (const [worktreeId, tabs] of partitions) {
+    for (const tab of tabs) {
+      const root = state.terminalLayoutsByTabId[tab.id]?.root
+      tabsById.set(tab.id, {
+        ...tab,
+        worktreeId,
+        ...(root ? { leafIds: new Set(collectLeafIdsInOrder(root)) } : {})
+      })
+    }
+  }
+  const records = <T>(record: Record<string, T> | undefined) =>
+    conversationRecords(record, options.pane?.paneKey)
   const candidates = new Map<string, RequestCandidate<Agent>>()
-  const retained = options.runningAgentsOnly ? [] : Object.values(state.retainedAgentsByPaneKey)
-  const sleeping = options.runningAgentsOnly
-    ? []
-    : Object.values(state.sleepingAgentSessionsByPaneKey)
+  const retained = options.runningAgentsOnly ? [] : records(state.retainedAgentsByPaneKey)
+  const sleeping = options.runningAgentsOnly ? [] : records(state.sleepingAgentSessionsByPaneKey)
 
   if (!options.runningAgentsOnly) {
-    for (const identity of Object.values(state.agentConversationsByPaneKey ?? {})) {
-      const candidate = lastReportedCandidate(state, identity)
+    for (const identity of records(state.agentConversationsByPaneKey)) {
+      const candidate = lastReportedCandidate(state, identity, tabsById)
       if (candidate) {
-        registerCandidate(state, tabsById, candidates, isAgent, candidate, options.allPanes)
+        registerCandidate(
+          state,
+          tabsById,
+          candidates,
+          isAgent,
+          candidate,
+          options.allPanes || !!options.pane
+        )
       }
     }
   }
@@ -162,7 +219,7 @@ export function collectAgentPaneConversations<Agent extends AgentType>(
         tabId: entry.entry.tabId,
         worktreeId: entry.worktreeId
       },
-      options.allPanes
+      options.allPanes || !!options.pane
     )
   }
   for (const record of sleeping) {
@@ -180,14 +237,23 @@ export function collectAgentPaneConversations<Agent extends AgentType>(
         tabId: record.tabId,
         worktreeId: record.worktreeId
       },
-      options.allPanes
+      options.allPanes || !!options.pane
     )
   }
-  for (const entry of Object.values(state.agentStatusByPaneKey)) {
-    registerCandidate(state, tabsById, candidates, isAgent, liveCandidate(entry), options.allPanes)
+  for (const entry of records(state.agentStatusByPaneKey)) {
+    registerCandidate(
+      state,
+      tabsById,
+      candidates,
+      isAgent,
+      liveCandidate(entry),
+      options.allPanes || !!options.pane
+    )
   }
 
-  return [...candidates.values()].map(({ priority: _priority, ...request }) => request)
+  return [...candidates.values()]
+    .filter((candidate) => !options.pane || candidate.paneKey === options.pane.paneKey)
+    .map(({ priority: _priority, ...request }) => request)
 }
 
 /** One pane's running agent, mapped as above, so a pane's action finds that pane's own conversation. */
@@ -196,21 +262,7 @@ export function resolvePaneAgentConversation<Agent extends AgentType>(
   pane: { worktreeId: string; paneKey: string },
   isAgent: (agent: AgentType | null | undefined) => agent is Agent
 ): AgentPaneConversation<Agent> | null {
-  const live = state.agentStatusByPaneKey[pane.paneKey]
-  if (live?.paneKey !== pane.paneKey) {
-    return null
-  }
-  const tabsById = new Map(
-    (state.tabsByWorktree[pane.worktreeId] ?? []).map((tab) => [tab.id, tab] as const)
-  )
-  const candidates = new Map<string, RequestCandidate<Agent>>()
-  registerCandidate(state, tabsById, candidates, isAgent, liveCandidate(live))
-  const [candidate] = candidates.values()
-  if (!candidate) {
-    return null
-  }
-  const { priority: _priority, ...request } = candidate
-  return request
+  return collectAgentPaneConversations(state, isAgent, { pane, runningAgentsOnly: true })[0] ?? null
 }
 
 /** The PTY a pane is bound to now. */
@@ -225,45 +277,5 @@ export function resolvePaneLastAgentConversation<Agent extends AgentType>(
   pane: { worktreeId: string; paneKey: string },
   isAgent: (agent: AgentType | null | undefined) => agent is Agent
 ): AgentPaneConversation<Agent> | null {
-  const live = resolvePaneAgentConversation(state, pane, isAgent)
-  const retained = state.retainedAgentsByPaneKey[pane.paneKey]
-  const saved = state.sleepingAgentSessionsByPaneKey[pane.paneKey]
-  const tab = (state.tabsByWorktree[pane.worktreeId] ?? []).find(
-    (candidate) => candidate.id === parsePaneKey(pane.paneKey)?.tabId
-  )
-  const source =
-    retained?.entry.paneKey === pane.paneKey && retained.worktreeId === pane.worktreeId
-      ? retained
-      : tab && saved?.worktreeId === pane.worktreeId
-        ? { tab, agentType: saved.agent, entry: saved }
-        : null
-  if (live) {
-    return live
-  }
-  const candidates = new Map<string, RequestCandidate<Agent>>()
-  const tabsById = new Map(source ? [[source.tab.id, source.tab]] : tab ? [[tab.id, tab]] : [])
-  if (source) {
-    registerCandidate(state, tabsById, candidates, isAgent, {
-      agent: source.agentType,
-      paneKey: pane.paneKey,
-      priority: 10,
-      providerSession: source.entry.providerSession,
-      refresh: false,
-      tabId: source.tab.id,
-      worktreeId: pane.worktreeId
-    })
-  }
-  const identity = state.agentConversationsByPaneKey?.[pane.paneKey]
-  if (identity?.worktreeId === pane.worktreeId && identity.paneKey === pane.paneKey) {
-    const candidate = lastReportedCandidate(state, identity)
-    if (candidate) {
-      registerCandidate(state, tabsById, candidates, isAgent, candidate)
-    }
-  }
-  const [candidate] = candidates.values()
-  if (!candidate) {
-    return null
-  }
-  const { priority: _priority, ...request } = candidate
-  return request
+  return collectAgentPaneConversations(state, isAgent, { pane })[0] ?? null
 }
