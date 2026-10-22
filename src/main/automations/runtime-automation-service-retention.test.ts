@@ -247,13 +247,10 @@ describe('headless automation service run terminal retention', () => {
       throw new Error('resume record persistence failed')
     })
     runtime.sleepTerminalsForWorktree.mockResolvedValue({ livePtyIds: [], stoppedPtyIds: [] })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked service exposes the drain hook it was given.
-    const drain = (service as unknown as { releaseFinishedRunTerminals: () => Promise<number> })
-      .releaseFinishedRunTerminals
-    await expect(drain()).resolves.toBe(0)
+    await expect(service.releaseFinishedRunTerminals?.()).resolves.toBe(0)
     expect(service.markDispatchResult).not.toHaveBeenCalled()
 
-    await expect(drain()).resolves.toBe(1)
+    await expect(service.releaseFinishedRunTerminals?.()).resolves.toBe(1)
     expect(service.markDispatchResult).toHaveBeenCalledTimes(1)
     expect(service.markDispatchResult).toHaveBeenCalledWith({
       runId: 'r0',
@@ -267,10 +264,7 @@ describe('headless automation service run terminal retention', () => {
     store.getWorktreeMeta.mockImplementation(firstRunOwnsWorkspace)
     store.listAutomationRuns.mockReturnValue(finishedRuns(1))
     runtime.getTerminalPtyIdForHandle.mockReturnValue(null)
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the mocked service exposes the drain hook it was given.
-    const drain = (service as unknown as { releaseFinishedRunTerminals: () => Promise<number> })
-      .releaseFinishedRunTerminals
-    await drain()
+    await service.releaseFinishedRunTerminals?.()
     expect(runtime.sleepTerminalsForWorktree).not.toHaveBeenCalled()
     expect(service.markDispatchResult).toHaveBeenCalledWith(
       expect.objectContaining({ runId: 'r0', terminalPaneKey: null, terminalPtyId: null })
