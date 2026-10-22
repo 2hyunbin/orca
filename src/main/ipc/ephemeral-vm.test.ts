@@ -38,7 +38,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('../ephemeral-vm-runtime-ssh', () => ({
+vi.mock('../ephemeral-vm/runtime-ssh', () => ({
   connectRuntimeOwnedSshTarget: connectRuntimeOwnedSshTargetMock,
   disconnectRuntimeOwnedSshTarget: disconnectRuntimeOwnedSshTargetMock,
   removeRuntimeOwnedSshTarget: removeRuntimeOwnedSshTargetMock
@@ -49,7 +49,7 @@ vi.mock('./runtime-environments/runtime-environments', () => ({
 }))
 
 import { registerEphemeralVmHandlers } from './ephemeral-vm'
-import { suspendEphemeralVmWorkspace } from '../ephemeral-vm-workspace-suspend'
+import { suspendEphemeralVmWorkspace } from '../ephemeral-vm/workspace-suspend'
 
 const tempDirs: string[] = []
 
