@@ -120,7 +120,7 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.15.8
+          terraform_version: 1.17.0
           terraform_wrapper: false
 
       - id: google-auth
@@ -167,6 +167,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true
 
       - name: Require the mirrored immutable image
         run: |

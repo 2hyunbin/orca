@@ -21,10 +21,6 @@ import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switc
 import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
 
-export type LiveTerminalPty = ReturnType<
-  OrcaRuntimeWithBuildPtyTerminalSummary['getLivePtyForHandle']
->
-
 export abstract class OrcaRuntimeWithBuildPtyTerminalSummary extends OrcaRuntimeWithGetPtyRecordForPaneKey {
   protected abstract bindPtyIncarnationHandle(
     retained: PtyIncarnationHandleRecord,
