@@ -313,9 +313,6 @@ importers:
       '@stablyai/playwright-test':
         specifier: ^2.1.16
         version: 2.1.16(@playwright/test@1.63.0(electron@43.7.8(supports-color@7.2.0)))(zod@4.6.7)
-      '@streamparser/json':
-        specifier: 0.0.26
-        version: 0.0.26
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.4(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -3163,9 +3160,6 @@ packages:
     peerDependenciesMeta:
       '@types/playwright__test':
         optional: true
-
-  '@streamparser/json@0.0.26':
-    resolution: {integrity: sha512-46597LNFI+MFdUnzX2QJWwmdTRdq0XVD+vVNJTtGVzIrnCuhG9pFo1OAzbNBqci8UJgk/X5KJZ6LcV+y7PTuDQ==}
 
   '@swc/core-darwin-arm64@1.16.2':
     resolution: {integrity: sha512-i/j0HNbnn79qnTVPicvay92Nark8fW8NQqn1e2mGERjUXNpBV0+SwQxlRpk2zBhn6laJ8PDI6Kn1nHZhnz3LCA==}
@@ -10210,8 +10204,6 @@ snapshots:
     transitivePeerDependencies:
       - '@types/zod'
       - zod
-
-  '@streamparser/json@0.0.26': {}
 
   '@swc/core-darwin-arm64@1.16.2':
     optional: true
