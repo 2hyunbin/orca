@@ -40,7 +40,10 @@ export type MobileWebBundleFetchProgress = {
 
 export type MobileWebBundleFetchResult = {
   readonly manifest: MobileWebBundleManifestRead
+  /** The assets read over the wire, verified. */
   readonly assets: ReadonlyMap<string, Uint8Array>
+  /** The assets placed in the staging tree from the cache instead. */
+  readonly reused: readonly string[]
   readonly totalBytes: number
   readonly elapsedMs: number
 }
@@ -55,20 +58,21 @@ type WindowRead = { readonly asset: AssetReassembly; readonly offset: number }
 
 /**
  * Where a download may take an asset from instead of the wire: the host's cached generation. A
- * match is by content (hash and length), and what `read` returns is hashed again before it is
- * used, so a cache that is stale, corrupt or gone costs a download, never a wrong page.
+ * match is by content (hash and length). The cache was hash-verified when it was written and is
+ * never modified in place, so a placed asset is the same bytes the page already opens from it.
  */
 export type MobileWebBundleReusableAssets = {
   readonly has: (asset: MobileWebBundleAssetRead) => boolean
-  /** Null when the bytes cannot be read; never rejects. */
-  readonly read: (asset: MobileWebBundleAssetRead) => Promise<Uint8Array<ArrayBuffer> | null>
+  /** Copies the cached asset into this download's staging tree, natively. False when it could not
+   *  be placed whole, which downloads it instead; never rejects. */
+  readonly place: (asset: MobileWebBundleAssetRead) => Promise<boolean>
 }
 
 /**
  * Reads the manifest, pages every asset it cannot reuse, and returns the verified bytes.
  *
- * Every asset, reused or read, is checked against the manifest's own sha256 before it is returned,
- * so a truncated or reordered reassembly fails here rather than in a webview much later. Progress
+ * Every asset read is checked against the manifest's own sha256 before it is returned, so a
+ * truncated or reordered reassembly fails here rather than in a webview much later. Progress
  * counts only what crosses the wire: reused assets cost no wait, so counting them would fill most
  * of the bar at once and then crawl.
  */
@@ -76,7 +80,8 @@ export async function fetchMobileWebBundle(args: {
   client: RpcClient
   signal?: AbortSignal
   onProgress?: (progress: MobileWebBundleFetchProgress) => void
-  reusable?: MobileWebBundleReusableAssets
+  /** Opened once the manifest is read, since the build it names is what the copies are staged for. */
+  reuse?: (manifest: MobileWebBundleManifestRead) => Promise<MobileWebBundleReusableAssets>
 }): Promise<MobileWebBundleFetchResult> {
   const startedAt = Date.now()
   const stopped = new AbortController()
@@ -84,12 +89,14 @@ export async function fetchMobileWebBundle(args: {
   const opened = await runRpcOperation(args.client, mobileWebBundleManifestRead, null)
   const manifest = opened.manifest
   const reader = mobileWebBundleWindowReader(args.client, opened)
-  const reusable = args.reusable
+  // A cache that cannot be opened is one with nothing to reuse, not a failed download.
+  const reusable = await args.reuse?.(manifest).catch(() => undefined)
   const candidates = new Set(
     reusable === undefined ? [] : manifest.assets.filter((entry) => reusable.has(entry))
   )
   const fetched = manifest.assets.filter((entry) => !candidates.has(entry))
   const assets = new Map<string, Uint8Array>()
+  const reused: string[] = []
   let receivedBytes = 0
   let downloadBytes = 0
   let downloadAssets = 0
@@ -197,7 +204,7 @@ export async function fetchMobileWebBundle(args: {
     }
   }
 
-  /** The candidates the cache could not supply intact, which are downloaded after all. */
+  /** The candidates the cache could not place whole, which are downloaded after all. */
   const reuseCandidates = async (): Promise<MobileWebBundleAssetRead[]> => {
     const missed: MobileWebBundleAssetRead[] = []
     for (const entry of candidates) {
@@ -205,9 +212,8 @@ export async function fetchMobileWebBundle(args: {
         break
       }
       throwIfCallerAborted(args.signal)
-      const bytes = await reusable?.read(entry)
-      if (bytes?.byteLength === entry.byteLength && (await sha256Hex(bytes)) === entry.sha256) {
-        assets.set(entry.path, bytes)
+      if (await reusable?.place(entry)) {
+        reused.push(entry.path)
       } else {
         missed.push(entry)
       }
@@ -240,7 +246,7 @@ export async function fetchMobileWebBundle(args: {
   }
   // The final window sends nothing after its last reply, so no worker would see this abort.
   throwIfCallerAborted(args.signal)
-  return { manifest, assets, totalBytes: receivedBytes, elapsedMs: Date.now() - startedAt }
+  return { manifest, assets, reused, totalBytes: receivedBytes, elapsedMs: Date.now() - startedAt }
 }
 
 /** Largest asset first, so the biggest script's tail is never the last read left in flight. Offsets
@@ -312,7 +318,8 @@ function assertWindowFillsItsSlot(
 
 /** Every slot was accepted exactly once, so only the hash is left to say the bytes are right. */
 async function verifyReassembledAsset(asset: AssetReassembly): Promise<Uint8Array> {
-  const hashed = await sha256Hex(asset.whole)
+  // Native: hashing in JS held the JS thread for seconds, and React's progress renders waited on it.
+  const hashed = toHex(new Uint8Array(await digest(CryptoDigestAlgorithm.SHA256, asset.whole)))
   if (hashed !== asset.entry.sha256) {
     throw new MobileWebBundleFetchError(
       'asset-checksum-mismatch',
@@ -360,11 +367,6 @@ function throwIfCallerAborted(caller: AbortSignal | undefined): void {
   if (caller?.aborted === true) {
     throw new MobileWebBundleFetchError('fetch-stopped', 'mobile web bundle fetch aborted')
   }
-}
-
-async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  // Native: hashing in JS held the JS thread for seconds, and React's progress renders waited on it.
-  return toHex(new Uint8Array(await digest(CryptoDigestAlgorithm.SHA256, bytes)))
 }
 
 function toHex(bytes: Uint8Array): string {

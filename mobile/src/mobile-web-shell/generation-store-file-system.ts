@@ -26,9 +26,12 @@ export type GenerationFileSystem = {
   /** Null only when the file is missing. A read that fails throws, because "absent" and "could not
    *  be read" lead the store to opposite decisions about deleting the cache. */
   readText(uri: string): Promise<string | null>
-  /** Null only when the file is missing, and a failed read throws, as `readText`. */
-  readBytes(uri: string): Promise<Uint8Array<ArrayBuffer> | null>
   fileExists(uri: string): Promise<boolean>
+  /** Null when the file is missing. */
+  fileSize(uri: string): Promise<number | null>
+  /** Copies a file natively, creating the destination's directories and replacing what is there.
+   *  Throws when the source is gone or unreadable. */
+  copyFile(fromUri: string, toUri: string): Promise<void>
   /** Recursive, and a no-op when the path is missing. */
   delete(uri: string): Promise<void>
   /** Renames a directory. The destination must not exist: expo moves a directory *into* an existing
@@ -84,12 +87,21 @@ export function createExpoGenerationFileSystem(): GenerationFileSystem {
       // rather than as a missing file.
       return file.exists ? await file.text() : null
     },
-    async readBytes(uri) {
-      const file = new File(uri)
-      return file.exists ? await file.bytes() : null
-    },
     async fileExists(uri) {
       return new File(uri).exists
+    },
+    async fileSize(uri) {
+      const file = new File(uri)
+      return file.exists ? file.size : null
+    },
+    async copyFile(fromUri, toUri) {
+      const target = new File(toUri)
+      // iOS copies only into an existing directory and over nothing, Android only over nothing.
+      target.parentDirectory.create({ intermediates: true, idempotent: true })
+      if (target.exists) {
+        target.delete()
+      }
+      new File(fromUri).copy(target)
     },
     async delete(uri) {
       const directory = new Directory(uri)

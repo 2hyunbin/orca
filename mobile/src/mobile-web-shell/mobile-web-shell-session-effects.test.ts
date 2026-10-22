@@ -60,7 +60,7 @@ function storeThat(fail: 'stage' | 'commit' | null): GenerationStore {
         ? reject
         : async () => ({ buildId: 'c', directory: 'd', manifest: MANIFEST }),
     abortStagedGeneration: async () => undefined,
-    openReusableAssets: async () => ({ has: () => false, read: async () => null }),
+    openReusableAssets: async () => ({ has: () => false, place: async () => false }),
     sweepStagedGenerations: async () => undefined,
     deleteHostCache: async () => undefined,
     recordUpdateFailure: async () => undefined,

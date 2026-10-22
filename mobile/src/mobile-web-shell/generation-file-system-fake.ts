@@ -48,15 +48,6 @@ export function createFakeGenerationFileSystem(): FakeGenerationFileSystem {
     writes.push(target.slice(ROOT.length + 1))
   }
 
-  const read = (target: string): Uint8Array<ArrayBuffer> | null => {
-    if (failReadAt !== null && target === uri(failReadAt)) {
-      throw new Error('simulated unreadable file')
-    }
-    const node = nodes.get(target)
-    // A copy, as a disk read is: a caller that writes into it must not change the file.
-    return node?.kind === 'file' ? new Uint8Array(node.bytes) : null
-  }
-
   return {
     rootUri: ROOT,
     writes,
@@ -109,14 +100,28 @@ export function createFakeGenerationFileSystem(): FakeGenerationFileSystem {
       write(target, new TextEncoder().encode(value))
     },
     async readText(target) {
-      const bytes = read(target)
-      return bytes === null ? null : new TextDecoder().decode(bytes)
-    },
-    async readBytes(target) {
-      return read(target)
+      if (failReadAt !== null && target === uri(failReadAt)) {
+        throw new Error('simulated unreadable file')
+      }
+      const node = nodes.get(target)
+      return node?.kind === 'file' ? new TextDecoder().decode(node.bytes) : null
     },
     async fileExists(target) {
       return nodes.get(target)?.kind === 'file'
+    },
+    async fileSize(target) {
+      const node = nodes.get(target)
+      return node?.kind === 'file' ? node.bytes.byteLength : null
+    },
+    async copyFile(fromUri, toUri) {
+      if (failReadAt !== null && fromUri === uri(failReadAt)) {
+        throw new Error('simulated unreadable file')
+      }
+      const node = nodes.get(fromUri)
+      if (node?.kind !== 'file') {
+        throw new Error(`fake filesystem has no file at ${fromUri}`)
+      }
+      write(toUri, node.bytes)
     },
     async delete(target) {
       for (const key of Array.from(nodes.keys())) {
