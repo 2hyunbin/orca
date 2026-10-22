@@ -181,7 +181,9 @@ describe('orca profile slice', () => {
 
   it('resets quietly when the user cancels the restart to keep unsaved changes', async () => {
     // Why: only the message crosses the preload bridge, so the rejection is rebuilt from it here.
-    orcaProfilesApi.switchProfile.mockRejectedValue(new Error(APP_RESTART_CANCELLED_BY_USER_MESSAGE))
+    orcaProfilesApi.switchProfile.mockRejectedValue(
+      new Error(APP_RESTART_CANCELLED_BY_USER_MESSAGE)
+    )
     const store = createTestStore()
     store.setState({ activeOrcaProfileId: 'local-default' })
 

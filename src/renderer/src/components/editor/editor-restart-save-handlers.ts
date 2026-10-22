@@ -2,8 +2,8 @@ import type { OpenFile } from '@/store/slices/editor'
 import { shouldPersistWorkspaceSession } from '@/lib/workspace-session'
 import { getBackedUpEditorDraft } from '@/lib/editor-draft-backup'
 import { canAutoSaveOpenFile } from './editor-autosave'
-import { flushPendingEditorChange } from './editor-pending-flush'
-import { getDuplicateDirtySavePaths } from './editor-autosave-state-projections'
+import { flushPendingEditorBuffer } from './editor-pending-flush'
+import { getDuplicateDirtySavePaths, restartSaveTargets } from './editor-autosave-state-projections'
 import type { AppStoreApi, EditorSaveQueue } from './editor-save-queue'
 import { requestRestartUnsavedChangesDecision } from './restart-unsaved-changes-dialog'
 import type { EditorSaveDirtyFilesDetail } from '../../../../shared/editor-save-events'
@@ -31,13 +31,13 @@ function settleWithin(work: Promise<unknown>, deadline: number): Promise<void> {
 type EditorRestartSaveHandlerOptions = {
   store: AppStoreApi
   queueSave: EditorSaveQueue['queueSave']
-  quiesceFileSave: EditorSaveQueue['quiesceFileSave']
+  settleFileSaves: EditorSaveQueue['settleFileSaves']
 }
 
 export function createEditorRestartSaveHandlers({
   store,
   queueSave,
-  quiesceFileSave
+  settleFileSaves
 }: EditorRestartSaveHandlerOptions): {
   handleSaveDirtyFiles: (event: Event) => Promise<void>
   handlePrepareHotExit: (event: Event) => Promise<void>
@@ -56,7 +56,7 @@ export function createEditorRestartSaveHandlers({
     try {
       detail.claim()
 
-      const dirtyFiles = store.getState().openFiles.filter((file) => file.isDirty)
+      const dirtyFiles = restartSaveTargets(store.getState())
       const unsupportedDirtyFiles = dirtyFiles.filter((file) => !canAutoSaveOpenFile(file))
       if (unsupportedDirtyFiles.length > 0) {
         detail.reject('Some unsaved editor changes cannot be auto-saved before restart.')
@@ -64,7 +64,7 @@ export function createEditorRestartSaveHandlers({
       }
 
       for (const file of dirtyFiles) {
-        flushPendingEditorChange(file.id)
+        flushPendingEditorBuffer(store.getState(), file.id)
       }
 
       const duplicateDirtySavePaths = getDuplicateDirtySavePaths(dirtyFiles)
@@ -76,15 +76,19 @@ export function createEditorRestartSaveHandlers({
         return
       }
 
-      await Promise.all(
+      const results = await Promise.all(
         dirtyFiles.map(async (file) => {
           const content = getLatestWritableContent(file)
           if (content === null) {
             throw new Error(`Missing editor buffer for ${file.relativePath}`)
           }
-          await queueSave(file, content)
+          return queueSave(file, content, 'restart')
         })
       )
+      if (results.some((result) => result !== 'written')) {
+        detail.reject('Some unsaved files were not saved. Review them before restarting.')
+        return
+      }
       detail.resolve()
     } catch (error) {
       detail.reject(String((error as Error)?.message ?? error))
@@ -97,9 +101,9 @@ export function createEditorRestartSaveHandlers({
     if (!state.settings?.editorAutoSave) {
       return
     }
-    const dirtyFiles = state.openFiles.filter((file) => file.isDirty)
+    const dirtyFiles = restartSaveTargets(state)
     const duplicateDirtySavePaths = new Set(getDuplicateDirtySavePaths(dirtyFiles))
-    const saves: Promise<void>[] = []
+    const saves: Promise<unknown>[] = []
     for (const file of dirtyFiles) {
       const draft = state.editorDrafts[file.id]
       if (
@@ -127,8 +131,8 @@ export function createEditorRestartSaveHandlers({
     try {
       const deadline = performance.now() + RESTART_SAVE_TIME_LIMIT_MS
       const initiallyDirtyFiles = store.getState().openFiles.filter((file) => file.isDirty)
-      const drains = initiallyDirtyFiles.map((file) => quiesceFileSave(file.id))
-      // Quiesce flushes synchronously; per-file queues keep healthy saves independent of stalled hosts.
+      const drains = initiallyDirtyFiles.map((file) => settleFileSaves(file.id))
+      // Settlement flushes synchronously; healthy records need not wait for stalled saves.
       await settleWithin(Promise.all([...drains, autoSaveBeforeRestart(deadline)]), deadline)
 
       const confirmedLostFileIds = new Set<string>()

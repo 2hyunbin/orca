@@ -7,7 +7,7 @@ import {
   EMPTY_PAIRED_DEVICE_IDS_BY_ENVIRONMENT,
   getPairedDeviceIdsByEnvironment
 } from '../../../../shared/workspace-creator-visibility'
-import type { VisibleWorktreeOptions } from './visible-worktrees'
+import type { VisibleWorktreeOptions } from './compute-visible-worktrees'
 
 /**
  * Read the store into the filter inputs `computeVisibleWorktrees` decides from.
@@ -31,7 +31,10 @@ export function buildVisibleWorktreeOptionsFromState(
       state.tabsByWorktree,
       Date.now()
     ),
-    worktreeIdsWithStructuredChat: getWorktreeIdsWithStructuredChat(state.unifiedTabsByWorktree),
+    worktreeIdsWithStructuredChat: getWorktreeIdsWithStructuredChat(
+      state.unifiedTabsByWorktree,
+      state.structuredChatSleptAtByPaneKey
+    ),
     hideDefaultBranchWorkspace: state.hideDefaultBranchWorkspace,
     hideAutomationGeneratedWorkspaces: state.hideAutomationGeneratedWorkspaces,
     hideCliCreatedWorkspaces: state.hideCliCreatedWorkspaces,

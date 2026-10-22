@@ -16,6 +16,7 @@ import { buildSleepingAgentSessionData } from './workspace-session-sleeping-agen
 import { buildActiveConnectionIdsAtShutdown } from './workspace-session-reconnect-targets'
 import { withoutStagedBrowserTabs } from './workspace-session-staged-browser-tabs'
 import { buildBrowserSessionData } from './workspace-session-browser-tabs'
+import { pickCloseIntents, type CloseIntentFields } from './workspace-session-close-intents'
 
 export { buildActiveConnectionIdsAtShutdown }
 
@@ -58,14 +59,14 @@ export type WorkspaceSessionSnapshot = Pick<
   | 'lastKnownRelayPtyIdByTabId'
   | 'lastVisitedAtByWorktreeId'
   | 'defaultTerminalTabsAppliedByWorktreeId'
-> & {
-  activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
-  sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
-  clientHostedBrowserCloseIntentsByEnvironment?: AppState['clientHostedBrowserCloseIntentsByEnvironment']
-  /** Optional so the many partial snapshot fixtures keep type-checking; see buildTerminalSessionData. */
-  pendingReconnectPtyIdByTabId?: AppState['pendingReconnectPtyIdByTabId']
-  deferredSshSessionIdsByTabId?: AppState['deferredSshSessionIdsByTabId']
-}
+> &
+  CloseIntentFields & {
+    activeWorkspaceExecutionHostId?: AppState['activeWorkspaceExecutionHostId']
+    sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
+    /** Optional so the many partial snapshot fixtures keep type-checking; see buildTerminalSessionData. */
+    pendingReconnectPtyIdByTabId?: AppState['pendingReconnectPtyIdByTabId']
+    deferredSshSessionIdsByTabId?: AppState['deferredSshSessionIdsByTabId']
+  }
 
 // Why: shallow-equality gate for the debounced session writer; _exhaustive below keeps it in sync with the snapshot type.
 export const SESSION_RELEVANT_FIELDS = [
@@ -102,6 +103,7 @@ export const SESSION_RELEVANT_FIELDS = [
   'defaultTerminalTabsAppliedByWorktreeId',
   'sleepingAgentSessionsByPaneKey',
   'clientHostedBrowserCloseIntentsByEnvironment',
+  'pairedTerminalTabCloseIntentsByEnvironment',
   'pendingReconnectPtyIdByTabId',
   'deferredSshSessionIdsByTabId'
 ] as const satisfies readonly (keyof WorkspaceSessionSnapshot)[]
@@ -127,10 +129,9 @@ export function buildEditorSessionData(
   | 'activeTabTypeByWorktree'
   | 'markdownFrontmatterVisible'
 > {
-  const editFiles = openFiles.filter((f) => f.mode === 'edit')
   const byWorktree: Record<string, PersistedOpenFile[]> = {}
   const editFileIdsByWorktree: Record<string, Set<string>> = {}
-  for (const f of editFiles) {
+  for (const f of openFiles.filter((file) => file.mode === 'edit')) {
     const arr = byWorktree[f.worktreeId] ?? (byWorktree[f.worktreeId] = [])
     const dirtyDraftContent = f.isDirty ? getBackedUpEditorDraft(f, editorDrafts) : undefined
     arr.push({
@@ -338,10 +339,7 @@ export function buildWorkspaceSessionPayload(
         ? snapshot.defaultTerminalTabsAppliedByWorktreeId
         : undefined,
     ...buildSleepingAgentSessionData(snapshot),
-    // Why unconditional rather than omit-when-empty: a full write replaces the persisted object,
-    // so an emptied map has to be written as empty or the last replay never sticks.
-    clientHostedBrowserCloseIntentsByEnvironment:
-      snapshot.clientHostedBrowserCloseIntentsByEnvironment
+    ...pickCloseIntents(snapshot)
   }
 
   return pruneLocalTerminalScrollbackBuffers(payload, snapshot.repos)
