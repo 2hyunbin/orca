@@ -116,6 +116,11 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
             )
           )
         : undefined)
+    const bundledSkillTarget = resolveBundledSkillTarget(
+      runtimeTarget,
+      projectRuntime,
+      runtimeState.activeWorktreeId ? activeWorkspaceHostId : undefined
+    )
     if (!projectRuntime) {
       // Why: buildSkillCommandForRuntime still builds a Windows host command
       // without a project runtime, so the terminal has to match that shell.
@@ -126,12 +131,8 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
             undefined
           )
         : undefined
-      const canUseSkillFreshness = shouldUseSkillFreshness(runtimeTarget)
-      const bundledSkillTarget = resolveBundledSkillTarget(
-        runtimeTarget,
-        undefined,
-        activeWorkspaceHostId
-      )
+      const canUseSkillFreshness =
+        bundledSkillTarget !== null && shouldUseSkillFreshness(runtimeTarget)
       return {
         installDisabledReason: null,
         ...(terminalShellOverride ? { terminalShellOverride } : {}),
@@ -151,12 +152,9 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
         agentRuntime
       ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
-      canUseSkillFreshness: shouldUseSkillFreshness(runtimeTarget, agentRuntime),
-      bundledSkillTarget: resolveBundledSkillTarget(
-        runtimeTarget,
-        projectRuntime,
-        activeWorkspaceHostId
-      )
+      canUseSkillFreshness:
+        bundledSkillTarget !== null && shouldUseSkillFreshness(runtimeTarget, agentRuntime),
+      bundledSkillTarget
     }
   }, [activeWorkspaceHostId, currentPlatform, runtimeState, runtimeTarget, windowsCapabilities])
 

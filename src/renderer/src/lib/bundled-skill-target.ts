@@ -49,13 +49,17 @@ export function servingExecutionHostId(
  * Where the agents run, never the client by default: null while the owning runtime is
  * unknown or the project runs in WSL. Pass the active workspace's owner
  * through `servingExecutionHostId`, so an SSH host with a managed server plans on that server.
+ * An omitted owner means no active workspace; null means its owner is unresolved.
  */
 export function resolveBundledSkillTarget(
   runtimeTarget: RuntimeClientTarget | null,
   projectRuntime: ProjectExecutionRuntimeResolution | undefined,
-  activeWorkspaceHostId: string | null = null
+  activeWorkspaceHostId?: string | null
 ): BundledSkillTarget | null {
   const owner = parseExecutionHostId(activeWorkspaceHostId)
+  if (activeWorkspaceHostId !== undefined && !owner) {
+    return null
+  }
   if (owner?.kind === 'ssh') {
     return { kind: 'ssh', targetId: owner.targetId }
   }

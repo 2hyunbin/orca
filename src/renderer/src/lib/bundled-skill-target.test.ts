@@ -66,6 +66,19 @@ describe('resolveBundledSkillTarget', () => {
     })
   })
 
+  it('plans nothing when an active workspace owner is unresolved after the catalog settles', () => {
+    expect(resolveBundledSkillTarget({ kind: 'local' }, undefined, null)).toBeNull()
+    expect(
+      resolveBundledSkillTarget({ kind: 'environment', environmentId: 'focused' }, undefined, null)
+    ).toBeNull()
+  })
+
+  it('keeps a proven local workspace target', () => {
+    expect(resolveBundledSkillTarget({ kind: 'local' }, undefined, 'local')).toEqual({
+      kind: 'local'
+    })
+  })
+
   it('plans this machine otherwise', () => {
     expect(resolveBundledSkillTarget({ kind: 'local' }, undefined)).toEqual({ kind: 'local' })
   })
