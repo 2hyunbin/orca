@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Text, View } from 'react-native'
+import { View } from 'react-native'
+import { CircleAlert } from 'lucide-react-native'
+import { StateView } from '../components/ui/StateView'
 import { filePreviewStyles as styles } from './mobile-file-preview-styles'
 
 export type MobileMediaPlaybackProps = { uri: string; mimeType: string; title: string }
@@ -10,7 +12,7 @@ export function MobileMediaPlayback({ uri, mimeType, title }: MobileMediaPlaybac
   useEffect(() => {
     const blockedMedia = (event: SecurityPolicyViolationEvent): void => {
       if (event.effectiveDirective === 'media-src') {
-        setFailure('Update Orca Mobile to play media in this workspace')
+        setFailure('Update Orca Mobile to play media in this workspace.')
       }
     }
     document.addEventListener('securitypolicyviolation', blockedMedia)
@@ -28,11 +30,7 @@ export function MobileMediaPlayback({ uri, mimeType, title }: MobileMediaPlaybac
     }
   }, [uri])
   if (failure) {
-    return (
-      <View style={styles.state}>
-        <Text style={styles.errorText}>{failure}</Text>
-      </View>
-    )
+    return <StateView icon={CircleAlert} title="Can’t play this file" message={failure} />
   }
   const props = {
     src: uri,
@@ -43,11 +41,7 @@ export function MobileMediaPlayback({ uri, mimeType, title }: MobileMediaPlaybac
       mediaRef.current = element
     },
     onError: (): void =>
-      setFailure(
-        (current) =>
-          current ||
-          'Unable to play this media file. Its codec may not be supported on this device.'
-      )
+      setFailure((current) => current || 'Its format may not be supported on this device.')
   }
   return (
     <View style={styles.state}>
