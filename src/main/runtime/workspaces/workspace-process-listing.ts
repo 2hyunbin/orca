@@ -1,3 +1,5 @@
+import { waitForInFlightWorktreeCreate } from '../../worktree-create-in-flight'
+import { splitWorktreeIdForFilesystem } from '../../../shared/worktree/id'
 import { resolveStructuredCodexAccountKind } from '../structured-agent-account-home'
 import { getStructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-registry'
 import { collectRuntimeWorktreeAgentSources } from '../runtime-worktree-agent-sources'
@@ -314,7 +316,17 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       // its agent running. No database answers no.
       hasOpenDispatch: (record) =>
         structuredWorkerOwesWork(this.getOrchestrationDbIfAvailable?.() ?? null, record),
-      setupHold: (workspaceId) => this.workspaceSetupAgentStarts.pending(workspaceId)
+      setupHold: (workspaceId) => {
+        const parsed = splitWorktreeIdForFilesystem(workspaceId)
+        const preparation = parsed
+          ? waitForInFlightWorktreeCreate(parsed.worktreePath, parsed.repoId)
+          : null
+        return preparation
+          ? preparation.then(async () => {
+              await this.workspaceSetupAgentStarts.pending(workspaceId)
+            })
+          : this.workspaceSetupAgentStarts.pending(workspaceId)
+      }
     })
   }
 }

@@ -116,7 +116,7 @@ describe('createSetupRunnerScript', () => {
         { cwd: 'C:\\repo-worktree' }
       )
       expect(writeFileSyncMock).toHaveBeenCalledWith(
-        'C:\\repo\\.git\\orca\\setup-runner.sh',
+        'C:\\repo\\.git\\orca\\setup-runner-child.sh',
         '#!/usr/bin/env bash\nset -e\npnpm install\nnpm run build\n',
         'utf-8'
       )
@@ -156,7 +156,7 @@ describe('createSetupRunnerScript', () => {
         { cwd: 'C:\\repo-worktree' }
       )
       expect(writeFileSyncMock).toHaveBeenCalledWith(
-        'C:\\repo\\.git\\orca\\setup-runner.cmd',
+        'C:\\repo\\.git\\orca\\setup-runner-child.cmd',
         expect.stringContaining('call copy .env.example .env\r\n'),
         'utf-8'
       )
@@ -223,7 +223,7 @@ describe('createSetupRunnerScript', () => {
       )
 
       expect(writeFileSyncMock).toHaveBeenCalledWith(
-        'C:\\repo\\.git\\orca\\setup-runner.sh',
+        'C:\\repo\\.git\\orca\\setup-runner-child.sh',
         '#!/usr/bin/env bash\nset -e\nset -euo pipefail\nmake build | tee build.log\n',
         'utf-8'
       )
@@ -256,12 +256,12 @@ describe('createSetupRunnerScript', () => {
         { cwd: 'C:\\repo-worktree' }
       )
       expect(writeFileSyncMock).toHaveBeenCalledWith(
-        'C:\\repo\\.git\\orca\\setup-runner.cmd',
+        'C:\\repo\\.git\\orca\\setup-runner-child.cmd',
         expect.stringContaining('call pnpm install\r\nif errorlevel 1 exit /b %errorlevel%'),
         'utf-8'
       )
       expect(writeFileSyncMock).toHaveBeenCalledWith(
-        'C:\\repo\\.git\\orca\\setup-runner.cmd',
+        'C:\\repo\\.git\\orca\\setup-runner-child.cmd',
         expect.stringContaining('call npm run build\r\nif errorlevel 1 exit /b %errorlevel%'),
         'utf-8'
       )
@@ -291,7 +291,7 @@ describe('createSetupRunnerScript', () => {
         { cwd: '/test/worktree' }
       )
       expect(writeFileSyncMock).toHaveBeenCalledWith(
-        '/test/repo/.git/orca/setup-runner.sh',
+        '/test/repo/.git/orca/setup-runner-child.sh',
         '#!/usr/bin/env bash\nset -e\npnpm install\n',
         'utf-8'
       )

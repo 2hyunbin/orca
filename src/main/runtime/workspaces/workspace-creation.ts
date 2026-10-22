@@ -50,11 +50,13 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
   ): Promise<CreateWorktreeResult> {
     // Re-arm a consumed checkout after terminal startup, including failed creates.
     const rearm: PreparationRearmHolder = { fire: () => {} }
+    const preparation: PreparationRearmHolder = { fire: () => {} }
     try {
       return await trackRuntimeWorkspaceCreate(args, (events) =>
-        this.performManagedWorktreeCreate(args, rearm, events)
+        this.performManagedWorktreeCreate(args, rearm, events, preparation)
       )
     } finally {
+      preparation.fire()
       rearm.fire()
     }
   }
@@ -62,7 +64,8 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
   private async performManagedWorktreeCreate(
     args: RuntimeManagedWorktreeCreateArgs,
     rearm: PreparationRearmHolder,
-    events: RuntimeWorkspaceCreateEvents
+    events: RuntimeWorkspaceCreateEvents,
+    preparation: PreparationRearmHolder
   ): Promise<CreateWorktreeResult> {
     if (!this.store) {
       throw new Error('runtime_unavailable')
@@ -81,7 +84,7 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
       keyOf: (worktreeId) => workspaceLifecycleKey(getRepoExecutionHostId(repo), worktreeId)
     })
     try {
-      return await this.createInResolvedProject(args, repo, creation, rearm, events)
+      return await this.createInResolvedProject(args, repo, creation, rearm, events, preparation)
     } finally {
       creation?.close()
     }
@@ -92,7 +95,8 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
     repo: Repo,
     creation: WorkspaceCreationHandle | undefined,
     rearm: PreparationRearmHolder,
-    events: RuntimeWorkspaceCreateEvents
+    events: RuntimeWorkspaceCreateEvents,
+    preparation: PreparationRearmHolder
   ): Promise<CreateWorktreeResult> {
     const store = this.requireStore()
     const onWorkspaceCreated = (worktreeId: string): void => {
@@ -173,14 +177,26 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         onWorkspaceCreated(persistedWorktree.id)
         return this.recordCreatedWorktreeLineage(persistedWorktree, lineageResolution)
       },
+      preparation,
       rearm,
       timing
     })
     const { worktree, worktreePath, includeCopyWarning, created, addResult, metadataResult } =
       localCreate
-    const settings = createSettings
     const { lineage, workspaceLineage, warnings: lineageWarnings } = metadataResult
 
+    const prepared = await prepareRuntimeLocalWorktreeSetup({
+      request: args,
+      repo,
+      worktreePath,
+      settings: createSettings,
+      runtimeTarget: this.getLocalGitExecutionOptionArgs(repo)[0],
+      shouldUseSetupRunner:
+        this.authoritativeWindowId !== null ||
+        Boolean(effectiveStartup) ||
+        Boolean(this.ptyController?.spawn),
+      warning: includeCopyWarning
+    })
     let {
       setup,
       defaultTabs,
@@ -189,30 +205,12 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
       hookFound,
       shouldRunSetup,
       didStartInProcessSetupHook
-    } = await prepareRuntimeLocalWorktreeSetup({
-      request: args,
-      repo,
-      worktreePath,
-      settings,
-      runtimeTarget: this.getLocalGitExecutionOptionArgs(repo)[0],
-      shouldUseSetupRunner:
-        this.authoritativeWindowId !== null ||
-        Boolean(effectiveStartup) ||
-        Boolean(this.ptyController?.spawn),
-      warning: includeCopyWarning
-    })
-
+    } = prepared
+    this.workspaceSetupAgentStarts.holdPrepared(worktree.id, prepared)
+    preparation.fire()
     this.invalidateResolvedWorktreeCache()
     this.invalidateWorktreeScanCacheForRepo(repo.id)
-    // Why: the filesystem-auth layer maintains a separate cache of registered
-    // worktree roots used by git IPC handlers (branchCompare, diff, status, etc.)
-    // to authorize paths. Without invalidating it here, CLI-created worktrees
-    // are not recognized and all git operations fail with "Access denied:
-    // unknown repository or worktree path".
-    // Scoped to this repo: the global form dirties every owner, so the next
-    // authorization-requiring IPC relists EVERY registered repo — ~58 `git worktree
-    // list` spawns, ~10s of git wall-clock through an admission budget of 4, to
-    // rediscover roots only this repo changed.
+    // Git IPC authorizes roots separately; invalidate only this repo to avoid relisting every repo.
     invalidateAuthorizedRootsCacheForRepo(store, repo)
 
     notifyLineageRepos(this.notifyWorktreesChanged.bind(this), repo.id, lineage?.parentWorktreeId)
@@ -245,7 +243,13 @@ export abstract class OrcaRuntimeWithCreateManagedWorktree extends OrcaRuntimeWi
         createTerminal: (selector, options) => this.createTerminal(selector, options, worktree),
         pasteDraft: (handle, draft) => this.pasteStartupDraftWhenReady(handle, draft),
         sendFollowup: (handle, followup) => this.sendStartupFollowupWhenReady(handle, followup),
-        provision: (options) => this.provisionManagedWorktreeTerminals(options, worktree),
+        provision: async (options) => {
+          const result = await this.provisionManagedWorktreeTerminals(options, worktree)
+          if (!result.setupSpawned) {
+            this.workspaceSetupAgentStarts.observe(worktree.id, null)
+          }
+          return result
+        },
         activate: activationCallbacks.local
       }
     })

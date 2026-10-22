@@ -189,17 +189,18 @@ beforeEach(() => {
 describe('runtime create listing hold', () => {
   const rows = [{ path: worktreePath }]
 
-  it('holds the checkout during Git creation and releases it once metadata is saved', async () => {
+  it('holds the checkout during Git creation and keeps it through metadata and include preparation', async () => {
     mocks.consume.mockImplementation(async () => {
       expect(withoutInFlightWorktreeCreates('repo-1', rows)).toEqual([])
       return { status: 'hit', result: {}, rearm: mocks.rearm }
     })
     mocks.resolveShared.mockImplementation(async () => {
-      expect(withoutInFlightWorktreeCreates('repo-1', rows)).toBe(rows)
+      expect(withoutInFlightWorktreeCreates('repo-1', rows)).toEqual([])
       return []
     })
     await createWorktree()
     expect(mocks.resolveShared).toHaveBeenCalledOnce()
+    expect(withoutInFlightWorktreeCreates('repo-1', rows)).toBe(rows)
   })
 
   it('releases the checkout when Git creation fails', async () => {

@@ -249,39 +249,14 @@ describe('the worktree factory', () => {
     expect(createStructuredSession).toHaveBeenCalledTimes(1)
   })
 
-  it('creates the chat at once, at rest, and holds its agent until setup ends', async () => {
+  it('creates at rest without deriving setup policy from a caller surface callback', async () => {
     const runtime = runtimeStub({
       setupReceipt: { startupPolicy: 'wait-for-setup', state: 'running', terminalHandle: 'setup-1' }
     })
-    const setup = Promise.withResolvers<{ exitCode: number | null }>()
-    runtime.waitForSetupTerminalCompletion.mockImplementation(() => setup.promise)
-    const create = runtime.createManagedWorktree.getMockImplementation()
-    runtime.createManagedWorktree.mockImplementationOnce(async (args) => {
-      // The runtime offers the sequence exactly when the project waits for setup.
-      const stage = args.initializeSurface
-      if (typeof stage === 'function') {
-        await stage({
-          worktreeId: 'wt-new',
-          startupTerminalHandle: undefined,
-          sequenceTerminalCommand: (command: string) => ({ command })
-        })
-      }
-      return create!(args)
-    })
-
     const result = await launch(CREATE_LAUNCH, runtime)
-
     expect(result.outcome.kind).toBe('structured')
     expect(createStructuredSession).toHaveBeenCalledWith(expect.objectContaining({ atRest: true }))
-    expect(runtime.waitForSetupTerminalCompletion).toHaveBeenCalledWith(
-      'setup-1',
-      expect.any(AbortSignal)
-    )
-    const held = runtime.workspaceSetupAgentStarts.pending('wt-new')
-    expect(held).not.toBeNull()
-    setup.resolve({ exitCode: 0 })
-    await held
-    expect(runtime.workspaceSetupAgentStarts.pending('wt-new')).toBeNull()
+    expect(runtime.waitForSetupTerminalCompletion).not.toHaveBeenCalled()
   })
 
   it('keeps agent-first creation for a launch the user wants as a terminal', async () => {

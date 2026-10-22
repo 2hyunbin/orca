@@ -84,7 +84,7 @@ function chatCreateRuntime(args: {
   vi.mocked(getDefaultTabsLaunch).mockReturnValue(args.withDefaults ? DEFAULTS : undefined)
   vi.mocked(createSetupRunnerScript).mockReturnValue({
     runnerScriptPath: '/repo/setup.sh',
-    envVars: {},
+    envVars: { ORCA_SETUP_COMPLETION_TOKEN: 'setup-token' },
     ...(args.wait ? { waitForAgentStartup: true } : {})
   })
   vi.mocked(listWorktrees).mockResolvedValue([
@@ -151,6 +151,46 @@ describe('host-created workspaces awaiting their agent chat', () => {
       }
     }
   )
+
+  it('owns a wrapped setup hold below launch adapters and retains completion after chat timeout', async () => {
+    vi.useFakeTimers()
+    try {
+      const { runtime, spawn } = chatCreateRuntime({
+        setupScriptLaunchMode: 'new-tab',
+        withDefaults: false,
+        wait: true
+      })
+      const result = await runtime.createManagedWorktree({
+        repoSelector: 'id:repo-1',
+        name: 'chat-create',
+        setupDecision: 'run',
+        startup: { command: 'claude' },
+        awaitTerminalProvisioning: true,
+        initializeSurface: async (workspace) => {
+          expect(runtime.workspaceSetupAgentStarts.pending(workspace.worktreeId)).not.toBeNull()
+          expect(spawn).toHaveBeenCalledTimes(1)
+        }
+      })
+      const handle = result.setupReceipt?.terminalHandle
+      if (!handle) {
+        throw new Error('missing setup terminal')
+      }
+      const held = runtime.workspaceSetupAgentStarts.pending(result.worktree.id)
+      expect(held).not.toBeNull()
+      expect(spawn.mock.calls[1]?.[0].command).toContain('printf')
+      await vi.advanceTimersByTimeAsync(60_000)
+      await held
+      expect(runtime.workspaceSetupAgentStarts.pending(result.worktree.id)).toBeNull()
+      runtime.onPtyData('pty-2', '__ORCA_SETUP_COMPLETE__:setup-token:17\r\n', Date.now())
+      runtime.onPtyData('pty-2', 'after setup\n'.repeat(10_000), Date.now())
+      await expect(runtime.waitForSetupTerminalCompletion(handle)).resolves.toEqual({
+        exitCode: 17
+      })
+      await expect(runtime.readTerminal(handle)).resolves.toMatchObject({ status: 'running' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 
   // The phone creates through agent.launch; a reported bug left a plain "Terminal 1" beside Setup.
   it('gives a paired-device chat launch Setup and the chat with no plain shell', async () => {

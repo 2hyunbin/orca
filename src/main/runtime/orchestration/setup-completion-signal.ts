@@ -79,3 +79,20 @@ export function createSetupCompletionScanner(
 function completionPrefix(completionToken: string): string {
   return `${SETUP_COMPLETION_PREFIX}${completionToken}:`
 }
+
+export function createSetupCompletionObservation(token: string) {
+  let finish: (exitCode: number | null) => void = () => {}
+  let fail: (error: unknown) => void = () => {}
+  const completion = new Promise<{ exitCode: number | null }>((resolve, reject) => {
+    fail = reject
+    finish = (exitCode) => resolve({ exitCode })
+  })
+  void completion.catch(() => {})
+  return {
+    token,
+    completion,
+    finish,
+    fail,
+    ...createSetupCompletionScanner(token, (code) => finish(code))
+  }
+}

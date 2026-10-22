@@ -75,10 +75,7 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
       setTabColor: async (handle, color) => {
         const { worktreeId, tabId } = this.getProvisionedTerminalTab(handle)
         await this.setMobileSessionTabProps(`id:${worktreeId}`, { tabId, color })
-      },
-      getPtyId: (handle) => this.getLivePtyForHandle(handle)?.pty.ptyId,
-      recordSetupCompletionToken: (ptyId, token) =>
-        this.setupCompletionTokenByPtyId.set(ptyId, token)
+      }
     }
   }
 
@@ -139,10 +136,7 @@ export abstract class OrcaRuntimeWithGetWorktreeTerminalProvisioningHost extends
           tabs
         })
         return applied(reply) && reply.ok ? (reply.result.createdTabs ?? []) : null
-      },
-      getPtyId: (handle) => this.getLivePtyForHandle(handle)?.pty.ptyId,
-      recordSetupCompletionToken: (ptyId, token) =>
-        this.setupCompletionTokenByPtyId.set(ptyId, token)
+      }
     }
   }
 

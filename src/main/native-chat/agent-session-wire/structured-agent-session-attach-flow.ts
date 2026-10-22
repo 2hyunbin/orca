@@ -106,6 +106,7 @@ export type AttachFlowInput = {
   eventSink?: StructuredAgentSessionEventSink
   /** Stops acquisition-window events targeting the superseded journal. */
   onAcquiring?: () => Promise<void> | void
+  onReserved?: () => Promise<void>
   /** Settles writes already captured by the superseded journal before opening another. */
   beforeJournalOpen?: () => Promise<void> | void
   /** The conversation's own open journal, which the attach adopts: it never opens one itself. */
@@ -208,6 +209,16 @@ export async function performAttach(
         return { ok: false, refusal: replay.refusal }
       }
     }
+    await lock.commit(async () => {
+      const journal = await input.openConversation(record)
+      await importAdoptedTranscript(
+        params,
+        { journal, unconfirmedClientMessageIds: [] },
+        record,
+        preparedTranscript.items
+      )
+      await input.onReserved?.()
+    })
     // Sample provider history before a new child is acquired. Once acquireOwner
     // starts the child, the adapter's liveness signal intentionally becomes
     // conservative and an absent prompt can no longer prove non-delivery.
@@ -293,7 +304,6 @@ export async function performAttach(
         openConversation: input.openConversation,
         providerHistoryWindow
       })
-      await importAdoptedTranscript(params, journal, acquired, preparedTranscript.items)
       await input.onAttached(journal, acquisitionGeneration, owner)
       return journal
     })

@@ -182,6 +182,7 @@ async function commitReservedRuntimePtySpawn(ctx: RuntimePtySpawnState) {
         ? {
             tabId: args.tabId,
             leafId: ctx.metadataLeafId,
+            setupCompletionToken: ctx.env?.ORCA_SETUP_COMPLETION_TOKEN,
             ...(args.preAllocatedHandle ? { terminalHandle: args.preAllocatedHandle } : {}),
             ...(ctx.result.incarnationId ? { incarnationId: ctx.result.incarnationId } : {}),
             ...(providerReattachLaunchIdentity ? { providerReattachLaunchIdentity } : {})

@@ -16,7 +16,7 @@ afterEach(() => rig.dispose())
 /** A chat whose agent is not running, in a workspace whose setup is still running. */
 async function chatHeldBySetup(): Promise<PromiseWithResolvers<void>> {
   const setup = Promise.withResolvers<void>()
-  let running = true
+  let running = false
   void setup.promise.then(() => {
     running = false
   })
@@ -24,6 +24,7 @@ async function chatHeldBySetup(): Promise<PromiseWithResolvers<void>> {
     restartable: true,
     setupHold: () => (running ? setup.promise : null)
   })
+  running = true
   await rig.host.close(SESSION, 'evict')
   rig.starts.mockClear()
   return setup

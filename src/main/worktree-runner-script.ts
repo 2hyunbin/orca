@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { buildObservedSetupCommand } from './runtime/orchestration/setup-completion-signal'
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { shouldWaitForSetupBeforeAgentStartup } from '../shared/setup-agent-startup-policy'
@@ -123,13 +125,17 @@ function createWorktreeRunnerScript(args: {
 
   mkdirSync(dirname(runnerScriptPath), { recursive: true })
 
+  const childPath =
+    runnerBaseName === 'setup-runner'
+      ? runnerScriptPath.replace(/\.(cmd|sh)$/, '-child.$1')
+      : runnerScriptPath
   if (runnerShell.family === 'cmd') {
-    writeFileSync(runnerScriptPath, buildWindowsRunnerScript(script), 'utf-8')
+    writeFileSync(childPath, buildWindowsRunnerScript(script), 'utf-8')
   } else {
-    writeFileSync(runnerScriptPath, buildPosixRunnerScript(script), 'utf-8')
+    writeFileSync(childPath, buildPosixRunnerScript(script), 'utf-8')
     if (!nativeWindowsWorktree) {
       // Why: chmod over a UNC path to the WSL filesystem sets the execute bit correctly inside WSL.
-      chmodSync(runnerScriptPath, 0o755)
+      chmodSync(childPath, 0o755)
     }
   }
 
@@ -147,6 +153,27 @@ function createWorktreeRunnerScript(args: {
       if (value) {
         envVars[key] = nativeWindowsPathToPosixShellPath(value)
       }
+    }
+  }
+
+  if (runnerBaseName === 'setup-runner') {
+    const token = randomUUID()
+    const observed = buildObservedSetupCommand(
+      wslWorktree ? toLinuxPath(childPath) : childPath,
+      nativeWindowsWorktree ? 'windows' : 'posix',
+      token,
+      launchShell
+    )
+    Object.assign(envVars, observed.env, { ORCA_SETUP_COMPLETION_TOKEN: token })
+    writeFileSync(
+      runnerScriptPath,
+      runnerShell.family === 'cmd'
+        ? `@echo off\r\n${observed.command}\r\nexit /b %errorlevel%\r\n`
+        : `#!/usr/bin/env bash\n${observed.command}\n`,
+      'utf-8'
+    )
+    if (!nativeWindowsWorktree) {
+      chmodSync(runnerScriptPath, 0o755)
     }
   }
 

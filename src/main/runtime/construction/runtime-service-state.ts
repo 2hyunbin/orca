@@ -1,3 +1,4 @@
+import type { createSetupCompletionObservation } from '../orchestration/setup-completion-signal'
 import { OrchestrationStructuredMailboxPointerDelivery } from '../orchestration/structured-mailbox-pointer-delivery'
 
 import { createStructuredMailboxPointerHost } from '../orchestration/structured-mailbox-pointer-host'
@@ -314,7 +315,10 @@ export abstract class OrcaRuntimeWithStopRequestedPtyIds extends OrcaRuntimeWith
   // ready marker. Keep a bounded raw buffer so fast startup output is replayed.
   protected recentPtyOutputById = new Map<string, RecentPtyOutputBuffer>()
 
-  protected setupCompletionTokenByPtyId = new Map<string, string>()
+  protected setupCompletionTokenByPtyId = new Map<
+    string,
+    ReturnType<typeof createSetupCompletionObservation>
+  >()
 
   readonly workspaceSetupAgentStarts = new WorkspaceSetupAgentStartHolds()
 }

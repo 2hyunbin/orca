@@ -1,3 +1,4 @@
+import { createSetupCompletionObservation } from '../../orchestration/setup-completion-signal'
 import { OrcaRuntimeWithInvalidateAllHandlesForPty } from './pty-handle-invalidation'
 import type { PtyIncarnationId } from '../../../../shared/pty-incarnation'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -31,6 +32,7 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
     binding?: {
       tabId: string
       leafId: string
+      setupCompletionToken?: string
       incarnationId?: PtyIncarnationId
       /** Handle allocated for the replacement incarnation, when one is known. */
       terminalHandle?: string
@@ -67,6 +69,8 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
       existingPty.incarnationId !== null &&
       existingPty.incarnationId !== binding.incarnationId
     if (incarnationChanged || pendingReplacementMatches) {
+      this.setupCompletionTokenByPtyId.get(ptyId)?.fail(new Error('terminal_handle_stale'))
+      this.setupCompletionTokenByPtyId.delete(ptyId)
       // A reconnect can register a replacement before inventory reports its exported handle.
       // Drop every alias for the predecessor; a newly preallocated handle is retained only when
       // the caller can prove it is the replacement's handle.
@@ -113,6 +117,12 @@ export abstract class OrcaRuntimeWithRegisterPty extends OrcaRuntimeWithInvalida
         : {}),
       ...(binding?.incarnationId ? { incarnationId: binding.incarnationId } : {})
     })
+    if (binding?.setupCompletionToken && !this.setupCompletionTokenByPtyId.has(ptyId)) {
+      const observed = createSetupCompletionObservation(binding.setupCompletionToken)
+      this.setupCompletionTokenByPtyId.set(ptyId, observed)
+      observed.scan(this.recentPtyOutputById.get(ptyId)?.read() ?? '')
+      this.workspaceSetupAgentStarts.observe(worktreeId, () => observed.completion)
+    }
     const hostScope = this.getOrchestrationCompatibilityHostScope(pty)
     if (paneKey && binding?.incarnationId && hostScope) {
       this._orchestrationDb?.retainReplacedWorkerTerminalResources({

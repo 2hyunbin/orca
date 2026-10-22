@@ -111,19 +111,19 @@ export async function prepareStructuredAgentSessionCreateForWorktree(args: {
     fields: attachFingerprintFields({ ...resolved, envelope: args.envelope })
   })
   host ??= await args.ensureHost()
-  const priorOperation =
-    args.atRest === undefined
-      ? null
-      : host.deps.store.getOperationRow(args.caller.callerKey, args.envelope.clientOperationId)
-  // A capability update cannot change the contract of an already-recorded create.
+  const priorOperation = host.deps.store.getOperationRow(
+    args.caller.callerKey,
+    args.envelope.clientOperationId
+  )
+  // Recorded operations retain their contract across capability and setup changes.
   const legacyReplay =
     args.firstMessage === undefined &&
     args.options === undefined &&
     priorOperation?.fingerprint === attachFingerprint
   const atRest =
-    args.atRest !== undefined &&
-    (priorOperation?.fingerprint === args.envelope.payloadFingerprint ||
-      (args.atRest === true && !legacyReplay))
+    priorOperation?.fingerprint === args.envelope.payloadFingerprint ||
+    ((args.atRest === true || host.deps.setupHold?.(resolved.location.workspaceId) != null) &&
+      !legacyReplay)
   const hostFingerprint = atRest ? args.envelope.payloadFingerprint : attachFingerprint
   if (atRest && args.options) {
     const refusal = structuredAgentSessionOptionOverridesRefusal(
@@ -201,6 +201,41 @@ export async function commitStructuredAgentSessionCreate(args: {
   const { prepared } = args
   const tab = prepared.tab
   const placedByWindow = args.placedByWindow ? { placedByWindow: true } : {}
+  const publishTab = tab
+    ? async () => {
+        if (
+          ORCA_LAYOUT_OWNER_IS_MAIN &&
+          structuredAgentSessionClosedBeforeCreate(prepared.attachParams.envelope.sessionId)
+        ) {
+          return
+        }
+        try {
+          await args.runtime.publishStructuredAgentSessionTab({
+            workspaceId: tab.workspaceId,
+            sessionId: prepared.attachParams.envelope.sessionId,
+            agent: tab.agent,
+            activate: args.activate,
+            ...placedByWindow,
+            ...(prepared.attachParams.surfaceTabId
+              ? { tabId: prepared.attachParams.surfaceTabId }
+              : {})
+          })
+        } catch (error) {
+          prepared.host.deps.logger.warn('publishing the tab of a created chat failed', {
+            scope: 'create-tab-publication',
+            sessionId: prepared.attachParams.envelope.sessionId,
+            error
+          })
+          throw new AgentSessionRefusalError(
+            refuse(
+              'agent_session_operation_unknown',
+              { reason: 'tabUnconfirmed' },
+              'The chat may have been created, but its tab could not be confirmed.'
+            )
+          )
+        }
+      }
+    : undefined
   if (prepared.atRest) {
     return prepared.host.create(args.caller, prepared.attachParams, {
       ...prepared.atRest,
@@ -208,69 +243,14 @@ export async function commitStructuredAgentSessionCreate(args: {
       ...(prepared.hostLaunchDirectory
         ? { hostLaunchDirectory: prepared.hostLaunchDirectory }
         : {}),
-      ...(tab
-        ? {
-            // A chat closed while it was being made gets no tab to show before main closes it.
-            publishTab: () =>
-              ORCA_LAYOUT_OWNER_IS_MAIN &&
-              structuredAgentSessionClosedBeforeCreate(prepared.attachParams.envelope.sessionId)
-                ? Promise.resolve()
-                : args.runtime.publishStructuredAgentSessionTab({
-                    workspaceId: tab.workspaceId,
-                    sessionId: prepared.attachParams.envelope.sessionId,
-                    agent: tab.agent,
-                    activate: args.activate,
-                    ...placedByWindow,
-                    ...(prepared.attachParams.surfaceTabId
-                      ? { tabId: prepared.attachParams.surfaceTabId }
-                      : {})
-                  })
-          }
-        : {})
+      ...(publishTab ? { publishTab } : {})
     })
   }
-  const result = await prepared.host.attach(args.caller, prepared.attachParams, {
+  return prepared.host.attach(args.caller, prepared.attachParams, {
     ...(prepared.hostLaunchDirectory ? { hostLaunchDirectory: prepared.hostLaunchDirectory } : {}),
-    ...(prepared.catalogModels ? { catalogModels: prepared.catalogModels } : {})
+    ...(prepared.catalogModels ? { catalogModels: prepared.catalogModels } : {}),
+    ...(publishTab ? { publishTab } : {})
   })
-  if (!result.ok || !prepared.tab) {
-    return result
-  }
-  // A chat closed while it was being made gets no tab to show before main closes it.
-  if (
-    ORCA_LAYOUT_OWNER_IS_MAIN &&
-    structuredAgentSessionClosedBeforeCreate(result.value.sessionId)
-  ) {
-    return result
-  }
-  const surfaceTabId = prepared.attachParams.surfaceTabId
-  try {
-    await args.runtime.publishStructuredAgentSessionTab({
-      workspaceId: prepared.tab.workspaceId,
-      sessionId: result.value.sessionId,
-      agent: prepared.tab.agent,
-      activate: args.activate,
-      ...placedByWindow,
-      ...(surfaceTabId ? { tabId: surfaceTabId } : {})
-    })
-  } catch (error) {
-    prepared.host.deps.logger.warn('publishing the tab of a created chat failed', {
-      scope: 'create-tab-publication',
-      sessionId: result.value.sessionId,
-      error
-    })
-    return {
-      ok: false,
-      refusal: refuse(
-        'agent_session_operation_unknown',
-        { reason: 'tabUnconfirmed' },
-        'The chat may have been created, but its tab could not be confirmed.'
-      )
-    }
-  }
-  // Read after publishing, which is what gives the chat its tab.
-  const tabId = prepared.host.getSessionTabId?.(result.value.sessionId)
-  return tabId ? { ...result, value: { ...result.value, tabId } } : result
 }
 
 export async function createStructuredAgentSessionForWorktree(args: {

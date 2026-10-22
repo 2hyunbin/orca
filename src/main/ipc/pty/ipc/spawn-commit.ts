@@ -73,6 +73,7 @@ async function commitReservedPtyIpcSpawn(ctx: PtyIpcSpawnState): Promise<PtySpaw
         ? {
             tabId: args.tabId,
             leafId: ctx.metadataLeafId,
+            setupCompletionToken: ctx.spawnEnv?.ORCA_SETUP_COMPLETION_TOKEN,
             ...(ctx.preAllocatedHandle ? { terminalHandle: ctx.preAllocatedHandle } : {}),
             ...(ctx.result.incarnationId ? { incarnationId: ctx.result.incarnationId } : {}),
             ...(agentLaunchAuthority ? { agentLaunchAuthority } : {}),

@@ -167,7 +167,8 @@ describe('registerPtyHandlers', () => {
       cwd: '/repo',
       tabId: 'tab-1',
       leafId,
-      worktreeId: 'wt-1'
+      worktreeId: 'wt-1',
+      env: { ORCA_SETUP_COMPLETION_TOKEN: 'host-setup-token' }
     })
 
     // Why: #7587 — the runtime can only back a stalled mobile create if the spawn threads {tabId, leafId}.
@@ -175,7 +176,12 @@ describe('registerPtyHandlers', () => {
       expect.any(String),
       'wt-1',
       null,
-      { tabId: 'tab-1', leafId, incarnationId: expect.any(String) },
+      {
+        tabId: 'tab-1',
+        leafId,
+        incarnationId: expect.any(String),
+        setupCompletionToken: 'host-setup-token'
+      },
       false
     )
   })

@@ -57,6 +57,7 @@ type RuntimeLocalWorktreeCreateArgs<T> = {
   ) => Promise<RemoteFetchResult>
   fetchRemote: (path: string, remote: string, options?: LocalGitExecOptions) => Promise<void>
   onWorktreeMetadataPersisted: (worktree: Worktree) => T
+  preparation?: PreparationRearmHolder
   rearm: PreparationRearmHolder
   timing: WorktreeCreateTimingRecorder
 }
@@ -174,6 +175,9 @@ async function performRuntimeLocalWorktreeCreate<T>(args: RuntimeLocalWorktreeCr
     candidate.worktreePath,
     worktreeGitOptions
   )
+  if (args.preparation) {
+    args.preparation.fire = releaseInFlightHold
+  }
   try {
     const git = await createRuntimeLocalGitWorktree({
       request,
@@ -210,7 +214,6 @@ async function performRuntimeLocalWorktreeCreate<T>(args: RuntimeLocalWorktreeCr
       effectiveCreatedWithAgent: args.createdWithAgent,
       localWorktreeGitOptions: worktreeGitOptions,
       onMetadataPersisted: (worktree) => {
-        releaseInFlightHold()
         return args.onWorktreeMetadataPersisted(worktree)
       },
       timing: args.timing
@@ -223,6 +226,8 @@ async function performRuntimeLocalWorktreeCreate<T>(args: RuntimeLocalWorktreeCr
       ...(base.baseFallback ? { baseFallback: base.baseFallback } : {})
     }
   } finally {
-    releaseInFlightHold()
+    if (!args.preparation) {
+      releaseInFlightHold()
+    }
   }
 }

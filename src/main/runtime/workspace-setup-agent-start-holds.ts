@@ -1,3 +1,4 @@
+import type { prepareRuntimeLocalWorktreeSetup } from './runtime-local-worktree-setup'
 // A chat created with a workspace whose project waits for setup starts its agent once setup ends.
 //
 // The hold is the setup completion observation itself, kept only in memory and bounded by the same
@@ -10,7 +11,10 @@ const SETUP_WAIT_TIMEOUT_MS = 60_000
 export type WorkspaceSetupCompletion = (signal: AbortSignal) => Promise<unknown>
 
 export class WorkspaceSetupAgentStartHolds {
-  private readonly held = new Map<string, Promise<void>>()
+  private readonly held = new Map<
+    string,
+    { released: Promise<void>; complete: (completion: WorkspaceSetupCompletion | null) => void }
+  >()
 
   /** Holds agent starts in the workspace from now; `release` names what ends the hold, if anything. */
   hold(worktreeId: string): (completion: WorkspaceSetupCompletion | null) => void {
@@ -24,12 +28,11 @@ export class WorkspaceSetupAgentStartHolds {
       ended.signal.addEventListener('abort', () => resolve(), { once: true })
     }).finally(() => {
       clearTimeout(timer)
-      if (this.held.get(worktreeId) === released) {
+      if (this.held.get(worktreeId)?.released === released) {
         this.held.delete(worktreeId)
       }
     })
-    this.held.set(worktreeId, released)
-    return (completion) => {
+    const complete = (completion: WorkspaceSetupCompletion | null) => {
       if (!completion) {
         ended.abort()
         return
@@ -38,10 +41,29 @@ export class WorkspaceSetupAgentStartHolds {
         .catch(() => undefined)
         .then(() => ended.abort())
     }
+    this.held.set(worktreeId, { released, complete })
+    return complete
+  }
+
+  holdPrepared(
+    worktreeId: string,
+    prepared: Awaited<ReturnType<typeof prepareRuntimeLocalWorktreeSetup>>
+  ): void {
+    const { setup, inProcessCompletion, waitForSetup } = prepared
+    if (waitForSetup && (setup || inProcessCompletion)) {
+      this.hold(worktreeId)
+      if (inProcessCompletion) {
+        this.observe(worktreeId, () => inProcessCompletion)
+      }
+    }
+  }
+
+  observe(worktreeId: string, completion: WorkspaceSetupCompletion | null): void {
+    this.held.get(worktreeId)?.complete(completion)
   }
 
   /** What an agent start in the workspace waits on first; null when nothing holds it. */
   pending(worktreeId: string): Promise<void> | null {
-    return this.held.get(worktreeId) ?? null
+    return this.held.get(worktreeId)?.released ?? null
   }
 }

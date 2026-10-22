@@ -1,5 +1,6 @@
 import {
   isAgentSessionWireRefusalCode,
+  isAgentSessionRefusalError,
   refuse,
   refuseUnclassified,
   withAgentSessionRefusalFacts,
@@ -77,11 +78,12 @@ export function failedAcquisitionSettlement(
     }
     return { exitProof: 'unproven', outcome: { status: 'failed', ...outcome } }
   }
-  const exitProof = isAgentSessionPreSpawnError(error)
-    ? 'processless'
-    : error instanceof AgentSessionAcquisitionRootExitObservedError
-      ? 'root-exit-observed'
-      : 'exit-proven'
+  const exitProof =
+    isAgentSessionPreSpawnError(error) || isAgentSessionRefusalError(error)
+      ? 'processless'
+      : error instanceof AgentSessionAcquisitionRootExitObservedError
+        ? 'root-exit-observed'
+        : 'exit-proven'
   const raw = error instanceof Error ? error.message : String(error)
   const details = failedAcquisitionDetails(error)
   const message =
@@ -94,9 +96,13 @@ export function failedAcquisitionSettlement(
     exitProof,
     outcome: {
       status: 'failed',
-      code: 'agent_session_operation_invalid',
-      ...(details ? { details } : {}),
-      message
+      ...(isAgentSessionRefusalError(error)
+        ? error.refusal
+        : {
+            code: 'agent_session_operation_invalid' as const,
+            ...(details ? { details } : {}),
+            message
+          })
     }
   }
 }

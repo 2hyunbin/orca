@@ -76,12 +76,16 @@ it.each([
     prompt: 'fix the build',
     startsAtCreation: true
   },
-  { name: 'a bare launch from the CLI starts', caller: CLI, startsAtCreation: true }
+  { name: 'a bare launch from the CLI waits', caller: CLI, startsAtCreation: false }
 ])('$name', async ({ caller, prompt, startsAtCreation }) => {
   const result = await launch(caller, prompt)
 
   expect(result.outcome).toMatchObject({ kind: 'structured', sessionId: SESSION })
   expect(rig.store.getRecord(SESSION)).toBeDefined()
   // At rest, nothing is spawned until the chat's first message.
-  expect(rig.adapter.acquire.mock.calls.length > 0).toBe(startsAtCreation)
+  if (startsAtCreation) {
+    await vi.waitFor(() => expect(rig.adapter.acquire).toHaveBeenCalledOnce())
+  } else {
+    expect(rig.adapter.acquire).not.toHaveBeenCalled()
+  }
 })

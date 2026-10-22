@@ -1,3 +1,4 @@
+import { holdInFlightWorktreeCreate } from '../worktree-create-in-flight'
 /* eslint-disable max-lines */
 // Why: worktree create helpers (local + remote) split out of worktrees.ts; the cohesive create flow runs this file just over the per-file line limit.
 
@@ -1004,6 +1005,7 @@ export function createLocalWorktree(
   // create that fails after that point — include copy, push target, terminal startup — must still
   // arm the replacement. Fires exactly once, after startup on the success path.
   const rearm: PreparationRearmHolder = { fire: () => {} }
+  const preparation: PreparationRearmHolder = { fire: () => {} }
   return worktreeCreateGit
     .run(() =>
       performLocalWorktreeCreate(
@@ -1014,12 +1016,14 @@ export function createLocalWorktree(
         rearm,
         timing,
         runtime,
-        onWorkspaceCreated
+        onWorkspaceCreated,
+        preparation
       )
     )
     .finally(() => {
       // Closes the create's measured window first, so its own re-arm is not counted against it.
       timing.finish()
+      preparation.fire()
       rearm.fire()
     })
 }
@@ -1032,7 +1036,8 @@ async function performLocalWorktreeCreate(
   rearm: PreparationRearmHolder,
   timing: WorktreeCreateTimingRecorder,
   runtime: OrcaRuntimeService,
-  onWorkspaceCreated?: (worktreeId: string) => void
+  onWorkspaceCreated: ((worktreeId: string) => void) | undefined,
+  preparation: PreparationRearmHolder
 ): Promise<CreateWorktreeResult> {
   const settings = store.getSettings()
   const worktreePathSettings = getWorktreePathSettings(
@@ -1377,6 +1382,11 @@ async function performLocalWorktreeCreate(
     )
   }
 
+  preparation.fire = await holdInFlightWorktreeCreate(
+    repo.id,
+    worktreePath,
+    localWorktreeGitOptions
+  )
   assertAttachableParentWorkspace(
     store,
     args.parentWorkspace,
@@ -1742,6 +1752,10 @@ async function performLocalWorktreeCreate(
     }
   })
 
+  if (setup?.waitForAgentStartup) {
+    runtime.workspaceSetupAgentStarts.hold(worktree.id)
+  }
+  preparation.fire()
   // Startup resolves the new id before lifecycle notifications invalidate runtime caches.
   runtime?.invalidateWorktreeCatalog?.(repo.id)
   const stagedStartup = await timing.time('spawn_startup_terminal', () =>
@@ -1758,19 +1772,26 @@ async function performLocalWorktreeCreate(
   // Why: an automation's terminals start in main, so the window is handed none to launch.
   const provisionedByHost = Boolean(args.automationProvenance)
   if (provisionedByHost && (setup || defaultTabs?.tabs.length)) {
-    void runtime.provisionManagedWorktreeTerminals(
-      {
-        worktreeSelector: `id:${worktree.id}`,
-        worktreeId: worktree.id,
-        worktreePath: worktree.path,
-        ...(setup ? { setup } : {}),
-        ...(defaultTabs ? { defaultTabs } : {}),
-        hasStartupTerminal: false,
-        setupCommandPlatform: getSetupRunnerCommandPlatformForLaunch(setup, 'posix'),
-        surfaceOwner: false
-      },
-      worktree
-    )
+    void runtime
+      .provisionManagedWorktreeTerminals(
+        {
+          worktreeSelector: `id:${worktree.id}`,
+          worktreeId: worktree.id,
+          worktreePath: worktree.path,
+          ...(setup ? { setup } : {}),
+          ...(defaultTabs ? { defaultTabs } : {}),
+          hasStartupTerminal: false,
+          setupCommandPlatform: getSetupRunnerCommandPlatformForLaunch(setup, 'posix'),
+          surfaceOwner: false
+        },
+        worktree
+      )
+      .then((result) => {
+        if (!result.setupSpawned) {
+          runtime.workspaceSetupAgentStarts.observe(worktree.id, null)
+        }
+      })
+      .catch(() => runtime.workspaceSetupAgentStarts.observe(worktree.id, null))
   }
 
   notifyLineageRepos(

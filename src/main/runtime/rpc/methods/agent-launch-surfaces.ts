@@ -31,7 +31,6 @@ import { createStructuredAgentSessionForWorktree } from './structured-agent-sess
 import { commitStructuredAgentSessionLaunchPrompt } from './agent-launch-structured-prompt'
 import { deliverTerminalAgentLaunchPrompt } from './agent-launch-terminal-prompt'
 import { AgentLaunchSessionAlreadyExistsError } from '../../../../shared/agent-launch-session-already-exists'
-import { AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY } from '../../../../shared/agent-session-create-capabilities'
 import { createStructuredAgentSessionId } from '../../../../shared/structured-agent-session-create'
 import { toAgentLaunchPreferences } from '../../../../shared/agent-launch-preferences'
 import { paneIdentity } from '../../runtime-terminal-pane-identity'
@@ -66,19 +65,10 @@ export function agentLaunchSurfaceFactory(
       agent,
       options,
       sessionId: requested,
-      tabId,
-      withoutPrompt,
-      afterSetup
+      tabId
     }) => {
       const sessionId = requested ?? createStructuredAgentSessionId(agent, randomUUID)
       const seeded = narrowStructuredLaunchSeedOptions(options)
-      // A client that creates chats without starting them starts this one on its first message;
-      // a setup hold rests every chat, so even the launch's own prompt starts it after setup.
-      const atRest =
-        afterSetup === true ||
-        (withoutPrompt === true &&
-          context.clientCapabilities?.includes(AGENT_SESSION_CREATE_MESSAGE_RUNTIME_CAPABILITY) ===
-            true)
       const created = await createStructuredAgentSessionForWorktree({
         runtime: context.runtime,
         ensureHost: async () => {
@@ -102,7 +92,7 @@ export function agentLaunchSurfaceFactory(
         agent,
         ...(seeded ? { options: seeded } : {}),
         ...(tabId ? { tabId } : {}),
-        ...(atRest ? { atRest: true as const } : {}),
+        atRest: true,
         activate:
           !callerPresentsSurface &&
           (presentation === undefined || (presentation === 'focused' && movesHostWindow))
