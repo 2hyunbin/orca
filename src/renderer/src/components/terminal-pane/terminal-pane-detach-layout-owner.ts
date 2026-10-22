@@ -1,4 +1,5 @@
 import { sendLayoutCommandToOwner } from '@/runtime/layout-owner-command'
+import { useAppStore } from '@/store'
 import type {
   TerminalLeafMoveRequest,
   TerminalLeafMoveResult
@@ -35,12 +36,11 @@ export function moveLeafThroughLayoutOwner(
             result.tabId
               ? {
                   status: 'moved',
-                  // A server's main answers its own terminal id; the moved pane keeps the one
-                  // this desktop knows it by, and a terminal it started gets one from its frames.
+                  // A server's main answers its own terminal id: the pane takes the binding its
+                  // frame (drawn before this answer) gave it, else the one this desktop knew.
                   ptyId: origin.routed
-                    ? result.ptyId
-                      ? request.ptyId
-                      : null
+                    ? (drawnBinding(result.tabId, request.leafId) ??
+                      (result.ptyId ? request.ptyId : null))
                     : (result.ptyId ?? null),
                   tabId: result.tabId
                 }
@@ -63,4 +63,9 @@ export function moveLeafThroughLayoutOwner(
       fallBack()
     }
   })
+}
+
+/** The terminal a server's frame bound the moved pane to, in this desktop's ids. */
+function drawnBinding(tabId: string, leafId: string): string | null {
+  return useAppStore.getState().terminalLayoutsByTabId[tabId]?.ptyIdsByLeafId?.[leafId] ?? null
 }

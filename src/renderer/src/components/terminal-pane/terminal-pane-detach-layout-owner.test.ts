@@ -15,6 +15,7 @@ import {
   WORKTREE_ID
 } from './terminal-pane-tab-detach-fixture'
 import { LOCAL_LAYOUT_APPLY_ORIGIN } from '@/runtime/server-layout-apply-routes'
+import { useAppStore } from '@/store'
 
 const mocks = vi.hoisted(() => ({
   send: vi.fn<typeof sendLayoutCommandToOwner>(),
@@ -89,6 +90,32 @@ describe('moveLeafThroughLayoutOwner', () => {
     lastHandlers().apply({ tabId: 'tab-server', ptyId: 'server-pty-new' }, routed)
     await expect(unbound).resolves.toEqual({ status: 'moved', ptyId: null, tabId: 'tab-server' })
     expect(legacyMove).not.toHaveBeenCalled()
+  })
+
+  it('binds the moved pane to the terminal the server’s frame drew, not a stale one', async () => {
+    // The server respawned the pane's shell; its frame drew the new tab with the new handle.
+    useAppStore.setState({
+      terminalLayoutsByTabId: {
+        'tab-server': {
+          root: { type: 'leaf', leafId: LEAF_2 },
+          activeLeafId: LEAF_2,
+          expandedLeafId: null,
+          ptyIdsByLeafId: { [LEAF_2]: 'remote-new' }
+        }
+      }
+    })
+    const moving = moveLeafThroughLayoutOwner(request, { groupId: TARGET_GROUP_ID, index: 1 })
+    lastHandlers().apply(
+      { tabId: 'tab-server', ptyId: 'server-pty-new' },
+      { framesKey: 'env-1', routed: true }
+    )
+
+    await expect(moving).resolves.toEqual({
+      status: 'moved',
+      ptyId: 'remote-new',
+      tabId: 'tab-server'
+    })
+    useAppStore.setState({ terminalLayoutsByTabId: {} })
   })
 
   it('moves as today when main lacks the pane, or a paired server owns the workspace', async () => {
