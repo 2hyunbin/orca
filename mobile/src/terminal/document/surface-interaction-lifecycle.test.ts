@@ -11,45 +11,52 @@ import { terminalDocumentDouble } from './document-terminal-double.test-support'
 afterEach(() => vi.restoreAllMocks())
 
 describe('inactive terminal interaction ownership', () => {
-  it('restores the resting transform when suspension interrupts a pinch', () => {
-    const postToHost = vi.fn()
-    const scope = createTerminalDocumentScope({ postToHost })
-    const surface = document.createElement('div')
-    document.body.appendChild(surface)
-    scope.surface = surface
-    scope.term = terminalDocumentDouble().terminal
-    attachSurfaceEventHandlers(scope, surface)
-    const touch = (type: string, xs: number[]) => {
-      const event = new Event(type, { bubbles: true, cancelable: true })
-      Object.defineProperty(event, 'touches', {
-        value: xs.map((clientX, identifier) => ({
-          identifier,
-          clientX,
-          clientY: 10,
-          target: surface
-        }))
-      })
-      surface.dispatchEvent(event)
+  it.each(['suspension', 'touchcancel'] as const)(
+    'restores the resting transform when %s interrupts a pinch',
+    (interruption) => {
+      const postToHost = vi.fn()
+      const scope = createTerminalDocumentScope({ postToHost })
+      const surface = document.createElement('div')
+      document.body.appendChild(surface)
+      scope.surface = surface
+      scope.term = terminalDocumentDouble().terminal
+      attachSurfaceEventHandlers(scope, surface)
+      const touch = (type: string, xs: number[]) => {
+        const event = new Event(type, { bubbles: true, cancelable: true })
+        Object.defineProperty(event, 'touches', {
+          value: xs.map((clientX, identifier) => ({
+            identifier,
+            clientX,
+            clientY: 10,
+            target: surface
+          }))
+        })
+        surface.dispatchEvent(event)
+      }
+
+      touch('touchstart', [10, 30])
+      touch('touchmove', [10, 40])
+      expect(surface.style.transform).toContain('scale(1.5)')
+
+      if (interruption === 'suspension') {
+        handleMsg(scope, { type: 'set-interaction-active', active: false })
+        handleMsg(scope, { type: 'set-interaction-active', active: true })
+      } else {
+        touch('touchcancel', [])
+      }
+      touch('touchend', [])
+
+      expect(surface.style.transform).toBe('translate(0px,0px) scale(1)')
+      expect(scope.term.options.fontSize).toBe(13)
+      expect(postToHost.mock.calls.some(([message]) => message.type === 'font-scale-changed')).toBe(
+        false
+      )
+      touch('touchstart', [10, 30])
+      touch('touchmove', [10, 40])
+      expect(surface.style.transform).toContain('scale(1.5)')
+      surface.remove()
     }
-
-    touch('touchstart', [10, 30])
-    touch('touchmove', [10, 40])
-    expect(surface.style.transform).toContain('scale(1.5)')
-
-    handleMsg(scope, { type: 'set-interaction-active', active: false })
-    handleMsg(scope, { type: 'set-interaction-active', active: true })
-    touch('touchend', [])
-
-    expect(surface.style.transform).toBe('translate(0px,0px) scale(1)')
-    expect(scope.term.options.fontSize).toBe(13)
-    expect(postToHost.mock.calls.some(([message]) => message.type === 'font-scale-changed')).toBe(
-      false
-    )
-    touch('touchstart', [10, 30])
-    touch('touchmove', [10, 40])
-    expect(surface.style.transform).toContain('scale(1.5)')
-    surface.remove()
-  })
+  )
 
   it('releases cancelled gesture frames across repeated hide/show cycles', () => {
     const scope = createTerminalDocumentScope()

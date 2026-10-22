@@ -3,22 +3,10 @@ import { stopSurfaceTouchGestures } from './surface-touch-gestures'
 import { resetSmoothScrollOffset } from './normal-buffer-smooth-scroll'
 import { clearLongPress } from './tap-dispatch'
 import { stopEdgeScroll } from './selection-overlay'
-import { updateTransform } from './viewport-transform'
-import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 
 export function suspendSurfaceTouchGestures(scope: TerminalDocumentScope) {
-  const interruptedPinch = scope.touchGesture.isPinching
   stopSurfaceTouchGestures(scope)
   resetSmoothScrollOffset(scope)
-  if (interruptedPinch) {
-    scope.userScale = 1
-    scope.panX = 0
-    scope.panY = 0
-    if (scope.surface) {
-      updateTransform(scope)
-    }
-    emitKeyboardAvoidanceMetrics(scope)
-  }
   clearLongPress(scope)
   stopEdgeScroll(scope)
   scope.tapCandidate = null

@@ -4,6 +4,7 @@ import { cancelDocumentFrame, scheduleDocumentFrame } from './document-frame-reg
 import { touchesInRoot } from './document-host-seams'
 import { clampPan } from './fit-scale'
 import { notify } from './host-notify'
+import { emitKeyboardAvoidanceMetrics } from './keyboard-avoidance-metrics'
 import { attachSurfaceMouseClickDragHandler } from './mouse-click-drag'
 import { routeScrollLines, shouldRouteScrollToTerminalInput } from './mouse-input-encoding'
 import {
@@ -317,6 +318,7 @@ export function startSurfaceTouchGestures(scope: TerminalDocumentScope) {
 
 /** Ruling 21: the momentum loop, which would keep scrolling into the terminal that replaced it. */
 export function stopSurfaceTouchGestures(scope: TerminalDocumentScope) {
+  const interruptedPinch = scope.touchGesture.isPinching
   scope.touchGesture.active = false
   if (scope.touchGesture.momentumId !== null) {
     cancelDocumentFrame(scope, scope.touchGesture.momentumId)
@@ -325,4 +327,13 @@ export function stopSurfaceTouchGestures(scope: TerminalDocumentScope) {
   scope.touchGesture.velY = 0
   scope.touchGesture.accumDelta = 0
   scope.touchGesture.isPinching = false
+  if (interruptedPinch) {
+    scope.userScale = 1
+    scope.panX = 0
+    scope.panY = 0
+    if (scope.surface) {
+      updateTransform(scope)
+    }
+    emitKeyboardAvoidanceMetrics(scope)
+  }
 }
