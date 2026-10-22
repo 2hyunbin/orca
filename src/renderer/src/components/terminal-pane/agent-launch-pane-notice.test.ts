@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const CATALOG: Record<string, string> = {
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.notStarted': '智能体无法启动。',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.unconfirmed': '无法确认智能体已启动。',
-  'auto.components.terminal.pane.AgentLaunchPaneNotice.exitedDuringStart': '它在启动时退出了。'
+  'auto.components.terminal.pane.AgentLaunchPaneNotice.agent': '智能体',
+  'auto.components.terminal.pane.AgentLaunchPaneNotice.notStarted': '无法启动 {{agent}}。',
+  'auto.components.terminal.pane.AgentLaunchPaneNotice.unconfirmed':
+    '无法确认 {{agent}} 已启动。请先检查其终端，再重试。',
+  'auto.components.terminal.pane.AgentLaunchPaneNotice.exitedDuringStart':
+    '{{agent}} 在启动时退出了。',
+  'auto.components.terminal.pane.AgentLaunchPaneNotice.tryInTerminal':
+    '请在此文件夹的终端中运行它以查看原因，然后重试。'
 }
 vi.mock('@/i18n/i18n', () => ({
-  translate: (key: string, fallback: string) => CATALOG[key] ?? fallback
+  translate: (key: string, fallback: string, options?: { agent?: string }) =>
+    (CATALOG[key] ?? fallback).replaceAll('{{agent}}', options?.agent ?? '')
 }))
 
 const { agentLaunchPaneNoticeText, agentLaunchPaneOutcomeForLeaf } =
@@ -15,18 +21,23 @@ const { agentLaunchPaneNoticeText, agentLaunchPaneOutcomeForLeaf } =
 describe("the pane of a launch whose agent isn't running", () => {
   it("says it couldn't start, in the viewer's language, with a reason they can act on", () => {
     expect(
-      agentLaunchPaneNoticeText({ kind: 'not-started', code: 'agent_session_exited_during_start' })
-    ).toBe('智能体无法启动。 它在启动时退出了。')
+      agentLaunchPaneNoticeText(
+        { kind: 'not-started', code: 'agent_session_exited_during_start' },
+        'claude'
+      )
+    ).toBe('Claude 在启动时退出了。 请在此文件夹的终端中运行它以查看原因，然后重试。')
   })
 
   it('never shows a host error code', () => {
     expect(
       agentLaunchPaneNoticeText({ kind: 'not-started', code: 'agent_launch_pane_already_live' })
-    ).toBe('智能体无法启动。')
+    ).toBe('无法启动 智能体。 请在此文件夹的终端中运行它以查看原因，然后重试。')
   })
 
   it("says it can't confirm, never that it failed, when nobody knows", () => {
-    expect(agentLaunchPaneNoticeText({ kind: 'unconfirmed' })).toBe('无法确认智能体已启动。')
+    expect(agentLaunchPaneNoticeText({ kind: 'unconfirmed' })).toBe(
+      '无法确认 智能体 已启动。请先检查其终端，再重试。'
+    )
   })
 })
 

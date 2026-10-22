@@ -94,6 +94,7 @@ export function TerminalPaneSurface({
     renameInputRef,
     renameValue,
     renamingPaneId,
+    resolveAgentForLeaf,
     saveQuickCommand,
     searchOpen,
     searchStateRef,
@@ -124,6 +125,7 @@ export function TerminalPaneSurface({
   const paneOnClient = useAppStore(
     (state) => getKnownExecutionHostIdForWorktree(state, worktreeId) === LOCAL_EXECUTION_HOST_ID
   )
+  const activeAgentId = resolveAgentForLeaf(activePane?.leafId ?? null)
 
   return (
     <>
@@ -188,6 +190,7 @@ export function TerminalPaneSurface({
       <TerminalPaneCodexRestartPortals controller={controller} />
       <AgentLaunchPaneNoticePortal
         refusal={visibleLaunchRefusal}
+        agentId={activeAgentId}
         isActive={isActive}
         pane={activePane}
         tabId={tabId}
@@ -198,6 +201,7 @@ export function TerminalPaneSurface({
         ? createPortal(
             <TerminalErrorToast
               error={visibleTerminalError}
+              agentId={activeAgentId}
               paneOnClient={paneOnClient}
               onDismiss={dismissTerminalError}
               onRestartDaemon={() => daemonActions.setPending('restart')}

@@ -13,6 +13,7 @@ vi.mock('@/lib/client-environment-info', () => ({
 }))
 
 import { i18n } from '@/i18n/i18n'
+import { agentLaunchPaneNoticeText } from './agent-launch-pane-notice-text'
 
 import {
   TerminalErrorToast,
@@ -69,6 +70,31 @@ describe('isSshReconnectOwnedTerminalError', () => {
 })
 
 describe('humanizeTerminalError', () => {
+  it.each(['agent_session_exited_during_start', 'agent_launch_future_failure'])(
+    'renders startup reason %s with the same named, actionable copy as the pane',
+    (code) => {
+      const view = render(
+        React.createElement(TerminalErrorToast, {
+          error: `Error invoking remote method 'pty:spawn': Error: ${code}`,
+          agentId: 'codex',
+          paneOnClient: false,
+          onDismiss: vi.fn()
+        })
+      )
+      const text = view.container.textContent ?? ''
+      expect(text).toContain(agentLaunchPaneNoticeText({ kind: 'not-started', code }, 'codex'))
+      expect(text).toContain(
+        code === 'agent_session_exited_during_start'
+          ? 'Codex exited while starting.'
+          : "Codex couldn't start."
+      )
+      expect(text).toContain('Run it in a terminal in this folder to see why, then try again.')
+      expect(text).not.toContain(code)
+      expect(text).not.toContain('Error invoking')
+      expect(view.container.querySelector('a')).toBeNull()
+    }
+  )
+
   it('replaces the pane-owner-unverified code with actionable copy', () => {
     const humanized = humanizeTerminalError('terminal_pane_owner_unverified')
     expect(humanized).not.toContain('terminal_pane_owner_unverified')

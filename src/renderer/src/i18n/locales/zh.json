@@ -3465,12 +3465,14 @@
             "restoring": "正在恢复终端…"
           },
           "AgentLaunchPaneNotice": {
-            "commandNotFound": "在此计算机上找不到其命令。",
+            "agent": "智能体",
+            "commandNotFound": "无法启动 {{agent}}，因为在此计算机上找不到其命令。",
             "copyPrompt": "复制提示",
-            "exitedDuringStart": "它在启动时退出了。",
-            "notStarted": "智能体无法启动。",
-            "unconfirmed": "无法确认智能体已启动。",
-            "workspaceGone": "其工作区已不可用。"
+            "exitedDuringStart": "{{agent}} 在启动时退出了。",
+            "notStarted": "无法启动 {{agent}}。",
+            "tryInTerminal": "请在此文件夹的终端中运行它以查看原因，然后重试。",
+            "unconfirmed": "无法确认 {{agent}} 已启动。请先检查其终端，再重试。",
+            "workspaceGone": "无法启动 {{agent}}，因为其工作区已不可用。"
           },
           "TerminalSleepingPaneOverlay": {
             "pausedDetail": "由于主机意外停止，自动恢复已暂停。您的会话已保存。",
