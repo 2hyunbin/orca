@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import type { AiVaultSearchHit } from '../../../shared/ai-vault-search-types'
 import { searchHit } from '../../../shared/ai-vault-search-test-fixture'
 import { makePaneKey } from '../../../shared/stable-pane-id'
+import { buildPaletteTranscriptIndex } from './cmd-j/palette-transcript-structured-tabs'
 import type { OriginalPaneState } from './right-sidebar/ai-vault-original-pane'
+import {
+  buildAiVaultOriginalPaneIndex,
+  findOriginalAiVaultSessionPaneInIndex
+} from './right-sidebar/ai-vault-original-pane-index'
+import { aiVaultSearchHitToSession } from './right-sidebar/ai-vault-search-session'
 import { parseAiVaultSnippetMarks } from './right-sidebar/ai-vault-search-snippet-marks'
 import {
   fitPaletteTranscriptMatches,
@@ -63,12 +69,12 @@ describe('resolvePaletteTranscriptMatches', () => {
         ordinal: 0,
         complete: false,
         windows: [],
-        terminalTabId: 'term-b',
+        tabId: 'term-b',
         snippet: { text: 'fix the flaky test', ranges: [{ start: 8, end: 13 }] }
       },
       {
         worktreeId: 'wt-a',
-        terminalTabId: 'term-a',
+        tabId: 'term-a',
         snippet: null,
         ordinal: 2,
         complete: false,
@@ -93,8 +99,112 @@ describe('resolvePaletteTranscriptMatches', () => {
     ])
   })
 
+  it('emits each valid tab for a resumed provider session, folding split panes and preserving sidebar choice', () => {
+    const state = paneStateFor([
+      { tabId: 'term-a', worktreeId: 'wt-a', sessionId: 'same-session' },
+      { tabId: 'term-b', worktreeId: 'wt-b', sessionId: 'same-session' },
+      { tabId: 'closed', worktreeId: 'wt-a', sessionId: 'same-session' }
+    ])
+    state.tabsByWorktree['wt-a'] = state.tabsByWorktree['wt-a']?.filter(
+      (tab) => tab.id !== 'closed'
+    )
+    const splitLeaf = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    state.terminalLayoutsByTabId['term-a'] = {
+      root: {
+        type: 'split',
+        direction: 'horizontal',
+        first: { type: 'leaf', leafId: LEAF_ID },
+        second: { type: 'leaf', leafId: splitLeaf }
+      },
+      activeLeafId: LEAF_ID,
+      expandedLeafId: null
+    }
+    const splitKey = makePaneKey('term-a', splitLeaf)
+    state.agentStatusByPaneKey[splitKey] = makeAgentEntry('term-a', 'done', 0, {
+      paneKey: splitKey,
+      agentType: 'claude',
+      tabId: 'term-a',
+      worktreeId: 'wt-a',
+      providerSession: { key: 'session_id', id: 'same-session' }
+    })
+    const evidence = hit('same-session', 'a [[refresh]] here')
+    expect(
+      resolvePaletteTranscriptMatches([evidence], state).map((match) => [
+        match.worktreeId,
+        match.tabId
+      ])
+    ).toEqual([
+      ['wt-a', 'term-a'],
+      ['wt-b', 'term-b']
+    ])
+    expect(
+      findOriginalAiVaultSessionPaneInIndex(
+        buildAiVaultOriginalPaneIndex(state),
+        aiVaultSearchHitToSession(evidence, 'local')
+      )?.tabId
+    ).toBe('term-a')
+  })
+
   it('returns nothing when there are no hits', () => {
     expect(resolvePaletteTranscriptMatches([], paneStateFor([]))).toEqual([])
+  })
+
+  it('preserves unique legacy prompt fallback and exact provider precedence with a prepared index', () => {
+    const state = paneStateFor([
+      { tabId: 'legacy', worktreeId: 'workspace', sessionId: 'old' },
+      { tabId: 'exact', worktreeId: 'workspace', sessionId: 'current' }
+    ])
+    const legacy = state.agentStatusByPaneKey[makePaneKey('legacy', LEAF_ID)]
+    legacy.providerSession = undefined
+    legacy.prompt = 'Investigate the refresh race in the workspace'
+    const evidence = { ...hit('unknown', null), title: legacy.prompt }
+    expect(
+      resolvePaletteTranscriptMatches(
+        [evidence, { ...evidence, sessionId: 'current' }],
+        state,
+        '',
+        undefined,
+        buildPaletteTranscriptIndex(state)
+      ).map((match) => [match.tabId, match.ordinal])
+    ).toEqual([
+      ['legacy', 0],
+      ['exact', 1]
+    ])
+    const exact = state.agentStatusByPaneKey[makePaneKey('exact', LEAF_ID)]
+    exact.providerSession = undefined
+    exact.prompt = legacy.prompt
+    expect(
+      resolvePaletteTranscriptMatches(
+        [evidence],
+        state,
+        '',
+        undefined,
+        buildPaletteTranscriptIndex(state)
+      )
+    ).toEqual([])
+    legacy.providerSession = { key: 'session_id', id: 'different-session' }
+    expect(
+      resolvePaletteTranscriptMatches(
+        [evidence],
+        state,
+        '',
+        undefined,
+        buildPaletteTranscriptIndex(state)
+      ).map((match) => match.tabId)
+    ).toEqual(['exact'])
+  })
+
+  it('folds only within a host when identical workspace and tab ids appear on several hosts', () => {
+    const local = resolvePaletteTranscriptMatches(
+      [hit('session', null)],
+      paneStateFor([{ tabId: 'terminal', worktreeId: 'workspace', sessionId: 'session' }])
+    )[0]
+    const remote = { ...local, executionHostId: 'runtime:remote' as const, ordinal: 1 }
+    const proof = { text: 'verified', ranges: [{ start: 0, end: 8 }] }
+    expect(fitPaletteTranscriptMatches([local, remote], new Map([[1, proof]]))).toEqual([
+      local,
+      { ...remote, snippet: proof, complete: true }
+    ])
   })
 })
 

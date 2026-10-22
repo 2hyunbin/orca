@@ -4,6 +4,7 @@ import {
   eligibleSessionsKey,
   type AiVaultSearchEligibleSessions
 } from '../../shared/ai-vault-search-eligible-sessions'
+import SyncDatabase from '../sqlite/sync-database'
 import { SessionSearchEngine } from './session-search-engine'
 import {
   addSyntheticSession,
@@ -82,6 +83,29 @@ it('keeps agent identity exact and distinguishes absent from empty eligibility',
   expect(harness.engine.search({ query: 'needle' }).hits).toHaveLength(2)
 })
 
+it('preserves eligible fork sessions when requested, including operator-only results and paging', async () => {
+  harness = await openSessionSearchHarness('ss-eligible-open-forks')
+  for (let id = 1; id <= 3; id++) {
+    addSyntheticSession(harness.db, { id, text: 'a needle here', rows: id })
+  }
+  markFork(harness.db, [1, 2, 3], 'same-opening')
+  const eligibleSessions = providers('1', '2')
+  for (const query of ['needle', 'repo:app']) {
+    const request = { query, eligibleSessions }
+    expect(harness.engine.search(request).hits.map((hit) => hit.sessionId)).toEqual(['2'])
+    expect(harness.engine.search({ query }).hits.map((hit) => hit.sessionId)).toEqual(['3'])
+    const openTabs = harness.engine.search({ ...request, preserveForks: true })
+    expect(openTabs.hits.map((hit) => hit.sessionId).sort()).toEqual(['1', '2'])
+    expect(openTabs.hits.every((hit) => hit.duplicateCount === undefined)).toBe(true)
+    const first = harness.engine.search({ ...request, preserveForks: true, limit: 1 })
+    const cursor = first.page.cursor ?? undefined
+    expect(cursor).toBeTruthy()
+    const second = harness.engine.search({ ...request, preserveForks: true, limit: 1, cursor })
+    expect(new Set([...first.hits, ...second.hits].map((hit) => hit.sessionId)).size).toBe(2)
+    expect(() => harness!.engine.search({ ...request, cursor })).toThrow('different-query')
+  }
+})
+
 it('makes typo visibility and repair decisions within eligible sessions', async () => {
   harness = await openSessionSearchHarness('ss-eligible-typos')
   addSyntheticSession(harness.db, { id: 1, text: 'a refersh token in the closed history here' })
@@ -129,9 +153,9 @@ it('keeps provider-only queries in SQL even with a large history and eligibility
   const register = harness.db.function.bind(harness.db)
   const scalar = vi.fn()
   vi.spyOn(harness.db, 'function').mockImplementation((name, callback) => {
-    register(name, (...values) => {
+    register(name, (agent, title) => {
       scalar()
-      return callback(...values)
+      return callback(agent, title)
     })
   })
   const engine = new SessionSearchEngine(harness.db)
@@ -187,9 +211,127 @@ it('keeps the wire restriction optional, bounded, and intact across parsing', ()
       .eligibleSessions
   ).toEqual(providers('1'))
   expect(
+    AiVaultSearchRequestSchema.parse({
+      query: 'needle',
+      preserveForks: true,
+      includeOriginalExcerpt: true
+    })
+  ).toMatchObject({ preserveForks: true, includeOriginalExcerpt: true })
+  expect(
     AiVaultSearchRequestSchema.safeParse({
       query: 'needle',
       eligibleSessions: providers(...Array.from({ length: 2049 }, (_, index) => String(index)))
     }).success
   ).toBe(false)
+})
+
+it('evaluates legacy eligibility only on FTS-matched sessions, including typo visibility', async () => {
+  const register = SyncDatabase.prototype.function
+  const eligibility = vi.fn()
+  vi.spyOn(SyncDatabase.prototype, 'function').mockImplementation(function (
+    this: SyncDatabase,
+    name,
+    callback
+  ) {
+    register.call(this, name, (agent, title) => {
+      eligibility()
+      return callback(agent, title)
+    })
+  })
+  harness = await openSessionSearchHarness('ss-legacy-scaling')
+  const engine = harness.engine
+  harness.db.exec('BEGIN')
+  for (let id = 1; id <= 3000; id++) {
+    addSyntheticSession(harness.db, {
+      id,
+      rows: id <= 2 ? 20 : 1,
+      text: id <= 2 ? 'a raremarker refresh here' : 'ordinary history'
+    })
+    harness.db
+      .prepare('UPDATE sessions SET title = ? WHERE id = ?')
+      .run(`Distinct task ${id}: Build a useful and complex feature`, id)
+  }
+  harness.db.exec('COMMIT')
+  const eligibleSessions: AiVaultSearchEligibleSessions = {
+    providers: [],
+    prompts: Array.from({ length: 20 }, (_, pane) => ({
+      agent: 'claude',
+      prompts: Array.from(
+        { length: 20 },
+        (_, entry) => `Distinct task ${pane * 20 + entry + 1}: Build a useful and complex feature`
+      )
+    }))
+  }
+  for (const query of ['raremarker', 'refersh']) {
+    eligibility.mockClear()
+    expect(
+      engine
+        .search({ query, eligibleSessions })
+        .hits.map((hit) => hit.sessionId)
+        .sort()
+    ).toEqual(['1', '2'])
+    expect(eligibility.mock.calls.length).toBeGreaterThan(0)
+    expect(eligibility.mock.calls.length).toBeLessThan(15)
+  }
+})
+
+it('pages every distinct eligible provider beyond the archive candidate default', async () => {
+  harness = await openSessionSearchHarness('ss-eligible-large-page')
+  harness.db.exec('BEGIN')
+  for (let id = 1; id <= 725; id++) {
+    addSyntheticSession(harness.db, { id, text: 'a needle here' })
+  }
+  harness.db.exec('COMMIT')
+  const request = {
+    query: 'needle',
+    limit: 100,
+    preserveForks: true,
+    eligibleSessions: providers(...Array.from({ length: 725 }, (_, index) => String(index + 1)))
+  }
+  const ids: string[] = []
+  let cursor: string | undefined
+  do {
+    const page = harness.engine.search({ ...request, cursor })
+    ids.push(...page.hits.map((hit) => hit.sessionId))
+    cursor = page.page.cursor ?? undefined
+  } while (cursor)
+  expect(ids).toHaveLength(725)
+  expect(new Set(ids).size).toBe(725)
+})
+
+it('prepares independent exact and symmetric-prefix eligibility across engines and repeated requests', async () => {
+  harness = await openSessionSearchHarness('ss-eligible-preparation')
+  const secondEngine = new SessionSearchEngine(harness.db)
+  const title = 'A particularly long conversation title'
+  for (let id = 1; id <= 4; id++) {
+    addSyntheticSession(harness.db, { id, text: 'a needle here' })
+  }
+  const titles = [title, title.slice(0, 24), `${title} with more detail`, 'short']
+  titles.forEach((value, index) =>
+    harness!.db.prepare('UPDATE sessions SET title = ? WHERE id = ?').run(value, index + 1)
+  )
+  const long = {
+    providers: [],
+    prompts: [{ agent: 'claude' as const, prompts: [title, `${title} with more detail`] }]
+  }
+  const short = {
+    providers: [],
+    prompts: [{ agent: 'claude' as const, prompts: ['short', 'sho'] }]
+  }
+  const search = (engine: SessionSearchEngine, eligibleSessions: AiVaultSearchEligibleSessions) =>
+    engine
+      .search({ query: 'needle', eligibleSessions })
+      .hits.map((hit) => hit.sessionId)
+      .sort()
+  expect(search(harness.engine, long)).toEqual(['1', '2', '3'])
+  expect(search(secondEngine, short)).toEqual(['4'])
+  expect(search(harness.engine, long)).toEqual(['1', '2', '3'])
+  expect(
+    search(secondEngine, {
+      providers: [],
+      prompts: [...long.prompts, { agent: 'claude', prompts: [title.slice(0, 24)] }]
+    })
+  ).toEqual([])
+  expect(search(harness.engine, short)).toEqual(['4'])
+  expect(harness.engine.search({ query: 'needle' }).hits).toHaveLength(4)
 })

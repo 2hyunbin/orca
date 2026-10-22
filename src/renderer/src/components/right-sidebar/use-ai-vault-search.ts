@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   AiVaultSearchHit,
-  AiVaultSearchRequest,
-  AiVaultSearchResponse
+  AiVaultSearchRequest
 } from '../../../../shared/ai-vault-search-types'
 import {
   ALL_EXECUTION_HOSTS_SCOPE,
@@ -22,20 +21,8 @@ import { isWebClientLocation } from '@/lib/web-client-location'
 import { useAppStore } from '@/store'
 import { aiVaultSearchHitToSession } from './ai-vault-search-session'
 
-type SearchIdentity = {
-  request: AiVaultSearchRequest | null
-  scope: ExecutionHostScope | null
-  policyKey: string
-  revision: number
-}
-
-type SearchPage = {
-  identity: SearchIdentity
-  hits: AiVaultSearchHit[]
-  response: AiVaultSearchResponse | null
-  error: boolean
-  loading: boolean
-}
+export { useAiVaultSearchPages } from './use-ai-vault-search-pages'
+import { useAiVaultSearchPages } from './use-ai-vault-search-pages'
 
 export function useAiVaultSearch(
   request: AiVaultSearchRequest | null,
@@ -43,95 +30,10 @@ export function useAiVaultSearch(
   policyKey: string,
   debounceMs = 250
 ) {
-  const [page, setPage] = useState<SearchPage | null>(null)
-  const [revision, setRevision] = useState(0)
-  const loadPage = useRef<((cursor: string) => void) | null>(null)
-  const identity = useMemo(
-    () => ({ request, scope, policyKey, revision }),
-    [request, scope, policyKey, revision]
-  )
-
-  useEffect(() => {
-    const { request, scope } = identity
-    if (!request || !scope) {
-      return
-    }
-    let cancelled = false
-    let pending = false
-    async function run(cursor?: string) {
-      if (pending || cancelled || !request || !scope) {
-        return
-      }
-      pending = true
-      setPage((previous) => ({
-        identity,
-        hits: cursor && previous?.identity === identity ? previous.hits : [],
-        response: null,
-        error: false,
-        loading: true
-      }))
-      try {
-        let response = await window.api.aiVault.searchSessions({ ...request, cursor }, scope)
-        let append = Boolean(cursor)
-        if (cancelled) {
-          return
-        }
-        if (response.kind === 'stale-cursor') {
-          append = false
-          response = await window.api.aiVault.searchSessions(request, scope)
-        }
-        if (cancelled) {
-          return
-        }
-        setPage((previous) => ({
-          identity,
-          hits:
-            response.kind === 'results'
-              ? [
-                  ...(append && previous?.identity === identity ? previous.hits : []),
-                  ...response.hits
-                ]
-              : [],
-          response,
-          error: false,
-          loading: false
-        }))
-      } catch {
-        if (!cancelled) {
-          setPage({ identity, hits: [], response: null, error: true, loading: false })
-        }
-      } finally {
-        pending = false
-      }
-    }
-    loadPage.current = (cursor) => void run(cursor)
-    const timer = setTimeout(() => void run(), debounceMs)
-    return () => {
-      cancelled = true
-      loadPage.current = null
-      clearTimeout(timer)
-    }
-  }, [identity, debounceMs])
-
-  const current = page?.identity === identity ? page : null
-  return {
-    hits: current?.hits ?? [],
-    response: current?.response ?? null,
-    error: current?.error ?? false,
-    loading: Boolean(request && scope && (!current || current.loading)),
-    removeHit: (hit: AiVaultSearchHit) =>
-      setPage((previous) =>
-        previous?.identity === identity
-          ? { ...previous, hits: previous.hits.filter((entry) => entry !== hit) }
-          : previous
-      ),
-    retry: () => setRevision((value) => value + 1),
-    loadMore: () => {
-      if (current?.response?.kind === 'results' && current.response.page.cursor) {
-        loadPage.current?.(current.response.page.cursor)
-      }
-    }
-  }
+  const requests = useMemo(() => [{ request, scope }], [request, scope])
+  const { pages, retry } = useAiVaultSearchPages(requests, policyKey, debounceMs)
+  const { hits, response, error, loading, removeHit, loadMore } = pages[0]
+  return { hits, response, error, loading, removeHit, loadMore, retry }
 }
 
 // Answers that a retry from this client cannot change; `not-ready` can, so it keeps searching.

@@ -2,6 +2,7 @@ import type SyncDatabase from '../sqlite/sync-database'
 import { ownRetainedString } from '../../shared/own-retained-string'
 import {
   paletteTranscriptLiteralOccurrences,
+  type PaletteTranscriptSourceBoundaries,
   preparePaletteTranscriptProofQuery
 } from '../../shared/palette-transcript-literal'
 import type { SessionSearchScope } from './session-search-engine-types'
@@ -10,14 +11,24 @@ export const ORIGINAL_EXCERPT_POINTS = 512
 // Indexed conversation chunks are at most 8,000 code units; tool rows are smaller.
 const INDEXED_COLUMN_POINTS = 8000
 
-type Context = { text: string; anchors: number; span: number; start: number }
+type Context = PaletteTranscriptSourceBoundaries & {
+  text: string
+  anchors: number
+  span: number
+  start: number
+}
 
 /** Prefer context the renderer can prove, while preserving one contiguous source slice. */
-export function selectOriginalExcerpt(text: string, query: string): Context {
+export function selectOriginalExcerpt(
+  text: string,
+  query: string,
+  boundaries: PaletteTranscriptSourceBoundaries = {}
+): Context {
   const points = /[\u{10000}-\u{10FFFF}]/u.test(text) ? Array.from(text) : null
   let occurrences = paletteTranscriptLiteralOccurrences(
     text,
-    preparePaletteTranscriptProofQuery(query)
+    preparePaletteTranscriptProofQuery(query),
+    boundaries
   )
   if (points) {
     const pointOffsets = new Int32Array(text.length + 1)
@@ -60,6 +71,8 @@ export function selectOriginalExcerpt(text: string, query: string): Context {
         ? points.slice(start, start + ORIGINAL_EXCERPT_POINTS).join('')
         : text.slice(start, start + ORIGINAL_EXCERPT_POINTS)
     ),
+    startsMessage: boundaries.startsMessage === true && start === 0,
+    endsMessage: boundaries.endsMessage === true && start + ORIGINAL_EXCERPT_POINTS >= length,
     anchors: best.anchors,
     span: best.span,
     start
@@ -73,14 +86,14 @@ export function sessionSearchOriginalExcerpt(
   rowid: number,
   query: string,
   retentionCutoffMs: number | null
-): { text: string } | undefined {
+): ({ text: string } & PaletteTranscriptSourceBoundaries) | undefined {
   const columns =
     scope === 'conversation'
       ? ['user_text', 'assistant_text']
       : ['user_text', 'assistant_text', 'tool_text']
   const row = db
     .prepare(
-      `SELECT ${columns.map((column) => `substr(f.${column}, 1, ${INDEXED_COLUMN_POINTS}) AS ${column}`).join(', ')}
+      `SELECT m.source_boundaries, ${columns.map((column) => `substr(f.${column}, 1, ${INDEXED_COLUMN_POINTS}) AS ${column}`).join(', ')}
      FROM messages_fts f
      JOIN messages m ON m.id = f.rowid
      JOIN sessions s ON s.id = m.session_row_id
@@ -92,11 +105,16 @@ export function sessionSearchOriginalExcerpt(
     return undefined
   }
   let best: Context | undefined
-  for (const value of Object.values(row)) {
+  for (const column of columns) {
+    const value = row[column]
     if (typeof value !== 'string' || !value) {
       continue
     }
-    const context = selectOriginalExcerpt(value, query)
+    const flags = typeof row.source_boundaries === 'number' ? row.source_boundaries : 0
+    const context = selectOriginalExcerpt(value, query, {
+      startsMessage: (flags & 1) !== 0,
+      endsMessage: (flags & 2) !== 0
+    })
     if (
       !best ||
       context.anchors > best.anchors ||
@@ -105,5 +123,7 @@ export function sessionSearchOriginalExcerpt(
       best = context
     }
   }
-  return best?.text ? { text: best.text } : undefined
+  return best?.text
+    ? { text: best.text, startsMessage: best.startsMessage, endsMessage: best.endsMessage }
+    : undefined
 }

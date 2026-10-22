@@ -51,7 +51,8 @@ export function sessionSearchPageKey(request: SessionSearchRequest): string {
     [...(filters.scopePaths ?? [])].sort(),
     ...(request.eligibleSessions === undefined
       ? []
-      : [eligibleSessionsKey(request.eligibleSessions)])
+      : [eligibleSessionsKey(request.eligibleSessions)]),
+    ...(request.preserveForks ? ['preserve-forks'] : [])
   ])
   return createHash('sha256').update(identity).digest('base64url').slice(0, 16)
 }

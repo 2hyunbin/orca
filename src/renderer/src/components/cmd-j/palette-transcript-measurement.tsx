@@ -1,7 +1,10 @@
-import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { HighlightedText } from '../worktree-jump-palette-primitives'
 import type { PaletteTranscriptSnippet } from '../worktree-jump-palette-model'
-import type { PaletteTranscriptMatch } from '../worktree-jump-palette-transcript-matches'
+import {
+  paletteTranscriptTabKey,
+  type PaletteTranscriptMatch
+} from '../worktree-jump-palette-transcript-matches'
 
 export const PaletteTranscriptExcerpt = memo(function PaletteTranscriptExcerpt({
   snippet,
@@ -31,7 +34,12 @@ export const PaletteTranscriptExcerpt = memo(function PaletteTranscriptExcerpt({
 export type PaletteTranscriptMeasurementProps = {
   generationKey: string
   candidates: readonly PaletteTranscriptMatch[]
-  onFits: (fits: ReadonlyMap<number, PaletteTranscriptSnippet>, displayKey: string) => void
+  destinationDemand?: number
+  onFits: (
+    fits: ReadonlyMap<number, PaletteTranscriptSnippet>,
+    displayKey: string,
+    settled: boolean
+  ) => void
 }
 
 function measurementKey(window: PaletteTranscriptSnippet): string {
@@ -43,10 +51,56 @@ function measurementKey(window: PaletteTranscriptSnippet): string {
   ])
 }
 
-/** One out-of-flow batch covers every candidate, including rows beyond renderer caps. */
+export const PALETTE_TRANSCRIPT_MEASUREMENT_BATCH = 128
+
+function measurementPlan(
+  candidates: readonly PaletteTranscriptMatch[],
+  cache: ReadonlyMap<string, boolean>,
+  destinationDemand: number
+) {
+  const samples = new Map<string, PaletteTranscriptSnippet>()
+  const fits = new Map<number, PaletteTranscriptSnippet>()
+  const destinations = new Set<string>()
+  let pending = false
+  for (const candidate of candidates) {
+    const destination = paletteTranscriptTabKey(
+      candidate.worktreeId,
+      candidate.tabId,
+      candidate.executionHostId
+    )
+    if (destinations.has(destination)) {
+      continue
+    }
+    let candidatePending = false
+    for (const window of candidate.windows) {
+      const key = measurementKey(window)
+      const fit = cache.get(key)
+      if (fit) {
+        fits.set(candidate.ordinal, window)
+        destinations.add(destination)
+        candidatePending = false
+        break
+      }
+      if (fit === undefined) {
+        candidatePending = true
+        if (samples.size < PALETTE_TRANSCRIPT_MEASUREMENT_BATCH) {
+          samples.set(key, window)
+        }
+      }
+    }
+    pending ||= candidatePending
+    if (destinations.size >= destinationDemand) {
+      break
+    }
+  }
+  return { samples, fits, pending }
+}
+
+/** Measure bounded batches until the promoted band is full or all windows are classified. */
 export const PaletteTranscriptMeasurement = memo(function PaletteTranscriptMeasurement({
   generationKey,
   candidates,
+  destinationDemand = Infinity,
   onFits
 }: PaletteTranscriptMeasurementProps): React.JSX.Element {
   const rulerRef = useRef<HTMLDivElement>(null)
@@ -54,16 +108,13 @@ export const PaletteTranscriptMeasurement = memo(function PaletteTranscriptMeasu
   const typographyRef = useRef<HTMLDivElement>(null)
   const previousCacheKey = useRef('')
   const [revision, setRevision] = useState(0)
-  const samples = useMemo(
-    () =>
-      new Map(
-        candidates.flatMap((candidate) =>
-          candidate.windows.map((window) => [measurementKey(window), window] as const)
-        )
-      ),
-    [candidates]
-  )
   const fitCache = useRef(new Map<string, boolean>())
+  const cacheGeneration = useRef(generationKey)
+  if (cacheGeneration.current !== generationKey) {
+    cacheGeneration.current = generationKey
+    fitCache.current.clear()
+  }
+  const { samples } = measurementPlan(candidates, fitCache.current, destinationDemand)
   useLayoutEffect(() => {
     const ruler = rulerRef.current
     if (!ruler) {
@@ -119,30 +170,22 @@ export const PaletteTranscriptMeasurement = memo(function PaletteTranscriptMeasu
       fitCache.current.clear()
     }
     previousCacheKey.current = cacheKey
-    const fits = new Map<number, PaletteTranscriptSnippet>()
-    if (width > 0 && document.fonts?.status === 'loaded') {
-      for (const candidate of candidates) {
-        for (const window of candidate.windows) {
-          const sampleKey = measurementKey(window)
-          const sample = samplesRef.current.get(sampleKey)
-          if (!sample) {
-            continue
-          }
-          const key = `${displayKey}:${sampleKey}`
-          let fitsWindow = fitCache.current.get(key)
-          if (fitsWindow === undefined) {
-            fitsWindow = sample.offsetWidth < width
-            fitCache.current.set(key, fitsWindow)
-          }
-          if (fitsWindow) {
-            fits.set(candidate.ordinal, window)
-            break
-          }
+    const ready = width > 0 && document.fonts?.status === 'loaded'
+    if (ready) {
+      for (const [key, sample] of samplesRef.current) {
+        if (!fitCache.current.has(key)) {
+          fitCache.current.set(key, sample.offsetWidth < width)
         }
       }
     }
-    onFits(fits, displayKey)
-  }, [candidates, generationKey, onFits, revision])
+    const plan = measurementPlan(candidates, fitCache.current, destinationDemand)
+    onFits(plan.fits, displayKey, ready && !plan.pending)
+    if (ready && plan.pending) {
+      const frame = requestAnimationFrame(() => setRevision((value) => value + 1))
+      return () => cancelAnimationFrame(frame)
+    }
+    return undefined
+  }, [candidates, destinationDemand, generationKey, onFits, revision])
   return (
     <div aria-hidden="true" className="pointer-events-none invisible absolute inset-x-2.5 top-0">
       {/* CommandDialog's descendant selector overrides each row's padding with px-2. */}

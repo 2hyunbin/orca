@@ -7,8 +7,7 @@ import { capPaletteSection, reserveObservedPaletteSection } from './palette-sect
 import {
   describePaletteOccurrences,
   observedPaletteSectionKeys,
-  reconcilePaletteObservedPrefix,
-  survivingPaletteSelection
+  reconcilePaletteObservedPrefix
 } from './palette-observed-prefix'
 
 const context = createPaletteSearchContext(1000)
@@ -117,13 +116,6 @@ it('drops truly removed destinations, frees slots, and uses live rows for surviv
   expect(next.map((entry) => entry.id)).not.toContain(old[0].id)
   expect(next.map((entry) => entry.id)).not.toContain(old[1].id)
   expect(next.filter((entry) => entry.type === 'workspace-tab')).toHaveLength(3)
-  expect(
-    survivingPaletteSelection(
-      old.map((entry) => entry.id),
-      available.map((entry) => entry.id),
-      old[1].id
-    )
-  ).toBe(old[2].id)
 })
 
 it('does not protect unobserved rows in subsequent batches', () => {

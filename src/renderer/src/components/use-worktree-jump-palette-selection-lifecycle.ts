@@ -21,7 +21,6 @@ import type { WorktreeJumpPaletteSections } from './use-worktree-jump-palette-se
 import type { WorktreeJumpPaletteStoreState } from './use-worktree-jump-palette-store-state'
 import type { WorktreeJumpPaletteWorktrees } from './use-worktree-jump-palette-worktrees'
 import type { WorktreeJumpPaletteObservedPrefix } from './use-worktree-jump-palette-observed-prefix'
-import { survivingPaletteSelection } from './cmd-j/palette-observed-prefix'
 
 type WorktreeJumpPaletteSelectionLifecycleInput = WorktreeJumpPaletteStoreState &
   WorktreeJumpPaletteObservedPrefix &
@@ -143,9 +142,8 @@ export function useWorktreeJumpPaletteSelectionLifecycle({
   if (membershipChanged) {
     setPreviousSelectionItemIds(selectionItemIds)
     if (selectedItemId && !selectionItemIds.includes(selectedItemId)) {
-      setSelectedItemId(
-        survivingPaletteSelection(previousSelectionItemIds, selectionItemIds, selectedItemId) ?? ''
-      )
+      // cmdk chooses the first remaining row when its selected item unmounts.
+      setSelectedItemId(selectionItemIds[0] ?? '')
     }
   }
   const currentSelectedItemId =
@@ -162,6 +160,21 @@ export function useWorktreeJumpPaletteSelectionLifecycle({
           showCreateAction,
           autoSelectCreateAction: taskSourceUrl !== null
         })
+  useLayoutEffect(() => {
+    if (
+      !presentationInteracted &&
+      !selectionMovedByUserRef.current &&
+      selectedItemId !== commandSelectedItemId
+    ) {
+      setSelectedItemId(commandSelectedItemId)
+    }
+  }, [
+    commandSelectedItemId,
+    presentationInteracted,
+    selectedItemId,
+    setSelectedItemId,
+    selectionMovedByUserRef
+  ])
   const handleCommandSelectionChange = useCallback(
     (nextItemId: string) => {
       handlePresentationSelectionChange(nextItemId)

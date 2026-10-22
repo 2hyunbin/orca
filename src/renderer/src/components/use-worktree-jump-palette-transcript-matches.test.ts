@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
 
+import { structuredAgentSessionPaneKey } from '../../../shared/structured-agent-session-projection'
+
+import { paletteTranscriptEligibility } from './cmd-j/palette-transcript-eligibility'
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { searchHit, searchResults } from '../../../shared/ai-vault-search-test-fixture'
@@ -25,7 +28,9 @@ const filterModel: PaletteFilterModel = {
   defaultHostId: 'local'
 }
 vi.mock('./right-sidebar/use-ai-vault-search', () => ({
-  useAiVaultSearch: search,
+  useAiVaultSearchPages: (requests: { request: unknown; scope: string }[]) => ({
+    pages: requests.map(({ request, scope }) => ({ ...search(request, scope), request, scope }))
+  }),
   aiVaultSearchNeedsLocalConsent: () => false
 }))
 
@@ -82,7 +87,7 @@ it('keeps measured evidence through pane updates while invalidating it on query 
   const hit = literalHit()
   search.mockReturnValue({
     hits: [hit],
-    response: { ...searchResults(), eligibleSessionsApplied: true },
+    response: { ...searchResults(), eligibleSessionsApplied: true, forksPreserved: true },
     loading: false
   })
   const initialProps = transcriptInput(hit)
@@ -105,11 +110,11 @@ it('keeps measured evidence through pane updates while invalidating it on query 
 
   search.mockReturnValue({
     hits: [{ ...hit, evidence: { ...hit.evidence, originalExcerpt: undefined } }],
-    response: { ...searchResults(), eligibleSessionsApplied: true },
+    response: { ...searchResults(), eligibleSessionsApplied: true, forksPreserved: true },
     loading: false
   })
   rerender(initialProps)
-  expect(result.current.transcriptMatches).toEqual([])
+  expect(result.current.transcriptMatches).toMatchObject([{ complete: false }])
 
   rerender({ ...initialProps, query: 'race' })
   expect(result.current.transcriptMatches).toEqual([])
@@ -120,7 +125,7 @@ it('retains acknowledged evidence during eligibility refresh, dropping closed pa
   const initialProps = transcriptInput(hit)
   search.mockReturnValue({
     hits: [hit],
-    response: { ...searchResults(), eligibleSessionsApplied: true },
+    response: { ...searchResults(), eligibleSessionsApplied: true, forksPreserved: true },
     loading: false
   })
   const { result, rerender } = renderHook(useWorktreeJumpPaletteTranscriptMatches, { initialProps })
@@ -201,5 +206,121 @@ it('builds eligibility from the current local workspace filter and ignores anoth
     matchesGroupHostId: () => false
   }
   rerender({ ...props, filterPredicate: blocked })
+  expect(search.mock.lastCall?.[0]).toBeNull()
+})
+
+it('keeps exact provider eligibility when production-sized legacy prompt history exceeds the budget', () => {
+  const input = transcriptInput(literalHit())
+  const provider = input.agentStatusByPaneKey[makePaneKey('terminal', LEAF_ID)]
+  const entries = Array.from({ length: 70 }, (_, pane) => {
+    const tabId = `legacy-${pane}`
+    const prompt = (history: number) => `${pane}-${history}: `.padEnd(200, 'x')
+    return makeAgentEntry(tabId, 'done', 0, {
+      agentType: 'claude',
+      tabId,
+      worktreeId: 'workspace',
+      providerSession: undefined,
+      prompt: prompt(0),
+      stateHistory: Array.from({ length: 20 }, (_, history) => ({
+        state: 'done' as const,
+        startedAt: 0,
+        prompt: prompt(history)
+      }))
+    })
+  })
+  const state = {
+    ...input,
+    agentStatusByPaneKey: Object.fromEntries(
+      [provider, ...entries].map((entry) => [entry.paneKey, entry])
+    ),
+    tabsByWorktree: {
+      workspace: [
+        input.tabsByWorktree.workspace[0],
+        ...entries.map((entry) => makeTerminalTab(entry.tabId ?? '', 'workspace', 'Legacy'))
+      ]
+    },
+    terminalLayoutsByTabId: Object.fromEntries(
+      [provider, ...entries].map((entry) => [entry.tabId, input.terminalLayoutsByTabId.terminal])
+    )
+  }
+  expect(paletteTranscriptEligibility(state)).toEqual({
+    providers: [{ agent: provider.agentType, sessionId: provider.providerSession?.id }],
+    prompts: []
+  })
+})
+
+it('does not request or classify transcript evidence for an oversized pasted query', () => {
+  search.mockReturnValue({ hits: [], response: null, loading: false })
+  const query = 'é'.repeat(2048)
+  const { result } = renderHook(useWorktreeJumpPaletteTranscriptMatches, {
+    initialProps: { ...transcriptInput(literalHit()), query, deferredQuery: query }
+  })
+  expect(search.mock.calls[0]?.[0]).toBeNull()
+  expect(result.current.transcriptMeasurement.candidates).toEqual([])
+  expect(result.current.transcriptSearchEnabled).toBe(false)
+})
+
+it('searches native chat provider sessions without a terminal layout and drops remote or closed chats', () => {
+  const hit = {
+    ...literalHit(),
+    evidence: {
+      role: 'user' as const,
+      timestamp: null,
+      snippet: 'Browser annotation (v1.4.217)',
+      originalExcerpt: { text: 'Browser annotation (v1.4.217)' }
+    }
+  }
+  search.mockReturnValue({
+    hits: [hit],
+    response: { ...searchResults(), eligibleSessionsApplied: true, forksPreserved: true },
+    loading: false
+  })
+  const tab = {
+    id: 'native-chat',
+    entityId: 'structured-session',
+    contentType: 'agent-session' as const,
+    worktreeId: 'workspace',
+    groupId: 'group',
+    label: 'Browser annotation',
+    customLabel: null,
+    color: null,
+    sortOrder: 0,
+    createdAt: 0
+  }
+  const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
+  const input: Parameters<typeof useWorktreeJumpPaletteTranscriptMatches>[0] = {
+    ...transcriptInput(hit),
+    query: '217',
+    deferredQuery: '217',
+    unifiedTabsByWorktree: { workspace: [tab] },
+    agentStatusByPaneKey: {
+      [paneKey]: makeAgentEntry(tab.id, 'done', 0, {
+        paneKey,
+        tabId: tab.id,
+        worktreeId: tab.worktreeId,
+        agentType: hit.agent,
+        providerSession: { key: 'session_id', id: hit.sessionId }
+      })
+    },
+    tabsByWorktree: {},
+    terminalLayoutsByTabId: {}
+  }
+  const { result, rerender } = renderHook(useWorktreeJumpPaletteTranscriptMatches, {
+    initialProps: input
+  })
+  expect(search.mock.lastCall?.[0]?.eligibleSessions.providers).toEqual([
+    { agent: hit.agent, sessionId: hit.sessionId }
+  ])
+  expect(result.current.transcriptMeasurement.candidates).toMatchObject([
+    { worktreeId: 'workspace', tabId: tab.id, windows: [expect.anything(), expect.anything()] }
+  ])
+  expect(result.current.transcriptEligibleTabs.size).toBe(1)
+  rerender({
+    ...input,
+    unifiedTabsByWorktree: { workspace: [{ ...tab, executionHostId: 'runtime:remote' }] }
+  })
+  expect(search.mock.lastCall?.[0]).toBeNull()
+  expect(result.current.transcriptMeasurement.candidates).toEqual([])
+  rerender({ ...input, unifiedTabsByWorktree: { workspace: [] } })
   expect(search.mock.lastCall?.[0]).toBeNull()
 })

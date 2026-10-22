@@ -31,6 +31,10 @@ export const AiVaultSearchRequestSchema = z
     within: AiVaultSearchScopeIdentitySchema.optional(),
     /** Applied by the answering host before retrieval limits and fork folding. */
     eligibleSessions: AiVaultSearchEligibleSessionsSchema.optional(),
+    /** Open-tab searches need each provider session, including forks. */
+    preserveForks: z.boolean().optional(),
+    /** Original-message context is only needed by Cmd+J's literal proof. */
+    includeOriginalExcerpt: z.boolean().optional(),
     debug: z.boolean().optional()
   })
   // Two scopes in one request have no defined intersection, and guessing one
@@ -50,6 +54,8 @@ export const AiVaultSearchEvidenceSchema = z.object({
   snippet: z.string(),
   originalExcerpt: z
     .object({
+      startsMessage: z.boolean().optional(),
+      endsMessage: z.boolean().optional(),
       text: z
         .string()
         .max(1024)
@@ -138,7 +144,8 @@ export const AiVaultSearchResponseSchema = z.discriminatedUnion('kind', [
     durationMs: z.number().nonnegative(),
     debug: AiVaultSearchDebugSchema.optional(),
     hosts: z.array(AiVaultSearchHostOutcomeSchema).optional(),
-    eligibleSessionsApplied: z.literal(true).optional()
+    eligibleSessionsApplied: z.literal(true).optional(),
+    forksPreserved: z.literal(true).optional()
   }),
   z.object({
     kind: z.literal('stale-cursor'),

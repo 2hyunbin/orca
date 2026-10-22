@@ -20,7 +20,7 @@ afterEach(() => {
   useAppStore.setState(initialState, true)
 })
 
-it('keeps the surviving neighbor selected through subsequent membership changes', async () => {
+it('keeps the recovered first row selected through subsequent membership changes', async () => {
   const worktrees = ['alpha', 'beta', 'gamma'].map((id) => makeWorktree(id, `refresh ${id}`))
   useAppStore.setState({
     activeModal: 'worktree-palette',
@@ -36,7 +36,7 @@ it('keeps the surviving neighbor selected through subsequent membership changes'
   })
   await act(async () => result.current.handleQueryChange('refresh'))
   const selected = encodePaletteIdentity(['worktree', '|beta'])
-  const neighbor = encodePaletteIdentity(['worktree', '|gamma'])
+  const survivor = encodePaletteIdentity(['worktree', '|alpha'])
   act(() => {
     result.current.selectionMovedByUserRef.current = true
     result.current.handleCommandSelectionChange(selected)
@@ -44,7 +44,7 @@ it('keeps the surviving neighbor selected through subsequent membership changes'
   expect(result.current.commandSelectedItemId).toBe(selected)
 
   act(() => useAppStore.setState({ worktreesByRepo: { 'repo-1': [worktrees[0], worktrees[2]] } }))
-  expect(result.current.commandSelectedItemId).toBe(neighbor)
+  expect(result.current.commandSelectedItemId).toBe(survivor)
 
   act(() =>
     useAppStore.setState({
@@ -53,5 +53,5 @@ it('keeps the surviving neighbor selected through subsequent membership changes'
       }
     })
   )
-  expect(result.current.commandSelectedItemId).toBe(neighbor)
+  expect(result.current.commandSelectedItemId).toBe(survivor)
 })

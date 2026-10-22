@@ -39,8 +39,10 @@ describe('real index to public service adapter', () => {
     addSyntheticSession(db, { id: 2 })
     const generic = await service.search({ query: 'needle' })
     expect(generic).not.toHaveProperty('eligibleSessionsApplied')
+    expect(generic).not.toHaveProperty('forksPreserved')
     const scoped = await service.search({
       query: 'needle',
+      preserveForks: true,
       eligibleSessions: {
         providers: [{ agent: 'claude', sessionId: '1' }],
         prompts: []
@@ -49,6 +51,7 @@ describe('real index to public service adapter', () => {
     expect(AiVaultSearchResponseSchema.parse(scoped)).toMatchObject({
       kind: 'results',
       eligibleSessionsApplied: true,
+      forksPreserved: true,
       hits: [{ sessionId: '1' }]
     })
   })
@@ -56,14 +59,23 @@ describe('real index to public service adapter', () => {
     const { db, store, service } = await fixture()
     addSyntheticSession(db, { id: 1 })
     addSyntheticSession(db, { id: 2, filePath: null })
-    const first = await service.search({ query: 'needle', limit: 1, debug: true })
+    const first = await service.search({
+      query: 'needle',
+      limit: 1,
+      debug: true,
+      includeOriginalExcerpt: true
+    })
     expect(AiVaultSearchResponseSchema.parse(first)).toEqual(first)
     expect(first.kind).toBe('results')
     if (first.kind !== 'results') {
       throw new Error('Expected results')
     }
     expect(first.debug?.plannerReport.scope).toBe('all')
-    expect(first.hits[0].evidence?.originalExcerpt).toEqual({ text: 'needle' })
+    expect(first.hits[0].evidence?.originalExcerpt).toEqual({
+      text: 'needle',
+      startsMessage: false,
+      endsMessage: false
+    })
     expect(first).not.toHaveProperty('route')
     expect(first).not.toHaveProperty('tier')
     expect(first.page.hasMore).toBe(true)
@@ -73,6 +85,7 @@ describe('real index to public service adapter', () => {
       throw new Error('Expected results')
     }
     expect(next.hits[0].sessionId).not.toBe(first.hits[0].sessionId)
+    expect(next.hits[0].evidence).not.toHaveProperty('originalExcerpt')
     expect(next).not.toHaveProperty('debug')
     const hits = [...first.hits, ...next.hits]
     expect(hits.find((hit) => hit.source.presence === 'present')?.resumeCommand).toBe('resume')

@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useState } from 'react'
-import { resolveWorktreeFilterHostId } from '@/components/cmd-j/palette-filter-options'
+import type { PaletteObservedOccurrence } from './cmd-j/palette-observed-prefix'
+import { paletteTranscriptWorkspaceHost } from './cmd-j/palette-transcript-host'
 import type { PaletteSearchContext } from '@/lib/palette-match/palette-ranking'
 import type { SearchableWorkspaceTab } from '@/lib/workspace-tab-palette-search'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { WorktreeJumpPaletteFilter } from './use-worktree-jump-palette-filter'
 import type { WorktreeJumpPaletteTranscriptMatches } from './use-worktree-jump-palette-transcript-matches'
@@ -20,6 +20,7 @@ type WorkspaceTabTranscriptMergeInput = Pick<WorktreeJumpPaletteFilter, 'filterM
     WorktreeJumpPaletteTranscriptMatches,
     'transcriptMatches' | 'transcriptEligibleTabs' | 'transcriptGenerationKey'
   > & {
+    protectedOccurrences?: readonly PaletteObservedOccurrence[]
     titleWorkspaceTabItems: WorkspaceTabPaletteItem[]
     workspaceTabEntries: readonly SearchableWorkspaceTab[]
     browserItems: BrowserPaletteItem[]
@@ -49,6 +50,7 @@ function reserveWorkspaceTabExcerpt(
 /** Merges transcript matches into the title-matched chats and assembles the open-tab rows. */
 export function useWorkspaceTabTranscriptMerge({
   filterModel,
+  protectedOccurrences = [],
   transcriptMatches,
   transcriptEligibleTabs,
   transcriptGenerationKey,
@@ -61,13 +63,13 @@ export function useWorkspaceTabTranscriptMerge({
   workspaceTabItems: WorkspaceTabPaletteItem[]
   openTabItems: OpenTabPaletteItem[]
 } {
-  // Host-less worktrees are local even while a runtime is focused; runtime-owned ones carry an owner id.
-  const isLocalWorktree = useCallback(
-    (worktree: Worktree) =>
-      !worktree.runtimeOwnerEnvironmentId &&
-      resolveWorktreeFilterHostId(worktree, filterModel.repoById, LOCAL_EXECUTION_HOST_ID) ===
-        LOCAL_EXECUTION_HOST_ID,
+  const executionHostIdForWorktree = useCallback(
+    (worktree: Worktree) => paletteTranscriptWorkspaceHost(worktree, filterModel),
     [filterModel]
+  )
+  const isTranscriptWorktree = useCallback(
+    (worktree: Worktree) => executionHostIdForWorktree(worktree) !== null,
+    [executionHostIdForWorktree]
   )
   const merged = useMemo(
     () =>
@@ -76,11 +78,13 @@ export function useWorkspaceTabTranscriptMerge({
         entries: workspaceTabEntries,
         matches: transcriptMatches,
         context: paletteSearchContext,
-        isLocalWorktree,
+        isTranscriptWorktree,
+        executionHostIdForWorktree,
         eligibleTabs: transcriptEligibleTabs
       }),
     [
-      isLocalWorktree,
+      executionHostIdForWorktree,
+      isTranscriptWorktree,
       paletteSearchContext,
       titleWorkspaceTabItems,
       transcriptMatches,
@@ -101,24 +105,24 @@ export function useWorkspaceTabTranscriptMerge({
     key: transcriptGenerationKey,
     tabs: currentReservations
   })
+  const observedIds = new Set(protectedOccurrences.map((entry) => entry.id))
+  const nextReservations = new Map(
+    [...currentReservations].map(([key, eligible]) => {
+      const previous =
+        reservation.key === transcriptGenerationKey ? reservation.tabs.get(key) : undefined
+      return [
+        key,
+        previous === true || observedIds.has(key) ? (previous ?? eligible) : eligible
+      ] as const
+    })
+  )
   let reservedTabs = reservation.tabs
   if (
     reservation.key !== transcriptGenerationKey ||
-    reservedTabs.size !== currentReservations.size ||
-    [...currentReservations.keys()].some((key) => !reservedTabs.has(key))
+    reservedTabs.size !== nextReservations.size ||
+    [...nextReservations].some(([key, eligible]) => reservedTabs.get(key) !== eligible)
   ) {
-    // A surviving destination keeps its geometry through title/transcript match transitions.
-    reservedTabs = new Map(
-      [...currentReservations].map(
-        ([key, eligible]) =>
-          [
-            key,
-            reservation.key === transcriptGenerationKey
-              ? (reservation.tabs.get(key) ?? eligible)
-              : eligible
-          ] as const
-      )
-    )
+    reservedTabs = nextReservations
     setReservation({ key: transcriptGenerationKey, tabs: reservedTabs })
   }
   const { workspaceTabItems, transcriptOnlyItems } = useMemo(

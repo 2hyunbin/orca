@@ -215,27 +215,3 @@ export function reconcilePaletteObservedPrefix({
     ]
   })
 }
-
-export function survivingPaletteSelection(
-  previous: readonly string[],
-  current: readonly string[],
-  selected: string
-): string | null {
-  if (current.includes(selected)) {
-    return selected
-  }
-  const previousIndex = previous.indexOf(selected)
-  if (previousIndex === -1) {
-    return current[0] ?? null
-  }
-  const currentIds = new Set(current)
-  return (
-    previous.slice(previousIndex + 1).find((key) => currentIds.has(key)) ??
-    previous
-      .slice(0, previousIndex)
-      .toReversed()
-      .find((key) => currentIds.has(key)) ??
-    current[0] ??
-    null
-  )
-}

@@ -6,6 +6,7 @@ import type { AiVaultSearchEligibleSessions } from '../../shared/ai-vault-search
 export type SessionRowFilter = {
   conditions: string[]
   values: (string | number)[]
+  matchedRowsOnly?: true
 }
 
 // Stored identity: `cwdKey` is the sidebar's `folderGroupKey` without its prefix,
@@ -68,11 +69,11 @@ export function sessionRowFilter(
       filter.values.push(JSON.stringify(eligibleSessions.providers))
     }
     if (eligibleSessions.prompts.length) {
-      alternatives.push(`(agent IN (SELECT json_extract(value, '$.agent') FROM json_each(?))
-        AND orca_session_prompt_eligible(agent, title, ?) = 1)`)
+      filter.matchedRowsOnly = true
+      alternatives.push(`(agent IN (SELECT value FROM json_each(?))
+        AND orca_session_prompt_eligible(agent, title) = 1)`)
       filter.values.push(
-        JSON.stringify(eligibleSessions.prompts),
-        JSON.stringify({ providers: [], prompts: eligibleSessions.prompts })
+        JSON.stringify([...new Set(eligibleSessions.prompts.map((entry) => entry.agent))])
       )
     }
     filter.conditions.push(alternatives.length ? `(${alternatives.join(' OR ')})` : '0 = 1')
@@ -111,4 +112,14 @@ function scopeRange(scopeKey: string): [string, string, string] {
 /** The first string that sorts after every string starting with `prefix`. */
 function nextAfterPrefix(prefix: string): string {
   return prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1)
+}
+
+/** Match postings first, then evaluate legacy eligibility once per distinct session before any cap. */
+export function matchedSessionEligibilityCte(filter: SessionRowFilter): string {
+  return `eligible_sessions AS MATERIALIZED (
+    SELECT id FROM sessions WHERE id IN (
+      SELECT DISTINCT m.session_row_id FROM messages_fts
+      JOIN messages m ON m.id = messages_fts.rowid WHERE messages_fts MATCH ?
+    ) AND ${filter.conditions.join(' AND ')}
+  )`
 }

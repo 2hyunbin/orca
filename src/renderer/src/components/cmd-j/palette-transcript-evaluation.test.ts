@@ -8,7 +8,7 @@ import {
 } from '../worktree-jump-palette-open-tab-items'
 import {
   mergeWorkspaceTabTranscriptMatches,
-  terminalTabKey,
+  paletteTranscriptTabKey,
   type PaletteTranscriptMatch
 } from '../worktree-jump-palette-transcript-matches'
 import { classifyPaletteTranscriptProof } from './palette-transcript-proof'
@@ -119,7 +119,7 @@ it('gates first-screen usefulness and literal correctness on a fixed independent
       const displayable = windows.find((window) => window.text.length <= 55)
       return {
         worktreeId: 'workspace',
-        terminalTabId: `indexed-${ordinal}`,
+        tabId: `indexed-${ordinal}`,
         ordinal,
         complete: Boolean(displayable),
         windows,
@@ -132,10 +132,10 @@ it('gates first-screen usefulness and literal correctness on a fixed independent
         entries,
         matches,
         eligibleTabs: new Set(
-          matches.map((match) => terminalTabKey(match.worktreeId, match.terminalTabId))
+          matches.map((match) => paletteTranscriptTabKey(match.worktreeId, match.tabId))
         ),
         context,
-        isLocalWorktree: () => true
+        isTranscriptWorktree: () => true
       })
     const baseline = merge(matches.map((match) => ({ ...match, complete: false })))
     const previous = [...baseline.titleItems].sort((a, b) =>

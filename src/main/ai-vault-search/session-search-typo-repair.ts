@@ -1,7 +1,7 @@
 import type SyncDatabase from '../sqlite/sync-database'
 import type { SessionSearchScope } from './session-search-engine-types'
 import { quoteFtsTerm, scopedExpression } from './session-search-query-planner'
-import type { SessionRowFilter } from './session-search-row-filter'
+import { matchedSessionEligibilityCte, type SessionRowFilter } from './session-search-row-filter'
 
 // Why: a query term with zero postings is usually a typo. The index's own
 // vocabulary (fts5vocab) is the dictionary, so repair needs no model and can
@@ -89,18 +89,28 @@ export class SessionSearchTypoRepair {
 
   /** Live rows carrying this term inside `scope`, counted no further than it matters. */
   private countRows(term: string, scope: SessionSearchScope, filter?: SessionRowFilter): number {
+    const eligibility = filter?.matchedRowsOnly
+      ? 'm.session_row_id IN (SELECT id FROM eligible_sessions)'
+      : `m.session_row_id IN (SELECT id FROM sessions WHERE ${filter?.conditions.join(' AND ')})`
+    const eligibilityCte = filter?.matchedRowsOnly
+      ? `WITH ${matchedSessionEligibilityCte(filter)} `
+      : ''
     const scoped = filter?.conditions.length
       ? this.db.prepare(
-          `SELECT count(*) AS rows FROM (
+          `${eligibilityCte}SELECT count(*) AS rows FROM (
          SELECT m.id FROM messages_fts
          JOIN messages m ON m.id = messages_fts.rowid
          JOIN sessions s ON s.id = m.session_row_id
-         WHERE messages_fts MATCH ? AND m.session_row_id IN
-           (SELECT id FROM sessions WHERE ${filter.conditions.join(' AND ')})
+         WHERE messages_fts MATCH ? AND ${eligibility}
          LIMIT ${MAX_COUNTED_ROWS})`
         )
       : this.liveRows
-    const row = scoped.get(scopedExpression(scope, quoteFtsTerm(term)), ...(filter?.values ?? []))
+    const match = scopedExpression(scope, quoteFtsTerm(term))
+    const row = scoped.get(
+      ...(filter?.matchedRowsOnly
+        ? [match, ...filter.values, match]
+        : [match, ...(filter?.values ?? [])])
+    )
     return typeof row?.rows === 'number' ? row.rows : 0
   }
 

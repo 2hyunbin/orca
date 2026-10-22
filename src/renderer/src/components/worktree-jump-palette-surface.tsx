@@ -121,7 +121,12 @@ export function WorktreeJumpPaletteSurface({
           controller.handlePresentationPointer(event.target)
           controller.handlePresentationWheel()
         }}
-        onPointerMoveCapture={(event) => controller.handlePresentationPointer(event.target)}
+        onPointerMoveCapture={(event) => {
+          if (event.target instanceof Element && event.target.closest('[cmdk-item]')) {
+            controller.selectionMovedByUserRef.current = true
+          }
+          controller.handlePresentationPointer(event.target)
+        }}
         onWheelCapture={controller.handlePresentationWheel}
         onScroll={controller.handlePresentationScroll}
         onScrollEnd={controller.handlePresentationScrollEnd}
@@ -167,6 +172,14 @@ export function WorktreeJumpPaletteSurface({
             ))}
           </>
         )}
+        {controller.transcriptSearchIncomplete ? (
+          <div role="status" className="px-3 py-2 text-center text-xs text-muted-foreground">
+            {translate(
+              'quickOpen.moreMatchesAvailable',
+              'More matches may be available. Refine your search to narrow the results.'
+            )}
+          </div>
+        ) : null}
         <WorktreeJumpPaletteTaskSearchStatus
           loading={controller.taskSearchLoading}
           failures={controller.taskSearchFailures}

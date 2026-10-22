@@ -124,11 +124,11 @@ vi.mock('@/components/ui/command', async () => {
       )
     },
     CommandList: React.forwardRef(function CommandList(
-      { children }: { children: React.ReactNode },
+      { children, ...props }: React.HTMLAttributes<HTMLDivElement>,
       ref: React.ForwardedRef<HTMLDivElement>
     ) {
       return (
-        <div ref={ref} data-command-list="true">
+        <div {...props} ref={ref} data-command-list="true">
           {children}
         </div>
       )
@@ -145,7 +145,12 @@ vi.mock('@/components/ui/command', async () => {
       onSelect?: (value: string) => void
       value?: string
     }) => (
-      <button data-command-item={value ?? ''} onClick={() => onSelect?.(value ?? '')} type="button">
+      <button
+        cmdk-item=""
+        data-command-item={value ?? ''}
+        onClick={() => onSelect?.(value ?? '')}
+        type="button"
+      >
         {children}
       </button>
     )
@@ -278,6 +283,27 @@ describe('WorktreeJumpPalette recent chats & terminals', () => {
     expect(rows.some((id) => id.startsWith(encodePaletteIdentity(['worktree'])))).toBe(true)
     expect(testContainer.textContent).toContain('Recent Chats & Terminals')
     expect(testContainer.textContent).toContain('Recent Workspaces')
+  })
+
+  it('keeps empty-query hover selection at the destination Enter will activate', async () => {
+    await renderPalette(makeRecentTabState())
+    const second = [...testContainer.querySelectorAll<HTMLElement>('[data-command-item]')][1]
+    const value = second.dataset.commandItem ?? ''
+    await act(async () => {
+      second.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }))
+      setCommandSelection?.(value)
+    })
+    await flushEffects()
+    expect(getCommandValue()).toBe(value)
+    await act(async () => {
+      const selected = [...testContainer.querySelectorAll<HTMLElement>('[data-command-item]')].find(
+        (row) => row.dataset.commandItem === getCommandValue()
+      )
+      selected?.click()
+    })
+    expect(activateWorkspaceTabPaletteResult).toHaveBeenCalledWith(
+      expect.objectContaining({ tabId: 'tab-beta', worktreeId: 'wt-beta' })
+    )
   })
 
   it('keeps duplicate persisted tab ids as separate recent rows and digit targets', async () => {

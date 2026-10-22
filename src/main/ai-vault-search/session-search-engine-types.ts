@@ -49,6 +49,8 @@ export type SessionSearchFilters = {
 export type SessionSearchRequest = {
   query: string
   eligibleSessions?: AiVaultSearchEligibleSessions
+  preserveForks?: boolean
+  includeOriginalExcerpt?: boolean
   /** Default `all`. */
   scope?: SessionSearchScope
   limit?: number
@@ -92,7 +94,7 @@ export type SessionSearchEvidence = {
   /** FTS5 snippet with the matched terms wrapped in `[[` `]]`. */
   snippet: string
   /** One contiguous, unmarked slice of an original indexed message column. */
-  originalExcerpt?: { text: string }
+  originalExcerpt?: { text: string; startsMessage?: boolean; endsMessage?: boolean }
   /** The snippet hit the engine's per-hit ceiling and was cut. */
   snippetTruncated?: boolean
 }

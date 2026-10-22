@@ -1,18 +1,16 @@
+import {
+  buildPaletteTranscriptIndex,
+  type PaletteTranscriptIndex,
+  type PaletteTranscriptState
+} from './cmd-j/palette-transcript-structured-tabs'
 import type { AiVaultSearchHit } from '../../../shared/ai-vault-search-types'
-import { LOCAL_EXECUTION_HOST_ID } from '../../../shared/execution-host'
-import { SESSION_SEARCH_LIMIT_MAX } from '../../../shared/ai-vault-search-limit'
+import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../shared/execution-host'
 import type { Worktree } from '../../../shared/worktree/types'
 import type { PaletteSearchContext } from '@/lib/palette-match/palette-ranking'
 import { buildWorkspaceTabBaseResult } from '@/lib/workspace-tab-palette-results'
 import type { SearchableWorkspaceTab } from '@/lib/workspace-tab-palette-search'
-import {
-  resolveOriginalPaneTarget,
-  type OriginalPaneState
-} from './right-sidebar/ai-vault-original-pane'
-import {
-  buildAiVaultOriginalPaneIndex,
-  findOriginalAiVaultSessionPaneInIndex
-} from './right-sidebar/ai-vault-original-pane-index'
+import { resolveOriginalPaneTarget } from './right-sidebar/ai-vault-original-pane'
+import { findOriginalAiVaultSessionPanesInIndex } from './right-sidebar/ai-vault-original-pane-index'
 import { aiVaultSearchHitToSession } from './right-sidebar/ai-vault-search-session'
 import { parseAiVaultSnippetMarks } from './right-sidebar/ai-vault-search-snippet-marks'
 import type {
@@ -25,10 +23,11 @@ import {
   type PaletteTranscriptWindow
 } from './cmd-j/palette-transcript-proof'
 
-/** A local index hit that belongs to a terminal tab with a live or sleeping pane. */
+/** An index hit connected to an open terminal or structured chat on its host. */
 export type PaletteTranscriptMatch = {
+  executionHostId?: ExecutionHostId
   worktreeId: string
-  terminalTabId: string
+  tabId: string
   snippet: PaletteTranscriptSnippet | null
   ordinal: number
   complete: boolean
@@ -38,12 +37,19 @@ export type PaletteTranscriptMatch = {
 const NO_TRANSCRIPT_MATCHES: readonly PaletteTranscriptMatch[] = []
 const NO_WORKSPACE_TAB_ITEMS: readonly WorkspaceTabPaletteItem[] = []
 
-export function terminalTabKey(worktreeId: string, terminalTabId: string): string {
-  return `${worktreeId}\u0000${terminalTabId}`
+export function paletteTranscriptTabKey(
+  worktreeId: string,
+  tabId: string,
+  executionHostId: ExecutionHostId = LOCAL_EXECUTION_HOST_ID
+): string {
+  return executionHostId === LOCAL_EXECUTION_HOST_ID
+    ? `${worktreeId}\u0000${tabId}`
+    : JSON.stringify([executionHostId, worktreeId, tabId])
 }
 
 export function resolvePaletteTranscriptEligibleTabs(
-  state: OriginalPaneState
+  state: PaletteTranscriptState,
+  index: PaletteTranscriptIndex = buildPaletteTranscriptIndex(state)
 ): ReadonlySet<string> {
   const keys = new Set<string>()
   const panes = [
@@ -61,8 +67,11 @@ export function resolvePaletteTranscriptEligibleTabs(
       tabIdHint: pane.tabId
     })
     if (target) {
-      keys.add(terminalTabKey(target.worktreeId, target.tabId))
+      keys.add(paletteTranscriptTabKey(target.worktreeId, target.tabId, index.executionHostId))
     }
+  }
+  for (const tab of index.structuredTabs) {
+    keys.add(paletteTranscriptTabKey(tab.worktreeId, tab.tabId, index.executionHostId))
   }
   return keys
 }
@@ -70,37 +79,56 @@ export function resolvePaletteTranscriptEligibleTabs(
 /** Keeps host order; hits with no pane are dropped because Cmd+J lists only open chats. */
 export function resolvePaletteTranscriptMatches(
   hits: readonly AiVaultSearchHit[],
-  paneState: OriginalPaneState,
+  paneState: PaletteTranscriptState,
   query = '',
-  proofWindows?: ReadonlyMap<AiVaultSearchHit, readonly PaletteTranscriptWindow[]>
+  proofWindows?: ReadonlyMap<AiVaultSearchHit, readonly PaletteTranscriptWindow[]>,
+  preparedIndex?: PaletteTranscriptIndex
 ): readonly PaletteTranscriptMatch[] {
   if (hits.length === 0) {
     return NO_TRANSCRIPT_MATCHES
   }
-  const index = buildAiVaultOriginalPaneIndex(paneState)
-  const requirements = preparePaletteTranscriptProofQuery(query)
+  const index = preparedIndex ?? buildPaletteTranscriptIndex(paneState)
+  const requirements = proofWindows ? null : preparePaletteTranscriptProofQuery(query)
   const matches: PaletteTranscriptMatch[] = []
-  for (const [ordinal, hit] of hits.slice(0, SESSION_SEARCH_LIMIT_MAX).entries()) {
-    if (hit.executionHostId && hit.executionHostId !== LOCAL_EXECUTION_HOST_ID) {
+  for (const [ordinal, hit] of hits.entries()) {
+    if ((hit.executionHostId ?? LOCAL_EXECUTION_HOST_ID) !== index.executionHostId) {
       continue
     }
-    const pane = findOriginalAiVaultSessionPaneInIndex(
-      index,
-      aiVaultSearchHitToSession(hit, LOCAL_EXECUTION_HOST_ID)
+    const panes = findOriginalAiVaultSessionPanesInIndex(
+      index.terminalPanes,
+      aiVaultSearchHitToSession(hit, index.executionHostId)
     )
-    if (!pane) {
+    const targets = [
+      ...panes,
+      ...(index.structuredTabsByAgent.get(hit.agent)?.get(hit.sessionId) ?? [])
+    ]
+    const distinctTabs = new Map(
+      targets.map((pane) => [paletteTranscriptTabKey(pane.worktreeId, pane.tabId), pane])
+    )
+    if (distinctTabs.size === 0) {
       continue
     }
-    matches.push({
-      worktreeId: pane.worktreeId,
-      terminalTabId: pane.tabId,
-      snippet: hit.evidence ? parseAiVaultSnippetMarks(hit.evidence.snippet) : null,
-      ordinal,
-      complete: false,
-      windows:
-        proofWindows?.get(hit) ??
-        classifyPaletteTranscriptProof(hit.evidence?.originalExcerpt?.text ?? '', requirements)
-    })
+    const snippet = hit.evidence ? parseAiVaultSnippetMarks(hit.evidence.snippet) : null
+    const windows =
+      proofWindows?.get(hit) ??
+      classifyPaletteTranscriptProof(
+        hit.evidence?.originalExcerpt?.text ?? '',
+        requirements ?? query,
+        hit.evidence?.originalExcerpt
+      )
+    for (const pane of distinctTabs.values()) {
+      matches.push({
+        ...(index.executionHostId !== LOCAL_EXECUTION_HOST_ID
+          ? { executionHostId: index.executionHostId }
+          : {}),
+        worktreeId: pane.worktreeId,
+        tabId: pane.tabId,
+        snippet,
+        ordinal,
+        complete: false,
+        windows
+      })
+    }
   }
   return matches
 }
@@ -114,7 +142,7 @@ export function fitPaletteTranscriptMatches(
   for (const match of matches) {
     const snippet = fits.get(match.ordinal)
     const fitted = snippet ? { ...match, snippet, complete: true } : match
-    const key = terminalTabKey(match.worktreeId, match.terminalTabId)
+    const key = paletteTranscriptTabKey(match.worktreeId, match.tabId, match.executionHostId)
     const previous = byTab.get(key)
     if (
       !previous ||
@@ -133,46 +161,55 @@ export function mergeWorkspaceTabTranscriptMatches({
   entries,
   matches,
   context,
-  isLocalWorktree,
+  isTranscriptWorktree,
+  executionHostIdForWorktree,
   eligibleTabs
 }: {
   titleItems: WorkspaceTabPaletteItem[]
   entries: readonly SearchableWorkspaceTab[]
   matches: readonly PaletteTranscriptMatch[]
   context: PaletteSearchContext
-  /** Index hits come from this desktop only, and worktree ids can repeat across hosts. */
-  isLocalWorktree: (worktree: Worktree) => boolean
+  /** Keeps transcript destinations within the currently searchable workspace scope. */
+  isTranscriptWorktree: (worktree: Worktree) => boolean
+  executionHostIdForWorktree?: (worktree: Worktree) => ExecutionHostId | null | undefined
   eligibleTabs: ReadonlySet<string>
 }): {
   titleItems: WorkspaceTabPaletteItem[]
   transcriptOnlyItems: readonly WorkspaceTabPaletteItem[]
 } {
-  const entryByTerminalTab = new Map<string, SearchableWorkspaceTab>()
+  const entryByChatTab = new Map<string, SearchableWorkspaceTab>()
   for (const entry of entries) {
-    const tabHost = entry.tab.executionHostId
     if (
-      entry.tab.contentType !== 'terminal' ||
-      !isLocalWorktree(entry.worktree) ||
-      (tabHost !== undefined && tabHost !== LOCAL_EXECUTION_HOST_ID)
+      (entry.tab.contentType !== 'terminal' && entry.tab.contentType !== 'agent-session') ||
+      !isTranscriptWorktree(entry.worktree)
     ) {
       continue
     }
-    const key = terminalTabKey(entry.worktree.id, entry.tab.entityId)
-    if (!entryByTerminalTab.has(key)) {
-      entryByTerminalTab.set(key, entry)
+    const key = paletteTranscriptTabKey(
+      entry.worktree.id,
+      entry.tab.contentType === 'agent-session' ? entry.tab.id : entry.tab.entityId,
+      entry.tab.executionHostId ??
+        executionHostIdForWorktree?.(entry.worktree) ??
+        entry.worktree.hostId ??
+        LOCAL_EXECUTION_HOST_ID
+    )
+    if (!entryByChatTab.has(key)) {
+      entryByChatTab.set(key, entry)
     }
   }
   const titleItemIds = new Set(titleItems.map((item) => item.id))
   const matchByItemId = new Map<string, PaletteTranscriptMatch>()
   const reservedItemIds = new Set<string>()
-  for (const [key, entry] of entryByTerminalTab) {
+  for (const [key, entry] of entryByChatTab) {
     if (eligibleTabs.has(key)) {
       reservedItemIds.add(buildWorkspaceTabBaseResult(entry, context).paletteIdentity)
     }
   }
   const transcriptOnlyItems: WorkspaceTabPaletteItem[] = []
   for (const match of matches) {
-    const entry = entryByTerminalTab.get(terminalTabKey(match.worktreeId, match.terminalTabId))
+    const entry = entryByChatTab.get(
+      paletteTranscriptTabKey(match.worktreeId, match.tabId, match.executionHostId)
+    )
     if (!entry) {
       continue
     }

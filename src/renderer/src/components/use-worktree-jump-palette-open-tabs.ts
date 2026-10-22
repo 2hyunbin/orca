@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import type { PaletteObservedOccurrence } from './cmd-j/palette-observed-prefix'
 import { buildSearchableBrowserPages } from '@/lib/browser-palette-page-entries'
 import { searchBrowserPages, type SearchableBrowserPage } from '@/lib/browser-palette-search'
 import {
@@ -42,10 +43,12 @@ type WorktreeJumpPaletteOpenTabsInput = WorktreeJumpPaletteStoreState &
     WorktreeJumpPaletteTranscriptMatches,
     'transcriptMatches' | 'transcriptEligibleTabs' | 'transcriptGenerationKey'
   > & {
+    protectedOccurrences?: readonly PaletteObservedOccurrence[]
     paletteSearchContext: PaletteSearchContext
   }
 
 export function useWorktreeJumpPaletteOpenTabs({
+  protectedOccurrences,
   paletteStatusInputsActive,
   browserSortedWorktrees,
   workspaces,
@@ -243,6 +246,7 @@ export function useWorktreeJumpPaletteOpenTabs({
     [workspaceTabMatches]
   )
   const { workspaceTabItems, openTabItems } = useWorkspaceTabTranscriptMerge({
+    protectedOccurrences,
     filterModel,
     transcriptMatches,
     transcriptEligibleTabs,

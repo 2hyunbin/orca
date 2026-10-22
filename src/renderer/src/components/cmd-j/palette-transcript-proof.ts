@@ -2,6 +2,7 @@ import { mergeMatchRanges, type MatchRange } from '@/lib/palette-match/normalize
 import {
   paletteTranscriptLiteralOccurrences,
   preparePaletteTranscriptProofQuery,
+  type PaletteTranscriptSourceBoundaries,
   type PaletteTranscriptOccurrence
 } from '../../../../shared/palette-transcript-literal'
 import type { PaletteTranscriptSnippet } from '../worktree-jump-palette-model'
@@ -46,7 +47,8 @@ function windowFor(
 /** Bounded original-text windows; callers must verify highlighted DOM fit before promotion. */
 export function classifyPaletteTranscriptProof(
   text: unknown,
-  query: string | readonly string[]
+  query: string | readonly string[],
+  boundaries: PaletteTranscriptSourceBoundaries = {}
 ): readonly PaletteTranscriptWindow[] {
   if (
     typeof text !== 'string' ||
@@ -61,7 +63,7 @@ export function classifyPaletteTranscriptProof(
   if (!requirements.length) {
     return []
   }
-  const occurrences = paletteTranscriptLiteralOccurrences(text, requirements)
+  const occurrences = paletteTranscriptLiteralOccurrences(text, requirements, boundaries)
   if (new Set(occurrences.map((occurrence) => occurrence.group)).size !== requirements.length) {
     return []
   }

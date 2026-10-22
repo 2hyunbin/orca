@@ -29,8 +29,12 @@ export function useWorktreeJumpPaletteController({
   lingering: boolean
   createLookupGuard: WorktreePaletteRequestGuard
 }) {
-  const storeState = useWorktreeJumpPaletteStoreState({ visible, lingering })
   const localState = useWorktreeJumpPaletteLocalState({ createLookupGuard, visible })
+  const storeState = useWorktreeJumpPaletteStoreState({
+    visible,
+    lingering,
+    query: localState.query
+  })
   const paletteEvaluationSnapshot = useMemo(
     () => ({
       query: localState.paletteSearchQuery,
@@ -75,6 +79,7 @@ export function useWorktreeJumpPaletteController({
   })
   const transcriptMatches = useWorktreeJumpPaletteTranscriptMatches({
     ...storeState,
+    agentStatusByPaneKey: storeState.transcriptAgentStatusByPaneKey,
     ...localState,
     ...filter
   })
@@ -92,7 +97,8 @@ export function useWorktreeJumpPaletteController({
     ...filter,
     ...worktrees,
     ...evaluation,
-    ...transcriptMatches
+    ...transcriptMatches,
+    ...observedPrefix
   })
   const recentTabs = useWorktreeJumpPaletteRecentTabs({
     ...storeState,

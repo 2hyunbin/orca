@@ -5,10 +5,26 @@ import {
   type MatchRange
 } from './palette-normalized-text'
 
+export type PaletteTranscriptSourceBoundaries = {
+  startsMessage?: boolean
+  endsMessage?: boolean
+}
+
 export type PaletteTranscriptOccurrence = MatchRange & { group: number }
 
-function sourceSupportedBoundary(text: string, offset: number, edge: 'start' | 'end'): boolean {
-  if (offset <= 0 || offset >= text.length || /[\uDC00-\uDFFF]/u.test(text[offset])) {
+function sourceSupportedBoundary(
+  text: string,
+  offset: number,
+  edge: 'start' | 'end',
+  boundaries: PaletteTranscriptSourceBoundaries
+): boolean {
+  if (offset === 0) {
+    return edge === 'start' && boundaries.startsMessage === true
+  }
+  if (offset === text.length) {
+    return edge === 'end' && boundaries.endsMessage === true
+  }
+  if (offset < 0 || offset > text.length || /[\uDC00-\uDFFF]/u.test(text[offset])) {
     return false
   }
   const here = String.fromCodePoint(text.codePointAt(offset) ?? 0)
@@ -90,7 +106,8 @@ export function preparePaletteTranscriptProofQuery(query: string): readonly stri
 /** Source-supported word, identifier and quoted-phrase anchors, in original offsets. */
 export function paletteTranscriptLiteralOccurrences(
   text: string,
-  requirements: readonly string[]
+  requirements: readonly string[],
+  boundaries: PaletteTranscriptSourceBoundaries = {}
 ): PaletteTranscriptOccurrence[] {
   const normalized = normalizePaletteText(text)
   const collapsed = foldWhitespace(normalized.normalized)
@@ -115,8 +132,8 @@ export function paletteTranscriptLiteralOccurrences(
           normalized.ends[normalizedEnd - 1] !== normalized.ends[normalizedEnd])
       if (
         wholeFold &&
-        sourceSupportedBoundary(text, range.start, 'start') &&
-        sourceSupportedBoundary(text, range.end, 'end')
+        sourceSupportedBoundary(text, range.start, 'start', boundaries) &&
+        sourceSupportedBoundary(text, range.end, 'end', boundaries)
       ) {
         occurrences.push({ ...range, group })
       }

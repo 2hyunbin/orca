@@ -12,6 +12,7 @@ describe('literal original transcript proof', () => {
   })
   it.each([
     ['we fixed token refresh race here', 'token refresh race'],
+    ['Browser annotation (v1.4.217)', '217'],
     ['call tokenRefresh and race_condition here', 'token refresh race'],
     ['look at [[refresh race]] … here', '"refresh race"'],
     ['we fixed REFRESH\n\t  race here', '"refresh race"'],
@@ -26,6 +27,7 @@ describe('literal original transcript proof', () => {
   })
   it.each([
     ['a car started here', 'car art'],
+    ['Browser annotation (v1.4.2170)', '217'],
     ['a refresh here', 'token refresh race'],
     ['a token_refresh unrelated words race_condition here', '"refresh race"'],
     ['a refresh, race here', '"refresh race"'],
@@ -75,4 +77,22 @@ describe('literal original transcript proof', () => {
     expect(window.ranges).toEqual([{ start: 0, end: 5 }])
     expect(window.sourceRanges).toEqual([{ start: 5, end: 10 }])
   })
+})
+
+it('accepts only explicitly supported message edges and keeps missing peer metadata conservative', () => {
+  expect(classifyPaletteTranscriptProof('refresh', 'refresh')).toEqual([])
+  expect(classifyPaletteTranscriptProof('refresh', 'refresh', { startsMessage: true })).toEqual([])
+  expect(classifyPaletteTranscriptProof('refresh', 'refresh', { endsMessage: true })).toEqual([])
+  expect(
+    classifyPaletteTranscriptProof('refresh', 'refresh', {
+      startsMessage: true,
+      endsMessage: true
+    })[1]?.ranges
+  ).toEqual([{ start: 0, end: 7 }])
+  expect(
+    classifyPaletteTranscriptProof('refresh here', 'refresh', { startsMessage: true }).length
+  ).toBeGreaterThan(0)
+  expect(
+    classifyPaletteTranscriptProof('a refresh', 'refresh', { endsMessage: true }).length
+  ).toBeGreaterThan(0)
 })

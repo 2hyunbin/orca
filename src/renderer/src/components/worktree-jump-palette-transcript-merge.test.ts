@@ -8,7 +8,7 @@ import {
 } from './worktree-jump-palette-open-tab-items'
 import {
   mergeWorkspaceTabTranscriptMatches,
-  terminalTabKey,
+  paletteTranscriptTabKey,
   type PaletteTranscriptMatch
 } from './worktree-jump-palette-transcript-matches'
 
@@ -16,7 +16,7 @@ const context = createPaletteSearchContext(10000)
 const snippet = { text: 'a refresh race here', ranges: [{ start: 2, end: 14 }] }
 const transcript = (id: string, ordinal: number, complete = true): PaletteTranscriptMatch => ({
   worktreeId: 'workspace',
-  terminalTabId: id,
+  tabId: id,
   ordinal,
   complete,
   snippet,
@@ -36,9 +36,9 @@ it('merges name highlights and independent transcript strength onto one host-awa
     entries,
     matches: [transcript('weak', 9), transcript('indexed', 2)],
     context,
-    isLocalWorktree: () => true,
+    isTranscriptWorktree: () => true,
     eligibleTabs: new Set(
-      entries.map((entry) => terminalTabKey(entry.worktree.id, entry.tab.entityId))
+      entries.map((entry) => paletteTranscriptTabKey(entry.worktree.id, entry.tab.entityId))
     )
   })
   const rows = buildOpenTabPaletteItems({
@@ -72,10 +72,10 @@ it('reserves eligible local geometry even with empty responses, and never adds l
       entries: [local, remote],
       matches,
       context,
-      isLocalWorktree: (worktree) => worktree.hostId !== 'runtime:paired',
+      isTranscriptWorktree: (worktree) => worktree.hostId !== 'runtime:paired',
       eligibleTabs: new Set([
-        terminalTabKey('workspace', 'local'),
-        terminalTabKey('workspace', 'remote')
+        paletteTranscriptTabKey('workspace', 'local'),
+        paletteTranscriptTabKey('workspace', 'remote')
       ])
     })
   const empty = merge([])
@@ -101,13 +101,71 @@ it('rejects an explicitly remote tab even when its workspace uses a local legacy
     titleItems: titles,
     entries: [local, remote],
     matches: [transcript('collision', 0)],
-    eligibleTabs: new Set([terminalTabKey('workspace', 'collision')]),
+    eligibleTabs: new Set([paletteTranscriptTabKey('workspace', 'collision')]),
     context,
-    isLocalWorktree: () => true
+    isTranscriptWorktree: () => true
   })
   expect(
     merged.titleItems
       .filter((item) => item.transcriptSnippet)
       .map((item) => item.result.executionHostId)
   ).toEqual([undefined])
+})
+
+it('merges evidence and reservations only onto the matching host for colliding workspace and tab ids', () => {
+  const local = transcriptTab('collision', 'refresh')
+  const remote: ReturnType<typeof transcriptTab> = {
+    ...local,
+    tab: { ...local.tab, executionHostId: 'runtime:remote' },
+    worktree: { ...local.worktree, hostId: 'runtime:remote' }
+  }
+  const entries = [local, remote]
+  const titles = buildWorkspaceTabPaletteItems(searchWorkspaceTabs(entries, 'refresh', { context }))
+  const remoteMatch = { ...transcript('collision', 1), executionHostId: 'runtime:remote' as const }
+  const merged = mergeWorkspaceTabTranscriptMatches({
+    titleItems: titles,
+    entries,
+    matches: [remoteMatch],
+    eligibleTabs: new Set([paletteTranscriptTabKey('workspace', 'collision', 'runtime:remote')]),
+    context,
+    isTranscriptWorktree: () => true
+  })
+  expect(
+    merged.titleItems.map((item) => [
+      item.result.executionHostId,
+      Boolean(item.transcriptSnippet),
+      item.transcriptReserved
+    ])
+  ).toEqual([
+    [undefined, false, false],
+    ['runtime:remote', true, true]
+  ])
+})
+
+it('uses the workspace host resolver when a native tab has no explicit host', () => {
+  const entry: ReturnType<typeof transcriptTab> = {
+    ...transcriptTab('native', 'Conversation'),
+    tab: { ...transcriptTab('native').tab, contentType: 'agent-session' },
+    worktree: {
+      ...transcriptTab('native').worktree,
+      hostId: 'local',
+      runtimeOwnerEnvironmentId: 'remote'
+    }
+  }
+  const merged = mergeWorkspaceTabTranscriptMatches({
+    titleItems: [],
+    entries: [entry],
+    matches: [{ ...transcript('native', 0), executionHostId: 'runtime:remote' }],
+    eligibleTabs: new Set([paletteTranscriptTabKey('workspace', 'native', 'runtime:remote')]),
+    context,
+    isTranscriptWorktree: () => true,
+    executionHostIdForWorktree: () => 'runtime:remote'
+  })
+  expect(merged.transcriptOnlyItems).toMatchObject([
+    {
+      result: { tabId: 'native', executionHostId: 'runtime:remote' },
+      transcriptSnippet: snippet,
+      transcriptReserved: true
+    }
+  ])
 })

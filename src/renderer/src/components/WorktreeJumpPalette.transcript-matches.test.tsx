@@ -1,9 +1,12 @@
 // @vitest-environment happy-dom
 
 import { act } from 'react'
+import { fireEvent } from '@testing-library/react'
+import * as tabActivation from '@/lib/workspace-tab-palette-activation'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as ReactI18Next from 'react-i18next'
+import type * as CommandPrimitives from '@/components/ui/command'
 import { useAppStore } from '@/store'
 import type { AppState } from '@/store/types'
 import WorktreeJumpPalette from './WorktreeJumpPalette'
@@ -16,12 +19,14 @@ import type {
 } from '../../../shared/ai-vault-search-types'
 import type { ExecutionHostScope } from '../../../shared/execution-host'
 import { searchHit, searchResults } from '../../../shared/ai-vault-search-test-fixture'
+import { structuredAgentSessionPaneKey } from '../../../shared/structured-agent-session-projection'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import {
   LEAF_ID,
   makeAgentEntry,
   makeRecentTabState,
-  makeRepo
+  makeRepo,
+  makeUnifiedTab
 } from './worktree-jump-palette-test-fixtures'
 
 vi.mock('react-i18next', async (importOriginal) => {
@@ -45,12 +50,10 @@ vi.mock('@/components/repo/RepoBadgeLabel', () => ({
 }))
 vi.mock('@/components/cmd-j/palette-host-badge', () => ({ getPaletteHostBadge: () => null }))
 
-vi.mock('@/components/ui/command', async () => {
-  const React = await import('react')
+vi.mock('@/components/ui/command', async (importOriginal) => {
+  const actual = await importOriginal<typeof CommandPrimitives>()
   return {
-    Command: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    CommandGroup: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    // The controlled value is what Enter would activate.
+    ...actual,
     CommandDialog: ({
       children,
       open,
@@ -58,33 +61,13 @@ vi.mock('@/components/ui/command', async () => {
     }: {
       children: React.ReactNode
       open?: boolean
-      commandProps?: { value?: string }
+      commandProps?: React.ComponentProps<typeof actual.Command>
     }) =>
       open ? (
-        <div data-command-dialog="true" data-command-value={commandProps?.value ?? ''}>
+        <actual.Command shouldFilter={false} {...commandProps}>
           {children}
-        </div>
-      ) : null,
-    CommandInput: ({
-      value,
-      onValueChange
-    }: {
-      value?: string
-      onValueChange?: (next: string) => void
-    }) => {
-      setCommandQuery = onValueChange ?? null
-      return <input data-command-input="true" value={value} readOnly />
-    },
-    CommandList: React.forwardRef(function CommandList(
-      { children }: { children: React.ReactNode },
-      ref: React.ForwardedRef<HTMLDivElement>
-    ) {
-      return <div ref={ref}>{children}</div>
-    }),
-    CommandEmpty: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-    CommandItem: ({ children, value }: { children: React.ReactNode; value?: string }) => (
-      <div data-command-item={value ?? ''}>{children}</div>
-    )
+        </actual.Command>
+      ) : null
   }
 })
 
@@ -95,7 +78,6 @@ const searchSessions =
 const initialAppState = useAppStore.getInitialState()
 let testRoot: Root
 let testContainer: HTMLDivElement
-let setCommandQuery: ((next: string) => void) | null = null
 
 function hit(sessionId: string, snippet: string): AiVaultSearchHit {
   return {
@@ -107,7 +89,12 @@ function hit(sessionId: string, snippet: string): AiVaultSearchHit {
 }
 
 function answer(hits: AiVaultSearchHit[]): void {
-  searchSessions.mockResolvedValue({ ...searchResults(), hits, eligibleSessionsApplied: true })
+  searchSessions.mockResolvedValue({
+    ...searchResults(),
+    hits,
+    eligibleSessionsApplied: true,
+    forksPreserved: true
+  })
 }
 
 function paneState(): Partial<AppState> {
@@ -156,7 +143,9 @@ async function renderPalette(
 }
 
 async function type(query: string): Promise<void> {
-  await act(async () => setCommandQuery?.(query))
+  await act(async () =>
+    fireEvent.change(testContainer.querySelector('[cmdk-input]')!, { target: { value: query } })
+  )
 }
 
 async function settleSearch(): Promise<void> {
@@ -181,21 +170,25 @@ function snippets(): string[] {
 }
 
 function allRowIds(): string[] {
-  return [...testContainer.querySelectorAll<HTMLElement>('[data-command-item]')].map(
-    (node) => node.dataset.commandItem ?? ''
+  return [...testContainer.querySelectorAll<HTMLElement>('[cmdk-item]')].map(
+    (node) => node.dataset.value ?? ''
   )
 }
 
 describe('WorktreeJumpPalette transcript matches', () => {
   beforeEach(() => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {})
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-    setCommandQuery = null
     searchSessions.mockReset()
     answer([])
     Object.defineProperty(window, 'api', {
       configurable: true,
-      value: { ...window.api, aiVault: { searchSessions } }
+      value: {
+        ...window.api,
+        aiVault: { searchSessions },
+        gh: { listWorkItems: vi.fn().mockResolvedValue({ items: [], hasMore: false }) }
+      }
     })
     useAppStore.setState(initialAppState, true)
     testContainer = document.createElement('div')
@@ -208,6 +201,57 @@ describe('WorktreeJumpPalette transcript matches', () => {
     document.body.replaceChildren()
     useAppStore.setState(initialAppState, true)
     vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('finds a native chat by a version component in its transcript', async () => {
+    const text = 'Browser annotation "Send" no longer auto-submits to agent (v1.4.217)'
+    answer([
+      {
+        ...hit('native-provider', ''),
+        evidence: {
+          role: 'user',
+          timestamp: null,
+          snippet: text,
+          originalExcerpt: { text, startsMessage: true, endsMessage: true }
+        }
+      }
+    ])
+    await renderPalette(true)
+    const tab = {
+      ...makeUnifiedTab('native-tab', 'wt-alpha', 'native-session', 'Browser annotation'),
+      contentType: 'agent-session' as const,
+      agentSessionAgent: 'claude' as const
+    }
+    const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
+    await act(async () =>
+      useAppStore.setState({
+        unifiedTabsByWorktree: { 'wt-alpha': [tab] },
+        tabsByWorktree: {},
+        terminalLayoutsByTabId: {},
+        agentStatusByPaneKey: {
+          [paneKey]: makeAgentEntry(tab.id, 'done', 0, {
+            paneKey,
+            tabId: tab.id,
+            worktreeId: tab.worktreeId,
+            agentType: 'claude',
+            providerSession: { key: 'session_id', id: 'native-provider' }
+          })
+        }
+      })
+    )
+    await type('217')
+    await settleSearch()
+    expect(searchSessions.mock.lastCall?.[0].eligibleSessions?.providers).toEqual([
+      { agent: 'claude', sessionId: 'native-provider' }
+    ])
+    const rows = [...testContainer.querySelectorAll('[cmdk-item]')]
+    const chat = rows.find((row) => row.textContent?.includes('Browser annotation'))
+    expect(chat).toBeDefined()
+    expect(
+      chat?.querySelector('[data-slot="palette-open-tab-transcript-snippet"]')?.textContent
+    ).toContain('217')
+    expect(chat?.querySelector('[data-agent-icon="claude"]')).not.toBeNull()
   })
 
   it('lists an open chat whose transcript, not its title, matches', async () => {
@@ -223,6 +267,8 @@ describe('WorktreeJumpPalette transcript matches', () => {
         query: 'zebra',
         limit: 100,
         cursor: undefined,
+        preserveForks: true,
+        includeOriginalExcerpt: true,
         eligibleSessions: {
           providers: [
             { agent: 'claude', sessionId: 's-alpha' },
@@ -244,6 +290,105 @@ describe('WorktreeJumpPalette transcript matches', () => {
     await settleSearch()
 
     expect(tabRowIds()).toEqual(['tab-alpha'])
+  })
+
+  it('refreshes an existing pane’s session without reopening or refreshing the presentation snapshot', async () => {
+    answer([hit('s-alpha', 'the [[zebra]] crossing')])
+    await renderPalette(true)
+    await type('zebra')
+    await settleSearch()
+    expect(tabRowIds()).toEqual(['tab-alpha'])
+    const initialTabs = useAppStore.getState().tabsByWorktree
+    const initialUnifiedTabs = useAppStore.getState().unifiedTabsByWorktree
+    const key = makePaneKey('term-alpha', LEAF_ID)
+    const entry = useAppStore.getState().agentStatusByPaneKey[key]
+    answer([hit('s-alpha-next', 'the new [[zebra]] crossing')])
+    await act(async () =>
+      useAppStore.setState({
+        agentStatusByPaneKey: {
+          ...useAppStore.getState().agentStatusByPaneKey,
+          [key]: { ...entry, providerSession: { key: 'session_id', id: 's-alpha-next' } }
+        }
+      })
+    )
+    expect(tabRowIds()).toEqual([])
+    await settleSearch()
+    expect(searchSessions.mock.lastCall?.[0].eligibleSessions?.providers).toContainEqual({
+      agent: 'claude',
+      sessionId: 's-alpha-next'
+    })
+    expect(searchSessions).toHaveBeenCalledTimes(2)
+    expect(tabRowIds()).toEqual(['tab-alpha'])
+    expect(snippets()).toEqual(['the new zebra crossing'])
+    expect(useAppStore.getState().tabsByWorktree).toBe(initialTabs)
+    expect(useAppStore.getState().unifiedTabsByWorktree).toBe(initialUnifiedTabs)
+
+    await act(async () =>
+      useAppStore.setState({
+        agentStatusByPaneKey: {
+          ...useAppStore.getState().agentStatusByPaneKey,
+          [key]: { ...useAppStore.getState().agentStatusByPaneKey[key], updatedAt: 100 }
+        }
+      })
+    )
+    await settleSearch()
+    expect(searchSessions).toHaveBeenCalledTimes(2)
+    expect(tabRowIds()).toEqual(['tab-alpha'])
+  })
+
+  it('keeps fork sessions in separate tabs visible while deduplicating repeated hits for one tab', async () => {
+    answer([
+      hit('s-alpha', 'the first [[zebra]] crossing'),
+      hit('s-beta', 'the second [[zebra]] crossing'),
+      hit('s-alpha-fork', 'the forked [[zebra]] crossing')
+    ])
+    await renderPalette(true)
+    const splitLeafId = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    const paneKey = makePaneKey('term-alpha', splitLeafId)
+    await act(async () =>
+      useAppStore.setState({
+        agentStatusByPaneKey: {
+          ...useAppStore.getState().agentStatusByPaneKey,
+          [paneKey]: makeAgentEntry('term-alpha', 'done', 0, {
+            paneKey,
+            agentType: 'claude',
+            tabId: 'term-alpha',
+            worktreeId: 'wt-alpha',
+            providerSession: { key: 'session_id', id: 's-alpha-fork' }
+          })
+        },
+        terminalLayoutsByTabId: {
+          ...useAppStore.getState().terminalLayoutsByTabId,
+          'term-alpha': {
+            root: {
+              type: 'split',
+              direction: 'horizontal',
+              first: { type: 'leaf', leafId: LEAF_ID },
+              second: { type: 'leaf', leafId: splitLeafId }
+            },
+            activeLeafId: LEAF_ID,
+            expandedLeafId: null
+          }
+        }
+      })
+    )
+    await type('zebra')
+    await settleSearch()
+    expect(tabRowIds()).toEqual(['tab-alpha', 'tab-beta'])
+    expect(snippets()).toEqual(['the first zebra crossing', 'the second zebra crossing'])
+  })
+
+  it('uses title matches when an older host acknowledges eligibility but still folds forks', async () => {
+    searchSessions.mockResolvedValue({
+      ...searchResults(),
+      eligibleSessionsApplied: true,
+      hits: [hit('s-alpha', 'the [[Beta]] crossing')]
+    })
+    await renderPalette(true)
+    await type('Beta')
+    await settleSearch()
+    expect(tabRowIds()).toEqual(['tab-beta'])
+    expect(snippets().filter(Boolean)).toEqual([])
   })
 
   it('uses title matches only when an older host cannot acknowledge eligibility', async () => {
@@ -307,13 +452,92 @@ describe('WorktreeJumpPalette transcript matches', () => {
     answer([hit('s-alpha', 'the [[Beta]] branch')])
     await renderPalette(true)
     await type('Beta')
-    const dialog = () => testContainer.querySelector<HTMLElement>('[data-command-dialog="true"]')
-    const selectedBefore = dialog()?.dataset.commandValue
+    const selected = () =>
+      testContainer.querySelector<HTMLElement>('[cmdk-item][data-selected="true"]')?.dataset.value
+    const selectedBefore = selected()
     expect(selectedBefore).toBeTruthy()
 
     await settleSearch()
 
     expect(tabRowIds()).toEqual(['tab-beta', 'tab-alpha'])
-    expect(dialog()?.dataset.commandValue).toBe(selectedBefore)
+    expect(selected()).toBe(selectedBefore)
+  })
+  it('preserves the selected destination through async arrivals and recovers to the first survivor on removal', async () => {
+    answer([hit('s-beta', 'a [[zebra]] here')])
+    await renderPalette(true)
+    await type('zebra')
+    await settleSearch()
+    const selected = () =>
+      testContainer.querySelector<HTMLElement>('[cmdk-item][data-selected="true"]')?.dataset.value
+    const input = () => testContainer.querySelector<HTMLInputElement>('[cmdk-input]')!
+    const beta = () =>
+      [...testContainer.querySelectorAll<HTMLElement>('[cmdk-item]')].find((node) =>
+        node.dataset.value?.endsWith(
+          encodePaletteIdentity(['workspace-tab', '', 'wt-beta', 'tab-beta'])
+        )
+      )!
+    await act(async () => fireEvent.keyDown(input(), { key: 'Home' }))
+    await act(async () => fireEvent.pointerMove(beta()))
+    const betaSelection = selected()
+    expect(betaSelection).toBe(beta().dataset.value)
+
+    answer([hit('s-alpha', 'a [[zebra]] here'), hit('s-beta', 'a [[zebra]] here')])
+    const newLeaf = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+    const key = makePaneKey('term-alpha', newLeaf)
+    await act(async () =>
+      useAppStore.setState({
+        agentStatusByPaneKey: {
+          ...useAppStore.getState().agentStatusByPaneKey,
+          [key]: makeAgentEntry('term-alpha', 'done', 0, {
+            paneKey: key,
+            agentType: 'claude',
+            tabId: 'term-alpha',
+            worktreeId: 'wt-alpha',
+            providerSession: { key: 'session_id', id: 's-extra' }
+          })
+        },
+        terminalLayoutsByTabId: {
+          ...useAppStore.getState().terminalLayoutsByTabId,
+          'term-alpha': {
+            root: {
+              type: 'split',
+              direction: 'horizontal',
+              first: { type: 'leaf', leafId: LEAF_ID },
+              second: { type: 'leaf', leafId: newLeaf }
+            },
+            activeLeafId: LEAF_ID,
+            expandedLeafId: null
+          }
+        }
+      })
+    )
+    await settleSearch()
+    expect(tabRowIds()).toContain('tab-alpha')
+    expect(selected()).toBe(betaSelection)
+
+    await act(async () =>
+      useAppStore.setState({
+        tabsByWorktree: { ...useAppStore.getState().tabsByWorktree, 'wt-beta': [] },
+        unifiedTabsByWorktree: { ...useAppStore.getState().unifiedTabsByWorktree, 'wt-beta': [] }
+      })
+    )
+    expect(selected()).toBe(allRowIds()[0])
+    expect(selected()).not.toBe(betaSelection)
+    const first = selected()
+    await act(async () => fireEvent.keyDown(input(), { key: 'ArrowDown' }))
+    expect(selected()).not.toBe(first)
+    await act(async () => fireEvent.keyDown(input(), { key: 'ArrowUp' }))
+    expect(selected()).toBe(first)
+    const activate = vi
+      .spyOn(tabActivation, 'activateWorkspaceTabPaletteResult')
+      .mockReturnValue({ status: 'activated' })
+    await act(async () => fireEvent.keyDown(input(), { key: 'Enter' }))
+    expect(activate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tabId: 'tab-alpha',
+        entityId: 'term-alpha',
+        worktreeId: 'wt-alpha'
+      })
+    )
   })
 })

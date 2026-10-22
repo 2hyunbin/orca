@@ -151,6 +151,7 @@ export async function deferTranscriptResponse(
     {
       kind: 'results',
       eligibleSessionsApplied: true,
+      forksPreserved: true,
       hits,
       page: { cursor: null, hasMore: false },
       generation: 7,
