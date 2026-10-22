@@ -1,12 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { readRuntimeFileContent, readRuntimeFilePreview } from './runtime-file-read-client'
 import {
   fsReadFile,
-  fsSaveDownloadedFile,
   runtimeEnvironmentCall,
   installRuntimeFileClientEnvironment
 } from './runtime-file-client-test-harness'
-import { downloadAndOpenRemoteTerminalFile } from '@/components/terminal-pane/terminal-remote-file-download-open'
 
 installRuntimeFileClientEnvironment()
 
@@ -43,7 +41,7 @@ describe('a granted host file outside every workspace', () => {
     )
   })
 
-  it('previews and downloads complete binary bytes through the same host grant', async () => {
+  it('previews a binary file through its grant', async () => {
     const preview = { content: 'iVBO', isBinary: true, isImage: true, mimeType: 'image/png' }
     runtimeEnvironmentCall.mockImplementation((args: { method: string }) =>
       Promise.resolve(
@@ -59,25 +57,6 @@ describe('a granted host file outside every workspace', () => {
     )
 
     await expect(readRuntimeFileContent(granted)).resolves.toEqual(preview)
-    const saved = { canceled: false, destinationPath: '/downloads/out.png' }
-    fsSaveDownloadedFile.mockResolvedValue(saved)
-    const openFilePath = vi.fn().mockResolvedValue(true)
-    vi.stubGlobal('window', { ...window, api: { ...window.api, shell: { openFilePath } } })
-    await downloadAndOpenRemoteTerminalFile(
-      {
-        target: granted.target,
-        worktreeId: granted.worktreeId,
-        worktreePath: '/srv/repo'
-      },
-      granted.filePath,
-      granted.terminalArtifactGrantId
-    )
-    expect(fsSaveDownloadedFile).toHaveBeenCalledWith({
-      suggestedName: 'out.png',
-      content: 'iVBO',
-      encoding: 'base64'
-    })
-    expect(openFilePath).toHaveBeenCalledWith('/downloads/out.png', 'local')
     expect(runtimeEnvironmentCall).toHaveBeenCalledWith(
       expect.objectContaining({ method: 'files.readTerminalArtifactPreview', params: grantParams })
     )

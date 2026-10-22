@@ -12,14 +12,13 @@ import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-typ
  */
 export async function downloadAndOpenRemoteTerminalFile(
   fileContext: RuntimeFileOperationArgs,
-  filePath: string,
-  terminalArtifactGrantId?: string
+  filePath: string
 ): Promise<void> {
   const name = basename(filePath) || filePath
   try {
     const result = fileContext.connectionId
       ? await window.api.fs.downloadFile({ filePath, connectionId: fileContext.connectionId })
-      : await downloadRuntimeFile(fileContext, filePath, name, terminalArtifactGrantId)
+      : await downloadRuntimeFile(fileContext, filePath, name)
     // Why: cancelling the native save dialog is a deliberate no-op, not a failure.
     if (result.canceled) {
       return

@@ -15,15 +15,13 @@ import {
   assertExternalSshReadOwnership,
   canReadRelativeRuntimeFile,
   getRemoteFileArgs,
-  hasRemoteRuntimeOwner,
-  localAccess
+  hasRemoteRuntimeOwner
 } from './runtime-file-routing'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
 import { chatScratchFileAddress } from './runtime-chat-scratch-file-address'
 import { isAgentSessionAttachmentStorePath } from '../../../shared/agent-session-attachments'
 import type { LocalFileAccess } from '../../../shared/local-file-access'
 import {
-  downloadRuntimeTerminalArtifact,
   readChatLinkedRuntimeFilePreview,
   readRuntimeTerminalArtifactContent
 } from './runtime-terminal-artifact-read'
@@ -34,12 +32,19 @@ import {
   readRemoteFilePreview
 } from './runtime-paged-file-read'
 
+const REMOTE_DOWNLOAD_CHUNK_BYTES = 384 * 1024
 const REMOTE_DOWNLOAD_UPDATE_REQUIRED_MESSAGE =
   'Remote file download requires a newer Orca server. Update the headless server and try again.'
 
 type RemoteFileDownloadArgs = NonNullable<ReturnType<typeof getRemoteFileArgs>>
 
-export { localAccess } from './runtime-file-routing'
+// Why local only: an SSH read is the remote host's to check, and its relay never sees this field.
+export function localAccess(
+  connectionId: string | undefined,
+  access: LocalFileAccess | undefined
+): { access?: LocalFileAccess } {
+  return access && !connectionId ? { access } : {}
+}
 
 export async function readRuntimeFileContent({
   target,
@@ -172,23 +177,13 @@ export async function readRuntimeFilePreview(
 export async function downloadRuntimeFile(
   context: RuntimeFileOperationArgs,
   filePath: string,
-  suggestedName: string,
-  grantId?: string
+  suggestedName: string
 ): Promise<RuntimeFileDownloadResult> {
   assertExternalSshReadOwnership(
     context.target,
     context.connectionId,
     context.expectedExternalSshTargetId
   )
-  const artifactDownload = downloadRuntimeTerminalArtifact(
-    context,
-    filePath,
-    suggestedName,
-    grantId
-  )
-  if (artifactDownload) {
-    return artifactDownload
-  }
   const remoteArgs = getRemoteFileArgs(context, filePath)
   if (!remoteArgs) {
     if (hasRemoteRuntimeOwner(context)) {
@@ -280,7 +275,7 @@ async function readRemoteDownloadChunk(
       worktree: remoteArgs.worktreeSelector,
       relativePath: remoteArgs.relativePath,
       offset,
-      length: 384 * 1024
+      length: REMOTE_DOWNLOAD_CHUNK_BYTES
     },
     { timeoutMs: 60_000 }
   )

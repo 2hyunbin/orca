@@ -225,9 +225,14 @@ describe('a link to this computer printed in a paired-server terminal', () => {
     expect(onOpenFailure).toHaveBeenCalledWith(expect.objectContaining({ verdict: 'unverifiable' }))
   })
 
-  it.each([false, true])(
-    'honors the default-app action (%s) for a host grant',
-    async (openWithSystemDefault) => {
+  it.each([
+    { source: 'terminal', openWithSystemDefault: false },
+    { source: 'terminal', openWithSystemDefault: true },
+    { source: 'chat', openWithSystemDefault: false },
+    { source: 'chat', openWithSystemDefault: true }
+  ])(
+    'opens a $source host grant in a read-only tab with default-app gesture=$openWithSystemDefault',
+    async ({ source, openWithSystemDefault }) => {
       runtimeEnvironmentCallMock.mockResolvedValueOnce({
         id: 'rpc-1',
         ok: true,
@@ -248,9 +253,13 @@ describe('a link to this computer printed in a paired-server terminal', () => {
       })
       const onOpenFailure = vi.fn()
 
+      const owner =
+        source === 'chat'
+          ? { nativeChatContext: { tabId: 'tab-1', sessionId: 'session-1' } }
+          : { terminalHandle: 'term-1' }
       openDetectedFilePath('/tmp/artifact.txt', null, null, {
         ...serverWorkspace,
-        terminalHandle: 'term-1',
+        ...owner,
         openWithSystemDefault,
         onOpenFailure
       })
@@ -263,25 +272,15 @@ describe('a link to this computer printed in a paired-server terminal', () => {
             worktree: 'id:wt-feat',
             pathText: '/tmp/artifact.txt',
             crossWorkspace: true,
-            terminal: 'term-1'
+            ...(source === 'chat'
+              ? { nativeChatContext: { tabId: 'tab-1', sessionId: 'session-1' } }
+              : { terminal: 'term-1' })
           }
         })
       )
       expect(statMock).not.toHaveBeenCalled()
       expect(openFilePathMock).not.toHaveBeenCalled()
       expect(onOpenFailure).not.toHaveBeenCalled()
-      if (openWithSystemDefault) {
-        expect(downloadAndOpenRemoteTerminalFile).toHaveBeenCalledWith(
-          expect.objectContaining({
-            target: { kind: 'environment', environmentId: 'env-1' },
-            worktreeId: 'wt-feat'
-          }),
-          '/tmp/artifact.txt',
-          'g-1'
-        )
-        expect(openFileMock).not.toHaveBeenCalled()
-        return
-      }
       expect(downloadAndOpenRemoteTerminalFile).not.toHaveBeenCalled()
       expect(openFileMock).toHaveBeenCalledWith(
         expect.objectContaining({
