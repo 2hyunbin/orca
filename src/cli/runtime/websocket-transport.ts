@@ -1,6 +1,7 @@
 import type { PairedRuntimeConnection } from '../../shared/paired-runtime-connection'
 import type { RuntimeOrchestrationEnvelope } from '../../shared/runtime-rpc-envelope'
 import { RemoteRuntimeClientError } from '../../shared/remote-runtime-client-error'
+import { AGENT_LAUNCH_RUNTIME_CAPABILITY } from '../../shared/agent-launch-runtime-capability'
 import {
   sendRemoteRuntimeRequest,
   sendRemoteRuntimeRequestWithStatusPreflight
@@ -16,7 +17,15 @@ export async function sendWebSocketRequest<TResult>(
   envelope?: RuntimeOrchestrationEnvelope
 ): Promise<RuntimeRpcResponse<TResult>> {
   try {
-    return await sendRemoteRuntimeRequest<TResult>(connection, method, params, timeoutMs, envelope)
+    return await sendRemoteRuntimeRequest<TResult>(
+      connection,
+      method,
+      params,
+      timeoutMs,
+      envelope,
+      undefined,
+      [AGENT_LAUNCH_RUNTIME_CAPABILITY]
+    )
   } catch (error) {
     if (error instanceof RemoteRuntimeClientError) {
       throw new RuntimeClientError(error.code, error.message, error.data)
@@ -40,7 +49,8 @@ export async function sendWebSocketRequestWithStatusPreflight<TResult>(
       params,
       timeoutMs,
       validateStatus,
-      envelope
+      envelope,
+      [AGENT_LAUNCH_RUNTIME_CAPABILITY]
     )
   } catch (error) {
     if (error instanceof RemoteRuntimeClientError) {
