@@ -17,6 +17,7 @@ import {
   TEST_REPO
 } from '@/store/slices/worktrees-slice-test-fixtures'
 import { mutateHostAgentLaunchSettings } from '../settings/agent-launch-settings-transport'
+import { clearHostAgentMenuSettingsForTests } from '../settings/use-host-agent-launch-preferences'
 import { useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
 
 const rpc = vi.hoisted(() => ({ call: vi.fn(), supports: vi.fn() }))
@@ -72,6 +73,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  clearHostAgentMenuSettingsForTests()
   useAppStore.setState(initial, true)
   setLocalRuntimeCapabilitiesForTests(null)
   replaceRuntimeEnvironmentRevisions([])
@@ -218,23 +220,47 @@ it('keeps this runtime’s last preferences through a failed reconnect refresh',
   )
 })
 
-it.each(['unsupported', 'offline'])(
-  'settles %s hosts without applying desktop visibility or default',
-  async (mode) => {
-    if (mode === 'unsupported') {
-      rpc.supports.mockResolvedValue(false)
-    } else {
-      rpc.call.mockRejectedValue(new Error('offline'))
-    }
-    const hook = renderHook(() =>
-      useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
-    )
-    await act(async () => {})
-    expect(
-      hook.result.current.state === 'settled' && hook.result.current.rows.map((row) => row.agent)
-    ).toEqual(['claude', 'codex', 'opencode'])
-    if (mode === 'unsupported') {
-      expect(rpc.call).not.toHaveBeenCalled()
-    }
-  }
-)
+it('reopens a freshly mounted menu with the last host answer, then revalidates', async () => {
+  const first = renderHook(() =>
+    useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
+  )
+  await act(async () => {})
+  first.unmount()
+  const pending = Promise.withResolvers<{ settings: typeof server }>()
+  rpc.call.mockReturnValueOnce(pending.promise)
+  const second = renderHook(() =>
+    useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
+  )
+  expect(second.result.current.state === 'settled' && second.result.current.rows[0]?.agent).toBe(
+    'codex'
+  )
+  await act(async () =>
+    pending.resolve({ settings: projectAgentLaunchSettings({ defaultTuiAgent: 'claude' }) })
+  )
+  expect(second.result.current.state === 'settled' && second.result.current.rows[0]?.agent).toBe(
+    'claude'
+  )
+})
+
+it('keeps desktop preferences for a host that predates host launch settings', async () => {
+  rpc.supports.mockResolvedValue(false)
+  const hook = renderHook(() =>
+    useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
+  )
+  await act(async () => {})
+  expect(
+    hook.result.current.state === 'settled' && hook.result.current.rows.map((row) => row.agent)
+  ).toEqual(['opencode', 'claude'])
+  expect(rpc.call).not.toHaveBeenCalled()
+})
+
+it('settles an unreachable host without applying desktop visibility or default', async () => {
+  rpc.call.mockRejectedValue(new Error('offline'))
+  const hook = renderHook(() =>
+    useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
+  )
+  await act(async () => {})
+  expect(
+    hook.result.current.state === 'settled' && hook.result.current.rows.map((row) => row.agent)
+  ).toEqual(['claude', 'codex', 'opencode'])
+})
