@@ -1,3 +1,4 @@
+import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
 import type { DiscoveredSkill, SkillDiscoverySource } from '../../../../shared/skills'
 import type { OrchestrationSkillAgentStatus } from '@/lib/orchestration-skill-coverage'
 import { AgentIcon } from '@/lib/agent-catalog'
@@ -89,6 +90,7 @@ function AgentCoverageChip({
 }
 
 export function OrchestrationSkillAgentCoverage(props: {
+  plan?: BundledSkillPlan
   skills: readonly DiscoveredSkill[]
   sources: readonly SkillDiscoverySource[]
   loading: boolean
@@ -100,7 +102,19 @@ export function OrchestrationSkillAgentCoverage(props: {
     kind: 'local'
   })
   const loading = skillsLoading || agentsLoading || detectedIds === null
-  const agentStatuses = getOrchestrationSkillAgentStatuses(skills, detectedIds ?? [], sources)
+  const missing = new Set(
+    props.plan?.skills.flatMap((skill) =>
+      skill.ops.flatMap((op) => (op.observed.kind === 'absent' ? op.agents : []))
+    )
+  )
+  const agentStatuses = getOrchestrationSkillAgentStatuses(skills, detectedIds ?? [], sources).map(
+    (status) => ({
+      ...status,
+      installed:
+        status.installed &&
+        !missing.has(status.agent === 'claude-agent-teams' ? 'claude' : status.agent)
+    })
+  )
   const installedCount = agentStatuses.filter((status) => status.installed).length
   const totalCount = agentStatuses.length
   const fullCoverage = !loading && totalCount > 0 && installedCount === totalCount

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
+import { useCallback, useState } from 'react'
 import { OrchestrationSkillPromptDialog } from './OrchestrationSkillPromptDialog'
 import { ORCHESTRATION_SKILL_INSTALL_COMMAND } from '@/lib/agent-feature-install-commands'
 import { ArrowRightLeft, GitBranch, ListChecks, Workflow, type LucideIcon } from 'lucide-react'
@@ -69,6 +70,19 @@ export function OrchestrationPane({
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
 
+  const renderCoverage = useCallback(
+    (plan: BundledSkillPlan | undefined) => (
+      <OrchestrationSkillAgentCoverage
+        embedded
+        plan={plan}
+        skills={discoveredSkills}
+        sources={discoveredSkillSources}
+        loading={orchestrationSkillLoading}
+      />
+    ),
+    [discoveredSkills, discoveredSkillSources, orchestrationSkillLoading]
+  )
+
   if (!showOrchestration) {
     return <div />
   }
@@ -120,14 +134,7 @@ export function OrchestrationPane({
             </button>
           ) : undefined
         }
-        footer={
-          <OrchestrationSkillAgentCoverage
-            embedded
-            skills={discoveredSkills}
-            sources={discoveredSkillSources}
-            loading={orchestrationSkillLoading}
-          />
-        }
+        footer={renderCoverage}
         onRecheck={refreshOrchestrationSkill}
         freshnessSkillName={
           activeSkillRuntime.canUseSkillFreshness ? ORCHESTRATION_SKILL_NAME : undefined

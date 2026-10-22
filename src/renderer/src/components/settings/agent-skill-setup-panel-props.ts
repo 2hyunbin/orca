@@ -1,3 +1,4 @@
+import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
 import type { BundledSkillTarget } from '@/lib/bundled-skill-target'
 import type { ComponentProps, ReactNode } from 'react'
 import type { LocalAgentRuntime } from './CliSkillRuntimeSetup'
@@ -32,7 +33,7 @@ export type AgentSkillSetupPanelProps = {
   // Modal footers can promote Install to the primary action.
   installVariant?: ComponentProps<typeof Button>['variant']
   actionHint?: ReactNode
-  footer?: ReactNode
+  footer?: ReactNode | ((plan: BundledSkillPlan | undefined) => ReactNode)
   onRecheck: () => void | Promise<unknown>
   // Freshness inventory is local-host-only.
   freshnessSkillName?: string

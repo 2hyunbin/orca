@@ -79,7 +79,7 @@ describe('SkillFreshnessStatusPill', () => {
     expect(detailsButton(rendered)).toBeNull()
   })
 
-  it('offers Details beside Up to date when an agent still needs linking', async () => {
+  it('offers Details beside Installed when an agent still needs linking', async () => {
     mocks.plan = planOf([
       planEntry('orca-cli', [
         planOp('keep', '/home/u/.agents/skills/orca-cli'),
@@ -88,7 +88,7 @@ describe('SkillFreshnessStatusPill', () => {
     ])
 
     const rendered = await renderPill('orca-cli')
-    expect(pillText(rendered)).toBe('Up to date')
+    expect(pillText(rendered)).toBe('Installed')
     expect(detailsButton(rendered)?.textContent).toBe('Details')
   })
 

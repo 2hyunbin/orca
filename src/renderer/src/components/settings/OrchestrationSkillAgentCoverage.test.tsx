@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
+import { planEntry, planOf, planOp } from '../skills/bundled-skill-plan-fixtures.test-support'
 import { OrchestrationSkillAgentCoverage } from './OrchestrationSkillAgentCoverage'
 
 const useDetectedAgents = vi.fn(() => ({
@@ -56,4 +57,45 @@ describe('OrchestrationSkillAgentCoverage', () => {
     // null and leaves the widget spinning forever.
     expect(useDetectedAgents).toHaveBeenCalledWith({ kind: 'local' })
   })
+})
+
+it('uses the install plan to mark an agent missing even when discovery finds a shared copy', () => {
+  const markup = renderToStaticMarkup(
+    <OrchestrationSkillAgentCoverage
+      loading={false}
+      plan={planOf([
+        planEntry('orchestration', [
+          planOp('keep', '/home/u/.agents/skills/orchestration'),
+          planOp('link', '/home/u/.claude/skills/orchestration', { agents: ['claude'] })
+        ])
+      ])}
+      sources={['claude', 'codex'].map((owner) => ({
+        id: owner,
+        label: owner,
+        path: '/home/u/.agents/skills',
+        sourceKind: 'home',
+        providers: [],
+        owner,
+        exists: true
+      }))}
+      skills={[
+        {
+          id: 'skill',
+          name: 'orchestration',
+          description: null,
+          providers: ['claude', 'codex'],
+          sourceKind: 'home',
+          sourceLabel: 'Shared',
+          rootPath: '/home/u/.agents/skills',
+          directoryPath: '/home/u/.agents/skills/orchestration',
+          skillFilePath: '/home/u/.agents/skills/orchestration/SKILL.md',
+          installed: true,
+          updatedAt: null
+        }
+      ]}
+    />
+  )
+  expect(markup).toContain('1 of 2 detected agents have the skill.')
+  expect(markup).toContain('Missing')
+  expect(markup).not.toContain('All 2 detected agents')
 })

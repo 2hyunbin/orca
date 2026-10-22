@@ -1,3 +1,4 @@
+import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { translate } from '@/i18n/i18n'
@@ -84,6 +85,16 @@ export function SkillFreshnessStatusPill({ skillName }: { skillName: string }): 
       </IntegrationStatusPill>
     )
   }
+  return <SkillPlanStatusPill plan={plan} skillName={skillName} />
+}
+
+export function SkillPlanStatusPill({
+  plan,
+  skillName
+}: {
+  plan: BundledSkillPlan | null
+  skillName: string
+}): React.JSX.Element {
   const status = getSkillFreshnessDisplayStatus(plan, skillName)
   // Why: the dialog lists every location and what the update does there, so Details is
   // offered whenever the plan has anything for this skill, including an agent to link.
@@ -91,7 +102,14 @@ export function SkillFreshnessStatusPill({ skillName }: { skillName: string }): 
   const needsAttention = hasSkillCopyNeedingAttention(plan, skillName)
   return (
     <span className="inline-flex items-center gap-2">
-      {statusPill(status)}
+      {statusPill(
+        status === 'up-to-date' &&
+          plan?.skills
+            .find((skill) => skill.name === skillName)
+            ?.ops.some((op) => op.kind === 'write' || op.kind === 'link' || op.kind === 'copy')
+          ? 'installed'
+          : status
+      )}
       {hasDetails ? (
         <Button
           // Why: ghost, not link — this sits in a header row rather than inside a

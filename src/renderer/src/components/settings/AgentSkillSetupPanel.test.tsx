@@ -53,7 +53,7 @@ vi.mock('@/hooks/useSkillFreshness', () => ({
 }))
 
 vi.mock('../skills/SkillFreshnessStatusPill', () => ({
-  SkillFreshnessStatusPill: ({ skillName }: { skillName: string }) => (
+  SkillPlanStatusPill: ({ skillName }: { skillName: string }) => (
     <span data-testid="skill-freshness">{skillName}</span>
   )
 }))
@@ -192,7 +192,7 @@ describe('AgentSkillSetupPanel', () => {
     expect(labels).toEqual(['Re-check'])
   })
 
-  it('surfaces skill freshness under hideHeader for guided setup hubs', () => {
+  it('shows a checking verdict before the guided setup plan loads', () => {
     const html = renderPanel({
       installed: true,
       hideHeader: true,
@@ -200,8 +200,7 @@ describe('AgentSkillSetupPanel', () => {
       freshnessSkillName: 'orca-linear'
     })
 
-    expect(html).toContain('data-testid="skill-freshness"')
-    expect(html).toContain('orca-linear')
+    expect(html).toContain('Checking...')
     expect(html).not.toContain('CLI skill')
   })
 

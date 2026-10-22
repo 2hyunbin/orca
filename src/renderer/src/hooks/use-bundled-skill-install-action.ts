@@ -1,3 +1,4 @@
+import type { BundledSkillPlan } from '../../../shared/bundled-skill-plan'
 import { bundledSkillSetupAttentionMessage } from '@/components/settings/bundled-skill-setup-result-copy'
 import {
   bundledSkillSetupChanges,
@@ -10,12 +11,19 @@ import {
 } from '../../../shared/bundled-skill-summary'
 import { bundledSkillTargetKey, type BundledSkillTarget } from '@/lib/bundled-skill-target'
 import { planBundledSkillsOnTarget } from '@/runtime/runtime-bundled-skills-client'
-import { INSTALLED_AGENT_SKILLS_CHANGED_EVENT } from './installed-agent-skills-change-event'
+import {
+  INSTALLED_AGENT_SKILLS_CHANGED_EVENT,
+  INSTALLED_AGENT_SKILLS_REFRESHED_EVENT
+} from './installed-agent-skills-change-event'
 import { useActiveProjectSkillRuntime } from './useActiveProjectSkillRuntime'
 
 /** `unknown`: the owning host could not plan, including servers that need an update. */
 export type BundledSkillInstallActionState =
-  | (BundledSkillInstallAction & { changes?: BundledSkillSetupChanges; attentionMessage?: string })
+  | (BundledSkillInstallAction & {
+      changes?: BundledSkillSetupChanges
+      attentionMessage?: string
+      plan?: BundledSkillPlan
+    })
   | { kind: 'loading' }
   | { kind: 'unknown' }
 
@@ -38,7 +46,11 @@ export function useBundledSkillInstallAction(
   useEffect(() => {
     const onChanged = (): void => setRevision((value) => value + 1)
     window.addEventListener(INSTALLED_AGENT_SKILLS_CHANGED_EVENT, onChanged)
-    return () => window.removeEventListener(INSTALLED_AGENT_SKILLS_CHANGED_EVENT, onChanged)
+    window.addEventListener(INSTALLED_AGENT_SKILLS_REFRESHED_EVENT, onChanged)
+    return () => {
+      window.removeEventListener(INSTALLED_AGENT_SKILLS_CHANGED_EVENT, onChanged)
+      window.removeEventListener(INSTALLED_AGENT_SKILLS_REFRESHED_EVENT, onChanged)
+    }
   }, [])
 
   useEffect(() => {
@@ -54,6 +66,7 @@ export function useBundledSkillInstallAction(
         if (planned.kind === 'plan') {
           action = {
             ...bundledSkillInstallAction(planned.plan),
+            plan: planned.plan,
             changes: bundledSkillSetupChanges(planned.plan),
             attentionMessage: bundledSkillSetupAttentionMessage(planned.plan)
           }

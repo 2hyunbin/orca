@@ -6,7 +6,7 @@ import { WslAgentSkillSetupPanel } from './WslAgentSkillSetupPanel'
 import { useCallback } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { IntegrationStatusPill } from '../integration-status-pill'
-import { SkillFreshnessStatusPill } from '../skills/SkillFreshnessStatusPill'
+import { SkillPlanStatusPill } from '../skills/SkillFreshnessStatusPill'
 import { BundledSkillInstallStatus } from './BundledSkillInstallStatus'
 import type { AgentSkillSetupPanelProps } from './agent-skill-setup-panel-props'
 import { Button } from '../ui/button'
@@ -75,6 +75,24 @@ function BundledAgentSkillSetupPanel({
       : action.kind === 'replace'
         ? 'replace'
         : null
+
+  const plan = 'plan' in action ? action.plan : undefined
+  const freshnessPill =
+    action.kind === 'loading' || action.kind === 'unknown' ? (
+      <IntegrationStatusPill tone={action.kind === 'loading' ? 'neutral' : 'attention'}>
+        {action.kind === 'loading'
+          ? translate('auto.components.skills.SkillFreshnessStatusPill.checking', 'Checking...')
+          : translate(
+              'auto.components.skills.SkillFreshnessStatusPill.checkFailed',
+              'Check failed'
+            )}
+      </IntegrationStatusPill>
+    ) : (
+      <SkillPlanStatusPill
+        skillName={freshnessSkillName ?? activeSkillNames[0]}
+        plan={plan ?? null}
+      />
+    )
 
   const startInstall = (): void => {
     if (installing) {
@@ -163,9 +181,7 @@ function BundledAgentSkillSetupPanel({
             {error ? <p className="text-[12px] text-destructive">{error}</p> : null}
             {/* hideHeader drops the title row; keep freshness so guided hubs still surface updates. */}
             {installed && freshnessSkillName && !failed ? (
-              <div className="mb-2">
-                <SkillFreshnessStatusPill skillName={freshnessSkillName} />
-              </div>
+              <div className="mb-2">{freshnessPill}</div>
             ) : null}
           </>
         ) : (
@@ -195,7 +211,7 @@ function BundledAgentSkillSetupPanel({
                   </IntegrationStatusPill>
                 ) : effectivelyInstalled ? (
                   freshnessSkillName ? (
-                    <SkillFreshnessStatusPill skillName={freshnessSkillName} />
+                    freshnessPill
                   ) : (
                     <IntegrationStatusPill tone="connected">
                       {translate(
@@ -238,7 +254,13 @@ function BundledAgentSkillSetupPanel({
           />
           {actionHint ? <div className="mt-2">{actionHint}</div> : null}
         </div>
-        {footer ? <div className="mt-5 border-t border-border/60 pt-5">{footer}</div> : null}
+        {footer ? (
+          <div className="mt-5 border-t border-border/60 pt-5">
+            {typeof footer === 'function'
+              ? footer('plan' in action ? action.plan : undefined)
+              : footer}
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -253,6 +275,7 @@ export function AgentSkillSetupPanel(props: AgentSkillSetupPanelProps): React.JS
     return (
       <WslAgentSkillSetupPanel
         {...props}
+        footer={typeof props.footer === 'function' ? props.footer(undefined) : props.footer}
         command={buildSkillCommandForRuntime(
           buildAgentFeatureSkillInstallCommand(props.skillNames),
           runtime
