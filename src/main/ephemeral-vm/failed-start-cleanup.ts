@@ -1,17 +1,17 @@
 import {
   getEphemeralVmRecipeResultConnection,
   type EphemeralVmRecipeResult
-} from '../shared/ephemeral-vm-recipes'
-import type { EphemeralVmRuntimeRecord } from '../shared/ephemeral-vm-runtimes'
+} from '../../shared/ephemeral-vm-recipes'
+import type { EphemeralVmRuntimeRecord } from '../../shared/ephemeral-vm-runtimes'
 import {
   upsertEphemeralVmRuntime,
   upsertEphemeralVmRuntimeRollbackRecovery
-} from '../shared/ephemeral-vm-runtime-store'
-import type { ProvisionEphemeralVmRuntimeArgs } from './ephemeral-vm-runtime-service'
+} from '../../shared/ephemeral-vm-runtime-store'
+import type { ProvisionEphemeralVmRuntimeArgs } from './runtime-service'
 import {
   runEphemeralVmRecipeCleanup,
   type EphemeralVmRecipeContext
-} from './ephemeral-vm-recipe-runner'
+} from '../../shared/ephemeral-vm-recipe-runner'
 
 type FailedStart = {
   context: EphemeralVmRecipeContext

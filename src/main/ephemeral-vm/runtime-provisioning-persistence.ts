@@ -1,17 +1,17 @@
 import { randomUUID } from 'node:crypto'
-import { assertEphemeralVmRuntimeCheckoutModeCanPersist } from '../shared/ephemeral-vm-runtime-feature-store'
-import { getEphemeralVmRecipeResultConnection } from '../shared/ephemeral-vm-recipes'
+import { assertEphemeralVmRuntimeCheckoutModeCanPersist } from '../../shared/ephemeral-vm-runtime-feature-store'
+import { getEphemeralVmRecipeResultConnection } from '../../shared/ephemeral-vm-recipes'
 import {
   listEphemeralVmRuntimes,
   removeEphemeralVmRuntime,
   upsertEphemeralVmRuntime
-} from '../shared/ephemeral-vm-runtime-store'
-import type { EphemeralVmRuntimeRecord } from '../shared/ephemeral-vm-runtimes'
+} from '../../shared/ephemeral-vm-runtime-store'
+import type { EphemeralVmRuntimeRecord } from '../../shared/ephemeral-vm-runtimes'
 import type {
   ProvisionEphemeralVmRuntimeArgs,
   ProvisionEphemeralVmRuntimeResult
-} from './ephemeral-vm-runtime-service'
-import { cleanupFailedEphemeralVmStart } from './ephemeral-vm-failed-start-cleanup'
+} from './runtime-service'
+import { cleanupFailedEphemeralVmStart } from './failed-start-cleanup'
 
 export type EphemeralVmCompatibilityPersistence = {
   instanceId: string

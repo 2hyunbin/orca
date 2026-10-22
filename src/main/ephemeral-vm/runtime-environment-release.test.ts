@@ -7,18 +7,18 @@ const mocks = vi.hoisted(() => ({
   closeTunnel: vi.fn(async () => {})
 }))
 
-vi.mock('../shared/runtime-environment-store', () => ({
+vi.mock('../../shared/runtime-environment-store', () => ({
   listEnvironments: mocks.list,
   removeEnvironment: mocks.remove
 }))
-vi.mock('../shared/runtime-environment-managed-orcad-store', () => ({
+vi.mock('../../shared/runtime-environment-managed-orcad-store', () => ({
   removeManagedOrcadEnvironment: mocks.removeManaged
 }))
-vi.mock('./managed-server/lifecycle/orcad-managed-tunnel', () => ({
+vi.mock('../managed-server/lifecycle/orcad-managed-tunnel', () => ({
   closeOrcadManagedTunnel: mocks.closeTunnel
 }))
 
-import { releaseEphemeralVmRuntimeEnvironments } from './ephemeral-vm-runtime-environment-release'
+import { releaseEphemeralVmRuntimeEnvironments } from './runtime-environment-release'
 
 describe('releaseEphemeralVmRuntimeEnvironments', () => {
   beforeEach(() => {

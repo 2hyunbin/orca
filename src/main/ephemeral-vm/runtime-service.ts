@@ -1,9 +1,9 @@
-import type { OrcaVmRecipe } from '../shared/orca-yaml-hook-types'
+import type { OrcaVmRecipe } from '../../shared/orca-yaml-hook-types'
 import {
   listEphemeralVmRuntimes,
   updateEphemeralVmRuntimeStatus
-} from '../shared/ephemeral-vm-runtime-store'
-import type { EphemeralVmRuntimeRecord } from '../shared/ephemeral-vm-runtimes'
+} from '../../shared/ephemeral-vm-runtime-store'
+import type { EphemeralVmRuntimeRecord } from '../../shared/ephemeral-vm-runtimes'
 import {
   runEphemeralVmRecipeCleanup,
   runEphemeralVmRecipeResume,
@@ -12,16 +12,14 @@ import {
   type EphemeralVmRecipeContext,
   type EphemeralVmRecipeStartFailure,
   type EphemeralVmRecipeStartSuccess
-} from './ephemeral-vm-recipe-runner'
-import { cleanupFailedEphemeralVmStart } from './ephemeral-vm-failed-start-cleanup'
+} from '../../shared/ephemeral-vm-recipe-runner'
+import { cleanupFailedEphemeralVmStart } from './failed-start-cleanup'
 import {
   persistProvisionedEphemeralVmRuntime,
   prepareEphemeralVmCompatibilityPersistence
-} from './ephemeral-vm-runtime-provisioning-persistence'
-import { getProvisionedRootResumeIntegrityError } from './ephemeral-vm-resume-integrity'
-import { runControlledEphemeralVmRuntimeCleanup } from './ephemeral-vm-runtime-cleanup-control'
-
-export { stopEphemeralVmRuntimeCleanup } from './ephemeral-vm-runtime-cleanup-control'
+} from './runtime-provisioning-persistence'
+import { getProvisionedRootResumeIntegrityError } from './resume-integrity'
+import { runControlledEphemeralVmRuntimeCleanup } from './runtime-cleanup-control'
 
 export type ProvisionEphemeralVmRuntimeArgs = {
   userDataPath: string

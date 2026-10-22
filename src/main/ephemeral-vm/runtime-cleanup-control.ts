@@ -1,4 +1,4 @@
-import type { CleanupEphemeralVmRuntimeResult } from './ephemeral-vm-runtime-service'
+import type { CleanupEphemeralVmRuntimeResult } from './runtime-service'
 
 type CleanupInFlight = {
   controller: AbortController

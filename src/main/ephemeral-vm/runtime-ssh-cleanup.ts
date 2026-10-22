@@ -1,8 +1,8 @@
 import {
   listEphemeralVmRuntimes,
   updateEphemeralVmRuntimeStatus
-} from '../shared/ephemeral-vm-runtime-store'
-import type { EphemeralVmRuntimeRecord } from '../shared/ephemeral-vm-runtimes'
+} from '../../shared/ephemeral-vm-runtime-store'
+import type { EphemeralVmRuntimeRecord } from '../../shared/ephemeral-vm-runtimes'
 
 export async function removeEphemeralVmRuntimeSshTarget(args: {
   userDataPath: string

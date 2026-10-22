@@ -2,23 +2,23 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileS
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../shared/pairing'
+import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
 import {
   getEphemeralVmRuntimeStorePath,
   listEphemeralVmRuntimes,
   upsertEphemeralVmRuntime
-} from '../shared/ephemeral-vm-runtime-store'
+} from '../../shared/ephemeral-vm-runtime-store'
 import {
   getEphemeralVmRuntimeFeatureStorePath,
   MAX_EPHEMERAL_VM_RUNTIME_FEATURE_STORE_FILE_BYTES
-} from '../shared/ephemeral-vm-runtime-feature-store'
+} from '../../shared/ephemeral-vm-runtime-feature-store'
 import {
   cleanupEphemeralVmRuntime,
   provisionEphemeralVmRuntime,
-  resumeEphemeralVmRuntime,
-  stopEphemeralVmRuntimeCleanup
-} from './ephemeral-vm-runtime-service'
-import type { OrcaVmRecipe } from '../shared/orca-yaml-hook-types'
+  resumeEphemeralVmRuntime
+} from './runtime-service'
+import { stopEphemeralVmRuntimeCleanup } from './runtime-cleanup-control'
+import type { OrcaVmRecipe } from '../../shared/orca-yaml-hook-types'
 
 const tempDirs: string[] = []
 

@@ -2,17 +2,19 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../shared/pairing'
-import { getEphemeralVmRecipeResultProjectRoot } from '../shared/ephemeral-vm-recipes'
+import { encodePairingOffer, PAIRING_OFFER_VERSION } from '../../shared/pairing'
+import { getEphemeralVmRecipeResultProjectRoot } from '../../shared/ephemeral-vm-recipes'
 import {
   buildEphemeralVmRecipeCleanupCommand,
-  buildEphemeralVmRecipeCleanupPayload,
+  buildEphemeralVmRecipeCleanupPayload
+} from '../../shared/ephemeral-vm-recipe-lifecycle-payload'
+import {
   runEphemeralVmRecipeCleanup,
   runEphemeralVmRecipeResume,
   runEphemeralVmRecipeStart,
   runEphemeralVmRecipeSuspend
-} from './ephemeral-vm-recipe-runner'
-import type { OrcaVmRecipe } from '../shared/orca-yaml-hook-types'
+} from '../../shared/ephemeral-vm-recipe-runner'
+import type { OrcaVmRecipe } from '../../shared/orca-yaml-hook-types'
 
 const tmpRoots: string[] = []
 

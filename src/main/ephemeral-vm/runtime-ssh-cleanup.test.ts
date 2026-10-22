@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, expect, it, vi } from 'vitest'
-import { upsertEphemeralVmRuntime } from '../shared/ephemeral-vm-runtime-store'
-import type { EphemeralVmRuntimeRecord } from '../shared/ephemeral-vm-runtimes'
-import { removeEphemeralVmRuntimeSshTarget } from './ephemeral-vm-runtime-ssh-cleanup'
+import { upsertEphemeralVmRuntime } from '../../shared/ephemeral-vm-runtime-store'
+import type { EphemeralVmRuntimeRecord } from '../../shared/ephemeral-vm-runtimes'
+import { removeEphemeralVmRuntimeSshTarget } from './runtime-ssh-cleanup'
 
 const tempDirs: string[] = []
 

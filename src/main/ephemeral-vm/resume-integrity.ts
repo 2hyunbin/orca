@@ -1,10 +1,10 @@
-import { normalizeRuntimePathForComparison } from '../shared/cross-platform-path'
+import { normalizeRuntimePathForComparison } from '../../shared/cross-platform-path'
 import {
   getEphemeralVmRecipeResultCheckoutMode,
   getEphemeralVmRecipeResultConnection,
   getEphemeralVmRecipeResultProjectRoot,
   type EphemeralVmRecipeResult
-} from '../shared/ephemeral-vm-recipes'
+} from '../../shared/ephemeral-vm-recipes'
 
 export function getProvisionedRootResumeIntegrityError(
   previous: EphemeralVmRecipeResult,

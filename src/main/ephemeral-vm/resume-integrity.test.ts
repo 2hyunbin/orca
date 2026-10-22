@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type {
   EphemeralVmRecipeConnection,
   EphemeralVmRecipeResult
-} from '../shared/ephemeral-vm-recipes'
-import { getProvisionedRootResumeIntegrityError } from './ephemeral-vm-resume-integrity'
+} from '../../shared/ephemeral-vm-recipes'
+import { getProvisionedRootResumeIntegrityError } from './resume-integrity'
 
 type RecipeSshTarget = Extract<EphemeralVmRecipeConnection, { type: 'ssh' }>['target']
 

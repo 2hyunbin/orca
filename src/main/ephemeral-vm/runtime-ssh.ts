@@ -1,12 +1,12 @@
-import { getSshConnectionStore } from './ipc/ssh/ssh'
-import { connectRegisteredSshTarget } from './ssh/targets/ssh-target-registry'
+import { getSshConnectionStore } from '../ipc/ssh/ssh'
+import { connectRegisteredSshTarget } from '../ssh/targets/ssh-target-registry'
 import {
   disconnectRegisteredSshTarget,
   removeRegisteredSshTarget
-} from './ipc/ssh/ssh-session-teardown'
-import type { EphemeralVmRecipeConnection } from '../shared/ephemeral-vm-recipes'
-import type { SshTarget } from '../shared/ssh-types'
-import { SshHostNotServedError } from './providers/ssh-host-not-served-error'
+} from '../ipc/ssh/ssh-session-teardown'
+import type { EphemeralVmRecipeConnection } from '../../shared/ephemeral-vm-recipes'
+import type { SshTarget } from '../../shared/ssh-types'
+import { SshHostNotServedError } from '../providers/ssh-host-not-served-error'
 
 export type RuntimeOwnedSshConnectionResult = {
   targetId: string
