@@ -20,6 +20,7 @@ import {
   recordPtySurfaceClaim,
   SURFACE_CLAIM_WITHOUT_STANDING
 } from '../../pty-recorded-surface-topology'
+import { followExportedPaneKeys } from './exported-pane-key-follow'
 
 export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceRepoScanRefresh {
   /** Switch-on, a pane main owns is no proof its terminal runs: its record decides (L80). */
@@ -59,6 +60,7 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
         | 'preview'
         | 'tabId'
         | 'paneKey'
+        | 'envPaneKey'
         | 'surfaceRecordedAtGraphSequence'
         | 'title'
         | 'connectionId'
@@ -110,6 +112,7 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
                 state.surfaceRecordedAtGraphSequence ?? this.graphSequence
               )
             }),
+        ...(state.envPaneKey ? { envPaneKey: state.envPaneKey } : {}),
         launchConfig: null,
         launchToken: null,
         launchIncarnationId: null,
@@ -224,6 +227,9 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
         state.surfaceRecordedAtGraphSequence ?? SURFACE_CLAIM_WITHOUT_STANDING
       )
     }
+    if (state.envPaneKey !== undefined) {
+      pty.envPaneKey = state.envPaneKey
+    }
     if (state.connected !== undefined) {
       pty.connected = state.connected
       pty.disconnectedAt = state.connected ? null : (pty.disconnectedAt ?? Date.now())
@@ -252,6 +258,11 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
       noteMainPaneRecordChange(this, prior, pty)
     }
     return pty
+  }
+
+  /** Moves agent status keyed by a re-homed terminal's exported pane key to the pane it is in. */
+  protected followExportedPaneKeys(): void {
+    followExportedPaneKeys(this.ptysById.values(), (pty) => this.paneOfPty(pty).paneKey)
   }
 
   protected makeRuntimePaneKey(
