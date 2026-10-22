@@ -2,7 +2,8 @@ import { translate } from '@/i18n/i18n'
 import type {
   PaletteItem,
   PaletteListEntry,
-  PaletteSectionKey
+  PaletteSectionKey,
+  SectionHeader
 } from '../worktree-jump-palette-model'
 import { buildPaletteListEntryRenderKeys } from './palette-list-entry-render-keys'
 
@@ -129,20 +130,14 @@ export function reconcilePaletteObservedPrefix({
     }
   }
   const keys = buildPaletteListEntryRenderKeys(entries.map((entry) => entry.id))
-  const headers = new Map<PaletteSectionKey, PaletteListEntry>()
-  for (const description of describePaletteOccurrences(entries, keys)) {
-    if (description.type === 'section-header' && description.section) {
-      const header = structural.get(description.id)
-      if (header) {
-        headers.set(description.section, header)
-      }
+  const headers = new Map<PaletteSectionKey, SectionHeader>()
+  for (const entry of entries) {
+    if (entry.type === 'section-header') {
+      headers.set(entry.section, entry)
     }
   }
-  let lastSection =
-    describePaletteOccurrences(
-      result,
-      result.map((entry) => entry.id)
-    ).at(-1)?.section ?? null
+  const last = result.at(-1)
+  let lastSection = last ? paletteEntrySection(last) : null
   const usedIds = new Set(result.map((entry) => entry.id))
   let continuation = 0
   for (const [index, entry] of entries.entries()) {
@@ -156,7 +151,7 @@ export function reconcilePaletteObservedPrefix({
     const section = paletteEntrySection(entry)
     if (section && section !== lastSection) {
       const header = headers.get(section)
-      if (header?.type === 'section-header') {
+      if (header) {
         let id = header.id
         while (usedIds.has(id)) {
           id = `${header.id}__observed_continued_${continuation++}`
@@ -179,12 +174,8 @@ export function reconcilePaletteObservedPrefix({
     eligible.set(section, ids)
   }
   const seen = new Map<PaletteSectionKey, Set<string>>()
-  const descriptions = describePaletteOccurrences(
-    result,
-    result.map((entry) => entry.id)
-  )
-  return result.flatMap((entry, index) => {
-    const section = descriptions[index].section
+  return result.flatMap((entry) => {
+    const section = paletteEntrySection(entry)
     if (!section) {
       return [entry]
     }
