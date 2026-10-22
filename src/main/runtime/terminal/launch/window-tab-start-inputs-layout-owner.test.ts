@@ -214,11 +214,12 @@ describe("the start inputs of the window's new tab, run by main (L252)", () => {
     ])
   })
 
-  it('pastes nothing into a terminal it attached to instead of starting', async () => {
+  it('pastes nothing into a terminal it attached to instead of starting, and says so', async () => {
     const pasteDraft = vi.fn()
+    const draftNotPasted = vi.fn()
     await startWindowTabWithInputs(
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the attach path reads no host member.
-      { runtime: fixture.runtime as never, store: null, pasteDraft },
+      { runtime: fixture.runtime as never, store: null, pasteDraft, draftNotPasted },
       { worktreeId: WORKTREE_ID, ...PANE },
       { command: 'codex', draftPaste: { agent: 'codex', content: 'look' } },
       // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: only the reply's handle and reattach flag are read.
@@ -226,5 +227,25 @@ describe("the start inputs of the window's new tab, run by main (L252)", () => {
     )
 
     expect(pasteDraft).not.toHaveBeenCalled()
+    expect(draftNotPasted.mock.calls).toEqual([[{ agent: 'codex', content: 'look' }]])
+  })
+
+  it('says the draft was not pasted when the start fails after it was fenced', async () => {
+    const startupDraftNotPasted = vi.fn()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: main's start reads only this notifier member here.
+    fixture.runtime.setNotifier({ startupDraftNotPasted } as never)
+    fixture.spawn.mockRejectedValueOnce(new Error('spawn failed'))
+
+    await expect(
+      fixture.runtime.startWindowTabTerminal(WORKTREE_ID, PANE, {
+        command: 'codex',
+        launchAgent: 'codex',
+        draftPaste: { agent: 'codex', content: 'look at this' }
+      })
+    ).rejects.toThrow()
+
+    expect(startupDraftNotPasted.mock.calls).toEqual([
+      [{ worktreeId: WORKTREE_ID, tabId: TAB_ID, agent: 'codex' }]
+    ])
   })
 })

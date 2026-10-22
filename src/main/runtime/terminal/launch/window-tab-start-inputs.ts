@@ -49,6 +49,8 @@ export type WindowTabStartHost = {
   runtime: OrcaRuntimeService
   store: RuntimeStore | null | undefined
   pasteDraft: (handle: string, draft: WorktreeStartupDraftPaste) => void
+  /** The window fenced its own paste of this draft, and main will not paste it either. */
+  draftNotPasted: (draft: WorktreeStartupDraftPaste) => void
 }
 
 export async function startWindowTabWithInputs(
@@ -61,12 +63,25 @@ export async function startWindowTabWithInputs(
     // As the window's own model start refuses it: a model launch cannot resume a session.
     return create({ ...opts, startFailure: new Error('capability_unsupported') })
   }
-  const terminal =
-    agentLaunch === undefined
-      ? await create(opts)
-      : await startPaneAgentLaunch(host, pane, agentLaunch, opts, create)
-  if (draftPaste && !terminal.isReattach) {
-    host.pasteDraft(terminal.handle, draftPaste)
+  let terminal: dependencies.RuntimeTerminalCreate
+  try {
+    terminal =
+      agentLaunch === undefined
+        ? await create(opts)
+        : await startPaneAgentLaunch(host, pane, agentLaunch, opts, create)
+  } catch (error) {
+    if (draftPaste) {
+      host.draftNotPasted(draftPaste)
+    }
+    throw error
+  }
+  if (draftPaste) {
+    // An attach finds a terminal this start never ran, so nothing pastes the draft into it.
+    if (terminal.isReattach) {
+      host.draftNotPasted(draftPaste)
+    } else {
+      host.pasteDraft(terminal.handle, draftPaste)
+    }
   }
   return terminal
 }

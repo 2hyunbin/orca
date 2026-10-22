@@ -11,6 +11,7 @@ import { mainOwnsTabLayout } from './main-owned-tab-layout'
 import { PaneOwnerContentionError } from '../../../ipc/pty/pane/pane-spawn-operation'
 import { startWindowTabWithInputs, type WindowTabStartInputs } from './window-tab-start-inputs'
 import type { OrcaRuntimeService } from '../../orca-runtime'
+import type { TuiAgent } from '../../../../shared/tui-agent'
 
 export type FailedStartPane = { tabId: string; leafId: string }
 
@@ -90,19 +91,16 @@ export abstract class OrcaRuntimeWithFailedStartPanes extends OrcaRuntimeWithCre
     ) {
       return Promise.reject(new Error('host_not_owned'))
     }
+    const draftNotPasted = (draft: { agent: TuiAgent }): void =>
+      this.notifier?.startupDraftNotPasted?.({ worktreeId, tabId: pane.tabId, agent: draft.agent })
     // Background: the window already shows the tab, so main reveals nothing.
     return startWindowTabWithInputs(
       {
         runtime: this,
         store: this.store,
         pasteDraft: (handle, draft) =>
-          this.pasteStartupDraftWhenReady(handle, draft, () =>
-            this.notifier?.startupDraftNotPasted?.({
-              worktreeId,
-              tabId: pane.tabId,
-              agent: draft.agent
-            })
-          )
+          this.pasteStartupDraftWhenReady(handle, draft, () => draftNotPasted(draft)),
+        draftNotPasted
       },
       { worktreeId, ...pane },
       opts,
