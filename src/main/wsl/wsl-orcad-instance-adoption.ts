@@ -90,7 +90,9 @@ async function lockHolderLiveness(
   if (!incarnation) {
     return 'exited'
   }
-  const verdict = compareOrcadProcessIdentity(lock.pid, lock, {
+  // Why lowercased: the guest's boot id is read lowercased, and a writer may record it otherwise.
+  const recorded = lock.bootId ? { ...lock, bootId: lock.bootId.toLowerCase() } : lock
+  const verdict = compareOrcadProcessIdentity(lock.pid, recorded, {
     incarnation: () => incarnation,
     // The guest's wall clock jumps after a host sleep, so it is not read.
     startedAtMs: () => null,

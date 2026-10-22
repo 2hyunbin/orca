@@ -249,6 +249,13 @@ describe('adopting an orcad the activation record does not name', () => {
     expect(host.writes).toEqual([])
   })
 
+  it('matches a lock that recorded its boot id in upper case', async () => {
+    host.lock = JSON.stringify({ ...JSON.parse(lockFor(530, OLD)), bootId: BOOT_ID.toUpperCase() })
+    host.alive.add(530)
+    host.stopTarget = stopTargetFor(530, OLD)
+    await expect(adopt(record())).resolves.toMatchObject({ outcome: 'adopted', pid: 530 })
+  })
+
   it('does not adopt a lock whose PID a distro restart gave to another process', async () => {
     // The stale lock and readiness both still name pid 500, so only process identity can tell.
     host.lock = lockFor(500, OLD)
