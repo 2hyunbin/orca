@@ -2,7 +2,8 @@
 // AddRepoCreateStep so the create-state machine stays scoped and testable.
 import { useCallback, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { selectRepos, useAppStore } from '@/store'
+import { useAppStore } from '@/store'
+import { selectRepos } from '@/store/project-catalog-selectors'
 import { useMountedRef } from '@/hooks/useMountedRef'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { markOnboardingProjectAdded } from '@/lib/onboarding-project-checklist'
