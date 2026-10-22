@@ -176,12 +176,16 @@ export async function executeWorktreeCreation(
   // Why: the worktree exists past this point and nothing awaits this caller, so
   // each follow-up step is best-effort — an escaped throw would strand the
   // creation surface over the finished workspace instead of reaching completion.
+  // The host the create went to, so a same-path twin elsewhere cannot make its owner ambiguous.
+  const creationHostId =
+    preparedRequest.workspaceRunContext?.hostId ?? preparedRequest.executionHostId
   let activation: ActivateAndRevealResult | false = false
   let primaryTabId: string | null = null
   if (shouldActivateOnCompletion && !structuredLaunch) {
     try {
       activation = activateAndRevealWorktree(worktree.id, {
         sidebarRevealBehavior: 'auto',
+        ...(creationHostId ? { executionHostId: creationHostId } : {}),
         ...(preparedRequest.agent !== null ? { agent: preparedRequest.agent } : {}),
         ...(result.setup ? { setup: result.setup } : {}),
         ...(defaultTabs ? { defaultTabs } : {}),
@@ -216,7 +220,12 @@ export async function executeWorktreeCreation(
             preparedRequest.issueCommand,
             defaultTabs,
             // Activation failed before providing its promised surface, so recovery must seed one.
-            backendSpawned ? { backendStartupTerminalSpawned: true } : undefined
+            backendSpawned || creationHostId
+              ? {
+                  ...(backendSpawned ? { backendStartupTerminalSpawned: true } : {}),
+                  ...(creationHostId ? { executionHostId: creationHostId } : {})
+                }
+              : undefined
           )
         } catch (recoveryError) {
           console.error('worktree create: recovery seed failed', worktree.id, recoveryError)
@@ -255,6 +264,7 @@ export async function executeWorktreeCreation(
           defaultTabs,
           {
             activateCreatedTabs: false,
+            ...(creationHostId ? { executionHostId: creationHostId } : {}),
             ...(callerProvidesSurface ? { callerProvidesSurface: true } : {}),
             ...(backendSpawned ? { backendStartupTerminalSpawned: true } : {})
           }
