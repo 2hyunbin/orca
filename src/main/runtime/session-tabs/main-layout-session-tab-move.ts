@@ -11,6 +11,7 @@ import { translateSessionTabMove } from '../../../shared/workspace-layout/old-cl
 import { resolveSessionTabRow } from '../../../shared/workspace-layout/old-client/old-client-session-tab-rows'
 import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 import { OrcaRuntimeWithMainLayoutRenames } from './main-layout-renames'
+import type { WorkspaceLayout } from '../../../shared/workspace-layout/workspace-layout-model'
 
 export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithMainLayoutRenames {
   protected abstract toMobileSessionTabsResult(
@@ -18,6 +19,14 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
       OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']
     >
   ): ReturnType<OrcaRuntimeWithPruneMobileSessionTabGroupLayout['toMobileSessionTabsResult']>
+
+  /** Main's layout of a workspace, from its routed partition; undefined when main holds none. */
+  protected mainLayoutWorkspace(worktreeId: string): WorkspaceLayout | undefined {
+    const hostId = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
+    return hostId
+      ? this.workspaceLayoutReads.readPartition(hostId)?.layout.workspaces[worktreeId]
+      : undefined
+  }
 
   /**
    * The move in main's layout, read against the rows the client was shown. Null when main does not
@@ -34,10 +43,7 @@ export abstract class OrcaRuntimeWithMainLayoutTabMoves extends OrcaRuntimeWithM
     ) {
       return null
     }
-    const hostId = this.tryGetWorkspaceSessionHostIdForWorktree(worktreeId)
-    const workspace = hostId
-      ? this.workspaceLayoutReads.readPartition(hostId)?.layout.workspaces[worktreeId]
-      : undefined
+    const workspace = this.mainLayoutWorkspace(worktreeId)
     if (!workspace) {
       throw new Error('tab_not_found')
     }

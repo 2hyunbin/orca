@@ -174,4 +174,31 @@ describe("a phone's layout change on a windowless server (switch on)", () => {
     expect(tabStrip(listed)).toEqual([order])
     expect(orderOf(listed.tabs)).toEqual(order)
   })
+
+  it("places a terminal created after a chat main holds in the chat's group, after it", async () => {
+    const { runtime } = await headlessRuntime()
+    await runtime.publishStructuredAgentSessionTab({
+      workspaceId: TEST_WORKTREE_ID,
+      sessionId: 's1',
+      agent: 'claude',
+      activate: true
+    })
+    await runtime.moveMobileSessionTab(WORKTREE, {
+      kind: 'split',
+      tabId: CHAT,
+      targetGroupId: SAVED_GROUP_ID,
+      splitDirection: 'right'
+    })
+
+    const created = await runtime.createMobileSessionTerminal(WORKTREE, {
+      afterTabId: CHAT,
+      clientNavigationId: 'phone',
+      supportsSplitGroupPlacement: true
+    })
+
+    expect(tabStrip(await runtime.listMobileSessionTabs(WORKTREE))).toEqual([
+      [SURFACE_TAB_ID, SECOND_TAB_ID, THIRD_TAB_ID],
+      [CHAT, created.tab.parentTabId]
+    ])
+  })
 })
