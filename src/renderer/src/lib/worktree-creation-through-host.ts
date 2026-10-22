@@ -1,10 +1,9 @@
 import { useAppStore } from '@/store'
 import { completeHostWorktreeCreation } from '@/lib/worktree-creation-host-completion'
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { runtimeTargetForRepoOwner } from '@/lib/repo-runtime-owner'
+import { repoOwnerHostId, runtimeTargetForRepoOwner } from '@/lib/repo-runtime-owner'
 import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
 import { adoptFromEndpoint } from '@/store/adopt-from-endpoint'
-import { repoHostId } from '@/store/slices/worktrees/listing/worktree-host-ownership'
 import { ensureLocalRuntimeCapabilities } from '@/runtime/local-runtime-capabilities'
 import { getRuntimeEnvironmentStatus, callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
@@ -51,7 +50,8 @@ export async function createWorktreeThroughHost(
   const target = requestedHostId
     ? runtimeRpcTargetForAuthorityKey(requestedHostId)
     : runtimeTargetForRepoOwner(state, request.repoId)
-  if (!target) {
+  const ownerHostId = requestedHostId ?? repoOwnerHostId(state, request.repoId)
+  if (!target || !ownerHostId) {
     return false
   }
   if (!request.hostAgentLaunch?.issued) {
@@ -74,7 +74,7 @@ export async function createWorktreeThroughHost(
   const executionHostId = adoptFromEndpoint(target, {
     kind: 'createdWorktree',
     requestedHostId,
-    resolveOwnHostId: () => repoHostId(state, request.repoId)
+    resolveOwnHostId: () => ownerHostId
   })
   const parent = resolveWorktreeCreateParent(state, request.parentWorktreeId, executionHostId)
   request.hostAgentLaunch ??= {

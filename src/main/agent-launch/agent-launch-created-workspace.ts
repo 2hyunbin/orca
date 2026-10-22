@@ -70,7 +70,7 @@ export async function recoverCreatedWorkspace(
 export function initialChatSelection<T extends { workspaceId: string; activate: boolean }>(
   runtime: CreatedWorkspaceLaunchOwner,
   input: T,
-  snapshots: ReadonlyMap<string, Pick<RuntimeMobileSessionTabsResult, 'tabs' | 'activeTabId'>>
+  snapshots: ReadonlyMap<string, { tabs: readonly { id: string }[]; activeTabId: string | null }>
 ): T {
   const snapshot = snapshots.get(input.workspaceId)
   return readCreatedWorkspaceLaunch(runtime, input.workspaceId)

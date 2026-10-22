@@ -190,8 +190,9 @@ export function agentLaunchWorkspaceCreation(
       if (context.clientKind !== 'runtime' || intent.target.kind !== 'create-worktree') {
         return
       }
+      const { creationId } = intent.target.create
       context.runtime.notifyWorktreeCreationProgress({
-        creationId: intent.target.create.creationId,
+        creationId: typeof creationId === 'string' ? creationId : undefined,
         phase: stage === 'worktree_create' ? 'fetching' : 'creating'
       })
     }
