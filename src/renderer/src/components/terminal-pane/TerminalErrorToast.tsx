@@ -6,7 +6,7 @@ import {
   isFolderWorkspacePathError
 } from '@/lib/folder-workspace-path-status'
 import { Button } from '@/components/ui/button'
-import { agentLaunchErrorText } from './agent-launch-pane-notice-text'
+import { agentLaunchErrorText, isAgentLaunchOnlyError } from './agent-launch-pane-notice-text'
 import {
   hasClientEnvironmentFooter,
   stripClientEnvironmentFooter
@@ -250,7 +250,7 @@ export function TerminalErrorToast({
     !ssh &&
     !paneOwnerUnverified &&
     !showDaemonRestart &&
-    !agentLaunchErrorText(error, agentId) &&
+    !isAgentLaunchOnlyError(error) &&
     !isExplainedTerminalError(error) &&
     !isFolderWorkspacePathOnlyError(error)
   const humanizedError = humanizeTerminalError(error, agentId)

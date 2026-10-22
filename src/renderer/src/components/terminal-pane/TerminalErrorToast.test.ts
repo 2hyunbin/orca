@@ -13,7 +13,6 @@ vi.mock('@/lib/client-environment-info', () => ({
 }))
 
 import { i18n } from '@/i18n/i18n'
-import { agentLaunchPaneNoticeText } from './agent-launch-pane-notice-text'
 
 import {
   TerminalErrorToast,
@@ -70,30 +69,42 @@ describe('isSshReconnectOwnedTerminalError', () => {
 })
 
 describe('humanizeTerminalError', () => {
-  it.each(['agent_session_exited_during_start', 'agent_launch_future_failure'])(
-    'renders startup reason %s with the same named, actionable copy as the pane',
-    (code) => {
+  it.each([false, true])(
+    'explains a known exit and retains reporting for independent errors: %s',
+    (mixed) => {
+      const code = 'agent_session_exited_during_start'
+      const footer = '---\nOrca: 1.4.232\nOS: win32 10.0 (x64)\nShell: cmd.exe'
       const view = render(
         React.createElement(TerminalErrorToast, {
-          error: `Error invoking remote method 'pty:spawn': Error: ${code}`,
+          error: `Error invoking remote method 'pty:spawn': Error: ${code}${mixed ? '\nPaste failed.' : ''}\n\n${footer}`,
           agentId: 'codex',
           paneOnClient: false,
           onDismiss: vi.fn()
         })
       )
       const text = view.container.textContent ?? ''
-      expect(text).toContain(agentLaunchPaneNoticeText({ kind: 'not-started', code }, 'codex'))
       expect(text).toContain(
-        code === 'agent_session_exited_during_start'
-          ? 'Codex exited while starting.'
-          : "Codex couldn't start."
+        'Codex exited while starting. Run it in a terminal in this folder to see why, then try again.'
       )
-      expect(text).toContain('Run it in a terminal in this folder to see why, then try again.')
       expect(text).not.toContain(code)
-      expect(text).not.toContain('Error invoking')
-      expect(view.container.querySelector('a')).toBeNull()
+      if (mixed) {
+        expect(text).toContain('Paste failed.')
+      }
+      expect(view.container.querySelectorAll('a')).toHaveLength(mixed ? 1 : 0)
     }
   )
+
+  it.each([
+    'agent_session_operation_unknown',
+    'agent_session_claim_unavailable',
+    'agent_launch_future_failure'
+  ])('preserves uncertainty for a startup string without proof of failure: %s', (code) => {
+    const text = humanizeTerminalError(
+      `Error invoking remote method 'pty:spawn': Error: ${code}`,
+      'codex'
+    )
+    expect(text).toBe("Couldn't confirm Codex started. Check its terminal before trying again.")
+  })
 
   it('replaces the pane-owner-unverified code with actionable copy', () => {
     const humanized = humanizeTerminalError('terminal_pane_owner_unverified')

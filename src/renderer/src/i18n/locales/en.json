@@ -3754,6 +3754,7 @@
             "copyPrompt": "Copy prompt",
             "exitedDuringStart": "{{agent}} exited while starting.",
             "notStarted": "{{agent}} couldn't start.",
+            "restoreWorkspace": "Restore the workspace folder or open an available workspace, then try again.",
             "tryInTerminal": "Run it in a terminal in this folder to see why, then try again.",
             "unconfirmed": "Couldn't confirm {{agent}} started. Check its terminal before trying again.",
             "workspaceGone": "{{agent}} couldn't start because its workspace is no longer available."

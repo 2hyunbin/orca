@@ -7,6 +7,10 @@ const CATALOG: Record<string, string> = {
     '无法确认 {{agent}} 已启动。请先检查其终端，再重试。',
   'auto.components.terminal.pane.AgentLaunchPaneNotice.exitedDuringStart':
     '{{agent}} 在启动时退出了。',
+  'auto.components.terminal.pane.AgentLaunchPaneNotice.workspaceGone':
+    '{{agent}} 的工作区已不可用，无法启动。',
+  'auto.components.terminal.pane.AgentLaunchPaneNotice.restoreWorkspace':
+    '请恢复工作区文件夹或打开可用的工作区，然后重试。',
   'auto.components.terminal.pane.AgentLaunchPaneNotice.tryInTerminal':
     '请在此文件夹的终端中运行它以查看原因，然后重试。'
 }
@@ -15,7 +19,7 @@ vi.mock('@/i18n/i18n', () => ({
     (CATALOG[key] ?? fallback).replaceAll('{{agent}}', options?.agent ?? '')
 }))
 
-const { agentLaunchPaneNoticeText, agentLaunchPaneOutcomeForLeaf } =
+const { agentLaunchErrorText, agentLaunchPaneNoticeText, agentLaunchPaneOutcomeForLeaf } =
   await import('./agent-launch-pane-notice-text')
 
 describe("the pane of a launch whose agent isn't running", () => {
@@ -26,6 +30,15 @@ describe("the pane of a launch whose agent isn't running", () => {
         'claude'
       )
     ).toBe('Claude 在启动时退出了。 请在此文件夹的终端中运行它以查看原因，然后重试。')
+  })
+
+  it('offers a possible workspace remedy on both startup surfaces when the folder is missing', () => {
+    const expected =
+      'Codex 的工作区已不可用，无法启动。 请恢复工作区文件夹或打开可用的工作区，然后重试。'
+    expect(
+      agentLaunchPaneNoticeText({ kind: 'not-started', code: 'worktree_not_found' }, 'codex')
+    ).toBe(expected)
+    expect(agentLaunchErrorText('worktree_not_found', 'codex')).toBe(expected)
   })
 
   it('never shows a host error code', () => {

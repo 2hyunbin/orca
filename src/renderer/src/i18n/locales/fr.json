@@ -3578,6 +3578,7 @@
             "copyPrompt": "Copier le prompt",
             "exitedDuringStart": "{{agent}} s’est arrêté pendant le démarrage.",
             "notStarted": "{{agent}} n’a pas pu démarrer.",
+            "restoreWorkspace": "Restaurez le dossier de l’espace de travail ou ouvrez un espace de travail disponible, puis réessayez.",
             "tryInTerminal": "Lancez-le dans un terminal dans ce dossier pour en connaître la raison, puis réessayez.",
             "unconfirmed": "Impossible de confirmer le démarrage de {{agent}}. Vérifiez son terminal avant de réessayer.",
             "workspaceGone": "{{agent}} n’a pas pu démarrer car son espace de travail n’est plus disponible."
