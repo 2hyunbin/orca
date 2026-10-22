@@ -45,7 +45,7 @@ type TargetStore = Pick<Store, 'getSshTargets' | 'updateSshTarget'>
  * older build since. Mid-migration the rows stay shown, since the source is still authoritative,
  * and so does a fence no journal explains (an empty host's deploy): no move owns those rows.
  */
-export function isHiddenRetainedSourceTarget(
+function isHiddenRetainedSourceTarget(
   userDataPath: string,
   target: Pick<SshTarget, 'id' | 'orcadFence'>
 ): boolean {
@@ -67,7 +67,7 @@ export function isHiddenRetainedSourceTarget(
 }
 
 /** `getUserDataPath` is read only once a host is fenced, so unfenced lists never touch the journal. */
-export function hiddenRetainedSourceTargetIds(
+function hiddenRetainedSourceTargetIds(
   getUserDataPath: () => string,
   targets: readonly SshTarget[]
 ): string[] {
@@ -205,7 +205,7 @@ export function currentOrcadSourceFingerprint(
 }
 
 /** What the retained source must still look like for this build to keep serving it from orcad. */
-export function retainedOrcadSourceBaseline(head: OrcadMigrationSourceCutover): string {
+function retainedOrcadSourceBaseline(head: OrcadMigrationSourceCutover): string {
   return head.sourceBaselineFingerprint ?? orcadCatalogFingerprint(head.manifest.payload)
 }
 
