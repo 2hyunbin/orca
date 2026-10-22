@@ -7,6 +7,7 @@ import { resolveWorktreeCreateDisplayNameRequest } from '../ipc/worktree-display
 import type { RuntimeTerminalCreate } from '../../shared/runtime-types'
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type { Repo } from '../../shared/repo-types'
+import { getRepoSshConnectionId } from '../../shared/execution-host'
 import type { TuiAgent } from '../../shared/tui-agent'
 import type { WorktreeStartupLaunch } from '../../shared/worktree/launch-types'
 import type { AgentLaunchRuntime } from '../../shared/agent-launch-runtime'
@@ -190,7 +191,7 @@ export async function createRuntimeFolderWorktree(args: {
   await request.initializeSurface?.({
     worktreeId: worktree.id,
     workspacePath: worktree.path,
-    connectionId: repo.connectionId ?? null,
+    connectionId: getRepoSshConnectionId(repo),
     created: { worktree, ...(startupTerminal ? { startupTerminal } : {}) },
     startupTerminalHandle: startupTerminal?.handle,
     ...(startupTerminal?.paneKey ? { startupTerminalPaneKey: startupTerminal.paneKey } : {})

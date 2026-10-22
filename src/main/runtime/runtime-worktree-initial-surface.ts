@@ -1,5 +1,6 @@
 import type { Worktree } from '../../shared/worktree/types'
 import type { Repo } from '../../shared/repo-types'
+import { getRepoSshConnectionId } from '../../shared/execution-host'
 import type { CreateWorktreeResult } from '../../shared/worktree/create-types'
 import type {
   AgentLaunchWorkspace,
@@ -22,7 +23,7 @@ export function worktreeInitialSurfaceWorkspace(
   return {
     worktreeId: worktree.id,
     workspacePath: worktree.path,
-    connectionId: repo.connectionId ?? null,
+    connectionId: getRepoSshConnectionId(repo),
     startupTerminalHandle: terminal.startupTerminalHandle ?? undefined,
     ...(terminal.startupTerminalPaneKey
       ? { startupTerminalPaneKey: terminal.startupTerminalPaneKey }
