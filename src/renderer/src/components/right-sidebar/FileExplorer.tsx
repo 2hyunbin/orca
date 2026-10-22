@@ -300,9 +300,8 @@ function FileExplorerFiles(): React.JSX.Element {
           />
         )}
         <FileExplorerQueryStrip view={explorerView} onSelectView={handleSelectExplorerView}>
-          {/* Why: keep both query rows mounted and cross-fade so the Names/Contents
-             switch does not remount or shift when changing modes. */}
-          <div className="relative min-h-7">
+          {/* Keep query rows mounted to preserve input selection when switching modes. */}
+          <div className="relative min-h-8">
             <div
               className={cn(
                 explorerView !== 'files' && 'pointer-events-none invisible absolute inset-x-0 top-0'
@@ -328,12 +327,12 @@ function FileExplorerFiles(): React.JSX.Element {
         </FileExplorerQueryStrip>
         <div
           className={cn(
-            'border-b border-border px-2 pb-1.5',
+            'border-b border-border px-2 py-1',
             explorerView !== 'search' &&
               'pointer-events-none invisible h-0 overflow-hidden border-b-0 p-0'
           )}
         >
-          <SearchFilters {...searchPanel.filtersProps} />
+          <SearchFilters key={activeWorktreeId} {...searchPanel.filtersProps} />
         </div>
         {/* Why: the Files and Contents views share one body slot; layering them
            avoids remounting heavy virtualized panes while preserving full height. */}

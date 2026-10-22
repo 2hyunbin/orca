@@ -14,12 +14,10 @@ export function FileExplorerQueryStrip({
   children
 }: FileExplorerQueryStripProps): React.JSX.Element {
   return (
-    <div className="border-b border-border px-2 py-1.5">
-      {/* Why: show the active query field first; the Contents/Names switch sits
-         underneath so it reads as choosing the mode for the field above. */}
-      <div className="flex flex-col gap-1">
-        {children}
+    <div className="border-b border-border px-2 py-2">
+      <div className="flex flex-col gap-2">
         <FileExplorerViewSwitch view={view} onSelectView={onSelectView} />
+        {children}
       </div>
     </div>
   )
