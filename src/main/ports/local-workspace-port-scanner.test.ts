@@ -411,7 +411,9 @@ describe('Darwin unavailable attribution', () => {
     vi.spyOn(process, 'platform', 'get').mockReturnValue('darwin')
     let blocked = false
     runPortScanCommandMock.mockImplementation(async (command: string, args: string[]) => {
-      if (blocked) throw new PortScanCommandTimeoutError('attribution unavailable')
+      if (blocked) {
+        throw new PortScanCommandTimeoutError('attribution unavailable')
+      }
       return {
         stdout: args.includes('-iTCP')
           ? LSOF_LISTEN_OUTPUT

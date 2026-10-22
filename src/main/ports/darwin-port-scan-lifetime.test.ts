@@ -11,7 +11,11 @@ import { PortScanCommandTimeoutError } from './port-scan-command-protocol'
 describe.runIf(process.platform === 'darwin')('Darwin operation admission', () => {
   const owned = new Set<ChildProcess>()
   afterEach(() => {
-    for (const child of owned) if (child.exitCode === null) child.kill()
+    for (const child of owned) {
+      if (child.exitCode === null) {
+        child.kill()
+      }
+    }
     owned.clear()
   })
 

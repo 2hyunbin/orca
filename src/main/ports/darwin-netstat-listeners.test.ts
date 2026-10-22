@@ -40,7 +40,9 @@ describe('Darwin numeric long netstat contract', () => {
     const parser = new DarwinNetstatListeners()
     parser.write(HEADER.slice(0, 27))
     parser.write(HEADER.slice(27))
-    for (let i = 0; i < 25_000; i++) parser.write(row('::1.50000', 'ESTABLISHED'))
+    for (let i = 0; i < 25_000; i++) {
+      parser.write(row('::1.50000', 'ESTABLISHED'))
+    }
     const listen = row('::1.3000')
     parser.write(listen.slice(0, 9))
     parser.write(listen.slice(9))
@@ -51,7 +53,7 @@ describe('Darwin numeric long netstat contract', () => {
     expect(parseDarwinNetstatListeners('')).toEqual([])
     expect(parseDarwinNetstatListeners(HEADER)).toEqual([])
     for (const output of [
-      HEADER + 'netstat: sysctl failed\n',
+      `${HEADER}netstat: sysctl failed\n`,
       HEADER + row('::1.3000').trimEnd(),
       HEADER + row('bad.3000'),
       HEADER + row('::1.70000'),

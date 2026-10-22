@@ -49,22 +49,31 @@ export class DarwinNetstatListeners {
     while ((newline = this.pending.indexOf('\n')) !== -1) {
       const line = this.pending.slice(0, newline).trim()
       this.pending = this.pending.slice(newline + 1)
-      if (line.length > 4096) throw new Error('Incomplete port listener output.')
+      if (line.length > 4096) {
+        throw new Error('Incomplete port listener output.')
+      }
       this.line(line)
     }
-    if (this.pending.length > 4096) throw new Error('Incomplete port listener output.')
+    if (this.pending.length > 4096) {
+      throw new Error('Incomplete port listener output.')
+    }
   }
 
   finish(): string {
     // The system prints headers only after encountering its first TCP PCB.
-    if (!this.pending && !this.title && !this.header) return ''
-    if (this.pending || !this.title || !this.header)
+    if (!this.pending && !this.title && !this.header) {
+      return ''
+    }
+    if (this.pending || !this.title || !this.header) {
       throw new Error('Incomplete port listener output.')
+    }
     return this.retained
   }
 
   private line(line: string): void {
-    if (!line) return
+    if (!line) {
+      return
+    }
     const fields = getProcessOutputFields(line, 9)
     if (!this.title && line === 'Active Internet connections (including servers)') {
       this.title = true
@@ -82,12 +91,15 @@ export class DarwinNetstatListeners {
       /^\d+$/.test(fields[2]) &&
       STATES.has(fields[5])
     ) {
-      if (fields[5] !== 'LISTEN' || !endpoint(fields[3])) return
+      if (fields[5] !== 'LISTEN' || !endpoint(fields[3])) {
+        return
+      }
     } else {
       throw new Error('Unrecognized port listener output.')
     }
-    if (this.retained.length + line.length + 1 > MAX_RETAINED_CHARS)
+    if (this.retained.length + line.length + 1 > MAX_RETAINED_CHARS) {
       throw new Error('Port listener output is too large.')
+    }
     this.retained += `${line}\n`
   }
 }
@@ -100,7 +112,9 @@ export function parseDarwinNetstatListeners(output: string): RawListeningPort[] 
     const fields = getProcessOutputFields(line, 6)
     if (fields[5] === 'LISTEN') {
       const port = endpoint(fields[3])
-      if (port) ports.push(port)
+      if (port) {
+        ports.push(port)
+      }
     }
   }
   return dedupeRawPorts(ports)

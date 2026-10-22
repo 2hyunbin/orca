@@ -34,7 +34,9 @@ export async function runPortScanCommandInProcess(
   args: string[],
   darwinOperation?: DarwinPortScanOperation
 ): Promise<{ stdout: string; spawnMs: number }> {
-  if (stopping) throw new Error('Port scanning is shutting down.')
+  if (stopping) {
+    throw new Error('Port scanning is shutting down.')
+  }
   if (process.platform === 'darwin' && darwinOperation) {
     return runDarwinPortScanCommand(command, args, darwinOperation)
   }
@@ -141,7 +143,9 @@ async function runDarwinPortScanCommand(
     let stderr = ''
     const listeners = operation === 'listeners' ? new DarwinNetstatListeners() : null
     const settle = (error?: unknown): void => {
-      if (settled) return
+      if (settled) {
+        return
+      }
       settled = true
       clearTimeout(timer)
       if (error) {
@@ -166,17 +170,25 @@ async function runDarwinPortScanCommand(
       PORT_SCAN_COMMAND_TIMEOUT_MS
     )
     child.once('error', (error) => {
-      if (!child.pid) activeChildren.delete(child)
+      if (!child.pid) {
+        activeChildren.delete(child)
+      }
       settle(error)
     })
     child.stdout?.setEncoding('utf8')
     child.stderr?.setEncoding('utf8')
     child.stdout?.on('data', (chunk: string) => {
-      if (settled) return
+      if (settled) {
+        return
+      }
       try {
-        if (listeners) listeners.write(chunk)
-        else if (stdout.length + chunk.length <= 2 * 1024 * 1024) stdout += chunk
-        else throw new Error('Port scan output is too large.')
+        if (listeners) {
+          listeners.write(chunk)
+        } else if (stdout.length + chunk.length <= 2 * 1024 * 1024) {
+          stdout += chunk
+        } else {
+          throw new Error('Port scan output is too large.')
+        }
       } catch (error) {
         settle(error)
       }
@@ -188,18 +200,24 @@ async function runDarwinPortScanCommand(
       stream?.on('error', (error) => settle(error))
     }
     child.once('close', (code, signal) => {
-      if (settled) return
+      if (settled) {
+        return
+      }
       try {
         const emptyLsof = command === '/usr/sbin/lsof' && code === 1 && stdout === ''
-        if (signal || stderr || (code !== 0 && !emptyLsof))
+        if (signal || stderr || (code !== 0 && !emptyLsof)) {
           throw new Error('Port scan observation is unavailable.')
+        }
         if (
           (command === '/usr/sbin/lsof' || command === '/bin/ps') &&
           stdout &&
           !stdout.endsWith('\n')
-        )
+        ) {
           throw new Error('Incomplete port scan observation.')
-        if (listeners) stdout = listeners.finish()
+        }
+        if (listeners) {
+          stdout = listeners.finish()
+        }
         settle()
       } catch (error) {
         settle(error)
@@ -217,7 +235,11 @@ export function killActivePortScanCommands(): void {
     } catch {
       // Already exited; nothing to reap.
     }
-    if (process.platform === 'darwin') detachChild(child)
+    if (process.platform === 'darwin') {
+      detachChild(child)
+    }
   }
-  if (process.platform !== 'darwin') activeChildren.clear()
+  if (process.platform !== 'darwin') {
+    activeChildren.clear()
+  }
 }
