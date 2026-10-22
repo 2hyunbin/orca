@@ -8,16 +8,11 @@ import {
 } from 'react'
 import type { Editor } from '@tiptap/react'
 import { registerPendingEditorFlush } from './editor-pending-flush'
-import {
-  focusLeftView,
-  notifyStaleViewEditRejected,
-  staleViewEditEpoch
-} from './editor-stale-view-edit'
+import { focusLeftView, staleViewEditEpoch } from './editor-stale-view-edit'
 import { commitRichMarkdownSerialization } from './rich-markdown-serialization-commit'
 
 type PendingSerializationParams = {
   fileId: string
-  content: string
   editorRef: MutableRefObject<Editor | null>
   lastCommittedMarkdownRef: MutableRefObject<string>
   originalSourceRef: MutableRefObject<string>
@@ -29,7 +24,6 @@ type PendingSerializationParams = {
 /** Owns the rich view's debounced serialization: commit, stale-edit rejection, and flush triggers. */
 export function useRichMarkdownPendingSerialization({
   fileId,
-  content,
   editorRef,
   lastCommittedMarkdownRef,
   originalSourceRef,
@@ -40,33 +34,15 @@ export function useRichMarkdownPendingSerialization({
   const serializeTimerRef = useRef<number | null>(null)
   // Why: the discard epoch when the pending edit began; a Discard since then drops it silently.
   const pendingEditEpochRef = useRef(0)
-  const sharedContentRef = useRef(content)
-  sharedContentRef.current = content
-
-  const trackDirtyStateHint = useCallback(
-    (onDirtyStateHint: (dirty: boolean) => void) => (dirty: boolean) => {
-      if (dirty && serializeTimerRef.current === null) {
-        pendingEditEpochRef.current = staleViewEditEpoch(fileId)
-      }
-      onDirtyStateHint(dirty)
-    },
-    [fileId]
-  )
-
-  const flushPendingSerialization = useCallback(() => {
+  const flushPendingSerialization = useCallback((): boolean => {
     if (serializeTimerRef.current === null) {
-      return
+      return false
     }
     window.clearTimeout(serializeTimerRef.current)
     serializeTimerRef.current = null
-    const discarded = pendingEditEpochRef.current !== staleViewEditEpoch(fileId)
-    if (discarded || sharedContentRef.current !== lastCommittedMarkdownRef.current) {
-      if (!discarded) {
-        notifyStaleViewEditRejected(fileId, pendingEditEpochRef.current)
-      }
-      // Why: republishing the shared text recomputes the dirty flag this view's typing raised.
-      onContentChangeRef.current(sharedContentRef.current)
-      return
+    if (pendingEditEpochRef.current !== staleViewEditEpoch(fileId)) {
+      // Why: a Discard since typing began owns the text and dirty flag now.
+      return true
     }
     try {
       const { markdown, didSerialize } = commitRichMarkdownSerialization(
@@ -81,6 +57,7 @@ export function useRichMarkdownPendingSerialization({
       // Why: teardown and reconcile failures are handled above; other failures must stay observable.
       console.error('[editor] rich markdown serialize (flush) failed', error)
     }
+    return false
   }, [
     fileId,
     editorRef,
@@ -101,7 +78,9 @@ export function useRichMarkdownPendingSerialization({
   // Why: layout-effect cleanup runs before useEditor's passive cleanup destroys
   // the editor on tab switch or mode change, so the flush can still serialize.
   useLayoutEffect(() => {
-    return flushPendingSerialization
+    return () => {
+      flushPendingSerialization()
+    }
   }, [flushPendingSerialization])
 
   const flushOnFocusLeave = useCallback(
@@ -116,7 +95,6 @@ export function useRichMarkdownPendingSerialization({
   return {
     serializeTimerRef,
     pendingEditEpochRef,
-    trackDirtyStateHint,
     flushPendingSerialization,
     flushOnFocusLeave
   }

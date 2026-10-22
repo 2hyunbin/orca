@@ -132,6 +132,7 @@ export default function RichMarkdownEditor({
   // ProseMirror handler reads them, avoiding the one-render stale window that
   // useEffect would introduce. Refs are mutable and never trigger re-renders.
   onContentChangeRef.current = onContentChange
+  onDirtyStateHintRef.current = onDirtyStateHint
   onSaveRef.current = onSave
   onOpenDocLinkRef.current = onOpenDocLink
   isEditingLinkRef.current = isEditingLink
@@ -145,23 +146,16 @@ export default function RichMarkdownEditor({
     worktreeRoot
   })
 
-  const {
-    serializeTimerRef,
-    pendingEditEpochRef,
-    trackDirtyStateHint,
-    flushPendingSerialization,
-    flushOnFocusLeave
-  } = useRichMarkdownPendingSerialization({
-    fileId,
-    content,
-    editorRef,
-    lastCommittedMarkdownRef,
-    originalSourceRef,
-    baseCanonicalRef,
-    onContentChangeRef,
-    reconcileRoundTripRef
-  })
-  onDirtyStateHintRef.current = trackDirtyStateHint(onDirtyStateHint)
+  const { serializeTimerRef, pendingEditEpochRef, flushPendingSerialization, flushOnFocusLeave } =
+    useRichMarkdownPendingSerialization({
+      fileId,
+      editorRef,
+      lastCommittedMarkdownRef,
+      originalSourceRef,
+      baseCanonicalRef,
+      onContentChangeRef,
+      reconcileRoundTripRef
+    })
 
   const { clearTransientReviewState } = review
   const setRootElement = useCallback(
@@ -213,7 +207,9 @@ export default function RichMarkdownEditor({
     handleEmojiPickRef: menu.handleEmojiPickRef,
     typedEmptyOrderedListMarkerRef,
     cancelAutoFocusRef,
+    fileId,
     serializeTimerRef,
+    pendingEditEpochRef,
     isInitializingRef,
     isApplyingProgrammaticUpdateRef,
     markdownCommentsRef: review.markdownCommentsRef,

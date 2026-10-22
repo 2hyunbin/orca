@@ -22,6 +22,7 @@ import {
   type ActivateMarkdownLink
 } from './rich-markdown-editor-click-routing'
 import { createRichMarkdownKeyHandler } from './rich-markdown-key-handler'
+import { staleViewEditEpoch } from './editor-stale-view-edit'
 import {
   createRichMarkdownImageResolverContext,
   setRichMarkdownImageResolverContext
@@ -72,12 +73,16 @@ export type EditorConfigParams = {
   handleEmojiPickRef: MutableRefObject<(menu: SlashMenuState) => void>
   typedEmptyOrderedListMarkerRef: MutableRefObject<boolean>
   cancelAutoFocusRef: MutableRefObject<(() => void) | null>
+  fileId: string
   serializeTimerRef: MutableRefObject<number | null>
+  /** Discard epoch when the pending serialization began. */
+  pendingEditEpochRef: MutableRefObject<number>
   isInitializingRef: MutableRefObject<boolean>
   isApplyingProgrammaticUpdateRef: MutableRefObject<boolean>
   markdownCommentsRef: MutableRefObject<DiffComment[]>
   markdownSourceLineOffsetRef: MutableRefObject<number>
-  flushPendingSerialization: () => void
+  /** Returns true when the pending edit was rejected instead of committed. */
+  flushPendingSerialization: () => boolean
   openSearchRef: MutableRefObject<() => void>
   openAnnotationPopoverRef: MutableRefObject<(requireLiveSelection?: boolean) => boolean>
   syncAnnotationTarget: (editor: Editor) => void
@@ -263,6 +268,8 @@ export function createRichMarkdownEditorConfig(params: EditorConfigParams): UseE
       onDirtyStateHintRef.current(true)
       if (serializeTimerRef.current !== null) {
         window.clearTimeout(serializeTimerRef.current)
+      } else {
+        params.pendingEditEpochRef.current = staleViewEditEpoch(params.fileId)
       }
       serializeTimerRef.current = window.setTimeout(() => {
         params.flushPendingSerialization()

@@ -130,6 +130,30 @@ describe('notebook document editing lifecycle', () => {
     expect(Object.hasOwn(hook.result.current.sourceDrafts, 'a')).toBe(false)
   })
 
+  it('does not republish unchanged text when flushed with no pending typing', () => {
+    const onContentChange = vi.fn()
+    const content = notebookContent()
+    const hook = renderHook(() =>
+      useIpynbDocumentEditing({
+        content,
+        fileId: 'notebook-a',
+        notebook: parseIpynb(content),
+        onContentChange,
+        onDirtyStateHint: vi.fn(),
+        onDeactivateEditor: vi.fn()
+      })
+    )
+
+    act(() => {
+      hook.result.current.updateCellSource(0, 'draft')
+      vi.advanceTimersByTime(400)
+      expect(onContentChange).toHaveBeenCalledOnce()
+      // The committed draft awaits acknowledgement; republishing this view's text could overwrite a newer view's.
+      flushPendingEditorBuffer(NO_SHARING, 'notebook-a')
+    })
+    expect(onContentChange).toHaveBeenCalledOnce()
+  })
+
   it('flushes drafts before structural work and cancels queued work on detach', () => {
     const onContentChange = vi.fn()
     const onDeactivateEditor = vi.fn()

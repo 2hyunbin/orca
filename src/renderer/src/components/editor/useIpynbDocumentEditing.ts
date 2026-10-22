@@ -109,6 +109,7 @@ export function useIpynbDocumentEditing({
   }, [])
 
   const flushSourceDrafts = useCallback((): string => {
+    const hadTimer = sourceCommitTimerRef.current !== null
     if (sourceCommitTimerRef.current !== null) {
       clearTimeout(sourceCommitTimerRef.current)
       sourceCommitTimerRef.current = null
@@ -144,9 +145,11 @@ export function useIpynbDocumentEditing({
       contentRef.current,
       rebase.updates.filter(({ index, source }) => source !== cells[index]?.source)
     )
-    // Republish even unchanged text to recompute dirty after cancelled or reverted typing.
-    contentRef.current = nextContent
-    onContentChangeRef.current(nextContent)
+    // Why: unchanged text is republished only to recompute dirty after this view's own typing.
+    if (hadTimer || rebase.dropped.length > 0 || nextContent !== contentRef.current) {
+      contentRef.current = nextContent
+      onContentChangeRef.current(nextContent)
+    }
     return nextContent
   }, [fileId, latestCells])
 
