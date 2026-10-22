@@ -246,80 +246,91 @@ describe('IPC process description lifetime', () => {
     warn.mockRestore()
   })
 
-  it('keeps captured attach identity after retirement, fences unpublished exits and delivers every sidecar', async () => {
-    const { captureLocalPtyProcessDescription } = await import('./ipc-pty-process-description')
-    const { createIpcPtyTransport } = await import('./pty-transport')
-    const { subscribeToPtyExit, ptyShutdownLifecycleHandlers, unregisterPtyDataHandlers } =
-      await import('./pty-dispatcher')
-    const { useAppStore } = await import('@/store')
-    const { readTerminalProcessMetadata, terminalProcessMetadataKey } =
-      await import('@/store/terminals/terminal-process-metadata')
-    const read = () => readTerminalProcessMetadata(useAppStore.getState(), 'local', 'lifetime')
-    const first = createIpcPtyTransport()
-    first.attach({ existingPtyId: 'lifetime', callbacks: {} })
-    captureLocalPtyProcessDescription(true)({
-      id: 'lifetime',
-      incarnationId: 'A',
-      shellPath: 'wsl.exe'
-    })
-    const stopA = ptyShutdownLifecycleHandlers.get('lifetime')!
-    const pendingB = captureLocalPtyProcessDescription(true)
-    const lateA = captureLocalPtyProcessDescription(true)
-    unregisterPtyDataHandlers(['lifetime'])
-    exit?.({ id: 'lifetime', code: 0, incarnationId: 'A' })
-    expect(read()).toBeUndefined()
-    expect(
-      useAppStore.getState().ptyProcessMetadataById[terminalProcessMetadataKey('local', 'lifetime')]
-    ).toEqual({ retired: true, incarnationId: 'A', observationRevision: 1 })
-    pendingB({ id: 'lifetime', incarnationId: 'B', shellPath: 'cmd.exe' })
-    expect(first.getLocalSessionMetadata?.()?.shellPath).toBeUndefined()
-    stopA.commit()
-    first.detach({ preserveExitObserver: false })
-    expect(read()?.incarnationId).toBe('B')
-    const stale = captureLocalPtyProcessDescription(true)
-    const delivered = vi.fn()
-    subscribeToPtyExit('lifetime', delivered)
-    exit?.({ id: 'lifetime', code: 0, incarnationId: 'foreign' })
-    expect(read()?.incarnationId).toBe('B')
-    stale({ id: 'lifetime', incarnationId: 'older', shellPath: 'wsl.exe' })
-    expect(read()?.incarnationId).toBe('B')
-    exit?.({ id: 'lifetime', code: 0, incarnationId: 'B', ptySourceDisowned: true })
-    expect(read()?.incarnationId).toBe('B')
-    expect(delivered).toHaveBeenCalledOnce()
-    exit?.({ id: 'lifetime', code: 0, incarnationId: 'B' })
-    lateA({ id: 'lifetime', incarnationId: 'A', shellPath: 'wsl.exe' })
-    expect(read()).toBeUndefined()
-    const beforeUnseen = captureLocalPtyProcessDescription(true)
-    exit?.({ id: 'unseen', code: 0, incarnationId: 'X' })
-    const betweenExits = captureLocalPtyProcessDescription(true)
-    exit?.({ id: 'unseen', code: 0, incarnationId: 'Y' })
-    beforeUnseen({ id: 'unseen', incarnationId: 'X', shellPath: 'cmd.exe' })
-    betweenExits({ id: 'unseen', incarnationId: 'Y', shellPath: 'cmd.exe' })
-    expect(readTerminalProcessMetadata(useAppStore.getState(), 'local', 'unseen')).toBeUndefined()
-    const sidecar = vi.fn(),
-      warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { installPtyProcessExitObserver } = await import('./pty-process-observation')
-    installPtyProcessExitObserver(() => {
-      throw new Error('description failed')
-    })
-    const faulty = createIpcPtyTransport({
-      onPtyExit: () => {
-        throw new Error('primary failed')
+  it.each([true, false])(
+    'keeps captured attach identity after retirement, fences unpublished exits and delivers every sidecar (initial facts: %s)',
+    async (hasInitialFacts) => {
+      const { captureLocalPtyProcessDescription } = await import('./ipc-pty-process-description')
+      const { createIpcPtyTransport } = await import('./pty-transport')
+      const { subscribeToPtyExit, ptyShutdownLifecycleHandlers, unregisterPtyDataHandlers } =
+        await import('./pty-dispatcher')
+      const { useAppStore } = await import('@/store')
+      const { readTerminalProcessMetadata, terminalProcessMetadataKey } =
+        await import('@/store/terminals/terminal-process-metadata')
+      const read = () => readTerminalProcessMetadata(useAppStore.getState(), 'local', 'lifetime')
+      const first = createIpcPtyTransport()
+      first.attach({ existingPtyId: 'lifetime', callbacks: {} })
+      if (hasInitialFacts) {
+        captureLocalPtyProcessDescription(true)({
+          id: 'lifetime',
+          incarnationId: 'A',
+          shellPath: 'wsl.exe'
+        })
       }
-    })
-    faulty.attach({ existingPtyId: 'throwing', callbacks: {} })
-    subscribeToPtyExit('throwing', () => {
-      throw new Error('first sidecar failed')
-    })
-    subscribeToPtyExit('throwing', sidecar)
-    try {
-      exit?.({ id: 'throwing', code: 0 })
-    } catch {
-      /* Delivery aggregates subscriber failures. */
+      const stopA = ptyShutdownLifecycleHandlers.get('lifetime')!
+      const pendingB = captureLocalPtyProcessDescription(true)
+      const lateA = captureLocalPtyProcessDescription(true)
+      unregisterPtyDataHandlers(['lifetime'])
+      exit?.({ id: 'lifetime', code: 0, incarnationId: 'A' })
+      expect(read()).toBeUndefined()
+      expect(
+        useAppStore.getState().ptyProcessMetadataById[
+          terminalProcessMetadataKey('local', 'lifetime')
+        ]
+      ).toEqual({ retired: true, incarnationId: 'A', observationRevision: 1 })
+      ;(hasInitialFacts ? pendingB : captureLocalPtyProcessDescription(true))({
+        id: 'lifetime',
+        incarnationId: 'B',
+        shellPath: 'cmd.exe'
+      })
+      expect(first.getLocalSessionMetadata?.()?.shellPath).toBeUndefined()
+      stopA.commit()
+      first.detach({ preserveExitObserver: false })
+      expect(read()?.incarnationId).toBe('B')
+      const stale = captureLocalPtyProcessDescription(true)
+      const delivered = vi.fn()
+      subscribeToPtyExit('lifetime', delivered)
+      exit?.({ id: 'lifetime', code: 0, incarnationId: 'foreign' })
+      expect(read()?.incarnationId).toBe('B')
+      stale({ id: 'lifetime', incarnationId: 'older', shellPath: 'wsl.exe' })
+      expect(read()?.incarnationId).toBe('B')
+      exit?.({ id: 'lifetime', code: 0, incarnationId: 'B', ptySourceDisowned: true })
+      expect(read()?.incarnationId).toBe('B')
+      expect(delivered).toHaveBeenCalledOnce()
+      exit?.({ id: 'lifetime', code: 0, incarnationId: 'B' })
+      lateA({ id: 'lifetime', incarnationId: 'A', shellPath: 'wsl.exe' })
+      expect(read()).toBeUndefined()
+      const beforeUnseen = captureLocalPtyProcessDescription(true)
+      exit?.({ id: 'unseen', code: 0, incarnationId: 'X' })
+      const betweenExits = captureLocalPtyProcessDescription(true)
+      exit?.({ id: 'unseen', code: 0, incarnationId: 'Y' })
+      beforeUnseen({ id: 'unseen', incarnationId: 'X', shellPath: 'cmd.exe' })
+      betweenExits({ id: 'unseen', incarnationId: 'Y', shellPath: 'cmd.exe' })
+      expect(readTerminalProcessMetadata(useAppStore.getState(), 'local', 'unseen')).toBeUndefined()
+      const sidecar = vi.fn(),
+        warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const { installPtyProcessExitObserver } = await import('./pty-process-observation')
+      installPtyProcessExitObserver(() => {
+        throw new Error('description failed')
+      })
+      const faulty = createIpcPtyTransport({
+        onPtyExit: () => {
+          throw new Error('primary failed')
+        }
+      })
+      faulty.attach({ existingPtyId: 'throwing', callbacks: {} })
+      subscribeToPtyExit('throwing', () => {
+        throw new Error('first sidecar failed')
+      })
+      subscribeToPtyExit('throwing', sidecar)
+      try {
+        exit?.({ id: 'throwing', code: 0 })
+      } catch {
+        /* Delivery aggregates subscriber failures. */
+      }
+      expect(sidecar).toHaveBeenCalledOnce()
+      warn.mockRestore()
     }
-    expect(sidecar).toHaveBeenCalledOnce()
-    warn.mockRestore()
-  })
+  )
 
   it('publishes scoped inventory to an inactive card before any pane mounts', async () => {
     const { listActivationPtySessions } = await import('@/lib/worktree-activation-pty-inventory')
