@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PreparedDroppedPaths } from '../../../../shared/native-file-drop-preparation'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { createOsFileDropSequence } from '@/hooks/use-os-file-drop-owner'
+import { WORKSPACE_FILE_PATH_MIME, writeWorkspaceFileDragSource } from '@/lib/workspace-file-drag'
 import type * as OsFileDropOwnerModule from '@/hooks/use-os-file-drop-owner'
 import { useEditorGroupFileDropOwner } from './use-editor-group-file-drop-owner'
 
@@ -27,7 +28,11 @@ vi.mock('@/lib/connection-context', () => ({ getConnectionId: () => null }))
 vi.mock('@/lib/ssh-mutation-expectation', () => ({
   // Like the real lookup, a workspace with no host record fails closed.
   captureWorktreeSshMutationExpectation: (_state: unknown, worktreeId: string) => {
-    if (!worktreeId.startsWith('wt-') && worktreeId !== FLOATING_TERMINAL_WORKTREE_ID) {
+    if (
+      !worktreeId.startsWith('wt-') &&
+      !worktreeId.startsWith('folder:') &&
+      worktreeId !== FLOATING_TERMINAL_WORKTREE_ID
+    ) {
       throw new Error('unresolved host')
     }
     return { expectedExecutionHostId: 'local' }
@@ -107,6 +112,7 @@ const openedPaths = (): string[] => mocks.openFile.mock.calls.map(([file]) => fi
 beforeEach(() => {
   mocks.groupsByWorktree = {
     'wt-b': [{ id: 'group-b' }],
+    'folder:notes': [{ id: 'group-b' }],
     [FLOATING_TERMINAL_WORKTREE_ID]: [{ id: 'floating-group' }]
   }
   mocks.stat.mockResolvedValue({ isDirectory: false, escapesWorktree: false })
@@ -129,6 +135,49 @@ afterEach(() => {
 })
 
 describe('editor group OS file drops', () => {
+  it.each(['strip', 'area', 'floating', 'folder'])(
+    'opens explorer resources dropped on the %s through the existing file opener',
+    async (root) => {
+      const floating = root === 'floating'
+      const worktreeId = floating
+        ? FLOATING_TERMINAL_WORKTREE_ID
+        : root === 'folder'
+          ? 'folder:notes'
+          : 'wt-b'
+      const groupId = floating ? 'floating-group' : 'group-b'
+      const view = render(<EditorGroup worktreeId={worktreeId} groupId={groupId} />)
+      const payload = new Map([[WORKSPACE_FILE_PATH_MIME, '/repos/wt-b/notes.md']])
+      writeWorkspaceFileDragSource(
+        { setData: (type, value) => payload.set(type, value) },
+        {
+          workspaceId: 'wt-b',
+          executionHostId: 'local'
+        }
+      )
+      const transfer = {
+        types: [...payload.keys()],
+        getData: (type: string) => payload.get(type) ?? '',
+        dropEffect: 'none'
+      }
+      const target = view.getByTestId(`${groupId}:${floating || root === 'folder' ? 'area' : root}`)
+      for (const type of ['dragover', 'drop']) {
+        const event = new Event(type, { bubbles: true, cancelable: true, composed: true })
+        Object.defineProperty(event, 'dataTransfer', { value: transfer })
+        act(() => {
+          target.dispatchEvent(event)
+        })
+        expect(event.defaultPrevented).toBe(true)
+      }
+      expect(transfer.dropEffect).toBe('copy')
+      await waitFor(() => expect(mocks.openFile).toHaveBeenCalledTimes(1))
+      expect(mocks.openFile).toHaveBeenCalledWith(
+        expect.objectContaining({ filePath: '/repos/wt-b/notes.md', worktreeId }),
+        expect.objectContaining({ targetGroupId: groupId })
+      )
+      expect(mocks.prepare).not.toHaveBeenCalled()
+    }
+  )
+
   it.each(['strip', 'area'])(
     'opens a file dropped on the %s in that group and worktree, not the active one',
     async (root) => {

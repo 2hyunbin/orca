@@ -9,17 +9,20 @@ import {
   sshConnectionStatesAt,
   SSH_WORKTREE_PATH as SSH_PATH
 } from '@/lib/remote-workspace-drop-test-fixtures'
+import { WORKSPACE_FILE_PATHS_MIME, writeWorkspaceFileDragSource } from '@/lib/workspace-file-drag'
 import { joinPath } from '@/lib/path'
 import { useEditorGroupFileDropOwner } from './use-editor-group-file-drop-owner'
 import { createCompatibleRuntimeStatusResponse } from '@/runtime/runtime-compatibility-test-fixture'
 
 const mocks = vi.hoisted(() => ({
+  stat: vi.fn(),
   importPaths: vi.fn(),
   prepare: vi.fn(),
   openFile: vi.fn(),
   setActiveTabType: vi.fn(),
   toastError: vi.fn()
 }))
+vi.mock('@/lib/user-opened-local-path', () => ({ statUserOpenedPath: mocks.stat }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
 vi.mock('@/runtime/runtime-file-import-client', () => ({
   importExternalPathsToRuntime: mocks.importPaths
@@ -82,6 +85,50 @@ afterEach(() => {
 })
 
 describe('editor group OS file drops on remote workspaces', () => {
+  it.each(['wt-ssh', 'wt-runtime'])(
+    'opens existing explorer files in %s without uploading and skips folders',
+    async (worktreeId) => {
+      const ssh = worktreeId === 'wt-ssh'
+      const groupId = ssh ? 'group-ssh' : 'group-runtime'
+      const root = ssh ? SSH_PATH : RUNTIME_PATH
+      const paths = ['folder', 'first.ts', 'second.md'].map((path) => joinPath(root, path))
+      mocks.stat.mockImplementation(async (_context, path) => ({
+        isDirectory: path === paths[0],
+        escapesWorktree: false
+      }))
+      const payload = new Map([[WORKSPACE_FILE_PATHS_MIME, JSON.stringify(paths)]])
+      writeWorkspaceFileDragSource(
+        { setData: (type, value) => payload.set(type, value) },
+        {
+          workspaceId: worktreeId,
+          executionHostId: ssh ? 'ssh:ssh-1' : 'runtime:owner-runtime'
+        }
+      )
+      const event = new Event('drop', { bubbles: true, cancelable: true })
+      Object.defineProperty(event, 'dataTransfer', {
+        value: {
+          types: [...payload.keys()],
+          getData: (type: string) => payload.get(type) ?? ''
+        }
+      })
+      const view = render(<EditorStrip worktreeId={worktreeId} groupId={groupId} />)
+      act(() => {
+        view.getByTestId('strip').dispatchEvent(event)
+      })
+      await waitFor(() => expect(mocks.openFile).toHaveBeenCalledTimes(2))
+      expect(mocks.openFile.mock.calls.map(([file]) => file.filePath)).toEqual(paths.slice(1))
+      expect(mocks.openFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worktreeId,
+          runtimeEnvironmentId: ssh ? undefined : 'owner-runtime'
+        }),
+        { targetGroupId: groupId, suppressActiveRuntimeFallback: ssh }
+      )
+      expect(mocks.importPaths).not.toHaveBeenCalled()
+      expect(mocks.prepare).not.toHaveBeenCalled()
+    }
+  )
+
   it("uploads an SSH group's drop into that workspace and opens it in that group", async () => {
     const view = render(<EditorStrip worktreeId="wt-ssh" groupId="group-ssh" />)
     dropFile(view.getByTestId('strip'))

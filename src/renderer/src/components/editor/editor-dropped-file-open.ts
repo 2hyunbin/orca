@@ -15,6 +15,8 @@ import { statUserOpenedPath } from '@/lib/user-opened-local-path'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { requireRuntimeTargetForFileOwner } from '@/lib/file-owner-runtime-target'
 import { openWorkspaceFile } from '@/lib/workspace-file-open'
+import { parseExecutionHostId } from '../../../../shared/execution-host'
+import type { WorkspaceFileDragSource } from '@/lib/workspace-file-drag'
 
 export function shouldUploadRemoteEditorFileDrop(
   target: RuntimeClientTarget,
@@ -121,10 +123,21 @@ function canOpenEditorFileDrop(
  * step; a host change before preparation finishes refuses instead of re-routing.
  */
 export function captureEditorFileDropOpen(
-  destination: EditorFileDropDestination
+  destination: EditorFileDropDestination,
+  source?: WorkspaceFileDragSource
 ): (paths: readonly string[]) => Promise<void> {
   const captured = captureEditorFileDropContext(destination.worktreeId)
-  if (!captured) {
+  const sourceHost = parseExecutionHostId(source?.executionHostId)
+  const sourceEnvironmentId =
+    source?.runtimeEnvironmentId ??
+    (sourceHost?.kind === 'runtime' ? sourceHost.environmentId : null)
+  if (
+    !captured ||
+    (source &&
+      ((sourceHost?.kind === 'runtime' ? 'local' : source?.executionHostId) !==
+        captured.fileContext.expectedExecutionHostId ||
+        sourceEnvironmentId !== runtimeTargetEnvironmentId(captured.fileContext.target)))
+  ) {
     showOwnerChangedError()
     return async () => undefined
   }
@@ -132,20 +145,21 @@ export function captureEditorFileDropOpen(
     if (paths.length === 0 || !canOpenEditorFileDrop(captured, destination)) {
       return
     }
-    await openEditorFileDropPaths(captured, destination, paths)
+    await openEditorFileDropPaths(captured, destination, paths, source === undefined)
   }
 }
 
 async function openEditorFileDropPaths(
   context: EditorFileDropContext,
   destination: EditorFileDropDestination,
-  paths: readonly string[]
+  paths: readonly string[],
+  clientLocalPaths: boolean
 ): Promise<void> {
   const { fileContext, worktreePath, connectionId } = context
   const { worktreeId, groupId } = destination
   const groupOptions = groupId ? { targetGroupId: groupId } : null
   const runtimeEnvironmentId = runtimeTargetEnvironmentId(fileContext.target)
-  if (shouldUploadRemoteEditorFileDrop(fileContext.target, connectionId)) {
+  if (clientLocalPaths && shouldUploadRemoteEditorFileDrop(fileContext.target, connectionId)) {
     if (!worktreePath) {
       toast.error(
         translate(
@@ -230,10 +244,14 @@ async function openEditorFileDropPaths(
           worktreeId,
           language: detectLanguage(filePath),
           mode: 'edit',
+          ...(!clientLocalPaths ? { runtimeEnvironmentId: runtimeEnvironmentId ?? undefined } : {}),
           ...(floating ? { runtimeEnvironmentId: null } : {})
         },
         options: {
           ...groupOptions,
+          ...(!clientLocalPaths
+            ? { suppressActiveRuntimeFallback: runtimeEnvironmentId === null }
+            : {}),
           ...(floating ? { preview: false, suppressActiveRuntimeFallback: true } : {})
         }
       })
