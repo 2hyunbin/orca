@@ -125,11 +125,11 @@ describe('summarizeBundledSkillOutcomes', () => {
     })
     expect(summary).toMatchObject({ ok: true, exitCode: 0 })
     expect(summary.skills.map((skill) => skill.line)).toEqual([
-      "Updated · 1 left alone: You've changed this copy",
-      "No change · 1 left alone: You've changed this copy"
+      'Updated · 1 not updated: you edited this copy',
+      'No change · 1 not updated: you edited this copy'
     ])
     expect(summary.skills[0].leftAlone).toEqual([
-      { path: '/leave', reason: "You've changed this copy", code: 'edited' }
+      { path: '/leave', reason: 'you edited this copy', code: 'edited' }
     ])
     for (const status of ['changed', 'failed'] as const) {
       expect(

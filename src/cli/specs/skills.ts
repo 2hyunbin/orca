@@ -78,7 +78,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
         'links it into each detected agent\u2019s skills folder, the same way the app\u2019s ' +
         'Update skills does.',
       'Only copies Orca wrote and nobody changed are updated. A copy you changed, or a ' +
-        'different skill with the same name, is left alone and reported; --force replaces ' +
+        'different skill with the same name, is not updated and is reported; --force replaces ' +
         'it after moving it to a backup under ~/.agents/.orca-skill-backups.',
       'Installs globally (all projects) by default. Use --local to install into the ' +
         'current project; it links only into agent folders the project already has.',
@@ -86,7 +86,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
         'to choose them yourself, or --agent universal for the shared folder alone.',
       'Use --dry-run to print what would change and the plan digest without writing; a ' +
         'real run plans again and writes only if the plan still matches.',
-      'Exits 1 when a location failed or changed while it ran; folders left alone are ' +
+      'Exits 1 when a location failed or changed while it ran; folders not updated are ' +
         'warnings.',
       'Omit --skill and --all to list installable skill names.'
     ],
@@ -107,7 +107,7 @@ export const SKILL_COMMAND_SPECS: CommandSpec[] = [
     notes: [
       'Runs the same planner as `orca skills install`, but only at locations that already ' +
         'hold the skill; it never adds a skill, or an existing skill for another agent.',
-      'Updates each untouched copy where it is and leaves anything else alone unless you ' +
+      'Updates each untouched copy where it is; other copies are not updated unless you ' +
         'pass --force. Use `orca skills install` to add a skill for a newly detected agent.',
       'Updates the global install by default. Use --local to update the current project.',
       'Use --dry-run to print what would change and the plan digest without writing.',

@@ -18,15 +18,18 @@ import { translate } from '@/i18n/i18n'
 
 export function leaveReasonText(reason: string | null | undefined): string {
   if (!reason || !isBundledSkillLeaveReason(reason)) {
-    return translate('auto.components.skills.skillPlanOpCopy.leftAsIs', 'Left as it is')
+    return translate(
+      'auto.components.skills.skillPlanOpCopy.leftAsIs',
+      'this copy was kept as it is'
+    )
   }
   switch (reason) {
     case 'edited':
-      return translate('auto.components.skills.skillPlanOpCopy.edited', "You've changed this copy")
+      return translate('auto.components.skills.skillPlanOpCopy.edited', 'you edited this copy')
     case 'other':
       return translate(
         'auto.components.skills.skillPlanOpCopy.other',
-        'A different skill already uses this name'
+        'a different skill already uses this name'
       )
     case 'unwritable':
       return translate(
@@ -41,12 +44,12 @@ export function leaveReasonText(reason: string | null | undefined): string {
     case 'busy':
       return translate(
         'auto.components.skills.skillPlanOpCopy.busy',
-        'Another skill install is still finishing here'
+        'another skill install is still finishing here'
       )
     case 'shared-not-current':
       return translate(
         'auto.components.skills.skillPlanOpCopy.sharedNotCurrent',
-        'The shared copy this folder uses is not Orca’s'
+        'the shared copy this folder uses is not Orca’s'
       )
   }
 }
@@ -59,19 +62,19 @@ export function locationPlaceLabel(location: BundledSkillLocation): string {
   return location.place.names.join(', ') || location.displayPath
 }
 
-/** What Update does at one location, for the "Show all locations" table. */
+/** The action or reason for one planned location. */
 export function locationStateText(location: BundledSkillLocation): string {
   const texts: Record<BundledSkillLocationState, () => string> = {
-    update: () => translate('auto.components.skills.skillPlanOpCopy.update', 'Will update'),
-    repair: () => translate('auto.components.skills.skillPlanOpCopy.repair', 'Will repair'),
-    install: () => translate('auto.components.skills.skillPlanOpCopy.write', 'Will install'),
-    link: () => translate('auto.components.skills.skillPlanOpCopy.link', 'Will link'),
-    replace: () => translate('auto.components.skills.skillPlanOpCopy.replace', 'Will replace'),
+    update: () => translate('auto.components.skills.skillPlanOpCopy.update', 'Update'),
+    repair: () => translate('auto.components.skills.skillPlanOpCopy.repair', 'Repair'),
+    install: () => translate('auto.components.skills.skillPlanOpCopy.write', 'Install'),
+    link: () => translate('auto.components.skills.skillPlanOpCopy.link', 'Link'),
+    replace: () => translate('auto.components.skills.skillPlanOpCopy.replace', 'Replace'),
     keep: () => translate('auto.components.skills.skillPlanOpCopy.keep', 'No change'),
     'keep-link': () =>
       translate('auto.components.skills.skillPlanOpCopy.keepLink', 'Link, no change'),
     leave: () =>
-      translate('auto.components.skills.skillPlanOpCopy.leftAlone', 'Left alone: {{value0}}', {
+      translate('auto.components.skills.skillPlanOpCopy.notUpdated', 'Not updated: {{value0}}', {
         value0: leaveReasonText(location.reason)
       }),
     unknown: () =>
@@ -84,11 +87,11 @@ export function locationStateText(location: BundledSkillLocation): string {
 export function skillPlanHeadline(state: BundledSkillPlanState): string | null {
   switch (state) {
     case 'update':
-      return translate('auto.components.skills.skillPlanOpCopy.update', 'Will update')
+      return translate('auto.components.skills.skillPlanOpCopy.update', 'Update')
     case 'repair':
-      return translate('auto.components.skills.skillPlanOpCopy.repair', 'Will repair')
+      return translate('auto.components.skills.skillPlanOpCopy.repair', 'Repair')
     case 'install':
-      return translate('auto.components.skills.skillPlanOpCopy.write', 'Will install')
+      return translate('auto.components.skills.skillPlanOpCopy.write', 'Install')
     case 'attention':
     case 'current':
       return null

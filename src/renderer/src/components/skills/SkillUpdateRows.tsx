@@ -105,12 +105,12 @@ export function SkillUpdateRows({
           >
             {showLocations
               ? translate(
-                  'auto.components.skills.SkillFreshnessUpdateDialog.hideLocations',
-                  'Hide locations'
+                  'auto.components.skills.SkillFreshnessUpdateDialog.hideFolders',
+                  'Hide folders'
                 )
               : translate(
-                  'auto.components.skills.SkillFreshnessUpdateDialog.showLocations',
-                  'Show all locations'
+                  'auto.components.skills.SkillFreshnessUpdateDialog.showFolders',
+                  'Show folders'
                 )}
             {showLocations ? <ChevronUp /> : <ChevronDown />}
           </Button>

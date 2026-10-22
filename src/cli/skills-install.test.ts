@@ -131,7 +131,7 @@ describe('orca skills install/update', () => {
     const text = await run(['update', '--skill', NAME, '--agent', 'claude', '--dry-run'])
 
     // Why no Claude line: update never adds the skill for an agent that does not have it.
-    expect(text).toContain(`${NAME}\n  ${paths.shared}: Will update\n\n`)
+    expect(text).toContain(`${NAME}\n  ${paths.shared}: Update\n\n`)
     expect(text).toMatch(/Plan digest: [0-9a-f]{64}\nRerun without --dry-run to update now\.\n$/u)
     expect(await skillText(paths.shared)).toBe(OLD_TEXT)
     expect(await lstat(paths.claude).catch(() => null)).toBeNull()
@@ -180,8 +180,10 @@ describe('orca skills install/update', () => {
     await writeCopy(paths.shared, EDITED_TEXT)
 
     const left = await run(['update', '--skill', NAME, '--agent', 'universal'])
-    expect(left).toContain("Left alone: You've changed this copy")
-    expect(left).toContain('Rerun with --force')
+    expect(left).toContain('Not updated: you edited this copy')
+    expect(left).toContain('1 not updated: you edited this copy')
+    expect(left).toContain('Rerun with --force to replace a copy that was not updated')
+    expect(left).not.toContain('left alone')
     expect(process.exitCode).toBe(0)
     expect(await skillText(paths.shared)).toBe(EDITED_TEXT)
 

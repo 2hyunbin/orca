@@ -55,13 +55,15 @@ export function SummaryHeadline({ plan }: { plan: BundledSkillPlan | null }): Re
       </p>
     )
   }
-  if (summary.skills.some((skill) => skill.state === 'attention')) {
+  if (
+    summary.skills.some((skill) => skill.locations.some((location) => location.state === 'leave'))
+  ) {
     return (
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
         <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
         {translate(
           'auto.components.skills.SkillFreshnessUpdateDialog.attention',
-          'Some installed Orca skills are left alone.'
+          'Everything else is up to date'
         )}
       </div>
     )
