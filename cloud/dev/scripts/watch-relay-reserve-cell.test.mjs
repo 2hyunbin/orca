@@ -25,7 +25,9 @@ import {
   raiseAlarm,
   readCellPhoneMinutes,
   readDirector503Minutes,
+  readSampleLogs,
   readSeatBehindRowSample,
+  sampleLogQueries,
   recordOutcome,
   rolloutLeaseRefusal,
   watchSegment
@@ -198,9 +200,14 @@ test('one stalled director instance does not trip the 503 rule; two instances or
   assert.equal(blind.rules.director503.status, 'unverifiable')
   assert.match(blind.rules.director503.reason, /truncated/)
   assert.equal(blind.state.unverifiableStreak, 1)
-  // Platform 503s no instance answered count as an instance of their own.
-  const platform = judge(read([37, 37, 37], { 'no-instance': [16, 16, 16], d2: [16, 16, 16] }))
+  // 503s no director logged, over the whole fleet line by themselves, are no one instance's stall.
+  const platform = judge(read([37, 37, 37], { unattributed: [31, 31, 31], d2: [6, 6, 6] }))
   assert.equal(platform.state.state, 'tripped')
+  assert.match(platform.state.verdict, /93 of them no director instance logged$/)
+  // A stalled instance's 30 s lines skew against the fleet's minutes; that remainder is not a second instance.
+  const skewed = judge(read([60, 170, 60], { sick: [52, 162, 52], unattributed: [8, 8, 8], d2: [0, 0, 0] }))
+  assert.equal(skewed.state.state, 'watching')
+  assert.equal(skewed.rules.director503.unattributed, 24)
   // The share follows the directors that logged: eight make it 30/8, so an even 45 trips.
   const eight = read([45, 45, 45], Object.fromEntries(Array.from({ length: 8 }, (_, index) => [`d${index}`, [5.6, 5.6, 5.6]])))
   eight.instances.directors = byMinute([8, 8, 8])
@@ -225,27 +232,65 @@ test('one stalled director instance does not trip the 503 rule; two instances or
   assert.equal(calm.rules.director503.status, 'pass')
 })
 
-test('per-instance 503s come from the request log, less each instance\'s own re-dials', async () => {
-  // 20 a minute split 10/10 over a and b; a alone answered 10 of its own re-dials a minute.
-  const sources = fakeSources({ per503: () => 20, metrics: () => [rateLimited(5), {}] })
+test('per-instance 503s are each director\'s own logged 503s less its re-dials, and the rest is unattributed', async () => {
+  // Fleet 30 a minute. a logged 20 (10 its own re-dials), b logged 6: 10 nobody accounts for.
+  const lineOf = (count, own) => ({
+    placementRejectionsByReasonDelta: { 'host-rate-limited': own },
+    assign503sByCauseDelta: { 'placement-lane': count }
+  })
+  const sources = fakeSources({ per503: () => 30, metrics: () => [lineOf(10, 5), lineOf(3, 0)] })
   const read = await readDirector503Minutes(
     { ...fakeReader(), fetch: sources.fetchImpl, runGcloud: sources.runGcloud },
     { projectId: 'onorca-cloud', directorService: 'orca-cloud-relay', endedAt: START, minutes: 3 }
   )
   assert.equal(read.ok, true)
-  assert.deepEqual(Object.values(read.perMinute), [10, 10, 10])
-  assert.deepEqual(Object.keys(read.instances.perMinute).sort(), ['a', 'b'])
-  assert.deepEqual(Object.values(read.instances.perMinute.a), [0, 0, 0])
-  assert.deepEqual(Object.values(read.instances.perMinute.b), [10, 10, 10])
+  assert.deepEqual(Object.values(read.perMinute), [20, 20, 20])
+  assert.deepEqual(Object.keys(read.instances.perMinute).sort(), ['a', 'b', 'unattributed'])
+  assert.deepEqual(Object.values(read.instances.perMinute.a), [10, 10, 10])
+  assert.deepEqual(Object.values(read.instances.perMinute.b), [6, 6, 6])
+  assert.deepEqual(Object.values(read.instances.perMinute.unattributed), [4, 4, 4])
   assert.deepEqual(Object.values(read.instances.directors), [2, 2, 2])
-  // A full read is truncated, not every 503.
-  const flood = fakeSources({ per503: () => 2_000 })
-  const truncated = await readDirector503Minutes(
-    { ...fakeReader(), fetch: flood.fetchImpl, runGcloud: flood.runGcloud },
-    { projectId: 'onorca-cloud', directorService: 'orca-cloud-relay', endedAt: START, minutes: 3 }
+})
+
+test('the recorded 10-21 07:55Z director stall reads as one instance and does not trip', async () => {
+  const recorded = JSON.parse(readFileSync(new URL('../fixtures/relay-reserve-watch/2026-10-21-director-stall.json', import.meta.url), 'utf8'))
+  const series = (code, perMinute) => ({
+    metric: { labels: { response_code: code } },
+    points: Object.entries(perMinute).map(([minute, count]) => ({
+      interval: { endTime: new Date(Date.parse(`${minute}Z`) + MINUTE).toISOString() },
+      value: { int64Value: String(count) }
+    }))
+  })
+  const ok = Object.fromEntries(Object.keys(recorded.fleet503PerMinute).map((minute) => [minute, 1_000]))
+  const lines = recorded.directorMetricsLines.map(({ timestamp, instance, ...deltas }) => ({
+    timestamp,
+    labels: { instanceId: instance },
+    resource: { type: 'cloud_run_revision' },
+    jsonPayload: { event: METRICS_EVENT, ...deltas }
+  }))
+  const read = await readDirector503Minutes(
+    {
+      ...fakeReader(),
+      fetch: async () => new Response(JSON.stringify({ timeSeries: [series('200', ok), series('503', recorded.fleet503PerMinute)] })),
+      runGcloud: async (args) => {
+        if (args[0] === 'auth') return { stdout: 'token' }
+        const [, from, to] = args[2].match(/timestamp>="([^"]+)" AND timestamp<"([^"]+)"/)
+        return { stdout: JSON.stringify(lines.filter(({ timestamp }) => timestamp >= from && timestamp < to)) }
+      }
+    },
+    { projectId: 'onorca-cloud', directorService: 'orca-cloud-relay', endedAt: Date.parse('2026-10-21T07:58:00Z'), minutes: 10 }
   )
-  assert.equal(truncated.ok, true)
-  assert.deepEqual(truncated.instances, { ok: false, error: 'director 503 request log read truncated' })
+  const judged = evaluateWatchSample(
+    freshState({ background: { medianPerMinute: 10, source: 'input' } }),
+    sampleAt(START, { director503: read }),
+    LIMIT
+  )
+  // The fleet alone was over 30 all three minutes, which is what tripped all four watches.
+  assert.deepEqual(Object.values(judged.rules.director503.recent), [45, 164, 40])
+  assert.equal(judged.rules.director503.status, 'pass')
+  // Not even the stalled instance held its share of 6 a minute: it fell to 5 in the third minute.
+  assert.equal(judged.rules.director503.instancesOver, 0)
+  assert.deepEqual(['07:55', '07:56', '07:57'].map((minute) => read.instances.perMinute.d5[`2026-10-21T${minute}`]), [40, 169, 5])
 })
 
 const SEAT_EVENT = 'orca_relay_reserve_ledger_seat_behind_row'
@@ -510,19 +555,8 @@ function metricsLines(filter, metrics) {
   return lines.reverse()
 }
 
-// The `metrics` lines' instances in order; each minute's 503s are split between the first two.
+// The `metrics` lines' instances, in order.
 const FAKE_DIRECTORS = ['a', 'b', 'c', 'd', 'e']
-function requestLines(filter, per503) {
-  const [, from, to] = filter.match(/timestamp>="([^"]+)" AND timestamp<"([^"]+)"/)
-  const lines = []
-  for (let minute = Date.parse(from); minute < Date.parse(to); minute += MINUTE) {
-    const count = per503(minute)
-    for (let index = 0; index < count; index += 1) {
-      lines.push({ timestamp: new Date(minute + 1_000).toISOString(), labels: { instanceId: FAKE_DIRECTORS[index % 2] } })
-    }
-  }
-  return lines.reverse()
-}
 
 function fakeSources({
   cell = () => ({}),
@@ -534,7 +568,9 @@ function fakeSources({
   seatControl = true,
   rolloutLease = null,
   // Each director instance's runtime-metrics deltas for the 30 s ending at `endedAt`.
-  metrics = () => [{}]
+  metrics = () => [{}],
+  // The watched cell's own runtime-metrics deltas, when it runs the phone path.
+  phone = null
 } = {}) {
   let samples = 0
   const monitoringSpans = []
@@ -576,17 +612,33 @@ function fakeSources({
     }
     throw new Error(`unexpected fetch ${text}`)
   }
+  const director = (entries) => entries.map((entry) => ({ ...entry, resource: { type: 'cloud_run_revision' } }))
+  // One query's lines, as Cloud Logging would answer its filter alone.
+  const answer = (filter) => {
+    const summaries = director(ledger(samples).map((entry) => ({ ...entry, jsonPayload: { ...entry.jsonPayload, event: SUMMARY_EVENT } })))
+    if (filter.includes(SEAT_EVENT)) return seatControl ? summaries : []
+    if (filter.includes(SUMMARY_EVENT)) return summaries
+    if (filter.includes('gce_instance')) {
+      return phone ? metricsLines(filter, (at) => [{ ...phone(at), event: METRICS_EVENT, cellId: CELL }]).map((entry) => ({ ...entry, resource: { type: 'gce_instance' } })) : []
+    }
+    if (filter.includes(METRICS_EVENT)) return director(metricsLines(filter, (at) => metrics(at).map((deltas) => ({ ...deltas, event: METRICS_EVENT }))))
+    return []
+  }
+  const logReads = []
   const runGcloud = async (args) => {
     if (args[0] === 'auth') return { stdout: 'token' }
     const filter = args[2]
-    const summaries = ledger(samples).map((entry) => ({ ...entry, jsonPayload: { ...entry.jsonPayload, event: SUMMARY_EVENT } }))
-    if (filter.includes(SEAT_EVENT)) return { stdout: JSON.stringify(seatControl ? summaries : []) }
-    if (filter.includes(SUMMARY_EVENT)) return { stdout: JSON.stringify(ledger(samples)) }
-    if (filter.includes(METRICS_EVENT)) return { stdout: JSON.stringify(metricsLines(filter, metrics)) }
-    if (filter.includes('httpRequest.status=503')) return { stdout: JSON.stringify(requestLines(filter, per503)) }
-    return { stdout: '[]' }
+    logReads.push({ sample: samples, filter })
+    // A sample's combined read is `(A) OR (B) ...`; each part answers as it would alone, deduplicated.
+    const parts = filter.startsWith('(') ? filter.slice(1, -1).split(') OR (') : [filter]
+    const seen = new Set()
+    const entries = parts.flatMap(answer).filter((entry) => {
+      const key = JSON.stringify(entry)
+      return !seen.has(key) && seen.add(key)
+    })
+    return { stdout: JSON.stringify(entries) }
   }
-  return { fetchImpl, runGcloud, monitoringSpans, readRolloutLease: async () => rolloutLease }
+  return { fetchImpl, runGcloud, monitoringSpans, logReads, readRolloutLease: async () => rolloutLease }
 }
 
 test('a segment samples once a minute, carries state to the next segment, and stops on a trip', async () => {
@@ -968,15 +1020,95 @@ test('503s the director could not serve trip after three minutes over the line, 
   const flippedAt = START - 2 * MINUTE
   const { state } = await watchFor(10, fakeSources({
     per503: (minute) => (minute < flippedAt ? 20 : 60),
-    // 10 re-dials a minute throughout; the 40 more after the flip are queue waits that timed out.
-    metrics: (at) => [{
-      ...rateLimited(5),
-      stickyRejectionsByReasonDelta: at <= flippedAt ? {} : { 'wait-timeout': 20 }
-    }]
+    // 10 re-dials a minute on a throughout; the 40 more after the flip are queue waits that timed
+    // out, 20 a minute on each of two instances.
+    metrics: (at) => {
+      const waits = at <= flippedAt ? {} : { stickyRejectionsByReasonDelta: { 'wait-timeout': 10 }, assign503sByCauseDelta: { 'sticky-lane': 10 } }
+      const a = rateLimited(5)
+      return [{ ...a, ...waits, assign503sByCauseDelta: { ...a.assign503sByCauseDelta, ...waits.assign503sByCauseDelta } }, waits]
+    }
   }), flippedAt)
   assert.equal(state.state, 'tripped')
   assert.deepEqual(state.background, { medianPerMinute: 10, minutes: 10, source: 'measured' })
-  assert.match(state.verdict, /director503: director 503s above 30\/min for 3 min \(50, 50, 50\)/)
+  assert.match(state.verdict, /director503: director 503s above 30\/min for 3 min \(50, 50, 50\), 2 instances each above 15\/min$/)
+})
+
+test('the combined read hands each query only its own lines', async () => {
+  const at = START
+  const endedAt = START - 3 * MINUTE
+  const queries = sampleLogQueries({
+    phoneRequest: { cellId: CELL, endedAt, minutes: 10 },
+    director: { directorService: 'orca-cloud-relay', endedAt, minutes: 10 },
+    seatRequest: { directorService: 'orca-cloud-relay', cellId: CELL, at }
+  })
+  const director = (ago, jsonPayload) => ({ timestamp: new Date(at - ago).toISOString(), resource: { type: 'cloud_run_revision' }, labels: { instanceId: 'a' }, jsonPayload })
+  const entries = {
+    metrics: director(5 * MINUTE, { event: METRICS_EVENT }),
+    phone: { timestamp: new Date(at - 5 * MINUTE).toISOString(), resource: { type: 'gce_instance' }, jsonPayload: { event: METRICS_EVENT, cellId: CELL } },
+    freshSummary: director(60_000, { event: SUMMARY_EVENT, pending: 0, dropped: 0 }),
+    staleSummary: director(10 * MINUTE, { event: SUMMARY_EVENT, pending: 0, dropped: 0 }),
+    ownSeat: director(2 * MINUTE, { event: SEAT_EVENT, cellId: CELL, epoch: 1, rowEpoch: 2 }),
+    otherSeat: director(2 * MINUTE, { event: SEAT_EVENT, cellId: 'production-gce-c99', epoch: 1, rowEpoch: 2 })
+  }
+  let filter
+  const logs = await readSampleLogs(
+    fakeReader({ runGcloud: async (args) => ((filter = args[2]), { stdout: JSON.stringify(Object.values(entries)) }) }),
+    queries
+  )
+  const names = (read) => read.entries.map((entry) => Object.keys(entries).find((name) => JSON.stringify(entries[name]) === JSON.stringify(entry)))
+  assert.equal(filter.split(') OR (').length, 4)
+  assert.deepEqual(names(logs.directorMetrics), ['metrics'])
+  assert.deepEqual(names(logs.phone), ['phone'])
+  // The ledger rule wants a summary from the last 150 s; the seat read's positive control, 15 min.
+  assert.deepEqual(names(logs.ledger), ['freshSummary'])
+  assert.deepEqual(names(logs.seatBehindRow), ['freshSummary', 'staleSummary', 'ownSeat'])
+  // Without the phone path its query is not sent.
+  const unwatched = sampleLogQueries({ phoneRequest: false, director: { directorService: 'orca-cloud-relay', endedAt, minutes: 10 }, seatRequest: { directorService: 'orca-cloud-relay', cellId: CELL, at } })
+  const sent = await readSampleLogs(fakeReader({ runGcloud: async (args) => ((filter = args[2]), { stdout: '[]' }) }), unwatched)
+  assert.equal(filter.split(') OR (').length, 3)
+  assert.doesNotMatch(filter, /gce_instance/)
+  assert.equal('phone' in sent, false)
+  // A full read is truncated for every query; a failed one names its error.
+  const full = await readSampleLogs(fakeReader({ runGcloud: async () => ({ stdout: JSON.stringify(Array.from({ length: 1_000 }, () => entries.metrics)) }) }), unwatched)
+  assert.ok(Object.values(full).every((read) => read.failed && read.error === 'sample log read truncated'))
+})
+
+// 10-21 18:39Z: twelve watches at ~5 Cloud Logging reads a sample hit the project's 60 a minute.
+test('a sample makes one Cloud Logging read, and a 429 retried inside its budget stays verifiable', async () => {
+  const memory = { flagsApplied: { generation: 4, flags: { admitMode: 'reserve', readinessLocal: true, phonePath: 'memory' } } }
+  const sources = fakeSources({ cell: () => memory, phone: () => ({ phoneAttachDeadlinesDelta: 0, clientAcceptCompletedDelta: 10 }) })
+  // Sample 6's combined read answers 429 once; sample 8's (the 9th read), on all three attempts.
+  let combined = 0
+  let ninth = 0
+  const runGcloud = async (args, options) => {
+    if (args[0] === 'logging' && args[2].startsWith('(')) {
+      combined += 1
+      if (combined === 6) throw new Error('RESOURCE_EXHAUSTED: 429 Quota exceeded for ReadRequestsPerMinutePerProject')
+      if (combined >= 9 && ninth < 3) {
+        ninth += 1
+        throw new Error('RESOURCE_EXHAUSTED: 429 Quota exceeded for ReadRequestsPerMinutePerProject')
+      }
+    }
+    return sources.runGcloud(args, options)
+  }
+  const { state, lines } = await watchFor(12, { ...sources, runGcloud })
+  assert.equal(state.state, 'watching')
+  assert.equal(lines.length, 12)
+  // One combined read per sample: 12, one retry for sample 6 and two for sample 8. Only the
+  // one-time backgrounds read alone.
+  assert.equal(combined, 15)
+  const reads = sources.logReads.map(({ filter }) => filter)
+  assert.equal(reads.filter((filter) => filter.startsWith('(')).length, 11)
+  assert.ok(reads.filter((filter) => !filter.startsWith('(')).length <= 3)
+  const combinedRead = reads.find((filter) => filter.startsWith('('))
+  for (const part of ['gce_instance', METRICS_EVENT, SUMMARY_EVENT, SEAT_EVENT]) assert.ok(combinedRead.includes(part), part)
+  // The retried 429 left sample 6 whole; sample 8, which never read, is one gap the next heals.
+  assert.equal(lines[5].unverifiableStreak, 0)
+  assert.ok(Object.values(lines[5].rules).every((rule) => rule.status !== 'unverifiable'))
+  assert.equal(lines[7].unverifiableStreak, 1)
+  assert.match(lines[7].rules.duplicateSeat.reason, /RESOURCE_EXHAUSTED/)
+  assert.match(lines[7].rules.director503.reason, /director runtime metrics read failed: RESOURCE_EXHAUSTED/)
+  assert.equal(lines[8].unverifiableStreak, 0)
 })
 
 test('a minute no director instance logged runtime metrics for is unverifiable, not zero', async () => {
@@ -1382,13 +1514,11 @@ async function phoneWatch(phoneMetrics, minutes) {
     const lines = []
     const config = parseAt(watchValues({ 'state-file': join(directory, 'state.json'), 'segment-minutes': String(minutes) }))
     const sources = fakeSources({
-      cell: () => ({ flagsApplied: { generation: 4, flags: { admitMode: 'reserve', readinessLocal: true, phonePath: 'memory' } } })
+      cell: () => ({ flagsApplied: { generation: 4, flags: { admitMode: 'reserve', readinessLocal: true, phonePath: 'memory' } } }),
+      phone: phoneMetrics
     })
-    const runGcloud = async (args) =>
-      args[2]?.includes('gce_instance') ? { stdout: JSON.stringify(metricsLines(args[2], (at) => [phoneMetrics(at)])) } : sources.runGcloud(args)
     const state = await watchSegment(config, {
       ...sources,
-      runGcloud,
       idToken: 'id',
       accessToken: 'access',
       audit: {},

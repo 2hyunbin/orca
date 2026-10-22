@@ -39,6 +39,14 @@ export const RESERVE_WATCH_RULES = {
   reserveApplyWaitMs: 10 * MINUTE_MS
 }
 
+// The fleet's non-drain 503s no instance's own lines account for. Unclamped per minute: the fleet
+// buckets by request minute and an instance's lines by 30 s, so a minute carries that skew and
+// only the sum over the judged minutes is judged, against the whole fleet line: no one
+// instance's stall explains it then. Its largest 3-minute sum in 10-20/21 was 38, against 90. An
+// instance answering 503s without logging its lines lands here and trips on purpose: a director
+// that stops logging is not the database stall the split lets through (10-21 07:55Z kept logging).
+export const UNATTRIBUTED_503S = 'unattributed'
+
 // Precedence: the first tripped rule names the verdict, so exact signals come before proxies. The
 // sample line's `rules` keys follow this order too.
 export const RULE_NAMES = ['deadMan', 'overrun', 'director503', 'duplicateSeat', 'hostDrop', 'ledgerDrift']
@@ -238,10 +246,15 @@ function judgeDirector503(read, state, at) {
   const directors = Math.min(...recent.map((minute) => read.instances.directors?.[minute]))
   if (!Number.isInteger(directors)) return unverifiable(`no director instance count for ${recent.join(', ')}`)
   const instanceAbove = above / Math.max(directors, instances.minOver)
-  const over = Object.entries(read.instances.perMinute)
+  const { [UNATTRIBUTED_503S]: rest = {}, ...byInstance } = read.instances.perMinute
+  const unattributed = recent.reduce((sum, minute) => sum + (rest[minute] ?? 0), 0)
+  const over = Object.entries(byInstance)
     .filter(([, byMinute]) => recent.every((minute) => (byMinute[minute] ?? 0) > instanceAbove))
     .map(([instance]) => instance)
-  const split = { ...detail, instanceAbove, instancesOver: over.length }
+  const split = { ...detail, instanceAbove, instancesOver: over.length, unattributed }
+  if (unattributed > above * recent.length) {
+    return trip(`director 503s above ${above}/min ${sustained}, ${unattributed} of them no director instance logged`, split)
+  }
   if (over.length >= instances.minOver) {
     return trip(`director 503s above ${above}/min ${sustained}, ${over.length} instances each above ${instanceAbove}/min`, split)
   }
