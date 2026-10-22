@@ -4,6 +4,7 @@ import { getRepoExecutionHostId, type ExecutionHostId } from '../../../../shared
 import { catalogOwnsHost, getProjectGroupHostId } from '../slices/project-group-owner-routing'
 import type { RepoSlice } from '../repos/repo-state'
 import { getFolderWorkspaceHostId } from '../../../../shared/folder-workspace-execution-host'
+import { selectProjectGroups, selectRepos } from '../project-catalog-selectors'
 
 // Why: a group id can exist on several hosts; only the deleted owner's rows may be cascaded away.
 export function applyProjectGroupDeleteCascade(
@@ -13,21 +14,21 @@ export function applyProjectGroupDeleteCascade(
 ): Pick<RepoSlice, 'projectGroups' | 'folderWorkspaces' | 'repos' | 'folderWorkspacePathStatuses'> {
   const ownsRowHost = (rowHostId: string): boolean =>
     ownerHostId ? catalogOwnsHost(ownerHostId, rowHostId) : true
-  const ownerGroups = state.projectGroups.filter((group) =>
+  const ownerGroups = selectProjectGroups(state).filter((group) =>
     ownsRowHost(getProjectGroupHostId(group))
   )
   const deletedGroupIds = getProjectGroupSubtreeIds(ownerGroups, groupId)
   const isDeletedGroup = (group: ProjectGroup): boolean =>
     deletedGroupIds.has(group.id) && ownsRowHost(getProjectGroupHostId(group))
   return {
-    projectGroups: state.projectGroups.filter((group) => !isDeletedGroup(group)),
+    projectGroups: selectProjectGroups(state).filter((group) => !isDeletedGroup(group)),
     folderWorkspaces: state.folderWorkspaces.filter(
       (workspace) =>
         !deletedGroupIds.has(workspace.projectGroupId) ||
         // Why: resolve the workspace's host against the pre-delete group list, which still holds its owner row.
-        !ownsRowHost(getFolderWorkspaceHostId(workspace, state.projectGroups))
+        !ownsRowHost(getFolderWorkspaceHostId(workspace, selectProjectGroups(state)))
     ),
-    repos: state.repos.map((repo) =>
+    repos: selectRepos(state).map((repo) =>
       repo.projectGroupId &&
       deletedGroupIds.has(repo.projectGroupId) &&
       ownsRowHost(getRepoExecutionHostId(repo))

@@ -8,13 +8,14 @@ import {
   getGitHubSourceTarget,
   getGitHubWorkItemRequestContext
 } from './work-item-routing'
+import { selectRepos } from '../project-catalog-selectors'
 
 export const createReviewThreadActions = (
   set: Parameters<StateCreator<AppState>>[0],
   get: Parameters<StateCreator<AppState>>[1]
 ): Pick<GitHubSlice, 'resolveReviewThread'> => ({
   resolveReviewThread: async (repoPath, prNumber, threadId, resolve, options) => {
-    const repo = get().repos?.find((candidate) =>
+    const repo = selectRepos(get())?.find((candidate) =>
       options?.repoId ? candidate.id === options.repoId : candidate.path === repoPath
     )
     const repoId = options?.repoId ?? repo?.id

@@ -32,6 +32,7 @@ import {
 } from './repo-slug-cache'
 import { githubRepoIdentityKey } from '../../../shared/github/repository-identity-key'
 import { createBoundedGenerationMap } from './bounded-generation-map'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export { lookupReposBySlugFromCache } from './repo-slug-cache'
 
@@ -185,7 +186,7 @@ export type RepoSlugIndexState = {
  *  lookup is stable across renders until `state.repos` changes; callers in
  *  deep trees can treat it as referentially equal inside a single render cycle. */
 export function useRepoSlugIndex(): RepoSlugIndexState {
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const [index, setIndex] = useState<SlugIndex>(() => new Map())
   const [upstreamIndex, setUpstreamIndex] = useState<SlugIndex>(() => new Map())
   const [ready, setReady] = useState(false)

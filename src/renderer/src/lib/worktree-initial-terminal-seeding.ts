@@ -108,7 +108,9 @@ export function ensureWorktreeHasInitialTerminal(
   const { renderableTabCount } = store.reconcileWorktreeTabModel(worktreeId)
   // Why: creating a terminal just because the legacy terminal slice is empty gives editor/browser-only worktrees an unexpected extra tab.
   const ownerState =
-    store.settings !== undefined || store.repos !== undefined || store.worktreesByRepo !== undefined
+    store.settings !== undefined ||
+    store.repos !== undefined ||
+    store.worktreesByRepo !== undefined
       ? store
       : useAppStore.getState()
   let sequencedStartup = startup

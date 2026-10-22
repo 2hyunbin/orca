@@ -6,6 +6,7 @@ import {
 import type { Repo } from '../../../../shared/repo-types'
 import { useAppStore } from '@/store'
 import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type AddedRepoOwner = {
   runtimeEnvironmentId?: string | null
@@ -31,10 +32,14 @@ export function upsertAddedRepoWithProjectHostSetup(
   const state = useAppStore.getState()
   const ownedRepo = repoWithCapturedOwner(repo, owner)
   const repoIdentity = getRepoHostIdentity(ownedRepo)
-  const alreadyPresent = state.repos.some((entry) => getRepoHostIdentity(entry) === repoIdentity)
+  const alreadyPresent = selectRepos(state).some(
+    (entry) => getRepoHostIdentity(entry) === repoIdentity
+  )
   const repos = alreadyPresent
-    ? state.repos.map((entry) => (getRepoHostIdentity(entry) === repoIdentity ? ownedRepo : entry))
-    : [...state.repos, ownedRepo]
+    ? selectRepos(state).map((entry) =>
+        getRepoHostIdentity(entry) === repoIdentity ? ownedRepo : entry
+      )
+    : [...selectRepos(state), ownedRepo]
   const projection = projectHostSetupProjectionFromRepos(repos)
 
   // Why: these Add Project flows call IPC directly, bypassing the repo slice

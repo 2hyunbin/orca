@@ -18,6 +18,7 @@ import {
 } from './folder-workspace-catalog'
 import { reuseEqualRecordMap } from '../slices/repo-identity-reconcile'
 import { getFolderWorkspaceUpdateCoordinator } from './folder-workspace-mutations'
+import { selectProjectGroups } from '../project-catalog-selectors'
 
 export function createFolderWorkspaceCatalogActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -59,7 +60,10 @@ export function createFolderWorkspaceCatalogActions(
       try {
         const target = runtimeTargetForOwnerEnvironment(options.runtimeEnvironmentId)
         const fence = claimHostCatalogFence(get, 'folder-workspaces', target)
-        applyCatalog(await fetchFolderWorkspaceCatalogForTarget(target, get().projectGroups), fence)
+        applyCatalog(
+          await fetchFolderWorkspaceCatalogForTarget(target, selectProjectGroups(get())),
+          fence
+        )
       } catch (err) {
         console.error('Failed to fetch folder workspaces:', err)
         if (options.throwOnError) {
@@ -73,7 +77,10 @@ export function createFolderWorkspaceCatalogActions(
       try {
         const target = { kind: 'local' as const }
         const fence = claimHostCatalogFence(get, 'folder-workspaces', target)
-        applyCatalog(await fetchFolderWorkspaceCatalogForTarget(target, get().projectGroups), fence)
+        applyCatalog(
+          await fetchFolderWorkspaceCatalogForTarget(target, selectProjectGroups(get())),
+          fence
+        )
       } catch (err) {
         failed = true
         console.error('Failed to fetch local folder workspaces for all-host load:', err)
@@ -85,7 +92,7 @@ export function createFolderWorkspaceCatalogActions(
       await loadRuntimeHostCatalogs(get, 'folder-workspaces', async (target, fence) => {
         try {
           applyCatalog(
-            await fetchFolderWorkspaceCatalogForTarget(target, get().projectGroups),
+            await fetchFolderWorkspaceCatalogForTarget(target, selectProjectGroups(get())),
             fence
           )
         } catch (err) {

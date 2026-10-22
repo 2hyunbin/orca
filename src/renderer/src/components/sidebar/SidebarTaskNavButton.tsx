@@ -21,6 +21,7 @@ import {
   restoreAvailableDefaultTaskProvider,
   resolveVisibleTaskProvider
 } from '../../../../shared/task-providers'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 function HideTaskSidebarMenu({ onHide }: { onHide: () => void }): React.JSX.Element {
   return (
@@ -58,7 +59,7 @@ export function SidebarTaskNavButton(): React.JSX.Element | null {
   const openTaskPage = useAppStore((s) => s.openTaskPage)
   const updateSettings = useAppStore((s) => s.updateSettings)
   const activeView = useAppStore((s) => s.activeView)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const repoMap = useRepoMap()
   const showTasksButton = useAppStore((s) => s.settings?.showTasksButton !== false)
   const rawVisibleTaskProviders = useAppStore((s) => s.settings?.visibleTaskProviders)

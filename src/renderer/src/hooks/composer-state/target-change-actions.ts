@@ -50,6 +50,7 @@ import {
 } from '@/lib/project-host-setup-options'
 import { useAppStore } from '@/store'
 import { getComposerEligibleRepos } from '@/lib/new-workspace-composer-repo'
+import { selectProjectHostSetups, selectRepos } from '../../store/project-catalog-selectors'
 
 export function useTargetChangeActions(input: TargetChangeActionsInput) {
   const {
@@ -252,8 +253,8 @@ export function useTargetChangeActions(input: TargetChangeActionsInput) {
           ? option
           : buildProjectHostSetupOptions({
               projectId: selectedRepoProjectId,
-              projectHostSetups: useAppStore.getState().projectHostSetups,
-              eligibleRepos: getComposerEligibleRepos(useAppStore.getState().repos),
+              projectHostSetups: selectProjectHostSetups(useAppStore.getState()),
+              eligibleRepos: getComposerEligibleRepos(selectRepos(useAppStore.getState())),
               hosts: hostOptions
             }).find(
               (candidate): candidate is ReadyProjectHostSetupOption =>

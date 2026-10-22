@@ -1,9 +1,10 @@
 import { useAppStore } from '@/store'
 import { requestContextualTourWhenReady } from './request-contextual-tour-when-ready'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function openWorkspaceCreationComposerWithTourHandoff(): void {
   const state = useAppStore.getState()
-  const hasProjects = state.repos.length > 0
+  const hasProjects = selectRepos(state).length > 0
 
   const shouldHandoffFromAgentSessionsTour =
     hasProjects &&

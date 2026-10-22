@@ -7,6 +7,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export type RuntimeSessionMirrorTargetInputs = Pick<
   AppState,
@@ -26,10 +27,10 @@ export function selectRuntimeSessionMirrorTargetInputs(
 ): RuntimeSessionMirrorTargetInputs {
   return {
     activeRuntimeEnvironmentId: state.settings?.activeRuntimeEnvironmentId ?? null,
-    repos: state.repos,
+    repos: selectRepos(state),
     worktreesByRepo: selectWorktreesByRepo(state),
     detectedWorktreesByRepo: selectDetectedWorktreesByRepo(state),
-    projectGroups: state.projectGroups,
+    projectGroups: selectProjectGroups(state),
     restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey,
     runtimeEnvironments: state.runtimeEnvironments,
     runtimeStatusByEnvironmentId: state.runtimeStatusByEnvironmentId

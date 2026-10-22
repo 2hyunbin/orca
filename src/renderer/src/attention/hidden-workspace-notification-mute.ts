@@ -7,6 +7,7 @@ import { computeVisibleWorktreeIds } from '@/components/sidebar/compute-visible-
 import { buildVisibleWorktreeOptionsFromState } from '@/components/sidebar/visible-worktree-options-from-state'
 import { isFolderWorkspaceFromOtherDevice } from '../../../shared/workspace-creator-visibility'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 /**
  * Whether attention from this workspace must raise nothing — no unread, banner, sound or push —
@@ -29,7 +30,7 @@ export function isWorkspaceNotificationMutedBySidebarFilters(
   ) {
     return false
   }
-  const repoMap = getIndexedRepoMap(state.repos)
+  const repoMap = getIndexedRepoMap(selectRepos(state))
   const inputs = buildVisibleWorktreeOptionsFromState(state, repoMap)
   const scope = parseWorkspaceKey(workspaceId)
   if (scope?.type === 'folder') {

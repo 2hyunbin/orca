@@ -1,6 +1,7 @@
 import type { AppState } from '../../store'
 import { getAllWorktreesFromState } from '../../store/selectors'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 const EMPTY_TABS_BY_WORKTREE: AppState['tabsByWorktree'] = {}
 const EMPTY_PTY_IDS_BY_TAB_ID: AppState['ptyIdsByTabId'] = {}
@@ -59,7 +60,7 @@ export function getResourceUsageRepos(
   state: Pick<AppState, 'repos'>,
   open: boolean
 ): AppState['repos'] {
-  return open ? state.repos : EMPTY_REPOS
+  return open ? selectRepos(state) : EMPTY_REPOS
 }
 
 export function getResourceUsageAllWorktrees(
@@ -80,5 +81,5 @@ export function getResourceUsageProjectGroups(
   state: Pick<AppState, 'projectGroups'>,
   open: boolean
 ): AppState['projectGroups'] {
-  return open ? state.projectGroups : EMPTY_PROJECT_GROUPS
+  return open ? selectProjectGroups(state) : EMPTY_PROJECT_GROUPS
 }

@@ -33,6 +33,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '../../../workspace-record-selectors'
+import { selectProjectGroups } from '../../../project-catalog-selectors'
 
 type PublisherRow = {
   id: string
@@ -53,7 +54,7 @@ function resolvePurgedPublishers(
   const scope = parseWorkspaceKey(workspaceId)
   const attributedHostIds = new Map([...purgedHosts].map((hostId) => [hostId, hostId]))
   if (scope?.type === 'folder') {
-    const groups = s.projectGroups ?? []
+    const groups = selectProjectGroups(s) ?? []
     const hosts = (selectFolderWorkspaces(s) ?? [])
       .filter((folder) => folder.id === scope.folderWorkspaceId)
       .flatMap((folder) => {

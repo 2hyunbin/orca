@@ -26,6 +26,7 @@ import { chatScratchFileAddress } from '@/runtime/runtime-chat-scratch-file-addr
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { findWorkspaceShowingPage } from './workspace-file-preview-page'
 import { openFilePreviewTab } from './file-preview-tab'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export type PreviewableLanguage = 'html'
 
@@ -143,8 +144,8 @@ export function useWorkspaceFileBrowserActionPredicate(
         ? runtimeEnvironmentIdOrLocalUnlessTwin(state, worktreeId)
         : null,
       folderWorkspaces: selectFolderWorkspaces(state),
-      projectGroups: state.projectGroups,
-      repos: state.repos,
+      projectGroups: selectProjectGroups(state),
+      repos: selectRepos(state),
       worktreesByRepo: selectWorktreesByRepo(state)
     }))
   )

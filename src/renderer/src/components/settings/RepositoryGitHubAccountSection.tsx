@@ -16,6 +16,7 @@ import {
   listRepositoryGhBindableAccounts,
   validateRepositoryGhAccountBinding
 } from './repository/identity/repository-github-account'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type RepositoryGitHubAccountSectionProps = {
   repo: Repo
@@ -154,7 +155,9 @@ export function RepositoryGitHubAccountSection({
         )
         return
       }
-      const echoed = useAppStore.getState().repos.find((entry) => entry.id === repo.id)?.ghAccount
+      const echoed = selectRepos(useAppStore.getState()).find(
+        (entry) => entry.id === repo.id
+      )?.ghAccount
       if (!isGhAccountBindingEnforced(resolved, echoed)) {
         setNotEnforced(true)
       }

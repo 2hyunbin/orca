@@ -39,6 +39,7 @@ import { getSshStatusLabel } from './new-workspace/new-workspace-composer-ssh-st
 import { useNewWorkspaceComposerFileDrop } from './new-workspace/use-new-workspace-composer-file-drop'
 import { useComposerFileDragOver } from './new-workspace/use-composer-file-drag-over'
 import { buildDefaultAgentSettingsUpdate } from '../../../shared/default-agent-settings'
+import { selectProjects, selectRepos } from '../store/project-catalog-selectors'
 
 // Why lazy: this pulls the ~41 KB project-location browser onto the boot graph, and nothing
 // reaches it without an explicit "Set location" click. Shared with the warm below so both hit
@@ -98,8 +99,8 @@ export default function NewWorkspaceComposerCard(
     (state) => state.settings?.disabledTuiAgents ?? DEFAULT_DISABLED_TUI_AGENTS
   )
   const updateSettings = useAppStore((state) => state.updateSettings)
-  const projects = useAppStore((state) => state.projects)
-  const repos = useAppStore((state) => state.repos)
+  const projects = useAppStore((state) => selectProjects(state))
+  const repos = useAppStore((state) => selectRepos(state))
   const nameInputFocusFrameRef = React.useRef<number | null>(null)
   const branchNameInputId = React.useId()
   const projectDescriptionId = React.useId()

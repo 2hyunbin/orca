@@ -14,6 +14,7 @@ import type {
 import { translate } from '@/i18n/i18n'
 import type { GitHubWorkItem } from '../../../../../shared/github/work-item-types'
 import type { PRCheckDetail } from '../../../../../shared/github/check-types'
+import { selectRepos } from '../../../store/project-catalog-selectors'
 
 type StoreState = ReturnType<typeof useAppStore.getState>
 
@@ -31,7 +32,7 @@ export async function saveFixChecksActionDefault(
   }
   const latestRepo =
     target.type === 'repo'
-      ? (state.repos.find((candidate) => candidate.id === target.repoId) ?? null)
+      ? (selectRepos(state).find((candidate) => candidate.id === target.repoId) ?? null)
       : null
   const result = saveSourceControlActionRecipe({
     target,

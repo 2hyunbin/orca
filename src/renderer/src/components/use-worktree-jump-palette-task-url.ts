@@ -17,6 +17,11 @@ import type { LinearIssue } from '../../../shared/linear/issue-types'
 import type { TaskSourceContext } from '../../../shared/task-source-context'
 import { buildTaskSourceContextFromRepo } from '../../../shared/task-source-context'
 import type { WorktreePaletteRequestGuard } from '@/lib/worktree-palette-create-action'
+import {
+  selectProjectHostSetups,
+  selectProjects,
+  selectRepos
+} from '../store/project-catalog-selectors'
 
 export type CmdJLinearIssuePreview = {
   query: string
@@ -35,12 +40,16 @@ export type CmdJGitHubWorkItemPreview = {
 }
 
 function getComposerDefaultWorkspaceTarget(state: ReturnType<typeof useAppStore.getState>) {
-  const eligibleRepos = getComposerEligibleRepos(state.repos)
-  const activeRepoId = resolveComposerActiveRepoId(state.repos, eligibleRepos, state.activeRepoId)
+  const eligibleRepos = getComposerEligibleRepos(selectRepos(state))
+  const activeRepoId = resolveComposerActiveRepoId(
+    selectRepos(state),
+    eligibleRepos,
+    state.activeRepoId
+  )
   const resolution = resolveWorkspaceCreationTarget({
     eligibleRepos,
-    projects: state.projects,
-    projectHostSetups: state.projectHostSetups,
+    projects: selectProjects(state),
+    projectHostSetups: selectProjectHostSetups(state),
     activeRepoId,
     focusedHostScope: state.workspaceHostScope
   })

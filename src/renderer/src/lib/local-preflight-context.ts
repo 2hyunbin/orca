@@ -27,6 +27,7 @@ import {
   getWslPreflightContext,
   type LocalPreflightContext
 } from './local-preflight-context-cache'
+import { selectProjects, selectRepos } from '../store/project-catalog-selectors'
 
 export { localPreflightContextKey } from './local-preflight-context-key'
 export type { LocalPreflightContext } from './local-preflight-context-cache'
@@ -133,7 +134,7 @@ export function getLocalRepoProjectExecutionRuntimeContext(
     return undefined
   }
 
-  const repo = getIndexedRepoMap(state.repos ?? EMPTY_REPOS).get(repoId)
+  const repo = getIndexedRepoMap(selectRepos(state) ?? EMPTY_REPOS).get(repoId)
   if (!isLocalRuntimeRepo(repo)) {
     return undefined
   }
@@ -297,7 +298,7 @@ function getLocalRuntimeRepoForWorktree(
     return undefined
   }
   const repoId = worktree?.repoId ?? state.activeRepoId
-  return repoId ? getIndexedRepoMap(state.repos ?? EMPTY_REPOS).get(repoId) : undefined
+  return repoId ? getIndexedRepoMap(selectRepos(state) ?? EMPTY_REPOS).get(repoId) : undefined
 }
 
 function isLocalRuntimeRepo(
@@ -318,7 +319,7 @@ function getLocalRuntimeProject(
   projectId: string,
   repoId: string
 ) {
-  return state.projects?.find(
+  return selectProjects(state)?.find(
     (entry) => entry.id === projectId || projectMatchesRepo(entry, repoId)
   )
 }

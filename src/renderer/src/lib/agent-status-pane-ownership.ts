@@ -3,6 +3,7 @@ import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { collectLeafIdsInOrder } from '../components/terminal-pane/terminal-layout-leaf-ids'
 import { getIndexedRepoMap, getIndexedWorktreeMap } from '../store/worktree-repo-index'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 /** Resolve a paneKey (tabId:leafId) to liveness, current title, owning worktree,
  *  and the owning repo's connectionId. Used for agent-type inference and to drop
@@ -66,7 +67,7 @@ export function resolvePaneKey(
   if (owningWorktreeId !== undefined) {
     const worktree = getIndexedWorktreeMap(selectWorktreesByRepo(store)).get(owningWorktreeId)
     if (worktree) {
-      const repo = getIndexedRepoMap(store.repos).get(worktree.repoId)
+      const repo = getIndexedRepoMap(selectRepos(store)).get(worktree.repoId)
       repoConnectionResolved = repo !== undefined
       repoConnectionId = repo?.connectionId ?? null
     }
@@ -126,7 +127,7 @@ export function resolveWorktreeConnection(
   if (!worktree) {
     return { worktreeExists: false, repoConnectionId: null, repoConnectionResolved: false }
   }
-  const repo = getIndexedRepoMap(store.repos).get(worktree.repoId)
+  const repo = getIndexedRepoMap(selectRepos(store)).get(worktree.repoId)
   return {
     worktreeExists: true,
     repoConnectionId: repo?.connectionId ?? null,

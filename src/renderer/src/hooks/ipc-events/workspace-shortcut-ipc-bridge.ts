@@ -10,6 +10,7 @@ import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { useAppStore } from '../../store'
 import { toggleAgentDashboardFromShortcut } from './agent-dashboard-command'
 import { openNewWorkspaceFromShortcut } from './new-workspace-command'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function registerWorkspaceShortcutIpcBridge(unsubs: (() => void)[]): void {
   unsubs.push(
@@ -71,7 +72,10 @@ export function registerWorkspaceShortcutIpcBridge(unsubs: (() => void)[]): void
   unsubs.push(
     window.api.ui.onOpenTasks(() => {
       const store = useAppStore.getState()
-      if (store.activeView === 'settings' || !store.repos.some((repo) => isGitRepoKind(repo))) {
+      if (
+        store.activeView === 'settings' ||
+        !selectRepos(store).some((repo) => isGitRepoKind(repo))
+      ) {
         return
       }
       store.openTaskPage()

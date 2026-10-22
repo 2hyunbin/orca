@@ -5,6 +5,7 @@ import { workspaceOwnerHostId } from '../../lib/workspace-row-owner-host'
 import type { AppState } from '../../store/types'
 import { useAppStore } from '../../store'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 /**
  * The WSL hosts an open project or terminal needs: the active workspace's host and the host of
@@ -77,9 +78,9 @@ export function registerWslHostIpcBridge(unsubs: (() => void)[]): void {
       state.activeWorktreeId,
       state.tabsByWorktree,
       state.runtimeEnvironments,
-      state.repos,
+      selectRepos(state),
       selectFolderWorkspaces(state),
-      state.projectGroups
+      selectProjectGroups(state)
     ]
     if (next.every((value, index) => value === inputs[index])) {
       return

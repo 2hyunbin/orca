@@ -15,6 +15,7 @@ import { settingsForGitHubRepoOwner } from './work-item-routing'
 import { githubHostedReviewFallbackPRNumber } from './pr-result-routing'
 import type { GitHubPRFallbackSource } from './cache-model'
 import { selectWorktreesByRepo } from '../workspace-record-selectors'
+import { selectRepos } from '../project-catalog-selectors'
 
 export function findWorktreeById(state: AppState, worktreeId: string): Worktree | null {
   return getWorktreeLookupIndex(state).byId.get(worktreeId)?.first ?? null
@@ -50,7 +51,7 @@ export function buildWorktreeLookupIndex(state: AppState): WorktreeLookupIndex {
   }
 
   const repoHostIdsByRepoId = new Map<string, Set<string>>()
-  for (const repo of state.repos ?? []) {
+  for (const repo of selectRepos(state) ?? []) {
     let hostIds = repoHostIdsByRepoId.get(repo.id)
     if (!hostIds) {
       hostIds = new Set<string>()
@@ -69,7 +70,7 @@ const worktreeLookupIndexes = new WeakMap<
 
 export function getWorktreeLookupIndex(state: AppState): WorktreeLookupIndex {
   const worktreesByRepo = selectWorktreesByRepo(state) ?? EMPTY_WORKTREES_BY_REPO
-  const repos = state.repos ?? EMPTY_WORKTREE_REPOS
+  const repos = selectRepos(state) ?? EMPTY_WORKTREE_REPOS
   const cached = worktreeLookupIndexes.get(worktreesByRepo)
   if (cached && cached.repos === repos) {
     return cached.index
@@ -205,7 +206,8 @@ export function buildPRRefreshCandidate(
   repoPath?: string,
   repoOverride?: Repo
 ): GitHubPRRefreshCandidate | null {
-  const repo = repoOverride ?? getGitHubRepoLookupIndex(state.repos).findById(worktree.repoId)
+  const repo =
+    repoOverride ?? getGitHubRepoLookupIndex(selectRepos(state)).findById(worktree.repoId)
   if (!repo) {
     return null
   }

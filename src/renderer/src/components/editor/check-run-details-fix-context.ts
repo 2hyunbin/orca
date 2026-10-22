@@ -15,6 +15,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import { translate } from '@/i18n/i18n'
 import { isGitHubPRSuppressed } from '../../../../shared/worktree/github-pr-suppression'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function resolveCheckRunDetailsFixCheck(
   check: PRCheckDetail,
@@ -45,7 +46,7 @@ export function resolveHostedReviewForCheckRunDetailsFix(
   if (!worktree) {
     return null
   }
-  const repo = store.repos.find((candidate) => candidate.id === worktree.repoId) ?? null
+  const repo = selectRepos(store).find((candidate) => candidate.id === worktree.repoId) ?? null
   if (!repo) {
     return null
   }
@@ -129,7 +130,7 @@ export function getCheckRunDetailsFixDisabledReason(worktreeId: string | null): 
       'Select a workspace before launching an AI action.'
     )
   }
-  const repo = store.repos.find((candidate) => candidate.id === worktree.repoId) ?? null
+  const repo = selectRepos(store).find((candidate) => candidate.id === worktree.repoId) ?? null
   if (!repo) {
     return translate(
       'auto.components.editor.check.run.details.fix.with.ai.4f2d9a8c17',
@@ -154,5 +155,5 @@ export function resolveCheckRunDetailsFixRepo(worktreeId: string | null): Repo |
   if (!worktree) {
     return null
   }
-  return store.repos.find((candidate) => candidate.id === worktree.repoId) ?? null
+  return selectRepos(store).find((candidate) => candidate.id === worktree.repoId) ?? null
 }

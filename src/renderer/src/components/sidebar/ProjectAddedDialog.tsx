@@ -4,6 +4,7 @@ import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { isFolderRepo } from '../../../../shared/repo-kind'
 import { finishProjectAddWithDefaultCheckout } from './project-added-default-checkout'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type ProjectAddedModalData = {
   repoId?: string
@@ -14,7 +15,7 @@ export default function ProjectAddedDialog(): null {
   const activeModal = useAppStore((s) => s.activeModal)
   const modalData = useAppStore((s) => s.modalData as ProjectAddedModalData)
   const closeModal = useAppStore((s) => s.closeModal)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const fetchReposForAllHosts = useAppStore((s) => s.fetchReposForAllHosts)
   const fetchWorktrees = useAppStore((s) => s.fetchWorktrees)
   const setHideDefaultBranchWorkspace = useAppStore((s) => s.setHideDefaultBranchWorkspace)

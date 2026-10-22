@@ -13,6 +13,7 @@ import {
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { parseWslUncPath } from '../../../shared/wsl-paths'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 type AiVaultResumeShellState = Pick<
   AppState,
@@ -99,7 +100,7 @@ export function getAiVaultResumeWorkspaceWslDistro(
     settings: state.settings ?? null,
     folderWorkspaces: selectFolderWorkspaces(state),
     projectGroups: state.projectGroups ?? [],
-    repos: state.repos,
+    repos: selectRepos(state),
     worktreesByRepo: selectWorktreesByRepo(state)
   }
   if (workspaceKey?.type === 'folder') {

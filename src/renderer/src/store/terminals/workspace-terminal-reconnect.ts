@@ -3,6 +3,7 @@ import { buildByIdIndex, buildWorktreeByIdIndex } from '../slices/worktree-by-id
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree/id'
 import type { TerminalSlice, TerminalStoreGet, TerminalStoreSet } from './terminal-state'
 import { selectWorktreesByRepo } from '../workspace-record-selectors'
+import { selectRepos } from '../project-catalog-selectors'
 
 export function createWorkspaceTerminalReconnectActions(
   set: TerminalStoreSet,
@@ -37,7 +38,7 @@ export function createWorkspaceTerminalReconnectActions(
       // Why indexed: the loop neither sets state nor awaits, so one index over the
       // whole store snapshot serves every iteration.
       const worktreeById = buildWorktreeByIdIndex(selectWorktreesByRepo(get()))
-      const repoById = buildByIdIndex(get().repos)
+      const repoById = buildByIdIndex(selectRepos(get()))
       for (const worktreeId of ids) {
         const tabs = tabsByWorktree[worktreeId] ?? []
         const targetTabIds = pendingReconnectTabByWorktree[worktreeId] ?? []

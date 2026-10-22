@@ -24,6 +24,7 @@ import {
   prepareProjectHostSetupMutation,
   upsertProjectHostSetup
 } from './project-host-routing'
+import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
 
 export function createProjectHostSetupActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -43,7 +44,7 @@ export function createProjectHostSetupActions(
         await assertProjectHostSetupMutationRuntimeCapabilities(target)
         const projectProviderIdentity =
           args.projectProviderIdentity ??
-          get().projects.find((project) => project.id === args.projectId)?.providerIdentity
+          selectProjects(get()).find((project) => project.id === args.projectId)?.providerIdentity
         // Why: the target host may not have a project record yet; carry the selected source-host identity across the boundary.
         const setupArgs = projectProviderIdentity ? { ...args, projectProviderIdentity } : args
         const result =
@@ -68,19 +69,19 @@ export function createProjectHostSetupActions(
         })
         const project = normalizeProjectRow(result.project)
         set((s) => {
-          const nextRepos = s.repos.some((entry) =>
+          const nextRepos = selectRepos(s).some((entry) =>
             repoMatchesHostIdentity(entry, repo.id, repoHostId)
           )
-            ? s.repos.map((entry) =>
+            ? selectRepos(s).map((entry) =>
                 repoMatchesHostIdentity(entry, repo.id, repoHostId) ? repo : entry
               )
-            : [...s.repos, repo]
-          const nextProjects = s.projects.some((entry) => entry.id === project.id)
-            ? s.projects.map((entry) => (entry.id === project.id ? project : entry))
-            : [...s.projects, project]
-          const nextSetups = s.projectHostSetups.some((entry) => entry.id === setup.id)
-            ? s.projectHostSetups.map((entry) => (entry.id === setup.id ? setup : entry))
-            : [...s.projectHostSetups, setup]
+            : [...selectRepos(s), repo]
+          const nextProjects = selectProjects(s).some((entry) => entry.id === project.id)
+            ? selectProjects(s).map((entry) => (entry.id === project.id ? project : entry))
+            : [...selectProjects(s), project]
+          const nextSetups = selectProjectHostSetups(s).some((entry) => entry.id === setup.id)
+            ? selectProjectHostSetups(s).map((entry) => (entry.id === setup.id ? setup : entry))
+            : [...selectProjectHostSetups(s), setup]
           return {
             repos: nextRepos,
             projects: nextProjects,
@@ -123,10 +124,10 @@ export function createProjectHostSetupActions(
         })
         const project = normalizeProjectRow(result.project)
         set((s) => ({
-          projects: s.projects.some((entry) => entry.id === project.id)
-            ? s.projects.map((entry) => (entry.id === project.id ? project : entry))
-            : [...s.projects, project],
-          projectHostSetups: upsertProjectHostSetup(s.projectHostSetups, setup)
+          projects: selectProjects(s).some((entry) => entry.id === project.id)
+            ? selectProjects(s).map((entry) => (entry.id === project.id ? project : entry))
+            : [...selectProjects(s), project],
+          projectHostSetups: upsertProjectHostSetup(selectProjectHostSetups(s), setup)
         }))
         return { project, setup }
       } catch (err) {
@@ -143,7 +144,7 @@ export function createProjectHostSetupActions(
     updateProjectHostSetup: async (args) => {
       try {
         const { target, hostArgs } = await prepareProjectHostSetupMutation(
-          get().projectHostSetups,
+          selectProjectHostSetups(get()),
           args
         )
         const result =
@@ -168,16 +169,16 @@ export function createProjectHostSetupActions(
         const repoHostId = repo ? getRepoExecutionHostId(repo) : null
         set((s) => ({
           repos: repo
-            ? s.repos.some((entry) => repoMatchesHostIdentity(entry, repo.id, repoHostId!))
-              ? s.repos.map((entry) =>
+            ? selectRepos(s).some((entry) => repoMatchesHostIdentity(entry, repo.id, repoHostId!))
+              ? selectRepos(s).map((entry) =>
                   repoMatchesHostIdentity(entry, repo.id, repoHostId!) ? repo : entry
                 )
-              : [...s.repos, repo]
-            : s.repos,
-          projects: s.projects.some((entry) => entry.id === project.id)
-            ? s.projects.map((entry) => (entry.id === project.id ? project : entry))
-            : [...s.projects, project],
-          projectHostSetups: upsertProjectHostSetup(s.projectHostSetups, setup)
+              : [...selectRepos(s), repo]
+            : selectRepos(s),
+          projects: selectProjects(s).some((entry) => entry.id === project.id)
+            ? selectProjects(s).map((entry) => (entry.id === project.id ? project : entry))
+            : [...selectProjects(s), project],
+          projectHostSetups: upsertProjectHostSetup(selectProjectHostSetups(s), setup)
         }))
         return { ...result, project, repo, setup }
       } catch (err) {
@@ -194,7 +195,7 @@ export function createProjectHostSetupActions(
     deleteProjectHostSetup: async (args) => {
       try {
         const { target, hostArgs } = await prepareProjectHostSetupMutation(
-          get().projectHostSetups,
+          selectProjectHostSetups(get()),
           args
         )
         const result =
@@ -217,19 +218,23 @@ export function createProjectHostSetupActions(
           row: result.setup
         })
         set((s) => {
-          const projectHostSetups = s.projectHostSetups.filter(
+          const projectHostSetups = selectProjectHostSetups(s).filter(
             (setup) => !isSameProjectHostSetup(setup, removedSetup)
           )
           const repos =
             repo && repoHostId
-              ? s.repos.filter((entry) => !repoMatchesHostIdentity(entry, repo.id, repoHostId))
-              : s.repos
+              ? selectRepos(s).filter(
+                  (entry) => !repoMatchesHostIdentity(entry, repo.id, repoHostId)
+                )
+              : selectRepos(s)
           const projects =
             repo && !projectHostSetups.some((setup) => setup.projectId === result.project.id)
-              ? s.projects.filter((project) => project.id !== result.project.id)
-              : s.projects
+              ? selectProjects(s).filter((project) => project.id !== result.project.id)
+              : selectProjects(s)
           const survivingRepoIds = new Set(repos.map((r) => r.id))
-          const removedRepoIds = s.repos.filter((r) => !survivingRepoIds.has(r.id)).map((r) => r.id)
+          const removedRepoIds = selectRepos(s)
+            .filter((r) => !survivingRepoIds.has(r.id))
+            .map((r) => r.id)
           return {
             repos,
             projects,

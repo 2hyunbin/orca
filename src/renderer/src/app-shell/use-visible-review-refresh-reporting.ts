@@ -12,10 +12,11 @@ import {
   REVIEW_REFRESH_COOLDOWN_MS
 } from '../../../shared/review-refresh-policy'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export function visibleReviewWorktreeIdsForState(state: AppState): string[] {
   const ids = new Set(state.visibleReviewCardWorktreeIds ?? [])
-  const repos = getIndexedRepoMap(state.repos)
+  const repos = getIndexedRepoMap(selectRepos(state))
   if (state.activeWorktreeId && rightSidebarShowsPullRequestData(state)) {
     ids.add(state.activeWorktreeId)
   }
@@ -68,7 +69,7 @@ function reportIdentity(state: AppState): string {
         candidate?.connectionState,
         candidate?.executionHostId,
         candidate?.cacheKey,
-        getIndexedRepoMap(state.repos).get(worktree.repoId)?.gitRemoteIdentity?.canonicalKey,
+        getIndexedRepoMap(selectRepos(state)).get(worktree.repoId)?.gitRemoteIdentity?.canonicalKey,
         Boolean(candidate && state.prCache[candidate.cacheKey]?.data),
         key ? state.hostedReviewCache[key]?.data?.provider : null
       ]
@@ -109,7 +110,7 @@ export function createVisibleReviewReportIdentitySelector(): (state: AppState) =
       rightSidebarOpen: state.rightSidebarOpen,
       rightSidebarTab: state.rightSidebarTab,
       visibleReviewCardWorktreeIds: state.visibleReviewCardWorktreeIds,
-      repos: state.repos,
+      repos: selectRepos(state),
       worktreesByRepo: selectWorktreesByRepo(state),
       settings: state.settings,
       sshConnectionStates: state.sshConnectionStates,

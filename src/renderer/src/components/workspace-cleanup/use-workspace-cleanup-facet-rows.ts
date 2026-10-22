@@ -37,6 +37,7 @@ import {
   createWorkspaceCleanupReviewInfoCache
 } from './workspace-cleanup-facet-row-caches'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type WorkspaceCleanupFacetRows = {
   rows: WorkspaceCleanupFacets[]
@@ -101,7 +102,7 @@ export function useWorkspaceCleanupFacetRows({
     useShallow((s) => ({
       worktreesByRepo: selectWorktreesByRepo(s),
       hostedReviewCache: s.hostedReviewCache,
-      repos: s.repos,
+      repos: selectRepos(s),
       settings: s.settings,
       // Statuses are a top-level UI-slice field, not part of GlobalSettings.
       workspaceStatuses: s.workspaceStatuses,

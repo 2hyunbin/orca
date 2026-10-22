@@ -11,6 +11,7 @@ import type { GitStatusResult } from '../../../../shared/git-status-types'
 import { getWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { isFolderWorkspaceDelete } from './delete-worktree-dialog-copy'
 import { orderDeleteWorktreeStatusHydrationTargets } from './delete-worktree-dirty-change-counts'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 const EMPTY_STATUS_BY_IDENTITY = new Map<string, GitStatusResult['entries'] | null>()
 
@@ -25,7 +26,7 @@ export function useDeleteWorktreeStatusHydration({
   visibleTargets: readonly Worktree[]
   repoMap: ReadonlyMap<string, Repo>
 }): ReadonlyMap<string, GitStatusResult['entries'] | null> {
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const generation = isOpen ? deleteTargets.map(getWorktreeHostIdentity).join('\n') : ''
   const generationRef = useRef(generation)
   const [statusByIdentity, setStatusByIdentity] = useState<

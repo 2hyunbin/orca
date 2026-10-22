@@ -20,6 +20,7 @@ import type { RepoSlice, RepoUpdate } from './repo-state'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { getProjectSetupRuntimeTarget } from '../projects/project-host-routing'
 import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-identity'
+import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
 
 export function sanitizeRepoUpdate(updates: RepoUpdate): RepoUpdate {
   const sanitized = { ...updates }
@@ -109,7 +110,7 @@ export function createRepoUpdateActions(
     updateRepo: async (projectId, updates, options) => {
       const updateRepoChains = getRepoUpdateChains(get)
       // Why: pass options.hostId so a duplicate repo id across hosts resolves to the intended row, not the settings-focused fallback.
-      const ownerRepo = findRepoForHost(get().repos, projectId, {
+      const ownerRepo = findRepoForHost(selectRepos(get()), projectId, {
         settings: get().settings,
         hostId: options?.hostId
       })
@@ -144,7 +145,7 @@ export function createRepoUpdateActions(
                   )
                 ).repo
           set((s) => {
-            const nextRepos = s.repos.map((r) => {
+            const nextRepos = selectRepos(s).map((r) => {
               const matchesOwner = ownerHasExplicitHost
                 ? repoMatchesHostIdentity(r, projectId, ownerHostId)
                 : repoMatchesHostIdentity(r, projectId, ownerHostId) || r === ownerRepo
@@ -205,7 +206,10 @@ export function createRepoUpdateActions(
             return {
               repos: nextRepos,
               ...mergeProjectCompatibilityForHostRepoChange({
-                previous: { projects: s.projects, projectHostSetups: s.projectHostSetups },
+                previous: {
+                  projects: selectProjects(s),
+                  projectHostSetups: selectProjectHostSetups(s)
+                },
                 nextRepos,
                 hostId: ownerHostId
               }),

@@ -24,6 +24,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 // Why: interpolated into the sentence so locales control where the name sits;
 // U+0000 cannot appear in a real project name, so the split is unambiguous.
@@ -47,7 +48,7 @@ const RemoveFolderDialog = React.memo(function RemoveFolderDialog() {
   // and that re-adding that host recovers it.
   const sshConnectionId = useAppStore(
     (s) =>
-      s.repos
+      selectRepos(s)
         .find((repo) => repo.id === repoId && (!hostId || getRepoExecutionHostId(repo) === hostId))
         ?.connectionId?.trim() ?? null
   )

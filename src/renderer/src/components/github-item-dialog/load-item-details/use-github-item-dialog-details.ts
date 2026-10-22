@@ -30,6 +30,7 @@ import {
 } from './work-item-details-cache'
 import { settleWorkItemDetailsFetch } from './work-item-details-fetch-settle'
 import { syncPRFileViewedState } from './pr-file-viewed-change'
+import { selectRepos } from '../../../store/project-catalog-selectors'
 
 export function useGitHubItemDialogDetails({
   workItem,
@@ -58,8 +59,9 @@ export function useGitHubItemDialogDetails({
     if (!repoPath && !effectiveRepoId) {
       return undefined
     }
-    return s.repos.find((r) => (effectiveRepoId ? r.id === effectiveRepoId : r.path === repoPath))
-      ?.issueSourcePreference
+    return selectRepos(s).find((r) =>
+      effectiveRepoId ? r.id === effectiveRepoId : r.path === repoPath
+    )?.issueSourcePreference
   })
   const canUseDetailsRepoContext = canUseGitHubRepoContext(repoPath, sourceContext)
   const issueRepository = useMemo(

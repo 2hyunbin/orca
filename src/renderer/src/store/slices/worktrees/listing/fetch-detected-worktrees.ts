@@ -19,6 +19,7 @@ import {
 } from './worktree-host-ownership'
 import { fetchKnownSshWorktreesForRepo } from './known-ssh-worktree-fetch'
 import { notifyRuntimeScopeForbiddenIfNeeded } from './runtime-scope-forbidden-toast'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export function createFetchDetectedWorktrees(
   set: WorktreeSliceSet,
@@ -28,9 +29,9 @@ export function createFetchDetectedWorktrees(
     try {
       const ownerState = get()
       const hostId = repoHostId(ownerState, repoId)
-      const ownerWasMissingAtStart = !ownerState.repos.some((repo) => repo.id === repoId)
+      const ownerWasMissingAtStart = !selectRepos(ownerState).some((repo) => repo.id === repoId)
       const setup = getProjectHostSetupForRepoHost(ownerState, repoId, hostId)
-      const repoOwner = findRepoForHost(ownerState.repos, repoId, {
+      const repoOwner = findRepoForHost(selectRepos(ownerState), repoId, {
         hostId,
         settings: ownerState.settings
       })

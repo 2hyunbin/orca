@@ -28,6 +28,7 @@ import type { TuiAgent } from '../../../shared/tui-agent'
 import type { WorkspaceSource as WorkspaceCreateTelemetrySource } from '../../../shared/workspace-source'
 import type { LaunchSource } from '../../../shared/telemetry-events'
 import { translate } from '@/i18n/i18n'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 type StartFixChecksAgentArgs = {
   repoId: string
@@ -113,7 +114,7 @@ async function pickExistingWorktreeAgent(
 
 export async function startFixChecksAgent(args: StartFixChecksAgentArgs): Promise<boolean> {
   const store = useAppStore.getState()
-  const repo = store.repos.find((candidate) => candidate.id === args.repoId) ?? null
+  const repo = selectRepos(store).find((candidate) => candidate.id === args.repoId) ?? null
   const recipe = resolveSourceControlActionRecipe({
     settings: store.settings,
     repo,

@@ -29,6 +29,7 @@ import {
   type ChecksPanelGitStatusSnapshot
 } from '../checks-panel-git-status-snapshot'
 import type { ChecksAgentComposerState, HostedReviewCreationSnapshot } from './panel-state-types'
+import { selectRepos } from '../../../store/project-catalog-selectors'
 
 export function useChecksPanelControllerState() {
   // Why: the sidebar stays mounted when closed (perf); gate polling on visibility so we don't fetch checks/comments or poll cwd while hidden.
@@ -191,7 +192,7 @@ export function useChecksPanelControllerState() {
       }
       const latestRepo =
         target.type === 'repo'
-          ? (state.repos.find((candidate) => candidate.id === target.repoId) ?? null)
+          ? (selectRepos(state).find((candidate) => candidate.id === target.repoId) ?? null)
           : null
       const result = saveSourceControlActionRecipe({
         target,

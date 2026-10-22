@@ -40,6 +40,7 @@ import {
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type McpConfigSectionProps = {
   repo: Repo
@@ -57,7 +58,7 @@ export function McpConfigSection({ repo }: McpConfigSectionProps): React.JSX.Ele
   const setActiveWorktree = useAppStore((state) => state.setActiveWorktree)
   const ensureWorktreeRootGroup = useAppStore((state) => state.ensureWorktreeRootGroup)
   const activeWorktreeId = useAppStore((state) => state.activeWorktreeId)
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const allWorktreesForRepo = useAppStore(
     (state) => selectWorktreesByRepo(state)[repo.id] ?? EMPTY_WORKTREES
   )

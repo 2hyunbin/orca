@@ -3,6 +3,7 @@ import type { Repo } from '../../../../shared/repo-types'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { runtimeTargetForRepoOwner } from '@/lib/repo-runtime-owner'
 import { lookupReposBySlugFromCache } from '@/lib/repo-slug-cache'
+import { selectRepos } from '../project-catalog-selectors'
 
 type RepoOwnerState = {
   repos: readonly Repo[]
@@ -19,6 +20,6 @@ export function runtimeTargetForProjectRowOwner(
   host: string | undefined,
   rowSource: RuntimeClientTarget
 ): RuntimeClientTarget {
-  const matchedRepo = lookupReposBySlugFromCache(state.repos, `${owner}/${repo}`, host)[0]
+  const matchedRepo = lookupReposBySlugFromCache(selectRepos(state), `${owner}/${repo}`, host)[0]
   return (matchedRepo ? runtimeTargetForRepoOwner(state, matchedRepo.id) : null) ?? rowSource
 }

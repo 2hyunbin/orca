@@ -33,6 +33,7 @@ import {
 } from './runtime-environment-subscription-selection'
 import type { WorktreeEventRuntime } from './worktree-event-runtime'
 import { readPublishedSortOrders } from '../../store/slices/worktrees/listing/worktree-sort-order-patch'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function registerRuntimeClientIpcBridge(
   unsubs: (() => void)[],
@@ -44,7 +45,7 @@ export function registerRuntimeClientIpcBridge(
     stopped = true
   })
   const isRuntimeEventRepoKnown = ({ repoId, executionHostId }: OwnedWorktreeEvent): boolean =>
-    (useAppStore.getState().repos ?? []).some(
+    (selectRepos(useAppStore.getState()) ?? []).some(
       (repo) => repo.id === repoId && getRepoExecutionHostId(repo) === executionHostId
     )
   const ensureRuntimeEventRepoKnown = async (

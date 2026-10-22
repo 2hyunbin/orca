@@ -16,6 +16,7 @@ import {
 import { resolveSelectedProjectRowRepo } from './project-row-filtering'
 import { buildProjectWorkItem } from './project-work-item'
 import { useProjectRowMutations } from './useProjectRowMutations'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type DialogRepoItem = {
   workItem: GitHubWorkItem
@@ -33,7 +34,7 @@ export function useProjectRowActions({
   currentCacheKey: string | null
   selectedRepoIds: ReadonlySet<string>
 }) {
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const rowMutations = useProjectRowMutations(currentCacheKey)
   const { lookupSlug, lookupSlugMatches, ready: slugIndexReady } = useRepoSlugIndex()
   const [dialogRepoItem, setDialogRepoItem] = useState<DialogRepoItem | null>(null)

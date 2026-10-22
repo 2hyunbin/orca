@@ -24,6 +24,7 @@ import {
 import { buildEditorSessionData } from '@/lib/workspace-session'
 import { buildPersistedUnifiedTabSessionData } from '@/lib/workspace-session-unified-tabs'
 import type { AppState } from './types'
+import { selectRepos } from './project-catalog-selectors'
 
 export type LayoutFrameStoreViewState = Pick<
   AppState,
@@ -120,7 +121,7 @@ export function layoutViewAndFactsOfStore(
   // The save's scrollback trim reads only the rows and their pane trees.
   const terminals = pruneLocalTerminalScrollbackBuffers(
     { ...view, tabsByWorktree, terminalLayoutsByTabId, localOnlyScrollbackByTabId },
-    state.repos
+    selectRepos(state)
   )
   const browserTabs = buildPersistedBrowserTabsByWorktree(
     pickKeys(state.browserTabsByWorktree, keys)

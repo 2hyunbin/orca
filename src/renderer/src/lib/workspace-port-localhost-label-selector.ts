@@ -5,6 +5,7 @@ import type { Repo } from '../../../shared/repo-types'
 import type { WorkspacePort } from '../../../shared/workspace-ports'
 import { useAppStore } from '@/store'
 import { localhostWorktreeLabelRouteForPort } from './workspace-port-localhost-label'
+import { selectProjects, selectRepos } from '../store/project-catalog-selectors'
 
 // Why: the port → repo → worktree → project resolution feeding
 // localhostWorktreeLabelRouteForPort was duplicated across every ports surface;
@@ -38,14 +39,14 @@ export function useLocalhostLabelRouteForPort(
   const portWorktreeId = port.kind === 'workspace' ? port.owner.worktreeId : null
   const portRepoId = port.kind === 'workspace' ? port.owner.repoId : null
   const repo = useAppStore((s) =>
-    portRepoId ? ((s.repos ?? []).find((entry) => entry.id === portRepoId) ?? null) : null
+    portRepoId ? ((selectRepos(s) ?? []).find((entry) => entry.id === portRepoId) ?? null) : null
   )
   const worktree = useAppStore((s) =>
     portWorktreeId ? (s.getKnownWorktreeById?.(portWorktreeId) ?? null) : null
   )
   const project = useAppStore((s) =>
     worktree?.projectId
-      ? ((s.projects ?? []).find((entry) => entry.id === worktree.projectId) ?? null)
+      ? ((selectProjects(s) ?? []).find((entry) => entry.id === worktree.projectId) ?? null)
       : null
   )
   return localhostWorktreeLabelRouteForPort({ port, repo, project, settings })

@@ -10,6 +10,7 @@ import {
   appendProvisioningLog,
   appendProvisioningWarnings
 } from '@/lib/pending-creation-provisioning-log'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 /** Provisions whatever remote target the request still needs before the worktree is created. */
 export async function prepareRequestForCreate(
@@ -47,7 +48,7 @@ async function prepareEphemeralVmRecipeRequest(
   })
   let preparedTarget: Awaited<ReturnType<typeof prepareEphemeralVmWorkspaceTarget>>
   try {
-    const sourceRepo = store.repos.find((repo) => repo.id === recipe.sourceRepoId)
+    const sourceRepo = selectRepos(store).find((repo) => repo.id === recipe.sourceRepoId)
     preparedTarget = await prepareEphemeralVmWorkspaceTarget({
       repoId: recipe.sourceRepoId,
       recipeId: recipe.recipeId,

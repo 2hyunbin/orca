@@ -16,6 +16,7 @@ import type { AppState } from '@/store/types'
 import { getIndexedWorktreeMap } from '@/store/worktree-repo-index'
 import { getFolderWorkspaceCandidateRepos } from './folder-workspace-connection'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export type AiVaultResumeTargetStatus = 'local' | 'ssh' | 'runtime' | 'unknown'
 
@@ -142,7 +143,7 @@ export function getAiVaultResumeWorkspaceExecutionHostId(
     return worktreeHostId
   }
   const repoId = worktree?.repoId ?? getRepoIdFromWorktreeId(worktreeId)
-  const repo = state.repos.find((candidate) => candidate.id === repoId)
+  const repo = selectRepos(state).find((candidate) => candidate.id === repoId)
   return repo ? getRepoExecutionHostId(repo) : null
 }
 
@@ -166,7 +167,7 @@ export function getAiVaultResumeWorkspaceTargetStatus(
     return worktreeHost
   }
   const repoId = worktree?.repoId ?? getRepoIdFromWorktreeId(worktreeId)
-  return getAiVaultResumeRepoTargetStatus(state.repos.find((repo) => repo.id === repoId))
+  return getAiVaultResumeRepoTargetStatus(selectRepos(state).find((repo) => repo.id === repoId))
 }
 
 function getAiVaultResumeFolderTargetStatus(
@@ -178,7 +179,7 @@ function getAiVaultResumeFolderTargetStatus(
     return 'unknown'
   }
 
-  const group = state.projectGroups.find((entry) => entry.id === workspace.projectGroupId)
+  const group = selectProjectGroups(state).find((entry) => entry.id === workspace.projectGroupId)
   const groupHostId = normalizeExecutionHostId(workspace.executionHostId ?? group?.executionHostId)
   if (groupHostId) {
     return getAiVaultResumeExecutionHostTargetStatus(groupHostId)
@@ -202,7 +203,7 @@ function getAiVaultResumeFolderExecutionHostId(
     return null
   }
 
-  const group = state.projectGroups.find((entry) => entry.id === workspace.projectGroupId)
+  const group = selectProjectGroups(state).find((entry) => entry.id === workspace.projectGroupId)
   const groupHostId = normalizeExecutionHostId(workspace.executionHostId ?? group?.executionHostId)
   if (groupHostId) {
     return groupHostId

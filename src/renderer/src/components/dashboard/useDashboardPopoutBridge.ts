@@ -7,6 +7,7 @@ import { buildDashboardSnapshot, type DashboardSnapshotState } from './build-das
 import { createWorktreeAgentRowsCache } from './worktree-agent-rows-cache'
 import { launchDashboardAgent } from './launch-dashboard-agent'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 // Why: cap snapshot rebuilds during bursts of agent-status pings. The board is a
 // glanceable surface, so ~4 updates/sec is plenty and keeps the cross-worktree
@@ -45,7 +46,7 @@ export function dashboardSnapshotInputsChanged(
   previousState: DashboardSnapshotWatchState
 ): boolean {
   return (
-    state.repos !== previousState.repos ||
+    selectRepos(state) !== previousState.repos ||
     selectWorktreesByRepo(state) !== selectWorktreesByRepo(previousState) ||
     state.tabsByWorktree !== previousState.tabsByWorktree ||
     state.unifiedTabsByWorktree !== previousState.unifiedTabsByWorktree ||

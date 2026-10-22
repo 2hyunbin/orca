@@ -7,6 +7,7 @@ import type { RepoSlice } from '../repos/repo-state'
 import { getProjectSetupRuntimeTarget } from './project-host-routing'
 import { mergeUpdatedProjectCompatibilityProject } from '../../../../shared/project-compatibility-merge'
 import { normalizeProjectRow } from '../../../../shared/project-catalog-row-normalization'
+import { selectProjects } from '../project-catalog-selectors'
 
 export function createProjectUpdateActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -35,7 +36,7 @@ export function createProjectUpdateActions(
         const normalizedProject = normalizeProjectRow(updatedProject)
         const runtimePreferenceChanged = 'localWindowsRuntimePreference' in updates
         set((state) => ({
-          projects: state.projects.map((project) =>
+          projects: selectProjects(state).map((project) =>
             project.id === projectId
               ? mergeUpdatedProjectCompatibilityProject(project, normalizedProject, updates)
               : project

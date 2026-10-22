@@ -13,6 +13,7 @@ import {
   mapRestoredPaneTitlesByPaneId,
   replayLayoutWithOneShotParkIntent
 } from './terminal-pane-lifecycle-primitives'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function restoreTerminalPaneLayout(args: {
   manager: PaneManager
@@ -55,7 +56,7 @@ export function restoreTerminalPaneLayout(args: {
     canReleaseReplayedScrollbackFromStore({
       hasScrollbackRefs,
       worktreeId,
-      repos: useAppStore.getState().repos
+      repos: selectRepos(useAppStore.getState())
     })
   ) {
     const layoutWithoutRestoredBuffers = { ...initialLayoutRef.current }

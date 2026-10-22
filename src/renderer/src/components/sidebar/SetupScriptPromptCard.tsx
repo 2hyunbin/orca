@@ -30,10 +30,11 @@ import { translate } from '@/i18n/i18n'
 import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
 import { useWorktreeById } from '@/store/selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 function SetupScriptPromptCard(): React.JSX.Element | null {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const activeRepoId = useAppStore((s) => s.activeRepoId)
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const activeWorktree = useWorktreeById(activeWorktreeId)

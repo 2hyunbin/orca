@@ -22,8 +22,9 @@ import { getSidebarOrderedRepoHeaderIdsByBucket } from '../../project-header-dro
 import { useProjectGroupHeaderDrag } from '../../project-group-header-drag'
 import { getSidebarOrderedProjectGroupHeaderIdsByBucket } from '../../project-group-header-drop'
 import { USER_SCROLL_MEASUREMENT_ADJUSTMENT_SUPPRESS_MS } from '../viewport/use-scroll-suppression'
+import { selectRepos } from '../../../../store/project-catalog-selectors'
 
-const readLiveRepos = (): readonly Repo[] => useAppStore.getState().repos
+const readLiveRepos = (): readonly Repo[] => selectRepos(useAppStore.getState())
 
 export type WorktreeSidebarHeaderDrag = ReturnType<typeof useWorktreeSidebarHeaderDrag>
 

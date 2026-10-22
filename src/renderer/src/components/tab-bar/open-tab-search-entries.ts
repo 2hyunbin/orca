@@ -21,6 +21,7 @@ import {
   type ExecutionHostId
 } from '../../../../shared/execution-host'
 import { getPaletteOwnershipWorktreeIds } from '@/lib/unified-tab-host-ownership'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type OpenTabSearchEntries = {
   workspaceTabs: readonly SearchableWorkspaceTab[]
@@ -132,7 +133,7 @@ export function selectOpenTabSearchEntryState(
   if (!worktree) {
     return null
   }
-  const repoCandidates = state.repos.filter((candidate) => candidate.id === worktree.repoId)
+  const repoCandidates = selectRepos(state).filter((candidate) => candidate.id === worktree.repoId)
   const resolvedHostId = worktree.hostId ?? preferredHostId
   const repo =
     (resolvedHostId

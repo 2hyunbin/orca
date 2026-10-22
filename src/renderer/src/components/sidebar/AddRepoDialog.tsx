@@ -21,6 +21,7 @@ import {
 import { routeAddRepoBrowse } from './add-repo-browse-authority'
 import { readDroppedHostPath } from './add-repo-wsl-host-folder-picker'
 import { useAddRepoWslHostPaths } from './use-add-repo-wsl-host-paths'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export default React.memo(function AddRepoDialog({
   hosted
@@ -42,7 +43,7 @@ export default React.memo(function AddRepoDialog({
   const scanNestedRepos = useAppStore((s) => s.scanNestedRepos)
   const cancelNestedRepoScan = useAppStore((s) => s.cancelNestedRepoScan)
   const importNestedRepos = useAppStore((s) => s.importNestedRepos)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const fetchWorktrees = useAppStore((s) => s.fetchWorktrees)
   const setHideDefaultBranchWorkspace = useAppStore((s) => s.setHideDefaultBranchWorkspace)
   const settings = useAppStore((s) => s.settings)

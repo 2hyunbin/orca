@@ -8,6 +8,7 @@ import {
 import { SidebarProjectFilterPanel } from './SidebarProjectFilterPanel'
 import type { Repo } from '../../../../shared/repo-types'
 import { translate } from '@/i18n/i18n'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 function getProjectFilterVisibilityLabel({
   selectedCount,
@@ -47,7 +48,7 @@ const SidebarRepositoryFilterSection = React.memo(function SidebarRepositoryFilt
 }: SidebarRepositoryFilterSectionProps) {
   const workspaceFilterRepoIds = useAppStore((s) => s.filterRepoIds)
   const setWorkspaceFilterRepoIds = useAppStore((s) => s.setFilterRepoIds)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const filterRepoIds = filterRepoIdsProp ?? workspaceFilterRepoIds
   const setFilterRepoIds = setFilterRepoIdsProp ?? setWorkspaceFilterRepoIds
 

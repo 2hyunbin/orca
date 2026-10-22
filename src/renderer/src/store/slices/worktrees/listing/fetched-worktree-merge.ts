@@ -36,6 +36,7 @@ import {
   rememberAuthoritativelyRemovedWorktrees
 } from './authoritative-worktree-removal-memory'
 import type { FencedWorktreeMergeArgs } from './worktree-slice-types'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export function preserveConcurrentManualOrder<T extends Worktree>(
   incoming: readonly T[],
@@ -168,7 +169,8 @@ export function mergeFetchedWorktrees(
       args.repoId,
       args.hostId,
       args.ownerWasMissingAtStart &&
-        (!args.refresh.directSshAuthority || s.repos === args.missingDirectSshOwnerReposSnapshot)
+        (!args.refresh.directSshAuthority ||
+          selectRepos(s) === args.missingDirectSshOwnerReposSnapshot)
     )
     if (refusal) {
       decision.outcome = refusal

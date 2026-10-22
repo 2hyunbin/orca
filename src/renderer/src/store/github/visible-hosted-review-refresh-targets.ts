@@ -22,6 +22,7 @@ import { getPRRefreshRuntimeRepoTarget } from './repository-routing'
 import type { VisibleHostedReviewRefreshTarget } from './visible-hosted-review-refresh-scheduler'
 import { shouldCoordinateVisibleGitHubReview } from './visible-hosted-review-refresh-ownership'
 import { selectDetectedWorktreesByRepo, selectWorktreesByRepo } from '../workspace-record-selectors'
+import { selectRepos } from '../project-catalog-selectors'
 
 export function* getVisibleHostedReviewWorkspaces(
   state: AppState,
@@ -44,7 +45,7 @@ export function* getVisibleHostedReviewWorkspaces(
       if (worktree.isArchived || worktree.isBare) {
         continue
       }
-      const repo = findRepoForHost(state.repos, worktree.repoId, {
+      const repo = findRepoForHost(selectRepos(state), worktree.repoId, {
         hostId: worktree.hostId,
         settings: state.settings
       })
@@ -122,7 +123,7 @@ export function getVisibleHostedReviewRefreshTargets(
     // The legacy GitHub action still resolves bare IDs; never pass it another owner's candidate.
     if (
       !exactRequest &&
-      (getGitHubRepoLookupIndex(state.repos).findById(repo.id) !== repo ||
+      (getGitHubRepoLookupIndex(selectRepos(state)).findById(repo.id) !== repo ||
         findWorktreeById(state, worktree.id) !== worktree)
     ) {
       continue
@@ -219,7 +220,7 @@ export function visibleHostedReviewRefreshInputsChanged(
     state.workspaceHostScope !== previous.workspaceHostScope ||
     selectWorktreesByRepo(state) !== selectWorktreesByRepo(previous) ||
     selectDetectedWorktreesByRepo(state) !== selectDetectedWorktreesByRepo(previous) ||
-    state.repos !== previous.repos ||
+    selectRepos(state) !== previous.repos ||
     state.settings !== previous.settings ||
     state.sshConnectionStates !== previous.sshConnectionStates ||
     state.prCache !== previous.prCache ||

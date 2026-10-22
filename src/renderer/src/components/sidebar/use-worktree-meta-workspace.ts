@@ -10,6 +10,7 @@ import type { Worktree } from '../../../../shared/worktree/types'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectGroups } from '../../store/project-catalog-selectors'
 
 /** Resolves the edited workspace within its execution host, including folders. */
 export function useWorktreeMetaWorkspace(args: {
@@ -46,7 +47,8 @@ export function useWorktreeMetaWorkspace(args: {
     const candidates = selectFolderWorkspaces(s).filter(
       (item) =>
         item.id === workspaceScope.folderWorkspaceId &&
-        (!executionHostId || getFolderWorkspaceHostId(item, s.projectGroups) === executionHostId)
+        (!executionHostId ||
+          getFolderWorkspaceHostId(item, selectProjectGroups(s)) === executionHostId)
     )
     return candidates.length === 1 ? candidates[0] : null
   })

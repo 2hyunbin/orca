@@ -38,6 +38,11 @@ import {
   blockRemovalForUnsavedFiles,
   projectRemovalTargets
 } from '@/components/sidebar/removal-unsaved-files'
+import {
+  selectProjectHostSetups,
+  selectProjects,
+  selectRepos
+} from '../../store/project-catalog-selectors'
 
 export function useSettingsStoreModel() {
   const settings = useAppStore((s) => s.settings)
@@ -50,9 +55,9 @@ export function useSettingsStoreModel() {
   const fetchSettings = useAppStore((s) => s.fetchSettings)
   const fetchKeybindings = useAppStore((s) => s.fetchKeybindings)
   const closeSettingsPage = useAppStore((s) => s.closeSettingsPage)
-  const repos = useAppStore((s) => s.repos)
-  const projects = useAppStore((s) => s.projects)
-  const projectHostSetups = useAppStore((s) => s.projectHostSetups)
+  const repos = useAppStore((s) => selectRepos(s))
+  const projects = useAppStore((s) => selectProjects(s))
+  const projectHostSetups = useAppStore((s) => selectProjectHostSetups(s))
   const updateProject = useAppStore((s) => s.updateProject)
   const updateRepo = useAppStore((s) => s.updateRepo)
   const removeProject = useAppStore((s) => s.removeProject)

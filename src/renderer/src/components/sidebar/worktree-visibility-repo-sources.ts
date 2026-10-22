@@ -6,9 +6,12 @@ import {
   resolveCustomWorktreeVisibilitySources
 } from '../../../../shared/worktree/visibility-sources'
 import { getRepoHostIdentity } from '@/store/slices/repo-host-identity'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function getLatestRepoForVisibilityScope(scope: string): Repo | null {
-  return useAppStore.getState().repos.find((repo) => getRepoHostIdentity(repo) === scope) ?? null
+  return (
+    selectRepos(useAppStore.getState()).find((repo) => getRepoHostIdentity(repo) === scope) ?? null
+  )
 }
 
 export function getRepoCustomWorktreeVisibilitySourceIds(repo: Repo | null): Set<string> {

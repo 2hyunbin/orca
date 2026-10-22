@@ -33,6 +33,7 @@ import { searchRepos } from '@/lib/repo-search'
 import { clearSidebarFilters, selectSidebarFilterState } from './sidebar-filter-actions'
 import { useWorkspaceOptionsFilterBadge } from './workspace-options-menu-items'
 import { translate } from '@/i18n/i18n'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type SidebarFilterProps = {
   preserveWorkspaceBoardOpen?: boolean
@@ -68,7 +69,7 @@ const SidebarFilter = React.memo(function SidebarFilter({
   )
   const filterRepoIds = useAppStore((s) => s.filterRepoIds)
   const setFilterRepoIds = useAppStore((s) => s.setFilterRepoIds)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const addRepo = useAppStore((s) => s.addRepo)
 
   const [open, setOpen] = useState(false)

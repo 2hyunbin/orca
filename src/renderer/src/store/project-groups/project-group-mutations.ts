@@ -24,6 +24,12 @@ import { applyProjectGroupDeleteCascade } from './project-group-removal-state'
 import { adoptFromEndpoint } from '../adopt-from-endpoint'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
+import {
+  selectProjectGroups,
+  selectProjectHostSetups,
+  selectProjects,
+  selectRepos
+} from '../project-catalog-selectors'
 
 function notifyProjectGroupOnOtherHost(): void {
   toast.error(
@@ -75,7 +81,7 @@ export function createProjectGroupMutationActions(
         set((s) => {
           // An overlapping catalog refresh may have already inserted a newer copy.
           if (
-            s.projectGroups.some(
+            selectProjectGroups(s).some(
               (existing) =>
                 existing.id === ownedGroup.id && getProjectGroupHostId(existing) === ownerHostId
             )
@@ -83,7 +89,7 @@ export function createProjectGroupMutationActions(
             return s
           }
           return {
-            projectGroups: [...s.projectGroups, ownedGroup],
+            projectGroups: [...selectProjectGroups(s), ownedGroup],
             folderWorkspacePathStatuses: {}
           }
         })
@@ -118,7 +124,7 @@ export function createProjectGroupMutationActions(
         }
         const ownedGroup = adoptFromEndpoint(target, { kind: 'projectGroup', row: updated })
         set((s) => ({
-          projectGroups: s.projectGroups.map((group) =>
+          projectGroups: selectProjectGroups(s).map((group) =>
             projectGroupMatchesOwnerHost(group, groupId, ownerHostId) ? ownedGroup : group
           ),
           folderWorkspacePathStatuses: {}
@@ -163,8 +169,8 @@ export function createProjectGroupMutationActions(
     deleteProjectGroupWithContainedProjects: async (groupId, options) => {
       const ownerHostId = resolveProjectGroupOwnerHostId(get(), groupId, options.hostId)
       const targets = selectProjectGroupRemovalTargets(
-        get().projectGroups,
-        get().repos,
+        selectProjectGroups(get()),
+        selectRepos(get()),
         groupId,
         ownerHostId
       )
@@ -208,7 +214,7 @@ export function createProjectGroupMutationActions(
       // host outside the group must survive, so each member row is removed on its own host.
       const membersById = new Map<string, Repo[]>()
       for (const member of targets.projects) {
-        const row = findRepoForHost(get().repos, member.id, { hostId: member.hostId })
+        const row = findRepoForHost(selectRepos(get()), member.id, { hostId: member.hostId })
         if (row) {
           membersById.set(member.id, [...(membersById.get(member.id) ?? []), row])
         }
@@ -235,7 +241,7 @@ export function createProjectGroupMutationActions(
         const stillExists =
           (members.length > 0 && removableHostIds.length === 0) ||
           removableHostIds.some((hostId) =>
-            get().repos.some((repo) => repoMatchesHostIdentity(repo, projectId, hostId))
+            selectRepos(get()).some((repo) => repoMatchesHostIdentity(repo, projectId, hostId))
           )
         if (stillExists) {
           failedProjectRemovals.push({
@@ -258,13 +264,16 @@ export function createProjectGroupMutationActions(
 
     moveProjectToGroup: async (project, groupId, order) => {
       try {
-        const repo = get().repos.find((candidate) => isSameRepoRow(candidate, project))
+        const repo = selectRepos(get()).find((candidate) => isSameRepoRow(candidate, project))
         const repoHostId = repo ? getRepoExecutionHostId(repo) : null
         const target = repoHostId ? ipcOrRuntimeTargetForHostId(repoHostId) : null
         if (!repo || !repoHostId || !target) {
           return false
         }
-        if (groupId && !isProjectGroupJoinableFromCatalog(get().projectGroups, groupId, target)) {
+        if (
+          groupId &&
+          !isProjectGroupJoinableFromCatalog(selectProjectGroups(get()), groupId, target)
+        ) {
           notifyProjectGroupOnOtherHost()
           return false
         }
@@ -291,13 +300,16 @@ export function createProjectGroupMutationActions(
         const ownedMoved = adoptFromEndpoint(target, { kind: 'repo', row: moved })
         const movedHostId = getRepoExecutionHostId(ownedMoved)
         set((s) => {
-          const nextRepos = s.repos.map((candidate) =>
+          const nextRepos = selectRepos(s).map((candidate) =>
             isSameRepoRow(candidate, repo) ? ownedMoved : candidate
           )
           return {
             repos: nextRepos,
             ...mergeProjectCompatibilityForHostRepoChange({
-              previous: { projects: s.projects, projectHostSetups: s.projectHostSetups },
+              previous: {
+                projects: selectProjects(s),
+                projectHostSetups: selectProjectHostSetups(s)
+              },
               nextRepos,
               hostId: movedHostId
             }),

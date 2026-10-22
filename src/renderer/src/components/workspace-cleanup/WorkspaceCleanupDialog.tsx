@@ -45,6 +45,7 @@ import {
   formatWithheldSelectionNotice,
   toggleSetMember
 } from './workspace-cleanup-selection-model'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export default function WorkspaceCleanupDialog(): React.JSX.Element | null {
   const lifecycle = useWorkspaceCleanupDialogLifecycle()
@@ -67,7 +68,7 @@ function WorkspaceCleanupDialogContent({
   const scanProgress = useAppStore((s) => s.workspaceCleanupProgress)
   const error = useAppStore((s) => s.workspaceCleanupError)
   const spaceError = useAppStore((s) => s.workspaceSpaceScanError)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const markCandidateViewed = useAppStore((s) => s.markWorkspaceCleanupCandidateViewed)
   const dismissCandidates = useAppStore((s) => s.dismissWorkspaceCleanupCandidates)
   const refreshWorkspaceSpace = useAppStore((s) => s.refreshWorkspaceSpace)

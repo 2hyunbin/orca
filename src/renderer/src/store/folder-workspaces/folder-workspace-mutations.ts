@@ -36,6 +36,7 @@ import {
   captureWorkspaceChatDraftKeys,
   deleteWorkspaceChatDrafts
 } from '../slices/worktrees/teardown/removed-worktree-chat-drafts'
+import { selectProjectGroups } from '../project-catalog-selectors'
 
 export type FolderWorkspaceUpdateField = keyof FolderWorkspaceUpdates
 
@@ -133,7 +134,7 @@ export function createFolderWorkspaceMutationActions(
       const sourceWorkspace = state.folderWorkspaces.find(
         (workspace) =>
           workspace.id === folderWorkspaceId &&
-          getFolderWorkspaceHostId(workspace, state.projectGroups) === ownerHostId
+          getFolderWorkspaceHostId(workspace, selectProjectGroups(state)) === ownerHostId
       )
       if (
         updates.linkedItems !== undefined &&
@@ -217,7 +218,7 @@ export function createFolderWorkspaceMutationActions(
           set((s) => ({
             folderWorkspaces: s.folderWorkspaces.map((workspace) =>
               workspace.id === folderWorkspaceId &&
-              getFolderWorkspaceHostId(workspace, s.projectGroups) === ownerHostId
+              getFolderWorkspaceHostId(workspace, selectProjectGroups(s)) === ownerHostId
                 ? mergeFolderWorkspaceUpdateResponse(workspace, updated, latestFields, {
                     rejectOlderResponse: catalogChanged
                   })
@@ -286,7 +287,7 @@ export function createFolderWorkspaceMutationActions(
           folderWorkspaces: s.folderWorkspaces.filter(
             (workspace) =>
               workspace.id !== folderWorkspaceId ||
-              getFolderWorkspaceHostId(workspace, s.projectGroups) !== ownerHostId
+              getFolderWorkspaceHostId(workspace, selectProjectGroups(s)) !== ownerHostId
           ),
           folderWorkspacePathStatuses: {}
         }))

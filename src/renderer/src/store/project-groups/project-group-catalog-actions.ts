@@ -14,6 +14,7 @@ import {
   fetchProjectGroupCatalogForTarget,
   mergeFetchedProjectGroupCatalog
 } from './project-group-catalog'
+import { selectProjectGroups } from '../project-catalog-selectors'
 
 export function createProjectGroupCatalogActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -27,8 +28,8 @@ export function createProjectGroupCatalogActions(
       if (!isHostCatalogFenceCurrent(get, fence)) {
         return s
       }
-      const { projectGroups } = mergeFetchedProjectGroupCatalog(catalog, s.projectGroups)
-      if (arrayElementsUnchanged(projectGroups, s.projectGroups)) {
+      const { projectGroups } = mergeFetchedProjectGroupCatalog(catalog, selectProjectGroups(s))
+      if (arrayElementsUnchanged(projectGroups, selectProjectGroups(s))) {
         return s
       }
       return {

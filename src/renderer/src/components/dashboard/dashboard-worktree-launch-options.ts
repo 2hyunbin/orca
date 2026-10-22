@@ -14,6 +14,7 @@ import type { TuiAgent } from '../../../../shared/tui-agent'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getRuntimeAgentInventoryKey } from '@/store/slices/runtime-agent-inventory-key'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export type DashboardLaunchDetectionState = Pick<
   AppState,
@@ -38,7 +39,7 @@ function buildDashboardLaunchCatalog(state: DashboardLaunchOptionState): Dashboa
   return {
     foldersById: new Map((state.folderWorkspaces ?? []).map((folder) => [folder.id, folder])),
     groupsById: new Map((state.projectGroups ?? []).map((group) => [group.id, group])),
-    reposById: new Map((state.repos ?? []).map((repo) => [repo.id, repo])),
+    reposById: new Map((selectRepos(state) ?? []).map((repo) => [repo.id, repo])),
     worktreesByRepoAndId: new Map(
       Object.entries(selectWorktreesByRepo(state) ?? {}).map(([repoId, worktrees]) => [
         repoId,

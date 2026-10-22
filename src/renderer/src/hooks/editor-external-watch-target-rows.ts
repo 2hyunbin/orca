@@ -11,6 +11,7 @@ import {
 } from '../../../shared/execution-host'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 type WatchTargetRowState = Pick<
   AppState,
@@ -69,15 +70,15 @@ export function resolveEditorExternalWatchTargetRows(
   const worktreeHost = parseExecutionHostId(worktree?.hostId)
   const repo = worktree
     ? worktreeHost
-      ? (findRepoForHost(state.repos, worktree.repoId, { hostId: worktreeHost.id }) ??
+      ? (findRepoForHost(selectRepos(state), worktree.repoId, { hostId: worktreeHost.id }) ??
         (worktreeHost.kind === 'local'
           ? undefined
-          : state.repos.find((candidate) => candidate.id === worktree.repoId)))
-      : state.repos.find((candidate) => candidate.id === worktree.repoId)
+          : selectRepos(state).find((candidate) => candidate.id === worktree.repoId)))
+      : selectRepos(state).find((candidate) => candidate.id === worktree.repoId)
     : undefined
   const folderHost = parseExecutionHostId(folderWorkspace?.executionHostId)
   const projectGroup = folderWorkspace
-    ? state.projectGroups.find(
+    ? selectProjectGroups(state).find(
         (group) =>
           group.id === folderWorkspace.projectGroupId &&
           parseExecutionHostId(group.executionHostId)?.id === folderHost?.id

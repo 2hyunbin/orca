@@ -21,6 +21,7 @@ import {
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { workItemsCacheKey } from './cache-identity'
 import { findRepoForGitHubOwner, getRuntimeRepoTarget } from './repository-routing'
+import { selectRepos } from '../project-catalog-selectors'
 
 export type GitHubWorkItemRequestContext = {
   repoId: string
@@ -76,7 +77,7 @@ function settingsForGitHubTaskSource(
     state.settings,
     sourceHost?.kind === 'runtime'
       ? sourceHost.environmentId
-      : getHostlessSourceRepoOwnerEnvironmentId(state.repos, repo?.id)
+      : getHostlessSourceRepoOwnerEnvironmentId(selectRepos(state), repo?.id)
   )
 }
 
@@ -155,7 +156,7 @@ export function getGitHubSourceTarget(
     return runtimeTargetForOwnerEnvironment(
       sourceHost?.kind === 'runtime'
         ? sourceHost.environmentId
-        : getHostlessSourceRepoOwnerEnvironmentId(state.repos, repo?.id)
+        : getHostlessSourceRepoOwnerEnvironmentId(selectRepos(state), repo?.id)
     )
   }
   return (

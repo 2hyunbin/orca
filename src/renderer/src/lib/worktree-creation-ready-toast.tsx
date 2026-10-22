@@ -13,6 +13,7 @@ import type { ExecutionHostId } from '../../../shared/execution-host'
 import { worktreeIdsEqual } from '../../../shared/worktree/id'
 import type { Worktree } from '../../../shared/worktree/types'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 /** Announces a create that finished after the user left its creation surface, instead of pulling them to it. */
 export function showWorktreeCreationReadyToast(
@@ -46,7 +47,7 @@ export function showWorktreeCreationReadyToast(
   }
 
   const name = resolveWorktreeDisplayName(worktree)
-  const repo = getIndexedRepoMap(useAppStore.getState().repos).get(worktree.repoId)
+  const repo = getIndexedRepoMap(selectRepos(useAppStore.getState())).get(worktree.repoId)
   // Why: a folder repo's workspace is not a git worktree, so its title and button say workspace.
   const isFolder = repo !== undefined && isFolderRepo(repo)
   const title = isFolder

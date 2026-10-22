@@ -34,6 +34,7 @@ import {
   resolveWebSessionVisibleTabId
 } from '@/runtime/web-session-focus-intent'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 type LaunchSurface = {
   sessionId: string
@@ -249,7 +250,10 @@ export function restoreStructuredLaunchSurfaces(): void {
     workspaces: [
       ...state.allWorktrees(),
       ...selectFolderWorkspaces(state).flatMap((workspace) => {
-        const group = findIndexedProjectGroupOwner(state.projectGroups, workspace.projectGroupId)
+        const group = findIndexedProjectGroupOwner(
+          selectProjectGroups(state),
+          workspace.projectGroupId
+        )
         const host = workspace.executionHostId || workspace.connectionId ? workspace : group
         const owned = host && { ...workspace, executionHostId: getCatalogOwnerHostId(host) }
         return owned ? [folderWorkspaceToWorktree(owned)] : []
@@ -268,7 +272,7 @@ export function restoreStructuredLaunchSurfaces(): void {
     if (!workspace || workspace.runtimeOwnerEnvironmentId?.trim()) {
       continue
     }
-    const repo = findIndexedRepoOwner(state.repos, workspace.repoId)
+    const repo = findIndexedRepoOwner(selectRepos(state), workspace.repoId)
     const host = workspace.hostId ?? (repo ? getCatalogOwnerHostId(repo) : undefined)
     if (host !== getStructuredAgentSessionLaunchOwner(record.sessionId)) {
       continue

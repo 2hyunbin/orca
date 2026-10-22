@@ -6,6 +6,7 @@ import { useAppStore } from '../../store'
 import { findRepoForHost } from '../../store/slices/repo-host-identity'
 import { getRuntimeGitStatus } from '@/runtime/runtime-git-status-client'
 import type { useWorkspaceSpaceManagerBindings } from './use-workspace-space-manager-bindings'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type WorkspaceSpaceManagerBindings = ReturnType<typeof useWorkspaceSpaceManagerBindings>
 
@@ -42,7 +43,7 @@ export function useWorkspaceSpaceGitRefreshAction(bindings: WorkspaceSpaceManage
         [identity]: { isRefreshing: true, error: null }
       }))
 
-      const owner = findRepoForHost(currentState.repos, worktree.repoId, {
+      const owner = findRepoForHost(selectRepos(currentState), worktree.repoId, {
         hostId: worktree.executionHostId,
         settings
       })

@@ -24,6 +24,7 @@ import { readHostedReviewForRepo } from '@/lib/hosted-review-repo-read'
 import { lookupGitHubWorkItemByOwnerRepoForSource } from '@/lib/github-work-item-source-lookup'
 import { buildTaskSourceContextFromRepo } from '../../../../../../shared/task-source-context'
 import { PrioritySemaphore } from '../../../../../../shared/priority-semaphore'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 function terminalReviewSourceKey(repo: Repo | null | undefined): string {
   const host = repo && parseExecutionHostId(getRepoExecutionHostId(repo))
@@ -60,7 +61,7 @@ export function createObserveTerminalGitHubPullRequestLink(
     ) {
       return
     }
-    const repo = findRepoForHost(state.repos, worktree.repoId, {
+    const repo = findRepoForHost(selectRepos(state), worktree.repoId, {
       hostId: hostId ?? worktree.hostId,
       settings: state.settings
     })
@@ -126,7 +127,7 @@ export function createObserveTerminalGitHubPullRequestLink(
         current.identity?.key === identityKey &&
         current.head === head &&
         terminalReviewSourceKey(
-          findRepoForHost(get().repos, current.repoId, {
+          findRepoForHost(selectRepos(get()), current.repoId, {
             hostId: hostId ?? current.hostId,
             settings: get().settings
           })

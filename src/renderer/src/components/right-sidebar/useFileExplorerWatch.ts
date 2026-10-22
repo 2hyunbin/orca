@@ -21,6 +21,7 @@ import { fileExplorerRefreshConcurrency } from './file-explorer-refresh-concurre
 import { createFileExplorerWatchRefreshScheduler } from './file-explorer-watch-refresh-scheduler'
 import { processFileExplorerFsPayload } from './file-explorer-watch-reconcile'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export {
   canonicalizeFileExplorerWatchPath,
@@ -58,7 +59,7 @@ export function getFileExplorerWatchRuntimeEnvironmentId(
     activeWorktreeId: state.activeWorktreeId,
     activeWorkspaceExecutionHostId: state.activeWorkspaceExecutionHostId,
     settings: state.settings,
-    repos: state.repos,
+    repos: selectRepos(state),
     worktreesByRepo: selectWorktreesByRepo(state),
     detectedWorktreesByRepo: state.detectedWorktreesByRepo ?? {},
     folderWorkspaces: state.folderWorkspaces ?? [],

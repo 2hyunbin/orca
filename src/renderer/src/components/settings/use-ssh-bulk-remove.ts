@@ -11,6 +11,7 @@ import { isManagedServerSshHost } from './SshManagedHostRemoveDialog'
 import type { SshBulkRemoveRequest, SshBulkRemoveResult } from './SshTargetDestructiveActions'
 import { planSshBulkRemove, type SshBulkRemovePlan } from './ssh-target-list-model'
 import { summarizeSshBulkRemove } from './ssh-bulk-remove-summary'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type PlainRemoveTarget = { id: string; label: string }
 
@@ -80,7 +81,7 @@ export function useSshBulkRemove(args: {
       }
       const resolution = resolveSshHostRemoval({
         targetId: target.id,
-        repos: state.repos,
+        repos: selectRepos(state),
         worktrees,
         sshConnectionStates: state.sshConnectionStates
       })

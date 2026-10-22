@@ -13,13 +13,14 @@ import {
   getGitHubSourceTarget,
   getGitHubWorkItemRequestContext
 } from './work-item-routing'
+import { selectRepos } from '../project-catalog-selectors'
 
 export const createCommentMutationActions = (
   set: Parameters<StateCreator<AppState>>[0],
   get: Parameters<StateCreator<AppState>>[1]
 ): Pick<GitHubSlice, 'addPRReviewCommentReply' | 'setPRCommentReaction'> => ({
   addPRReviewCommentReply: async (repoPath, prNumber, commentId, body, options) => {
-    const repo = get().repos?.find((candidate) =>
+    const repo = selectRepos(get())?.find((candidate) =>
       options?.repoId ? candidate.id === options.repoId : candidate.path === repoPath
     )
     const repoId = options?.repoId ?? repo?.id
@@ -113,7 +114,7 @@ export const createCommentMutationActions = (
     reacted,
     options
   ) => {
-    const repo = get().repos?.find((candidate) =>
+    const repo = selectRepos(get())?.find((candidate) =>
       options?.repoId ? candidate.id === options.repoId : candidate.path === repoPath
     )
     const repoId = options?.repoId ?? repo?.id

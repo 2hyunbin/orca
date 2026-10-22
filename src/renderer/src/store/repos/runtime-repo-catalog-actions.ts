@@ -21,6 +21,7 @@ import {
 import { getRuntimeTargetHostId } from '../../runtime/runtime-client-target'
 import { mergeFetchedHostProjectCatalog } from '../../../../shared/project-compatibility-host-merge'
 import { scheduleSafeAutoForkSync } from './safe-auto-fork-sync'
+import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
 
 export function createRuntimeRepoCatalogActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -50,16 +51,16 @@ export function createRuntimeRepoCatalogActions(
           if (isRemovedRuntimeHostId(catalog.hostId, s.removedRuntimeEnvironmentIds)) {
             return s
           }
-          const result = mergeFetchedRepoCatalog(catalog, s.repos)
+          const result = mergeFetchedRepoCatalog(catalog, selectRepos(s))
           const reconciliation = reconcileSupersededSshRepos(result.repos, s)
           const finalizedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
           const validRepoIds = new Set(finalizedRepos.map((repo) => repo.id))
           const validRepoHostIdentities = new Set(finalizedRepos.map(getRepoHostIdentity))
           const mergedProjectCompatibility = mergeFetchedHostProjectCatalog({
             previous: {
-              projects: s.projects,
+              projects: selectProjects(s),
               projectHostSetups: filterSetupsForPrunedRepoRows(
-                s.projectHostSetups,
+                selectProjectHostSetups(s),
                 result.repos,
                 finalizedRepos
               )

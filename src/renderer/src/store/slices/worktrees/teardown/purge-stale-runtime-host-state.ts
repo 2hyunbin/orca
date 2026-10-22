@@ -20,6 +20,11 @@ import { buildFullWorktreePurgeState } from './worktree-purge-state'
 import { removeWorktreeVisitEntriesForTargets } from '@/lib/worktree-visit-recency'
 import { settleAttentionRemovedBy } from '../../workspace-attention/attention-removal-follow-up'
 import { flushRetiredHostEdits } from './removed-workspace-unsaved-files'
+import {
+  selectProjectGroups,
+  selectProjectHostSetups,
+  selectRepos
+} from '../../../project-catalog-selectors'
 
 export function createPurgeStaleRuntimeHostState(
   set: WorktreeSliceSet,
@@ -43,7 +48,7 @@ export function createPurgeStaleRuntimeHostState(
           const survivingRepoIds = new Set<string>()
           const repoIdsWithSurvivingOwners = new Set<string>()
           const survivingRepos: Repo[] = []
-          for (const repo of s.repos) {
+          for (const repo of selectRepos(s)) {
             if (isRemovedRuntimeHostId(getRepoExecutionHostId(repo), removed)) {
               repoIdsWithRemovedOwners.add(repo.id)
             } else {
@@ -52,11 +57,11 @@ export function createPurgeStaleRuntimeHostState(
               repoIdsWithSurvivingOwners.add(repo.id)
             }
           }
-          const reposChanged = survivingRepos.length !== s.repos.length
+          const reposChanged = survivingRepos.length !== selectRepos(s).length
 
           // Why: a repoId-less setup on the removed host can still split a surviving project group, so drop every setup it owns.
           const survivingSetups: ProjectHostSetup[] = []
-          for (const setup of s.projectHostSetups) {
+          for (const setup of selectProjectHostSetups(s)) {
             if (isRemovedRuntimeHostId(setup.hostId, removed)) {
               if (setup.repoId) {
                 repoIdsWithRemovedOwners.add(setup.repoId)
@@ -68,11 +73,11 @@ export function createPurgeStaleRuntimeHostState(
               }
             }
           }
-          const setupsChanged = survivingSetups.length !== s.projectHostSetups.length
-          const projectGroups = dropRuntimeHostedCatalogRows(s.projectGroups, removed)
+          const setupsChanged = survivingSetups.length !== selectProjectHostSetups(s).length
+          const projectGroups = dropRuntimeHostedCatalogRows(selectProjectGroups(s), removed)
           const folderWorkspaces = dropRuntimeHostedCatalogRows(s.folderWorkspaces, removed)
           const groupsChanged =
-            projectGroups !== s.projectGroups || folderWorkspaces !== s.folderWorkspaces
+            projectGroups !== selectProjectGroups(s) || folderWorkspaces !== s.folderWorkspaces
           const detectedRows: Record<string, DetectedWorktreeListResult['worktrees']> =
             Object.fromEntries(
               Object.entries(s.detectedWorktreesByRepo).map(([repoId, result]) => [

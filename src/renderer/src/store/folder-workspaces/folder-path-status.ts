@@ -18,6 +18,7 @@ import {
 import { catalogOwnsHost, getProjectGroupHostId } from '../slices/project-group-owner-routing'
 import { getFolderWorkspaceHostId } from '../../../../shared/folder-workspace-execution-host'
 import { selectFolderWorkspaces } from '../workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../project-catalog-selectors'
 
 type FolderPathStatusSnapshotState = Pick<
   AppState,
@@ -45,7 +46,7 @@ function getFolderPathStatusScope(
     }
   }
   if (request.scope === 'project-group') {
-    const groups = state.projectGroups.filter(
+    const groups = selectProjectGroups(state).filter(
       (group) =>
         group.id === request.projectGroupId &&
         catalogOwnsHost(ownerHostId, getProjectGroupHostId(group))
@@ -63,14 +64,14 @@ function getFolderPathStatusScope(
   const folders = selectFolderWorkspaces(state).filter(
     (workspace) =>
       workspace.id === request.folderWorkspaceId &&
-      catalogOwnsHost(ownerHostId, getFolderWorkspaceHostId(workspace, state.projectGroups))
+      catalogOwnsHost(ownerHostId, getFolderWorkspaceHostId(workspace, selectProjectGroups(state)))
   )
   const folder = folders.length === 1 ? folders[0] : null
   if (!folder?.folderPath || !folder.projectGroupId) {
     return null
   }
-  const executionHostId = getFolderWorkspaceHostId(folder, state.projectGroups)
-  const group = state.projectGroups.find(
+  const executionHostId = getFolderWorkspaceHostId(folder, selectProjectGroups(state))
+  const group = selectProjectGroups(state).find(
     (candidate) =>
       candidate.id === folder.projectGroupId && getProjectGroupHostId(candidate) === executionHostId
   )
@@ -94,13 +95,13 @@ export function getFolderWorkspaceStatusRequestSnapshot(
   if (!scope) {
     return null
   }
-  const projectGroups = state.projectGroups.filter((group) =>
+  const projectGroups = selectProjectGroups(state).filter((group) =>
     catalogOwnsHost(ownerHostId, getProjectGroupHostId(group))
   )
   const groupIds = scope.projectGroupId
     ? getProjectGroupSubtreeIds(projectGroups, scope.projectGroupId)
     : new Set<string>()
-  const candidateRepos = state.repos.filter(
+  const candidateRepos = selectRepos(state).filter(
     (repo) =>
       catalogOwnsHost(ownerHostId, getRepoExecutionHostId(repo)) &&
       ((typeof repo.projectGroupId === 'string' && groupIds.has(repo.projectGroupId)) ||

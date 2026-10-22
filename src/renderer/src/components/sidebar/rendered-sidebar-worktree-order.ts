@@ -31,6 +31,7 @@ import {
   getVisibleSidebarHostIdSet
 } from '../../../../shared/sidebar-list/host-filtering'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectProjectGroups, selectRepos } from '../../store/project-catalog-selectors'
 
 const EMPTY_REPO_ID_SET: ReadonlySet<string> = Object.freeze(new Set<string>())
 const EMPTY_IMPORTED_BY_REPO: ReadonlyMap<string, ImportedWorktreesCardCandidate> = new Map()
@@ -68,7 +69,7 @@ export function computeRenderedSidebarRows(
     state.visibleWorkspaceHostIds,
     state.workspaceHostScope
   )
-  const projectGroups = state.projectGroups ?? []
+  const projectGroups = selectProjectGroups(state) ?? []
   const { prCache } = selectWorktreeListReviewCacheInputs(
     state,
     state.groupBy,
@@ -81,7 +82,7 @@ export function computeRenderedSidebarRows(
     worktrees: [...visibleWorktrees],
     repoMap,
     prGroupOf: createSidebarPRGroupReader(repoMap, prCache),
-    repoOrder: getLogicalRepoOrderRankById(state.repos.map((repo) => repo.id)),
+    repoOrder: getLogicalRepoOrderRankById(selectRepos(state).map((repo) => repo.id)),
     workspaceStatuses: state.workspaceStatuses,
     projectOrderBy: state.projectOrderBy,
     lineageById: state.worktreeLineageById,
@@ -119,7 +120,7 @@ export function computeRenderedSidebarRows(
         rows,
         hostOptions: orderHostSectionOptions(
           buildSidebarHostOptions({
-            repos: state.repos,
+            repos: selectRepos(state),
             sshTargetLabels: state.sshTargetLabels,
             sshConnectionStates: state.sshConnectionStates,
             settings: state.settings,

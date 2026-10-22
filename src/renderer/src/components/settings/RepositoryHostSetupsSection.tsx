@@ -30,6 +30,7 @@ import {
   isConnectedRuntimeHostState,
   runtimeHostConnectionStateForEntry
 } from '@/runtime/runtime-host-connection-state'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type RepositoryHostSetupsSectionProps = {
   repo: Repo
@@ -75,7 +76,7 @@ export function RepositoryHostSetupsSection({
   const setupProjectClone = useAppStore((state) => state.setupProjectClone)
   const createProjectHostSetup = useAppStore((state) => state.createProjectHostSetup)
   const deleteProjectHostSetup = useAppStore((state) => state.deleteProjectHostSetup)
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const sshTargetLabels = useAppStore((state) => state.sshTargetLabels)
   const sshConnectionStates = useAppStore((state) => state.sshConnectionStates)
   const settings = useAppStore((state) => state.settings)

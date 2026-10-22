@@ -5,6 +5,7 @@ import { blockRemovalForUnsavedFiles } from './removal-unsaved-files'
 import { getExecutionHostIdForFolderWorkspace } from '@/lib/folder-workspace-runtime-owner'
 import { getFolderWorkspaceHostId } from '../../../../shared/folder-workspace-execution-host'
 import { selectFolderWorkspaces } from '@/store/workspace-record-selectors'
+import { selectProjectGroups } from '../../store/project-catalog-selectors'
 
 /** Mirrors deleteFolderWorkspace: its tabs close only when no same-id folder survives elsewhere. */
 export function folderWorkspaceDeleteClosesTabs(
@@ -20,7 +21,7 @@ export function folderWorkspaceDeleteClosesTabs(
   return !selectFolderWorkspaces(state).some(
     (workspace) =>
       workspace.id === folderWorkspaceId &&
-      getFolderWorkspaceHostId(workspace, state.projectGroups) !== ownerHostId
+      getFolderWorkspaceHostId(workspace, selectProjectGroups(state)) !== ownerHostId
   )
 }
 

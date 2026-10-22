@@ -14,6 +14,7 @@ import { getLocalProjectExecutionRuntimeContext } from '@/lib/local-preflight-co
 import { resolveResumeLaunchRecipe } from '../../../shared/tui-agent-launch-defaults'
 import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
 import { translate } from '@/i18n/i18n'
+import { selectRepos } from '../store/project-catalog-selectors'
 
 export type ResumeSleepingAgentSessionsOptions = {
   suppressNavigation?: boolean
@@ -30,7 +31,7 @@ export type ResumeSleepingAgentSessionsOptions = {
 function getResumeLaunchTarget(worktreeId: string): AgentResumeLaunchTarget {
   const state = useAppStore.getState()
   const worktree = state.getKnownWorktreeById(worktreeId)
-  const repo = worktree ? state.repos.find((entry) => entry.id === worktree.repoId) : null
+  const repo = worktree ? selectRepos(state).find((entry) => entry.id === worktree.repoId) : null
   // The resume tab is created without a shell override, so the global Windows shell wins.
   const executionHostId = getExecutionHostIdForWorktree(state, worktreeId)
   return resolveAgentResumeLaunchTarget({

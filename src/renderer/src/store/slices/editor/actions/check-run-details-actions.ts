@@ -17,6 +17,7 @@ import type { OpenFile } from '../types/open-file'
 import { openWorkspaceEditorItem } from '../tabs/workspace-editor-item'
 import { reconcileCheckDetailsReadingCache } from '@/components/editor/check-details-reading-cache'
 import { selectWorktreesByRepo } from '../../../workspace-record-selectors'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export function createCheckRunDetailsActions(
   set: EditorSet,
@@ -194,7 +195,7 @@ export function createCheckRunDetailsActions(
       }
       const worktree = findWorktreeById(selectWorktreesByRepo(state), file.worktreeId)
       const repoId = worktree?.repoId ?? getRepoIdFromWorktreeId(file.worktreeId)
-      const repo = state.repos.find((candidate) => candidate.id === repoId)
+      const repo = selectRepos(state).find((candidate) => candidate.id === repoId)
       if (!repo?.path) {
         patch({
           details: checkRunDetails.details,

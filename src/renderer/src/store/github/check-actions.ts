@@ -28,6 +28,7 @@ import {
   getGitHubSourceTarget,
   getGitHubWorkItemRequestContext
 } from './work-item-routing'
+import { selectRepos } from '../project-catalog-selectors'
 
 export const createCheckActions = (
   set: Parameters<StateCreator<AppState>>[0],
@@ -41,7 +42,7 @@ export const createCheckActions = (
     prRepo,
     options
   ): Promise<PRCheckDetail[]> => {
-    const repo = get().repos?.find((candidate) =>
+    const repo = selectRepos(get())?.find((candidate) =>
       options?.repoId ? candidate.id === options.repoId : candidate.path === repoPath
     )
     const repoId = options?.repoId ?? repo?.id
@@ -210,7 +211,7 @@ export const createCheckActions = (
 
   fetchPRCheckDetails: async (repoPath, args, options): Promise<PRCheckRunDetails | null> => {
     try {
-      const repo = get().repos?.find((candidate) =>
+      const repo = selectRepos(get())?.find((candidate) =>
         options?.repoId ? candidate.id === options.repoId : candidate.path === repoPath
       )
       const repoId = options?.repoId ?? repo?.id

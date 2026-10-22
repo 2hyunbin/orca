@@ -28,6 +28,7 @@ import { useSkillInstallRisk } from './use-skill-install-risk'
 import { SkillInstallDialogFooter } from './SkillInstallDialogFooter'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export function SkillInstallDialog({
   open,
@@ -41,7 +42,7 @@ export function SkillInstallDialog({
   const runtimeEnvironments = useAppStore((state) => state.runtimeEnvironments)
   const runtimeStatus = useAppStore((state) => state.runtimeStatusByEnvironmentId)
   const worktreesByRepo = useAppStore((state) => selectWorktreesByRepo(state))
-  const repos = useAppStore((state) => state.repos)
+  const repos = useAppStore((state) => selectRepos(state))
   const folderWorkspaces = useAppStore((state) => selectFolderWorkspaces(state))
   const sshConnectionStates = useAppStore((state) => state.sshConnectionStates)
   const sshTargetLabels = useAppStore((state) => state.sshTargetLabels)

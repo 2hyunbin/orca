@@ -27,6 +27,7 @@ import type {
 import type { PRCheckDetail, PRCheckRunDetails } from '../../../../shared/github/check-types'
 import { translate } from '@/i18n/i18n'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 export {
   buildCheckRunDetailsFixBasePrompt,
@@ -179,7 +180,7 @@ export function useCheckRunDetailsFixWithAI(args: {
       }
       const latestRepo =
         target.type === 'repo'
-          ? (state.repos.find((candidate) => candidate.id === target.repoId) ?? null)
+          ? (selectRepos(state).find((candidate) => candidate.id === target.repoId) ?? null)
           : null
       const result = saveSourceControlActionRecipe({
         target,

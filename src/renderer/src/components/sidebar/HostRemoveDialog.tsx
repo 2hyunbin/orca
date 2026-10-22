@@ -29,6 +29,7 @@ import {
   selectDetectedWorktreesByRepo,
   selectWorktreesByRepo
 } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type HostRemoveDialogProps = {
   open: boolean
@@ -54,7 +55,7 @@ export function HostRemoveDialog({
   const [deleteWorkspaces, setDeleteWorkspaces] = useState(false)
   const mountedRef = useMountedRef()
 
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const worktreesByRepo = useAppStore((s) => selectWorktreesByRepo(s))
   const detectedWorktreesByRepo = useAppStore((s) => selectDetectedWorktreesByRepo(s))
   const sshConnectionStates = useAppStore((s) => s.sshConnectionStates)

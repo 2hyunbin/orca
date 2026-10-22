@@ -22,6 +22,7 @@ import {
   type WorktreeTabBucketProjection
 } from '@/lib/worktree-tab-bucket-projection'
 import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 // Why: when an agent finishes or its terminal closes, the store cleans up the
 // explicit status entry and the agent vanishes from the live status set.
@@ -151,7 +152,7 @@ export function useRetainedAgentsSync(): void {
     useShallow(
       (s) =>
         [
-          s.repos,
+          selectRepos(s),
           selectWorktreesByRepo(s),
           selectFolderWorkspaces(s),
           tabTopologyProjectionRef.current!.project(s.tabsByWorktree),
@@ -164,7 +165,7 @@ export function useRetainedAgentsSync(): void {
   useEffect(() => {
     const state = useAppStore.getState()
     const { currentAgents, existingWorktreeIds, tabIndex } = buildRetainedAgentsSyncSnapshot({
-      repos: state.repos,
+      repos: selectRepos(state),
       worktreesByRepo: selectWorktreesByRepo(state),
       folderWorkspaces: selectFolderWorkspaces(state),
       tabsByWorktree: state.tabsByWorktree,

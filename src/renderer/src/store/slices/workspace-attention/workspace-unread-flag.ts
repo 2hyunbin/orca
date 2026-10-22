@@ -13,6 +13,7 @@ import type { WorkspaceAttentionGet, WorkspaceAttentionSet } from './workspace-a
 import { workspaceHasLiveMarker } from './workspace-live-markers'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../../shared/sidebar-inputs-switch'
 import { ownerHostOwnsSidebarInputs } from '../worktrees/listing/owner-host-sidebar-inputs'
+import { selectProjectGroups } from '../../project-catalog-selectors'
 
 // The persisted workspace flag `isUnread`. Only the workspace-attention module writes it.
 
@@ -35,7 +36,7 @@ export function markWorkspaceUnreadFlag(
       ? folderRowToMark(state, worktreeId, workspaceScope.folderWorkspaceId)
       : undefined
   const folderHostId = folderRow
-    ? getFolderWorkspaceHostId(folderRow, state.projectGroups)
+    ? getFolderWorkspaceHostId(folderRow, selectProjectGroups(state))
     : undefined
   const pending = pendingRaises.get(worktreeId) ?? { raises: 0, reads: 0 }
   pendingRaises.set(worktreeId, pending)
@@ -87,7 +88,7 @@ function folderRowOnHost(
   return state.folderWorkspaces.find(
     (workspace) =>
       workspace.id === folderWorkspaceId &&
-      (!host || getFolderWorkspaceHostId(workspace, state.projectGroups) === host)
+      (!host || getFolderWorkspaceHostId(workspace, selectProjectGroups(state)) === host)
   )
 }
 
@@ -120,7 +121,7 @@ function raiseWorkspaceUnreadFlag(
       folderWorkspaceId,
       { isUnread: true, ...stamp },
       {
-        executionHostId: getFolderWorkspaceHostId(marked, state.projectGroups)
+        executionHostId: getFolderWorkspaceHostId(marked, selectProjectGroups(state))
       }
     )
     return
@@ -282,7 +283,7 @@ export function isWorkspaceFlagSet(
         workspace.id === workspaceScope.folderWorkspaceId &&
         Boolean(workspace.isUnread) &&
         (!executionHostId ||
-          getFolderWorkspaceHostId(workspace, state.projectGroups) === executionHostId)
+          getFolderWorkspaceHostId(workspace, selectProjectGroups(state)) === executionHostId)
     )
   }
   return Boolean(findKnownWorktreeById(state, worktreeId)?.isUnread)

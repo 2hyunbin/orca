@@ -25,6 +25,7 @@ import {
   selectFolderWorkspaces,
   selectWorktreesByRepo
 } from '../../../workspace-record-selectors'
+import { selectRepos } from '../../../project-catalog-selectors'
 
 export function createFetchAllWorktrees(
   set: WorktreeSliceSet,
@@ -32,14 +33,14 @@ export function createFetchAllWorktrees(
 ): WorktreeSlice['fetchAllWorktrees'] {
   return async (options) => {
     const repos = options?.visibilityOwnerHostId
-      ? get().repos.filter((repo) => {
+      ? selectRepos(get()).filter((repo) => {
           const repoHost = parseExecutionHostId(getRepoExecutionHostId(repo))
           const ownerHost = parseExecutionHostId(options.visibilityOwnerHostId)
           return ownerHost?.kind === 'runtime'
             ? repoHost?.kind === 'runtime' && repoHost.environmentId === ownerHost.environmentId
             : repoHost?.kind !== 'runtime'
         })
-      : get().repos
+      : selectRepos(get())
 
     // Why: after the one-shot hydration purge, later calls only refresh cached lists — no IPC double-probe for the per-repo success signal.
     if (get().hasHydratedWorktreePurge || options?.visibilityOwnerHostId) {

@@ -11,6 +11,7 @@ import {
 import { isRuntimeRepoRefSearchQueryWithinLimit } from '@/runtime/runtime-repo-search-bounds'
 import { translate } from '@/i18n/i18n'
 import { getRepoExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 type BaseRefPickerProps = {
   repoId: string
@@ -32,7 +33,7 @@ export function BaseRefPicker({
     if (hostId) {
       return hostId
     }
-    const repo = findRepoForHost(state.repos, repoId, { settings: state.settings })
+    const repo = findRepoForHost(selectRepos(state), repoId, { settings: state.settings })
     return repo ? getRepoExecutionHostId(repo) : null
   })
   // Why: null until the IPC resolves (or when the repo has no default base ref

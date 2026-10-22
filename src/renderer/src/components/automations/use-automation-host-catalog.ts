@@ -44,6 +44,7 @@ import {
 } from './automation-authority-identity'
 import { useAutomationDesktopSshRegistrations } from './use-automation-desktop-ssh-registrations'
 import { useAutomationHostCatalogSourceState } from './use-automation-host-catalog-source-state'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 /**
  * Owns the per-host query controller and the two catalogs the page needs.
@@ -84,7 +85,7 @@ export function useAutomationHostCatalog(
   options: AutomationHostCatalogOptions = {}
 ): AutomationHostCatalogView {
   const settings = useAppStore((s) => s.settings)
-  const repos = useAppStore((s) => s.repos)
+  const repos = useAppStore((s) => selectRepos(s))
   const runtimeEnvironments = useAppStore((s) => s.runtimeEnvironments)
   const automationHostFilter = useAppStore((s) => s.automationHostFilter)
   const setAutomationHostFilter = useAppStore((s) => s.setAutomationHostFilter)

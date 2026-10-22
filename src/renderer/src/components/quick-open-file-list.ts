@@ -39,6 +39,7 @@ import {
   getFileExplorerOperationRoute
 } from '@/components/right-sidebar/file-explorer-operation-owner'
 import { runtimeTargetForOwnerEnvironment } from '@/runtime/runtime-client-target'
+import { selectProjectGroups, selectRepos } from '../store/project-catalog-selectors'
 
 export type RuntimeFileListState = {
   files: string[]
@@ -99,11 +100,11 @@ export function useRuntimeFileListForWorktree({
   const operationOwnerState = useAppStore(
     useShallow((state) => ({
       settings: state.settings,
-      repos: state.repos,
+      repos: selectRepos(state),
       worktreesByRepo: state.worktreesByRepo,
       detectedWorktreesByRepo: state.detectedWorktreesByRepo,
       folderWorkspaces: state.folderWorkspaces,
-      projectGroups: state.projectGroups,
+      projectGroups: selectProjectGroups(state),
       restoredRuntimeHostIdByWorkspaceSessionKey: state.restoredRuntimeHostIdByWorkspaceSessionKey
     }))
   )

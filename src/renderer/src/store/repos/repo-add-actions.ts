@@ -22,6 +22,7 @@ import { mergeProjectCompatibilityForHostRepoChange } from './repo-catalog-ident
 import { warnIfProjectKnownInAnotherProfile } from '../projects/project-profile-presence'
 import { warnIfProjectCrossesWslFilesystemBoundary } from '../projects/project-wsl-filesystem-boundary-advisory'
 import { selectWorktreesByRepo } from '../workspace-record-selectors'
+import { selectProjectHostSetups, selectProjects, selectRepos } from '../project-catalog-selectors'
 
 export function createRepoAddActions(
   set: Parameters<StateCreator<AppState>>[0],
@@ -95,20 +96,23 @@ export function createRepoAddActions(
         }
         repo = adoptFromEndpoint(target, { kind: 'repo', row: repo })
         const repoIdentity = getRepoHostIdentity(repo)
-        const alreadyAdded = get().repos.some((r) => getRepoHostIdentity(r) === repoIdentity)
+        const alreadyAdded = selectRepos(get()).some((r) => getRepoHostIdentity(r) === repoIdentity)
         if (alreadyAdded) {
           get().clearOrcaHookTrustForRepo(repo.id)
         }
         set((s) => {
-          if (s.repos.some((r) => getRepoHostIdentity(r) === repoIdentity)) {
+          if (selectRepos(s).some((r) => getRepoHostIdentity(r) === repoIdentity)) {
             return s
           }
-          const nextRepos = [...s.repos, repo]
+          const nextRepos = [...selectRepos(s), repo]
           const hostId = getRepoExecutionHostId(repo)
           return {
             repos: nextRepos,
             ...mergeProjectCompatibilityForHostRepoChange({
-              previous: { projects: s.projects, projectHostSetups: s.projectHostSetups },
+              previous: {
+                projects: selectProjects(s),
+                projectHostSetups: selectProjectHostSetups(s)
+              },
               nextRepos,
               hostId
             }),
@@ -131,7 +135,7 @@ export function createRepoAddActions(
           // Why: the cross-profile advisory applies to SSH-added projects too; the presence lookup already keys on connection/host.
           await warnIfProjectKnownInAnotherProfile(repo, get().activeOrcaProfileId)
           // Why after the set(): the project row carrying the runtime override only exists once the repo is in state.
-          warnIfProjectCrossesWslFilesystemBoundary(repo, get().projects, get().settings)
+          warnIfProjectCrossesWslFilesystemBoundary(repo, selectProjects(get()), get().settings)
         }
         return repo
       } catch (err) {
@@ -168,7 +172,7 @@ export function createRepoAddActions(
 
     addNonGitFolder: async (path, options) => {
       try {
-        const hadProjectBeforeAdd = get().repos.length > 0
+        const hadProjectBeforeAdd = selectRepos(get()).length > 0
         const repo = await get().addRepoPath(path, 'folder', options)
         if (!repo) {
           return null

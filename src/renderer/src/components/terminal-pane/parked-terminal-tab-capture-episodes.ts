@@ -1,5 +1,6 @@
 import { useAppStore } from '../../store'
 import { captureParkedTerminalBuffers } from './parked-terminal-buffer-capture'
+import { selectRepos } from '../../store/project-catalog-selectors'
 
 /** Serialize each newly parked tab's panes while they are still mounted, once per park episode.
  *  Why here rather than at unmount: a remote-runtime tab's xterm is the only client-side copy of
@@ -25,7 +26,7 @@ export function captureNewlyParkedTerminalTabs(
   // An unhydrated catalog fails open toward "remote" in shouldPreserveTerminalScrollbackBuffers —
   // capturing needlessly costs a serialize, while skipping it parks with no copy at all. See the
   // note there on why the opposite default is correct in worktree-runtime-owner.ts.
-  const repos = useAppStore.getState().repos ?? []
+  const repos = selectRepos(useAppStore.getState()) ?? []
   for (const tabId of parkedTabIds) {
     if (capturedTabIds.has(tabId)) {
       continue
