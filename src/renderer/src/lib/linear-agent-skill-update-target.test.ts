@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DiscoveredSkill } from '../../../shared/skills'
-import {
-  buildAgentFeatureSkillInstallCommand,
-  ORCA_LINEAR_SKILL_INSTALL_COMMAND
-} from './agent-feature-install-commands'
-import { getLinearAgentSkillUpdateTarget } from './linear-agent-skill-update-command'
+import { getLinearAgentSkillUpdateTarget } from './linear-agent-skill-update-target'
 
 function skill(name: string): DiscoveredSkill {
   return {
@@ -24,26 +20,18 @@ function skill(name: string): DiscoveredSkill {
 
 describe('getLinearAgentSkillUpdateTarget', () => {
   it('targets the canonical skill for missing, canonical, and dual-name installs', () => {
-    expect(getLinearAgentSkillUpdateTarget([], false)).toEqual({
-      skillName: 'orca-linear',
-      command: ORCA_LINEAR_SKILL_INSTALL_COMMAND
-    })
+    expect(getLinearAgentSkillUpdateTarget([], false)).toEqual({ skillName: 'orca-linear' })
     expect(getLinearAgentSkillUpdateTarget([skill('orca-linear')], true)).toEqual({
-      skillName: 'orca-linear',
-      command: ORCA_LINEAR_SKILL_INSTALL_COMMAND
+      skillName: 'orca-linear'
     })
     expect(
       getLinearAgentSkillUpdateTarget([skill('orca-linear'), skill('linear-tickets')], true)
-    ).toEqual({
-      skillName: 'orca-linear',
-      command: ORCA_LINEAR_SKILL_INSTALL_COMMAND
-    })
+    ).toEqual({ skillName: 'orca-linear' })
   })
 
   it('keeps the update and freshness identity on a legacy-only install', () => {
     expect(getLinearAgentSkillUpdateTarget([skill('linear-tickets')], true)).toEqual({
-      skillName: 'linear-tickets',
-      command: buildAgentFeatureSkillInstallCommand(['linear-tickets'])
+      skillName: 'linear-tickets'
     })
   })
 })

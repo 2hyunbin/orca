@@ -78,14 +78,9 @@ describe('OnboardingInlineCommandTerminal command-finished forwarding', () => {
     vi.useRealTimers()
   })
 
-  it('prepares auto-paste again when the resolved tab shell changes', async () => {
+  it('auto-pastes the command into the tab it created', async () => {
     vi.useFakeTimers()
-    mocks.createTab
-      .mockReturnValueOnce({ id: 'tab-1', shellOverride: 'wsl.exe' })
-      .mockReturnValueOnce({ id: 'tab-2', shellOverride: 'powershell.exe' })
-    const prepareCommandForShell = vi.fn(
-      (command: string, shellOverride: string | undefined) => `${shellOverride}:${command}`
-    )
+    mocks.createTab.mockReturnValueOnce({ id: 'tab-1', shellOverride: 'zsh' })
     const pasted: PasteTerminalTextDetail[] = []
     const handlePaste = (event: Event): void => {
       pasted.push((event as CustomEvent<PasteTerminalTextDetail>).detail)
@@ -100,24 +95,6 @@ describe('OnboardingInlineCommandTerminal command-finished forwarding', () => {
         root?.render(
           <OnboardingInlineCommandTerminal
             command="npx skills add orchestration"
-            prepareCommandForShell={prepareCommandForShell}
-            shellOverride="powershell.exe"
-            title="Skill setup"
-            ariaLabel="Skill setup terminal"
-          />
-        )
-      })
-      await act(async () => {})
-      await act(async () => {
-        vi.advanceTimersByTime(250)
-      })
-      await act(async () => {
-        root?.render(
-          <OnboardingInlineCommandTerminal
-            command="npx skills add orchestration"
-            forceHostRuntime
-            prepareCommandForShell={prepareCommandForShell}
-            shellOverride="powershell.exe"
             title="Skill setup"
             ariaLabel="Skill setup terminal"
           />
@@ -128,25 +105,13 @@ describe('OnboardingInlineCommandTerminal command-finished forwarding', () => {
         vi.advanceTimersByTime(250)
       })
 
-      expect(prepareCommandForShell).toHaveBeenCalledWith('npx skills add orchestration', 'wsl.exe')
-      expect(prepareCommandForShell).toHaveBeenCalledWith(
-        'npx skills add orchestration',
-        'powershell.exe'
-      )
       expect(mocks.createTab).toHaveBeenCalledWith(
         'ephemeral-setup-terminal:onboarding-inline-terminal',
         undefined,
-        'powershell.exe',
-        expect.objectContaining({ forceHostRuntime: true })
+        undefined,
+        expect.objectContaining({ activate: false })
       )
-      expect(pasted).toContainEqual({
-        tabId: 'tab-1',
-        text: 'wsl.exe:npx skills add orchestration'
-      })
-      expect(pasted).toContainEqual({
-        tabId: 'tab-2',
-        text: 'powershell.exe:npx skills add orchestration'
-      })
+      expect(pasted).toContainEqual({ tabId: 'tab-1', text: 'npx skills add orchestration' })
     } finally {
       window.removeEventListener(PASTE_TERMINAL_TEXT_EVENT, handlePaste)
     }

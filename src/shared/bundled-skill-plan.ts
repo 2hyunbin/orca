@@ -122,11 +122,13 @@ export type BundledSkillInstallResult = {
 const BundledSkillForceSchema = z.array(z.string().min(1).max(4096)).max(256)
 
 /**
- * What the app asks a host to plan: its own global homes, Orca's installed skills only.
+ * What the app asks a host to plan in its own global homes: Orca's installed skills (Update),
+ * or `names` for every detected agent (a setup screen's Install).
  * Frozen with `skills.bundled-orca.v1`: the schema is strict, so an older host rejects any
  * new field; a field needs a new capability.
  */
 export const BundledSkillPlanRequestSchema = z.strictObject({
+  names: z.array(z.string().min(1).max(128)).min(1).max(64).optional(),
   force: BundledSkillForceSchema.optional()
 })
 export type BundledSkillPlanRequest = z.infer<typeof BundledSkillPlanRequestSchema>

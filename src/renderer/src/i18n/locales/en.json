@@ -1306,6 +1306,21 @@
       },
       "duplicatePairedServers": {
         "ambiguousSameServer": "{{value0}} and {{value1}} are the same server paired twice. Remove one in Settings > Remote Orca Servers."
+      },
+      "bundled": {
+        "skill": {
+          "install": {
+            "error": {
+              "message": {
+                "homeUnavailable": "Orca could not find the home folder to install the skills into.",
+                "wslUnavailable": "WSL is not available on this machine, so Orca could not install the skills there.",
+                "environmentMismatch": "This machine cannot install skills into WSL.",
+                "wslDetectionFailed": "Orca could not check which agents are installed in WSL. Make sure the distro starts, then retry.",
+                "unknown": "Orca could not install the skills."
+              }
+            }
+          }
+        }
       }
     },
     "hooks": {
@@ -5474,7 +5489,8 @@
           "write": "Will install",
           "keepLink": "Link, no change",
           "repair": "Will repair",
-          "sharedFolder": "Shared folder"
+          "sharedFolder": "Shared folder",
+          "resultLeftAlone": "{{value0}} · {{value1}} left alone: {{value2}}"
         }
       },
       "sidebar": {
@@ -6538,7 +6554,6 @@
         },
         "LinearAgentSkillSetupPrompt": {
           "modalTitle": "Enable Linear ticket access",
-          "modalDescription": "Install the Linear skill from a terminal.",
           "modalPrompt": "Enable agents to read and edit the attached Linear ticket.",
           "dontShowAgain": "Don't show again",
           "missingBoth": "Orca CLI and Linear agent skill are missing.",
@@ -6551,8 +6566,6 @@
           "recheck": "Re-check",
           "panelTitle": "Linear agent skill",
           "panelDescription": "Install the host agent skill for linked Linear task handoffs.",
-          "terminalTitle": "Install Linear agent skill",
-          "terminalAria": "Linear agent skill installer terminal",
           "successTitle": "Linear ticket access is ready",
           "successDescription": "Agents can now read and update linked Linear tickets from this workspace.",
           "successDescriptionWsl": "WSL agents can now use linked Linear tickets from this workspace.",
@@ -6564,7 +6577,8 @@
           "toastMissingSkill": "Linear skill is missing",
           "toastInstallSkillDescription": "Install the Linear skill to enable your agents to read and edit Linear tasks through the Orca CLI.",
           "toastRemoteDescription": "{{value0}} Remote agent environments may need their own setup.",
-          "toastWslDescription": "{{value0}} This setup runs in the selected WSL agent runtime."
+          "toastWslDescription": "{{value0}} This setup runs in the selected WSL agent runtime.",
+          "modalInstallDescription": "Install the Linear skill for your agents."
         },
         "FolderWorkspaceComposerDialog": {
           "connectFailed": "Failed to connect to project.",
@@ -7190,7 +7204,6 @@
         },
         "AgentSkillSetupPanel": {
           "0b810ec59f": "Press Enter to run the command.",
-          "ed197f59a2": "Copy command",
           "817d3f9f18": "Copy command",
           "5289300939": "Not installed",
           "9fcebceb2a": "Installed",
@@ -7198,17 +7211,12 @@
           "c689392435": "Re-check",
           "a31e2aa302": "Failed to copy command.",
           "378ad26865": "Copied command.",
-          "copiedCommand": "Copied command.",
-          "failedToCopyCommand": "Failed to copy command.",
-          "copyCommandAria": "Copy command",
-          "runCommandDescription": "Press Enter to run the command.",
-          "5f818f12ab": "Preparing...",
-          "4c05b9d7cb": "Preparing setup terminal.",
           "installLabel": "Install",
           "updateLabel": "Update",
-          "setupCommandFailed": "The setup command exited with code {{value0}}. This error will clear after a successful retry.",
-          "setupFailed": "Setup failed",
-          "retrySetup": "Retry"
+          "retrySetup": "Retry",
+          "installing": "Installing...",
+          "hostUnavailable": "Orca can't install skills on this workspace's machine yet.",
+          "needsAttention": "Needs attention"
         },
         "AgentsPane": {
           "d83834f5e6": "Detecting installed agents…",
@@ -7505,16 +7513,10 @@
         "CliSkillRuntimeSetup": {
           "04325573f8": "WSL",
           "a58ba464ad": "Skill location",
-          "0ed08febc5": "Failed to register the WSL shell command.",
-          "3728a94fb6": "WSL shell command needs attention",
-          "775a4cfbb8": "WSL shell command registration is unavailable",
           "c47127f222": "WSL default",
           "0c9f3cf9da": "Choose where Orca checks and installs global agent skills.",
           "f00d6aa9b5": "WSL is not available on this machine.",
-          "7c776ff9d8": "wsl",
-          "fc0fcf72fd": "Register the WSL shell command before skill setup.",
-          "windowsPathUnknown": "WSL shell command PATH could not be checked",
-          "refreshCliRegistration": "Refresh CLI registration status and try again."
+          "7c776ff9d8": "wsl"
         },
         "CommitMessageAiPane": {
           "841ed9884a": "Used by repositories that have not customized Source Control AI.",
@@ -8283,8 +8285,6 @@
         "OrchestrationPane": {
           "52e0634e2c": "Ask a coordinator agent to use orchestration for handoffs, worktree handovers, and sequential or parallel child agents.",
           "ae79504732": "How to use it",
-          "7bc082f4de": "Copy install command",
-          "832f1f3ee6": "Prefer your own terminal?",
           "9bedd2a6e5": "Enables agents to hand off context and coordinate work through Orca.",
           "07641b9768": "Orchestration skill",
           "2aacdb0517": "Coordinate coding agents across handoffs, worktree handovers, and child-agent work.",
@@ -8306,15 +8306,6 @@
           "fullCoverage_other": "All {{value0}} detected agents have the skill.",
           "noCoverage": "Install the skill above, then re-check.",
           "partialCoverage": "{{value0}} of {{value1}} detected agents have the skill."
-        },
-        "OrchestrationSkillPromptDialog": {
-          "f08d45293d": "Copy command",
-          "35550f3b3b": "Done",
-          "1bdce1911e": "Copy orchestration skill install command",
-          "b99f375eb2": "Run this command in a terminal to install the orchestration skill for your agents.",
-          "2914abcfa2": "Install orchestration skill",
-          "d3dc559225": "Failed to copy install command.",
-          "239bf9132b": "Copied install command."
         },
         "PrivacyDiagnosticBundleControls": {
           "dc8404a930": "Create diagnostic file",
@@ -10029,7 +10020,6 @@
               "614c756ab1": "Import Browser Cookies",
               "cee44fb442": "automation",
               "a57c2172dc": "agent-browser",
-              "6ea88e5206": "npx",
               "f5b8fdddf5": "orca-cli",
               "e5a784bc54": "install",
               "9d97446873": "agent",
@@ -10286,7 +10276,6 @@
             "f89a94773c": "update",
             "79ff46776e": "Check for app updates and install a newer Orca version.",
             "e15af4eb64": "Check for Updates",
-            "6382fe9724": "npx",
             "baa263d6d8": "agents",
             "bda108e66c": "skill",
             "244e3fb4c8": "Install the Orca skill so agents know to use the Orca CLI.",
@@ -11853,9 +11842,7 @@
           "checking": "Checking recipes...",
           "none": "No recipes found yet.",
           "cloudVmSkillTitle": "Cloud VM setup skill",
-          "cloudVmRefresh": "Refresh Cloud VM recipes",
-          "cloudVmTerminalTitle": "Cloud VM setup",
-          "cloudVmTerminalAriaLabel": "Cloud VM skill install terminal"
+          "cloudVmRefresh": "Refresh Cloud VM recipes"
         },
         "ephemeralVmsExperimentalSetting": {
           "description": "Shows setup controls and workspace run targets for repo-owned, on-demand environments.",
@@ -11878,16 +11865,12 @@
             "skill": {
               "install": {
                 "cta": {
-                  "copiedCommand": "Copied command.",
-                  "copyFailed": "Failed to copy command.",
                   "skillLabel": "Agent skill:",
                   "checking": "Checking...",
                   "installed": "Installed",
                   "notInstalled": "Not installed",
                   "recheck": "Re-check",
-                  "installedDescription": "Agent skill installed. To update it, run:",
-                  "description": "Let agents read and edit Linear tasks. Full guided setup (connect + skill + visibility) is under Settings → Task Sources.",
-                  "copyCommand": "Copy command"
+                  "description": "Let agents read and edit Linear tasks. Full guided setup (connect + skill + visibility) is under Settings → Task Sources."
                 }
               },
               "search": {
@@ -12001,8 +11984,6 @@
           "skillTitle": "Linear skill",
           "howToUse": "Example prompts",
           "howToUseDescription": "Click a card to copy a prompt. Use these in a Linear-linked worktree after the skill is installed.",
-          "terminalTitle": "Linear skill setup",
-          "terminalAriaLabel": "Linear skill install terminal",
           "manageConnectionHint": "Review connected Linear workspaces and API keys in",
           "manageConnectionLink": "Integrations"
         },
@@ -12376,8 +12357,6 @@
           "skillDescription": "Gives agents /orca-linear to read tickets, post updates, move states, and attach pull or merge requests.",
           "skillBlocked": "Connect Linear first, then install the skill for agents.",
           "skillPanelTitle": "Linear skill",
-          "terminalTitle": "Linear skill setup",
-          "terminalAriaLabel": "Linear skill install terminal",
           "showDescription": "Include Linear in the Tasks page source picker and sidebar shortcuts."
         },
         "TaskSourceProviderCard": {
@@ -13231,6 +13210,9 @@
           "tailscale": "Tailscale · {{address}}",
           "lan": "Local network · {{address}}",
           "loopback": "This computer · {{address}}"
+        },
+        "BundledSkillInstallStatus": {
+          "updateServer": "Update Orca on the server to install its skills."
         }
       },
       "right": {
@@ -14835,11 +14817,6 @@
           "yoloModeLabel": "Yolo mode",
           "yoloPermissionsDescription": "Agents run commands and edit files without asking, and some also bypass their sandbox. Use only in projects you trust."
         },
-        "FeatureSetupInlineTerminal": {
-          "789b59936e": "Press Enter to run the command and confirm npx if asked. You can also set this up later in Settings.",
-          "47fc6cc6dc": "Skill setup command",
-          "c767ab7061": "Skill setup"
-        },
         "IntegrationsStep": {
           "277f30eb34": "Linear, GitLab, Bitbucket, Azure DevOps, Gitea, and Jira live in Settings > Integrations.",
           "3a3e360289": "More task sources",
@@ -15385,7 +15362,6 @@
             "c61c91e642": "Let agents coordinate through Orca to keep large, multi-step tasks moving to completion.",
             "ac07f8887f": "Agent Orchestration",
             "e9eb197e12": "Opened Computer Use permissions",
-            "3a59452a67": "Skill command copied and inserted below for review.",
             "c605f51f2b": "Capability setup ready",
             "1aa657d8f4": "Some capability setup needs attention",
             "allInstalled": "All skills installed",
@@ -15724,7 +15700,6 @@
             "c9728107c5": "Try it out",
             "25dd101f15": "Browser setup needs attention",
             "e02b11e6b0": "Browser setup ready",
-            "d6d15077df": "Skill command copied and inserted below for review.",
             "78e65f19d9": "Browser setup failed",
             "b7345c18db": "An unexpected error occurred.",
             "5f97caf76b": "Installing…"
@@ -15769,15 +15744,6 @@
             "badb4fc342": ">",
             "22e62f3bab": "Claude Code session started"
           },
-          "CliSkillSetupTerminal": {
-            "1953e90447": "Press Enter to install the Orca CLI orchestration skill for your agents.",
-            "43b60ec5c3": "Orca CLI and orchestration skill install terminal",
-            "84e9576dac": "Skill setup",
-            "5c3aee22c0": "Copy command",
-            "5eca672aac": "Copy skill install command",
-            "6ff813fc1d": "Failed to copy skill command.",
-            "b8ad063571": "Copied the skill install command."
-          },
           "CmdJPaletteTipDialog": {
             "c0bb9f869b": "Settings → Shortcuts",
             "8241897205": "Rebind the shortcut anytime in"
@@ -15804,6 +15770,10 @@
             "d20ccf1e61": "done",
             "379d776971": "typing",
             "0418f9becc": "open"
+          },
+          "CliSkillSetupPanel": {
+            "title": "Skill setup",
+            "description": "Install the Orca CLI and orchestration skills for your agents."
           }
         }
       },
@@ -15898,9 +15868,7 @@
           },
           "MobileEmulatorAgentSetupGuideSteps": {
             "21f5687c07": "Orca CLI skill",
-            "64fb057667": "Teaches agents the orca emulator commands for this worktree.",
-            "5c59ea96ca": "Mobile emulator Orca CLI skill setup",
-            "bff5341ac3": "Mobile emulator Orca CLI skill install terminal"
+            "64fb057667": "Teaches agents the orca emulator commands for this worktree."
           },
           "MobileEmulatorTabIntroCallout": {
             "1924982130": "Dismiss",

@@ -1,7 +1,7 @@
 import type { BundledSkillPlan } from '../../../shared/bundled-skill-plan'
 import type { DiscoveredSkill } from '../../../shared/skills'
 import type { SettingsNavInstallStatus } from './settings-navigation-types'
-import { getLinearAgentSkillUpdateTarget } from './linear-agent-skill-update-command'
+import { getLinearAgentSkillUpdateTarget } from './linear-agent-skill-update-target'
 import { getSkillFreshnessDisplayStatus } from './skill-freshness-display-status'
 
 type AgentSkillNavInstallStatusInput = {

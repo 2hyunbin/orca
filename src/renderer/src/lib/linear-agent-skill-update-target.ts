@@ -3,15 +3,10 @@ import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   hasInstalledAgentSkill
 } from '@/hooks/useInstalledAgentSkills'
-import {
-  buildAgentFeatureSkillInstallCommand,
-  LINEAR_TICKETS_SKILL_NAME,
-  ORCA_LINEAR_SKILL_NAME
-} from '@/lib/agent-feature-install-commands'
+import { LINEAR_TICKETS_SKILL_NAME, ORCA_LINEAR_SKILL_NAME } from '@/lib/agent-feature-skill-names'
 
 export type LinearAgentSkillUpdateTarget = {
   skillName: typeof ORCA_LINEAR_SKILL_NAME | typeof LINEAR_TICKETS_SKILL_NAME
-  command: string
 }
 
 // Why: legacy-only installs must update and report freshness for the installed
@@ -30,12 +25,5 @@ export function getLinearAgentSkillUpdateTarget(
     !installed || canonicalSkillInstalled || !legacySkillInstalled
       ? ORCA_LINEAR_SKILL_NAME
       : LINEAR_TICKETS_SKILL_NAME
-  return { skillName, command: buildAgentFeatureSkillInstallCommand([skillName]) }
-}
-
-export function getLinearAgentSkillUpdateCommand(
-  skills: readonly DiscoveredSkill[],
-  installed: boolean
-): string {
-  return getLinearAgentSkillUpdateTarget(skills, installed).command
+  return { skillName }
 }

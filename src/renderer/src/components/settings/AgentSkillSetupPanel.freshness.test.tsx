@@ -22,10 +22,6 @@ vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({ bundledSkillTarget: { kind: 'local' } })
 }))
 
-vi.mock('../onboarding/OnboardingInlineCommandTerminal', () => ({
-  OnboardingInlineCommandTerminal: () => null
-}))
-
 function plan(updateNames: string[]): BundledSkillPlan {
   return planOf(updateNames.map((name) => sharedEntry(name, 'update')))
 }
@@ -36,10 +32,7 @@ function panelProps(
   return {
     title: 'Linear skill',
     description: null,
-    command: 'npx skills add orca-linear --global',
-    terminalTitle: 'Linear skill setup',
-    terminalAriaLabel: 'Linear skill install terminal',
-    terminalWorktreeId: 'settings-linear-skill-terminal',
+    skillNames: ['orca-linear'],
     installed: true,
     loading: false,
     error: null,

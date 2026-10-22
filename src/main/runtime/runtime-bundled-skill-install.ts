@@ -6,7 +6,10 @@ import type {
   BundledSkillPlan
 } from '../../shared/bundled-skill-plan'
 import { isSkillInstallProviderId } from '../../shared/skill-install-providers'
-import { localBundledSkillInput } from '../skills/bundled-skill-install/local-host'
+import {
+  localBundledSkillInput,
+  type BundledSkillSelection
+} from '../skills/bundled-skill-install/local-host'
 import {
   installBundledSkills,
   previewBundledSkillInstall,
@@ -28,7 +31,7 @@ import {
 async function wslInput(
   host: RuntimeSkillCommandHost,
   wsl: NonNullable<BundledSkillLocalPlanRequest['wsl']>,
-  selection: { force?: readonly string[] }
+  selection: BundledSkillSelection
 ): Promise<BundledSkillServiceInput> {
   const distro = wsl.distro ?? getDefaultWslDistro()
   if (!distro) {
@@ -63,19 +66,26 @@ async function wslInput(
       homeDirectory: destination.homeDirectory,
       providerRootOverrides
     }),
-    installedOnly: true,
-    ...(selection.force ? { force: selection.force } : {})
+    ...selection
   }
 }
 
-// Why global and installed-only: this is the app's Update skills, which never adds a skill
-// the user did not install. A paired server or SSH host plans this on its own host over RPC.
+/** Update never adds a skill the user did not install; only a named Install does. */
+function appSelection(request: BundledSkillLocalPlanRequest): BundledSkillSelection {
+  return {
+    ...(request.names ? { names: request.names } : { installedOnly: true }),
+    ...(request.force ? { force: request.force } : {})
+  }
+}
+
+// Why global: a paired server or SSH host plans this on its own host over RPC.
 async function appInput(
   host: RuntimeSkillCommandHost,
   request: BundledSkillLocalPlanRequest
 ): Promise<BundledSkillServiceInput> {
+  const selection = appSelection(request)
   if (request.wsl) {
-    return wslInput(host, request.wsl, request)
+    return wslInput(host, request.wsl, selection)
   }
   const destination = await resolveSkillInstallDestination(
     { scope: 'global' },
@@ -87,7 +97,7 @@ async function appInput(
     userDataPath: host.getUserDataPath(),
     destination,
     claudeConfigDirectory: host.getClaudeConfigDirectory?.({ runtime: 'host' }),
-    selection: { installedOnly: true, ...(request.force ? { force: request.force } : {}) }
+    selection
   })
 }
 

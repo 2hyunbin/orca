@@ -244,34 +244,13 @@ export const onboardingFeatureSetupRunSchema = z
   .object({
     ...onboardingFeatureSetupSelectionSchema,
     cli_touched: z.boolean(),
-    skill_commands_copied: z.boolean(),
-    skill_install_command_prepared: z.boolean(),
+    // How the one-click skill install ended; replaces the copy/paste command fields.
+    skill_install_result: z.enum(['installed', 'needs_attention', 'update_server', 'failed']),
     computer_use_permissions_opened: z.boolean(),
     warning_count: z.number().int().nonnegative(),
     cohort: cohortSchema
   })
   // Why: validate derived selected_count at the untrusted IPC boundary rather than trust renderer callers.
-  .refine(
-    hasMatchingOnboardingFeatureSetupSelectedCount,
-    onboardingFeatureSetupSelectedCountRefinement
-  )
-  .strict()
-export const onboardingFeatureSetupTerminalOpenedSchema = z
-  .object({
-    ...onboardingFeatureSetupSelectionSchema,
-    cohort: cohortSchema
-  })
-  .refine(
-    hasMatchingOnboardingFeatureSetupSelectedCount,
-    onboardingFeatureSetupSelectedCountRefinement
-  )
-  .strict()
-export const onboardingFeatureSetupTerminalInteractedSchema = z
-  .object({
-    ...onboardingFeatureSetupSelectionSchema,
-    method: z.enum(['keyboard', 'pointer']),
-    cohort: cohortSchema
-  })
   .refine(
     hasMatchingOnboardingFeatureSetupSelectedCount,
     onboardingFeatureSetupSelectedCountRefinement

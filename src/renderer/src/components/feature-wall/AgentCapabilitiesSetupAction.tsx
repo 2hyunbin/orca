@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, Globe2, Loader2, MonitorCog, Terminal, Workflow } from 'lucide-react'
+import { Check, Download, Globe2, Loader2, MonitorCog, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
 import { useAppStore } from '@/store'
 import { AgentCapabilityStatusNote, AgentCapabilityStatusPill } from './AgentCapabilityStatusBadges'
-import { FeatureSetupInlineTerminal } from '../onboarding/FeatureSetupInlineTerminal'
-import type { OnboardingFeatureSetupRuntimeContext } from '../onboarding/onboarding-feature-setup-runtime'
+import {
+  bundledSkillInstallNeedsAttention,
+  useBundledSkillInstall,
+  type BundledSkillInstall
+} from '@/hooks/use-bundled-skill-install'
+import { BundledSkillInstallStatus } from '../settings/BundledSkillInstallStatus'
 import {
   DEFAULT_ONBOARDING_FEATURE_SETUP_SELECTION,
   hasSelectedOnboardingFeatureSetup,
+  onboardingFeatureSetupRunTelemetry,
   runOnboardingFeatureSetup,
   type OnboardingFeatureSetupId,
   type OnboardingFeatureSetupSelection
@@ -23,6 +27,7 @@ import {
   type AgentCapabilityInstallStatus
 } from './agent-capability-setup-status'
 import { translate } from '@/i18n/i18n'
+import { track } from '@/lib/telemetry'
 
 export function AgentCapabilitiesSetupAction(props: {
   onOrchestrationSkillInstalledChange: (installed: boolean) => void
@@ -36,14 +41,10 @@ export function AgentCapabilitiesSetupAction(props: {
   const [featureSetup, setFeatureSetup] = useState<OnboardingFeatureSetupSelection>(
     DEFAULT_ONBOARDING_FEATURE_SETUP_SELECTION
   )
-  const [featureSetupCommand, setFeatureSetupCommand] = useState<string | null>(null)
-  const [featureSetupCommandSelection, setFeatureSetupCommandSelection] =
-    useState<OnboardingFeatureSetupSelection | null>(null)
-  const [featureSetupRuntime, setFeatureSetupRuntime] =
-    useState<OnboardingFeatureSetupRuntimeContext | null>(null)
   const [setupBusyLabel, setSetupBusyLabel] = useState<string | null>(null)
   const recordFeatureInteraction = useAppStore((s) => s.recordFeatureInteraction)
-  const activeSkillRuntime = useActiveProjectSkillRuntime()
+  const skillInstall = useBundledSkillInstall()
+  const installSkills = skillInstall.install
   useEffect(() => {
     onBrowserUseSkillInstalledChange(readiness.browserUseSkillInstalled)
   }, [onBrowserUseSkillInstalledChange, readiness.browserUseSkillInstalled])
@@ -65,12 +66,12 @@ export function AgentCapabilitiesSetupAction(props: {
     setFeatureSetup(value)
   }, [])
   const handleStartFeatureSetup = useCallback(async (): Promise<void> => {
-    if (setupBusyLabel !== null || featureSetupCommand !== null) {
+    if (setupBusyLabel !== null) {
       return
     }
     setSetupBusyLabel('Setting up capabilities...')
     try {
-      const result = await runOnboardingFeatureSetup(featureSetup, undefined, activeSkillRuntime)
+      const result = await runOnboardingFeatureSetup(featureSetup)
       if (featureSetup.browserUse) {
         recordFeatureInteraction('agent-browser-setup')
       }
@@ -92,18 +93,18 @@ export function AgentCapabilitiesSetupAction(props: {
           }
         )
       }
-      if (result.skillCommandsCopied) {
+      const installState = await installSkills(result.skillNames)
+      const telemetry =
+        installState && onboardingFeatureSetupRunTelemetry(featureSetup, result, installState)
+      if (telemetry) {
+        track('onboarding_feature_setup_run', telemetry)
+      }
+      if (installState?.kind === 'done' && installState.summary.ok) {
         toast.success(
           translate(
             'auto.components.feature.wall.AgentCapabilitiesSetupAction.c605f51f2b',
             'Capability setup ready'
-          ),
-          {
-            description: translate(
-              'auto.components.feature.wall.AgentCapabilitiesSetupAction.3a59452a67',
-              'Skill command copied and inserted below for review.'
-            )
-          }
+          )
         )
       }
       if (result.computerUsePermissionsOpened) {
@@ -114,30 +115,17 @@ export function AgentCapabilitiesSetupAction(props: {
           )
         )
       }
-      if (result.skillInstallCommand) {
-        setFeatureSetupCommandSelection(featureSetup)
-        setFeatureSetupRuntime(activeSkillRuntime)
-        setFeatureSetupCommand(result.skillInstallCommand)
-      }
     } finally {
       setSetupBusyLabel(null)
     }
-  }, [
-    activeSkillRuntime,
-    featureSetup,
-    featureSetupCommand,
-    recordFeatureInteraction,
-    setupBusyLabel
-  ])
+  }, [featureSetup, installSkills, recordFeatureInteraction, setupBusyLabel])
 
   return (
     <div className="space-y-5">
       <AgentCapabilitySetupControls
         featureSetup={featureSetup}
         onFeatureSetupChange={handleFeatureSetupChange}
-        featureSetupCommand={featureSetupCommand}
-        featureSetupCommandSelection={featureSetupCommandSelection}
-        featureSetupRuntime={featureSetupRuntime}
+        skillInstall={skillInstall}
         setupBusyLabel={setupBusyLabel}
         onStartFeatureSetup={() => void handleStartFeatureSetup()}
         allReady={isAgentCapabilityReadinessComplete(readiness)}
@@ -208,16 +196,16 @@ const AGENT_CAPABILITY_SETUP_ROWS: readonly AgentCapabilitySetupRow[] = [
 function AgentCapabilitySetupControls(props: {
   featureSetup: OnboardingFeatureSetupSelection
   onFeatureSetupChange: (value: OnboardingFeatureSetupSelection) => void
-  featureSetupCommand: string | null
-  featureSetupCommandSelection: OnboardingFeatureSetupSelection | null
-  featureSetupRuntime: OnboardingFeatureSetupRuntimeContext | null
+  skillInstall: BundledSkillInstall
   setupBusyLabel: string | null
   onStartFeatureSetup: () => void
   allReady: boolean
   installStatus: Record<OnboardingFeatureSetupId, AgentCapabilityInstallStatus>
 }): React.JSX.Element {
   const hasSelectedFeatures = hasSelectedOnboardingFeatureSetup(props.featureSetup)
-  const showSetupAction = !props.featureSetupCommand
+  const installState = props.skillInstall.state
+  const showSetupAction =
+    installState.kind !== 'unsupported' && !bundledSkillInstallNeedsAttention(installState)
   // Why: a disabled install button is noise once everything is set up.
   const showAllReady = props.allReady && !hasSelectedFeatures && !props.setupBusyLabel
 
@@ -248,7 +236,7 @@ function AgentCapabilitySetupControls(props: {
             {props.setupBusyLabel ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
-              <Terminal className="size-4" />
+              <Download className="size-4" />
             )}
             {props.setupBusyLabel ??
               translate(
@@ -258,13 +246,7 @@ function AgentCapabilitySetupControls(props: {
           </Button>
         </div>
       ) : null}
-      {props.featureSetupCommand ? (
-        <FeatureSetupInlineTerminal
-          command={props.featureSetupCommand}
-          runtimeContext={props.featureSetupRuntime ?? undefined}
-          selection={props.featureSetupCommandSelection ?? props.featureSetup}
-        />
-      ) : null}
+      <BundledSkillInstallStatus install={props.skillInstall} className="mt-4" />
     </>
   )
 }

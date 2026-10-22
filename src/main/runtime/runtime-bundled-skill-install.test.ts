@@ -86,3 +86,24 @@ describe('app and CLI plan the same targets for one machine', () => {
     expect(cli).toEqual(app)
   })
 })
+
+describe('named installs from setup screens', () => {
+  it('plans an uninstalled skill only when the request names it', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'orca-bundled-app-named-')))
+    roots.push(root)
+    const home = join(root, 'home')
+    await mkdir(join(home, '.claude'), { recursive: true })
+    vi.stubEnv('HOME', home)
+    vi.stubEnv('USERPROFILE', home)
+    const host = appHost(home, join(root, 'user-data'))
+
+    expect((await planLocalBundledSkills(host, {})).skills).toEqual([])
+    const named = await planLocalBundledSkills(host, { names: [NAME] })
+    expect(named.skills[0].ops.map((op) => [op.role, op.kind])).toEqual(
+      expect.arrayContaining([
+        ['shared', 'write'],
+        ['agent', 'link']
+      ])
+    )
+  })
+})

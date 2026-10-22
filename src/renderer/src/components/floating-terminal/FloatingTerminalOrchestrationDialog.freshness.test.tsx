@@ -18,7 +18,6 @@ vi.mock('@/hooks/useActiveProjectSkillRuntime', () => ({
   useActiveProjectSkillRuntime: () => ({
     agentRuntime: undefined,
     discoveryTarget: undefined,
-    terminalShellOverride: undefined,
     installDisabledReason: null,
     canUseSkillFreshness: mocks.canUseSkillFreshness,
     bundledSkillTarget: mocks.canUseSkillFreshness ? { kind: 'local' } : null
@@ -35,17 +34,6 @@ vi.mock('@/hooks/useInstalledAgentSkills', () => ({
   }),
   notifyInstalledAgentSkillsChanged: vi.fn(),
   notifyInstalledAgentSkillsRefreshed: vi.fn()
-}))
-
-vi.mock('@/components/settings/CliSkillRuntimeSetup', () => ({
-  buildSkillCommandForRuntime: (command: string) => command,
-  buildSkillSetupTerminalCommand: (command: string) => command,
-  ensureWslCliAvailableForAgentSkillTerminal: vi.fn(),
-  getWslCliDistroRequest: () => undefined
-}))
-
-vi.mock('@/components/onboarding/OnboardingInlineCommandTerminal', () => ({
-  OnboardingInlineCommandTerminal: () => null
 }))
 
 vi.mock('@/store', () => ({

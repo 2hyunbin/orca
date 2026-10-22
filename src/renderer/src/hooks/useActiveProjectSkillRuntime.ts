@@ -10,7 +10,6 @@ import {
 } from '@/lib/local-preflight-context'
 import {
   getProjectAgentSkillRuntime,
-  getProjectAgentSkillTerminalShellOverride,
   getProjectSkillDiscoveryTarget,
   getProjectSkillInstallDisabledReason,
   type ProjectAgentSkillRuntime
@@ -25,7 +24,6 @@ type ActiveProjectSkillRuntime = {
   projectRuntime?: ProjectExecutionRuntimeResolution
   discoveryTarget?: SkillDiscoveryTarget
   agentRuntime?: ProjectAgentSkillRuntime
-  terminalShellOverride?: string
   installDisabledReason: string | null
   canUseSkillFreshness: boolean
   /** Where Update skills plans Orca's skills; null while that host is unknown. */
@@ -110,26 +108,14 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
           )
         : undefined)
     if (!projectRuntime) {
-      // Why: buildSkillCommandForRuntime still builds a Windows host command
-      // without a project runtime, so the terminal has to match that shell.
-      const terminalShellOverride = hasLocalSkillRuntimeAuthority(runtimeTarget)
-        ? getProjectAgentSkillTerminalShellOverride(
-            currentPlatform,
-            runtimeState.settings,
-            undefined
-          )
-        : undefined
-      const canUseSkillFreshness = shouldUseSkillFreshness(runtimeTarget)
-      const bundledSkillTarget = resolveBundledSkillTarget(
-        runtimeTarget,
-        undefined,
-        activeWorkspaceHostId
-      )
       return {
         installDisabledReason: null,
-        ...(terminalShellOverride ? { terminalShellOverride } : {}),
-        canUseSkillFreshness,
-        bundledSkillTarget
+        canUseSkillFreshness: shouldUseSkillFreshness(runtimeTarget),
+        bundledSkillTarget: resolveBundledSkillTarget(
+          runtimeTarget,
+          undefined,
+          activeWorkspaceHostId
+        )
       }
     }
 
@@ -138,11 +124,6 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       projectRuntime,
       discoveryTarget: getProjectSkillDiscoveryTarget(projectRuntime),
       agentRuntime,
-      terminalShellOverride: getProjectAgentSkillTerminalShellOverride(
-        currentPlatform,
-        runtimeState.settings,
-        agentRuntime
-      ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
       canUseSkillFreshness: shouldUseSkillFreshness(runtimeTarget, agentRuntime),
       bundledSkillTarget: resolveBundledSkillTarget(

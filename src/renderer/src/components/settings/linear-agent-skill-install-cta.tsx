@@ -1,19 +1,17 @@
-import { useMemo } from 'react'
-import { Copy, RefreshCw } from 'lucide-react'
-import { toast } from 'sonner'
+import { useCallback, useMemo } from 'react'
+import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { IntegrationStatusPill } from '@/components/integration-status-pill'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   GLOBAL_AGENT_SKILL_SOURCE_KINDS,
   useInstalledAgentSkillNames
 } from '@/hooks/useInstalledAgentSkills'
 import {
-  LINEAR_AGENT_SKILL_NAMES,
-  ORCA_LINEAR_SKILL_INSTALL_COMMAND,
-  ORCA_LINEAR_SKILL_NAME
-} from '@/lib/agent-feature-install-commands'
-import { getLinearAgentSkillUpdateCommand } from '@/lib/linear-agent-skill-update-command'
+  bundledSkillInstallNeedsAttention,
+  useBundledSkillInstall
+} from '@/hooks/use-bundled-skill-install'
+import { LINEAR_AGENT_SKILL_NAMES, ORCA_LINEAR_SKILL_NAME } from '@/lib/agent-feature-skill-names'
+import { getLinearAgentSkillUpdateTarget } from '@/lib/linear-agent-skill-update-target'
 import { cn } from '@/lib/utils'
 import { getLinearAgentSkillSetupInlineRuntimeCopy } from '../sidebar/linear-agent-skill-setup-copy'
 import {
@@ -22,11 +20,9 @@ import {
   getLinearPromptSkillDiscoveryTarget,
   type LinearAgentSkillPromptSettings
 } from '../sidebar/linear-agent-skill-runtime'
-import { buildSkillCommandForRuntime } from './CliSkillRuntimeSetup'
-import {
-  useIntegrationCommandRowClass,
-  useIntegrationSubordinateRowClass
-} from './integration-card-presentation'
+import { useIntegrationSubordinateRowClass } from './integration-card-presentation'
+import { BundledSkillInstallStatus } from './BundledSkillInstallStatus'
+import { recheckSurfacesAfterAgentSkillInstall } from './agent-skill-recheck-surface-sync'
 import { translate } from '@/i18n/i18n'
 
 type LinearAgentSkillInstallCtaProps = {
@@ -54,39 +50,19 @@ export function LinearAgentSkillInstallCta({
     discoveryTarget: skillDiscoveryTarget,
     sourceKinds: GLOBAL_AGENT_SKILL_SOURCE_KINDS
   })
-  const command = useMemo(
-    () =>
-      buildSkillCommandForRuntime(
-        skill.installed
-          ? getLinearAgentSkillUpdateCommand(skill.skills, skill.installed)
-          : ORCA_LINEAR_SKILL_INSTALL_COMMAND,
-        agentRuntime
-      ),
-    [agentRuntime, skill.installed, skill.skills]
+  const skillName = useMemo(
+    () => getLinearAgentSkillUpdateTarget(skill.skills, skill.installed).skillName,
+    [skill.installed, skill.skills]
   )
+  const { refresh } = skill
+  const recheckAfterInstall = useCallback(
+    () => recheckSurfacesAfterAgentSkillInstall(refresh),
+    [refresh]
+  )
+  const skillInstall = useBundledSkillInstall({ onFinished: recheckAfterInstall })
+  const { state, ready, install } = skillInstall
+  const installing = state.kind === 'installing'
   const subordinateRowClass = useIntegrationSubordinateRowClass('space-y-1.5')
-  const commandRowClass = useIntegrationCommandRowClass()
-
-  const copyCommand = async (): Promise<void> => {
-    try {
-      await window.api.ui.writeClipboardText(command)
-      toast.success(
-        translate(
-          'auto.components.settings.linear.agent.skill.install.cta.copiedCommand',
-          'Copied command.'
-        )
-      )
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : translate(
-              'auto.components.settings.linear.agent.skill.install.cta.copyFailed',
-              'Failed to copy command.'
-            )
-      )
-    }
-  }
 
   return (
     <div className={subordinateRowClass}>
@@ -135,45 +111,42 @@ export function LinearAgentSkillInstallCta({
       {skill.error ? <p className="text-xs text-destructive">{skill.error}</p> : null}
       {!skill.loading && (
         <>
-          <p className="text-xs text-muted-foreground">
-            {skill.installed
-              ? translate(
-                  'auto.components.settings.linear.agent.skill.install.cta.installedDescription',
-                  'Agent skill installed. To update it, run:'
-                )
-              : translate(
-                  'auto.components.settings.linear.agent.skill.install.cta.description',
-                  'Let agents read and edit Linear tasks. Full guided setup (connect + skill + visibility) is under Settings → Task Sources.'
-                )}
-          </p>
-          <div className={commandRowClass}>
-            <code className="scrollbar-sleek min-w-0 flex-1 overflow-x-auto whitespace-nowrap">
-              {command}
-            </code>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  className="shrink-0"
-                  aria-label={translate(
-                    'auto.components.settings.linear.agent.skill.install.cta.copyCommand',
-                    'Copy command'
-                  )}
-                  onClick={() => void copyCommand()}
-                >
-                  <Copy className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top" sideOffset={4}>
-                {translate(
-                  'auto.components.settings.linear.agent.skill.install.cta.copyCommand',
-                  'Copy command'
-                )}
-              </TooltipContent>
-            </Tooltip>
-          </div>
+          {skill.installed ? null : (
+            <p className="text-xs text-muted-foreground">
+              {translate(
+                'auto.components.settings.linear.agent.skill.install.cta.description',
+                'Let agents read and edit Linear tasks. Full guided setup (connect + skill + visibility) is under Settings → Task Sources.'
+              )}
+            </p>
+          )}
+          {state.kind === 'unsupported' || bundledSkillInstallNeedsAttention(state) ? null : (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              className="w-fit"
+              onClick={() => void install([skillName])}
+              disabled={installing || !ready}
+            >
+              {installing ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Download className="size-3" />
+              )}
+              {installing
+                ? translate(
+                    'auto.components.settings.AgentSkillSetupPanel.installing',
+                    'Installing...'
+                  )
+                : skill.installed
+                  ? translate('auto.components.settings.AgentSkillSetupPanel.updateLabel', 'Update')
+                  : translate(
+                      'auto.components.skills.SkillInstallDialog.39acb9e8f4',
+                      'Install skill'
+                    )}
+            </Button>
+          )}
+          <BundledSkillInstallStatus install={skillInstall} buttonSize="xs" />
           {remote || agentRuntime.runtime === 'wsl' ? (
             <p className="text-[11px] text-muted-foreground/70">
               {getLinearAgentSkillSetupInlineRuntimeCopy(remote, agentRuntime)}

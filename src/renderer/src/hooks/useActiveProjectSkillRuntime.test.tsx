@@ -41,15 +41,6 @@ describe('useActiveProjectSkillRuntime', () => {
     delete (window as unknown as { api?: unknown }).api
   })
 
-  // Why: with no local project runtime, buildSkillCommandForRuntime still emits the
-  // Windows host cmd.exe wrapper, which Git Bash would mangle into MSYS paths.
-  it('still overrides a POSIX-family Windows shell when no project runtime resolves', () => {
-    const { result } = renderHook(() => useActiveProjectSkillRuntime())
-
-    expect(result.current.projectRuntime).toBeUndefined()
-    expect(result.current.terminalShellOverride).toBe('powershell.exe')
-  })
-
   it('adopts the global WSL default when no project is active', () => {
     setGlobalWslDefault('Ubuntu')
     const { result } = renderHook(() => useActiveProjectSkillRuntime())
@@ -77,7 +68,7 @@ describe('useActiveProjectSkillRuntime', () => {
     useAppStore.setState({ activeRepoId: null })
   })
 
-  it('does not inject the local WSL runtime or shell into a remote environment', () => {
+  it('does not inject the local WSL runtime into a remote environment', () => {
     setGlobalWslDefault('Ubuntu')
     useAppStore.setState({
       settings: {
@@ -89,14 +80,6 @@ describe('useActiveProjectSkillRuntime', () => {
     const { result } = renderHook(() => useActiveProjectSkillRuntime())
 
     expect(result.current.agentRuntime).toBeUndefined()
-    expect(result.current.terminalShellOverride).toBeUndefined()
-  })
-
-  it('leaves the shell alone on non-Windows hosts', () => {
-    setPlatform('darwin')
-    const { result } = renderHook(() => useActiveProjectSkillRuntime())
-
-    expect(result.current.terminalShellOverride).toBeUndefined()
   })
 
   it('limits freshness pills to this machine and paired hosts', () => {
