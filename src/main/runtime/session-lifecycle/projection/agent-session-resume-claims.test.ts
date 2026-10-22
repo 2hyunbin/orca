@@ -61,6 +61,28 @@ describe('AgentSessionResumeClaims', () => {
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
   })
 
+  it('keeps a hold until every PTY its overlapping opens bound has exited', () => {
+    const { claims, exits } = makeClaims()
+    const first = claims.claim(SESSION, 'tab:a')
+    const second = claims.claim(SESSION, 'tab:a')
+    first?.bind('pty-1')
+    second?.bind('pty-2')
+
+    exits.get('pty-2')?.()
+    expect(claims.claim(SESSION, 'tab:b')).toBeNull()
+    exits.get('pty-1')?.()
+    expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
+  })
+
+  it('keeps a hold while an overlapping open is still spawning', () => {
+    const { claims, exits } = makeClaims()
+    claims.claim(SESSION, 'tab:a')?.bind('pty-1')
+    claims.claim(SESSION, 'tab:a')
+
+    exits.get('pty-1')?.()
+    expect(claims.claim(SESSION, 'tab:b')).toBeNull()
+  })
+
   it('ends a hold once the hook store reports it in its pane', () => {
     let reported = false
     const { claims, exits } = makeClaims(() => reported)

@@ -15,11 +15,12 @@ export type AgentSessionResumeHold = ResumedAgentSession & {
   claimedAt: number
 }
 
-type Hold = AgentSessionResumeHold & { holders: number; stopWatchingExit: () => void }
+/** `unsettled`: shares whose create has neither bound a PTY nor released; `ptys`: exit watchers. */
+type Hold = AgentSessionResumeHold & { unsettled: number; ptys: Map<string, () => void> }
 
 /** A resumer's share of a hold, settled only from its own create's evidence. */
 export type AgentSessionResumeClaim = {
-  /** The exact PTY this resumer's create produced; its exit ends the hold. */
+  /** The exact PTY this resumer's create produced; the hold ends once every such PTY exits. */
   bind: (ptyId: string) => void
   /** Releases when nothing was dispatched or the spawn proved its exit; otherwise stays held. */
   settleFailure: (dispatched: boolean, error?: unknown) => void
@@ -50,15 +51,15 @@ export class AgentSessionResumeClaims {
       if (held.paneKey !== paneKey) {
         return null
       }
-      held.holders += 1
+      held.unsettled += 1
       return this.share(held)
     }
     const hold: Hold = {
       ...session,
       paneKey,
       claimedAt: Date.now(),
-      holders: 1,
-      stopWatchingExit: () => {}
+      unsettled: 1,
+      ptys: new Map()
     }
     this.holds.add(hold)
     return this.share(hold)
@@ -83,8 +84,16 @@ export class AgentSessionResumeClaims {
   }
 
   private end(hold: Hold): void {
-    hold.stopWatchingExit()
+    for (const stopWatching of hold.ptys.values()) {
+      stopWatching()
+    }
     this.holds.delete(hold)
+  }
+
+  private endIfSettled(hold: Hold): void {
+    if (hold.unsettled === 0 && hold.ptys.size === 0) {
+      this.end(hold)
+    }
   }
 
   private share(hold: Hold): AgentSessionResumeClaim {
@@ -95,9 +104,18 @@ export class AgentSessionResumeClaims {
           return
         }
         open = false
-        if (this.holds.has(hold)) {
-          hold.stopWatchingExit()
-          hold.stopWatchingExit = this.lifecycle.watchExit(ptyId, () => this.end(hold))
+        hold.unsettled -= 1
+        // Why every PTY: overlapping opens of one pane can each spawn, and any may still write.
+        if (this.holds.has(hold) && !hold.ptys.has(ptyId)) {
+          hold.ptys.set(ptyId, () => {})
+          const stopWatching = this.lifecycle.watchExit(ptyId, () => {
+            hold.ptys.get(ptyId)?.()
+            hold.ptys.delete(ptyId)
+            this.endIfSettled(hold)
+          })
+          if (hold.ptys.has(ptyId)) {
+            hold.ptys.set(ptyId, stopWatching)
+          }
         }
       },
       settleFailure: (dispatched, error) => {
@@ -108,10 +126,8 @@ export class AgentSessionResumeClaims {
           return
         }
         open = false
-        hold.holders -= 1
-        if (hold.holders === 0) {
-          this.end(hold)
-        }
+        hold.unsettled -= 1
+        this.endIfSettled(hold)
       }
     }
   }

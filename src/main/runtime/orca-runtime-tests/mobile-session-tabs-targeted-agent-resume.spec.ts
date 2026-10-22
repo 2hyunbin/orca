@@ -43,6 +43,27 @@ function makeSleptWorkspace() {
 
 type Fixture = ReturnType<typeof makeSleptWorkspace>
 
+type DurableMutationStore = { runDurableMutation: (mutate: unknown) => Promise<unknown> }
+
+function isDurableMutationStore(
+  store: Fixture['runtimeStore']
+): store is Fixture['runtimeStore'] & DurableMutationStore {
+  return 'runDurableMutation' in store && typeof store.runDurableMutation === 'function'
+}
+
+type WorkspaceScopeResolver = {
+  resolveTerminalWorkspaceLaunchScope: (selector: string) => Promise<unknown>
+}
+
+function hasWorkspaceScopeResolver(
+  runtime: OrcaRuntimeService
+): runtime is OrcaRuntimeService & WorkspaceScopeResolver {
+  return (
+    'resolveTerminalWorkspaceLaunchScope' in runtime &&
+    typeof runtime.resolveTerminalWorkspaceLaunchScope === 'function'
+  )
+}
+
 function sessionRow(paneKey: string, receivedAt = 0): AgentStatusIpcPayload {
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the resume guards read only paneKey, providerSession and the observation clocks.
   return { paneKey, providerSession: SESSION, receivedAt } as never
@@ -122,7 +143,7 @@ function storedRecord(fixture: Fixture) {
 
 describe('resumeAgentSessionInWorkspace', () => {
   // Review repro, on the runtime-owned path: the spawn started but its reply was lost.
-  it('review: retains ownership after an ambiguous create with a running resume', async () => {
+  it('retains ownership after an ambiguous create with a running resume', async () => {
     const fixture = makeSleptWorkspace()
     const handle = deriveRemoteRuntimeTerminalCreateHandle(
       'agent-session-resume',
@@ -170,20 +191,20 @@ describe('resumeAgentSessionInWorkspace', () => {
     expect(send).not.toHaveBeenCalledWith('terminal:requestTabCreate', expect.anything())
   })
 
-  it('review: rechecks hook ownership when another resume settles during pane preflight', async () => {
+  it('rechecks hook ownership when another resume settles during pane preflight', async () => {
     const fixture = makeSleptWorkspace()
     let rows: AgentStatusIpcPayload[] = []
     const { runtime, spawn, resume, openOldPane } = makeRuntime(fixture, {
       rows: () => rows,
       checkHookAgentPresence: async () => 'live'
     })
-    const resolveWorkspace: unknown = Reflect.get(runtime, 'resolveTerminalWorkspaceLaunchScope')
-    if (typeof resolveWorkspace !== 'function') {
+    if (!hasWorkspaceScopeResolver(runtime)) {
       throw new Error('missing resolver')
     }
+    const resolveWorkspace = runtime.resolveTerminalWorkspaceLaunchScope.bind(runtime)
     let first = true
     Object.assign(runtime, {
-      resolveTerminalWorkspaceLaunchScope: async (...args: unknown[]) => {
+      resolveTerminalWorkspaceLaunchScope: async (selector: string) => {
         if (first) {
           first = false
           // Why no throw on refusal: the pane's earlier claim now refuses this resume outright.
@@ -192,7 +213,7 @@ describe('resumeAgentSessionInWorkspace', () => {
             rows = [sessionRow(result.paneKey, Date.now() + 1)]
           }
         }
-        return Reflect.apply(resolveWorkspace, runtime, args)
+        return resolveWorkspace(selector)
       }
     })
     await openOldPane()
@@ -260,14 +281,14 @@ describe('resumeAgentSessionInWorkspace', () => {
     const fixture = makeSleptWorkspace()
     const { spawn, attachWindow, resume } = makeRuntime(fixture)
     const store = fixture.runtimeStore
-    if (!('runDurableMutation' in store) || typeof store.runDurableMutation !== 'function') {
+    if (!isDurableMutationStore(store)) {
       throw new Error('fixture store is not durable')
     }
-    const commit = store.runDurableMutation
+    const commit = store.runDurableMutation.bind(store)
     Object.assign(store, {
-      runDurableMutation: (...args: unknown[]) => {
+      runDurableMutation: (mutate: unknown) => {
         attachWindow()
-        return Reflect.apply(commit, store, args)
+        return commit(mutate)
       }
     })
 
