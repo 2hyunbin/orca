@@ -2,12 +2,12 @@ import {
   isEmptyLinearIssueAttributeFilter,
   linearIssueAttributeFilterSignature,
   type LinearIssueAttributeFilter
-} from '../../../shared/linear/issue-attribute-filter'
+} from '../../../../../shared/linear/issue-attribute-filter'
 import {
   getTaskSourceCacheScope,
   type TaskSourceContext
-} from '../../../shared/task-source-context'
-import type { LinearIssueListReadArgs } from '../store/slices/linear'
+} from '../../../../../shared/task-source-context'
+import type { LinearIssueListReadArgs } from '../../../store/slices/linear/linear-slice-contract'
 
 export function isLinearIssueSearchActive(immediateQuery: string, appliedQuery: string): boolean {
   return immediateQuery.trim().length > 0 || appliedQuery.trim().length > 0

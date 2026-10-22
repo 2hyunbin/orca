@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { LinearTeam } from '../../../shared/linear/workspace-types'
+import type { LinearTeam } from '../../../../../shared/linear/workspace-types'
 import {
   reconcileLinearTeamSelection,
   storedLinearTeamSelection
