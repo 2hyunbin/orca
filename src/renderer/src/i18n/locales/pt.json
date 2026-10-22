@@ -12,8 +12,12 @@
       "status": "PR #{{number}} desvinculado"
     },
     "discard": {
+      "deleteUntrackedFileDescription": "Isso excluirá permanentemente este arquivo não rastreado. Essa ação não pode ser desfeita.",
+      "deleteUntrackedFilesDescription": "Isso excluirá permanentemente estes {{count}} arquivos não rastreados. Essa ação não pode ser desfeita.",
       "restoreStagedVersionDescription": "Isso restaurará a última versão preparada e descartará a exclusão. Essa ação não pode ser desfeita.",
-      "unstagedChangesDescription": "Isso reverterá as alterações não preparadas neste arquivo. Essa ação não pode ser desfeita."
+      "unstagedChangesDescription": "Isso reverterá as alterações não preparadas neste arquivo. Essa ação não pode ser desfeita.",
+      "unstagedSelectionIncludingUntrackedDescription": "Isso reverterá as alterações não preparadas e excluirá permanentemente quaisquer arquivos não rastreados nesta seleção. Essa ação não pode ser desfeita.",
+      "unstagedFilesIncludingUntrackedDescription": "Isso reverterá as alterações não preparadas e excluirá permanentemente quaisquer arquivos não rastreados entre estes {{count}} arquivos. Essa ação não pode ser desfeita."
     }
   },
   "githubChecks": {
@@ -10365,7 +10369,6 @@
             "databaseCount_one": "{{value0}} banco de dados",
             "databaseCount_other": "{{value0}} bancos de dados",
             "scanning": "Verificando {{value0}}",
-            "reading": "Lendo {{value0}} arquivos",
             "scanned": "Verificação concluída: {{value0}}"
           }
         }
