@@ -40,9 +40,7 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
 
   protected readonly agentSessionResumeClaims = new AgentSessionResumeClaims({
     reported: (hold) => this.hookStoreReportsResumeHold(hold),
-    watchExit: (ptyId, onExit) => this.subscribeToPtyExit(ptyId, onExit),
-    panePtyIds: (paneKey) =>
-      [...this.ptysById.values()].filter((pty) => pty.paneKey === paneKey).map((pty) => pty.ptyId)
+    watchExit: (ptyId, onExit) => this.subscribeToPtyExit(ptyId, onExit)
   })
 
   /**
@@ -112,7 +110,7 @@ export abstract class OrcaRuntimeWithAgentSessionResumeOwnership extends OrcaRun
     }
     const resume = await this.preparePaneOwnedResume(worktreeId, record).catch(() => null)
     if (!resume) {
-      resumeClaim.release()
+      resumeClaim.settleFailure(false)
       return {}
     }
     return { ...resume, resumeClaim }

@@ -68,21 +68,22 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
       return { ok: false, reason: 'held_elsewhere' }
     }
     let dispatched = false
+    let failure: unknown
     const result = await this.resumeClaimedAgentSession(worktreeId, session, request, {
       identity,
       onPtySpawnDispatched: () => {
         dispatched = true
+      },
+      onPtyCreated: claim.bind
+    }).catch((error: unknown): AgentSessionResumeResult => {
+      failure = error
+      return {
+        ok: false,
+        reason: !dispatched && request.signal?.aborted ? 'aborted' : 'create_failed'
       }
-    }).catch((): AgentSessionResumeResult => ({
-      ok: false,
-      reason: !dispatched && request.signal?.aborted ? 'aborted' : 'create_failed'
-    }))
-    // Why: once the spawn request left, a failure proves nothing (a lost SSH reply), so the pane
-    // stays held until its PTY exits or the hook store names it.
-    if (result.ok || dispatched) {
-      claim.bind(result.ok ? result.ptyId : undefined)
-    } else {
-      claim.release()
+    })
+    if (!result.ok) {
+      claim.settleFailure(dispatched, failure)
     }
     return result
   }
@@ -91,7 +92,11 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
     worktreeId: string,
     session: ResumedAgentSession,
     request: { captureHostId: ExecutionHostId; mutationId: string; signal?: AbortSignal },
-    create: { identity: { tabId: string; leafId: string }; onPtySpawnDispatched: () => void }
+    create: {
+      identity: { tabId: string; leafId: string }
+      onPtySpawnDispatched: () => void
+      onPtyCreated: (ptyId: string) => void
+    }
   ): Promise<AgentSessionResumeResult> {
     const refuse = (reason: AgentSessionResumeRefusal): AgentSessionResumeResult => ({
       ok: false,
@@ -169,6 +174,7 @@ export abstract class OrcaRuntimeWithResumeAgentSessionInWorkspace extends OrcaR
         identity: create.identity,
         createMutation: { clientIdentity: 'agent-session-resume', id: request.mutationId },
         onPtySpawnDispatched: create.onPtySpawnDispatched,
+        onPtyCreated: create.onPtyCreated,
         signal: request.signal
       }
     )

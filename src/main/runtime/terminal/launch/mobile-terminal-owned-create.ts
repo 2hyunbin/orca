@@ -50,6 +50,8 @@ export type OwnedMobileTerminalCreateOptions = {
   refuseSleptWorktree?: boolean
   /** See TerminalCreateOptions; a create that throws before it proves nothing spawned. */
   onPtySpawnDispatched?: () => void
+  /** The PTY this create produced, reported before publication can fail. */
+  onPtyCreated?: (ptyId: string) => void
 }
 
 export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal extends OrcaRuntimeWithResolveMobileSessionTerminalCommand {
@@ -97,33 +99,27 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
         focus: false,
         ...(opts.presentation ? { presentation: opts.presentation } : {}),
         ...(opts.afterDesktopTabId ? { afterTabId: opts.afterDesktopTabId } : {}),
-        ...(mutationHandle
-          ? {
-              onPtySpawnDispatched: (launch) => {
-                opts.onPtySpawnDispatched?.()
-                if (!launch) {
-                  return
-                }
-                if (
-                  !this.ownedMobileDispatchRecipes.has(mutationHandle) &&
-                  this.ownedMobileDispatchRecipes.size >= 4096
-                ) {
-                  throw new Error('runtime_unavailable')
-                }
-                // Retain original dispatch evidence across an ambiguous response; retry payloads cannot replace it.
-                this.ownedMobileDispatchRecipes.set(mutationHandle, {
-                  connectionId: workspace.connectionId ?? null,
-                  recordedAt: Date.now(),
-                  ...(launch.launchConfig
-                    ? { launchConfig: copySleepingAgentLaunchConfig(launch.launchConfig) }
-                    : {}),
-                  ...(launch.launchAgent ? { launchAgent: launch.launchAgent } : {})
-                })
-              }
+        onPtySpawnDispatched: (launch) => {
+          if (mutationHandle && launch) {
+            if (
+              !this.ownedMobileDispatchRecipes.has(mutationHandle) &&
+              this.ownedMobileDispatchRecipes.size >= 4096
+            ) {
+              throw new Error('runtime_unavailable')
             }
-          : opts.onPtySpawnDispatched
-            ? { onPtySpawnDispatched: opts.onPtySpawnDispatched }
-            : {}),
+            // Retain original dispatch evidence across an ambiguous response; retry payloads cannot replace it.
+            this.ownedMobileDispatchRecipes.set(mutationHandle, {
+              connectionId: workspace.connectionId ?? null,
+              recordedAt: Date.now(),
+              ...(launch.launchConfig
+                ? { launchConfig: copySleepingAgentLaunchConfig(launch.launchConfig) }
+                : {}),
+              ...(launch.launchAgent ? { launchAgent: launch.launchAgent } : {})
+            })
+          }
+          // Why after the recipe: its refusal above is still before dispatch.
+          opts.onPtySpawnDispatched?.()
+        },
         ...(preAllocatedHandle ? { preAllocatedHandle } : {}),
         command: opts.command,
         ...(opts.shellOverride ? { shellOverride: opts.shellOverride } : {}),
@@ -165,6 +161,9 @@ export abstract class OrcaRuntimeWithCreateRuntimeOwnedMobileSessionTerminal ext
           (_selector, handle) => create(handle)
         )
       : await create()
+    if (terminal.ptyId) {
+      opts.onPtyCreated?.(terminal.ptyId)
+    }
     const livePty = this.getLivePtyForHandle(terminal.handle)
     if (!livePty) {
       throw new Error('terminal_handle_stale')

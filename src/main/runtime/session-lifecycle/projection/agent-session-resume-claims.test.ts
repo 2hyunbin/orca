@@ -3,17 +3,16 @@ import { AgentSessionResumeClaims } from './agent-session-resume-claims'
 
 const SESSION = { agent: 'claude', providerSession: { key: 'session_id', id: 'one' } } as const
 
-function makeClaims(reported = () => false, panePtyIds: string[] = []) {
+function makeClaims(reported = () => false) {
   const exits = new Map<string, () => void>()
   const claims = new AgentSessionResumeClaims({
     reported,
-    panePtyIds: () => panePtyIds,
     watchExit: (ptyId, onExit) => {
       exits.set(ptyId, onExit)
       return () => exits.delete(ptyId)
     }
   })
-  return { claims, exits, panePtyIds }
+  return { claims, exits }
 }
 
 describe('AgentSessionResumeClaims', () => {
@@ -26,32 +25,40 @@ describe('AgentSessionResumeClaims', () => {
     ).not.toBeNull()
   })
 
-  it('shares one pane between overlapping opens until every open releases', () => {
+  it('shares one pane between overlapping opens until every open fails before dispatch', () => {
     const { claims } = makeClaims()
     const first = claims.claim(SESSION, 'tab:a')
     const second = claims.claim(SESSION, 'tab:a')
-    first?.release()
+    first?.settleFailure(false)
     expect(claims.claim(SESSION, 'tab:b')).toBeNull()
-    second?.release()
+    second?.settleFailure(false)
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
   })
 
-  it('ends a bound hold when its PTY exits, and stops watching it', () => {
+  it('keeps a dispatched spawn with no identified PTY held', () => {
+    const { claims } = makeClaims()
+    claims.claim(SESSION, 'tab:a')?.settleFailure(true, new Error('spawn reply lost'))
+    expect(claims.claim(SESSION, 'tab:b')).toBeNull()
+  })
+
+  it('releases a dispatched spawn that proved its exit during start', () => {
+    const { claims } = makeClaims()
+    claims
+      .claim(SESSION, 'tab:a')
+      ?.settleFailure(true, new Error('agent_session_exited_during_start'))
+    expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
+  })
+
+  it('ends a bound hold when its exact PTY exits, even if the create then failed', () => {
     const { claims, exits } = makeClaims()
-    claims.claim(SESSION, 'tab:a')?.bind('pty-1')
+    const claim = claims.claim(SESSION, 'tab:a')
+    claim?.bind('pty-1')
+    claim?.settleFailure(true, new Error('publication failed'))
     expect(claims.claim(SESSION, 'tab:b')).toBeNull()
 
     exits.get('pty-1')?.()
     expect(exits.has('pty-1')).toBe(false)
     expect(claims.claim(SESSION, 'tab:b')).not.toBeNull()
-  })
-
-  it('binds a spawned-then-failed create to the PTY its pane gained since the claim', () => {
-    const { claims, exits, panePtyIds } = makeClaims(() => false, ['old-pty'])
-    const claim = claims.claim(SESSION, 'tab:a')
-    panePtyIds.push('new-pty')
-    claim?.bind()
-    expect([...exits.keys()]).toEqual(['new-pty'])
   })
 
   it('ends a hold once the hook store reports it in its pane', () => {

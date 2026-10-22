@@ -11,6 +11,7 @@ import {
 } from '../orca-runtime-test-fixtures.spec'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
 import type { PtyProcessInfo } from '../../providers/pty-provider-contract'
+import { deterministicAgentSessionUuid } from '../runtime-agent-launch-resolution'
 import { deriveRemoteRuntimeTerminalCreateHandle } from '../remote-runtime-terminal-create-identity'
 
 const PANE_KEY = `host-tab:${HEADLESS_LEAF_ID}`
@@ -504,5 +505,111 @@ describe('resumeAgentSessionInWorkspace retries, cancellation and a failed publi
     unsubscribe()
     runtime.onPtyExit('resumed-pty', 0)
     await expect(resume({ mutationId: 'next-delivery' })).resolves.toMatchObject({ ok: true })
+  })
+})
+
+describe('resumeAgentSessionInWorkspace claim lifetime', () => {
+  it('releases the hold after a proven exit before registration', async () => {
+    let first = true
+    const { runtime, resume } = makeRuntime(makeSleptWorkspace(), {
+      spawn: async () => {
+        if (first) {
+          first = false
+          runtime.beginPtyRegistration('resumed-pty')
+          runtime.onPtyExit('resumed-pty', 0)
+        }
+        return { id: 'resumed-pty' }
+      }
+    })
+    await expect(resume()).resolves.toEqual({ ok: false, reason: 'create_failed' })
+    await expect(resume({ mutationId: 'after-proven-exit' })).resolves.toMatchObject({ ok: true })
+  })
+
+  it('does not settle a lost reply using another caller terminal in the same pane', async () => {
+    let rejectFirst!: (error: Error) => void
+    let started!: () => void
+    const start = new Promise<void>((resolve) => {
+      started = resolve
+    })
+    let calls = 0
+    const { runtime, resume, spawn } = makeRuntime(makeSleptWorkspace(), {
+      spawn: async () => {
+        calls += 1
+        if (calls === 1) {
+          started()
+          return new Promise<{ id: string }>((_resolve, reject) => {
+            rejectFirst = reject
+          })
+        }
+        return { id: `other-pty-${calls}` }
+      }
+    })
+    const first = resume()
+    await start
+    const args = spawn.mock.calls[0]?.[0]
+    if (
+      !args ||
+      typeof args !== 'object' ||
+      !('tabId' in args) ||
+      !('leafId' in args) ||
+      typeof args.tabId !== 'string' ||
+      typeof args.leafId !== 'string'
+    ) {
+      throw new Error('missing pane identity')
+    }
+    const other = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
+      tabId: args.tabId,
+      leafId: args.leafId,
+      command: 'echo another caller',
+      focus: false
+    })
+    rejectFirst(new Error('lost spawn reply'))
+    await expect(first).resolves.toEqual({ ok: false, reason: 'create_failed' })
+    if (!other.ptyId) {
+      throw new Error('missing other PTY')
+    }
+    runtime.onPtyExit(other.ptyId, 0)
+    await expect(resume({ mutationId: 'other-delivery' })).resolves.toEqual({
+      ok: false,
+      reason: 'held_elsewhere'
+    })
+  })
+
+  it('does not settle an ambiguous resume using an earlier exited shell in its pane', async () => {
+    const seed = `${TEST_WORKTREE_ID}\0${MUTATION_ID}`
+    const tabId = deterministicAgentSessionUuid(`agent-session-resume-tab\0${seed}`)
+    const leafId = deterministicAgentSessionUuid(`agent-session-resume-leaf\0${seed}`)
+    let firstInventory = true
+    let spawns = 0
+    const { runtime, resume } = makeRuntime(makeSleptWorkspace(), {
+      listProcesses: async () => {
+        if (firstInventory) {
+          firstInventory = false
+          const other = await runtime.createTerminal(`id:${TEST_WORKTREE_ID}`, {
+            tabId,
+            leafId,
+            command: 'echo another caller',
+            focus: false
+          })
+          if (!other.ptyId) {
+            throw new Error('missing shell PTY')
+          }
+          runtime.onPtyExit(other.ptyId, 0)
+        }
+        return []
+      },
+      spawn: async () => {
+        spawns += 1
+        if (spawns === 2) {
+          throw new Error('resume started but reply lost')
+        }
+        return { id: `sequential-pty-${spawns}` }
+      }
+    })
+    await expect(resume()).resolves.toEqual({ ok: false, reason: 'create_failed' })
+    await expect(resume({ mutationId: 'next-delivery' })).resolves.toEqual({
+      ok: false,
+      reason: 'held_elsewhere'
+    })
   })
 })

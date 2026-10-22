@@ -176,18 +176,13 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
           onPtySpawnDispatched: () => {
             dispatched = true
           },
+          ...(resumeClaim ? { onPtyCreated: resumeClaim.bind } : {}),
           ...(automatic ? { refuseSleptWorktree: true } : {})
         }
       )
-      resumeClaim?.bind(created.tab.ptyId ?? null)
       return created
     } catch (err) {
-      // Why: once the spawn request left, a failure proves nothing (a lost SSH reply).
-      if (dispatched) {
-        resumeClaim?.bind()
-      } else {
-        resumeClaim?.release()
-      }
+      resumeClaim?.settleFailure(dispatched, err)
       if (
         !(automatic && isWorktreeTerminalsSleepingError(err)) &&
         sessionId &&

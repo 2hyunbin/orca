@@ -17,11 +17,12 @@ export type AgentSessionResumeHold = ResumedAgentSession & {
 
 type Hold = AgentSessionResumeHold & { holders: number; stopWatchingExit: () => void }
 
-/** A resumer's share of a hold: bind it to the spawned PTY, or release it when nothing spawned. */
+/** A resumer's share of a hold, settled only from its own create's evidence. */
 export type AgentSessionResumeClaim = {
-  /** Without an id, binds the PTY the pane gained since the claim, if the runtime holds one. */
-  bind: (ptyId?: string | null) => void
-  release: () => void
+  /** The exact PTY this resumer's create produced; its exit ends the hold. */
+  bind: (ptyId: string) => void
+  /** Releases when nothing was dispatched or the spawn proved its exit; otherwise stays held. */
+  settleFailure: (dispatched: boolean, error?: unknown) => void
 }
 
 /**
@@ -38,8 +39,6 @@ export class AgentSessionResumeClaims {
       reported: (hold: AgentSessionResumeHold) => boolean
       /** Calls `onExit` once the PTY proves exited; returns the unsubscribe. */
       watchExit: (ptyId: string, onExit: () => void) => () => void
-      /** The PTYs the runtime has bound to this pane. */
-      panePtyIds: (paneKey: string) => string[]
     }
   ) {}
 
@@ -90,23 +89,22 @@ export class AgentSessionResumeClaims {
 
   private share(hold: Hold): AgentSessionResumeClaim {
     let open = true
-    const priorPtyIds = new Set(this.lifecycle.panePtyIds(hold.paneKey))
     return {
-      bind: (exact) => {
+      bind: (ptyId) => {
         if (!open) {
           return
         }
         open = false
-        // Why: a create can spawn and then fail; its PTY's exit must still end the hold.
-        const ptyId =
-          exact ?? this.lifecycle.panePtyIds(hold.paneKey).findLast((id) => !priorPtyIds.has(id))
-        if (ptyId && this.holds.has(hold)) {
+        if (this.holds.has(hold)) {
           hold.stopWatchingExit()
           hold.stopWatchingExit = this.lifecycle.watchExit(ptyId, () => this.end(hold))
         }
       },
-      release: () => {
-        if (!open) {
+      settleFailure: (dispatched, error) => {
+        // Why: a dispatched spawn with no identified PTY may still run (a lost SSH reply).
+        const exitedDuringStart =
+          error instanceof Error && error.message === 'agent_session_exited_during_start'
+        if (!open || (dispatched && !exitedDuringStart)) {
           return
         }
         open = false
