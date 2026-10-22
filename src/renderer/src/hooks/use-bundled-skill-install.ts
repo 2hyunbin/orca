@@ -94,7 +94,14 @@ export function useBundledSkillInstall(
         const planned = await planBundledSkillsOnTarget(target, request)
         if (planned.kind === 'unsupported') {
           next = { kind: 'unsupported', reason: planned.reason }
-        } else if (bundledSkillInstallAction(planned.plan).kind === 'attention') {
+        } else if (
+          bundledSkillInstallAction(planned.plan).kind === 'attention' ||
+          planned.plan.skills.some((entry) =>
+            entry.ops.some(
+              (op) => request.force?.includes(op.path) && op.kind === 'leave' && !op.replaceable
+            )
+          )
+        ) {
           next = {
             kind: 'failed',
             message: translate(

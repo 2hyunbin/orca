@@ -2,7 +2,14 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { doneResult, planOf, sharedEntry } from '../skills/bundled-skill-plan-fixtures.test-support'
+import type { BundledSkillPlanRequest } from '../../../../shared/bundled-skill-plan'
+import {
+  doneResult,
+  planEntry,
+  planOf,
+  planOp,
+  sharedEntry
+} from '../skills/bundled-skill-plan-fixtures.test-support'
 import { AgentSkillSetupPanel } from './AgentSkillSetupPanel'
 import { LinearAgentSkillInstallCta } from './linear-agent-skill-install-cta'
 import { BrowserAction } from '../feature-wall/FeatureWallBrowserAction'
@@ -101,6 +108,84 @@ function renderSurface(surface: 'panel' | 'linear' | 'browser' | 'capabilities')
 
 for (const surface of ['panel', 'linear', 'browser', 'capabilities'] as const) {
   describe(`${surface} blocked setup`, () => {
+    it.each([false, true])(
+      'shows Needs attention without executing an unreadable replacement (other work: %s)',
+      async (otherWork) => {
+        const name = surface === 'linear' ? 'orca-linear' : 'orca-cli'
+        const path = `/home/u/.agents/skills/${name}`
+        const agentPath = `/home/u/.claude/skills/${name}`
+        const edited = planOf([
+          planEntry(name, [
+            planOp('leave', path, { reason: 'edited', replaceable: true }),
+            ...(otherWork
+              ? [planOp('leave', agentPath, { reason: 'edited', replaceable: true })]
+              : [])
+          ])
+        ])
+        const blocked = planOf([
+          planEntry(name, [
+            planOp('leave', path, {
+              observed: { kind: 'unreadable' },
+              reason: 'unreadable',
+              replaceable: false
+            }),
+            ...(otherWork ? [planOp('replace', agentPath)] : [])
+          ])
+        ])
+        mocks.plan.mockImplementation((_target, request: BundledSkillPlanRequest) => ({
+          kind: 'plan',
+          plan: request.force ? blocked : edited
+        }))
+        mocks.execute.mockResolvedValue(doneResult(blocked))
+        renderSurface(surface)
+
+        fireEvent.click(await screen.findByRole('button', { name: "Replace with Orca's copy" }))
+
+        expect(await screen.findByRole('button', { name: 'Retry' })).toBeDefined()
+        expect(screen.getAllByText('Needs attention').length).toBeGreaterThan(0)
+        expect(screen.queryByRole('button', { name: "Replace with Orca's copy" })).toBeNull()
+        expect(mocks.plan).toHaveBeenCalledWith(TARGET, {
+          names: [name],
+          force: otherWork ? [path, agentPath] : [path]
+        })
+        expect(mocks.execute).not.toHaveBeenCalled()
+      }
+    )
+
+    it('executes the explicit replacement plan using its full-identity digest', async () => {
+      const name = surface === 'linear' ? 'orca-linear' : 'orca-cli'
+      const path = `/home/u/.agents/skills/${name}`
+      const edited = planOf([sharedEntry(name, 'leave', { reason: 'edited', replaceable: true })])
+      const replacement = planOf(
+        [
+          sharedEntry(name, 'replace', {
+            observed: {
+              kind: 'folder',
+              entries: ['SKILL.md:file', 'notes.md:file'],
+              skillDigest: 'c'.repeat(64),
+              treeDigest: 'd'.repeat(64)
+            }
+          })
+        ],
+        'e'.repeat(64)
+      )
+      mocks.plan.mockImplementation((_target, request: BundledSkillPlanRequest) => ({
+        kind: 'plan',
+        plan: request.force ? replacement : edited
+      }))
+      mocks.execute.mockResolvedValue(doneResult(replacement))
+      renderSurface(surface)
+
+      fireEvent.click(await screen.findByRole('button', { name: "Replace with Orca's copy" }))
+
+      expect(await screen.findByText('Updated', { exact: true })).toBeDefined()
+      expect(mocks.execute).toHaveBeenCalledExactlyOnceWith(TARGET, replacement.planDigest, {
+        names: [name],
+        force: [path]
+      })
+      expect(screen.queryByText('Needs attention')).toBeNull()
+    })
+
     it.each(['edited', 'other'] as const)(
       'offers Replace without forcing a preview of a %s copy',
       async (reason) => {
