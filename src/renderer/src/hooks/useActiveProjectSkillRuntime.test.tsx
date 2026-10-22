@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { getDefaultSettings } from '../../../shared/constants'
+import { FLOATING_TERMINAL_WORKTREE_ID, getDefaultSettings } from '../../../shared/constants'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { useAppStore } from '@/store'
 import {
   hasLocalSkillRuntimeAuthority,
@@ -34,7 +35,19 @@ describe('useActiveProjectSkillRuntime', () => {
   beforeEach(() => {
     setPlatform('win32')
     setWindowsShell('git-bash')
-    useAppStore.setState({ runtimeEnvironmentCatalogSettled: true, runtimeEnvironments: [] })
+    useAppStore.setState({
+      activeRepoId: null,
+      activeWorktreeId: null,
+      activeWorkspaceExecutionHostId: null,
+      projects: [],
+      repos: [],
+      worktreesByRepo: {},
+      folderWorkspaces: [],
+      projectGroups: [],
+      restoredRuntimeHostIdByWorkspaceSessionKey: {},
+      runtimeEnvironmentCatalogSettled: true,
+      runtimeEnvironments: []
+    })
   })
 
   afterEach(() => {
@@ -50,6 +63,8 @@ describe('useActiveProjectSkillRuntime', () => {
       wslDistro: 'Ubuntu',
       label: 'WSL Ubuntu'
     })
+    expect(result.current.bundledSkillTarget).toBeNull()
+    expect(result.current.canUseSkillFreshness).toBe(false)
   })
 
   it('ignores a windows-host global default so skill discovery keeps no target', () => {
@@ -80,6 +95,41 @@ describe('useActiveProjectSkillRuntime', () => {
     const { result } = renderHook(() => useActiveProjectSkillRuntime())
 
     expect(result.current.agentRuntime).toBeUndefined()
+  })
+
+  it.each<{ name: string; workspaceId: string; hostId: ExecutionHostId }>([
+    { name: 'SSH worktree', workspaceId: 'repo::/remote/ssh', hostId: 'ssh:box' },
+    { name: 'paired worktree', workspaceId: 'repo::/remote/paired', hostId: 'runtime:paired' },
+    { name: 'folder workspace', workspaceId: 'folder:restored', hostId: 'runtime:paired' }
+  ])(
+    'keeps a restored $name unresolved while owner rows are missing',
+    ({ workspaceId, hostId }) => {
+      useAppStore.setState({
+        activeRepoId: 'repo',
+        activeWorktreeId: workspaceId,
+        activeWorkspaceExecutionHostId: hostId
+      })
+
+      const { result } = renderHook(() => useActiveProjectSkillRuntime())
+
+      expect(result.current.bundledSkillTarget).toBeNull()
+      expect(result.current.canUseSkillFreshness).toBe(false)
+    }
+  )
+
+  it('keeps a local target when no workspace is active', () => {
+    const { result } = renderHook(() => useActiveProjectSkillRuntime())
+
+    expect(result.current.bundledSkillTarget).toEqual({ kind: 'local' })
+    expect(result.current.canUseSkillFreshness).toBe(true)
+  })
+
+  it('keeps a proven local target for floating terminals', () => {
+    useAppStore.setState({ activeWorktreeId: FLOATING_TERMINAL_WORKTREE_ID })
+    const { result } = renderHook(() => useActiveProjectSkillRuntime())
+
+    expect(result.current.bundledSkillTarget).toEqual({ kind: 'local' })
+    expect(result.current.canUseSkillFreshness).toBe(true)
   })
 
   it('limits freshness pills to this machine and paired hosts', () => {

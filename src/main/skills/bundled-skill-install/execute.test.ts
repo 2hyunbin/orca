@@ -150,6 +150,60 @@ describe('interrupted swaps', () => {
 })
 
 describe('the disk changing under a plan', () => {
+  it.each([
+    ['edited', 'notes.txt'],
+    ['edited', join('scripts', 'run.sh')],
+    ['foreign', 'notes.txt'],
+    ['foreign', join('scripts', 'run.sh')]
+  ])('does not replace a %s copy whose %s changed after preview', async (kind, auxiliary) => {
+    const home = await makeSkillHome()
+    const text = kind === 'edited' ? `---\nname: ${NAME}\n---\nmine\n` : 'another skill\n'
+    await writeCopy(home.shared, text)
+    const auxiliaryPath = join(home.shared, auxiliary)
+    await mkdir(dirname(auxiliaryPath), { recursive: true })
+    await writeFile(auxiliaryPath, 'before\n')
+    const input = serviceInput(home, { agents: [], force: [home.shared] })
+    const plan = await previewBundledSkillInstall(input)
+    expect(plan.skills[0].ops[0].kind).toBe('replace')
+
+    await writeFile(auxiliaryPath, 'after\n')
+    const result = await installBundledSkills(input, plan.planDigest)
+
+    expect(result.skills).toEqual([{ name: NAME, status: 'changed', ops: [] }])
+    expect(await readFile(join(home.shared, 'SKILL.md'), 'utf8')).toBe(text)
+    expect(await readFile(auxiliaryPath, 'utf8')).toBe('after\n')
+    expect(
+      await readdir(join(home.home, '.agents', '.orca-skill-backups')).catch(() => [])
+    ).toEqual([])
+    expect(await leftoverSiblings(home.shared)).toEqual([])
+  })
+
+  it('rechecks auxiliary content immediately before moving a replacement into backups', async () => {
+    const home = await makeSkillHome()
+    const text = `---\nname: ${NAME}\n---\nmine\n`
+    await writeCopy(home.shared, text)
+    const auxiliaryPath = join(home.shared, 'scripts', 'run.sh')
+    await mkdir(dirname(auxiliaryPath), { recursive: true })
+    await writeFile(auxiliaryPath, 'before\n')
+    const filesystem: BundledSkillFilesystem = {
+      ...nativeBundledSkillFilesystem,
+      ensureDirectory: async (path) => {
+        await nativeBundledSkillFilesystem.ensureDirectory(path)
+        await writeFile(auxiliaryPath, 'raced\n')
+      }
+    }
+    const input = serviceInput(home, { agents: [], force: [home.shared], filesystem })
+    const plan = await previewBundledSkillInstall(input)
+
+    const result = await installBundledSkills(input, plan.planDigest)
+
+    expect(result.skills[0].ops.map((op) => [op.kind, op.status])).toEqual([['replace', 'changed']])
+    expect(await readFile(join(home.shared, 'SKILL.md'), 'utf8')).toBe(text)
+    expect(await readFile(auxiliaryPath, 'utf8')).toBe('raced\n')
+    expect(await readdir(join(home.home, '.agents', '.orca-skill-backups'))).toEqual([])
+    expect(await leftoverSiblings(home.shared)).toEqual([])
+  })
+
   it('writes nothing when the folder changed after the preview', async () => {
     const home = await makeSkillHome()
     const input = await npxShared(home)

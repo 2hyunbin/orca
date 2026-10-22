@@ -18,7 +18,6 @@ let cachedPlan: { targetKey: string; result: BundledSkillPlanResult; revision: n
   null
 let pendingPlan: {
   targetKey: string
-  background: boolean
   request: Promise<BundledSkillPlanResult>
 } | null = null
 let invalidationRevision = 0
@@ -65,8 +64,7 @@ function publishSnapshot(next: SkillFreshnessSnapshot): void {
 
 async function loadPlan(
   target: BundledSkillTarget,
-  force: boolean,
-  background: boolean
+  force: boolean
 ): Promise<BundledSkillPlanResult> {
   const targetKey = bundledSkillTargetKey(target)
   if (force) {
@@ -77,10 +75,9 @@ async function loadPlan(
     if (cachedPlan?.targetKey === targetKey && cachedPlan.revision >= targetRevision) {
       return cachedPlan.result
     }
-    // Why: a user's re-check must not wait on a background plan that declined to boot WSL.
-    if (pendingPlan?.targetKey !== targetKey || (pendingPlan.background && !background)) {
+    if (pendingPlan?.targetKey !== targetKey) {
       const requestRevision = invalidationRevision
-      const request = planBundledSkillsOnTarget(target, {}, { background })
+      const request = planBundledSkillsOnTarget(target, {})
         .then((result) => {
           // Why per target: a late answer from the previous host must not satisfy this one.
           cachedPlan = {
@@ -99,7 +96,7 @@ async function loadPlan(
             pendingPlan = null
           }
         })
-      pendingPlan = { targetKey, background, request }
+      pendingPlan = { targetKey, request }
     }
     await pendingPlan.request
   }
@@ -108,11 +105,10 @@ async function loadPlan(
 /** Re-plan without going through the hook, for surfaces whose explicit refresh affordance
  *  must move the shared verdict. */
 export function refreshSkillFreshness(force = true): Promise<void> {
-  return refreshPlan(force, false)
+  return refreshPlan(force)
 }
 
-/** `background`: nobody asked, so a stopped WSL distro is not booted for it. */
-async function refreshPlan(force: boolean, background: boolean): Promise<void> {
+async function refreshPlan(force: boolean): Promise<void> {
   if (scheduledFocusRescan !== null) {
     window.clearTimeout(scheduledFocusRescan)
     scheduledFocusRescan = null
@@ -127,7 +123,7 @@ async function refreshPlan(force: boolean, background: boolean): Promise<void> {
   // stop authorizing UI even if the replacement plan fails.
   publishSnapshot({ ...IDLE, targetKey, loading: true })
   try {
-    const result = await loadPlan(target, force, background)
+    const result = await loadPlan(target, force)
     if (sequence === refreshSequence) {
       publishSnapshot(
         result.kind === 'plan'
@@ -152,14 +148,14 @@ function selectSkillFreshnessTarget(target: BundledSkillTarget): boolean {
     return false
   }
   activeTarget = target
-  void refreshPlan(true, true)
+  void refreshPlan(true)
   return true
 }
 
 function onWindowFocus(): void {
   const cooldownRemaining = FOCUS_RESCAN_COOLDOWN_MS - (Date.now() - lastCompletedScanAt)
   if (cooldownRemaining <= 0) {
-    void refreshPlan(true, true)
+    void refreshPlan(true)
     return
   }
   if (
@@ -175,14 +171,14 @@ function onWindowFocus(): void {
   scheduledFocusRescan = window.setTimeout(
     () => {
       scheduledFocusRescan = null
-      void refreshPlan(true, true)
+      void refreshPlan(true)
     },
     Math.min(cooldownRemaining, FOCUS_RESCAN_COOLDOWN_MS)
   )
 }
 
 function onInstalledSkillsChanged(): void {
-  void refreshPlan(true, true)
+  void refreshPlan(true)
 }
 
 function subscribe(subscriber: () => void): () => void {
@@ -220,7 +216,7 @@ function getDisabledSnapshot(): SkillFreshnessSnapshot {
 
 function ensurePlanLoaded(): void {
   if (!snapshot.plan && !snapshot.unsupported && !snapshot.loading) {
-    void refreshPlan(false, true)
+    void refreshPlan(false)
   }
 }
 
@@ -231,7 +227,7 @@ export type SkillFreshnessState = SkillFreshnessSnapshot & {
 async function skipSkillFreshnessRefresh(): Promise<void> {}
 
 function refreshSkillFreshnessAfterReenable(): Promise<void> {
-  pendingReenableRefresh ??= refreshPlan(true, true).finally(() => {
+  pendingReenableRefresh ??= refreshPlan(true).finally(() => {
     pendingReenableRefresh = null
   })
   return pendingReenableRefresh

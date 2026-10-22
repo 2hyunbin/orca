@@ -13,8 +13,6 @@ import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 /** The host whose Orca skills the Update dialog, badge and nudge plan and update. */
 export type BundledSkillTarget =
   | { kind: 'local' }
-  /** This Windows app's WSL distro, where the active project's (or the default) agents run. */
-  | { kind: 'wsl'; distro: string }
   /** A paired server or the managed server on an SSH host; it plans its own disk. */
   | { kind: 'environment'; environmentId: string }
   /** An SSH host no Orca server serves yet: nothing can plan it until it connects. */
@@ -25,8 +23,6 @@ export function bundledSkillTargetKey(target: BundledSkillTarget): string {
   switch (target.kind) {
     case 'local':
       return 'local'
-    case 'wsl':
-      return `wsl:${target.distro}`
     case 'environment':
       return `runtime:${target.environmentId}`
     case 'ssh':
@@ -51,15 +47,19 @@ export function servingExecutionHostId(
 
 /**
  * Where the agents run, never the client by default: null while the owning runtime is
- * unknown or a WSL project still needs its distro repaired. Pass the active workspace's owner
+ * unknown or the project runs in WSL. Pass the active workspace's owner
  * through `servingExecutionHostId`, so an SSH host with a managed server plans on that server.
+ * An omitted owner means no active workspace; null means its owner is unresolved.
  */
 export function resolveBundledSkillTarget(
   runtimeTarget: RuntimeClientTarget | null,
   projectRuntime: ProjectExecutionRuntimeResolution | undefined,
-  activeWorkspaceHostId: string | null = null
+  activeWorkspaceHostId?: string | null
 ): BundledSkillTarget | null {
   const owner = parseExecutionHostId(activeWorkspaceHostId)
+  if (activeWorkspaceHostId !== undefined && !owner) {
+    return null
+  }
   if (owner?.kind === 'ssh') {
     return { kind: 'ssh', targetId: owner.targetId }
   }
@@ -75,7 +75,5 @@ export function resolveBundledSkillTarget(
   if (projectRuntime?.status === 'repair-required') {
     return null
   }
-  return projectRuntime?.runtime.kind === 'wsl'
-    ? { kind: 'wsl', distro: projectRuntime.runtime.distro }
-    : { kind: 'local' }
+  return projectRuntime?.runtime.kind === 'wsl' ? null : { kind: 'local' }
 }

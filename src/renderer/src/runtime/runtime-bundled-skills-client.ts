@@ -22,25 +22,13 @@ export type BundledSkillUnsupportedReason = 'update-server' | 'connect-host'
 /** Plans on the host that runs the agents; a paired host plans its own disk, never this one's. */
 export async function planBundledSkillsOnTarget(
   target: BundledSkillTarget,
-  request: BundledSkillPlanRequest,
-  options: { background?: boolean } = {}
+  request: BundledSkillPlanRequest
 ): Promise<BundledSkillPlanResult> {
   if (target.kind === 'ssh') {
     return { kind: 'unsupported', reason: 'connect-host' }
   }
   if (target.kind !== 'environment') {
-    const plan = await window.api.skills.bundledPlan({
-      ...request,
-      ...(target.kind === 'wsl'
-        ? {
-            wsl: {
-              distro: target.distro,
-              // Why: a check nobody asked for must not boot a stopped distro.
-              ...(options.background ? { onlyIfRunning: true } : {})
-            }
-          }
-        : {})
-    })
+    const plan = await window.api.skills.bundledPlan(request)
     return { kind: 'plan', plan }
   }
   if (
@@ -72,7 +60,7 @@ export function executeBundledSkillsOnTarget(
   if (target.kind !== 'environment') {
     return window.api.skills.bundledExecute({
       planDigest,
-      request: { ...request, ...(target.kind === 'wsl' ? { wsl: { distro: target.distro } } : {}) }
+      request
     })
   }
   return callRuntimeRpc<BundledSkillInstallResult>(

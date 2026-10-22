@@ -64,19 +64,6 @@ describe('planBundledSkillsOnTarget', () => {
     expect(bundledPlan).not.toHaveBeenCalled()
   })
 
-  it('plans a WSL distro through this app, naming the distro', async () => {
-    await planBundledSkillsOnTarget({ kind: 'wsl', distro: 'Ubuntu' }, { force: ['/x'] })
-
-    expect(bundledPlan).toHaveBeenCalledWith({ force: ['/x'], wsl: { distro: 'Ubuntu' } })
-    expect(callRuntimeRpc).not.toHaveBeenCalled()
-  })
-
-  it('asks a background WSL check not to boot a stopped distro', async () => {
-    await planBundledSkillsOnTarget({ kind: 'wsl', distro: 'Ubuntu' }, {}, { background: true })
-
-    expect(bundledPlan).toHaveBeenCalledWith({ wsl: { distro: 'Ubuntu', onlyIfRunning: true } })
-  })
-
   it('asks an SSH host no server serves to connect, and never plans this machine', async () => {
     expect(await planBundledSkillsOnTarget({ kind: 'ssh', targetId: 'box' }, {})).toEqual({
       kind: 'unsupported',
@@ -90,7 +77,7 @@ describe('planBundledSkillsOnTarget', () => {
     expect(runtimeEnvironmentSupportsCapability).not.toHaveBeenCalled()
   })
 
-  it('plans this machine without a WSL target', async () => {
+  it('plans this machine over IPC', async () => {
     await planBundledSkillsOnTarget({ kind: 'local' }, {})
 
     expect(bundledPlan).toHaveBeenCalledWith({})
@@ -100,7 +87,7 @@ describe('planBundledSkillsOnTarget', () => {
 describe('executeBundledSkillsOnTarget', () => {
   it('sends the previewed digest and request to the host that planned it', async () => {
     await executeBundledSkillsOnTarget(SERVER, 'd'.repeat(64), { force: ['/x'] })
-    await executeBundledSkillsOnTarget({ kind: 'wsl', distro: 'Ubuntu' }, 'e'.repeat(64), {})
+    await executeBundledSkillsOnTarget({ kind: 'local' }, 'e'.repeat(64), {})
 
     expect(callRuntimeRpc).toHaveBeenCalledWith(
       SERVER,
@@ -111,7 +98,7 @@ describe('executeBundledSkillsOnTarget', () => {
     expect(bundledExecute).toHaveBeenCalledTimes(1)
     expect(bundledExecute).toHaveBeenCalledWith({
       planDigest: 'e'.repeat(64),
-      request: { wsl: { distro: 'Ubuntu' } }
+      request: {}
     })
   })
 })

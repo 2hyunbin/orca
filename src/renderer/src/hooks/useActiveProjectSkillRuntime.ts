@@ -114,15 +114,16 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
             )
           )
         : undefined)
+    const bundledSkillTarget = resolveBundledSkillTarget(
+      runtimeTarget,
+      projectRuntime,
+      runtimeState.activeWorktreeId ? activeWorkspaceHostId : undefined
+    )
     if (!projectRuntime) {
       return {
         installDisabledReason: null,
-        canUseSkillFreshness: shouldUseSkillFreshness(runtimeTarget),
-        bundledSkillTarget: resolveBundledSkillTarget(
-          runtimeTarget,
-          undefined,
-          activeWorkspaceHostId
-        )
+        canUseSkillFreshness: bundledSkillTarget !== null && shouldUseSkillFreshness(runtimeTarget),
+        bundledSkillTarget
       }
     }
 
@@ -132,12 +133,9 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       discoveryTarget: getProjectSkillDiscoveryTarget(projectRuntime),
       agentRuntime,
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
-      canUseSkillFreshness: shouldUseSkillFreshness(runtimeTarget, agentRuntime),
-      bundledSkillTarget: resolveBundledSkillTarget(
-        runtimeTarget,
-        projectRuntime,
-        activeWorkspaceHostId
-      )
+      canUseSkillFreshness:
+        bundledSkillTarget !== null && shouldUseSkillFreshness(runtimeTarget, agentRuntime),
+      bundledSkillTarget
     }
   }, [activeWorkspaceHostId, currentPlatform, runtimeState, runtimeTarget, windowsCapabilities])
 

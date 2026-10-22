@@ -318,23 +318,15 @@ describe('useSkillFreshness', () => {
   })
 
   it('re-plans a new host without ever showing the previous host’s plan', async () => {
-    const wsl = deferred<BundledSkillPlan>()
-    const bundledPlan = vi
-      .fn()
-      .mockResolvedValueOnce(plan(1, ['orca-cli']))
-      .mockReturnValueOnce(wsl.promise)
+    const bundledPlan = vi.fn().mockResolvedValueOnce(plan(1, ['orca-cli']))
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a test double implements only the preload methods this code path calls.
     window.api = { skills: { bundledPlan } } as never
 
     await act(async () => root?.render(<Probe />))
     expect(state?.plan?.planDigest).toBe(digest(1))
 
-    await act(async () => root?.render(<Probe target={{ kind: 'wsl', distro: 'Ubuntu' }} />))
-    expect(state).toMatchObject({ plan: null, loading: true })
-    // Why onlyIfRunning: nobody asked for this check, so it must not boot a stopped distro.
-    expect(bundledPlan).toHaveBeenLastCalledWith({ wsl: { distro: 'Ubuntu', onlyIfRunning: true } })
-
-    await act(async () => wsl.resolve(plan(2)))
-    expect(state?.plan?.planDigest).toBe(digest(2))
+    await act(async () => root?.render(<Probe target={{ kind: 'ssh', targetId: 'box' }} />))
+    expect(state).toMatchObject({ plan: null, loading: false, unsupported: 'connect-host' })
+    expect(bundledPlan).toHaveBeenCalledTimes(1)
   })
 })

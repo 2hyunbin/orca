@@ -5,8 +5,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   BundledSkillInstallResult,
-  BundledSkillLocalExecuteRequest,
-  BundledSkillLocalPlanRequest,
+  BundledSkillExecuteRequest,
+  BundledSkillPlanRequest,
   BundledSkillPlan
 } from '../../../../shared/bundled-skill-plan'
 import { SkillFreshnessUpdateDialog } from './SkillFreshnessUpdateDialog'
@@ -72,11 +72,11 @@ function deferred<T>(): Deferred<T> {
 }
 
 const skillsApi = {
-  bundledPlan: vi.fn(async (_request?: BundledSkillLocalPlanRequest): Promise<BundledSkillPlan> =>
+  bundledPlan: vi.fn(async (_request?: BundledSkillPlanRequest): Promise<BundledSkillPlan> =>
     planOf([])
   ),
   bundledExecute: vi.fn(
-    async (_request: BundledSkillLocalExecuteRequest): Promise<BundledSkillInstallResult> => ({
+    async (_request: BundledSkillExecuteRequest): Promise<BundledSkillInstallResult> => ({
       scope: 'global',
       skills: []
     })
