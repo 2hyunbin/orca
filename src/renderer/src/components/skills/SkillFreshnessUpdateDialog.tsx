@@ -23,6 +23,7 @@ import { SkillUpdateRows } from './SkillUpdateRows'
 import { SummaryHeadline } from './skill-freshness-summary-headline'
 import { updateActionLabel } from './skill-plan-op-copy'
 import {
+  acknowledgeLatestSkillUpdateRun,
   acknowledgeSkillUpdateRun,
   startSkillUpdateRun,
   useSkillUpdateRun,
@@ -118,12 +119,19 @@ function runOutcomes(run: SkillUpdateRun): ReadonlyMap<string, BundledSkillOutco
  * the disk. Holding the last plan keeps the rows on screen as the result appears; only the live
  * plan can authorize Update.
  */
-function useHeldSkillPlan(plan: BundledSkillPlan | null): [BundledSkillPlan | null, () => void] {
-  const [heldPlan, setHeldPlan] = useState<BundledSkillPlan | null>(null)
-  if (plan && plan !== heldPlan) {
-    setHeldPlan(plan)
+function useHeldSkillPlan(
+  plan: BundledSkillPlan | null,
+  targetKey: string | null
+): [BundledSkillPlan | null, () => void] {
+  const [held, setHeld] = useState<{ plan: BundledSkillPlan; targetKey: string | null } | null>(
+    null
+  )
+  if (plan && (plan !== held?.plan || targetKey !== held.targetKey)) {
+    setHeld({ plan, targetKey })
   }
-  return [plan ?? heldPlan, () => setHeldPlan(null)]
+  // Why the key: another host's rows must never stand in for this one's.
+  const heldPlan = held?.targetKey === targetKey ? held.plan : null
+  return [plan ?? heldPlan, () => setHeld(null)]
 }
 
 /** A run's progress or result once Update starts; until then the plan's headline or error. */
@@ -236,7 +244,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
   }
   const reviewed = useReviewedSkillPlan(target, state.plan, force)
 
-  const [shownPlan, releaseHeldPlan] = useHeldSkillPlan(reviewed.plan)
+  const [shownPlan, releaseHeldPlan] = useHeldSkillPlan(reviewed.plan, targetKey)
   const shownSummary = shownPlan ? summarizeBundledSkillPlan(shownPlan) : null
   const [showLocations, setShowLocations] = useState(false)
   const phase = skillRowPhase(run)
@@ -264,6 +272,8 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     if (showResult && targetKey) {
       acknowledgeSkillUpdateRun(targetKey)
     }
+    // A settled run on another host would otherwise hold the status bar, which opens this one.
+    acknowledgeLatestSkillUpdateRun()
     notifyInstalledAgentSkillsChanged()
   }
 

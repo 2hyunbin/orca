@@ -17,6 +17,7 @@ import { clearSkillDiscoveryCaches } from '../skills/skill-discovery-target'
 import { resolveSkillInstallDestination } from '../skills/skill-install-destinations'
 import { detectSkillProvidersInWsl } from '../skills/skill-wsl-provider-detection'
 import { getDefaultWslDistro } from '../wsl'
+import { listConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import type { RuntimeSkillCommandHost } from './runtime-skill-command-contract'
 import {
   createSkillInstallAuthority,
@@ -26,12 +27,20 @@ import {
 /** Agents in the guest read the guest's homes, with the guest's own env and agent detection. */
 async function wslInput(
   host: RuntimeSkillCommandHost,
-  requestedDistro: string | undefined,
+  wsl: NonNullable<BundledSkillLocalPlanRequest['wsl']>,
   selection: { force?: readonly string[] }
 ): Promise<BundledSkillServiceInput> {
-  const distro = requestedDistro ?? getDefaultWslDistro()
+  const distro = wsl.distro ?? getDefaultWslDistro()
   if (!distro) {
     throw new Error('skill-install-wsl-unavailable')
+  }
+  if (
+    wsl.onlyIfRunning &&
+    !(await listConfirmedRunningWslDistros()).some(
+      (running) => running.toLowerCase() === distro.toLowerCase()
+    )
+  ) {
+    throw new Error(`WSL ${distro} isn't running. Re-check to start it and check its skills.`)
   }
   const destination = await resolveSkillInstallDestination(
     { scope: 'global', executionTarget: { kind: 'wsl', distro } },
@@ -66,7 +75,7 @@ async function appInput(
   request: BundledSkillLocalPlanRequest
 ): Promise<BundledSkillServiceInput> {
   if (request.wsl) {
-    return wslInput(host, request.wsl.distro, request)
+    return wslInput(host, request.wsl, request)
   }
   const destination = await resolveSkillInstallDestination(
     { scope: 'global' },

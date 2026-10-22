@@ -52,6 +52,14 @@ describe('resolveBundledSkillTarget', () => {
     ).toBeNull()
   })
 
+  it('follows the active workspace to its paired host, and never plans this machine for direct SSH', () => {
+    expect(resolveBundledSkillTarget({ kind: 'local' }, undefined, 'runtime:env-2')).toEqual({
+      kind: 'environment',
+      environmentId: 'env-2'
+    })
+    expect(resolveBundledSkillTarget({ kind: 'local' }, undefined, 'ssh:target-1')).toBeNull()
+  })
+
   it('plans this machine otherwise', () => {
     expect(resolveBundledSkillTarget({ kind: 'local' }, undefined)).toEqual({ kind: 'local' })
   })

@@ -68,6 +68,12 @@ describe('planBundledSkillsOnTarget', () => {
     expect(callRuntimeRpc).not.toHaveBeenCalled()
   })
 
+  it('asks a background WSL check not to boot a stopped distro', async () => {
+    await planBundledSkillsOnTarget({ kind: 'wsl', distro: 'Ubuntu' }, {}, { background: true })
+
+    expect(bundledPlan).toHaveBeenCalledWith({ wsl: { distro: 'Ubuntu', onlyIfRunning: true } })
+  })
+
   it('plans this machine without a WSL target', async () => {
     await planBundledSkillsOnTarget({ kind: 'local' }, {})
 

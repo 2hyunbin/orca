@@ -174,6 +174,13 @@ export function acknowledgeSkillUpdateRun(targetKey: string): void {
   setRun(targetKey, IDLE)
 }
 
+/** Clears the status bar's run when it settled; a running one keeps it. */
+export function acknowledgeLatestSkillUpdateRun(): void {
+  if (latestTargetKey) {
+    acknowledgeSkillUpdateRun(latestTargetKey)
+  }
+}
+
 /** @internal - tests need a clean module between cases. */
 export function _resetSkillUpdateRunStore(): void {
   for (const slot of slots.values()) {

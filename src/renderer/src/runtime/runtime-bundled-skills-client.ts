@@ -19,12 +19,21 @@ export type BundledSkillPlanResult =
 /** Plans on the host that runs the agents; a paired host plans its own disk, never this one's. */
 export async function planBundledSkillsOnTarget(
   target: BundledSkillTarget,
-  request: BundledSkillPlanRequest
+  request: BundledSkillPlanRequest,
+  options: { background?: boolean } = {}
 ): Promise<BundledSkillPlanResult> {
   if (target.kind !== 'environment') {
     const plan = await window.api.skills.bundledPlan({
       ...request,
-      ...(target.kind === 'wsl' ? { wsl: { distro: target.distro } } : {})
+      ...(target.kind === 'wsl'
+        ? {
+            wsl: {
+              distro: target.distro,
+              // Why: a check nobody asked for must not boot a stopped distro.
+              ...(options.background ? { onlyIfRunning: true } : {})
+            }
+          }
+        : {})
     })
     return { kind: 'plan', plan }
   }

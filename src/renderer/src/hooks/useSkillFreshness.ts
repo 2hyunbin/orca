@@ -13,10 +13,14 @@ import { INSTALLED_AGENT_SKILLS_CHANGED_EVENT } from './installed-agent-skills-c
 const FOCUS_RESCAN_COOLDOWN_MS = 15_000
 // Why one target: every surface derives it from the same store, so they all plan one host.
 let activeTarget: BundledSkillTarget | null = null
-let cachedPlan: { targetKey: string; result: BundledSkillPlanResult } | null = null
-let pendingPlan: { targetKey: string; request: Promise<BundledSkillPlanResult> } | null = null
+let cachedPlan: { targetKey: string; result: BundledSkillPlanResult; revision: number } | null =
+  null
+let pendingPlan: {
+  targetKey: string
+  background: boolean
+  request: Promise<BundledSkillPlanResult>
+} | null = null
 let invalidationRevision = 0
-let completedRevision = -1
 let lastCompletedScanAt = 0
 let refreshSequence = 0
 let scheduledFocusRescan: number | null = null
@@ -60,7 +64,8 @@ function publishSnapshot(next: SkillFreshnessSnapshot): void {
 
 async function loadPlan(
   target: BundledSkillTarget,
-  force: boolean
+  force: boolean,
+  background: boolean
 ): Promise<BundledSkillPlanResult> {
   const targetKey = bundledSkillTargetKey(target)
   if (force) {
@@ -68,15 +73,23 @@ async function loadPlan(
   }
   const targetRevision = invalidationRevision
   for (;;) {
-    if (cachedPlan?.targetKey === targetKey && completedRevision >= targetRevision) {
+    if (cachedPlan?.targetKey === targetKey && cachedPlan.revision >= targetRevision) {
       return cachedPlan.result
     }
-    if (pendingPlan?.targetKey !== targetKey) {
+    // Why: a user's re-check must not wait on a background plan that declined to boot WSL.
+    if (pendingPlan?.targetKey !== targetKey || (pendingPlan.background && !background)) {
       const requestRevision = invalidationRevision
-      const request = planBundledSkillsOnTarget(target, {})
+      const request = planBundledSkillsOnTarget(target, {}, { background })
         .then((result) => {
-          cachedPlan = { targetKey, result }
-          completedRevision = Math.max(completedRevision, requestRevision)
+          // Why per target: a late answer from the previous host must not satisfy this one.
+          cachedPlan = {
+            targetKey,
+            result,
+            revision:
+              cachedPlan?.targetKey === targetKey
+                ? Math.max(cachedPlan.revision, requestRevision)
+                : requestRevision
+          }
           lastCompletedScanAt = Date.now()
           return result
         })
@@ -85,7 +98,7 @@ async function loadPlan(
             pendingPlan = null
           }
         })
-      pendingPlan = { targetKey, request }
+      pendingPlan = { targetKey, background, request }
     }
     await pendingPlan.request
   }
@@ -93,7 +106,12 @@ async function loadPlan(
 
 /** Re-plan without going through the hook, for surfaces whose explicit refresh affordance
  *  must move the shared verdict. */
-export async function refreshSkillFreshness(force = true): Promise<void> {
+export function refreshSkillFreshness(force = true): Promise<void> {
+  return refreshPlan(force, false)
+}
+
+/** `background`: nobody asked, so a stopped WSL distro is not booted for it. */
+async function refreshPlan(force: boolean, background: boolean): Promise<void> {
   if (scheduledFocusRescan !== null) {
     window.clearTimeout(scheduledFocusRescan)
     scheduledFocusRescan = null
@@ -108,7 +126,7 @@ export async function refreshSkillFreshness(force = true): Promise<void> {
   // stop authorizing UI even if the replacement plan fails.
   publishSnapshot({ ...IDLE, targetKey, loading: true })
   try {
-    const result = await loadPlan(target, force)
+    const result = await loadPlan(target, force, background)
     if (sequence === refreshSequence) {
       publishSnapshot(
         result.kind === 'plan'
@@ -133,14 +151,14 @@ function selectSkillFreshnessTarget(target: BundledSkillTarget): boolean {
     return false
   }
   activeTarget = target
-  void refreshSkillFreshness(true)
+  void refreshPlan(true, true)
   return true
 }
 
 function onWindowFocus(): void {
   const cooldownRemaining = FOCUS_RESCAN_COOLDOWN_MS - (Date.now() - lastCompletedScanAt)
   if (cooldownRemaining <= 0) {
-    void refreshSkillFreshness(true)
+    void refreshPlan(true, true)
     return
   }
   if (
@@ -156,14 +174,14 @@ function onWindowFocus(): void {
   scheduledFocusRescan = window.setTimeout(
     () => {
       scheduledFocusRescan = null
-      void refreshSkillFreshness(true)
+      void refreshPlan(true, true)
     },
     Math.min(cooldownRemaining, FOCUS_RESCAN_COOLDOWN_MS)
   )
 }
 
 function onInstalledSkillsChanged(): void {
-  void refreshSkillFreshness(true)
+  void refreshPlan(true, true)
 }
 
 function subscribe(subscriber: () => void): () => void {
@@ -201,7 +219,7 @@ function getDisabledSnapshot(): SkillFreshnessSnapshot {
 
 function ensurePlanLoaded(): void {
   if (!snapshot.plan && !snapshot.unsupported && !snapshot.loading) {
-    void refreshSkillFreshness(false)
+    void refreshPlan(false, true)
   }
 }
 
@@ -212,7 +230,7 @@ export type SkillFreshnessState = SkillFreshnessSnapshot & {
 async function skipSkillFreshnessRefresh(): Promise<void> {}
 
 function refreshSkillFreshnessAfterReenable(): Promise<void> {
-  pendingReenableRefresh ??= refreshSkillFreshness(true).finally(() => {
+  pendingReenableRefresh ??= refreshPlan(true, true).finally(() => {
     pendingReenableRefresh = null
   })
   return pendingReenableRefresh
@@ -258,7 +276,6 @@ export const _skillFreshnessCacheForTests = {
     cachedPlan = null
     pendingPlan = null
     invalidationRevision = 0
-    completedRevision = -1
     lastCompletedScanAt = 0
     refreshSequence = 0
     pendingReenableRefresh = null

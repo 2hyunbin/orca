@@ -4,6 +4,7 @@ import { act, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BundledSkillPlan } from '../../../shared/bundled-skill-plan'
+import type { BundledSkillTarget } from '@/lib/bundled-skill-target'
 import { planOf, sharedEntry } from '../components/skills/bundled-skill-plan-fixtures.test-support'
 import {
   _skillFreshnessCacheForTests,
@@ -43,8 +44,18 @@ let state: SkillFreshnessState | null = null
 const states = new Map<string, SkillFreshnessState>()
 const renderedPlans: (BundledSkillPlan | null)[] = []
 
-function Probe({ id = 'default', enabled = true }: { id?: string; enabled?: boolean }): null {
-  state = useSkillFreshness(enabled ? { kind: 'local' } : null)
+const LOCAL: BundledSkillTarget = { kind: 'local' }
+
+function Probe({
+  id = 'default',
+  enabled = true,
+  target = LOCAL
+}: {
+  id?: string
+  enabled?: boolean
+  target?: BundledSkillTarget
+}): null {
+  state = useSkillFreshness(enabled ? target : null)
   states.set(id, state)
   renderedPlans.push(state.plan)
   return null
@@ -304,5 +315,26 @@ describe('useSkillFreshness', () => {
         ([name]) => name === 'orca:installed-agent-skills-changed'
       )
     ).toHaveLength(1)
+  })
+
+  it('re-plans a new host without ever showing the previous host’s plan', async () => {
+    const wsl = deferred<BundledSkillPlan>()
+    const bundledPlan = vi
+      .fn()
+      .mockResolvedValueOnce(plan(1, ['orca-cli']))
+      .mockReturnValueOnce(wsl.promise)
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a test double implements only the preload methods this code path calls.
+    window.api = { skills: { bundledPlan } } as never
+
+    await act(async () => root?.render(<Probe />))
+    expect(state?.plan?.planDigest).toBe(digest(1))
+
+    await act(async () => root?.render(<Probe target={{ kind: 'wsl', distro: 'Ubuntu' }} />))
+    expect(state).toMatchObject({ plan: null, loading: true })
+    // Why onlyIfRunning: nobody asked for this check, so it must not boot a stopped distro.
+    expect(bundledPlan).toHaveBeenLastCalledWith({ wsl: { distro: 'Ubuntu', onlyIfRunning: true } })
+
+    await act(async () => wsl.resolve(plan(2)))
+    expect(state?.plan?.planDigest).toBe(digest(2))
   })
 })

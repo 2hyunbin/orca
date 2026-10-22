@@ -146,7 +146,13 @@ export type BundledSkillExecuteRequest = z.infer<typeof BundledSkillExecuteReque
  */
 export const BundledSkillLocalPlanRequestSchema = z.strictObject({
   ...BundledSkillPlanRequestSchema.shape,
-  wsl: z.strictObject({ distro: z.string().min(1).max(256).optional() }).optional()
+  wsl: z
+    .strictObject({
+      distro: z.string().min(1).max(256).optional(),
+      /** A background check: refuse rather than boot a stopped distro. */
+      onlyIfRunning: z.boolean().optional()
+    })
+    .optional()
 })
 export type BundledSkillLocalPlanRequest = z.infer<typeof BundledSkillLocalPlanRequestSchema>
 

@@ -1,3 +1,4 @@
+import { parseExecutionHostId } from '../../../shared/execution-host'
 import type { ProjectExecutionRuntimeResolution } from '../../../shared/project-execution-runtime'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 
@@ -23,12 +24,21 @@ export function bundledSkillTargetKey(target: BundledSkillTarget): string {
 
 /**
  * Where the agents run, never the client by default: null while the owning runtime is
- * unknown or a WSL project still needs its distro repaired.
+ * unknown, the active workspace is on a direct SSH host (no route to plan it), or a WSL
+ * project still needs its distro repaired.
  */
 export function resolveBundledSkillTarget(
   runtimeTarget: RuntimeClientTarget | null,
-  projectRuntime: ProjectExecutionRuntimeResolution | undefined
+  projectRuntime: ProjectExecutionRuntimeResolution | undefined,
+  activeWorkspaceHostId: string | null = null
 ): BundledSkillTarget | null {
+  const owner = parseExecutionHostId(activeWorkspaceHostId)
+  if (owner?.kind === 'ssh') {
+    return null
+  }
+  if (owner?.kind === 'runtime') {
+    return { kind: 'environment', environmentId: owner.environmentId }
+  }
   if (!runtimeTarget) {
     return null
   }

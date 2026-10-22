@@ -12,7 +12,7 @@ const OBSERVE_MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 
 // Records keyed by argument index, NUL-delimited: L(ink) index ok target real, D(irectory) index
 // then E name kind per entry and S base64 for a plain SKILL.md, X index (unlistable),
-// F index kind mtime, M index (missing).
+// F index kind mtime, U index (parent not searchable), M index (missing).
 export const WSL_OBSERVE_SCRIPT = [
   'set -u',
   'index=0',
@@ -44,6 +44,9 @@ export const WSL_OBSERVE_SCRIPT = [
   '  elif [ -e "$path" ]; then',
   '    kind=other; [ -f "$path" ] && kind=file',
   `    printf 'F\\0%s\\0%s\\0%s\\0' "$index" "$kind" "$(stat -c %Y -- "$path" 2>/dev/null || printf '')"`,
+  // Why: `-e` is false under a parent the user can't search; native lstat reads that as EACCES.
+  `  elif parent=$(dirname -- "$path"); [ -d "$parent" ] && [ ! -x "$parent" ]; then`,
+  `    printf 'U\\0%s\\0' "$index"`,
   '  else',
   `    printf 'M\\0%s\\0' "$index"`,
   '  fi',
@@ -187,6 +190,8 @@ export function parseWslObserveOutput(
       observations.set(path, { kind, mtimeMs: seconds ? Number(seconds) * 1000 : null })
     } else if (tag === 'X') {
       observations.set(path, { kind: 'directory', mtimeMs: null, entries: null })
+    } else if (tag === 'U') {
+      observations.set(path, null)
     } else if (tag === 'M') {
       observations.set(path, { kind: 'missing', mtimeMs: null })
     } else {

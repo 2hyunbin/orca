@@ -17,6 +17,7 @@ import {
 } from '@/lib/project-skill-runtime'
 import { useWindowsTerminalCapabilities } from '@/lib/windows-terminal-capabilities'
 import { resolveBundledSkillTarget, type BundledSkillTarget } from '@/lib/bundled-skill-target'
+import { getResolvedExecutionHostIdForWorktree } from '@/lib/resolved-worktree-execution-host'
 import { useAppStore } from '@/store'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 
@@ -78,6 +79,9 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       worktreesByRepo: selectWorktreesByRepo(state)
     }))
   )
+  const activeWorkspaceHostId = useAppStore((state) =>
+    getResolvedExecutionHostIdForWorktree(state, state.activeWorktreeId)
+  )
   const currentPlatform = getCurrentPlatform()
   const windowsCapabilities = useWindowsTerminalCapabilities(currentPlatform === 'win32')
   const runtimeTarget = useActiveSkillDiscoveryRuntimeTarget()
@@ -116,7 +120,11 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
           )
         : undefined
       const canUseSkillFreshness = shouldUseSkillFreshness(runtimeTarget)
-      const bundledSkillTarget = resolveBundledSkillTarget(runtimeTarget, undefined)
+      const bundledSkillTarget = resolveBundledSkillTarget(
+        runtimeTarget,
+        undefined,
+        activeWorkspaceHostId
+      )
       return {
         installDisabledReason: null,
         ...(terminalShellOverride ? { terminalShellOverride } : {}),
@@ -137,9 +145,13 @@ export function useActiveProjectSkillRuntime(): ActiveProjectSkillRuntime {
       ),
       installDisabledReason: getProjectSkillInstallDisabledReason(projectRuntime),
       canUseSkillFreshness: shouldUseSkillFreshness(runtimeTarget, agentRuntime),
-      bundledSkillTarget: resolveBundledSkillTarget(runtimeTarget, projectRuntime)
+      bundledSkillTarget: resolveBundledSkillTarget(
+        runtimeTarget,
+        projectRuntime,
+        activeWorkspaceHostId
+      )
     }
-  }, [currentPlatform, runtimeState, runtimeTarget, windowsCapabilities])
+  }, [activeWorkspaceHostId, currentPlatform, runtimeState, runtimeTarget, windowsCapabilities])
 
   // Content-equal runtimes keep one reference so effect keys do not thrash.
   // Adjust during render (not a ref write) when serialized identity changes.
