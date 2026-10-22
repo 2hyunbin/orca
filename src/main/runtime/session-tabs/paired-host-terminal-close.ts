@@ -79,7 +79,7 @@ export async function closeTerminalOnPairedHost(
     if (original?.originalPresentation) {
       throw error
     }
-    if (code === 'terminal_not_found' && !original?.originalPresentation) {
+    if (code === 'terminal_not_found') {
       // The owner has no such terminal, so nothing runs there to stop.
       return { ptyKilled: false }
     }

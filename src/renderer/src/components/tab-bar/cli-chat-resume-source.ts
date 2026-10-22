@@ -11,7 +11,6 @@ import {
   resolvePaneLastAgentConversation
 } from '@/lib/ai-vault-tab-title-requests'
 import { LOCAL_EXECUTION_HOST_ID, type ExecutionHostId } from '../../../../shared/execution-host'
-import { makePaneKey } from '../../../../shared/stable-pane-id'
 import {
   adoptsCliConversations,
   type CliConversationRowAgent
@@ -34,7 +33,6 @@ export function resolveCliChatResumeSource(
   state: AppState,
   args: { tab: { id: string; worktreeId: string }; paneKey?: string }
 ): CliChatResumeSource | null {
-  const activeLeafId = state.terminalLayoutsByTabId[args.tab.id]?.activeLeafId
   const paneConversation = (paneKey: string) =>
     resolvePaneLastAgentConversation(
       state,
@@ -43,10 +41,9 @@ export function resolveCliChatResumeSource(
     )
   const conversation = args.paneKey
     ? paneConversation(args.paneKey)
-    : (collectAgentPaneConversations(state, adoptsCliConversations, {
+    : collectAgentPaneConversations(state, adoptsCliConversations, {
         tab: { worktreeId: args.tab.worktreeId, tabId: args.tab.id }
-      }).find((candidate) => candidate.tabId === args.tab.id) ??
-      (activeLeafId ? paneConversation(makePaneKey(args.tab.id, activeLeafId)) : null))
+      }).find((candidate) => candidate.tabId === args.tab.id)
   if (
     !conversation ||
     conversation.tabId !== args.tab.id ||

@@ -197,7 +197,7 @@ export type TerminalSurfaceCloseCommit = {
   requestedSession: WorkspaceSessionState | null | undefined
   /** The tab's owner identity still matches the one the close was asked against. */
   ownerMatches: () => boolean
-  /** The partitions holding the tab, routed partition first; empty when unroutable. */
+  /** The tab's partitions, routed first; original-aware calls return captured and current holders. */
   hostIds: () => readonly ExecutionHostId[]
   /** Owner-fenced closes only: each holder's copy of the tab when the close was asked. A second
    *  copy that is new or rebound since refuses the close, since `ownerMatches` fences only the
@@ -239,20 +239,7 @@ export function terminalSurfaceCloseMutation(
       : undefined
   return () => {
     const original = commit.options.originalPresentation
-    const hostIds = original
-      ? [
-          ...new Set([
-            ...original.holders.map((holder) => holder.hostId),
-            ...commit
-              .hostIds()
-              .filter((id) =>
-                commit
-                  .getSession(id)
-                  ?.tabsByWorktree[commit.worktreeId]?.some((row) => row.id === target.tabId)
-              )
-          ])
-        ]
-      : commit.hostIds()
+    const hostIds = commit.hostIds()
     if (
       !commit.ownerMatches() ||
       (original && !matchesTerminalSurfaceCapture(original, hostIds, commit.getSession))
