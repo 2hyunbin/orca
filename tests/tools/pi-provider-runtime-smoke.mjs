@@ -132,12 +132,31 @@ try {
   const replies = new Map()
   let settled
   const settledOnce = new Promise((resolve) => (settled = resolve))
-  createInterface({ input: rpc.stdout }).on('line', (line) => {
-    const record = JSON.parse(line)
-    if (record.type === 'response' && replies.has(record.id)) {
-      replies.get(record.id)(record, line)
-    } else if (record.type === 'agent_settled' || record.type === 'agent_end') {
-      settled()
+  let fail
+  const failed = new Promise((_, reject) => (fail = reject))
+  const deadline = setTimeout(
+    () => fail(new Error('Pi RPC smoke timed out after 30 seconds')),
+    30000
+  )
+  rpc.on('error', fail)
+  rpc.on('close', (code, signal) =>
+    fail(new Error(`Pi RPC closed (code ${code}, signal ${signal})`))
+  )
+  rpc.stdin.on('error', fail)
+  rpc.stdout.on('error', fail)
+  const lines = createInterface({ input: rpc.stdout })
+  lines.on('line', (line) => {
+    try {
+      const record = JSON.parse(line)
+      if (record.type === 'response' && replies.has(record.id)) {
+        const reply = replies.get(record.id)
+        replies.delete(record.id)
+        reply(record, line)
+      } else if (record.type === 'agent_settled' || record.type === 'agent_end') {
+        settled()
+      }
+    } catch (error) {
+      fail(error)
     }
   })
   let next = 0
@@ -153,24 +172,31 @@ try {
       rpc.stdin.write(`${JSON.stringify({ ...params, type, id })}\n`)
     })
   try {
-    assert.equal((await ask('prompt', { message: 'hello' })).success, true)
-    await settledOnce
-    const all = await ask('get_entries', {}, 'orca-optional-1')
-    assert.equal((await ask('get_state')).success, true)
-    assert.equal(all.success, true, all.error)
-    const ids = all.data.entries.map((entry) => entry.id)
-    assert.ok(ids.length >= 2 && ids.every((id) => typeof id === 'string' && id.length > 0))
-    assert.equal(all.data.leafId, ids.at(-1))
-    const since = await ask('get_entries', { since: ids[0] })
-    assert.deepEqual(
-      since.data.entries.map((entry) => entry.id),
-      ids.slice(1)
-    )
-    const unknown = await ask('get_entries', { since: 'not-an-entry' })
-    assert.equal(unknown.success, false)
-    assert.match(unknown.error, /Entry not found/)
-    results.push({ variant: 'rpc-get-entries', entries: ids.length })
+    await Promise.race([
+      failed,
+      (async () => {
+        assert.equal((await ask('prompt', { message: 'hello' })).success, true)
+        await settledOnce
+        const all = await ask('get_entries', {}, 'orca-optional-1')
+        assert.equal((await ask('get_state')).success, true)
+        assert.equal(all.success, true, all.error)
+        const ids = all.data.entries.map((entry) => entry.id)
+        assert.ok(ids.length >= 2 && ids.every((id) => typeof id === 'string' && id.length > 0))
+        assert.equal(all.data.leafId, ids.at(-1))
+        const since = await ask('get_entries', { since: ids[0] })
+        assert.deepEqual(
+          since.data.entries.map((entry) => entry.id),
+          ids.slice(1)
+        )
+        const unknown = await ask('get_entries', { since: 'not-an-entry' })
+        assert.equal(unknown.success, false)
+        assert.match(unknown.error, /Entry not found/)
+        results.push({ variant: 'rpc-get-entries', entries: ids.length })
+      })()
+    ])
   } finally {
+    clearTimeout(deadline)
+    lines.close()
     rpc.kill()
   }
   console.log(
