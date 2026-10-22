@@ -28,7 +28,8 @@ import type * as ParseCacheModule from './session-scanner-parse-cache'
 import {
   getSessionParseCacheEntry,
   storeSessionParseCacheEntry,
-  storeSessionScopeCwd
+  storeSessionScopeCwd,
+  type SessionScopeCwdStamp
 } from './session-parse-cache-store'
 import type { SessionSidecarObservation } from './session-sidecar-stat'
 import { isolatedScanRoots } from './session-scanner-test-fixtures'
@@ -172,7 +173,12 @@ describe('session parse cache persistence', () => {
     const cacheFile = join(root, 'session-parse-cache.json')
     initSessionParseCachePersistence({ filePath: cacheFile, appVersion: APP_VERSION })
     const paths = Array.from({ length: 1_001 }, (_, index) => join(root, `session-${index}`))
-    const stamp = { mtimeMs: 1, sizeBytes: 10, platform: 'linux', cwd: '/original' }
+    const stamp: SessionScopeCwdStamp = {
+      mtimeMs: 1,
+      sizeBytes: 10,
+      platform: 'linux',
+      cwd: '/original'
+    }
     for (const path of paths) {
       storeSessionScopeCwd(path, stamp)
     }
