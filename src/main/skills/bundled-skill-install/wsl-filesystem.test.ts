@@ -115,10 +115,14 @@ describe('createWslBundledSkillFilesystem', () => {
     ).rejects.toThrow('skill-install-wsl-path-outside-root')
     expect(runs).toHaveLength(0)
 
-    await filesystem.ensureDirectory(unc(join(home.home, '.agents', '.orca-skill-backups', 'x')))
-    expect(
-      (await lstat(join(home.home, '.agents', '.orca-skill-backups', 'x'))).isDirectory()
-    ).toBe(true)
+    // Swap ensures the backups root itself before moving a copy into it.
+    await filesystem.ensureDirectory(unc(join(home.home, '.agents', '.orca-skill-backups')))
+    expect((await lstat(join(home.home, '.agents', '.orca-skill-backups'))).isDirectory()).toBe(
+      true
+    )
+    await expect(filesystem.ensureDirectory(unc(join(home.home, '.agents')))).rejects.toThrow(
+      'skill-install-wsl-path-outside-root'
+    )
   })
 
   it('resolves real paths and writability in the guest', async () => {

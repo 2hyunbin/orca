@@ -1,4 +1,4 @@
-import { posix } from 'node:path'
+import { join, posix } from 'node:path'
 import { toWindowsWslPath } from '../../../shared/wsl-paths'
 import { runWslProcess } from '../../wsl/wsl-runner'
 import type { SkillDirectoryEntry, SkillFilesystemEntryKind } from '../skill-install-filesystem'
@@ -260,7 +260,9 @@ export function createWslBundledSkillFilesystem(input: {
       ])
     },
     ensureDirectory: async (path) => {
-      await run(ENSURE_DIRECTORY_SCRIPT, [guarded.requireAllowed(path)])
+      // Why a child: swap ensures the backups root itself, which the strict guard refuses.
+      guarded.requireAllowed(join(path, 'entry'))
+      await run(ENSURE_DIRECTORY_SCRIPT, [toGuest(path)])
     },
     rename: (source, target) => guarded.rename(source, target),
     // Backups sit in the guest home, so this is a guest `mv` like any other rename.
