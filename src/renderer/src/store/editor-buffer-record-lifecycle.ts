@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import {
-  editorBufferMirrorMismatch,
+  editorBufferViewMirrorMismatch,
   reconcileEditorBufferMembership,
   type EditorBufferState
 } from './slices/editor/buffers/editor-buffer-record'
@@ -82,7 +82,7 @@ export function assertEditorBufferRecordsMatchViews(state: EditorBufferState): v
   }
   for (const file of state.openFiles) {
     const record = state.editorBuffers[editorBufferIdOfView(state, file.id)]
-    const field = editorBufferMirrorMismatch(file, record)
+    const field = editorBufferViewMirrorMismatch(file, record)
     if (field !== null) {
       throw new Error(`Editor buffer mirror "${field}" of ${file.id} differs from its record`)
     }

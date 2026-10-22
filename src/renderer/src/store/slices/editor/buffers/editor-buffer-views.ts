@@ -16,6 +16,20 @@ export const EMPTY_EDITOR_BUFFER_VIEW_INDEX: EditorBufferViewIndex = {
   editorBufferViews: {}
 }
 
+const DETACHED_EDITOR_BUFFER_PREFIX = 'detached:'
+
+/**
+ * A record id no identity key can equal. Records on a retired environment, and divergent dirty
+ * drafts of one file, move here and are never merged into another record.
+ */
+export function detachedEditorBufferId(viewId: string): string {
+  return `${DETACHED_EDITOR_BUFFER_PREFIX}${viewId}`
+}
+
+export function isDetachedEditorBufferId(recordId: string): boolean {
+  return recordId.startsWith(DETACHED_EDITOR_BUFFER_PREFIX)
+}
+
 /** The record a tab belongs to. One record per tab until views of one file share a record. */
 export function editorBufferIdForFile(file: OpenFile): string {
   return file.id
