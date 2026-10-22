@@ -80,6 +80,7 @@ export function WorktreeAgentList({
 
 const styles = StyleSheet.create({
   list: {
-    marginTop: 3
+    marginTop: 2,
+    gap: 2
   }
 })
