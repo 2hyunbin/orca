@@ -41,11 +41,17 @@ export class ConversationChain {
     return result
   }
 
-  /** Settles this conversation's running and queued work; later work starts a fresh lane. */
-  cancel(id: string, reason: ConnectorRefusal): void {
+  /**
+   * Settles this conversation's running and queued work; later work starts a fresh lane. Given a
+   * lane's signal, only that lane is settled, never one opened after it.
+   */
+  cancel(id: string, reason: ConnectorRefusal, laneSignal?: AbortSignal): void {
     const lane = this.lanes.get(id)
+    if (!lane || (laneSignal && lane.signal !== laneSignal)) {
+      return
+    }
     this.lanes.delete(id)
-    lane?.controller.abort(reason)
+    lane.controller.abort(reason)
   }
 
   private openLane(id: string): Lane {

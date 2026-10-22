@@ -201,9 +201,18 @@ describe('ExternalConversationSeam delivery ids', () => {
         }
       }
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-      expect((await seam.start({ launcher }, KEY, 'd1', START)).initial).toEqual(UNKNOWN)
-      expect((await seam.start({ launcher }, KEY, 'd1', START)).initial).toEqual(UNKNOWN)
-      expect((await restart().start({ launcher }, KEY, 'd1', START)).initial).toEqual(UNKNOWN)
+      expect(
+        (await seam.start({ launcher, terminal: fakeTerminal().terminal }, KEY, 'd1', START))
+          .initial
+      ).toEqual(UNKNOWN)
+      expect(
+        (await seam.start({ launcher, terminal: fakeTerminal().terminal }, KEY, 'd1', START))
+          .initial
+      ).toEqual(UNKNOWN)
+      expect(
+        (await restart().start({ launcher, terminal: fakeTerminal().terminal }, KEY, 'd1', START))
+          .initial
+      ).toEqual(UNKNOWN)
       expect(launch).toHaveBeenCalledTimes(1)
       warn.mockRestore()
     }
@@ -483,4 +492,88 @@ describe('ExternalConversationSeam send', () => {
     expect(await follower).toEqual(gone)
     expect(terminal.writes).toEqual([])
   })
+
+  it('settles the held head and its follower when a new process takes the pane, same PTY id', async () => {
+    const { seam, host, terminal } = await started()
+    terminal.state.blocked = true
+    const head = seam.send(host, KEY, 'd1', 'one')
+    const follower = seam.send(host, KEY, 'd2', 'two')
+    await vi.waitFor(() => expect(terminal.held()).toBe(1))
+    terminal.replace()
+    terminal.answer()
+    const gone = { outcome: 'refused', reason: 'agent_not_reachable' }
+    expect(await head).toEqual(gone)
+    expect(await follower).toEqual(gone)
+    expect(terminal.writes).toEqual([])
+    // A later delivery opens a new lane on the process there now.
+    expect(await seam.send(host, KEY, 'd3', 'three')).toEqual({ outcome: 'accepted' })
+    expect(terminal.writes).toEqual(['three'])
+  })
+
+  it('settles a follower when the replacement shows up as the head’s rejection', async () => {
+    const { seam, host, terminal } = await started()
+    terminal.sendTerminalAgentPrompt.mockImplementationOnce(async () => {
+      terminal.replace()
+      throw new Error('terminal_not_writable')
+    })
+    const head = seam.send(host, KEY, 'd1', 'one')
+    const follower = seam.send(host, KEY, 'd2', 'two')
+    const gone = { outcome: 'refused', reason: 'agent_not_reachable' }
+    expect(await head).toEqual(gone)
+    expect(await follower).toEqual(gone)
+    expect(terminal.writes).toEqual([])
+  })
+
+  it('settles a follower whose admitted process was replaced after the head wrote', async () => {
+    const { seam, host, terminal } = await started()
+    terminal.sendTerminalAgentPrompt.mockImplementationOnce(async (handle, prompt) => {
+      terminal.writes.push(prompt)
+      terminal.replace()
+      return { handle, accepted: true, bytesWritten: 1 }
+    })
+    const head = seam.send(host, KEY, 'd1', 'one')
+    const follower = seam.send(host, KEY, 'd2', 'two')
+    expect(await head).toEqual({ outcome: 'accepted' })
+    expect(await follower).toEqual({ outcome: 'refused', reason: 'agent_not_reachable' })
+    expect(terminal.writes).toEqual(['one'])
+  })
+})
+
+describe('ExternalConversationSeam twin removal', () => {
+  async function twins(linkedHost: 'local' | 'ssh:box') {
+    const records = fakeLinkStore([LOCAL_REPO, { ...LOCAL_REPO, connectionId: 'box' }])
+    records.put(WORKTREE, 'local', {})
+    records.put(WORKTREE, 'ssh:box', {})
+    const h = harness({}, records)
+    const terminal = fakeTerminal()
+    const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'), {
+      worktreeId: WORKTREE,
+      sshHostId: linkedHost === 'local' ? null : linkedHost
+    })
+    const host = { launcher, terminal: terminal.terminal }
+    await h.seam.start(host, KEY, 'start', START)
+    terminal.state.blocked = true
+    const head = h.seam.send(host, KEY, 'd1', 'one')
+    const follower = h.seam.send(host, KEY, 'd2', 'two')
+    await vi.waitFor(() => expect(terminal.held()).toBe(1))
+    return { ...h, terminal, head, follower }
+  }
+
+  it.each([
+    ['ssh:box', 'local'],
+    ['local', 'ssh:box']
+  ] as const)(
+    'keeps a conversation on %s held when its %s twin is removed, settles it on its own removal',
+    async (linkedHost, twinHost) => {
+      const { terminal, head, follower, remove, removeWorkspace } = await twins(linkedHost)
+      remove(WORKTREE, twinHost)
+      removeWorkspace(WORKTREE)
+      expect(terminal.held()).toBe(1)
+      remove(WORKTREE, linkedHost)
+      removeWorkspace(WORKTREE)
+      const gone = { outcome: 'refused', reason: 'agent_not_reachable' }
+      expect(await head).toEqual(gone)
+      expect(await follower).toEqual(gone)
+    }
+  )
 })

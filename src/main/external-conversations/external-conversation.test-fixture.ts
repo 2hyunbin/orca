@@ -129,7 +129,13 @@ type WriteOptions = {
  * `wait`), then the binding fence, the guard, the signal, and the write.
  */
 export function fakeTerminal() {
-  const state: { ptyId: string | null; blocked: boolean } = { ptyId: 'pty-1', blocked: false }
+  const state: { ptyId: string | null; incarnation: number; blocked: boolean } = {
+    ptyId: 'pty-1',
+    incarnation: 1,
+    blocked: false
+  }
+  const current = (): string =>
+    `inc-${state.ptyId}${state.incarnation > 1 ? `-${state.incarnation}` : ''}`
   const writes: string[] = []
   const waiters = new Set<(error?: Error) => void>()
   const hold = (signal: AbortSignal | undefined): Promise<void> =>
@@ -155,7 +161,11 @@ export function fakeTerminal() {
         }
         await hold(options.signal)
       }
-      if (options.expectedBinding && options.expectedBinding.ptyId !== state.ptyId) {
+      const expected = options.expectedBinding
+      if (
+        expected &&
+        (expected.ptyId !== state.ptyId || expected.processIncarnation !== current())
+      ) {
         throw new Error('terminal_handle_stale')
       }
       await options.beforeWrite?.(state.ptyId ?? '')
@@ -173,7 +183,7 @@ export function fakeTerminal() {
       if (!state.ptyId) {
         throw new Error('terminal_not_writable')
       }
-      return { ptyId: state.ptyId, processIncarnation: `inc-${state.ptyId}`, generation: 1 }
+      return { ptyId: state.ptyId, processIncarnation: current(), generation: 1 }
     },
     sendTerminalAgentPrompt,
     readLaunchedAgentForeground: vi.fn(async () => 'agent' as const),
@@ -193,6 +203,10 @@ export function fakeTerminal() {
     exit() {
       state.ptyId = null
       ;[...waiters].forEach((settle) => settle(new Error('terminal_not_writable')))
+    },
+    /** A new process in the same pane and PTY id; `answer` then hands held writes to it. */
+    replace() {
+      state.incarnation += 1
     }
   }
 }

@@ -5,6 +5,7 @@ import {
 } from '../runtime/launched-agent-write-guard'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { sendAgentTurn } from '../runtime/orchestration/send-agent-turn'
+import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
 import { refusalOf } from './external-conversation-chain'
 import { refused, type Delivery } from './external-conversation-types'
 
@@ -20,33 +21,40 @@ const UNREACHABLE = new Set([
   'agent_not_in_foreground'
 ])
 
+/** The linked pane's handle and the process it is bound to now; null once nothing is. */
+export function bindPane(
+  terminal: FollowUpTerminal,
+  paneKey: string
+): { handle: string; binding: AgentPromptExpectedBinding } | null {
+  const handle = terminal.getTerminalHandleForPaneKey(paneKey)
+  if (!handle) {
+    return null
+  }
+  try {
+    const { ptyId, processIncarnation } = terminal.getTerminalPromptRequestBinding(handle)
+    return { handle, binding: { ptyId, processIncarnation } }
+  } catch {
+    return null
+  }
+}
+
 /**
- * One follow-up into the linked pane through the shared writer: it waits out an approval on its
- * own predicate, refuses a process other than the one bound here, and stops on `signal`. A throw
- * before any guarded write passed wrote nothing; after that it may have, so it is `unknown`.
+ * One follow-up through the shared writer: it waits out an approval on its own predicate, refuses
+ * a process other than `expectedBinding`, and stops on `signal`. A throw before
+ * any guarded write passed wrote nothing; after that it may have, so it is `unknown`.
  */
 export async function deliverFollowUp(
   terminal: FollowUpTerminal,
   followUp: {
-    paneKey: string
+    handle: string
+    expectedBinding: AgentPromptExpectedBinding
     agent: ConnectorAgent
     text: string
     requestId: string
     signal: AbortSignal
   }
 ): Promise<Delivery> {
-  const { signal } = followUp
-  const handle = terminal.getTerminalHandleForPaneKey(followUp.paneKey)
-  let expectedBinding: { ptyId: string; processIncarnation: string }
-  try {
-    if (!handle) {
-      return refused('agent_not_reachable')
-    }
-    const { ptyId, processIncarnation } = terminal.getTerminalPromptRequestBinding(handle)
-    expectedBinding = { ptyId, processIncarnation }
-  } catch {
-    return refused('agent_not_reachable')
-  }
+  const { signal, handle, expectedBinding } = followUp
   const guard = createLaunchedAgentWriteGuard(terminal, followUp.agent, {
     unprovableHost: 'write-unless-shell'
   })
