@@ -30,11 +30,12 @@ function completedChild(
   stderr = '',
   signal: NodeJS.Signals | null = null
 ): ChildProcess {
-  const child = new ChildProcess()
   const out = new PassThrough()
   const err = new PassThrough()
-  child.stdout = out
-  child.stderr = err
+  const child = Object.defineProperties(new ChildProcess(), {
+    stdout: { value: out },
+    stderr: { value: err }
+  })
   vi.spyOn(child, 'kill').mockReturnValue(true)
   vi.spyOn(child, 'unref').mockImplementation(() => {})
   queueMicrotask(() => {
