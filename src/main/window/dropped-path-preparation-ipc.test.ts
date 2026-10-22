@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type * as DragTempFileCopy from './dragged-temp-file-copy'
 import type { DragTempCopyItemResult } from './dragged-temp-file-copy'
+import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
 
 type IpcListener = (event: { sender: unknown }, payload: unknown) => void
 type InvokeHandler = (event: { sender: unknown }, payload: unknown) => Promise<unknown>
@@ -99,11 +100,29 @@ describe('registerDroppedPathPreparation', () => {
     ipcHandlers.clear()
   })
 
-  it('registers only the preparation request', () => {
+  it('registers only the preparation and dropped-bytes requests', () => {
     const { window } = createWindow()
     registerDroppedPathPreparation(window)
-    expect([...ipcHandlers.keys()]).toEqual(['fs:prepareDroppedPaths'])
+    expect([...ipcHandlers.keys()]).toEqual(['fs:prepareDroppedPaths', 'fs:storeDroppedFileBytes'])
     expect(ipcListeners.size).toBe(0)
+  })
+
+  it('takes dropped bytes only from its own renderer, within the store limit', () => {
+    const { window, webContents, close } = createWindow()
+    registerDroppedPathPreparation(window, async () => null)
+    const handler = ipcHandlers.get('fs:storeDroppedFileBytes')!
+    const request = { name: 'Shot.png', bytes: new Uint8Array([1]) }
+    expect(() => handler({ sender: {} }, request)).toThrow('owning window')
+    for (const invalid of [
+      null,
+      { name: '', bytes: new Uint8Array([1]) },
+      { name: 'Shot.png', bytes: [1] },
+      { name: 'Shot.png', bytes: new Uint8Array(AGENT_SESSION_ATTACHMENT_MAX_BYTES + 1) }
+    ]) {
+      expect(() => handler({ sender: webContents }, invalid)).toThrow('Invalid')
+    }
+    close()
+    expect(ipcHandlers.has('fs:storeDroppedFileBytes')).toBe(false)
   })
 
   it('prepares ordinary paths only for its own live renderer and validates the request', async () => {

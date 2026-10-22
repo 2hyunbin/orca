@@ -1,10 +1,11 @@
-import { basename } from 'node:path'
 import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
 import type { AgentSessionAttachmentStore } from '../native-chat/agent-session-attachments/agent-session-attachment-store'
 import type { NativeFileDropCopyFailureReason } from '../../shared/native-file-drop'
 import type {
+  DroppedFileBytesSlot,
   PrepareDroppedPathsRequest,
-  PreparedDroppedPaths
+  PreparedDroppedPaths,
+  StoreDroppedFileBytesRequest
 } from '../../shared/native-file-drop-preparation'
 import {
   DragTempCopyBatch,
@@ -24,10 +25,7 @@ export type DroppedPathPreparationDeps = {
   platform: NodeJS.Platform
   getCopyEnvironment: () => Promise<DragTempCopyEnvironment>
   watchRenderer: () => RendererDropLifetime
-  localChatAttachmentStore?: () => Promise<Pick<
-    AgentSessionAttachmentStore,
-    'storeFile' | 'importFreshFile'
-  > | null>
+  localChatAttachmentStore?: () => Promise<Pick<AgentSessionAttachmentStore, 'storeFile'> | null>
   copyTimeoutMs?: number
 }
 
@@ -46,34 +44,34 @@ export function createDroppedPathPreparationQueue(
     if (!request.paths.some((path) => mayNeedDragTempCopy(path, deps.platform))) {
       return { paths: [...request.paths], failures: [] }
     }
-    if (lane.pending >= MAX_PENDING_DRAG_TEMP_COPIES) {
-      return failDroppedPathPreparation(request.paths, deps.platform, 'busy')
-    }
-    const lifetime = deps.watchRenderer()
-    lane.pending += 1
-    const prepared = lane.tail.then(() => {
-      lifetime.signal.throwIfAborted()
-      return copyDroppedPaths(request, lifetime.signal, deps)
-    })
-    lane.tail = prepared
-      .then(
-        () => undefined,
-        () => undefined
-      )
-      .finally(() => {
-        lane.pending -= 1
-        lifetime.dispose()
-      })
-    // Why: a reloaded document must stop waiting even while its request is queued.
-    return rejectOnDropAbort(prepared, lifetime.signal)
+    return enqueueDropWork(
+      deps,
+      lane,
+      (signal) =>
+        deps.getCopyEnvironment().then((env) => prepareDroppedPaths(request, env, signal)),
+      (reason) => failDroppedPathPreparation(request.paths, deps.platform, reason)
+    )
   }
+}
+
+/** A local chat's dropped file, sent as the File's bytes: written once into the chat store. */
+export function createDroppedFileBytesIntake(
+  deps: DroppedPathPreparationDeps,
+  lane = createDragTempCopyLane()
+): (request: StoreDroppedFileBytesRequest) => PreparedDroppedPaths | Promise<PreparedDroppedPaths> {
+  return (request) =>
+    enqueueDropWork(
+      deps,
+      lane,
+      (signal) => storeDroppedFileBytes(request, signal, deps),
+      (reason) => ({ paths: [], failures: [copyFailure(1, reason)] })
+    )
 }
 
 export async function prepareDroppedPaths(
   request: PrepareDroppedPathsRequest,
   env: DragTempCopyEnvironment,
-  signal?: AbortSignal,
-  localChatAttachmentStore?: DroppedPathPreparationDeps['localChatAttachmentStore']
+  signal?: AbortSignal
 ): Promise<PreparedDroppedPaths> {
   const batch = new DragTempCopyBatch(
     request.consumer === 'local-chat' ? AGENT_SESSION_ATTACHMENT_MAX_BYTES : -1
@@ -82,90 +80,107 @@ export async function prepareDroppedPaths(
   try {
     const capture = materializeDragTempPaths(request.paths, env, signal, batch)
     prepared = await (signal ? rejectOnDropAbort(capture, signal) : capture)
-    if (request.consumer === 'local-chat') {
-      prepared = []
-      const handoff = storeCreatedCopies(batch, env, localChatAttachmentStore, signal)
-      await (signal ? rejectOnDropAbort(handoff, signal) : handoff)
-      prepared = request.paths.map((path) => batch.completed.get(path)!)
-    }
     signal?.throwIfAborted()
-    batch.completed.clear()
   } catch (error) {
-    batch.completed.clear()
     await removeCreatedDragTempCopies(batch.directories)
     throw error
+  } finally {
+    batch.completed.clear()
   }
   const acceptsOriginal = request.consumer === 'main-reader'
-  const paths = prepared.flatMap((result) =>
-    result.status === 'imported'
-      ? [result.destPath]
-      : result.status === 'uncopied' && acceptsOriginal
-        ? [result.sourcePath]
-        : []
-  )
-  const unprepared = prepared.flatMap((result) =>
-    result.status === 'buffered' ||
-    result.status === 'imported' ||
-    (result.status === 'uncopied' && acceptsOriginal)
-      ? []
-      : [result]
-  )
+  const paths: string[] = []
+  const fromDroppedFiles: DroppedFileBytesSlot[] = []
+  const unprepared: Extract<DragTempCopyItemResult, { status: 'uncopied' | 'failed' }>[] = []
+  for (const result of prepared) {
+    if (result.status === 'imported') {
+      paths.push(result.destPath)
+    } else if (result.status === 'uncopied' && acceptsOriginal) {
+      paths.push(result.sourcePath)
+    } else if (result.status === 'from-file') {
+      fromDroppedFiles.push({
+        // Why first occurrence: a path dropped twice is read and stored once.
+        sourceIndex: request.paths.indexOf(result.sourcePath),
+        byteLength: result.byteLength,
+        position: paths.length + fromDroppedFiles.length
+      })
+    } else {
+      unprepared.push(result)
+    }
+  }
   const commonReason = unprepared.every((item) => item.reason === unprepared[0]?.reason)
     ? unprepared[0]?.reason
     : undefined
   return {
     paths,
-    failures: unprepared.length > 0 ? [copyFailure(unprepared.length, commonReason)] : []
+    failures: unprepared.length > 0 ? [copyFailure(unprepared.length, commonReason)] : [],
+    ...(fromDroppedFiles.length > 0 ? { fromDroppedFiles } : {})
   }
 }
 
-async function storeCreatedCopies(
-  batch: DragTempCopyBatch,
-  env: DragTempCopyEnvironment,
-  getStore: DroppedPathPreparationDeps['localChatAttachmentStore'],
-  signal?: AbortSignal
-): Promise<void> {
-  let storePromise:
-    | ReturnType<NonNullable<DroppedPathPreparationDeps['localChatAttachmentStore']>>
-    | undefined
-  for (const [sourcePath, result] of batch.completed) {
-    signal?.throwIfAborted()
-    const buffered = result.status === 'buffered'
-    const file =
-      result.status === 'imported' &&
-      result.directory &&
-      result.byteLength !== undefined &&
-      result.byteLength <= AGENT_SESSION_ATTACHMENT_MAX_BYTES
-    if (!buffered && !file) {
-      continue
-    }
-    let stored: string | undefined
+async function storeDroppedFileBytes(
+  request: StoreDroppedFileBytesRequest,
+  signal: AbortSignal,
+  deps: DroppedPathPreparationDeps
+): Promise<PreparedDroppedPaths> {
+  const bytes = Buffer.from(
+    request.bytes.buffer,
+    request.bytes.byteOffset,
+    request.bytes.byteLength
+  )
+  const getStore = deps.localChatAttachmentStore?.().catch(() => null) ?? Promise.resolve(null)
+  // Why abortable: a chat host that never finishes starting must not hold the lane past the deadline.
+  const store = await rejectOnDropAbort(getStore, signal)
+  if (store) {
     try {
-      const store = await (storePromise ??= getStore?.().catch(() => null) ?? Promise.resolve(null))
-      signal?.throwIfAborted()
-      if (store) {
-        stored = buffered
-          ? await store.storeFile(basename(sourcePath), result.bytes)
-          : result.status === 'imported' && result.byteLength !== undefined
-            ? await store.importFreshFile(basename(sourcePath), result.destPath, result.byteLength)
-            : undefined
-      }
+      const stored = await store.storeFile(request.name, bytes)
+      signal.throwIfAborted()
+      return { paths: [stored], failures: [] }
     } catch {
-      signal?.throwIfAborted()
-    }
-    signal?.throwIfAborted()
-    if (stored) {
-      batch.completed.set(sourcePath, { sourcePath, status: 'imported', destPath: stored })
-      if (result.status === 'imported' && result.directory) {
-        await removeCreatedDragTempCopies([result.directory])
-      }
-    } else if (buffered) {
-      batch.completed.set(
-        sourcePath,
-        await stageCapturedDragTempBytes(sourcePath, result.bytes, env, batch, signal)
-      )
+      signal.throwIfAborted()
     }
   }
+  // Store unavailable or its write failed: keep the received bytes as a private copy by path.
+  const staged = await stageCapturedDragTempBytes(
+    request.name,
+    bytes,
+    await deps.getCopyEnvironment(),
+    new DragTempCopyBatch(),
+    signal
+  )
+  return staged.status === 'imported'
+    ? { paths: [staged.destPath], failures: [] }
+    : {
+        paths: [],
+        failures: [copyFailure(1, staged.status === 'failed' ? staged.reason : undefined)]
+      }
+}
+
+function enqueueDropWork(
+  deps: DroppedPathPreparationDeps,
+  lane: { tail: Promise<void>; pending: number },
+  work: (signal: AbortSignal) => Promise<PreparedDroppedPaths>,
+  fail: (reason?: NativeFileDropCopyFailureReason) => PreparedDroppedPaths
+): PreparedDroppedPaths | Promise<PreparedDroppedPaths> {
+  if (lane.pending >= MAX_PENDING_DRAG_TEMP_COPIES) {
+    return fail('busy')
+  }
+  const lifetime = deps.watchRenderer()
+  lane.pending += 1
+  const prepared = lane.tail.then(() => {
+    lifetime.signal.throwIfAborted()
+    return runWithinDropDeadline(lifetime.signal, deps, work, fail)
+  })
+  lane.tail = prepared
+    .then(
+      () => undefined,
+      () => undefined
+    )
+    .finally(() => {
+      lane.pending -= 1
+      lifetime.dispose()
+    })
+  // Why: a reloaded document must stop waiting even while its request is queued.
+  return rejectOnDropAbort(prepared, lifetime.signal)
 }
 
 function failDroppedPathPreparation(
@@ -181,10 +196,11 @@ function failDroppedPathPreparation(
   }
 }
 
-async function copyDroppedPaths(
-  request: PrepareDroppedPathsRequest,
+async function runWithinDropDeadline(
   rendererSignal: AbortSignal,
-  deps: DroppedPathPreparationDeps
+  deps: DroppedPathPreparationDeps,
+  work: (signal: AbortSignal) => Promise<PreparedDroppedPaths>,
+  fail: (reason?: NativeFileDropCopyFailureReason) => PreparedDroppedPaths
 ): Promise<PreparedDroppedPaths> {
   const timeout = new AbortController()
   const timer = setTimeout(
@@ -193,21 +209,12 @@ async function copyDroppedPaths(
   )
   const signal = AbortSignal.any([rendererSignal, timeout.signal])
   try {
-    return await rejectOnDropAbort(
-      deps
-        .getCopyEnvironment()
-        .then((env) => prepareDroppedPaths(request, env, signal, deps.localChatAttachmentStore)),
-      signal
-    )
+    return await rejectOnDropAbort(work(signal), signal)
   } catch (error) {
     if (rendererSignal.aborted) {
       throw error
     }
-    return failDroppedPathPreparation(
-      request.paths,
-      deps.platform,
-      timeout.signal.aborted ? 'timed-out' : undefined
-    )
+    return fail(timeout.signal.aborted ? 'timed-out' : undefined)
   } finally {
     clearTimeout(timer)
   }

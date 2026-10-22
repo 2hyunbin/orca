@@ -279,6 +279,50 @@ describe('useOsFileDropOwner', () => {
     }
   )
 
+  it('sends a local chat its checked drag-temp files as bytes and keeps the drop order', async () => {
+    const shot = new File(['image'], 'Shot.png')
+    const gone = new File(['x'], 'Gone.png')
+    // Why: a File whose file changed after the drop refuses to read.
+    gone.arrayBuffer = () => Promise.reject(new DOMException('changed', 'NotReadableError'))
+    prepareDroppedPaths.mockResolvedValueOnce({
+      paths: ['/dropped/notes.txt'],
+      failures: [],
+      fromDroppedFiles: [
+        { sourceIndex: 0, byteLength: 5, position: 0 },
+        { sourceIndex: 2, byteLength: 1, position: 2 },
+        { sourceIndex: 0, byteLength: 5, position: 3 }
+      ]
+    })
+    const storeDroppedFileBytes = vi.fn(async ({ name }: { name: string }) => ({
+      paths: [`/store/${name}`],
+      failures: []
+    }))
+    vi.stubGlobal('api', { fs: { getPathForFile, prepareDroppedPaths, storeDroppedFileBytes } })
+    const onDrop = vi.fn<DropHandler>()
+    const view = render(<Owner onDrop={onDrop} consumer={() => 'local-chat'} />)
+    drag(view.getByTestId('owner'), 'drop', [shot, new File(['n'], 'notes.txt'), gone, shot])
+    await vi.waitFor(() => expect(onDrop).toHaveBeenCalledTimes(1))
+    expect(prepareDroppedPaths).toHaveBeenCalledWith(
+      expect.objectContaining({ consumer: 'local-chat' })
+    )
+    expect(storeDroppedFileBytes).toHaveBeenCalledTimes(1)
+    expect(Array.from(storeDroppedFileBytes.mock.calls[0][0].bytes as Uint8Array)).toEqual(
+      Array.from(new TextEncoder().encode('image'))
+    )
+    expect(onDrop.mock.calls[0][0]).toEqual({
+      paths: ['/store/Shot.png', '/dropped/notes.txt', '/store/Shot.png'],
+      failures: [
+        {
+          target: 'rejected',
+          reason: 'temp-copy-failed',
+          pathCount: 1,
+          byteLength: 0,
+          commonReason: 'changed'
+        }
+      ]
+    })
+  })
+
   it('reports a preparation failure once without passing unprepared paths', async () => {
     const onDrop = vi.fn<DropHandler>()
     prepareDroppedPaths.mockRejectedValueOnce(new Error('copy failed'))

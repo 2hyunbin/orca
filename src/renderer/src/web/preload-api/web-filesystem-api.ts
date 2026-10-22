@@ -29,6 +29,9 @@ export function createFileApi(): NonNullable<Partial<PreloadApi>['fs']> {
     prepareDroppedPaths: async () => {
       throw new Error('Preparing dropped file paths is not supported in the web client')
     },
+    storeDroppedFileBytes: async () => {
+      throw new Error('Storing dropped files is not supported in the web client')
+    },
     readFileChunk: async ({ filePath, offset, length }) => {
       const file = await resolveRuntimeFilePath(filePath)
       return callRuntimeResult('files.readChunk', {

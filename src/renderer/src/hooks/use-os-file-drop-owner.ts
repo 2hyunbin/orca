@@ -11,6 +11,7 @@ import {
   type PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 import { hasOsFileDragTypes } from '../lib/os-file-drop-cancellation-guard'
+import { takeDroppedFileBytes } from './os-file-drop-bytes'
 
 export type OsFileDropSequence = { deliveryTail: Promise<void> }
 
@@ -162,11 +163,13 @@ export function useOsFileDropOwner<Destination = undefined>(
         }
 
         const paths: string[] = []
+        const pathFiles: File[] = []
         for (const file of files) {
           try {
             const path = getPathForFile(file)
             if (path) {
               paths.push(path)
+              pathFiles.push(file)
             }
           } catch {
             // A virtual file may not have a local path.
@@ -193,10 +196,10 @@ export function useOsFileDropOwner<Destination = undefined>(
         const preparation = (async (): Promise<PreparedDroppedPaths> => {
           let prepared: PreparedDroppedPaths
           try {
-            prepared = await window.api.fs.prepareDroppedPaths({
-              paths,
-              consumer: preparationConsumer
-            })
+            prepared = await takeDroppedFileBytes(
+              await window.api.fs.prepareDroppedPaths({ paths, consumer: preparationConsumer }),
+              pathFiles
+            )
           } catch {
             prepared = {
               paths: [],

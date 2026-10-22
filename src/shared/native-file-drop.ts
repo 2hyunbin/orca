@@ -37,7 +37,7 @@ export type NativeFileDropSizeRejectionReason = 'paths-too-large' | 'too-many-pa
 
 /** `unresolved-paths`: the OS handed us file items no path could be read from
  *  (promised/virtual files), which used to be swallowed with no feedback.
- *  `temp-copy-failed`: main could not copy a macOS drag-temp file; only main sends it. */
+ *  `temp-copy-failed`: a macOS drag-temp file could not be copied or stored. */
 export type NativeFileDropRejectionReason =
   | NativeFileDropSizeRejectionReason
   | 'unresolved-paths'

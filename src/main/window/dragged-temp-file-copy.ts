@@ -2,8 +2,6 @@ import { constants, createWriteStream, type Stats } from 'node:fs'
 import { lstat, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { pipeline } from 'node:stream/promises'
-import { AGENT_SESSION_ATTACHMENT_MAX_BYTES } from '../../shared/agent-session-attachments'
-import { readNodeFileHandleWithinLimit } from '../../shared/node-bounded-file-reader'
 import type { NativeFileDropCopyFailureReason } from '../../shared/native-file-drop'
 import {
   formatByteCeiling,
@@ -21,7 +19,7 @@ const DRAG_PROVIDER_DIR_PREFIX = 'NSIRD_'
 const COPY_DIR_PREFIX = 'orca-drop-'
 const DRAG_TEMP_COPY_ROOT_NAME = 'orca-drops'
 // Why no expiry: a copy may be what a terminal agent, a draft or a sent message still names, and
-// nothing tells which; fresh structured-chat copies enter the chat store before publication.
+// nothing tells which; a local chat's drop is written straight into its chat store instead.
 
 export type DragTempCopyEnvironment = {
   platform: NodeJS.Platform
@@ -39,7 +37,8 @@ export type DragTempCopyItemResult =
       byteLength?: number
       directory?: string
     }
-  | { sourcePath: string; status: 'buffered'; bytes: Buffer }
+  /** Checked and left unread: a local chat takes it as the dropped File's bytes. */
+  | { sourcePath: string; status: 'from-file'; byteLength: number }
   /** Left as the original path, which only main's children can open. */
   | { sourcePath: string; status: 'uncopied'; reason: 'too-large' | 'storage-full' }
   | { sourcePath: string; status: 'failed'; reason: NativeFileDropCopyFailureReason }
@@ -47,7 +46,8 @@ export type DragTempCopyItemResult =
 export class DragTempCopyBatch {
   readonly completed = new Map<string, DragTempCopyItemResult>()
   readonly directories = new Set<string>()
-  constructor(public remainingMemory = -1) {}
+  /** Files at or under this size are classified `from-file` instead of copied; -1 for none. */
+  constructor(readonly fromFileMaxBytes = -1) {}
 }
 
 export function getDragTempCopyRoot(appTempRoot: string): string {
@@ -78,21 +78,7 @@ export async function materializeDragTempPaths(
       if (completed.has(sourcePath)) {
         continue
       }
-      let capture = await materializeDragTempPath(sourcePath, remainingBytes, env, signal, batch)
-      while (!capture) {
-        batch.remainingMemory = -1
-        for (const [path, result] of completed) {
-          if (result.status === 'buffered') {
-            const staged = await stageCapturedDragTempBytes(path, result.bytes, env, batch, signal)
-            completed.set(path, staged)
-            if (staged.status === 'failed') {
-              remainingBytes += result.bytes.length
-            }
-          }
-        }
-        // Spill waits invalidate prospective provider stats: acquire it normally again.
-        capture = await materializeDragTempPath(sourcePath, remainingBytes, env, signal, batch)
-      }
+      const capture = await materializeDragTempPath(sourcePath, remainingBytes, env, signal, batch)
       remainingBytes -= capture.copiedBytes
       completed.set(sourcePath, capture.result)
     }
@@ -145,7 +131,7 @@ export async function materializeDragTempPath(
   env: DragTempCopyEnvironment,
   signal?: AbortSignal,
   batch = new DragTempCopyBatch()
-): Promise<{ result: DragTempCopyItemResult; copiedBytes: number } | null> {
+): Promise<{ result: DragTempCopyItemResult; copiedBytes: number }> {
   const passThrough = { result: imported(sourcePath, sourcePath), copiedBytes: 0 }
   if (!mayNeedDragTempCopy(sourcePath, env.platform)) {
     return passThrough
@@ -193,25 +179,10 @@ export async function materializeDragTempPath(
       }
       signal?.throwIfAborted()
 
-      if (batch.remainingMemory >= 0) {
-        if (size > batch.remainingMemory) {
-          return null
-        }
-        const read = await readNodeFileHandleWithinLimit(
-          handle,
-          AGENT_SESSION_ATTACHMENT_MAX_BYTES,
-          {
-            regularFileOnly: true,
-            signal,
-            window: { offset: 0, length: size }
-          }
-        )
-        if (!isSameSnapshot(read.stats, opened) || !isSameSnapshot(await handle.stat(), opened)) {
-          throw new DropCopyError('changed')
-        }
-        signal?.throwIfAborted()
-        batch.remainingMemory -= size
-        return { result: { sourcePath, status: 'buffered', bytes: read.buffer }, copiedBytes: size }
+      if (size <= batch.fromFileMaxBytes) {
+        // Why unread: the renderer sends the dropped File's bytes and the chat store writes them
+        // once; reading here too would stage a second copy.
+        return { result: { sourcePath, status: 'from-file', byteLength: size }, copiedBytes: size }
       }
       copyDir = await createCopyDirectory(env.copyRoot, batch)
       signal?.throwIfAborted()
