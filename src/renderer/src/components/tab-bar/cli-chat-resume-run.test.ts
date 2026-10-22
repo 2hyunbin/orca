@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CliChatResumeSource } from './cli-chat-resume-source'
 import type { AgentSessionWireRefusal } from '../../../../shared/agent-session-wire'
 import type { StructuredAgentSessionCreateParams } from '../../../../shared/structured-agent-session-create'
+import type * as FrameDrawnChatTabPlacementModule from '@/lib/frame-drawn-chat-tab-placement'
 
 const mocks = vi.hoisted(() => {
   const state: { source: CliChatResumeSource | null } = { source: null }
@@ -36,7 +37,7 @@ vi.mock('@/lib/structured-agent-session-create-hydration', () => ({
 vi.mock('sonner', () => ({ toast: { error: mocks.toast } }))
 // A frame-drawn server workspace's create carries the tab's place, read as it is sent.
 vi.mock('@/lib/frame-drawn-chat-tab-placement', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/frame-drawn-chat-tab-placement')>()
+  const actual = await importOriginal<typeof FrameDrawnChatTabPlacementModule>()
   return {
     ...actual,
     withFrameDrawnChatTabPlacement: (
