@@ -92,33 +92,37 @@ export function writeLink(
 }
 
 /**
- * The conversation's link, read from every host's canonical rows each time: the locator-keyed map
+ * Every persisted link, read from every host's canonical rows each time: the locator-keyed map
  * keeps only one host's row per id, and a removed, renamed or re-adopted workspace is never
  * answered from a cache.
  */
-export function findLink(
-  store: ExternalConversationLinkStore,
-  key: ConversationKey
-): LinkedConversation | null {
-  const matches = (links: unknown): ExternalConversationLink | undefined =>
-    linksOf(links).find((link) => sameConversation(link, key))
+export function* allLinks(store: ExternalConversationLinkStore): Generator<LinkedConversation> {
   const hosts = new Set<ExecutionHostId>([
     LOCAL_EXECUTION_HOST_ID,
     ...store.getRepos().map(getRepoExecutionHostId)
   ])
   for (const hostId of hosts) {
     for (const [worktreeId, meta] of Object.entries(readAllWorktreeMetaForHost(store, hostId))) {
-      const link = matches(meta.externalConversations)
-      if (link) {
-        const sshHostId = hostId === LOCAL_EXECUTION_HOST_ID ? null : hostId
-        return { workspace: { worktreeId, sshHostId }, link }
+      const sshHostId = hostId === LOCAL_EXECUTION_HOST_ID ? null : hostId
+      for (const link of linksOf(meta.externalConversations)) {
+        yield { workspace: { worktreeId, sshHostId }, link }
       }
     }
   }
   for (const folder of store.getFolderWorkspaces?.() ?? []) {
-    const link = matches(folder.externalConversations)
-    if (link) {
-      return { workspace: { worktreeId: folderWorkspaceKey(folder.id), sshHostId: null }, link }
+    for (const link of linksOf(folder.externalConversations)) {
+      yield { workspace: { worktreeId: folderWorkspaceKey(folder.id), sshHostId: null }, link }
+    }
+  }
+}
+
+export function findLink(
+  store: ExternalConversationLinkStore,
+  key: ConversationKey
+): LinkedConversation | null {
+  for (const linked of allLinks(store)) {
+    if (sameConversation(linked.link, key)) {
+      return linked
     }
   }
   return null

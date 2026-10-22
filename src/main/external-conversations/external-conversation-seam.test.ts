@@ -328,8 +328,8 @@ describe('ExternalConversationSeam disposal', () => {
 })
 
 async function started() {
-  const h = harness()
   const terminal = fakeTerminal()
+  const h = harness({}, undefined, undefined, terminal.terminal)
   const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'))
   const host = { launcher, terminal: terminal.terminal }
   await h.seam.start(host, KEY, 'start', START)
@@ -513,8 +513,8 @@ describe('ExternalConversationSeam twin removal', () => {
     const records = fakeLinkStore([LOCAL_REPO, { ...LOCAL_REPO, connectionId: 'box' }])
     records.put(WORKTREE, 'local', {})
     records.put(WORKTREE, 'ssh:box', {})
-    const h = harness({}, records)
     const terminal = fakeTerminal()
+    const h = harness({}, records, undefined, terminal.terminal)
     const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'), {
       worktreeId: WORKTREE,
       sshHostId: linkedHost === 'local' ? null : linkedHost
@@ -549,8 +549,8 @@ describe('ExternalConversationSeam twin removal', () => {
 
 describe('ExternalConversationSeam start-headed lanes', () => {
   async function startHeaded(delayLink: boolean) {
-    const h = harness()
     const terminal = fakeTerminal()
+    const h = harness({}, undefined, undefined, terminal.terminal)
     const launched = deferred<void>()
     const linkResolved = deferred<void>()
     const { launcher, launch } = fakeLauncher(async () => {
@@ -605,8 +605,8 @@ describe('ExternalConversationSeam start-headed lanes', () => {
   })
 
   it('lets no follower adopt a process when the launch published none it can prove', async () => {
-    const { seam } = harness()
     const terminal = fakeTerminal()
+    const { seam } = harness({}, undefined, undefined, terminal.terminal)
     terminal.state.ptyId = null
     const launched = deferred<void>()
     const { launcher, launch } = fakeLauncher(async () => {

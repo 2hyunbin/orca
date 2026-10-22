@@ -9,6 +9,7 @@ import type { ExternalConversationLink } from '../../shared/external-conversatio
 import { isLocalHookConnectionId } from '../../shared/wsl-hook-relay-contract'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import {
+  allLinks,
   findLink,
   writeLink,
   type ExternalConversationLinkStore,
@@ -53,40 +54,46 @@ export function hookReportedSession(
  * takes its hook rows with it, so the session has to be on the link before then for a reopen.
  */
 export class LinkedSessionCapture {
-  /** Linked panes this period, by pane key, with the session last seen there. */
-  private readonly watched = new Map<
-    string,
-    { key: ConversationKey; rows: SessionRows; sessionId?: string }
-  >()
+  /** Linked panes, by pane key, with the session last seen there. */
+  private readonly watched = new Map<string, { key: ConversationKey; sessionId?: string }>()
 
-  constructor(private readonly store: ExternalConversationLinkStore) {}
+  constructor(
+    private readonly store: ExternalConversationLinkStore,
+    private readonly rows: SessionRows
+  ) {}
+
+  /** Takes up every persisted link, as a fresh seam must: their sessions may move before a send. */
+  restore(): void {
+    for (const { link } of allLinks(this.store)) {
+      this.capture(link, link.paneKey)
+    }
+  }
 
   /** The hook store's sessions changed; captures each watched pane whose session moved. */
   sessionsChanged(sessions: readonly { paneKey: string; sessionId: string }[]): void {
     for (const { paneKey, sessionId } of sessions) {
       const watch = this.watched.get(paneKey)
       if (watch && watch.sessionId !== sessionId) {
-        this.capture(watch.rows, watch.key, paneKey)
+        this.capture(watch.key, paneKey)
       }
     }
-  }
-
-  watch(rows: SessionRows, key: ConversationKey, paneKey: string, sessionId?: string): void {
-    this.watched.set(paneKey, { key, rows, sessionId })
   }
 
   /**
    * Copies the pane's hook-reported session onto its link when it changed, and watches the pane
    * while the link names it; answers the link as it now stands.
    */
-  capture(rows: SessionRows, key: ConversationKey, paneKey: string): LinkedConversation | null {
+  capture(key: ConversationKey, paneKey: string): LinkedConversation | null {
     const linked = findLink(this.store, key)
     if (!linked || linked.link.paneKey !== paneKey) {
       this.watched.delete(paneKey)
       return linked
     }
-    const captured = hookReportedSession(rows, linked.link)
-    this.watch(rows, key, paneKey, (captured ?? linked.link).providerSession?.id)
+    const captured = hookReportedSession(this.rows, linked.link)
+    this.watched.set(paneKey, {
+      key: { source: key.source, externalId: key.externalId },
+      sessionId: (captured ?? linked.link).providerSession?.id
+    })
     if (
       !captured ||
       (linked.link.captureHostId === captured.captureHostId &&

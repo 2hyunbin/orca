@@ -30,7 +30,7 @@ async function started(
   sshHostId: ExecutionHostId | null = null,
   terminal = fakeTerminal()
 ) {
-  const h = harness({}, records)
+  const h = harness({}, records, undefined, terminal.terminal)
   const { launcher } = fakeLauncher(async () => launchResult('handed-to-terminal'), {
     worktreeId: WORKTREE,
     sshHostId
@@ -250,5 +250,22 @@ describe('ExternalConversationSeam reopen', () => {
     expect(await seam.send(host, KEY, 'd1', 'x')).toEqual(UNREACHABLE)
     expect(terminal.writes).toEqual([])
     expect(link()).toEqual([expect.objectContaining({ paneKey: REOPENED_PANE })])
+  })
+
+  it('captures a persisted link’s changed session after connectors are turned off and on', async () => {
+    const { seam, restart, host, terminal, reportSessions } = await started()
+    seam.dispose('connectors_disabled')
+    const restarted = restart()
+    const changedSession = { ...SESSION, id: 'claude-session-after-clear' }
+    terminal.state.rows = [sessionRow(PANE, null, changedSession)]
+    reportSessions([{ paneKey: PANE, sessionId: changedSession.id }])
+    terminal.exit()
+    terminal.state.rows = []
+    terminal.reopenable()
+    expect(await restarted.send(host, KEY, 'after-restart', 'next')).toEqual(REOPENED)
+    expect(terminal.resumeAgentSessionInWorkspace).toHaveBeenCalledWith(
+      WORKTREE,
+      expect.objectContaining({ providerSession: changedSession })
+    )
   })
 })

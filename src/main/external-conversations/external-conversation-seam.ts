@@ -12,7 +12,7 @@ import {
 } from './external-conversation-links'
 import { bindPane, deliverFollowUp, type FollowUpTerminal } from './external-conversation-send'
 import { reopenLinkedAgent, type ReopenTerminal } from './external-conversation-reopen'
-import { LinkedSessionCapture } from './external-conversation-session-capture'
+import { LinkedSessionCapture, type SessionRows } from './external-conversation-session-capture'
 import type { AgentPromptExpectedBinding } from '../runtime/runtime-terminal-contracts'
 import {
   launchConversation,
@@ -47,6 +47,8 @@ export type ExternalConversationSeamDeps = {
   receiptDb: () => DeliveryReceiptDb
   /** Worktree removals; returns the release. */
   onWorkspaceRemoved: (listener: (worktreeId: string) => void) => () => void
+  /** The hook rows linked agents' sessions are read from. */
+  sessionRows: SessionRows
   /** The hook store's provider sessions by pane, on every change; returns the release. */
   onProviderSessionsChanged: (
     listener: (sessions: readonly { paneKey: string; sessionId: string }[]) => void
@@ -79,7 +81,7 @@ export class ExternalConversationSeam {
 
   constructor(private readonly deps: ExternalConversationSeamDeps) {
     this.receipts = new DeliveryReceipts(deps.receiptDb)
-    this.sessions = new LinkedSessionCapture(deps.store)
+    this.sessions = new LinkedSessionCapture(deps.store, deps.sessionRows)
     // A removed workspace may keep its PTY registered a while; its held and queued sends end now.
     // The event names no host, so a same-path twin's removal is told apart by the link surviving.
     this.releaseRemovals = deps.onWorkspaceRemoved((worktreeId) => {
@@ -93,6 +95,8 @@ export class ExternalConversationSeam {
     this.releaseSessions = deps.onProviderSessionsChanged((sessions) =>
       this.sessions.sessionsChanged(sessions)
     )
+    // Subscribed first, so a session reported while the snapshot is read is not missed.
+    this.sessions.restore()
   }
 
   /** Deferred work passes this to every effect, so nothing starts or writes after a disable. */
@@ -142,7 +146,7 @@ export class ExternalConversationSeam {
                 createdAt: Date.now()
               })
               this.startedHere.add(conversationId(key))
-              this.sessions.capture(host.terminal, key, paneKey)
+              this.sessions.capture(key, paneKey)
             },
             // Before link resolution or prompt delivery settle, so no follower adopts a successor.
             (paneKey) => {
@@ -188,7 +192,7 @@ export class ExternalConversationSeam {
     signal: AbortSignal
   ): Promise<Delivery> {
     const id = conversationId(key)
-    const linked = this.sessions.capture(terminal, key, found.link.paneKey) ?? found
+    const linked = this.sessions.capture(key, found.link.paneKey) ?? found
     this.linked.set(id, { key, worktreeId: linked.workspace.worktreeId })
     const pane = bindPane(terminal, linked.link.paneKey)
     // A lane that already reached a process may only ever write to that one.
@@ -231,7 +235,7 @@ export class ExternalConversationSeam {
       (paneKey) => {
         relinked.paneKey = paneKey
         writeLink(this.deps.store, workspace, relinked)
-        this.sessions.capture(terminal, key, paneKey)
+        this.sessions.capture(key, paneKey)
       }
     )
     if (!reopened.ok) {
