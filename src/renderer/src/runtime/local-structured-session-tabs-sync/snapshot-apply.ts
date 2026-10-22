@@ -61,6 +61,8 @@ export type StructuredSessionSnapshotApplyOptions = {
   onRetiredEpochDrop?: (worktreeId: string, publicationEpoch: string) => void
   /** Collects accepted publications so lifecycle listeners run after the store patch settles. */
   onAcceptedAgentSession?: (worktreeId: string, sessionId: string) => void
+  /** Receives accepted ordinary topology after ownership, publication and cancellation fences. */
+  onAcceptedTopology?: (snapshot: RuntimeMobileSessionTabsResult) => void
   /** Workspaces main's frames draw: the listing writes none of their tabs, only collects labels. */
   framesDraw?: (worktreeId: string) => boolean
   /** Collects host titles for drawn chat tabs, applied as content after the store patch. */
@@ -166,6 +168,7 @@ export function applyLocalStructuredSessionTabSnapshots<
       continue
     }
     const effectiveSnapshot = suppressCancelledStructuredSessionTabs(snapshot, { kind: 'local' })
+    options.onAcceptedTopology?.(effectiveSnapshot)
     for (const tab of effectiveSnapshot.tabs) {
       if (tab.type === 'agent-session') {
         options.onAcceptedAgentSession?.(snapshot.worktree, tab.sessionId)

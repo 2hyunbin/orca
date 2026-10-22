@@ -31,6 +31,14 @@ export type WorktreeCreationProgressMode = 'stepped' | 'indeterminate'
 /** Serializable creation intent, including any script checks deferred until
  * after the composer closes. Retained by the pending panel for Retry. */
 export type WorktreeCreationRequest = {
+  /** Kept with Retry so an unanswered host create is replayed, never recreated. */
+  hostAgentLaunch?: {
+    operationId: string
+    sessionId: string
+    paneKey: string
+    create: Readonly<Record<string, unknown>>
+    issued: boolean
+  }
   repoId: string
   /** Execution owner retained after script preparation, including retries. */
   executionHostId?: ExecutionHostId

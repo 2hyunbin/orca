@@ -41,7 +41,8 @@ function layoutContainsLeaf(
 export function bindLivePtyToExactSurface(
   store: LiveSurfaceAdoptionStore,
   worktreeId: string,
-  terminal: { paneKey: string; ptyId: string; tabId: string }
+  terminal: { paneKey: string; ptyId: string; tabId: string },
+  options?: Parameters<LiveSurfaceAdoptionStore['createTab']>[3]
 ): boolean {
   const pane = parsePaneKey(terminal.paneKey)
   if (!pane || pane.tabId !== terminal.tabId) {
@@ -70,6 +71,7 @@ export function bindLivePtyToExactSurface(
     return true
   }
   const created = store.createTab(worktreeId, undefined, undefined, {
+    ...options,
     id: terminal.tabId,
     initialLeafId: pane.leafId,
     initialPtyId: terminal.ptyId,

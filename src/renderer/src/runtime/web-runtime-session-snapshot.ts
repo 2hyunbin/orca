@@ -37,6 +37,7 @@ export async function refreshWebRuntimeSessionTabsSnapshot(
     }
     afterCurrentInFlight?: boolean
     errorMode?: 'warn' | 'throw'
+    onCurrentSnapshot?: (snapshot: RuntimeMobileSessionTabsResult) => void
   } = {}
 ): Promise<void> {
   // Why one await up front: the apply below must not yield between the list and its receipt.
@@ -128,19 +129,23 @@ export async function refreshWebRuntimeSessionTabsSnapshot(
     )
     if (
       !recovered ||
-      getRuntimeEnvironmentRevision(environmentId) !== expectedEnvironmentPairingRevision
+      getRuntimeEnvironmentRevision(environmentId) !== expectedEnvironmentPairingRevision ||
+      getRuntimeEnvironmentConnectionGeneration(environmentId) !==
+        expectedEnvironmentConnectionGeneration ||
+      getWebSessionTabsTrackingGeneration(environmentId) !== expectedTrackingGeneration
     ) {
       return
     }
     // Why: this list is the host answering, but only the frame's own decision
     // says whether that answer is evidence — a workspace the mirror never
     // writes is discarded with nothing accepted behind it.
-    const decision = shouldApplyRecoveredWebSessionTabsSnapshot(
+    const current = shouldApplyRecoveredWebSessionTabsSnapshot(
       environmentId,
       recovered,
       receivedFrame,
       runtimeId
     )
+    const decision = current
       ? decideWebSessionTabsSnapshot(recovered, environmentId)
       : WEB_SESSION_TABS_FRAME_OUTRANKED
     const settleMirror = applyWebSessionTabsStorePatch(
@@ -166,6 +171,9 @@ export async function refreshWebRuntimeSessionTabsSnapshot(
       recovered
     )
     settleMirror()
+    if (current) {
+      options.onCurrentSnapshot?.(recovered)
+    }
   } catch (error) {
     if (options.errorMode === 'throw') {
       throw error
