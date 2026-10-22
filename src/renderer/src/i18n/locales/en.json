@@ -5509,6 +5509,7 @@
           "needsAttention": "Needs attention",
           "other": "a different skill already uses this name",
           "replace": "Replace",
+          "replacedWithBackup": "Replaced · Your copy was saved as a backup",
           "sharedNotCurrent": "the shared copy this folder uses is not Orca’s",
           "unwritable": "Orca can't write to this folder",
           "unreadable": "Orca can't read every file in this copy",

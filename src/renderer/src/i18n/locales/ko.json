@@ -5201,6 +5201,7 @@
           "needsAttention": "확인 필요",
           "other": "다른 스킬이 이미 이 이름을 사용합니다",
           "replace": "교체",
+          "replacedWithBackup": "교체됨 · 기존 사본이 백업으로 저장되었습니다",
           "sharedNotCurrent": "이 폴더가 사용하는 공유 사본은 Orca의 것이 아닙니다",
           "unwritable": "Orca가 이 폴더에 쓸 수 없습니다",
           "unreadable": "Orca가 이 사본의 일부 파일을 읽을 수 없습니다",

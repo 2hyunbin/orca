@@ -1,7 +1,8 @@
 import type { BundledSkillLocation } from '../../../../shared/bundled-skill-locations'
-import type {
-  BundledSkillOutcomeSummary,
-  BundledSkillPlanSkillSummary
+import type { BundledSkillOutcome } from '../../../../shared/bundled-skill-plan'
+import {
+  bundledSkillOutcomeText,
+  type BundledSkillPlanSkillSummary
 } from '../../../../shared/bundled-skill-summary'
 import { translate } from '@/i18n/i18n'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -29,9 +30,11 @@ function ChoiceLine({
 }): React.JSX.Element {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <span className="min-w-0 [overflow-wrap:anywhere]" title={location.path}>
-        {locationStateText(location)}
-      </span>
+      {location.state === 'leave' ? (
+        <span className="min-w-0 [overflow-wrap:anywhere]" title={location.path}>
+          {locationStateText(location)}
+        </span>
+      ) : null}
       {replace && location.replaceable ? (
         <label className="flex w-fit items-center gap-1.5 text-xs text-muted-foreground">
           <Checkbox
@@ -81,21 +84,25 @@ export function SkillUpdateRow({
 }: {
   skill: BundledSkillPlanSkillSummary
   phase: SkillRowPhase
-  outcome?: BundledSkillOutcomeSummary
+  outcome?: BundledSkillOutcome
   replace?: SkillReplaceToggle
   showLocations: boolean
 }): React.JSX.Element {
+  const replacement = skill.locations.find((location) => location.state === 'replace')
   const headline =
     phase === 'pending'
       ? translate('auto.components.skills.SkillFreshnessUpdateDialog.updating', 'Updating…')
       : phase === 'result' && outcome
         ? // Why: a skill the run only reports on shows its left-alone lines, not "No change".
-          outcome.text === 'No change' && outcome.leftAlone.length > 0
+          bundledSkillOutcomeText(outcome) === 'No change' &&
+          outcome.ops.some((op) => op.kind === 'leave')
           ? null
-          : skillOutcomeText(outcome.text)
-        : skillPlanHeadline(skill.state)
+          : skillOutcomeText(outcome)
+        : replacement
+          ? locationStateText(replacement)
+          : skillPlanHeadline(skill.state)
   const choices = skill.locations.filter(
-    (location) => location.state === 'leave' || location.state === 'replace'
+    (location) => location.state === 'leave' || (phase !== 'result' && location.state === 'replace')
   )
   return (
     <div
