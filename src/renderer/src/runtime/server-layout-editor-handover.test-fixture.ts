@@ -99,6 +99,11 @@ export function createFakeServerMain(
         now === 'apply' ? apply(command) : { ok: false, code: now.refuse }
       )
     },
+    /** session.tabs.close of one tab, as that main applies it to its layout. */
+    closeTab: (workspace: string, tabId: string): 'applied' | 'unknown-tab' => {
+      const reply = apply({ type: 'closeTabs', tabIds: [tabId], workspace })
+      return reply.ok && reply.result.closed?.includes(tabId) ? 'applied' : 'unknown-tab'
+    },
     /** Applies every held command now and answers it. */
     release: (): void => {
       for (const { command, resolve } of held.splice(0)) {

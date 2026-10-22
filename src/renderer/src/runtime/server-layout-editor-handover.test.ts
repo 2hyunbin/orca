@@ -46,13 +46,21 @@ const hoisted = vi.hoisted(
     sent: Sent[]
     reply: ((command: LayoutCommand) => Promise<LayoutApplyReply>) | null
     writeRuntimeFile: Mock
+    closeSessionTab: Mock<
+      (args: {
+        worktreeId: string
+        tabId: string
+        environmentId?: string | null
+      }) => Promise<string>
+    >
   } => ({
     owners: new Map(),
     resync: vi.fn(),
     subscribe: null,
     sent: [],
     reply: null,
-    writeRuntimeFile: vi.fn()
+    writeRuntimeFile: vi.fn(),
+    closeSessionTab: vi.fn()
   })
 )
 
@@ -99,6 +107,10 @@ vi.mock('@/runtime/runtime-rpc-client', async (importOriginal) => {
     }
   }
 })
+
+vi.mock('./web-runtime-session-tab-lifecycle', () => ({
+  closeWebRuntimeSessionTab: hoisted.closeSessionTab
+}))
 
 vi.mock('@/runtime/runtime-file-mutation-client', async (importOriginal) => ({
   ...(await importOriginal<typeof RuntimeFileMutationClient>()),
@@ -208,6 +220,9 @@ async function connect(store: TestStore, server: ReturnType<typeof createFakeSer
 function serverWith() {
   const server = createFakeServerMain(streams, { [WT]: SERVER_LAYOUT })
   hoisted.reply = (command) => server.reply(command)
+  hoisted.closeSessionTab.mockImplementation(async ({ worktreeId, tabId }) =>
+    server.closeTab(worktreeId, tabId)
+  )
   return server
 }
 
@@ -217,6 +232,7 @@ beforeEach(() => {
   hoisted.sent.length = 0
   hoisted.reply = null
   hoisted.writeRuntimeFile.mockReset().mockResolvedValue({ ok: true })
+  hoisted.closeSessionTab.mockReset().mockResolvedValue('failed')
   hoisted.resync.mockReset().mockResolvedValue(undefined)
   streams.all.length = 0
   resetWebSessionTabsSyncTestState()
@@ -416,6 +432,55 @@ describe('a desktop-only editor tab when the server’s frames take its workspac
     expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
     expect(editorTabIds(store)).toEqual([first.tabId, second.tabId])
     expect(openFileIds(store)).toEqual([first.fileId, second.fileId])
+  })
+
+  it('closes the server’s copy of a tab the user closed while its hand-over was in flight', async () => {
+    const store = mirroredStore()
+    const kept = openDesktopFile(store, FILE_PATH)
+    const closed = openDesktopFile(store, SECOND_PATH)
+    const server = serverWith()
+    server.answer = 'pending'
+    await connect(store, server)
+    expect(serverOpens().map((command) => command.tabId)).toEqual([kept.tabId, closed.tabId])
+
+    store.getState().closeFile(closed.fileId)
+    server.answer = 'apply'
+    server.release()
+    await settle()
+    await settle()
+    await settle()
+
+    expect(hoisted.closeSessionTab).toHaveBeenCalledTimes(1)
+    expect(hoisted.closeSessionTab).toHaveBeenCalledWith({
+      worktreeId: WT,
+      tabId: closed.tabId,
+      environmentId: ENV,
+      reason: 'user'
+    })
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(true)
+    expect(server.layout(WT)?.tabs.map((tab) => tab.id)).not.toContain(closed.tabId)
+    expect(server.layout(WT)?.tabs.map((tab) => tab.id)).toContain(kept.tabId)
+    expect(editorTabIds(store)).toEqual([kept.tabId])
+    expect(openFileIds(store)).toEqual([kept.fileId])
+  })
+
+  it('stays mirror-drawn when the server’s copy of a tab closed mid-hand-over cannot be closed', async () => {
+    const store = mirroredStore()
+    const closed = openDesktopFile(store, FILE_PATH)
+    const server = serverWith()
+    hoisted.closeSessionTab.mockResolvedValue('failed')
+    server.answer = 'pending'
+    await connect(store, server)
+
+    store.getState().closeFile(closed.fileId)
+    server.answer = 'apply'
+    server.release()
+    await settle()
+    await settle()
+
+    expect(hoisted.closeSessionTab).toHaveBeenCalledTimes(1)
+    expect(isFrameDrawnServerWorkspace(ENV, WT)).toBe(false)
+    expect(editorTabIds(store)).toEqual([])
   })
 
   it('routes an open in the gated workspace to the server, whose frames keep the tab', async () => {

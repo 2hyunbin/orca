@@ -9,6 +9,7 @@ import type { PublishedWorkspaceLayout } from '../../../shared/workspace-layout/
 import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
 import { sendToServerMain, type WindowLayoutCommand } from './layout-apply-send'
 import { serverEditorOpen } from './server-layout-apply'
+import { closeWebRuntimeSessionTab } from './web-runtime-session-tab-lifecycle'
 
 type EditorOpen = Extract<WindowLayoutCommand, { type: 'openEditorTab' }>
 
@@ -59,11 +60,19 @@ function desktopOnlyEditorOpens(
   })
 }
 
+/** Whether the window still shows the tab with this desktop's own file, not a mirror's copy. */
+function showsDesktopTab(state: AppState, key: string, open: EditorOpen): boolean {
+  return (state.unifiedTabsByWorktree[key] ?? []).some(
+    (tab) => tab.id === open.tabId && tab.entityId === open.fileId
+  )
+}
+
 /**
  * Hands a workspace's desktop-only editor tabs to the server's main, then reports when all have
  * answered. A resent open the server already applied answers ok (drawnTabOpen); any refusal, even
  * `tab_exists` (the id is another tab's there), or a failed call, keeps the workspace mirror-drawn
- * for the rest of this stream.
+ * for the rest of this stream. A tab the user closed while its open was in flight is closed on the
+ * server before the workspace gates, so its frames never draw it back.
  */
 export function createServerEditorHandover(options: {
   environmentId: string
@@ -77,15 +86,49 @@ export function createServerEditorHandover(options: {
   const notGateable = new Set<string>()
   let closed = false
 
+  const answered = (key: string): void => {
+    const left = (waiting.get(key) ?? 1) - 1
+    if (left > 0) {
+      waiting.set(key, left)
+      return
+    }
+    waiting.delete(key)
+    options.onAnswered()
+  }
+
+  /** The server applied an open for a tab the user closed meanwhile: its close goes there too. */
+  const closeOnServer = (key: string, tabId: string): void => {
+    void closeWebRuntimeSessionTab({
+      worktreeId: key,
+      tabId,
+      environmentId: options.environmentId,
+      reason: 'user'
+    }).then((outcome) => {
+      if (closed) {
+        return
+      }
+      if (outcome === 'failed') {
+        // A gate now would draw the server's copy back; an undelivered close replays meanwhile.
+        console.warn('[layout-owner] a closed editor tab could not be closed on the server')
+        notGateable.add(key)
+      }
+      answered(key)
+    })
+  }
+
   const answer =
-    (key: string, tabId: string) =>
+    (key: string, open: EditorOpen) =>
     (reply: LayoutApplyReply | null): void => {
       if (closed) {
         return
       }
+      if (reply?.ok && !showsDesktopTab(options.getState(), key, open)) {
+        closeOnServer(key, open.tabId)
+        return
+      }
       if (reply?.ok) {
         const tabs = handedOver.get(key) ?? new Set()
-        handedOver.set(key, tabs.add(tabId))
+        handedOver.set(key, tabs.add(open.tabId))
       } else {
         console.warn(
           '[layout-owner] an editor tab stays on this desktop:',
@@ -93,13 +136,7 @@ export function createServerEditorHandover(options: {
         )
         notGateable.add(key)
       }
-      const left = (waiting.get(key) ?? 1) - 1
-      if (left > 0) {
-        waiting.set(key, left)
-        return
-      }
-      waiting.delete(key)
-      options.onAnswered()
+      answered(key)
     }
 
   return {
@@ -118,12 +155,7 @@ export function createServerEditorHandover(options: {
       }
       waiting.set(key, opens.length)
       for (const open of opens) {
-        sendToServerMain(
-          options.environmentId,
-          key,
-          serverEditorOpen(key, open),
-          answer(key, open.tabId)
-        )
+        sendToServerMain(options.environmentId, key, serverEditorOpen(key, open), answer(key, open))
       }
       return false
     },
