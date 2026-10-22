@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { isTerminalLeafId } from '../stable-pane-id'
-import { SleepCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
+import { SleepCommand, StartPaneCommand, WakeCommand } from './workspace-layout-sleep-wake-params'
 import { RenameTabsCommand } from './workspace-layout-rename-tabs-params'
 import { EditorFileRecord, EditorViewRecord } from './workspace-layout-editor-file-params'
 import { SetGroupRatiosCommand, SetPaneRatiosCommand } from './workspace-layout-ratio-params'
@@ -335,6 +335,7 @@ export const LayoutApplyParams = z.object({
     RenameEditorFilesCommand,
     SleepCommand,
     WakeCommand,
+    StartPaneCommand,
     SetDefaultTabsAppliedCommand,
     ApplyDefaultTabsCommand
   ])

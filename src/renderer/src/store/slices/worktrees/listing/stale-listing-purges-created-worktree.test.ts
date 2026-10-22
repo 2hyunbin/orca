@@ -135,7 +135,7 @@ function applyListing(
   rows: Worktree[],
   catalogVersion?: WorktreeCatalogVersion
 ): WorktreeListingMergeOutcome {
-  return mergeFetchedWorktrees(store.setState, {
+  return mergeFetchedWorktrees(store.setState, store.getState, {
     repoId: REPO_ID,
     hostId: 'local',
     ownerWasMissingAtStart: false,

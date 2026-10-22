@@ -1,18 +1,18 @@
 import { session } from 'electron'
 import { existsSync } from 'node:fs'
-import type { BrowserCookieImportResult } from '../../shared/browser-workspace-types'
-import { withCookieMutationLock } from './browser-cookie-import-clear'
+import type { BrowserCookieImportResult } from '../../../../shared/browser-workspace-types'
+import { withCookieMutationLock } from '../../browser-cookie-import-clear'
 import {
   diag,
   reasonWithDiagLog,
   summarizeCookieImportError
-} from './browser-cookie-import-diagnostics'
-import type { DetectedBrowser } from './browser-cookie-detection-types'
-import type { CookieImportOptions } from './browser-cookie-import-pipeline'
-import { prepareChromiumCookieImport } from './browser-cookie-chromium-prepare'
-import { scanChromiumCookieRows } from './browser-cookie-chromium-scan'
-import { finalizeChromiumCookieImport } from './browser-cookie-chromium-finalize'
-import type { ChromiumImportContext } from './browser-cookie-chromium-types'
+} from '../../browser-cookie-import-diagnostics'
+import type { DetectedBrowser } from '../../browser-cookie-detection-types'
+import type { CookieImportOptions } from '../../browser-cookie-import-pipeline'
+import { prepareChromiumCookieImport } from './prepare-import'
+import { scanChromiumCookieRows } from './scan-source-rows'
+import { finalizeChromiumCookieImport } from './finalize-import'
+import type { ChromiumImportContext } from './import-context'
 
 export async function importChromiumCookies(
   browser: DetectedBrowser,
