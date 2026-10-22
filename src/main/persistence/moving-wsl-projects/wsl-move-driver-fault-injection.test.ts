@@ -55,7 +55,10 @@ vi.mock('../../telemetry/cohort-classifier', () => ({
 const journalKill = vi.hoisted(() => ({ at: null as ((name: string) => void) | null }))
 vi.mock('./wsl-move-cutover-journal', async (importOriginal) => {
   const actual = await importOriginal<typeof Journal>()
-  const around = <A extends unknown[]>(name: (...args: A) => string, run: (...args: A) => void) => {
+  const around = <A extends unknown[]>(
+    name: (...args: NoInfer<A>) => string,
+    run: (...args: A) => void
+  ) => {
     return (...args: A): void => {
       journalKill.at?.(`${name(...args)}:before`)
       run(...args)

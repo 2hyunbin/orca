@@ -9,6 +9,7 @@ import type { Store } from '../loading-store/store'
 import { wslMoveAutomationHostFilterUpdate } from './wsl-move-automation-filter-rewrite'
 import { registerWslMoveDesktopRewriteStore } from './wsl-move-desktop-rewrite-stores'
 import { wslMoveRewriteScope, type WslMoveRewriteScope } from './wsl-move-rewrite-scope'
+import { withWslMoveSeededDrafts } from './wsl-move-seeded-drafts'
 import { wslMoveHostSessionSeed, wslMoveSessionGlobalsPatch } from './wsl-move-session-rewrite'
 import { rewriteWslMoveUiRouting } from './wsl-move-ui-routing-rewrite'
 
@@ -130,7 +131,13 @@ export function applyWslMoveHostSessionSeed(
   if (!seed) {
     return []
   }
+  const drafted = withWslMoveSeededDrafts(
+    seed.session,
+    profile.getWorkspaceSession(LOCAL_EXECUTION_HOST_ID),
+    scope,
+    new Set(seed.workspaceIds)
+  )
   // A move's one-shot seed, or its redo after a stale window; layout commands refuse runtime hosts.
-  profile.setWorkspaceSession(seed.session, hostId)
+  profile.setWorkspaceSession(drafted ?? seed.session, hostId)
   return seed.workspaceIds
 }
