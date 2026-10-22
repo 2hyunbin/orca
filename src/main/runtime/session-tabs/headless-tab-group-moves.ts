@@ -183,6 +183,9 @@ export abstract class RuntimeHeadlessTabGroups extends RuntimeHeadlessTabPropert
       besideGroupId: move.targetGroupId,
       direction: move.splitDirection
     })
+    if (!reply.ok) {
+      console.warn('[layout-owner] phone split refused', reply.code)
+    }
     const held = this.mobileSessionTabsByWorktree.get(worktreeId)
     const rows = held?.tabs.filter((row) => orderIdOf(row) === tabId) ?? []
     const moved = rows.find((row) => row.isActive) ?? rows[0]
