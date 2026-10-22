@@ -14487,6 +14487,7 @@
             "sourceActionsUnavailable": "转录来源不可用。"
           },
           "AiVaultScanProgressStrip": {
+            "agentChecked": "{{agent}}：已检查 {{settled}} / {{total}} 个历史记录候选项",
             "fileCount_one": "{{value0}} 个文件",
             "fileCount_other": "{{value0}} 个文件",
             "databaseCount_one": "{{value0}} 个数据库",
