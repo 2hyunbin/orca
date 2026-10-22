@@ -71,7 +71,7 @@ export function withFrameDrawnChatTabPlacement(intent: {
   if (!environmentId) {
     return intent.params
   }
-  // The admission call just probed this host, so its capabilities are cached; unknown sends no place.
+  // Probed earlier in the launch; unknown sends no place, so the server saves the tab at the group's end.
   const supported =
     readCachedRuntimeEnvironmentCapability(
       environmentId,

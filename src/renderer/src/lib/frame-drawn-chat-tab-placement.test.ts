@@ -3,11 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => {
   const groupsByWorktree: Record<string, { id: string; tabOrder: string[] }[]> = {}
   const noted: string[][] = []
-  return {
-    state: { groupsByWorktree },
+  const flags: { frameDrawn: boolean; routed: boolean; supported: boolean | null } = {
     frameDrawn: true,
     routed: true,
-    supported: true as boolean | null,
+    supported: true
+  }
+  return {
+    state: { groupsByWorktree },
+    ...flags,
     /** Tabs the server's frames hold, by desktop id → server id. */
     serverIds: new Map<string, string>(),
     noted
