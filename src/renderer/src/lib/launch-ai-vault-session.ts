@@ -1,5 +1,6 @@
 import { useAppStore } from '@/store'
 import { persistAgentLaunchTabOrder } from '@/lib/launch-agent-tab-order'
+import { insertUnifiedTabAfterAnchor } from '@/lib/unified-tab-anchor-insertion'
 import { tuiAgentToAgentKind } from '@/lib/telemetry'
 import { runtimeEnvironmentIdOrLocalUnlessTwin } from '@/lib/worktree-runtime-owner'
 import { createWebRuntimeSessionTerminal } from '@/runtime/web-runtime-terminal-creation'
@@ -103,12 +104,7 @@ export function launchAiVaultSessionInNewTab(args: {
 
   persistAgentLaunchTabOrder(args.worktreeId, tab.id)
   if (slot && !split && (!args.targetGroupId || args.targetGroupId === slot.groupId)) {
-    const order = (
-      useAppStore.getState().groupsByWorktree[args.worktreeId]?.find((g) => g.id === slot.groupId)
-        ?.tabOrder ?? []
-    ).filter((id) => id !== tab.id)
-    order.splice(order.indexOf(slot.id) + 1, 0, tab.id)
-    useAppStore.getState().reorderUnifiedTabs(slot.groupId, order)
+    insertUnifiedTabAfterAnchor(args.worktreeId, tab.id, slot.id)
   }
 
   return { tabId: tab.id }

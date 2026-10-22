@@ -35,18 +35,20 @@ export function TerminalPaneResumeInChatButton({
     )
   })
   const pending = useCliChatResumePending(source)
-  const label = translate('components.tab.bar.switch.toNativeChat', 'Switch to native chat')
+  const label =
+    capability === false
+      ? translate(
+          'auto.components.right.sidebar.AiVaultSessionRow.resumeInNewNativeChat',
+          'Resume in New Chat'
+        )
+      : translate('components.tab.bar.switch.toNativeChat', 'Switch to native chat')
   const tooltip = !source
     ? translate(
         'components.tab.bar.switch.noConversation',
         'No saved conversation is available in this terminal yet.'
       )
     : capability === false
-      ? translate(
-          'components.tab.bar.switch.unavailable',
-          'Switching {{agent}} is not available yet.',
-          { agent: agentLabel(source.agent) }
-        )
+      ? label
       : running && source
         ? translate(
             'components.tab.bar.switch.exitAgentFirst',
@@ -70,13 +72,13 @@ export function TerminalPaneResumeInChatButton({
           // Same class as split so it shares the hover/active reveal.
           className="pane-title-split-trigger"
           aria-label={label}
-          disabled={!source || pending || capability !== true}
+          disabled={!source || pending || capability === undefined}
           // Not `disabled`: the tooltip has to say why.
-          aria-disabled={running || undefined}
+          aria-disabled={(capability === true && running) || undefined}
           aria-busy={pending || undefined}
           onClick={(event) => {
             event.stopPropagation()
-            if (source && !running && capability === true) {
+            if (source && capability !== undefined && (capability === false || !running)) {
               void runCliChatResume(source)
             }
           }}
