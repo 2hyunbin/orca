@@ -1,3 +1,5 @@
+import { toast } from 'sonner'
+import { createTerminalTabAppearanceActions } from './terminal-tab-appearance'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
 import { createTestStore, makeWorktree, seedStore } from '../slices/store-test-helpers'
@@ -151,8 +153,10 @@ describe('recoloring a structured chat tab', () => {
 
 describe('renaming a structured chat tab', () => {
   beforeEach(() => {
+    vi.mocked(toast.error).mockClear()
     hostRename.mockClear()
     hostRename.mockResolvedValue({ name: 'Flaky retry test', applied: true })
+    hostSavesNames.mockClear()
     hostSavesNames.mockResolvedValue(true)
   })
 
@@ -171,15 +175,60 @@ describe('renaming a structured chat tab', () => {
       expect.objectContaining({ type: 'renameTab', tabId: STRUCTURED_TAB_ID })
     )
     store.getState().setTabCustomLabel(STRUCTURED_TAB_ID, 'Old local alias')
+    let answer = (_supported: boolean) => {}
+    hostSavesNames.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve
+        })
+    )
     store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, 'Updated local name')
+    await vi.waitFor(() => expect(hostSavesNames).toHaveBeenCalledTimes(2))
+    store.getState().setUnifiedTabColor(STRUCTURED_TAB_ID, 'red')
+    store.setState({
+      unifiedTabsByWorktree: {
+        [WORKTREE]: store
+          .getState()
+          .unifiedTabsByWorktree[WORKTREE]!.map((tab) => ({ ...tab, executionHostId: 'local' }))
+      }
+    })
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      layoutApplyTestTransport.answerWith('pending')
+    }
+    answer(true)
     await vi.waitFor(() =>
       expect(hostRename).toHaveBeenLastCalledWith(
         { sessionId: 'codex-1', name: 'Updated local name' },
         { kind: 'local' }
       )
     )
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      await vi.waitFor(() => expect(layoutApplyTestTransport.pendingCount).toBe(1))
+      store.getState().setUnifiedTabColor(STRUCTURED_TAB_ID, 'blue')
+      layoutApplyTestTransport.answerPending()
+      layoutApplyTestTransport.answerWith('accept')
+    }
     await layoutApplyTestTransport.settle()
     await vi.waitFor(() => expect(labelOf(store)).toBeNull())
+    expect(colorOf(store)).toBe(ORCA_LAYOUT_OWNER_IS_MAIN ? 'blue' : 'red')
+
+    // Existing alias retirement is bookkeeping, not a reason to discard an explicit host write.
+    hostSavesNames.mockImplementationOnce(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve
+        })
+    )
+    store.getState().setTabCustomLabel(STRUCTURED_TAB_ID, 'Migrating alias')
+    store.getState().setTabCustomTitle(STRUCTURED_TAB_ID, 'After migration')
+    await vi.waitFor(() => expect(hostSavesNames).toHaveBeenCalledTimes(3))
+    store.getState().setTabCustomLabel(STRUCTURED_TAB_ID, null)
+    answer(true)
+    await vi.waitFor(() => expect(hostRename).toHaveBeenCalledTimes(3))
+    expect(hostRename).toHaveBeenLastCalledWith(
+      { sessionId: 'codex-1', name: 'After migration' },
+      { kind: 'local' }
+    )
   })
 
   it.each(['window', 'main'] as const)(
@@ -197,14 +246,29 @@ describe('renaming a structured chat tab', () => {
           { ...folder, executionHostId: 'runtime:b' }
         ]
       })
-      const actions =
-        entry === 'main'
-          ? routeTerminalTabChangesThroughLayoutOwner(store.getState(), store.getState)
-          : store.getState()
+      const windowActions = createTerminalTabAppearanceActions(store.setState, store.getState)
+      const mainActions = routeTerminalTabChangesThroughLayoutOwner(windowActions, store.getState)
+      const actions = entry === 'main' ? mainActions : windowActions
+      const otherActions = entry === 'main' ? windowActions : mainActions
       const current = () => store.getState().unifiedTabsByWorktree[folder.id][0]!
+      let complete = () => {}
+      hostRename.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            complete = () => resolve({ name: 'First', applied: true })
+          })
+      )
       actions.setTabCustomTitle(tab.id, '  First  ')
+      store.setState({
+        activeWorktreeId: 'intermediate',
+        activeWorkspaceExecutionHostId: 'runtime:a'
+      })
+      await vi.waitFor(() => expect(hostRename).toHaveBeenCalledTimes(1))
+      store.getState().setUnifiedTabColor(tab.id, 'red')
       store.setState({ activeWorktreeId: 'elsewhere', activeWorkspaceExecutionHostId: 'runtime:a' })
+      complete()
       await vi.waitFor(() => expect(current().customLabel).toBe('First'))
+      expect(current().color).toBe('red')
       expect(hostRename).toHaveBeenLastCalledWith(
         { sessionId: tab.entityId, name: 'First' },
         { kind: 'environment', environmentId: 'b' }
@@ -212,7 +276,6 @@ describe('renaming a structured chat tab', () => {
       expect(current().executionHostId).toBeUndefined()
 
       store.setState({ activeWorktreeId: folder.id, activeWorkspaceExecutionHostId: 'runtime:b' })
-      let complete = () => {}
       hostRename.mockImplementationOnce(
         () =>
           new Promise((resolve) => {
@@ -228,15 +291,33 @@ describe('renaming a structured chat tab', () => {
       )
       const error = vi.spyOn(console, 'warn').mockImplementation(() => {})
       hostRename.mockRejectedValueOnce(new Error('Save refused'))
-      actions.setTabCustomTitle(tab.id, 'Not saved')
+      store.getState().setUnifiedTabColor(tab.id, 'blue')
+      otherActions.setTabCustomTitle(tab.id, 'Not saved')
       await vi.waitFor(() => expect(error).toHaveBeenCalled())
       expect(current().customLabel).toBe('First')
+      expect(toast.error).toHaveBeenCalledExactlyOnceWith("Couldn't rename this chat")
       error.mockRestore()
       complete()
       await layoutApplyTestTransport.settle()
       expect(current().customLabel).toBe('First')
-      actions.setTabCustomTitle(tab.id, 'Newer')
+      let fail = (_error: Error) => {}
+      hostRename.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            fail = reject
+          })
+      )
+      actions.setTabCustomTitle(tab.id, 'Older failure')
+      await vi.waitFor(() => expect(hostRename).toHaveBeenCalledTimes(4))
+      store.getState().setUnifiedTabColor(tab.id, 'green')
+      otherActions.setTabCustomTitle(tab.id, 'Newer')
       await vi.waitFor(() => expect(current().customLabel).toBe('Newer'))
+      vi.mocked(toast.error).mockClear()
+      const staleError = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      fail(new Error('Obsolete failure'))
+      await vi.waitFor(() => expect(staleError).toHaveBeenCalled())
+      expect(toast.error).not.toHaveBeenCalled()
+      staleError.mockRestore()
 
       hostRename.mockImplementationOnce(
         () =>
@@ -259,6 +340,21 @@ describe('renaming a structured chat tab', () => {
 
       actions.setTabCustomTitle(tab.id, 'After replacement')
       await vi.waitFor(() => expect(current().customLabel).toBe('After replacement'))
+      let answer = (_supported: boolean) => {}
+      hostSavesNames.mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            answer = resolve
+          })
+      )
+      actions.setTabCustomTitle(tab.id, 'Repointed')
+      await vi.waitFor(() => expect(hostSavesNames).toHaveBeenCalledTimes(8))
+      const repointed = { ...current(), entityId: 'another-session', createdAt: 2 }
+      store.setState({ unifiedTabsByWorktree: { [folder.id]: [repointed] } })
+      answer(true)
+      await layoutApplyTestTransport.settle()
+      expect(hostRename).toHaveBeenCalledTimes(7)
+      expect(current()).toBe(repointed)
     }
   )
 

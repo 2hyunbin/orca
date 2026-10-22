@@ -50,7 +50,7 @@ async function submitRename(
   }
   const { target } = action
   if (!target || !(await supportsStructuredAgentSessionRename(target))) {
-    if (action.current()) {
+    if (action.aliasCurrent()) {
       keepOnTab()
     }
     return
@@ -74,14 +74,18 @@ async function submitRename(
     })
   } catch (error) {
     console.warn('[structured-chat-rename] rename failed', error)
-    toast.error(translate('components.tab.bar.chatRename.failed', "Couldn't rename this chat"))
+    if (action.current()) {
+      toast.error(translate('components.tab.bar.chatRename.failed', "Couldn't rename this chat"))
+    }
     return
   }
   if (!action.current()) {
     return
   }
   if (action.retainAlias) {
-    get().setTabCustomLabel(tab.id, name, { recordInteraction: false })
+    if (action.aliasCurrent()) {
+      get().setTabCustomLabel(tab.id, name, { recordInteraction: false })
+    }
     return
   }
   await dropLegacyAlias(
