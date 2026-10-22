@@ -1,3 +1,4 @@
+import type { AcpLaunchInvocationDeps } from './acp-structured-launch-resolution'
 import type { StructuredAgentSessionChildWorkProducer } from '../native-chat/agent-session-wire/structured-agent-session-subagent-rows'
 import type { StructuredAgentSessionLifecycleEvent } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
@@ -20,6 +21,7 @@ export const ACP_OPTION_WRITE_TIMEOUT_MS = 30_000
 
 export type AcpStructuredSessionAdapterDeps = {
   spec: AcpLaunchSpec
+  textTaskLaunch?: AcpLaunchInvocationDeps
   /** The child to spawn, sealed with the reservation's token. */
   resolveLaunch: (input: {
     identity: AgentSessionJournalIdentity

@@ -24,7 +24,7 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-function renderSetting(overrides: Partial<GlobalSettings> = {}) {
+function renderSetting(overrides: Partial<GlobalSettings> = {}, expand = true) {
   const settings = { ...getDefaultSettings('/tmp'), ...overrides }
   const updateSettings = vi.fn()
   const onDirtyChange = vi.fn()
@@ -45,6 +45,9 @@ function renderSetting(overrides: Partial<GlobalSettings> = {}) {
     />
   )
   const view = render(element())
+  if (expand && screen.queryByRole('button', { name: 'Advanced' })) {
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+  }
   return { ...view, element, settings, updateSettings, writeSourceControlAiSettings, onDirtyChange }
 }
 
@@ -65,12 +68,37 @@ function changeAgentArgs(value: string): void {
 }
 
 describe('Chat names setting', () => {
+  it('keeps alternate-agent setup in Advanced and opens it for search', () => {
+    const { element, rerender } = renderSetting({}, false)
+    expect(screen.queryByRole('combobox')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Advanced' }).getAttribute('aria-expanded')).toBe(
+      'false'
+    )
+    state.settingsSearchQuery = 'naming agent'
+    rerender(element())
+    expect(screen.getByRole('combobox').textContent).toContain('Use chat agent')
+    expect(screen.getByRole('button', { name: 'Advanced' }).hasAttribute('disabled')).toBe(true)
+  })
+
   it('defaults to on and writes the off preference', () => {
     const { updateSettings } = renderSetting()
     const toggle = screen.getByRole('switch', { name: 'Name chats automatically' })
     expect(toggle.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(toggle)
     expect(updateSettings).toHaveBeenCalledWith({ nativeChatAutoName: false })
+  })
+
+  it('shows the effective CLI recipe while arguments exist and returns to chat agent when cleared', () => {
+    renderSetting({
+      defaultTuiAgent: 'claude',
+      sourceControlAi: normalizeSourceControlAiSettings({
+        actions: { conversationName: { agentId: null, agentArgs: '--model haiku' } }
+      })
+    })
+    expect(screen.getByRole('combobox').textContent).toContain('Use configured CLI agent (Claude)')
+    expect(screen.getByText('Clear CLI arguments to use each chat’s agent.')).toBeTruthy()
+    changeAgentArgs('')
+    expect(screen.getByRole('combobox').textContent).toContain('Use chat agent')
   })
 
   it('saves CLI arguments and a template through the shared writer', async () => {
@@ -155,6 +183,7 @@ describe('Chat names setting', () => {
     rerender(element())
     expect(screen.getByDisplayValue('Keep my edits')).toBeTruthy()
     expect(onDirtyChange).toHaveBeenLastCalledWith(true)
+    expect(screen.getByRole('button', { name: 'Advanced' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
     expect(screen.queryByText('Command template')).toBeNull()
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)
@@ -219,6 +248,7 @@ describe('Chat names setting', () => {
     unmount()
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)
     render(<StrictMode>{element()}</StrictMode>)
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
     changeTemplate('New draft')
     expect(onDirtyChange).toHaveBeenLastCalledWith(true)
     onDirtyChange.mockClear()
@@ -288,6 +318,7 @@ describe('Chat names setting', () => {
       </Suspense>
     )
     const { rerender, unmount } = render(element(false))
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
     changeTemplate('Committed save')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await act(async () => {

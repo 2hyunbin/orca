@@ -1,3 +1,4 @@
+import { AcpTextTasks } from './acp-text-task'
 // A structured chat over the Agent Client Protocol: one adapter per registered ACP agent, which
 // the router drives like the Claude and Codex lanes. Rewind and goals are absent, so the chat hides
 // them; compaction is the agent's own `/compact` prompt, for an agent whose launch spec offers it.
@@ -43,16 +44,21 @@ import { supportsAcpStructuredLocation } from './acp-structured-location-support
 
 export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapter {
   private readonly children: AcpStructuredChildren
+  private readonly textTasks: AcpTextTasks
   private readonly copies: AcpConversationCopies
   constructor(private readonly deps: AcpStructuredSessionAdapterDeps) {
     this.children = new AcpStructuredChildren(deps)
     this.copies = new AcpConversationCopies(deps)
+    this.textTasks = new AcpTextTasks(deps)
   }
 
   /** Restart recovery's evidence; null for an agent whose own store Orca cannot read. */
   providerHistoryWindow: NonNullable<StructuredAgentSessionAdapter['providerHistoryWindow']> = (
     input
   ) => readAcpRecoveryHistory(this.deps, input.identity)
+
+  generateText: NonNullable<StructuredAgentSessionAdapter['generateText']> = (input) =>
+    this.textTasks.generate(input)
 
   copyConversation: NonNullable<StructuredAgentSessionAdapter['copyConversation']> = (input) =>
     this.copies.copy(input)
@@ -318,6 +324,7 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
 
   async closeAll(): Promise<void> {
     const copiedChildren = this.copies.closeAll()
+    const textChildren = this.textTasks.closeAll()
     const ids = new Set([
       ...this.children.sessions.keys(),
       ...this.children.starts.failedSessionIds()
@@ -326,7 +333,8 @@ export class AcpStructuredSessionAdapter implements StructuredAgentSessionAdapte
     const proven = await Promise.all(
       [...ids].map((sessionId) => this.children.stop(sessionId, true))
     )
-    if (!(await copiedChildren) || proven.includes(false)) {
+    const stoppedTasks = await Promise.all([copiedChildren, textChildren])
+    if (stoppedTasks.includes(false) || proven.includes(false)) {
       throw new Error('an ACP agent child could not be proven stopped')
     }
   }
