@@ -5,7 +5,7 @@ import {
 } from '../../../src/shared/native-chat-image-transcript-markers'
 import { appendReturnedDraftText } from '../../../src/shared/returned-draft-text'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
-import { composerSkillOccurrences } from '../../../src/shared/structured-agent-session-send-mutation'
+import { composerSkillOccurrences } from '../../../src/shared/composer-skill-occurrences'
 import { mobileChatDraftStorageKey } from './mobile-native-chat-draft-data'
 import {
   mobileChatDraftStorage,
