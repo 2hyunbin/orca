@@ -41,17 +41,6 @@ export type FileRangeReadResult = {
   bytesRead: number
 }
 
-/** Thrown by `readFileRange` when the host cannot serve a positional read.
- *  Callers that tail a file should probe `supportsFileRangeRead()` once and
- *  fall back to a single whole-file snapshot, NOT to a whole-file read per
- *  chunk -- that is quadratic on a growing file. */
-export class FileRangeReadUnsupportedError extends Error {
-  constructor(message = 'Positional file reads are unavailable on this host') {
-    super(message)
-    this.name = 'FileRangeReadUnsupportedError'
-  }
-}
-
 export type IFilesystemProvider = {
   readDir(dirPath: string, options?: { followSymlinks?: boolean }): Promise<DirEntry[]>
   readFile(filePath: string, limits?: FileReadLimits): Promise<FileReadResult>

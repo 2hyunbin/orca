@@ -246,10 +246,6 @@ export const AGENT_HOOK_REQUEST_REPLAY_METHOD = 'agent_hook.requestReplay' as co
  *  overlay dirs on the remote. */
 export const AGENT_HOOK_INSTALL_PLUGINS_METHOD = 'agent_hook.installPlugins' as const
 
-/** JSON-RPC request method that asks the remote relay to install every
- *  managed hook using its local filesystem instead of WAN-bound SFTP. */
-export const AGENT_HOOK_INSTALL_MANAGED_HOOKS_METHOD = 'agent_hook.installManagedHooks' as const
-
 export type AgentHookInstallManagedHooksParams = {
   /** SHA-256 fingerprint of the server key negotiated by Orca's SSH transport. */
   hostKeyFingerprint?: string

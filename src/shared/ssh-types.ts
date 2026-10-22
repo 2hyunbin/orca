@@ -14,7 +14,6 @@ export const LEGACY_DEFAULT_SSH_RELAY_GRACE_PERIOD_SECONDS = 3 * 60 * 60
  */
 export const SSH_REMOTE_RUNTIMES = ['legacy', 'pinned-node'] as const
 export type SshRemoteRuntime = (typeof SSH_REMOTE_RUNTIMES)[number]
-export const DEFAULT_SSH_REMOTE_RUNTIME: SshRemoteRuntime = 'pinned-node'
 
 /** Where the design D6 fallback ladder landed; `legacy` is the opt-in host-npm path outside it. */
 export const SSH_REMOTE_RUNTIME_RUNGS = ['A', 'B', 'C', 'D', 'legacy'] as const
