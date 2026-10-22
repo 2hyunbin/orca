@@ -1,70 +1,31 @@
-import { StyleSheet, Text, View } from 'react-native'
+import { StyleSheet, Text } from 'react-native'
 import { LargeTitle } from '../components/ui/NavBar'
-import type { HomeStatsSummary } from '../stats/home-stats-total'
-import { colors, spacing, textStyles } from '../theme/mobile-theme'
+import { colors, textStyles } from '../theme/mobile-theme'
+import { MobileHomeAppUpdateBanner } from './MobileHomeAppUpdateBanner'
 
-function formatDuration(ms: number): string {
-  const totalMinutes = Math.floor(ms / 60_000)
-  const totalHours = Math.floor(totalMinutes / 60)
-  const days = Math.floor(totalHours / 24)
-  const hours = totalHours % 24
-  if (days > 0) {
-    return `${days}d ${hours}h`
-  }
-  const minutes = totalMinutes % 60
-  return totalHours > 0 ? `${totalHours}h ${minutes}m` : `${totalMinutes}m`
+/** "3 agents working · 1 needs you", or null when nothing is running or waiting. */
+export function homeActivitySummary(workingAgents: number, needsYou: number): string | null {
+  const parts = [
+    workingAgents > 0 ? `${workingAgents} agent${workingAgents === 1 ? '' : 's'} working` : null,
+    needsYou > 0 ? `${needsYou} need${needsYou === 1 ? 's' : ''} you` : null
+  ].filter((part): part is string => part !== null)
+  return parts.length > 0 ? parts.join(' · ') : null
 }
 
-/** The large title and a quiet row of lifetime numbers, laid out before they arrive so nothing moves. */
-export function MobileHomeListHeader({ stats }: { stats: HomeStatsSummary | null }) {
-  const items = [
-    { label: 'Agents spawned', value: stats ? stats.totalAgentsSpawned.toLocaleString() : null },
-    { label: 'Agent time', value: stats ? formatDuration(stats.totalAgentTimeMs) : null },
-    { label: 'PRs created', value: stats ? stats.totalPRsCreated.toLocaleString() : null }
-  ]
+/** The large title, one grey line on what the agents are doing, and the update notice. */
+export function MobileHomeListHeader(props: { workingAgents: number; needsYou: number }) {
+  const summary = homeActivitySummary(props.workingAgents, props.needsYou)
   return (
-    <View>
-      <LargeTitle title="Orca" />
-      <View
-        style={styles.stats}
-        accessible
-        accessibilityLabel={
-          stats
-            ? items.map((item) => `${item.label}: ${item.value}`).join(', ')
-            : 'Usage numbers not loaded yet'
-        }
-      >
-        {items.map((item) => (
-          <View key={item.label} style={styles.stat}>
-            <Text
-              style={[styles.value, item.value === null && styles.valuePending]}
-              numberOfLines={1}
-            >
-              {item.value ?? '—'}
-            </Text>
-            <Text style={styles.label} numberOfLines={1}>
-              {item.label}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </View>
+    <>
+      <LargeTitle
+        title="Orca"
+        subtitle={summary ? <Text style={styles.summary}>{summary}</Text> : undefined}
+      />
+      <MobileHomeAppUpdateBanner />
+    </>
   )
 }
 
 const styles = StyleSheet.create({
-  stats: {
-    flexDirection: 'row',
-    gap: spacing.lg,
-    paddingHorizontal: spacing.lg + 4,
-    paddingTop: spacing.xs
-  },
-  stat: { flex: 1, minWidth: 0 },
-  value: {
-    ...textStyles.headline,
-    color: colors.textPrimary,
-    fontVariant: ['tabular-nums']
-  },
-  valuePending: { color: colors.textMuted },
-  label: { ...textStyles.footnote, color: colors.textMuted }
+  summary: { ...textStyles.callout, color: colors.textSecondary }
 })

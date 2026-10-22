@@ -1,10 +1,19 @@
-import { memo, useCallback, type ReactElement } from 'react'
-import { ScrollView, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { memo, useCallback, type ReactNode } from 'react'
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent
+} from 'react-native'
+import { Plus } from 'lucide-react-native'
 import { MobileHostCard } from '../components/MobileHostCard'
-import { ListGroup, LIST_LEADING_INSET } from '../components/ui/ListGroup'
+import { ListGroup, LIST_LEADING_INSET, LIST_ROW_PADDING } from '../components/ui/ListGroup'
 import { SectionHeader } from '../components/ui/SectionHeader'
-import type { HomeStatsSummary } from '../stats/home-stats-total'
-import { spacing } from '../theme/mobile-theme'
+import { pressTransition } from '../components/ui/transition-styles'
+import { colors, spacing, textStyles } from '../theme/mobile-theme'
 import { classifyConnection } from '../transport/connection-health'
 import { resolveHomeHostConnectionState } from '../transport/home-host-auto-connect'
 import { useHostStatusGates } from '../transport/host-status-gates'
@@ -12,15 +21,18 @@ import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState, HostCatalogEntry } from '../transport/types'
 import type { HostWorktreeInfo } from '../worktree/home-worktree-info'
 import type { HomeHostConnections } from './home-host-connection-projection'
-import { MobileHomeListHeader } from './MobileHomeListHeader'
 
 type MobileHomeHostListProps = {
   autoConnectHostIds: string[]
-  bottomInset: number
+  /** Room under the last group, so it clears the pinned bottom bar. */
+  bottomPadding: number
   contentMaxWidth: number
-  /** Drawn between the stats and the desktops: the Resume row, when there is one. */
-  resume: ReactElement | null
-  footer: ReactElement
+  /** The title, summary and notices. */
+  header: ReactNode
+  /** Drawn before the desktops: "Needs you" and "Jump back in". */
+  workspaces: ReactNode
+  /** Drawn after the desktops: usage. */
+  footer: ReactNode
   hostAttempts: Record<string, number>
   hostClients: Readonly<Record<string, RpcClient>>
   hostLastConnected: Record<string, number | null>
@@ -28,22 +40,22 @@ type MobileHomeHostListProps = {
   hosts: HostCatalogEntry[]
   hostStates: Record<string, ConnectionState>
   isWideLayout: boolean
-  stats: HomeStatsSummary | null
   worktreeInfo: Record<string, HostWorktreeInfo>
   onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
   onOpen: (host: HostCatalogEntry) => void
   onLongPress: (host: HostCatalogEntry) => void
   onOpenActions: (host: HostCatalogEntry) => void
+  onPairDesktop: () => void
 }
 
-/** Home's scrolling body: large title, Resume, one "Desktops" group, then the footer. */
+/** Home's scrolling body: header, workspaces, the "Desktops" group with its pair row, then the footer. */
 export function MobileHomeHostList(props: MobileHomeHostListProps) {
   return (
     <ScrollView
       onScroll={props.onScroll}
       scrollEventThrottle={16}
       contentContainerStyle={[
-        { paddingBottom: spacing.xl + props.bottomInset },
+        { paddingBottom: props.bottomPadding },
         props.isWideLayout && {
           maxWidth: props.contentMaxWidth,
           width: '100%',
@@ -51,8 +63,8 @@ export function MobileHomeHostList(props: MobileHomeHostListProps) {
         }
       ]}
     >
-      <MobileHomeListHeader stats={props.stats} />
-      {props.resume}
+      {props.header}
+      {props.workspaces}
       <SectionHeader
         title="Desktops"
         count={props.hosts.length > 1 ? props.hosts.length : undefined}
@@ -74,6 +86,7 @@ export function MobileHomeHostList(props: MobileHomeHostListProps) {
             onOpenActions={props.onOpenActions}
           />
         ))}
+        <PairDesktopRow onPress={props.onPairDesktop} />
       </ListGroup>
       {props.footer}
     </ScrollView>
@@ -136,4 +149,42 @@ const MobileHomeHostRow = memo(function MobileHomeHostRow(props: MobileHomeHostR
       onOpenActions={openActions}
     />
   )
+})
+
+/** The Desktops group's last row: quieter than the desktops, and opens pairing. */
+function PairDesktopRow({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel="Pair a desktop" onPress={onPress}>
+      {({ pressed }) => (
+        <View
+          style={[
+            styles.pairRow,
+            pressed && styles.pairPressed,
+            pressed ? pressTransition.pressed : pressTransition.rest
+          ]}
+        >
+          <View style={styles.pairLeading}>
+            <Plus size={20} color={colors.textSecondary} strokeWidth={2} />
+          </View>
+          <Text style={styles.pairLabel} numberOfLines={1}>
+            Pair a desktop
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  )
+}
+
+const styles = StyleSheet.create({
+  pairRow: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: LIST_ROW_PADDING,
+    paddingVertical: 10
+  },
+  pairPressed: { backgroundColor: colors.fill },
+  pairLeading: { width: 28, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  pairLabel: { ...textStyles.body, color: colors.textSecondary, flex: 1, minWidth: 0 }
 })

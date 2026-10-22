@@ -5,24 +5,25 @@ import {
   openAppUpdate,
   useAppUpdateState
 } from '../app-update/app-update-runtime'
-import { AppUpdateCard } from './AppUpdateCard'
+import { Banner } from '../components/ui/Banner'
 import { spacing } from '../theme/mobile-theme'
 
-/** Last on Home, so a check that lands after first paint never moves the rows above it. */
-export function MobileHomeAppUpdateCard() {
+/** Under Home's title, only while an update is available and not dismissed. */
+export function MobileHomeAppUpdateBanner() {
   const available = undismissedAppUpdate(useAppUpdateState())
   if (!available) {
     return null
   }
   return (
     <View style={styles.slot}>
-      <AppUpdateCard
-        version={available.version}
-        onPress={() => openAppUpdate(available.url)}
+      <Banner
+        message={`Orca ${available.version} is available.`}
+        action={{ label: 'Update', onPress: () => openAppUpdate(available.url) }}
         onDismiss={() => appUpdateChecker.dismiss(available.version)}
+        dismissLabel={`Dismiss Orca ${available.version} update`}
       />
     </View>
   )
 }
 
-const styles = StyleSheet.create({ slot: { marginTop: spacing.xl } })
+const styles = StyleSheet.create({ slot: { marginTop: spacing.sm } })

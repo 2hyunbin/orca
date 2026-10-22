@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, StyleSheet, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import {
+  Alert,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent
+} from 'react-native'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Activity, QrCode, RefreshCw } from 'lucide-react-native'
 import { useOpenMobileAccounts } from '../accounts/use-open-mobile-accounts'
@@ -14,7 +21,7 @@ import { useResponsiveLayout } from '../layout/responsive-layout'
 import { triggerError, triggerMediumImpact } from '../platform/haptics'
 import { useOpenMobileSession } from '../session/use-open-mobile-session'
 import { useOpenMobileTasks } from '../tasks/use-open-mobile-tasks'
-import { colors } from '../theme/mobile-theme'
+import { colors, spacing } from '../theme/mobile-theme'
 import {
   useDisconnectHostClient,
   useForceReconnect,
@@ -29,16 +36,20 @@ import type { HostCatalogEntry } from '../transport/types'
 import { useOpenMobileHostEdit } from '../transport/use-open-mobile-host-edit'
 import type { HomeWorktreeSummary } from '../worktree/home-worktree-info'
 import { isResumeTargetConfirmedMissing, type HomeResumeCard } from '../worktree/home-resume-card'
+import { MobileHomeAccountUsageCards } from './MobileHomeAccountUsageCards'
+import { MobileHomeBottomBar } from './MobileHomeBottomBar'
 import { MobileHomeEmptyState } from './MobileHomeEmptyState'
 import { MobileHomeHostList } from './MobileHomeHostList'
-import { MobileHomeListFooter } from './MobileHomeListFooter'
-import { MobileHomeResumeCard } from './MobileHomeResumeCard'
+import { MobileHomeListHeader } from './MobileHomeListHeader'
 import { MobileHomeTopBar } from './MobileHomeTopBar'
+import { MobileHomeWorkspaceSection } from './MobileHomeWorkspaceSection'
 import { useMobileHomeData } from './use-mobile-home-data'
 import { newWorkspaceOverlayHref } from '../new-workspace/new-workspace-overlay-route'
 
 // A secure-store read usually lands well inside this, so most launches never see the spinner.
 const LOADING_REVEAL_DELAY_MS = 400
+// The bottom bar's height before its first layout: padding plus one large button.
+const BOTTOM_BAR_ESTIMATE = spacing.md + 50
 
 export function MobileHomeScreen() {
   const data = useMobileHomeData()
@@ -56,6 +67,10 @@ export function MobileHomeScreen() {
   // The large title scrolls with the list; the bar shows "Orca" once it has gone under.
   const [titleCollapsed, setTitleCollapsed] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [bottomBarHeight, setBottomBarHeight] = useState<number | null>(null)
+  const onBottomBarLayout = useCallback((event: LayoutChangeEvent) => {
+    setBottomBarHeight(event.nativeEvent.layout.height)
+  }, [])
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = event.nativeEvent.contentOffset.y
     setTitleCollapsed(y > LARGE_TITLE_COLLAPSE_OFFSET)
@@ -69,7 +84,7 @@ export function MobileHomeScreen() {
     return byHostId
   }, [data.allClients])
 
-  const openResume = useCallback(
+  const openWorkspace = useCallback(
     (card: HomeResumeCard) => {
       if (
         isResumeTargetConfirmedMissing(
@@ -154,15 +169,14 @@ export function MobileHomeScreen() {
 
   const empty = data.hostCatalogLoaded && data.hostCatalog.length === 0
   const showList = data.hostCatalogLoaded && !empty
-  const resumeDesktop = data.resumeCard
-    ? (data.sortedHostCatalog.find((host) => host.id === data.resumeCard?.hostId) ?? null)
-    : null
+  const bottomPadding =
+    (bottomBarHeight ?? BOTTOM_BAR_ESTIMATE + Math.max(insets.bottom, spacing.lg)) + spacing.xl
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <MobileHomeTopBar
         onOpenSettings={() => data.router.push('/settings')}
-        titleVisible={!showList || titleCollapsed}
+        titleVisible={data.hostCatalogLoaded ? showList && titleCollapsed : true}
         scrolled={showList && scrolled}
       />
       {!data.hostCatalogLoaded ? (
@@ -175,51 +189,65 @@ export function MobileHomeScreen() {
           onPairDesktop={() => data.router.push('/pair-scan')}
         />
       ) : (
-        <MobileHomeHostList
-          autoConnectHostIds={data.autoConnectHostIds}
-          bottomInset={insets.bottom}
-          contentMaxWidth={contentMaxWidth}
-          resume={
-            data.resumeCard ? (
-              <MobileHomeResumeCard
-                card={data.resumeCard}
-                desktop={resumeDesktop}
-                onOpen={openResume}
+        <View style={styles.body}>
+          <MobileHomeHostList
+            autoConnectHostIds={data.autoConnectHostIds}
+            bottomPadding={bottomPadding}
+            contentMaxWidth={contentMaxWidth}
+            header={
+              <MobileHomeListHeader
+                workingAgents={data.workingAgentCount}
+                needsYou={data.needsYou.length}
               />
-            ) : null
-          }
-          footer={
-            <MobileHomeListFooter
-              accountsHosts={data.accountsHosts}
-              connectedHosts={data.connectedHosts}
-              taskProvidersByHost={data.taskProvidersByHost}
-              onCreateWorkspace={() =>
-                data.router.push(
-                  newWorkspaceOverlayHref(data.connectedHosts.map((host) => host.id))
-                )
-              }
-              onOpenAccounts={openMobileAccounts}
-              onOpenTasks={openMobileTasks}
-              onPairDesktop={() => data.router.push('/pair-scan')}
-            />
-          }
-          hostAttempts={data.hostAttempts}
-          hostClients={hostClients}
-          hostLastConnected={data.hostLastConnected}
-          hostConnections={data.hostConnections}
-          hosts={data.sortedHostCatalog}
-          hostStates={data.hostStates}
-          isWideLayout={isWideLayout}
-          stats={data.stats}
-          worktreeInfo={data.worktreeInfo}
-          onScroll={onScroll}
-          onOpen={openHost}
-          onLongPress={(host) => {
-            triggerMediumImpact()
-            setActionTarget(host)
-          }}
-          onOpenActions={setActionTarget}
-        />
+            }
+            workspaces={
+              <>
+                <MobileHomeWorkspaceSection
+                  waiting
+                  cards={data.needsYou}
+                  hosts={data.sortedHostCatalog}
+                  onOpen={openWorkspace}
+                />
+                <MobileHomeWorkspaceSection
+                  waiting={false}
+                  cards={data.jumpBackIn}
+                  hosts={data.sortedHostCatalog}
+                  onOpen={openWorkspace}
+                />
+              </>
+            }
+            footer={
+              <MobileHomeAccountUsageCards items={data.accountsHosts} onOpen={openMobileAccounts} />
+            }
+            hostAttempts={data.hostAttempts}
+            hostClients={hostClients}
+            hostLastConnected={data.hostLastConnected}
+            hostConnections={data.hostConnections}
+            hosts={data.sortedHostCatalog}
+            hostStates={data.hostStates}
+            isWideLayout={isWideLayout}
+            worktreeInfo={data.worktreeInfo}
+            onScroll={onScroll}
+            onOpen={openHost}
+            onLongPress={(host) => {
+              triggerMediumImpact()
+              setActionTarget(host)
+            }}
+            onOpenActions={setActionTarget}
+            onPairDesktop={() => data.router.push('/pair-scan')}
+          />
+          <MobileHomeBottomBar
+            connectedHosts={data.connectedHosts}
+            bottomInset={insets.bottom}
+            contentMaxWidth={contentMaxWidth}
+            isWideLayout={isWideLayout}
+            onOpenTasks={(hostId) => openMobileTasks(hostId)}
+            onCreateWorkspace={() =>
+              data.router.push(newWorkspaceOverlayHref(data.connectedHosts.map((host) => host.id)))
+            }
+            onLayout={onBottomBarLayout}
+          />
+        </View>
       )}
       <ActionSheetModal
         visible={actionTarget != null}
@@ -283,5 +311,6 @@ function MobileHomeLoadingState() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.bgBase }
+  container: { flex: 1, backgroundColor: colors.bgBase },
+  body: { flex: 1 }
 })
