@@ -107,6 +107,50 @@ describe('hydrateBrowserSession', () => {
     )
   })
 
+  // Main repairs only the workspaces it is asked about (sendLayoutApply's owner test); a paired
+  // server's workspace keeps today's window repair in every build.
+  it("still gives a paired server's tabless browser record a tab", () => {
+    const store = createTestStore()
+    const serverWt = 'repo1::/srv/wt1'
+    store.setState({
+      repos: [
+        {
+          id: 'repo1',
+          path: '/srv',
+          displayName: 'Server repo',
+          badgeColor: '#000',
+          addedAt: 0,
+          executionHostId: 'runtime:env-1'
+        }
+      ],
+      worktreesByRepo: {
+        repo1: [
+          makeWorktree({ id: serverWt, repoId: 'repo1', path: '/srv/wt1', hostId: 'runtime:env-1' })
+        ]
+      },
+      activeWorktreeId: serverWt
+    })
+
+    store.getState().hydrateBrowserSession({
+      activeRepoId: 'repo1',
+      activeWorktreeId: serverWt,
+      activeTabId: null,
+      tabsByWorktree: {},
+      terminalLayoutsByTabId: {},
+      browserTabsByWorktree: {
+        [serverWt]: [
+          makeBrowserTab({ id: 'browser-1', worktreeId: serverWt, url: 'https://example.com' })
+        ]
+      }
+    })
+
+    expect(
+      (store.getState().unifiedTabsByWorktree[serverWt] ?? [])
+        .filter((tab) => tab.contentType === 'browser')
+        .map((tab) => tab.entityId)
+    ).toEqual(['browser-1'])
+  })
+
   it('synthesizes a page for a browser workspace whose persisted page list is empty', () => {
     // Why: session salvage drops a corrupt page by rebuilding the array, so the
     // key survives holding []. Treating that as "has pages" restores a workspace

@@ -198,7 +198,7 @@ export function translateSessionTabMove(
     const rowCount = shown.tabOrder.length
     const shownIndex = Math.max(0, Math.min(params.index ?? rowCount, rowCount))
     // A shown index lands before the first tab main holds from that row on (a row it holds no tab
-    // for, such as a combined diff, places nothing); past the last one, the end stays the end.
+    // for, such as one the window drew before main's frame, places nothing); past the last, the end.
     const before = toTabIds(workspace, shown.tabOrder.slice(shownIndex))[0]
     const index = before === undefined ? target.tabOrder.length : target.tabOrder.indexOf(before)
     return to({
@@ -209,7 +209,7 @@ export function translateSessionTabMove(
       afterTabId: tabOrderAnchor(target.tabOrder, index)
     })
   }
-  // A row main holds no tab for (a combined diff) is named once, as shown, and keeps no place.
+  // A row main holds no tab for (one drawn before main's frame) is named once, and keeps no place.
   const unheld = (rowIds: readonly string[]) =>
     rowIds.filter((rowId) => !resolveSessionTabRow(workspace, rowId))
   const shownUnheld = new Set(unheld(shown.tabOrder))

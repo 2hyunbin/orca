@@ -91,4 +91,16 @@ describe("main's load of a browser record with no tab", () => {
     ).toMatchObject({ entityId: 'browser-1', groupId: 'g2', label: 'Example' })
     expect(load(saved).changes).toEqual([])
   })
+
+  it('mints the same id on every load, and a restart after a save keeps one tab', () => {
+    const ids = (session: WorkspaceSessionState) =>
+      load(session)
+        .layout.workspaces[KEY]!.tabs.filter((tab) => tab.kind === 'browser')
+        .map((tab) => tab.id)
+    const first = ids(savedSession())
+
+    expect(ids(savedSession())).toEqual(first)
+    expect(ids(saveWorkspaceLayout(load(savedSession())))).toEqual(first)
+    expect(first).toHaveLength(1)
+  })
 })

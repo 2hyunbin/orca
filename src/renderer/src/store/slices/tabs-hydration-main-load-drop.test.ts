@@ -78,4 +78,38 @@ describe("a window-owned build reading a session main's load rewrote", () => {
     expect(restore(rewritten)).toEqual(restore(savedSession()))
     expect(restore(rewritten).groups).toEqual([['ed-a', 'kept-diff', 'ed-b']])
   })
+
+  // L280: main's load also gives a tabless browser record its tab and saves it; a window-owned
+  // build then restores that one tab and has nothing left to repair.
+  it("restores the browser tab main's load added, once", () => {
+    layoutOwner.isMain = true
+    const withRecord: WorkspaceSessionState = {
+      ...savedSession(),
+      browserTabsByWorktree: {
+        [KEY]: [
+          {
+            id: 'browser-1',
+            worktreeId: KEY,
+            url: 'https://example.com',
+            title: 'Example',
+            loading: false,
+            faviconUrl: null,
+            canGoBack: false,
+            canGoForward: false,
+            loadError: null,
+            createdAt: 5
+          }
+        ]
+      }
+    }
+    const loaded = loadWorkspaceLayout(LOCAL_EXECUTION_HOST_ID, withRecord, nameBasedLoadContext())
+    const mainId = loaded.layout.workspaces[KEY]!.tabs.find((tab) => tab.kind === 'browser')!.id
+    const rewritten = saveWorkspaceLayout(loaded)
+    layoutOwner.isMain = false
+
+    const browserTabs = buildHydratedTabState(rewritten, new Set([KEY])).unifiedTabsByWorktree[
+      KEY
+    ]!.filter((tab) => tab.contentType === 'browser')
+    expect(browserTabs.map((tab) => [tab.id, tab.entityId])).toEqual([[mainId, 'browser-1']])
+  })
 })

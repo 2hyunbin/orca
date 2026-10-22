@@ -104,7 +104,13 @@ function loadTabs(args: WorkspaceLoadArgs): {
   const savedEditFilePaths = new Set(
     (session.openFilesByWorktree?.[key] ?? []).map((file) => file.filePath)
   )
-  const heldViews = args.context.editorViewsOf?.(key)
+  // A transient tab stays while a view is held for its file, as the window's frame build keeps it.
+  const heldViews = args.context.editorViewsOf?.(key) ?? {}
+  const viewedEntities = new Set(
+    (session.unifiedTabs?.[key] ?? []).flatMap((entry) =>
+      heldViews[entry.id] ? [entry.entityId] : []
+    )
+  )
   const tabs: LayoutTab[] = []
   const candidates: OrderCandidate[] = []
   const tabIds = new Set<string>()
@@ -137,7 +143,7 @@ function loadTabs(args: WorkspaceLoadArgs): {
     if (
       ORCA_LAYOUT_OWNER_IS_MAIN &&
       entry.contentType !== 'terminal' &&
-      !restoresSavedContentTab(entry, savedEditFilePaths, () => !!heldViews?.[entry.id])
+      !restoresSavedContentTab(entry, savedEditFilePaths, () => viewedEntities.has(entry.entityId))
     ) {
       continue
     }
@@ -164,9 +170,14 @@ function loadTabs(args: WorkspaceLoadArgs): {
       childRecord(args.view.lastFocusedAt, key)[entry.id] = entry.lastFocusedAt
     }
   }
-  // Switch point: a saved browser record with no tab gets one at the end of the active group, the
-  // repair the window's browser hydration makes (createUnifiedTab), so no window mints its own id.
+  // Switch point: a saved browser record with no tab gets one at the end of the active group (the
+  // saved one while it holds a tab, as selectHydratedActiveGroupId picks it), the repair the
+  // window's browser hydration makes (createUnifiedTab), so no window mints its own id.
   if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+    const savedActive = session.activeGroupIdByWorktree?.[key]
+    const activeGroupId = candidates.some((candidate) => candidate.groupId === savedActive)
+      ? savedActive
+      : undefined
     for (const record of session.browserTabsByWorktree?.[key] ?? []) {
       if (tabs.some((tab) => tab.kind === 'browser' && tab.entityId === record.id)) {
         continue
@@ -184,7 +195,7 @@ function loadTabs(args: WorkspaceLoadArgs): {
       childRecord(args.facts.tabLabels, key)[id] = record.title
       candidates.push({
         id,
-        groupId: session.activeGroupIdByWorktree?.[key],
+        groupId: activeGroupId,
         createdAt: record.createdAt
       })
     }

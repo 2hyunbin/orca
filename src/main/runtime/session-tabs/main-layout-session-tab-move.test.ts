@@ -82,7 +82,7 @@ describe("a client's tab move in a workspace main owns", () => {
     expect(groups().map((entry) => entry.tabOrder)).toEqual([[TAB_ID], ['a', 'b']])
   })
 
-  /** The client was shown a row main holds no tab for (a combined diff) at the group's front. */
+  /** The client was shown a row main holds no tab for (drawn before main's frame) at the group's front. */
   function showUnheldRow(runtime: unknown): void {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the move reads only this member, which OrcaRuntimeService implements.
     const rowsOf = runtime as {
