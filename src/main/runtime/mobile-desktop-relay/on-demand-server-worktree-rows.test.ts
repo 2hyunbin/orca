@@ -174,6 +174,9 @@ describe('mobile relay host catalog, fetching on demand', () => {
     ])
     call.mockResolvedValue(psReply(output))
     const result = await catalog(hosts).catalog.worktrees('runtime:env')
+    if (result.worktrees === null) {
+      throw new Error('Expected relayed worktrees')
+    }
     expect(result.worktrees).toEqual([
       expect.objectContaining({
         worktreeId: c.id,

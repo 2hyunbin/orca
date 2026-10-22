@@ -50,7 +50,11 @@ const sshRepo: Repo = {
   connectionId: 'box'
 }
 
-function resolved(id: string, repo: Repo, hostId: ResolvedWorktree['hostId']): ResolvedWorktree {
+function resolved(
+  id: string,
+  repo: Repo,
+  hostId: NonNullable<ResolvedWorktree['hostId']>
+): ResolvedWorktree & { hostId: NonNullable<ResolvedWorktree['hostId']> } {
   return {
     id,
     repoId: repo.id,
@@ -413,7 +417,9 @@ describe('current saved lineage at real Store boundaries', () => {
       expect(read).toHaveBeenCalledTimes(count)
       for (const id of ['p', 'q']) {
         await runtime.updateManagedWorktreeMeta(`id:${input[0].id}`, {
-          lineage: { parentWorktreeRef: { worktreeId: `repo-1::/r/${id}`, instanceId: id } }
+          lineage: {
+            parentWorktreeRef: { worktreeId: `repo-1::/r/${id}`, instanceId: id, external: false }
+          }
         })
         expect((await runtime.showManagedWorktree(`id:${input[0].id}`)).parentWorktreeId).toBe(
           `repo-1::/r/${id}`
@@ -459,7 +465,9 @@ describe('current saved lineage at real Store boundaries', () => {
       })
       await expect(
         runtime.updateManagedWorktreeMeta(`id:${input[0].id}`, {
-          lineage: { parentWorktreeRef: { worktreeId: input[1].id, instanceId: 'p' } }
+          lineage: {
+            parentWorktreeRef: { worktreeId: input[1].id, instanceId: 'p', external: false }
+          }
         })
       ).rejects.toThrow('changed')
       expect(store.getWorktreeLineage(input[0].id)).toBeUndefined()
@@ -468,7 +476,11 @@ describe('current saved lineage at real Store boundaries', () => {
       const validateParent = vi.fn()
       const changing = updateRuntimeManagedWorktreeMetadata({
         selector: `id:${input[0].id}`,
-        updates: { lineage: { parentWorktreeRef: { worktreeId: input[1].id, instanceId: 'p' } } },
+        updates: {
+          lineage: {
+            parentWorktreeRef: { worktreeId: input[1].id, instanceId: 'p', external: false }
+          }
+        },
         store,
         ports: {
           resolveWorktree: async (selector) =>
