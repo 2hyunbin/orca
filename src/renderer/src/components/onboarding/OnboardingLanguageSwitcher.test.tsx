@@ -146,6 +146,11 @@ describe('onboarding language request', () => {
       )
     )
     expect(useAppStore.getState().settings?.uiLanguage).toBe('fr')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Other language…' }).hasAttribute('disabled')).toBe(
+        false
+      )
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Other language…' }))
     const form = screen.getByRole('textbox').closest('form')
     if (!form) {
