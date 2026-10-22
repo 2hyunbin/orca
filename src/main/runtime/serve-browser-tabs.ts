@@ -55,6 +55,8 @@ export class ServeBrowserTabs {
       save: (worktreeId: string, session: WorkspaceSessionState) => void
       /** `layout.apply` on one partition; set only in a layout-owner build. */
       applyLayout?: LayoutApply
+      /** Closes a running page as a host-side tab close does, retiring its listed row. */
+      closeRunningPage: (worktreeId: string, pageId: string) => void
     }
   ) {}
 
@@ -120,7 +122,10 @@ export class ServeBrowserTabs {
     const worktreeIds = worktreeId ? [worktreeId] : new Set(this.deps.savedWorktreeIds())
     return [...worktreeIds].flatMap((id) => {
       const live = this.deps.livePageIds(id)
-      return this.startableIn(id).filter((page) => !live.has(page.pageId))
+      // Switch point: a page that joined a tab is listed, and startable by its id, as the tab's first is.
+      return this.startableIn(id, ORCA_LAYOUT_OWNER_IS_MAIN).filter(
+        (page) => !live.has(page.pageId)
+      )
     })
   }
 
@@ -142,33 +147,37 @@ export class ServeBrowserTabs {
     if (this.deps.livePageIds(worktreeId).size > 0) {
       return undefined
     }
-    const tabs = this.startableIn(worktreeId)
+    const tabs = this.startableIn(worktreeId, false)
     const recorded = this.deps.session(worktreeId)?.activeBrowserTabIdByWorktree?.[worktreeId]
     return tabs.find((page) => page.tabId === recorded) ?? tabs[0]
   }
 
-  private startableIn(worktreeId: string): RestorableBrowserPage[] {
+  /** Each saved tab's shown page, or every page of it when `allPages`. */
+  private startableIn(worktreeId: string, allPages: boolean): RestorableBrowserPage[] {
     const session = this.deps.session(worktreeId)
     if (!session) {
       return []
     }
     return (session.browserTabsByWorktree?.[worktreeId] ?? []).flatMap((tab) => {
-      const pageId = tab.activePageId ?? tab.pageIds?.[0]
-      const page = pageId ? findSavedBrowserPage(session, worktreeId, pageId)?.page : undefined
-      // A document page is one desktop's; a remote page belongs to the host that ran it.
-      if (!page || page.docLocation || page.remoteBrowserPageId) {
-        return []
-      }
-      return [
-        {
-          tabId: tab.id,
-          pageId: page.id,
-          url: page.url,
-          title: page.title,
-          profileId: tab.sessionProfileId ?? null,
-          worktreeId
+      const shown = tab.activePageId ?? tab.pageIds?.[0]
+      const pageIds = allPages && tab.pageIds?.length ? tab.pageIds : shown ? [shown] : []
+      return pageIds.flatMap((pageId) => {
+        const page = findSavedBrowserPage(session, worktreeId, pageId)?.page
+        // A document page is one desktop's; a remote page belongs to the host that ran it.
+        if (!page || page.docLocation || page.remoteBrowserPageId) {
+          return []
         }
-      ]
+        return [
+          {
+            tabId: tab.id,
+            pageId: page.id,
+            url: page.url,
+            title: page.title,
+            profileId: tab.sessionProfileId ?? null,
+            worktreeId
+          }
+        ]
+      })
     })
   }
 
@@ -216,7 +225,10 @@ export class ServeBrowserTabs {
     void this.applyLogged(applyLayout, worktreeId, command).then((ok) => {
       const latest = this.pendingOpens.get(pageId)
       this.pendingOpens.delete(pageId)
-      if (ok && latest) {
+      if (!ok && joined && latest) {
+        // A refused join (its tab closed meanwhile) saves nothing, so its running page would leak.
+        this.deps.closeRunningPage(worktreeId, pageId)
+      } else if (ok && latest) {
         this.write(worktreeId, (_hostId, next) =>
           withServeBrowserPageRecord(next, latest, joined ?? pageId)
         )

@@ -9,7 +9,12 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
 import { ServeBrowserTabs } from './serve-browser-tabs'
 
-vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
+const layoutOwner = vi.hoisted(() => ({ isMain: true }))
+vi.mock('../../shared/layout-owner-switch', () => ({
+  get ORCA_LAYOUT_OWNER_IS_MAIN() {
+    return layoutOwner.isMain
+  }
+}))
 
 const WT = 'repo-1::/repo'
 const PAGE = { worktreeId: WT, pageId: 'page-1', url: 'https://example.com/', title: 'Example' }
@@ -27,16 +32,22 @@ function servedHost(initial: WorkspaceSessionState = getDefaultWorkspaceSession(
       return change.value
     }
   )
+  layoutOwner.isMain = true
+  const createTab = vi.fn(async ({ browserPageId }: { browserPageId?: string }) => ({
+    browserPageId: browserPageId!
+  }))
+  const closeRunningPage = vi.fn()
   const tabs = new ServeBrowserTabs({
-    backend: () => ({ createTab: vi.fn(), closeTab: vi.fn() }),
+    backend: () => ({ createTab, closeTab: vi.fn() }),
     livePageIds: () => new Set(),
     savedWorktreeIds: () => [WT],
     session: () => session,
     hostId: () => 'local',
     save,
-    applyLayout
+    applyLayout,
+    closeRunningPage
   })
-  return { tabs, applyLayout, save, session: () => session }
+  return { tabs, applyLayout, save, createTab, closeRunningPage, session: () => session }
 }
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
@@ -168,6 +179,7 @@ describe('served browser tabs in a layout-owner build', () => {
     await settle()
 
     expect(host.save).not.toHaveBeenCalled()
+    expect(host.closeRunningPage).not.toHaveBeenCalled()
     expect(warn).toHaveBeenCalled()
     warn.mockRestore()
   })
@@ -253,6 +265,50 @@ describe('served browser tabs in a layout-owner build', () => {
       expect(host.session().browserPagesByWorkspace?.['page-1']?.map((page) => page.id)).toEqual([
         'page-1'
       ])
+    })
+
+    it('closes the running page when main refuses the join, saving nothing', async () => {
+      const host = await hostWithTab()
+      host.applyLayout.mockResolvedValueOnce({ ok: false, code: 'tab_not_found' })
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+      host.tabs.opened({ ...JOINED, browserTabId: 'page-1' })
+      await settle()
+
+      expect(host.closeRunningPage).toHaveBeenCalledWith(WT, 'page-2')
+      expect(host.session().browserPagesByWorkspace?.['page-1']?.map((page) => page.id)).toEqual([
+        'page-1'
+      ])
+      warn.mockRestore()
+    })
+
+    it('lists and starts every saved page of the tab after a restart', async () => {
+      const host = await hostWithTab()
+      host.tabs.opened({ ...JOINED, browserTabId: 'page-1' })
+      await settle()
+
+      expect(host.tabs.listUnstarted(WT).map((tab) => tab.browserPageId)).toEqual([
+        'page-1',
+        'page-2'
+      ])
+      await expect(host.tabs.start(WT, 'page-2')).resolves.toBe(true)
+      expect(host.createTab).toHaveBeenLastCalledWith(
+        expect.objectContaining({ browserPageId: 'page-2', url: JOINED.url })
+      )
+      // With none named, the tab's shown page starts, as before.
+      await expect(host.tabs.start(WT, undefined)).resolves.toBe(true)
+      expect(host.createTab).toHaveBeenLastCalledWith(
+        expect.objectContaining({ browserPageId: 'page-1' })
+      )
+    })
+
+    it('lists only the shown page of a tab with the switch off', async () => {
+      const host = await hostWithTab()
+      host.tabs.opened({ ...JOINED, browserTabId: 'page-1' })
+      await settle()
+      layoutOwner.isMain = false
+
+      expect(host.tabs.listUnstarted(WT).map((tab) => tab.browserPageId)).toEqual(['page-1'])
     })
   })
 })
