@@ -12,6 +12,7 @@ import {
   isTabDragData,
   type TabDragItemData
 } from './tab-drag-data'
+import { isHeldServerTab, serverTabCount } from '@/lib/held-server-tabs'
 
 export type TabGroupPanelGeometryEntry = {
   groupId: string
@@ -146,6 +147,10 @@ export function resolvePanelEdgePaneColumnSplit({
   panelRect?: DOMRect | null
   bodyRect?: DOMRect | null
 }): PaneColumnSplitTarget | null {
+  // A held tab has no place of its own in the server's groups: it cannot split off.
+  if (isHeldServerTab(worktreeId, activeDrag.unifiedTabId)) {
+    return null
+  }
   const panelRect = providedPanelRect ?? getTabGroupPanelRect(targetGroupId, worktreeId)
   if (!panelRect) {
     return null
@@ -179,7 +184,7 @@ export function resolvePanelEdgePaneColumnSplit({
       sourceGroupId: activeDrag.groupId,
       targetGroupId,
       splitDirection: zone,
-      sourceTabCount: sourceGroup?.tabOrder.length ?? 0,
+      sourceTabCount: serverTabCount(worktreeId, sourceGroup?.tabOrder ?? []),
       layout: layoutByWorktree[worktreeId]
     })
   ) {
