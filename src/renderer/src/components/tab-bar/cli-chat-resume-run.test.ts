@@ -1,12 +1,28 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { CliChatResumeSource } from './cli-chat-resume-source'
 import type * as ResumeSourceModule from './cli-chat-resume-source'
 import type * as RuntimeRpcModule from '@/runtime/runtime-rpc-client'
 import type { AgentSessionWireRefusal } from '../../../../shared/agent-session-wire'
 import type { StructuredAgentSessionCreateParams } from '../../../../shared/structured-agent-session-create'
 
-const mocks = vi.hoisted(() => {
+export type CliChatResumeTestMocks = {
+  source: CliChatResumeSource | null
+  realSource: boolean
+  sourceCapability: Mock
+  createCapability: Mock
+  call: Mock
+  toast: Mock
+  success: Mock
+  activate: Mock<() => Promise<boolean>>
+  activateVerified: Mock<() => Promise<string>>
+  switchCapability: Mock<() => Promise<boolean>>
+  exitWatchers: Map<string, () => void>
+  rpc: Mock<(...args: unknown[]) => Promise<object>>
+  inspect: Mock<(ptyId: string) => Promise<{ foregroundProcessEvidence?: unknown }>>
+}
+
+const mocks: CliChatResumeTestMocks = vi.hoisted(() => {
   const state: { source: CliChatResumeSource | null } = { source: null }
   return {
     ...state,
@@ -24,7 +40,6 @@ const mocks = vi.hoisted(() => {
     inspect: vi.fn(async (_ptyId: string): Promise<{ foregroundProcessEvidence?: unknown }> => ({}))
   }
 })
-export type CliChatResumeTestMocks = typeof mocks
 
 vi.mock('@/runtime/runtime-terminal-inspection', () => ({
   inspectRuntimeTerminalProcess: mocks.inspect
