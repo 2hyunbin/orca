@@ -318,6 +318,61 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(button('Done')).toBeTruthy()
   })
 
+  it('keeps preview row order through a replacement run and the refreshed plan', async () => {
+    const replacementPath = '/home/u/.claude/skills/computer-use'
+    mocks.plan = planOf([
+      planEntry('computer-use', [
+        planOp('leave', replacementPath, { reason: 'edited', replaceable: true })
+      ]),
+      sharedEntry('orca-cli', 'update'),
+      sharedEntry('agent-discord', 'leave', { reason: 'unwritable' }),
+      sharedEntry('orchestration', 'restore')
+    ])
+    const forced = planOf(
+      mocks.plan.skills.map((entry) =>
+        entry.name === 'computer-use'
+          ? planEntry(entry.name, [planOp('replace', replacementPath)])
+          : entry
+      ),
+      '2'.repeat(64)
+    )
+    skillsApi.bundledPlan.mockResolvedValueOnce(forced)
+    const execution = deferred<BundledSkillInstallResult>()
+    skillsApi.bundledExecute.mockReturnValueOnce(execution.promise)
+    const rowNames = () =>
+      [...container.querySelectorAll('[data-skill-row]')].map((row) =>
+        row.getAttribute('data-skill-row')
+      )
+    const previewOrder = ['orchestration', 'orca-cli', 'computer-use', 'agent-discord']
+    render()
+    expect(rowNames()).toEqual(previewOrder)
+    click(replaceCheckbox())
+    await flush()
+    expect(rowNames()).toEqual(previewOrder)
+
+    click(button('Update 3 skills'))
+    expect(rowNames()).toEqual(previewOrder)
+    await act(async () => {
+      execution.resolve(doneResult(forced))
+      await execution.promise
+    })
+    expect(rowNames()).toEqual(previewOrder)
+
+    mocks.plan = null
+    render()
+    expect(rowNames()).toEqual(previewOrder)
+    mocks.plan = planOf([
+      sharedEntry('computer-use', 'keep'),
+      sharedEntry('orca-cli', 'keep'),
+      sharedEntry('agent-discord', 'leave', { reason: 'unwritable' }),
+      sharedEntry('orchestration', 'keep')
+    ])
+    skillsApi.bundledPlan.mockResolvedValueOnce(mocks.plan)
+    render()
+    await flush()
+    expect(rowNames()).toEqual(previewOrder)
+  })
+
   it('reports a location that changed since review as needing attention', async () => {
     const plan = planOf([sharedEntry('orca-cli', 'update')])
     mocks.plan = plan
