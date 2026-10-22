@@ -16,6 +16,7 @@ import {
 import { tabSelectionKey } from '@/store/slices/tabs/moved-tab-selection'
 import { layoutFramesFlowing } from '@/runtime/layout-frame-position'
 import { splitRatioIntentAt } from '../../../../shared/workspace-layout/split-ratio-intents'
+import { serverTabCount } from '@/lib/frame-drawn-desktop-created-tabs'
 import { tabOrderAnchor } from '../../../../shared/workspace-layout/tab-order'
 
 /** A tab drop as the window resolved it: within its group, into another, or beside a group. */
@@ -86,7 +87,7 @@ function commandFor(worktreeId: string, drop: TabDrop): WindowLayoutCommand | nu
         sourceGroupId: source.id,
         targetGroupId: groupId,
         splitDirection: drop.direction,
-        sourceTabCount: source.tabOrder.length,
+        sourceTabCount: serverTabCount(worktreeId, source.tabOrder),
         layout: state.layoutByWorktree[worktreeId]
       })
     ) {
