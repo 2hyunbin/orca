@@ -255,7 +255,7 @@ class MainSurfacePublisher {
 }
 
 /** The runtime a publisher belongs to; any runtime instance, held weakly. */
-type SurfacesOwner = WeakKey
+export type SurfacesOwner = WeakKey
 
 const byRuntime = new WeakMap<SurfacesOwner, MainSurfacePublisher>()
 

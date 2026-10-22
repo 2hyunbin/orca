@@ -12,7 +12,7 @@ import { advertisedUrlWatcher } from '../../../ports/advertised-url-watcher'
 import type { PtyLivenessVerdict } from '../../../../shared/pty-liveness-verdict'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import { exitedSplitPaneFacts } from './exited-split-pane-rule'
-import { takeClosedPaneOfExitedPty } from './closed-pane-of-exited-pty'
+import { closedPaneOfExitedPty, type ClosedPaneOfExit } from './closed-pane-of-exited-pty'
 import type {
   RuntimePtyWorktreeRecord,
   RuntimeLeafRecord
@@ -39,14 +39,14 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
   protected abstract rememberPtyLivenessVerdict(ptyId: string, verdict: PtyLivenessVerdict): void
 
   /** The pane main's close already dropped, from its closed-pane record; null while main holds it. */
-  private takeClosedPaneOfExit(
+  private closedPaneOfExit(
     pty: RuntimePtyWorktreeRecord | undefined,
     exitIncarnationId: PtyIncarnationId | undefined
-  ): { tabId: string; paneKey: string } | null {
+  ): ClosedPaneOfExit | null {
     if (!ORCA_LAYOUT_OWNER_IS_MAIN || !pty || this.paneOfPty(pty).paneKey) {
       return null
     }
-    return takeClosedPaneOfExitedPty(
+    return closedPaneOfExitedPty(
       this.store,
       this.tryGetWorkspaceSessionHostIdForWorktree(pty.worktreeId),
       pty,
@@ -94,7 +94,7 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
     // Why: collect before retirePtyAgentLaunchAuthority, which deletes the restored-authority
     // receipt a receipt-only pane's key comes from.
     const exitPaneKeys = this.collectAgentStatusPaneKeysForPty(ptyId)
-    const closedPane = this.takeClosedPaneOfExit(pty, exitIncarnationId)
+    const closedPane = this.closedPaneOfExit(pty, exitIncarnationId)
     if (closedPane) {
       exitPaneKeys.add(closedPane.paneKey)
     }
@@ -274,7 +274,8 @@ export abstract class OrcaRuntimeWithOnPtyExit extends OrcaRuntimeWithOnClientDi
             // Switch point: main decides an exited split pane's close.
             ORCA_LAYOUT_OWNER_IS_MAIN
               ? exitedSplitPaneFacts(this.terminalRunFacts, pty, ptyId, exitCode, options)
-              : undefined
+              : undefined,
+            closedPane ?? undefined
           )
         } catch (error) {
           console.error('[runtime] failed to publish terminal retirement:', error)

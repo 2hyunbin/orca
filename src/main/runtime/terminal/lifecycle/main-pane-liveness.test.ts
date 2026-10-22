@@ -46,12 +46,16 @@ function hostController(host: Host, cwd: string, worktreeId: string) {
 }
 
 /** One inventory sweep of a single provider, as a workspace listing or a relay refresh runs it. */
-async function sweepProvider(runtime: object, connectionId: string | null): Promise<void> {
-  const refresh: unknown = Reflect.get(runtime, 'refreshPtyWorktreeRecordsWithControllerInventory')
-  if (typeof refresh !== 'function') {
-    throw new Error('needs the runtime inventory refresh')
-  }
-  await Reflect.apply(refresh, runtime, [[], null, undefined, connectionId])
+async function sweepProvider(
+  runtime: InstanceType<typeof OrcaRuntimeService>,
+  connectionId: string | null
+): Promise<void> {
+  await runtime['refreshPtyWorktreeRecordsWithControllerInventory'](
+    [],
+    null,
+    undefined,
+    connectionId
+  )
 }
 
 /** A host whose saved `host-tab` pane binds `ptyId`, live until the test drops it from `host.live`. */
@@ -121,9 +125,8 @@ async function rowStatus(runtime: InstanceType<typeof OrcaRuntimeService>, workt
   return row?.type === 'terminal' ? row.status : null
 }
 
-const record = (runtime: object, ptyId: string) =>
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: test reads the runtime's protected record map.
-  (runtime as { ptysById: Map<string, { connected: boolean }> }).ptysById.get(ptyId)
+const record = (runtime: InstanceType<typeof OrcaRuntimeService>, ptyId: string) =>
+  runtime['ptysById'].get(ptyId)
 
 afterEach(() => {
   layoutOwner.isMain = true
@@ -258,11 +261,7 @@ describe('stopping a workspace through a listing gap (switch on)', () => {
     await rowStatus(runtime, TEST_WORKTREE_ID)
     expect(record(runtime, 'saved-pty')?.connected).toBe(false)
 
-    const liveIds: unknown = Reflect.apply(
-      Reflect.get(runtime, 'getLivePtyIdsForWorktree'),
-      runtime,
-      [TEST_WORKTREE_ID]
-    )
+    const liveIds = runtime['getLivePtyIdsForWorktree'](TEST_WORKTREE_ID)
     expect(liveIds).toEqual(new Set(['saved-pty']))
 
     // The host answered it has no such id, which cannot prove the shell gone (a restarted host can
@@ -283,11 +282,7 @@ describe('a reused terminal id of another workspace (switch on)', () => {
     host.live.clear()
     await sweepProvider(runtime, null)
 
-    const liveIds: unknown = Reflect.apply(
-      Reflect.get(runtime, 'getLivePtyIdsForWorktree'),
-      runtime,
-      [TEST_WORKTREE_ID]
-    )
+    const liveIds = runtime['getLivePtyIdsForWorktree'](TEST_WORKTREE_ID)
     expect(liveIds).toEqual(new Set())
   })
 })
@@ -333,9 +328,9 @@ describe('a terminal registered while a listing is in flight (switch on)', () =>
       answer = resolve
     })
     const listedBeforeSpawn = [...host.live]
-    Reflect.set(runtime, 'ptyController', {
+    runtime['ptyController'] = {
       ...hostController(host, TEST_WORKTREE_PATH, TEST_WORKTREE_ID),
-      hasPty: () => undefined,
+      hasPty: () => null,
       listProcesses: async () => {
         await answered
         return listedBeforeSpawn.map((id) => ({
@@ -346,7 +341,7 @@ describe('a terminal registered while a listing is in flight (switch on)', () =>
           wslDistro: null
         }))
       }
-    })
+    }
     const listing = sweepProvider(runtime, null)
 
     // A split's shell commits while the host's answer, taken before it existed, is on its way.

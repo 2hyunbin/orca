@@ -7,7 +7,9 @@ import type { WorkspaceSessionState } from '../../shared/workspace-session-state
 import { getConnectionExecutionHostId } from '../../shared/execution-host'
 import { getPtyExecutionHost } from '../../shared/terminal-execution-host'
 import { asProfileSessionStore, storeOf } from './profile-session-store.test-fixture'
-import { unbindReusedTerminalId } from '../persistence/loading-store/reused-terminal-id-unbind'
+import { reusedTerminalIdUnbinding } from '../persistence/loading-store/reused-terminal-id-unbind'
+import { layoutContainsLeafId } from '../persistence/restoring-sessions/terminal-layout-normalization'
+import type { OrcaRuntimeService } from './orca-runtime'
 
 export { boundSessionOf, forgetInstalledPaneSession } from './profile-session-store.test-fixture'
 
@@ -22,29 +24,20 @@ export type BoundPane = {
   incarnationId?: string
 }
 
-function containsLeaf(node: unknown, leafId: string): boolean {
-  if (!node || typeof node !== 'object') {
-    return false
-  }
-  return Reflect.get(node, 'type') === 'leaf'
-    ? Reflect.get(node, 'leafId') === leafId
-    : containsLeaf(Reflect.get(node, 'first'), leafId) ||
-        containsLeaf(Reflect.get(node, 'second'), leafId)
-}
-
 /** The pane's incarnation stamped, and a reused id unbound from older panes, as the commit does. */
 function stampedSession(
   session: WorkspaceSessionState,
   pane: BoundPane,
   incarnationId: string
 ): WorkspaceSessionState {
-  const next = structuredClone(session)
-  unbindReusedTerminalId(next, { ...pane, incarnationId })
-  next.terminalPtyIncarnationsByPaneKey = {
-    ...next.terminalPtyIncarnationsByPaneKey,
-    [`${pane.tabId}:${pane.leafId}`]: incarnationId
+  const next = { ...session, ...reusedTerminalIdUnbinding(session, { ...pane, incarnationId }) }
+  return {
+    ...next,
+    terminalPtyIncarnationsByPaneKey: {
+      ...next.terminalPtyIncarnationsByPaneKey,
+      [`${pane.tabId}:${pane.leafId}`]: incarnationId
+    }
   }
-  return next
 }
 
 /** The session with the pane bound to its terminal: the tab and leaf added when missing. */
@@ -59,7 +52,7 @@ export function withBoundPane(
   const leaf = { type: 'leaf' as const, leafId: pane.leafId }
   const root = !layout?.root
     ? leaf
-    : containsLeaf(layout.root, pane.leafId)
+    : layoutContainsLeafId(layout.root, pane.leafId)
       ? layout.root
       : { type: 'split' as const, direction: 'vertical' as const, first: layout.root, second: leaf }
   return {
@@ -100,7 +93,11 @@ export function withBoundPane(
  * As the spawn commit: binds the pane in the runtime's store session before registration. A
  * store with no session gets an in-memory one, as a profile always has. No-op with the switch off.
  */
-export function bindPaneFirst(runtime: object, pane: BoundPane, hostId = 'local'): void {
+export function bindPaneFirst(
+  runtime: OrcaRuntimeService,
+  pane: BoundPane,
+  hostId = 'local'
+): void {
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
     return
   }
@@ -115,7 +112,7 @@ export function bindPaneFirst(runtime: object, pane: BoundPane, hostId = 'local'
 
 /** As main's pane move to a new tab: the pane leaves `fromTabId` (a tab left empty goes) first. */
 export function movePaneFirst(
-  runtime: object,
+  runtime: OrcaRuntimeService,
   fromTabId: string,
   pane: BoundPane,
   hostId = 'local'
@@ -147,14 +144,7 @@ export function movePaneFirst(
 
 /** registerPty as the PTY host's commit runs it: the pane is bound first. */
 export function registerBoundPty(
-  runtime: {
-    registerPty: (
-      ptyId: string,
-      worktreeId: string,
-      connectionId?: string | null,
-      binding?: { tabId: string; leafId: string } & Record<string, unknown>
-    ) => void
-  },
+  runtime: OrcaRuntimeService,
   ptyId: string,
   worktreeId: string,
   connectionId: string | null,
@@ -192,7 +182,7 @@ export function committingSpawn<
   Args extends { worktreeId?: string; tabId?: string; leafId?: string },
   Result extends { id: string }
 >(
-  runtime: object,
+  runtime: OrcaRuntimeService,
   spawn: (args: Args) => Promise<Result>,
   hostId = 'local'
 ): (args: Args) => Promise<Result> {
@@ -218,8 +208,12 @@ export function committingSpawn<
  * As the PTY host's commit, for a store with sessions: binds the pane the runtime wrote before the
  * spawn, and refuses one closed since. A store that cannot write panes gets the one it would have.
  */
-function commitIntoWrittenPane(runtime: object, args: SpawnArgs, result: unknown): void {
-  const ptyId: unknown = result && typeof result === 'object' ? Reflect.get(result, 'id') : null
+function commitIntoWrittenPane(
+  runtime: OrcaRuntimeService,
+  args: SpawnArgs,
+  result: unknown
+): void {
+  const ptyId = result && typeof result === 'object' && 'id' in result ? result.id : null
   const store = storeOf(runtime)
   if (
     !store?.getWorkspaceSession ||
@@ -235,7 +229,7 @@ function commitIntoWrittenPane(runtime: object, args: SpawnArgs, result: unknown
     const session = store.getWorkspaceSession?.(hostId)
     return (
       (session?.tabsByWorktree?.[worktreeId]?.some((tab) => tab.id === tabId) ?? false) &&
-      containsLeaf(session?.terminalLayoutsByTabId?.[tabId]?.root, leafId)
+      layoutContainsLeafId(session?.terminalLayoutsByTabId?.[tabId]?.root ?? null, leafId)
     )
   }
   // The partition the runtime wrote the pane in; with no admission, the one bindPaneFirst uses.
@@ -250,7 +244,7 @@ function commitIntoWrittenPane(runtime: object, args: SpawnArgs, result: unknown
 type SpawnArgs = Parameters<NonNullable<RuntimePtyController['spawn']>>[0]
 
 type PtyControllerRuntimePrototype = {
-  setPtyController: (controller: RuntimePtyController | null) => void
+  setPtyController: (this: OrcaRuntimeService, controller: RuntimePtyController | null) => void
 }
 
 /**
@@ -267,27 +261,32 @@ export function commitFakeSpawnsInRuntimeTests(prototype: PtyControllerRuntimePr
     }
     const commit = (args: SpawnArgs, result: unknown): void =>
       commitIntoWrittenPane(this, args, result)
-    const committed = new WeakMap<object, unknown>()
-    // A proxy, not a copy: a suite that swaps or reads its controller later sees its own object.
-    setPtyController.call(
-      this,
-      new Proxy(controller, {
-        get(target, prop, receiver) {
-          const value: unknown = Reflect.get(target, prop, receiver)
-          if (prop !== 'spawn' || typeof value !== 'function') {
-            return value
+    // An accessor on the suite's own object, not a copy: a suite that swaps its spawn later
+    // (a spy, a reassignment) still has its new spawn committed.
+    type Spawn = NonNullable<RuntimePtyController['spawn']>
+    const committed = new WeakMap<Spawn, Spawn>()
+    let current: Spawn = controller.spawn
+    Object.defineProperty(controller, 'spawn', {
+      configurable: true,
+      enumerable: true,
+      get: () => {
+        const own = current
+        let wrapped = committed.get(own)
+        if (!wrapped) {
+          wrapped = async (args) => {
+            const result = await own.call(controller, args)
+            commit(args, result)
+            return result
           }
-          if (!committed.has(value)) {
-            committed.set(value, async (args: SpawnArgs) => {
-              const result: unknown = await Reflect.apply(value, target, [args])
-              commit(args, result)
-              return result
-            })
-          }
-          return committed.get(value)
+          committed.set(own, wrapped)
         }
-      })
-    )
+        return wrapped
+      },
+      set: (next: Spawn) => {
+        current = next
+      }
+    })
+    setPtyController.call(this, controller)
   }
 }
 
@@ -297,7 +296,7 @@ export function commitFakeSpawnsInRuntimeTests(prototype: PtyControllerRuntimePr
  * the exit (code 0) these suites drove before.
  */
 export async function dropFromHostInventory(
-  runtime: { onPtyExit: (ptyId: string, exitCode: number) => unknown },
+  runtime: OrcaRuntimeService,
   ptyId: string
 ): Promise<void> {
   if (!ORCA_LAYOUT_OWNER_IS_MAIN) {
@@ -306,26 +305,22 @@ export async function dropFromHostInventory(
   }
   const encoded = getPtyExecutionHost(ptyId)
   const hostId = encoded && encoded !== 'foreign' ? encoded : 'local'
-  const controller: unknown = Reflect.get(runtime, 'ptyController')
-  const inventory = Object.assign(
-    Object.create(controller && typeof controller === 'object' ? controller : null),
-    {
-      listProcesses: async () => [],
-      listProcessesWithHostScope: async () => ({ processes: [], hostIds: ['local', hostId] }),
-      hasPty: () => false
-    }
-  )
-  Reflect.set(runtime, 'ptyController', inventory)
+  const controller = runtime['ptyController']
+  const base: RuntimePtyController = controller ?? {
+    write: () => false,
+    kill: () => false,
+    getForegroundProcess: async () => null
+  }
+  // Inherits the suite's controller, so its other methods keep their own `this`.
+  const inventory: RuntimePtyController = Object.assign(Object.create(base), {
+    listProcesses: async () => [],
+    listProcessesWithHostScope: async () => ({ processes: [], hostIds: ['local', hostId] }),
+    hasPty: () => false
+  })
+  runtime['ptyController'] = inventory
   try {
-    const refresh: unknown = Reflect.get(
-      runtime,
-      'refreshPtyWorktreeRecordsWithControllerInventory'
-    )
-    if (typeof refresh !== 'function') {
-      throw new Error('dropFromHostInventory needs the runtime inventory refresh')
-    }
-    await Reflect.apply(refresh, runtime, [[]])
+    await runtime['refreshPtyWorktreeRecordsWithControllerInventory']([])
   } finally {
-    Reflect.set(runtime, 'ptyController', controller)
+    runtime['ptyController'] = controller
   }
 }

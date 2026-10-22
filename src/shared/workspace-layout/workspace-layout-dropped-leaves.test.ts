@@ -17,13 +17,28 @@ vi.mock('../layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 
 const OTHER_WS = 'repo-1::/Users/dev/other'
 
+/** A create's result: the tab and leaf it made. */
+function createdPane(value: unknown): { tabId: string; leafId: string } {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    !('tabId' in value) ||
+    !('leafId' in value) ||
+    typeof value.tabId !== 'string' ||
+    typeof value.leafId !== 'string'
+  ) {
+    throw new Error('expected a created terminal pane')
+  }
+  return { tabId: value.tabId, leafId: value.leafId }
+}
+
 /** Two terminal tabs, the first split; every pane bound to its own terminal incarnation. */
 function boundLayout(context: LayoutContext) {
   const { model, results } = build(context, [
     { type: 'createTerminalTab', workspace: WS },
     { type: 'createTerminalTab', workspace: WS }
   ])
-  const [first, second] = results as { tabId: string; leafId: string }[]
+  const [first, second] = results.map(createdPane)
   const split = build(
     context,
     [

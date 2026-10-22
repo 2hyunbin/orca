@@ -5,7 +5,7 @@ import { isRemoteRuntimePtyId } from '../../../../shared/remote-runtime-pty-id'
 import { parseAppSshPtyId } from '../../../../shared/ssh-pty-id'
 import { paneTerminalFact, type RuntimePtyRegistryView } from '../../runtime-leaf-record-projection'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
-import { startedMainTerminalSurfaces } from './main-terminal-surfaces'
+import { startedMainTerminalSurfaces, type SurfacesOwner } from './main-terminal-surfaces'
 
 /** A pane main owns: its bound terminal, and whether a status says that binding is not live. */
 export type MainPaneBinding = {
@@ -63,7 +63,7 @@ function provenAbsent(
  * gap, as the window kept it connected; a certified exit, or the host saying it cannot tell, ends it.
  */
 export function mainBindsUnendedTerminal(
-  runtime: object,
+  runtime: SurfacesOwner,
   ptyId: string,
   recorded: { verdict: { status: string } } | undefined
 ): boolean {
@@ -77,6 +77,6 @@ export function mainBindsUnendedTerminal(
 }
 
 /** Whether a pane main owns holds the terminal now: its workspace and stamped incarnation match. */
-export function mainHoldsTerminal(runtime: object, ptyId: string): boolean {
+export function mainHoldsTerminal(runtime: SurfacesOwner, ptyId: string): boolean {
   return (startedMainTerminalSurfaces(runtime)?.findPaneForPty(ptyId) ?? null) !== null
 }

@@ -47,11 +47,8 @@ describe('a stale handle of a replaced pane (switch on)', () => {
     await dropFromHostInventory(runtime, 'pty-old')
     replace()
     // A listing re-issues the old terminal's handle while no pane holds it.
-    const reissue: unknown = Reflect.get(runtime, 'issuePtyHandle')
-    if (typeof reissue !== 'function') {
-      throw new Error('needs issuePtyHandle')
-    }
-    expect(Reflect.apply(reissue, runtime, [runtime['ptysById'].get('pty-old')])).toBe(oldHandle)
+    const old = runtime['ptysById'].get('pty-old')
+    expect(old && runtime['issuePtyHandle'](old)).toBe(oldHandle)
 
     await expect(
       runtime.recoverTerminalPane(paneKey, TEST_WORKTREE_ID, oldHandle)

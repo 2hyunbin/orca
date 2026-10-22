@@ -2,7 +2,7 @@
 // paired server's partition are main's panes; a server's or SSH host's own workspaces are not.
 import { describe, expect, it, vi } from 'vitest'
 import { getDefaultWorkspaceSession } from '../../../../shared/constants'
-import type { ExecutionHostId } from '../../../../shared/execution-host'
+import { normalizeExecutionHostId, type ExecutionHostId } from '../../../../shared/execution-host'
 import { loadWorkspaceLayout } from '../../../../shared/workspace-layout/workspace-layout-load'
 import { nameBasedLoadContext } from '../../../../shared/workspace-layout/workspace-layout-minted-ids'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
@@ -55,18 +55,19 @@ function indexOf(
   partitions: Partial<Record<ExecutionHostId, WorkspaceSessionState>>,
   homes: Record<string, ExecutionHostId>
 ) {
-  const loaded = new Map(
-    Object.entries(partitions).map(([hostId, state]) => [
-      hostId,
-      loadWorkspaceLayout(hostId as ExecutionHostId, state!, nameBasedLoadContext())
-    ])
-  )
+  const loaded = new Map<ExecutionHostId, ReturnType<typeof loadWorkspaceLayout>>()
+  for (const [key, state] of Object.entries(partitions)) {
+    const hostId = normalizeExecutionHostId(key)
+    if (hostId && state) {
+      loaded.set(hostId, loadWorkspaceLayout(hostId, state, nameBasedLoadContext()))
+    }
+  }
   return new TerminalSurfaceIndex({
     reads: () => ({
       readPartition: (hostId) => loaded.get(hostId) ?? null,
       onLayoutOperationCommitted: () => () => {}
     }),
-    hostIds: () => [...loaded.keys()] as ExecutionHostId[],
+    hostIds: () => [...loaded.keys()],
     homeHostId: (key) => homes[key] ?? null,
     generatedTitlesEnabled: () => false,
     onChanged: () => {}

@@ -5,8 +5,10 @@ import { getDefaultWorkspaceSession } from '../../shared/constants'
 import type { LayoutCommand } from '../../shared/workspace-layout/workspace-layout-command-types'
 import { resolveHostId } from '../persistence/loading-store/session-host-partitions'
 import { applyCommandToSession } from '../persistence/terminal-topology/terminal-pane-admission'
+import type { OrcaRuntimeService } from './orca-runtime'
+import type { RuntimeStore } from './runtime-store-contract'
 
-type SessionStore = {
+export type SessionStore = {
   getWorkspaceSession?: (hostId?: string) => WorkspaceSessionState | null | undefined
   setWorkspaceSession?: (session: WorkspaceSessionState, hostId?: string) => void
   getWorkspaceSessionHostIds?: () => readonly string[]
@@ -20,8 +22,9 @@ const installedSessionStores = new WeakSet<SessionStore>()
 const installedLayoutApplies = new WeakSet<SessionStore>()
 
 /** Drops the in-memory session bindPaneFirst gave a store shared across tests, so none leaks. */
-export function forgetInstalledPaneSession(shared: object): void {
-  const store: SessionStore = shared
+export function forgetInstalledPaneSession(
+  store: SessionStore & Pick<RuntimeStore, 'getRepos'>
+): void {
   if (installedLayoutApplies.delete(store)) {
     delete store.applyLayoutCommand
   }
@@ -35,9 +38,8 @@ export function forgetInstalledPaneSession(shared: object): void {
   }
 }
 
-export function storeOf(runtime: object): SessionStore | null {
-  const store: unknown = Reflect.get(runtime, 'store')
-  return store && typeof store === 'object' ? store : null
+export function storeOf(runtime: OrcaRuntimeService): SessionStore | null {
+  return runtime['store'] ?? null
 }
 
 /**
@@ -90,6 +92,9 @@ export function asProfileSessionStore(
 }
 
 /** The session main's layout reads from the runtime's store, as bindPaneFirst left it. */
-export function boundSessionOf(runtime: object, hostId = 'local'): WorkspaceSessionState {
+export function boundSessionOf(
+  runtime: OrcaRuntimeService,
+  hostId = 'local'
+): WorkspaceSessionState {
   return storeOf(runtime)?.getWorkspaceSession?.(hostId) ?? getDefaultWorkspaceSession()
 }

@@ -125,7 +125,7 @@ export function registerHeadlessPlaceholderGraphSurfaceStandingTests(): void {
         const kept = attached.terminals.find((terminal) => terminal.ptyId === PTY)
         expect(kept?.orphaned).toBe(false)
         expect(kept?.tabId).toBe('tab-restored')
-        Reflect.get(runtime, 'store').setWorkspaceSession(getDefaultWorkspaceSession())
+        runtime['store']?.setWorkspaceSession?.(getDefaultWorkspaceSession())
         // The stub store announces no layout write; the next graph installs main's panes.
         runtime.syncWindowGraph(1, { tabs: [], leaves: [] })
       }

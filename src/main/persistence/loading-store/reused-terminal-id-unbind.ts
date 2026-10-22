@@ -10,15 +10,25 @@ export type ReusedTerminalBinding = {
   leafId: string
 }
 
+type UnboundFields = Pick<
+  WorkspaceSessionState,
+  'terminalLayoutsByTabId' | 'terminalPtyIncarnationsByPaneKey' | 'tabsByWorktree'
+>
+
 /**
- * Drops `ptyId` from each other pane whose stamped incarnation differs, in place, with the stamp.
+ * The session's layouts, incarnation stamps and tab rows with `ptyId` dropped from each other pane
+ * whose stamped incarnation differs; null when none does. The commit writes them with its binding.
  * An unstamped binding (a legacy save) is left alone: nothing proves it names another process.
  */
-export function unbindReusedTerminalId(
+export function reusedTerminalIdUnbinding(
   session: WorkspaceSessionState,
   binding: ReusedTerminalBinding
-): void {
+): UnboundFields | null {
   const stamps = session.terminalPtyIncarnationsByPaneKey ?? {}
+  let layouts = session.terminalLayoutsByTabId
+  let remainingStamps = stamps
+  let rows = session.tabsByWorktree
+  let changed = false
   for (const [tabId, layout] of Object.entries(session.terminalLayoutsByTabId ?? {})) {
     const stale = Object.entries(layout.ptyIdsByLeafId ?? {}).flatMap(([leafId, ptyId]) => {
       const stamp = stamps[`${tabId}:${leafId}`]
@@ -27,36 +37,41 @@ export function unbindReusedTerminalId(
         !isBindingPane &&
         stamp !== undefined &&
         stamp !== binding.incarnationId
-        ? [leafId]
+        ? [`${tabId}:${leafId}`]
         : []
     })
     if (stale.length === 0) {
       continue
     }
+    changed = true
     const stillBound = Object.fromEntries(
-      Object.entries(layout.ptyIdsByLeafId ?? {}).filter(([leafId]) => !stale.includes(leafId))
-    )
-    session.terminalLayoutsByTabId = {
-      ...session.terminalLayoutsByTabId,
-      [tabId]: { ...layout, ptyIdsByLeafId: stillBound }
-    }
-    session.terminalPtyIncarnationsByPaneKey = Object.fromEntries(
-      Object.entries(session.terminalPtyIncarnationsByPaneKey ?? {}).filter(
-        ([paneKey]) => !stale.some((leafId) => paneKey === `${tabId}:${leafId}`)
+      Object.entries(layout.ptyIdsByLeafId ?? {}).filter(
+        ([leafId]) => !stale.includes(`${tabId}:${leafId}`)
       )
     )
+    layouts = { ...layouts, [tabId]: { ...layout, ptyIdsByLeafId: stillBound } }
+    remainingStamps = Object.fromEntries(
+      Object.entries(remainingStamps).filter(([paneKey]) => !stale.includes(paneKey))
+    )
     // The tab row's own terminal id names the stale process too; it takes a pane still bound.
-    for (const [worktreeId, tabs] of Object.entries(session.tabsByWorktree)) {
-      if (tabs.some((tab) => tab.id === tabId && tab.ptyId === binding.ptyId)) {
-        session.tabsByWorktree = {
-          ...session.tabsByWorktree,
-          [worktreeId]: tabs.map((tab) =>
-            tab.id === tabId && tab.ptyId === binding.ptyId
-              ? { ...tab, ptyId: Object.values(stillBound)[0] ?? null }
-              : tab
-          )
-        }
-      }
-    }
+    const named = (tab: { id: string; ptyId?: string | null }) =>
+      tab.id === tabId && tab.ptyId === binding.ptyId
+    rows = Object.fromEntries(
+      Object.entries(rows).map(([worktreeId, tabs]) => [
+        worktreeId,
+        tabs.some(named)
+          ? tabs.map((tab) =>
+              named(tab) ? { ...tab, ptyId: Object.values(stillBound)[0] ?? null } : tab
+            )
+          : tabs
+      ])
+    )
   }
+  return changed
+    ? {
+        terminalLayoutsByTabId: layouts,
+        terminalPtyIncarnationsByPaneKey: remainingStamps,
+        tabsByWorktree: rows
+      }
+    : null
 }

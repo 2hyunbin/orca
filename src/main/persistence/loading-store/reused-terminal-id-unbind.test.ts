@@ -89,6 +89,69 @@ describe('a spawn commit binding a reused terminal id (switch on)', () => {
     )
   })
 
+  it('leaves every saved binding as it was for a spawn of an id no pane names', () => {
+    switchState.on = true
+    const session = savedSession('inc-before-restart')
+    const before = structuredClone(session)
+
+    applyPtyBinding(
+      {
+        worktreeId: WORKTREE,
+        tabId: 'new-tab',
+        leafId: NEW_LEAF,
+        ptyId: 'pty-4',
+        incarnationId: 'inc-4'
+      },
+      session,
+      WORKTREE,
+      `new-tab:${NEW_LEAF}`
+    )
+
+    expect(session.terminalLayoutsByTabId['saved-tab']).toEqual(
+      before.terminalLayoutsByTabId['saved-tab']
+    )
+    expect(session.tabsByWorktree[WORKTREE]?.[0]).toEqual(before.tabsByWorktree[WORKTREE]?.[0])
+    expect(session.terminalPtyIncarnationsByPaneKey).toEqual({
+      [`saved-tab:${SAVED_LEAF}`]: 'inc-before-restart',
+      [`new-tab:${NEW_LEAF}`]: 'inc-4'
+    })
+  })
+
+  it('moves the tab row to the pane still bound when the stale pane is a split of the same tab', () => {
+    switchState.on = true
+    const session = savedSession('inc-before-restart')
+    session.terminalLayoutsByTabId['saved-tab'] = {
+      root: {
+        type: 'split',
+        direction: 'vertical',
+        first: { type: 'leaf', leafId: SAVED_LEAF },
+        second: { type: 'leaf', leafId: NEW_LEAF }
+      },
+      activeLeafId: SAVED_LEAF,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [SAVED_LEAF]: 'pty-3' }
+    }
+
+    applyPtyBinding(
+      {
+        worktreeId: WORKTREE,
+        tabId: 'saved-tab',
+        leafId: NEW_LEAF,
+        ptyId: 'pty-3',
+        incarnationId: 'inc-now'
+      },
+      session,
+      WORKTREE,
+      `saved-tab:${NEW_LEAF}`
+    )
+
+    expect(panesBinding(session, 'pty-3')).toEqual([`saved-tab:${NEW_LEAF}`])
+    expect(session.tabsByWorktree[WORKTREE]?.[0]?.ptyId).toBe('pty-3')
+    expect(session.terminalPtyIncarnationsByPaneKey).toEqual({
+      [`saved-tab:${NEW_LEAF}`]: 'inc-now'
+    })
+  })
+
   it('leaves a pane stamped with the same incarnation bound', () => {
     switchState.on = true
     const session = savedSession('inc-now')

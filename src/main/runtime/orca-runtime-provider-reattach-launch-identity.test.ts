@@ -38,9 +38,7 @@ function createRuntime(): OrcaRuntimeService {
 }
 
 function paneKeyOf(runtime: OrcaRuntimeService, ptyId: string): string | null {
-  const pty = (runtime as unknown as { ptysById: Map<string, { ptyId: string }> }).ptysById.get(
-    ptyId
-  )
+  const pty = runtime['ptysById'].get(ptyId)
   return runtime['paneOfPty'](pty).paneKey
 }
 
