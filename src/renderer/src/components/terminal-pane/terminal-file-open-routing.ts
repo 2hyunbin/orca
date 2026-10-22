@@ -207,11 +207,12 @@ export function openDetectedFilePath(
       return
     }
 
-    // Why: a granted file is readable only through its grant, so it opens in Orca, never as a download.
-    if (openWithSystemDefault && !canOpenWithSystemDefault && hostGrantId === null) {
+    if (openWithSystemDefault && !canOpenWithSystemDefault) {
       // Why: the popover names Shift+Cmd/Ctrl "Download & open with default app", and the OS
       // cannot launch a remote path, so the direct gesture must reach the same download.
-      await downloadAndOpenRemoteTerminalFile(fileContext, mappedFilePath)
+      await (hostGrantId
+        ? downloadAndOpenRemoteTerminalFile(fileContext, mappedFilePath, hostGrantId)
+        : downloadAndOpenRemoteTerminalFile(fileContext, mappedFilePath))
       return
     }
 

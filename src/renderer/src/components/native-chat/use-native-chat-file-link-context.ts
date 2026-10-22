@@ -8,7 +8,7 @@ import {
 
 export function useNativeChatFileLinkContext(
   terminalTabId: string,
-  chatSessionId?: string
+  chatSessionId?: string | null
 ): NativeChatFileLinkContext | null {
   const selectContext = useMemo(
     () => createNativeChatFileLinkContextSelector(terminalTabId),

@@ -6,12 +6,36 @@ import type {
 } from '../../../shared/runtime-types'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type {
+  RuntimeFileDownloadResult,
   RuntimeFileOperationArgs,
   RuntimeReadableFileContent
 } from './runtime-file-client-types'
 import { callRuntimeRpc } from './runtime-rpc-client'
 import { RuntimeRpcCallError } from './runtime-rpc-result'
 import { toRuntimeWorktreeSelector } from './runtime-worktree-selector'
+
+export function downloadRuntimeTerminalArtifact(
+  context: RuntimeFileOperationArgs,
+  filePath: string,
+  suggestedName: string,
+  grantId: string | undefined
+): Promise<RuntimeFileDownloadResult> | null {
+  if (!grantId || context.target.kind !== 'environment' || !context.worktreeId) {
+    return null
+  }
+  return readRuntimeTerminalArtifactContent({
+    target: context.target,
+    worktreeId: context.worktreeId,
+    absolutePath: filePath,
+    grantId
+  }).then((result) => {
+    return window.api.fs.saveDownloadedFile({
+      suggestedName,
+      content: result.content,
+      encoding: result.isBinary ? 'base64' : 'utf8'
+    })
+  })
+}
 
 /** Reads a host file outside every workspace through the grant its host issued for it. */
 export async function readRuntimeTerminalArtifactContent(args: {

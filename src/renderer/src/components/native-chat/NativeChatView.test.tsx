@@ -9,6 +9,16 @@ import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { NativeChatSessionGate } from './NativeChatSessionGate'
 import { useNativeChatDraft } from './use-native-chat-draft'
 import { clearNativeChatDraftCacheForTests } from './native-chat-draft-cache'
+import {
+  NativeChatMarkdownImageOwnerContext,
+  NativeChatMarkdownImageOwnerProvider
+} from './native-chat-markdown-image-owner'
+import { useAppStore } from '@/store'
+import {
+  repoFixture,
+  terminalTabFixture,
+  worktreeFixture
+} from './native-chat-workspace-test-fixtures'
 
 function entry(overrides: Partial<AgentStatusEntry> & Pick<AgentStatusEntry, 'paneKey'>) {
   return {
@@ -55,6 +65,36 @@ describe('NativeChatSessionGate', () => {
   afterEach(() => {
     cleanup()
     clearNativeChatDraftCacheForTests()
+  })
+
+  it('keeps the startup pane usable without inventing a chat file session identity', () => {
+    useAppStore.setState({
+      ...useAppStore.getInitialState(),
+      repos: [repoFixture()],
+      worktreesByRepo: { repo: [worktreeFixture('wt-1', '/repo', { hostId: 'local' })] },
+      tabsByWorktree: { 'wt-1': [terminalTabFixture('tab-1', 'wt-1')] }
+    })
+    const pane = (sessionId: string | null) => (
+      <NativeChatMarkdownImageOwnerProvider tabId="tab-1" sessionId={sessionId} isVisible>
+        <NativeChatMarkdownImageOwnerContext.Consumer>
+          {(owner) => (
+            <output>
+              {owner?.runtimeContext?.nativeChatContext?.sessionId ?? 'no-session'}:
+              {owner?.fileLinkContext?.chatSessionId ?? 'no-session'}
+            </output>
+          )}
+        </NativeChatMarkdownImageOwnerContext.Consumer>
+        <DraftProbe paneKey="tab-1:leaf-1" sessionId={sessionId} />
+      </NativeChatMarkdownImageOwnerProvider>
+    )
+    const view = render(pane(null))
+    expect(screen.getByRole('status')).toHaveTextContent('no-session:no-session')
+    const composer = screen.getByRole('textbox', { name: 'Message draft' })
+    fireEvent.change(composer, { target: { value: 'startup draft' } })
+    view.rerender(pane('known-session'))
+    expect(screen.getByRole('status')).toHaveTextContent('known-session:known-session')
+    expect(screen.getByRole('textbox', { name: 'Message draft' })).toBe(composer)
+    expect(composer).toHaveValue('startup draft')
   })
 
   it('preserves the open composer, session, and draft through disconnect and reconnect', () => {

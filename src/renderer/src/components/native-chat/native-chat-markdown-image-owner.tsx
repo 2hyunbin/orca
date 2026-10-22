@@ -19,7 +19,7 @@ export function NativeChatMarkdownImageOwnerProvider({
   children
 }: {
   tabId: string
-  sessionId: string
+  sessionId: string | null
   isVisible: boolean
   children: ReactNode
 }): React.JSX.Element {
@@ -28,7 +28,7 @@ export function NativeChatMarkdownImageOwnerProvider({
   // Why: an image outside every workspace on a paired host loads through the grant its chat earns.
   const runtimeContext = useMemo(
     () =>
-      ownerRuntimeContext
+      ownerRuntimeContext && sessionId
         ? { ...ownerRuntimeContext, nativeChatContext: { tabId, sessionId } }
         : ownerRuntimeContext,
     [ownerRuntimeContext, tabId, sessionId]
