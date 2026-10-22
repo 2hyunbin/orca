@@ -73,21 +73,21 @@ function indexWorkspaces(tabsByWorkspace: WorkspaceTabMap | undefined) {
     const byTabId = new Map<string, string>()
     const bySessionId = new Map<string, string[]>()
     for (const [workspaceId, tabs] of Object.entries(tabsByWorkspace)) {
-      for (const tab of tabs ?? []) {
-        if (tab.contentType && tab.contentType !== 'agent-session') {
+      for (const { id, contentType, entityId } of tabs ?? []) {
+        if (contentType && contentType !== 'agent-session') {
           continue
         }
-        if (!byTabId.has(tab.id)) {
-          byTabId.set(tab.id, workspaceId)
+        if (!byTabId.has(id)) {
+          byTabId.set(id, workspaceId)
         }
-        if (tab.entityId === undefined) {
+        if (entityId === undefined) {
           continue
         }
-        const candidates = bySessionId.get(tab.entityId) ?? []
+        const candidates = bySessionId.get(entityId) ?? []
         if (candidates.at(-1) !== workspaceId) {
           candidates.push(workspaceId)
         }
-        bySessionId.set(tab.entityId, candidates)
+        bySessionId.set(entityId, candidates)
       }
     }
     index = { byTabId, bySessionId }
