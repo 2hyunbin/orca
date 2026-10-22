@@ -1,11 +1,16 @@
-import { isBundledSkillLeaveReason } from '../../../../shared/bundled-skill-plan'
+import {
+  isBundledSkillLeaveReason,
+  type BundledSkillPlan
+} from '../../../../shared/bundled-skill-plan'
 import type {
   BundledSkillLocation,
   BundledSkillLocationState
 } from '../../../../shared/bundled-skill-locations'
-import type {
-  BundledSkillOutcomeText,
-  BundledSkillPlanState
+import {
+  bundledSkillInstallAgents,
+  summarizeBundledSkillPlan,
+  type BundledSkillOutcomeText,
+  type BundledSkillPlanState
 } from '../../../../shared/bundled-skill-summary'
 import { SKILL_INSTALL_PROVIDERS } from '../../../../shared/skill-install-providers'
 import { translate } from '@/i18n/i18n'
@@ -114,4 +119,28 @@ export function installForAgentsLabel(agents: readonly string[]): string {
   return translate('auto.components.skills.skillPlanOpCopy.installFor', 'Install for {{value0}}', {
     value0: names
   })
+}
+
+/** The Update button's label: an update when any skill needs one, else the agents it links. */
+export function updateActionLabel(plan: BundledSkillPlan): string {
+  const summary = summarizeBundledSkillPlan(plan)
+  const updates = summary.skills.filter(
+    (skill) => skill.state === 'update' || skill.state === 'repair'
+  ).length
+  if (updates === 0) {
+    const agents = bundledSkillInstallAgents(plan.skills)
+    return agents.length > 0
+      ? installForAgentsLabel(agents)
+      : translate('auto.components.skills.SkillFreshnessUpdateDialog.title', 'Update skills')
+  }
+  return updates === 1
+    ? translate(
+        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionOne',
+        'Update 1 skill'
+      )
+    : translate(
+        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionMany',
+        'Update {{value0}} skills',
+        { value0: updates }
+      )
 }

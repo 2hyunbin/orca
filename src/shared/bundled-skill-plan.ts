@@ -126,32 +126,32 @@ const BundledSkillForceSchema = z.array(z.string().min(1).max(4096)).max(256)
  * Frozen with `skills.bundled-orca.v1`: the schema is strict, so an older host rejects any
  * new field; a field needs a new capability.
  */
-export const BundledSkillPlanRequestSchema = z
-  .object({ force: BundledSkillForceSchema.optional() })
-  .strict()
+export const BundledSkillPlanRequestSchema = z.strictObject({
+  force: BundledSkillForceSchema.optional()
+})
 export type BundledSkillPlanRequest = z.infer<typeof BundledSkillPlanRequestSchema>
 
 const PlanDigestSchema = z.string().regex(/^[0-9a-f]{64}$/u)
 
 /** Runs the plan `request` produced, identified by its digest; the ops are never re-sent. */
-export const BundledSkillExecuteRequestSchema = z
-  .object({ planDigest: PlanDigestSchema, request: BundledSkillPlanRequestSchema })
-  .strict()
+export const BundledSkillExecuteRequestSchema = z.strictObject({
+  planDigest: PlanDigestSchema,
+  request: BundledSkillPlanRequestSchema
+})
 export type BundledSkillExecuteRequest = z.infer<typeof BundledSkillExecuteRequestSchema>
 
 /**
  * The desktop app's own IPC (never the wire): its host, or a WSL distro it reaches through
  * `wsl.exe` when that is where the user's agents run. No distro means the default one.
  */
-export const BundledSkillLocalPlanRequestSchema = BundledSkillPlanRequestSchema.extend({
-  wsl: z
-    .object({ distro: z.string().min(1).max(256).optional() })
-    .strict()
-    .optional()
-}).strict()
+export const BundledSkillLocalPlanRequestSchema = z.strictObject({
+  ...BundledSkillPlanRequestSchema.shape,
+  wsl: z.strictObject({ distro: z.string().min(1).max(256).optional() }).optional()
+})
 export type BundledSkillLocalPlanRequest = z.infer<typeof BundledSkillLocalPlanRequestSchema>
 
-export const BundledSkillLocalExecuteRequestSchema = z
-  .object({ planDigest: PlanDigestSchema, request: BundledSkillLocalPlanRequestSchema })
-  .strict()
+export const BundledSkillLocalExecuteRequestSchema = z.strictObject({
+  planDigest: PlanDigestSchema,
+  request: BundledSkillLocalPlanRequestSchema
+})
 export type BundledSkillLocalExecuteRequest = z.infer<typeof BundledSkillLocalExecuteRequestSchema>

@@ -1,35 +1,7 @@
 import { AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react'
 import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
-import {
-  bundledSkillInstallAgents,
-  summarizeBundledSkillPlan
-} from '../../../../shared/bundled-skill-summary'
+import { summarizeBundledSkillPlan } from '../../../../shared/bundled-skill-summary'
 import { translate } from '@/i18n/i18n'
-import { installForAgentsLabel } from './skill-plan-op-copy'
-
-/** The Update button's label: an update when any skill needs one, else the agents it links. */
-export function updateActionLabel(plan: BundledSkillPlan): string {
-  const summary = summarizeBundledSkillPlan(plan)
-  const updates = summary.skills.filter(
-    (skill) => skill.state === 'update' || skill.state === 'repair'
-  ).length
-  if (updates === 0) {
-    const agents = bundledSkillInstallAgents(plan.skills)
-    return agents.length > 0
-      ? installForAgentsLabel(agents)
-      : translate('auto.components.skills.SkillFreshnessUpdateDialog.title', 'Update skills')
-  }
-  return updates === 1
-    ? translate(
-        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionOne',
-        'Update 1 skill'
-      )
-    : translate(
-        'auto.components.skills.SkillFreshnessUpdateDialog.updateActionMany',
-        'Update {{value0}} skills',
-        { value0: updates }
-      )
-}
 
 /** Pre-run headline, read from the live plan; once a run starts the dialog reports it. */
 export function SummaryHeadline({ plan }: { plan: BundledSkillPlan | null }): React.JSX.Element {
