@@ -35,7 +35,6 @@ import {
   getJiraCreateAllowedValueLabel,
   isJiraScalarUserCreateField
 } from '@/components/task-page-jira-create-fields'
-import { defaultScopeSource } from '@/lib/default-creation-host'
 import { TaskPageJiraIssueAssigneeField } from './IssueAssigneeField'
 import { TaskPageJiraIssueUserField } from './IssueUserField'
 export function TaskPageJiraIssueDialog({
@@ -271,26 +270,26 @@ export function TaskPageJiraIssueDialog({
                       {field.name}
                     </label>
                     {isJiraScalarUserCreateField(field) ? (
-                      <TaskPageJiraIssueUserField
-                        key={JSON.stringify([
-                          model.providerRuntimeContextKey,
-                          newJiraIssueTargetProjectSelectionKey,
-                          newJiraIssueTargetType?.id
-                        ])}
-                        providerSettings={
-                          model.jiraTaskSourceContext ?? defaultScopeSource(model.settings)
-                        }
-                        siteId={newJiraIssueTargetProject?.siteId}
-                        value={fieldValue}
-                        onChange={(id) =>
-                          setNewJiraIssueCustomFieldValues((prev) => ({
-                            ...prev,
-                            [field.key]: id
-                          }))
-                        }
-                        disabled={newJiraIssueSubmitting}
-                        label={field.name}
-                      />
+                      model.jiraTaskSourceContext ? (
+                        <TaskPageJiraIssueUserField
+                          key={JSON.stringify([
+                            model.providerRuntimeContextKey,
+                            newJiraIssueTargetProjectSelectionKey,
+                            newJiraIssueTargetType?.id
+                          ])}
+                          providerSettings={model.jiraTaskSourceContext}
+                          siteId={newJiraIssueTargetProject?.siteId}
+                          value={fieldValue}
+                          onChange={(id) =>
+                            setNewJiraIssueCustomFieldValues((prev) => ({
+                              ...prev,
+                              [field.key]: id
+                            }))
+                          }
+                          disabled={newJiraIssueSubmitting}
+                          label={field.name}
+                        />
+                      ) : null
                     ) : field.allowedValues?.length && field.schema?.type !== 'array' ? (
                       <Select
                         value={fieldValue}

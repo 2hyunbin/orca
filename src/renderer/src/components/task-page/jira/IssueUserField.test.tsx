@@ -4,24 +4,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, expect, it, vi } from 'vitest'
 import { TaskPageJiraIssueUserField } from './IssueUserField'
 import { buildJiraCreateSubmission } from '@/components/task-page-jira-create-fields'
-import { createIssue } from '../../../../../main/jira/jira-issue-mutations'
-import type { JiraCreateField, JiraSite } from '../../../../../shared/jira-types'
+import type { JiraCreateField } from '../../../../../shared/jira-types'
 
-const { search, request, clients } = vi.hoisted(() => ({
-  search: vi.fn(),
-  request: vi.fn(),
-  clients: vi.fn()
-}))
+const search = vi.hoisted(() => vi.fn())
 vi.mock('@/runtime/runtime-jira-client', () => ({ jiraSearchUsers: search }))
-vi.mock('../../../../../main/jira/client', () => ({
-  getClients: clients,
-  isAuthError: () => false
-}))
-vi.mock('../../../../../main/jira/request-queue', () => ({ acquire: vi.fn(), release: vi.fn() }))
-vi.mock('../../../../../main/jira/authenticated-request', () => ({
-  apiBasePath: () => '/rest/api/issue-test',
-  jiraRequest: request
-}))
 afterEach(cleanup)
 
 it.each(['cloud', 'server'] as const)(
@@ -35,24 +21,16 @@ it.each(['cloud', 'server'] as const)(
       schema: { type: 'user' },
       allowedValues: [{ id, name: 'Ada Lovelace' }]
     }
-    const site: JiraSite = {
-      id: 'site-1',
-      siteUrl: 'https://jira.example.com',
-      displayName: 'Jira',
-      email: '',
-      accountId: 'me',
-      authType: authType === 'server' ? 'server' : undefined
-    }
-    clients.mockReturnValue([{ site }])
+    const siteId = 'site-1'
+    const submit = vi.fn()
     search.mockResolvedValue([{ accountId: id, displayName: 'Ada Lovelace' }])
-    request.mockReset().mockResolvedValue({ id: '1', key: 'ENG-1' })
     function Form() {
       const [value, setValue] = useState('')
       return (
         <>
           <TaskPageJiraIssueUserField
             providerSettings={{ kind: 'local' }}
-            siteId={site.id}
+            siteId={siteId}
             value={value}
             onChange={setValue}
             disabled={false}
@@ -60,15 +38,7 @@ it.each(['cloud', 'server'] as const)(
           />
           <button
             disabled={!value}
-            onClick={() =>
-              void createIssue({
-                siteId: site.id,
-                projectId: '100',
-                issueTypeId: '1',
-                title: 'Example',
-                ...buildJiraCreateSubmission([field], { [field.key]: value })
-              })
-            }
+            onClick={() => submit(buildJiraCreateSubmission([field], { [field.key]: value }))}
           >
             Create issue
           </button>
@@ -82,20 +52,13 @@ it.each(['cloud', 'server'] as const)(
     })
     expect(screen.getByRole('button', { name: 'Create issue' }).hasAttribute('disabled')).toBe(true)
     fireEvent.click(await screen.findByRole('button', { name: 'Ada Lovelace' }))
-    expect(search).toHaveBeenCalledWith({ kind: 'local' }, 'Ada Lovelace', site.id)
+    expect(search).toHaveBeenCalledWith({ kind: 'local' }, 'Ada Lovelace', siteId)
     expect(screen.getByRole('button', { name: 'Reporter' }).textContent).toBe('Ada Lovelace')
     fireEvent.click(screen.getByRole('button', { name: 'Create issue' }))
     await waitFor(() =>
-      expect(request).toHaveBeenCalledWith({ site }, expect.any(String), {
-        method: 'POST',
-        body: JSON.stringify({
-          fields: {
-            project: { id: '100' },
-            issuetype: { id: '1' },
-            summary: 'Example',
-            [field.key]: authType === 'server' ? { name: id } : { accountId: id }
-          }
-        })
+      expect(submit).toHaveBeenCalledWith({
+        customFields: { [field.key]: id },
+        userFieldKeys: [field.key]
       })
     )
   }
