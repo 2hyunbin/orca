@@ -20,11 +20,7 @@ export function getMobileNativeChatToggleActions(args: {
   const tab = terminalHandle
     ? tabs.find((candidate) => candidate.terminal === terminalHandle)
     : null
-  if (
-    !tab ||
-    (!isTabChatView(tab.id) &&
-      !resolveMobileNativeChat(tab, args.nativeChatTranscriptIsLocalReadable))
-  ) {
+  if (!tab || !resolveMobileNativeChat(tab, args.nativeChatTranscriptIsLocalReadable)) {
     return []
   }
   const isChat = isTabChatView(tab.id)
