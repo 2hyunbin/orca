@@ -79,18 +79,18 @@ export function buildResourcePtyRows(args: {
   const localTabIds = new Set(
     Object.values(tabsByWorktree).flatMap((tabs) => tabs.map((tab) => tab.id))
   )
+  const ptyIdsByTabId = Object.fromEntries(
+    Object.entries(args.bindings.ptyIdsByTabId).filter(([id]) => localTabIds.has(id))
+  )
+  const terminalLayoutsByTabId = Object.fromEntries(
+    Object.entries(args.bindings.terminalLayoutsByTabId ?? {}).filter(([id]) => localTabIds.has(id))
+  )
   const bindings = buildResourceSessionBindingIndex({
     ...args.bindings,
     tabsByWorktree,
     deferredSshSessionIdsByTabId: {},
-    ptyIdsByTabId: Object.fromEntries(
-      Object.entries(args.bindings.ptyIdsByTabId).filter(([id]) => localTabIds.has(id))
-    ),
-    terminalLayoutsByTabId: Object.fromEntries(
-      Object.entries(args.bindings.terminalLayoutsByTabId ?? {}).filter(([id]) =>
-        localTabIds.has(id)
-      )
-    )
+    ptyIdsByTabId,
+    terminalLayoutsByTabId
   })
   const projectGroups = new Map(
     args.projectGroups

@@ -83,7 +83,7 @@ for (const theme of ['dark', 'light'] as const) {
         agentOwnership: index === 0 ? 'unknown' : 'absent',
         fencedTermination: index !== 998
       }))
-      const counts: PtyViewCounts = {
+      const counts: Required<PtyViewCounts> = {
         listing: 0,
         metrics: 0,
         kills: []
