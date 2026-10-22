@@ -124,7 +124,10 @@ export function reportCliError(error: unknown, json: boolean, context: CliErrorC
   const selector = contextRecovery(errorCode(error), context)
   if (json) {
     if (error instanceof RuntimeRpcFailureError) {
-      const response = withAutomationOwnerConflictRecovery(error.response)
+      const sidecarExit = computerSidecarExitRecovery(error, context)
+      const response = sidecarExit
+        ? { ...error.response, error: { ...error.response.error, data: sidecarExit } }
+        : withAutomationOwnerConflictRecovery(error.response)
       console.log(
         JSON.stringify(
           selector

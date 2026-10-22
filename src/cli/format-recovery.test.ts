@@ -235,8 +235,21 @@ describe('CLI error recovery', () => {
     })
 
     const output = formatCliError(error, { commandPath: ['computer', 'list-apps'] })
-
     expect(output).toContain('update or reprovision the server')
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    reportCliError(error, true, { commandPath: ['computer', 'list-apps'] })
+    expect(JSON.parse(String(log.mock.calls[0]?.[0]))).toMatchObject({
+      error: {
+        code: 'accessibility_error',
+        data: {
+          nextSteps: expect.arrayContaining([
+            expect.stringContaining('update or reprovision the server')
+          ])
+        }
+      }
+    })
+    log.mockRestore()
   })
 
   it('does not replace mutation recovery with generic runtime startup advice', () => {
