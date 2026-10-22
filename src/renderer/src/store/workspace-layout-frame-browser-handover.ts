@@ -30,6 +30,14 @@ export function noteFramesTakingOverStagedBrowserTabs(
       (built.browserPagesByWorkspace[tabId] ?? []).map((page) => page.id)
     )
   )
+  // Before scanning the dropped pages: a close drops many pages and draws none of a staged create's.
+  if (
+    !Object.values(state.remoteBrowserPageHandlesByPageId).some(
+      (handle) => handle?.staged === true && drawnPageIds.has(handle.remotePageId)
+    )
+  ) {
+    return
+  }
   for (const tabId of droppedTabIds) {
     for (const page of state.browserPagesByWorkspace[tabId] ?? []) {
       const handle = state.remoteBrowserPageHandlesByPageId[page.id]
