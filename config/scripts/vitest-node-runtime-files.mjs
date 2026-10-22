@@ -104,6 +104,7 @@ const NODE_RUNTIME_INCLUDE = [
   'src/main/plugins/plugin-worker-supervision.integration.test.ts',
   // Reconciliation loads the real native Parcel watcher; Bun can abort on Linux ARM.
   'src/main/plugins/plugin-service-reconciliation.test.ts',
+  'src/main/plugins/plugin-kill-list-content-revocation.test.ts',
   'src/main/usage/usage-scan-worker-event-loop.test.ts',
   // Asserts Node's spawn-failure close signal and that a dead worker closes its children's pipes.
   'src/main/worker-thread-child-process/worker-thread-child-process.test.ts',
@@ -124,6 +125,7 @@ const NODE_RUNTIME_INCLUDE = [
   'src/main/git/repo-detection.test.ts',
   'src/renderer/src/components/browser-pane/annotate/browser-grab-toast-owner-cleanup.test.tsx',
   'src/main/window/native-chat-paste-files.test.ts',
+  'src/renderer/src/hooks/os-file-drop-bytes.test.ts',
   'src/main/computer/desktop-script-serve-channel.test.ts',
   'src/main/providers/local-pty-child-process-verdict.test.ts',
   'src/main/providers/working-directory-validation.test.ts',
