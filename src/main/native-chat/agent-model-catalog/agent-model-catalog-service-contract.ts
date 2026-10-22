@@ -29,24 +29,11 @@ export type AgentModelCatalogServiceDeps = AgentModelCatalogWorkspaceDeps & {
 }
 
 export type AgentModelCatalogService = {
+  snapshot: (params: AgentModelCatalogReadParams) => AgentSessionModelCatalogResult
+  demand: (params: AgentModelCatalogReadParams) => Promise<void>
+  retireContext: () => void
   peek: (sessionId: string, verifiedOnly?: boolean) => AgentModelCatalogEntry | null
-  read: (params: {
-    agent: string
-    sessionId?: string
-    /** Where a new chat would run; null when one was named but is not a local directory. */
-    workspacePath?: string | null
-    /** Answer for the folder the named session runs in, as its new-chat read did. */
-    inSessionWorkspace?: true
-    /** With no entry yet, answer from the listing this read starts or joins instead of `unknown`;
-     *  with a held reason past its TTL, from the probe re-checking it. */
-    waitForListing?: boolean
-    /** Answer only from the saved entry and held reason; start, join or re-check no listing. */
-    savedOnly?: boolean
-    verifiedOnly?: boolean
-    legacy?: boolean
-    /** Old options readers need account-default presentation, never launch or admission proof. */
-    legacyOptionsDisplay?: true
-  }) => Promise<AgentSessionModelCatalogResult>
+  read: (params: AgentModelCatalogReadParams) => Promise<AgentSessionModelCatalogResult>
   /** Incoming listing ids, checking only a launch-added row against the pinned account. */
   retainedLiveModelIds: (
     sessionId: string,
@@ -62,4 +49,24 @@ export type AgentModelCatalogService = {
   stop: () => void
   /** A chat under this record's account proved its start: a held reason is re-checked sooner. */
   providerStarted: (record: AgentSessionRecord) => void
+}
+
+export type AgentModelCatalogReadParams = {
+  agent: string
+  /** Internal selector resolution; never part of the wire contract. */
+  workspace?: { selector: string; identity: () => unknown; resolve: () => Promise<string | null> }
+  sessionId?: string
+  /** Where a new chat would run; null when one was named but is not a local directory. */
+  workspacePath?: string | null
+  /** Answer for the folder the named session runs in, as its new-chat read did. */
+  inSessionWorkspace?: true
+  /** With no entry yet, answer from the listing this read starts or joins instead of `unknown`;
+   *  with a held reason past its TTL, from the probe re-checking it. */
+  waitForListing?: boolean
+  /** Answer only from the saved entry and held reason; start, join or re-check no listing. */
+  savedOnly?: boolean
+  verifiedOnly?: boolean
+  legacy?: boolean
+  /** Old options readers need account-default presentation, never launch or admission proof. */
+  legacyOptionsDisplay?: true
 }

@@ -90,10 +90,15 @@ export const STRUCTURED_AGENT_SESSION_OPTIONS_READ_METHODS = [
         if (worktree === undefined) {
           return catalog.read({ ...params, ...scope })
         }
-        const workspacePath = await ctx.runtime
-          .resolveStructuredAgentSessionLocalWorkspacePath(worktree)
-          .catch(() => null)
-        return catalog.read({ ...params, ...scope, workspacePath })
+        return catalog.read({
+          ...params,
+          ...scope,
+          workspace: {
+            selector: worktree,
+            identity: () => ctx.runtime.structuredAgentSessionCatalogWorkspaceIdentity(),
+            resolve: () => ctx.runtime.resolveStructuredAgentSessionLocalWorkspacePath(worktree)
+          }
+        })
       }
       const listing = await read()
       const own = record?.provider === params.agent ? record : null

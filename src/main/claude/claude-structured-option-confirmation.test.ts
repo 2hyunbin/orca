@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   applyStructuredAgentSessionOptions,
   createStructuredAgentSessionOptionState,
@@ -184,7 +184,7 @@ describe('confirmation never outlives the write it belongs to', () => {
     } as unknown as ClaudeSession
 
     await setClaudeStructuredOption(session, { key: 'effort', value: 'low' }, undefined)
-    expect(session.confirmedOptions.has('effort')).toBe(true)
+    await vi.waitFor(() => expect(session.confirmedOptions.has('effort')).toBe(true))
 
     // The provider now reports a level it cannot represent; the stale confirmation
     // must not survive into the new value.

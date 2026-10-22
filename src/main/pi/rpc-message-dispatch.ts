@@ -57,7 +57,6 @@ export async function dispatchPiRpcMessage(
     return exited()
   }
   input.onInputPreparation?.()
-  const model = input.executionOptions?.model ?? session.initialOptions.model
   if (!input.executionOptions) {
     input.signal?.throwIfAborted()
     return session.submit(
@@ -68,16 +67,7 @@ export async function dispatchPiRpcMessage(
     )
   }
   for (const key of ['model', 'effort'] as const) {
-    const value =
-      input.executionOptions?.[key] ??
-      (key === 'model' || model === session.initialOptions.model
-        ? session.initialOptions[key]
-        : undefined)
-    if (value === undefined && session.optionProof.writes.has(key)) {
-      throw new AgentSessionOptionRejectedError(
-        new Error(`The default ${key} for this model is unknown`)
-      )
-    }
+    const value = input.executionOptions[key]
     if (value === undefined || session.optionProof.current.get(key) === value) {
       continue
     }

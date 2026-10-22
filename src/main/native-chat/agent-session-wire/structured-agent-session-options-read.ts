@@ -1,22 +1,20 @@
+import { independentAgentModelCatalog } from '../agent-model-catalog/agent-model-catalog-discovery'
+import {
+  readStructuredAgentSessionOptionsAtRest,
+  IN_PROCESS_OPTIONS_READER,
+  type StructuredAgentSessionOptionsReader
+} from './structured-agent-session-resting-options'
+export { IN_PROCESS_OPTIONS_READER, type StructuredAgentSessionOptionsReader }
 import { structuredAgentSessionThreadGoalReport } from './structured-agent-session-thread-goal'
 // Saved choices, catalog defaults and actual execution reports remain separate facts.
 
-import type {
-  AgentSessionModelCatalogResult,
-  AgentSessionOptionsResult
-} from '../../../shared/agent-session-wire'
-import { decodeStructuredAgentSessionOptionValue } from '../../../shared/structured-agent-session-option-codec'
-import { finishedListingIds } from '../../../shared/structured-agent-session-options'
-import { savedEffectiveServiceTier } from '../../../shared/structured-agent-session-effective-tier'
+import type { AgentSessionOptionsResult } from '../../../shared/agent-session-wire'
 import { journalOpenReadRefusal } from '../agent-session-journal/journal-open-failure'
 import type { StructuredAgentSessionLiveOptions } from './structured-agent-session-adapter'
 import { retainedAgentModelCatalogModels } from '../agent-model-catalog/agent-model-catalog-entry'
 import { saveStructuredAgentSessionListing } from './structured-agent-session-start-listing'
-import { independentAgentModelCatalog } from '../agent-model-catalog/agent-model-catalog-discovery'
-import type { StructuredAgentSessionHostDeps } from './structured-agent-session-host-types'
 import {
   structuredAgentSessionCapabilityView,
-  structuredAgentSessionOptionModels,
   type StructuredAgentSessionRestingOptions as RestingOptions
 } from './structured-agent-session-option-models'
 import { structuredAgentSessionLaunchPermission } from './structured-agent-session-launch-permission'
@@ -27,113 +25,6 @@ export {
   recordStructuredAgentSessionOptionIntent,
   structuredAgentSessionOptionOverridesRefusal
 } from './structured-agent-session-option-intent'
-
-/** What the asking client takes: whether it reads an answer that names no model. */
-export type StructuredAgentSessionOptionsReader = { readsWithoutModel: boolean }
-
-/** A same-build caller in this process reads as the RPC gate treats one: it takes no model. */
-export const IN_PROCESS_OPTIONS_READER: StructuredAgentSessionOptionsReader = {
-  readsWithoutModel: true
-}
-
-async function readStructuredAgentSessionOptionsAtRest(
-  deps: Pick<StructuredAgentSessionHostDeps, 'store' | 'agents' | 'modelCatalog'>,
-  sessionId: string,
-  reader: StructuredAgentSessionOptionsReader
-): Promise<RestingOptions> {
-  const record = deps.store.getRecord(sessionId)
-  if (!record) {
-    throw new Error('agent_session_identity_required')
-  }
-  const rules = deps.agents.definition(record.provider)?.restingOptions ?? null
-  const readCatalog = async (
-    inSessionWorkspace: boolean
-  ): Promise<AgentSessionModelCatalogResult> =>
-    (await deps.modelCatalog
-      ?.read({
-        agent: record.provider,
-        sessionId,
-        savedOnly: true,
-        ...(!reader.readsWithoutModel ? { legacyOptionsDisplay: true as const } : {}),
-        ...(inSessionWorkspace
-          ? { inSessionWorkspace: true as const }
-          : independentAgentModelCatalog(record.provider)
-            ? { workspacePath: null }
-            : {})
-      })
-      .catch(() => null)) ?? { origin: 'unknown' }
-  const saved = record.options ?? {}
-  // The chat's own folder decides its default, as its first frame did.
-  const scoped = await readCatalog(true)
-  const folderDefault =
-    scoped.origin === 'unknown' ? undefined : scoped.models.find((entry) => entry.isDefault)
-  // Where the folder names none, a client that needs a model keeps the account default it got before.
-  const catalog =
-    saved.model === undefined &&
-    !folderDefault &&
-    scoped.origin !== 'unknown' &&
-    !reader.readsWithoutModel
-      ? await readCatalog(false)
-      : scoped
-  // With no catalog for the account, the list a running child of this agent falls back to.
-  const listed = catalog.origin === 'unknown' ? (rules?.fallbackModels() ?? null) : catalog.models
-  const models = listed ?? []
-  const proof = independentAgentModelCatalog(record.provider)
-    ? await deps.modelCatalog
-        ?.read({
-          agent: record.provider,
-          sessionId,
-          savedOnly: true,
-          verifiedOnly: true,
-          inSessionWorkspace: true
-        })
-        .catch(() => null)
-    : catalog
-  const listedModelIds = proof ? finishedListingIds(proof) : undefined
-  const defaultModels =
-    independentAgentModelCatalog(record.provider) && reader.readsWithoutModel
-      ? proof && proof.origin !== 'unknown'
-        ? proof.models
-        : []
-      : models
-  const fastMode =
-    saved.fastMode === undefined
-      ? null
-      : decodeStructuredAgentSessionOptionValue('fastMode', saved.fastMode)
-  // An unknown model is one the client already treats as unconfirmed. Only a real listing names the
-  // account's default; a built-in list's default is a guess, so with none the client keeps its own.
-  const model =
-    saved.model ??
-    (catalog.origin === 'unknown' ? undefined : models.find((entry) => entry.isDefault)?.id)
-  // The pick, else the model's default where a live child reports that, or where the chat's folder
-  // names that model as what it runs, as its first frame showed.
-  const effort =
-    saved.effort ??
-    (rules?.effortDefaultsToModel || (saved.model === undefined && folderDefault)
-      ? defaultModels.find((entry) => entry.id === model)?.defaultEffort
-      : undefined)
-  const defaulted = (['model', 'effort'] as const).filter(
-    (key) => saved[key] === undefined && Boolean(key === 'model' ? model : effort)
-  )
-  // The tier the chat's own model runs; the record keeps the saved one for a model that offers it.
-  const serviceTier = savedEffectiveServiceTier(saved, models)
-  return {
-    inventory: catalog,
-    fallback: catalog.origin === 'unknown' ? (listed ?? []) : [],
-    models: listed ? structuredAgentSessionOptionModels(listed, model, (row) => row) : [],
-    ...(catalog.origin !== 'unknown' && catalog.fastModeSupport
-      ? { fastModeSupport: catalog.fastModeSupport }
-      : {}),
-    ...(listedModelIds ? { listedModelIds } : {}),
-    current: {
-      ...(model ? { model } : {}),
-      ...(effort ? { effort } : {}),
-      ...(typeof fastMode === 'boolean' ? { fastMode } : {}),
-      ...(serviceTier ? { serviceTier } : {}),
-      defaulted
-    }
-  }
-}
 
 /** A live child's own answer, or the answer at rest; the goal, usage and rewind either way. */
 export async function readStructuredAgentSessionOptions(

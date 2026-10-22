@@ -35,6 +35,9 @@ afterEach(async () => {
 describe('the host catalog lifetime', () => {
   it('prewarms once the host is installed and stops its listings at teardown', async () => {
     const service = {
+      snapshot: vi.fn(() => ({ origin: 'unknown' as const })),
+      demand: vi.fn(async () => {}),
+      retireContext: vi.fn(),
       peek: () => null,
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       retainedLiveModelIds: vi.fn(async () => []),

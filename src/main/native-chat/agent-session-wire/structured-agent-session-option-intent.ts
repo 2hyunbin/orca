@@ -9,12 +9,11 @@ import type { AgentSessionRecordStore } from '../../runtime/agent-session-record
 import type { StructuredAgentRegistry } from './structured-agent-registry'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
 import {
-  savedAgentSessionCatalogModels,
+  type savedAgentSessionCatalogModels,
   structuredAgentSessionPickReply
 } from './structured-agent-session-pick-reply'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import { pickAgentSessionOption } from '../../runtime/agent-session-record-options'
-import { isAgentSessionRefusalError } from '../../../shared/agent-session-wire-refusals'
 
 /** Whether the agent takes this pick: a permission mode it offers, or an option key it names. */
 function acceptsOptionPick(
@@ -48,8 +47,7 @@ export function structuredAgentSessionOptionOverridesRefusal(
       )
 }
 
-/** Records a pick for the next start. Only a key the provider would accept is kept, and only a
- *  value the chat's model runs; a model pick drops an inherited effort or Fast it doesn't. */
+/** Records literal picks for registered keys; the native control owns value acceptance. */
 export async function recordStructuredAgentSessionOptionIntent(
   deps: {
     store: Pick<
@@ -74,7 +72,6 @@ export async function recordStructuredAgentSessionOptionIntent(
       )
     }
   }
-  const models = await savedAgentSessionCatalogModels(deps, record.provider, sessionId)
   let options: Readonly<Record<string, string>>
   if (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID) {
     const permissionMode = input.value
@@ -82,21 +79,9 @@ export async function recordStructuredAgentSessionOptionIntent(
     // The answer still names the mode among the options, as the wire always has.
     options = { ...record.options, [input.key]: input.value }
   } else {
-    const picked = { sessionId, fence, ...input, models, now: ctx.now() }
-    try {
-      options =
-        (await deps.store.reviseSessionOptions(pickAgentSessionOption, picked)).options ?? {}
-    } catch (error) {
-      // The ordered write refused a value the chat's model doesn't offer.
-      if (isAgentSessionRefusalError(error)) {
-        return { ok: false, refusal: error.refusal }
-      }
-      throw error
-    }
+    const picked = { sessionId, fence, ...input, models: undefined, now: ctx.now() }
+    options = (await deps.store.reviseSessionOptions(pickAgentSessionOption, picked)).options ?? {}
   }
-  const displayModels =
-    models ??
-    (await savedAgentSessionCatalogModels(deps, record.provider, sessionId, undefined, false))
   ctx.publish()
   return {
     ok: true,
@@ -104,7 +89,7 @@ export async function recordStructuredAgentSessionOptionIntent(
       ...input,
       options:
         deps.adapter?.projectOptions?.(sessionId, options)?.options ??
-        structuredAgentSessionPickReply(options, displayModels)
+        structuredAgentSessionPickReply(options, undefined)
     }
   }
 }

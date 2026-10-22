@@ -137,11 +137,11 @@ describe('agentSession.modelCatalog', () => {
       STRUCTURED_CLIENT,
       { resolveStructuredAgentSessionLocalWorkspacePath }
     )
-    expect(resolveStructuredAgentSessionLocalWorkspacePath).toHaveBeenCalledWith('id:wt-1')
+    expect(resolveStructuredAgentSessionLocalWorkspacePath).not.toHaveBeenCalled()
     expect(read).toHaveBeenCalledWith({
       agent: 'codex',
       sessionId: SESSION,
-      workspacePath: '/repo/wt'
+      workspace: expect.objectContaining({ selector: 'id:wt-1', resolve: expect.any(Function) })
     })
   })
 
@@ -156,7 +156,10 @@ describe('agentSession.modelCatalog', () => {
         })
       }
     )
-    expect(read).toHaveBeenCalledWith({ agent: 'codex', workspacePath: null })
+    expect(read).toHaveBeenCalledWith({
+      agent: 'codex',
+      workspace: expect.objectContaining({ selector: 'id:missing', resolve: expect.any(Function) })
+    })
   })
 
   it('reads as before when no worktree is named', async () => {

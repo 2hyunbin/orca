@@ -32,6 +32,7 @@ import {
 } from '../../../shared/floating-workspace-worktree'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import type { AgentSessionAccountHome } from '../../../shared/agent-session-account-home'
+import { getWorktreeScanMutationRevision } from '../../local-worktree-scan-generation'
 import type { StructuredAgentId } from '../../../shared/agent-session-provider-handle'
 
 export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport extends OrcaRuntimeWithStructuredSessionAccountHome {
@@ -104,6 +105,16 @@ export abstract class OrcaRuntimeWithGetStructuredAgentSessionCreateSupport exte
       workspaceId: target.worktree.id,
       workspaceKind: folderWorkspace ? ('folder' as const) : ('git-worktree' as const)
     }
+  }
+
+  structuredAgentSessionCatalogWorkspaceIdentity(): string {
+    return JSON.stringify([
+      this.resolvedWorktrees.generation,
+      getWorktreeScanMutationRevision(),
+      this.store?.getFolderWorkspaces(),
+      this.store?.getRepos(),
+      this.store?.getSettings().floatingTerminalCwd
+    ])
   }
 
   /** Where a structured chat here would run, when that is a directory on this machine. */

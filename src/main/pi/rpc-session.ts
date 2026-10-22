@@ -66,7 +66,6 @@ export class PiRpcSession {
   readonly heldSends = new Set<string>()
   readonly optionProof = { current: new Map<string, string>(), writes: new Map<string, symbol>() }
   readonly startup: PiRpcSessionStartup
-  initialOptions: Readonly<Record<string, string>> = {}
   openedLink: AgentSessionProviderHandleLink | null = null
   requestedClose = false
   private publishedExit = false
@@ -173,12 +172,7 @@ export class PiRpcSession {
 
   async open(signal: AbortSignal): Promise<StructuredAgentSessionProviderOpenResult> {
     const result = await this.startup.run(this.resolvedLaunch, signal)
-    this.initialOptions = {
-      ...(result.reportedOptions.model ? { model: result.reportedOptions.model } : {}),
-      ...(result.reportedOptions.effort ? { effort: result.reportedOptions.effort } : {})
-    }
     this.openedLink = result.link ?? null
-    this.optionProof.current = new Map(Object.entries(this.initialOptions))
     void this.startup
       .readAfterOpen(this.generation, result.reportedOptions)
       .catch((error: unknown) =>

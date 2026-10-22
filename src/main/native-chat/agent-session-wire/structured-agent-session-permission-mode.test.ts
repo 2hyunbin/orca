@@ -146,8 +146,7 @@ describe('a chat permission mode', () => {
       await environment.resolveBaseEnvironment()
       capture.mockClear()
       expect(await pick('ask')).toMatchObject({ ok: true })
-      expect(capture).toHaveBeenCalled()
-      expect(capture.mock.calls.every(([options]) => options?.cachedOnly === true)).toBe(true)
+      expect(capture).not.toHaveBeenCalled()
       expect(shell).not.toHaveBeenCalled()
     } finally {
       shellReady.resolve({ PATH: '/missing/catalog-bin' })

@@ -129,8 +129,14 @@ describe('model catalog prewarm', () => {
     service.recordLiveListing('chat-b', { models: listing('newer').models })
     lookups[1]!.resolve('/work/b')
     lookups[0]!.resolve('/work/b')
-    const read = await service.read({ agent: 'opencode2', sessionId: 'chat-b' })
-    expect(read.origin !== 'unknown' && read.models.map((model) => model.id)).toEqual(['newer'])
+    await vi.waitFor(async () => {
+      const read = await service.read({
+        agent: 'opencode2',
+        sessionId: 'chat-b',
+        waitForListing: true
+      })
+      expect(read.origin !== 'unknown' && read.models.map((model) => model.id)).toEqual(['newer'])
+    })
   })
 
   it('keeps one catalog per folder for an agent whose project config changes its models', async () => {
@@ -312,7 +318,7 @@ describe('model catalog prewarm', () => {
       origin: 'unknown',
       listingInProgress: true
     })
-    expect(probes.pi).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(probes.pi).toHaveBeenCalledTimes(1))
   })
 
   it('on stop, starts no queued agent, stops the running listings and lists nothing more', async () => {
@@ -421,7 +427,7 @@ describe('one account, one catalog key', () => {
     const retained = (launchOnlyModelId: string) =>
       service.retainedLiveModelIds('session-1', { ...incoming, launchOnlyModelId })
     expect(await retained('gpt-live')).toEqual(['gpt-live', 'gpt-new'])
-    expect(await retained('gpt-new')).toEqual(['gpt-live'])
+    expect(await retained('gpt-new')).toEqual(['gpt-live', 'gpt-new'])
     const adapterAccess = agentModelCatalogSessionAccess(
       store,
       { agent: 'grok', accountHomeVariable: 'GROK_HOME' },
@@ -430,7 +436,7 @@ describe('one account, one catalog key', () => {
     expect(adapterAccess?.fingerprint).toBe(agentModelCatalogFingerprintForRecord(launched))
 
     // …is what the next new chat reads for the same home: no cold start for this account.
-    const read = await service.read({ agent: 'grok' })
+    const read = await service.read({ agent: 'grok', waitForListing: true })
     expect(read.origin !== 'unknown' && read.models.map((model) => model.id)).toEqual(['gpt-live'])
   })
 })

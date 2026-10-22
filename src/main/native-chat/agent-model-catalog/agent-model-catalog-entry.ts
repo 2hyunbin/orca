@@ -220,13 +220,10 @@ export function agentModelCatalogEntry(
 
 /** Only a launch-added row needs independent account membership; ordinary incoming rows stand. */
 export function retainedAgentModelCatalogModels(
-  previous: Pick<AgentModelCatalogEntry, 'models'> | null | undefined,
+  _previous: Pick<AgentModelCatalogEntry, 'models'> | null | undefined,
   listing: AgentModelCatalogLiveListing
 ): AgentSessionModelOption[] {
-  const launchOnly = listing.launchOnlyModelId
-  return launchOnly !== undefined && !previous?.models.some((model) => model.id === launchOnly)
-    ? listing.models.filter((model) => model.id !== launchOnly)
-    : listing.models
+  return listing.models
 }
 
 /** The entry `success` makes of `previous`, replacing only the listing of its source. */

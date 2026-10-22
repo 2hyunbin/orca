@@ -396,6 +396,20 @@ describe("Claude's model the chat never chose", () => {
 })
 
 describe('Claude structured option write under the request deadline', () => {
+  it('completes successful literal effort writes without optional settings confirmation', async () => {
+    const { session, applyFlagSettings } = fastModeSession(true)
+    session.connection.getSettings = () => new Promise(() => {})
+    await expect(
+      setClaudeStructuredOption(session, { key: 'effort', value: 'high' }, undefined)
+    ).resolves.toMatchObject({ effort: 'high' })
+    expect(applyFlagSettings).toHaveBeenCalledWith(
+      { effortLevel: 'high' },
+      { timeoutMs: undefined }
+    )
+    expect(session.appliedInputOptions.get('effort')).toBe('high')
+    expect(session.confirmedOptions.has('effort')).toBe(false)
+  })
+
   it("keeps a timed-out client write as the deadline's own error, not a rejection", async () => {
     const session = sessionFor(async () => {
       throw new ClaudeControlRequestTimeoutError('set_model')

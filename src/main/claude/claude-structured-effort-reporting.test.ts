@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { setClaudeStructuredOption } from './claude-structured-options'
 import { readClaudeSettingsEffort } from './claude-structured-session-options'
 import type { ClaudeSession } from './claude-structured-session-state'
@@ -116,16 +116,14 @@ describe('Claude effort readback', () => {
   it('records an effort the child did not adopt without vouching for it', async () => {
     const { session, calls } = sessionWith('high')
 
-    // The disagreement stops the confirmation, not the write: no other client
-    // vetoes here, and the pre-flight catalog guard already refuses the levels
-    // the model cannot run.
+    // The native enum is valid; a different readback cannot veto a successful control.
     await expect(
-      setClaudeStructuredOption(session, { key: 'effort', value: 'bogus-effort-xyz' }, undefined)
-    ).resolves.toEqual({ effort: 'bogus-effort-xyz' })
+      setClaudeStructuredOption(session, { key: 'effort', value: 'low' }, undefined)
+    ).resolves.toEqual({ effort: 'low' })
     expect(session.confirmedOptions.has('effort')).toBe(false)
     // The child's own answer is kept rather than discarded with the refusal.
-    expect(session.reportedOptions.effort).toBe('high')
-    expect(calls).toEqual(['apply:bogus-effort-xyz', 'get_settings'])
+    await vi.waitFor(() => expect(session.reportedOptions.effort).toBe('high'))
+    expect(calls).toEqual(['apply:low', 'get_settings'])
   })
 
   it('records an effort the child confirms', async () => {

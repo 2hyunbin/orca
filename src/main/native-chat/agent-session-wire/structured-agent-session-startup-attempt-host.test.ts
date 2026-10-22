@@ -101,6 +101,9 @@ async function startHost(): Promise<void> {
       setOption
     },
     modelCatalog: {
+      snapshot: vi.fn(() => ({ origin: 'unknown' as const })),
+      demand: vi.fn(async () => {}),
+      retireContext: vi.fn(),
       peek: () => null,
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       recordLiveListing,

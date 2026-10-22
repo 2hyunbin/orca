@@ -110,9 +110,10 @@ export function codexOffersServiceTier(
 
 /** A turn's options: an unoffered tier runs as standard; the chat's saved tier is kept. */
 export function codexTurnRequestOptions(
-  session: Parameters<typeof codexSessionCapabilities>[0]
+  session: Parameters<typeof codexSessionCapabilities>[0],
+  supplied: Readonly<Record<string, string>> = Object.fromEntries(session.options)
 ): Record<string, string> {
-  const options = Object.fromEntries(session.options)
+  const options = { ...supplied }
   const reportedOptions = session.reportedOptions ?? {}
   const capabilities = codexSessionCapabilities(session)
   const models = capabilities.models

@@ -1,3 +1,8 @@
+import {
+  evictAgentModelCatalogEntries,
+  agentModelCatalogEntryIsStale,
+  pruneAgentModelCatalogPartialAttempts
+} from './agent-model-catalog-entry-lifetime'
 import { independentAgentModelCatalog } from './agent-model-catalog-discovery'
 export type { AgentModelCatalogProbe } from './agent-model-catalog-discovery'
 import type { AgentModelCatalogPersistence } from './agent-model-catalog-persistence'
@@ -40,11 +45,12 @@ export type { AgentModelCatalogFailure }
 // picker opens does not hammer a dead binary, then dies on its own (see
 // `AgentModelCatalogFailures`, which also holds why no chat can start under the account).
 
-export const AGENT_MODEL_CATALOG_FRESH_MS = 10 * 60_000
+export { AGENT_MODEL_CATALOG_FRESH_MS } from './agent-model-catalog-entry-lifetime'
 export const AGENT_MODEL_CATALOG_MAX_ENTRIES = 256
 
 import {
   refreshAgentModelCatalogListing,
+  retireAgentModelCatalogListings,
   type AgentModelCatalogLister,
   type InFlightListings
 } from './agent-model-catalog-lister'
@@ -62,6 +68,7 @@ export class AgentModelCatalogStore {
   // Catalogs listed under a command or env the agent no longer launches with; cleared by a discovery.
   private readonly dueEntries = new Set<string>()
   private readonly partialAttempts = new Map<string, { agent: string; at: number }>()
+  private readonly retirementRevisions = new Map<string, number>()
   private nextListingOrder = 0
   private persistence: AgentModelCatalogPersistence | null = null
   private readonly now: () => number
@@ -112,19 +119,11 @@ export class AgentModelCatalogStore {
 
   /** Only a discovery ages: live saves never postpone the next account-level listing. */
   isStale(entry: AgentModelCatalogEntry): boolean {
-    return (
-      this.dueEntries.has(entry.fingerprint) ||
-      !entry.discovered ||
-      (independentAgentModelCatalog(entry.agent) && entry.discovered.complete !== true) ||
-      this.now() - entry.discovered.at >=
-        (independentAgentModelCatalog(entry.agent) ? 2 * 60_000 : AGENT_MODEL_CATALOG_FRESH_MS)
-    )
+    return agentModelCatalogEntryIsStale(entry, this.dueEntries.has(entry.fingerprint), this.now())
   }
 
   failureDetail(fingerprint: string): string | null {
-    return this.hasActiveFailure(fingerprint)
-      ? (this.failures.get(fingerprint)?.detail ?? null)
-      : null
+    return this.failures.detail(fingerprint)
   }
 
   hasActiveFailure(fingerprint: string): boolean {
@@ -135,7 +134,22 @@ export class AgentModelCatalogStore {
     return this.failures.get(fingerprint)
   }
 
+  retirementRevision(agent: string): number {
+    return this.retirementRevisions.get(agent) ?? 0
+  }
+
+  private retireListings(agent: string): void {
+    this.retirementRevisions.set(agent, this.retirementRevision(agent) + 1)
+    retireAgentModelCatalogListings(
+      this.refreshes,
+      this.latestWrittenOrder,
+      this.listingWaiters,
+      agent
+    )
+  }
+
   expireFailures(agent: string): void {
+    this.retireListings(agent)
     this.failures.expireAgent(agent)
   }
 
@@ -145,6 +159,7 @@ export class AgentModelCatalogStore {
 
   /** The agent's command or launch env changed: each of its catalogs and held reasons is due. */
   expireAgent(agent: string): void {
+    this.retireListings(agent)
     for (const entry of this.entries.values()) {
       if (entry.agent === agent) {
         this.dueEntries.add(entry.fingerprint)
@@ -261,13 +276,16 @@ export class AgentModelCatalogStore {
     fingerprint: string,
     agent: string,
     lister: AgentModelCatalogLister,
-    listModels: () => Promise<AgentModelCatalogSuccess>
+    listModels: () => Promise<AgentModelCatalogSuccess>,
+    current?: () => boolean
   ): Promise<AgentModelCatalogEntry | null> {
+    this.isListing(fingerprint)
     return refreshAgentModelCatalogListing({
       fingerprint,
       agent,
       lister,
       listModels,
+      current,
       refreshes: this.refreshes,
       entries: this.entries,
       latestWrittenOrder: this.latestWrittenOrder,
@@ -281,6 +299,7 @@ export class AgentModelCatalogStore {
   }
 
   isListing(fingerprint: string): boolean {
+    retireAgentModelCatalogListings(this.refreshes, this.latestWrittenOrder, this.listingWaiters)
     return this.refreshes.has(fingerprint)
   }
 
@@ -309,47 +328,35 @@ export class AgentModelCatalogStore {
   /** True when a read should kick a background refresh: nothing known or the
    *  entry aged out, and no failure is still inside its TTL. */
   shouldRefresh(fingerprint: string): boolean {
-    if (this.refreshes.has(fingerprint) || this.hasActiveFailure(fingerprint)) {
+    if (this.isListing(fingerprint) || this.hasActiveFailure(fingerprint)) {
       return false
     }
-    for (const [key, attempt] of this.partialAttempts) {
-      if (this.now() - attempt.at >= 2 * 60_000) {
-        this.partialAttempts.delete(key)
-      }
-    }
-    if (this.partialAttempts.has(fingerprint)) {
-      return false
-    }
+    pruneAgentModelCatalogPartialAttempts(this.partialAttempts, this.now())
     const entry = this.entries.get(fingerprint)
-    return !entry || this.isStale(entry)
+    return !this.partialAttempts.has(fingerprint) && (!entry || this.isStale(entry))
   }
 
   /** A probe's reason past its TTL. Only a probe re-derives it, however fresh the catalog beside
    *  it, so only probe paths ask; a chat's own listing would never clear it. */
   heldReasonDue(fingerprint: string): boolean {
-    return (
-      this.failures.get(fingerprint)?.unavailable !== undefined &&
-      !this.hasActiveFailure(fingerprint)
-    )
+    return this.failures.unavailableDue(fingerprint)
   }
 
   /** Whether a session-less probe should list now: the refresh rule, or a held reason due. */
   probeDue(fingerprint: string): boolean {
     return (
       this.shouldRefresh(fingerprint) ||
-      (!this.refreshes.has(fingerprint) && this.heldReasonDue(fingerprint))
+      (!this.isListing(fingerprint) && this.heldReasonDue(fingerprint))
     )
   }
 
   private evictOverCap(): void {
-    for (const key of this.entries.keys()) {
-      if (this.entries.size <= AGENT_MODEL_CATALOG_MAX_ENTRIES) {
-        return
-      }
-      this.entries.delete(key)
-      this.dueEntries.delete(key)
-      this.partialAttempts.delete(key)
-    }
+    evictAgentModelCatalogEntries(
+      this.entries,
+      this.dueEntries,
+      this.partialAttempts,
+      AGENT_MODEL_CATALOG_MAX_ENTRIES
+    )
   }
 }
 

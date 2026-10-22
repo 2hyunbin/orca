@@ -66,8 +66,7 @@ export class AcpStructuredOptions {
   // A loaded session keeps the model it ran; only a new one resolves the agent's own config.
   private resolvesConfig = false
   readonly picked = new Set<string>()
-  private initialChoice: Readonly<Record<string, string>> = {}
-  currentProof = new Set<string>()
+  readonly appliedInput = new Map<string, string>()
   writeRevision = 0
 
   /** The session state a new, load or resume response reported. */
@@ -81,13 +80,7 @@ export class AcpStructuredOptions {
     this.configOptions = response.configOptions ?? []
     this.models = response.models ?? null
     this.resolvesConfig = origin === 'new'
-    this.initialChoice = this.reported()
-    this.currentProof = new Set(Object.keys(this.initialChoice))
-  }
-
-  /** The native selection before any message changed this child. */
-  messageDefault(): Readonly<Record<string, string>> {
-    return this.initialChoice
+    this.appliedInput.clear()
   }
 
   /** Orca sent `key` to the session, or the chat's saved options hold a value for it. */
@@ -260,16 +253,16 @@ export function writeAcpSessionOption(
     return Promise.reject(abortSignalReason(signal))
   }
   const revision = ++options.writeRevision
-  options.currentProof.delete(bound.key)
+  options.appliedInput.delete(bound.key)
   if (bound.key === 'model') {
-    options.currentProof.delete('effort')
+    options.appliedInput.delete('effort')
   }
   const adopt = (apply: () => void): void => {
     if (options.writeRevision !== revision) {
       throw new Error(`${agent} option write was superseded`)
     }
     apply()
-    options.currentProof.add(bound.key)
+    options.appliedInput.set(bound.key, write.method === 'config' ? write.value : write.modelId)
   }
   const applied =
     write.method === 'config'

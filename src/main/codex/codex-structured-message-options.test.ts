@@ -120,7 +120,7 @@ describe('Codex captured message choices', () => {
     }
   })
 
-  it('resets an explicit empty choice after a thread launch and earlier turn override', async () => {
+  it('keeps captured omissions sparse after an earlier explicit override', async () => {
     const request = vi.fn(async (method: string, _params?: Record<string, unknown>) =>
       method === 'turn/start'
         ? { turn: { id: 'opened' } }
@@ -163,22 +163,32 @@ describe('Codex captured message choices', () => {
       request.mock.calls.filter(([method]) => method === 'turn/start').map(([, params]) => params)
     ).toMatchObject([
       { model: 'model-a', effort: 'high', personality: 'friendly', serviceTier: 'priority' },
-      // Unchosen keys keep the thread's own model and effort, not the listing's defaults.
-      { model: 'model-a', effort: 'high', personality: 'pragmatic', serviceTier: 'flex' },
-      { model: 'model-a', effort: 'high' },
-      { model: 'model-a', effort: 'low' }
+      {},
+      { model: 'model-a' },
+      { effort: 'low' }
     ])
     expect(request.mock.calls.map(([method]) => method)).toEqual([
-      'config/read',
       'turn/start',
       'turn/start',
       'turn/start',
       'turn/start'
     ])
-    expect(Object.fromEntries(session.options)).toEqual({
-      model: 'model-a',
-      effort: 'low'
-    })
+    expect(Object.fromEntries(session.options)).toEqual({ effort: 'low' })
+  })
+
+  it('compiles legacy Fast without a catalog and gives an explicit tier precedence', async () => {
+    const request = vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({
+      turn: { id: 'turn-fast' }
+    }))
+    const session = optionSession(request)
+    for (const [id, choices, tier] of [
+      ['legacy', { fastMode: 'true' }, 'fast'],
+      ['explicit', { fastMode: 'true', serviceTier: 'flex' }, 'flex']
+    ] as const) {
+      const turnOptions = await resolvedCodexMessageOptions(session, choices)
+      await startCodexTurn(session, { clientMessageId: id, body: USER_MESSAGE, turnOptions })
+      expect(request.mock.calls.at(-1)?.[1]).toMatchObject({ serviceTier: tier })
+    }
   })
 
   it('reports what a turn ran: its thread effort, and a steer its turn', async () => {
@@ -201,7 +211,8 @@ describe('Codex captured message choices', () => {
       )
     const ran = { model: 'model-a', effort: 'xhigh' }
     expect(await send('first', { model: 'model-a' })).toMatchObject({ ranOptions: ran })
-    expect(request.mock.calls[0]?.[1]).toMatchObject(ran)
+    expect(request.mock.calls[0]?.[1]).toMatchObject({ model: 'model-a' })
+    expect(request.mock.calls[0]?.[1]).not.toHaveProperty('effort')
     session.activeTurnIds = new Set(['turn-1'])
     const steered = await send('steer', { model: 'model-a', serviceTier: 'priority' })
     expect(request.mock.calls.at(-1)?.[0]).toBe('turn/steer')
@@ -260,16 +271,18 @@ describe('Codex captured message choices', () => {
     expect(request.mock.calls[0]?.[1]).toMatchObject({ model: 'saved-next', effort: 'high' })
   })
 
-  it('refuses a default reset with no trustworthy default before prompt input', async () => {
+  it('sends an exact empty snapshot without consulting unknown defaults', async () => {
     const request = vi.fn(async () => ({ turn: { id: 'unexpected' } }))
     const session = optionSession(request)
     session.reportedOptions = {}
     session.options.set('model', 'old-override')
     session.options.set('effort', 'high')
-    await expect(resolvedCodexMessageOptions(session, {})).rejects.toThrow(
-      'default model is unavailable'
-    )
-    expect(request).not.toHaveBeenCalled()
+    const turnOptions = await resolvedCodexMessageOptions(session, {})
+    expect(turnOptions).toEqual({})
+    await startCodexTurn(session, { clientMessageId: 'sparse', body: USER_MESSAGE, turnOptions })
+    expect(request).toHaveBeenCalledOnce()
+    expect(request.mock.calls[0]?.[1]).not.toHaveProperty('model')
+    expect(request.mock.calls[0]?.[1]).not.toHaveProperty('effort')
   })
 
   it('restores native options after a known refusal and retains them after an unknown answer', async () => {

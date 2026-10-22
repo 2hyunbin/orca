@@ -195,10 +195,7 @@ export function structuredAgentSessionOptionSnapshot(
 ): SessionOptionDescriptor[] {
   const permission = structuredAgentSessionPermissionDescriptor(state)
   const options = modelOptionSnapshot(state).map((option) =>
-    (state.listingInProgress && ['effort', 'serviceTier', 'fastMode'].includes(option.id)) ||
-    (state.fastModeRestricted && option.id === 'fastMode')
-      ? { ...option, settable: false }
-      : option
+    state.fastModeRestricted && option.id === 'fastMode' ? { ...option, settable: false } : option
   )
   return permission ? [...options, permission] : options
 }
@@ -221,14 +218,21 @@ export function canSetStructuredAgentSessionOption(
   value: SessionOptionValue,
   snapshot = structuredAgentSessionOptionSnapshot(state)
 ): boolean {
-  const descriptor = snapshot.find((entry) => entry.id === id)
-  return Boolean(
-    state.catalog &&
-    descriptor?.settable &&
-    state.pendingId !== id &&
-    ((typeof value === 'string' &&
-      descriptor?.kind.type === 'select' &&
-      descriptor.kind.choices.some((choice) => choice.value === value)) ||
-      (typeof value === 'boolean' && descriptor?.kind.type === 'boolean'))
+  if (state.pendingId === id || (id === 'fastMode' && state.fastModeRestricted)) {
+    return false
+  }
+  if (id === 'permissionMode') {
+    const descriptor = snapshot.find((entry) => entry.id === id)
+    return (
+      descriptor?.settable === true &&
+      descriptor.kind.type === 'select' &&
+      descriptor.kind.choices.some((choice) => choice.value === value)
+    )
+  }
+  return (
+    (['model', 'effort', 'serviceTier', 'personality'].includes(id) &&
+      typeof value === 'string' &&
+      value.length > 0) ||
+    (id === 'fastMode' && typeof value === 'boolean')
   )
 }

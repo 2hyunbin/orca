@@ -294,6 +294,9 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
         { id: 'haiku', isDefault: false }
       ]
       const catalog = (rows: typeof listed) => ({
+        snapshot: vi.fn(() => ({ origin: 'unknown' as const })),
+        demand: vi.fn(async () => {}),
+        retireContext: vi.fn(),
         peek: () => null,
         read: vi.fn(async () => ({
           origin: 'probe' as const,

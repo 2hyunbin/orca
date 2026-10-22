@@ -180,6 +180,54 @@ describe('ACP structured session adapter: turns', () => {
     })
   })
 
+  it('passes unlisted literal controls and inherits omitted fields on the next prompt', async () => {
+    const rig = await openAcpAdapterRig()
+    await rig.acquire()
+    let promptIndex = 0
+    const dispatch = async (id: string, executionOptions: Record<string, string>) => {
+      await rig.adapter.dispatch({
+        sessionId: SESSION,
+        fence: 1,
+        clientMessageId: id,
+        executionOptions,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: id }] }
+      })
+      const prompt = await rig.frame('session/prompt', promptIndex++)
+      rig.child().agent.notify('session/update', chunk(`prompt:${id}`, 'Reply'))
+      rig.child().agent.reply(prompt, { stopReason: 'end_turn' })
+      await waitFor(async () => {
+        const turns = (await rig.rig.rows()).flatMap((row) => readAgentJournalTurn(row.body) ?? [])
+        expect(turns.filter((turn) => turn.state === 'completed')).toHaveLength(promptIndex)
+      })
+    }
+    await dispatch('B', { model: 'unlisted-model', effort: 'high' })
+    await rig.frame('session/prompt')
+    let before = rig.child().agent.frames.length
+    await dispatch('A', { model: 'grok-4.6' })
+    expect(
+      rig
+        .child()
+        .agent.frames.slice(before)
+        .map((frame) => frame.method)
+    ).toEqual(['session/set_config_option', 'session/prompt'])
+    before = rig.child().agent.frames.length
+    await dispatch('empty', {})
+    expect(
+      rig
+        .child()
+        .agent.frames.slice(before)
+        .map((frame) => frame.method)
+    ).toEqual(['session/prompt'])
+    before = rig.child().agent.frames.length
+    await dispatch('explicit', { effort: 'high' })
+    expect(
+      rig
+        .child()
+        .agent.frames.slice(before)
+        .map((frame) => frame.method)
+    ).toEqual(['session/set_config_option', 'session/prompt'])
+  })
+
   it("sends Grok's prompt identity only to an agent whose dialect echoes it", async () => {
     const rig = await openAcpAdapterRig({
       deps: { spec: { ...GROK, dialect: GENERIC_ACP_DIALECT } }

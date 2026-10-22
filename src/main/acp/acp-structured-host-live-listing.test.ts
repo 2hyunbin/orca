@@ -14,6 +14,9 @@ afterEach(async () => {
 describe('a live Grok listing', () => {
   it('is saved through the host catalog when the chat reads its options', async () => {
     const modelCatalog: AgentModelCatalogService = {
+      snapshot: vi.fn(() => ({ origin: 'unknown' as const })),
+      demand: vi.fn(async () => {}),
+      retireContext: vi.fn(),
       peek: () => null,
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       retainedLiveModelIds: vi.fn(async () => []),
@@ -39,6 +42,9 @@ describe('a live Grok listing', () => {
 
   it('starts the chat even when saving its start listing throws', async () => {
     const modelCatalog: AgentModelCatalogService = {
+      snapshot: vi.fn(() => ({ origin: 'unknown' as const })),
+      demand: vi.fn(async () => {}),
+      retireContext: vi.fn(),
       peek: () => null,
       read: vi.fn(async () => ({ origin: 'unknown' as const })),
       retainedLiveModelIds: vi.fn(async () => []),

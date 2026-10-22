@@ -95,13 +95,14 @@ describe('a saved-only catalog read', () => {
     })
     expect(probe).not.toHaveBeenCalled()
 
-    await service.read({ agent: 'grok' })
+    await service.read({ agent: 'grok', waitForListing: true })
     expect(probe).toHaveBeenCalledOnce()
   })
 
   it('answers from the saved entry and starts nothing, however old the entry is', async () => {
     const { store, probe, service, advance } = rig()
     store.recordSuccess(FINGERPRINT, 'grok', listing('grok-4.7'), 'discovery')
+    await service.demand({ agent: 'grok' })
     advance(AGENT_MODEL_CATALOG_FRESH_MS)
     const result = await service.read({ agent: 'grok', savedOnly: true })
     expect(result).toMatchObject({ origin: 'probe', models: [{ id: 'grok-4.7' }] })
@@ -109,8 +110,8 @@ describe('a saved-only catalog read', () => {
     expect(store.pendingListing(FINGERPRINT)).toBeNull()
     expect(probe).not.toHaveBeenCalled()
     // The same read without `savedOnly` refreshes the aged entry: the probe is what the flag skips.
-    await service.read({ agent: 'grok' })
-    expect(probe).toHaveBeenCalledTimes(1)
+    await service.read({ agent: 'grok', waitForListing: true })
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(1))
   })
 
   it('answers unknown with nothing saved, and starts no listing for it', async () => {
@@ -127,6 +128,7 @@ describe('a saved-only catalog read', () => {
         Promise.reject(new AgentModelCatalogUnavailableError(SIGNED_OUT))
       )
       .catch(() => undefined)
+    await service.demand({ agent: 'grok' })
     advance(AGENT_MODEL_CATALOG_FAILURE_TTL_MS)
     expect(await service.read({ agent: 'grok', savedOnly: true })).toEqual({
       origin: 'unknown',
@@ -138,6 +140,7 @@ describe('a saved-only catalog read', () => {
   it('says the named default holds in every workspace only for an agent no project config moves', async () => {
     const grok = rig('grok')
     grok.store.recordSuccess(FINGERPRINT, 'grok', listing('grok-4.7'), 'discovery')
+    await grok.service.demand({ agent: 'grok' })
     expect(await grok.service.read({ agent: 'grok', savedOnly: true })).toMatchObject({
       listingNamesConfiguredModel: true,
       defaultHoldsInEveryWorkspace: true
@@ -150,8 +153,143 @@ describe('a saved-only catalog read', () => {
       wslDistro: null
     })
     opencode.store.recordSuccess(opencodeKey, 'opencode', listing('a/b'), 'discovery')
+    await opencode.service.demand({ agent: 'opencode' })
     expect(await opencode.service.read({ agent: 'opencode', savedOnly: true })).not.toHaveProperty(
       'defaultHoldsInEveryWorkspace'
     )
   })
+})
+
+it('returns a snapshot before a cold worktree selector resolves', async () => {
+  const folder = Promise.withResolvers<string | null>()
+  const account = vi.fn(async () => HOME)
+  const service = createAgentModelCatalogService({
+    store: new AgentModelCatalogStore(),
+    getRecord: () => undefined,
+    drivesRecord: () => true,
+    resolveAccountHome: account
+  })
+  const request = {
+    agent: 'grok',
+    workspace: {
+      selector: 'folder',
+      identity: () => 1,
+      resolve: () => folder.promise
+    }
+  }
+  try {
+    expect(await service.read(request)).toEqual({ origin: 'unknown', listingInProgress: true })
+    expect(await service.read({ ...request, savedOnly: true })).toEqual({ origin: 'unknown' })
+    expect(account).not.toHaveBeenCalled()
+  } finally {
+    service.stop()
+    folder.resolve(null)
+  }
+})
+
+it('observes a bound scope immediately while another account and default writer are unresolved', async () => {
+  const home = Promise.withResolvers<AgentSessionAccountHome>()
+  const defaults = Promise.withResolvers<boolean>()
+  let selected = false
+  const resolveAccountHome = vi.fn(() => (selected ? home.promise : Promise.resolve(HOME)))
+  const store = new AgentModelCatalogStore()
+  store.recordSuccess(FINGERPRINT, 'grok', listing('kept'), 'discovery')
+  const service = createAgentModelCatalogService({
+    store,
+    getRecord: () => undefined,
+    drivesRecord: () => true,
+    resolveAccountHome,
+    workspaceMayOverrideDefaultModel: () => defaults.promise
+  })
+  try {
+    await service.demand({ agent: 'grok', workspacePath: '/known' })
+    selected = true
+    void service.demand({ agent: 'grok', workspacePath: '/unresolved' })
+    await vi.waitFor(() => expect(resolveAccountHome).toHaveBeenCalledTimes(2))
+    const calls = resolveAccountHome.mock.calls.length
+    expect(
+      await service.read({ agent: 'grok', workspacePath: '/known', savedOnly: true })
+    ).toMatchObject({ models: [{ id: 'kept', isDefault: false }] })
+    expect(
+      await service.read({ agent: 'grok', workspacePath: '/unresolved', savedOnly: true })
+    ).toEqual({ origin: 'unknown' })
+    expect(resolveAccountHome).toHaveBeenCalledTimes(calls)
+  } finally {
+    service.stop()
+    home.resolve(HOME)
+    defaults.resolve(false)
+  }
+})
+
+it('retires pending resolution and old ingestion across change away and back', async () => {
+  const initial = Promise.withResolvers<AgentSessionAccountHome>()
+  const stale = Promise.withResolvers<AgentModelCatalogSuccess>()
+  let resolving = true
+  const store = new AgentModelCatalogStore()
+  const probe = vi.fn(() => stale.promise)
+  const service = createAgentModelCatalogService({
+    store,
+    getRecord: () => undefined,
+    drivesRecord: () => true,
+    resolveAccountHome: () => (resolving ? initial.promise : Promise.resolve(HOME)),
+    probes: { grok: probe }
+  })
+  try {
+    const first = service.demand({ agent: 'grok' })
+    service.retireContext()
+    service.retireContext()
+    initial.resolve(HOME)
+    await first
+    expect(probe).not.toHaveBeenCalled()
+    resolving = false
+    const old = service.demand({ agent: 'grok' })
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
+    service.retireContext()
+    store.recordFailure(FINGERPRINT, 'new account failure', 'grok')
+    stale.resolve(listing('retired'))
+    await old
+    expect(store.get(FINGERPRINT)).toBeNull()
+    expect(store.failureDetail(FINGERPRINT)).toBe('new account failure')
+    expect(service.snapshot({ agent: 'grok', savedOnly: true })).toEqual({ origin: 'unknown' })
+  } finally {
+    service.stop()
+  }
+})
+
+it('starts a new listing instead of joining a retired workspace invocation', async () => {
+  const stale = Promise.withResolvers<AgentModelCatalogSuccess>()
+  let revision = 0
+  const probe = vi.fn().mockReturnValueOnce(stale.promise).mockResolvedValue(listing('current'))
+  const store = new AgentModelCatalogStore()
+  const service = createAgentModelCatalogService({
+    store,
+    getRecord: () => undefined,
+    drivesRecord: () => true,
+    resolveAccountHome: async () => HOME,
+    probes: { grok: probe }
+  })
+  const request = {
+    agent: 'grok',
+    workspace: {
+      selector: 'folder',
+      identity: () => revision,
+      resolve: async () => '/folder'
+    }
+  }
+  try {
+    const first = service.demand(request)
+    await vi.waitFor(() => expect(probe).toHaveBeenCalledOnce())
+    revision += 2
+    expect(service.snapshot({ ...request, savedOnly: true })).toEqual({ origin: 'unknown' })
+    await service.demand(request)
+    expect(probe).toHaveBeenCalledTimes(2)
+    stale.resolve(listing('retired'))
+    await first
+    expect(service.snapshot({ ...request, savedOnly: true })).toMatchObject({
+      models: [{ id: 'current' }]
+    })
+  } finally {
+    stale.resolve(listing('retired'))
+    service.stop()
+  }
 })

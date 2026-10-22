@@ -200,6 +200,30 @@ describe('Pi RPC session ownership and delivery', () => {
     expect(h.connection.sent).toMatchObject([{ type: 'prompt', message: 'chosen' }])
   })
 
+  it('keeps sparse messages sparse and reapplies effort after a model control', async () => {
+    const h = await setup()
+    h.connection.requestOverride = (command) =>
+      command === 'set_thinking_level' ? Promise.resolve({}) : undefined
+    const send = (id: string, executionOptions: Record<string, string>) =>
+      h.adapter.dispatch({
+        sessionId,
+        fence: 7,
+        clientMessageId: id,
+        executionOptions,
+        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: id }] }
+      })
+    await send('B', { model: 'anthropic/unlisted', effort: 'high' })
+    h.connection.requests.length = 0
+    await send('A', { model: 'anthropic/model-1' })
+    expect(h.connection.requests.filter((key) => key.startsWith('set_'))).toEqual(['set_model'])
+    h.connection.requests.length = 0
+    await send('empty', {})
+    expect(h.connection.requests.filter((key) => key.startsWith('set_'))).toEqual([])
+    await send('explicit', { effort: 'high' })
+    expect(h.connection.requests).toContain('set_thinking_level')
+    expect(h.connection.sent).toHaveLength(4)
+  })
+
   it('rejects a known-unsent prompt when an option times out and preserves Stop reason', async () => {
     const h = await setup()
     const timeout = new Error('Pi did not answer set_model')

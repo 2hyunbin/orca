@@ -325,7 +325,7 @@ describe('a chat at rest, read by the host', () => {
     expect(result.models).toEqual(installed)
     expect(result.current).toMatchObject({ model: 'opus', effort: 'low' })
     const chat = picking({ model: 'opus' }, installed, undefined, 'claude')
-    expect(await chat.pick('effort', 'low')).toMatchObject({ ok: false })
+    expect(await chat.pick('effort', 'low')).toMatchObject({ ok: true })
     expect(await chat.pick('effort', 'high')).toMatchObject({ ok: true })
     const firstRun = picking({ model: 'opus' }, installed, undefined, 'claude')
     firstRun.ran('opus', { effort: 'low' })
@@ -456,7 +456,7 @@ describe('a chat at rest, read by the host', () => {
       expect(answer.current).toMatchObject({ serviceTier: runs })
       const chat = picking(options, models)
       expect(await chat.pick('model', 'gpt-account')).toMatchObject({
-        value: { options: { serviceTier: runs } }
+        value: { options: { serviceTier: 'flex' } }
       })
       expect(chat.record().options?.serviceTier).toBe('flex')
     }
@@ -508,24 +508,34 @@ describe('a chat at rest, read by the host', () => {
           options: ran,
           models: rows
         })),
-      record: () => record
+      record: () => record,
+      inventory: deps.modelCatalog
     }
   }
 
-  it('admits options only under the model the chat runs, whichever write lands first', async () => {
+  it('keeps literal picks and rejects late evidence from another model', async () => {
     const chat = picking({ model: 'a', effort: 'high' })
-    // A model pick drops an inherited effort its row does not offer; an offered one is refused.
     await chat.pick('model', 'c')
-    expect(chat.record().options).toEqual({ model: 'c' })
-    expect(await chat.pick('effort', 'high')).toMatchObject({ ok: false })
+    expect(chat.record().options).toEqual({ model: 'c', effort: 'high' })
+    expect(await chat.pick('effort', 'high')).toMatchObject({ ok: true })
     await chat.pick('model', 'b')
     // A turn that ran on another model, recorded late, fills nothing, though b offers its effort.
-    expect(chat.ran('a', { effort: 'high' }).options).toEqual({ model: 'b' })
+    expect(chat.ran('a', { effort: 'high' }).options).toEqual({ model: 'b', effort: 'high' })
     expect(chat.ran('b', { effort: 'high' }).options).toEqual({ model: 'b', effort: 'high' })
     // A catalog that later drops it, or a pick, keeps the saved value.
     chat.ran('b', { effort: 'low' }, [])
     await chat.pick('serviceTier', 'priority')
     expect(chat.record().options).toEqual({ model: 'b', effort: 'high', serviceTier: 'priority' })
+  })
+
+  it('saves literal and permission picks while inventory is unresolved', async () => {
+    const chat = picking({ model: 'a' })
+    const read = vi.spyOn(chat.inventory, 'read').mockImplementation(() => new Promise(() => {}))
+    expect(await chat.pick('model', 'not-listed')).toMatchObject({ ok: true })
+    expect(await chat.pick('effort', 'high')).toMatchObject({ ok: true })
+    expect(await chat.pick('permissionMode', 'ask')).toMatchObject({ ok: true })
+    expect(read).not.toHaveBeenCalled()
+    expect(chat.record().options).toEqual({ model: 'not-listed', effort: 'high' })
   })
 
   it('keeps saved literal values after the installed list omits their model', async () => {
