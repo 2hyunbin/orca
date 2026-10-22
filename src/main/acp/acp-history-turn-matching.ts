@@ -116,7 +116,8 @@ export function matchAcpHistoryTurns(
       }
     }
     const native = [...owners][0]
-    const historical = heldTurn && isHistoricalProviderTimelineItem(heldTurn, read)
+    const historical =
+      heldTurn && isHistoricalProviderTimelineItem(heldTurn, read) ? heldTurn : undefined
     if (owners.size > 1 || (historical && native !== undefined)) {
       throw new Error('conflicting-history-owners')
     }
@@ -127,7 +128,7 @@ export function matchAcpHistoryTurns(
       }
     } else if (historical) {
       kind.set(source.turn, 'imported')
-      boundaries.set(source.turn, heldTurn.sequence)
+      boundaries.set(source.turn, historical.sequence)
     } else if (heldTurn) {
       throw new Error('unowned-history-turn')
     } else {

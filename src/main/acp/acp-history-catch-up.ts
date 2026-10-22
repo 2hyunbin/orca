@@ -1,5 +1,6 @@
 import {
   agentJournalItemKey,
+  agentJournalSubmissionKey,
   parseAgentJournalItemKey
 } from '../../shared/agent-session-journal-item-key'
 import {
@@ -7,6 +8,9 @@ import {
   type AgentJournalRenderItem
 } from '../../shared/agent-session-journal-types'
 import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
+import { nativeChatRowRendersContent } from '../../shared/native-chat-row-content'
+import { projectNativeChatTranscriptMessages } from '../../shared/native-chat-transcript-projection'
+import { projectStructuredAgentSessionMessages } from '../../shared/structured-agent-session-message-projection'
 import { usableJournalHistoryOrigin } from '../native-chat/agent-session-journal/journal-history-origin'
 import { journalLifecycleItemMutation } from '../native-chat/agent-session-journal/journal-lifecycle-mutation'
 import { isHistoricalProviderTimelineItem } from '../native-chat/agent-session-timeline/provider-timeline-history'
@@ -144,14 +148,29 @@ function journalView(
     throw new Error('no-history-journal')
   }
   const all: AgentJournalRenderItem[] = []
-  let retained = false
   history.visitItems((key) => {
     const item = history.item(key)
     if (item) {
       all.push(item)
     }
-    retained ||= parseAgentJournalItemKey(key)?.provider !== 'orca'
   })
+  const submissions = history.submissions()
+  const eligible = submissions.filter(
+    (send) => send.handedOverAt !== undefined || send.handoverRecorded !== true
+  )
+  const eligibleUsers = new Set(
+    eligible
+      .filter((send) => send.keptAsQueuedMessageId === undefined)
+      .map((send) => agentJournalSubmissionKey(send.clientMessageId))
+  )
+  const retained = projectNativeChatTranscriptMessages(
+    projectStructuredAgentSessionMessages(all, [], submissions)
+  ).some(
+    (message) =>
+      nativeChatRowRendersContent(message.blocks) &&
+      (parseAgentJournalItemKey(message.id)?.provider !== 'orca' ||
+        (message.role === 'user' && eligibleUsers.has(message.id)))
+  )
   const turnKeys = new Set(
     all.flatMap((item) => {
       const turn = readAgentJournalTurn(item.body)
@@ -199,12 +218,7 @@ function journalView(
     [...keys, ...items.keys()].map((key) => [key, journal.canonicalItemId(key)])
   )
   // Aliases are rejected; their target bodies cannot establish exact provider coverage.
-  const requests = new Set(
-    history
-      .submissions()
-      .filter((send) => send.handedOverAt !== undefined || send.handoverRecorded !== true)
-      .map((send) => `prompt:${send.clientMessageId}`)
-  )
+  const requests = new Set(eligible.map((send) => `prompt:${send.clientMessageId}`))
   const origin = usableJournalHistoryOrigin(history.historyOrigin())
   const handle = origin?.providerHandle
   const importedAt =

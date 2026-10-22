@@ -8,6 +8,8 @@ import {
   parseAgentJournalItemKey
 } from '../../shared/agent-session-journal-item-key'
 import type { AgentJournalRenderItem } from '../../shared/agent-session-journal-types'
+import { agentSessionFailureFact } from '../../shared/agent-session-failure'
+import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
 import {
   AGENT,
   closeProviderTimelineRigs,
@@ -219,7 +221,18 @@ describe('ACP history catch-up', () => {
   it('refreshes same-key bodies after restart without inventing execution ownership or a new divider', async () => {
     const { fixture, catchUp } = await setup(OPENCODE_ACP_DIALECT, 'user-message-id')
     const { rig } = fixture
-    await chatSend(fixture, 'native', 'my native prompt')
+    await rig.journal.appendSubmission({
+      clientMessageId: 'native',
+      payloadFingerprint: 'native',
+      body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'my native prompt' }] },
+      fence: 1
+    })
+    await rig.journal.resolveDispatch({
+      clientMessageId: 'native',
+      fence: 1,
+      state: 'accepted',
+      providerIdentity: null
+    })
     rig.assembler.apply({
       type: 'input.accepted',
       clientMessageId: 'native',
@@ -398,7 +411,12 @@ describe('ACP history catch-up', () => {
         body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'repeat' }] }
       })
     }
-    await journal.resolveDispatch({ clientMessageId: 'handed', fence: 1, state: 'pending' })
+    await journal.resolveDispatch({
+      clientMessageId: 'handed',
+      fence: 1,
+      state: 'pending',
+      turnScope: { kind: 'thread' }
+    })
     const submissions = journal.submissions()
     const replay = ['handed', 'queued'].flatMap((id) => [
       userReplay(id),
@@ -418,6 +436,66 @@ describe('ACP history catch-up', () => {
     expect(journal.submission('queued')?.dispatchState).toBe('pending')
     expect(journal.submission('queued')?.handedOverAt).toBeUndefined()
   })
+  it.each(['refused', 'direct', 'queued', 'card', 'empty'] as const)(
+    'places the divider from visible retained content with a %s submission',
+    async (scenario) => {
+      const { fixture, catchUp } = await setup(GROK_ACP_DIALECT, 'prompt-id')
+      const { journal } = fixture.rig
+      await journal.appendSubmission({
+        clientMessageId: 'retained',
+        payloadFingerprint: 'retained',
+        fence: 1,
+        ...(scenario === 'direct' ? {} : { handoverRecorded: true }),
+        body: {
+          kind: 'message',
+          role: 'user',
+          blocks: [{ type: 'text', text: scenario === 'empty' ? '' : 'keep my message' }]
+        }
+      })
+      if (scenario !== 'direct' && scenario !== 'queued') {
+        await journal.resolveDispatch({
+          clientMessageId: 'retained',
+          fence: 1,
+          state: 'pending',
+          turnScope: { kind: 'thread' }
+        })
+      }
+      if (scenario === 'refused' || scenario === 'card') {
+        await journal.resolveDispatch({
+          clientMessageId: 'retained',
+          fence: 1,
+          state: 'rejected',
+          ...agentSessionFailureWords(agentSessionFailureFact('providerRejected'), {
+            surface: 'rejection'
+          }),
+          ...(scenario === 'card' ? { keptAsQueuedMessageId: 'card' } : {})
+        })
+      }
+      const before = await fixture.rig.rows()
+      const submissions = journal.submissions()
+      const replay = [
+        userReplay('outside'),
+        {
+          method: 'session/update',
+          params: {
+            sessionId: NAMESPACE,
+            _meta: { promptId: 'outside' },
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: { type: 'text', text: 'answer' }
+            }
+          }
+        }
+      ]
+      await catchUp(replay)
+      const rows = await fixture.rig.rows()
+      expect(dividers(rows)).toHaveLength(scenario === 'refused' || scenario === 'direct' ? 1 : 0)
+      expect(rows.slice(0, before.length)).toEqual(before)
+      expect(journal.submissions()).toEqual(submissions)
+      await catchUp(replay)
+      expect(await fixture.rig.rows()).toEqual(rows)
+    }
+  )
   it.each(['queued-only', 'ownership-revision'] as const)(
     'captures immutable coverage before concurrent %s',
     async (scenario) => {

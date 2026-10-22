@@ -84,6 +84,7 @@ export class AcpHistoryJournalOverlay {
       mutation: {
         ...(previous?.mutation ?? mutation),
         identity,
+        itemId: undefined,
         body: mutation.body,
         turnScope,
         ...(mutation.body.kind === 'message' && mutation.body.role === 'user'
