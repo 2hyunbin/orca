@@ -1,16 +1,16 @@
-import type { TaskPageProviderMetadataModel } from './use-task-page-provider-metadata'
+import type { TaskPageProviderMetadataModel } from '../../use-task-page-provider-metadata'
 import { useEffect } from 'react'
 import { gitLabApiFor } from '@/runtime/gitlab-owner-api'
-import { mapSettledWithConcurrency } from '../../../shared/map-with-concurrency'
-import type { Repo } from '../../../shared/repo-types'
-import { getRepoExecutionHostId } from '../../../shared/execution-host'
-import type { GitLabDialogRepoSelector } from './gitlab-item-dialog/gitlab-item-dialog-types'
-import type { GitLabWorkItem, GitLabTodo } from '../../../shared/gitlab-types'
+import { mapSettledWithConcurrency } from '../../../../../shared/map-with-concurrency'
+import type { Repo } from '../../../../../shared/repo-types'
+import { getRepoExecutionHostId } from '../../../../../shared/execution-host'
+import type { GitLabDialogRepoSelector } from '../../gitlab-item-dialog/gitlab-item-dialog-types'
+import type { GitLabWorkItem, GitLabTodo } from '../../../../../shared/gitlab-types'
 import {
   getTaskPageRepoSourceContext,
   isGitLabIssueFilter,
   isGitLabMRFilter
-} from './task-page-source-context'
+} from '../../task-page-source-context'
 
 // Why: "All projects" fans out one list call per repo; staying below the runtime RPC queue's
 // foreground concurrency (8) leaves headroom for other callers on the same selector, such as the sidebar.
@@ -228,4 +228,3 @@ export function useTaskPageGitLabLoading<Model extends GitLabLoadingInput>(model
   ])
   return model
 }
-export type TaskPageGitLabLoadingModel = TaskPageProviderMetadataModel
