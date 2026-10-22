@@ -1,26 +1,23 @@
-import { StyleSheet, Text, View } from 'react-native'
 import type { AccountsSnapshot } from '../components/AccountUsage'
 import { MobileHomeQuickActions } from '../components/MobileHomeQuickActions'
 import { PickerModal } from '../components/PickerModal'
 import { useConnectedHostPicker } from '../components/use-connected-host-picker'
 import type { TaskProvider } from '../../../src/shared/task-providers'
-import { colors, spacing } from '../theme/mobile-theme'
 import type { HostProfile } from '../transport/types'
-import type { HomeResumeCard } from '../worktree/home-resume-card'
+import { homeDesktopPickerOptions } from './home-desktop-picker-options'
 import { MobileHomeAccountUsageCards } from './MobileHomeAccountUsageCards'
-import { MobileHomeResumeCard } from './MobileHomeResumeCard'
+import { MobileHomeAppUpdateCard } from './MobileHomeAppUpdateCard'
 import { MobileHomeTasksCard } from './MobileHomeTasksCard'
 
 const DEFAULT_TASK_PROVIDERS: TaskProvider[] = ['github']
 
+/** Below the desktops: the Actions group, account usage, and the app update notice. */
 export function MobileHomeListFooter(props: {
   accountsHosts: { host: HostProfile; snapshot: AccountsSnapshot }[]
   connectedHosts: HostProfile[]
-  resumeCard: HomeResumeCard | null
   taskProvidersByHost: Record<string, TaskProvider[]>
   onCreateWorkspace: () => void
   onOpenAccounts: (hostId: string) => void
-  onOpenResume: (card: HomeResumeCard) => void
   onOpenTasks: (hostId: string, provider?: TaskProvider) => void
   onPairDesktop: () => void
 }) {
@@ -30,6 +27,7 @@ export function MobileHomeListFooter(props: {
     providers: props.taskProvidersByHost[host.id] ?? DEFAULT_TASK_PROVIDERS
   }))
   const providers = [...new Set(hostProviders.flatMap((entry) => entry.providers))]
+  const offeredHostIds = new Set(tasksHostPicker.pickerProps.options.map((option) => option.value))
 
   function openTasks(provider?: TaskProvider) {
     // Why: a provider chip offers only desktops that have it, so it never opens a different one.
@@ -42,39 +40,27 @@ export function MobileHomeListFooter(props: {
   }
 
   return (
-    <View>
-      {props.resumeCard ? (
-        <>
-          <Text style={styles.sectionHeading}>Resume</Text>
-          <MobileHomeResumeCard card={props.resumeCard} onOpen={props.onOpenResume} />
-        </>
-      ) : null}
-      <Text style={styles.sectionHeading}>Tasks</Text>
-      <MobileHomeTasksCard
-        enabled={props.connectedHosts.length > 0}
-        providers={providers}
-        onOpen={openTasks}
-      />
-      <PickerModal title="Open Tasks On" {...tasksHostPicker.pickerProps} />
+    <>
       <MobileHomeQuickActions
         connectedHosts={props.connectedHosts}
         onPairDesktop={props.onPairDesktop}
         onCreateWorkspace={props.onCreateWorkspace}
+      >
+        <MobileHomeTasksCard
+          enabled={props.connectedHosts.length > 0}
+          providers={providers}
+          onOpen={openTasks}
+        />
+      </MobileHomeQuickActions>
+      <PickerModal
+        title="Open tasks on"
+        {...tasksHostPicker.pickerProps}
+        options={homeDesktopPickerOptions(
+          props.connectedHosts.filter((host) => offeredHostIds.has(host.id))
+        )}
       />
       <MobileHomeAccountUsageCards items={props.accountsHosts} onOpen={props.onOpenAccounts} />
-    </View>
+      <MobileHomeAppUpdateCard />
+    </>
   )
 }
-
-const styles = StyleSheet.create({
-  sectionHeading: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.xs
-  }
-})

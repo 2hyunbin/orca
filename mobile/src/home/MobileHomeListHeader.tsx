@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native'
+import { LargeTitle } from '../components/ui/NavBar'
 import type { HomeStatsSummary } from '../stats/home-stats-total'
-import { colors, spacing } from '../theme/mobile-theme'
-import { MobileHomeAppUpdateCard } from './MobileHomeAppUpdateCard'
+import { colors, spacing, textStyles } from '../theme/mobile-theme'
 
 function formatDuration(ms: number): string {
   const totalMinutes = Math.floor(ms / 60_000)
@@ -15,66 +15,56 @@ function formatDuration(ms: number): string {
   return totalHours > 0 ? `${totalHours}h ${minutes}m` : `${totalMinutes}m`
 }
 
+/** The large title and a quiet row of lifetime numbers, laid out before they arrive so nothing moves. */
 export function MobileHomeListHeader({ stats }: { stats: HomeStatsSummary | null }) {
+  const items = [
+    { label: 'Agents spawned', value: stats ? stats.totalAgentsSpawned.toLocaleString() : null },
+    { label: 'Agent time', value: stats ? formatDuration(stats.totalAgentTimeMs) : null },
+    { label: 'PRs created', value: stats ? stats.totalPRsCreated.toLocaleString() : null }
+  ]
   return (
     <View>
-      <View style={styles.hero}>
-        <Text style={styles.heroTitle}>Welcome back</Text>
+      <LargeTitle title="Orca" />
+      <View
+        style={styles.stats}
+        accessible
+        accessibilityLabel={
+          stats
+            ? items.map((item) => `${item.label}: ${item.value}`).join(', ')
+            : 'Usage numbers not loaded yet'
+        }
+      >
+        {items.map((item) => (
+          <View key={item.label} style={styles.stat}>
+            <Text
+              style={[styles.value, item.value === null && styles.valuePending]}
+              numberOfLines={1}
+            >
+              {item.value ?? '—'}
+            </Text>
+            <Text style={styles.label} numberOfLines={1}>
+              {item.label}
+            </Text>
+          </View>
+        ))}
       </View>
-      {stats ? (
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{stats.totalAgentsSpawned.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>Agents spawned</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{formatDuration(stats.totalAgentTimeMs)}</Text>
-            <Text style={styles.statLabel}>Agent time</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{stats.totalPRsCreated.toLocaleString()}</Text>
-            <Text style={styles.statLabel}>PRs created</Text>
-          </View>
-        </View>
-      ) : null}
-      <MobileHomeAppUpdateCard />
-      <Text style={styles.sectionHeading}>Desktops</Text>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  hero: { paddingTop: spacing.xs, paddingBottom: spacing.md },
-  heroTitle: {
+  stats: {
+    flexDirection: 'row',
+    gap: spacing.lg,
+    paddingHorizontal: spacing.lg + 4,
+    paddingTop: spacing.xs
+  },
+  stat: { flex: 1, minWidth: 0 },
+  value: {
+    ...textStyles.headline,
     color: colors.textPrimary,
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.3
+    fontVariant: ['tabular-nums']
   },
-  statsRow: { flexDirection: 'row', gap: 10, marginBottom: spacing.lg },
-  statCard: {
-    flex: 1,
-    backgroundColor: 'rgba(26,26,26,0.6)',
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: spacing.md
-  },
-  statValue: {
-    color: colors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: -0.3
-  },
-  statLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '500', marginTop: 2 },
-  sectionHeading: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.xs
-  }
+  valuePending: { color: colors.textMuted },
+  label: { ...textStyles.footnote, color: colors.textMuted }
 })

@@ -35,6 +35,9 @@ import { useMobileHomeHostConnections } from './use-mobile-home-host-connections
 export function useMobileHomeData() {
   const router = useRouter()
   const [hostCatalog, setHostCatalog] = useState<HostCatalogEntry[]>([])
+  // Why: the catalog starts empty, so without this a paired user sees the first-run screen until
+  // the secure-store read lands.
+  const [hostCatalogLoaded, setHostCatalogLoaded] = useState(false)
   const [statsByHost, setStatsByHost] = useState<Record<string, HomeStatsRow>>({})
   const [worktreeInfo, setWorktreeInfo] = useState<Record<string, HostWorktreeInfo>>({})
   const [accountsByHost, setAccountsByHost] = useState<Record<string, AccountsSnapshot>>({})
@@ -93,20 +96,28 @@ export function useMobileHomeData() {
   useFocusEffect(
     useCallback(() => {
       let stale = false
-      void loadHostCatalog().then(async (catalog) => {
-        if (stale) {
-          return
-        }
-        setHostCatalog(catalog)
-        if (catalog.length === 0 || onboardingCheckedRef.current) {
-          return
-        }
-        onboardingCheckedRef.current = true
-        const steps = await loadMobileOnboardingSteps()
-        if (!stale && steps.length > 0) {
-          router.replace(mobileOnboardingDestination(steps))
-        }
-      })
+      void loadHostCatalog()
+        .then(async (catalog) => {
+          if (stale) {
+            return
+          }
+          setHostCatalog(catalog)
+          setHostCatalogLoaded(true)
+          if (catalog.length === 0 || onboardingCheckedRef.current) {
+            return
+          }
+          onboardingCheckedRef.current = true
+          const steps = await loadMobileOnboardingSteps()
+          if (!stale && steps.length > 0) {
+            router.replace(mobileOnboardingDestination(steps))
+          }
+        })
+        .catch(() => {
+          // An unreadable catalog shows what it always did, the first-run screen, not a spinner.
+          if (!stale) {
+            setHostCatalogLoaded(true)
+          }
+        })
       void AsyncStorage.getItem(LAST_VISITED_WORKTREE_STORAGE_KEY).then((raw) => {
         if (!stale) {
           setLastVisited(readLastVisitedWorktreeRecord(raw))
@@ -174,6 +185,7 @@ export function useMobileHomeData() {
     accountsHosts,
     connectedHosts,
     hostCatalog,
+    hostCatalogLoaded,
     hostConnections,
     resumeCard,
     router,

@@ -1,6 +1,11 @@
 import { QrCode } from 'lucide-react-native'
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
-import { colors, radii, spacing } from '../theme/mobile-theme'
+import { ScrollView, StyleSheet, Text, View } from 'react-native'
+import { OrcaLogo } from '../components/OrcaLogo'
+import { Button } from '../components/ui/Button'
+import { ListGroup, LIST_LEADING_INSET } from '../components/ui/ListGroup'
+import { ListRow } from '../components/ui/ListRow'
+import { SectionHeader } from '../components/ui/SectionHeader'
+import { colors, spacing, textStyles } from '../theme/mobile-theme'
 
 const ONBOARDING_STEPS = [
   {
@@ -17,6 +22,7 @@ const ONBOARDING_STEPS = [
   }
 ]
 
+/** First run: the welcome, the one primary "Pair desktop", and the three steps. */
 export function MobileHomeEmptyState(props: {
   bottomInset: number
   contentMaxWidth: number
@@ -27,8 +33,8 @@ export function MobileHomeEmptyState(props: {
   return (
     <ScrollView
       contentContainerStyle={[
-        styles.emptyContainer,
-        { paddingBottom: props.bottomInset },
+        styles.container,
+        { paddingBottom: spacing.xl + props.bottomInset },
         props.isWideLayout && {
           maxWidth: props.contentMaxWidth,
           width: '100%',
@@ -36,103 +42,79 @@ export function MobileHomeEmptyState(props: {
         }
       ]}
     >
-      <View style={styles.emptyHero}>
-        <Text style={styles.emptyTitle}>Connect your desktop</Text>
-        <Text style={styles.emptyBody}>
+      <View style={styles.hero}>
+        <OrcaLogo size={36} color={colors.textPrimary} />
+        <Text style={styles.title} accessibilityRole="header">
+          Connect your desktop
+        </Text>
+        <Text style={styles.body}>
           Pair with Orca on your computer to check on your agents, jump into any terminal, and drive
           work from your phone.
         </Text>
-        <Pressable style={styles.primaryButton} onPress={props.onPairDesktop}>
-          <QrCode size={17} color={colors.bgBase} />
-          <Text style={styles.primaryButtonText}>Pair Desktop</Text>
-        </Pressable>
+        <Button
+          label="Pair desktop"
+          icon={QrCode}
+          variant="primary"
+          onPress={props.onPairDesktop}
+          style={styles.cta}
+        />
       </View>
-      <View style={styles.stepsSection}>
-        <Text style={styles.sectionHeading}>How it works</Text>
+      <SectionHeader title="How it works" />
+      <ListGroup separatorInset={LIST_LEADING_INSET}>
         {ONBOARDING_STEPS.map((step, index) => (
-          <View key={step.title} style={[styles.stepRow, index > 0 && styles.stepRowBorder]}>
-            <View style={styles.stepNum}>
-              <Text style={styles.stepNumText}>{index + 1}</Text>
-            </View>
-            <View style={styles.stepText}>
-              <Text style={styles.stepTitle}>{step.title}</Text>
-              <Text style={styles.stepDesc}>{step.desc}</Text>
-            </View>
-          </View>
+          <ListRow
+            key={step.title}
+            title={step.title}
+            subtitle={step.desc}
+            subtitleNumberOfLines={3}
+            leading={
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>{index + 1}</Text>
+              </View>
+            }
+          />
         ))}
-      </View>
+      </ListGroup>
     </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
-  emptyContainer: { flexGrow: 1 },
-  emptyHero: {
+  container: { flexGrow: 1 },
+  hero: {
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 32,
-    paddingBottom: 40
+    paddingHorizontal: spacing.lg + 4,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.lg,
+    gap: spacing.md
   },
-  emptyTitle: {
-    fontSize: 22,
-    fontWeight: '700',
+  title: {
+    ...textStyles.title,
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 10
+    marginTop: spacing.sm
   },
-  emptyBody: {
-    fontSize: 15,
+  body: {
+    ...textStyles.body,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32
+    maxWidth: 340
   },
-  primaryButton: {
-    flexDirection: 'row',
+  cta: { alignSelf: 'center', marginTop: spacing.md },
+  stepNumber: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.fill,
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: colors.textPrimary,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    borderRadius: radii.card
+    justifyContent: 'center'
   },
-  primaryButtonText: { color: colors.bgBase, fontSize: 15, fontWeight: '700' },
-  stepsSection: { paddingHorizontal: spacing.xl },
-  sectionHeading: {
-    fontSize: 11,
+  stepNumberText: {
+    ...textStyles.footnote,
     fontWeight: '600',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.xs
-  },
-  stepRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 14,
-    paddingVertical: spacing.lg
-  },
-  stepRowBorder: { borderTopWidth: 1, borderTopColor: colors.borderSubtle },
-  stepNum: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 1
-  },
-  stepNumText: { fontSize: 12, fontWeight: '700', color: colors.textSecondary },
-  stepText: { flex: 1 },
-  stepTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 3
-  },
-  stepDesc: { fontSize: 12, color: colors.textMuted, lineHeight: 17 }
+    color: colors.textSecondary,
+    fontVariant: ['tabular-nums']
+  }
 })

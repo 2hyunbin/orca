@@ -1,84 +1,39 @@
-import { ChevronRight, Terminal } from 'lucide-react-native'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
-import { colors, radii, spacing } from '../theme/mobile-theme'
+import { SquareTerminal } from 'lucide-react-native'
+import { ListGroup, LIST_LEADING_INSET } from '../components/ui/ListGroup'
+import { ListRow } from '../components/ui/ListRow'
+import { SectionHeader } from '../components/ui/SectionHeader'
+import { colors } from '../theme/mobile-theme'
+import { useHostDisplay, type HostDisplaySource } from '../transport/use-host-display'
 import type { HomeResumeCard } from '../worktree/home-resume-card'
 
-const REPO_COLORS = ['#8b5cf6', '#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4']
-
-function homeResumeRepoColor(name: string): string {
-  let hash = 0
-  for (let index = 0; index < name.length; index += 1) {
-    hash = (hash * 31 + name.charCodeAt(index)) | 0
-  }
-  return REPO_COLORS[Math.abs(hash) % REPO_COLORS.length]
-}
-
+/** The likeliest next step, first on Home: the workspace to go back to and the desktop it is on. */
 export function MobileHomeResumeCard(props: {
   card: HomeResumeCard
+  /** The desktop `card.hostId` names, so the row can call it what its Home row does. */
+  desktop: HostDisplaySource | null
   onOpen: (card: HomeResumeCard) => void
 }) {
+  const { worktree, actionable } = props.card
+  const display = useHostDisplay(props.desktop)
+  const desktopName = props.desktop ? display.title : 'your desktop'
+  const title = worktree.displayName || worktree.repo
+  const where = [worktree.repo, worktree.branch, desktopName]
+    .filter((part) => part && part !== title)
+    .join(' · ')
   return (
-    <Pressable
-      disabled={!props.card.actionable}
-      style={({ pressed }) => [
-        styles.resumeCard,
-        !props.card.actionable && styles.cardDisabled,
-        pressed && styles.cardPressed
-      ]}
-      onPress={() => props.onOpen(props.card)}
-    >
-      <View style={styles.resumeIcon}>
-        <Terminal size={18} color={colors.textSecondary} />
-      </View>
-      <View style={styles.resumeMain}>
-        <Text style={styles.resumeTitle} numberOfLines={1}>
-          {props.card.worktree.displayName}
-        </Text>
-        <View style={styles.resumeSub}>
-          <View
-            style={[
-              styles.repoDot,
-              { backgroundColor: homeResumeRepoColor(props.card.worktree.repo) }
-            ]}
-          />
-          <Text style={styles.resumeSubText} numberOfLines={1}>
-            {props.card.worktree.repo}
-            {'  ·  '}
-            {props.card.worktree.branch}
-          </Text>
-        </View>
-      </View>
-      <ChevronRight size={16} color={colors.textMuted} />
-    </Pressable>
+    <>
+      <SectionHeader title="Resume" />
+      <ListGroup separatorInset={LIST_LEADING_INSET}>
+        <ListRow
+          title={title}
+          subtitle={actionable ? where : `Connect ${desktopName} to resume.`}
+          leading={<SquareTerminal size={20} color={colors.textSecondary} strokeWidth={2} />}
+          navigates
+          disabled={!actionable}
+          onPress={() => props.onOpen(props.card)}
+          accessibilityLabel={`Resume ${title}${actionable ? `, ${where}` : `. Connect ${desktopName} to resume.`}`}
+        />
+      </ListGroup>
+    </>
   )
 }
-
-const styles = StyleSheet.create({
-  resumeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgPanel,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: radii.card,
-    paddingLeft: spacing.md,
-    paddingRight: spacing.md,
-    paddingVertical: 12
-  },
-  cardDisabled: { opacity: 0.45 },
-  cardPressed: { backgroundColor: colors.bgRaised },
-  resumeIcon: {
-    width: 46,
-    height: 46,
-    borderRadius: 13,
-    backgroundColor: colors.bgRaised,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 14
-  },
-  resumeMain: { flex: 1, minWidth: 0 },
-  resumeTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
-  resumeSub: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
-  repoDot: { width: 7, height: 7, borderRadius: 3.5 },
-  resumeSubText: { fontSize: 12, color: colors.textSecondary, flex: 1 }
-})

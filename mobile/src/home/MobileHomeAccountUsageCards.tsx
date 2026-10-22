@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react-native'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { ClaudeIcon, OpenAIIcon } from '../components/AgentIcons'
 import {
@@ -8,9 +9,16 @@ import {
   type AccountsSnapshot,
   type ProviderKey
 } from '../components/AccountUsage'
-import { colors, radii, spacing } from '../theme/mobile-theme'
+import { ListGroup, LIST_LEADING_INSET, LIST_ROW_PADDING } from '../components/ui/ListGroup'
+import { SectionHeader } from '../components/ui/SectionHeader'
+import { pressTransition } from '../components/ui/transition-styles'
+import { colors, spacing, textStyles } from '../theme/mobile-theme'
 import type { HostProfile } from '../transport/types'
 
+const PROVIDERS: readonly ProviderKey[] = ['claude', 'codex']
+const PROVIDER_LABELS: Record<ProviderKey, string> = { claude: 'Claude', codex: 'Codex' }
+
+/** One row per account with usage, in an inset group; each opens that desktop's Accounts screen. */
 export function MobileHomeAccountUsageCards(props: {
   items: { host: HostProfile; snapshot: AccountsSnapshot }[]
   onOpen: (hostId: string) => void
@@ -18,116 +26,126 @@ export function MobileHomeAccountUsageCards(props: {
   if (props.items.length === 0) {
     return null
   }
+  const showHost = props.items.length > 1
+  const rows = props.items.flatMap(({ host, snapshot }) =>
+    PROVIDERS.flatMap((provider) => {
+      const providerSnapshot = provider === 'claude' ? snapshot.claude : snapshot.codex
+      const limits = getActiveProviderRateLimits(snapshot, provider)
+      if (providerSnapshot.accounts.length === 0 && !hasActiveProviderUsage(limits)) {
+        return []
+      }
+      const active =
+        providerSnapshot.accounts.find(
+          (account) => account.id === providerSnapshot.activeAccountId
+        ) ?? null
+      return [
+        <UsageRow
+          key={`${host.id}:${provider}`}
+          provider={provider}
+          email={active?.email ?? 'System default'}
+          hostName={showHost ? host.name : null}
+          session={getUsageBarState(limits, 'session')}
+          weekly={getUsageBarState(limits, 'weekly')}
+          onPress={() => props.onOpen(host.id)}
+        />
+      ]
+    })
+  )
+  if (rows.length === 0) {
+    return null
+  }
   return (
     <>
-      <Text style={styles.sectionHeading}>Account usage</Text>
-      {props.items.map(({ host, snapshot }) => {
-        const claudeActive =
-          snapshot.claude.accounts.find(
-            (account) => account.id === snapshot.claude.activeAccountId
-          ) ?? null
-        const codexActive =
-          snapshot.codex.accounts.find(
-            (account) => account.id === snapshot.codex.activeAccountId
-          ) ?? null
-        return (
-          <Pressable
-            key={host.id}
-            style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-            onPress={() => props.onOpen(host.id)}
-          >
-            {props.items.length > 1 ? (
-              <Text style={styles.hostLabel} numberOfLines={1}>
-                {host.name}
-              </Text>
-            ) : null}
-            {(['claude', 'codex'] as ProviderKey[]).map((provider) => {
-              const active = provider === 'claude' ? claudeActive : codexActive
-              const accounts =
-                provider === 'claude' ? snapshot.claude.accounts : snapshot.codex.accounts
-              const limits = getActiveProviderRateLimits(snapshot, provider)
-              if (accounts.length === 0 && !hasActiveProviderUsage(limits)) {
-                return null
-              }
-              const sessionBar = getUsageBarState(limits, 'session')
-              const weeklyBar = getUsageBarState(limits, 'weekly')
-              return (
-                <View key={provider} style={styles.row}>
-                  <View style={styles.icon}>
-                    {provider === 'claude' ? (
-                      <ClaudeIcon size={18} />
-                    ) : (
-                      <OpenAIIcon size={18} color={colors.textPrimary} />
-                    )}
-                  </View>
-                  <View style={styles.info}>
-                    <Text style={styles.email} numberOfLines={1}>
-                      {active?.email ?? 'System default'}
-                    </Text>
-                    <View style={styles.bars}>
-                      <UsageBar
-                        label="5h"
-                        usedPercent={sessionBar.usedPercent}
-                        unavailable={sessionBar.unavailable}
-                        loading={sessionBar.loading}
-                      />
-                      <UsageBar
-                        label="7d"
-                        usedPercent={weeklyBar.usedPercent}
-                        unavailable={weeklyBar.unavailable}
-                        loading={weeklyBar.loading}
-                      />
-                    </View>
-                  </View>
-                </View>
-              )
-            })}
-          </Pressable>
-        )
-      })}
+      <SectionHeader title="Account usage" />
+      <ListGroup separatorInset={LIST_LEADING_INSET}>{rows}</ListGroup>
     </>
   )
 }
 
+type BarState = ReturnType<typeof getUsageBarState>
+
+function UsageRow(props: {
+  provider: ProviderKey
+  email: string
+  hostName: string | null
+  session: BarState
+  weekly: BarState
+  onPress: () => void
+}) {
+  const label = [
+    `${PROVIDER_LABELS[props.provider]} usage`,
+    props.email,
+    props.hostName ? `on ${props.hostName}` : null
+  ]
+    .filter(Boolean)
+    .join(', ')
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={props.onPress}>
+      {({ pressed }) => (
+        <View
+          style={[
+            styles.row,
+            pressed && styles.pressed,
+            pressed ? pressTransition.pressed : pressTransition.rest
+          ]}
+        >
+          <View style={styles.leading}>
+            {props.provider === 'claude' ? (
+              <ClaudeIcon size={20} />
+            ) : (
+              <OpenAIIcon size={20} color={colors.textPrimary} />
+            )}
+          </View>
+          <View style={styles.main}>
+            <Text style={styles.title} numberOfLines={1}>
+              {props.email}
+            </Text>
+            {props.hostName ? (
+              <Text style={styles.host} numberOfLines={1}>
+                {props.hostName}
+              </Text>
+            ) : null}
+            <View style={styles.bars}>
+              <UsageBar
+                label="5h"
+                usedPercent={props.session.usedPercent}
+                unavailable={props.session.unavailable}
+                loading={props.session.loading}
+              />
+              <UsageBar
+                label="7d"
+                usedPercent={props.weekly.usedPercent}
+                unavailable={props.weekly.unavailable}
+                loading={props.weekly.loading}
+              />
+            </View>
+          </View>
+          <ChevronRight size={16} color={colors.textMuted} strokeWidth={2.2} />
+        </View>
+      )}
+    </Pressable>
+  )
+}
+
 const styles = StyleSheet.create({
-  sectionHeading: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    marginTop: spacing.xl,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.xs
+  row: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: LIST_ROW_PADDING,
+    paddingVertical: spacing.md
   },
-  card: {
-    backgroundColor: colors.bgPanel,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: radii.card,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    gap: spacing.sm,
-    marginBottom: spacing.sm
-  },
-  cardPressed: { backgroundColor: colors.bgRaised },
-  hostLabel: {
-    fontSize: 11,
-    color: colors.textMuted,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4
-  },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
-  icon: {
-    width: 32,
-    height: 32,
-    borderRadius: 9,
-    backgroundColor: colors.bgRaised,
+  pressed: { backgroundColor: colors.fill },
+  leading: {
+    width: 28,
+    height: textStyles.body.lineHeight,
+    alignSelf: 'flex-start',
     alignItems: 'center',
     justifyContent: 'center'
   },
-  info: { flex: 1, minWidth: 0, gap: 2 },
-  email: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
-  bars: { flexDirection: 'row', gap: spacing.md, marginTop: 4 }
+  main: { flex: 1, minWidth: 0, gap: 2 },
+  title: { ...textStyles.body, fontWeight: '500', color: colors.textPrimary },
+  host: { ...textStyles.subhead, color: colors.textSecondary },
+  bars: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs }
 })

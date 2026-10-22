@@ -1,11 +1,14 @@
 import { memo, useCallback, type ReactElement } from 'react'
-import { FlatList, StyleSheet, View } from 'react-native'
-import type { ListRenderItemInfo } from 'react-native'
+import { ScrollView, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { MobileHostCard } from '../components/MobileHostCard'
+import { ListGroup, LIST_LEADING_INSET } from '../components/ui/ListGroup'
+import { SectionHeader } from '../components/ui/SectionHeader'
 import type { HomeStatsSummary } from '../stats/home-stats-total'
 import { spacing } from '../theme/mobile-theme'
 import { classifyConnection } from '../transport/connection-health'
 import { resolveHomeHostConnectionState } from '../transport/home-host-auto-connect'
+import { useHostStatusGates } from '../transport/host-status-gates'
+import type { RpcClient } from '../transport/rpc-client'
 import type { ConnectionState, HostCatalogEntry } from '../transport/types'
 import type { HostWorktreeInfo } from '../worktree/home-worktree-info'
 import type { HomeHostConnections } from './home-host-connection-projection'
@@ -15,8 +18,11 @@ type MobileHomeHostListProps = {
   autoConnectHostIds: string[]
   bottomInset: number
   contentMaxWidth: number
+  /** Drawn between the stats and the desktops: the Resume row, when there is one. */
+  resume: ReactElement | null
   footer: ReactElement
   hostAttempts: Record<string, number>
+  hostClients: Readonly<Record<string, RpcClient>>
   hostLastConnected: Record<string, number | null>
   hostConnections: HomeHostConnections
   hosts: HostCatalogEntry[]
@@ -24,46 +30,19 @@ type MobileHomeHostListProps = {
   isWideLayout: boolean
   stats: HomeStatsSummary | null
   worktreeInfo: Record<string, HostWorktreeInfo>
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
   onOpen: (host: HostCatalogEntry) => void
   onLongPress: (host: HostCatalogEntry) => void
   onOpenActions: (host: HostCatalogEntry) => void
 }
 
+/** Home's scrolling body: large title, Resume, one "Desktops" group, then the footer. */
 export function MobileHomeHostList(props: MobileHomeHostListProps) {
-  const renderHost = useCallback(
-    ({ item }: ListRenderItemInfo<HostCatalogEntry>) => (
-      <MobileHomeHostRow
-        item={item}
-        autoConnectHostIds={props.autoConnectHostIds}
-        hostAttempts={props.hostAttempts}
-        hostLastConnected={props.hostLastConnected}
-        hostConnections={props.hostConnections}
-        hostStates={props.hostStates}
-        worktreeInfo={props.worktreeInfo}
-        onOpen={props.onOpen}
-        onLongPress={props.onLongPress}
-        onOpenActions={props.onOpenActions}
-      />
-    ),
-    [
-      props.autoConnectHostIds,
-      props.hostAttempts,
-      props.hostLastConnected,
-      props.hostConnections,
-      props.hostStates,
-      props.onLongPress,
-      props.onOpen,
-      props.onOpenActions,
-      props.worktreeInfo
-    ]
-  )
-
   return (
-    <FlatList
-      data={props.hosts}
-      keyExtractor={(host) => host.id}
+    <ScrollView
+      onScroll={props.onScroll}
+      scrollEventThrottle={16}
       contentContainerStyle={[
-        styles.list,
         { paddingBottom: spacing.xl + props.bottomInset },
         props.isWideLayout && {
           maxWidth: props.contentMaxWidth,
@@ -71,11 +50,33 @@ export function MobileHomeHostList(props: MobileHomeHostListProps) {
           alignSelf: 'center'
         }
       ]}
-      ListHeaderComponent={<MobileHomeListHeader stats={props.stats} />}
-      ItemSeparatorComponent={CardGap}
-      renderItem={renderHost}
-      ListFooterComponent={props.footer}
-    />
+    >
+      <MobileHomeListHeader stats={props.stats} />
+      {props.resume}
+      <SectionHeader
+        title="Desktops"
+        count={props.hosts.length > 1 ? props.hosts.length : undefined}
+      />
+      <ListGroup separatorInset={LIST_LEADING_INSET}>
+        {props.hosts.map((item) => (
+          <MobileHomeHostRow
+            key={item.id}
+            item={item}
+            autoConnectHostIds={props.autoConnectHostIds}
+            client={props.hostClients[item.id] ?? null}
+            hostAttempts={props.hostAttempts}
+            hostLastConnected={props.hostLastConnected}
+            hostConnections={props.hostConnections}
+            hostStates={props.hostStates}
+            worktreeInfo={props.worktreeInfo}
+            onOpen={props.onOpen}
+            onLongPress={props.onLongPress}
+            onOpenActions={props.onOpenActions}
+          />
+        ))}
+      </ListGroup>
+      {props.footer}
+    </ScrollView>
   )
 }
 
@@ -90,7 +91,7 @@ type MobileHomeHostRowProps = Pick<
   | 'onOpen'
   | 'onLongPress'
   | 'onOpenActions'
-> & { item: HostCatalogEntry }
+> & { item: HostCatalogEntry; client: RpcClient | null }
 
 const MobileHomeHostRow = memo(function MobileHomeHostRow(props: MobileHomeHostRowProps) {
   const { item, onLongPress, onOpen, onOpenActions } = props
@@ -99,6 +100,13 @@ const MobileHomeHostRow = memo(function MobileHomeHostRow(props: MobileHomeHostR
     props.hostStates[item.id],
     props.autoConnectHostIds
   )
+  // Why: the same status read the host screen's gate makes, so a desktop that would show the
+  // update wall says "Update needed" here instead of "Connected".
+  const { compatVerdict } = useHostStatusGates({
+    hostId: item.id,
+    client: props.client,
+    connState: state
+  })
   const connection = props.hostConnections[item.id]
   const verdict = classifyConnection({
     state,
@@ -122,18 +130,10 @@ const MobileHomeHostRow = memo(function MobileHomeHostRow(props: MobileHomeHostR
       verdict={verdict}
       path={connection?.path ?? 'lan'}
       worktreeInfo={props.worktreeInfo[item.id]}
+      compatVerdict={compatVerdict}
       onPress={open}
       onLongPress={longPress}
       onOpenActions={openActions}
     />
   )
-})
-
-function CardGap() {
-  return <View style={styles.cardGap} />
-}
-
-const styles = StyleSheet.create({
-  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl },
-  cardGap: { height: spacing.sm }
 })

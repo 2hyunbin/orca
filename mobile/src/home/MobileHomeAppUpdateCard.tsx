@@ -8,6 +8,7 @@ import {
 import { AppUpdateCard } from './AppUpdateCard'
 import { spacing } from '../theme/mobile-theme'
 
+/** Last on Home, so a check that lands after first paint never moves the rows above it. */
 export function MobileHomeAppUpdateCard() {
   const available = undismissedAppUpdate(useAppUpdateState())
   if (!available) {
@@ -24,4 +25,4 @@ export function MobileHomeAppUpdateCard() {
   )
 }
 
-const styles = StyleSheet.create({ slot: { marginBottom: spacing.lg } })
+const styles = StyleSheet.create({ slot: { marginTop: spacing.xl } })
