@@ -59,6 +59,8 @@ describe('useActiveProjectSkillRuntime', () => {
       wslDistro: 'Ubuntu',
       label: 'WSL Ubuntu'
     })
+    expect(result.current.bundledSkillTarget).toBeNull()
+    expect(result.current.canUseSkillFreshness).toBe(false)
   })
 
   it('ignores a windows-host global default so skill discovery keeps no target', () => {

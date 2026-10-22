@@ -1,6 +1,5 @@
 import { basename, dirname, join, resolve } from 'node:path'
 import type { SkillInstallProviderId } from '../../../shared/skill-install-providers'
-import { parseWslUncPath } from '../../../shared/wsl-paths'
 import type { ResolvedSkillInstallDestination } from '../skill-install-destinations'
 import {
   resolveSkillProviderDestinations,
@@ -32,14 +31,7 @@ export type BundledSkillTargetRequest = {
 
 export function bundledSkillPathKey(path: string): string {
   const normalized = resolve(path)
-  if (process.platform !== 'win32') {
-    return normalized
-  }
-  // Why: a WSL guest's paths are case-sensitive even when reached from Windows.
-  const wsl = parseWslUncPath(normalized)
-  return wsl
-    ? `wsl:${wsl.distro.toLocaleLowerCase('en-US')}:${wsl.linuxPath}`
-    : normalized.toLocaleLowerCase('en-US')
+  return process.platform === 'win32' ? normalized.toLocaleLowerCase('en-US') : normalized
 }
 
 /** Missing tails are re-attached, so a root not created yet still resolves through linked parents. */

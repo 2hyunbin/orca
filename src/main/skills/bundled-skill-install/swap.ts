@@ -27,13 +27,9 @@ function siblingPath(target: string, marker: string): string {
  * One place per executing host, outside every skills root (agents would load it) and outside
  * any project (it would show up in the repo).
  */
-export function bundledSkillBackupsRoot(homeDirectory: string): string {
-  return join(homeDirectory, '.agents', '.orca-skill-backups')
-}
-
 export function bundledSkillBackupPath(homeDirectory: string, name: string): string {
   const utc = new Date().toISOString().replace(/[:.]/gu, '-')
-  return join(bundledSkillBackupsRoot(homeDirectory), `${name}-${utc}-${randomUUID()}`)
+  return join(homeDirectory, '.agents', '.orca-skill-backups', `${name}-${utc}-${randomUUID()}`)
 }
 
 /** The installer's only delete: it refuses anything but its own stage and old siblings. */

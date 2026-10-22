@@ -32,10 +32,9 @@ describe('resolveBundledSkillTarget', () => {
     expect(bundledSkillTargetKey(target!)).toBe('runtime:env-1')
   })
 
-  it('sends a Windows project that runs in WSL to the guest', () => {
+  it('plans nothing for a Windows project that runs in WSL', () => {
     const target = resolveBundledSkillTarget({ kind: 'local' }, WSL_PROJECT)
-    expect(target).toEqual({ kind: 'wsl', distro: 'Ubuntu' })
-    expect(bundledSkillTargetKey(target!)).toBe('wsl:Ubuntu')
+    expect(target).toBeNull()
   })
 
   it('plans nothing while a WSL project needs its distro repaired, never the Windows home', () => {

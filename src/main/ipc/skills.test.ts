@@ -278,6 +278,15 @@ describe('registerSkillsHandlers', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: a test double implements only the members this code path reads.
     registerSkillsHandlers(store as never, runtime as never)
 
+    await expect(
+      handlerFor('skills:bundledPlan')(null, { wsl: { distro: 'Ubuntu' } })
+    ).rejects.toThrow()
+    await expect(
+      handlerFor('skills:bundledExecute')(null, {
+        planDigest: 'd'.repeat(64),
+        request: { wsl: { distro: 'Ubuntu' } }
+      })
+    ).rejects.toThrow()
     await expect(handlerFor('skills:bundledPlan')(null, { force: 'all' })).rejects.toThrow()
     await expect(handlerFor('skills:bundledPlan')(null, { names: ['../x'] })).rejects.toThrow()
     await expect(handlerFor('skills:bundledExecute')(null, {})).rejects.toThrow()

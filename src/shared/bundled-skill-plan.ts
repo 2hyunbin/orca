@@ -148,25 +148,3 @@ export const BundledSkillExecuteRequestSchema = z.strictObject({
   request: BundledSkillPlanRequestSchema
 })
 export type BundledSkillExecuteRequest = z.infer<typeof BundledSkillExecuteRequestSchema>
-
-/**
- * The desktop app's own IPC (never the wire): its host, or a WSL distro it reaches through
- * `wsl.exe` when that is where the user's agents run. No distro means the default one.
- */
-export const BundledSkillLocalPlanRequestSchema = z.strictObject({
-  ...BundledSkillPlanRequestSchema.shape,
-  wsl: z
-    .strictObject({
-      distro: z.string().min(1).max(256).optional(),
-      /** A background check: refuse rather than boot a stopped distro. */
-      onlyIfRunning: z.boolean().optional()
-    })
-    .optional()
-})
-export type BundledSkillLocalPlanRequest = z.infer<typeof BundledSkillLocalPlanRequestSchema>
-
-export const BundledSkillLocalExecuteRequestSchema = z.strictObject({
-  planDigest: PlanDigestSchema,
-  request: BundledSkillLocalPlanRequestSchema
-})
-export type BundledSkillLocalExecuteRequest = z.infer<typeof BundledSkillLocalExecuteRequestSchema>

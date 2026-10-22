@@ -1,12 +1,9 @@
-import { join } from 'node:path'
 import type {
   BundledSkillInstallResult,
-  BundledSkillLocalExecuteRequest,
-  BundledSkillLocalPlanRequest,
+  BundledSkillExecuteRequest,
   BundledSkillPlan,
   BundledSkillPlanRequest
 } from '../../shared/bundled-skill-plan'
-import { isSkillInstallProviderId } from '../../shared/skill-install-providers'
 import {
   localBundledSkillInput,
   type BundledSkillSelection
@@ -16,17 +13,10 @@ import {
   previewBundledSkillInstall,
   type BundledSkillServiceInput
 } from '../skills/bundled-skill-install/service'
-import { createWslBundledSkillFilesystem } from '../skills/bundled-skill-install/wsl-filesystem'
 import { clearSkillDiscoveryCaches } from '../skills/skill-discovery-target'
 import { resolveSkillInstallDestination } from '../skills/skill-install-destinations'
-import { detectSkillProvidersInWsl } from '../skills/skill-wsl-provider-detection'
-import { getDefaultWslDistro } from '../wsl'
-import { listConfirmedRunningWslDistros } from '../wsl-background-distro-gate'
 import type { RuntimeSkillCommandHost } from './runtime-skill-command-contract'
-import {
-  createSkillInstallAuthority,
-  resolveSkillProviderRoots
-} from './runtime-skill-install-authority'
+import { createSkillInstallAuthority } from './runtime-skill-install-authority'
 
 /** Named skills are an install for the host's agents; otherwise update what is installed. */
 function bundledSkillSelection(request: BundledSkillPlanRequest): BundledSkillSelection {
@@ -36,59 +26,13 @@ function bundledSkillSelection(request: BundledSkillPlanRequest): BundledSkillSe
   }
 }
 
-/** Agents in the guest read the guest's homes, with the guest's own env and agent detection. */
-async function wslInput(
-  host: RuntimeSkillCommandHost,
-  wsl: NonNullable<BundledSkillLocalPlanRequest['wsl']>,
-  selection: BundledSkillPlanRequest
-): Promise<BundledSkillServiceInput> {
-  const distro = wsl.distro ?? getDefaultWslDistro()
-  if (!distro) {
-    throw new Error('skill-install-wsl-unavailable')
-  }
-  if (
-    wsl.onlyIfRunning &&
-    !(await listConfirmedRunningWslDistros()).some(
-      (running) => running.toLowerCase() === distro.toLowerCase()
-    )
-  ) {
-    throw new Error(`WSL ${distro} isn't running. Re-check to start it and check its skills.`)
-  }
-  const destination = await resolveSkillInstallDestination(
-    { scope: 'global', executionTarget: { kind: 'wsl', distro } },
-    createSkillInstallAuthority(host)
-  )
-  await host.skillTransactionRecovery
-  const providerRootOverrides = await resolveSkillProviderRoots(host, {
-    scope: 'global',
-    homeDirectory: destination.homeDirectory,
-    wslDistro: distro
-  })
-  return {
-    destination,
-    agents: (await detectSkillProvidersInWsl(distro)).filter(isSkillInstallProviderId),
-    providerRootOverrides,
-    // Why Windows userData: cloud installs into this guest from the app keep their state here.
-    stateDirectory: join(host.getUserDataPath(), 'skill-installs'),
-    filesystem: createWslBundledSkillFilesystem({
-      distro,
-      homeDirectory: destination.homeDirectory,
-      providerRootOverrides
-    }),
-    ...bundledSkillSelection(selection)
-  }
-}
-
 // Why global: these are the user's own agents. Without names this is the app's Update skills,
 // which never adds a skill the user did not install. A paired server or SSH host plans this on
 // its own host over RPC.
 async function appInput(
   host: RuntimeSkillCommandHost,
-  request: BundledSkillLocalPlanRequest
+  request: BundledSkillPlanRequest
 ): Promise<BundledSkillServiceInput> {
-  if (request.wsl) {
-    return wslInput(host, request.wsl, request)
-  }
   const destination = await resolveSkillInstallDestination(
     { scope: 'global' },
     createSkillInstallAuthority(host)
@@ -105,14 +49,14 @@ async function appInput(
 
 export async function planLocalBundledSkills(
   host: RuntimeSkillCommandHost,
-  request: BundledSkillLocalPlanRequest
+  request: BundledSkillPlanRequest
 ): Promise<BundledSkillPlan> {
   return previewBundledSkillInstall(await appInput(host, request))
 }
 
 export async function executeLocalBundledSkills(
   host: RuntimeSkillCommandHost,
-  { planDigest, request }: BundledSkillLocalExecuteRequest
+  { planDigest, request }: BundledSkillExecuteRequest
 ): Promise<BundledSkillInstallResult> {
   const result = await installBundledSkills(await appInput(host, request), planDigest)
   // Discovery would otherwise serve its pre-install answer from cache.
