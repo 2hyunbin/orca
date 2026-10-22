@@ -5,7 +5,7 @@ import type { OrchestrationCallerIdentity } from '../../../orchestration/orchest
 import { MESSAGE_TYPES } from '../../../orchestration/types'
 import { OrchestrationError } from '../../../orchestration/orchestration-error'
 import { LEGACY_CONTRACT_VERSION } from '../../../orchestration/db'
-import { parseMessageTaskId } from './schemas'
+import { isDispatchMutationMessageType, parseMessageTaskId } from './schemas'
 
 export function parseMessageTypes(rawTypes: string | undefined): MessageType[] | undefined {
   const types = rawTypes
@@ -27,6 +27,7 @@ export function resolveMessageRun(
     to?: string
     runId?: string
     payload?: string
+    type?: string
   }
 ): { run: RunRow | undefined; dispatchId: string | undefined } {
   const db = runtime.getOrchestrationDb()
@@ -79,8 +80,13 @@ export function resolveMessageRun(
       `Dispatch ${dispatch.id} belongs to Run ${dispatch.run_id}, not ${run.id}.`
     )
   }
-  // Why: a resolved --dispatch-id scopes the message; lifecycle validation owns Task/Dispatch mismatches.
-  if (run && !params.to && !params.runId && !(payloadNamesDispatch && dispatch)) {
+  // Why: a payload-named or lifecycle Dispatch scopes the message; lifecycle validation owns Task/Dispatch mismatches.
+  if (
+    run &&
+    !params.to &&
+    !params.runId &&
+    !(dispatch && (payloadNamesDispatch || isDispatchMutationMessageType(params.type)))
+  ) {
     const taskId = parseMessageTaskId(params.payload)
     const task = taskId ? db.getTask(taskId) : undefined
     if (task?.run_id && task.run_id !== run.id) {

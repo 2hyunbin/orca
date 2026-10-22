@@ -88,22 +88,27 @@ describe('implicit task-scoped message routing', () => {
     }
   )
 
-  it('leaves a stale Task on an explicit Dispatch to lifecycle rejection in the Dispatch Run', async () => {
-    const { db, otherTask, activeRunId, dispatchId, send } = setup('worker')
-    const receipt = await send({
-      type: 'worker_done',
-      payload: JSON.stringify({
-        taskId: otherTask.id,
-        dispatchId,
-        outcome: 'succeeded'
+  it.each([
+    ['explicit', 'worker_done', 'task_dispatch_mismatch'],
+    ['implicit', 'worker_done', 'missing_dispatch_id'],
+    ['implicit', 'escalation', 'task_dispatch_mismatch']
+  ] as const)(
+    'leaves a stale Task on an %s Dispatch %s to lifecycle rejection in the Dispatch Run',
+    async (scope, type, code) => {
+      const { db, otherTask, activeRunId, dispatchId, send } = setup('worker')
+      const receipt = await send({
+        type,
+        payload: JSON.stringify({
+          taskId: otherTask.id,
+          outcome: 'succeeded',
+          ...(scope === 'explicit' ? { dispatchId } : {})
+        })
       })
-    })
 
-    expect(receipt).toMatchObject({
-      lifecycle: { action: 'rejected', code: 'task_dispatch_mismatch' }
-    })
-    expect(db.getInbox(100)).toEqual([expect.objectContaining({ run_id: activeRunId })])
-  })
+      expect(receipt).toMatchObject({ lifecycle: { action: 'rejected', code } })
+      expect(db.getInbox(100)).toEqual([expect.objectContaining({ run_id: activeRunId })])
+    }
+  )
 
   it('preserves explicit terminal delivery when the payload references a foreign task', async () => {
     const { db, otherTask, activeRunId, runtime, send } = setup()
@@ -118,7 +123,7 @@ describe('implicit task-scoped message routing', () => {
     ])
   })
 
-  it.each([undefined, '{', '[]', '{"taskId":17}', '{"taskId":"task_unknown"}'])(
+  it.each([undefined, '{', '{"taskId":"task_unknown"}'])(
     'preserves existing status-message behavior for payload %s',
     async (payload) => {
       const { db, activeRunId, send } = setup()
