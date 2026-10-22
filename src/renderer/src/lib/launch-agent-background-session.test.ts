@@ -27,7 +27,7 @@ const mockSubscribeToPtyExit = vi.fn()
 const mockPasteDraftWhenAgentReady = vi.fn()
 const mockDispatchEvent = vi.fn()
 const mockGetAgentLaunchPlatformForRepo = vi.fn<() => NodeJS.Platform>()
-const mockHostKind = vi.fn<() => 'local' | 'runtime'>(() => 'local')
+const mockHostKind = vi.fn<() => 'local' | 'runtime' | 'ssh'>(() => 'local')
 const state = createAgentBackgroundSessionTestState({
   createTab: mockCreateTab,
   setTabCustomTitle: mockSetTabCustomTitle,
@@ -41,6 +41,9 @@ let currentStoreState = state
 vi.mock('@/store', () => ({
   useAppStore: {
     getState: () => currentStoreState,
+    setState: vi.fn((update: (state: unknown) => object) =>
+      Object.assign(currentStoreState, update(currentStoreState))
+    ),
     subscribe: vi.fn(() => () => {})
   }
 }))
@@ -82,6 +85,8 @@ vi.mock('@/components/terminal-pane/pty-data-sidecar-subscriptions', () => ({
 describe('launchAgentBackgroundSession', () => {
   beforeEach(() => {
     currentStoreState = state
+    mockHostKind.mockReturnValue('local')
+    Object.assign(state, { ptyProcessMetadataById: {}, ptyProcessObservationRevision: 0 })
     resetAgentBackgroundSessionTestHarness({
       state,
       createTab: mockCreateTab,
@@ -293,6 +298,51 @@ describe('launchAgentBackgroundSession', () => {
       })
     )
   })
+
+  it.each(['local', 'ssh', 'publication-failure'] as const)(
+    'keeps successful %s provider ownership through descriptive publication',
+    async (kind) => {
+      const { useAppStore } = await import('@/store')
+      const { readTerminalProcessMetadata } =
+        await import('@/store/terminals/terminal-process-metadata')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      if (kind === 'ssh') {
+        state.repos[0].connectionId = 'box'
+        mockHostKind.mockReturnValue('ssh')
+      }
+      if (kind === 'publication-failure') {
+        vi.mocked(useAppStore.setState).mockImplementationOnce(() => {
+          throw new Error('description notification failed')
+        })
+      }
+      const create = mockCreateTab.getMockImplementation()
+      mockCreateTab.mockImplementationOnce((...args) => {
+        expect(
+          readTerminalProcessMetadata(useAppStore.getState(), 'local', 'pty-1')?.shellPath
+        ).toBe(kind === 'local' ? 'cmd.exe' : undefined)
+        return create?.(...args)
+      })
+      mockSpawn.mockResolvedValue({
+        id: 'pty-1',
+        incarnationId: 'actual',
+        shellPath: 'cmd.exe',
+        wslDistro: null
+      })
+      const { launchAgentBackgroundSession } = await import('./launch-agent-background-session')
+      const result = await launchAgentBackgroundSession({
+        agent: 'claude',
+        worktreeId: 'wt-1',
+        prompt: 'run'
+      })
+      expect(result?.ptyId).toBe('pty-1')
+      expect(mockCreateTab).toHaveBeenCalledOnce()
+      expect(mockKill).not.toHaveBeenCalled()
+      expect(readTerminalProcessMetadata(useAppStore.getState(), 'local', 'pty-1')?.shellPath).toBe(
+        kind === 'local' ? 'cmd.exe' : undefined
+      )
+      warn.mockRestore()
+    }
+  )
 
   it('records effective launch config returned by local PTY spawn', async () => {
     const effectiveLaunchConfig = {

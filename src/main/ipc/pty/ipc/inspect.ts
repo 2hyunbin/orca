@@ -85,6 +85,9 @@ export function installPtyInspectIpcHandlers(deps: {
               id: session.id,
               cwd: session.cwd,
               title: session.title,
+              ...(session.incarnationId ? { incarnationId: session.incarnationId } : {}),
+              ...(session.wslDistro !== undefined ? { wslDistro: session.wslDistro } : {}),
+              ...(session.shellPath ? { shellPath: session.shellPath } : {}),
               ...(session.worktreeId !== undefined ? { worktreeId: session.worktreeId } : {}),
               ...(session.exiting === true ? { exiting: true as const } : {}),
               // Why: the renderer's binding map is empty during restore, so ownership is the only

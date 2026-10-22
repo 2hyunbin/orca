@@ -19,6 +19,9 @@ export type PtyListedSession = {
   id: string
   cwd: string
   title: string
+  incarnationId?: string
+  wslDistro?: string | null
+  shellPath?: string
   worktreeId?: string
   /**
    * Agent ownership as the listing provider could establish it. Destructive actions must treat

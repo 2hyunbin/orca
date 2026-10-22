@@ -12,6 +12,7 @@ import {
   exitListeners,
   ptyIncarnations,
   ptyInitialCwd,
+  ptyShellPath,
   ptyProcesses,
   getPtyShellName,
   ptyTerminalHandle,
@@ -125,6 +126,7 @@ export async function listLocalPtyProcesses(): Promise<PtyProcessInfo[]> {
   return Array.from(ptyProcesses.entries()).map(([id, proc]) => ({
     id,
     ...(ptyIncarnations.get(id) ? { incarnationId: ptyIncarnations.get(id) } : {}),
+    ...(ptyShellPath.get(id) ? { shellPath: ptyShellPath.get(id) } : {}),
     ...(proc.pid > 0 ? { rootProcessId: proc.pid } : {}),
     cwd: ptyInitialCwd.get(id) ?? '',
     title: proc.process || getPtyShellName(id) || 'shell',

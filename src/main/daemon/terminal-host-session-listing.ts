@@ -22,6 +22,7 @@ export function listLiveTerminalHostSessions(
       isAlive: true,
       ...(session.terminalHandle ? { terminalHandle: session.terminalHandle } : {}),
       wslDistro: session.wslDistro,
+      ...(session.shellPath ? { shellPath: session.shellPath } : {}),
       pid: session.pid,
       cwd: session.getCwd(),
       cols: size?.cols ?? 0,

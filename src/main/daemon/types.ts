@@ -368,6 +368,8 @@ export type SessionInfo = {
   isAlive: boolean
   terminalHandle?: string
   wslDistro?: string | null
+  /** Actual top-level executable reported by the process owner; absent on older hosts. */
+  shellPath?: string
   pid: number | null
   cwd: string | null
   cols: number

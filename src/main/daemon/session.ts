@@ -130,6 +130,9 @@ export class Session {
     return this.termination.beginTermination()
   }
 
+  // oxfmt-ignore
+  get shellPath(): string | undefined { return this.subprocess.shellPath }
+
   get pid(): number {
     return this.subprocess.pid
   }

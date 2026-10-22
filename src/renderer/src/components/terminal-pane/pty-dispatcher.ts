@@ -1,3 +1,4 @@
+import { observePtyProcessExit } from './pty-process-observation'
 /** Singleton PTY event dispatcher and eager buffer helpers, split out from pty-transport.ts. */
 import { TERMINAL_SCROLLBACK_SESSION_BUFFER_BYTE_LIMIT } from '../../../../shared/terminal-scrollback-limits'
 import {
@@ -200,6 +201,7 @@ function attachPtySecondaryPushListeners(unsubscribes: (() => void)[]): void {
         // Why: one-shot owner — remove before invoking so a throwing callback can't stay registered for a duplicate exit.
         ptyExitHandlers.delete(payload.id)
       }
+      observePtyProcessExit(payload)
       deliverPtyExitToHandlers({
         ptyId: payload.id,
         code: payload.code,

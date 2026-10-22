@@ -1,4 +1,5 @@
 import { getConnectionExecutionHostId } from '../../../../shared/execution-host'
+import { createIpcPtyProcessDescription } from './ipc-pty-process-description'
 import { attachIpcPty } from './ipc-pty-attach'
 import { connectIpcPty } from './ipc-pty-connect'
 import { createIpcPtySessionHandlers } from './ipc-pty-session-handlers'
@@ -11,7 +12,6 @@ import type { TerminalInputKind } from '../../../../shared/terminal-input-kind'
 export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTransport {
   const {
     connectionId,
-    shellOverride,
     onPtyExit,
     onTitleChange,
     onBell,
@@ -74,11 +74,22 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       ptyId = null
       preconnectInputBuffer?.clear()
     },
-    onPtyExit
+    captureProcessRetirement: () => description.captureRetirement(),
+    onPtyExit: (id, code) => {
+      description.detach()
+      onPtyExit?.(id, code)
+    }
   })
-  const bind = (id: string): void => {
+  const description = createIpcPtyProcessDescription(
+    !connectionId,
+    () => ptyId,
+    () => storedCallbacks.onSessionMetadataChanged?.(),
+    opts
+  )
+  const bind = (id: string, incarnationId?: string): void => {
     ptyId = id
     connected = true
+    description.bind(incarnationId)
   }
   const setCallbacks = (callbacks: typeof storedCallbacks): void => {
     storedCallbacks = callbacks
@@ -121,6 +132,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
   return {
     getPendingEscapeTailAnsi: outputProcessor.getPendingEscapeTailAnsi,
     connect: async (options) => {
+      const publishDescription = description.capture()
       const connectGeneration = advancePtyLifecycle()
       pendingConnectGeneration = connectGeneration
       try {
@@ -134,6 +146,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
             lifecycleGeneration === connectGeneration + 1,
           ownsPtyId: (id) => !destroyed && connected && ptyId === id,
           handleExplicitlyClosedConnect: (id) => destroyed && (onAbandonedConnect?.(id) ?? false),
+          adoptMetadata: publishDescription,
           bind,
           isCurrent: (id) => lifecycleGeneration === connectGeneration && connected && ptyId === id,
           setCallbacks,
@@ -153,6 +166,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       !destroyed && ptyId === null && pendingConnectGeneration === lifecycleGeneration,
 
     attach: (options) => {
+      const publishDescription = description.capture()
       const attachGeneration = advancePtyLifecycle()
       try {
         attachIpcPty(options, {
@@ -170,6 +184,11 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
         preconnectInputBuffer?.clear()
         throw error
       }
+      description.hydrate(
+        options.existingPtyId,
+        publishDescription,
+        () => !destroyed && lifecycleGeneration === attachGeneration
+      )
       if (lifecycleGeneration === attachGeneration) {
         void flushPreconnectInput()
       }
@@ -183,12 +202,17 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
       advancePtyLifecycle()
       preconnectInputBuffer?.clear()
       const id = ptyId
+      const retire = description.captureRetirement()
       connected = false
       ptyId = null
+      description.detach()
       handlers.clearAccumulatedState()
       if (id) {
         try {
-          window.api.pty.kill(id)
+          void window.api.pty
+            .kill(id)
+            ?.then(retire)
+            .catch((error) => console.warn('[pty-transport] could not close terminal', error))
         } finally {
           handlers.unregisterAll(id)
           storedCallbacks.onDisconnect?.()
@@ -197,6 +221,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
     },
 
     detach(options) {
+      description.detach()
       advancePtyLifecycle()
       outputProcessor.disposePendingSideEffectGauge()
       handlers.clearAccumulatedState()
@@ -274,10 +299,7 @@ export function createIpcPtyTransport(opts: IpcPtyTransportOptions = {}): PtyTra
     getConnectionId: () => connectionId ?? null,
     getExecutionHostId: () => getConnectionExecutionHostId(connectionId),
     getRuntimeEnvironmentId: () => null,
-    getLocalSessionMetadata: () =>
-      connectionId
-        ? null
-        : { ...(opts.cwd ? { cwd: opts.cwd } : {}), ...(shellOverride ? { shellOverride } : {}) },
+    getLocalSessionMetadata: description.getContext,
     resetCrossChunkParserState: outputProcessor.resetAgentStatusCarry,
 
     destroy(options) {
