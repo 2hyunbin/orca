@@ -10,7 +10,6 @@ import {
   type AgentJournalTurnScope
 } from '../../shared/agent-session-journal-types'
 import { journalLifecycleItemMutation } from '../native-chat/agent-session-journal/journal-row-builders'
-import type { JournalLifecycleIdentityMutationInput } from '../native-chat/agent-session-journal/journal-lifecycle-mutation'
 import {
   continuedOutsideNotice,
   continuedOutsideRecordId,
@@ -50,7 +49,7 @@ export function createClaudeTranscriptImportPlan(input: {
   rewound: boolean | null
   check: () => void
 }) {
-  const mutations = new Map<string, JournalLifecycleIdentityMutationInput>()
+  const mutations = new Map<string, ReturnType<typeof journalLifecycleItemMutation>>()
   const { saved, scopeOf, promptScope, dependencies } = createClaudeTranscriptItemReader(
     input.journal
   )

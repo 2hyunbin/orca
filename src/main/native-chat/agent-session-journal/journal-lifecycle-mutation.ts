@@ -54,7 +54,7 @@ export function journalLifecycleItemMutation(
   attribution: AgentJournalRowAttribution & JournalItemEcho & { observedAt?: number },
   identity: AgentJournalItemIdentity,
   body: AgentJournalItemBody
-): JournalLifecycleIdentityMutationInput {
+): Extract<JournalLifecycleIdentityMutationInput, { kind: 'item' }> {
   const { turnScope } = attribution
   return {
     kind: 'item',
