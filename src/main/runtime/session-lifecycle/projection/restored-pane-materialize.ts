@@ -30,6 +30,7 @@ import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-ho
 import type { WorkspaceLayoutStream } from '../../workspace-layout-stream'
 import { parsePaneKey } from '../../../../shared/stable-pane-id'
 import { isUnclaimedRunningSleepRecord } from './sleep-record-pane-claim'
+import { worktreeIdsEqual } from '../../../../shared/worktree/id'
 
 export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBuildHeadlessMobileSessionBrowserTabs {
   protected abstract resolveAgentLaunchRuntime(
@@ -111,7 +112,10 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
   async resumeSleptWorkspaceAgents(worktreeId: string): Promise<void> {
     const records = Object.values(
       this.getWorkspaceSessionForWorktree(worktreeId)?.sleepingAgentSessionsByPaneKey ?? {}
-    ).filter((record) => record.worktreeId === worktreeId && isUnclaimedRunningSleepRecord(record))
+    ).filter(
+      (record) =>
+        worktreeIdsEqual(record.worktreeId, worktreeId) && isUnclaimedRunningSleepRecord(record)
+    )
     const panes = records.flatMap((record) => {
       const pane = parsePaneKey(record.paneKey)
       return pane ? [{ worktreeId, tabId: pane.tabId, leafId: pane.leafId }] : []
