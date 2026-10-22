@@ -1,7 +1,10 @@
 import { useAppStore } from '@/store'
 import type { PtyConnectResult } from '../pty-transport-types'
 import { createBrowserUuid } from '@/lib/browser-uuid'
-import { peekMainStartedPaneView } from '@/store/terminals/main-started-pane-view'
+import {
+  peekMainStartedPaneView,
+  takeMainGaveBackPane
+} from '@/store/terminals/main-started-pane-view'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../../shared/layout-owner-switch'
 import { parseLegacyNumericPaneKey } from '../../../../../shared/stable-pane-id'
 import { neutralTerminalTitle } from '../../../../../shared/terminal-pane-title-reset'
@@ -152,7 +155,7 @@ export function installSleepingRecordAccess(session: ConnectPanePtySession): voi
   session.ownsStartupDraftPaste = session.claimStartupDraftPasteDelivery()
   // Main gave back a start this pane captured while it waited: the draft is this pane's again.
   session.reclaimStartupDraftFromMain = (): void => {
-    if (session.mainStartedPaneView && !peekMainStartedPaneView(session.cacheKey)) {
+    if (session.mainStartedPaneView && takeMainGaveBackPane(session.cacheKey)) {
       session.mainStartedPaneView = undefined
       session.ownsStartupDraftPaste = session.claimStartupDraftPasteDelivery()
     }

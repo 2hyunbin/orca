@@ -10,7 +10,7 @@ import {
   markAgentStartupDeliveryConsumed,
   releaseAgentStartupDeliveryConsumed
 } from '@/lib/agent-startup-delivery-guards'
-import { forgetMainStartedPane, noteMainStartsPane } from './main-started-pane-view'
+import { giveBackMainStartedPane, noteMainStartsPane } from './main-started-pane-view'
 
 type TabStartup = AppState['pendingStartupByTabId'][string]
 
@@ -110,7 +110,7 @@ export function takeStartupBackFromMain(
   paneKey: string,
   startup: TabStartup | undefined
 ): void {
-  forgetMainStartedPane(paneKey)
+  giveBackMainStartedPane(paneKey)
   if (startup?.launchToken && startupDraftPaste(startup)) {
     releaseAgentStartupDeliveryConsumed(
       agentStartupDeliveryKey({ worktreeId, tabId, launchToken: startup.launchToken })
