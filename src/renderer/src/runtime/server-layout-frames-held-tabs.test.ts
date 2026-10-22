@@ -548,4 +548,27 @@ describe('a staged server-hosted browser tab (L285)', () => {
     expect(wasStagedBrowserTabHandedToFrames(staged.workspaceId, 'server-page-1')).toBe(true)
     expect(DESKTOP_CREATED_SERVER_TAB_HOLDS.isTabHeld(WT, staged.workspaceId)).toBe(false)
   })
+
+  it('leaves no hold on a tab the mirror adopted before the frames drew the workspace', async () => {
+    const { store, stream, frames } = await appStoreFrameDrawn()
+    const staged = stageWebRuntimeBrowserTab({
+      environmentId: ENV,
+      worktreeId: WT,
+      remotePageId: 'server-page-1',
+      activate: true,
+      targetGroupId: HOST_GROUP
+    })!
+    // The mirror's adoption: same rows, the handle no longer staged.
+    store.getState().setRemoteBrowserPageHandle(staged.pageId, {
+      environmentId: ENV,
+      remotePageId: 'server-page-1'
+    })
+
+    streams.send(stream, frames.records(WT, WITH_PAGE))
+    await settle()
+    expect(check.workspaceBuilt).toContain(WT)
+    expect(tabIds(store)).not.toContain(staged.tabId)
+    expect(tabIds(store)).toContain('server-browser-tab')
+    expect(DESKTOP_CREATED_SERVER_TAB_HOLDS.isTabHeld(WT, staged.tabId!)).toBe(false)
+  })
 })

@@ -217,30 +217,37 @@ function holdStagedBrowserTab(
 }
 
 /**
- * A staged tab whose page the server's layout now lists is the server's: its frames draw the page
- * in their own tab and drop this one, which the create reads as the frames taking it over (L284).
+ * A held browser tab whose page the server's layout now lists is the server's: its frames draw the
+ * page in their own tab and drop this one, which a create still in flight reads as the frames taking
+ * it over (L284). Also a tab the mirror adopted before the frames drew the workspace.
  */
-export function releaseStagedBrowserTabsTheServerLists(
-  worktreeId: string,
-  serverPageIds: ReadonlySet<string>
+export function releaseHeldBrowserTabsTheServerLists(
+  environmentId: string,
+  serverPageIdsByWorkspace: ReadonlyMap<string, ReadonlySet<string>>
 ): void {
   const state = useAppStore.getState()
-  const pageIds = Object.entries(state.remoteBrowserPageHandlesByPageId).flatMap(
-    ([pageId, handle]) =>
-      handle?.staged === true && serverPageIds.has(handle.remotePageId) ? [pageId] : []
+  const listed = [...serverPageIdsByWorkspace.values()]
+  const pageIds = new Set(
+    Object.entries(state.remoteBrowserPageHandlesByPageId).flatMap(([pageId, handle]) =>
+      handle?.environmentId === environmentId && listed.some((ids) => ids.has(handle.remotePageId))
+        ? [pageId]
+        : []
+    )
   )
-  if (pageIds.length === 0) {
+  if (pageIds.size === 0) {
     return
   }
-  for (const workspace of state.browserTabsByWorktree[worktreeId] ?? []) {
-    if (!pageIds.some((pageId) => workspace.pageIds?.includes(pageId))) {
-      continue
-    }
-    const tabId = state.unifiedTabsByWorktree[worktreeId]?.find(
-      (tab) => tab.contentType === 'browser' && tab.entityId === workspace.id
-    )?.id
-    for (const id of stagedTabIds({ workspaceId: workspace.id, ...(tabId ? { tabId } : {}) })) {
-      forgetDesktopCreatedServerTab(id)
+  for (const worktreeId of serverPageIdsByWorkspace.keys()) {
+    for (const workspace of state.browserTabsByWorktree[worktreeId] ?? []) {
+      if (!workspace.pageIds?.some((pageId) => pageIds.has(pageId))) {
+        continue
+      }
+      const tabId = state.unifiedTabsByWorktree[worktreeId]?.find(
+        (tab) => tab.contentType === 'browser' && tab.entityId === workspace.id
+      )?.id
+      for (const id of stagedTabIds({ workspaceId: workspace.id, ...(tabId ? { tabId } : {}) })) {
+        forgetDesktopCreatedServerTab(id)
+      }
     }
   }
 }
