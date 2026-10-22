@@ -16,6 +16,7 @@ export function structuredAgentSessionStatusSummary({
   record,
   state,
   stopping,
+  usageLimitContinue,
   childWork,
   now
 }: {
@@ -28,6 +29,7 @@ export function structuredAgentSessionStatusSummary({
   journal: AgentSessionJournal
   record: AgentSessionRecord | null
   state: StructuredAgentSessionStatusState
+  usageLimitContinue?: AgentSessionStatusSummary['usageLimitContinue']
   /** A person's Stop is still ending the work it stopped. */
   stopping: boolean
   childWork: Pick<AgentSessionStatusSummary, 'children' | 'backgroundTasks'>
@@ -42,6 +44,7 @@ export function structuredAgentSessionStatusSummary({
   const launchDirectory = record ? agentSessionPinnedLaunchDirectory(record) : undefined
   return {
     sessionId,
+    ...(usageLimitContinue ? { usageLimitContinue } : {}),
     workspaceId: session.params.location.workspaceId,
     agent: session.params.provider,
     ...(session.child

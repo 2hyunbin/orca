@@ -1,6 +1,7 @@
 // A turn one of the agent's usage limits ended, as its row says, and whether the chat still sits on
 // it. Derived from the journal each time, never stored; the chat offers Continue from it.
 
+import { readAgentJournalTurn } from './agent-session-turn-record'
 import { isRootAgentJournalItem } from './agent-session-journal-producer'
 import { readAgentSessionFailureFact } from './agent-session-failure'
 import type { AgentJournalRenderItem, AgentJournalSubmission } from './agent-session-journal-types'
@@ -19,14 +20,29 @@ function usageLimitOfRow(item: AgentJournalRenderItem): AgentSessionUsageLimit |
   return fact?.kind === 'usageLimitReached' ? (fact.usageLimit ?? {}) : null
 }
 
+export type NativeChatUsageLimitCut = {
+  turnItemId: string
+  resetsAt?: number
+  turnEndedAt?: number
+}
+
 /** The latest root turn, when a usage limit ended it and nothing was sent since. Null otherwise. */
 export function latestNativeChatUsageLimitCut(
   items: readonly AgentJournalRenderItem[],
   submissions: readonly Pick<AgentJournalSubmission, 'dispatchState'>[]
-): { turnItemId: string } | null {
+): NativeChatUsageLimitCut | null {
   const latest = latestNativeChatTurnSinceRequest(items, submissions)
-  return latest?.verdict === 'failure' &&
-    findInNativeChatTurn(items, latest.turnItem.itemId, usageLimitOfRow) !== null
-    ? { turnItemId: latest.turnItem.itemId }
-    : null
+  if (!latest || latest.verdict !== 'failure') {
+    return null
+  }
+  const limit = findInNativeChatTurn(items, latest.turnItem.itemId, usageLimitOfRow)
+  if (limit === null) {
+    return null
+  }
+  const turn = readAgentJournalTurn(latest.turnItem.body)
+  return {
+    turnItemId: latest.turnItem.itemId,
+    ...(limit.resetsAt !== undefined ? { resetsAt: limit.resetsAt } : {}),
+    turnEndedAt: latest.turnItem.recoveredAt ?? turn?.completedAt
+  }
 }

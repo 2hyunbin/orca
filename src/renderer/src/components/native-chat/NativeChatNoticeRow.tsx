@@ -1,3 +1,4 @@
+import { NativeChatUsageLimitAutoContinue } from './NativeChatUsageLimitAutoContinue'
 import { NativeChatUsageLimitActions } from './NativeChatUsageLimitActions'
 import { AlertCircle, AlertTriangle, Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -214,6 +215,9 @@ export function NativeChatNoticeRow({
         ) : null}
       </div>
       {usageLimitContinue ? <NativeChatUsageLimitActions /> : null}
+      {usageLimitContinue && orcaStopView.usageLimitAutoContinue ? (
+        <NativeChatUsageLimitAutoContinue state={orcaStopView.usageLimitAutoContinue} />
+      ) : null}
       {claudeSignIn && isClaudeSignInFailureKind(block.failure?.kind) ? (
         <Button
           type="button"

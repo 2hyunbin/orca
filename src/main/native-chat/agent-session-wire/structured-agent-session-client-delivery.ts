@@ -48,7 +48,9 @@ export class StructuredAgentSessionClientDelivery {
     /** A session's child records changed; the chat strip republishes from them. */
     onChildWorkChanged: (sessionId: string) => void,
     // Required: an opening frame without the roster reads as "no tasks" to current clients.
-    readBackgroundTasks: NonNullable<SubscriberFieldHooks['readBackgroundTasks']>
+    readBackgroundTasks: NonNullable<SubscriberFieldHooks['readBackgroundTasks']>,
+    readUsageLimitContinue: (id: string) => AgentSessionStatusSummary['usageLimitContinue'] = () =>
+      undefined
   ) {
     this.statusFeed = createStructuredAgentSessionHostStatusFeed({
       sessions,
@@ -56,7 +58,8 @@ export class StructuredAgentSessionClientDelivery {
       currentWork: (sessionId, journal) => this.currentWork(sessionId, journal),
       deps,
       onAgentStarted,
-      onChildWorkChanged
+      onChildWorkChanged,
+      readUsageLimitContinue
     })
     this.turnCompletionFeed = new StructuredAgentSessionTurnCompletionFeed({
       sessions,

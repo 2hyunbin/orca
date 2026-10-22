@@ -1,3 +1,4 @@
+import * as usageLimitContinue from '../../shared/agent-session-usage-limit-continue'
 /** Durable single-writer session records and their operation ledger, as rows in the host's chat
  *  journal database. */
 
@@ -252,7 +253,12 @@ export class AgentSessionRecordStore {
     return this.mutate(args.sessionId, (record) => evictAgentSessionOwner({ ...args, record }))
   }
 
-  async transitionHandoff(
+  cancelUsageLimitContinue = (id: string, cut: usageLimitContinue.UsageLimitContinueIdentity) =>
+    this.mutate(id, (record) =>
+      usageLimitContinue.cancelAgentSessionUsageLimitContinue(record, cut)
+    )
+
+  transitionHandoff(
     sessionId: string,
     transition: (record: AgentSessionRecord) => AgentSessionRecord
   ): Promise<AgentSessionRecord> {

@@ -18842,6 +18842,7 @@
         "accountUnavailable": "此聊天无法切换到其他账户。请将其移交给其他智能体。"
       },
       "usageLimitAutoContinue": {
+        "cancelFailed": "无法取消自动继续。请重试。",
         "openSetting": "额度重置后自动继续",
         "cancelled": "Orca 不会自动继续此聊天。",
         "scheduled": "Orca 将在 {{time}} 继续此聊天。",

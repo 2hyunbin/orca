@@ -85,6 +85,8 @@ export class RuntimeClientSettingsController {
       artifactSharingEnabled: isArtifactSharingEnabled(settings),
       worktreeVisibilityDefaults: settings.worktreeVisibilityDefaults ?? { external: 'hide' },
       agentSkillSharingEnabled: isAgentSkillSharingEnabled(settings),
+      nativeChatAutoContinueAfterUsageLimit:
+        settings.nativeChatAutoContinueAfterUsageLimit === true,
       machineName: settings.machineName ?? '',
       // Why projected: a web client's Settings → Chat edits this host's new-chat default.
       ...(settings.nativeChatPermissionMode

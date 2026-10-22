@@ -156,6 +156,11 @@ export type StructuredAgentSessionHostDeps = {
   now?: () => number
   /** The idle sweep's period and window. Tests drive these; production takes the defaults. */
   idleSweep?: { intervalMs?: number; idleMs?: number }
+  usageLimitAutoContinue?: {
+    isEnabled: () => boolean
+    subscribe: (changed: () => void) => () => void
+    isWorkspaceAsleep: (workspaceId: string) => boolean
+  }
   /** How long a start may stay silent, and its ceiling. Tests drive these; production takes the
    *  host constants. */
   startupLimits?: Partial<StructuredAgentSessionStartupLimits>

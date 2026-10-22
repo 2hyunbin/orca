@@ -33,6 +33,7 @@ export type RuntimeClientSettings = Pick<
   | 'agentSkillSharingEnabled'
   | 'machineName'
   | 'nativeChatPermissionMode'
+  | 'nativeChatAutoContinueAfterUsageLimit'
   | 'agentNativeChatPermissionModes'
 > & {
   /** Older clients still read these; neither is persisted or accepted as an update. */
@@ -73,4 +74,5 @@ export type RuntimeClientSettingsUpdate = Pick<
   | 'worktreeVisibilityDefaults'
   | 'machineName'
   | 'nativeChatPermissionMode'
+  | 'nativeChatAutoContinueAfterUsageLimit'
 >

@@ -1,3 +1,4 @@
+import type { NativeChatUsageLimitAutoContinueState } from './NativeChatUsageLimitAutoContinue'
 import { createContext, useContext } from 'react'
 
 /** What a structured chat tells its rows about an Orca stop: the name of the machine whose Orca runs
@@ -13,6 +14,7 @@ export type NativeChatOrcaStopView = {
   continueNow: () => void
   /** The turn a usage limit ended whose row carries Continue right now, if any. */
   usageLimitTurnItemId: string | null
+  usageLimitAutoContinue?: NativeChatUsageLimitAutoContinueState | null
   usageLimitContinueDisabled?: boolean
   continueUsageLimit: (hadFocus?: boolean) => void
 }

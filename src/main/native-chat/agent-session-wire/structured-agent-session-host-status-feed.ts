@@ -20,6 +20,7 @@ import { structuredAgentSessionConversationFence } from './structured-agent-sess
  *  before its constructor parameters are assigned. */
 export function createStructuredAgentSessionHostStatusFeed(args: {
   sessions: StructuredAgentSessionStatusFeedDeps['sessions']
+  readUsageLimitContinue?: StructuredAgentSessionStatusFeedDeps['readUsageLimitContinue']
   now: () => number
   currentWork: StructuredAgentSessionSubagentRowsDeps['currentWork']
   deps: () => {
@@ -58,6 +59,7 @@ export function createStructuredAgentSessionHostStatusFeed(args: {
   })
   const feed = new StructuredAgentSessionStatusFeed({
     sessions: args.sessions,
+    readUsageLimitContinue: args.readUsageLimitContinue,
     getRecord: (sessionId) => args.deps().store.getRecord(sessionId),
     replacedRuntime: (sessionId) => args.deps().store.replacedRuntime(sessionId),
     now: args.now,

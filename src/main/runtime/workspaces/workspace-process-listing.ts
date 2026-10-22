@@ -265,6 +265,12 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         structuredAgentConfiguredArgs(agent, this.requireStore().getSettings()),
       // Wired only here, so a test runtime never runs a real `claude --version`.
       claudeCliFlags: claudeCliFlagSupport,
+      usageLimitAutoContinue: {
+        isEnabled: () =>
+          this.requireStore().getSettings().nativeChatAutoContinueAfterUsageLimit === true,
+        subscribe: (changed) => this.requireStore().onSettingsChanged?.(changed) ?? (() => {}),
+        isWorkspaceAsleep: (workspaceId) => this.isWorktreeTerminalSleepHeld(workspaceId)
+      },
       nativeChatVisuals: {
         isEnabled: () => this.requireStore().getSettings().nativeChatInlineVisuals !== false
       },

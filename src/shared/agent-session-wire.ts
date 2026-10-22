@@ -222,6 +222,11 @@ export type AgentSessionSubscribeEvent =
  *  from the journal so no client has to replay a transcript to learn whether a
  *  turn is running. Additive surface: an older host has no such method. */
 export type AgentSessionStatusSummary = {
+  usageLimitContinue?: {
+    turnItemId: string
+    resetsAt: number
+    state: 'scheduled' | 'cancelled' | 'failed' | 'off'
+  }
   rewindBlockedReason?: AgentSessionRewindReason
   sessionId: string
   workspaceId: string

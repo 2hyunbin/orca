@@ -27,6 +27,7 @@ export type StructuredAgentSessionStatusFeedDeps = {
   getRecord: (sessionId: string) => AgentSessionRecord | null
   /** `AgentSessionRecordStore.replacedRuntime`; absent where no runtime was replaced. */
   replacedRuntime?: (sessionId: string) => { fence: number } | undefined
+  readUsageLimitContinue?: (id: string) => AgentSessionStatusSummary['usageLimitContinue']
   now: () => number
   /** Where a failing sink or observer is reported; neither may cost subscribers their event. */
   logger: StructuredAgentSessionLogger
