@@ -1,7 +1,18 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
+import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import { createTrackedJournalOpener } from '../agent-session-journal/journal-host-database-test-support'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import { createDeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import { testEventSinkLogging } from './structured-agent-session-logger-test-support'
 import type { HistoryCatchUpPlan } from './structured-agent-session-history-catch-up'
-import { runHistoryCatchUp } from './structured-agent-session-history-catch-up'
+import {
+  createHistoryCatchUpBatch,
+  runHistoryCatchUp
+} from './structured-agent-session-history-catch-up'
 
 describe('history catch-up runner', () => {
   afterEach(() => vi.useRealTimers())
@@ -49,7 +60,7 @@ describe('history catch-up runner', () => {
   const plan: HistoryCatchUpPlan = {
     settlementId: 's',
     mutations: [{ kind: 'tombstone', identity: { provider: 'orca', clientMessageId: 'old' } }],
-    keys: [],
+    keys: [agentJournalItemKey({ provider: 'orca', clientMessageId: 'old' })],
     reservedBytes: 1
   }
   it('gives up at the deadline when the commit never becomes durable', async () => {
@@ -104,5 +115,85 @@ describe('history catch-up runner', () => {
     expect(await runHistoryCatchUp(input)).toBe('skipped')
     const step = append.mock.calls[0]?.[0].steps[0]
     expect(step?.resolve(journal)).toEqual([])
+  })
+  it('completes saved items only while all saved reads match, and checks empty plans without writes', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-31622-expected-items-'))
+    const journals = createTrackedJournalOpener()
+    const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
+    try {
+      const journal = await journals.open({
+        stateDirectory: root,
+        identity: {
+          sessionId: 'expected-items',
+          workspaceId: 'ws',
+          hostId: 'local',
+          agent: 'codex',
+          providerHandle: codexProviderHandle('thread')
+        }
+      })
+      const publish = vi.fn()
+      deferred.bind({ journal, fence: 1, publish })
+      const identity = { provider: 'codex' as const, threadId: 't', turnId: 't', ordinal: 0 }
+      const parent = { ...identity, ordinal: 1 }
+      const key = agentJournalItemKey(identity)
+      const parentKey = agentJournalItemKey(parent)
+      const body = (text: string) => ({
+        kind: 'message' as const,
+        role: 'assistant' as const,
+        blocks: [{ type: 'text' as const, text }]
+      })
+      const options = { fence: 1, turnScope: { kind: 'thread' as const } }
+      await journal.appendItem(identity, body('prefix'), options)
+      await journal.appendItem(parent, body('eligible parent'), options)
+      const original = journal.item(key)
+      const expected = (itemKey: string) => {
+        const item = journal.item(itemKey)
+        if (!item) {
+          throw new Error('missing saved item')
+        }
+        return { canonicalItemId: item.itemId, revision: item.revision }
+      }
+      const make = (text: string) => {
+        const batch = createHistoryCatchUpBatch()
+        batch.revise(
+          { kind: 'item', identity, body: body(text), turnScope: options.turnScope },
+          expected(key)
+        )
+        batch.expectItem(parentKey, expected(parentKey))
+        return batch.finish('complete', ['same source keys'])
+      }
+      const { input } = fixture()
+      const run = (prepared: HistoryCatchUpPlan) =>
+        runHistoryCatchUp({
+          ...input,
+          sink: deferred.sink,
+          timeoutMs: 5_000,
+          prepare: async () => prepared
+        })
+      const first = make('complete')
+      expect(make('different contents').settlementId).not.toBe(first.settlementId)
+      expect(await run(first)).toBe('committed')
+      expect(journal.item(key)).toMatchObject({
+        ...original,
+        body: body('complete'),
+        revision: (original?.revision ?? -1) + 1
+      })
+      const stale = make('later completion')
+      await journal.appendItem(parent, body('changed parent'), options)
+      const before = journal.cursor()
+      expect(await run(stale)).toBe('skipped')
+      expect(journal.cursor()).toEqual(before)
+      expect(journal.itemBody(key)).toEqual(body('complete'))
+      const empty = createHistoryCatchUpBatch()
+      empty.expectItem(key, expected(key))
+      const publications = publish.mock.calls.length
+      expect(await run(empty.finish('checked', []))).toBe('checked')
+      expect(journal.cursor()).toEqual(before)
+      expect(publish).toHaveBeenCalledTimes(publications)
+    } finally {
+      deferred.close()
+      await journals.closeAll()
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })
