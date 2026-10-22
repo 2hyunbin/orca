@@ -12947,7 +12947,7 @@
           "reassurance": "Runs on each host, reached over your own SSH connection. Your code and files stay where they are. Only Orca’s list of projects, tabs and terminals moves to the host."
         },
         "sshHostServer": {
-          "sourceChanged": "An older version of Orca changed this host’s projects. Move those changes to this host’s Orca server, or keep the server’s version, to connect again.",
+          "sourceChanged": "This computer has projects or folders for this host that its Orca server doesn’t have yet, often added by an older version of Orca. Move them to this host’s Orca server, or keep the server’s version, to connect again.",
           "deploying": "Setting up Orca on {{host}}…",
           "converting": "Moving to Orca on {{host}}…",
           "connecting": "Connecting to Orca on {{host}}…",
@@ -14819,6 +14819,7 @@
             "sourceActionsUnavailable": "The transcript source is unavailable."
           },
           "AiVaultScanProgressStrip": {
+            "agentChecked": "{{agent}}: {{settled}} of {{total}} history candidates checked",
             "fileCount_one": "{{value0}} file",
             "fileCount_other": "{{value0}} files",
             "databaseCount_one": "{{value0}} database",

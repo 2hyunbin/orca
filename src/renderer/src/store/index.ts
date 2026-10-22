@@ -65,6 +65,7 @@ import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-swit
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
 import { withEditorBufferRecords } from './editor-buffer-record-lifecycle'
+import { attachEditorBufferIdentityEvents } from './editor-buffer-identity-events'
 import {
   registerRendererMemoryProfileContributor,
   summarizeStateCollectionSizes
@@ -156,6 +157,7 @@ installPtyProcessExitObserver((payload) => {
   )
 })
 registerHttpLinkStoreAccessor(() => useAppStore.getState())
+attachEditorBufferIdentityEvents(() => useAppStore.getState())
 registerWindowsPathAccessEnvironments(() => useAppStore.getState().runtimeEnvironments)
 registerWorkspaceHttpLinkBrowserOpener(async (request) => {
   const { openWorkspaceBrowserTab } = await import('@/lib/workspace-browser-tab-open')
