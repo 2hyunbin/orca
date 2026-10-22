@@ -238,7 +238,7 @@ describe('launchAiVaultSessionInNewTab', () => {
   it.each([undefined, 'explicit-group'])(
     'derives the source group before the paired launch and preserves explicit target %s',
     (targetGroupId) => {
-      runtimeMocks.runtimeEnvironmentIdWithLegacyFallbackUnlessTwin.mockReturnValue('env-1')
+      runtimeMocks.runtimeEnvironmentIdOrLocalUnlessTwin.mockReturnValue('env-1')
       runtimeMocks.isWebRuntimeSessionActive.mockReturnValue(true)
       mockState.unifiedTabsByWorktree['wt-1'] = [{ id: 'chat-C', groupId: 'source-group' }]
       launchAiVaultSessionInNewTab({

@@ -1,6 +1,7 @@
 import { useAppStore } from '@/store'
 import { parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { getIndexedWorktreeById } from '@/store/worktree-repo-index'
+import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import { resolveWorktreeDisplayName } from '@/lib/worktree-default-display-name'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
@@ -62,9 +63,14 @@ export async function switchIntoOwner(
     const scope = parseWorkspaceKey(structuredSession.workspaceId)
     const folder =
       scope?.type === 'folder'
-        ? state.folderWorkspaces.find((workspace) => workspace.id === scope.folderWorkspaceId)
+        ? selectFolderWorkspaces(state).find(
+            (workspace) => workspace.id === scope.folderWorkspaceId
+          )
         : undefined
-    const worktree = getIndexedWorktreeById(state.worktreesByRepo, structuredSession.workspaceId)
+    const worktree = getIndexedWorktreeById(
+      selectWorktreesByRepo(state),
+      structuredSession.workspaceId
+    )
     const workspace =
       folder?.name ??
       (worktree ? resolveWorktreeDisplayName(worktree) : structuredSession.workspaceId)

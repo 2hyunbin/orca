@@ -9,7 +9,8 @@ export function revealCreatedTerminal(args: {
   ptyId: string
   handle: string
   cwd: string
-  launchOpts: dependencies.TerminalCreateOptions
+  launchOpts: Omit<dependencies.TerminalCreateOptions, 'title'> &
+    Pick<dependencies.RuntimeTerminalCreate, 'title'>
   effectiveLaunchConfig: dependencies.TerminalCreateOptions['launchConfig']
   launchToken: string | undefined
   presentation: RuntimeTerminalPresentation | undefined

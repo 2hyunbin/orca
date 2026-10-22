@@ -24,6 +24,7 @@ import type {
 import type { PtyProcessInspection } from '../providers/pty-process-inspection'
 import type { WriteSettlement } from '../../shared/pty-write-settlement'
 import type { TerminalInputKind } from '../../shared/terminal-input-kind'
+import type { StartupCwdFallback } from '../../shared/startup-cwd-fallback'
 
 export type PtyInventoryRefreshOptions = {
   includeForegroundProcessEvidence?: boolean
@@ -117,6 +118,7 @@ export type RuntimePtyController = {
     PtySpawnResult & {
       stablePaneOwner?: { handle: string; tabId: string; leafId: string }
       savedStartupCwd?: string
+      startupCwdFallback?: StartupCwdFallback
     }
   >
   /** The local terminal owner's automatic-restore state; null when it has no fork gate. */

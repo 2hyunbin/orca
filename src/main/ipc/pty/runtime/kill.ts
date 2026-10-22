@@ -215,7 +215,7 @@ export async function stopAndWaitPtyFromRuntimeController(
 async function stopAndWaitPty(
   deps: PtyRuntimeControllerDeps,
   ptyId: string,
-  opts?: { keepHistory?: boolean; deadlineMs?: number }
+  opts?: Parameters<typeof stopAndWaitPtyFromRuntimeController>[2]
 ): Promise<boolean> {
   const {
     runtime,
