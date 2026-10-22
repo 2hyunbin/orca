@@ -414,7 +414,7 @@ it.each([
 ] as const)(
   'reports a %s continuation once in a toast and in the status bar',
   async (outcome, label, said) => {
-    fakeHost({}, () => (outcome === 'refused' ? 'refused' : 'unknown'))
+    fakeHost({}, () => (outcome === 'refused' ? 'refused' : 'unknown'), 'agent_session_conflict')
     await mount(
       <>
         <NativeChatResumeOnRestartModal />
@@ -426,6 +426,11 @@ it.each([
     expect(toasts()).toEqual([[said]])
     // One offer read and one bulk action.
     expect(rpc).toHaveBeenCalledTimes(2)
+    if (outcome === 'refused') {
+      await act(async () => lastToastShow()?.())
+      expect(button('Retry')).toBeTruthy()
+      expect(chatBox('a').getAttribute('data-state')).toBe('checked')
+    }
   }
 )
 
@@ -442,20 +447,22 @@ it('keeps the offer listed after an unreadable resume response', async () => {
   expect(document.querySelector('[role="dialog"]')).toBeNull()
 })
 
-// A lost reply leaves delivery uncertain; only a positive host failure can offer Retry.
-it('keeps a lost request unconfirmed until the host confirms a retryable failure', async () => {
+// A host observation cannot settle a lost action reply; closing its summary restores host facts.
+it('keeps a lost request unconfirmed until its viewed summary retires', async () => {
   let sessions = offered
   let continueFails = true
+  let failures: ReturnType<typeof failure>[] = []
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
   const lost = new Error('response lost')
   rpc.mockImplementation(async (_target, method) => {
     if (method === 'agentSession.restartResumable') {
-      return { sessions, failed: [] }
+      return { sessions, failed: failures }
     }
     if (continueFails) {
       throw lost
     }
     sessions = []
+    failures = []
     return {
       resumed: [{ sessionId: 'b', outcome: 'resumed' }],
       continued: [{ sessionId: 'b', outcome: 'continued' }],
@@ -504,8 +511,14 @@ it('keeps a lost request unconfirmed until the host confirms a retryable failure
   expect([...document.querySelectorAll('button')].some((row) => row.textContent === 'Retry')).toBe(
     false
   )
-  rpc.mockResolvedValueOnce({ sessions: [], failed: [failure('b', 'agent_session_conflict')] })
+  sessions = []
+  failures = [failure('b', 'agent_session_conflict')]
   await act(async () => refreshNativeChatRestartOffer())
+  expect([...document.querySelectorAll('button')].some((row) => row.textContent === 'Retry')).toBe(
+    false
+  )
+  await act(async () => button('Close').click())
+  await act(async () => show?.())
   await act(async () => button('Retry').click())
   expect(calls().at(-1)).toEqual(['agentSession.restartContinue', { sessionIds: ['b'] }])
   expect(getNativeChatRestartOffer()).toMatchObject({ candidates: [], failed: [] })

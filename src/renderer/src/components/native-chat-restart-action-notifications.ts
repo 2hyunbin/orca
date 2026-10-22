@@ -182,11 +182,8 @@ export function announceRestartResults(
     hostFailed === undefined
       ? notContinued
       : notContinued.filter((sessionId) => failed.has(sessionId) || sentUnconfirmed(sessionId))
-  // The filed outcome is what the list shows, so the toast uses it too.
-  const unconfirmed = (sessionId: string): boolean =>
-    (failed.get(sessionId) ?? (sentUnconfirmed(sessionId) ? 'unconfirmed' : 'refused')) ===
-    'unconfirmed'
-  const unconfirmedCount = reported.filter(unconfirmed).length
+  // Only normalized action outcomes settle delivery; a host list is an observation.
+  const unconfirmedCount = reported.filter(sentUnconfirmed).length
   const continuedCount = new Set(requested).size - notContinued.length
   announceResume(
     continuedCount,

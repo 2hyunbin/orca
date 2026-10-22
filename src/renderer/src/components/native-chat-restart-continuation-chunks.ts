@@ -93,12 +93,6 @@ export async function continueRestartChunks(
       const read = await owner.refresh()
       if (owner.current()) {
         result.failed = read.available ? owner.failures() : undefined
-        const failures = new Map(result.failed?.map((row) => [row.sessionId, row.outcome]))
-        result.continued = result.continued.map((entry) =>
-          chunk.includes(entry.sessionId) && failures.get(entry.sessionId) === 'refused'
-            ? { ...entry, outcome: 'refused' }
-            : entry
-        )
       }
       break
     }

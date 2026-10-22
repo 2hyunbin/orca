@@ -6,6 +6,7 @@ import {
   useNativeChatTargetRestartResuming,
   useNativeChatRestartRuntimes
 } from './native-chat-restart-runtimes'
+import { NativeChatResumeStatusSegment } from './status-bar/NativeChatResumeStatusSegment'
 import { resumeRunView } from './native-chat-resume-run-view'
 import { RuntimeRpcCallError } from '@/runtime/runtime-rpc-result'
 import {
@@ -462,3 +463,96 @@ it('enrolls an ordinary paired desktop once and shares resuming with target cons
   expect(document.querySelector('output')?.textContent).toBe('')
   expect(rpc).toHaveBeenCalledTimes(count)
 })
+
+it.each(['available', 'unavailable', 'other-desktop'])(
+  'retains unknown retry evidence over host observations (%s)',
+  async (mode) => {
+    let remote: NativeChatRestartStore | undefined
+    let inProgress = false
+    let hostFailure = { ...failure('a', 'agent_session_conflict'), failedAt: 10, retryable: true }
+    const reply = Promise.withResolvers<unknown>()
+    rpc.mockImplementation(async (_target, method, params) => {
+      if (method === 'agentSession.restartResumable') {
+        if (inProgress && mode === 'unavailable') {
+          throw new Error('read unavailable')
+        }
+        return { sessions: [], failed: [hostFailure] }
+      }
+      expect(params).toEqual({ sessionIds: ['a'] })
+      // Another desktop settles F20 before this request reserves it; reservation retains failure.
+      if (mode === 'other-desktop') {
+        hostFailure = { ...hostFailure, failedAt: 20 }
+      }
+      inProgress = true
+      return reply.promise
+    })
+    useAppStore.setState({
+      settings: { ...useAppStore.getState().settings, experimentalNativeChat: false },
+      runtimeEnvironments: [
+        {
+          id: 'ssh',
+          name: 'Server',
+          createdAt: 0,
+          updatedAt: 0,
+          lastUsedAt: null,
+          runtimeId: 'r1',
+          endpoints: [],
+          preferredEndpointId: 'none'
+        }
+      ],
+      runtimeStatusByEnvironmentId: new Map([['ssh', ready('r1')]])
+    })
+    function Fixture() {
+      remote = useNativeChatRestartRuntimes()[0]?.store
+      return (
+        <>
+          <NativeChatResumeStatusSegment iconOnly={false} />
+          {remote && (
+            <NativeChatResumeRuntimeModal store={remote} machineName="Server" offerEnabled />
+          )}
+        </>
+      )
+    }
+    await mount(<Fixture />)
+    await act(async () => button('Server: 1 chat failed to resume. Click for details.').click())
+    await act(async () => button('Retry').click())
+    expect(inProgress).toBe(true)
+    expect(hostFailure.failedAt).toBe(mode === 'other-desktop' ? 20 : 10)
+    await act(async () => {
+      reply.reject(new Error('Timed out waiting for the remote Orca runtime to respond.'))
+    })
+    expect(remote!.getNativeChatRestartRun()?.continued).toEqual([
+      { sessionId: 'a', outcome: 'unknown' }
+    ])
+    expect(vi.mocked(toast.warning)).toHaveBeenCalledWith(
+      'Couldn’t confirm 1 chat was resumed',
+      expect.objectContaining({ action: expect.objectContaining({ label: 'Review' }) })
+    )
+    const statusLabel = 'Server: 1 chat to check after resuming. Click for details.'
+    expect(document.querySelectorAll(`button[aria-label="${statusLabel}"]`)).toHaveLength(1)
+    await act(async () => button(statusLabel).click())
+    expect(document.body.textContent).toContain('Open the chat and check before sending another.')
+    expect(
+      [...document.querySelectorAll('button')].some((row) => row.textContent === 'Retry')
+    ).toBe(false)
+    expect(document.querySelector('[role="checkbox"][data-state="checked"]')).toBeNull()
+    expect(button('Open chat')).toBeTruthy()
+    await act(async () => remote!.reopenNativeChatRestartOffer())
+    expect(document.body.textContent).toContain('Open the chat and check before sending another.')
+    expect(
+      rpc.mock.calls.filter((call) => call[1] === 'agentSession.restartContinue')
+    ).toHaveLength(1)
+    expect(remote!.getNativeChatRestartOffer().failed[0]).toEqual({
+      ...hostFailure,
+      executionHostId: 'runtime:ssh'
+    })
+    await act(async () => button('Close').click())
+    expect(remote!.getNativeChatRestartRun()).toBeNull()
+    await act(async () => remote!.reopenNativeChatRestartOffer())
+    expect(button('Retry')).toBeTruthy()
+    expect(document.body.textContent).not.toContain(
+      'Open the chat and check before sending another.'
+    )
+    await act(async () => useAppStore.setState({ runtimeEnvironments: [] }))
+  }
+)

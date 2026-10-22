@@ -33,7 +33,7 @@ export type ResumeRunView = {
 // What needs the user first, then what is still moving, then what is done.
 const ORDER: Record<Category, number> = { attention: 0, 'in-progress': 1, resumed: 2, other: 3 }
 
-/** Run-only uncertainty uses the same Open guidance; a current host failure takes precedence. */
+/** A host observation cannot settle this action’s unresolved delivery. */
 export function resumeRunFailures(run: ResumeRun | null, failed: readonly ResumeFailure[]) {
   const unknown = new Set(
     run?.inFlight
@@ -43,6 +43,7 @@ export function resumeRunFailures(run: ResumeRun | null, failed: readonly Resume
           .map((entry) => entry.sessionId)
   )
   return new Map<string, ResumeFailure>([
+    ...failed.map((failure) => [failure.sessionId, failure] as const),
     ...(run?.entries ?? [])
       .filter((entry) => unknown.has(entry.candidate.sessionId))
       .map(
@@ -56,8 +57,7 @@ export function resumeRunFailures(run: ResumeRun | null, failed: readonly Resume
               reason: 'agent_session_restart_request_failed'
             }
           ] as const
-      ),
-    ...failed.map((failure) => [failure.sessionId, failure] as const)
+      )
   ])
 }
 

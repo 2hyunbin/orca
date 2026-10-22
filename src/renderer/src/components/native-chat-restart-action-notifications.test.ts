@@ -147,14 +147,17 @@ it('preserves normalized uncertainty when a pending-list read omits the chat', (
 })
 
 // Unconfirmed means the agent may well be working; "couldn't be resumed" would invite a second send.
-// `b` reattached with no continuation row: only the host's filed outcome says it is unconfirmed.
-it('counts a chat the host filed as unconfirmed on its own line, as the list does', () => {
+// The normalized action result takes precedence over a different host observation.
+it('counts normalized uncertainty separately from matching refusal', () => {
   announceRestartResults(
     ['a', 'b'],
-    [{ sessionId: 'a', outcome: 'refused' }],
     [
       { sessionId: 'a', outcome: 'refused' },
-      { sessionId: 'b', outcome: 'unconfirmed' }
+      { sessionId: 'b', outcome: 'unknown' }
+    ],
+    [
+      { sessionId: 'a', outcome: 'unconfirmed' },
+      { sessionId: 'b', outcome: 'refused' }
     ],
     show
   )

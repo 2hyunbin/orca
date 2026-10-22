@@ -10,7 +10,7 @@ import {
 } from '../native-chat-resume-on-restart-store'
 import { useNativeChatRestartRuntimes } from '../native-chat-restart-runtimes'
 import { resumeRunInFlight } from '../native-chat-resume-run'
-import { resumeRunView } from '../native-chat-resume-run-view'
+import { resumeRunFailures, resumeRunView } from '../native-chat-resume-run-view'
 
 // Why: closing the resume dialog is a snooze, not a decline — the host keeps the offer. This is
 // then the only surface left carrying it, so it is always rendered rather than gated by
@@ -216,7 +216,7 @@ function NativeChatRuntimeResumeStatusSegment({
 }): React.JSX.Element | null {
   const { candidates, failed } = useNativeChatRestartOffer(offerEnabled, store)
   const run = useNativeChatRestartRun(store)
-  const failureBySession = new Map(failed.map((entry) => [entry.sessionId, entry]))
+  const failureBySession = resumeRunFailures(run, failed)
   const view = run ? resumeRunView(run, candidates, (id) => failureBySession.get(id), 'all') : null
   if (!offerEnabled) {
     return null
@@ -225,16 +225,11 @@ function NativeChatRuntimeResumeStatusSegment({
   // Count the selection once until the action publishes the host's remaining list.
   const running = run !== null && resumeRunInFlight(run)
   const inRun = new Set(running ? run.entries.map((entry) => entry.candidate.sessionId) : [])
-  const waiting = failed.filter((failure) => !inRun.has(failure.sessionId))
+  const waiting = [...failureBySession.values()].filter((failure) => !inRun.has(failure.sessionId))
   const pending = candidates.filter((candidate) => !inRun.has(candidate.sessionId)).length
-  const unknown = !running
-    ? [...(view?.statusBySession ?? [])].filter(
-        ([id, status]) => status.kind === 'unconfirmed' && !failureBySession.has(id)
-      ).length
-    : 0
-  const failures = waiting.length + unknown
+  const failures = waiting.length
   // An unconfirmed chat may be working, so "failed" would invite a duplicate "continue".
-  const unconfirmed = unknown > 0 || waiting.some((failure) => failure.outcome === 'unconfirmed')
+  const unconfirmed = waiting.some((failure) => failure.outcome === 'unconfirmed')
   // Only this run's own completed rows establish its success; older host failures are separate.
   const resumed =
     run !== null &&
