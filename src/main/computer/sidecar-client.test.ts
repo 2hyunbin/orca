@@ -13,11 +13,16 @@ import {
   resetComputerSidecarForTest
 } from './sidecar-client'
 
-const { forkMock, existsSyncMock, appEnvironment } = vi.hoisted(() => ({
-  forkMock: vi.fn(),
-  existsSyncMock: vi.fn((_path: string) => true),
-  appEnvironment: { current: null as { getAppPath(): string; isPackaged(): boolean } | null }
-}))
+type TestAppEnvironment = { getAppPath(): string; isPackaged(): boolean }
+
+const { forkMock, existsSyncMock, appEnvironment } = vi.hoisted(() => {
+  const environment: { current: TestAppEnvironment | null } = { current: null }
+  return {
+    forkMock: vi.fn(),
+    existsSyncMock: vi.fn((_path: string) => true),
+    appEnvironment: environment
+  }
+})
 
 vi.mock('child_process', () => ({
   fork: forkMock
