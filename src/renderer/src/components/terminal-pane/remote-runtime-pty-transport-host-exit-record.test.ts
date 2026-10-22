@@ -144,6 +144,37 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
     transport.destroy?.()
   })
 
+  it('keeps a pane whose host already holds a replacement for the exited terminal', async () => {
+    const onPtyExit = vi.fn()
+    const transport = await attachRestoredHostTab(onPtyExit)
+    const shown = answerShow({ connected: false, verdict: 'exited' })
+    const answer = runtimeCall.getMockImplementation()
+    runtimeCall.mockImplementation(async (args: { method: string; params?: unknown }) =>
+      args.method === 'terminal.resolvePane'
+        ? {
+            ok: true,
+            result: {
+              terminal: {
+                handle: 'terminal-restarted',
+                tabId: 'host-tab-1',
+                leafId: 'pane:1',
+                worktreeId: 'wt-1'
+              }
+            }
+          }
+        : answer?.(args)
+    )
+
+    refuseStream('terminal_handle_stale')
+
+    await vi.waitFor(() => expect(shown).toEqual(['terminal-ended']))
+    // Why: let the probe's pane read answer; a premature retirement lands within these turns.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(onPtyExit).not.toHaveBeenCalled()
+    expect(transport.getRecoveryState?.().phase).not.toBe('ended')
+    transport.destroy?.()
+  })
+
   it('settles a pane whose restore attach is refused as stale before it binds', async () => {
     const { createRemoteRuntimePtyTransport } = await import('./remote-runtime-pty-transport')
     const onPtyExit = vi.fn()
@@ -154,9 +185,23 @@ describe('remote runtime pane whose host session already ended (#31539)', () => 
       onPtyExit
     })
     const shown: string[] = []
+    let resolves = 0
     runtimeCall.mockImplementation(async (args: { method: string; params?: ShowParams }) => {
       if (args.method === 'terminal.resolvePane') {
-        return { ok: false, error: { code: 'runtime_error', message: 'terminal_handle_stale' } }
+        resolves += 1
+        return resolves === 1
+          ? { ok: false, error: { code: 'runtime_error', message: 'terminal_handle_stale' } }
+          : {
+              ok: true,
+              result: {
+                terminal: {
+                  handle: 'terminal-ended',
+                  tabId: 'tab-1',
+                  leafId: 'pane:1',
+                  worktreeId: 'wt-1'
+                }
+              }
+            }
       }
       if (args.method === 'terminal.show') {
         shown.push(args.params?.terminal ?? '')

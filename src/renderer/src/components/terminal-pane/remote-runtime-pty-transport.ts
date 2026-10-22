@@ -2252,31 +2252,48 @@ export function createRemoteRuntimePtyTransport(
     }
     hostExitProbeHandle = targetHandle
     const probeLifecycle = lifecycleEpoch
-    void callRuntime<{ terminal?: RuntimeTerminalShow }>('terminal.show', {
-      terminal: targetHandle
-    })
-      .then(
-        (result) => {
-          if (
-            destroyed ||
-            terminalEnded ||
-            probeLifecycle !== lifecycleEpoch ||
-            handle !== targetHandle ||
-            !hostRecordsTerminalExit(result?.terminal)
-          ) {
-            return
-          }
-          remotePtyId ??= exitedPtyId
-          const cause = result.terminal?.exitCause
-          retireRemoteTerminalId(cause?.kind === 'exited' ? cause.exitCode : undefined)
-        },
-        () => {}
-      )
+    const stillCurrent = (): boolean =>
+      !destroyed && !terminalEnded && probeLifecycle === lifecycleEpoch && handle === targetHandle
+    void (async () => {
+      const { terminal } = await callRuntime<{ terminal?: RuntimeTerminalShow }>('terminal.show', {
+        terminal: targetHandle
+      })
+      // Why: the old process's exit ends the pane only if the host has no replacement for it.
+      if (
+        !stillCurrent() ||
+        !hostRecordsTerminalExit(terminal) ||
+        !(await hostPaneHasNoReplacement(targetHandle)) ||
+        !stillCurrent()
+      ) {
+        return
+      }
+      remotePtyId ??= exitedPtyId
+      const cause = terminal?.exitCause
+      retireRemoteTerminalId(cause?.kind === 'exited' ? cause.exitCode : undefined)
+    })()
+      .catch(() => {})
       .finally(() => {
         if (hostExitProbeHandle === targetHandle) {
           hostExitProbeHandle = null
         }
       })
+  }
+
+  async function hostPaneHasNoReplacement(targetHandle: string): Promise<boolean> {
+    if (!tabId || !leafId || !worktreeId) {
+      return true
+    }
+    const paneTabId = isWebTerminalSurfaceTabId(tabId) ? toHostSessionTabId(tabId) : tabId
+    try {
+      const resolved = await callRuntime<{ terminal?: RuntimeTerminalResolvePane }>(
+        'terminal.resolvePane',
+        { paneKey: `${paneTabId}:${leafId}`, worktreeId }
+      )
+      return resolved.terminal?.handle === targetHandle
+    } catch (error) {
+      // Why: the host's own pane registry answering "no such pane" means nothing replaced it.
+      return runtimeTerminalErrorMessage(error).includes('terminal_not_found')
+    }
   }
 
   function rebindRemoteTerminalHandle(
