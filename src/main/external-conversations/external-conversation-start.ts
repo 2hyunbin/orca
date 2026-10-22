@@ -63,8 +63,9 @@ export function runtimeConversationLauncher(runtime: OrcaRuntimeService): Conver
 }
 
 /**
- * Launches the conversation's agent and links its pane as soon as the surface is published, so a
- * failure after that still leaves a conversation to follow. A failure before it throws.
+ * Launches the conversation's agent and links its pane as soon as the surface is published. Only
+ * a failure before anything was published throws, so its delivery id may retry; after that an
+ * agent may exist, so any failure, the link's included, is `unknown` and never launches again.
  */
 export async function launchConversation(
   launcher: ConversationLauncher,
@@ -73,13 +74,17 @@ export async function launchConversation(
   writeLink: (workspace: AgentPaneWorkspace, paneKey: string) => void
 ): Promise<Delivery> {
   // Settled to its error, so a failed write waits for the launch instead of going unhandled.
-  const link: { written: Promise<unknown> | null } = { written: null }
-  const onSurfacePublished = (surface: AgentLaunchPublishedSurface): void => {
-    const { outcome } = surface
+  const surface: { published: boolean; linked: Promise<unknown> | null } = {
+    published: false,
+    linked: null
+  }
+  const onSurfacePublished = (published: AgentLaunchPublishedSurface): void => {
+    surface.published = true
+    const { outcome } = published
     if (outcome.kind === 'terminal' && outcome.paneKey) {
       const paneKey = outcome.paneKey
-      link.written = launcher
-        .paneWorkspace(surface.worktreeId)
+      surface.linked = launcher
+        .paneWorkspace(published.worktreeId)
         .then((workspace) => writeLink(workspace, paneKey))
         .then(
           () => null,
@@ -88,22 +93,26 @@ export async function launchConversation(
     }
   }
   let result: AgentLaunchResult | null = null
-  let launchError: unknown = null
   try {
     result = await launcher.launch(input, onSurfacePublished, signal)
   } catch (error) {
-    launchError = error
-  }
-  if (!link.written) {
-    // Turned off before the agent existed: the launch stopped before any effect.
-    if (signal.aborted) {
-      return refused('connectors_disabled')
+    if (!surface.published) {
+      // Turned off before the agent existed: the launch stopped before any effect.
+      if (signal.aborted) {
+        return refused('connectors_disabled')
+      }
+      throw error
     }
-    throw launchError ?? new Error('connector_launch_without_pane')
   }
-  const linkError = await link.written
+  const linkError = surface.linked
+    ? await surface.linked
+    : new Error('connector_launch_without_pane')
   if (linkError) {
-    throw linkError
+    console.warn(
+      '[connectors] the agent launched but its conversation link was not written',
+      linkError
+    )
+    return { outcome: 'unknown', reason: 'launch_outcome_unknown' }
   }
   return result?.prompt?.outcome === 'handed-to-terminal'
     ? { outcome: 'accepted' }
