@@ -21,14 +21,8 @@ export function NativeChatFindBar({
   find: NativeChatFind
   isVisible: boolean
 }): React.JSX.Element {
-  const { query, setQuery, close, rootRef, barRef, inputRef, revealMatch } = find
-  const { matchCount, activeIndex, step } = useNativeChatFindMatches({
-    rootRef,
-    barRef,
-    query,
-    isVisible,
-    revealMatch
-  })
+  const { query, setQuery, close, barRef, inputRef } = find
+  const { matchCount, activeIndex, step } = useNativeChatFindMatches({ ...find, isVisible })
 
   const range = useNativeChatReturnRef(selection, () => ({ from: 0, to: 0 }))
   useLayoutEffect(() => {

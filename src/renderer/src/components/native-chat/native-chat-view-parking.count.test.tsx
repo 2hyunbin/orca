@@ -1,3 +1,5 @@
+import type * as ReaderInput from './native-chat-reader-scroll-input'
+import type { AgentSessionHistoryPage } from '../../../../shared/agent-session-wire'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 // @vitest-environment happy-dom
 import {
@@ -21,7 +23,38 @@ import { createNativeChatReturnField } from './native-chat-view-state-memory'
 import { legacySingleQuestionPromptItems } from './native-chat-structured-question-test-fixtures'
 import { isMacPlatform } from './native-chat-shortcut'
 import { changePrompt } from './native-chat-prompt-editor.test-support'
+import {
+  deliverResizes,
+  stubLayout,
+  stubResizeObserver
+} from './native-chat-windowing-test-harness'
 import StructuredAgentSessionPaneOverlayLayer from './StructuredAgentSessionPaneOverlayLayer'
+
+vi.mock('./use-native-chat-paced-text', async (importOriginal) =>
+  (await import('./native-chat-unpaced-text-fixture')).unpacedTextModule(importOriginal)
+)
+
+const findReceiver = vi.hoisted(() => ({ matchedCalls: 0 }))
+vi.mock('./native-chat-reader-scroll-input', async (original) => {
+  const actual = await original<typeof ReaderInput>()
+  return {
+    ...actual,
+    useNativeChatReaderScrollInput: (
+      ...args: Parameters<typeof actual.useNativeChatReaderScrollInput>
+    ) => {
+      const reader = actual.useNativeChatReaderScrollInput(...args)
+      return {
+        ...reader,
+        revealFindMatch: (...input: Parameters<typeof reader.revealFindMatch>) => {
+          if (input[0]) {
+            findReceiver.matchedCalls++
+          }
+          return reader.revealFindMatch(...input)
+        }
+      }
+    }
+  }
+})
 
 const census = vi.hoisted(() => ({
   current: '',
@@ -75,8 +108,13 @@ vi.mock('@/runtime/structured-agent-session-client', async (importOriginal) => (
   subscribeStructuredAgentSessionStatus: network.subscribe
 }))
 
+const layoutRestores: (() => void)[] = []
 afterEach(() => {
   cleanup()
+  for (const restore of layoutRestores.splice(0).toReversed()) {
+    restore()
+  }
+  vi.restoreAllMocks()
   act(() => useAppStore.setState({ unifiedTabsByWorktree: {} }))
   vi.useRealTimers()
 })
@@ -84,8 +122,88 @@ afterEach(() => {
 describe('real structured chat presentation population', () => {
   it('releases historical chat subscriptions, editors and roots after switching grace', async () => {
     vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] })
+    layoutRestores.push(
+      stubLayout({ scrollGeometry: true, offsetChain: true, viewportHeight: () => 150 }),
+      stubResizeObserver()
+    )
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement
+    ) {
+      const root = this.closest<HTMLElement>('[data-native-chat-scroll]')
+      const top = this.hasAttribute('data-index') ? this.offsetTop - (root?.scrollTop ?? 0) : 0
+      return new DOMRect(
+        0,
+        top,
+        800,
+        this.hasAttribute('data-index') ? this.offsetHeight : this.clientHeight
+      )
+    })
+    const settle = async () => {
+      for (let frame = 0; frame < 3; frame++) {
+        await act(async () => {
+          deliverResizes()
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        })
+      }
+    }
+    vi.spyOn(Range.prototype, 'getBoundingClientRect').mockImplementation(function (this: Range) {
+      const row = this.startContainer.parentElement?.closest<HTMLElement>('[data-index]')
+      const box = row?.getBoundingClientRect()
+      return DOMRect.fromRect({ x: 20, y: (box?.top ?? 0) + 10, width: 40, height: 16 })
+    })
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true)
+    let rowCount = 8
     let holdReturnRead = false
     let finishRead: (() => void) | undefined
+    const history = (sessionId: string): AgentSessionHistoryPage => ({
+      sessionId: sessionId,
+      epoch: 'count',
+      direction: 'tail',
+      items:
+        sessionId === 'count-session-1'
+          ? legacySingleQuestionPromptItems.map((item) => ({
+              ...item,
+              body: { ...item.body, freeTextQuestionId: undefined }
+            }))
+          : sessionId === 'count-session-0'
+            ? Array.from({ length: rowCount }, (_, index) => ({
+                itemId: `match-row-${index}`,
+                sequence: index + 1,
+                revision: 1,
+                observedAt: index + 1,
+                body: {
+                  kind: 'message',
+                  role: 'assistant',
+                  blocks: [{ type: 'text', text: `needle needle needle ${index}` }]
+                }
+              }))
+            : [],
+      queuedMessages:
+        sessionId === 'count-session-0'
+          ? [
+              {
+                messageId: 'mail',
+                position: 1,
+                state: 'waiting',
+                body: {
+                  kind: 'message',
+                  role: 'user',
+                  blocks: [{ type: 'text', text: 'Queued text' }]
+                }
+              }
+            ]
+          : [],
+      removedItemIds: [],
+      submissions: [],
+      window: {
+        oldest: { epoch: 'count', sequence: 1 },
+        newest: { epoch: 'count', sequence: rowCount },
+        nextCursor: { epoch: 'count', sequence: rowCount }
+      },
+      liveCursor: { epoch: 'count', sequence: rowCount },
+      hasOlder: false,
+      hasNewer: false
+    })
     network.call.mockImplementation(async (_target, method, args) => {
       if (method === 'agentSession.history') {
         if (holdReturnRead && args.sessionId === 'count-session-0') {
@@ -93,43 +211,7 @@ describe('real structured chat presentation population', () => {
             finishRead = resolve
           })
         }
-        return {
-          ok: true,
-          page: {
-            sessionId: args.sessionId,
-            epoch: 'count',
-            fence: 0,
-            direction: 'tail',
-            items:
-              args.sessionId === 'count-session-1'
-                ? legacySingleQuestionPromptItems.map((item) => ({
-                    ...item,
-                    body: { ...item.body, freeTextQuestionId: undefined }
-                  }))
-                : [],
-            queuedMessages:
-              args.sessionId === 'count-session-0'
-                ? [
-                    {
-                      messageId: 'mail',
-                      position: 1,
-                      state: 'waiting',
-                      body: {
-                        kind: 'message',
-                        role: 'user',
-                        blocks: [{ type: 'text', text: 'Queued text' }]
-                      }
-                    }
-                  ]
-                : [],
-            removedItemIds: [],
-            submissions: [],
-            window: { oldest: null, newest: null, nextCursor: null },
-            liveCursor: { epoch: 'count', sequence: 0 },
-            hasOlder: false,
-            hasNewer: false
-          }
-        }
+        return { ok: true, page: history(args.sessionId) }
       }
       if (method === 'agentSession.queuedMessageEditHold') {
         return {
@@ -147,7 +229,17 @@ describe('real structured chat presentation population', () => {
       }
       return { ok: true, value: {} }
     })
-    network.subscribe.mockResolvedValue({ unsubscribe: vi.fn() })
+    network.subscribe.mockImplementation(async (_target, params, onEvent) => {
+      if (typeof params !== 'function') {
+        onEvent({
+          type: 'snapshot',
+          sessionId: params.sessionId,
+          page: history(params.sessionId),
+          fence: rowCount
+        })
+      }
+      return { unsubscribe: vi.fn() }
+    })
     const tabs: Tab[] = Array.from({ length: 27 }, (_, index) => ({
       id: `count-${index}`,
       entityId: `count-session-${index}`,
@@ -228,13 +320,14 @@ describe('real structured chat presentation population', () => {
     ).toHaveLength(0)
     // Selection commits before the next native task, without history or reveal-focus frames.
     await act(async () => vi.advanceTimersByTimeAsync(300_001))
+    rowCount = 9
     holdReturnRead = true
     await act(async () => {
       expect(
         activateStructuredAgentSessionTab({ worktreeId: 'count-workspace', tabId: tabs[0]!.id })
       ).toBe(true)
     })
-    const destination = view.container.querySelector<HTMLElement>(
+    let destination = view.container.querySelector<HTMLElement>(
       '[data-structured-agent-session-overlay-tab-id="count-0"] [data-native-chat-root]'
     )!
     const typed = new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true })
@@ -260,6 +353,19 @@ describe('real structured chat presentation population', () => {
     })
     holdReturnRead = false
     await act(async () => finishRead?.())
+    // Conversation input above intentionally dismissed the first visit. Miss a new row after
+    // that input so the Find return also carries an unresolved, consumed New separator.
+    for (const tab of tabs.slice(10)) {
+      act(() => useAppStore.setState({ groupsByWorktree: { 'count-workspace': [group(tab)] } }))
+    }
+    await act(async () => vi.advanceTimersByTimeAsync(30_001))
+    rowCount = 10
+    await act(async () => {
+      activateStructuredAgentSessionTab({ worktreeId: 'count-workspace', tabId: tabs[0]!.id })
+    })
+    destination = view.container.querySelector<HTMLElement>(
+      '[data-structured-agent-session-overlay-tab-id="count-0"] [data-native-chat-root]'
+    )!
     fireEvent.keyDown(destination, {
       key: 'f',
       metaKey: isMacPlatform(),
@@ -270,6 +376,30 @@ describe('real structured chat presentation population', () => {
     })
     expect(document.activeElement).toBe(find)
     fireEvent.change(find, { target: { value: 'needle' } })
+    fireEvent.keyDown(find, { key: 'Enter' })
+    fireEvent.keyDown(find, { key: 'Enter' })
+    const findStatus = () =>
+      within(find.closest('[data-native-chat-find-bar]')!).getByText(/\d+\/\d+/).textContent
+    const selectedBeforePark = findStatus()!
+    expect(Number(selectedBeforePark.split('/')[1])).toBeGreaterThan(2)
+    const markerBeforePark = within(destination)
+      .getByRole('separator', { name: 'New' })
+      .closest('[data-native-chat-row-key]')
+      ?.getAttribute('data-native-chat-row-key')
+    await settle()
+    const scroller = destination.querySelector<HTMLElement>('[data-native-chat-scroll]')!
+    fireEvent.wheel(scroller, { deltaY: 20 })
+    scroller.scrollTop = 180
+    fireEvent.scroll(scroller)
+    await settle()
+    const savedTop = scroller.scrollTop
+    expect(savedTop).toBeGreaterThan(150)
+    const savedRow = destination.querySelector<HTMLElement>(
+      '[data-native-chat-row-key="match-row-4"]'
+    )!
+    expect(savedRow).not.toBeNull()
+    const savedOffset = savedRow.getBoundingClientRect().top
+    const revealsBeforePark = findReceiver.matchedCalls
     find.setSelectionRange(1, 3)
     await act(async () => {
       activateStructuredAgentSessionTab({ worktreeId: 'count-workspace', tabId: tabs[1]!.id })
@@ -348,8 +478,30 @@ describe('real structured chat presentation population', () => {
       name: 'Find in chat'
     })
     expect(restoredFind.value).toBe('needle')
+    await settle()
+    const returnedScroller = right.querySelector<HTMLElement>('[data-native-chat-scroll]')!
+    expect(Math.abs(returnedScroller.scrollTop - savedTop)).toBeLessThanOrEqual(1)
+    expect(
+      right
+        .querySelector<HTMLElement>('[data-native-chat-row-key="match-row-4"]')
+        ?.getBoundingClientRect().top
+    ).toBe(savedOffset)
+    const restoredStatus = () =>
+      within(restoredFind.closest('[data-native-chat-find-bar]')!).getByText(/\d+\/\d+/).textContent
+    expect(findReceiver.matchedCalls).toBe(revealsBeforePark)
+    expect(restoredStatus()).toBe(selectedBeforePark)
+    expect(
+      within(right)
+        .getByRole('separator', { name: 'New' })
+        .closest('[data-native-chat-row-key]')
+        ?.getAttribute('data-native-chat-row-key')
+    ).toBe(markerBeforePark)
+    expect(useAppStore.getState().activeGroupIdByWorktree['count-workspace']).toBe('count-group')
     expect([restoredFind.selectionStart, restoredFind.selectionEnd]).toEqual([1, 3])
     expect(restoredEdit.closest('ul')?.scrollTop).toBe(0)
+    fireEvent.keyDown(restoredFind, { key: 'Enter' })
+    const [active, total] = selectedBeforePark.split('/').map(Number)
+    expect(restoredStatus()).toBe(`${(active! % total!) + 1}/${total}`)
     await act(async () => fireEvent.click(within(right).getByRole('button', { name: 'Save' })))
     expect(
       network.call.mock.calls.some(
@@ -362,6 +514,7 @@ describe('real structured chat presentation population', () => {
     )
     expect(document.activeElement).toBe(restoredFind)
     expect([restoredFind.selectionStart, restoredFind.selectionEnd]).toEqual([1, 3])
+    vi.restoreAllMocks()
     console.log(JSON.stringify({ chats: 27, perView, burstSubscriptions, retainedSubscriptions }))
   })
 })

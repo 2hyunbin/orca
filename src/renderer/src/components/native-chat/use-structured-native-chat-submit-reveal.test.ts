@@ -15,6 +15,7 @@ vi.mock('@/runtime/runtime-rpc-client', () => ({
 it('reveals before launch Retry, but waits for a successful queue Resume', async () => {
   const order: string[] = []
   const controller = {
+    epoch: null,
     respond: vi.fn(async () => null),
     queuedMessages: {
       queueCapable: true,
@@ -40,7 +41,7 @@ it('reveals before launch Retry, but waits for a successful queue Resume', async
   const { result } = renderHook(() => useStructuredNativeChatSubmitReveal(controller, retryLaunch))
   result.current.messageListRef.current = {
     revealLatest: () => order.push('reveal'),
-    revealFindMatch: () => {},
+    revealFindMatch: () => false,
     messageCopyText: () => null
   }
 
@@ -48,6 +49,12 @@ it('reveals before launch Retry, but waits for a successful queue Resume', async
   await act(() => result.current.queuedMessages.resume())
 
   expect(order).toEqual(['reveal', 'launch', 'resume', 'reveal'])
+  // The composer's accepted-submit callback supersedes pending navigation even without a list.
+  result.current.messageListRef.current = null
+  const supersede = vi.fn()
+  result.current.navigationRef.current = supersede
+  act(() => result.current.revealLatest())
+  expect(supersede).toHaveBeenCalledTimes(1)
 })
 
 // STA-10671: an older host held for its permission mode would run a queued card unprompted.
@@ -68,7 +75,7 @@ it('sends no queued card and retries no start on a host held for its permission 
     editor: undefined,
     steerNewest: vi.fn(() => true)
   }
-  const controller = { respond: vi.fn(async () => null), queuedMessages }
+  const controller = { epoch: null, respond: vi.fn(async () => null), queuedMessages }
   const retryLaunch = vi.fn()
   useAppStore.setState({
     settings: { ...useAppStore.getState().settings!, nativeChatPermissionMode: 'ask' }

@@ -1,7 +1,8 @@
 import {
-  createNativeChatReturnField,
-  useNativeChatReturnState
-} from './native-chat-view-state-memory'
+  useNativeChatExpandedTurns,
+  type NavigationRequest,
+  type NativeChatTranscriptOptions
+} from './native-chat-transcript-navigation-state'
 import {
   nativeChatTranscriptOuterClass,
   NATIVE_CHAT_TRANSCRIPT_COLUMN_CLASS
@@ -10,7 +11,6 @@ import { NativeChatJumpToLatest } from './NativeChatJumpToLatest'
 import { NativeChatNewRowsAnnouncement } from './NativeChatNewRowsMarker'
 import { useNativeChatRowTypography } from './use-native-chat-row-typography'
 import { useCallback, useMemo, useRef, useState } from 'react'
-import type { CommentMarkdownLinkClickHandler } from '@/components/sidebar/CommentMarkdown'
 import { translate } from '@/i18n/i18n'
 import type { NativeChatLiveSession } from './use-native-chat-live-session'
 import { useNativeChatTranscriptProjection } from './use-native-chat-transcript-projection'
@@ -19,7 +19,6 @@ import { nativeChatTaskListPredecessors } from '../../../../shared/native-chat-t
 import { NativeChatDockedTaskList } from './NativeChatDockedTaskList'
 import { useNativeChatTurnStatus } from './use-native-chat-turn-status'
 import { NativeChatAwaitingInputRow } from './NativeChatAwaitingInputRow'
-import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client-types'
 import type { NativeChatTurnActivity } from '../../../../shared/native-chat-turn-activity'
 import { NativeChatTurnActivityLine } from './NativeChatTurnActivityLine'
 import {
@@ -33,7 +32,6 @@ import {
 } from './NativeChatTranscriptItems'
 import { useNativeChatTranscriptRowContext } from './use-native-chat-transcript-row-context'
 import type { StructuredAgentSessionHostWork } from './use-structured-agent-session-transport-state'
-import type { NativeChatDeliveryNotice } from './NativeChatMessageRow'
 import {
   splitNativeChatSlotsWaitingBehindLiveTurn,
   nativeChatSlotIndexOf
@@ -65,24 +63,21 @@ import type {
 import type { AgentSessionLatestTurn } from '../../../../shared/agent-session-wire'
 import { isStructuredAgentSessionThinking } from '../../../../shared/structured-agent-session-live-turn'
 import type { NativeChatSettledTurns } from '../../../../shared/native-chat-turn-status'
-import type { NativeChatDiffReveal, NativeChatDiffTarget } from './native-chat-turn-diffs'
+import type { NativeChatDiffTarget } from './native-chat-turn-diffs'
 import { useNativeChatTurnDiffs } from './use-native-chat-turn-diffs'
+import type { NativeChatAppliedCut } from './use-native-chat-context-clear-floor'
 import { transcriptTailRow } from './native-chat-transcript-tail-row'
 
 /** The turn is blocked on the reader. `shown`: the pane draws the prompt itself, as a card;
  *  `unshown`: it cannot (the prompt is only in the agent's terminal). */
 export type NativeChatAwaitingInput = 'shown' | 'unshown'
 
-type NavigationRequest =
-  | { kind: 'diff'; target: NativeChatDiffReveal }
-  | { kind: 'rail'; messageId: string; requestId: number }
-
-const expandedTurns = createNativeChatReturnField<ReadonlySet<string>>()
-
 export function NativeChatMessageList({
   ref,
   session,
   journalEpoch,
+  appliedCut,
+  onReaderNavigation,
   journalItems,
   journalSubmissions,
   journalLatestTurn: latestTurn,
@@ -101,9 +96,11 @@ export function NativeChatMessageList({
   turnActivity,
   stopping = false,
   runtimeContext
-}: {
+}: NativeChatTranscriptOptions & {
   ref?: Parameters<typeof useNativeChatMessageListHandle>[0]
   session: NativeChatLiveSession
+  appliedCut?: NativeChatAppliedCut | null
+  onReaderNavigation?: () => void
   journalEpoch?: string | null
   journalItems?: readonly AgentJournalRenderItem[]
   /** With the items, what places each row in its turn (structured lane). */
@@ -119,20 +116,15 @@ export function NativeChatMessageList({
   isVisible?: boolean
   isWorking: boolean
   /** Toolbar-driven desired open state for every tool run; each flip re-syncs. */
-  expandSignal: boolean
   workingStartedAt?: number | null
   /** Recorded turn durations keyed by user message id (the host's, or the transcript's).
    *  A turn missing here shows the duration this list observed, if it saw the turn run. */
   settledTurns?: NativeChatSettledTurns
-  onLinkClick?: CommentMarkdownLinkClickHandler
-  allowFileUriLinks?: boolean
-  deliveryNotices?: ReadonlyMap<string, NativeChatDeliveryNotice>
   /** Set while the turn waits on the reader; the live activity line yields to it. */
   awaitingInput?: NativeChatAwaitingInput | null
   turnActivity?: NativeChatTurnActivity | null
   /** A person's Stop is ending the live turn: its tail line reads "Stopping…". */
   stopping?: boolean
-  runtimeContext?: RuntimeFileOperationArgs | null
 }): React.JSX.Element {
   const [navigationRequest, setNavigationRequest] = useState<NavigationRequest | null>(null)
   const navigationSequence = useRef(0)
@@ -144,14 +136,14 @@ export function NativeChatMessageList({
   )
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
-  const [expandedTurnIds, setExpandedTurnIds] = useNativeChatReturnState(
-    expandedTurns,
-    () => new Set()
-  )
+  const [expandedTurnIds, setExpandedTurnIds] = useNativeChatExpandedTurns()
   const disclosures = useNativeChatDisclosures()
-  const toggleExpandedTurn = useCallback((turnKey: string) => {
-    setExpandedTurnIds((current) => toggleNativeChatExpandedKey(current, turnKey))
-  }, [])
+  const toggleExpandedTurn = useCallback(
+    (turnKey: string) => {
+      setExpandedTurnIds((current) => toggleNativeChatExpandedKey(current, turnKey))
+    },
+    [setExpandedTurnIds]
+  )
 
   const { hasMore, loadingEarlier, loadEarlier } = session
   // No paging from a pending or errored read: the lane would no-op, and its recovery
@@ -246,7 +238,9 @@ export function NativeChatMessageList({
   const { marker: newRowsMarker, dismiss } = useNativeChatNewRowsMarker(
     slots,
     waitingSlots,
-    isVisible && session.readCurrent === true
+    isVisible && session.readCurrent === true,
+    appliedCut,
+    session.readPhase === 'ready'
   )
   const transcriptWindow = useNativeChatTranscriptWindow({
     scrollRef,
@@ -307,7 +301,10 @@ export function NativeChatMessageList({
   })
   const { start: startHistoryJump, abort: abortHistoryJump } = railHistoryJump
   const readerInput = useNativeChatReaderScrollInput(scrollRef, {
-    onReaderScroll: abortHistoryJump,
+    onReaderScroll: () => {
+      abortHistoryJump()
+      onReaderNavigation?.()
+    },
     onTakeScroll: transcriptWindow.cancelAlign,
     onLeaveEnd: readerLeavesEnd,
     onScrollGesture: transcriptScroll.forwardedGesture

@@ -1,12 +1,4 @@
-import { NativeChatViewIdentity } from './native-chat-view-state-memory'
-import {
-  useCallback,
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useSyncExternalStore
-} from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { useAppStore } from '../../store'
 import { nativeChatCardDismissKey } from './native-chat-dismiss-key'
 import {
@@ -48,7 +40,6 @@ export function useNativeChatPromptCardPresentation({
   /** While the transcript loads, an absent transcript card is unknown, not cleared. */
   transcriptSettled?: boolean
 }): NativeChatPromptCardPresentation {
-  const viewIdentity = useContext(NativeChatViewIdentity)
   // Why the wait's start: two prompts with the same text are separate occurrences.
   const startedAt = useAppStore((s) => {
     const entry = s.agentStatusByPaneKey[paneKey]
@@ -82,11 +73,11 @@ export function useNativeChatPromptCardPresentation({
   // Why: with no wait start to tell occurrences apart, an unobserved stretch may hide a new one.
   useLayoutEffect(
     () => () => {
-      if (viewIdentity === null && dismissals.read(paneKey)?.startedAt === null) {
+      if (dismissals.read(paneKey)?.startedAt === null) {
         dismissals.forget(paneKey)
       }
     },
-    [paneKey, viewIdentity]
+    [paneKey]
   )
   const record = useCallback(
     (state: NativeChatPromptDismissal['state']) => {

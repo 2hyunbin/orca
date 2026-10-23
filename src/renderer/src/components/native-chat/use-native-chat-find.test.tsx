@@ -130,8 +130,25 @@ function Chat({
   const rootRef = useRef<HTMLDivElement>(null)
   // As in ResolvedView: a card hides the composer and detaches its handle.
   const composerRef = { current: card ? null : composer }
-  const messageListRef = useRef({ revealFindMatch: reveal })
-  const find = useNativeChatFind(enabled, rootRef, composerRef, messageListRef)
+  const messageListRef = useRef({
+    revealLatest: () => {},
+    messageCopyText: () => null,
+    revealFindMatch: (match: Range | null, bar: DOMRectReadOnly | null, claim?: () => boolean) => {
+      if (claim && !claim()) {
+        return false
+      }
+      if (match) {
+        reveal(match, bar)
+      }
+      return true
+    }
+  })
+  const navigationRef = useRef<(() => void) | null>(null)
+  const find = useNativeChatFind(enabled, rootRef, composerRef, {
+    messageListRef,
+    epoch: null,
+    navigationRef
+  })
   useNativeChatPasteBridge({ rootRef, composerRef })
   return (
     <div
@@ -712,7 +729,7 @@ describe('native chat find', () => {
     expect(pressModF(composer.element).defaultPrevented).toBe(false)
     expect(findInput()).toBeNull()
   })
-  it('picks the first visible match while typing without scrolling or leaving the end', () => {
+  it('claims the first visible match through the reader receiver while typing', () => {
     const reveal = vi.fn()
     const composer = composerHandle()
     const { container } = render(
@@ -730,7 +747,7 @@ describe('native chat find', () => {
     pressModF(composer.element)
     typeQuery('alpha')
     expect(status()).toBe('2/2')
-    expect(reveal).not.toHaveBeenCalled()
+    expect(reveal).toHaveBeenCalledTimes(1)
   })
 })
 

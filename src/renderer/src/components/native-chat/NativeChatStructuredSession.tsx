@@ -31,7 +31,7 @@ import { useNativeChatTabOwnerWorktreeId } from './use-native-chat-tab-owner'
 import { useStructuredAgentSession } from './use-structured-agent-session'
 import { useNativeChatImageRuntimeContext } from './native-chat-image-runtime-context'
 import { useStructuredNativeChatPaneCommands } from './use-structured-native-chat-pane-commands'
-import type { NativeChatStructuredViewProps } from './native-chat-view-types'
+import type { StructuredSessionProps } from './native-chat-view-types'
 import { NativeChatStructuredSessionStatus } from './NativeChatStructuredSessionStatus'
 import { useNativeChatLaunchDraftSignal } from './use-native-chat-launch-draft-adoption'
 import { useNativeChatInterruptedContinuation } from './NativeChatInterruptedContinue'
@@ -68,9 +68,7 @@ import {
   useNativeChatClaudeSignIn
 } from './native-chat-claude-sign-in'
 
-export function NativeChatStructuredSession(
-  props: Omit<NativeChatStructuredViewProps, 'mode'>
-): React.JSX.Element {
+export function NativeChatStructuredSession(props: StructuredSessionProps): React.JSX.Element {
   const ownerWorktreeId = useNativeChatTabOwnerWorktreeId(props.tabId)
   const fileLinkContext = useNativeChatFileLinkContext(props.tabId)
   const provisionalLaunch = useNativeChatProvisionalLaunch(ownerWorktreeId, props.sessionId)
@@ -157,7 +155,7 @@ export function NativeChatStructuredSession(
   const viewState = selectNativeChatViewState(session, { readRetries: !readFailedFinally })
   const paneActive = props.isVisible && props.isFocusedGroup
   useNativeChatFontSize(viewState.kind === 'ready' && paneActive, rootRef)
-  const find = useNativeChatFind(paneActive, rootRef, composerRef, submits.messageListRef)
+  const find = useNativeChatFind(paneActive, rootRef, composerRef, submits)
   const appearanceStyle = useNativeChatStoreAppearanceStyle()
   const imageRuntimeContext = useNativeChatImageRuntimeContext(props.tabId)
   const { onLinkClick, linkActionRequest, closeLinkActions } = useNativeChatLinkActions(
@@ -217,7 +215,7 @@ export function NativeChatStructuredSession(
     onSubmitted: submits.revealLatest,
     sendBlockedReason: hostPermission.sendBlockedReason ?? install.sendBlockedReason
   })
-  const asyncQuestion = { paneKey, session, send: structuredTransport.send }
+  const asyncQuestion = { epoch: controller.epoch, session, send: structuredTransport.send }
   const continuation = useNativeChatInterruptedContinuation({
     ...controller,
     target: props.target,
@@ -306,6 +304,8 @@ export function NativeChatStructuredSession(
                   key={`${controller.epoch}:${controller.contextClear.clears}`}
                   ref={submits.messageListRef}
                   session={session}
+                  onReaderNavigation={find.cancelNavigation}
+                  appliedCut={controller.contextClear.applied}
                   journalEpoch={controller.epoch}
                   journalItems={controller.journalItems}
                   journalSubmissions={controller.submissions}
