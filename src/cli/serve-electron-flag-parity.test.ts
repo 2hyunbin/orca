@@ -14,6 +14,7 @@ const UNTRANSLATED_GLOBAL_FLAGS = new Set([
   'force',
   'supervise',
   'reclaim-stale-lock',
+  'data-root',
   'yes'
 ])
 

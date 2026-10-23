@@ -34,11 +34,10 @@ import {
 import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
-import { orcadLockHolderLocality } from './orcad-lock-holder-locality'
 import {
-  ORCAD_RECLAIM_STALE_LOCK_COMMAND,
-  ORCAD_RECLAIM_STALE_LOCK_FLAG
-} from '../../shared/orcad-stale-lock-reclaim'
+  orcadLockHolderLocality,
+  orcadLockHolderUnverifiableError
+} from './orcad-lock-holder-locality'
 import {
   MAX_ORCAD_LOCK_BYTES,
   readBoundedLockFile,
@@ -266,19 +265,15 @@ export function acquireOrcadInstanceLock(
         'root corrupts it. Give each its own ORCA_USER_DATA.'
     )
   }
-  const locality = orcadLockHolderLocality(existing, record, dataRootIsLocal)
   if (!judgedHere(existing, 'holder')) {
     // Its PID means nothing here, so neither a missing nor a reused one proves it exited.
-    throw new OrcadInstanceLockError(
-      'orcad_instance_lock_holder_unverifiable',
-      `${describeLockHolder(existing)} (pid ${existing.pid}, started ${existing.acquiredAt}) ` +
-        `holds the data root ${dataRoot}${locality === 'foreign' ? ' from another machine' : ''}. ` +
-        'Orca cannot check from here whether it is still running, because this data root may be ' +
-        'shared with other machines. Stop it there. If it is not running anywhere, run ' +
-        `\`${ORCAD_RECLAIM_STALE_LOCK_COMMAND}\` (\`orcad ${ORCAD_RECLAIM_STALE_LOCK_FLAG}\` for a ` +
-        'managed server) on the machine it ran on to check and clear it, or delete ' +
-        `${lockPath} once you are sure.`
-    )
+    throw orcadLockHolderUnverifiableError({
+      holder: `${describeLockHolder(existing)} (pid ${existing.pid}, started ${existing.acquiredAt})`,
+      foreign: orcadLockHolderLocality(existing, record, dataRootIsLocal) === 'foreign',
+      dataRoot,
+      lockPath,
+      desktop: hooks.role === 'desktop'
+    })
   }
   // The desktop takes this lock only after Electron's single-instance lock, which already proves
   // no other desktop runs; a desktop record is then stale even when its PID was reused.

@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { resolve } from 'node:path'
 import type { CommandHandler } from '../dispatch'
 import { formatCliStatus, formatStatus, printResult } from '../format'
 import { RuntimeClientError, serveOrcaApp } from '../runtime-client'
@@ -85,16 +86,14 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
   serve: async ({ flags, json }) => {
     if (flags.get('reclaim-stale-lock') === true) {
       // Why lazy: only this mode needs orcad's lock code, and every other command skips loading it.
-      const { reclaimStaleOrcadInstanceLock } =
+      const { printOrcadStaleLockReclaimResult, reclaimStaleOrcadInstanceLock } =
         await import('../../main/orcad/orcad-stale-lock-reclaim.js')
-      const result = await reclaimStaleOrcadInstanceLock(resolveLaunchUserDataPath(), {
-        yes: flags.get('yes') === true
-      })
-      if (json) {
-        console.log(JSON.stringify({ reclaimed: result.exitCode === 0, message: result.message }))
-      } else {
-        ;(result.exitCode === 0 ? console.log : console.error)(result.message)
-      }
+      const dataRoot = flags.get('data-root')
+      const result = await reclaimStaleOrcadInstanceLock(
+        typeof dataRoot === 'string' ? resolve(dataRoot) : resolveLaunchUserDataPath(),
+        { yes: flags.get('yes') === true }
+      )
+      printOrcadStaleLockReclaimResult(result, json)
       process.exitCode = result.exitCode
       return
     }

@@ -3,9 +3,10 @@
  *
  * A lock on a home other machines may share names a PID that is evidence only on the machine that
  * issued it, so a start after a reboot refuses it rather than guess. This command gathers what this
- * machine can check (same host, a different boot, an old record, nothing answering at the holder's
- * endpoint), shows it, and clears the lock only when the user confirms that no other machine
- * sharing the home runs Orca. Losing contact is never treated as exit without that confirmation.
+ * machine can check (same host name, an earlier boot, an old record, nothing answering on this
+ * machine at the holder's endpoints), shows it, and clears the lock only when the user confirms
+ * with --yes that no other machine sharing the home runs Orca. Losing contact is never treated as
+ * exit without that confirmation.
  */
 import { readdirSync, statSync } from 'node:fs'
 import { createConnection } from 'node:net'
@@ -28,7 +29,12 @@ import { resolveUserDataPath } from './orcad-app-paths'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { readRuntimeMetadata } from '../runtime/runtime-metadata'
 import { RUNTIME_SOCKET_NAME_REGEX } from '../runtime/runtime-rpc/runtime-rpc-socket-metadata'
-import { ORCAD_RECLAIM_STALE_LOCK_FLAG } from '../../shared/orcad-stale-lock-reclaim'
+import {
+  ORCAD_RECLAIM_STALE_LOCK_FLAG,
+  ORCAD_STALE_LOCK_DATA_ROOT_FLAG,
+  ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES,
+  type OrcadStaleLockReclaimStatus
+} from '../../shared/orcad-stale-lock-reclaim'
 
 // A holder that just took the lock may not be listening yet; its silence would prove nothing.
 export const ORCAD_STALE_LOCK_MIN_AGE_MS = 2 * 60_000
@@ -47,7 +53,21 @@ export type OrcadStaleLockReclaimHooks = {
   lockHooks?: OrcadInstanceLockHooks
 }
 
-export type OrcadStaleLockReclaimResult = { exitCode: number; message: string }
+export type OrcadStaleLockEvidence = {
+  pid: number
+  host: string
+  bootId: string
+  currentBootId: string
+  ageMinutes: number
+}
+
+export type OrcadStaleLockReclaimResult = {
+  status: OrcadStaleLockReclaimStatus
+  exitCode: number
+  lockPath: string
+  message: string
+  evidence?: OrcadStaleLockEvidence
+}
 
 export async function reclaimStaleOrcadInstanceLock(
   dataRoot: string,
@@ -55,28 +75,50 @@ export async function reclaimStaleOrcadInstanceLock(
   hooks: OrcadStaleLockReclaimHooks = {}
 ): Promise<OrcadStaleLockReclaimResult> {
   const lockPath = join(dataRoot, ORCAD_LOCK_FILE_NAME)
+  const result = (
+    status: OrcadStaleLockReclaimStatus,
+    message: string,
+    evidence?: OrcadStaleLockEvidence
+  ): OrcadStaleLockReclaimResult => ({
+    status,
+    exitCode: ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES[status],
+    lockPath,
+    message,
+    ...(evidence ? { evidence } : {})
+  })
   const contents = readBoundedLockFile(lockPath)
   if (contents === null) {
-    // Only a confirmed absence is nothing to do; a permission or I/O error hides a lock.
+    // Only a confirmed absence is "none"; a permission or I/O error hides a lock.
     return lockIsAbsent(lockPath)
-      ? { exitCode: 0, message: `No orcad instance lock at ${lockPath}; nothing to reclaim.` }
-      : refuse(`The lock ${lockPath} cannot be read. Check it by hand before deleting it.`)
+      ? result(
+          'none',
+          `No orcad instance lock at ${lockPath}. If a start reported a lock in another data ` +
+            `root, re-run with ${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} and the directory it named.`
+        )
+      : result('refused', `The lock ${lockPath} cannot be read. Check it by hand.`)
   }
   const holder = parseOrcadInstanceLockRecord(contents)
   if (!holder) {
-    return refuse(`The lock ${lockPath} is not a complete record. Check it by hand.`)
+    return result('refused', `The lock ${lockPath} is not a complete record. Check it by hand.`)
   }
-  const refusal = await staleLockRefusal(dataRoot, lockPath, holder, hooks)
-  if (refusal) {
-    return refuse(`${refusal} Not reclaiming ${lockPath}.`)
-  }
-  const evidence = describeEvidence(holder, lockPath, hooks)
   const currentBoot = (hooks.bootId ?? currentBootId)()
+  const checked = await checkStaleLock(dataRoot, lockPath, holder, currentBoot, hooks)
+  if ('refusal' in checked) {
+    return result('refused', `${checked.refusal} Not reclaiming ${lockPath}.`)
+  }
+  const { evidence } = checked
+  const found =
+    `${holder.role === 'desktop' ? 'The Orca desktop app' : 'orcad'} pid ${evidence.pid} on ` +
+    `host ${evidence.host} took ${lockPath} ${evidence.ageMinutes} minutes ago, in boot ` +
+    `${evidence.bootId} (this machine is now in boot ${evidence.currentBootId}), and nothing ` +
+    'answers on this machine at its endpoints. The host name and boot checks cannot rule out ' +
+    'another machine with the same host name that shares this home.'
   if (!options.yes) {
-    return refuse(
-      `${evidence}\nOrca cannot prove from here that it stopped, because this data root may be ` +
-        'shared with other machines. Make sure no other machine sharing this home runs Orca for ' +
-        `this profile, then re-run with ${ORCAD_RECLAIM_STALE_LOCK_FLAG} --yes.`
+    return result(
+      'eligible',
+      `${found}\nMake sure no other machine sharing this home runs Orca for this profile, then ` +
+        `re-run with ${ORCAD_RECLAIM_STALE_LOCK_FLAG} --yes.`,
+      evidence
     )
   }
   try {
@@ -91,77 +133,75 @@ export async function reclaimStaleOrcadInstanceLock(
           : record.host === holder.host && !!record.bootId && record.bootId !== currentBoot
     }).release()
   } catch (error) {
-    return refuse(error instanceof Error ? error.message : String(error))
+    return result('refused', error instanceof Error ? error.message : String(error), evidence)
   }
-  return { exitCode: 0, message: `${evidence}\nReclaimed ${lockPath}. Orca can start now.` }
+  return result('reclaimed', `${found}\nReclaimed ${lockPath}. Orca can start now.`, evidence)
 }
 
-/** Why each check refuses, or null once every one passed. */
-async function staleLockRefusal(
+async function checkStaleLock(
   dataRoot: string,
   lockPath: string,
   holder: OrcadLockRecord,
+  bootId: string | null,
   hooks: OrcadStaleLockReclaimHooks
-): Promise<string | null> {
-  const bootId = (hooks.bootId ?? currentBootId)()
+): Promise<{ refusal: string } | { evidence: OrcadStaleLockEvidence }> {
   const machineIdentity = (hooks.machineIdentity ?? profileStateAccessMachineIdentity)()
   const self = { ...(machineIdentity ? { machineIdentity } : {}), ...(bootId ? { bootId } : {}) }
   const locality = orcadLockHolderLocality(holder, self, () =>
     (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
   )
+  // Covers a record from this boot too: the same boot proves the same machine.
   if (locality === 'local') {
-    return 'This machine can judge this lock itself, so a normal start reclaims it if its holder exited.'
+    return {
+      refusal:
+        'This machine can judge this lock itself, so a normal start reclaims it if its holder exited.'
+    }
   }
   if (locality === 'foreign') {
-    return 'The lock was written by another machine (a different machine id).'
+    return { refusal: 'The lock was written by another machine (a different machine id).' }
   }
   const host = (hooks.hostname ?? hostname)()
   if (!holder.host) {
-    return 'The lock does not record which host wrote it (an older orcad wrote it).'
+    return {
+      refusal: 'The lock does not record which host wrote it (an older orcad wrote it).'
+    }
   }
   if (holder.host !== host) {
-    return `The lock was written on host ${holder.host}, not this host (${host}).`
+    return { refusal: `The lock was written on host ${holder.host}, not this host (${host}).` }
   }
   if (!holder.bootId || !bootId) {
-    return 'The lock or this machine has no boot id to compare.'
-  }
-  if (holder.bootId === bootId) {
-    return 'The lock comes from this boot, so its holder may still be running here.'
+    return { refusal: 'The lock or this machine has no boot id to compare.' }
   }
   const now = (hooks.now ?? Date.now)()
   const writtenMs = Math.max(Date.parse(holder.acquiredAt), statOrNull(lockPath)?.mtimeMs ?? now)
   if (!(now - writtenMs >= ORCAD_STALE_LOCK_MIN_AGE_MS)) {
-    return `The lock is less than ${ORCAD_STALE_LOCK_MIN_AGE_MS / 60_000} minutes old.`
+    return { refusal: `The lock is less than ${ORCAD_STALE_LOCK_MIN_AGE_MS / 60_000} minutes old.` }
   }
   const endpoints = holderEndpoints(dataRoot, holder.pid)
   if (!endpoints) {
-    return 'The runtime record in the data root cannot be read.'
+    return { refusal: 'The runtime record in the data root cannot be read.' }
   }
   const probe = hooks.probeEndpoint ?? probeOrcadEndpoint
   for (const endpoint of endpoints) {
     const answer = await probe(endpoint)
-    if (answer !== 'silent') {
-      return answer === 'answers'
-        ? `Its endpoint ${endpoint} still answers, so it is running.`
-        : `Its endpoint ${endpoint} could not be checked.`
+    if (answer === 'answers') {
+      return {
+        refusal: `Something on this machine answers at ${endpoint}, so it may still be running.`
+      }
+    }
+    if (answer === 'unknown') {
+      return { refusal: `Whether anything answers at ${endpoint} could not be checked.` }
     }
   }
-  return null
-}
-
-function describeEvidence(
-  holder: OrcadLockRecord,
-  lockPath: string,
-  hooks: OrcadStaleLockReclaimHooks
-): string {
-  const now = (hooks.now ?? Date.now)()
-  const ageMinutes = Math.round((now - Date.parse(holder.acquiredAt)) / 60_000)
-  return (
-    `${holder.role === 'desktop' ? 'The Orca desktop app' : 'orcad'} pid ${holder.pid} on host ` +
-    `${holder.host} took ${lockPath} ${ageMinutes} minutes ago, in boot ${holder.bootId} ` +
-    `(this machine is now in boot ${(hooks.bootId ?? currentBootId)()}), and nothing answers ` +
-    'at its endpoints.'
-  )
+  return {
+    evidence: {
+      pid: holder.pid,
+      host: holder.host,
+      bootId: holder.bootId,
+      currentBootId: bootId,
+      ageMinutes: Math.round((now - Date.parse(holder.acquiredAt)) / 60_000)
+    }
+  }
 }
 
 /** The holder's sockets and recorded transports; null when its runtime record is unreadable. */
@@ -174,10 +214,6 @@ function holderEndpoints(dataRoot: string, pid: number): string[] | null {
         endpoints.add(transport.endpoint)
       }
     }
-  } catch {
-    return null
-  }
-  try {
     for (const entry of readdirSync(dataRoot)) {
       if (RUNTIME_SOCKET_NAME_REGEX.exec(entry)?.[1] === String(pid)) {
         endpoints.add(join(dataRoot, entry))
@@ -193,9 +229,10 @@ export function probeOrcadEndpoint(endpoint: string): Promise<OrcadEndpointProbe
   let target: { path: string } | { host: string; port: number }
   try {
     const url = /^wss?:\/\//u.test(endpoint) ? new URL(endpoint) : null
+    const defaultPort = url?.protocol === 'wss:' ? 443 : 80
     // Why strip brackets: URL keeps them around an IPv6 host, which the socket API rejects.
     target = url
-      ? { host: url.hostname.replace(/^\[|\]$/gu, ''), port: Number(url.port || 80) }
+      ? { host: url.hostname.replace(/^\[|\]$/gu, ''), port: Number(url.port || defaultPort) }
       : { path: endpoint }
   } catch {
     return Promise.resolve('unknown')
@@ -236,16 +273,36 @@ function statOrNull(path: string): { mtimeMs: number } | null {
   }
 }
 
-function refuse(message: string): OrcadStaleLockReclaimResult {
-  return { exitCode: 1, message }
+/** Prints a result as one line of JSON or as text, the way both entry points report it. */
+export function printOrcadStaleLockReclaimResult(
+  result: OrcadStaleLockReclaimResult,
+  json: boolean
+): void {
+  if (json) {
+    console.log(JSON.stringify(result))
+    return
+  }
+  ;(result.status === 'reclaimed' ? console.log : console.error)(result.message)
 }
 
-/** `orcad --reclaim-stale-lock [--yes]`, on the data root this orcad would serve. */
+/** `orcad --reclaim-stale-lock [--data-root <dir>] [--yes] [--json]`. */
 export async function runOrcadStaleLockReclaimCommandAndExit(argv: string[]): Promise<never> {
-  const unknown = argv.slice(1).filter((arg) => arg !== '--yes')
-  const result = unknown.length
-    ? refuse(`Unknown argument for ${ORCAD_RECLAIM_STALE_LOCK_FLAG}: ${unknown[0]}`)
-    : await reclaimStaleOrcadInstanceLock(resolveUserDataPath(), { yes: argv.includes('--yes') })
-  ;(result.exitCode === 0 ? console.log : console.error)(result.message)
+  const args = argv.slice(1)
+  const json = args.includes('--json')
+  const dataRootIndex = args.indexOf(ORCAD_STALE_LOCK_DATA_ROOT_FLAG)
+  const dataRoot = dataRootIndex === -1 ? resolveUserDataPath() : args[dataRootIndex + 1]
+  const unknown = args.filter(
+    (arg, index) =>
+      !['--yes', '--json', ORCAD_STALE_LOCK_DATA_ROOT_FLAG].includes(arg) &&
+      (dataRootIndex === -1 || index !== dataRootIndex + 1)
+  )
+  if (!dataRoot || unknown.length) {
+    console.error(
+      `Usage: orcad ${ORCAD_RECLAIM_STALE_LOCK_FLAG} [${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} <dir>] [--yes] [--json]`
+    )
+    process.exit(ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES.refused)
+  }
+  const result = await reclaimStaleOrcadInstanceLock(dataRoot, { yes: args.includes('--yes') })
+  printOrcadStaleLockReclaimResult(result, json)
   process.exit(result.exitCode)
 }

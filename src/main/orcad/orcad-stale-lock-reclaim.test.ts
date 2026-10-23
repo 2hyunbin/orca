@@ -89,18 +89,33 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     const root = makeRoot()
     const lockPath = writeLock(root, holderRecord())
     const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
-    expect(result.exitCode).toBe(0)
+    expect(result).toMatchObject({ status: 'reclaimed', exitCode: 0 })
     expect(existsSync(lockPath)).toBe(false)
+  })
+
+  it('never reports an empty data root as a recovery', async () => {
+    const result = await reclaimStaleOrcadInstanceLock(makeRoot(), { yes: true }, rebootedBox())
+    expect(result).toMatchObject({
+      status: 'none',
+      exitCode: 4,
+      message: expect.stringContaining('--data-root')
+    })
   })
 
   it('without --yes, names what it found and warns about other machines, then refuses', async () => {
     const root = makeRoot()
     writeLock(root, holderRecord())
     const result = await reclaimStaleOrcadInstanceLock(root, { yes: false }, rebootedBox())
-    expect(result.exitCode).toBe(1)
+    expect(result).toMatchObject({
+      status: 'eligible',
+      exitCode: 2,
+      evidence: { pid: HOLDER_PID, host: 'box', bootId: 'boot-1', currentBootId: 'boot-2' }
+    })
     for (const evidence of [`pid ${HOLDER_PID}`, 'host box', 'boot boot-1', '10 minutes ago']) {
       expect(result.message).toContain(evidence)
     }
+    expect(result.message).toContain('nothing answers on this machine')
+    expect(result.message).toContain('cannot rule out another machine with the same host name')
     expect(result.message).toContain('no other machine sharing this home runs Orca')
     expect(readOrcadInstanceLockRecord(join(root, ORCAD_LOCK_FILE_NAME))?.nonce).toBe(
       'stale-holder'
@@ -116,7 +131,11 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
       server.listen(join(root, `o-${HOLDER_PID}-rt.sock`), resolve)
     )
     const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
-    expect(result).toMatchObject({ exitCode: 1, message: expect.stringContaining('still answers') })
+    expect(result).toMatchObject({
+      status: 'refused',
+      exitCode: 1,
+      message: expect.stringContaining('Something on this machine answers')
+    })
     expect(readOrcadInstanceLockRecord(join(root, ORCAD_LOCK_FILE_NAME))?.nonce).toBe(
       'stale-holder'
     )
@@ -160,6 +179,63 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     await expect(probeOrcadEndpoint(`ws://[::1]:${port}`)).resolves.toBe('answers')
   })
 
+  it('reclaims a holder whose PID was reused after the reboot, but not one it cannot identify', async () => {
+    const reused = makeRoot()
+    const reusedLock = writeLock(reused, holderRecord())
+    const alive = (incarnation: { linuxStartTicks: string; bootId: string } | null) =>
+      rebootedBox({
+        lockHooks: {
+          ...rebootedBox().lockHooks,
+          processIsAlive: () => true,
+          incarnation: () => incarnation
+        }
+      })
+    // Another process now has that PID: its incarnation names this boot, not the record's.
+    const reclaimed = await reclaimStaleOrcadInstanceLock(
+      reused,
+      { yes: true },
+      alive({ linuxStartTicks: '9', bootId: 'boot-2' })
+    )
+    expect(reclaimed.status).toBe('reclaimed')
+    expect(existsSync(reusedLock)).toBe(false)
+
+    const unreadable = makeRoot()
+    writeLock(unreadable, holderRecord())
+    const refused = await reclaimStaleOrcadInstanceLock(unreadable, { yes: true }, alive(null))
+    expect(refused.status).toBe('refused')
+    expect(readOrcadInstanceLockRecord(join(unreadable, ORCAD_LOCK_FILE_NAME))?.nonce).toBe(
+      'stale-holder'
+    )
+  })
+
+  it('never clears a record other than the one it checked', async () => {
+    const root = makeRoot()
+    const lockPath = writeLock(root, holderRecord())
+    // A different holder's record lands after the checks and before the reclaim.
+    const swap = async (): Promise<'silent'> => {
+      writeLock(root, holderRecord({ nonce: 'newer-holder' }))
+      return 'silent'
+    }
+    writeFileSync(join(root, `o-${HOLDER_PID}-rt.sock`), '')
+    const result = await reclaimStaleOrcadInstanceLock(
+      root,
+      { yes: true },
+      rebootedBox({ probeEndpoint: swap })
+    )
+    expect(result.status).toBe('refused')
+    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('newer-holder')
+  })
+
+  it('answers a TCP probe only for a listener, and anything it cannot check as unknown', async () => {
+    const server = createServer()
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+    await expect(probeOrcadEndpoint(`ws://127.0.0.1:${port}`)).resolves.toBe('answers')
+    await expect(probeOrcadEndpoint('ws://[::1')).resolves.toBe('unknown')
+  })
+
   it.each([
     ['another host', holderRecord({ host: 'other-box' }), 'not this host'],
     // The same boot is this machine's to judge: a normal start does, by its PID.
@@ -174,7 +250,11 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     const root = makeRoot()
     writeLock(root, record)
     const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
-    expect(result).toMatchObject({ exitCode: 1, message: expect.stringContaining(reason) })
+    expect(result).toMatchObject({
+      status: 'refused',
+      exitCode: 1,
+      message: expect.stringContaining(reason)
+    })
     expect(readOrcadInstanceLockRecord(join(root, ORCAD_LOCK_FILE_NAME))?.nonce).toBe(
       'stale-holder'
     )

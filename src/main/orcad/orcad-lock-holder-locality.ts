@@ -2,6 +2,8 @@
 import process from 'node:process'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { readOrcadProcessIncarnation } from './orcad-process-start-time'
+import { OrcadInstanceLockError } from './orcad-data-root-privacy'
+import { orcadStaleLockReclaimCommand } from '../../shared/orcad-stale-lock-reclaim'
 
 /**
  * Same machine: the same machine identity, or (records without one) the same kernel boot. A record
@@ -42,4 +44,30 @@ export function orcadPeerPidIsJudgeableHere(
     return false
   }
   return orcadLockHolderLocality(peer, self, dataRootIsOnLocalDisk) === 'local'
+}
+
+/** A lock this machine cannot judge; on Linux it names the command that checks and clears it. */
+export function orcadLockHolderUnverifiableError(lock: {
+  holder: string
+  foreign: boolean
+  dataRoot: string
+  lockPath: string
+  desktop: boolean
+}): OrcadInstanceLockError {
+  // An orcad names its own runtime and entry: managed hosts have no `orca` or `orcad` on PATH.
+  const command = orcadStaleLockReclaimCommand(
+    lock.dataRoot,
+    lock.desktop ? null : { execPath: process.execPath, entry: process.argv[1] }
+  )
+  const reclaim =
+    process.platform === 'linux'
+      ? `run \`${command}\` on the machine it ran on to check and clear it, or `
+      : ''
+  return new OrcadInstanceLockError(
+    'orcad_instance_lock_holder_unverifiable',
+    `${lock.holder} holds the data root ${lock.dataRoot}${lock.foreign ? ' from another machine' : ''}. ` +
+      'Orca cannot check from here whether it is still running, because this data root may be ' +
+      `shared with other machines. Stop it there. If it is not running anywhere, ${reclaim}` +
+      `delete ${lock.lockPath} once you are sure.`
+  )
 }

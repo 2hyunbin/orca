@@ -512,6 +512,16 @@ describe('acquireOrcadInstanceLock', () => {
     })
   })
 
+  it('never lets a confirmed reclaim take a lock another machine id holds', () => {
+    const root = makeRoot()
+    const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
+    writeFileSync(lockPath, JSON.stringify(persistedRecord({ machineIdentity: 'machine-b' })))
+    expect(() => acquireOrcadInstanceLock(root, hooks({ reclaimConfirmed: () => true }))).toThrow(
+      expect.objectContaining({ code: 'orcad_instance_lock_holder_unverifiable' })
+    )
+    expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
+  })
+
   it('reclaims a record naming no machine only when it is provably from this one', () => {
     const root = makeRoot()
     const lockPath = join(root, ORCAD_LOCK_FILE_NAME)
