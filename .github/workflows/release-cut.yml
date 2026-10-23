@@ -66,7 +66,7 @@ jobs:
     # diverge it (version line) every slot, conflicting every PR back upstream.
     # Gate to the canonical repo so the workflow no-ops on forks.
     if: github.repository == 'stablyai/orca'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
       contents: write
