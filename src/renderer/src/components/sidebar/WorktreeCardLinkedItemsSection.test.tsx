@@ -160,7 +160,10 @@ describe('workspace linked references in hover details', () => {
     expect(screen.getByText('· Linear · acme')).toBeTruthy()
     const checks = screen.getByLabelText('Checks: Passing')
     expect(checks.previousElementSibling?.textContent).toBe('PR #57')
-    expect(checks.nextElementSibling?.textContent).toContain('GitHub')
+    expect(checks.previousElementSibling?.previousElementSibling?.getAttribute('aria-label')).toBe(
+      'GitHub'
+    )
+    expect(checks.nextElementSibling?.textContent).not.toContain('GitHub')
     const key = getWorkspaceAttachmentKey(attachments[0])
     expect(
       Array.from(container.querySelectorAll('[data-workspace-hover-reference]'))

@@ -1,6 +1,7 @@
 import type { MouseEvent, ReactNode } from 'react'
 import { CircleDot, GitMerge, GitPullRequest } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { GitHubIcon } from '@/components/icons/GitHubIcon'
 import { FilePathCursorTooltip } from '@/components/file-path-cursor-tooltip'
 import { translate } from '@/i18n/i18n'
 import { ReviewChecksIndicator, reviewStateLabel } from './WorktreeCardMetadataStatusBadges'
@@ -107,10 +108,15 @@ export function WorktreeCardReferenceRow({
           </button>
         )}
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-2xs text-muted-foreground">
+          {provider === 'GitHub' ? (
+            <span className="inline-flex shrink-0" role="img" aria-label={provider}>
+              <GitHubIcon className="size-3" />
+            </span>
+          ) : null}
           <span className="shrink-0">{label}</span>
           {review?.status ? <ReviewChecksIndicator status={review.status} /> : null}
           <span className="min-w-0 flex-1 truncate">
-            · {provider}
+            {provider === 'GitHub' ? null : `· ${provider}`}
             {source ? ` · ${source}` : ''}
           </span>
           {actions}

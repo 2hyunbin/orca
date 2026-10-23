@@ -124,9 +124,10 @@ export function WorktreeCardLinkedReviewActions({
   closeHover: () => void
 }): React.JSX.Element {
   const url = item.url ?? review?.url
+  const label = item.type === 'mr' ? 'MR' : 'PR'
   return (
     <WorktreeCardReviewActions
-      label={item.type === 'mr' ? 'MR' : 'PR'}
+      label={label}
       number={item.number}
       provider={workspaceAttachmentProviderLabel(item)}
       onOpenChange={onOpenChange}
