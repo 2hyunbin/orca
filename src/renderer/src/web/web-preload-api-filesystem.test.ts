@@ -35,7 +35,7 @@ describe('web file preload API', () => {
     ).rejects.toThrow('Remote folder download is unavailable in paired web clients.')
   })
 
-  it('returns false for runtime missing-path errors from fs.pathExists', async () => {
+  it('returns false for a missing file in the most specific detected worktree', async () => {
     const runtimeCalls: { method: string; params: unknown }[] = []
     const worktree = {
       id: 'wt-1',
@@ -75,7 +75,15 @@ describe('web file preload API', () => {
             return Promise.resolve({
               id: `call-${runtimeCalls.length}`,
               ok: true,
-              result: { repoId: 'repo-1', authoritative: true, worktrees: [worktree] },
+              result: {
+                repoId: 'repo-1',
+                authoritative: true,
+                worktrees: [
+                  { ...worktree, id: 'wt-parent', path: '/workspace' },
+                  worktree,
+                  { ...worktree, id: 'wt-same-path' }
+                ]
+              },
               _meta: { runtimeId: 'runtime-1' }
             })
           }

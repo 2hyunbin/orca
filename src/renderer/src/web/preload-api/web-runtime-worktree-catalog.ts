@@ -139,17 +139,19 @@ export async function resolveRuntimeWorktreeByPath(
     useDetectedWorktreeCache,
     expectedEnvironmentId
   )
-  const match = worktrees
-    .map((worktree) => ({
-      worktree,
-      relativePath: relativePathInsideRoot(worktree.path, worktreePath)
-    }))
-    .filter((entry) => entry.relativePath !== null)
-    .sort((a, b) => b.worktree.path.length - a.worktree.path.length)[0]
+  let match: Worktree | undefined
+  for (const worktree of worktrees) {
+    if (
+      (!match || worktree.path.length > match.path.length) &&
+      relativePathInsideRoot(worktree.path, worktreePath) !== null
+    ) {
+      match = worktree
+    }
+  }
   if (!match) {
     throw new Error(`No runtime worktree owns ${worktreePath}`)
   }
-  return match.worktree
+  return match
 }
 
 export async function resolveRuntimeFilePath(
