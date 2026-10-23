@@ -20,6 +20,7 @@ type UnsupportedMatch = {
   reason: MarkdownRichModeUnsupportedReason
   message: string
   pattern: RegExp
+  requiredText?: string
 }
 
 export type MarkdownRichModeEligibility = {
@@ -58,6 +59,7 @@ const UNSUPPORTED_PATTERNS: UnsupportedMatch[] = [
   },
   {
     reason: 'reference-links',
+    requiredText: ']:',
     get message() {
       return translate(
         'auto.components.editor.markdown.rich.mode.2fd2b44073',
@@ -68,6 +70,7 @@ const UNSUPPORTED_PATTERNS: UnsupportedMatch[] = [
   },
   {
     reason: 'footnotes',
+    requiredText: ']:',
     get message() {
       return translate(
         'auto.components.editor.markdown.rich.mode.7a8ce7c7da',
@@ -112,6 +115,9 @@ export function getMarkdownRichModeUnsupportedReason(
 
   for (const matcher of UNSUPPORTED_PATTERNS) {
     if (matcher.reason === 'html-or-jsx') {
+      continue
+    }
+    if (matcher.requiredText && !contentWithoutCode.includes(matcher.requiredText)) {
       continue
     }
     if (matcher.pattern.test(contentWithoutCode)) {

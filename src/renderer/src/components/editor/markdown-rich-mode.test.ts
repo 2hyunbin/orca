@@ -213,6 +213,21 @@ const decide = (content: string) =>
   getMarkdownRichModeEligibilityDecision({ content, sizeOverridden: false })
 
 describe('rich Markdown line scanning', () => {
+  it.each([
+    ['[unfinished\n'.repeat(100), null],
+    ['[^unfinished\n'.repeat(100), null],
+    ['[label\ncontinued]: /target', 'reference-links'],
+    ['[^note]: \n', 'footnotes'],
+    ['[^note]: text', 'reference-links'],
+    ['[label]:\u2028/target', 'reference-links'],
+    ['[label]:/target', null],
+    ['[]: /target', null],
+    ['`[hidden]: /target`\n[unfinished', null],
+    ['---\n[label]: /target\n---\n[unfinished', null]
+  ] as const)('preserves definition eligibility for %j', (content, expected) => {
+    expect(decide(content).unsupportedReason).toBe(expected)
+  })
+
   it('does not inspect every prose character to find newline boundaries', () => {
     const content = 'Ordinary prose '.repeat(10_000)
     const spy = vi.spyOn(String.prototype, 'charCodeAt')
