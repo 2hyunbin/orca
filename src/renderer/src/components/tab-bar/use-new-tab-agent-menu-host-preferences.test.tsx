@@ -17,7 +17,10 @@ import {
   TEST_REPO
 } from '@/store/slices/worktrees-slice-test-fixtures'
 import { mutateHostAgentLaunchSettings } from '../settings/agent-launch-settings-transport'
-import { clearHostAgentMenuSettingsForTests } from '../settings/use-host-agent-launch-preferences'
+import {
+  clearHostAgentMenuSettingsForTests,
+  readAgentLaunchPreferencesForWorktree
+} from '../settings/use-host-agent-launch-preferences'
 import { useNewTabAgentMenuRows } from './use-new-tab-agent-menu-rows'
 
 const rpc = vi.hoisted(() => ({ call: vi.fn(), supports: vi.fn() }))
@@ -254,7 +257,7 @@ it('keeps desktop preferences for a host that predates host launch settings', as
   expect(rpc.call).not.toHaveBeenCalled()
 })
 
-it('settles an unreachable host without applying desktop visibility or default', async () => {
+it('falls back to desktop preferences when the first read fails', async () => {
   rpc.call.mockRejectedValue(new Error('offline'))
   const hook = renderHook(() =>
     useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
@@ -262,5 +265,45 @@ it('settles an unreachable host without applying desktop visibility or default',
   await act(async () => {})
   expect(
     hook.result.current.state === 'settled' && hook.result.current.rows.map((row) => row.agent)
-  ).toEqual(['claude', 'codex', 'opencode'])
+  ).toEqual(['opencode', 'claude'])
+})
+
+it('stops waiting on a stalled host, then applies its late answer', async () => {
+  vi.useFakeTimers()
+  try {
+    const stalled = Promise.withResolvers<{ settings: typeof server }>()
+    rpc.call.mockReturnValueOnce(stalled.promise)
+    const hook = renderHook(() =>
+      useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
+    )
+    expect(hook.result.current.state).toBe('loading')
+    await act(async () => vi.advanceTimersByTime(3_000))
+    expect(hook.result.current.state === 'settled' && hook.result.current.rows[0]?.agent).toBe(
+      'opencode'
+    )
+    await act(async () => stalled.resolve({ settings: server }))
+    expect(hook.result.current.state === 'settled' && hook.result.current.rows[0]?.agent).toBe(
+      'codex'
+    )
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('gives the new-agent shortcut and badge the default the host menu applied', async () => {
+  expect(readAgentLaunchPreferencesForWorktree(useAppStore.getState(), 'wt')).toEqual({
+    defaultTuiAgent: 'opencode',
+    disabledTuiAgents: ['codex']
+  })
+  const hook = renderHook(() =>
+    useNewTabAgentMenuRows('wt', true, { kind: 'runtime', environmentId: 'alpha' })
+  )
+  await act(async () => {})
+  expect(hook.result.current.state === 'settled' && hook.result.current.defaultTuiAgent).toBe(
+    'codex'
+  )
+  expect(readAgentLaunchPreferencesForWorktree(useAppStore.getState(), 'wt')).toEqual({
+    defaultTuiAgent: 'codex',
+    disabledTuiAgents: ['opencode']
+  })
 })

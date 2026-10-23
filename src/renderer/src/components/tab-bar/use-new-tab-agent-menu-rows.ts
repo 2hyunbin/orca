@@ -45,11 +45,18 @@ import { readDetectedAgentsForTarget } from '@/lib/agent-detection-target-invent
 import { resolveAgentMenuSelection } from '@/lib/agent-menu-selection'
 import { useHostAgentMenuSettings } from '@/components/settings/use-host-agent-launch-preferences'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 
 export type NewTabAgentMenuModel =
   | { state: 'loading'; placeholderCount: number }
-  | { state: 'settled'; rows: NewTabAgentMenuRow[]; detection: UseDetectedAgentsResult }
+  | {
+      state: 'settled'
+      rows: NewTabAgentMenuRow[]
+      detection: UseDetectedAgentsResult
+      /** The default these rows were ordered by, so the new-agent badge marks the same agent. */
+      defaultTuiAgent?: GlobalSettings['defaultTuiAgent']
+    }
 
 function catalogUnlearned(
   host: string,
@@ -273,7 +280,7 @@ export function useAgentMenuObservation(
         state: 'loading',
         placeholderCount: Math.max(chatAgents.length, detection.detectedIds?.length ?? 0, 2)
       }
-    : { state: 'settled', rows, detection }
+    : { state: 'settled', rows, detection, defaultTuiAgent: settings?.defaultTuiAgent }
   return {
     model,
     detection,
