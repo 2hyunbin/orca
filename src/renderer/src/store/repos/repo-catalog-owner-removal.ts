@@ -30,6 +30,7 @@ import {
   worktreeMatchesHost
 } from '../slices/worktrees/listing/worktree-host-ownership'
 import { workspacePublishingHosts } from '../slices/worktrees/teardown/host-twin-worktree-purge'
+import { selectDetectedWorktreesByRepo, selectWorktreesByRepo } from '../workspace-record-selectors'
 
 export type RepoCatalogOwnerRemoval = {
   rows: Pick<AppState, 'worktreesByRepo' | 'detectedWorktreesByRepo' | 'sortEpoch'>
@@ -111,8 +112,10 @@ export function planRepoCatalogOwnerRemoval(
   )
   const removed = new Set<string>()
   const aliases = new Map<string, HostWorktreeTarget>()
-  let worktreesByRepo = s.worktreesByRepo
-  let detectedWorktreesByRepo = s.detectedWorktreesByRepo
+  const initialWorktreesByRepo = selectWorktreesByRepo(s)
+  const initialDetectedWorktreesByRepo = selectDetectedWorktreesByRepo(s)
+  let worktreesByRepo = initialWorktreesByRepo
+  let detectedWorktreesByRepo = initialDetectedWorktreesByRepo
   const matchesRemovedOwner = (
     repoId: string,
     row: { hostId?: ExecutionHostId; runtimeOwnerEnvironmentId?: string }
@@ -130,7 +133,7 @@ export function planRepoCatalogOwnerRemoval(
     }
     return worktreeMatchesHost(row, hostId, worktreeHostMatchOptions(s, repoId, hostId))
   }
-  for (const [repoId, list] of Object.entries(s.worktreesByRepo)) {
+  for (const [repoId, list] of Object.entries(initialWorktreesByRepo)) {
     const kept = list.filter((row) => {
       if (!matchesRemovedOwner(repoId, row)) {
         return true
@@ -147,7 +150,7 @@ export function planRepoCatalogOwnerRemoval(
     if (kept.length === list.length) {
       continue
     }
-    if (worktreesByRepo === s.worktreesByRepo) {
+    if (worktreesByRepo === initialWorktreesByRepo) {
       worktreesByRepo = { ...worktreesByRepo }
     }
     if (kept.length > 0) {
@@ -156,7 +159,7 @@ export function planRepoCatalogOwnerRemoval(
       delete worktreesByRepo[repoId]
     }
   }
-  for (const [repoId, result] of Object.entries(s.detectedWorktreesByRepo)) {
+  for (const [repoId, result] of Object.entries(initialDetectedWorktreesByRepo)) {
     const kept = result.worktrees.filter((row) => {
       if (!matchesRemovedOwner(repoId, row)) {
         return true
@@ -173,7 +176,7 @@ export function planRepoCatalogOwnerRemoval(
     if (kept.length === result.worktrees.length) {
       continue
     }
-    if (detectedWorktreesByRepo === s.detectedWorktreesByRepo) {
+    if (detectedWorktreesByRepo === initialDetectedWorktreesByRepo) {
       detectedWorktreesByRepo = { ...detectedWorktreesByRepo }
     }
     if (kept.length > 0) {
@@ -221,8 +224,8 @@ export function planRepoCatalogOwnerRemoval(
       worktreesByRepo,
       detectedWorktreesByRepo,
       sortEpoch:
-        worktreesByRepo !== s.worktreesByRepo ||
-        detectedWorktreesByRepo !== s.detectedWorktreesByRepo
+        worktreesByRepo !== initialWorktreesByRepo ||
+        detectedWorktreesByRepo !== initialDetectedWorktreesByRepo
           ? s.sortEpoch + 1
           : s.sortEpoch
     },
