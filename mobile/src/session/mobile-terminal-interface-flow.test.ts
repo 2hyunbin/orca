@@ -2,10 +2,7 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { expect, it, vi } from 'vitest'
 import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
-import {
-  mobileTerminalInterfaceReleasesChat,
-  type MobileNativeChatTab
-} from './mobile-native-chat-eligibility'
+import { mobileTerminalInterfaceReleasesChat } from './mobile-native-chat-eligibility'
 import { useMobileNativeChatLaunchDraftSeed } from './use-mobile-native-chat-launch-draft-seed'
 import {
   editMobileNativeChatDraft,
@@ -18,7 +15,8 @@ import {
   readSessionViewOverridesPreference,
   updateSessionViewOverride
 } from '../storage/session-view-preferences'
-import { mobileSessionTabsEqual, type MobileTerminalSessionTab } from './mobile-terminal-records'
+import { mobileSessionTabsEqual } from './mobile-terminal-records'
+import type { MobileSessionTab } from './mobile-session-route-types'
 
 vi.mock('lucide-react-native', () => ({ MessageSquare: () => null, SquareTerminal: () => null }))
 vi.mock('expo-router', async () => {
@@ -58,7 +56,7 @@ it.each([undefined, 'Keep this editable'])(
       state: 'shell',
       basis: 'cold'
     }
-    let tab: MobileTerminalSessionTab & Pick<MobileNativeChatTab, 'launchAgent'> = {
+    let tab: Extract<MobileSessionTab, { type: 'terminal' }> = {
       type: 'terminal',
       id: 'tab',
       title: 'Agent',

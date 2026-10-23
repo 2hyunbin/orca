@@ -2,7 +2,7 @@ import { sessionTabsListRead } from './mobile-session-read-operations'
 import type { RpcClient } from '../transport/rpc-client'
 import type { RpcFailure } from '../transport/types'
 
-export const RECONCILIATION_INTERVAL_MS = 2000
+export { RECONCILIATION_INTERVAL_MS } from './mobile-session-reconciliation-cadence'
 
 export type SessionTabsApplyOutcome<Tab> =
   | { accepted: false }

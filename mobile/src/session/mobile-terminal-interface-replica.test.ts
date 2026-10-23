@@ -1,19 +1,18 @@
-// @vitest-environment happy-dom
-import { act, renderHook } from '@testing-library/react'
+import { createElement, useSyncExternalStore, useCallback, useState } from 'react'
+import { act, create, type ReactTestRenderer } from 'react-test-renderer'
+import type { RpcClient } from '../transport/rpc-client'
+import type { ConnectionState } from '../transport/types'
+import type { MobileSessionTab as Tab } from './mobile-session-route-types'
 import { expect, it, vi } from 'vitest'
 import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
 import { resolveMobileNativeChat, canShowMobileNativeChat } from './mobile-native-chat-eligibility'
 
 it('joins listener-first phone observations independently of structural tabs, retracts late tabs and owns client cleanup', async () => {
-  const { useSyncExternalStore, useCallback, useState } = await import('react')
   const { scopeRpcClientToExecutionHost } =
     await import('../transport/execution-host-scoped-rpc-client')
   const { mobileTerminalInterfaceReplica, deriveMobileTerminalInterfaces } =
     await import('./mobile-terminal-interface-replica')
   const { createStableLogicalRpcClient } = await import('../transport/stable-logical-rpc-client')
-  type RpcClient = import('../transport/rpc-client').RpcClient
-  type ConnectionState = import('../transport/types').ConnectionState
-  type Tab = import('./mobile-session-route-types').MobileSessionTab
   const observation: TerminalInterfaceObservation = {
     ptyId: 'physical',
     incarnationId: 'birth',
@@ -100,8 +99,8 @@ it('joins listener-first phone observations independently of structural tabs, re
     for (const listener of stateListeners) {
       listener(next)
     }
-    renderer?.rerender()
-    secondRenderer?.rerender()
+    renderer?.update(createElement(Probe))
+    secondRenderer?.update(createElement(Probe))
   }
   const accepted: Tab = {
     type: 'terminal',
@@ -148,28 +147,28 @@ it('joins listener-first phone observations independently of structural tabs, re
     )
     return null
   }
-  let renderer: ReturnType<typeof renderHook> | undefined
-  let secondRenderer: ReturnType<typeof renderHook> | undefined
-  const scopedRenderers: ReturnType<typeof renderHook>[] = []
+  let renderer: ReactTestRenderer | undefined
+  let secondRenderer: ReactTestRenderer | undefined
+  const scopedRenderers: ReactTestRenderer[] = []
   try {
     await act(async () => {
-      renderer = renderHook(Probe)
+      renderer = create(createElement(Probe))
     })
     expect(replica.read().get('handle')).toEqual(observation) // Replay survives the following ready.
     expect(physical.subscribe).toHaveBeenCalledTimes(1)
     await act(async () => {
-      secondRenderer = renderHook(Probe)
+      secondRenderer = create(createElement(Probe))
     })
     expect(physical.subscribe).toHaveBeenCalledTimes(1)
     structural = [accepted, browser]
-    await act(async () => renderer?.rerender())
+    await act(async () => renderer?.update(createElement(Probe)))
     expect(resolution !== null).toBe(false) // Observation preceded the matching tab.
     expect(toggleAvailable()).toBe(false)
     expect(derived[1]).toBe(browser)
     expect(accepted).not.toHaveProperty('terminalInterface')
     await act(async () => emit(frame(2, [])))
     structural = [{ ...accepted }, browser] // A later structural publication cannot restore a retracted value.
-    await act(async () => renderer?.rerender())
+    await act(async () => renderer?.update(createElement(Probe)))
     expect(derived[0]).not.toHaveProperty('terminalInterface', observation)
     expect(resolution !== null).toBe(true)
     expect(toggleAvailable()).toBe(true)
@@ -249,11 +248,12 @@ it('joins listener-first phone observations independently of structural tabs, re
         toggle: serverToggle,
         preference
       })
+      return null
     }
     await act(async () => {
       scopedRenderers.push(
-        renderHook(() => ServerProbe({ focused: true })),
-        renderHook(() => ServerProbe({ focused: false }))
+        create(createElement(ServerProbe, { focused: true })),
+        create(createElement(ServerProbe, { focused: false }))
       )
     })
     expect(active.size).toBe(2) // One desktop feed and one server feed, shared by two mounted consumers each.
@@ -351,7 +351,7 @@ it('joins listener-first phone observations independently of structural tabs, re
     // Synchronous opener failure must dispose the logical record after subscribe returns.
     openingFailure = { type: 'error', error: { code: 'remote_runtime_unavailable' } }
     await act(async () => {
-      scopedRenderers.push(renderHook(() => ServerProbe({ focused: false })))
+      scopedRenderers.push(create(createElement(ServerProbe, { focused: false })))
     })
     expect(serverActive.size).toBe(0)
     const synchronousEnded = serverHistory.at(-1)!
@@ -369,7 +369,7 @@ it('joins listener-first phone observations independently of structural tabs, re
     await act(async () => scopedRenderers.shift()?.unmount())
     openingFailure = null
     await act(async () => {
-      scopedRenderers.push(renderHook(() => ServerProbe({ focused: false })))
+      scopedRenderers.push(create(createElement(ServerProbe, { focused: false })))
     })
     expect(serverReplica.read().get('handle')).toEqual(replay) // Fresh consumers can start after final release.
     const beforeClose = serverHistory.at(-1)!

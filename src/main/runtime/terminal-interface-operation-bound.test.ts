@@ -6,6 +6,7 @@ import { withBoundPane } from './bind-first-pane.test-fixture'
 import { getRuntimeBrowserPageRegistry } from './runtime-browser-page-registry'
 import type { RuntimeMobileSessionTabsResult } from '../../shared/runtime-types'
 import type { RuntimeClientEvent } from '../../shared/runtime-client-events'
+import type { RuntimePtyWorktreeRecord } from './runtime-terminal-state-records'
 
 vi.mock('../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: true }))
 await import('./orca-runtime-test-mocks.spec')
@@ -80,7 +81,11 @@ async function population(size: number, allEligible = false) {
   let inventoryVisits = 0
   const ptys = runtime['ptysById']
   const values = ptys.values.bind(ptys)
-  vi.spyOn(ptys, 'values').mockImplementation(function* () {
+  vi.spyOn(ptys, 'values').mockImplementation(function* (): Generator<
+    RuntimePtyWorktreeRecord,
+    undefined,
+    unknown
+  > {
     for (const pty of values()) {
       inventoryVisits += 1
       yield pty
@@ -164,8 +169,10 @@ async function measure<T>(
   }
 }
 
+type Measurements = ReturnType<Awaited<ReturnType<typeof population>>['measurements']>
+
 it('bounds unchanged 250ms inventory and one-terminal input work by observed terminals', async () => {
-  const results = []
+  const results: { size: number; tick: Measurements; input: Measurements }[] = []
   for (const size of [10, 100]) {
     results.push(
       await measure(size, async (fixture) => {
@@ -191,7 +198,7 @@ it('bounds unchanged 250ms inventory and one-terminal input work by observed ter
 })
 
 it('bounds full snapshot work by observations rather than unrelated panes', async () => {
-  const results = []
+  const results: (Measurements & { size: number })[] = []
   for (const size of [10, 100]) {
     results.push(
       await measure(size, async (fixture) => {
@@ -216,7 +223,12 @@ it('bounds full snapshot work by observations rather than unrelated panes', asyn
 })
 
 it('bounds one observation change and recovery fanout by affected mobile workspaces', async () => {
-  const results = []
+  const results: {
+    size: number
+    withoutListener: Measurements
+    recovered: Measurements
+    retracted: Measurements
+  }[] = []
   for (const size of [10, 100]) {
     results.push(
       await measure(size, async (fixture) => {
@@ -366,7 +378,7 @@ it('bounds one observation change and recovery fanout by affected mobile workspa
 it.each([0, 2])(
   'bounds all-eligible completion and full-frame work (completion stagger=%sms)',
   async (stagger) => {
-    const results = []
+    const results: { size: number; stagger: number; tick: Measurements; wave: Measurements }[] = []
     for (const size of [10, 100]) {
       results.push(
         await measure(

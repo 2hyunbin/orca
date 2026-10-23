@@ -1,4 +1,4 @@
-import { RECONCILIATION_INTERVAL_MS } from './mobile-session-tabs-stream-health'
+import { RECONCILIATION_INTERVAL_MS } from './mobile-session-reconciliation-cadence'
 import { executionHostScopedClients } from '../transport/execution-host-scoped-rpc-client'
 import {
   terminalInterfaceSnapshotSchema,

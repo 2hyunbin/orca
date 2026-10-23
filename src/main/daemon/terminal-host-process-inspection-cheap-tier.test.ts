@@ -1,3 +1,4 @@
+import type { IPty } from 'node-pty'
 import type * as InterfaceEvidence from '../providers/terminal-interface-process-evidence'
 import type * as FsPromises from 'node:fs/promises'
 import type { Session } from './session'
@@ -165,21 +166,38 @@ function installPs(): void {
   })
 }
 
-function createSession(processName: () => string, rootPid = SHELL_PID): Session {
+type FixtureSession = Session & { markDead(): void }
+
+function createSession(processName: () => string, rootPid = SHELL_PID): FixtureSession {
   let dead = false
+  const process: IPty = {
+    pid: rootPid,
+    cols: 80,
+    rows: 24,
+    get process() {
+      return processName()
+    },
+    handleFlowControl: false,
+    onData: () => ({ dispose() {} }),
+    onExit: () => ({ dispose() {} }),
+    resize() {},
+    clear() {},
+    write() {},
+    kill() {},
+    pause() {},
+    resume() {}
+  }
   const tracker = trackerModule.createPtyForegroundProcessTracker({
-    process: {
-      pid: rootPid,
-      get process() {
-        return processName()
-      }
-    } as never,
+    process,
     shellPath: '/bin/zsh',
     sessionId: 'wt-1:pane-1',
     startupAgentRecognition: null,
     isDead: () => dead
   })
-  return {
+  const session: Pick<
+    Session,
+    'pid' | 'inspectTerminalInterface' | 'incarnationId' | 'isAlive' | 'getForegroundProcess'
+  > & { markDead(): void } = {
     pid: rootPid,
     inspectTerminalInterface: (
       snapshot?: Parameters<typeof interfaceEvidence.inspectPosixTerminalInterface>[3]
@@ -194,7 +212,9 @@ function createSession(processName: () => string, rootPid = SHELL_PID): Session 
       dead = true
       tracker.markDead()
     }
-  } as unknown as Session & { markDead(): void }
+  }
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: inspection uses only these checked public members; constructing Session would start an unrelated PTY output pipeline.
+  return session as unknown as FixtureSession
 }
 
 async function inspect(
@@ -277,7 +297,7 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
   })
 
   /** Bring a session to a recognized anchor the way production does: one full cadence tick. */
-  async function anchoredSession(): Promise<Session> {
+  async function anchoredSession(): Promise<FixtureSession> {
     const session = createSession(() => 'node')
     const first = await inspect(session, { steadyState: true })
     await settle()
@@ -427,7 +447,7 @@ describe.each(['darwin', 'linux'])('daemon cheap-tier process inspection (%s)', 
   })
 
   it('a dead session is never served from its anchor', async () => {
-    const session = (await anchoredSession()) as Session & { markDead(): void }
+    const session = await anchoredSession()
     session.markDead()
     await expect(inspect(session, { steadyState: true })).rejects.toThrow('not found')
     expect(forks.cheap).toBe(0)
