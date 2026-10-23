@@ -52,6 +52,39 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function normalizeIpynbLineEndings(text: string): string {
+  if (text.length <= 64 * 1024) {
+    return text.replace(/\r\n/g, '\n')
+  }
+  // Retain sparse spans; flatten dense replacements before they accumulate large ropes.
+  let carriageReturn = text.indexOf('\r\n')
+  if (carriageReturn === -1) {
+    return text
+  }
+  let count = 0
+  let prefix = ''
+  let copiedThrough = 0
+  while (carriageReturn !== -1 && count < text.length / 64) {
+    prefix += `${text.slice(copiedThrough, carriageReturn)}\n`
+    copiedThrough = carriageReturn + 2
+    count += 1
+    carriageReturn = text.indexOf('\r\n', copiedThrough)
+  }
+  if (carriageReturn === -1) {
+    return prefix + text.slice(copiedThrough)
+  }
+  const chunks: string[] = [prefix]
+  for (let start = copiedThrough; start < text.length;) {
+    let end = Math.min(start + 64 * 1024, text.length)
+    if (text.charCodeAt(end - 1) === 13 && text.charCodeAt(end) === 10) {
+      end += 1
+    }
+    chunks.push(text.slice(start, end).split('\r\n').join('\n'))
+    start = end
+  }
+  return chunks.join('')
+}
+
 export function concatIpynbMultilineString(value: unknown): string {
   if (Array.isArray(value)) {
     let result = ''
@@ -59,9 +92,9 @@ export function concatIpynbMultilineString(value: unknown): string {
       const item = String(value[i] ?? '')
       result += i < value.length - 1 && !item.endsWith('\n') ? `${item}\n` : item
     }
-    return result.replace(/\r\n/g, '\n')
+    return normalizeIpynbLineEndings(result)
   }
-  return String(value ?? '').replace(/\r\n/g, '\n')
+  return normalizeIpynbLineEndings(String(value ?? ''))
 }
 
 export function translateKernelLanguageToMonaco(language: string | null | undefined): string {

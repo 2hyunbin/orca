@@ -25,6 +25,32 @@ describe('ipynb parsing', () => {
     expect(concatIpynbMultilineString(['a', 'b\n', 'c\r\n'])).toBe('a\nb\nc\n')
   })
 
+  it.each([65535, 65536, 65537])(
+    'preserves CRLF pairs around normalization window %s',
+    (offset) => {
+      const prefix = 'a'.repeat(offset)
+      const tail = 'b\r\n'.repeat(50_000)
+      expect(concatIpynbMultilineString(`${prefix}\r\n${tail}\r`)).toBe(
+        `${prefix}\n${'b\n'.repeat(50_000)}\r`
+      )
+    }
+  )
+
+  it('preserves bare returns, Unicode and injected newlines between array items', () => {
+    const items = ['\r', 'a\r', null, undefined, 42, '😀\ud800\r\nb\r', '', 'last\r']
+    expect(concatIpynbMultilineString(items)).toBe('\na\n\n\n42\n😀\ud800\nb\n\nlast\r')
+    expect(concatIpynbMultilineString(['\r', '\n'])).toBe('\n\n')
+    expect(concatIpynbMultilineString(null)).toBe('')
+    expect(concatIpynbMultilineString(42)).toBe('42')
+  })
+
+  it('normalizes large multiline arrays and preserves sparse CRLF text', () => {
+    expect(concatIpynbMultilineString(Array(50_000).fill('a\r\n'))).toBe('a\n'.repeat(50_000))
+    const plain = 'a'.repeat(100_000)
+    expect(concatIpynbMultilineString(`${plain}\r\n${plain}`)).toBe(`${plain}\n${plain}`)
+    expect(concatIpynbMultilineString(plain)).toBe(plain)
+  })
+
   it('maps Jupyter kernel language names to Monaco language ids', () => {
     expect(translateKernelLanguageToMonaco('c#')).toBe('csharp')
     expect(translateKernelLanguageToMonaco('c++11')).toBe('cpp')
