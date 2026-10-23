@@ -53,6 +53,7 @@ export function encodeRawMarkdownHtmlForRichEditor(
   let activeFence: '`' | '~' | null = null
   let activeFenceLength = 0
   let result = ''
+  const sourceMarker = /[\n`<[]/g
   const nonWhitespace = /\S/g
   const fencePrefix = /(`{3,}|~{3,})/y
   let fenceProbe = -1
@@ -82,9 +83,10 @@ export function encodeRawMarkdownHtmlForRichEditor(
     }
 
     if (activeFence) {
-      const nextChar = normalizedContent[index]
-      result += nextChar
-      index += 1
+      const lineEnd = findLineEnd(normalizedContent, index)
+      const nextLineStart = Math.min(lineEnd + 1, normalizedContent.length)
+      result += normalizedContent.slice(index, nextLineStart)
+      index = nextLineStart
       continue
     }
 
@@ -205,9 +207,14 @@ export function encodeRawMarkdownHtmlForRichEditor(
       }
     }
 
-    const nextChar = normalizedContent[index]
-    result += nextChar
-    index += 1
+    // Keep every line start available to fence and block matching.
+    sourceMarker.lastIndex = index + 1
+    const nextIndex =
+      normalizedContent[index] === '\n'
+        ? index + 1
+        : (sourceMarker.exec(normalizedContent)?.index ?? normalizedContent.length)
+    result += normalizedContent.slice(index, nextIndex)
+    index = nextIndex
   }
 
   return result
