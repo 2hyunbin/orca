@@ -56,7 +56,7 @@ Batch validation lives in `reviews/<area>-<batch>-validation.json`. Local log pa
 
 The current batch adds 171 original files and 1,256 case records: 21 CLI files, 50 main-process test/support files, 50 config files and 50 mobile files. The decisions retain 1,140 cases, fix 96, consolidate 16 and remove four, leaving 1,236 declarations. Repairs observe exact CLI errors and request identities, ACP lifecycle and cleanup, actual mobile root-detach and bundle activation, and build/workflow admission. Duplicate controls transfer into retained cases before removal. Source review counts are not runtime test totals.
 
-The tracker remains authoritative for current counts after upstream reconciliation. Cloud runner/workflow mapping is reconciled at its pinned checkpoint; repository-wide reconciliation and the remaining candidates are still required.
+At this checkpoint, 1,308 present files are reviewed, 15 are removed, none are stale and 15,663 candidates remain pending. The superseding graph review covers all nine current declarations and 22 expanded runtime cases. Cloud runner/workflow mapping is reconciled at its pinned checkpoint; repository-wide reconciliation and the remaining candidates are still required.
 
 Further completed review records:
 
@@ -130,6 +130,7 @@ Further completed review records:
 | `main-0002`            |                50 |          337 | Exercise ACP replay and lifecycle, child cleanup, hook delivery and independent observer timing.                               |
 | `config-0008`          |                50 |          257 | Evaluate workflow gates, reseal failures and all compiler-key inputs; trim redundant inventory checks.                         |
 | `mobile-0007`          |                50 |          499 | Exercise actual root detach, byte-window flow, bundle staging/activation and cache-independent failure retention.              |
+| `upstream-0006`        |       1 re-review |            9 | Retain exact graph/opacity collections after additive ownership metadata; all 22 expanded cases pass.                          |
 
 Two production findings are recorded in `reviews/cloud-0005-validation.json`: audit rows added after `stop()` can still persist at the batch threshold, and queue overflow during an in-flight reserve-ledger insert can lose a queued identity. That batch reproduced and recorded them without changing production behavior. Cloud-only relay test/typecheck/lint build the unchanged process-host package before resolving its compiled exports; this prerequisite was validated with generated outputs absent.
 

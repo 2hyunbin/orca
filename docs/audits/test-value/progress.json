@@ -1,12 +1,12 @@
 {
-  "source_commit": "18c27344d15c3d0bc253b43fa82ccfb937a50a86",
-  "scanned_source_files": 37112,
+  "source_commit": "cb508dc745545c7d66ad4cea78d987e1742e547e",
+  "scanned_source_files": 37119,
   "counts": {
-    "files": 16969,
-    "declarations": 118910,
+    "files": 16971,
+    "declarations": 118926,
     "reviewed": 1308,
     "stale": 0,
-    "unreviewed": 15661,
+    "unreviewed": 15663,
     "removed": 15
   },
   "reviewed_original_declarations": 9373,
@@ -24,10 +24,10 @@
       "unreviewed": 0
     },
     "config": {
-      "files": 607,
+      "files": 608,
       "reviewed": 383,
       "stale": 0,
-      "unreviewed": 224
+      "unreviewed": 225
     },
     "docs": {
       "files": 106,
@@ -78,10 +78,10 @@
       "unreviewed": 5407
     },
     "src/shared": {
-      "files": 1301,
+      "files": 1302,
       "reviewed": 4,
       "stale": 0,
-      "unreviewed": 1297
+      "unreviewed": 1298
     },
     "src/wsl-guest": {
       "files": 45,
