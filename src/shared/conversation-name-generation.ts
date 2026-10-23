@@ -34,7 +34,7 @@ export function sanitizeGeneratedConversationName(raw: string): string | null {
   if (cleaned.startsWith('<think>') || cleaned.startsWith('◁think▷')) {
     return null
   }
-  const firstLine = cleaned.split(/\r?\n/u).find((line) => line.trim().length > 0)
+  const firstLine = cleaned.split(/\r?\n/u, 1)[0]
   if (!firstLine) {
     return null
   }

@@ -32,4 +32,15 @@ describe('conversation name generation', () => {
     expect(sanitizeGeneratedConversationName('<think>no answer</think>')).toBeNull()
     expect(sanitizeGeneratedConversationName('<think>unfinished')).toBeNull()
   })
+
+  it.each([
+    [' \n\t\n# Title: "Keep this"\r\nIgnore this', 'Keep this'],
+    ['```text\n\n**Keep this**\nIgnore this\n```', 'Keep this'],
+    [JSON.stringify({ text: '\n\nKeep this\nIgnore this' }), 'Keep this'],
+    ['First\rsecond\nIgnore this', 'First second'],
+    ['First\u2028second\nIgnore this', 'First second'],
+    ['Title: ""\nIgnore this', null]
+  ])('preserves first-line selection after cleanup for %j', (raw, expected) => {
+    expect(sanitizeGeneratedConversationName(raw)).toBe(expected)
+  })
 })
