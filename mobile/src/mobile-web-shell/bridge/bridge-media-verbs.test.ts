@@ -68,7 +68,7 @@ describe('what a pick may answer', () => {
     }
     expect(mediaPickResultSchema.safeParse({ items: [at] }).success).toBe(true)
     expect(
-      mediaPickResultSchema.safeParse({ items: [{ ...at, mime: at.mime + 'x' }] }).success
+      mediaPickResultSchema.safeParse({ items: [{ ...at, mime: `${at.mime}x` }] }).success
     ).toBe(false)
     for (const bad of [
       { ...item, handle: '' },

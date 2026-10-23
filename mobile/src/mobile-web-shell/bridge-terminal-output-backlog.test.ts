@@ -492,7 +492,7 @@ describe('a snapshot payload at the budget the page asks for', () => {
     const events = bridge.frames().filter((frame) => frame.type === 'event' && frame.id === ID)
     expect(events).toHaveLength(1)
     expect(bridge.frames().some((frame) => frame.type === 'end')).toBe(false)
-    const bytes = new TextEncoder().encode(bridge.posted[bridge.posted.length - 1]).byteLength
+    const bytes = new TextEncoder().encode(bridge.posted.at(-1)).byteLength
     expect(bytes).toBeLessThanOrEqual(BRIDGE_MAX_MESSAGE_BYTES)
     expect(BRIDGE_MAX_MESSAGE_BYTES - bytes).toBeLessThan(64)
   })

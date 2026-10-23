@@ -2,7 +2,7 @@
   "batch": "0006",
   "reviewer": "root",
   "base_commit": "5d32f372e76983b6436d5700ce688990662e7243",
-  "reviewed_source_head": "fa47c64b9078a51b3d94a9176f12b0718d6f1b8f",
+  "reviewed_source_head": "d52d8aa2d457aec1d4f09781cf077ec7d4191ac5",
   "status": "locally validated; full PR workflow required before merge",
   "scope": {
     "unique_reviewed_paths": 154,
@@ -115,6 +115,18 @@
         "removed": 15
       },
       "errors": []
+    },
+    "post_ci_style_fix": {
+      "path": "docs/audits/test-value/reviews/mobile-0006-post-ci-validation.json",
+      "sha256": "1d86e869ff982802c6b53bdb482af5782e7ee80a8545871b13499a781f695820",
+      "passing_runtime_cases": 23,
+      "suites": 2,
+      "record_verification": {
+        "command": "node /tmp/orca-mobile-0006-verify-post-ci-records.mjs --checkout /home/neil/orca/workspaces/orca/comprehensive-test-audit-6 --records docs/audits/test-value/reviews/mobile-0006.jsonl --validation docs/audits/test-value/reviews/mobile-0006-validation.json",
+        "result": "passed",
+        "log": "/tmp/orca-audit-6-ci-fix-record-verification.log",
+        "log_sha256": "a57a5cd0905451435ff3a43abfb8e0dd2d512adb8bc7e8ab3ab785756d4d0ef8"
+      }
     }
   },
   "integrity": {
@@ -135,7 +147,7 @@
       "config-0006.jsonl": "ffc209344e60c137a8835f8e354ade362e7316edff44136472f462af02f72819",
       "config-0006-support.jsonl": "50f0fbabc074f7304a154ad6a306cf8650ea1cb9cfc598695e0a5a9a70a29026",
       "config-0006-rereview.jsonl": "a72e55f8155d0fc4dec1f001abb94b97dbf06d8dc0acd9b4878d5b04537c25d0",
-      "mobile-0006.jsonl": "cebd8be9f0e5fe10853990d6fa2ecaa0c0d819fe6f0512a68b352c60c6b7fd63",
+      "mobile-0006.jsonl": "5e167b5d419f8322d3e875713b4d4eff17b0c1844aa8968e3b6e56f3686cfcf5",
       "mobile-0006-support.jsonl": "2118c3d595f550e5f439504f351d424b31f458e40fd9259fb8e09869287444a0",
       "cloud-0006.jsonl": "7bd92843b62fe68cb201e8e9ef52a6e68667782b57b333fae8b6ee69415ad013"
     },

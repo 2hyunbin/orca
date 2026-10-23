@@ -1489,7 +1489,7 @@
   ],
   "integrity": {
     "records_path": "docs/audits/test-value/reviews/mobile-0006.jsonl",
-    "records_sha256": "cebd8be9f0e5fe10853990d6fa2ecaa0c0d819fe6f0512a68b352c60c6b7fd63",
+    "records_sha256": "5e167b5d419f8322d3e875713b4d4eff17b0c1844aa8968e3b6e56f3686cfcf5",
     "original_hashes_verified_against_source_commit": 50,
     "final_hashes_verified": 50,
     "exact_original_ast_declarations_verified": 566,
@@ -1543,6 +1543,18 @@
     "frozen_implementation_path": "/tmp/orca-mobile-0006-implementation.json",
     "frozen_implementation_sha256": "d2f050a6c7255a99a082a29d8eaaca55a79728b8bde3872fa99cddf01b15a489",
     "review_plan_sha256": "8f39d51290a17335dcd46f0a8fc54099bf2b0cbe7b7141885876b2dd93cee496",
-    "review_record_verifier_sha256": "ac1420627bca7fc218b7f339084a27852c8aa62e4342baa7913aef91e188c22c"
+    "review_record_verifier_sha256": "ac1420627bca7fc218b7f339084a27852c8aa62e4342baa7913aef91e188c22c",
+    "post_ci_record_verifier": {
+      "path": "/tmp/orca-mobile-0006-verify-post-ci-records.mjs",
+      "sha256": "919110f17b6344f53a226a43b99fea90b2168d3a645add421454339d36bb7934",
+      "derived_from": "/tmp/orca-mobile-0006-verify-records.mjs",
+      "derivation": "Retains all frozen original review/table/transfer/mutation checks; permits exactly the two recorded and re-executed style substitutions."
+    }
+  },
+  "post_ci_style_validation": {
+    "path": "docs/audits/test-value/reviews/mobile-0006-post-ci-validation.json",
+    "sha256": "1d86e869ff982802c6b53bdb482af5782e7ee80a8545871b13499a781f695820",
+    "passing_runtime_cases": 23,
+    "suites": 2
   }
 }

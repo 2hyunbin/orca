@@ -11,5 +11,12 @@
   "transfer_groups": 13,
   "mutation_checks": 6,
   "passing_runtime_cases": 621,
-  "errors": []
+  "errors": [],
+  "scope": "Frozen implementation verification; subsequent style changes separately checked below.",
+  "post_ci_style_validation": {
+    "path": "docs/audits/test-value/reviews/mobile-0006-post-ci-validation.json",
+    "sha256": "1d86e869ff982802c6b53bdb482af5782e7ee80a8545871b13499a781f695820",
+    "passing_runtime_cases": 23,
+    "suites": 2
+  }
 }
