@@ -146,6 +146,45 @@ describe('summarizeBundledSkillOutcomes', () => {
       }).exitCode
     ).toBe(1)
   })
+  it('counts skipped skills once while retaining every skipped folder and reason', () => {
+    const summary = summarizeBundledSkillOutcomes({
+      scope: 'global',
+      skills: [
+        {
+          name: 'orca-cli',
+          status: 'ran',
+          ops: [
+            { path: '/shared/orca-cli', kind: 'update', status: 'done' },
+            { path: '/claude/orca-cli', kind: 'update', status: 'done' }
+          ]
+        },
+        {
+          name: 'orchestration',
+          status: 'ran',
+          ops: [{ path: '/shared/orchestration', kind: 'update', status: 'done' }]
+        },
+        {
+          name: 'computer-use',
+          status: 'ran',
+          ops: [
+            { path: '/shared', kind: 'leave', status: 'done', reason: 'edited' },
+            { path: '/claude', kind: 'leave', status: 'done', reason: 'shared-not-current' },
+            { path: '/cursor', kind: 'leave', status: 'done', reason: 'shared-not-current' }
+          ]
+        }
+      ]
+    })
+
+    expect(summary).toMatchObject({ ok: true, changedCount: 2, leftAloneCount: 1 })
+    expect(summary.skills[2].leftAlone.map((left) => left.path)).toEqual([
+      '/shared',
+      '/claude',
+      '/cursor'
+    ])
+    expect(summary.skills[2].line).toBe(
+      "No change · 1 skipped: Skill edited outside Orca; The shared copy isn't Orca's"
+    )
+  })
 })
 
 describe('bundledSkillInstallAgents', () => {
