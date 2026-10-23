@@ -85,11 +85,12 @@ function resolveGroupTab(
   tabOrder: readonly string[],
   selection: { activeTabId: string | null; recentTabIds?: string[] } | undefined
 ): { activeTabId: string | null; recentTabIds: string[] } {
-  const tabIds = new Set(tabOrder)
-  const recentTabIds = (selection?.recentTabIds ?? []).filter((id) => tabIds.has(id))
+  const recentTabIds = (selection?.recentTabIds ?? []).filter((id) => tabOrder.includes(id))
   const recorded = selection?.activeTabId
   const activeTabId =
-    recorded && tabIds.has(recorded) ? recorded : (recentTabIds.at(-1) ?? tabOrder[0] ?? null)
+    recorded && tabOrder.includes(recorded)
+      ? recorded
+      : (recentTabIds.at(-1) ?? tabOrder[0] ?? null)
   return { activeTabId, recentTabIds }
 }
 
