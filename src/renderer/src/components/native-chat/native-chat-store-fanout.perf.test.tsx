@@ -159,7 +159,7 @@ it.each(
   const view = render(
     <>
       {Array.from({ length: population.chats }, (_, index) => (
-        <Subscriber key={index} index={index} population={population} />
+        <Subscriber key={scope(index)} index={index} population={population} />
       ))}
     </>
   )
