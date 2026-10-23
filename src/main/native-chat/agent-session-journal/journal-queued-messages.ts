@@ -12,7 +12,7 @@ import {
   type JournalQueueRow
 } from './journal-queue-events'
 import { LegacyQueuedCards } from './journal-queue-import'
-import { retainedQueueFacts } from './journal-queue-retention'
+import { queuedChangeOf, retainedQueueFacts } from './journal-queue-retention'
 import { composeJournalOperationReceipts, type JournalOperationReceipt } from './journal-row-writer'
 import type { JournalQueuedMessagesDeps, JournalSubmissionConsume } from './journal-store-contracts'
 import {
@@ -30,7 +30,6 @@ import {
 import { QueuedMessageNotConsumableError } from './queued-message-consume-error'
 import { QueuedMessageEditLeases } from './queued-message-edit-leases'
 import { queuedMessageUpdateDecision, type QueuedMessageUpdate } from './queued-message-update'
-import { queuedChangeOf } from './journal-queue-retention'
 import {
   adoptUnconfirmedRecovery,
   unconfirmedRecoveryCards,

@@ -98,7 +98,7 @@ export async function catchUpCodexThread(input: {
       input.assertCurrent?.()
       await waitForPromiseWithSignal(
         Promise.all(
-          receipts.map((receipt) =>
+          receipts.map(async (receipt) =>
             input.onReceipt?.(receipt.clientMessageId, receipt.providerIdentity)
           )
         ),

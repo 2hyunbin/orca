@@ -18,13 +18,13 @@ import {
 import type {
   JournalLifecycleBatchInput,
   JournalPlannedLifecycleBatchInput,
-  JournalResolvedLifecycleBatchInput
+  JournalResolvedLifecycleBatchInput,
+  ResolveDispatchInput
 } from './journal-store-contracts'
 import type { JournalRow } from './journal-row-schema'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import { keepFailedStartSends } from './journal-unsent-send-hold'
 import { buildJournalQueueRow } from './journal-queue-events'
-import type { ResolveDispatchInput } from './journal-store-contracts'
 
 export class JournalLifecycleBatchAppender {
   constructor(
