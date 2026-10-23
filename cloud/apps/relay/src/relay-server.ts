@@ -275,7 +275,7 @@ export function createRelayServer(
               }))
             ),
         demote: (seat, row) => {
-          reservePlacement?.demoteSeat(seat)
+          reservePlacement?.demoteSeat(seat, 'reconcile')
           // The re-assign mints above the row, so the mirror can take it.
           reservePlacement?.raiseEpochFloor(seat, row.epoch)
           console.warn(

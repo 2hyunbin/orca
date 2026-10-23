@@ -620,8 +620,8 @@ describe('host session cleanup races', () => {
     expect(releaseActivity).toHaveBeenCalledWith(key, 'control:production-gce-c3:1')
   })
 
-  // Two hellos proven against the same empty map took the same generation; the second, activated
-  // after the first had already left the map, reused it, and the first's late leave unseated it.
+  // Two hellos proven against the same empty map could take the same generation; an activation at
+  // a generation this host already had here is refused, so a late leave cannot share it.
   it('refuses a fresh activation at a generation this host already had here', async () => {
     const activateControl = vi
       .fn<RelayAssignmentStore['activateControl']>()
