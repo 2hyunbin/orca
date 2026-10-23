@@ -8,6 +8,7 @@ import { githubHostExecOptions } from './github-api-repository'
 import { noteRepositoryRateLimitSpend, repositoryRateLimitGuard } from './rate-limit'
 
 const MAX_ISSUE_TIMELINE_ITEMS = 300
+const MAX_ISSUE_TIMELINE_PAGES = 20
 const GITHUB_REST_PAGE_SIZE = 100
 
 type RestTimelineUser = {
@@ -151,7 +152,11 @@ export async function getIssueTimelineItems(
 ): Promise<GitHubIssueTimelineItem[]> {
   try {
     const items: GitHubIssueTimelineItem[] = []
-    for (let page = 1; items.length < MAX_ISSUE_TIMELINE_ITEMS; page += 1) {
+    for (
+      let page = 1;
+      items.length < MAX_ISSUE_TIMELINE_ITEMS && page <= MAX_ISSUE_TIMELINE_PAGES;
+      page += 1
+    ) {
       if (repositoryRateLimitGuard(repository, 'core', ghOptions).blocked) {
         return items
       }

@@ -458,6 +458,68 @@ describe('getWorkItemDetails', () => {
     expect(timelineItems.at(-1)).toMatchObject({ assignee: 'assignee-6-89' })
   })
 
+  it('returns issue details and collected activity without scanning an unsupported-heavy timeline', async () => {
+    getWorkItemMock.mockResolvedValueOnce({
+      id: 'issue:923',
+      type: 'issue',
+      number: 923,
+      title: 'Noisy issue',
+      state: 'open',
+      url: 'https://github.com/acme/widgets/issues/923',
+      labels: [],
+      updatedAt: '2026-04-01T00:00:00Z',
+      author: 'issue-author'
+    })
+    getOwnerRepoForRemoteMock.mockResolvedValue({ owner: 'acme', repo: 'widgets' })
+    const requestedPages: number[] = []
+    ghExecFileAsyncMock.mockImplementation(async (args: string[]) => {
+      const endpoint = args.find((arg) => arg.includes('/timeline?'))
+      if (!endpoint) {
+        return {
+          stdout: JSON.stringify({
+            data: {
+              repository: {
+                issue: {
+                  body: 'Issue body survives auxiliary pagination',
+                  assignees: { nodes: [] },
+                  participants: { nodes: [] },
+                  comments: { nodes: [] }
+                }
+              }
+            }
+          })
+        }
+      }
+      const page = Number(endpoint.match(/[?&]page=(\d+)/)?.[1])
+      requestedPages.push(page)
+      return {
+        stdout:
+          page > 48
+            ? ''
+            : Array.from({ length: 100 }, (_, index) =>
+                JSON.stringify({
+                  id: `${page}:${index}`,
+                  event: index === 0 && [1, 20, 21].includes(page) ? 'assigned' : 'commented',
+                  actor: { login: 'issue-author' },
+                  assignee: { login: `assignee-${page}` },
+                  created_at: '2026-04-01T00:00:00Z'
+                })
+              ).join('\n')
+      }
+    })
+
+    const details = await getWorkItemDetails('/repo-root', 923, 'issue')
+
+    expect(details?.item.number).toBe(923)
+    expect(details?.body).toBe('Issue body survives auxiliary pagination')
+    expect(details?.timelineItems).toMatchObject([
+      { assignee: 'assignee-1' },
+      { assignee: 'assignee-20' }
+    ])
+    expect(requestedPages).toEqual(Array.from({ length: 20 }, (_, index) => index + 1))
+    expect(noteRepositoryRateLimitSpendMock).toHaveBeenCalledTimes(21)
+  })
+
   it('falls back to REST + GraphQL when the collapsed issue query fails', async () => {
     getWorkItemMock.mockResolvedValueOnce({
       id: 'issue:923',
