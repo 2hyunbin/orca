@@ -13,7 +13,7 @@ import {
 } from '../../claude-agent-teams-shim-env'
 import { applyClaudeEnvPatch } from '../../../claude-accounts/environment'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
-import { splitPanePendingError, splitPaneClosedError } from './terminal-split-retry'
+import { splitPanePendingError } from './terminal-split-retry'
 import {
   SPLIT_PANE_APPEAR_TIMEOUT_MS,
   SPLIT_PANE_START_TIMEOUT_MS
@@ -203,26 +203,20 @@ export abstract class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends
           this.graphSyncCallbacks.splice(idx, 1)
         }
       }
-      const giveUp = (error: Error): void => {
+      // Absence never proves a close: an unbound pane leaves the graph while it remounts.
+      const giveUp = (): void => {
         stopWatching()
-        reject(error)
+        reject(splitPanePendingError(tabId, leafId))
       }
-      let listedOnce = false
-      // A pane listed once and gone now was closed; it cannot still start.
-      const outcome = (): Error =>
-        listedOnce && !listedLeaf()
-          ? splitPaneClosedError(tabId, leafId)
-          : splitPanePendingError(tabId, leafId)
       let timer = setTimeout(() => {
-        if (!listedLeaf()) {
-          giveUp(outcome())
-          return
+        if (listedLeaf()) {
+          timer = setTimeout(giveUp, startMs - appearMs)
+        } else {
+          giveUp()
         }
-        timer = setTimeout(() => giveUp(outcome()), startMs - appearMs)
       }, appearMs)
 
       const check = (): void => {
-        listedOnce ||= listedLeaf() !== undefined
         const handle = tryResolve()
         if (handle) {
           stopWatching()

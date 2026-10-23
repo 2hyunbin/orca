@@ -11,8 +11,6 @@ export type RendererSplit = {
 type RendererSplitEntry = {
   split: RendererSplit
   recordedAt: number
-  /** Main's graph listed the pane at least once; its absence now means it was closed. */
-  seen: boolean
 }
 
 const MAX_RENDERER_SPLITS = 128
@@ -28,25 +26,12 @@ export class RendererSplitLedger {
 
   record(leafId: string, split: RendererSplit): void {
     this.prune()
-    this.entries.set(leafId, { split, recordedAt: this.now(), seen: false })
+    this.entries.set(leafId, { split, recordedAt: this.now() })
   }
 
-  get(leafId: string): { split: RendererSplit; seen: boolean } | null {
+  get(leafId: string): RendererSplit | null {
     this.prune()
-    return this.entries.peek(leafId) ?? null
-  }
-
-  /** Marks listed panes seen; returns whether any split is still waiting to be seen. */
-  observe(isListed: (tabId: string, leafId: string) => boolean): boolean {
-    this.prune()
-    let unseen = false
-    for (const [leafId, entry] of this.entries.entries()) {
-      if (!entry.seen && isListed(entry.split.tabId, leafId)) {
-        entry.seen = true
-      }
-      unseen ||= !entry.seen
-    }
-    return unseen
+    return this.entries.peek(leafId)?.split ?? null
   }
 
   private prune(): void {
@@ -81,12 +66,5 @@ export function splitRetryUnknownError(tabId: string, leafId: string): TerminalS
   return new TerminalSplitOutcomeError(
     `This Orca host has no record of split ${leafId} from this terminal; it was not split again.`,
     { splitId: leafId, tabId, splitMayStillComplete: false, nextSteps: [LIST_BEFORE_SPLITTING] }
-  )
-}
-
-export function splitPaneClosedError(tabId: string, leafId: string): TerminalSplitOutcomeError {
-  return new TerminalSplitOutcomeError(
-    `Split pane ${leafId} in tab ${tabId} opened and was then closed.`,
-    { splitId: leafId, tabId, splitMayStillComplete: false, nextSteps: [] }
   )
 }

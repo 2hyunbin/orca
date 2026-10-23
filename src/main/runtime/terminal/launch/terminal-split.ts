@@ -7,7 +7,6 @@ import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
 import {
   RendererSplitLedger,
-  splitPaneClosedError,
   splitRetryUnknownError,
   type RendererSplit
 } from './terminal-split-retry'
@@ -31,7 +30,6 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
   protected abstract waitForLeafInTab(tabId: string, leafId: string): Promise<string>
 
   private readonly rendererSplits = new RendererSplitLedger()
-  private rendererSplitWatch: (() => void) | null = null
 
   async splitTerminal(
     handle: string,
@@ -84,9 +82,12 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     }
 
     if (opts.retrySplit) {
-      // A retry only waits: the window may still be making the pane, so asking again could run
-      // the command twice, and nothing can prove a pane it never listed was not made and closed.
-      const split = this.rendererSplitForRetry(leaf.tabId, opts.retrySplit)
+      // A retry only waits: the window may still be making the pane, and a pane missing from the
+      // graph may be remounting rather than closed, so asking again could run the command twice.
+      const split = this.rendererSplits.get(opts.retrySplit)
+      if (split?.tabId !== leaf.tabId) {
+        throw splitRetryUnknownError(leaf.tabId, opts.retrySplit)
+      }
       return await this.awaitRendererSplit(split, opts.retrySplit)
     }
     const newLeafId = randomUUID()
@@ -107,40 +108,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
     split: RendererSplit,
     leafId: string
   ): Promise<RuntimeTerminalSplit> {
-    this.watchRendererSplits()
     const handle = await this.waitForLeafInTab(split.tabId, leafId)
     return { handle, tabId: split.tabId, paneRuntimeId: split.paneRuntimeId, leafId }
-  }
-
-  private rendererSplitForRetry(tabId: string, leafId: string): RendererSplit {
-    const entry = this.rendererSplits.get(leafId)
-    if (!entry || entry.split.tabId !== tabId) {
-      throw splitRetryUnknownError(tabId, leafId)
-    }
-    if (entry.seen && !this.leaves.has(this.getLeafKey(tabId, leafId))) {
-      throw splitPaneClosedError(tabId, leafId)
-    }
-    return entry.split
-  }
-
-  /** Watches graph syncs while a split is unseen, so a retry can tell a closed pane from a late one. */
-  private watchRendererSplits(): void {
-    if (this.rendererSplitWatch) {
-      return
-    }
-    const watch = (): void => {
-      const unseen = this.rendererSplits.observe((tabId, leafId) =>
-        this.leaves.has(this.getLeafKey(tabId, leafId))
-      )
-      if (!unseen) {
-        const idx = this.graphSyncCallbacks.indexOf(watch)
-        if (idx !== -1) {
-          this.graphSyncCallbacks.splice(idx, 1)
-        }
-        this.rendererSplitWatch = null
-      }
-    }
-    this.rendererSplitWatch = watch
-    this.graphSyncCallbacks.push(watch)
   }
 }

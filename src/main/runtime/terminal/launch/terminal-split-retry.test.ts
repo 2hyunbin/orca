@@ -112,15 +112,21 @@ describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
       expect(harness.rendererSplitTerminal).toHaveBeenCalledTimes(1)
     })
 
-    it('refuses to re-make a pane that opened and was closed, or a split it never made', async () => {
+    it('a retry for a pane missing from the graph answers pending, never splitting again', async () => {
       const harness = createHarness()
       const { leafId } = await timedOutSplit(harness)
-      harness.publish([{ leafId, paneRuntimeId: 2, ptyId: 'pty-late' }])
+      harness.publish([{ leafId, paneRuntimeId: 2, ptyId: null }])
+      // Absent again: closed or remounting, main cannot tell, so it must not claim either.
       harness.publish()
 
-      await expect(
-        harness.runtime.splitTerminal(harness.handle, { retrySplit: leafId })
-      ).rejects.toThrow('was then closed')
+      const retry = harness.runtime
+        .splitTerminal(harness.handle, { retrySplit: leafId })
+        .catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(10_000)
+
+      await expect(retry).resolves.toMatchObject({
+        data: { splitId: leafId, splitMayStillComplete: true }
+      })
       await expect(
         harness.runtime.splitTerminal(harness.handle, {
           retrySplit: '22222222-2222-4222-8222-222222222222'
@@ -128,27 +134,5 @@ describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
       ).rejects.toThrow('no record of split')
       expect(harness.rendererSplitTerminal).toHaveBeenCalledTimes(1)
     })
-
-    it.each([
-      ['before the first deadline', 5_000],
-      ['while its terminal starts', 15_000]
-    ])(
-      'reports a pane that opened and closed %s as closed, not as still starting',
-      async (_when, closedAfterMs) => {
-        const harness = createHarness()
-        const split = harness.runtime
-          .splitTerminal(harness.handle, { command: 'agent' })
-          .catch((error: unknown) => error)
-        const leafId = harness.rendererSplitTerminal.mock.calls[0]?.[2]?.newLeafId
-        harness.publish([{ leafId, paneRuntimeId: 2, ptyId: null }])
-        await vi.advanceTimersByTimeAsync(closedAfterMs)
-        harness.publish()
-        await vi.advanceTimersByTimeAsync(30_000)
-
-        await expect(split).resolves.toMatchObject({
-          data: { splitId: leafId, splitMayStillComplete: false }
-        })
-      }
-    )
   }
 )

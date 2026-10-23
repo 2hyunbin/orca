@@ -190,7 +190,7 @@ export function mapRuntimeError(id: string, meta: RpcEnvelopeMeta, error: unknow
     return agentSessionRefusalErrorResponse(id, meta, error)
   }
   if (error instanceof TerminalSplitOutcomeError) {
-    // Keeps the code callers already match; the split's id rides only in `data`.
+    // Keeps the code callers already match; the split's id rides in `data` for scripts.
     return errorResponse(id, meta, 'runtime_error', message, error.data)
   }
   if (
