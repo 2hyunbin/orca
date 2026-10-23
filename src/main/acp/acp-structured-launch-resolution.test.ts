@@ -42,7 +42,6 @@ function grokRecord(overrides: Partial<AgentSessionRecord> = {}): AgentSessionRe
   }
 }
 
-/** A journal holding one turn of each named provider session. */
 function journalWithTurns(...providerSessions: string[]): JournalLoad {
   const state = createJournalReducerState(identity.sessionId, 'epoch-1')
   providerSessions.forEach((providerSession, index) => {
@@ -116,7 +115,6 @@ describe('ACP launch resolution', () => {
     expect((await start('ask')).args).not.toContain('--always-approve')
   })
 
-  // A chat's mode is its only full-access path, so an ACP agent with no modes would always ask.
   it.each(ACP_LAUNCH_SPECS.map((spec) => spec.agent))(
     'gives %s chats a Full access mode',
     (agent) => {
@@ -170,14 +168,14 @@ describe('ACP launch resolution', () => {
       reads.push('read')
       return null
     }).resolve({ identity })
-    // Read only when asked: a reopen that works never replays the journal.
+    // Defer recovery reads until reopening actually fails.
     expect(reads).toEqual([])
     expect(launch.resume?.mayBeUnsaved()).toBe(true)
 
     expect(await unsaved(() => journalWithTurns())).toBe(true)
     expect(await unsaved(() => journalWithTurns('acp-other'))).toBe(true)
     expect(await unsaved(() => journalWithTurns('acp-other', 'acp-1'))).toBe(false)
-    // A journal that does not read whole, or at all, proves nothing.
+    // Damaged, newer or failed reads cannot prove that nothing was exchanged.
     expect(
       await unsaved(() => ({
         ...journalWithTurns(),
@@ -219,7 +217,6 @@ describe('ACP launch resolution', () => {
       nativeId: 'acp-1'
     })
     const replaced = grokRecord({ providerHandleChain: [link('acp-1'), link('acp-2', 'acp-1')] })
-    /** A journal holding the row for `lostKey`, written while `providerSession` ran. */
     const withRow = (providerSession: string): JournalLoad => {
       const load = journalWithTurns()
       const itemId = agentJournalItemKey(
@@ -246,7 +243,6 @@ describe('ACP launch resolution', () => {
       (await resolver(record, readJournal).resolve({ identity })).resume?.unannouncedLosses()
 
     const reads: string[] = []
-    // A chain that lost nothing never reads the journal.
     expect(
       await losses(grokRecord({ providerHandleChain: [link('acp-1')] }), () => {
         reads.push('read')
@@ -257,9 +253,9 @@ describe('ACP launch resolution', () => {
     expect(await losses(replaced, () => null)).toEqual([lostKey])
     expect(await losses(replaced, () => journalWithTurns('acp-2'))).toEqual([lostKey])
     expect(await losses(replaced, () => withRow('acp-2'))).toEqual([])
-    // A row the superseded replacement wrote still counts.
+    // A warning written by a superseded replacement still counts.
     expect(await losses(replaced, () => withRow('acp-gone'))).toEqual([])
-    // A journal that does not read whole proves nothing, so no row is written.
+    // Partial journals cannot establish which warning rows are missing.
     expect(
       await losses(replaced, () => ({
         ...journalWithTurns(),
