@@ -7,6 +7,7 @@ import { createGlobalSettingsFixture } from '../../../shared/global-settings-tes
 import { brandEphemeralSetupTerminalWorktreeId } from '../../../shared/ephemeral-setup-terminal-worktree-id'
 import type { AgentSessionStatusSummary } from '../../../shared/agent-session-wire'
 import type * as LayoutRouting from '@/store/terminals/tab-change-through-layout-owner'
+import type * as LocalRuntimeCapabilities from './local-runtime-capabilities'
 import {
   addWorkspace,
   emptySession
@@ -67,7 +68,8 @@ vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAI
 vi.mock('@/store/terminals/tab-change-through-layout-owner', () => ({
   sendTabChangeToLayoutOwner: mock.layout
 }))
-vi.mock('./local-runtime-capabilities', () => ({
+vi.mock('./local-runtime-capabilities', async (importOriginal) => ({
+  ...(await importOriginal<typeof LocalRuntimeCapabilities>()),
   subscribeLocalRuntimeCapabilitiesKnown: () => () => {}
 }))
 vi.mock('./runtime-host-contact-regained', () => ({

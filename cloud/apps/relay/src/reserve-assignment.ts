@@ -2,12 +2,14 @@ import {
   ASSIGNMENT_LIMITS,
   RELAY_CLOSE_CODE,
   RELAY_DEFAULT_REGION,
+  RELAY_REGIONS,
   type RelayRegion
 } from '@orca-cloud/relay-contract'
 import type { AssignOptions, RelayAssignment } from './assignment-store.js'
 import { CELL_RESERVE_TTL_MS } from './cell-reserve-contract.js'
 import type { CellReserveClient } from './cell-reserve-client.js'
 import { relayHostLogDigest } from './relay-host-log-digest.js'
+import type { RehomeSkip, RehomeTargetRoom, ReserveRehome } from './reserve-rehome.js'
 import {
   mintEpoch,
   type PlacementCell,
@@ -43,9 +45,9 @@ export class ReservePaceError extends Error {
 type Identity = { userId: string; relayHostId: string }
 
 export type ReservePlan =
-  | { kind: 'answer'; assignment: RelayAssignment; lane: 'sticky' | 'placement' }
+  | { kind: 'answer'; assignment: RelayAssignment; lane: 'sticky' | 'placement' | 'rehome' }
   | { kind: 'retry'; retryAfterSeconds: number; reason: 'map-incomplete' | 'database' | 'paced' }
-  | ({ kind: 'database' } & Pick<AssignOptions, 'epochFloor' | 'placeFresh' | 'regionReserve'>)
+  | ({ kind: 'database' } & Pick<AssignOptions, 'epochFloor' | 'placeFresh' | 'regionReserve' | 'reserveSpill'>)
 
 // A host whose seat the ledger reconcile demoted mints above its row for this long, so the
 // re-assign does not collide with the row again (the mirror refuses an equal epoch).
@@ -87,6 +89,8 @@ export class ReserveAssignment {
       // True while the pool has waiters: the optional WRONG_CELL read is skipped, so timed-out
       // reads cannot stack up behind a stall.
       databaseBusy?: () => boolean
+      // Step 1 C: rehome on reconnect; absent or at 0% it never runs.
+      rehome?: ReserveRehome
       now?: () => number
       random?: () => number
       log?: (line: string) => void
@@ -140,7 +144,8 @@ export class ReserveAssignment {
   async plan(
     identity: Identity,
     // regionCorrection: the reply carries a region window bound to the database row.
-    request: { reconnect: boolean; region: RelayRegion; regionCorrection?: boolean }
+    // preferred: `region` is the host's own preference, not the default.
+    request: { reconnect: boolean; region: RelayRegion; regionCorrection?: boolean; preferred?: boolean }
   ): Promise<ReservePlan> {
     this.flushSummary()
     if (this.input.mode === 'off') return { kind: 'database' }
@@ -192,12 +197,27 @@ export class ReserveAssignment {
     }
     const epochFloor = known.length === 0 ? 0 : Math.max(...known)
     const lastCellId = seats[0]?.cellId ?? left?.cellId ?? row?.cellId
+    if (request.reconnect && request.preferred && !incomplete && known.length > 0) {
+      const rehomed = await this.rehome(identity, request.region, seats, left, epochFloor, rowFloor ?? 0, now)
+      if (rehomed) {
+        return { kind: 'answer', assignment: rehomed, lane: 'rehome' }
+      }
+    }
     // The database lane answers it, so the window exchange follows: no memory answer, no share
     // draw, only the in-region fallback, once the map is complete and knows the host.
     if (request.regionCorrection) {
-      return incomplete || known.length === 0
-        ? { kind: 'database' }
-        : { kind: 'database', regionReserve: this.regionReserve(identity, request.region, epochFloor, seats, now) }
+      if (incomplete) {
+        return { kind: 'database' }
+      }
+      // A never-seen host's spill mints above the row the database lane read.
+      const reserveSpill = this.reserveSpill(identity, request.region, epochFloor, seats)
+      return known.length === 0
+        ? { kind: 'database', reserveSpill }
+        : {
+            kind: 'database',
+            regionReserve: this.regionReserve(identity, request.region, epochFloor, seats, now),
+            reserveSpill
+          }
     }
     if (incomplete) {
       if (lastCellId !== undefined && directory.cellState(lastCellId)?.status === 'pending') {
@@ -218,15 +238,16 @@ export class ReserveAssignment {
     const placeFresh = async (): Promise<RelayAssignment | null> =>
       await this.placeFresh(identity, request.region, epochFloor, seats)
     const regionReserve = this.regionReserve(identity, request.region, epochFloor, seats, now)
+    const reserveSpill = incomplete ? undefined : this.reserveSpill(identity, request.region, epochFloor, seats)
     // Where the host was last seen decides who owns it: a database-mode cell keeps today's
     // path, sticky included; only a fresh placement may be booked on a reserve-mode cell.
     const lastOnReserve = lastCellId !== undefined && directory.placementModeOf(lastCellId) === 'reserve'
     if (!lastOnReserve && (seats.length > 0 || left !== undefined || row !== null)) {
-      return { kind: 'database', epochFloor, placeFresh, regionReserve }
+      return { kind: 'database', epochFloor, placeFresh, regionReserve, reserveSpill }
     }
     const placed = await placeFresh()
     if (placed) return { kind: 'answer', assignment: placed, lane: 'placement' }
-    return { kind: 'database', epochFloor, regionReserve }
+    return { kind: 'database', epochFloor, regionReserve, reserveSpill }
   }
 
   // For the share draw's losers: the database lane tries the region first, then this, then spills.
@@ -249,27 +270,77 @@ export class ReserveAssignment {
     }
   }
 
-  // The same epoch on the same cell: no booking, no database, no row lock. A cell that
-  // restarted since forgot the seat, so it is asked to hold it first.
-  private async stickyFromMemory(
+  // For a database lane that found no cell with room anywhere: each region with a reserve seat,
+  // the host's own first, without the share draw. A pace is the answer only if no region places.
+  private reserveSpill(
     identity: Identity,
-    seats: ShadowSeat[],
+    region: RelayRegion,
+    epochFloor: number,
+    seats: readonly ShadowSeat[]
+  ): NonNullable<AssignOptions['reserveSpill']> {
+    return async ({ skipOwnRegion, rowEpoch }) => {
+      const floor = Math.max(epochFloor, rowEpoch)
+      const now = this.now()
+      let paced: ReservePaceError | undefined
+      for (const target of [region, ...RELAY_REGIONS.filter((other) => other !== region)]) {
+        const hasRoom =
+          !(skipOwnRegion && target === region) &&
+          this.placementCells().some(
+            (cell) => this.input.placer.isCandidate(cell, target, now) && this.input.placer.hasSeat(cell)
+          )
+        if (!hasRoom) {
+          continue
+        }
+        try {
+          const placed = await this.placeFresh(identity, target, floor, seats, true, true)
+          if (placed) {
+            this.recordSpill(region, target)
+            return placed
+          }
+        } catch (error) {
+          if (!(error instanceof ReservePaceError)) {
+            throw error
+          }
+          if (!paced || error.retryAfterSeconds < paced.retryAfterSeconds) {
+            paced = error
+          }
+        }
+      }
+      if (paced) {
+        this.summary.retries.paced += 1
+        throw paced
+      }
+      return null
+    }
+  }
+
+  private recordSpill(fromRegion: RelayRegion, toRegion: RelayRegion): void {
+    this.summary.spill += 1
+    const key = `${fromRegion}>${toRegion}`
+    this.summary.spills[key] = (this.summary.spills[key] ?? 0) + 1
+  }
+
+  // What stickyFromMemory may answer, in its order: only the newest grant (highest epoch, then
+  // the newest join), on a cell that is a candidate in its own region. Lazy, so each cell is
+  // judged after the previous candidate's sticky reserve settled.
+  private *stickyCandidates(
+    seats: readonly ShadowSeat[],
     left: { cellId: string; epoch: number; incarnation?: string; closeCode?: number } | undefined,
     now: number,
     rowFloor: number
-  ): Promise<RelayAssignment | null> {
-    // Highest epoch first, then the newest join: only the newest grant may be answered from
-    // memory, so a stale seat (or a leaver at a lower epoch) is never sent back.
+  ) {
     const newest = Math.max(0, ...seats.map((seat) => seat.epoch), left?.epoch ?? 0)
     // A seat at or behind a row the reconcile demoted it for is never answered again.
-    if (newest <= rowFloor) return null
-    const candidates: Array<{
+    if (newest <= rowFloor) {
+      return
+    }
+    const candidates: {
       cellId: string
       epoch: number
       incarnation?: string
       seated: boolean
       joinedAt: number
-    }> = [
+    }[] = [
       ...seats
         .filter((seat) => seat.state === 'active')
         .map((seat) => ({
@@ -290,7 +361,92 @@ export class ReserveAssignment {
       if (!cell || !state || !placement || !this.input.placer.isCandidate(placement, cell.region, now)) {
         continue
       }
-      if (!candidate.seated && !this.input.placer.hasSeat(placement)) continue
+      if (!candidate.seated && !this.input.placer.hasSeat(placement)) {
+        continue
+      }
+      yield { candidate, cell, state, placement }
+    }
+  }
+
+  // Rule set in reserve-rehome.ts; this finds the source and the target room, and books.
+  private async rehome(
+    identity: Identity,
+    region: RelayRegion,
+    seats: readonly ShadowSeat[],
+    left: { cellId: string; epoch: number; incarnation?: string; closeCode?: number } | undefined,
+    epochFloor: number,
+    rowFloor: number,
+    now: number
+  ): Promise<RelayAssignment | null> {
+    const rehome = this.input.rehome
+    if (!rehome?.enabled) {
+      return null
+    }
+    const source = this.stickyCandidates(seats, left, now, rowFloor).next().value
+    if (!source?.placement.reserve || source.cell.region === region) {
+      return null
+    }
+    const regionOf = (cellId: string) => this.input.cells().find((entry) => entry.cellId === cellId)?.region
+    const skip = rehome.admit({
+      identity,
+      sourceCellId: source.cell.cellId,
+      sourceControls: source.state.reportedControls ?? 0,
+      leaves: this.input.directory
+        .recentlyLeftOf(identity.userId, identity.relayHostId, now)
+        .map((leave) => ({ region: regionOf(leave.cellId), closeCode: leave.closeCode, at: leave.at })),
+      target: this.targetRoom(region, now),
+      now
+    })
+    const record = this.rehomeRecord(source.cell.region, region)
+    if (skip) {
+      record.skippedByRule[skip] = (record.skippedByRule[skip] ?? 0) + 1
+      return null
+    }
+    let placed: RelayAssignment | null = null
+    try {
+      placed = await this.placeFresh(identity, region, epochFloor, seats, true, true)
+    } catch (error) {
+      if (!(error instanceof ReservePaceError)) {
+        throw error
+      }
+    }
+    if (!placed) {
+      rehome.refund(source.cell.cellId)
+      record.skippedByRule['not-placed'] = (record.skippedByRule['not-placed'] ?? 0) + 1
+      return null
+    }
+    rehome.recordMoved(identity, now)
+    record.count += 1
+    return placed
+  }
+
+  private targetRoom(region: RelayRegion, now: number): RehomeTargetRoom {
+    const { placer } = this.input
+    const candidates = this.placementCells().filter((cell) => placer.isCandidate(cell, region, now))
+    return {
+      free: candidates.reduce((sum, cell) => sum + placer.free(cell), 0),
+      ceiling: candidates.reduce((sum, cell) => sum + (cell.ceiling ?? 0), 0),
+      bookable: candidates.some((cell) => placer.hasSeat(cell) && placer.hasBudget(cell, now))
+    }
+  }
+
+  private rehomeRecord(fromRegion: RelayRegion, toRegion: RelayRegion): RehomeRecord {
+    const key = `${fromRegion}>${toRegion}`
+    const record = this.summary.rehomes[key] ?? { count: 0, skippedByRule: {} }
+    this.summary.rehomes[key] = record
+    return record
+  }
+
+  // The same epoch on the same cell: no booking, no database, no row lock. A cell that
+  // restarted since forgot the seat, so it is asked to hold it first.
+  private async stickyFromMemory(
+    identity: Identity,
+    seats: ShadowSeat[],
+    left: { cellId: string; epoch: number; incarnation?: string; closeCode?: number } | undefined,
+    now: number,
+    rowFloor: number
+  ): Promise<RelayAssignment | null> {
+    for (const { candidate, cell, state } of this.stickyCandidates(seats, left, now, rowFloor)) {
       if (candidate.incarnation !== undefined && candidate.incarnation !== state.incarnation) {
         const answer = await this.input.client.reserve(cell, {
           ...identity,
@@ -319,7 +475,10 @@ export class ReserveAssignment {
     epochFloor: number,
     seats: readonly ShadowSeat[] = [],
     // The database lane found the region full: no share draw, and no other region.
-    regionFull = false
+    regionFull = false,
+    // The caller counts its own outcome (spill, rehome): no database lane follows it, and a pace
+    // may not be the answer.
+    spill = false
   ): Promise<RelayAssignment | null> {
     const placements = this.placementCells()
     if (!regionFull && this.random() >= this.input.placer.reservePoolShare(placements, region)) return null
@@ -357,7 +516,9 @@ export class ReserveAssignment {
         }
       }
       if (result.kind === 'pace') {
-        this.summary.retries.paced += 1
+        if (!spill) {
+          this.summary.retries.paced += 1
+        }
         throw new ReservePaceError(result.retryAfterSeconds)
       }
       // Database cells in this region take it; a region with none spills as today.
@@ -366,7 +527,9 @@ export class ReserveAssignment {
       )
       if (hasDatabaseCells) break
     }
-    this.summary.database += 1
+    if (!spill) {
+      this.summary.database += 1
+    }
     return null
   }
 
@@ -496,14 +659,23 @@ export class ReserveAssignment {
       latenciesMs.length === 0
         ? null
         : Math.round(latenciesMs[Math.min(latenciesMs.length - 1, Math.floor(share * latenciesMs.length))]!)
+    const { spills, rehomes, ...counts } = this.summary
     this.log(
       JSON.stringify({
         event: 'orca_relay_reserve_placement_summary',
         mode: this.input.mode,
-        ...this.summary,
+        ...counts,
         dryRun: { outcomes, count: latenciesMs.length, p50Ms: percentile(0.5), p99Ms: percentile(0.99), cells }
       })
     )
+    for (const [key, count] of Object.entries(spills)) {
+      const [fromRegion, toRegion] = key.split('>')
+      this.log(JSON.stringify({ event: 'orca_relay_reserve_spill', fromRegion, toRegion, count }))
+    }
+    for (const [key, record] of Object.entries(rehomes)) {
+      const [fromRegion, toRegion] = key.split('>')
+      this.log(JSON.stringify({ event: 'orca_relay_reserve_rehome', fromRegion, toRegion, ...record }))
+    }
     this.summary = emptySummary()
   }
 
@@ -521,6 +693,11 @@ type PlacementSummary = {
   placed: number
   // Placements the database lane would have sent out of the region.
   regionKept: number
+  // Reserve bookings after the database lane found no cell anywhere, and by region pair.
+  spill: number
+  spills: Record<string, number>
+  // Rehome on reconnect, by region pair: moves, and why an eligible host was not moved.
+  rehomes: Record<string, RehomeRecord>
   calls: number
   database: number
   supersedes: number
@@ -533,6 +710,8 @@ type PlacementSummary = {
     cells: Record<string, DryRunCellSummary>
   }
 }
+
+type RehomeRecord = { count: number; skippedByRule: Partial<Record<RehomeSkip, number>> }
 
 type DryRunCellSummary = {
   outcomes: Record<string, number>
@@ -547,6 +726,9 @@ function emptySummary(): PlacementSummary {
     stickyReserves: 0,
     placed: 0,
     regionKept: 0,
+    spill: 0,
+    spills: {},
+    rehomes: {},
     calls: 0,
     database: 0,
     supersedes: 0,
