@@ -25,9 +25,10 @@ export function nativeChatTaskListPredecessors(
   messages: readonly NativeChatMessage[]
 ): Map<string, NativeChatTaskListPredecessors> {
   const history = new Map<string, NativeChatTaskListPredecessors>()
-  const previous: NativeChatTaskListPredecessors = {}
+  let previous: NativeChatTaskListPredecessors = {}
   for (const message of messages) {
-    history.set(message.id, { ...previous })
+    const context = previous
+    history.set(message.id, context)
     if (message.role === 'user') {
       continue
     }
@@ -37,6 +38,9 @@ export function nativeChatTaskListPredecessors(
       }
       const tool = nativeChatTaskListTool(call.name)
       if (tool && taskListFromCall(call)) {
+        if (previous === context) {
+          previous = { ...previous }
+        }
         previous[tool] = call
       }
     }
