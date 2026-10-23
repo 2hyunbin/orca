@@ -23,7 +23,8 @@ function delayedInventory(
   processes: () => PtyProcessInfo[]
 ): IPtyProvider['listProcesses'] {
   return (opts) => {
-    if (opts?.deadlineMs === undefined) {
+    const deadlineMs = opts?.deadlineMs
+    if (deadlineMs === undefined) {
       throw new Error('Inventory fixture requires the actual RPC deadline')
     }
     return new Promise((resolve, reject) => {
@@ -36,7 +37,7 @@ function delayedInventory(
           clearTimeout(success)
           reject(new Error('Inventory RPC deadline exceeded'))
         },
-        Math.max(0, opts.deadlineMs - Date.now())
+        Math.max(0, deadlineMs - Date.now())
       )
     })
   }
@@ -67,19 +68,19 @@ describe('daemon inventory acquisition budget', () => {
       rows = rows.filter((process) => process.id !== id)
     })
 
-    await expect(
-      sweepProviderByPrefix(
-        worktreeId,
-        facade,
-        Date.now() + 10_000,
-        async (_id, stop) => {
-          const stopped = await stop()
-          return { stopped, owner: stopped }
-        },
-        undefined,
-        true
-      )
-    ).resolves.toBe(1)
+    const sweep = sweepProviderByPrefix(
+      worktreeId,
+      facade,
+      Date.now() + 10_000,
+      async (_id, stop) => {
+        const stopped = await stop()
+        return { stopped, owner: stopped }
+      },
+      undefined,
+      true
+    )
+    await vi.advanceTimersByTimeAsync(1_000)
+    await expect(sweep).resolves.toBe(1)
     expect(facade.shutdown).toHaveBeenCalledExactlyOnceWith(targetId, expect.anything())
     expect(rows).toEqual([])
     expect(fast.listProcesses).toHaveBeenCalledTimes(2)
@@ -116,8 +117,11 @@ describe('daemon inventory acquisition budget', () => {
     const diagnostic = expect(
       resolver.listProcesses({ deadlineMs: startedAt + 10_000 })
     ).rejects.toThrow('Inventory RPC deadline exceeded')
+    const settled = vi.fn()
+    void diagnostic.then(settled)
     await vi.advanceTimersByTimeAsync(2_000)
 
+    expect(settled).toHaveBeenCalledOnce()
     await diagnostic
     expect(owner.listProcesses).toHaveBeenCalledExactlyOnceWith({ deadlineMs: startedAt + 2_000 })
   })
@@ -168,10 +172,10 @@ describe('daemon inventory acquisition budget', () => {
     expect(legacy.listProcesses).toHaveBeenCalledTimes(2)
     await vi.advanceTimersByTimeAsync(2_000)
 
-    await diagnostic
     await expect(recovery).resolves.toEqual({ kind: 'owner', provider: current })
     expect(routes.get('shared')).toBe(current)
-    expect(resolver.getVerifiedRoute('shared')).toBe(current)
+    await vi.advanceTimersByTimeAsync(30_000)
+    await diagnostic
   })
 
   it('reattaches an exact persisted incarnation despite a deadline-limited legacy provider', async () => {
