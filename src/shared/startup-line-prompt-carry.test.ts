@@ -75,6 +75,21 @@ describe('whether a launch prompt rides the typed startup line', () => {
     expect(pastBudget.promptCarried).toBe(false)
   })
 
+  it.each(['é', '世', '😊', '\ud800', '\udc00'])(
+    'measures %s text in UTF-8 at the single-line budget',
+    (character) => {
+      const encoder = new TextEncoder()
+      const promptBytes = promptForClaudeLineOf(TYPED_STARTUP_LINE_PROMPT_BUDGET_BYTES).length
+      const characterBytes = encoder.encode(character).byteLength
+      const count = Math.floor(promptBytes / characterBytes)
+      const prompt = character.repeat(count) + 'x'.repeat(promptBytes % characterBytes)
+      const atBudget = offer('claude', prompt)
+      expect(encoder.encode(atBudget.plan?.launchCommand).byteLength).toBe(512)
+      expect(atBudget.promptCarried).toBe(true)
+      expect(offer('claude', `${prompt}x`).promptCarried).toBe(false)
+    }
+  )
+
   it('measures the quoted line, so quote-heavy text under the budget raw can exceed it typed', () => {
     // 200 quotes are 200 raw bytes but 600 once portable quoting expands each to `"'"`.
     const quotes = "'".repeat(200)
@@ -164,6 +179,19 @@ describe('a multi-line prompt typed into a shell the host names', () => {
   it('keeps a zsh line off the launch command past the whole-line budget', () => {
     const prompt = linesOf(Math.ceil(ZSH_MULTI_LINE_STARTUP_LINE_BUDGET_BYTES / 400) + 1, 400)
     expect(offer('claude', prompt, { shellName: 'zsh' }).promptCarried).toBe(false)
+  })
+
+  it.each([
+    ['two-byte characters', 'é'.repeat(240)],
+    ['three-byte characters', '世'.repeat(160)],
+    ['surrogate pairs', '😊'.repeat(120)],
+    ['unpaired surrogates', '\ud800'.repeat(160)]
+  ])('preserves the exact UTF-8 whole-line budget with %s', (_label, line) => {
+    const prompt = `${`${line}\n`.repeat(17)}finish`
+    const atBudget = offer('claude', prompt, { shellName: 'zsh' })
+    expect(new TextEncoder().encode(atBudget.plan?.launchCommand).byteLength).toBe(8192)
+    expect(atBudget.promptCarried).toBe(true)
+    expect(offer('claude', `${prompt}x`, { shellName: 'zsh' }).promptCarried).toBe(false)
   })
 
   it('keeps a long single line off a zsh launch command, which a late write truncates', () => {

@@ -19,6 +19,7 @@
 import { TUI_AGENT_CONFIG } from './tui-agent-config'
 import { buildAgentStartupPlan, type AgentStartupPlan } from './tui-agent-startup'
 import type { TuiAgent } from './tui-agent'
+import { isUtf8ByteLengthWithinLimit } from './utf8-byte-limits'
 
 /** Half of macOS MAX_CANON: a single typed line this long survived every canonical-mode write
  *  measured, and 1 KiB did not. Also the cap on each line of a multi-line one. */
@@ -26,12 +27,6 @@ export const TYPED_STARTUP_LINE_PROMPT_BUDGET_BYTES = 512
 
 /** A multi-line line typed into zsh: the largest measured intact behind a late write (8 KiB). */
 export const ZSH_MULTI_LINE_STARTUP_LINE_BUDGET_BYTES = 8192
-
-const encoder = new TextEncoder()
-
-function typedLineBytes(line: string): number {
-  return encoder.encode(line).byteLength
-}
 
 export function startupLineCarriesPrompt(args: {
   agent: TuiAgent
@@ -57,7 +52,7 @@ export function startupLineCarriesPrompt(args: {
   }
   const line = withPrompt.launchCommand
   if (!hasControlByte(line)) {
-    return typedLineBytes(line) <= TYPED_STARTUP_LINE_PROMPT_BUDGET_BYTES
+    return isUtf8ByteLengthWithinLimit(line, TYPED_STARTUP_LINE_PROMPT_BUDGET_BYTES)
   }
   return args.shellName === 'zsh' && zshReadsMultiLineWhole(line)
 }
@@ -68,12 +63,15 @@ export function startupLineCarriesPrompt(args: {
  * bracketed paste, and fish drops a paste written before its reader is up.
  */
 function zshReadsMultiLineWhole(line: string): boolean {
-  const lines = line.split('\n')
   return (
-    lines.every(
-      (part) =>
-        !hasControlByte(part) && typedLineBytes(part) <= TYPED_STARTUP_LINE_PROMPT_BUDGET_BYTES
-    ) && typedLineBytes(line) <= ZSH_MULTI_LINE_STARTUP_LINE_BUDGET_BYTES
+    isUtf8ByteLengthWithinLimit(line, ZSH_MULTI_LINE_STARTUP_LINE_BUDGET_BYTES) &&
+    line
+      .split('\n')
+      .every(
+        (part) =>
+          !hasControlByte(part) &&
+          isUtf8ByteLengthWithinLimit(part, TYPED_STARTUP_LINE_PROMPT_BUDGET_BYTES)
+      )
   )
 }
 
