@@ -47,7 +47,12 @@ export function WorktreeLineageToggle({
     .join(', ')
 
   return (
-    <div className={cn('relative mt-1 flex min-w-0 justify-start', !newCardStyle && '-ml-1')}>
+    <div
+      className={cn(
+        '@container relative mt-1 flex min-w-0 justify-start',
+        !newCardStyle && '-ml-1'
+      )}
+    >
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -60,19 +65,19 @@ export function WorktreeLineageToggle({
             aria-expanded={!collapsed}
             onClick={onToggle}
           >
-            <span className="inline-flex min-w-0 items-center gap-1 px-1 py-0.5">
-              <span className="inline-flex min-w-0 items-center gap-1">
-                <span className="inline-flex min-w-0 items-center gap-1">
-                  <Workflow className="size-2.5 shrink-0" />
-                  <span className="shrink-0 tabular-nums">{count}</span>
-                  <span className="truncate">
-                    {count === 1
-                      ? translate('auto.components.sidebar.WorktreeList.0c6ee14f23', 'child')
-                      : translate('auto.components.sidebar.WorktreeList.045a8aed48', 'children')}
-                  </span>
-                </span>
+            <span className="inline-flex min-w-0 flex-wrap items-center gap-1 px-1 py-0.5">
+              <span className="inline-flex shrink-0 items-center gap-1">
+                <Workflow className="size-2.5 shrink-0" />
+                <span className="tabular-nums">{count}</span>
+              </span>
+              <span className={cn('truncate', summary.length > 0 && 'hidden @min-[13rem]:block')}>
+                {count === 1
+                  ? translate('auto.components.sidebar.WorktreeList.0c6ee14f23', 'child')
+                  : translate('auto.components.sidebar.WorktreeList.045a8aed48', 'children')}
+              </span>
+              <span className="inline-flex min-w-0 max-w-full items-center gap-0.5">
                 {summary.length > 0 ? (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 border-l border-border pl-1">
+                  <span className="inline-flex min-w-0 flex-wrap items-center gap-1 border-l border-border pl-1">
                     {summary.map((status) => (
                       <span
                         key={status}
@@ -92,10 +97,13 @@ export function WorktreeLineageToggle({
                     ))}
                   </span>
                 ) : null}
+                <ChevronDown
+                  className={cn(
+                    'size-2.5 shrink-0 transition-transform',
+                    collapsed && '-rotate-90'
+                  )}
+                />
               </span>
-              <ChevronDown
-                className={cn('size-2.5 shrink-0 transition-transform', collapsed && '-rotate-90')}
-              />
             </span>
           </Button>
         </TooltipTrigger>
