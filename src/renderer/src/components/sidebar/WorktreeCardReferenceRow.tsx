@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from 'react'
-import { CircleDot, GitMerge, GitPullRequest } from 'lucide-react'
+import { CircleDot, Clock, GitMerge, GitPullRequest } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { GitHubIcon } from '@/components/icons/GitHubIcon'
 import { FilePathCursorTooltip } from '@/components/file-path-cursor-tooltip'
@@ -26,6 +26,7 @@ export function WorktreeCardReferenceRow({
   label,
   provider,
   source,
+  stale,
   url,
   onOpen,
   onManage,
@@ -37,11 +38,15 @@ export function WorktreeCardReferenceRow({
   label: string
   provider: string
   source?: string | null
+  stale?: boolean
   url?: string
   onOpen: (url: string, event: MouseEvent) => void
   onManage?: (event: MouseEvent) => void
   actions?: ReactNode
 }): React.JSX.Element {
+  const staleLabel = stale
+    ? translate('workspace.links.lastKnownStatus', 'Last known status')
+    : null
   return (
     <div className="flex min-w-0 items-start gap-2">
       <div className="mt-0.5 flex w-3.5 shrink-0 items-center">
@@ -115,6 +120,22 @@ export function WorktreeCardReferenceRow({
           ) : null}
           <span className="shrink-0">{label}</span>
           {review?.status ? <ReviewChecksIndicator status={review.status} /> : null}
+          {staleLabel ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  aria-label={staleLabel}
+                  className="inline-flex shrink-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Clock className="size-3" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={4}>
+                {staleLabel}
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
           <span className="min-w-0 flex-1 truncate">
             {provider === 'GitHub' ? null : `· ${provider}`}
             {source ? ` · ${source}` : ''}
