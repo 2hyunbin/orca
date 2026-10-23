@@ -1,4 +1,5 @@
 import { basename, dirname, join, resolve } from 'node:path'
+import { isPathInsideOrEqual } from '../../../shared/cross-platform-path'
 import type { SkillInstallProviderId } from '../../../shared/skill-install-providers'
 import type { ResolvedSkillInstallDestination } from '../skill-install-destinations'
 import {
@@ -66,6 +67,8 @@ export async function resolveBundledSkillTargets(
   if (!scopeRoot) {
     throw new Error('skill-install-workspace-required')
   }
+  const workspaceRealPath =
+    scope === 'workspace' ? await resolveBundledSkillRealPath(filesystem, scopeRoot) : null
   const sharedPath = join(scopeRoot, '.agents', 'skills')
   const candidates: { role: 'shared' | 'agent'; path: string; agents: SkillInstallProviderId[] }[] =
     [{ role: 'shared', path: sharedPath, agents: [] }]
@@ -92,6 +95,9 @@ export async function resolveBundledSkillTargets(
   const roots = new Map<string, BundledSkillTargetRoot>()
   for (const candidate of candidates) {
     const realPath = await resolveBundledSkillRealPath(filesystem, candidate.path)
+    if (workspaceRealPath !== null && !isPathInsideOrEqual(workspaceRealPath, realPath)) {
+      continue
+    }
     const existing = roots.get(bundledSkillPathKey(realPath))
     if (existing) {
       existing.agents.push(...candidate.agents)

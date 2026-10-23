@@ -273,16 +273,18 @@ async function planSkill(
     digest: bundledSkillTextDigest(Buffer.from(source.text, 'utf8')),
     force: new Set((input.force ?? []).map(bundledSkillPathKey))
   }
-  const [sharedRoot, ...agentRoots] = roots
-  const sharedOp = await planTarget(context, sharedRoot, null)
-  const shared: SharedTarget = {
-    path: sharedOp.path,
-    realPath: join(sharedRoot.realPath, source.name),
-    current: WRITES_SHARED_CURRENT.has(sharedOp.kind)
-  }
-  const ops = [sharedOp]
-  for (const root of agentRoots) {
-    ops.push(await planTarget(context, root, shared))
+  let shared: SharedTarget | null = null
+  const ops: BundledSkillOp[] = []
+  for (const root of roots) {
+    const op = await planTarget(context, root, shared)
+    ops.push(op)
+    if (root.role === 'shared') {
+      shared = {
+        path: op.path,
+        realPath: join(root.realPath, source.name),
+        current: WRITES_SHARED_CURRENT.has(op.kind)
+      }
+    }
   }
   return { name: source.name, digest: context.digest, ops }
 }
