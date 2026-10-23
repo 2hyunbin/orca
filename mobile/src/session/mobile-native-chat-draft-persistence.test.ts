@@ -437,7 +437,11 @@ it('coalesces typing around an exact copy and never authorizes a removed or expi
 /** Each write waits for the test to settle it; `saved` is what a reload reads. */
 function heldWrites() {
   const writes: { value: string | null; settle: (error?: Error) => void }[] = []
-  const state = { saved: null as string | null, inFlight: 0, peak: 0 }
+  const state: { saved: string | null; inFlight: number; peak: number } = {
+    saved: null,
+    inFlight: 0,
+    peak: 0
+  }
   const write = vi.fn(
     (_key: string, value: string | null) =>
       new Promise<void>((resolve, reject) => {
