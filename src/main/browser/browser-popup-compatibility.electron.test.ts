@@ -168,7 +168,7 @@ describe('hidden Chromium popup compatibility', () => {
       expect(status().tabOpens.at(-1)).toEqual({ url: oauthUrl, activate })
     }
     expect(status().childRequests.length).toBe(hostedBefore)
-    // A POST arrives without a page too, but reopening it by URL would drop its body.
+    // Reopening a POST by URL would lose its body even when it has no fields.
     await page.locator('#post').click({ modifiers: ['ControlOrMeta', 'Shift'] })
     await new Promise((resolve) => setTimeout(resolve, 750))
     expect(
