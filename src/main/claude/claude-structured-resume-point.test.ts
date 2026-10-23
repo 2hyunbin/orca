@@ -19,7 +19,6 @@ import {
 const journals = createTrackedJournalOpener()
 const cleanups: (() => Promise<void>)[] = []
 
-/** A resumed owner that completed one turn (`a4`) and then saw the next turn's prompt. */
 async function ownerMidSecondTurn(persisted: unknown[]) {
   const root = await mkdtemp(join(tmpdir(), 'orca-claude-completed-leaf-'))
   const claudeConfigDir = join(root, 'claude')
@@ -144,7 +143,6 @@ describe('Claude resume point is the last completed turn on every exit path', ()
       uuid: 'a5',
       message: { role: 'assistant', content: [{ type: 'text', text: 'next answer' }] }
     })
-    // Claude's transcript chains these after a reply; the live stream never adopts them.
     frame({ type: 'system', subtype: 'stop_hook_summary', uuid: 'a5-hook-summary' })
     frame({ type: 'attachment', uuid: 'a5-attachment' })
     frame({ type: 'result', subtype: 'success', uuid: 'a5-result' })

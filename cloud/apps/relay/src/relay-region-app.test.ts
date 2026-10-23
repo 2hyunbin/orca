@@ -152,7 +152,8 @@ describe('Relay region API', () => {
     }
     const assign = vi.fn(async () => assignment)
     const regionReserve = vi.fn(async () => null)
-    const plan = vi.fn(async () => ({ kind: 'database', regionReserve }))
+    const reserveSpill = vi.fn(async () => null)
+    const plan = vi.fn(async () => ({ kind: 'database', regionReserve, reserveSpill }))
     const app = createRelayApp(config(), {
       store: {} as never,
       assignments: {
@@ -182,10 +183,10 @@ describe('Relay region API', () => {
       'asia-east2',
       'asia-east2',
       undefined,
-      { regionReserve, hostRequested: true }
+      { regionReserve, reserveSpill, hostRequested: true }
     )
     plan.mockClear()
-    await app.request(
+    const report = await app.request(
       '/v1/assign',
       assignmentRequest('abcdefghijklmnop', {
         regionCorrection: {
@@ -199,6 +200,7 @@ describe('Relay region API', () => {
         }
       })
     )
+    expect(report.status).toBe(200)
     expect(plan).not.toHaveBeenCalled()
   })
 

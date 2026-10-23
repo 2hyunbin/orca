@@ -27,11 +27,7 @@ export function claudeTurnResumePointWriter(
   }
 }
 
-/**
- * Record a completed turn: its leaf becomes the one close and exit persist, and the durable point
- * advances in place so an owner that dies before its close path runs keeps it. Writes run one at a
- * time, and a failure is only logged: this is bookkeeping and must never fail the turn.
- */
+/** Serialize completed-turn cursor writes; persistence failures must not fail the turn. */
 function persistClaudeTurnResumePoint(
   sessionId: string,
   session: ClaudeSession,
@@ -87,7 +83,7 @@ function persistClaudeTurnResumePoint(
           leafUuid,
           error
         })
-        // Forget the failed leaf so the next turn end retries it even when the leaf has not moved.
+        // Allow retry at the next turn end even if the leaf stays unchanged.
         if (session.resumePointWrite === write) {
           session.resumePointWrite = undefined
         }
@@ -96,7 +92,7 @@ function persistClaudeTurnResumePoint(
   session.resumePointWrite = write
 }
 
-/** Close and exit persist the last completed turn, after any in-flight turn-end write settles. */
+/** Drain turn-end writes before close or exit persists the final cursor. */
 export async function settledClaudeTurnEndLeaf(session: ClaudeSession): Promise<string | null> {
   await session.resumePointWrite?.settled
   return session.turnEndLeafUuid
