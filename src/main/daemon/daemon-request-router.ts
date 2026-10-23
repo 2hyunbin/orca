@@ -176,6 +176,7 @@ export class DaemonRequestRouter {
         return shutdownStalledOwner(request, {
           ...this.options,
           health: this.health,
+          isAcceptingWork: () => this.options.lifecycle.isAcceptingWork(),
           shutdown: () => this.shutdown(clientId, request.id, true, true)
         })
       case 'shutdown':

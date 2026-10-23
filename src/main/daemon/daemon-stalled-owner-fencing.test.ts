@@ -164,3 +164,55 @@ it('preserves ordinary process exit for a generic daemon shutdown', async () => 
     timeout: 3000
   })
 })
+
+it('retains verified recovery completion when another client wins ordinary shutdown', async () => {
+  const other = new DaemonClient({
+    socketPath: getDaemonSocketPath(directory),
+    tokenPath: join(directory, 'daemon.token')
+  })
+  await other.ensureConnected()
+  const request = await reviewedRequest()
+  const pending = Promise.withResolvers<void>()
+  const original = TerminalHost.prototype.dispose
+  const dispose = vi.spyOn(TerminalHost.prototype, 'dispose').mockImplementation(async function (
+    this: TerminalHost
+  ) {
+    await pending.promise
+    await original.call(this)
+  })
+  const recovery = client.request('shutdownStalledOwner', request)
+  try {
+    await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce())
+    await other.request('shutdown', { killSessions: false })
+    await vi.waitFor(() => expect(dispose).toHaveBeenCalledTimes(2))
+    expect(rpcCompleted).not.toHaveBeenCalled()
+    pending.resolve()
+    await expect(recovery).resolves.toEqual({ status: 'restarted', killedCount: 1 })
+    await vi.waitFor(() =>
+      expect(rpcCompleted).toHaveBeenCalledExactlyOnceWith('verified-stalled-owner')
+    )
+  } finally {
+    pending.resolve()
+    await recovery.catch(() => {})
+    dispose.mockRestore()
+    other.disconnect()
+  }
+})
+
+it('refuses recovery if shutdown starts while the strict health check is pending', async () => {
+  const request = await reviewedRequest()
+  const health = Promise.withResolvers<{ state: string; pendingMs: number }>()
+  probe.check.mockReturnValueOnce(health.promise)
+  const recovery = client.request('shutdownStalledOwner', request)
+  try {
+    await vi.waitFor(() => expect(probe.check).toHaveBeenCalledOnce())
+    const stopping = server.shutdown()
+    health.resolve({ state: 'stalled', pendingMs: 5000 })
+    await expect(recovery).resolves.toEqual({ status: 'refused' })
+    await stopping
+    expect(rpcCompleted).not.toHaveBeenCalled()
+  } finally {
+    health.resolve({ state: 'stalled', pendingMs: 5000 })
+    await recovery.catch(() => {})
+  }
+})

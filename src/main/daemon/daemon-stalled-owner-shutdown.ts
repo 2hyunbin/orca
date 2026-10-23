@@ -28,6 +28,7 @@ export async function shutdownStalledOwner(
     admission: Pick<DaemonTerminalAdmission, 'inFlight'>
     host: Pick<TerminalHost, 'listSessions'>
     health: Pick<DaemonHealthRequests, 'handle'>
+    isAcceptingWork: () => boolean
     shutdown: () => Promise<unknown>
   }
 ): Promise<StalledDaemonRestartResult> {
@@ -35,6 +36,7 @@ export async function shutdownStalledOwner(
   const identity = options.identity
   if (
     !identity ||
+    !options.isAcceptingWork() ||
     owner.pid !== identity.pid ||
     owner.startedAtMs !== identity.startedAtMs ||
     owner.launchNonce !== identity.launchNonce ||
@@ -44,6 +46,7 @@ export async function shutdownStalledOwner(
   }
   const health = await options.health.handle({ id: request.id, type: 'asyncIoHealth' })
   if (
+    !options.isAcceptingWork() ||
     !health ||
     typeof health !== 'object' ||
     !('state' in health) ||
