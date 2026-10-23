@@ -14,47 +14,73 @@ const KEY_A = 'tab-1:11111111-1111-4111-8111-111111111111'
 const KEY_B = 'tab-2:22222222-1111-4111-8111-111111111111'
 const scope = { workspaceIds: [WT], workspaceKeys: new Set([WT]) }
 
-const proc = (
+const RELAY = 10
+// The WSL relay (`init`) starts the pane's login shell as a session leader.
+const relay: WslGuestProcessRow = { pid: RELAY, ppid: 1, sid: 1, argc: 1, comm: 'init', paneKey: null }
+const shellA: WslGuestProcessRow = {
+  pid: 100,
+  ppid: RELAY,
+  sid: 100,
+  argc: 1,
+  comm: 'bash',
+  paneKey: KEY_A
+}
+const child = (
   pid: number,
-  pgrp: number,
-  tpgid: number,
   comm: string,
-  paneKey: string | null
-): WslGuestProcessRow => ({ pid, pgrp, tpgid, comm, paneKey })
+  extra: Partial<WslGuestProcessRow> = {}
+): WslGuestProcessRow => ({ pid, ppid: 100, sid: 100, argc: 1, comm, paneKey: KEY_A, ...extra })
 
 describe('classifyWslGuestPaneForeground', () => {
-  it('reads a pane whose foreground group is only its shell as idle', () => {
-    const rows = [proc(100, 100, 100, 'bash', KEY_A), proc(200, 200, 205, 'bash', KEY_B)]
+  it('reads a pane whose shell has nothing else, or only an idle nested shell, as idle', () => {
+    expect(classifyWslGuestPaneForeground([relay, shellA], KEY_A)).toBe('shell-idle')
+    expect(classifyWslGuestPaneForeground([relay, shellA, child(110, 'zsh')], KEY_A)).toBe(
+      'shell-idle'
+    )
+  })
+
+  // Every one of these survived the old foreground-group check and would end at the move's Sleep.
+  it.each([
+    ['a foreground program', [child(150, 'vim')]],
+    ['a background job', [child(150, 'npm')]],
+    ['a nohup or disowned job reparented to init', [child(150, 'node', { ppid: 1 })]],
+    ['a setsid daemon that kept the key', [child(150, 'redis-server', { ppid: 1, sid: 150 })]],
+    ['a child that cleared its environment', [child(150, 'python3', { paneKey: null })]],
+    ['a script waiting at `read`', [child(150, 'bash', { argc: 2 })]],
+    ['`sh -c` running a command', [child(150, 'sh', { argc: 3 })]]
+  ])('blocks %s', (_label, extra) => {
+    expect(classifyWslGuestPaneForeground([relay, shellA, ...extra], KEY_A)).toBe(
+      'process-running'
+    )
+  })
+
+  it("ignores another pane's work and the relay above the shell", () => {
+    const shellB = { ...shellA, pid: 200, sid: 200, paneKey: KEY_B }
+    const rows = [relay, shellA, shellB, child(250, 'vim', { ppid: 200, sid: 200, paneKey: KEY_B })]
     expect(classifyWslGuestPaneForeground(rows, KEY_A)).toBe('shell-idle')
+    expect(classifyWslGuestPaneForeground(rows, KEY_B)).toBe('process-running')
   })
 
-  it('reads a running program as busy, even one that cleared its environment', () => {
-    const rows = [
-      proc(100, 100, 150, 'bash', KEY_A),
-      proc(150, 150, 150, 'vim', null),
-      proc(200, 200, 200, 'zsh', KEY_B)
-    ]
-    expect(classifyWslGuestPaneForeground(rows, KEY_A)).toBe('process-running')
-    expect(classifyWslGuestPaneForeground(rows, KEY_B)).toBe('shell-idle')
-  })
-
-  it('never reads a pane with no guest process, or an ambiguous terminal, as idle', () => {
-    expect(classifyWslGuestPaneForeground([], KEY_A)).toBe('unverifiable')
-    const split = [proc(100, 100, 100, 'bash', KEY_A), proc(300, 300, 300, 'bash', KEY_A)]
-    expect(classifyWslGuestPaneForeground(split, KEY_A)).toBe('unverifiable')
+  it('never reads a pane whose shell was not found as idle', () => {
+    expect(classifyWslGuestPaneForeground([relay], KEY_A)).toBe('unverifiable')
   })
 })
 
 describe('parseWslGuestPaneProcesses', () => {
   it('keeps comm with spaces and drops malformed lines', () => {
     expect(
-      parseWslGuestPaneProcesses(`10\t10\t10\tmy prog\t${KEY_A}\nbad line\n11\t11\t11\tbash\t\n`)
-    ).toEqual([proc(10, 10, 10, 'my prog', KEY_A), proc(11, 11, 11, 'bash', null)])
+      parseWslGuestPaneProcesses(
+        `10\t1\t10\t1\tmy prog\t${KEY_A}\nbad line\n11\t10\t10\t     2\tbash\t\n`
+      )
+    ).toEqual([
+      { pid: 10, ppid: 1, sid: 10, argc: 1, comm: 'my prog', paneKey: KEY_A },
+      { pid: 11, ppid: 10, sid: 10, argc: 2, comm: 'bash', paneKey: null }
+    ])
   })
 })
 
 describe.runIf(process.platform === 'linux')('WSL_GUEST_PANE_PROCESS_SCRIPT on Linux', () => {
-  it('lists processes as pid, pgrp, tpgid, comm and pane key', () => {
+  it('lists processes as pid, ppid, sid, argc, comm and pane key', () => {
     const out = execFileSync('sh', ['-c', WSL_GUEST_PANE_PROCESS_SCRIPT], { encoding: 'utf8' })
     for (const row of parseWslGuestPaneProcesses(out)) {
       expect(row.pid).toBeGreaterThan(0)
