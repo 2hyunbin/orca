@@ -1,5 +1,4 @@
 import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
-import { hookRowAgentPhase } from '../../shared/agent-transitions'
 import { writeFencedAgentKeys } from './terminal-agent-fenced-keys'
 import type { TerminalAgentPromptAnswerRuntime } from './terminal-agent-prompt-answer'
 
@@ -17,10 +16,7 @@ class AgentNoLongerWorkingError extends Error {
   }
 }
 
-/**
- * One Escape to the agent in `paneKey`, only while its hook row says the main agent's turn runs,
- * and only into the process that row was read with: an idle composer or a successor never gets it.
- */
+/** The host must still report the same process running a main-agent turn at handoff. */
 export async function interruptWorkingAgent(
   runtime: TerminalAgentPromptAnswerRuntime,
   readHookRow: (paneKey: string) => AgentStatusIpcPayload | null,
@@ -38,11 +34,11 @@ export async function interruptWorkingAgent(
       throw new Error('agent_not_reachable')
     }
     const row = readHookRow(paneKey)
+    if (!row) {
+      throw new Error('agent_not_reachable')
+    }
     // Escape stops only the main agent's turn; background work alone leaves an idle composer.
-    const turnRuns = row?.mainAgent
-      ? row.mainAgent.state === 'working'
-      : row && hookRowAgentPhase(row) === 'working'
-    if (!turnRuns) {
+    if ((row.mainAgent?.state ?? row.state) !== 'working') {
       return null
     }
     const { ptyId, processIncarnation } = runtime.getTerminalPromptRequestBinding(handle)
@@ -60,9 +56,12 @@ export async function interruptWorkingAgent(
   const turn = read
   const written = await writeFencedAgentKeys(runtime, turn.handle, ESCAPE, {
     signal: options.signal,
-    fence: async (ptyId) => {
-      await options.beforeWrite?.(ptyId)
-      // Last and synchronous, so the turn cannot end between this read and the write.
+    beforeWrite: options.beforeWrite,
+    fence: (ptyId) => {
+      if (options.signal.aborted) {
+        throw new Error('request_aborted')
+      }
+      // No await separates this host-state check from transport handoff.
       const now = working()
       if (!now) {
         throw new AgentNoLongerWorkingError()

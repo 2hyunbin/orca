@@ -95,8 +95,8 @@ export class TerminalAgentPromptAnswers {
     }
     const written = await writeFencedAgentKeys(runtime, asked.handle, keys, {
       signal: answer.signal,
-      fence: async (ptyId) => {
-        await answer.beforeWrite?.(ptyId)
+      beforeWrite: answer.beforeWrite,
+      fence: (ptyId) => {
         // Last and synchronous, so nothing moves between this read and the write.
         const now = this.read(runtime, target)
         if (
@@ -112,7 +112,7 @@ export class TerminalAgentPromptAnswers {
     if (written.outcome !== 'refused') {
       return written
     }
-    if (written.error === undefined && this.answered.get(target.paneKey) === answer.promptId) {
+    if (!('error' in written) && this.answered.get(target.paneKey) === answer.promptId) {
       this.answered.delete(target.paneKey)
     }
     return {

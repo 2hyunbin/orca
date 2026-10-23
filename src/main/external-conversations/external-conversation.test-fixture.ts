@@ -219,12 +219,16 @@ export function fakeTerminal() {
     async (
       handle: string,
       action: { text?: string },
-      options: { beforeWrite?: (ptyId: string) => unknown }
+      options: {
+        beforeWrite?: (ptyId: string) => unknown
+        reserveWrite?: (ptyId: string) => void
+      }
     ): Promise<RuntimeTerminalSend> => {
       if (!state.ptyId) {
         throw new Error('terminal_not_writable')
       }
       await options.beforeWrite?.(state.ptyId)
+      options.reserveWrite?.(state.ptyId)
       keys.push(action.text ?? '')
       return { handle, accepted: true, bytesWritten: 1, writeSettlement: { outcome: 'accepted' } }
     }

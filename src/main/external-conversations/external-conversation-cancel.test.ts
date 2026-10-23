@@ -66,6 +66,18 @@ describe('ExternalConversationSeam cancel', () => {
     expect(fake.keys).toEqual([])
   })
 
+  it('does not receipt missing status as idle, so reconnecting status permits a retry', async () => {
+    const { seam, host, hookRows, fake } = await linked()
+    hookRows.delete(PANE)
+    await expect(seam.cancel(host, KEY, 'c1')).resolves.toEqual({
+      outcome: 'refused',
+      reason: 'agent_not_reachable'
+    })
+    hookRows.set(PANE, hookRow())
+    await expect(seam.cancel(host, KEY, 'c1')).resolves.toEqual({ outcome: 'accepted' })
+    expect(fake.keys).toEqual(['\x1b'])
+  })
+
   it('rejects a pending approval through the prompt answer, and refuses a question', async () => {
     const { seam, host, hookRows, fake } = await linked()
     hookRows.set(PANE, APPROVAL)
