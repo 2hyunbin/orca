@@ -6,6 +6,7 @@ import type {
 } from '../../shared/agent-session-wire'
 import { StructuredAgentSessionStatusFeed } from '../native-chat/agent-session-wire/structured-agent-session-status-feed'
 import type { StatusFeedSession } from '../native-chat/agent-session-wire/structured-agent-session-status-feed-deps'
+import type { StructuredAgentSessionHostSession } from '../native-chat/agent-session-wire/structured-agent-session-host-types'
 import { AgentSessionSubscribers } from '../native-chat/agent-session-wire/structured-agent-session-subscribers'
 import {
   readQueuePublication,
@@ -48,7 +49,14 @@ describe('real-store status and queue publications', () => {
         ]
       })
       const store = await openTestAgentSessionRecordStore(root)
-      const sessions = new Map<string, StatusFeedSession>()
+      const sessions = new Map<
+        string,
+        Pick<StatusFeedSession, 'journal' | 'params'> &
+          Pick<
+            StructuredAgentSessionHostSession,
+            'child' | 'lastEndedChild' | 'operationalRevision'
+          >
+      >()
       const counts = {
         snapshots: 0,
         snapshotItems: 0,
@@ -104,6 +112,7 @@ describe('real-store status and queue publications', () => {
         ).toBe(true)
         sessions.set(row.sessionId, {
           journal,
+          child: null,
           params: { location: row.location, provider: row.provider }
         })
         const snapshot = journal.snapshot

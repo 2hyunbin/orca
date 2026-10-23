@@ -323,7 +323,7 @@ describe('real conversation inventory work', () => {
     for (const size of [1, 10]) {
       const rows = Array.from({ length: size }, (_, i) => ({
         ...listResult().sessions[0]!,
-        agent: 'claude',
+        agent: 'claude' as const,
         sessionId: i ? 'unowned-provider' : 'provider-damaged-chat-0'
       }))
       work.reset()
