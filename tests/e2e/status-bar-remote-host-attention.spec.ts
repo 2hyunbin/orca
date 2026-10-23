@@ -124,8 +124,18 @@ test('remote host counts and actionable attention preserve rendered status-bar g
   await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const trigger = page.getByRole('button', { name: 'Remote host connection status', exact: true })
   const attention = trigger.locator('span.text-destructive')
+  const measureTrigger = () =>
+    trigger.evaluate((button) => {
+      const bounds = button.getBoundingClientRect()
+      return {
+        x: bounds.x,
+        width: bounds.width,
+        neighbors: [button.previousElementSibling, button.nextElementSibling].map(
+          (node) => node?.getBoundingClientRect().x ?? 0
+        )
+      }
+    })
   await expect(trigger).toBeVisible()
-  const coveredDensities = new Set<string>()
   const measurements: { theme: string; viewport: number; density: string; width: number }[] = []
 
   for (const theme of ['light', 'dark']) {
@@ -151,17 +161,7 @@ test('remote host counts and actionable attention preserve rendered status-bar g
         continue
       }
       themeDensities.add(density)
-      coveredDensities.add(density)
-      const baseline = await trigger.evaluate((button) => {
-        const bounds = button.getBoundingClientRect()
-        return {
-          x: bounds.x,
-          width: bounds.width,
-          neighbors: [button.previousElementSibling, button.nextElementSibling].map(
-            (node) => node?.getBoundingClientRect().x ?? 0
-          )
-        }
-      })
+      const baseline = await measureTrigger()
       measurements.push({ theme, viewport, density, width: baseline.width })
       for (const condition of CONDITIONS) {
         for (const count of COUNTS) {
@@ -207,16 +207,7 @@ test('remote host counts and actionable attention preserve rendered status-bar g
           ).toBeVisible()
           await expect(attention).toBeVisible({ visible: blocked })
           await expect(trigger.locator('.animate-spin')).toHaveCount(0)
-          const current = await trigger.evaluate((button) => {
-            const bounds = button.getBoundingClientRect()
-            return {
-              x: bounds.x,
-              width: bounds.width,
-              neighbors: [button.previousElementSibling, button.nextElementSibling].map(
-                (node) => node?.getBoundingClientRect().x ?? 0
-              )
-            }
-          })
+          const current = await measureTrigger()
           expect(
             Math.abs(current.width - baseline.width),
             `${theme}/${density}/${count}/${condition}: width`
@@ -225,7 +216,6 @@ test('remote host counts and actionable attention preserve rendered status-bar g
             Math.abs(current.x - baseline.x),
             `${theme}/${density}/${count}/${condition}: x`
           ).toBeLessThanOrEqual(0.5)
-          expect(current.neighbors).toHaveLength(baseline.neighbors.length)
           current.neighbors.forEach((x, index) =>
             expect(Math.abs(x - baseline.neighbors[index])).toBeLessThanOrEqual(0.5)
           )
@@ -238,8 +228,8 @@ test('remote host counts and actionable attention preserve rendered status-bar g
         contentType: 'image/png'
       })
     }
+    expect([...themeDensities].sort()).toEqual(['compact', 'full', 'icon-only'])
   }
-  expect([...coveredDensities].sort()).toEqual(['compact', 'full', 'icon-only'])
   await testInfo.attach('remote-host-trigger-widths', {
     body: JSON.stringify(measurements, null, 2),
     contentType: 'application/json'
@@ -257,13 +247,6 @@ test('remote host counts and actionable attention preserve rendered status-bar g
   await expect(page.getByText('Access revoked', { exact: true })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(trigger).toBeFocused()
-  await trigger.hover()
-  await expect(
-    page.getByRole('tooltip', {
-      name: 'Connected hosts: 120. Hosts needing attention: 1.',
-      exact: true
-    })
-  ).toBeVisible()
   await trigger.click()
   await expect(page.getByText('Access revoked', { exact: true })).toBeVisible()
   await page.getByText('Re-pair…', { exact: true }).first().click()

@@ -9,7 +9,6 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { useAppStore } from '../../store'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { SshConnectionStatus } from '../../../../shared/ssh-types'
 import { translate } from '@/i18n/i18n'
@@ -38,9 +37,7 @@ import { syncSshConfigTargetsPassively } from '../../lib/ssh-config-passive-sync
 import { connectRuntimeHostAndReloadProjects } from './runtime-environment-explicit-connect'
 import {
   runtimeHostBlockedCopy,
-  runtimeHostConnectionDetail,
-  runtimeHostStatusForOverall,
-  sshStatusForOverall
+  runtimeHostConnectionDetail
 } from './remote-host-connection-status'
 import {
   isConnectedRuntimeHostState,
@@ -104,7 +101,7 @@ export function SshStatusSegment({
         status: state?.status ?? ('disconnected' satisfies SshConnectionStatus)
       }
     })
-  const runtimeHosts = userManagedEnvironments
+  const runtimeHostRows = userManagedEnvironments
     .filter((environment) => visibleHosts.has(toRuntimeExecutionHostId(environment.id)))
     .map((environment) => {
       const statusEntry = runtimeStatusByEnvironmentId.get(environment.id)
@@ -123,16 +120,10 @@ export function SshStatusSegment({
               canRepair: blockedReason === 'access-revoked' && repairRoute === 'access-link'
             }
           : null,
-        snapshot: statusEntry?.snapshot,
-        status: statusEntry?.status ?? null,
-        active: settings?.activeRuntimeEnvironmentId === environment.id,
+        state: runtimeHostConnectionStateForEntry(statusEntry),
         remoteControl: statusEntry?.remoteControl ?? statusEntry?.status?.remoteControl ?? null
       }
     })
-  const runtimeHostRows = runtimeHosts.map((host) => ({
-    ...host,
-    state: runtimeHostConnectionStateForEntry(runtimeStatusByEnvironmentId.get(host.id))
-  }))
   // Available remote servers are online even when they are not the active runtime.
   // Keep host health separate from the advanced active-server selection.
   const connectedRuntimeHosts = runtimeHostRows.filter((host) =>
@@ -174,16 +165,13 @@ export function SshStatusSegment({
     [recordFeatureInteraction, readRuntimeHostStatusSnapshots]
   )
 
-  if (targets.length === 0 && runtimeHosts.length === 0) {
+  if (targets.length === 0 && runtimeHostRows.length === 0) {
     return null
   }
 
-  const statuses = [
-    ...targets.map((t) => sshStatusForOverall(t.status)),
-    ...runtimeHostRows.map((host) => runtimeHostStatusForOverall(host.state, host.blockedReason))
-  ]
-  const connectedHostCount = statuses.filter((status) => status === 'connected').length
-  const blockedHostCount = statuses.filter((status) => status === 'blocked').length
+  const connectedHostCount =
+    connectedTargets.length + connectedRuntimeHosts.filter((host) => !host.blockedReason).length
+  const blockedHostCount = runtimeHostRows.filter((host) => host.blockedReason).length
   const connectionSummary = remoteHostConnectionSummary(connectedHostCount, blockedHostCount)
   const openRepair = (host: { id: string; label: string }): void => {
     // Why close first: the dialog must not open underneath the menu's focus trap.
@@ -202,60 +190,53 @@ export function SshStatusSegment({
         }
       }}
     >
-      <Tooltip>
-        <DropdownMenuTrigger asChild>
-          <TooltipTrigger asChild>
-            <button
-              ref={triggerRef}
-              type="button"
-              className="inline-flex shrink-0 items-center gap-1.5 cursor-pointer rounded px-1 py-0.5 text-muted-foreground hover:bg-accent/70"
-              aria-label={translate(
-                'auto.components.status.bar.SshStatusSegment.fdc57e9970',
-                'Remote host connection status'
-              )}
-              aria-description={connectionSummary}
-            >
-              {iconOnly ? (
-                <MonitorSmartphone aria-hidden className="size-3" />
-              ) : (
-                <Server aria-hidden className="size-3" />
-              )}
-              <span className="inline-grid text-2xs tabular-nums">
-                {/* Reserve both localized forms so count changes don't resize the bar. */}
-                <span aria-hidden className="invisible col-start-1 row-start-1">
-                  {connectedHostCountLabel(1)}
-                </span>
-                <span aria-hidden className="invisible col-start-1 row-start-1">
-                  {connectedHostCountLabel(Math.max(99, statuses.length))}
-                </span>
-                <span className="col-start-1 row-start-1">
-                  {connectedHostCountLabel(connectedHostCount)}
-                </span>
-              </span>
-              <span
-                aria-hidden
-                className={cn(
-                  'inline-flex shrink-0 items-center gap-1.5 border-l border-border pl-2 text-destructive',
-                  blockedHostCount === 0 && 'invisible'
-                )}
-              >
-                <AlertCircle className="size-3" />
-                {!compact && !iconOnly && (
-                  <span className="text-2xs">
-                    {translate(
-                      'auto.components.status.bar.SshStatusSegment.needsAttention',
-                      'Needs attention'
-                    )}
-                  </span>
+      <DropdownMenuTrigger asChild>
+        <button
+          ref={triggerRef}
+          type="button"
+          className="inline-flex shrink-0 items-center gap-1.5 cursor-pointer rounded px-1 py-0.5 text-muted-foreground hover:bg-accent/70"
+          aria-label={translate(
+            'auto.components.status.bar.SshStatusSegment.fdc57e9970',
+            'Remote host connection status'
+          )}
+          aria-description={connectionSummary}
+        >
+          {iconOnly ? (
+            <MonitorSmartphone aria-hidden className="size-3" />
+          ) : (
+            <Server aria-hidden className="size-3" />
+          )}
+          <span className="inline-grid text-2xs tabular-nums">
+            {/* Reserve both localized forms so count changes don't resize the bar. */}
+            <span aria-hidden className="invisible col-start-1 row-start-1">
+              {connectedHostCountLabel(1)}
+            </span>
+            <span aria-hidden className="invisible col-start-1 row-start-1">
+              {connectedHostCountLabel(Math.max(99, targets.length + runtimeHostRows.length))}
+            </span>
+            <span className="col-start-1 row-start-1">
+              {connectedHostCountLabel(connectedHostCount)}
+            </span>
+          </span>
+          <span
+            aria-hidden
+            className={cn(
+              'inline-flex shrink-0 items-center gap-1.5 border-l border-border pl-2 text-destructive',
+              blockedHostCount === 0 && 'invisible'
+            )}
+          >
+            <AlertCircle className="size-3" />
+            {!compact && !iconOnly && (
+              <span className="text-2xs">
+                {translate(
+                  'auto.components.status.bar.SshStatusSegment.needsAttention',
+                  'Needs attention'
                 )}
               </span>
-            </button>
-          </TooltipTrigger>
-        </DropdownMenuTrigger>
-        <TooltipContent side="top" sideOffset={6}>
-          {connectionSummary}
-        </TooltipContent>
-      </Tooltip>
+            )}
+          </span>
+        </button>
+      </DropdownMenuTrigger>
       <DropdownMenuContent
         side="top"
         align="start"

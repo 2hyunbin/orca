@@ -17,7 +17,7 @@ import {
   getResourceManagerTooltipLines
 } from './resource-manager-terminal-copy'
 import { SshStatusSegment } from './SshStatusSegment'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import { remoteHostConnectionSummary } from './ssh-status-segment-copy'
 
 type StoreState = {
   sshConnectionStates: Map<string, { status: SshConnectionStatus }>
@@ -149,22 +149,31 @@ describe('status-bar copy under a non-English UI language', () => {
       { id: 'ssh-1', label: 'builder', status: 'connected' },
       { id: 'ssh-2', label: 'openclaw', status: 'connected' }
     ])
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
 
     expect(screen.getByRole('button').getAttribute('aria-label')).toBe('リモートホスト接続状態')
+    expect(screen.getByRole('button').getAttribute('aria-description')).toBe(
+      '接続済みのホスト：2 台。'
+    )
     expect(triggerText()).toContain('2 台のホスト')
+  })
+
+  it('translates the host summary when attention is needed', () => {
+    expect(remoteHostConnectionSummary(2, 1)).toBe(
+      '接続済みのホスト：2 台。対応が必要なホスト：1 台。'
+    )
   })
 
   it('translates the singular host count', () => {
     setSshTargets([{ id: 'ssh-1', label: 'builder', status: 'connected' }])
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
 
     expect(triggerText()).toContain('1 台のホスト')
   })
 
   it('keeps the translated connected count while a host is connecting', () => {
     setSshTargets([{ id: 'ssh-1', label: 'builder', status: 'connecting' }])
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(triggerText()).toContain('0 台のホスト')
     expect(triggerText()).not.toContain('接続中…')
   })

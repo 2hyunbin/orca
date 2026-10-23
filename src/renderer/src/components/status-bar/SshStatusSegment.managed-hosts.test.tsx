@@ -9,7 +9,6 @@ import type { PublicKnownRuntimeEnvironment } from '../../../../shared/runtime-e
 import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-status'
 import type { SshConnectionState } from '../../../../shared/ssh-types'
 import { SshStatusSegment } from './SshStatusSegment'
-import { TooltipProvider } from '@/components/ui/tooltip'
 
 const mocks = vi.hoisted(() => ({
   disconnectRuntime: vi.fn(async () => undefined),
@@ -158,7 +157,7 @@ describe('the status menu for a managed SSH host', () => {
     { compact: true, iconOnly: true }
   ])('keeps retries quiet and exposes blockers alongside the connected count (%j)', (density) => {
     state.runtimeStatusByEnvironmentId.delete('server-windows')
-    const { rerender } = render(<SshStatusSegment {...density} />, { wrapper: TooltipProvider })
+    const { rerender } = render(<SshStatusSegment {...density} />)
     const trigger = screen.getByRole('button', { name: 'Remote host connection status' })
     const expectSummary = (blocked: boolean): void => {
       expect(trigger.getAttribute('aria-description')).toBe(
@@ -208,7 +207,7 @@ describe('the status menu for a managed SSH host', () => {
   })
 
   it('shows and counts one row per machine and disconnects the managed server', async () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.queryByText('SSH Host')).toBeNull()
     expect(
@@ -226,7 +225,7 @@ describe('the status menu for a managed SSH host', () => {
       'ssh-openclaw',
       sshState({ kind: 'relay', reason: 'source_changed' })
     )
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.getByText('SSH Host')).toBeTruthy()
     expect(
@@ -255,7 +254,7 @@ describe('the status menu for a managed SSH host', () => {
         retired: true
       }
     })
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(
       screen.getByRole('button', { name: 'Remote host connection status' }).textContent
@@ -266,7 +265,7 @@ describe('the status menu for a managed SSH host', () => {
 
   it('does not merge an independently paired server just because its name matches', () => {
     state.runtimeEnvironments[0] = environment('server-openclaw', 'openclaw')
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(2)
     expect(
       screen.getByRole('button', { name: 'Remote host connection status' }).textContent
@@ -275,14 +274,14 @@ describe('the status menu for a managed SSH host', () => {
 
   it('keeps the SSH row until the managed server catalog has arrived', () => {
     state.runtimeEnvironments = [environment('server-windows', 'win-lowspec')]
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.getByText('SSH Host')).toBeTruthy()
   })
 
   it('names the managed row after its SSH host, honouring a rename saved on the SSH id', () => {
     state.runtimeEnvironments[0] = { ...state.runtimeEnvironments[0], name: 'orcad-ssh-openclaw' }
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('openclaw')).toHaveLength(1)
     expect(screen.queryByText('orcad-ssh-openclaw')).toBeNull()
     cleanup()
@@ -290,13 +289,13 @@ describe('the status menu for a managed SSH host', () => {
       ...getDefaultSettings('/home/test'),
       hostSettingOverrides: { 'ssh:ssh-openclaw': { displayLabel: 'Claw box' } }
     }
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getAllByText('Claw box')).toHaveLength(1)
   })
 
   it('names a revoked server and offers Re-pair instead of a futile Connect', () => {
     state.runtimeStatusByEnvironmentId.set('server-windows', blockedStatus('access-revoked'))
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getByText('Access revoked')).toBeTruthy()
     expect(screen.queryByText('Disconnected')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull()
@@ -304,11 +303,20 @@ describe('the status menu for a managed SSH host', () => {
     expect(screen.getByRole('dialog').textContent).toBe('Re-pair win-lowspec (server-windows)')
   })
 
-  it('names an incompatible server as needing an update', () => {
-    state.runtimeStatusByEnvironmentId.set('server-windows', blockedStatus('incompatible'))
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+  it('excludes a reachable but incompatible server from the connected count', () => {
+    const ready = readyStatus()
+    state.runtimeStatusByEnvironmentId.set('server-windows', {
+      ...ready,
+      status: ready.status ? { ...ready.status, runtimeProtocolVersion: 0 } : null
+    })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getByText('Update required')).toBeTruthy()
     expect(screen.queryByText('Re-pair…')).toBeNull()
+    expect(
+      screen
+        .getByRole('button', { name: 'Remote host connection status' })
+        .getAttribute('aria-description')
+    ).toBe('Connected hosts: 1. Hosts needing attention: 1.')
   })
 })
 

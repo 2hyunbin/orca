@@ -8,7 +8,6 @@ import type { RuntimeEnvironmentStatus } from '../../../../shared/runtime-host-s
 import type { SshConnectionState, SshConnectionStatus } from '../../../../shared/ssh-types'
 import type { Repo } from '../../../../shared/repo-types'
 import { SshStatusSegment } from './SshStatusSegment'
-import { TooltipProvider } from '@/components/ui/tooltip'
 import { HOST_LIST_ROW_LIMIT } from '../host-picker/bounded-host-list'
 import { SSH_STATUS_MENU_IDLE_ROW_LIMIT } from './ssh-status-menu-rows'
 
@@ -84,14 +83,14 @@ afterEach(() => {
 
 describe('the status menu with a very large imported SSH host list', () => {
   it('renders a bounded number of idle host rows instead of one per imported host', () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     const connectButtons = screen.queryAllByRole('button', { name: 'Connect' })
     expect(connectButtons.length).toBeLessThanOrEqual(SSH_STATUS_MENU_IDLE_ROW_LIMIT + 1)
     expect(document.body.getElementsByTagName('*').length).toBeLessThan(2_000)
   })
 
   it('always lists connected and in-progress hosts, wherever they sit in the list', () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getByText('node-09000')).toBeTruthy()
     expect(screen.getByText('node-13000')).toBeTruthy()
     expect(screen.getByText('node-00000')).toBeTruthy()
@@ -99,7 +98,7 @@ describe('the status menu with a very large imported SSH host list', () => {
   })
 
   it('keeps an idle host that owns a project, even deep in the config', () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getByText('node-12345')).toBeTruthy()
   })
 
@@ -107,7 +106,7 @@ describe('the status menu with a very large imported SSH host list', () => {
     const connect = vi.fn(async () => undefined)
     vi.stubGlobal('api', { ssh: { connect } })
     state.sshConnectionStates.set('ssh-5', connectionState('ssh-5', 'auth-failed'))
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     const hidden = IMPORTED_HOST_COUNT - 3 - SSH_STATUS_MENU_IDLE_ROW_LIMIT
     fireEvent.click(screen.getByRole('menuitem', { name: `Find among ${hidden} more SSH hosts…` }))
     const search = await screen.findByRole('combobox')
@@ -121,7 +120,7 @@ describe('the status menu with a very large imported SSH host list', () => {
   })
 
   it('caps the search results and says how many more match', async () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     fireEvent.click(screen.getByRole('menuitem', { name: /^Find among/ }))
     const search = await screen.findByRole('combobox')
     fireEvent.change(search, { target: { value: 'node-1' } })
@@ -132,7 +131,7 @@ describe('the status menu with a very large imported SSH host list', () => {
   })
 
   it('returns focus to the status button when the search is closed from the keyboard', async () => {
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     fireEvent.click(screen.getByRole('menuitem', { name: /^Find among/ }))
     const search = await screen.findByRole('combobox')
     search.focus()
@@ -145,7 +144,7 @@ describe('the status menu with a very large imported SSH host list', () => {
   it('offers no search when every idle host fits', () => {
     state.sshTargetLabels = new Map([['ssh-1', 'solo']])
     state.sshConnectionStates = new Map()
-    render(<SshStatusSegment compact={false} iconOnly={false} />, { wrapper: TooltipProvider })
+    render(<SshStatusSegment compact={false} iconOnly={false} />)
     expect(screen.getByText('solo')).toBeTruthy()
     expect(screen.queryByRole('menuitem', { name: /^Find/ })).toBeNull()
   })
