@@ -177,6 +177,12 @@ export function collectTypecheckPass(root = process.cwd()) {
     compiler
   )
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`
+  console.error(
+    output
+      .split('\n')
+      .filter((line) => /journal-text-pruner\.ts|agent-session-delta-coalescer\.ts/.test(line))
+      .join('\n')
+  )
   return {
     failing: parseFailingFiles(output),
     programTestFiles: parseProgramTestFiles(output, fs.realpathSync(root))
