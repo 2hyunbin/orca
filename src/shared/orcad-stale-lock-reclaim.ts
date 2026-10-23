@@ -11,6 +11,14 @@ export const ORCAD_STALE_LOCK_DATA_ROOT_FLAG = '--data-root'
 /** `--json` prints one of these; the exit code names the status too. */
 export type OrcadStaleLockReclaimStatus = 'none' | 'eligible' | 'refused' | 'reclaimed'
 
+export type OrcadStaleLockEvidence = {
+  pid: number
+  host: string
+  bootId: string
+  currentBootId: string
+  ageMinutes: number
+}
+
 // Why `none` is not 0: a command pointed at the wrong data root must never read as a recovery.
 export const ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES: Record<OrcadStaleLockReclaimStatus, number> = {
   reclaimed: 0,

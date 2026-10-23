@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { registerManagedServerActions } from '../../runtime/managed-server-actions-registry'
 import {
   createManagedOrcadActions,
+  reclaimManagedOrcadStaleLock,
   restartManagedOrcad,
   type ManagedOrcadActionOptions
 } from './managed-orcad-actions'
@@ -26,6 +27,15 @@ export function registerOrcadRuntimeMaintenanceHandlers(options: ManagedOrcadAct
   )
   ipcMain.handle('runtimeEnvironments:restartOrcad', async (_event, args: { selector: string }) =>
     restartManagedOrcad(options, requiredString(args?.selector, 'Server'))
+  )
+  ipcMain.handle(
+    'runtimeEnvironments:reclaimOrcadStaleLock',
+    async (_event, args: { selector: string; yes?: boolean }) =>
+      reclaimManagedOrcadStaleLock(
+        options,
+        requiredString(args?.selector, 'Server'),
+        args?.yes === true
+      )
   )
   ipcMain.handle('runtimeEnvironments:stopOrcad', async (_event, args: { selector: string }) =>
     actions.stop(requiredString(args?.selector, 'Server'))

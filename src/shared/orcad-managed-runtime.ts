@@ -4,6 +4,7 @@ import type { OrcadMigrationBlocker } from './orcad-migration/orcad-migration-pr
 import type { OrcadMigrationSourceCutoverPhase } from './orcad-migration/orcad-migration-source-cutover'
 import type { OrcadDaemonRetirementVerdict } from './orcad-stop-request'
 import type { SshManagedServerLinkedProject } from './ssh-types'
+import type { OrcadStaleLockEvidence } from './orcad-stale-lock-reclaim'
 
 export const ORCAD_MANAGED_REMOTE_PORT = 6_768
 
@@ -77,6 +78,25 @@ export type OrcadManagedRestartResult =
   | { outcome: 'restarted'; environmentId: string }
   | { outcome: 'terminals-running'; liveSessions: number | null }
   | { outcome: 'not-restarted'; reason: string }
+
+/** `orcad --reclaim-stale-lock` run on a managed host's active slot (#32177). */
+export type OrcadManagedStaleLockReclaimResult =
+  | {
+      status: 'none' | 'eligible' | 'refused'
+      message: string
+      lockPath: string
+      evidence?: OrcadStaleLockEvidence
+    }
+  /** `notRestarted` says why the server did not start again once its lock was cleared. */
+  | {
+      status: 'reclaimed'
+      environmentId: string
+      message: string
+      lockPath: string
+      notRestarted?: string
+    }
+  /** The host can't run the command, or another lifecycle step holds it; nothing changed. */
+  | { status: 'unsupported' | 'busy'; message: string }
 
 /**
  * Unlinks the server from this desktop without reaching its host, for a host that is gone or

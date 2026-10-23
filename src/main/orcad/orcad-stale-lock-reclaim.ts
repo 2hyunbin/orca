@@ -34,6 +34,7 @@ import {
   ORCAD_STALE_LOCK_DATA_ROOT_FLAG,
   ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES,
   type OrcadReclaimHintRuntime,
+  type OrcadStaleLockEvidence,
   type OrcadStaleLockReclaimStatus
 } from '../../shared/orcad-stale-lock-reclaim'
 
@@ -52,14 +53,6 @@ export type OrcadStaleLockReclaimHooks = {
   dataRootIsOnLocalDisk?: (dataRoot: string) => boolean
   probeEndpoint?: (endpoint: string) => Promise<OrcadEndpointProbe>
   lockHooks?: OrcadInstanceLockHooks
-}
-
-export type OrcadStaleLockEvidence = {
-  pid: number
-  host: string
-  bootId: string
-  currentBootId: string
-  ageMinutes: number
 }
 
 export type OrcadStaleLockReclaimResult = {

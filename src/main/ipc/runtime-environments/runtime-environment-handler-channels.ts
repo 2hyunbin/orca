@@ -22,6 +22,7 @@ export const RUNTIME_ENVIRONMENT_HANDLER_CHANNELS = [
   'runtimeEnvironments:rollbackOrcad',
   'runtimeEnvironments:recoverOrcad',
   'runtimeEnvironments:restartOrcad',
+  'runtimeEnvironments:reclaimOrcadStaleLock',
   'runtimeEnvironments:stopOrcad',
   'runtimeEnvironments:cancelOrcadStop',
   'runtimeEnvironments:forgetOrcad',
