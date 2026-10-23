@@ -11,7 +11,6 @@ import {
   type PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 import { hasOsFileDragTypes } from '../lib/os-file-drop-cancellation-guard'
-import { prepareOsFileDrop } from './os-file-drop-bytes'
 
 export type OsFileDropSequence = { deliveryTail: Promise<void> }
 
@@ -122,12 +121,12 @@ export function useOsFileDropOwner<Destination = undefined>(
         const preparationConsumer =
           typeof consumer === 'function' ? consumer(context.destination) : consumer
         const queueDelivery = (
-          prepared: PreparedDroppedPaths | Promise<PreparedDroppedPaths | undefined>
+          prepared: PreparedDroppedPaths | Promise<PreparedDroppedPaths>
         ): void => {
           sequence.deliveryTail = sequence.deliveryTail
             .then(async () => {
               const result = await prepared
-              if (result && (isDestinationLive || attached)) {
+              if (isDestinationLive || attached) {
                 await deliver(
                   isDestinationLive && !isDestinationLive(context)
                     ? { ...result, paths: [] }
@@ -163,13 +162,11 @@ export function useOsFileDropOwner<Destination = undefined>(
         }
 
         const paths: string[] = []
-        const pathFiles: File[] = []
         for (const file of files) {
           try {
             const path = getPathForFile(file)
             if (path) {
               paths.push(path)
-              pathFiles.push(file)
             }
           } catch {
             // A virtual file may not have a local path.
@@ -193,10 +190,13 @@ export function useOsFileDropOwner<Destination = undefined>(
           return
         }
 
-        const preparation = (async (): Promise<PreparedDroppedPaths | undefined> => {
-          let prepared: PreparedDroppedPaths | undefined
+        const preparation = (async (): Promise<PreparedDroppedPaths> => {
+          let prepared: PreparedDroppedPaths
           try {
-            prepared = await prepareOsFileDrop(paths, pathFiles, preparationConsumer)
+            prepared = await window.api.fs.prepareDroppedPaths({
+              paths,
+              consumer: preparationConsumer
+            })
           } catch {
             prepared = {
               paths: [],
@@ -210,9 +210,6 @@ export function useOsFileDropOwner<Destination = undefined>(
                 }
               ]
             }
-          }
-          if (!prepared) {
-            return undefined
           }
           return { paths: prepared.paths, failures: [...resolutionFailures, ...prepared.failures] }
         })()

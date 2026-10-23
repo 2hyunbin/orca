@@ -156,32 +156,24 @@ export class AgentSessionAttachmentStore {
     }
   }
 
-  /** Stores bytes this process already holds as one committed upload; returns its path. Not in
-   *  flight meanwhile: the sweep leaves a folder this new alone for an hour. */
-  async storeFile(name: string, bytes: Buffer, signal?: AbortSignal): Promise<string> {
+  /** Stores bytes this process already holds as one committed upload; returns its path. */
+  async storeFile(name: string, bytes: Buffer): Promise<string> {
+    return this.storeWith(name, (partPath) => writeFile(partPath, bytes, { flag: 'wx' }))
+  }
+
+  /** One committed upload whose hidden part file `write` fills, renamed into place; returns its
+   *  path. Not in flight meanwhile: the sweep leaves a folder this new alone for an hour. */
+  async storeWith(name: string, write: (partPath: string) => Promise<void>): Promise<string> {
     const uploadDir = join(this.rootDir, randomUUID())
     const finalPath = join(uploadDir, sanitizeAgentSessionAttachmentName(name))
     try {
-      signal?.throwIfAborted()
       await mkdir(uploadDir, { recursive: true })
-      signal?.throwIfAborted()
       const partPath = join(uploadDir, AGENT_SESSION_ATTACHMENT_PART_FILE)
-      await writeFile(partPath, bytes, { flag: 'wx', signal })
-      signal?.throwIfAborted()
-      const committed = await renameFileWithWindowsRetryAsync(
-        partPath,
-        finalPath,
-        () => !signal?.aborted
-      )
-      if (!committed) {
-        signal?.throwIfAborted()
-        throw new Error('Attachment upload was cancelled')
-      }
+      await write(partPath)
+      // Rename is the commit: nothing fallible may follow it.
+      await renameFileWithWindowsRetryAsync(partPath, finalPath)
     } catch (error) {
-      // Drop failures use the existing abandoned-part sweep; cleanup cannot hold their payload.
-      if (!signal) {
-        await removeQuietly(uploadDir)
-      }
+      await removeQuietly(uploadDir)
       throw error
     }
     return finalPath

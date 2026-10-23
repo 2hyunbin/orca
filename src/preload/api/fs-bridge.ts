@@ -2,9 +2,7 @@ import type { PathExistenceResult } from '../../shared/path-existence-batch'
 import { ipcRenderer, webUtils } from 'electron'
 import type {
   PrepareDroppedPathsRequest,
-  PreparedDroppedPaths,
-  StoreDroppedFileBytesRequest,
-  EndDroppedFileIntakeRequest
+  PreparedDroppedPaths
 } from '../../shared/native-file-drop-preparation'
 import type { SshMutationExpectation } from '../../shared/ssh-types'
 import type { LocalFileAccess } from '../../shared/local-file-access'
@@ -36,10 +34,6 @@ export const fsApi = {
   getPathForFile: (file: File): string => webUtils.getPathForFile(file),
   prepareDroppedPaths: (args: PrepareDroppedPathsRequest): Promise<PreparedDroppedPaths> =>
     ipcRenderer.invoke('fs:prepareDroppedPaths', args),
-  storeDroppedFileBytes: (args: StoreDroppedFileBytesRequest): Promise<PreparedDroppedPaths> =>
-    ipcRenderer.invoke('fs:storeDroppedFileBytes', args),
-  endDroppedFileIntake: (args: EndDroppedFileIntakeRequest): Promise<void> =>
-    ipcRenderer.invoke('fs:endDroppedFileIntake', args),
   readFileChunk: (args: {
     filePath: string
     connectionId?: string

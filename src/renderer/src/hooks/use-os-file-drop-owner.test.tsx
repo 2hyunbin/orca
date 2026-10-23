@@ -9,8 +9,7 @@ import {
 } from '../lib/workspace-file-drag'
 import type {
   PrepareDroppedPathsRequest,
-  PreparedDroppedPaths,
-  StoreDroppedFileBytesRequest
+  PreparedDroppedPaths
 } from '../../../shared/native-file-drop-preparation'
 import { withFallback } from '../web/preload-api/web-fallback-api'
 import {
@@ -279,57 +278,6 @@ describe('useOsFileDropOwner', () => {
       ])
     }
   )
-
-  it('sends a local chat its checked drag-temp files as bytes and keeps the drop order', async () => {
-    const shot = new File(['image'], 'Shot.png')
-    const gone = new File(['x'], 'Gone.png')
-    Object.defineProperty(gone, 'size', { value: 2 })
-    prepareDroppedPaths.mockResolvedValueOnce({
-      paths: ['/dropped/notes.txt'],
-      failures: [],
-      intake: { intakeId: 'shot-drop', expiresAt: Date.now() + 3000 },
-      fromDroppedFiles: [
-        { sourceIndex: 0, byteLength: 5, position: 0 },
-        { sourceIndex: 2, byteLength: 1, position: 2 },
-        { sourceIndex: 0, byteLength: 5, position: 3 }
-      ]
-    })
-    const storeDroppedFileBytes = vi.fn(async ({ name }: StoreDroppedFileBytesRequest) => ({
-      paths: [`/store/${name}`],
-      failures: []
-    }))
-    vi.stubGlobal('api', {
-      fs: {
-        getPathForFile,
-        prepareDroppedPaths,
-        storeDroppedFileBytes,
-        endDroppedFileIntake: vi.fn(async () => undefined)
-      }
-    })
-    const onDrop = vi.fn<DropHandler>()
-    const view = render(<Owner onDrop={onDrop} consumer={() => 'local-chat'} />)
-    drag(view.getByTestId('owner'), 'drop', [shot, new File(['n'], 'notes.txt'), gone, shot])
-    await vi.waitFor(() => expect(onDrop).toHaveBeenCalledTimes(1))
-    expect(prepareDroppedPaths).toHaveBeenCalledWith(
-      expect.objectContaining({ consumer: 'local-chat' })
-    )
-    expect(storeDroppedFileBytes).toHaveBeenCalledTimes(1)
-    expect(Array.from(storeDroppedFileBytes.mock.calls[0][0].bytes)).toEqual(
-      Array.from(new TextEncoder().encode('image'))
-    )
-    expect(onDrop.mock.calls[0][0]).toEqual({
-      paths: ['/store/Shot.png', '/dropped/notes.txt', '/store/Shot.png'],
-      failures: [
-        {
-          target: 'rejected',
-          reason: 'temp-copy-failed',
-          pathCount: 1,
-          byteLength: 0,
-          commonReason: 'changed'
-        }
-      ]
-    })
-  })
 
   it('reports a preparation failure once without passing unprepared paths', async () => {
     const onDrop = vi.fn<DropHandler>()

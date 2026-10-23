@@ -44,11 +44,8 @@ vi.mock('../ipc/runtime-import-limits', async (importOriginal) => ({
   REMOTE_IMPORT_MAX_TOTAL_BYTES: 16
 }))
 
-import {
-  materializeDragTempPaths,
-  mayNeedDragTempCopy,
-  type DragTempCopyEnvironment
-} from './dragged-temp-file-copy'
+import { materializeDragTempPaths, type DragTempCopyEnvironment } from './dragged-temp-file-copy'
+import { mayNeedDragTempCopy } from './drag-temp-path'
 
 const SCREENSHOT_NAME = 'Screenshot 2026-09-28 at 4.03.11 PM.png'
 const canChangePermissions = process.platform !== 'win32' && process.getuid?.() !== 0
@@ -306,7 +303,7 @@ describe('materializeDragTempPaths', () => {
     expect(await materializeDragTempPaths([source], env)).toEqual([
       { sourcePath: source, status: 'failed', reason: 'changed' }
     ])
-    await vi.waitFor(async () => expect(await readdir(env.copyRoot)).toEqual([]))
+    expect(await readdir(env.copyRoot)).toEqual([])
   })
 
   it('reports a full disk as a reason token, logging the errno, and leaves no copy behind', async () => {
@@ -319,7 +316,7 @@ describe('materializeDragTempPaths', () => {
     expect(await materializeDragTempPaths([source], env)).toEqual([
       { sourcePath: source, status: 'failed', reason: 'out-of-space' }
     ])
-    await vi.waitFor(async () => expect(await readdir(env.copyRoot)).toEqual([]))
+    expect(await readdir(env.copyRoot)).toEqual([])
     expect(warn).toHaveBeenCalledWith(expect.any(String), { code: 'ENOSPC' })
   })
 
@@ -402,7 +399,7 @@ describe('materializeDragTempPaths', () => {
     await expect(
       materializeDragTempPaths([first, second], env, controller.signal)
     ).rejects.toThrow()
-    await vi.waitFor(async () => expect(await copyDirs()).toEqual([]))
+    expect(await copyDirs()).toEqual([])
   })
 })
 

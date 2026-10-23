@@ -37,9 +37,7 @@ import type {
 } from '../../shared/agent-session-attachments'
 import type {
   PrepareDroppedPathsRequest,
-  PreparedDroppedPaths,
-  StoreDroppedFileBytesRequest,
-  EndDroppedFileIntakeRequest
+  PreparedDroppedPaths
 } from '../../shared/native-file-drop-preparation'
 
 export type ExportApi = {
@@ -55,8 +53,6 @@ export type FilesystemApi = {
   fs: {
     getPathForFile?: (file: File) => string
     prepareDroppedPaths: (args: PrepareDroppedPathsRequest) => Promise<PreparedDroppedPaths>
-    storeDroppedFileBytes: (args: StoreDroppedFileBytesRequest) => Promise<PreparedDroppedPaths>
-    endDroppedFileIntake: (args: EndDroppedFileIntakeRequest) => Promise<void>
     readFileChunk: (args: {
       filePath: string
       connectionId?: string
