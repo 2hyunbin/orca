@@ -507,15 +507,13 @@ import {
         ...items.slice(2)
       ].map((item, index) => ({ ...item, sequence: index + 1 }))
       const landings: number[] = []
-      const scrollTo = vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(function (
-        this: HTMLElement,
-        options?: ScrollToOptions | number
-      ) {
+      const scrollTo = vi.fn(function (this: HTMLElement, options?: ScrollToOptions | number) {
         if (typeof options === 'object' && options.top !== undefined) {
           this.scrollTop = options.top
           landings.push(this.scrollTop)
         }
       })
+      vi.spyOn(HTMLElement.prototype, 'scrollTo').mockImplementation(scrollTo)
       const transcript = (): React.JSX.Element => (
         <NativeChatMessageList
           session={session(projectStructuredItemsToNativeChat(withPrompts))}
@@ -566,7 +564,11 @@ import {
         screen.getByText('Edited').closest<HTMLElement>('[data-index]')?.offsetTop ?? 0
       expect(Number.isFinite(diffTop)).toBe(true)
       expect(scrollTo).toHaveBeenCalledWith({ top: diffTop, behavior: 'auto' })
-      expect(scrollTo.mock.calls.some(([options]) => options?.behavior === 'smooth')).toBe(false)
+      expect(
+        scrollTo.mock.calls.some(
+          ([options]) => typeof options === 'object' && options.behavior === 'smooth'
+        )
+      ).toBe(false)
     })
   })
 
