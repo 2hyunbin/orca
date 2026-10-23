@@ -1,4 +1,5 @@
-import type { AppState } from '@/store/types'
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+
 import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { WorkspaceAttachmentOrigin } from '../../../shared/worktree/types'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
@@ -12,7 +13,10 @@ export type WorkspaceReferenceTerminalContext = {
 }
 
 export function getWorkspaceAttachmentTerminalOrigin(
-  state: Pick<AppState, 'tabsByWorktree' | 'agentStatusByPaneKey' | 'terminalLayoutsByTabId'>,
+  state: Pick<
+    AgentStatusReadState,
+    'tabsByWorktree' | 'agentStatusByPaneKey' | 'terminalLayoutsByTabId'
+  >,
   worktreeId: string,
   context: WorkspaceReferenceTerminalContext,
   hostId: ExecutionHostId | undefined

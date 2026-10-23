@@ -1,3 +1,4 @@
+import { getAgentStatusState, subscribeAgentStatusState } from '@/store/agent-status'
 import { useEffect } from 'react'
 import { useAppStore, type AppState } from '@/store'
 import { revealDashboardAgent } from './reveal-dashboard-agent'
@@ -94,7 +95,7 @@ export function dashboardSnapshotInputsChanged(
  *  because react-doctor's effect-needs-cleanup false-positives on `subscribe`
  *  inside an effect body; the caller's cleanup does unsubscribe. */
 function watchSnapshotInputs(onChanged: () => void): () => void {
-  return useAppStore.subscribe((state, previousState) => {
+  return subscribeAgentStatusState((state, previousState) => {
     // Why: unrelated high-frequency store writes must not rebuild a cross-worktree snapshot.
     if (dashboardSnapshotInputsChanged(state, previousState)) {
       onChanged()
@@ -170,7 +171,7 @@ export function useDashboardPopoutBridge(enabled: boolean): void {
     const rowsCache = createWorktreeAgentRowsCache()
     const publishNow = (withIcons: boolean): void => {
       lastPublishAt = Date.now()
-      const state = useAppStore.getState()
+      const state = getAgentStatusState()
       const snapshot = buildDashboardSnapshot(state, lastPublishAt, {
         rowsCache,
         rowsGeneration: state.agentStatusEpoch

@@ -1,0 +1,107 @@
+// @vitest-environment happy-dom
+import { act, cleanup, renderHook } from '@testing-library/react'
+import { afterEach, expect, it, vi } from 'vitest'
+import { useAppStore } from '@/store'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
+import { makePaneKey } from '../../../shared/stable-pane-id'
+import type { Tab } from '../../../shared/tab-types'
+import type { TerminalTab } from '../../../shared/terminal-tab-types'
+import { getTabAgentExitOwner } from './tab-agent-exit-owner'
+import { useTabAgent } from './use-tab-agent'
+
+const initial = useAppStore.getState()
+const owner = getAgentStatusOwner(useAppStore)
+let stop = () => {}
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+  stop()
+  owner.transact((transaction) => {
+    for (const key of Object.keys(owner.getSnapshot())) {
+      transaction.setEntry(key, undefined)
+    }
+    useAppStore.setState(initial, true)
+  })
+})
+
+it('reads scoped root history across mount, removal, generation reset and new keyed panes', () => {
+  vi.useFakeTimers()
+  const tab: TerminalTab = {
+    id: 'icons',
+    worktreeId: 'wt',
+    title: 'zsh',
+    launchAgent: 'codex',
+    customTitle: null,
+    color: null,
+    sortOrder: 0,
+    createdAt: 0
+  }
+  const items: Tab[] = ['codex', 'zsh'].map((label, n) => ({
+    id: `item-${n}`,
+    entityId: tab.id,
+    contentType: 'terminal',
+    worktreeId: 'wt',
+    groupId: `g${n}`,
+    label,
+    customLabel: null,
+    color: null,
+    sortOrder: n,
+    createdAt: 0
+  }))
+  useAppStore.setState({
+    tabsByWorktree: { wt: [tab] },
+    ptyIdsByTabId: { icons: ['pty-a'] },
+    unifiedTabsByWorktree: { wt: items },
+    layoutByWorktree: {
+      wt: {
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        first: { type: 'leaf', groupId: 'g0' },
+        second: { type: 'leaf', groupId: 'g1' }
+      }
+    }
+  })
+  const service = getTabAgentExitOwner(owner)
+  stop = service.start()
+  const clear = vi.fn(useAppStore.getState().clearTabLaunchAgent)
+  useAppStore.setState({ clearTabLaunchAgent: clear })
+  const first = renderHook(() => useTabAgent({ ...tab, title: 'zsh' }, 'g0'))
+  const second = renderHook(() => useTabAgent({ ...tab, title: 'zsh' }, 'g1'))
+  expect(first.result.current).toBeNull()
+  expect(second.result.current).toBe('codex')
+  expect(clear).not.toHaveBeenCalled()
+  first.unmount()
+  second.unmount()
+  const changed = vi.fn()
+  const unrelated = vi.fn()
+  const release = owner.subscribeTab('icons', changed)
+  const releaseOther = owner.subscribeTab('other', unrelated)
+  const pane = makePaneKey('icons', '11111111-1111-4111-8111-111111111111')
+  act(() =>
+    useAppStore
+      .getState()
+      .setAgentStatus(pane, { state: 'working', agentType: 'codex', prompt: 'task' })
+  )
+  expect(changed).toHaveBeenCalledTimes(1)
+  expect(unrelated).not.toHaveBeenCalled()
+  const remount = renderHook(() => useTabAgent(tab, 'g1'))
+  expect(remount.result.current).toBe('codex')
+  act(() => {
+    owner.transact((transaction) => {
+      transaction.setEntry(pane, undefined)
+      useAppStore.setState({
+        ptyIdsByTabId: { icons: ['pty-b'] },
+        unifiedTabsByWorktree: { wt: items.map((item) => ({ ...item, label: 'zsh' })) }
+      })
+    })
+  })
+  expect(service.getObservation('wt', 'icons', 'g0')).toBe(false)
+  expect(service.getObservation('wt', 'icons', 'g1')).toBe(false)
+  expect(remount.result.current).toBe('codex')
+  expect(clear).not.toHaveBeenCalled()
+  act(() => useAppStore.setState({ tabsByWorktree: { wt: [] } }))
+  expect(service.getObservation('wt', 'icons', 'g0')).toBe(false)
+  release()
+  releaseOther()
+})

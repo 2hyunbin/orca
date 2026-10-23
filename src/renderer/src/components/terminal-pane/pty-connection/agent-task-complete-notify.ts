@@ -1,3 +1,4 @@
+import { getAgentStatusEntry } from '@/store/agent-status'
 import type { AgentIdleEdgeMeta } from '../../../../../shared/terminal-output-side-effects'
 import { idleEdgeSettledAtRest, isClaudeIdleEdge } from '@/lib/agent-idle-edge'
 import { captureNotificationTransportOwner } from '@/attention/notification-subject-owner'
@@ -54,9 +55,9 @@ export function installAgentTaskCompleteNotify(session: ConnectPanePtySession): 
     session.clearPendingAgentTaskCompleteNotification()
     let graceElapsed = false
     const generationAtSchedule = session.agentTaskCompleteNotificationGeneration
-    const agentStatusAtSchedule = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+    const agentStatusAtSchedule = getAgentStatusEntry(session.cacheKey)
     const hasNewerActiveHookStatus = (): boolean => {
-      const currentStatus = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+      const currentStatus = getAgentStatusEntry(session.cacheKey)
       const scheduledAgentType = agentStatusAtSchedule?.agentType
       const currentAgentForScheduledTurn = resolveCompatibleAgentTypeForOwner(
         currentStatus?.agentType,
@@ -119,7 +120,7 @@ export function installAgentTaskCompleteNotify(session: ConnectPanePtySession): 
       if (!graceElapsed) {
         return
       }
-      const entry = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+      const entry = getAgentStatusEntry(session.cacheKey)
       if (canDispatchAgentNotificationAfterGrace(entry, options)) {
         dispatch()
       }

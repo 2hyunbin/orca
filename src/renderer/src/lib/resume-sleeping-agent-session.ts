@@ -1,4 +1,5 @@
-import { useAppStore } from '@/store'
+import { getAgentStatusState } from '@/store/agent-status'
+import type { useAppStore } from '@/store'
 import { isWorkspaceSleepRecord } from '../../../shared/workspace-sleep'
 import {
   agentProviderSessionsEqual,
@@ -39,7 +40,7 @@ function clearPassiveCompletedRecordsForClaimKey(
   claimKey: string,
   keepPaneKey: string
 ): void {
-  const state = useAppStore.getState()
+  const state = getAgentStatusState()
   for (const record of records) {
     if (record.paneKey === keepPaneKey || !activationTreatsNoteAsFinished(record)) {
       continue
@@ -51,7 +52,7 @@ function clearPassiveCompletedRecordsForClaimKey(
 }
 
 function getCurrentPaneOwnedClaimKeys(records: readonly SleepingAgentSessionRecord[]): Set<string> {
-  const state = useAppStore.getState()
+  const state = getAgentStatusState()
   const keys = new Set<string>()
   for (const record of records) {
     if (
@@ -200,7 +201,7 @@ function replayParkedWorktreeResumeSweep(
 ): void {
   // Why: the mirror can settle long after the user moved on, so a replayed
   // resume must not steal the surface they are looking at now.
-  const isActive = useAppStore.getState().activeWorktreeId === worktreeId
+  const isActive = getAgentStatusState().activeWorktreeId === worktreeId
   // Why `skipClaimKeys` is dropped: it is a park-time snapshot of in-place
   // wakes, and a latch that has since failed must stay resumable here.
   resumeSleepingAgentSessionsForWorktree(worktreeId, {
@@ -231,7 +232,7 @@ export function resumeSleepingAgentSessionsForWorktree(
   worktreeId: string,
   options?: ResumeSleepingAgentSessionsOptions
 ): number {
-  const state = useAppStore.getState()
+  const state = getAgentStatusState()
   // Why: every branch below reads local rows as the verdict on what the execution host is running,
   // and before it answers "I hold no pane for this record" is `unverifiable`, not `exited`. Resuming
   // on it forks a second agent onto a transcript the host is still writing (STA-3500). Declining is
@@ -263,7 +264,7 @@ export function resumeSleepingAgentSessionsForWorktree(
 
   let launched = 0
   for (const record of worktreeRecords) {
-    const currentState = useAppStore.getState()
+    const currentState = getAgentStatusState()
     if (currentState.sleepingAgentSessionsByPaneKey[record.paneKey] !== record) {
       continue
     }

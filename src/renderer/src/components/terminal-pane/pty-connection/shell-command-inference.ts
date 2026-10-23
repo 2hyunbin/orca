@@ -1,3 +1,4 @@
+import { getAgentStatusEntry } from '@/store/agent-status'
 import { detectAgentStatusFromTitle } from '@/lib/agent-status'
 import { useAppStore } from '@/store'
 import type { AgentType } from '../../../../../shared/agent-status-types'
@@ -129,7 +130,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
   // hook row count. A genuine OMP/Pi pane stays protected owner-independently by
   // the isPiAgentTitle guard inside isGeminiTerminalTitle.
   session.getPaneScopedRendererOwner = (): AgentType | undefined => {
-    const entry = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+    const entry = getAgentStatusEntry(session.cacheKey)
     return (
       session.commandInferredPaneAgent ??
       (session.isFreshActivePaneAgentEntry(entry) ? entry.agentType : undefined)
@@ -178,7 +179,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
     session.clearTitleOnlyInterruptTimer()
     session.titleOnlyInterruptTimer = setTimeout(() => {
       session.titleOnlyInterruptTimer = null
-      if (useAppStore.getState().agentStatusByPaneKey[session.cacheKey]) {
+      if (getAgentStatusEntry(session.cacheKey)) {
         return
       }
       const currentState = useAppStore.getState()
@@ -238,7 +239,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
     // Why: launch ownership (tab.launchAgent) never decays after the agent
     // exits, so it must not count as liveness here — only live status, live
     // titles, and the replayed screen shape do.
-    if (useAppStore.getState().agentStatusByPaneKey[session.cacheKey]) {
+    if (getAgentStatusEntry(session.cacheKey)) {
       return true
     }
     const title = session.getCurrentTerminalTitle() ?? ''

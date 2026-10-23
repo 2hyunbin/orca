@@ -1,3 +1,4 @@
+import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
 import { resolveAgentPaneAuthorityKey } from '@/store/slices/agent-pane-authority'
 import type { AppState } from '../../store/types'
 import { titleHasAgentName } from '../../../../shared/agent-detection'
@@ -37,7 +38,7 @@ export function isSeenHostReplay(
   >,
   state: string,
   existing:
-    | Pick<AppState['agentStatusByPaneKey'][string], 'state' | 'stateStartedAt' | 'turnEndedAt'>
+    | Pick<AgentStatusSnapshot[string], 'state' | 'stateStartedAt' | 'turnEndedAt'>
     | undefined
 ): boolean {
   if (data.isReplay !== true) {

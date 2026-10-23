@@ -83,7 +83,8 @@ export function capLiveAgentStatusesInPlace(
   buildClassifier: () => (paneKey: string) => PaneLiveness,
   now: number,
   maxEntries = MAX_LIVE_AGENT_STATUSES,
-  entryCount = countLiveAgentStatuses(freshLive)
+  entryCount = countLiveAgentStatuses(freshLive),
+  onEvict?: (entry: AgentStatusEntry) => void
 ): string[] {
   let overflow = entryCount - maxEntries
   if (overflow <= 0) {
@@ -104,6 +105,7 @@ export function capLiveAgentStatusesInPlace(
       if (liveness === 'live' || !canEvict(liveness, freshLive[key])) {
         continue
       }
+      onEvict?.(freshLive[key])
       delete freshLive[key]
       overflow -= 1
       evictedPaneKeys.push(key)

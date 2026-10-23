@@ -1,3 +1,4 @@
+import { useAgentStatusSelector } from '@/store/agent-status'
 import React, { createContext, useContext, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
@@ -73,7 +74,7 @@ export function PaletteLiveStatusProvider({
     migrationUnsupportedByPtyId,
     unreadTerminalTabs,
     unreadAgentCompletionPanes
-  } = useAppStore(
+  } = useAgentStatusSelector(
     useShallow((s) =>
       active
         ? {

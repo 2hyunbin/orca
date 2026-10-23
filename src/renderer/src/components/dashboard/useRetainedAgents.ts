@@ -1,3 +1,4 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { useEffect, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
@@ -162,7 +163,7 @@ export function useRetainedAgentsSync(): void {
   const prevAgentsRef = useRef<RetainedAgentSnapshot>(new Map())
 
   useEffect(() => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     const { currentAgents, existingWorktreeIds, tabIndex } = buildRetainedAgentsSyncSnapshot({
       repos: state.repos,
       worktreesByRepo: selectWorktreesByRepo(state),

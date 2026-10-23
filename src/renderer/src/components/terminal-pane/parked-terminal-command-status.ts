@@ -1,3 +1,4 @@
+import { getAgentStatusEntry } from '@/store/agent-status'
 /**
  * Parked-pane command-lifecycle status policy.
  * Why: parking unmounts TerminalPane, so OSC 133;D and Command Code scrape signals went dark.
@@ -34,7 +35,7 @@ export type ParkedTerminalCommandStatusPolicy = {
 // scrape against whatever process replaced it. Shared by parked watchers and the reveal
 // remount, which both recreate the detector long past the banner.
 export function readInFlightCommandCodeTurn(paneKey: string): { prompt: string } | null {
-  const entry = useAppStore.getState().agentStatusByPaneKey?.[paneKey]
+  const entry = getAgentStatusEntry(paneKey)
   if (entry?.agentType !== 'command-code' || entry.state !== 'working') {
     return null
   }
@@ -197,7 +198,7 @@ export function createParkedTerminalCommandStatusPolicy(options: {
       if (parseAppSshPtyId(ptyId) === null) {
         return
       }
-      dropCommandFinishedStatusIfSameTurn(useAppStore.getState().agentStatusByPaneKey[paneKey])
+      dropCommandFinishedStatusIfSameTurn(getAgentStatusEntry(paneKey))
     },
 
     // Port of pty-connection's seedCommandCodeOutputWorkingStatus (store-level only).

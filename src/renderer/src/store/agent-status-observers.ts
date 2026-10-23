@@ -1,9 +1,12 @@
+import { parsePaneKey } from '../../../shared/stable-pane-id'
+import { captureTerminalFacts, type CapturedTerminalFacts } from './terminal-fact-publication'
 import type { AgentStatusEntry } from './slices/agent-status-contract'
 import type { AppState } from './types'
 
 export type AgentStatusSnapshot = Readonly<Record<string, AgentStatusEntry>>
 export type AgentStatusReadState = AppState & { agentStatusByPaneKey: AgentStatusSnapshot }
 export type AgentStatusTransition = {
+  terminalFacts: CapturedTerminalFacts
   sequence: number
   previous: AgentStatusReadState
   next: AgentStatusReadState
@@ -19,8 +22,9 @@ export function reportAgentStatusObserverError(error: unknown): void {
   }
 }
 
-export function createAgentStatusObservers() {
+export function createAgentStatusObservers(get: () => AppState) {
   const entries = new Map<string, Set<Subscription<() => void>>>()
+  const tabs = new Map<string, Set<Subscription<() => void>>>()
   const aggregates = new Set<Subscription<() => void>>()
   const transitions = new Set<
     Subscription<(transition: AgentStatusTransition) => void> & { paneKey?: string }
@@ -58,6 +62,20 @@ export function createAgentStatusObservers() {
         }
       }
     },
+    subscribeTab(tabId: string, listener: () => void): () => void {
+      let bucket = tabs.get(tabId)
+      if (!bucket) {
+        bucket = new Set()
+        tabs.set(tabId, bucket)
+      }
+      const unsubscribe = subscribe(bucket, listener)
+      return () => {
+        unsubscribe()
+        if (bucket.size === 0 && tabs.get(tabId) === bucket) {
+          tabs.delete(tabId)
+        }
+      }
+    },
     subscribeAggregate: (listener: () => void) => subscribe(aggregates, listener),
     subscribeTransitions(
       listener: (transition: AgentStatusTransition) => void,
@@ -77,15 +95,25 @@ export function createAgentStatusObservers() {
       effects: readonly (() => void)[]
     ): () => void {
       const points = [...changedKeys].flatMap((key) => [...(entries.get(key) ?? [])])
+      const changedTabs = new Set([...changedKeys].map((key) => parsePaneKey(key)?.tabId))
+      const collections = [...changedTabs].flatMap((id) => (id ? [...(tabs.get(id) ?? [])] : []))
       const aggregate = changedKeys.size > 0 ? [...aggregates] : []
       const paired = [...transitions].filter(
         (subscription) =>
           subscription.paneKey === undefined || changedKeys.has(subscription.paneKey)
       )
       const transition: AgentStatusTransition | null =
-        paired.length > 0 ? { sequence: 0, previous: previous(), next: next(), changedKeys } : null
+        paired.length > 0
+          ? {
+              sequence: 0,
+              previous: previous(),
+              next: next(),
+              changedKeys,
+              terminalFacts: captureTerminalFacts(get, previous(), next())
+            }
+          : null
       const deliver = (): void => {
-        for (const subscription of [...points, ...aggregate]) {
+        for (const subscription of [...points, ...collections, ...aggregate]) {
           if (subscription.active) {
             call(subscription.listener)
           }
@@ -104,7 +132,10 @@ export function createAgentStatusObservers() {
         if (transition) {
           transition.sequence = sequence
         }
-        if (points.length + aggregate.length + paired.length + effects.length > 0) {
+        if (
+          points.length + collections.length + aggregate.length + paired.length + effects.length >
+          0
+        ) {
           queue.push(deliver)
         }
       }

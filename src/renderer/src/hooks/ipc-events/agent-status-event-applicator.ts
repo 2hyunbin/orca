@@ -1,3 +1,4 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { sameAgentStatusTerminalOwner } from '../../../../shared/agent-status-terminal-owner'
 import { isWslHookRelayConnectionId } from '../../../../shared/wsl-hook-relay-contract'
 import { pickHostTurnEnd, type AgentStatusIpcPayload } from '../../../../shared/agent-status-types'
@@ -13,7 +14,7 @@ import { track } from '@/lib/telemetry'
 import { resolveAgentPaneAuthorityKey } from '@/store/slices/agent-pane-authority'
 import type { AgentStatusUpdate } from '@/store/slices/agent-status'
 import { observeAgentHookCompletionForNotification } from '../agent-hook-completion-notifications'
-import { useAppStore } from '../../store'
+
 import {
   applyResolvedAgentTerminalTitleToTab,
   hasRuntimeBackedWorktreeAttribution,
@@ -56,7 +57,7 @@ export function createAgentStatusEventApplicator(args: {
     data: AgentStatusIpcPayload,
     options?: AgentStatusApplyOptions
   ): AgentStatusApplyResult => {
-    const store = options?.batch?.transaction.getState() ?? useAppStore.getState()
+    const store = options?.batch?.transaction.getState() ?? getAgentStatusState()
     if (!store.workspaceSessionReady) {
       return 'dropped'
     }
@@ -298,7 +299,7 @@ export function createAgentStatusEventApplicator(args: {
         update.routing,
         update.metadata
       )
-      applyResolvedAgentTerminalTitleToTab(useAppStore.getState(), paneKey, tabTitle, terminalTitle)
+      applyResolvedAgentTerminalTitleToTab(getAgentStatusState(), paneKey, tabTitle, terminalTitle)
       applyPostCommitNotification()
     }
     return 'applied'

@@ -111,7 +111,7 @@ export function createAgentStatusDropActions(
         }
       })
       if (liveExisted) {
-        freshness.scheduleDeferred()
+        runtime.runAfterCommit(freshness.scheduleDeferred)
       }
       if (typeof window !== 'undefined') {
         window.api?.agentStatus?.drop?.(paneKey)
@@ -132,7 +132,7 @@ export function createAgentStatusDropActions(
         return dropped.patch
       })
       if (hadLive) {
-        freshness.scheduleDeferred()
+        runtime.runAfterCommit(freshness.scheduleDeferred)
       }
       if (typeof window !== 'undefined') {
         window.api?.agentStatus?.dropByTabPrefix?.(tabIdPrefix)
@@ -249,7 +249,7 @@ export function createAgentStatusDropActions(
         }
       })
       if (hadLive) {
-        freshness.scheduleDeferred()
+        runtime.runAfterCommit(freshness.scheduleDeferred)
       }
     }
   }

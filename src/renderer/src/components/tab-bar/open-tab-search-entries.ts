@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // Builds one worktree's tabs, browser pages and simulator tabs into the shapes
 // the three Cmd+J engines search.
 
@@ -109,7 +110,7 @@ export function selectOpenTabSearchBrowserPageState(
 }
 
 export type OpenTabSearchAgentState = Pick<
-  AppState,
+  AgentStatusReadState,
   | 'agentStatusByPaneKey'
   | 'paneForegroundAgentByPaneKey'
   | 'retainedAgentsByPaneKey'

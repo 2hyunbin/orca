@@ -1,3 +1,5 @@
+import { useAgentStatusSelector } from '@/store/agent-status'
+import { getAgentStatusEntry } from '@/store/agent-status'
 import React, { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useAppStore } from '@/store'
@@ -87,7 +89,9 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
     useShallow((s) => selectSendTargetControlInputs(s, worktreeId))
   )
   // Why: return a stable empty constant unless the send-target popover is ours, so churny pane-title/agent-status maps don't re-render idle bodies.
-  const sendTargetInputs = useAppStore(useShallow((s) => selectSendTargetInputs(s, worktreeId)))
+  const sendTargetInputs = useAgentStatusSelector(
+    useShallow((s) => selectSendTargetInputs(s, worktreeId))
+  )
   const sendPromptToSidebarAgentTarget = useAppStore((s) => s.sendPromptToSidebarAgentTarget)
   const focusedAgentPaneKey = useFocusedAgentPaneKey(worktreeId)
   const compactAgentListRootRef = useRef<HTMLDivElement | null>(null)
@@ -178,7 +182,7 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
         })
         activateTerminalTabOnOwner(worktreeId, tabId, parsed.leafId)
       } else if (!activateStructuredAgentSessionTab({ worktreeId, tabId })) {
-        const liveEntry = useAppStore.getState().agentStatusByPaneKey[paneKey]
+        const liveEntry = getAgentStatusEntry(paneKey)
         if (liveEntry?.worktreeId === worktreeId) {
           // Why: orchestration worker status can be worktree-attributed before the renderer knows its tab; keep the live row instead of dismissing as stale.
           activateTerminalTabOnOwner(worktreeId, tabId, parsed.leafId)

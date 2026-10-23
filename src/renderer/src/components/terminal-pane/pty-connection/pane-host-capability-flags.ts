@@ -1,3 +1,4 @@
+import { getAgentStatusEntry } from '@/store/agent-status'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { UNRESOLVED_OWNER_HOST_ID } from '../../../../../shared/execution-host'
 import { reportWorkerTerminalUserInput } from '@/lib/worker-terminal-takeover-report'
@@ -173,7 +174,7 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
     if (payload.state === 'working' && session.syncAgentTaskCompleteTrackingEnabled()) {
       session.requiresFreshWorkingForAgentTaskCompleteNotification = false
     }
-    const storedStatus = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+    const storedStatus = getAgentStatusEntry(session.cacheKey)
     const notificationPayload =
       typeof storedStatus?.stateStartedAt === 'number'
         ? { ...statusPayload, stateStartedAt: storedStatus.stateStartedAt }

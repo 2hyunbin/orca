@@ -1,7 +1,7 @@
-import type { AppState } from '@/store/types'
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 
 export type PaletteStatusInputsState = Pick<
-  AppState,
+  AgentStatusReadState,
   | 'agentStatusByPaneKey'
   | 'runtimePaneTitlesByTabId'
   | 'ptyIdsByTabId'

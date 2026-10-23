@@ -1,5 +1,7 @@
+import { useAgentStatusSelector } from '@/store/agent-status'
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { useMemo, useRef } from 'react'
-import { useAppStore } from '@/store'
+
 import type { AppState } from '@/store/types'
 import type { DashboardBucket } from '../../../../shared/dashboard-snapshot'
 import {
@@ -12,7 +14,7 @@ export type AgentBucketCounts = Record<DashboardBucket, number>
 
 /** The bucket-count inputs, shaped so it doubles as the snapshot state passed to the builder. */
 export type AgentBucketCountState = Pick<
-  AppState,
+  AgentStatusReadState,
   | 'repos'
   | 'worktreesByRepo'
   | 'tabsByWorktree'
@@ -96,7 +98,7 @@ export function selectAgentBucketCountState(s: AppState): AgentBucketCountState 
  * Recomputes only when an input slice changes.
  */
 export function useAgentBucketCounts(): AgentBucketCounts {
-  const state = useAppStore(selectAgentBucketCountState)
+  const state = useAgentStatusSelector(selectAgentBucketCountState)
   // Why a per-hook cache: unrelated status/title writes change one worktree's inputs;
   // the cache keeps every other worktree's rows without rerunning its row pipeline.
   const cacheRef = useRef<ReturnType<typeof createDashboardBucketCountsCache>>(undefined!)

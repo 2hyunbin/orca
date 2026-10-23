@@ -172,7 +172,7 @@ export function createAgentStatusWorktreeDropActions(
         }
       })
       if (hadLive) {
-        freshness.scheduleDeferred()
+        runtime.runAfterCommit(freshness.scheduleDeferred)
       }
     }
   }

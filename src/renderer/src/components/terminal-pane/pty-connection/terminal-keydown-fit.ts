@@ -1,3 +1,4 @@
+import { getAgentStatusEntry } from '@/store/agent-status'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { makePaneKey } from '../../../../../shared/stable-pane-id'
 import { useAppStore } from '@/store'
@@ -194,7 +195,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       if (hookLaneOwnsAgentTurnEnds(session.cacheKey, session.transport.getPtyId(), exited.agent)) {
         return true
       }
-      const currentStatus = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+      const currentStatus = getAgentStatusEntry(session.cacheKey)
       const currentAgentForReplacement = resolveCompatibleAgentTypeForOwner(
         currentStatus?.agentType,
         replacement.agent
@@ -207,7 +208,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       if (hookLaneOwnsAgentTurnEnds(session.cacheKey, session.transport.getPtyId(), exited.agent)) {
         return true
       }
-      const currentStatus = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+      const currentStatus = getAgentStatusEntry(session.cacheKey)
       const currentAgentForExited = resolveCompatibleAgentTypeForOwner(
         currentStatus?.agentType,
         exited.agent
@@ -234,7 +235,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       if (meta?.terminalIdleConfirmed === true) {
         // Why: an agent can crash before its done hook; confirmed process death
         // must still restore cursor and native Windows Kitty keyboard modes.
-        const currentAgentStatus = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+        const currentAgentStatus = getAgentStatusEntry(session.cacheKey)
         if (!isFreshNonDoneAgentStatus(currentAgentStatus)) {
           session.setFocusReportSuppressionForAgentCompletion(title, meta.agentStatus?.agentType)
         }

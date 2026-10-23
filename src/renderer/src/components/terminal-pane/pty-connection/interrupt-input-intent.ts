@@ -1,3 +1,4 @@
+import { getAgentStatusEntry } from '@/store/agent-status'
 import { detectAgentStatusFromTitle } from '@/lib/agent-status'
 import { useAppStore } from '@/store'
 import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
@@ -39,7 +40,7 @@ export function installInterruptInputIntent(session: ConnectPanePtySession): voi
   }
   session.interruptInference = createAgentInterruptInference({
     paneKey: session.cacheKey,
-    getStatusEntry: () => useAppStore.getState().agentStatusByPaneKey[session.cacheKey],
+    getStatusEntry: () => getAgentStatusEntry(session.cacheKey),
     inferInterrupt: (request) => {
       // Why: the explicit hook row is the authority for an in-flight agent turn.
       // Codex can reset its terminal title while handling Ctrl+C/Escape, so title
@@ -60,7 +61,7 @@ export function installInterruptInputIntent(session: ConnectPanePtySession): voi
   })
   session.questionAnsweredInference = createAgentQuestionAnsweredInference({
     paneKey: session.cacheKey,
-    getStatusEntry: () => useAppStore.getState().agentStatusByPaneKey[session.cacheKey],
+    getStatusEntry: () => getAgentStatusEntry(session.cacheKey),
     inferQuestionAnswered: (request) =>
       window.api.agentStatus.inferQuestionAnswered(request).catch((err) => {
         console.warn('[agent-question] inferQuestionAnswered failed:', err)

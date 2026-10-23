@@ -1,3 +1,4 @@
+import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
 import { isAiVaultTitleAgent } from '../../../shared/ai-vault-session-title'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
@@ -51,7 +52,7 @@ function relevantRecordEqual<T>(
 }
 
 function agentRecordsEqual(current: AppState, previous: AppState): boolean {
-  const relevantStatus = (entry: AppState['agentStatusByPaneKey'][string]): boolean =>
+  const relevantStatus = (entry: AgentStatusSnapshot[string]): boolean =>
     isAiVaultTitleAgent(entry.agentType) && Boolean(entry.providerSession?.id)
   const statusEqual = relevantRecordEqual(
     current.agentStatusByPaneKey,

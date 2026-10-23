@@ -1,4 +1,5 @@
-import { useAppStore } from '@/store'
+import { getAgentStatusState } from '@/store/agent-status'
+
 import { buildAgentResumeStartupPlan } from '@/lib/tui-agent-startup'
 import {
   resolveSshHostReportedPlatform,
@@ -46,7 +47,7 @@ export function resolveAgentAccountRestartResumeStartup(
 ): AgentAccountRestartStartup | null {
   // Why: a hand-started Claude must not come back with configured defaults such as a permission bypass.
   const unrecordedLaunchUsesDefaults = agent !== 'claude'
-  const state = useAppStore.getState()
+  const state = getAgentStatusState()
   const paneKey = makePaneKey(args.tabId, args.leafId)
   const entry = state.agentStatusByPaneKey[paneKey]
   const sleeping = state.sleepingAgentSessionsByPaneKey[paneKey]

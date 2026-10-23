@@ -34,7 +34,7 @@ export function createAgentStatusAuthorityActions(
 > {
   const { get, set, freshness } = runtime
   return {
-    scheduleAgentStatusFreshness: () => freshness.schedule(),
+    scheduleAgentStatusFreshness: () => runtime.runAfterCommit(freshness.schedule),
 
     retireAgentPaneAuthority: (paneKey, options) => {
       const retirementId = createBrowserUuid()
@@ -126,7 +126,7 @@ export function createAgentStatusAuthorityActions(
         })
       )
       if (hadLive) {
-        freshness.scheduleDeferred()
+        runtime.runAfterCommit(freshness.scheduleDeferred)
       }
       if (typeof window !== 'undefined') {
         window.api?.agentStatus?.retirePaneAuthority?.(

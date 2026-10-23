@@ -1,3 +1,4 @@
+import { getAgentStatusEntry } from '@/store/agent-status'
 import { resolvePaneTitleDecision } from '../terminal-title-evidence'
 import { useAppStore } from '@/store'
 import { shouldSeedCacheTimerOnInitialTitle } from '../cache-timer-seeding'
@@ -42,7 +43,7 @@ export function installTitleSpawnBell(session: ConnectPanePtySession): void {
     // feed completion tracking — observeTitle would classify the cleared
     // title as idle and mint a task-complete for a merely-paused agent.
     if (!meta?.staleWorkingTitleClear && session.syncAgentTaskCompleteTrackingEnabled()) {
-      const activeHookStatus = useAppStore.getState().agentStatusByPaneKey[session.cacheKey]
+      const activeHookStatus = getAgentStatusEntry(session.cacheKey)
       if (!session.shouldSuppressTitleCompletionForFreshHook(decision.rawTitle, activeHookStatus)) {
         // Why: display titles still update while hooks are active, but a stale
         // idle frame must not complete the coordinator turn before hook `done`.

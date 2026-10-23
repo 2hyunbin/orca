@@ -1,9 +1,10 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { useAppStore } from '@/store'
-import type { AppState } from '@/store/types'
+
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 
 export type FocusedAgentRowHighlightState = Pick<
-  AppState,
+  AgentStatusReadState,
   | 'activeWorktreeId'
   | 'activeTabType'
   | 'activeTabId'

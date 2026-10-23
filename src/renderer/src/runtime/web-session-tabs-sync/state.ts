@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import type { AppState } from '../../store'
 import type {
   RuntimeMobileSessionAgentTab,
@@ -219,7 +220,7 @@ export type MirroredBrowserTab = {
 export type MirroredEditorTab = { file: OpenFile; unifiedTab: Tab; hostTabId: string }
 
 export type WebSessionTabsSyncState = Pick<
-  AppState,
+  AgentStatusReadState,
   | 'activeBrowserTabId'
   | 'activeBrowserTabIdByWorktree'
   | 'activeGroupIdByWorktree'

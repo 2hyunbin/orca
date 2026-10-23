@@ -1,17 +1,21 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
+import { getAgentStatusOwner, type AgentStatusTransaction } from '../agent-status-commit'
+import type { AgentStatusReadState } from '../agent-status-observers'
 import type { AgentStatusBatchTransaction, AgentStatusBatchUpdate } from './agent-status-contract'
 import type { AgentStatusSlice } from './agent-status-slice-contract'
 import type { GeneratedTabTitleUpdate } from './terminal-tab-title-batch'
 import { createFreshnessScheduler } from './agent-status-freshness-scheduler'
 
 export type AgentStatusStateUpdate =
-  | AppState
-  | Partial<AppState>
-  | ((state: AppState) => AppState | Partial<AppState>)
+  | AgentStatusReadState
+  | Partial<AgentStatusReadState>
+  | ((state: AgentStatusReadState) => AgentStatusReadState | Partial<AgentStatusReadState>)
 
 export type AgentStatusRuntime = {
-  get: () => AppState
+  get: () => AgentStatusReadState
+  setEntry: AgentStatusTransaction['setEntry']
+  editEntries: AgentStatusTransaction['editEntries']
   set: (update: AgentStatusStateUpdate) => void
   runAfterCommit: (effect: () => void) => void
   applyGeneratedTabTitleUpdate: (update: GeneratedTabTitleUpdate) => void
@@ -31,72 +35,56 @@ export function createAgentStatusRuntime(
     'setAgentStatus' | 'recordAgentProviderSession' | 'setAgentProgramStatus'
   >
 ): AgentStatusRuntime {
-  let batchedAgentStatusState: AppState | null = null
-  let batchedAgentStatusTouchedKeys: Set<keyof AppState> | null = null
-  // Identity can no longer report "this staged update changed something" once the staged object is
-  // mutated in place, so every accepted staged write advances this instead.
-  let batchedAgentStatusRevision = 0
-  let batchedAgentStatusEffects: (() => void)[] | null = null
-  let batchedGeneratedTabTitleUpdates: GeneratedTabTitleUpdate[] | null = null
-  let batchedAgentStatusFreshnessRequested = false
-  const get = (): AppState => batchedAgentStatusState ?? storeGet()
-
-  // Deliberately narrower than zustand's `set`: no `replace` parameter, so no call site in
-  // this slice can compile into a REPLACE the batch commit is unable to express.
+  const owner = getAgentStatusOwner({ getState: storeGet })
+  const get = owner.getTransactionState
   const set = (update: AgentStatusStateUpdate): void => {
-    const staged = batchedAgentStatusState
-    if (staged === null) {
-      storeSet(update, false)
-      return
-    }
-    const nextState = typeof update === 'function' ? update(staged) : update
-    if (Object.is(nextState, staged)) {
-      return
-    }
-    batchedAgentStatusRevision += 1
-    const touched = batchedAgentStatusTouchedKeys
-    if (touched) {
-      for (const key of Object.keys(nextState)) {
-        touched.add(key as keyof AppState)
+    owner.transact((transaction) => {
+      const state = transaction.getState()
+      const resolved = typeof update === 'function' ? update(state) : update
+      if (resolved === state) {
+        return
       }
-    }
-    // The staged object is private until commit, so fold into it instead of cloning AppState per update.
-    Object.assign(staged, nextState)
+      const { agentStatusByPaneKey, ...app } = resolved
+      if (agentStatusByPaneKey && agentStatusByPaneKey !== state.agentStatusByPaneKey) {
+        for (const key of new Set([
+          ...Object.keys(state.agentStatusByPaneKey),
+          ...Object.keys(agentStatusByPaneKey)
+        ])) {
+          transaction.setEntry(key, agentStatusByPaneKey[key])
+        }
+      }
+      // SAFETY: Removing the live snapshot leaves only the typed AppState patch fields.
+      const fields = Object.keys(app) as (keyof AppState)[]
+      if (fields.some((key) => !Object.is(state[key], app[key]))) {
+        storeSet(app)
+      }
+    })
   }
-
-  const runAfterCommit = (effect: () => void): void => {
-    if (batchedAgentStatusEffects) {
-      batchedAgentStatusEffects.push(effect)
-      return
-    }
-    effect()
-  }
-
+  const runAfterCommit = owner.afterCommit
+  const editEntries: AgentStatusTransaction['editEntries'] = (edit) =>
+    owner.transact((transaction) => transaction.editEntries(edit))
+  const setEntry: AgentStatusTransaction['setEntry'] = (key, entry) =>
+    owner.transact((transaction) => transaction.setEntry(key, entry))
+  let generatedTitles: GeneratedTabTitleUpdate[] | null = null
+  let freshnessRequested = false
   const applyGeneratedTabTitleUpdate = (update: GeneratedTabTitleUpdate): void => {
-    if (batchedGeneratedTabTitleUpdates) {
-      batchedGeneratedTabTitleUpdates.push(update)
-      return
-    }
-    if (update.options) {
-      get().setGeneratedTabTitleFromAgentPrompt(update.paneKey, update.prompt, update.options)
+    if (generatedTitles) {
+      generatedTitles.push(update)
     } else {
-      get().setGeneratedTabTitleFromAgentPrompt(update.paneKey, update.prompt)
+      runAfterCommit(() => storeGet().setGeneratedTabTitlesFromAgentPrompts([update]))
     }
   }
-
   const requestFreshness = (acceptedInBatch: boolean): void => {
-    if (batchedAgentStatusState !== null) {
-      batchedAgentStatusFreshnessRequested ||= acceptedInBatch
-      return
+    if (generatedTitles) {
+      freshnessRequested ||= acceptedInBatch
+    } else {
+      runAfterCommit(freshness.scheduleDeferred)
     }
-    freshness.scheduleDeferred()
   }
-
-  const applyBatchedAgentStatusUpdate = (update: AgentStatusBatchUpdate): boolean => {
-    if (!batchedAgentStatusState) {
-      return false
-    }
-    const revisionBeforeUpdate = batchedAgentStatusRevision
+  const apply = (update: AgentStatusBatchUpdate): boolean => {
+    const revision = owner.getAppRevision()
+    const before = get()
+    const previous = before.agentStatusByPaneKey[update.paneKey]
     const actions = getActions()
     if (update.kind === 'providerSession') {
       actions.recordAgentProviderSession(
@@ -119,61 +107,35 @@ export function createAgentStatusRuntime(
         update.metadata
       )
     }
-    return batchedAgentStatusRevision !== revisionBeforeUpdate
+    const after = get()
+    return (
+      revision !== owner.getAppRevision() || previous !== after.agentStatusByPaneKey[update.paneKey]
+    )
   }
-
-  const batchTransaction: AgentStatusBatchTransaction = {
-    getState: get,
-    apply: applyBatchedAgentStatusUpdate,
-    afterCommit: runAfterCommit
-  }
-
   const transactAgentStatuses = <Result>(
     operation: (transaction: AgentStatusBatchTransaction) => Result
-  ): Result => {
-    if (batchedAgentStatusState) {
-      return operation(batchTransaction)
-    }
-    const initialState = storeGet()
-    const touchedKeys = new Set<keyof AppState>()
-    const revisionAtStart = batchedAgentStatusRevision
-    batchedAgentStatusState = { ...initialState }
-    batchedAgentStatusTouchedKeys = touchedKeys
-    batchedAgentStatusEffects = []
-    batchedGeneratedTabTitleUpdates = []
-    try {
-      const result = operation(batchTransaction)
-      const nextState = batchedAgentStatusState
-      const effects = batchedAgentStatusEffects
-      const generatedTabTitleUpdates = batchedGeneratedTabTitleUpdates
-      const freshnessRequested = batchedAgentStatusFreshnessRequested
-      const hasStagedWrites = batchedAgentStatusRevision !== revisionAtStart
-      batchedAgentStatusState = null
-      batchedAgentStatusTouchedKeys = null
-      batchedAgentStatusEffects = null
-      batchedGeneratedTabTitleUpdates = null
-      batchedAgentStatusFreshnessRequested = false
-      if (hasStagedWrites) {
-        storeSet(buildAgentStatusBatchPatch(initialState, nextState, touchedKeys), false)
+  ): Result =>
+    owner.transact((transaction) => {
+      if (generatedTitles) {
+        return operation({ getState: get, apply, afterCommit: runAfterCommit })
       }
-      if (generatedTabTitleUpdates.length > 0) {
-        storeGet().setGeneratedTabTitlesFromAgentPrompts(generatedTabTitleUpdates)
+      generatedTitles = []
+      freshnessRequested = false
+      try {
+        const result = operation({ getState: get, apply, afterCommit: runAfterCommit })
+        const titles = generatedTitles
+        if (titles.length > 0) {
+          transaction.afterCommit(() => storeGet().setGeneratedTabTitlesFromAgentPrompts(titles))
+        }
+        if (freshnessRequested) {
+          transaction.afterCommit(freshness.scheduleDeferred)
+        }
+        return result
+      } finally {
+        generatedTitles = null
+        freshnessRequested = false
       }
-      if (freshnessRequested) {
-        freshness.scheduleDeferred()
-      }
-      for (const effect of effects) {
-        effect()
-      }
-      return result
-    } finally {
-      batchedAgentStatusState = null
-      batchedAgentStatusTouchedKeys = null
-      batchedAgentStatusEffects = null
-      batchedGeneratedTabTitleUpdates = null
-      batchedAgentStatusFreshnessRequested = false
-    }
-  }
+    })
 
   const freshness = createFreshnessScheduler({
     getStatusEntries: () => get().agentStatusByPaneKey,
@@ -225,6 +187,8 @@ export function createAgentStatusRuntime(
   return {
     get,
     set,
+    setEntry,
+    editEntries,
     runAfterCommit,
     applyGeneratedTabTitleUpdate,
     requestFreshness,
@@ -232,19 +196,4 @@ export function createAgentStatusRuntime(
     transactAgentStatuses,
     clearSleepingAgentSessionsByPaneKey
   }
-}
-
-function buildAgentStatusBatchPatch(
-  initialState: AppState,
-  nextState: AppState,
-  touchedKeys: ReadonlySet<keyof AppState>
-): Partial<AppState> {
-  const patch: Record<string, unknown> = {}
-  // Untouched slices cannot differ, so the patch stays proportional to what the fold actually wrote.
-  for (const key of touchedKeys) {
-    if (!Object.is(nextState[key], initialState[key])) {
-      patch[key as string] = nextState[key]
-    }
-  }
-  return patch as Partial<AppState>
 }

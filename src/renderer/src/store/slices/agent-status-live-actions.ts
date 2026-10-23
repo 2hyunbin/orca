@@ -36,6 +36,8 @@ export function createAgentStatusLiveActions(
     set,
     applyGeneratedTabTitleUpdate,
     freshness,
+    editEntries,
+    runAfterCommit,
     requestFreshness,
     transactAgentStatuses
   } = runtime
@@ -105,12 +107,13 @@ export function createAgentStatusLiveActions(
         return state
       }
       const previousEntries = state.agentStatusByPaneKey
-      const reduction = reduceAgentStatusLiveUpdate(state, built, updatedAt)
+      const replacedEntry = previousEntries[built.entry.paneKey]
+      const reduction = reduceAgentStatusLiveUpdate(state, built, updatedAt, editEntries)
       liveEntryDelta = {
         previousEntries,
-        nextEntries: reduction.patch.agentStatusByPaneKey ?? previousEntries,
+        nextEntries: get().agentStatusByPaneKey,
         nextEntry: built.entry,
-        replacedEntry: previousEntries[built.entry.paneKey],
+        replacedEntry,
         evictedEntries: reduction.evictedEntries
       }
       if (retirement !== undefined) {
@@ -127,7 +130,11 @@ export function createAgentStatusLiveActions(
       return reduction.patch
     })
     if (liveEntryDelta) {
-      freshness.noteLiveEntryDelta(liveEntryDelta)
+      runAfterCommit(() => {
+        if (liveEntryDelta) {
+          freshness.noteLiveEntryDelta(liveEntryDelta)
+        }
+      })
     }
     // Zustand's updater runs synchronously, but TypeScript cannot observe the closure assignment.
     const builtResult = built as AgentStatusLiveEntryBuild | AgentStatusLiveEntryRejection | null
@@ -160,7 +167,7 @@ export function createAgentStatusLiveActions(
     requestFreshness(true)
     if (builtResult.completionRefreshWorktreeId) {
       const worktreeId = builtResult.completionRefreshWorktreeId
-      queueMicrotask(() => get().refreshGitHubForWorktreeIfStale(worktreeId))
+      runAfterCommit(() => queueMicrotask(() => get().refreshGitHubForWorktreeIfStale(worktreeId)))
     }
   }
 

@@ -1,7 +1,13 @@
+import { readAgentStatusFold, writeAgentStatusFold, type StatusStage } from './agent-status-fold'
+import type { AgentStatusTransaction } from './agent-status-fold'
+import {
+  countLiveAgentStatuses,
+  noteLiveAgentStatusCount
+} from './slices/agent-status-capacity-eviction'
+import { bindTerminalFactGetters } from './terminal-fact-publication'
 import type { StateCreator, StoreApi } from 'zustand'
 import { shallow } from 'zustand/vanilla/shallow'
 import type { AppState } from './types'
-import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import {
   prepareStructuredReadRetirement,
   installStructuredReadRetirement
@@ -16,21 +22,7 @@ import {
   type AgentStatusSnapshot
 } from './agent-status-observers'
 
-type StatusStage = {
-  app: AppState
-  live: AgentStatusSnapshot
-  draft: Record<string, AgentStatusEntry> | null
-  dirty: Set<string>
-  effects: (() => void)[]
-  readRetirement: ReturnType<typeof prepareStructuredReadRetirement> | null
-  read: { app: AppState; view: AgentStatusReadState } | null
-}
-export type AgentStatusTransaction = {
-  getState: () => AgentStatusReadState
-  retireReadOwner: (sessionId: string, target: RuntimeClientTarget) => void
-  setEntry: (paneKey: string, entry: AgentStatusEntry | undefined) => void
-  afterCommit: (effect: () => void) => void
-}
+export type { AgentStatusTransaction } from './agent-status-fold'
 export type AgentStatusOwner = ReturnType<typeof createAgentStatusOwner>
 const owners = new WeakMap<object, AgentStatusOwner>()
 
@@ -52,7 +44,7 @@ export function afterStoreAcceptance(store: { getState: () => unknown }, effect:
 }
 
 function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () => AppState) {
-  const observers = createAgentStatusObservers()
+  const observers = createAgentStatusObservers(get)
   let live: AgentStatusSnapshot = {}
   let stage: StatusStage | null = null
   let pending: { app: AppState; accept: () => void } | null = null
@@ -85,19 +77,7 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       if (!stage) {
         return joined(get(), live)
       }
-      const prepared = stage
-      if (prepared.read?.app !== prepared.app) {
-        prepared.read = {
-          app: prepared.app,
-          view: {
-            ...prepared.app,
-            get agentStatusByPaneKey() {
-              return prepared.draft ?? prepared.live
-            }
-          }
-        }
-      }
-      return prepared.read.view
+      return readAgentStatusFold(stage)
     },
     afterCommit,
     retireReadOwner(sessionId, target) {
@@ -110,6 +90,18 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
         target
       )
     },
+    editEntries(edit) {
+      if (!stage) {
+        throw new Error('Live status writes require a transaction')
+      }
+      if (!stage.draft) {
+        stage.draft = { ...stage.live }
+        noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
+      }
+      for (const key of edit(stage.draft)) {
+        stage.dirty.add(key)
+      }
+    },
     setEntry(paneKey, entry) {
       if (!stage) {
         throw new Error('Live status writes require a transaction')
@@ -117,8 +109,14 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       if (Object.is((stage.draft ?? stage.live)[paneKey], entry)) {
         return
       }
-      stage.draft ??= { ...stage.live }
+      if (!stage.draft) {
+        stage.draft = { ...stage.live }
+        noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
+      }
       stage.dirty.add(paneKey)
+      const size =
+        countLiveAgentStatuses(stage.draft) + (entry ? (paneKey in stage.draft ? 0 : 1) : -1)
+      noteLiveAgentStatusCount(stage.draft, size)
       if (entry) {
         stage.draft[paneKey] = entry
       } else {
@@ -128,14 +126,7 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
   }
   const write = (...args: StoreSetArgs<AppState>): void => {
     if (stage) {
-      if (args[1] === true) {
-        stage.app = typeof args[0] === 'function' ? args[0](stage.app) : args[0]
-      } else {
-        const next = typeof args[0] === 'function' ? args[0](stage.app) : args[0]
-        if (!Object.is(next, stage.app)) {
-          stage.app = Object.assign({}, stage.app, next)
-        }
-      }
+      writeAgentStatusFold(stage, ...args)
       return
     }
     const previousFrame = appFrame
@@ -174,10 +165,14 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
   }
   const owner = {
     subscribeEntry: observers.subscribeEntry,
+    subscribeTab: observers.subscribeTab,
     subscribeAggregate: observers.subscribeAggregate,
     subscribeTransitions: observers.subscribeTransitions,
     getEntry: (paneKey: string): AgentStatusEntry | undefined => live[paneKey],
     getSnapshot: () => live,
+    getState: () => joined(get(), live),
+    getTransactionState: transaction.getState,
+    getAppRevision: () => stage?.appRevision ?? 0,
     getAppState: () => stage?.app ?? get(),
     afterCommit,
     write,
@@ -206,6 +201,8 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       const previousLive = live
       const prepared: StatusStage = {
         app: previous,
+        appDraft: null,
+        appRevision: 0,
         live,
         draft: null,
         dirty: new Set(),
@@ -285,6 +282,8 @@ export function withAgentStatusCommit(
   return (set, get, api) => {
     const owner = createAgentStatusOwner(set, get)
     owners.set(api.getState, owner)
+    owners.set(owner.getAppState, owner)
+    bindTerminalFactGetters(owner, get, owner.getAppState)
     api.subscribe(owner.receipt)
     const subscribe = api.subscribe
     api.subscribe = (listener) =>

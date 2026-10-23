@@ -1,3 +1,4 @@
+import { useAgentStatusSelector } from '@/store/agent-status'
 import { useCallback, useMemo } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { toast } from 'sonner'
@@ -28,7 +29,7 @@ export function useAiVaultOriginalPaneActions(): {
   jumpToOriginalPane: (session: AiVaultSession) => Promise<boolean>
   jumpToWorktree: (worktreeId: string) => void
 } {
-  const originalPaneLookupState = useAppStore(
+  const originalPaneLookupState = useAgentStatusSelector(
     useShallow((s) => ({
       agentStatusByPaneKey: s.agentStatusByPaneKey,
       retainedAgentsByPaneKey: s.retainedAgentsByPaneKey,

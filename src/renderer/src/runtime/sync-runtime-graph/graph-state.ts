@@ -1,3 +1,5 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
 import type { MobileProjectSectionCatalog } from '../../../../shared/mobile-project-sections-contract'
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { AppState } from '@/store/types'
@@ -22,7 +24,7 @@ export const EMPTY_ACTIVE_BROWSER_TAB_ID_BY_WORKTREE: AppState['activeBrowserTab
 export const EMPTY_BROWSER_TABS_BY_WORKTREE: AppState['browserTabsByWorktree'] = {}
 export const EMPTY_BROWSER_PAGES_BY_WORKSPACE: AppState['browserPagesByWorkspace'] = {}
 export const EMPTY_LAYOUT_BY_WORKTREE: AppState['layoutByWorktree'] = {}
-export const EMPTY_AGENT_STATUS_BY_PANE_KEY: AppState['agentStatusByPaneKey'] = {}
+export const EMPTY_AGENT_STATUS_BY_PANE_KEY: AgentStatusSnapshot = {}
 export const EMPTY_NARROWED_BY_KEY: ReadonlyMap<string, never> = new Map<string, never>()
 export const EMPTY_WORKTREE_TERMINAL_TABS: AppState['tabsByWorktree'][string] = []
 export const EMPTY_WORKTREE_BROWSER_WORKSPACES: AppState['browserTabsByWorktree'][string] = []
@@ -44,7 +46,7 @@ export const graphState = {
   syncPendingAfterFlight: false,
   syncEnabled: false,
   syncTimer: null as ReturnType<typeof setTimeout> | null,
-  getStoreState: null as (() => AppState) | null,
+  getStoreState: null as (() => AgentStatusReadState) | null,
   mobileSessionSnapshotCacheByWorktree: new Map<
     string,
     {
