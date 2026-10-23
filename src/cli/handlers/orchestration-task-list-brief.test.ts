@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const callMock = vi.fn()
 
@@ -8,17 +8,23 @@ vi.mock('../format', () => ({ printResult: vi.fn() }))
 import { ORCHESTRATION_HANDLERS } from './orchestration'
 import { printResult } from '../format'
 import { okFixture } from '../test-fixtures'
+import { RuntimeClient } from '../runtime-client'
+
+const client = new RuntimeClient('/tmp/orca-task-brief', 60_000, null, null)
+afterEach(() => vi.restoreAllMocks())
 
 async function runTaskListBrief(): Promise<unknown> {
   vi.mocked(printResult).mockClear()
+  vi.spyOn(client, 'call').mockImplementation(callMock)
   await ORCHESTRATION_HANDLERS['orchestration task-list']({
     flags: new Map<string, string | boolean>([
       ['brief', true],
       ['run', 'run_1']
     ]),
-    client: { call: callMock },
+    client,
+    cwd: '/tmp/repo',
     json: true
-  } as never)
+  })
   expect(callMock).toHaveBeenCalledOnce()
   expect(callMock).toHaveBeenCalledWith('orchestration.taskList', {
     status: undefined,

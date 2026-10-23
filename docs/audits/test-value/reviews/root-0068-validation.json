@@ -184,7 +184,7 @@
     }
   },
   "integrity": {
-    "records_sha256": "8df51a1a3e0bfd415f9a468863909543a73ffdc90f8f7bf2c7cda73b5c905881",
+    "records_sha256": "350d6cd3495001129f3c7fa34b9332418d34b55b5d3b5e8987b2241fa56ed7b9",
     "original_and_final_hashes_verified": true,
     "exact_original_case_slices_verified": 21,
     "exact_parameter_rows_verified": 5,
@@ -193,10 +193,30 @@
     "original_snapshot_sha256": "77668c081400d717af6d4495fb81751e0c939efef0ed72df6e7a6fab9bdfc6db",
     "plan_sha256": "0df58e0f6879c7db51f3e3ab2d274ef8c57d732246e10e063931420abf26b7be",
     "record_generator_sha256": "893a81bbfa8c9ac10f7d188cf405b53833fad89254e3a883538dc39ee6a56b43",
-    "mutation_script_sha256": "81e58d0ccb344a2047f8e1d643b4248cff2c17dac79643363503473c2b6999f2"
+    "mutation_script_sha256": "81e58d0ccb344a2047f8e1d643b4248cff2c17dac79643363503473c2b6999f2",
+    "prior_records_sha256": "8df51a1a3e0bfd415f9a468863909543a73ffdc90f8f7bf2c7cda73b5c905881"
   },
   "limitations": [
     "Injected RPC ports exercise actual CLI request mapping, flag validation and real writer/formatter/console data flow. No actual worker, remote host, native app or shell launches.",
     "Existing21 declarations and all24 runtime cases are retained; temporary production warning stripping is fully restored. The regression proof shows the old full suite passes and the reviewed suite fails only the intended reveal-warning case."
-  ]
+  ],
+  "integration_followup": {
+    "reason": "Changed-code quality rejected new context assertions. Use actual RuntimeClient instances with a stubbed call method and checked handler contexts. All same26 combined runtime cases and CLI typecheck pass. Original mutation evidence remains explicitly historical for its recorded pre-integration test hashes.",
+    "files": [
+      "src/cli/handlers/orchestration-task-list-brief.test.ts",
+      "src/cli/handlers/orchestration-worker-cli.test.ts"
+    ],
+    "test_report": "/tmp/orca-audit-7-checked-client-tests.json",
+    "test_report_sha256": "b04eff93ae15df51b827ae57e36d0c3d8dfe6dfe1d014ac890a275a52eecef78",
+    "test_log": "/tmp/orca-audit-7-checked-client-tests.log",
+    "test_log_sha256": "e90a1e7c905dba85c5d7f7da2456d3d5579e2a18569e39a9f96ee4fd2a082c3d",
+    "typecheck_command": "ORCA_BACKGROUND_LAUNCH=1 pnpm tc:cli",
+    "typecheck_log": "/tmp/orca-audit-7-checked-client-typecheck.log",
+    "typecheck_log_sha256": "64350cfafba2dd6bb61adf325923dc3c41762eb81a276ff9302796e6e77b09bc",
+    "exit_codes": {
+      "tests": 0,
+      "typecheck": 0
+    },
+    "checked_plan_sha256": "3fd7c446736855386e9f63134ec2fdd79ac205a76a649751a2a6f5b08be7dec5"
+  }
 }

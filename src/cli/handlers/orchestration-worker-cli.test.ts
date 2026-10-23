@@ -13,12 +13,16 @@ import { printResult } from '../format'
 import { parseArgs, validateCommandAndFlags } from '../args'
 import { formatCommandHelp } from '../help'
 import { okFixture } from '../test-fixtures'
+import { RuntimeClient } from '../runtime-client'
 import { ORCHESTRATION_WORKER_COMMAND_SPECS } from '../specs/orchestration-worker-specs'
 import { ORCHESTRATION_WORKER_LAUNCH_PREFERENCES_RUNTIME_CAPABILITY } from '../../shared/protocol-version'
+
+const client = new RuntimeClient('/tmp/orca-worker-cli', 60_000, null, null)
 
 describe('orchestration worker-start CLI contract', () => {
   beforeEach(() => {
     callMock.mockReset()
+    vi.spyOn(client, 'call').mockImplementation(callMock)
     vi.mocked(printResult).mockClear()
     vi.spyOn(console, 'log').mockImplementation(() => {})
     process.exitCode = undefined
@@ -38,10 +42,10 @@ describe('orchestration worker-start CLI contract', () => {
   const invokeWorkerStart = (flags: Map<string, string | boolean>, json = true) =>
     ORCHESTRATION_HANDLERS['orchestration worker-start']({
       flags,
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json
-    } as never)
+    })
 
   function printedText(): string {
     expect(console.log).toHaveBeenCalledOnce()
@@ -280,10 +284,10 @@ describe('orchestration worker-start CLI contract', () => {
         ['terminal', 'term_worker'],
         ['from', 'term_coord']
       ]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     expect(printedText()).toContain('terminal_not_writable')
     expect(process.exitCode).toBe(1)
@@ -307,10 +311,10 @@ describe('orchestration worker-start CLI contract', () => {
         ['agent', 'codex'],
         ['from', 'term_coord']
       ]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     expect(printedText()).toContain(
       'Warning: Terminal term_worker is running but could not be revealed.'
@@ -341,10 +345,10 @@ describe('orchestration worker-start CLI contract', () => {
         ['terminal', 'term_worker'],
         ['from', 'term_coord']
       ]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     expect(printedText()).toContain('but --terminal reuses a running terminal agent')
   })
@@ -361,10 +365,10 @@ describe('orchestration worker-start CLI contract', () => {
 
     await ORCHESTRATION_HANDLERS['orchestration worker-stop']({
       flags: new Map<string, string | boolean>([['dispatch', 'ctx_manual']]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     expect(printedText()).toContain(
       'Warning: The assignment was stopped without closing its unsupervised terminal process.'
@@ -385,10 +389,10 @@ describe('orchestration worker-start CLI contract', () => {
         ['cursor', '0'],
         ['limit', '100']
       ]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: true
-    } as never)
+    })
 
     expect(callMock).toHaveBeenCalledWith('orchestration.workerRead', {
       dispatch: 'ctx_1',
@@ -413,10 +417,10 @@ describe('orchestration worker-start CLI contract', () => {
         ['cursor', 'owr1_previous'],
         ['source', 'transcript']
       ]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: true
-    } as never)
+    })
 
     expect(callMock).toHaveBeenCalledWith('orchestration.workerRead', {
       dispatch: 'ctx_1',
@@ -447,10 +451,10 @@ describe('orchestration worker-start CLI contract', () => {
 
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: new Map(),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     expect(printedText()).toContain('ctx_legacy task=task_legacy [ready] terminal=active')
   })
@@ -468,10 +472,10 @@ describe('orchestration worker-start CLI contract', () => {
 
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: new Map<string, string | boolean>(),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     expect(vi.mocked(printResult).mock.calls[0]?.[0]).toMatchObject({
       result: { warnings: response.result.warnings }
@@ -493,10 +497,10 @@ describe('orchestration worker-start CLI contract', () => {
     await expect(
       ORCHESTRATION_HANDLERS['orchestration worker-list']({
         flags,
-        client: { call: callMock },
+        client,
         cwd: '/tmp/repo',
         json: true
-      } as never)
+      })
     ).rejects.toMatchObject({ code: 'incompatible_runtime' })
 
     // The extra call is the bound-Run lookup; the enumeration itself must not be retried.
@@ -559,10 +563,10 @@ describe('orchestration worker-start CLI contract', () => {
 
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: new Map<string, string | boolean>(),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     const output = printedText()
     expect(output).toContain(
@@ -604,10 +608,10 @@ describe('orchestration worker-start CLI contract', () => {
 
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: new Map<string, string | boolean>([['include-remote', true]]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     const output = printedText()
     expect(output).toContain('ctx_remote task=task_remote [running] terminal=active')
@@ -636,10 +640,10 @@ describe('orchestration worker-start CLI contract', () => {
 
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: new Map<string, string | boolean>([['include-remote', true]]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: false
-    } as never)
+    })
 
     expect(printedText()).toBe(
       'No workers found.\nScope: all Runs (no Run is bound to this terminal; pass --run to narrow)' +
@@ -667,10 +671,10 @@ describe('orchestration worker-start CLI contract', () => {
 
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: new Map<string, string | boolean>([['include-remote', true]]),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: true
-    } as never)
+    })
 
     expect(printResult).toHaveBeenCalledWith(
       { ...response, result: { ...response.result, scope: { source: 'all' } } },
@@ -702,10 +706,10 @@ describe('orchestration worker-start CLI contract', () => {
     })
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: parsed.flags,
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: true
-    } as never)
+    })
     expect(callMock).toHaveBeenCalledWith(
       'orchestration.workerList',
       expect.objectContaining({ includeRemote: true, paginate: true })
@@ -714,10 +718,10 @@ describe('orchestration worker-start CLI contract', () => {
     callMock.mockClear()
     await ORCHESTRATION_HANDLERS['orchestration worker-list']({
       flags: new Map(),
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: true
-    } as never)
+    })
     const listParams = callMock.mock.calls.find(
       ([method]) => method === 'orchestration.workerList'
     )?.[1]
@@ -754,10 +758,10 @@ describe('orchestration worker-start CLI contract', () => {
     })
     await ORCHESTRATION_HANDLERS['orchestration worker-retain']({
       flags: retained.flags,
-      client: { call: callMock },
+      client,
       cwd: '/tmp/repo',
       json: true
-    } as never)
+    })
     expect(callMock).toHaveBeenCalledWith('orchestration.workerRetain', { dispatch: 'ctx_1' })
   })
 })

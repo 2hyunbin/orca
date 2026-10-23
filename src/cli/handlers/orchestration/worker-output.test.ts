@@ -259,7 +259,7 @@ describe('worker-read plain formatting', () => {
   it('distinguishes a released archive read from a live one', () => {
     const output = formatWorkerRead({
       dispatchId: 'dispatch_1',
-      status: { worker: 'succeeded', terminal: 'released', liveness: 'unverifiable' },
+      status: { worker: 'succeeded', terminal: 'exited', liveness: 'unverifiable' },
       source: 'terminal',
       sourceIdentity: 'private-source-identity',
       terminal: {
@@ -273,7 +273,7 @@ describe('worker-read plain formatting', () => {
       fallbackReason: null,
       warnings: [],
       archived: true
-    } as unknown as OrchestrationWorkerReadResult)
+    })
 
     expect(output).toContain('Archived: true')
     expect(output).toContain('Terminal liveness: unverifiable')
@@ -288,7 +288,7 @@ function workerReadResult(
     dispatchId: 'dispatch_1',
     status: { worker: 'ready', terminal: 'running' },
     ...value
-  } as OrchestrationWorkerReadResult
+  }
 }
 
 type WorkerReadResultWithoutContext<T> = T extends unknown
@@ -370,8 +370,8 @@ describe('formatWorkerRead', () => {
       )
     )
 
-    expect(output).toContain(`[system] ${sentence}`)
-    expect(occurrences(output, sentence)).toBe(1)
+    expect(output).toContain('[system] Kicked off 2 subagents (1 failed)')
+    expect(occurrences(output, 'Kicked off 2 subagents (1 failed)')).toBe(1)
   })
 
   // Suppression is per twin, not per message. One twin beside two roster blocks
@@ -392,8 +392,8 @@ describe('formatWorkerRead', () => {
       )
     )
 
-    expect(occurrences(output, subagentGroupFallbackText(ROSTER))).toBe(1)
-    expect(output).toContain(`[subagents] ${subagentGroupFallbackText(other)}`)
+    expect(occurrences(output, 'Kicked off 2 subagents (1 failed)')).toBe(1)
+    expect(output).toContain('[subagents] Ran 1 subagent')
   })
 
   // Which group a lone twin belongs to is decided by its TEXT, not its position.
@@ -416,8 +416,8 @@ describe('formatWorkerRead', () => {
       )
     )
 
-    expect(occurrences(output, second)).toBe(1)
-    expect(output).toContain(`[subagents] ${subagentGroupFallbackText(ROSTER)}`)
+    expect(occurrences(output, 'Ran 1 subagent')).toBe(1)
+    expect(output).toContain('[subagents] Kicked off 2 subagents (1 failed)')
   })
 
   // The same claim, with the twin written after both blocks: nothing about the
@@ -438,8 +438,8 @@ describe('formatWorkerRead', () => {
       )
     )
 
-    expect(occurrences(output, second)).toBe(1)
-    expect(output).toContain(`[subagents] ${subagentGroupFallbackText(ROSTER)}`)
+    expect(occurrences(output, 'Ran 1 subagent')).toBe(1)
+    expect(output).toContain('[subagents] Kicked off 2 subagents (1 failed)')
   })
 
   // A group with no twin beside it is a shape the block schema admits and no
@@ -450,7 +450,7 @@ describe('formatWorkerRead', () => {
       transcriptRead([{ type: 'subagent-group', groupId: 'thread:turn-1', agents: [...ROSTER] }])
     )
 
-    expect(output).toContain(`[assistant] [subagents] ${subagentGroupFallbackText(ROSTER)}`)
+    expect(output).toContain('[assistant] [subagents] Kicked off 2 subagents (1 failed)')
   })
 
   // A roster from a newer build holds a state this build does not know, which
@@ -467,6 +467,7 @@ describe('formatWorkerRead', () => {
           {
             type: 'subagent-group',
             groupId: 'thread:turn-1',
+            // SAFETY: This fixture models a newer host's unrecognized state at the RPC boundary.
             agents: [
               { id: 'child-1', label: 'read', state: 'completed' },
               { id: 'child-2', label: 'edit', state: 'cancelled' }
@@ -490,6 +491,7 @@ describe('formatWorkerRead', () => {
     const output = formatWorkerRead(
       transcriptRead([
         { type: 'text', text: 'before' },
+        // SAFETY: This fixture models a newer host's unrecognized block at the RPC boundary.
         { type: 'plan-step', title: 'ship it' } as unknown as NativeChatBlock,
         { type: 'text', text: 'after' }
       ])
