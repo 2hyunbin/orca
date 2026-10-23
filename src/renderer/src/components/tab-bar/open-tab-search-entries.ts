@@ -74,7 +74,7 @@ export type OpenTabSearchBrowserPageState = Pick<
 // Why picked: the full entry state also follows terminal titles and editor tabs, which would
 // re-render a subscriber that only needs the open browser pages.
 export function selectOpenTabSearchBrowserPageState(
-  state: AppState,
+  state: AgentStatusReadState,
   worktreeId: string
 ): OpenTabSearchBrowserPageState | null {
   const entry = selectOpenTabSearchEntryState(state, worktreeId)
@@ -121,7 +121,7 @@ export type OpenTabSearchAgentState = Pick<
 // No group id: every tab of the worktree is offered, including the one the
 // column already shows, matching how Cmd+J lists the tab you are on.
 export function selectOpenTabSearchEntryState(
-  state: AppState,
+  state: AgentStatusReadState,
   worktreeId: string
 ): OpenTabSearchEntryState | null {
   const preferredHostId =
@@ -169,7 +169,9 @@ export function selectOpenTabSearchEntryState(
   }
 }
 
-export function selectOpenTabSearchAgentState(state: AppState): OpenTabSearchAgentState {
+export function selectOpenTabSearchAgentState(
+  state: AgentStatusReadState
+): OpenTabSearchAgentState {
   return {
     agentStatusByPaneKey: state.agentStatusByPaneKey,
     paneForegroundAgentByPaneKey: state.paneForegroundAgentByPaneKey,

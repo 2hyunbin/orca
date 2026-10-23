@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // @vitest-environment happy-dom
 
 // The row's state clock, as the host dates it. A subagent's rows move the summary's `updatedAt`
@@ -13,12 +14,12 @@ import type {
 import { agentEntryCompletionAt } from '../../../../shared/agent-completion-time'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { Tab } from '../../../../shared/tab-types'
-import type { AppState } from '@/store/types'
+
 import { countActivityUnread } from '../activity/useActivityUnreadCount'
 
 type TestStore = {
-  getState: () => AppState
-  setState: (state: Partial<AppState> & { testRuntimeOwner?: string | null }) => void
+  getState: () => AgentStatusReadState
+  setState: (state: Partial<AgentStatusReadState> & { testRuntimeOwner?: string | null }) => void
 }
 
 const mocks = vi.hoisted(() => {

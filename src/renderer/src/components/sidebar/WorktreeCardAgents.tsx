@@ -1,3 +1,4 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { useAgentStatusSelector, getAgentStatusEntry } from '@/store/agent-status'
 import React, { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
@@ -97,7 +98,9 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
 
   // Why: acknowledgement writes are app-global; project only this card's rows
   // so unrelated worktree activity does not rerender every agent body.
-  const agentRowsUnread = useAppStore(useShallow((s) => selectAgentRowsUnread(s, agents)))
+  const agentRowsUnread = useAgentStatusSelector(
+    useShallow((s) => selectAgentRowsUnread(s, agents))
+  )
   const unvisitedByPaneKey = useMemo(() => {
     const out: Record<string, boolean> = {}
     for (const [index, agent] of agents.entries()) {
@@ -172,7 +175,7 @@ const WorktreeCardAgentsBody = React.memo(function WorktreeCardAgentsBody({
       }
       // Why: design-doc rule — every user-initiated worktree switch must route through activateAndRevealWorktree (cross-repo activation + nav history).
       activateAndRevealWorktree(worktreeId)
-      const tabs = useAppStore.getState().tabsByWorktree[worktreeId] ?? []
+      const tabs = getAgentStatusState().tabsByWorktree[worktreeId] ?? []
       if (tabs.some((t) => t.id === tabId)) {
         activateTabAndFocusPane(tabId, parsed.leafId, {
           ackPaneKeyOnSuccess: paneKey,

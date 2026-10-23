@@ -2,7 +2,6 @@ import { useAgentStatusSelector } from '@/store/agent-status'
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { useMemo, useRef } from 'react'
 
-import type { AppState } from '@/store/types'
 import type { DashboardBucket } from '../../../../shared/dashboard-snapshot'
 import {
   buildDashboardBucketCounts,
@@ -49,7 +48,7 @@ export function resetAgentBucketCountStateForTests(): void {
   previousState = null
 }
 
-export function selectAgentBucketCountState(s: AppState): AgentBucketCountState {
+export function selectAgentBucketCountState(s: AgentStatusReadState): AgentBucketCountState {
   const previous = previousState
   if (
     previous !== null &&

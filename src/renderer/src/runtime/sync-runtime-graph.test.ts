@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { describe, expect, it } from 'vitest'
 import {
   canSkipRuntimeMobileSessionSyncKeyBuild,
@@ -7,7 +8,6 @@ import {
 import { buildRuntimeMobileAgentStatusProjectionForTests } from './sync-runtime-graph/agent-status-projection'
 import { makeAgentStatusEntry, makeState } from './sync-runtime-graph-test-harness'
 import { getDefaultSettings } from '../../../shared/constants'
-import type { AppState } from '../store/types'
 
 // Why: the comparator at `runtimeMobileSessionSyncKeysEqual` checks
 // `terminalLayoutsByTabId`, `runtimePaneTitlesByTabId`, `groupsByWorktree`,
@@ -19,11 +19,11 @@ import type { AppState } from '../store/types'
 // share every other reference-checked collection between the two states; this
 // factory produces one `Partial<AppState>` whose fields can be spread into both
 // `makeState` calls.
-function makeSharedOverrides(): Partial<AppState> {
+function makeSharedOverrides(): Partial<AgentStatusReadState> {
   return {
     tabsByWorktree: {},
-    terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
-    runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],
+    terminalLayoutsByTabId: {} as AgentStatusReadState['terminalLayoutsByTabId'],
+    runtimePaneTitlesByTabId: {} as AgentStatusReadState['runtimePaneTitlesByTabId'],
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     unifiedTabsByWorktree: {},
@@ -111,7 +111,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
       ...shared,
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Codex working', customTitle: null, ptyId: 'pty-1' }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
     const before = getRuntimeMobileSessionSyncKey(base)
     const after = getRuntimeMobileSessionSyncKey(
@@ -127,7 +127,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
               ptyId: 'pty-1'
             }
           ]
-        } as unknown as AppState['tabsByWorktree']
+        } as unknown as AgentStatusReadState['tabsByWorktree']
       }),
       base,
       before
@@ -142,7 +142,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
       ...shared,
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'pnpm test', customTitle: null, ptyId: 'pty-1' }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
     const before = getRuntimeMobileSessionSyncKey(base)
     const after = getRuntimeMobileSessionSyncKey(
@@ -158,7 +158,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
               ptyId: 'pty-1'
             }
           ]
-        } as unknown as AppState['tabsByWorktree']
+        } as unknown as AgentStatusReadState['tabsByWorktree']
       }),
       base,
       before
@@ -179,7 +179,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
           ptyId: 'pty-1'
         }
       ]
-    } as unknown as AppState['tabsByWorktree']
+    } as unknown as AgentStatusReadState['tabsByWorktree']
     const base = makeState({
       ...shared,
       tabsByWorktree,
@@ -246,21 +246,21 @@ describe('getRuntimeMobileSessionSyncKey', () => {
     // deep-equal comparator, defeating the purpose of pinning down the
     // by-reference contract. Share every map the comparator inspects by
     // reference — any unshared default `{}` from `makeState` would diverge.
-    const sharedOverrides: Partial<AppState> = {
+    const sharedOverrides: Partial<AgentStatusReadState> = {
       ...makeSharedOverrides(),
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal 1', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree'],
+      } as unknown as AgentStatusReadState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf' as const, leafId: 'pane:1' },
           activeLeafId: 'pane:1',
           expandedLeafId: null
         }
-      } as unknown as AppState['terminalLayoutsByTabId'],
+      } as unknown as AgentStatusReadState['terminalLayoutsByTabId'],
       runtimePaneTitlesByTabId: {
         'term-1': { 1: 'pane title' }
-      } as unknown as AppState['runtimePaneTitlesByTabId']
+      } as unknown as AgentStatusReadState['runtimePaneTitlesByTabId']
     }
     const stateA = makeState(sharedOverrides)
     const stateB = makeState(sharedOverrides)
@@ -294,8 +294,8 @@ describe('getRuntimeMobileSessionSyncKey', () => {
         activeLeafId: 'pane:1',
         expandedLeafId: null
       }
-    } as unknown as AppState['terminalLayoutsByTabId']
-    const mapB = { ...mapA } as AppState['terminalLayoutsByTabId']
+    } as unknown as AgentStatusReadState['terminalLayoutsByTabId']
+    const mapB = { ...mapA } as AgentStatusReadState['terminalLayoutsByTabId']
 
     const stateA = makeState({ ...sharedOverrides, terminalLayoutsByTabId: mapA })
     const stateB = makeState({ ...sharedOverrides, terminalLayoutsByTabId: mapB })
@@ -321,7 +321,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
         ...sharedOverrides,
         tabsByWorktree: {
           'wt-1': [{ id: 'term-1', title: 'Terminal 1', customTitle: null }]
-        } as unknown as AppState['tabsByWorktree']
+        } as unknown as AgentStatusReadState['tabsByWorktree']
       })
     )
     const after = getRuntimeMobileSessionSyncKey(
@@ -329,7 +329,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
         ...sharedOverrides,
         tabsByWorktree: {
           'wt-1': [{ id: 'term-1', title: 'Terminal 1 (renamed)', customTitle: null }]
-        } as unknown as AppState['tabsByWorktree']
+        } as unknown as AgentStatusReadState['tabsByWorktree']
       })
     )
 
@@ -344,7 +344,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
         ...sharedOverrides,
         tabsByWorktree: {
           'wt-1': [{ id: 'term-1', title: 'Terminal 1', customTitle: null }]
-        } as unknown as AppState['tabsByWorktree']
+        } as unknown as AgentStatusReadState['tabsByWorktree']
       })
     )
     const after = getRuntimeMobileSessionSyncKey(
@@ -352,7 +352,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
         ...sharedOverrides,
         tabsByWorktree: {
           'wt-1': [{ id: 'term-1', title: 'Terminal 1', customTitle: null, launchAgent: 'codex' }]
-        } as unknown as AppState['tabsByWorktree']
+        } as unknown as AgentStatusReadState['tabsByWorktree']
       })
     )
 
@@ -405,7 +405,7 @@ describe('getRuntimeMobileSessionSyncKey', () => {
     const sharedOverrides = makeSharedOverrides()
     const folderWorkspace = {
       id: 'folder-1'
-    } as AppState['folderWorkspaces'][number]
+    } as AgentStatusReadState['folderWorkspaces'][number]
     const before = makeState({
       ...sharedOverrides,
       folderWorkspaces: [folderWorkspace]

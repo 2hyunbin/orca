@@ -1,5 +1,6 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AppState } from '@/store/types'
+
 import {
   buildRuntimeMobileAgentStatusProjectionForTests,
   resetRuntimeMobileAgentStatusProjectionCacheForTests
@@ -22,8 +23,8 @@ function makeEntry(index: number, overrides: Record<string, unknown> = {}): neve
   } as never
 }
 
-function mapOf(indices: readonly number[]): AppState['agentStatusByPaneKey'] {
-  const map: AppState['agentStatusByPaneKey'] = {}
+function mapOf(indices: readonly number[]): AgentStatusReadState['agentStatusByPaneKey'] {
+  const map: AgentStatusReadState['agentStatusByPaneKey'] = {}
   for (const index of indices) {
     map[`tab-${index}:leaf-0`] = makeEntry(index)
   }
@@ -31,7 +32,9 @@ function mapOf(indices: readonly number[]): AppState['agentStatusByPaneKey'] {
 }
 
 /** A collection refresh can replace its container while preserving the rows. */
-function respread(map: AppState['agentStatusByPaneKey']): AppState['agentStatusByPaneKey'] {
+function respread(
+  map: AgentStatusReadState['agentStatusByPaneKey']
+): AgentStatusReadState['agentStatusByPaneKey'] {
   return { ...map }
 }
 

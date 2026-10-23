@@ -1,3 +1,4 @@
+import { prepareStructuredAgentSessionSendRemoval } from '@/components/native-chat/structured-agent-session-message-sender'
 import { structuredAgentSessionSendBody } from '../../../shared/structured-agent-session-send-mutation'
 import type { StructuredAgentLaunchReceipt } from './structured-agent-session-launch-recovery'
 import type { StructuredAgentSessionFirstMessage } from '../../../shared/structured-agent-session-create'
@@ -315,4 +316,22 @@ export function settleStructuredAgentLaunchPrompt(args: {
     }
     return outcome
   })
+}
+
+export function prepareStructuredAgentSessionChatSendRemoval(sessionId: string) {
+  const prompts = staged.get(sessionId)
+  const captured = [...(prompts ?? [])]
+  const sends = prepareStructuredAgentSessionSendRemoval(sessionId)
+  return {
+    install: () => {
+      if (staged.get(sessionId) === prompts) {
+        staged.delete(sessionId)
+      }
+      for (const prompt of captured) {
+        prompt.discarded = true
+      }
+      sends.install()
+    },
+    effects: [...captured.map((prompt) => () => prompt.discard()), ...sends.effects]
+  }
 }

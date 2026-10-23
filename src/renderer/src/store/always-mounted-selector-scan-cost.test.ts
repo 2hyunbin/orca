@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 /**
  * Zustand reruns every subscriber's selector on every store write, so an O(N)
  * scan inside an always-mounted selector is paid thousands of times per second
@@ -11,7 +12,7 @@ import type { Worktree } from '../../../shared/worktree/types'
 import { WORKTREE_ID_SEPARATOR } from '../../../shared/worktree/id'
 import { getLocalPreflightContext } from '../lib/local-preflight-context'
 import { getProjectRuntimeSessionSummary } from '../components/settings/repository-runtime-session-summary'
-import type { AppState } from './types'
+
 import { selectRepoByIdForActiveWorkspace } from './selectors'
 
 // The user scale that motivated this: 10 repos, 423 worktrees, 382 open tabs.
@@ -39,7 +40,7 @@ function makeRepoRows(counter: ReadCounter): Repo[] {
   })
 }
 
-function makeWorktreesByRepo(counter: ReadCounter): AppState['worktreesByRepo'] {
+function makeWorktreesByRepo(counter: ReadCounter): AgentStatusReadState['worktreesByRepo'] {
   const worktreesByRepo: Record<string, Worktree[]> = {}
   for (let repoIndex = 0; repoIndex < REPO_COUNT; repoIndex += 1) {
     const repoId = `repo-${repoIndex}`
@@ -60,7 +61,7 @@ function makeWorktreesByRepo(counter: ReadCounter): AppState['worktreesByRepo'] 
 }
 
 /** The worst case for a first-wins linear scan: the last row of the last repo. */
-function lastWorktreeId(worktreesByRepo: AppState['worktreesByRepo']): string {
+function lastWorktreeId(worktreesByRepo: AgentStatusReadState['worktreesByRepo']): string {
   const lastBucket = Object.values(worktreesByRepo).at(-1) ?? []
   return (lastBucket.at(-1) as Worktree).id
 }
@@ -83,7 +84,7 @@ describe('local preflight context worktree lookup', () => {
       projects: [],
       runtimeEnvironments,
       runtimeEnvironmentCatalogHydrated: true
-    } as unknown as AppState
+    } as unknown as AgentStatusReadState
     worktreeReads.count = 0
     repoReads.count = 0
 
@@ -122,7 +123,7 @@ describe('local preflight context worktree lookup', () => {
         activeWorktreeId,
         repos,
         worktreesByRepo
-      } as unknown as AppState,
+      } as unknown as AgentStatusReadState,
       'darwin'
     )
     expect(before).toEqual({ wslDistro: 'Ubuntu' })
@@ -138,7 +139,7 @@ describe('local preflight context worktree lookup', () => {
         activeWorktreeId,
         repos,
         worktreesByRepo: { [`repo-${REPO_COUNT - 1}`]: [movedWorktree] }
-      } as unknown as AppState,
+      } as unknown as AgentStatusReadState,
       'darwin'
     )
 
@@ -147,13 +148,13 @@ describe('local preflight context worktree lookup', () => {
 })
 
 describe('selectRepoByIdForActiveWorkspace', () => {
-  function makeActiveWorkspaceState(counter: ReadCounter): AppState {
+  function makeActiveWorkspaceState(counter: ReadCounter): AgentStatusReadState {
     return {
       repos: makeRepoRows(counter),
       activeRepoId: 'repo-0',
       // No repo row carries this host, so the fallback branch runs every time.
       activeWorkspaceExecutionHostId: 'ssh:host-a'
-    } as unknown as AppState
+    } as unknown as AgentStatusReadState
   }
 
   it('resolves the active-workspace host once per repos snapshot', () => {
@@ -185,7 +186,7 @@ describe('selectRepoByIdForActiveWorkspace', () => {
       repos: [localRepo, sshRepo],
       activeRepoId: 'repo-0',
       activeWorkspaceExecutionHostId: 'ssh:host-a'
-    } as unknown as AppState
+    } as unknown as AgentStatusReadState
 
     expect(selectRepoByIdForActiveWorkspace(state, 'repo-0')).toBe(sshRepo)
     expect(selectRepoByIdForActiveWorkspace(state, 'repo-0')).toBe(sshRepo)
@@ -203,7 +204,7 @@ describe('selectRepoByIdForActiveWorkspace', () => {
 })
 
 describe('project runtime session summary', () => {
-  function makeRuntimeSessionState(counter: ReadCounter): AppState {
+  function makeRuntimeSessionState(counter: ReadCounter): AgentStatusReadState {
     const tabsByWorktree: Record<string, TerminalTab[]> = {}
     for (let repoIndex = 0; repoIndex < REPO_COUNT; repoIndex += 1) {
       for (let index = 0; index < WORKTREES_PER_REPO; index += 1) {
@@ -228,7 +229,7 @@ describe('project runtime session summary', () => {
       tabsByWorktree,
       ptyIdsByTabId: {},
       agentStatusByPaneKey: {}
-    } as unknown as AppState
+    } as unknown as AgentStatusReadState
   }
 
   it('reuses the tab index across repos and store writes', () => {
@@ -268,7 +269,7 @@ describe('project runtime session summary', () => {
         tabsByWorktree: {
           [worktreeId]: [{ id: 'tab-new', ptyId: 'pty-new', worktreeId } as TerminalTab]
         }
-      } as unknown as AppState,
+      } as unknown as AgentStatusReadState,
       'repo-0'
     )
 
@@ -286,7 +287,7 @@ describe('project runtime session summary', () => {
           'tab-1-0-0:leaf': { state: 'working', tabId: 'tab-1-0-0' },
           'tab-0-1-0:leaf': { state: 'done', tabId: 'tab-0-1-0' }
         }
-      } as unknown as AppState,
+      } as unknown as AgentStatusReadState,
       'repo-0'
     )
 

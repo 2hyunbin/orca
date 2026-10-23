@@ -12,7 +12,6 @@ import {
   type AgentProviderSessionMetadata,
   type SleepingAgentSessionRecord
 } from '../../../../shared/agent-session-resume'
-import { resolveAgentPaneAuthorityKey } from './agent-pane-authority'
 import {
   findAgentPaneWorktreeId,
   getTabIdFromPaneKey,
@@ -37,7 +36,7 @@ export function createAgentStatusProviderSessionActions(
       routing?: AgentProviderSessionRouting,
       metadata?: AgentProviderSessionRecordMetadata
     ) => {
-      paneKey = resolveAgentPaneAuthorityKey(paneKey)
+      paneKey = runtime.authority().resolveAgentPaneAuthorityKey(paneKey)
       const updatedAt = timing?.updatedAt ?? Date.now()
       if (
         paneKey in get().recentlyRetiredAgentStatusPaneKeys ||

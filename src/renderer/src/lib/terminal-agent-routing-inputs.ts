@@ -1,3 +1,4 @@
+import { selectFolderWorkspaces, selectWorktreesByRepo } from '@/store/workspace-record-selectors'
 import type { AppState } from '@/store'
 
 type RoutingState = Pick<
@@ -19,7 +20,7 @@ function sameRows<T>(
 }
 export function haveSameTerminalRoutingInputs(left: RoutingState, right: RoutingState): boolean {
   if (
-    !sameRows(left.folderWorkspaces, right.folderWorkspaces, [
+    !sameRows(selectFolderWorkspaces(left), selectFolderWorkspaces(right), [
       'id',
       'folderPath',
       'projectGroupId',
@@ -42,17 +43,19 @@ export function haveSameTerminalRoutingInputs(left: RoutingState, right: Routing
   ) {
     return false
   }
-  if (left.worktreesByRepo === right.worktreesByRepo) {
+  const leftWorktrees = selectWorktreesByRepo(left)
+  const rightWorktrees = selectWorktreesByRepo(right)
+  if (leftWorktrees === rightWorktrees) {
     return true
   }
-  const keys = Object.keys(left.worktreesByRepo)
-  const oldKeys = Object.keys(right.worktreesByRepo)
+  const keys = Object.keys(leftWorktrees)
+  const oldKeys = Object.keys(rightWorktrees)
   return (
     keys.length === oldKeys.length &&
     keys.every(
       (key, i) =>
         key === oldKeys[i] &&
-        sameRows(left.worktreesByRepo[key], right.worktreesByRepo[key], ['id', 'hostId', 'repoId'])
+        sameRows(leftWorktrees[key], rightWorktrees[key], ['id', 'hostId', 'repoId'])
     )
   )
 }

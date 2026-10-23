@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 /**
  * #12906 / STA-3596: on a paired (remote) runtime the sidebar agent row renders
  * its identity line and its status subtitle, but the last-assistant-message line
@@ -23,7 +24,7 @@ import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-typ
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { getDefaultSettings } from '../../../shared/constants'
-import type { AppState } from '../store/types'
+
 import { createTestStore, makeWorktree, seedStore } from '../store/slices/store-test-helpers'
 import {
   markRendererOwnedAgentStatusWrite,
@@ -150,7 +151,7 @@ function applyHostSnapshot(
   vi.setSystemTime(now)
   const state = store.getState()
   const patch = applyFreshWebSessionTabsSnapshot(state, snapshot, ENV, now)
-  store.setState(patch as Partial<AppState>)
+  store.setState(patch as Partial<AgentStatusReadState>)
   return patch !== state
 }
 
@@ -184,7 +185,7 @@ function seedPairedClientStore(): TestStore {
     settings: { ...getDefaultSettings('/tmp'), tabAutoGenerateTitle: true },
     worktreesByRepo: { repo1: [makeWorktree({ id: WT, repoId: 'repo1', path: '/path/wt1' })] },
     activeWorktreeId: WT
-  } as Partial<AppState>)
+  } as Partial<AgentStatusReadState>)
   return store
 }
 

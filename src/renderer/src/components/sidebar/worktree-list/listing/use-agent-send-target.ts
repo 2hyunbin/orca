@@ -1,3 +1,4 @@
+import { useAgentStatusSelector } from '@/store/agent-status'
 import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
 import { useMemo } from 'react'
 import { useAppStore } from '@/store'
@@ -17,7 +18,7 @@ const EMPTY_RUNTIME_PANE_TITLES_BY_TAB_ID: AppState['runtimePaneTitlesByTabId'] 
 export function useAgentSendTargetWorktreeId(): string | null {
   const agentSendPopoverTargetMode = useAppStore((s) => s.agentSendPopoverTargetMode)
   // Why: eligibility only matters while the picker is open; when closed, don't subscribe to wake-time layout churn.
-  const agentTargetStatusByPaneKey = useAppStore((s) =>
+  const agentTargetStatusByPaneKey = useAgentStatusSelector((s) =>
     agentSendPopoverTargetMode ? s.agentStatusByPaneKey : EMPTY_AGENT_STATUS_BY_PANE_KEY
   )
   const agentTargetStatusEpoch = useAppStore((s) =>

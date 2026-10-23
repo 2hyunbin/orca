@@ -1,5 +1,5 @@
 import type { AgentStatusReadState } from '@/store/agent-status-observers'
-import { useAppStore } from '@/store'
+import { useAgentStatusSelector } from '@/store/agent-status'
 
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 
@@ -60,5 +60,5 @@ export function getFocusedAgentPaneKeyForWorktree(
 }
 
 export function useFocusedAgentPaneKey(worktreeId: string): string | null {
-  return useAppStore((state) => getFocusedAgentPaneKeyForWorktree(state, worktreeId))
+  return useAgentStatusSelector((state) => getFocusedAgentPaneKeyForWorktree(state, worktreeId))
 }

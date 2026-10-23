@@ -1,5 +1,6 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppState } from '@/store/types'
+
 import { singlePaneLayoutSnapshot } from '@/store/slices/terminal-helpers'
 import type { AgentStatusEntry } from '../../../shared/agent-status-types'
 import {
@@ -15,7 +16,7 @@ const PTY_ID = 'pty-1'
 const CREATED_AT = 100
 
 type OwnershipState = Pick<
-  AppState,
+  AgentStatusReadState,
   | 'activeWorktreeId'
   | 'activeTabId'
   | 'activeTabType'
@@ -77,9 +78,11 @@ function createStore() {
     closeTab,
     shutdownCompletedAgentPaneForHibernation
   }
-  const listeners = new Set<(state: AppState, previousState: AppState) => void>()
+  const listeners = new Set<
+    (state: AgentStatusReadState, previousState: AgentStatusReadState) => void
+  >()
   const store: AutomationTerminalOwnershipStore = {
-    getState: () => state as unknown as AppState,
+    getState: () => state as unknown as AgentStatusReadState,
     subscribe: (listener) => {
       listeners.add(listener)
       return () => listeners.delete(listener)
@@ -89,7 +92,10 @@ function createStore() {
     const previousState = state
     state = { ...state, ...patch }
     for (const listener of listeners) {
-      listener(state as unknown as AppState, previousState as unknown as AppState)
+      listener(
+        state as unknown as AgentStatusReadState,
+        previousState as unknown as AgentStatusReadState
+      )
     }
   }
   return {

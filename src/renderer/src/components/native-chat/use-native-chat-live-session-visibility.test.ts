@@ -1,3 +1,4 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 // @vitest-environment happy-dom
 
 import { act, createElement } from 'react'
@@ -104,7 +105,7 @@ describe('useNativeChatLiveSession visibility', () => {
     latest = null
     renders.mockClear()
     resetTransport()
-    useAppStore.setState({ agentStatusByPaneKey: {} })
+    applyAgentStatusPatch(useAppStore, { agentStatusByPaneKey: {} })
   })
 
   afterEach(() => {
@@ -120,7 +121,7 @@ describe('useNativeChatLiveSession visibility', () => {
   })
 
   it('unsubscribes on hide, retains committed messages, and rejects hidden work', async () => {
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       agentStatusByPaneKey: {
         [BASE_ARGS.paneKey]: { state: 'working', stateStartedAt: 100, updatedAt: Date.now() }
       }

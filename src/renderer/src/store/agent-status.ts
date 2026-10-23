@@ -16,7 +16,8 @@ export function getAgentStatusState(): AgentStatusReadState {
 
 export function subscribeAgentStatusState(
   listener: (state: AgentStatusReadState, previous: AgentStatusReadState) => void,
-  store: Pick<StoreApi<AppState>, 'getState' | 'subscribe'> = useAppStore
+  store: Pick<StoreApi<AppState>, 'getState' | 'subscribe'> = useAppStore,
+  paneKey?: string
 ): () => void {
   const owner = getAgentStatusOwner(store)
   let previous = owner.getState()
@@ -30,7 +31,7 @@ export function subscribeAgentStatusState(
     listener(next, before)
   }
   const app = store.subscribe(notify)
-  const status = owner.subscribeAggregate(notify)
+  const status = paneKey ? owner.subscribeEntry(paneKey, notify) : owner.subscribeAggregate(notify)
   return () => {
     app()
     status()

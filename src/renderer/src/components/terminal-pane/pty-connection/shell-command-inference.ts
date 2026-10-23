@@ -1,6 +1,7 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { getAgentStatusEntry } from '@/store/agent-status'
 import { detectAgentStatusFromTitle } from '@/lib/agent-status'
-import { useAppStore } from '@/store'
+import '@/store'
 import type { AgentType } from '../../../../../shared/agent-status-types'
 import { AGENT_INTERRUPT_SETTLE_MS } from '../../../../../shared/agent-interrupt-intent'
 import { resolvePaneAgentOwner } from '../../../../../shared/pane-agent-owner'
@@ -104,7 +105,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
    * in generic terminals where launch metadata does not exist.
    */
   session.getAuthoritativePaneAgent = (): AgentType | undefined => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     const tab = (state.tabsByWorktree[session.deps.worktreeId] ?? []).find(
       (entry) => entry.id === session.deps.tabId
     )
@@ -137,7 +138,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
     )
   }
   session.clearInferredInterruptWorkingTitle = (): void => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     const currentTitle = state.runtimePaneTitlesByTabId?.[session.deps.tabId]?.[session.pane.id]
     const statusTitle = state.agentStatusByPaneKey[session.cacheKey]?.terminalTitle
     const neutralTitle = titleAfterInferredInterrupt(
@@ -164,7 +165,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
     }
   }
   session.observeTitleOnlyInterrupt = (): void => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     if (state.agentStatusByPaneKey[session.cacheKey]) {
       return
     }
@@ -182,7 +183,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
       if (getAgentStatusEntry(session.cacheKey)) {
         return
       }
-      const currentState = useAppStore.getState()
+      const currentState = getAgentStatusState()
       const currentRuntimeTitle =
         currentState.runtimePaneTitlesByTabId?.[session.deps.tabId]?.[session.pane.id]
       const currentTabTitle = (currentState.tabsByWorktree[session.deps.worktreeId] ?? []).find(
@@ -206,7 +207,7 @@ export function installShellCommandInference(session: ConnectPanePtySession): vo
     }
   }
   session.getCurrentTerminalTitle = (): string | null => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     const runtimeTitle = state.runtimePaneTitlesByTabId?.[session.deps.tabId]?.[session.pane.id]
     const tabTitle = (state.tabsByWorktree[session.deps.worktreeId] ?? []).find(
       (entry) => entry.id === session.deps.tabId

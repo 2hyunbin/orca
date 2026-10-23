@@ -1,3 +1,5 @@
+import { applyAgentStatusPatch } from '../agent-status-patch'
+import type { AgentStatusReadState } from '../agent-status-observers'
 import { withAgentStatusCommit } from '../agent-status-commit'
 import { create } from 'zustand'
 import type { AppState } from '../types'
@@ -129,12 +131,12 @@ export function createTestStore() {
 
 export function seedStore(
   store: ReturnType<typeof createTestStore>,
-  state: Partial<AppState>
+  state: Partial<AgentStatusReadState>
 ): void {
   // The cascade tests intentionally centralize the default repo fixture here
   // so the test files can stay under the enforced max-lines limit without
   // disabling the lint rule and hiding further growth.
-  store.setState({
+  applyAgentStatusPatch(store, {
     repos: [{ ...TEST_REPO, executionHostId: 'local' }],
     ...state
   })

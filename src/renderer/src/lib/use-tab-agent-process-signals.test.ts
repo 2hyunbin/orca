@@ -1,3 +1,5 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import '@/store/agent-status-commit'
 // @vitest-environment happy-dom
 
 import { act, createElement } from 'react'
@@ -14,7 +16,7 @@ import {
 } from './tab-agent-from-signals'
 import { useTabAgent } from './use-tab-agent'
 
-const initialAppState = useAppStore.getInitialState()
+const initialAppState = { ...useAppStore.getInitialState(), agentStatusByPaneKey: {} }
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = makePaneKey('tab-1', LEAF_ID)
 let latestHookAgent: TerminalAgent | null | undefined
@@ -163,8 +165,8 @@ describe('useTabAgent process signals', () => {
   beforeEach(() => {
     latestHookAgent = undefined
     clearTabLaunchAgent.mockReset()
-    useAppStore.setState(initialAppState, true)
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, initialAppState)
+    applyAgentStatusPatch(useAppStore, {
       ptyIdsByTabId: { 'tab-1': ['pty-1'] },
       terminalLayoutsByTabId: {
         'tab-1': {
@@ -184,7 +186,7 @@ describe('useTabAgent process signals', () => {
       act(() => root.unmount())
     })
     document.body.replaceChildren()
-    useAppStore.setState(initialAppState, true)
+    applyAgentStatusPatch(useAppStore, initialAppState)
   })
 
   it('shows the recognized foreground agent for a manual launch with no hooks or titles', async () => {

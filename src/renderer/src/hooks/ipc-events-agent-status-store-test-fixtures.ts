@@ -1,9 +1,10 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { expect, vi } from 'vitest'
 import type {
   AgentStatusBatchTransaction,
   AgentStatusBatchUpdate
 } from '../store/slices/agent-status'
-import type { AppState } from '../store/types'
+
 import { makePaneKey } from '../../../shared/stable-pane-id'
 
 export const FUTURE_LEAF_ID = '11111111-1111-4111-8111-111111111111'
@@ -126,7 +127,7 @@ export function installMockAgentStatusTransaction(state: StoreLike): void {
     const attemptedUpdates: AgentStatusBatchUpdate[] = []
     const effects: (() => void)[] = []
     const result = operation({
-      getState: () => stagedState as AppState,
+      getState: () => stagedState as AgentStatusReadState,
       apply: (update) => {
         attemptedUpdates.push(update)
         return applyMockAgentStatusUpdate(stagedState, update)
@@ -200,7 +201,7 @@ export function buildStoreState(overrides: StoreLike): StoreLike {
   }
   if (!('updateTabTitles' in overrides)) {
     state.updateTabTitles = vi.fn((updates: readonly { tabId: string; title: string }[]) => {
-      const updateTitle = state.updateTabTitle as AppState['updateTabTitle']
+      const updateTitle = state.updateTabTitle as AgentStatusReadState['updateTabTitle']
       for (const { tabId, title } of updates) {
         updateTitle(tabId, title)
       }
@@ -211,7 +212,7 @@ export function buildStoreState(overrides: StoreLike): StoreLike {
       updates.map((update) => {
         if (update.kind === 'providerSession') {
           const recordProviderSession =
-            state.recordAgentProviderSession as AppState['recordAgentProviderSession']
+            state.recordAgentProviderSession as AgentStatusReadState['recordAgentProviderSession']
           recordProviderSession(
             update.paneKey,
             update.agent,
@@ -226,7 +227,7 @@ export function buildStoreState(overrides: StoreLike): StoreLike {
             setProgramStatus(update.paneKey, update.programStatus)
           }
         } else {
-          const setStatus = state.setAgentStatus as AppState['setAgentStatus']
+          const setStatus = state.setAgentStatus as AgentStatusReadState['setAgentStatus']
           setStatus(
             update.paneKey,
             update.payload,

@@ -281,3 +281,32 @@ export function encodePushTargetClearForRuntimeRpc(
   // Why: remote runtime RPC is JSON-shaped and drops undefined, so null is the wire signal for clearing persisted pushTarget metadata.
   return { ...updates, pushTarget: null }
 }
+
+export function prepareHostedReviewMutationRemoval(worktreeIds: ReadonlySet<string>): () => void {
+  const generations = [...hostedReviewLinkMutationGenerationByWorktreeId].filter(([key]) =>
+    worktreeIds.has(key)
+  )
+  const tombstones = [...hostedReviewLinkClearTombstonesByWorktreeId].filter(([key]) =>
+    worktreeIds.has(key)
+  )
+  const aliases = [...hostedReviewLinkWorktreeIdAliases].filter(
+    ([key, value]) => worktreeIds.has(key) || worktreeIds.has(value)
+  )
+  return () => {
+    for (const [key, value] of generations) {
+      if (hostedReviewLinkMutationGenerationByWorktreeId.get(key) === value) {
+        hostedReviewLinkMutationGenerationByWorktreeId.delete(key)
+      }
+    }
+    for (const [key, value] of tombstones) {
+      if (hostedReviewLinkClearTombstonesByWorktreeId.get(key) === value) {
+        hostedReviewLinkClearTombstonesByWorktreeId.delete(key)
+      }
+    }
+    for (const [key, value] of aliases) {
+      if (hostedReviewLinkWorktreeIdAliases.get(key) === value) {
+        hostedReviewLinkWorktreeIdAliases.delete(key)
+      }
+    }
+  }
+}

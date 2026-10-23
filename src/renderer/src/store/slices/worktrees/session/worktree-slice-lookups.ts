@@ -1,3 +1,4 @@
+import { coordinatedPurgeSet } from '../teardown/worktree-purge-preparation'
 import type { WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../../../shared/constants'
@@ -142,9 +143,10 @@ export function createGetKnownWorktreeById(
 }
 
 export function createPurgeWorktreeTerminalState(
-  set: WorktreeSliceSet,
+  storeSet: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['purgeWorktreeTerminalState'] {
+  const set = coordinatedPurgeSet(storeSet, get)
   return (worktreeTargets) => {
     const purgeableWorktreeTargets = worktreeTargets.filter((target) => {
       const worktreeId = typeof target === 'string' ? target : target.id

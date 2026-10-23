@@ -1,3 +1,6 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestStore,
@@ -6,7 +9,7 @@ import {
   TEST_REPO
 } from '../store/slices/store-test-helpers'
 import type { AgentStatusBatchUpdate, AgentStatusUpdate } from '../store/slices/agent-status'
-import type { AppState } from '../store/types'
+
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { folderWorkspaceKey } from '../../../shared/workspace-scope'
 import {
@@ -90,8 +93,8 @@ describe('useIpcEvents agent status snapshot integration', () => {
         expected: true
       }
     ]
-    const tabsByWorktree: AppState['tabsByWorktree'] = {}
-    const terminalLayoutsByTabId: AppState['terminalLayoutsByTabId'] = {}
+    const tabsByWorktree: AgentStatusReadState['tabsByWorktree'] = {}
+    const terminalLayoutsByTabId: AgentStatusReadState['terminalLayoutsByTabId'] = {}
     for (const entry of cases) {
       ;(tabsByWorktree[entry.ownerId] ??= []).push(
         makeTab({
@@ -120,7 +123,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
     const localRepo = { ...TEST_REPO, id: 'repo-routing-local', connectionId: null }
     const sshRepo = { ...TEST_REPO, id: 'repo-routing-ssh', connectionId: 'ssh-live' }
     const store = createTestStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       workspaceSessionReady: true,
       repos: [localRepo, sshRepo],
       worktreesByRepo: {
@@ -149,7 +152,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       terminalLayoutsByTabId,
       activeWorktreeId: null,
       settings: { ...store.getState().settings, terminalFontSize: 13 }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({
@@ -173,13 +176,18 @@ describe('useIpcEvents agent status snapshot integration', () => {
         cases
           .filter((entry) => entry.expected)
           .every(
-            (entry) => store.getState().agentStatusByPaneKey[makePaneKey(entry.tabId, entry.leafId)]
+            (entry) =>
+              getAgentStatusOwner(store).getState().agentStatusByPaneKey[
+                makePaneKey(entry.tabId, entry.leafId)
+              ]
           )
       ).toBe(true)
     })
     for (const entry of cases) {
       expect(
-        store.getState().agentStatusByPaneKey[makePaneKey(entry.tabId, entry.leafId)] !== undefined
+        getAgentStatusOwner(store).getState().agentStatusByPaneKey[
+          makePaneKey(entry.tabId, entry.leafId)
+        ] !== undefined
       ).toBe(entry.expected)
     }
   })
@@ -210,7 +218,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       }
     ] satisfies AgentStatusSetData[])
     const store = createTestStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       workspaceSessionReady: true,
       repos: [TEST_REPO],
       worktreesByRepo: {
@@ -229,7 +237,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       },
       activeWorktreeId: null,
       settings: { ...store.getState().settings, terminalFontSize: 13 }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({
@@ -252,8 +260,12 @@ describe('useIpcEvents agent status snapshot integration', () => {
     useIpcEvents()
 
     await vi.waitFor(() => {
-      expect(store.getState().agentStatusByPaneKey[waitingPaneKey]?.state).toBe('waiting')
-      expect(store.getState().agentStatusByPaneKey[donePaneKey]?.state).toBe('done')
+      expect(
+        getAgentStatusOwner(store).getState().agentStatusByPaneKey[waitingPaneKey]?.state
+      ).toBe('waiting')
+      expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[donePaneKey]?.state).toBe(
+        'done'
+      )
       expect(store.getState().tabsByWorktree[worktreeId]?.[0]?.title).toBe('Pi ready')
     })
   })
@@ -540,7 +552,9 @@ describe('useIpcEvents agent status snapshot integration', () => {
         }
       }
     })
-    const updateTabTitles = vi.mocked(storeState.updateTabTitles as AppState['updateTabTitles'])
+    const updateTabTitles = vi.mocked(
+      storeState.updateTabTitles as AgentStatusReadState['updateTabTitles']
+    )
 
     stubReactSyncEffect()
     vi.doMock('../store', () => ({

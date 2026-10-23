@@ -1,3 +1,4 @@
+import { subscribeAgentStatusState, getAgentStatusState } from '@/store/agent-status'
 import { getAgentStatusEntry } from '@/store/agent-status'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { UNRESOLVED_OWNER_HOST_ID } from '../../../../../shared/execution-host'
@@ -31,7 +32,7 @@ import {
 } from '../renderer-owned-agent-status-registry'
 
 import { resolveLatestAgentDoneStartedAt } from './agent-done-started-at'
-import { rendererAgentStatusObservations } from '@/lib/renderer-agent-status-observations'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import {
   createTerminalInputEchoDelay,
   noteTerminalInputAwaitingEcho
@@ -84,24 +85,28 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
     if (initialAgentStatus?.state === 'done') {
       session.setFocusReportSuppressionForAgentCompletion(undefined, initialAgentStatus.agentType)
     }
-    session.unsubscribeWindowsDoneTerminalModeReset = useAppStore.subscribe((nextState) => {
-      const nextAgentStatus = nextState.agentStatusByPaneKey[session.cacheKey]
-      const nextAgentStatusState = nextAgentStatus?.state
-      if (nextAgentStatusState === 'done') {
-        session.setFocusReportSuppressionForAgentCompletion(undefined, nextAgentStatus.agentType)
-      } else if (nextAgentStatusState) {
-        session.suppressNativeWindowsIdleCodexFocusReports = false
-      }
-      const nextAgentDoneStartedAt = resolveLatestAgentDoneStartedAt(nextAgentStatus)
-      // Why: a NEW completed turn — same-state `done` pings keep stateStartedAt, so they no-op.
-      if (
-        nextAgentDoneStartedAt !== undefined &&
-        nextAgentDoneStartedAt !== lastAgentDoneStartedAt
-      ) {
-        session.queueAgentIdleTerminalModeReset()
-      }
-      lastAgentDoneStartedAt = nextAgentDoneStartedAt
-    })
+    session.unsubscribeWindowsDoneTerminalModeReset = subscribeAgentStatusState(
+      (nextState) => {
+        const nextAgentStatus = nextState.agentStatusByPaneKey[session.cacheKey]
+        const nextAgentStatusState = nextAgentStatus?.state
+        if (nextAgentStatusState === 'done') {
+          session.setFocusReportSuppressionForAgentCompletion(undefined, nextAgentStatus.agentType)
+        } else if (nextAgentStatusState) {
+          session.suppressNativeWindowsIdleCodexFocusReports = false
+        }
+        const nextAgentDoneStartedAt = resolveLatestAgentDoneStartedAt(nextAgentStatus)
+        // Why: a NEW completed turn — same-state `done` pings keep stateStartedAt, so they no-op.
+        if (
+          nextAgentDoneStartedAt !== undefined &&
+          nextAgentDoneStartedAt !== lastAgentDoneStartedAt
+        ) {
+          session.queueAgentIdleTerminalModeReset()
+        }
+        lastAgentDoneStartedAt = nextAgentDoneStartedAt
+      },
+      useAppStore,
+      session.cacheKey
+    )
   }
 
   session.localWindowsTerminalCapabilities = hasCachedWindowsTerminalCapabilities()
@@ -124,7 +129,7 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
       ? registerRendererOwnedAgentStatusPane(session.cacheKey, session.runtimeEnvironmentId)
       : null
   session.handleRendererOwnedAgentStatus = (payload): void => {
-    const currentState = useAppStore.getState()
+    const currentState = getAgentStatusState()
     const routing = session.resolveCurrentAgentStatusRouting()
     if (!routing) {
       return
@@ -135,7 +140,7 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
     const statusPayload = agentType === payload.agentType ? payload : { ...payload, agentType }
     const observedStatusPayload = {
       ...statusPayload,
-      observation: rendererAgentStatusObservations.observe(session.cacheKey, {
+      observation: getAgentStatusOwner(useAppStore).observations().observe(session.cacheKey, {
         origin: 'osc',
         observedAt: Date.now(),
         kind: 'snapshot'
@@ -246,7 +251,7 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
     requestTerminalWritePipelineProbe(session.pane.terminal)
   }
   session.recordTerminalInputForHibernation = (): void => {
-    useAppStore.getState().recordTerminalInput(session.cacheKey)
+    getAgentStatusState().recordTerminalInput(session.cacheKey)
   }
   // Why: onData mixes real user input with xterm's parser auto-replies (focus
   // reports, DA/DSR/CPR responses). Recording those replies as activity makes

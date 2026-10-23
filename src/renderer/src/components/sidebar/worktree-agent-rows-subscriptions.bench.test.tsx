@@ -1,3 +1,5 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 // @vitest-environment happy-dom
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -24,7 +26,7 @@ const WRITES = Number(process.env.ORCA_BENCH_WRITES ?? 500)
 it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
   'measures mounted agent row subscriptions',
   () => {
-    const original = useAppStore.getState()
+    const original = getAgentStatusOwner(useAppStore).getState()
     const tabsByWorktree = Object.fromEntries(
       Array.from({ length: CARDS }, (_, index) => {
         const worktreeId = `wt-${index}`
@@ -46,7 +48,7 @@ it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
         stateHistory: []
       }
     }
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       tabsByWorktree,
       agentStatusByPaneKey: entries,
       unifiedTabsByWorktree: {},
@@ -93,8 +95,8 @@ it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
           for (let index = 0; index < WRITES; index += 1) {
             const key = makePaneKey(`tab-${index % CARDS}`, LEAF)
             act(() => {
-              const previous = useAppStore.getState().agentStatusByPaneKey
-              useAppStore.setState({
+              const previous = getAgentStatusOwner(useAppStore).getState().agentStatusByPaneKey
+              applyAgentStatusPatch(useAppStore, {
                 agentStatusByPaneKey: {
                   ...previous,
                   [key]: { ...previous[key], updatedAt: Date.now(), toolName: `tool-${index}` }
@@ -125,7 +127,7 @@ it.skipIf(!process.env.ORCA_AGENT_ROWS_BENCH)(
     } finally {
       act(() => root.unmount())
       container.remove()
-      useAppStore.setState(original, true)
+      applyAgentStatusPatch(useAppStore, original)
     }
   },
   120_000

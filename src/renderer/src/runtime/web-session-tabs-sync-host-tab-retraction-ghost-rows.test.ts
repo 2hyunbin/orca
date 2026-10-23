@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 /**
  * STA-4593 incident: a paired client accumulated ~18 sidebar agent rows while the
  * host reported 4 agent records. The host had closed (retracted) the reviewer
@@ -29,7 +30,7 @@ import type {
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { getDefaultSettings } from '../../../shared/constants'
-import type { AppState } from '../store/types'
+
 import { createTestStore, makeWorktree, seedStore } from '../store/slices/store-test-helpers'
 import {
   markRendererOwnedAgentStatusWrite,
@@ -168,7 +169,7 @@ function applyHostSnapshot(
   if (opts?.expectChange !== false) {
     expect(patch, 'host snapshot must pass the freshness gate').not.toBe(state)
   }
-  store.setState(patch as Partial<AppState>)
+  store.setState(patch as Partial<AgentStatusReadState>)
 }
 
 /**
@@ -241,7 +242,7 @@ function seedPairedClientStore(): TestStore {
     settings: { ...getDefaultSettings('/tmp'), tabAutoGenerateTitle: true },
     worktreesByRepo: { repo1: [makeWorktree({ id: WT, repoId: 'repo1', path: '/path/wt1' })] },
     activeWorktreeId: WT
-  } as Partial<AppState>)
+  } as Partial<AgentStatusReadState>)
   return store
 }
 
@@ -716,7 +717,7 @@ describe('a host-retracted paired tab leaves no ghost agent row behind', () => {
       T0 + 2_000
     )
     expect(patch, 'the batch must pass the freshness gate').not.toBe(state)
-    store.setState(patch as Partial<AppState>)
+    store.setState(patch as Partial<AgentStatusReadState>)
     release()
 
     const observed = observeSidebar(store, T0 + 3_000)

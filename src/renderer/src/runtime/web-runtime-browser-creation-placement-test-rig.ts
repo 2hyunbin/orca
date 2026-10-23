@@ -1,3 +1,4 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { vi } from 'vitest'
 import type { BrowserPage, BrowserWorkspace } from '../../../shared/browser-workspace-types'
 import type { RuntimeMobileSessionTabsResult } from '../../../shared/runtime-types'
@@ -221,11 +222,11 @@ export function installRuntimeTransport(): ReturnType<typeof vi.fn> {
 }
 
 export function groupOrder(groupId: string): string[] {
-  return useAppStore.getState().groupsByWorktree[WT]?.find((g) => g.id === groupId)?.tabOrder ?? []
+  return getAgentStatusState().groupsByWorktree[WT]?.find((g) => g.id === groupId)?.tabOrder ?? []
 }
 
 export function wrapperForRemotePage(remotePageId: string): Tab | undefined {
-  const state = useAppStore.getState()
+  const state = getAgentStatusState()
   const workspace = (state.browserTabsByWorktree[WT] ?? []).find((candidate) =>
     (state.browserPagesByWorkspace[candidate.id] ?? []).some(
       (candidatePage) =>

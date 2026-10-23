@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // @vitest-environment happy-dom
 
 // End to end for A1: a frame off the host's turn-completion stream lights the unread indicators
@@ -18,12 +19,12 @@ import type { NotificationDispatchRequest } from '../../../../shared/notificatio
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import type { Tab } from '../../../../shared/tab-types'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
-import type { AppState } from '@/store/types'
+
 import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 
 type TestStore = {
-  getState: () => AppState
-  setState: (state: Partial<AppState>) => void
+  getState: () => AgentStatusReadState
+  setState: (state: Partial<AgentStatusReadState>) => void
 }
 type BridgeMocks = {
   store: TestStore | null
@@ -535,7 +536,7 @@ describe('StructuredAgentSessionAttentionBridge', () => {
     expect(store.getState().unreadTerminalTabs[tab.id]).toBe('agent-completion')
   })
 
-  it.each<{ selected: string; activeAfterCollision: Partial<AppState> }>([
+  it.each<{ selected: string; activeAfterCollision: Partial<AgentStatusReadState> }>([
     { selected: 'the paired workspace', activeAfterCollision: {} },
     {
       selected: 'another workspace',

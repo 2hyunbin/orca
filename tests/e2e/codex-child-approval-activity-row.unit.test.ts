@@ -1,3 +1,5 @@
+import type { AgentStatusReadState } from '../../src/renderer/src/store/agent-status-observers'
+import { applyAgentStatusPatch } from '../../src/renderer/src/store/agent-status-patch'
 // @vitest-environment happy-dom
 
 // A Codex parent settles, its subagent asks for approval, and the user answers. Every hop is the
@@ -19,7 +21,7 @@ import type {
 import type { AgentJournalItemBody } from '../../src/shared/agent-session-journal-types'
 import { parseAgentJournalItemKey } from '../../src/shared/agent-session-journal-item-key'
 import type { Tab } from '../../src/shared/tab-types'
-import type { AppState } from '../../src/renderer/src/store/types'
+
 import { createCodexJournalTranslator } from '../../src/main/codex/codex-structured-journal-translation'
 import { CODEX_COMMAND_APPROVAL_METHOD } from '../../src/main/codex/codex-structured-prompt-replies'
 import { createTrackedJournalOpener } from '../../src/main/native-chat/agent-session-journal/journal-host-database-test-support'
@@ -38,8 +40,8 @@ import { countActivityUnread } from '../../src/renderer/src/components/activity/
 import { useAgentPaneThreads } from '../../src/renderer/src/components/activity/use-agent-pane-threads'
 
 type TestStore = {
-  getState: () => AppState
-  setState: (state: Partial<AppState> & { testRuntimeOwner?: string | null }) => void
+  getState: () => AgentStatusReadState
+  setState: (state: Partial<AgentStatusReadState> & { testRuntimeOwner?: string | null }) => void
 }
 
 const mocks = vi.hoisted(() => {
@@ -105,7 +107,7 @@ beforeEach(async () => {
   mocks.subscribeStatus.mockResolvedValue({ unsubscribe: mocks.unsubscribe })
   root = await mkdtemp(join(tmpdir(), 'orca-codex-child-approval-'))
   const worktree = makeWorktree()
-  store().setState({
+  applyAgentStatusPatch(store(), {
     agentStatusByPaneKey: {},
     acknowledgedAgentsByPaneKey: {},
     activityClearedAtByPaneKey: {},

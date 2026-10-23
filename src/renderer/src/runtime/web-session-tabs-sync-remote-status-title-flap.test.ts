@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 /**
  * issue1-ui-flash repro: on a paired client viewing a remote-runtime worktree,
  * TWO independent writers own the same store keys for one mirrored pane:
@@ -51,7 +52,7 @@ import { makePaneKey } from '../../../shared/stable-pane-id'
 import { toWebTerminalSurfaceTabId } from '../../../shared/terminal-surface-id'
 import { deriveGeneratedTabTitle } from '../../../shared/agent-tab-title'
 import { getDefaultSettings } from '../../../shared/constants'
-import type { AppState } from '../store/types'
+
 import { createTestStore, makeWorktree, seedStore } from '../store/slices/store-test-helpers'
 import {
   markRendererOwnedAgentStatusWrite,
@@ -150,7 +151,7 @@ function applyHostSnapshot(
   // The freshness gate must accept every republished frame (monotonic version).
   expect(shouldApplyWebSessionTabsSnapshot(snapshot, ENV)).toBe(true)
   const patch = applyWebSessionTabsSnapshot(state, snapshot, ENV, now)
-  store.setState(patch as Partial<AppState>)
+  store.setState(patch as Partial<AgentStatusReadState>)
 }
 
 /**

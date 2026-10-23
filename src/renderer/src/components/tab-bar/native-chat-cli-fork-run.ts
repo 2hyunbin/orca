@@ -1,5 +1,6 @@
+import { subscribeAgentStatusState, getAgentStatusState } from '@/store/agent-status'
 import { useSyncExternalStore } from 'react'
-import { useAppStore } from '@/store'
+import '@/store'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
 import {
@@ -62,7 +63,7 @@ export async function runNativeChatCliFork(args: {
     if (controller.signal.aborted || (owner && !matchesWebSessionIntentOwner(owner))) {
       return false
     }
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     const source = state.unifiedTabsByWorktree[tab.worktreeId]?.find((item) => item.id === tab.id)
     const current =
       source?.contentType === 'agent-session' && source.entityId === subject.sessionId
@@ -91,7 +92,7 @@ export async function runNativeChatCliFork(args: {
   }
   pending.set(key, controller)
   changed()
-  const stopSource = useAppStore.subscribe(() => {
+  const stopSource = subscribeAgentStatusState(() => {
     if (!isCurrent()) {
       abandon()
     }
@@ -119,7 +120,7 @@ export async function runNativeChatCliFork(args: {
     }
     const target = prepared.session
     const startupArgs = {
-      state: useAppStore.getState(),
+      state: getAgentStatusState(),
       worktreeId: subject.workspaceId,
       session: target,
       commandOverride: args.commandOverrides?.[target.agent]

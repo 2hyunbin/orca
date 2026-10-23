@@ -1,9 +1,18 @@
+import {
+  countLiveAgentStatuses,
+  noteLiveAgentStatusCount
+} from './slices/agent-status-capacity-eviction'
+import type { createAgentPaneAuthority } from './slices/agent-pane-authority'
+import type { AgentStatusObservationSequencer } from '../../../shared/agent-status-observation'
+import type { HostWorkingClientBoundary } from '../runtime/web-session-tabs-sync/state'
+import type { RemovalNoticeRoot } from './slices/worktrees/teardown/removed-workspace-unsaved-files'
+import type { PreparedPurgeOwnership } from './slices/worktrees/teardown/worktree-purge-preparation'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
 import type { AppState } from './types'
 import type { AgentStatusEntry } from './slices/agent-status-contract'
 import type { AgentStatusReadState, AgentStatusSnapshot } from './agent-status-observers'
 import type { StoreSetArgs } from './react-commit-cascade-write-probe'
-import type { prepareStructuredReadRetirement } from '../components/native-chat/structured-agent-session-read-owner-registry'
+import { prepareStructuredReadRetirement } from '../components/native-chat/structured-agent-session-read-owner-registry'
 
 export type AgentStatusTransaction = {
   getState: () => AgentStatusReadState
@@ -13,6 +22,12 @@ export type AgentStatusTransaction = {
   afterCommit: (effect: () => void) => void
 }
 export type StatusStage = {
+  authority: ReturnType<typeof createAgentPaneAuthority> | null
+  observations: AgentStatusObservationSequencer | null
+  mirrorBoundaries: Map<string, HostWorkingClientBoundary> | null
+  notice: RemovalNoticeRoot | null
+  purgedLaunches: Set<string>
+  purge: PreparedPurgeOwnership[]
   app: AppState
   appDraft: AppState | null
   appRevision: number
@@ -73,5 +88,68 @@ export function createAgentStatusReadViews() {
       byStatus.set(statuses, view)
     }
     return view
+  }
+}
+
+export function createAgentStatusTransaction(
+  getStage: () => StatusStage | null,
+  readCommitted: () => AgentStatusReadState,
+  afterCommit: AgentStatusTransaction['afterCommit']
+): AgentStatusTransaction {
+  return {
+    getState: () => {
+      const stage = getStage()
+      if (!stage) {
+        return readCommitted()
+      }
+      return readAgentStatusFold(stage)
+    },
+    afterCommit,
+    retireReadOwner(sessionId, target) {
+      const stage = getStage()
+      if (!stage) {
+        throw new Error('Reader retirement requires a transaction')
+      }
+      stage.readRetirement = prepareStructuredReadRetirement(
+        stage.readRetirement,
+        sessionId,
+        target
+      )
+    },
+    editEntries(edit) {
+      const stage = getStage()
+      if (!stage) {
+        throw new Error('Live status writes require a transaction')
+      }
+      if (!stage.draft) {
+        stage.draft = { ...stage.live }
+        noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
+      }
+      for (const key of edit(stage.draft)) {
+        stage.dirty.add(key)
+      }
+    },
+    setEntry(paneKey, entry) {
+      const stage = getStage()
+      if (!stage) {
+        throw new Error('Live status writes require a transaction')
+      }
+      if (Object.is((stage.draft ?? stage.live)[paneKey], entry)) {
+        return
+      }
+      if (!stage.draft) {
+        stage.draft = { ...stage.live }
+        noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
+      }
+      stage.dirty.add(paneKey)
+      const size =
+        countLiveAgentStatuses(stage.draft) + (entry ? (paneKey in stage.draft ? 0 : 1) : -1)
+      noteLiveAgentStatusCount(stage.draft, size)
+      if (entry) {
+        stage.draft[paneKey] = entry
+      } else {
+        delete stage.draft[paneKey]
+      }
+    }
   }
 }

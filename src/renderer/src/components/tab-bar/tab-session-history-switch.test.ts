@@ -1,6 +1,9 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import type { AppState } from '@/store/types'
+
 import { makeRepo, makeTerminalTab, makeWorktree } from '../worktree-jump-palette-test-fixtures'
 import { makeAgentStatusEntry } from '@/runtime/sync-runtime-graph-test-harness'
 import { collectAiVaultTitleRequests } from '@/lib/ai-vault-tab-title-requests'
@@ -93,11 +96,11 @@ function row(overrides: Partial<AiVaultSession> = {}): AiVaultSession {
 const SIBLING_ID = 'repo-1::/repo/sibling'
 
 function makeState(
-  agentStatusByPaneKey: AppState['agentStatusByPaneKey'] = {},
+  agentStatusByPaneKey: AgentStatusReadState['agentStatusByPaneKey'] = {},
   repo: Partial<ReturnType<typeof makeRepo>> = {}
-): AppState {
-  useAppStore.setState(useAppStore.getInitialState(), true)
-  useAppStore.setState({
+): AgentStatusReadState {
+  applyAgentStatusPatch(useAppStore, { ...useAppStore.getInitialState(), agentStatusByPaneKey: {} })
+  applyAgentStatusPatch(useAppStore, {
     agentStatusByPaneKey,
     activeRepoId: 'repo-1',
     activeWorktreeId: WORKTREE_ID,
@@ -112,7 +115,7 @@ function makeState(
       ]
     }
   })
-  return useAppStore.getState()
+  return getAgentStatusOwner(useAppStore).getState()
 }
 
 // What the Session History panel sends for its default Workspace scope, at the panel's default
@@ -156,7 +159,7 @@ beforeEach(() => {
 })
 
 // What Orca remembers once the agent exits and the pane is back at its shell prompt.
-const exitedAgentRecords: Record<string, Partial<AppState>> = {
+const exitedAgentRecords: Record<string, Partial<AgentStatusReadState>> = {
   retained: {
     retainedAgentsByPaneKey: {
       'term-1:leaf-1': {
@@ -244,8 +247,8 @@ describe('resolveTabSessionHistorySubject', () => {
     'offers nothing from a %s record once the agent has exited, though the tab title keeps it',
     (kind) => {
       makeState()
-      useAppStore.setState(exitedAgentRecords[kind])
-      const state = useAppStore.getState()
+      applyAgentStatusPatch(useAppStore, exitedAgentRecords[kind])
+      const state = getAgentStatusOwner(useAppStore).getState()
       expect(
         resolveTabSessionHistorySubject(state, { tab: { id: 'term-1', worktreeId: WORKTREE_ID } })
       ).toBeNull()
@@ -275,7 +278,7 @@ describe('resolveTabSessionHistorySubject', () => {
       worktreeId: WORKTREE_ID,
       providerSession: { key: 'session_id', id: 'claude-session-old' }
     })
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       terminalLayoutsByTabId: {
         'term-1': { root: null, activeLeafId: 'leaf-1', expandedLeafId: null }
       },
@@ -290,7 +293,7 @@ describe('resolveTabSessionHistorySubject', () => {
       }
     })
     expect(
-      resolveTabSessionHistorySubject(useAppStore.getState(), {
+      resolveTabSessionHistorySubject(getAgentStatusOwner(useAppStore).getState(), {
         tab: { id: 'term-1', worktreeId: WORKTREE_ID }
       })
     ).toEqual(cliSubject)
@@ -379,7 +382,7 @@ describe('resolveTabSessionHistorySubject', () => {
 describe('one pane of a terminal tab', () => {
   const claudePane = 'term-1:leaf-1'
   const geminiPane = 'term-1:leaf-2'
-  const splitTab = (activeLeafId: string): AppState => {
+  const splitTab = (activeLeafId: string): AgentStatusReadState => {
     makeState({
       [claudePane]: liveClaudeEntry['term-1:leaf-1'],
       [geminiPane]: makeAgentStatusEntry({
@@ -390,17 +393,17 @@ describe('one pane of a terminal tab', () => {
         providerSession: { key: 'session_id', id: 'gemini-session-1' }
       })
     })
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       terminalLayoutsByTabId: { 'term-1': { root: null, activeLeafId, expandedLeafId: null } }
     })
-    return useAppStore.getState()
+    return getAgentStatusOwner(useAppStore).getState()
   }
-  const paneSubject = (state: AppState, paneKey: string) =>
+  const paneSubject = (state: AgentStatusReadState, paneKey: string) =>
     resolveTabSessionHistorySubject(state, {
       tab: { id: 'term-1', worktreeId: WORKTREE_ID },
       paneKey
     })
-  const paneGate = (state: AppState, paneKey: string) =>
+  const paneGate = (state: AgentStatusReadState, paneKey: string) =>
     canPaneOfferResumeInNewChat(state, { worktreeId: WORKTREE_ID, paneKey })
 
   it("never stands in a sibling pane's conversation for a pane with no move", () => {
@@ -445,8 +448,8 @@ describe('one pane of a terminal tab', () => {
     'offers nothing once the agent exited and only a %s record remains, as the tab menu does',
     (kind) => {
       makeState()
-      useAppStore.setState(exitedAgentRecords[kind])
-      const exited = useAppStore.getState()
+      applyAgentStatusPatch(useAppStore, exitedAgentRecords[kind])
+      const exited = getAgentStatusOwner(useAppStore).getState()
       expect(paneSubject(exited, claudePane)).toBeNull()
       expect(paneGate(exited, claudePane)).toBe(false)
       expect(
@@ -461,10 +464,10 @@ describe('one pane of a terminal tab', () => {
       localWindowsRuntimeDefault: { kind: 'wsl'; distro: string } | { kind: 'windows-host' }
     ) => {
       makeState(liveClaudeEntry)
-      useAppStore.setState({
+      applyAgentStatusPatch(useAppStore, {
         settings: { ...getDefaultSettings('C:\\Users\\me'), localWindowsRuntimeDefault }
       })
-      return useAppStore.getState()
+      return getAgentStatusOwner(useAppStore).getState()
     }
     expect(paneGate(onWindows({ kind: 'windows-host' }), claudePane)).toBe(true)
     expect(paneGate(onWindows({ kind: 'wsl', distro: 'Ubuntu' }), claudePane)).toBe(false)

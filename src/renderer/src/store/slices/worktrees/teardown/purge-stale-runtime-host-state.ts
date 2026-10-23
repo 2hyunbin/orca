@@ -1,3 +1,4 @@
+import { coordinatedPurgeSet } from '../teardown/worktree-purge-preparation'
 import { beginEnclosingWorktreeRemoval } from '@/store/active-worktree-deselection-intent'
 import type { WorktreePurgeTarget, WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
@@ -22,9 +23,10 @@ import { settleAttentionRemovedBy } from '../../workspace-attention/attention-re
 import { flushRetiredHostEdits } from './removed-workspace-unsaved-files'
 
 export function createPurgeStaleRuntimeHostState(
-  set: WorktreeSliceSet,
+  storeSet: WorktreeSliceSet,
   get: WorktreeSliceGet
 ): WorktreeSlice['purgeStaleRuntimeHostState'] {
+  const set = coordinatedPurgeSet(storeSet, get)
   const purge: WorktreeSlice['purgeStaleRuntimeHostState'] = (removedEnvironmentIds) => {
     const removed = new Set(removedEnvironmentIds)
     if (removed.size === 0) {

@@ -1,6 +1,7 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { getAgentStatusEntry } from '@/store/agent-status'
 import { detectAgentStatusFromTitle } from '@/lib/agent-status'
-import { useAppStore } from '@/store'
+import '@/store'
 import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
 import { createAgentInterruptInference } from '../agent-interrupt-inference'
 import { createAgentQuestionAnsweredInference } from '../agent-question-answered-inference'
@@ -72,7 +73,7 @@ export function installInterruptInputIntent(session: ConnectPanePtySession): voi
     entry: AgentStatusEntry | undefined,
     options?: { allowInferredInterrupt?: boolean }
   ): void => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     if (!entry) {
       // Why: an Orca-started agent can exit before its first hook status. The
       // launch registry was still created up front, so clear it on command exit.
@@ -163,7 +164,7 @@ export function installInterruptInputIntent(session: ConnectPanePtySession): voi
     // "question answered" signal no hook will ever deliver.
     session.questionAnsweredInference.observeSentTerminalInput(data)
     if (!isPassiveTerminalInputReport(data)) {
-      dismissRetainedProgramResult(session.cacheKey, useAppStore.getState())
+      dismissRetainedProgramResult(session.cacheKey, getAgentStatusState())
     }
   }
   session.pendingTerminalInputWrite = null

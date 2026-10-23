@@ -1,10 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
+import { describe, expect, it } from 'vitest'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { collectRetainedAgentsOnDisappear } from '@/components/dashboard/useRetainedAgents'
-import {
-  resetAgentPaneAuthorityAliasesForTests,
-  resolveAgentPaneAuthorityKey
-} from './agent-pane-authority'
 import { createTestStore, makeTab, makeWorktree, seedStore } from './store-test-helpers'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -19,14 +17,6 @@ const SIBLING_LEAF = '22222222-2222-4222-8222-222222222222'
 const SOURCE_PANE_KEY = makePaneKey(SOURCE_TAB, LEAF)
 const TARGET_PANE_KEY = makePaneKey(TARGET_TAB, LEAF)
 const FINAL_PANE_KEY = makePaneKey(FINAL_TAB, LEAF)
-
-beforeEach(() => {
-  resetAgentPaneAuthorityAliasesForTests()
-})
-
-afterEach(() => {
-  resetAgentPaneAuthorityAliasesForTests()
-})
 
 function makeDoneEntry(args: {
   paneKey: string
@@ -179,7 +169,7 @@ describe('detach completed split pane → sidebar retention', () => {
     })
 
     detach(store, SOURCE_TAB, TARGET_TAB)
-    const state = store.getState()
+    const state = getAgentStatusOwner(store).getState()
     const result = collect({ currentPaneKey: TARGET_PANE_KEY, currentTabId: TARGET_TAB })
 
     expect(state.agentStatusByPaneKey[SOURCE_PANE_KEY]).toBeUndefined()
@@ -204,15 +194,19 @@ describe('detach completed split pane → sidebar retention', () => {
       []
     )
     // Why: every intermediate key must resolve to the CURRENT owner, not the previous hop.
-    expect(resolveAgentPaneAuthorityKey(SOURCE_PANE_KEY)).toBe(FINAL_PANE_KEY)
-    expect(resolveAgentPaneAuthorityKey(TARGET_PANE_KEY)).toBe(FINAL_PANE_KEY)
+    expect(
+      getAgentStatusOwner(store).authority().resolveAgentPaneAuthorityKey(SOURCE_PANE_KEY)
+    ).toBe(FINAL_PANE_KEY)
+    expect(
+      getAgentStatusOwner(store).authority().resolveAgentPaneAuthorityKey(TARGET_PANE_KEY)
+    ).toBe(FINAL_PANE_KEY)
   })
 
   it('keeps every intermediate key routed after a fourth move', () => {
     const store = createDetachStore()
     const EXTRA_TAB = 'tab-extra'
     const extraPaneKey = makePaneKey(EXTRA_TAB, LEAF)
-    store.setState({
+    applyAgentStatusPatch(store, {
       tabsByWorktree: {
         [WORKTREE_ID]: [
           ...(store.getState().tabsByWorktree[WORKTREE_ID] ?? []),
@@ -231,10 +225,14 @@ describe('detach completed split pane → sidebar retention', () => {
     detach(store, FINAL_TAB, EXTRA_TAB)
 
     for (const formerKey of [SOURCE_PANE_KEY, TARGET_PANE_KEY, FINAL_PANE_KEY]) {
-      expect(resolveAgentPaneAuthorityKey(formerKey)).toBe(extraPaneKey)
+      expect(getAgentStatusOwner(store).authority().resolveAgentPaneAuthorityKey(formerKey)).toBe(
+        extraPaneKey
+      )
     }
     store.getState().setAgentStatus(TARGET_PANE_KEY, { state: 'done', prompt: 'late post' })
-    expect(store.getState().agentStatusByPaneKey[extraPaneKey]?.prompt).toBe('late post')
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[extraPaneKey]?.prompt).toBe(
+      'late post'
+    )
   })
 
   it('still retains the source when a different run occupies the transferred key', () => {

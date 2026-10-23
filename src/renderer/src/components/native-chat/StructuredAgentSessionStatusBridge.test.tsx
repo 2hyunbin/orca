@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // @vitest-environment happy-dom
 
 import { act, cleanup, render, waitFor } from '@testing-library/react'
@@ -12,14 +13,14 @@ import { resolveAttention } from '../../../../shared/sidebar-list/smart-attentio
 import { isExplicitAgentStatusFresh } from '@/lib/pane-agent-evidence'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { Tab } from '../../../../shared/tab-types'
-import type { AppState } from '@/store/types'
+
 import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 
 const mocks = vi.hoisted(() => ({
   setAgentStatus: vi.fn(),
   store: ((): {
-    getState: () => AppState
-    setState: (state: Partial<AppState>) => void
+    getState: () => AgentStatusReadState
+    setState: (state: Partial<AgentStatusReadState>) => void
   } | null => null)(),
   subscribeStatus: vi.fn(),
   subscribeTranscript: vi.fn(),
@@ -656,7 +657,7 @@ describe('StructuredAgentSessionStatusBridge', () => {
   })
 
   it('keeps the host-fed chat row through Sleep and offers Sleep until its host marks the chat slept', async () => {
-    const state = (): AppState => useAppStore.getState()
+    const state = (): AgentStatusReadState => useAppStore.getState()
     const sleepable = (): boolean => hasSleepableWorkspaceActivity('wt-1', state())
     mocks.store?.setState({
       unifiedTabsByWorktree: { 'wt-1': [{ ...structuredTab, executionHostId: 'local' }] }

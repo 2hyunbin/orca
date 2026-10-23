@@ -1,3 +1,4 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 // @vitest-environment happy-dom
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -9,7 +10,7 @@ import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { getTabAgentExitOwner } from './tab-agent-exit-owner'
 import { useTabAgent } from './use-tab-agent'
 
-const initial = useAppStore.getState()
+const initial = getAgentStatusOwner(useAppStore).getState()
 const owner = getAgentStatusOwner(useAppStore)
 let stop = () => {}
 afterEach(() => {
@@ -20,7 +21,7 @@ afterEach(() => {
     for (const key of Object.keys(owner.getSnapshot())) {
       transaction.setEntry(key, undefined)
     }
-    useAppStore.setState(initial, true)
+    applyAgentStatusPatch(useAppStore, initial)
   })
 })
 
@@ -48,7 +49,7 @@ it('reads scoped root history across mount, removal, generation reset and new ke
     sortOrder: n,
     createdAt: 0
   }))
-  useAppStore.setState({
+  applyAgentStatusPatch(useAppStore, {
     tabsByWorktree: { wt: [tab] },
     ptyIdsByTabId: { icons: ['pty-a'] },
     unifiedTabsByWorktree: { wt: items },
@@ -65,7 +66,7 @@ it('reads scoped root history across mount, removal, generation reset and new ke
   const service = getTabAgentExitOwner(owner)
   stop = service.start()
   const clear = vi.fn(useAppStore.getState().clearTabLaunchAgent)
-  useAppStore.setState({ clearTabLaunchAgent: clear })
+  applyAgentStatusPatch(useAppStore, { clearTabLaunchAgent: clear })
   const first = renderHook(() => useTabAgent({ ...tab, title: 'zsh' }, 'g0'))
   const second = renderHook(() => useTabAgent({ ...tab, title: 'zsh' }, 'g1'))
   expect(first.result.current).toBeNull()
@@ -90,7 +91,7 @@ it('reads scoped root history across mount, removal, generation reset and new ke
   act(() => {
     owner.transact((transaction) => {
       transaction.setEntry(pane, undefined)
-      useAppStore.setState({
+      applyAgentStatusPatch(useAppStore, {
         ptyIdsByTabId: { icons: ['pty-b'] },
         unifiedTabsByWorktree: { wt: items.map((item) => ({ ...item, label: 'zsh' })) }
       })
@@ -100,7 +101,7 @@ it('reads scoped root history across mount, removal, generation reset and new ke
   expect(service.getObservation('wt', 'icons', 'g1')).toBe(false)
   expect(remount.result.current).toBe('codex')
   expect(clear).not.toHaveBeenCalled()
-  act(() => useAppStore.setState({ tabsByWorktree: { wt: [] } }))
+  act(() => applyAgentStatusPatch(useAppStore, { tabsByWorktree: { wt: [] } }))
   expect(service.getObservation('wt', 'icons', 'g0')).toBe(false)
   release()
   releaseOther()

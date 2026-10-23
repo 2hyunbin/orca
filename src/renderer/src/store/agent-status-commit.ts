@@ -1,22 +1,22 @@
+import type { RemovalNoticeRoot } from './slices/worktrees/teardown/removed-workspace-unsaved-files'
+import type { PreparedPurgeOwnership } from './slices/worktrees/teardown/worktree-purge-preparation'
+import type { HostWorkingClientBoundary } from '../runtime/web-session-tabs-sync/state'
+import { createAgentPaneAuthority } from './slices/agent-pane-authority'
+import {
+  AgentStatusObservationSequencer,
+  createAgentStatusAuthorityId
+} from '../../../shared/agent-status-observation'
 import {
   createAgentStatusReadViews,
-  readAgentStatusFold,
+  createAgentStatusTransaction,
   writeAgentStatusFold,
-  type StatusStage,
-  type AgentStatusTransaction
+  type StatusStage
 } from './agent-status-fold'
-import {
-  countLiveAgentStatuses,
-  noteLiveAgentStatusCount
-} from './slices/agent-status-capacity-eviction'
 import { bindTerminalFactGetters } from './terminal-fact-publication'
 import type { StateCreator, StoreApi } from 'zustand'
 import { shallow } from 'zustand/vanilla/shallow'
 import type { AppState } from './types'
-import {
-  prepareStructuredReadRetirement,
-  installStructuredReadRetirement
-} from '../components/native-chat/structured-agent-session-read-owner-registry'
+import { installStructuredReadRetirement } from '../components/native-chat/structured-agent-session-read-owner-registry'
 import { removedStructuredReaders } from './structured-tab-read-retirement'
 import type { AgentStatusEntry } from './slices/agent-status-contract'
 import type { StoreSetArgs } from './react-commit-cascade-write-probe'
@@ -29,6 +29,14 @@ import {
 export type { AgentStatusTransaction } from './agent-status-fold'
 export type AgentStatusOwner = ReturnType<typeof createAgentStatusOwner>
 const owners = new WeakMap<object, AgentStatusOwner>()
+const actionOwners = new WeakMap<AppState['transferAgentPaneAuthority'], AgentStatusOwner>()
+export function findAgentStatusOwner(
+  state: Partial<Pick<AppState, 'transferAgentPaneAuthority'>>
+): AgentStatusOwner | undefined {
+  return state.transferAgentPaneAuthority
+    ? actionOwners.get(state.transferAgentPaneAuthority)
+    : undefined
+}
 
 export function getAgentStatusOwner(store: Pick<StoreApi<AppState>, 'getState'>): AgentStatusOwner {
   const owner = owners.get(store.getState)
@@ -49,6 +57,9 @@ export function afterStoreAcceptance(store: { getState: () => unknown }, effect:
 
 function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () => AppState) {
   const observers = createAgentStatusObservers(get)
+  let mirrorBoundaries = new Map<string, HostWorkingClientBoundary>()
+  let authority = createAgentPaneAuthority()
+  let observations = new AgentStatusObservationSequencer(createAgentStatusAuthorityId('renderer'))
   let live: AgentStatusSnapshot = {}
   let stage: StatusStage | null = null
   let pending: { app: AppState; accept: () => void } | null = null
@@ -63,58 +74,11 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       effect()
     }
   }
-  const transaction: AgentStatusTransaction = {
-    getState: () => {
-      if (!stage) {
-        return joined(get(), live)
-      }
-      return readAgentStatusFold(stage)
-    },
-    afterCommit,
-    retireReadOwner(sessionId, target) {
-      if (!stage) {
-        throw new Error('Reader retirement requires a transaction')
-      }
-      stage.readRetirement = prepareStructuredReadRetirement(
-        stage.readRetirement,
-        sessionId,
-        target
-      )
-    },
-    editEntries(edit) {
-      if (!stage) {
-        throw new Error('Live status writes require a transaction')
-      }
-      if (!stage.draft) {
-        stage.draft = { ...stage.live }
-        noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
-      }
-      for (const key of edit(stage.draft)) {
-        stage.dirty.add(key)
-      }
-    },
-    setEntry(paneKey, entry) {
-      if (!stage) {
-        throw new Error('Live status writes require a transaction')
-      }
-      if (Object.is((stage.draft ?? stage.live)[paneKey], entry)) {
-        return
-      }
-      if (!stage.draft) {
-        stage.draft = { ...stage.live }
-        noteLiveAgentStatusCount(stage.draft, countLiveAgentStatuses(stage.live))
-      }
-      stage.dirty.add(paneKey)
-      const size =
-        countLiveAgentStatuses(stage.draft) + (entry ? (paneKey in stage.draft ? 0 : 1) : -1)
-      noteLiveAgentStatusCount(stage.draft, size)
-      if (entry) {
-        stage.draft[paneKey] = entry
-      } else {
-        delete stage.draft[paneKey]
-      }
-    }
-  }
+  const transaction = createAgentStatusTransaction(
+    () => stage,
+    () => joined(get(), live),
+    afterCommit
+  )
   const write = (...args: StoreSetArgs<AppState>): void => {
     if (stage) {
       writeAgentStatusFold(stage, ...args)
@@ -155,6 +119,26 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
     }
   }
   const owner = {
+    purgedLaunches: () => stage?.purgedLaunches,
+    purgeNotice(create: () => RemovalNoticeRoot): RemovalNoticeRoot {
+      return stage ? (stage.notice ??= create()) : create()
+    },
+    preparePurgeOwnership(prepared: PreparedPurgeOwnership): void {
+      if (stage) {
+        stage.purge.push(prepared)
+        stage.effects.push(...prepared.effects)
+      } else {
+        prepared.install()
+        for (const effect of prepared.effects) {
+          effect()
+        }
+      }
+    },
+    isPreparing: () => stage !== null,
+    mirrorBoundaries: () =>
+      stage ? (stage.mirrorBoundaries ??= new Map(mirrorBoundaries)) : mirrorBoundaries,
+    authority: () => (stage ? (stage.authority ??= authority.fork()) : authority),
+    observations: () => (stage ? (stage.observations ??= observations.fork()) : observations),
     subscribeEntry: observers.subscribeEntry,
     subscribeTab: observers.subscribeTab,
     subscribeAggregate: observers.subscribeAggregate,
@@ -191,6 +175,12 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       const previous = get()
       const previousLive = live
       const prepared: StatusStage = {
+        notice: null,
+        purge: [],
+        purgedLaunches: new Set(),
+        mirrorBoundaries: null,
+        authority: null,
+        observations: null,
         app: previous,
         appDraft: null,
         appRevision: 0,
@@ -225,6 +215,10 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
           prepared.app !== previous ||
           nextLive !== live ||
           prepared.readRetirement ||
+          prepared.purge.length > 0 ||
+          prepared.authority ||
+          prepared.observations ||
+          prepared.mirrorBoundaries ||
           prepared.effects.length > 0
         ) {
           const accept = observers.prepare(
@@ -237,7 +231,13 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
           try {
             const install = prepared.app !== previous ? { app: prepared.app, accept } : null
             pending = install
+            for (const purge of prepared.purge) {
+              purge.install()
+            }
             live = nextLive
+            mirrorBoundaries = prepared.mirrorBoundaries ?? mirrorBoundaries
+            authority = prepared.authority ?? authority
+            observations = prepared.observations ?? observations
             if (prepared.readRetirement) {
               installStructuredReadRetirement(prepared.readRetirement)
             }
@@ -274,6 +274,7 @@ export function withAgentStatusCommit(
     const owner = createAgentStatusOwner(set, get)
     owners.set(api.getState, owner)
     owners.set(owner.getAppState, owner)
+    owners.set(owner.getTransactionState, owner)
     bindTerminalFactGetters(owner, get, owner.getAppState)
     api.subscribe(owner.receipt)
     const subscribe = api.subscribe
@@ -290,6 +291,8 @@ export function withAgentStatusCommit(
         }
       })
     api.setState = owner.write
-    return createState(owner.write, owner.getAppState, api)
+    const state = createState(owner.write, owner.getAppState, api)
+    actionOwners.set(state.transferAgentPaneAuthority, owner)
+    return state
   }
 }

@@ -1,3 +1,4 @@
+import { useAgentStatusSelector } from '@/store/agent-status'
 import { getAgentStatusState, useAgentStatusSnapshot } from '@/store/agent-status'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -53,7 +54,7 @@ export function useWorktreeJumpPaletteStoreState({
   const pendingWorktreeCreations = useAppStore((state) => state.pendingWorktreeCreations)
   const pluginCommands = usePluginCommands()
   const paletteStatusInputsActive = visible || lingering
-  const { ptyIdsByTabId, terminalLayoutsByTabId, tabsByWorktree } = useAppStore(
+  const { ptyIdsByTabId, terminalLayoutsByTabId, tabsByWorktree } = useAgentStatusSelector(
     useShallow((state) => selectPaletteStatusInputs(state, paletteStatusInputsActive))
   )
   const { prCache, issueCache, hostedReviewCache } = useAppStore(

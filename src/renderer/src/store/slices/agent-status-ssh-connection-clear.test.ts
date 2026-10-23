@@ -1,6 +1,8 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { AppState } from '../types'
 import { createTestStore } from './store-test-helpers'
 
 describe('agent status cleanup for a lost SSH connection', () => {
@@ -51,7 +53,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
         { updatedAt: 6 },
         { connectionId: null }
       )
-    store.setState({
+    applyAgentStatusPatch(store, {
       agentLaunchConfigByPaneKey: {
         [oldA]: {
           launchConfig: { agentCommand: 'codex', agentArgs: '--full-auto', agentEnv: {} },
@@ -61,7 +63,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
       },
       acknowledgedAgentsByPaneKey: { [oldA]: 2 },
       retentionSuppressedPaneKeys: { [oldA]: true }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
     const subscriber = vi.fn()
     const unsubscribe = store.subscribe(subscriber)
     const queueMicrotaskSpy = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation(() => {})
@@ -71,12 +73,14 @@ describe('agent status cleanup for a lost SSH connection', () => {
     unsubscribe()
     expect(subscriber).toHaveBeenCalledOnce()
     expect(queueMicrotaskSpy).toHaveBeenCalledOnce()
-    expect(store.getState().agentStatusByPaneKey[oldA]).toBeUndefined()
-    expect(store.getState().agentStatusByPaneKey[secondA]).toBeUndefined()
-    expect(store.getState().agentStatusByPaneKey[newerA]).toBeDefined()
-    expect(store.getState().agentStatusByPaneKey[siblingB]).toBeDefined()
-    expect(store.getState().agentStatusByPaneKey[unstamped]).toBeDefined()
-    expect(store.getState().agentStatusByPaneKey[local]?.connectionId).toBeNull()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[oldA]).toBeUndefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[secondA]).toBeUndefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[newerA]).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[siblingB]).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[unstamped]).toBeDefined()
+    expect(
+      getAgentStatusOwner(store).getState().agentStatusByPaneKey[local]?.connectionId
+    ).toBeNull()
     expect(store.getState().agentLaunchConfigByPaneKey[oldA]).toBeDefined()
     expect(store.getState().acknowledgedAgentsByPaneKey[oldA]).toBe(2)
     expect(store.getState().retentionSuppressedPaneKeys[oldA]).toBe(true)
@@ -88,7 +92,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
     // the host is proven via the owning worktree's repo so those orphans clear too.
     vi.useFakeTimers()
     const store = createTestStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       repos: [
         {
           id: 'repo-a',
@@ -111,7 +115,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
         'repo-a': [{ id: 'wt-a', repoId: 'repo-a' }],
         'repo-b': [{ id: 'wt-b', repoId: 'repo-b' }]
       }
-    } as unknown as Partial<AppState>)
+    } as unknown as Partial<AgentStatusReadState>)
 
     const orphanA = 'tab-a:11111111-1111-4111-8111-111111111111'
     const freshOrphanA = 'tab-a2:22222222-2222-4222-8222-222222222222'
@@ -149,9 +153,9 @@ describe('agent status cleanup for a lost SSH connection', () => {
 
     store.getState().clearTransientAgentStatuses('ssh-a', 30)
 
-    expect(store.getState().agentStatusByPaneKey[orphanA]).toBeUndefined()
-    expect(store.getState().agentStatusByPaneKey[freshOrphanA]).toBeDefined()
-    expect(store.getState().agentStatusByPaneKey[otherHostB]).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[orphanA]).toBeUndefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[freshOrphanA]).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[otherHostB]).toBeDefined()
   })
 
   it('does not clear a live row on another host that shares a repo id', () => {
@@ -159,7 +163,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
     // repo id would clear the other host's live rows, so ownership must come from the worktree (#9030).
     vi.useFakeTimers()
     const store = createTestStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       repos: [
         {
           id: 'shared',
@@ -184,7 +188,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
           { id: 'wt-b', repoId: 'shared', hostId: 'ssh:ssh-b' }
         ]
       }
-    } as unknown as Partial<AppState>)
+    } as unknown as Partial<AgentStatusReadState>)
 
     const orphanA = 'tab-a:11111111-1111-4111-8111-111111111111'
     const liveB = 'tab-b:22222222-2222-4222-8222-222222222222'
@@ -209,8 +213,8 @@ describe('agent status cleanup for a lost SSH connection', () => {
 
     store.getState().clearTransientAgentStatuses('ssh-a', 30)
 
-    expect(store.getState().agentStatusByPaneKey[orphanA]).toBeUndefined()
-    expect(store.getState().agentStatusByPaneKey[liveB]).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[orphanA]).toBeUndefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[liveB]).toBeDefined()
   })
 
   it('does not clear a live row whose worktree id collides across hosts', () => {
@@ -219,7 +223,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
     // unstamped row on a collided id is ambiguous — left alone rather than hiding a live row (#9030).
     vi.useFakeTimers()
     const store = createTestStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       repos: [
         {
           id: 'shared',
@@ -244,7 +248,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
           { id: 'shared::/p', repoId: 'shared', hostId: 'ssh:ssh-b' }
         ]
       }
-    } as unknown as Partial<AppState>)
+    } as unknown as Partial<AgentStatusReadState>)
 
     const liveOnB = 'tab-b:11111111-1111-4111-8111-111111111111'
     const collidedOrphan = 'tab-x:22222222-2222-4222-8222-222222222222'
@@ -271,8 +275,8 @@ describe('agent status cleanup for a lost SSH connection', () => {
 
     store.getState().clearTransientAgentStatuses('ssh-a', 30)
 
-    expect(store.getState().agentStatusByPaneKey[liveOnB]).toBeDefined()
-    expect(store.getState().agentStatusByPaneKey[collidedOrphan]).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[liveOnB]).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[collidedOrphan]).toBeDefined()
   })
 
   it('retains an accepted connection stamp across later unstamped pings', () => {
@@ -296,7 +300,9 @@ describe('agent status cleanup for a lost SSH connection', () => {
         { updatedAt: 2 }
       )
 
-    expect(store.getState().agentStatusByPaneKey[paneKey]?.connectionId).toBe('ssh-a')
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[paneKey]?.connectionId).toBe(
+      'ssh-a'
+    )
   })
 
   it('blocks renderer callbacks at clear time until a later reconnect', () => {
@@ -346,7 +352,7 @@ describe('agent status cleanup for a lost SSH connection', () => {
 
     store.getState().clearTransientAgentStatuses('ssh-a', 3)
 
-    expect(store.getState().agentStatusByPaneKey[paneKey]).toMatchObject({
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[paneKey]).toMatchObject({
       prompt: 'host b',
       connectionId: 'ssh-b'
     })

@@ -29,7 +29,7 @@ export function prepareStructuredReadRetirement(
   sessionId: string,
   target: RuntimeClientTarget
 ): PreparedReadRetirement {
-  const prepared = previous ?? { retirements: new Map(), effects: [] }
+  const prepared: PreparedReadRetirement = previous ?? { retirements: new Map(), effects: [] }
   const key = structuredReadOwnerKey(sessionId, target)
   if (!prepared.retirements.has(key)) {
     const retirement = { owner: owners.get(key), detached: false }

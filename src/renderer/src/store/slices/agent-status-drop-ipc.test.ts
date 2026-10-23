@@ -1,3 +1,4 @@
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -78,8 +79,8 @@ describe('dropAgentStatusByTabPrefix -> IPC fan-out', () => {
 
     expect(dropByTabPrefix).toHaveBeenCalledTimes(1)
     expect(dropByTabPrefix).toHaveBeenCalledWith('tab-1')
-    expect(store.getState().agentStatusByPaneKey['tab-1:0']).toBeUndefined()
-    expect(store.getState().agentStatusByPaneKey['tab-2:0']).toBeDefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey['tab-1:0']).toBeUndefined()
+    expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey['tab-2:0']).toBeDefined()
   })
 
   it('fires dropByTabPrefix when no local rows match so stale main cache can be evicted', () => {

@@ -1,5 +1,4 @@
 import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
-import { resolveAgentPaneAuthorityKey } from '@/store/slices/agent-pane-authority'
 import type { AppState } from '../../store/types'
 import { titleHasAgentName } from '../../../../shared/agent-detection'
 import type {
@@ -12,9 +11,10 @@ import type { useAppStore } from '../../store'
 export function isAgentStatusForRecentlyClosedTab(
   store: Pick<AppState, 'recentlyClosedAgentStatusTabIds' | 'recentlyRetiredAgentStatusPaneKeys'>,
   paneKey: string,
-  authorityRestartId?: string
+  authorityRestartId?: string,
+  resolveAuthority: (paneKey: string) => string = (key) => key
 ): boolean {
-  const ownerPaneKey = resolveAgentPaneAuthorityKey(paneKey)
+  const ownerPaneKey = resolveAuthority(paneKey)
   if (authorityRestartId && ownerPaneKey !== paneKey) {
     return true
   }

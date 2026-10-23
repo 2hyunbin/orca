@@ -12,7 +12,6 @@ import {
   retainedAgentEntryFromLive,
   shouldReplaceRetainedWithLive
 } from './agent-status-pane-key-tab-binding'
-import { retireAgentPaneAuthorityAliasesByOwnerTab } from './agent-pane-authority'
 import { agentTurnEndedOnPurpose } from '../../../../shared/agent-main-agent-verdict'
 
 function removeAcknowledgement(
@@ -119,7 +118,9 @@ export function createAgentStatusDropActions(
     },
 
     dropAgentStatusByTabPrefix: (tabIdPrefix, opts?: DropAgentStatusByTabPrefixOptions) => {
-      const retiredAliasPaneKeys = retireAgentPaneAuthorityAliasesByOwnerTab(tabIdPrefix)
+      const retiredAliasPaneKeys = runtime
+        .authority()
+        .retireAgentPaneAuthorityAliasesByOwnerTab(tabIdPrefix)
       let hadLive = false
       set((s) => {
         const dropped = buildAgentStatusTabPrefixDropPatch(

@@ -1,16 +1,16 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildMobileSessionTabSnapshots } from './sync-runtime-graph/mobile-session-snapshots'
 import {
   getRuntimeMobileSessionSyncKey,
   runtimeMobileSessionSyncKeysEqual
 } from './sync-runtime-graph/sync-key'
-import type { AppState } from '../store/types'
 
-function makeState(overrides: Partial<AppState> = {}): AppState {
+function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
   return {
     tabsByWorktree: {},
-    terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
-    runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],
+    terminalLayoutsByTabId: {} as AgentStatusReadState['terminalLayoutsByTabId'],
+    runtimePaneTitlesByTabId: {} as AgentStatusReadState['runtimePaneTitlesByTabId'],
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     unifiedTabsByWorktree: {},
@@ -21,10 +21,10 @@ function makeState(overrides: Partial<AppState> = {}): AppState {
     editorDrafts: {},
     activeTabId: null,
     ...overrides
-  } as AppState
+  } as AgentStatusReadState
 }
 
-function makeOpenMarkdownFile(): AppState['openFiles'][number] {
+function makeOpenMarkdownFile(): AgentStatusReadState['openFiles'][number] {
   return {
     id: '/repo/README.md',
     filePath: '/repo/README.md',
@@ -45,10 +45,10 @@ describe('runtime mobile session sync key projection reuse', () => {
     const base = makeState({
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Codex working', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree'],
+      } as unknown as AgentStatusReadState['tabsByWorktree'],
       runtimePaneTitlesByTabId: {
         'term-1': { 1: 'Codex working' }
-      } as unknown as AppState['runtimePaneTitlesByTabId'],
+      } as unknown as AgentStatusReadState['runtimePaneTitlesByTabId'],
       openFiles: [makeOpenMarkdownFile()],
       editorDrafts: { '/repo/README.md': '# draft' }
     })
@@ -57,7 +57,7 @@ describe('runtime mobile session sync key projection reuse', () => {
       ...base,
       runtimePaneTitlesByTabId: {
         'term-1': { 1: 'Codex spinner frame' }
-      } as unknown as AppState['runtimePaneTitlesByTabId']
+      } as unknown as AgentStatusReadState['runtimePaneTitlesByTabId']
     })
 
     const stringifySpy = vi.spyOn(JSON, 'stringify')
@@ -75,7 +75,7 @@ describe('runtime mobile session sync key projection reuse', () => {
     const base = makeState({
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Codex working', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree'],
+      } as unknown as AgentStatusReadState['tabsByWorktree'],
       openFiles: [makeOpenMarkdownFile()],
       editorDrafts: { '/repo/README.md': '# draft' }
     })
@@ -84,7 +84,7 @@ describe('runtime mobile session sync key projection reuse', () => {
       ...base,
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Codex spinner frame', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
 
     const stringifySpy = vi.spyOn(JSON, 'stringify')
@@ -102,7 +102,7 @@ describe('runtime mobile session sync key projection reuse', () => {
     const base = makeState({
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Codex working', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
     const baseKey = getRuntimeMobileSessionSyncKey(base)
     const activated = makeState({
@@ -134,7 +134,7 @@ describe('runtime mobile session sync key projection reuse', () => {
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Codex working', customTitle: null }],
         'wt-2': [unchangedTab]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
     const baseKey = getRuntimeMobileSessionSyncKey(base)
     expect(unchangedTitle).toHaveBeenCalled()
@@ -145,7 +145,7 @@ describe('runtime mobile session sync key projection reuse', () => {
       tabsByWorktree: {
         ...base.tabsByWorktree,
         'wt-1': [{ id: 'term-1', title: 'Codex spinner frame', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
 
     const titleTickKey = getRuntimeMobileSessionSyncKey(titleTick, base, baseKey)
@@ -166,11 +166,11 @@ describe('mobile session snapshot reuse', () => {
     const base = makeState({
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Codex working', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree'],
+      } as unknown as AgentStatusReadState['tabsByWorktree'],
       tabBarOrderByWorktree: { 'wt-1': ['term-1', '/repo/README.md'] },
       runtimePaneTitlesByTabId: {
         'term-1': { 1: 'Codex working' }
-      } as unknown as AppState['runtimePaneTitlesByTabId'],
+      } as unknown as AgentStatusReadState['runtimePaneTitlesByTabId'],
       openFiles: [makeOpenMarkdownFile()],
       editorDrafts: { '/repo/README.md': draft },
       activeFileId: '/repo/README.md'
@@ -184,7 +184,7 @@ describe('mobile session snapshot reuse', () => {
       ...base,
       runtimePaneTitlesByTabId: {
         'term-1': { 1: 'Codex spinner frame' }
-      } as unknown as AppState['runtimePaneTitlesByTabId']
+      } as unknown as AgentStatusReadState['runtimePaneTitlesByTabId']
     })
 
     expect(draftSpy).not.toHaveBeenCalled()
@@ -194,14 +194,14 @@ describe('mobile session snapshot reuse', () => {
     const state = makeState({
       tabsByWorktree: {
         'wt-stable': [{ id: 'term-1', title: 'Codex working', customTitle: null }]
-      } as unknown as AppState['tabsByWorktree'],
+      } as unknown as AgentStatusReadState['tabsByWorktree'],
       terminalLayoutsByTabId: {
         'term-1': {
           root: { type: 'leaf', leafId: '11111111-1111-4111-8111-111111111111' },
           activeLeafId: '11111111-1111-4111-8111-111111111111',
           expandedLeafId: null
         }
-      } as unknown as AppState['terminalLayoutsByTabId']
+      } as unknown as AgentStatusReadState['terminalLayoutsByTabId']
     })
 
     const first = buildMobileSessionTabSnapshots(state)[0]
@@ -214,12 +214,12 @@ describe('mobile session snapshot reuse', () => {
   })
 
   it('bumps only the changed worktree version when a sibling stays byte-identical', () => {
-    const makeTwoWorktreeState = (title: string): AppState =>
+    const makeTwoWorktreeState = (title: string): AgentStatusReadState =>
       makeState({
         tabsByWorktree: {
           'wt-changed': [{ id: 'term-a', title, customTitle: null }],
           'wt-stable-sibling': [{ id: 'term-b', title: 'Idle agent', customTitle: null }]
-        } as unknown as AppState['tabsByWorktree'],
+        } as unknown as AgentStatusReadState['tabsByWorktree'],
         terminalLayoutsByTabId: {
           'term-a': {
             root: { type: 'leaf', leafId: '22222222-2222-4222-8222-222222222222' },
@@ -231,7 +231,7 @@ describe('mobile session snapshot reuse', () => {
             activeLeafId: '33333333-3333-4333-8333-333333333333',
             expandedLeafId: null
           }
-        } as unknown as AppState['terminalLayoutsByTabId']
+        } as unknown as AgentStatusReadState['terminalLayoutsByTabId']
       })
 
     const before = new Map(

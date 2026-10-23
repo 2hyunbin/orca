@@ -1,3 +1,4 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 // @vitest-environment happy-dom
 import { renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -15,14 +16,14 @@ const TAB_ID = 'tab-1'
 const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const PANE_KEY = makePaneKey(TAB_ID, LEAF_ID)
 
-const initialAppState = useAppStore.getInitialState()
+const initialAppState = { ...useAppStore.getInitialState(), agentStatusByPaneKey: {} }
 
 beforeEach(() => {
-  useAppStore.setState(initialAppState, true)
+  applyAgentStatusPatch(useAppStore, initialAppState)
 })
 
 afterEach(() => {
-  useAppStore.setState(initialAppState, true)
+  applyAgentStatusPatch(useAppStore, initialAppState)
 })
 
 function repo(): Repo {
@@ -87,7 +88,7 @@ function entry(): AgentStatusEntry {
 }
 
 function seed(settings: Partial<GlobalSettings> | null): void {
-  useAppStore.setState({
+  applyAgentStatusPatch(useAppStore, {
     repos: [repo()],
     worktreesByRepo: { 'repo-1': [worktree()] },
     tabsByWorktree: { 'wt-1': [tab()] },
@@ -135,7 +136,7 @@ describe('useLiveDashboardSnapshot', () => {
     const { result: localResult } = renderHook(() => useLiveDashboardSnapshot())
     expect(localResult.current.cards[0].terminalInput?.hostPlatform).toBe('linux')
 
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       repos: [{ ...repo(), connectionId: 'conn-1', executionHostId: 'ssh:conn-1' }],
       sshConnectionStates: new Map([
         ['conn-1', { remotePlatform: 'win32' }]
@@ -150,13 +151,13 @@ describe('useLiveDashboardSnapshot', () => {
   // else, so a missed subscription never heals.
   it('re-derives the host-input profile when only a host slice changes', () => {
     seed({ tabAutoGenerateTitle: false })
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       repos: [{ ...repo(), connectionId: 'conn-1', executionHostId: 'ssh:conn-1' }]
     })
     const { result, rerender } = renderHook(() => useLiveDashboardSnapshot())
     expect(result.current.cards[0].terminalInput?.hostPlatform).toBe('linux')
 
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       sshConnectionStates: new Map([
         ['conn-1', { remotePlatform: 'win32' }]
       ]) as unknown as ReturnType<typeof useAppStore.getState>['sshConnectionStates']
@@ -167,13 +168,13 @@ describe('useLiveDashboardSnapshot', () => {
 
   it('re-derives saved SSH labels when the target catalog changes', () => {
     seed({ tabAutoGenerateTitle: false })
-    useAppStore.setState({
+    applyAgentStatusPatch(useAppStore, {
       repos: [{ ...repo(), connectionId: 'target-1', executionHostId: 'ssh:target-1' }]
     })
     const { result, rerender } = renderHook(() => useLiveDashboardSnapshot())
     expect(result.current.cards[0].hostLabel).toBe('target-1')
 
-    useAppStore.setState({ sshTargetLabels: new Map([['target-1', 'Builder']]) })
+    applyAgentStatusPatch(useAppStore, { sshTargetLabels: new Map([['target-1', 'Builder']]) })
     rerender()
     expect(result.current.cards[0].hostLabel).toBe('Builder')
   })

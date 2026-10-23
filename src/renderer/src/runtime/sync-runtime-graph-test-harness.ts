@@ -1,11 +1,11 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import type { AgentStatusEntry } from '../../../shared/agent-status-types'
-import type { AppState } from '../store/types'
 
-export function makeState(overrides: Partial<AppState> = {}): AppState {
+export function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
   return {
     tabsByWorktree: {},
-    terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
-    runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],
+    terminalLayoutsByTabId: {} as AgentStatusReadState['terminalLayoutsByTabId'],
+    runtimePaneTitlesByTabId: {} as AgentStatusReadState['runtimePaneTitlesByTabId'],
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     unifiedTabsByWorktree: {},
@@ -24,7 +24,7 @@ export function makeState(overrides: Partial<AppState> = {}): AppState {
     agentStatusByPaneKey: {},
     agentStatusEpoch: 0,
     ...overrides
-  } as AppState
+  } as AgentStatusReadState
 }
 
 export function makeAgentStatusEntry(overrides: Partial<AgentStatusEntry> = {}): AgentStatusEntry {

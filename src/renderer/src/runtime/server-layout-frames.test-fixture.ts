@@ -1,3 +1,6 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 // A paired server for the server layout frame tests: its session.tabs snapshots, its layout in the
 // server's own ids, its status entry, and the layout streams the desktop opens to it.
 
@@ -13,7 +16,7 @@ import type {
 } from '../../../shared/workspace-layout/workspace-layout-published'
 import type { WorkspaceLayoutChangeFrame } from '../../../shared/workspace-layout/workspace-layout-stream-frames'
 import type { RuntimeClientTarget } from '../../../shared/runtime-client-target'
-import type { AppState } from '@/store/types'
+
 import type { RuntimeLayoutStreamStatus } from './runtime-layout-client'
 import type { PublicKnownRuntimeEnvironment } from '../../../shared/runtime-environments'
 import { createTestStore } from '../store/slices/store-test-helpers'
@@ -156,8 +159,8 @@ export function runtimeEnvironment(
 }
 
 type MirrorStore = {
-  getState: () => AppState
-  setState: (patch: Partial<AppState>) => void
+  getState: () => AgentStatusReadState
+  setState: (patch: Partial<AgentStatusReadState>) => void
 }
 
 /** Applies one session.tabs snapshot the way the mirror commits it. */
@@ -166,8 +169,14 @@ export function mirrorSnapshot(
   environmentId: string,
   snapshot: RuntimeMobileSessionTabsResult
 ): void {
-  store.setState(
-    applyWebSessionTabsSnapshotWithContext(store.getState(), snapshot, environmentId, NOW)
+  applyAgentStatusPatch(
+    store,
+    applyWebSessionTabsSnapshotWithContext(
+      getAgentStatusOwner(store).getState(),
+      snapshot,
+      environmentId,
+      NOW
+    )
   )
 }
 
@@ -230,7 +239,7 @@ export function createFakeLayoutStreams() {
 export const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 
 /** What a reattach or an emptied workspace would change: tab ids, groups and pane bindings. */
-export function treeOf(state: AppState, key: string) {
+export function treeOf(state: AgentStatusReadState, key: string) {
   const tabIds = (state.tabsByWorktree[key] ?? []).map((tab) => tab.id)
   return {
     tabIds,
@@ -268,7 +277,7 @@ export function createServerHarness(mocks: { owners: Map<string, string> }) {
   return {
     /** The paired servers, and what each one's verified status advertises. */
     setServers: (store: TestStore, servers: Server[]): void => {
-      store.setState({
+      applyAgentStatusPatch(store, {
         runtimeEnvironments: servers.map((server) =>
           runtimeEnvironment(server.environmentId, server.runtimeId, server.pairingRevision ?? 1)
         ),

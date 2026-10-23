@@ -1,3 +1,4 @@
+import { subscribeAgentStatusState, getAgentStatusState } from '@/store/agent-status'
 import { getAgentStatusEntry } from '@/store/agent-status'
 import type { AgentIdleEdgeMeta } from '../../../../../shared/terminal-output-side-effects'
 import { idleEdgeSettledAtRest, isClaudeIdleEdge } from '@/lib/agent-idle-edge'
@@ -126,7 +127,11 @@ export function installAgentTaskCompleteNotify(session: ConnectPanePtySession): 
       }
     }
 
-    session.agentTaskCompleteStatusUnsubscribe = useAppStore.subscribe(dispatchIfDetailed)
+    session.agentTaskCompleteStatusUnsubscribe = subscribeAgentStatusState(
+      dispatchIfDetailed,
+      useAppStore,
+      session.cacheKey
+    )
     session.agentTaskCompleteNotificationGraceTimer = setTimeout(() => {
       session.agentTaskCompleteNotificationGraceTimer = null
       graceElapsed = true
@@ -167,7 +172,7 @@ export function installAgentTaskCompleteNotify(session: ConnectPanePtySession): 
       session.deps.setCacheTimerStartedAt(session.cacheKey, null)
       return
     }
-    const currentState = useAppStore.getState()
+    const currentState = getAgentStatusState()
     const activeHookStatus = currentState.agentStatusByPaneKey[session.cacheKey]
     if (session.shouldSuppressTitleCompletionForFreshHook(title, activeHookStatus)) {
       // Why: agent CLIs can briefly publish an idle title while hook status

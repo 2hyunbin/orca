@@ -1,16 +1,16 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { describe, expect, it } from 'vitest'
 import { buildMobileSessionTabSnapshots } from './sync-runtime-graph/mobile-session-snapshots'
 import {
   getRuntimeMobileSessionSyncKey,
   runtimeMobileSessionSyncKeysEqual
 } from './sync-runtime-graph/sync-key'
-import type { AppState } from '../store/types'
 
-function makeState(overrides: Partial<AppState> = {}): AppState {
+function makeState(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
   return {
     tabsByWorktree: {},
-    terminalLayoutsByTabId: {} as AppState['terminalLayoutsByTabId'],
-    runtimePaneTitlesByTabId: {} as AppState['runtimePaneTitlesByTabId'],
+    terminalLayoutsByTabId: {} as AgentStatusReadState['terminalLayoutsByTabId'],
+    runtimePaneTitlesByTabId: {} as AgentStatusReadState['runtimePaneTitlesByTabId'],
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     unifiedTabsByWorktree: {},
@@ -25,12 +25,12 @@ function makeState(overrides: Partial<AppState> = {}): AppState {
     editorDrafts: {},
     activeTabId: null,
     ...overrides
-  } as AppState
+  } as AgentStatusReadState
 }
 
 function makeBrowserWorkspace(
   title = 'Example'
-): NonNullable<AppState['browserTabsByWorktree'][string]>[number] {
+): NonNullable<AgentStatusReadState['browserTabsByWorktree'][string]>[number] {
   return {
     id: 'browser-1',
     worktreeId: 'wt-1',
@@ -75,7 +75,7 @@ describe('browser mobile session sync', () => {
         'wt-1': [
           { id: 'group-1', activeTabId: 'unified-browser-1', tabOrder: ['unified-browser-1'] }
         ]
-      } as unknown as AppState['groupsByWorktree'],
+      } as unknown as AgentStatusReadState['groupsByWorktree'],
       unifiedTabsByWorktree: {
         'wt-1': [
           {
@@ -86,7 +86,7 @@ describe('browser mobile session sync', () => {
             title: 'Browser'
           }
         ]
-      } as unknown as AppState['unifiedTabsByWorktree'],
+      } as unknown as AgentStatusReadState['unifiedTabsByWorktree'],
       browserTabsByWorktree: { 'wt-1': [makeBrowserWorkspace()] },
       browserPagesByWorkspace: {
         'browser-1': [
@@ -104,7 +104,7 @@ describe('browser mobile session sync', () => {
             createdAt: 1
           }
         ]
-      } as unknown as AppState['browserPagesByWorkspace'],
+      } as unknown as AgentStatusReadState['browserPagesByWorkspace'],
       browserCertificateFailuresByPageId: {
         'page-1': {
           challengeId: 'challenge-1',

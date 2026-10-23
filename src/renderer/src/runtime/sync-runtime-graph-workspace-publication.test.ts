@@ -1,7 +1,7 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { describe, expect, it } from 'vitest'
 import { buildMobileSessionTabSnapshots } from './sync-runtime-graph/mobile-session-snapshots'
 import { makeState } from './sync-runtime-graph-test-harness'
-import type { AppState } from '../store/types'
 
 describe('buildMobileSessionTabSnapshots', () => {
   it('does not publish state for a removed folder workspace', () => {
@@ -10,7 +10,7 @@ describe('buildMobileSessionTabSnapshots', () => {
       folderWorkspaces: [],
       tabsByWorktree: {
         [staleFolderKey]: [{ id: 'term-1', title: 'Terminal 1' }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
 
     expect(buildMobileSessionTabSnapshots(state)).toEqual([])
@@ -20,10 +20,12 @@ describe('buildMobileSessionTabSnapshots', () => {
     const folderWorkspaceId = 'live-folder'
     const folderKey = `folder:${folderWorkspaceId}`
     const state = makeState({
-      folderWorkspaces: [{ id: folderWorkspaceId } as AppState['folderWorkspaces'][number]],
+      folderWorkspaces: [
+        { id: folderWorkspaceId } as AgentStatusReadState['folderWorkspaces'][number]
+      ],
       tabsByWorktree: {
         [folderKey]: [{ id: 'term-1', title: 'Terminal 1' }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
 
     expect(buildMobileSessionTabSnapshots(state)).toEqual([
@@ -35,10 +37,12 @@ describe('buildMobileSessionTabSnapshots', () => {
     const folderWorkspaceId = 'cache-eviction-folder'
     const folderKey = `folder:${folderWorkspaceId}`
     const liveState = makeState({
-      folderWorkspaces: [{ id: folderWorkspaceId } as AppState['folderWorkspaces'][number]],
+      folderWorkspaces: [
+        { id: folderWorkspaceId } as AgentStatusReadState['folderWorkspaces'][number]
+      ],
       tabsByWorktree: {
         [folderKey]: [{ id: 'term-1', title: 'Terminal 1' }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
     const removedState = makeState({
       folderWorkspaces: [],
@@ -59,17 +63,19 @@ describe('buildMobileSessionTabSnapshots', () => {
       repoId: 'repo-1'
     }
     const base = makeState({
-      worktreesByRepo: { 'repo-1': [worktree] } as unknown as AppState['worktreesByRepo'],
+      worktreesByRepo: {
+        'repo-1': [worktree]
+      } as unknown as AgentStatusReadState['worktreesByRepo'],
       tabsByWorktree: {
         'wt-1': [{ id: 'term-1', title: 'Terminal 1' }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
     const initial = buildMobileSessionTabSnapshots(base)[0]!
     const recreated = {
       ...base,
       worktreesByRepo: {
         'repo-1': [{ ...worktree, instanceId: 'new-instance' }]
-      } as unknown as AppState['worktreesByRepo']
+      } as unknown as AgentStatusReadState['worktreesByRepo']
     }
 
     const next = buildMobileSessionTabSnapshots(recreated)[0]!
@@ -91,10 +97,10 @@ describe('buildMobileSessionTabSnapshots', () => {
             instanceId: 'ssh-instance'
           }
         ]
-      } as unknown as AppState['worktreesByRepo'],
+      } as unknown as AgentStatusReadState['worktreesByRepo'],
       tabsByWorktree: {
         'wt-duplicate': [{ id: 'term-1', title: 'Terminal 1' }]
-      } as unknown as AppState['tabsByWorktree']
+      } as unknown as AgentStatusReadState['tabsByWorktree']
     })
 
     const snapshots = buildMobileSessionTabSnapshots(state)

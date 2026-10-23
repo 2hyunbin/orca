@@ -1,3 +1,4 @@
+import { recordHibernationBoundaryResolved } from '@/lib/agent-hibernation-pane-age'
 import { resolvePaneKey } from '../../lib/agent-status-pane-ownership'
 import type { AgentStatusSlice } from './agent-status-slice-contract'
 import type { AgentStatusRuntime } from './agent-status-runtime'
@@ -7,10 +8,6 @@ import type {
   AgentStatusRouting,
   AgentStatusTiming
 } from './agent-status-contract'
-import {
-  resolveAgentPaneAuthorityKey,
-  transferAgentPaneAuthorityAlias
-} from './agent-pane-authority'
 import {
   buildAgentStatusLiveEntry,
   type AgentStatusLiveEntryBuild,
@@ -49,7 +46,7 @@ export function createAgentStatusLiveActions(
     routing?: AgentStatusRouting,
     metadata?: AgentStatusMetadata
   ): void => {
-    const paneKey = resolveAgentPaneAuthorityKey(rawPaneKey)
+    const paneKey = runtime.authority().resolveAgentPaneAuthorityKey(rawPaneKey)
     if (metadata?.authorityRestartId && paneKey !== rawPaneKey) {
       return
     }
@@ -119,8 +116,14 @@ export function createAgentStatusLiveActions(
       if (retirement !== undefined) {
         // The host confirmed this retired group’s surviving owner; preserve that route for its next retirement.
         for (const [key, id] of Object.entries(state.recentlyRetiredAgentStatusPaneKeys)) {
-          if (id === retirement && key !== paneKey && resolveAgentPaneAuthorityKey(key) === key) {
-            transferAgentPaneAuthorityAlias({ fromPaneKey: key, toPaneKey: paneKey })
+          if (
+            id === retirement &&
+            key !== paneKey &&
+            runtime.authority().resolveAgentPaneAuthorityKey(key) === key
+          ) {
+            runtime
+              .authority()
+              .transferAgentPaneAuthorityAlias({ fromPaneKey: key, toPaneKey: paneKey })
           }
         }
         const nextRetired = { ...state.recentlyRetiredAgentStatusPaneKeys }
@@ -147,6 +150,9 @@ export function createAgentStatusLiveActions(
       return
     }
     const { entry } = builtResult
+    if (builtResult.boundaryResolved) {
+      runAfterCommit(() => recordHibernationBoundaryResolved(paneKey, updatedAt))
+    }
     const shouldReplaceGeneratedTitle = generatedTitleReplacesExisting(entry)
     const mayWriteGeneratedTitle =
       get().settings?.tabAutoGenerateTitle === true &&

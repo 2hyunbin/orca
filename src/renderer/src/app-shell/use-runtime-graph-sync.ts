@@ -1,4 +1,5 @@
-import { getAgentStatusState, subscribeAgentStatusState } from '../store/agent-status'
+import { getAgentStatusOwner } from '../store/agent-status-commit'
+import { getAgentStatusState } from '../store/agent-status'
 import { useEffect } from 'react'
 import { getSystemPrefersDarkSnapshot } from '../components/terminal-pane/use-system-prefers-dark'
 import {
@@ -26,32 +27,34 @@ export function useRuntimeGraphSync(): void {
 
   useEffect(() => {
     let previousKey = getRuntimeMobileSessionSyncKey(getAgentStatusState())
-    return subscribeAgentStatusState((state, previousState) => {
-      // Why: this fires on every store mutation; read the cached prefers-dark snapshot instead of allocating a throwaway MediaQueryList via matchMedia each tick.
-      const systemPrefersDark = getSystemPrefersDarkSnapshot()
-      // Why: skip the key build when every input is reference-unchanged; the gate mirrors every field getRuntimeMobileSessionSyncKey uses.
-      if (
-        canSkipRuntimeMobileSessionSyncKeyBuild(
+    return getAgentStatusOwner(useAppStore).subscribeTransitions(
+      ({ next: state, previous: previousState }) => {
+        // Why: this fires on every store mutation; read the cached prefers-dark snapshot instead of allocating a throwaway MediaQueryList via matchMedia each tick.
+        const systemPrefersDark = getSystemPrefersDarkSnapshot()
+        // Why: skip the key build when every input is reference-unchanged; the gate mirrors every field getRuntimeMobileSessionSyncKey uses.
+        if (
+          canSkipRuntimeMobileSessionSyncKeyBuild(
+            state,
+            previousState,
+            systemPrefersDark,
+            previousKey.systemPrefersDark
+          )
+        ) {
+          return
+        }
+        const nextKey = getRuntimeMobileSessionSyncKey(
           state,
           previousState,
-          systemPrefersDark,
-          previousKey.systemPrefersDark
+          previousKey,
+          systemPrefersDark
         )
-      ) {
-        return
+        if (runtimeMobileSessionSyncKeysEqual(nextKey, previousKey)) {
+          return
+        }
+        previousKey = nextKey
+        scheduleRuntimeGraphSync()
       }
-      const nextKey = getRuntimeMobileSessionSyncKey(
-        state,
-        previousState,
-        previousKey,
-        systemPrefersDark
-      )
-      if (runtimeMobileSessionSyncKeysEqual(nextKey, previousKey)) {
-        return
-      }
-      previousKey = nextKey
-      scheduleRuntimeGraphSync()
-    })
+    )
   }, [])
 
   useEffect(

@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // @vitest-environment happy-dom
 
 // A chat whose create got no answer (a lost reply, or a reload mid-start) may or may not exist on
@@ -10,11 +11,10 @@ import type { RuntimeMobileSessionTabsResult } from '../../../../shared/runtime-
 import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import type { Tab } from '../../../../shared/tab-types'
 import type { StructuredAgentSessionLaunchIntent } from '@/lib/launch-structured-agent-session'
-import type { AppState } from '@/store/types'
 
 type TestStore = {
-  getState: () => AppState
-  setState: (state: Partial<AppState>) => void
+  getState: () => AgentStatusReadState
+  setState: (state: Partial<AgentStatusReadState>) => void
 }
 
 const mocks = vi.hoisted(() => {

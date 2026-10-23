@@ -1,13 +1,24 @@
 import type { AppState } from './types'
 import type { AgentStatusReadState } from './agent-status-observers'
 import type { TerminalStoreGet, TerminalStoreSet } from './terminals/terminal-state'
-const sources = [
-  'tabsByWorktree',
-  'unifiedTabsByWorktree',
-  'runtimePaneTitlesByTabId',
-  'paneForegroundAgentByPaneKey'
-] as const
-export type TerminalFactSource = (typeof sources)[number]
+function readSources({
+  tabsByWorktree,
+  unifiedTabsByWorktree,
+  runtimePaneTitlesByTabId,
+  paneForegroundAgentByPaneKey
+}: AppState) {
+  return {
+    tabsByWorktree,
+    unifiedTabsByWorktree,
+    runtimePaneTitlesByTabId,
+    paneForegroundAgentByPaneKey
+  }
+}
+export type TerminalFactSource = keyof ReturnType<typeof readSources>
+function sourceKeys(state: AppState): TerminalFactSource[] {
+  // SAFETY: readSources returns exactly the four terminal fact fields.
+  return Object.keys(readSources(state)) as TerminalFactSource[]
+}
 type TerminalFactRoot = AppState[TerminalFactSource]
 type TerminalFactOwner = { getState: () => AgentStatusReadState }
 type Hint = {
@@ -41,7 +52,7 @@ export function terminalFactSetter(
     try {
       set((state) => {
         const patch = update(state)
-        for (const source of sources) {
+        for (const source of sourceKeys(get())) {
           const next = patch[source]
           if (next && next !== state[source]) {
             slots[source] = { before: state[source], after: next, keys, token }
@@ -50,12 +61,12 @@ export function terminalFactSetter(
         return patch
       })
     } finally {
-      for (const source of sources) {
+      for (const source of sourceKeys(get())) {
         if (slots[source]?.token === token) {
           delete slots[source]
         }
       }
-      if (sources.every((source) => !slots[source])) {
+      if (sourceKeys(get()).every((source) => !slots[source])) {
         publications.delete(publicationKey(get))
       }
     }
@@ -81,7 +92,7 @@ export function captureTerminalFacts(
   next: AppState
 ): CapturedTerminalFacts {
   const facts: CapturedTerminalFacts = {}
-  for (const source of sources) {
+  for (const source of sourceKeys(next)) {
     if (previous[source] !== next[source]) {
       const keys = terminalFactKeys(get, source, previous[source], next[source])
       if (keys) {

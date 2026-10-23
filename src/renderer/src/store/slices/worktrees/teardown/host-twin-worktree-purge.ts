@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '../../../agent-status-observers'
 import type { AppState } from '../../../types'
 import {
   LOCAL_EXECUTION_HOST_ID,
@@ -46,7 +47,7 @@ type PublisherRow = {
  * legacy row or a paired runtime's SSH row counts as the purged copy, not a twin.
  */
 function resolvePurgedPublishers(
-  s: AppState,
+  s: AgentStatusReadState,
   workspaceId: string,
   purgedHosts: ReadonlySet<ExecutionHostId>
 ): { survivors: ExecutionHostId[]; attributedHostIds: Map<ExecutionHostId, ExecutionHostId> } {
@@ -111,7 +112,7 @@ export type HostTwinPurgeScopes = Map<ExecutionHostId, Map<string, ExecutionHost
 
 /** Host targets whose id a host outside the purge still publishes. A raw id for the same id wins. */
 export function collectHostTwinPurgeScopes(
-  s: AppState,
+  s: AgentStatusReadState,
   targets: readonly WorktreePurgeTarget[]
 ): HostTwinPurgeScopes {
   const rawIds = new Set(targets.filter((target) => !target.hostId).map((target) => target.id))
@@ -141,15 +142,16 @@ export function collectHostTwinPurgeScopes(
  * buckets, raw-id module stores and surfaces with no host evidence stay: they may be the twin's.
  */
 export function buildHostTwinPurgeState(
-  s: AppState,
+  s: AgentStatusReadState,
   hostId: ExecutionHostId,
   twinHostIds: ReadonlyMap<string, readonly ExecutionHostId[]>
-): Partial<AppState> {
+): Partial<AgentStatusReadState> {
   const twinIds = new Set(twinHostIds.keys())
   const removed = collectRemovedHostTwinState(s, twinIds, hostId, twinHostIds)
   const canonical = (worktreeId: string) =>
     removedHostCanonicalizer(s, worktreeId, hostId, twinHostIds.get(worktreeId) ?? [])
   const cancelledSessionIds = cancelStructuredLaunchesForWorktrees(
+    s,
     twinIds,
     (worktreeId, launchHostId) => canonical(worktreeId)(launchHostId) === hostId
   )

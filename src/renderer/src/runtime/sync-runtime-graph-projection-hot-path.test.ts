@@ -1,5 +1,6 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppState } from '../store/types'
+
 import { makeAgentStatusEntry, makeState } from './sync-runtime-graph-test-harness'
 import type * as EditorDraftHashModule from './sync-runtime-graph/editor-draft-hash'
 
@@ -35,12 +36,14 @@ const {
 
 // ── Reference implementations: the pre-change bodies, kept verbatim ────────────────────
 
-type MainAgentStatus = AppState['agentStatusByPaneKey'][string]['mainAgent']
+type MainAgentStatus = AgentStatusReadState['agentStatusByPaneKey'][string]['mainAgent']
 function mainAgentKey(mainAgent: MainAgentStatus) {
   return mainAgent ? [mainAgent.state, mainAgent.outcome ?? null, mainAgent.stateStartedAt] : null
 }
 
-function referenceEditorDraftsProjection(editorDrafts: AppState['editorDrafts']): string {
+function referenceEditorDraftsProjection(
+  editorDrafts: AgentStatusReadState['editorDrafts']
+): string {
   return JSON.stringify(
     Object.fromEntries(
       Object.entries(editorDrafts).map(([fileId, content]) => [fileId, stableHashString(content)])
@@ -48,7 +51,7 @@ function referenceEditorDraftsProjection(editorDrafts: AppState['editorDrafts'])
   )
 }
 
-function referenceOpenFilesProjection(openFiles: AppState['openFiles']): string {
+function referenceOpenFilesProjection(openFiles: AgentStatusReadState['openFiles']): string {
   return JSON.stringify(
     openFiles.map((file) => ({
       id: file.id,
@@ -66,7 +69,7 @@ function referenceOpenFilesProjection(openFiles: AppState['openFiles']): string 
   )
 }
 
-function referenceBrowserProjection(state: AppState): string {
+function referenceBrowserProjection(state: AgentStatusReadState): string {
   return JSON.stringify({
     workspacesByWorktree: Object.fromEntries(
       Object.entries(state.browserTabsByWorktree ?? {}).map(([worktreeId, workspaces]) => [
@@ -99,7 +102,7 @@ function referenceBrowserProjection(state: AppState): string {
 }
 
 /** The pre-change agent-status serialization, including its `localeCompare` sort. */
-function referenceAgentStatusProjection(map: AppState['agentStatusByPaneKey']): string {
+function referenceAgentStatusProjection(map: AgentStatusReadState['agentStatusByPaneKey']): string {
   return JSON.stringify(
     Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -305,7 +308,7 @@ describe('agent-status projection sort', () => {
       return seed.toString(16).padStart(8, '0')
     }
     const paneKeys = Array.from({ length: 500 }, () => `${nextHex()}-${nextHex()}:${nextHex()}`)
-    const map: AppState['agentStatusByPaneKey'] = {}
+    const map: AgentStatusReadState['agentStatusByPaneKey'] = {}
     for (const [index, paneKey] of paneKeys.entries()) {
       map[paneKey] = makeAgentStatusEntry({ paneKey, prompt: `prompt ${index}` })
     }
@@ -339,7 +342,7 @@ describe('agent-status projection sort', () => {
   })
 
   it('is deterministic for keys where locale and code-unit order disagree', () => {
-    const map: AppState['agentStatusByPaneKey'] = {}
+    const map: AgentStatusReadState['agentStatusByPaneKey'] = {}
     for (const paneKey of ['b:leaf', 'A:leaf', 'a:leaf', 'á:leaf', 'B:leaf']) {
       map[paneKey] = makeAgentStatusEntry({ paneKey })
     }
@@ -358,13 +361,15 @@ describe('open-files and browser projections', () => {
   it('re-serializes only the changed entry per store write', () => {
     const files = Array.from({ length: 20 }, (_value, index) => makeOpenFile(index))
     const writes = 50
-    const driveWrites = (project: (openFiles: AppState['openFiles']) => string): void => {
-      let openFiles = files as unknown as AppState['openFiles']
+    const driveWrites = (
+      project: (openFiles: AgentStatusReadState['openFiles']) => string
+    ): void => {
+      let openFiles = files as unknown as AgentStatusReadState['openFiles']
       project(openFiles)
       for (let write = 0; write < writes; write += 1) {
         const next = [...openFiles]
         next[0] = makeOpenFile(0, { isDirty: write % 2 === 0 })
-        openFiles = next as unknown as AppState['openFiles']
+        openFiles = next as unknown as AgentStatusReadState['openFiles']
         project(openFiles)
       }
     }
@@ -391,7 +396,7 @@ describe('open-files and browser projections', () => {
       browserPagesByWorkspace: pagesByWorkspace as never
     })
     const writes = 50
-    const driveWrites = (project: (state: AppState) => string): void => {
+    const driveWrites = (project: (state: AgentStatusReadState) => string): void => {
       let state = initial
       project(state)
       for (let write = 0; write < writes; write += 1) {
@@ -420,15 +425,15 @@ describe('open-files and browser projections', () => {
   })
 
   it('matches the uncached projections byte for byte across shapes', () => {
-    const openFileCases: AppState['openFiles'][] = [
-      [] as unknown as AppState['openFiles'],
-      [makeOpenFile(0)] as unknown as AppState['openFiles'],
-      [makeOpenFile(0, { isDirty: true })] as unknown as AppState['openFiles'],
+    const openFileCases: AgentStatusReadState['openFiles'][] = [
+      [] as unknown as AgentStatusReadState['openFiles'],
+      [makeOpenFile(0)] as unknown as AgentStatusReadState['openFiles'],
+      [makeOpenFile(0, { isDirty: true })] as unknown as AgentStatusReadState['openFiles'],
       [
         makeOpenFile(0, { isDirty: true, diffSource: 'working' }),
         makeOpenFile(1, { mode: 'diff', markdownPreviewSourceFileId: 'file-0' }),
         makeOpenFile(2, { isUntitled: true, deleteUntouchedOnClose: true, language: undefined })
-      ] as unknown as AppState['openFiles']
+      ] as unknown as AgentStatusReadState['openFiles']
     ]
     for (const [index, openFiles] of openFileCases.entries()) {
       expect({ index, projection: buildRuntimeMobileOpenFilesProjection(openFiles) }).toEqual({
@@ -437,7 +442,7 @@ describe('open-files and browser projections', () => {
       })
     }
 
-    const browserCases: AppState[] = [
+    const browserCases: AgentStatusReadState[] = [
       makeState({}),
       makeState({ browserTabsByWorktree: { 'wt-1': [makeBrowserWorkspace(0)] } as never }),
       makeState({
@@ -467,11 +472,11 @@ describe('open-files and browser projections', () => {
 describe('sync key transitions', () => {
   it('fires on exactly the transitions the uncached projections would have fired on', () => {
     const drafts = { 'file-0': 'aaa', 'file-1': 'bbb' }
-    const files = [makeOpenFile(0), makeOpenFile(1)] as unknown as AppState['openFiles']
+    const files = [makeOpenFile(0), makeOpenFile(1)] as unknown as AgentStatusReadState['openFiles']
     const workspaces = [makeBrowserWorkspace(0)] as never
     const status = {
       'tab-0:leaf-0': makeAgentStatusEntry({ paneKey: 'tab-0:leaf-0' })
-    } as AppState['agentStatusByPaneKey']
+    } as AgentStatusReadState['agentStatusByPaneKey']
 
     const base = makeState({
       editorDrafts: drafts,
@@ -482,7 +487,7 @@ describe('sync key transitions', () => {
     })
 
     // Each step returns the next state; the flag is whether a mobile-visible input really moved.
-    const steps: { name: string; next: (from: AppState) => AppState }[] = [
+    const steps: { name: string; next: (from: AgentStatusReadState) => AgentStatusReadState }[] = [
       { name: 'no-op re-spread', next: (from) => makeState({ ...from }) },
       {
         name: 'keystroke in one draft',
@@ -563,7 +568,7 @@ describe('sync key transitions', () => {
       }
     ]
 
-    const referenceTuple = (state: AppState): string[] => [
+    const referenceTuple = (state: AgentStatusReadState): string[] => [
       referenceEditorDraftsProjection(state.editorDrafts),
       referenceOpenFilesProjection(state.openFiles),
       referenceBrowserProjection(state),

@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import type { StoreApi } from 'zustand/vanilla'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
@@ -5,7 +6,7 @@ import type { AgentStatusEntry } from '../../../../shared/agent-status-types'
 import { makePaneKey } from '../../../../shared/stable-pane-id'
 import { structuredAgentSessionPaneKey } from '../../../../shared/structured-agent-session-projection'
 import { buildAgentNotificationId } from '../../../../shared/agent-notification-id'
-import type { AppState } from '../types'
+
 import { createUIStore } from './ui-slice-test-harness'
 
 const mocks = vi.hoisted(() => ({
@@ -108,7 +109,7 @@ function makeTerminalTab(id: string, worktreeId: string): TerminalTab {
 }
 
 // Why: send targets list structured chats from the tabs slice, which the UI harness omits.
-function createAgentSendStore(): StoreApi<AppState> {
+function createAgentSendStore(): StoreApi<AgentStatusReadState> {
   const store = createUIStore()
   store.setState({ unifiedTabsByWorktree: {} })
   return store
@@ -130,7 +131,7 @@ describe('createUISlice agent send target mode', () => {
   const readyPaneKey = makePaneKey(tabId, readyLeafId)
   const workingPaneKey = makePaneKey(tabId, workingLeafId)
 
-  function seedAgentSendState(store: StoreApi<AppState>): void {
+  function seedAgentSendState(store: StoreApi<AgentStatusReadState>): void {
     const now = Date.now()
     store.setState({
       tabsByWorktree: {
@@ -186,7 +187,7 @@ describe('createUISlice agent send target mode', () => {
           stateHistory: []
         }
       }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
   }
 
   it('opens target mode with derived eligible and disabled pane keys', () => {
@@ -245,7 +246,7 @@ describe('createUISlice agent send target mode', () => {
           state: 'blocked'
         }
       }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
 
     store.getState().openAgentSendPopoverTargetMode({
       id: 'send-1',
@@ -356,8 +357,8 @@ describe('createUISlice agent send target mode', () => {
   const chatPaneKey = structuredAgentSessionPaneKey(chatTabId, 'claude_1')
 
   function seedChatState(
-    store: StoreApi<AppState>,
-    agentStatusByPaneKey: AppState['agentStatusByPaneKey']
+    store: StoreApi<AgentStatusReadState>,
+    agentStatusByPaneKey: AgentStatusReadState['agentStatusByPaneKey']
   ): void {
     store.setState({
       agentStatusByPaneKey,
@@ -714,7 +715,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
       acknowledgedAgentsByPaneKey: {
         [skippedPaneKey]: 4_000
       }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
 
     store.getState().acknowledgeAgents([livePaneKey, retainedPaneKey, skippedPaneKey])
 
@@ -757,7 +758,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
         [livePaneKey]: makeAgentEntry(livePaneKey, 2_000)
       },
       retainedAgentsByPaneKey: {}
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
 
     store.getState().acknowledgeAgents([fallbackPaneKey, livePaneKey])
 
@@ -793,7 +794,7 @@ describe('createUISlice acknowledgeAgents notification dismissal', () => {
           startedAt: 1_000
         }
       }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
 
     store.getState().acknowledgeAgents([livePaneKey])
 
@@ -814,7 +815,7 @@ describe('openDiffNotesSendMenuForActiveWorktree', () => {
   function stubDiffNotesStore(
     comments: { sentAt?: number }[],
     activeWorktreeId: string | null = 'wt-1'
-  ): { store: StoreApi<AppState>; setRightSidebarTab: ReturnType<typeof vi.fn> } {
+  ): { store: StoreApi<AgentStatusReadState>; setRightSidebarTab: ReturnType<typeof vi.fn> } {
     const store = createAgentSendStore()
     const setRightSidebarTab = vi.fn()
     store.setState({
@@ -822,7 +823,7 @@ describe('openDiffNotesSendMenuForActiveWorktree', () => {
       getDiffComments: () => comments,
       setRightSidebarTab,
       setRightSidebarOpen: vi.fn()
-    } as unknown as Partial<AppState>)
+    } as unknown as Partial<AgentStatusReadState>)
     return { store, setRightSidebarTab }
   }
 

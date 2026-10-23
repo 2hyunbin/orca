@@ -1,3 +1,6 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestStore,
@@ -5,7 +8,7 @@ import {
   makeWorktree,
   TEST_REPO
 } from '../store/slices/store-test-helpers'
-import type { AppState } from '../store/types'
+
 import {
   buildStoreState,
   expectWorktreeRouting,
@@ -378,7 +381,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
       }
     })
     const setAgentStatusBatch = vi.mocked(
-      storeState.setAgentStatuses as AppState['setAgentStatuses']
+      storeState.setAgentStatuses as AgentStatusReadState['setAgentStatuses']
     )
 
     stubReactSyncEffect()
@@ -549,7 +552,7 @@ describe('useIpcEvents agent status snapshot integration', () => {
     const refreshGitHubForWorktreeIfStale = vi.fn()
     const observeAgentHookCompletionForNotification = vi.fn()
     const store = createTestStore()
-    store.setState({
+    applyAgentStatusPatch(store, {
       workspaceSessionReady: true,
       repos: [{ ...TEST_REPO, connectionId: null, executionHostId: 'local' }],
       worktreesByRepo: {
@@ -623,7 +626,9 @@ describe('useIpcEvents agent status snapshot integration', () => {
     useIpcEvents()
 
     await vi.waitFor(() => {
-      expect(store.getState().agentStatusByPaneKey[FUTURE_PANE_KEY]).toMatchObject({
+      expect(
+        getAgentStatusOwner(store).getState().agentStatusByPaneKey[FUTURE_PANE_KEY]
+      ).toMatchObject({
         state: 'done',
         sessionBoundary: true
       })

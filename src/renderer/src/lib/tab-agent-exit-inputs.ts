@@ -49,69 +49,58 @@ export function affectedExitEvidenceTabs({
       }
     }
   }
-  for (const source of [
-    'terminalLayoutsByTabId',
-    'ptyIdsByTabId',
-    'retainedAgentsByPaneKey',
-    'paneForegroundAgentByPaneKey'
-  ] as const) {
-    const before = previous[source]
-    const after = next[source]
-    if (before === after) {
-      continue
-    }
-    const hints = source === 'paneForegroundAgentByPaneKey' ? terminalFacts[source] : undefined
-    for (const key of hints ?? new Set([...Object.keys(before), ...Object.keys(after)])) {
-      if (before[key] === after[key]) {
-        continue
-      }
-      if (source === 'retainedAgentsByPaneKey' || source === 'paneForegroundAgentByPaneKey') {
-        addPane(key)
-      } else {
-        affected.add(key)
-      }
-    }
-  }
-  for (const source of [
-    'unifiedTabsByWorktree',
-    'layoutByWorktree',
-    'groupsByWorktree',
-    'activeGroupIdByWorktree'
-  ] as const) {
-    if (previous[source] === next[source]) {
-      continue
-    }
-    if (source === 'unifiedTabsByWorktree' && terminalFacts[source]) {
-      for (const id of terminalFacts[source]) {
-        affected.add(id)
-      }
-      continue
-    }
-    for (const workspace of new Set([
-      ...Object.keys(previous[source]),
-      ...Object.keys(next[source])
-    ])) {
-      if (previous[source][workspace] === next[source][workspace]) {
-        continue
-      }
-      if (source === 'unifiedTabsByWorktree') {
-        const before = new Set(previous[source][workspace] ?? [])
-        const after = new Set(next[source][workspace] ?? [])
-        for (const item of new Set([...before, ...after])) {
-          if (item.contentType === 'terminal' && before.has(item) !== after.has(item)) {
-            affected.add(item.entityId)
-          }
-        }
-      } else {
-        for (const tab of [
-          ...(previous.tabsByWorktree[workspace] ?? []),
-          ...(next.tabsByWorktree[workspace] ?? [])
-        ]) {
-          affected.add(tab.id)
+  const changedRecords = <T>(
+    before: Readonly<Record<string, T>>,
+    after: Readonly<Record<string, T>>,
+    add: (key: string) => void,
+    hints?: readonly string[]
+  ): void => {
+    if (before !== after) {
+      for (const key of hints ?? new Set([...Object.keys(before), ...Object.keys(after)])) {
+        if (before[key] !== after[key]) {
+          add(key)
         }
       }
     }
   }
+  const addTab = (key: string): void => {
+    affected.add(key)
+  }
+  changedRecords(previous.terminalLayoutsByTabId, next.terminalLayoutsByTabId, addTab)
+  changedRecords(previous.ptyIdsByTabId, next.ptyIdsByTabId, addTab)
+  changedRecords(previous.retainedAgentsByPaneKey, next.retainedAgentsByPaneKey, addPane)
+  changedRecords(
+    previous.paneForegroundAgentByPaneKey,
+    next.paneForegroundAgentByPaneKey,
+    addPane,
+    terminalFacts.paneForegroundAgentByPaneKey
+  )
+  if (terminalFacts.unifiedTabsByWorktree) {
+    for (const id of terminalFacts.unifiedTabsByWorktree) {
+      affected.add(id)
+    }
+  } else {
+    changedRecords(previous.unifiedTabsByWorktree, next.unifiedTabsByWorktree, (workspace) => {
+      const before = new Set(previous.unifiedTabsByWorktree[workspace] ?? [])
+      const after = new Set(next.unifiedTabsByWorktree[workspace] ?? [])
+      for (const item of new Set([...before, ...after])) {
+        if (item.contentType === 'terminal' && before.has(item) !== after.has(item)) {
+          affected.add(item.entityId)
+        }
+      }
+    })
+  }
+  const addWorkspace = (workspace: string): void => {
+    for (const tab of [
+      ...(previous.tabsByWorktree[workspace] ?? []),
+      ...(next.tabsByWorktree[workspace] ?? [])
+    ]) {
+      affected.add(tab.id)
+    }
+  }
+  changedRecords(previous.layoutByWorktree, next.layoutByWorktree, addWorkspace)
+  changedRecords(previous.groupsByWorktree, next.groupsByWorktree, addWorkspace)
+  changedRecords(previous.activeGroupIdByWorktree, next.activeGroupIdByWorktree, addWorkspace)
   if (previous.settings?.tabAutoGenerateTitle !== next.settings?.tabAutoGenerateTitle) {
     for (const id of getTerminalTabOwners(next.tabsByWorktree).keys()) {
       affected.add(id)

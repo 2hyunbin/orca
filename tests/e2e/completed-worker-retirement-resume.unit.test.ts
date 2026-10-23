@@ -1,3 +1,4 @@
+import { applyAgentStatusPatch } from '../../src/renderer/src/store/agent-status-patch'
 import { getDefaultSettings } from '../../src/shared/constants'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -98,7 +99,7 @@ function seedWorkspace(options: { helper?: boolean } = {}): void {
   )
   const unrelated = makeTab(CANARY_TAB_ID, CANARY_WORKTREE_ID, CANARY_PTY_ID, 'Unrelated')
   const helper = makeTab(HELPER_TAB_ID, WORKTREE_ID, 'pty-worker-child', 'Worker child')
-  useAppStore.setState({
+  applyAgentStatusPatch(useAppStore, {
     repos: [
       {
         id: REPO_ID,

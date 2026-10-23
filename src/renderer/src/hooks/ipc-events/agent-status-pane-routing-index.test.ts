@@ -1,6 +1,9 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Tab } from '../../../../shared/tab-types'
-import type { AppState } from '../../store/types'
+
 import {
   createTestStore,
   makeLayout,
@@ -23,11 +26,11 @@ const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_LEAF_ID = '22222222-2222-4222-8222-222222222222'
 
 function seedLineage(store: ReturnType<typeof createTestStore>): {
-  tabsByWorktree: AppState['tabsByWorktree']
+  tabsByWorktree: AgentStatusReadState['tabsByWorktree']
   paneKeys: string[]
 } {
-  const tabsByWorktree: AppState['tabsByWorktree'] = {}
-  const unifiedTabsByWorktree: AppState['unifiedTabsByWorktree'] = {}
+  const tabsByWorktree: AgentStatusReadState['tabsByWorktree'] = {}
+  const unifiedTabsByWorktree: AgentStatusReadState['unifiedTabsByWorktree'] = {}
   const paneKeys: string[] = []
   for (let index = 0; index < WORKTREE_COUNT; index += 1) {
     const worktreeId = `wt-${index}`
@@ -38,7 +41,7 @@ function seedLineage(store: ReturnType<typeof createTestStore>): {
     ]
     paneKeys.push(makePaneKey(tabId, LEAF_ID))
   }
-  store.setState({
+  applyAgentStatusPatch(store, {
     repos: [TEST_REPO],
     worktreesByRepo: {
       [TEST_REPO.id]: Array.from({ length: WORKTREE_COUNT }, (_, index) =>
@@ -48,7 +51,7 @@ function seedLineage(store: ReturnType<typeof createTestStore>): {
     tabsByWorktree,
     unifiedTabsByWorktree,
     terminalLayoutsByTabId: {}
-  } as Partial<AppState>)
+  } as Partial<AgentStatusReadState>)
   return { tabsByWorktree, paneKeys }
 }
 
@@ -64,14 +67,14 @@ describe('agent-status pane routing index memoization', () => {
 
     // 100 status commits: each replaces the live status map, none replaces the tab map.
     for (let commit = 0; commit < 100; commit += 1) {
-      const index = createAgentStatusPaneRoutingIndex(store.getState())
+      const index = createAgentStatusPaneRoutingIndex(getAgentStatusOwner(store).getState())
       expect(resolvePaneKeyFromRoutingIndex(index, paneKeys[commit % paneKeys.length]).exists).toBe(
         true
       )
-      store.setState({
-        agentStatusByPaneKey: { ...store.getState().agentStatusByPaneKey },
+      applyAgentStatusPatch(store, {
+        agentStatusByPaneKey: { ...getAgentStatusOwner(store).getState().agentStatusByPaneKey },
         agentStatusEpoch: commit
-      } as Partial<AppState>)
+      } as Partial<AgentStatusReadState>)
     }
 
     expect(agentStatusPaneRoutingIndexCounters.indexBuilds).toBe(1)
@@ -86,13 +89,13 @@ describe('agent-status pane routing index memoization', () => {
   it('rebuilds the tab index when the tab map is replaced', () => {
     const store = createTestStore()
     seedLineage(store)
-    createAgentStatusPaneRoutingIndex(store.getState())
+    createAgentStatusPaneRoutingIndex(getAgentStatusOwner(store).getState())
     resetAgentStatusPaneRoutingIndexCounters()
 
-    store.setState({
+    applyAgentStatusPatch(store, {
       tabsByWorktree: { ...store.getState().tabsByWorktree }
-    } as Partial<AppState>)
-    createAgentStatusPaneRoutingIndex(store.getState())
+    } as Partial<AgentStatusReadState>)
+    createAgentStatusPaneRoutingIndex(getAgentStatusOwner(store).getState())
 
     expect(agentStatusPaneRoutingIndexCounters.tabIndexBuilds).toBe(1)
   })
@@ -100,13 +103,13 @@ describe('agent-status pane routing index memoization', () => {
   it('reuses the index across a layout replacement without re-indexing tabs', () => {
     const store = createTestStore()
     seedLineage(store)
-    createAgentStatusPaneRoutingIndex(store.getState())
+    createAgentStatusPaneRoutingIndex(getAgentStatusOwner(store).getState())
     resetAgentStatusPaneRoutingIndexCounters()
 
-    store.setState({
+    applyAgentStatusPatch(store, {
       terminalLayoutsByTabId: { 'tab-0': makeLayout() }
-    } as Partial<AppState>)
-    createAgentStatusPaneRoutingIndex(store.getState())
+    } as Partial<AgentStatusReadState>)
+    createAgentStatusPaneRoutingIndex(getAgentStatusOwner(store).getState())
 
     expect(agentStatusPaneRoutingIndexCounters.indexBuilds).toBe(1)
     expect(agentStatusPaneRoutingIndexCounters.tabIndexBuilds).toBe(0)
@@ -119,7 +122,7 @@ describe('agent-status leading-edge and batched pane resolution', () => {
     const duplicateTabId = 'tab-duplicate'
     const splitTabId = 'tab-split'
     const orphanTabId = 'tab-orphan'
-    const unifiedTabsByWorktree: AppState['unifiedTabsByWorktree'] = {
+    const unifiedTabsByWorktree: AgentStatusReadState['unifiedTabsByWorktree'] = {
       'wt-a': [
         makeUnifiedTab({
           id: duplicateTabId,
@@ -151,7 +154,7 @@ describe('agent-status leading-edge and batched pane resolution', () => {
         })
       ]
     }
-    store.setState({
+    applyAgentStatusPatch(store, {
       repos: [TEST_REPO],
       worktreesByRepo: {
         [TEST_REPO.id]: [
@@ -182,7 +185,7 @@ describe('agent-status leading-edge and batched pane resolution', () => {
           titlesByLeafId: { [LEAF_ID]: 'Pane title', [OTHER_LEAF_ID]: '' }
         }
       }
-    } as Partial<AppState>)
+    } as Partial<AgentStatusReadState>)
 
     const corpus = [
       makePaneKey(duplicateTabId, LEAF_ID),
@@ -195,7 +198,7 @@ describe('agent-status leading-edge and batched pane resolution', () => {
       'not-a-pane-key'
     ]
 
-    const state = store.getState()
+    const state = getAgentStatusOwner(store).getState()
     const index = createAgentStatusPaneRoutingIndex(state)
     for (const paneKey of corpus) {
       expect({ paneKey, ...resolvePaneKeyFromRoutingIndex(index, paneKey) }).toEqual({

@@ -4,7 +4,6 @@ import {
   programStatusFacetsEqual,
   type ProgramStatusFacet
 } from '../../../../shared/program-status/facet'
-import { resolveAgentPaneAuthorityKey } from './agent-pane-authority'
 
 export function createAgentStatusProgramStatusActions(
   runtime: AgentStatusRuntime
@@ -12,7 +11,7 @@ export function createAgentStatusProgramStatusActions(
   const { get, setEntry } = runtime
   return {
     setAgentProgramStatus: (paneKey: string, programStatus: ProgramStatusFacet | null) => {
-      paneKey = resolveAgentPaneAuthorityKey(paneKey)
+      paneKey = runtime.authority().resolveAgentPaneAuthorityKey(paneKey)
       const existing = get().agentStatusByPaneKey[paneKey]
       if (
         !existing ||

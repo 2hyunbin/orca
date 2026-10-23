@@ -1,3 +1,4 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { getAgentStatusEntry } from '@/store/agent-status'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { makePaneKey } from '../../../../../shared/stable-pane-id'
@@ -271,7 +272,7 @@ export function installTerminalKeydownFit(session: ConnectPanePtySession): void 
       if (session.transport.getPtyId()) {
         return true
       }
-      return (useAppStore.getState().ptyIdsByTabId[session.deps.tabId] ?? []).length > 0
+      return (getAgentStatusState().ptyIdsByTabId[session.deps.tabId] ?? []).length > 0
     }
   })
 }

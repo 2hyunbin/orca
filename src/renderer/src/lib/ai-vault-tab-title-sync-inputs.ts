@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import type { AgentStatusSnapshot } from '@/store/agent-status-observers'
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
 import { isAiVaultTitleAgent } from '../../../shared/ai-vault-session-title'
@@ -51,7 +52,7 @@ function relevantRecordEqual<T>(
   return currentCount === previousCount
 }
 
-function agentRecordsEqual(current: AppState, previous: AppState): boolean {
+function agentRecordsEqual(current: AgentStatusReadState, previous: AgentStatusReadState): boolean {
   const relevantStatus = (entry: AgentStatusSnapshot[string]): boolean =>
     isAiVaultTitleAgent(entry.agentType) && Boolean(entry.providerSession?.id)
   const statusEqual = relevantRecordEqual(
@@ -112,7 +113,7 @@ function titleEqual(
   )
 }
 
-function terminalTabsEqual(current: AppState, previous: AppState): boolean {
+function terminalTabsEqual(current: AgentStatusReadState, previous: AgentStatusReadState): boolean {
   const currentKeys = Object.keys(current.tabsByWorktree)
   const previousKeys = Object.keys(previous.tabsByWorktree)
   if (currentKeys.length !== previousKeys.length) {
@@ -139,7 +140,7 @@ function terminalTabsEqual(current: AppState, previous: AppState): boolean {
   return true
 }
 
-function activePanesEqual(current: AppState, previous: AppState): boolean {
+function activePanesEqual(current: AgentStatusReadState, previous: AgentStatusReadState): boolean {
   const currentKeys = Object.keys(current.terminalLayoutsByTabId)
   const previousKeys = Object.keys(previous.terminalLayoutsByTabId)
   if (currentKeys.length !== previousKeys.length) {
@@ -152,7 +153,10 @@ function activePanesEqual(current: AppState, previous: AppState): boolean {
   )
 }
 
-function requestOwnersEqual(current: AppState, previous: AppState): boolean {
+function requestOwnersEqual(
+  current: AgentStatusReadState,
+  previous: AgentStatusReadState
+): boolean {
   const worktreeIds = new Set([
     ...collectAiVaultTitleRequests(current).map((request) => request.worktreeId),
     ...collectAiVaultTitleRequests(previous).map((request) => request.worktreeId)
@@ -167,7 +171,10 @@ function requestOwnersEqual(current: AppState, previous: AppState): boolean {
   return true
 }
 
-export function aiVaultTitleSyncInputsChanged(current: AppState, previous: AppState): boolean {
+export function aiVaultTitleSyncInputsChanged(
+  current: AgentStatusReadState,
+  previous: AgentStatusReadState
+): boolean {
   const agentRecordsChanged =
     current.agentStatusByPaneKey !== previous.agentStatusByPaneKey ||
     current.retainedAgentsByPaneKey !== previous.retainedAgentsByPaneKey ||

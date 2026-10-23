@@ -1,6 +1,7 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { createStore } from 'zustand/vanilla'
 import { describe, expect, it, vi } from 'vitest'
-import type { AppState } from '@/store/types'
+
 import type { AgentProviderSessionMetadata } from '../../../shared/agent-session-resume'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import { aiVaultTitleSyncInputsChanged } from './ai-vault-tab-title-sync-inputs'
@@ -13,10 +14,10 @@ const COLLECTIONS = [
 ] as const
 type Collection = (typeof COLLECTIONS)[number]
 
-function makeState(count = 1): AppState {
-  const live: AppState['agentStatusByPaneKey'] = {}
-  const retained: AppState['retainedAgentsByPaneKey'] = {}
-  const sleeping: AppState['sleepingAgentSessionsByPaneKey'] = {}
+function makeState(count = 1): AgentStatusReadState {
+  const live: AgentStatusReadState['agentStatusByPaneKey'] = {}
+  const retained: AgentStatusReadState['retainedAgentsByPaneKey'] = {}
+  const sleeping: AgentStatusReadState['sleepingAgentSessionsByPaneKey'] = {}
   const tabs: TerminalTab[] = []
   for (let index = 0; index < count * 3; index++) {
     const tab: TerminalTab = {
@@ -74,14 +75,14 @@ function makeState(count = 1): AppState {
     folderWorkspaces: [],
     repos: [],
     settings: {}
-  } as unknown as AppState
+  } as unknown as AgentStatusReadState
 }
 
 function replaceProvider(
-  state: AppState,
+  state: AgentStatusReadState,
   collection: Collection,
   providerSession: AgentProviderSessionMetadata
-): AppState {
+): AgentStatusReadState {
   const paneKey = Object.keys(state[collection])[0]
   const existing = state[collection][paneKey]
   const next =
@@ -104,7 +105,7 @@ describe('AI Vault title subscription inputs', () => {
       })
     state.retainedAgentsByPaneKey = observeEnumerations(state.retainedAgentsByPaneKey)
     state.sleepingAgentSessionsByPaneKey = observeEnumerations(state.sleepingAgentSessionsByPaneKey)
-    const store = createStore<AppState>(() => state)
+    const store = createStore<AgentStatusReadState>(() => state)
     const scheduleReconcile = vi.fn(() => () => {})
     const stop = startAiVaultTabTitleSync({
       getState: store.getState,

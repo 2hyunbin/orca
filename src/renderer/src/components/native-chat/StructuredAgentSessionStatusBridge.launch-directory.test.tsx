@@ -1,3 +1,4 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 // @vitest-environment happy-dom
 
 import { act, cleanup, render, waitFor } from '@testing-library/react'
@@ -12,7 +13,7 @@ import {
   toRuntimeExecutionHostId
 } from '../../../../shared/execution-host'
 import type { Tab } from '../../../../shared/tab-types'
-import type { AppState } from '@/store/types'
+
 import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 import * as statusOwner from '@/runtime/structured-agent-session-owner'
 import * as statusProjection from './structured-agent-session-status-projection'
@@ -20,8 +21,8 @@ import { tabActivationPatch } from '@/store/slices/tabs/tabs-focus-actions'
 import { makeWorktree } from '@/store/slices/store-test-helpers'
 
 type TestStore = {
-  getState: () => AppState
-  setState: (state: Partial<AppState>) => void
+  getState: () => AgentStatusReadState
+  setState: (state: Partial<AgentStatusReadState>) => void
 }
 
 const mocks = vi.hoisted(() => {
@@ -121,7 +122,7 @@ function emit(event: AgentSessionStatusEvent): void {
   act(() => send(event))
 }
 
-function pins(): AppState['structuredSessionLaunchDirectoryByTabId'] {
+function pins(): AgentStatusReadState['structuredSessionLaunchDirectoryByTabId'] {
   return mocks.store?.getState().structuredSessionLaunchDirectoryByTabId ?? {}
 }
 

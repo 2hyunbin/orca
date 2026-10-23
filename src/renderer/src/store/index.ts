@@ -1,3 +1,4 @@
+import { applyAgentStatusPatch } from './agent-status-patch'
 import { create, type StateCreator } from 'zustand'
 import type { AppState } from './types'
 import { createRepoSlice } from './slices/repos'
@@ -63,7 +64,7 @@ import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-swit
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
 import { withEditorBufferRecords } from './editor-buffer-record-lifecycle'
-import { withAgentStatusCommit } from './agent-status-commit'
+import { withAgentStatusCommit, getAgentStatusOwner } from './agent-status-commit'
 import { attachEditorBufferIdentityEvents } from './editor-buffer-identity-events'
 import {
   registerRendererMemoryProfileContributor,
@@ -181,6 +182,9 @@ export type { AppState } from './types'
 if ((import.meta.env.DEV || e2eConfig.exposeStore) && typeof window !== 'undefined') {
   const testWindow = window as unknown as Record<string, unknown>
   testWindow.__store = useAppStore
+  testWindow.__agentStatus = getAgentStatusOwner(useAppStore)
+  testWindow.__setStorePatch = (patch: Parameters<typeof applyAgentStatusPatch>[1]) =>
+    applyAgentStatusPatch(useAppStore, patch)
   if (e2eConfig.exposeStore) {
     testWindow.__webRuntimeSessionE2E = {
       createTerminal: async (args: Parameters<typeof createWebRuntimeSessionTerminal>[0]) =>

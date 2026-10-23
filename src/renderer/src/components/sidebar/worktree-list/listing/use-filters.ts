@@ -1,3 +1,4 @@
+import { getAgentStatusState } from '@/store/agent-status'
 import { useCallback } from 'react'
 import { useAppStore } from '@/store'
 import {
@@ -153,7 +154,7 @@ export function useSidebarWorktreeFilters() {
   const filterState = useAppStore(useShallow(selectSidebarFilterState))
 
   const revealWorkspaceFilters = useCallback((worktree: Worktree) => {
-    const state = useAppStore.getState()
+    const state = getAgentStatusState()
     const repo = state.repos.find((candidate) => candidate.id === worktree.repoId)
     const context = {
       state,
@@ -167,7 +168,7 @@ export function useSidebarWorktreeFilters() {
   }, [])
 
   const clearFilters = useCallback(
-    () => clearSidebarFilters(filterState, useAppStore.getState()),
+    () => clearSidebarFilters(filterState, getAgentStatusState()),
     [filterState]
   )
 

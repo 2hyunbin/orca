@@ -1,3 +1,6 @@
+import type { createAgentPaneAuthority } from './agent-pane-authority'
+import type { AgentStatusObservationSequencer } from '../../../../shared/agent-status-observation'
+import { applyAgentStatusPatch } from '../agent-status-patch'
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
 import { getAgentStatusOwner, type AgentStatusTransaction } from '../agent-status-commit'
@@ -13,6 +16,8 @@ export type AgentStatusStateUpdate =
   | ((state: AgentStatusReadState) => AgentStatusReadState | Partial<AgentStatusReadState>)
 
 export type AgentStatusRuntime = {
+  authority: () => ReturnType<typeof createAgentPaneAuthority>
+  observations: () => AgentStatusObservationSequencer
   get: () => AgentStatusReadState
   setEntry: AgentStatusTransaction['setEntry']
   editEntries: AgentStatusTransaction['editEntries']
@@ -37,29 +42,8 @@ export function createAgentStatusRuntime(
 ): AgentStatusRuntime {
   const owner = getAgentStatusOwner({ getState: storeGet })
   const get = owner.getTransactionState
-  const set = (update: AgentStatusStateUpdate): void => {
-    owner.transact((transaction) => {
-      const state = transaction.getState()
-      const resolved = typeof update === 'function' ? update(state) : update
-      if (resolved === state) {
-        return
-      }
-      const { agentStatusByPaneKey, ...app } = resolved
-      if (agentStatusByPaneKey && agentStatusByPaneKey !== state.agentStatusByPaneKey) {
-        for (const key of new Set([
-          ...Object.keys(state.agentStatusByPaneKey),
-          ...Object.keys(agentStatusByPaneKey)
-        ])) {
-          transaction.setEntry(key, agentStatusByPaneKey[key])
-        }
-      }
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: Rest removes the live snapshot; remaining own keys are the typed AppState patch keys.
-      const fields = Object.keys(app) as (keyof AppState)[]
-      if (fields.some((key) => !Object.is(state[key], app[key]))) {
-        storeSet(app)
-      }
-    })
-  }
+  const set = (update: AgentStatusStateUpdate): void =>
+    applyAgentStatusPatch({ getState: storeGet, setState: storeSet }, update)
   const runAfterCommit = owner.afterCommit
   const editEntries: AgentStatusTransaction['editEntries'] = (edit) =>
     owner.transact((transaction) => transaction.editEntries(edit))
@@ -185,6 +169,8 @@ export function createAgentStatusRuntime(
   }
 
   return {
+    authority: owner.authority,
+    observations: owner.observations,
     get,
     set,
     setEntry,

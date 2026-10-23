@@ -182,6 +182,7 @@ export function buildRetractedMirroredTabSweepPatch(
   }
   let sweepState: RetiredTerminalTabSweepState = {
     acknowledgedAgentsByPaneKey: state.acknowledgedAgentsByPaneKey ?? {},
+    transferAgentPaneAuthority: state.transferAgentPaneAuthority,
     activityClearedAtByPaneKey: state.activityClearedAtByPaneKey ?? {},
     agentLaunchConfigByPaneKey: state.agentLaunchConfigByPaneKey ?? {},
     agentStatusByPaneKey: agentStatusPatch?.agentStatusByPaneKey ?? state.agentStatusByPaneKey,

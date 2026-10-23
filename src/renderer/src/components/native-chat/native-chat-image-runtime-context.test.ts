@@ -1,6 +1,7 @@
+import type { AgentStatusReadState } from '@/store/agent-status-observers'
 import { describe, expect, it } from 'vitest'
 import { shallow } from 'zustand/shallow'
-import type { AppState } from '@/store/types'
+
 import { useAppStore } from '@/store'
 import type { TerminalTab } from '../../../../shared/terminal-tab-types'
 import type { Tab } from '../../../../shared/tab-types'
@@ -11,7 +12,7 @@ import {
 } from './native-chat-image-runtime-context'
 import { repoFixture, worktreeFixture } from './native-chat-workspace-test-fixtures'
 
-function state(overrides: Partial<AppState> = {}): AppState {
+function state(overrides: Partial<AgentStatusReadState> = {}): AgentStatusReadState {
   const tab: TerminalTab = {
     id: 'tab-1',
     ptyId: null,
@@ -52,7 +53,7 @@ describe('resolveNativeChatImageRuntimeContext', () => {
     const first = selectNativeChatImageOwnerState(storeState)
     const second = selectNativeChatImageOwnerState({
       ...storeState,
-      agentStatusByPaneKey: {} as AppState['agentStatusByPaneKey']
+      agentStatusByPaneKey: {} as AgentStatusReadState['agentStatusByPaneKey']
     })
 
     expect(shallow(second, first)).toBe(true)
@@ -83,7 +84,7 @@ describe('resolveNativeChatImageRuntimeContext', () => {
       getKnownWorktreeById: () => ownerOnlyWorktree,
       worktreesByRepo: { repo: [ownerOnlyWorktree] },
       runtimeEnvironments: [{ id: 'owner-a' }]
-    } as unknown as AppState
+    } as unknown as AgentStatusReadState
 
     const context = resolveNativeChatImageRuntimeContext(ownerState, 'tab-1')
 
@@ -122,7 +123,7 @@ describe('resolveNativeChatImageRuntimeContext', () => {
       isPinned: false,
       agentSessionAgent: 'codex'
     }
-    const floatingState: AppState = {
+    const floatingState: AgentStatusReadState = {
       ...state(),
       tabsByWorktree: {},
       unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: [floatingTab] },

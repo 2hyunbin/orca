@@ -1,3 +1,5 @@
+import { applyAgentStatusPatch } from '@/store/agent-status-patch'
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { useAppStore } from '@/store'
 import { createTestStore } from '@/store/slices/store-test-helpers'
@@ -153,7 +155,11 @@ describe('hook-driven tab title IPC integration', () => {
           titlesByLeafId: { [LEAF_ID]: 'Codex ready', [otherLeaf]: title }
         }
       }
-      store.setState({ ...seeded, workspaceSessionReady: true, activeWorktreeId: null })
+      applyAgentStatusPatch(store, {
+        ...seeded,
+        workspaceSessionReady: true,
+        activeWorktreeId: null
+      })
       const events = states.map((state, index): AgentStatusIpcPayload & AgentStatusSetData => ({
         paneKey: PANE_KEY,
         worktreeId: WORKTREE_ID,
@@ -179,8 +185,8 @@ describe('hook-driven tab title IPC integration', () => {
         })
       )
       const { registerAgentStatusIpcBridge } = await import('./agent-status-ipc-bridge')
-      const updateTitle = vi.spyOn(store.getState(), 'updateTabTitle')
-      const updateTitles = vi.spyOn(store.getState(), 'updateTabTitles')
+      const updateTitle = vi.spyOn(getAgentStatusOwner(store).getState(), 'updateTabTitle')
+      const updateTitles = vi.spyOn(getAgentStatusOwner(store).getState(), 'updateTabTitles')
       const unsubs: (() => void)[] = []
       const bridge = registerAgentStatusIpcBridge(unsubs)
       try {
@@ -188,12 +194,14 @@ describe('hook-driven tab title IPC integration', () => {
           onSet(events[0])
         }
         await vi.waitFor(() => {
-          expect(store.getState().agentStatusByPaneKey[PANE_KEY]?.state).toBe(states.at(-1))
+          expect(getAgentStatusOwner(store).getState().agentStatusByPaneKey[PANE_KEY]?.state).toBe(
+            states.at(-1)
+          )
         })
         expect(store.getState().tabsByWorktree[WORKTREE_ID][0].title).toBe(expected)
-        expect(store.getState().agentStatusByPaneKey[PANE_KEY].terminalTitle).toBe(
-          states.at(-1) === 'done' ? 'Codex ready' : 'Codex - action required'
-        )
+        expect(
+          getAgentStatusOwner(store).getState().agentStatusByPaneKey[PANE_KEY].terminalTitle
+        ).toBe(states.at(-1) === 'done' ? 'Codex ready' : 'Codex - action required')
         expect(updateTitle).toHaveBeenCalledTimes(mode === 'live' ? 1 : 0)
         expect(updateTitles).toHaveBeenCalledTimes(mode === 'snapshot' ? 1 : 0)
       } finally {
