@@ -1,5 +1,5 @@
 import type * as Monaco from 'monaco-editor'
-import type { IRawGrammar } from 'vscode-textmate'
+import type { LanguageRegistration } from 'shiki/core'
 import { registerTextMateLanguage } from './textmate-language-registration'
 
 const HASKELL_SCOPE = 'source.haskell'
@@ -49,14 +49,12 @@ function mapHaskellTokenScopes(scopes: readonly string[]): string {
   return scope
 }
 
-export async function loadHaskellTextMateGrammar(scopeName: string): Promise<IRawGrammar | null> {
-  if (scopeName !== HASKELL_SCOPE) {
-    return null
-  }
+export async function loadHaskellTextMateGrammar(): Promise<LanguageRegistration> {
   // BSD-3-Clause grammar; provenance and license ship in resources/licenses/language-haskell.
   const grammarModule = await import('./textmate-grammars/haskell.tmLanguage.json')
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: TextMate adds the required $self/$base repository entries; real tokenizer tests validate this generated upstream grammar.
-  return grammarModule.default as unknown as IRawGrammar
+  const grammar = grammarModule.default as unknown as LanguageRegistration
+  return { ...grammar, name: 'haskell' }
 }
 
 export function registerHaskellLanguage(monaco: Pick<typeof Monaco, 'languages'>): void {
@@ -67,7 +65,6 @@ export function registerHaskellLanguage(monaco: Pick<typeof Monaco, 'languages'>
       aliases: ['Haskell', 'haskell']
     },
     configuration: haskellLanguageConfiguration,
-    scopeName: HASKELL_SCOPE,
     loadGrammar: loadHaskellTextMateGrammar,
     mapTokenScopes: mapHaskellTokenScopes
   })

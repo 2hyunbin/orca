@@ -1,7 +1,7 @@
 /**
  * Agent/tool preflight detection. Split out of `ipc/preflight.ts` so the Orca
- * runtime — which calls `detectInstalledAgentsWithShellPathHydration` and
- * `detectRemoteAgents` during normal operation — can reach this logic without
+ * runtime — which calls `detectInstalledAgentsWithShellPathHydration`
+ * during normal operation — can reach this logic without
  * dragging `ipcMain` into its module graph. The Electron handler registration
  * stays in `ipc/preflight.ts` and imports from here.
  */
@@ -15,7 +15,6 @@ import { getBitbucketAuthStatus } from '../bitbucket/client'
 import { getGiteaAuthStatus } from '../gitea/client'
 import { _resetKnownHostsCache } from '../gitlab/gl-utils'
 import { mergePersistedWindowsPathAsync } from '../pty/windows-environment-path'
-import { getActiveMultiplexer } from '../ssh/ssh-target-registry'
 import type { WslPreflightTarget } from '../ipc/preflight-wsl-agent-detection'
 import {
   getPreflightWslTarget,
@@ -28,22 +27,21 @@ import {
   execCommandInWslOrThrow,
   execLocalPreflightCommandOrThrow,
   findRunnableLocalCommand,
-  isCommandAvailable,
-  shellQuote
+  isCommandAvailable
 } from '../ipc/preflight-command-exec'
+import { quotePosixShell } from '../../shared/shell-argument-quoting'
 import {
   detectRemoteWindowsTerminalCapabilities,
   type RemoteWindowsTerminalCapabilities
 } from '../ipc/preflight-remote-windows-terminal-capabilities'
-import {
-  getTuiAgentDetectionProbeCommands,
-  KNOWN_TUI_AGENT_DETECTION_COMMANDS,
-  resolveDetectedTuiAgentIds
-} from '../ipc/tui-agent-detection-commands'
 import { invalidateWslGuestEnvironment } from '../wsl/wsl-guest-environment'
 import { prunePreflightWslCache } from '../preflight-wsl-cache'
-import { detectAgentCommandsOnHost } from './agent-command-detection'
+import { detectInstalledAgents } from './installed-agent-detection'
 export { detectAgentCommandsOnHost } from './agent-command-detection'
+export {
+  detectInstalledAgents,
+  detectInstalledAgentsWithShellPathHydration
+} from './installed-agent-detection'
 
 export type PreflightStatus = {
   git: { installed: boolean }
@@ -120,10 +118,6 @@ export function _resetPreflightCache(): void {
   preflightCacheEpoch += 1
 }
 
-function uniqueAgentIds(ids: Iterable<string>): string[] {
-  return [...new Set(ids)]
-}
-
 /** A CLI verdict and, on the local path, the exact copy that produced it. */
 type CommandRuntime = { installed: boolean; wslTarget?: WslPreflightTarget; binary?: string }
 
@@ -142,25 +136,6 @@ async function detectCommandRuntime(
   return probe.status === 'available'
     ? { installed: true, binary: probe.binary }
     : { installed: false }
-}
-
-export async function detectInstalledAgents(context?: PreflightRuntimeContext): Promise<string[]> {
-  const commands = getTuiAgentDetectionProbeCommands(
-    KNOWN_TUI_AGENT_DETECTION_COMMANDS,
-    getPreflightWslTarget(context) ? 'wsl' : process.platform
-  )
-  return resolveDetectedTuiAgentIds(
-    KNOWN_TUI_AGENT_DETECTION_COMMANDS,
-    await detectAgentCommandsOnHost(commands, { context }),
-    getPreflightWslTarget(context) ? 'wsl' : process.platform
-  )
-}
-
-export async function detectInstalledAgentsWithShellPathHydration(
-  context?: PreflightRuntimeContext
-): Promise<string[]> {
-  await hydrateShellPathForAgentDetection(context)
-  return detectInstalledAgents(context)
 }
 
 export type RefreshAgentsResult = {
@@ -218,19 +193,6 @@ export async function refreshShellPathAndDetectAgents(
   }
 }
 
-export async function detectRemoteAgents(args: { connectionId: string }): Promise<string[]> {
-  const mux = getActiveMultiplexer(args.connectionId)
-  if (!mux || mux.isDisposed()) {
-    // Why: remote agent detection is passive UI polling. A disconnected host has
-    // no detectable agents until reconnect, but should not spam IPC errors.
-    return []
-  }
-  const result = (await mux.request('preflight.detectAgents', {
-    commands: KNOWN_TUI_AGENT_DETECTION_COMMANDS
-  })) as { agents: string[] }
-  return uniqueAgentIds(result.agents)
-}
-
 // Why the probe object rather than the bare command name: on the local path
 // `binary` is the copy that just passed `--version`, which on a shim-shadowed
 // host is not what PATH would resolve (#22975). WSL has no `binary` — the guest
@@ -238,7 +200,7 @@ export async function detectRemoteAgents(args: { connectionId: string }): Promis
 async function isGhAuthenticated(probe: CommandRuntime): Promise<boolean> {
   try {
     await (probe.wslTarget
-      ? execCommandInWslOrThrow(probe.wslTarget, `${shellQuote('gh')} auth status`)
+      ? execCommandInWslOrThrow(probe.wslTarget, `${quotePosixShell('gh')} auth status`)
       : execLocalPreflightCommandOrThrow(probe.binary ?? 'gh', ['auth', 'status']))
     // Why: for plain-text `gh auth status`, exit 0 means gh did not detect any
     // authentication issues for the checked hosts/accounts.
@@ -259,7 +221,7 @@ async function isGhAuthenticated(probe: CommandRuntime): Promise<boolean> {
 async function isGlabAuthenticated(probe: CommandRuntime): Promise<boolean> {
   try {
     await (probe.wslTarget
-      ? execCommandInWslOrThrow(probe.wslTarget, `${shellQuote('glab')} auth status`)
+      ? execCommandInWslOrThrow(probe.wslTarget, `${quotePosixShell('glab')} auth status`)
       : execLocalPreflightCommandOrThrow(probe.binary ?? 'glab', ['auth', 'status']))
     return true
   } catch (error) {
@@ -343,6 +305,8 @@ async function executePreflightCheck(
 ): Promise<PreflightStatus> {
   if (process.platform === 'win32' && !wslTarget) {
     await mergePersistedWindowsPathAsync(process.env, { forceRefresh: force })
+  } else if (process.platform !== 'win32') {
+    await hydrateShellPathForAgentDetection(context, force)
   }
 
   if (force) {
@@ -369,7 +333,7 @@ async function executePreflightCheck(
     getGiteaAuthStatus()
   ])
 
-  const result = {
+  return {
     git: { installed: gitProbe.installed },
     gh: { installed: ghProbe.installed, authenticated: ghAuthenticated },
     glab: { installed: glabProbe.installed, authenticated: glabAuthenticated },
@@ -377,6 +341,4 @@ async function executePreflightCheck(
     azureDevOps,
     gitea
   }
-
-  return result
 }

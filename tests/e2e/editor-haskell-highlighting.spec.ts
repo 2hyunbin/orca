@@ -78,18 +78,23 @@ test('highlights recognized Haskell source and an untracked file diff', async ({
     },
     { filePath, language: detectLanguage(filePath) }
   )
-  const sourceEditor = orcaPage.locator('.monaco-editor').first()
+  await orcaPage.evaluate(() => window.__store?.getState().updateSettings({ theme: 'light' }))
+  const sourceEditor = orcaPage.locator('.monaco-editor.vs').first()
   await expectHighlighted(sourceEditor)
   await expect
     .poll(() => orcaPage.evaluate(() => window.__monacoEditorE2E?.snapshot().valueLength))
     .toBe(source.length)
-  await orcaPage.screenshot({ path: testInfo.outputPath('haskell-source.png') })
+  await orcaPage.screenshot({ path: testInfo.outputPath('haskell-source-light.png') })
+  await orcaPage.evaluate(() => window.__store?.getState().updateSettings({ theme: 'dark' }))
+  await expectHighlighted(orcaPage.locator('.monaco-editor.vs-dark').first())
+  await orcaPage.screenshot({ path: testInfo.outputPath('haskell-source-dark.png') })
+  await orcaPage.evaluate(() => window.__store?.getState().updateSettings({ theme: 'light' }))
 
   await orcaPage
     .locator('[data-testid="source-control-entry"]')
     .filter({ hasText: 'Main.hs' })
     .click()
-  await expectHighlighted(orcaPage.locator('.modified-in-monaco-diff-editor'))
+  await expectHighlighted(orcaPage.locator('.modified-in-monaco-diff-editor.vs'))
   await orcaPage.screenshot({ path: testInfo.outputPath('haskell-diff.png') })
 
   await orcaPage.evaluate(() => window.__store?.getState().updateSettings({ theme: 'dark' }))

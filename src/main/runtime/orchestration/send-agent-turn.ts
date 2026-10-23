@@ -21,6 +21,7 @@ import { ORCHESTRATION_READINESS_TIMEOUT_MS } from '../../../shared/orchestratio
 import { structuredAgentSessionMessageSendMutation } from '../../../shared/structured-agent-session-send-mutation'
 import type { StructuredAgentSessionHost } from '../../native-chat/agent-session-wire/structured-agent-session-host'
 import { dispatchPreambleSendOptions, type DispatchPreambleSendOptions } from './preamble'
+import type { RuntimeAgentPromptWriteOptions } from '../runtime-terminal-contracts'
 
 /**
  * `now` hands the message over at once, joining a running turn as a steer. `queue` asks a busy chat
@@ -35,11 +36,14 @@ export type StructuredAgentTurnHost = Pick<
 >
 
 export type StructuredSessionTurn = {
+  /** Carries its sender as `from`, which the chat shows and no fingerprint covers. */
   body: AgentJournalMessageItem
-  delivery: AgentTurnDelivery
   /** Reused on a retry, so the host replays its recorded answer instead of sending twice. */
   operationId: string
   expectedRuntimeFence: number
+  delivery: AgentTurnDelivery
+  /** Host-local admission for an automated send. */
+  beforeRun?: () => void
 }
 
 export type StructuredSessionTurnSend = {
@@ -49,13 +53,17 @@ export type StructuredSessionTurnSend = {
   /** Scopes the host's operation ledger, so one sender's sends cannot exhaust another's budget. */
   callerKey: string
   turn: StructuredSessionTurn
+  /** The caller's own readiness budget for the agent to take the message, its start included;
+   *  the orchestration readiness timeout by default. */
+  budgetMs?: number
 }
 
 /**
  * What the typed text is, which decides how it is typed. A dispatch preamble leads with the
- * coordinator's task line; no other kind of message may borrow that.
+ * coordinator's task line; no other kind of message may borrow that. An external message is a
+ * connector thread's follow-up, typed as the user's own.
  */
-export type TerminalTurnPurpose = 'dispatch-preamble'
+export type TerminalTurnPurpose = 'dispatch-preamble' | 'external-message'
 
 /** A terminal has one write: whether a mid-turn prompt waits is the agent TUI's own behaviour. */
 export type TerminalTurn = {
@@ -65,12 +73,18 @@ export type TerminalTurn = {
   operationId: string
 }
 
+/** The writer's opt-in options a terminal turn may carry; no current caller sets them. */
+type TerminalTurnWriteOptions = Pick<
+  RuntimeAgentPromptWriteOptions,
+  'signal' | 'onPermission' | 'expectedBinding'
+>
+
 /** Method syntax on purpose: the runtime's own signature takes the wider write options. */
 type TerminalAgentTurnRuntime<TReceipt> = {
   sendTerminalAgentPrompt(
     handle: string,
     prompt: string,
-    options: DispatchPreambleSendOptions
+    options: DispatchPreambleSendOptions & TerminalTurnWriteOptions
   ): Promise<TReceipt>
 }
 
@@ -79,7 +93,9 @@ export type TerminalTurnSend<TReceipt> = {
   runtime: TerminalAgentTurnRuntime<TReceipt>
   handle: string
   turn: TerminalTurn
-}
+  /** Runs before each PTY write; throwing refuses it (`createWorkerBriefWriteGuard`). */
+  beforeWrite?: DispatchPreambleSendOptions['beforeWrite']
+} & TerminalTurnWriteOptions
 
 /**
  * `sent` carries the submission as it settled, or as first answered when the wait ran out; it is
@@ -103,11 +119,13 @@ export function sendAgentTurn<TReceipt>(
       return sendStructuredSessionTurn(send)
     case 'terminal':
       // Not async: the caller awaits the runtime's own promise.
-      return send.runtime.sendTerminalAgentPrompt(
-        send.handle,
-        send.turn.body,
-        terminalTurnOptions(send.turn)
-      )
+      return send.runtime.sendTerminalAgentPrompt(send.handle, send.turn.body, {
+        ...terminalTurnOptions(send.turn),
+        ...(send.beforeWrite ? { beforeWrite: send.beforeWrite } : {}),
+        ...(send.signal ? { signal: send.signal } : {}),
+        ...(send.onPermission ? { onPermission: send.onPermission } : {}),
+        ...(send.expectedBinding ? { expectedBinding: send.expectedBinding } : {})
+      })
   }
 }
 
@@ -115,6 +133,14 @@ function terminalTurnOptions(turn: TerminalTurn): DispatchPreambleSendOptions {
   switch (turn.purpose) {
     case 'dispatch-preamble':
       return dispatchPreambleSendOptions(turn.operationId)
+    case 'external-message':
+      // The writer returning is the whole receipt; the turn is read from hooks, not awaited here.
+      return {
+        inputKind: 'driving',
+        acceptQueued: true,
+        observationTimeoutMs: 0,
+        requestId: turn.operationId
+      }
   }
 }
 
@@ -122,15 +148,16 @@ async function sendStructuredSessionTurn(
   send: StructuredSessionTurnSend
 ): Promise<StructuredSessionTurnOutcome> {
   const { turn } = send
+  const message = structuredAgentSessionMessageSendMutation({
+    sessionId: send.sessionId,
+    clientOperationId: turn.operationId,
+    expectedRuntimeFence: turn.expectedRuntimeFence,
+    body: turn.body,
+    delivery: turn.delivery === 'queue' ? 'queue-if-active' : undefined
+  })
   const result = await send.host.send(
     { callerKey: send.callerKey },
-    structuredAgentSessionMessageSendMutation({
-      sessionId: send.sessionId,
-      clientOperationId: turn.operationId,
-      expectedRuntimeFence: turn.expectedRuntimeFence,
-      body: turn.body,
-      delivery: turn.delivery === 'queue' ? 'queue-if-active' : undefined
-    })
+    turn.beforeRun ? { ...message, beforeRun: turn.beforeRun } : message
   )
   if (!result.ok) {
     return { kind: 'refused', refusal: result.refusal }
@@ -139,8 +166,9 @@ async function sendStructuredSessionTurn(
   if ('queued' in result.value) {
     return { kind: 'queued', clientMessageId, queued: result.value.queued }
   }
-  // Accepted is not delivered: the agent may still be starting, so wait the start out. A wait
-  // that fails or runs out leaves the first answer standing.
+  // Accepted is not delivered: the agent may still be starting. One budget, the caller's, covers
+  // the start and the answer; a start that outlasts it leaves the message held for the agent, and
+  // the answer `pending`, which the caller reports as a turn start nobody observed yet.
   const answered = agentSessionSendSubmission(result.value)
   if (answered?.dispatchState !== 'pending') {
     return { kind: 'sent', clientMessageId, submission: answered }
@@ -149,7 +177,7 @@ async function sendStructuredSessionTurn(
   // hand-off, which the queue sent under a fresh id.
   const settled = await send.host
     .waitForSendSettlement(send.sessionId, answered.clientMessageId, {
-      budgetMs: ORCHESTRATION_READINESS_TIMEOUT_MS
+      budgetMs: send.budgetMs ?? ORCHESTRATION_READINESS_TIMEOUT_MS
     })
     .catch(() => undefined)
   return {
