@@ -238,6 +238,30 @@ describe('the status menu for a managed SSH host', () => {
     expect(mocks.disconnectRuntime).not.toHaveBeenCalled()
   })
 
+  it.each(['access-revoked', 'incompatible'] as const)(
+    'counts a %s managed server needing attention while its SSH relay is connected',
+    (reason) => {
+      state.sshConnectionStates.set(
+        'ssh-openclaw',
+        sshState({ kind: 'relay', reason: 'source_changed' })
+      )
+      state.runtimeStatusByEnvironmentId.set(
+        'server-openclaw',
+        blockedStatus(reason, 'server-openclaw')
+      )
+      render(<SshStatusSegment compact={false} iconOnly={false} />)
+      const trigger = screen.getByRole('button', { name: 'Remote host connection status' })
+      expect(trigger.getAttribute('aria-description')).toBe(
+        'Connected hosts: 2. Hosts needing attention: 1.'
+      )
+      expect(within(trigger).getByText('Needs attention').parentElement?.classList).not.toContain(
+        'invisible'
+      )
+      expect(screen.getAllByText('openclaw')).toHaveLength(1)
+      expect(screen.getByText('SSH Host')).toBeTruthy()
+    }
+  )
+
   it('keeps the managed server reconnect action when the pair is disconnected', async () => {
     state.sshConnectionStates.set('ssh-openclaw', { ...sshState(), status: 'disconnected' })
     state.runtimeStatusByEnvironmentId.set('server-openclaw', {
@@ -320,12 +344,15 @@ describe('the status menu for a managed SSH host', () => {
   })
 })
 
-function blockedStatus(blockedReason: 'access-revoked' | 'incompatible'): RuntimeEnvironmentStatus {
+function blockedStatus(
+  blockedReason: 'access-revoked' | 'incompatible',
+  environmentId = 'server-windows'
+): RuntimeEnvironmentStatus {
   return {
     status: null,
     checkedAt: 1,
     snapshot: {
-      environmentId: 'server-windows',
+      environmentId,
       pairingRevision: 1,
       sequence: 1,
       checkedAt: 1,

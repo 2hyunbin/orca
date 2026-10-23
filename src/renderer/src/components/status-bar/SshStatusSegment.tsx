@@ -75,20 +75,18 @@ export function SshStatusSegment({
   const hostLabelOverrides = useMemo(() => getHostDisplayLabelOverrides(settings), [settings])
   const userManagedEnvironments = runtimeEnvironments.filter(isListedRemoteServer)
   // Why the registry: a managed server and its SSH host are one machine, shown on its active route.
-  const visibleHosts = new Map(
-    pickerExecutionHosts(
-      buildExecutionHostRegistry({
-        repos: [],
-        settings,
-        hostSource: 'configured-only',
-        sshTargetLabels,
-        sshConnectionStates,
-        runtimeEnvironments: userManagedEnvironments,
-        runtimeStatusByEnvironmentId,
-        hostLabelOverrides
-      })
-    ).map((host) => [host.id, host])
-  )
+  const registeredHosts = buildExecutionHostRegistry({
+    repos: [],
+    settings,
+    hostSource: 'configured-only',
+    sshTargetLabels,
+    sshConnectionStates,
+    runtimeEnvironments: userManagedEnvironments,
+    runtimeStatusByEnvironmentId,
+    hostLabelOverrides
+  })
+  const registeredHostsById = new Map(registeredHosts.map((host) => [host.id, host]))
+  const visibleHosts = new Map(pickerExecutionHosts(registeredHosts).map((host) => [host.id, host]))
   const targets = Array.from(sshTargetLabels.entries())
     // Why: runtime-owned (per-workspace-env) SSH targets are hidden — never list them
     // as a user-facing SSH host in the status bar.
@@ -171,7 +169,10 @@ export function SshStatusSegment({
 
   const connectedHostCount =
     connectedTargets.length + connectedRuntimeHosts.filter((host) => !host.blockedReason).length
-  const blockedHostCount = runtimeHostRows.filter((host) => host.blockedReason).length
+  const blockedHostCount = userManagedEnvironments.filter(
+    (environment) =>
+      registeredHostsById.get(toRuntimeExecutionHostId(environment.id))?.health === 'blocked'
+  ).length
   const connectionSummary = remoteHostConnectionSummary(connectedHostCount, blockedHostCount)
   const openRepair = (host: { id: string; label: string }): void => {
     // Why close first: the dialog must not open underneath the menu's focus trap.
