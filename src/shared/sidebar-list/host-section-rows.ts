@@ -205,8 +205,11 @@ export function addHostSectionRows(args: {
   // The headers above the next host-owned row: one lane header, or a project group's path.
   let pendingRows: Extract<Row, { type: 'header' }>[] = []
   const usedPendingRows = new Set<Row>()
-  // Each host's last emitted header path, so a sibling group repeats only what differs.
-  const emittedPathByHostId = new Map<ExecutionHostId, string[]>()
+  // Pending rows are replaced at each header; reuse each host's path until then.
+  const emittedPathByHostId = new Map<
+    ExecutionHostId,
+    { pending: typeof pendingRows; keys: string[] }
+  >()
   const flushUnusedPendingRows = (rows: readonly Extract<Row, { type: 'header' }>[]): void => {
     const unused = rows.filter((row) => !usedPendingRows.has(row))
     if (unused.length === 0) {
@@ -239,19 +242,22 @@ export function addHostSectionRows(args: {
     const rowHostId = getRowHostId(row, args.defaultHostId)
     if (rowHostId) {
       const hostRows = rowsByHostId.get(rowHostId) ?? []
-      const localizedPendingRows = localizePendingRowsForHost(pendingRows, rowHostId)
-      const path = localizedPendingRows.map(getPendingRowKey)
-      const emitted = emittedPathByHostId.get(rowHostId) ?? []
-      let shared = 0
-      while (shared < path.length && path[shared] === emitted[shared]) {
-        shared += 1
-      }
-      if (shared < path.length || path.length !== emitted.length) {
-        hostRows.push(...localizedPendingRows.slice(shared))
-        emittedPathByHostId.set(rowHostId, path)
-      }
-      if (localizedPendingRows.length > 0) {
-        pendingRows.forEach((pendingRow) => usedPendingRows.add(pendingRow))
+      const emitted = emittedPathByHostId.get(rowHostId)
+      if (emitted?.pending !== pendingRows) {
+        const localizedPendingRows = localizePendingRowsForHost(pendingRows, rowHostId)
+        const path = localizedPendingRows.map(getPendingRowKey)
+        const previous = emitted?.keys ?? []
+        let shared = 0
+        while (shared < path.length && path[shared] === previous[shared]) {
+          shared += 1
+        }
+        if (shared < path.length || path.length !== previous.length) {
+          hostRows.push(...localizedPendingRows.slice(shared))
+        }
+        emittedPathByHostId.set(rowHostId, { pending: pendingRows, keys: path })
+        if (localizedPendingRows.length > 0) {
+          pendingRows.forEach((pendingRow) => usedPendingRows.add(pendingRow))
+        }
       }
       hostRows.push(row)
       rowsByHostId.set(rowHostId, hostRows)

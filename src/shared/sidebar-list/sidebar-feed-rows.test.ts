@@ -321,6 +321,56 @@ describe('buildSidebarFeedRows host sections', () => {
       'ssh:box|far::/w/b@0'
     ])
   })
+
+  it('keeps sibling header transitions after multiple rows on each host', () => {
+    const repos = [
+      repo('near', { projectGroupId: 'H' }),
+      repo('far', { connectionId: 'box', projectGroupId: 'H' }),
+      repo('near-sibling', { projectGroupId: 'I' }),
+      repo('far-sibling', { connectionId: 'box', projectGroupId: 'I' })
+    ]
+    const workspaces = buildWorkspaceRows({
+      worktrees: repos.flatMap((project) =>
+        [2, 1].map((lastActivityAt) =>
+          worktree(`${project.id}::/w/${String(lastActivityAt)}`, {
+            hostId: project.connectionId ? 'ssh:box' : 'local',
+            lastActivityAt
+          })
+        )
+      ),
+      folderWorkspaces: [],
+      repos,
+      lineageById: {}
+    })
+    const built = buildSidebarFeedRows(
+      domains({ workspaces }),
+      catalog(repos, [projectGroup('G', null), projectGroup('H', 'G'), projectGroup('I', 'G')]),
+      view({ groupBy: 'repo', visibleWorkspaceHostIds: ['local', 'ssh:box'] })
+    )
+
+    expect(outline(built.sectionRows)).toEqual([
+      '## This computer',
+      '# G@0',
+      '# H@1',
+      '# near@2',
+      'local|near::/w/2@0',
+      'local|near::/w/1@0',
+      '# I@1',
+      '# near-sibling@2',
+      'local|near-sibling::/w/2@0',
+      'local|near-sibling::/w/1@0',
+      '## box',
+      '# G@0',
+      '# H@1',
+      '# far@2',
+      'ssh:box|far::/w/2@0',
+      'ssh:box|far::/w/1@0',
+      '# I@1',
+      '# far-sibling@2',
+      'ssh:box|far-sibling::/w/2@0',
+      'ssh:box|far-sibling::/w/1@0'
+    ])
+  })
 })
 
 describe('the desktop’s hover hold over the shared builder', () => {
