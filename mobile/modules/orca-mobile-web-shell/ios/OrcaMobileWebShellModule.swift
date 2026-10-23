@@ -4,6 +4,12 @@ public class OrcaMobileWebShellModule: Module {
   public func definition() -> ModuleDefinition {
     Name("OrcaMobileWebShell")
 
+    OnCreate {
+      DispatchQueue.main.async {
+        MobileWebShellNetworkBlock.load { _ in }
+      }
+    }
+
     View(OrcaMobileWebShellView.self) {
       Events("onLoadState", "onBridgeMessage", "onExternalNavigation")
 
