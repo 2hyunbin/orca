@@ -136,10 +136,11 @@ describe('workspace linked references in hover details', () => {
     }
     const { container } = render(<Fixture onManage={vi.fn()} referenceDetails={details} />)
     expect(screen.getByText('Merged sibling')).toBeTruthy()
-    expect(screen.getByText('State: Merged')).toBeTruthy()
+    expect(screen.getByLabelText('State: Merged')).toBeTruthy()
+    expect(screen.queryByText('State: Merged')).toBeNull()
     expect(screen.getByText('Target: release')).toBeTruthy()
     expect(screen.getByText('State: In Progress')).toBeTruthy()
-    expect(screen.getAllByText('Checks: Passing')).toHaveLength(1)
+    expect(screen.getAllByLabelText('Checks: Passing')).toHaveLength(1)
     expect(screen.queryByText('Used for checks')).toBeNull()
     const siblingRow = Array.from(
       container.querySelectorAll('[data-workspace-hover-reference]')
@@ -157,14 +158,14 @@ describe('workspace linked references in hover details', () => {
     expect(screen.getByText('ENG-215 · Linear · acme')).toBeTruthy()
     const key = getWorkspaceAttachmentKey(attachments[0])
     expect(
-      Array.from(container.querySelectorAll('[data-workspace-hover-reference]')).find(
-        (node) => node.getAttribute('data-workspace-hover-reference') === key
-      )?.textContent
-    ).toContain('Checks: Passing')
+      Array.from(container.querySelectorAll('[data-workspace-hover-reference]'))
+        .find((node) => node.getAttribute('data-workspace-hover-reference') === key)
+        ?.querySelector('[aria-label="Checks: Passing"]')
+    ).toBeTruthy()
     expect(screen.queryByText('Used for checks')).toBeNull()
-    expect(screen.getAllByText('Checks: Passing')).toHaveLength(1)
+    expect(screen.getAllByLabelText('Checks: Passing')).toHaveLength(1)
   })
-  it('opens a reference without activating the parent and dismisses hover', () => {
+  it('offers Orca link destinations without activating the parent and dismisses hover', () => {
     const openUrl = vi.fn()
     Object.defineProperty(window, 'api', { configurable: true, value: { shell: { openUrl } } })
     const parentClick = vi.fn()
@@ -175,8 +176,9 @@ describe('workspace linked references in hover details', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Hover workspace' }))
     parentClick.mockClear()
-    fireEvent.click(screen.getByRole('button', { name: 'Open MR !42' }))
-    expect(openUrl).toHaveBeenCalledWith('https://gitlab.example.com/team/orca/-/merge_requests/42')
+    fireEvent.click(screen.getByRole('link', { name: 'Open MR !42' }))
+    expect(openUrl).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /System Browser/ })).toBeTruthy()
     expect(parentClick).not.toHaveBeenCalled()
     expect(container.querySelector('[data-hover-open]')?.getAttribute('data-hover-open')).toBe(
       'false'
