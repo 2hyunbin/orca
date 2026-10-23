@@ -163,6 +163,12 @@ it('retains four workers on ARM and the four-core Blacksmith unit runner', () =>
     )
   }
   expect(
+    runInNewContext(expression, {
+      runner: { arch: 'X64' },
+      inputs: { runner: 'blacksmith-8vcpu-ubuntu-2404' }
+    })
+  ).toBe('--maxWorkers=8')
+  expect(
     runInNewContext(expression, { runner: { arch: 'X64' }, inputs: { runner: 'ubuntu-latest' } })
   ).toBe('')
 })
