@@ -27,7 +27,7 @@ describe('useNativeChatComposerNotice', () => {
       renderHook(
         () => ({
           error: useNativeChatComposerError(
-            { working: false, background: false, sending: false, retry: false },
+            { working: false, background: false, sending: false, retry: false, prompt: false },
             current
           ),
           attachments: useNativeChatComposerNotice()

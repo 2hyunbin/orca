@@ -80,7 +80,7 @@ describe('dismissed prompt occurrences outlive the view but not the prompt', () 
   it('keeps a transcript-only dismissal while parked, then retires it on authoritative absence', () => {
     const wrapper = ({ children }: { children: ReactNode }) =>
       createElement(NativeChatViewIdentity.Provider, { value: 'prompt-return' }, children)
-    const mount = () =>
+    const mount = (card: InteractivePromptCard = question) =>
       renderHook(
         ({ card, settled }: { card: InteractivePromptCard; settled: boolean }) =>
           useNativeChatPromptCardPresentation({
@@ -89,7 +89,7 @@ describe('dismissed prompt occurrences outlive the view but not the prompt', () 
             canSend: true,
             transcriptSettled: settled
           }),
-        { wrapper, initialProps: { card: question, settled: true } }
+        { wrapper, initialProps: { card, settled: true } }
       )
     const first = mount()
     act(() => first.result.current.dismiss())

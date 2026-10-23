@@ -436,9 +436,12 @@ describe('queued card image edit', () => {
       field.setSelectionRange(6, 10, 'backward')
       fireEvent.select(field)
       const destination = owner.mock.calls.at(-1)![1].captureDestination?.(new DragEvent('drop'))
+      if (typeof destination !== 'function') {
+        throw new Error('Expected a captured drop destination')
+      }
       before.unmount()
       await act(async () => {
-        await destination?.(['/tmp/drop.png', '/repo/notes.txt'])
+        await destination(['/tmp/drop.png', '/repo/notes.txt'])
       })
       render(ui())
       await waitFor(() => expect(screen.getByRole('textbox')).toHaveProperty('readOnly', false))

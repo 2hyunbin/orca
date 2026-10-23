@@ -145,7 +145,9 @@ describe('real structured chat presentation population', () => {
     expect(
       [...census.listeners.values()].filter((entry) => entry.tab === tabs[1]!.id)
     ).toHaveLength(0)
-    act(() => useAppStore.setState((state) => ({ settings: { ...state.settings } })))
+    act(() =>
+      useAppStore.setState((state) => ({ settings: state.settings && { ...state.settings } }))
+    )
     act(() =>
       useAppStore.setState((state) => ({ agentStatusByPaneKey: { ...state.agentStatusByPaneKey } }))
     )
