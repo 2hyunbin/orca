@@ -9,7 +9,7 @@ import {
   RendererSplitLedger,
   splitPaneClosedError,
   splitRetryUnknownError,
-  type RendererSplitRequest
+  type RendererSplit
 } from './terminal-split-retry'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
 import type { Worktree } from '../../../../shared/worktree/types'
@@ -83,51 +83,47 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       )
     }
 
-    const newLeafId = opts.retrySplit ?? randomUUID()
-    const request: RendererSplitRequest = opts.retrySplit
-      ? this.rendererSplitForRetry(leaf.tabId, opts.retrySplit)
-      : {
-          tabId: leaf.tabId,
-          paneRuntimeId: leaf.paneRuntimeId,
-          direction,
-          command: opts.command,
-          worktreeId: leaf.worktreeId,
-          sourceLeafId: leaf.leafId,
-          telemetrySource: opts.telemetrySource
-        }
-    if (!opts.retrySplit) {
-      this.rendererSplits.record(newLeafId, request)
+    if (opts.retrySplit) {
+      // A retry only waits: the window may still be making the pane, so asking again could run
+      // the command twice, and nothing can prove a pane it never listed was not made and closed.
+      const split = this.rendererSplitForRetry(leaf.tabId, opts.retrySplit)
+      return await this.awaitRendererSplit(split, opts.retrySplit)
     }
-    this.watchRendererSplits()
-    if (!this.leaves.has(this.getLeafKey(request.tabId, newLeafId))) {
-      // A retry re-sends the same leaf id; the window skips a split whose pane it already made.
-      const { tabId, paneRuntimeId, ...split } = request
-      this.notifier?.splitTerminal(tabId, paneRuntimeId, { ...split, newLeafId })
-    }
-
-    const newHandle = await this.waitForLeafInTab(request.tabId, newLeafId)
-    return {
-      handle: newHandle,
-      tabId: request.tabId,
-      paneRuntimeId: request.paneRuntimeId,
-      leafId: newLeafId
-    }
+    const newLeafId = randomUUID()
+    const split = { tabId: leaf.tabId, paneRuntimeId: leaf.paneRuntimeId }
+    this.rendererSplits.record(newLeafId, split)
+    this.notifier?.splitTerminal(leaf.tabId, leaf.paneRuntimeId, {
+      direction,
+      command: opts.command,
+      worktreeId: leaf.worktreeId,
+      sourceLeafId: leaf.leafId,
+      telemetrySource: opts.telemetrySource,
+      newLeafId
+    })
+    return await this.awaitRendererSplit(split, newLeafId)
   }
 
-  private rendererSplitForRetry(tabId: string, leafId: string): RendererSplitRequest {
+  private async awaitRendererSplit(
+    split: RendererSplit,
+    leafId: string
+  ): Promise<RuntimeTerminalSplit> {
+    this.watchRendererSplits()
+    const handle = await this.waitForLeafInTab(split.tabId, leafId)
+    return { handle, tabId: split.tabId, paneRuntimeId: split.paneRuntimeId, leafId }
+  }
+
+  private rendererSplitForRetry(tabId: string, leafId: string): RendererSplit {
     const entry = this.rendererSplits.get(leafId)
-    if (!entry || entry.request.tabId !== tabId) {
+    if (!entry || entry.split.tabId !== tabId) {
       throw splitRetryUnknownError(tabId, leafId)
     }
     if (entry.seen && !this.leaves.has(this.getLeafKey(tabId, leafId))) {
       throw splitPaneClosedError(tabId, leafId)
     }
-    // A remounted source pane gets a new runtime id; the window routes by the live one.
-    const source = this.leaves.get(this.getLeafKey(tabId, entry.request.sourceLeafId))
-    return source ? { ...entry.request, paneRuntimeId: source.paneRuntimeId } : entry.request
+    return entry.split
   }
 
-  /** Watches graph syncs while a split is unseen, so a pane closed after a timeout is not re-made. */
+  /** Watches graph syncs while a split is unseen, so a retry can tell a closed pane from a late one. */
   private watchRendererSplits(): void {
     if (this.rendererSplitWatch) {
       return

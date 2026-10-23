@@ -207,22 +207,22 @@ export abstract class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends
         stopWatching()
         reject(error)
       }
+      let listedOnce = false
+      // A pane listed once and gone now was closed; it cannot still start.
+      const outcome = (): Error =>
+        listedOnce && !listedLeaf()
+          ? splitPaneClosedError(tabId, leafId)
+          : splitPanePendingError(tabId, leafId)
       let timer = setTimeout(() => {
         if (!listedLeaf()) {
-          giveUp(splitPanePendingError(tabId, leafId))
+          giveUp(outcome())
           return
         }
-        timer = setTimeout(() => {
-          // A pane listed at the first deadline and gone now was closed; it cannot still start.
-          giveUp(
-            listedLeaf()
-              ? splitPanePendingError(tabId, leafId)
-              : splitPaneClosedError(tabId, leafId)
-          )
-        }, startMs - appearMs)
+        timer = setTimeout(() => giveUp(outcome()), startMs - appearMs)
       }, appearMs)
 
       const check = (): void => {
+        listedOnce ||= listedLeaf() !== undefined
         const handle = tryResolve()
         if (handle) {
           stopWatching()

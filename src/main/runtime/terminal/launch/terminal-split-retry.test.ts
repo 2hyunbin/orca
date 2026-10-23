@@ -101,21 +101,15 @@ describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
       expect(harness.rendererSplitTerminal).toHaveBeenCalledTimes(1)
     })
 
-    it('a retry before the pane appears re-sends the original split under the same leaf id', async () => {
+    it('a retry before the pane appears waits for it without asking the window again', async () => {
       const harness = createHarness()
       const { leafId } = await timedOutSplit(harness)
 
-      const retry = harness.runtime.splitTerminal(harness.handle, {
-        retrySplit: leafId,
-        command: 'something else'
-      })
-      expect(harness.rendererSplitTerminal).toHaveBeenLastCalledWith(
-        TAB_ID,
-        1,
-        expect.objectContaining({ newLeafId: leafId, command: 'agent --task 1' })
-      )
+      const retry = harness.runtime.splitTerminal(harness.handle, { retrySplit: leafId })
       harness.publish([{ leafId, paneRuntimeId: 2, ptyId: 'pty-late' }])
+
       await expect(retry).resolves.toMatchObject({ leafId })
+      expect(harness.rendererSplitTerminal).toHaveBeenCalledTimes(1)
     })
 
     it('refuses to re-make a pane that opened and was closed, or a split it never made', async () => {
@@ -135,20 +129,26 @@ describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
       expect(harness.rendererSplitTerminal).toHaveBeenCalledTimes(1)
     })
 
-    it('reports a pane that opened and closed during the wait as closed, not as still starting', async () => {
-      const harness = createHarness()
-      const split = harness.runtime
-        .splitTerminal(harness.handle, { command: 'agent' })
-        .catch((error: unknown) => error)
-      const leafId = harness.rendererSplitTerminal.mock.calls[0]?.[2]?.newLeafId
-      harness.publish([{ leafId, paneRuntimeId: 2, ptyId: null }])
-      await vi.advanceTimersByTimeAsync(10_000)
-      harness.publish()
-      await vi.advanceTimersByTimeAsync(20_000)
+    it.each([
+      ['before the first deadline', 5_000],
+      ['while its terminal starts', 15_000]
+    ])(
+      'reports a pane that opened and closed %s as closed, not as still starting',
+      async (_when, closedAfterMs) => {
+        const harness = createHarness()
+        const split = harness.runtime
+          .splitTerminal(harness.handle, { command: 'agent' })
+          .catch((error: unknown) => error)
+        const leafId = harness.rendererSplitTerminal.mock.calls[0]?.[2]?.newLeafId
+        harness.publish([{ leafId, paneRuntimeId: 2, ptyId: null }])
+        await vi.advanceTimersByTimeAsync(closedAfterMs)
+        harness.publish()
+        await vi.advanceTimersByTimeAsync(30_000)
 
-      await expect(split).resolves.toMatchObject({
-        data: { splitId: leafId, splitMayStillComplete: false }
-      })
-    })
+        await expect(split).resolves.toMatchObject({
+          data: { splitId: leafId, splitMayStillComplete: false }
+        })
+      }
+    )
   }
 )

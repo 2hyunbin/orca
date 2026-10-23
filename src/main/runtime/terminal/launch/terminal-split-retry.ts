@@ -1,20 +1,15 @@
-import type { TerminalPaneSplitSource } from '../../../../shared/feature-education-telemetry'
+import { BoundedMap } from '../../../../shared/bounded-map'
 import { TerminalSplitOutcomeError } from '../../../../shared/terminal-split-outcome'
 import { SPLIT_PANE_WAIT_TIMEOUT_MESSAGE } from './terminal-split-wait-timeout'
 
-/** What main asked the window to split; replayed unchanged so a retry cannot change the command. */
-export type RendererSplitRequest = {
+/** Where main asked the window to split; a retry answers from it without asking again. */
+export type RendererSplit = {
   tabId: string
   paneRuntimeId: number
-  direction: 'horizontal' | 'vertical'
-  command?: string
-  worktreeId: string
-  sourceLeafId: string
-  telemetrySource?: TerminalPaneSplitSource
 }
 
 type RendererSplitEntry = {
-  request: RendererSplitRequest
+  split: RendererSplit
   recordedAt: number
   /** Main's graph listed the pane at least once; its absence now means it was closed. */
   seen: boolean
@@ -25,32 +20,28 @@ const RENDERER_SPLIT_TTL_MS = 30 * 60_000
 
 /** Window-made splits keyed by the new pane's leaf id, so a retry joins the split instead of repeating it. */
 export class RendererSplitLedger {
-  private readonly entries = new Map<string, RendererSplitEntry>()
+  private readonly entries = new BoundedMap<string, RendererSplitEntry>({
+    maxEntries: MAX_RENDERER_SPLITS
+  })
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  record(leafId: string, request: RendererSplitRequest): void {
+  record(leafId: string, split: RendererSplit): void {
     this.prune()
-    this.entries.set(leafId, { request, recordedAt: this.now(), seen: false })
-    for (const oldest of this.entries.keys()) {
-      if (this.entries.size <= MAX_RENDERER_SPLITS) {
-        break
-      }
-      this.entries.delete(oldest)
-    }
+    this.entries.set(leafId, { split, recordedAt: this.now(), seen: false })
   }
 
-  get(leafId: string): { request: RendererSplitRequest; seen: boolean } | null {
+  get(leafId: string): { split: RendererSplit; seen: boolean } | null {
     this.prune()
-    return this.entries.get(leafId) ?? null
+    return this.entries.peek(leafId) ?? null
   }
 
   /** Marks listed panes seen; returns whether any split is still waiting to be seen. */
   observe(isListed: (tabId: string, leafId: string) => boolean): boolean {
     this.prune()
     let unseen = false
-    for (const [leafId, entry] of this.entries) {
-      if (!entry.seen && isListed(entry.request.tabId, leafId)) {
+    for (const [leafId, entry] of this.entries.entries()) {
+      if (!entry.seen && isListed(entry.split.tabId, leafId)) {
         entry.seen = true
       }
       unseen ||= !entry.seen
@@ -60,7 +51,7 @@ export class RendererSplitLedger {
 
   private prune(): void {
     const cutoff = this.now() - RENDERER_SPLIT_TTL_MS
-    for (const [leafId, entry] of this.entries) {
+    for (const [leafId, entry] of this.entries.entries()) {
       if (entry.recordedAt < cutoff) {
         this.entries.delete(leafId)
       }
