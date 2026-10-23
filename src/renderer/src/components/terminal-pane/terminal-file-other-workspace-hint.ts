@@ -9,8 +9,10 @@ import { getIndexedRepoMap } from '@/store/worktree-repo-index'
 import { openLinkedFileInEditor } from './terminal-file-link-editor-open'
 import { reserveDetectedFilePathOpenTurn } from './terminal-file-open-turn'
 
-const OTHER_WORKSPACE_HINT_TOAST_ID = 'terminal-file-other-workspace'
-let hintShown = false
+// Why a fresh id per hint: sonner applies a dismissal later, so reusing one id would let the
+// previous hint's dismissal remove the hint that replaced it.
+let hintSequence = 0
+let shownHintId: string | null = null
 
 export type FileInOtherWorkspace = {
   /** The tab the link opened here. */
@@ -45,9 +47,9 @@ export function openFileInOwningWorkspace(file: FileInOtherWorkspace): void {
 
 /** A newer link click supersedes the hint, so its action never opens an older link's file. */
 export function dismissFileInOtherWorkspaceHint(): void {
-  if (hintShown) {
-    hintShown = false
-    toast.dismiss(OTHER_WORKSPACE_HINT_TOAST_ID)
+  if (shownHintId) {
+    toast.dismiss(shownHintId)
+    shownHintId = null
   }
 }
 
@@ -65,9 +67,12 @@ export function showFileInOtherWorkspaceHint(file: FileInOtherWorkspace): void {
     worktree && 'repoId' in worktree
       ? getIndexedRepoMap(state.repos).get(worktree.repoId)?.displayName
       : undefined
-  hintShown = true
+  const hintId = `terminal-file-other-workspace-${++hintSequence}`
+  shownHintId = hintId
   const hidden = (): void => {
-    hintShown = false
+    if (shownHintId === hintId) {
+      shownHintId = null
+    }
   }
   toast(
     workspaceName
@@ -86,7 +91,7 @@ export function showFileInOtherWorkspaceHint(file: FileInOtherWorkspace): void {
           'This file is in another workspace'
         ),
     {
-      id: OTHER_WORKSPACE_HINT_TOAST_ID,
+      id: hintId,
       duration: 8000,
       description: translate(
         'auto.components.terminal.pane.TerminalLinkActionPopover.openedHereReadOnly',

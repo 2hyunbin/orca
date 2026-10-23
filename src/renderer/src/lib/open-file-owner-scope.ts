@@ -3,6 +3,7 @@ import type { AppState } from '@/store/types'
 import { LOCAL_EXECUTION_HOST_ID, toRuntimeExecutionHostId } from '../../../shared/execution-host'
 import { isFloatingWorkspaceId } from '../../../shared/floating-workspace-worktree'
 import { findWorkspaceFileRoute } from './runtime-workspace-file-route'
+import { editorBufferRouteEpochOf } from '@/store/slices/editor/buffers/editor-buffer-identity-cache'
 
 type OwnerScopedFile = Pick<
   OpenFile,
@@ -16,15 +17,15 @@ type OwnerScopedFile = Pick<
   | 'externalSshTargetId'
 >
 
+type OwnerScope = { worktreeId: string; relativePath: string }
+const ownerScopeCache = new WeakMap<object, { epoch: object; scope: OwnerScope }>()
+
 /**
  * The workspace an open file's reads and watch go through. A read-only view
  * of a file another workspace on its host holds (#32158) lives in one workspace but is scoped to
  * the one that holds the file, derived from the catalog so a restored view needs nothing stored.
  */
-export function openFileOwnerScope(
-  file: OwnerScopedFile,
-  state: AppState
-): { worktreeId: string; relativePath: string } {
+export function openFileOwnerScope(file: OwnerScopedFile, state: AppState): OwnerScope {
   const own = { worktreeId: file.worktreeId, relativePath: file.relativePath }
   // Why: only a read-only absolute view may sit outside the workspace holding its file; a live-tail
   // log follows itself and must not pull in a recursive watch of a folder that holds it.
@@ -39,13 +40,21 @@ export function openFileOwnerScope(
   ) {
     return own
   }
+  // Why cached: watch selectors run on every store update; the catalog walk only on route changes.
+  const epoch = editorBufferRouteEpochOf(state)
+  const cached = ownerScopeCache.get(file)
+  if (cached?.epoch === epoch) {
+    return cached.scope
+  }
   const runtimeOwner = file.runtimeEnvironmentId?.trim()
   const route = findWorkspaceFileRoute(
     state,
     runtimeOwner ? toRuntimeExecutionHostId(runtimeOwner) : LOCAL_EXECUTION_HOST_ID,
     file.filePath
   )
-  return route ? { worktreeId: route.worktreeId, relativePath: route.relativePath } : own
+  const scope = route ? { worktreeId: route.worktreeId, relativePath: route.relativePath } : own
+  ownerScopeCache.set(file, { epoch, scope })
+  return scope
 }
 
 /** The workspace an open file is scoped to; without a catalog, the one it lives in. */

@@ -132,6 +132,24 @@ describe('a terminal file link clicked in workspace A', () => {
     expect(openFileMock.mock.lastCall?.[0]).not.toHaveProperty('readOnly')
   })
 
+  it('keeps the hint of a second link clicked while the first hint shows', async () => {
+    findWorkspaceFileRouteMock.mockReturnValue({
+      worktreeId: 'wt-b',
+      relativePath: 'report.md',
+      executionHostId: 'local'
+    })
+
+    openDetectedFilePath('/b/report.md', null, null, sourceDeps)
+    await settle()
+    openDetectedFilePath('/b/report.md', null, null, sourceDeps)
+    await settle()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+
+    expect(screen.getByText('This file is in project-b · feature-b')).not.toBeNull()
+  })
+
   it('shows no read-only hint when the link reused an editable tab here', async () => {
     findWorkspaceFileRouteMock.mockReturnValue({
       worktreeId: 'wt-b',

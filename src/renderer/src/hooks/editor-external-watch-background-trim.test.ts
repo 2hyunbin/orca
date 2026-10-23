@@ -15,10 +15,12 @@ import {
   TEST_REPO
 } from '@/store/slices/worktrees-slice-test-fixtures'
 
-// Why a catalog object: the owner lookup reads the store; the route mock below answers it.
-vi.mock('@/store', () => ({ useAppStore: { getState: vi.fn(() => ({})) } }))
-// Why: the catalog says wt1 holds /r/wt1/a.ts.
+// Why: the catalog says wt1 holds /r/wt1/a.ts once it knows the owner.
 const catalog = vi.hoisted(() => ({ knowsOwner: true }))
+// Why `repos` tracks the catalog: owner lookups are cached until a route input changes.
+vi.mock('@/store', () => ({
+  useAppStore: { getState: vi.fn(() => ({ repos: catalog.knowsOwner ? 'known' : 'unknown' })) }
+}))
 vi.mock('@/lib/runtime-workspace-file-route', () => ({
   findWorkspaceFileRoute: (_state: unknown, _hostId: string, absolutePath: string) =>
     catalog.knowsOwner && absolutePath === '/r/wt1/a.ts'
