@@ -431,7 +431,9 @@ describe('Claude structured option write under the request deadline', () => {
     const sequence = session.optionMutationSequence
     await expect(
       setClaudeStructuredOption(session, { key: 'effort', value: 'banana' }, undefined)
-    ).rejects.toThrow('Claude effort must be low, medium, high, xhigh, or max.')
+    ).rejects.toThrow(
+      'Claude effort is invalid; choose low, medium, high, xhigh, or max and send again.'
+    )
     expect(applyFlagSettings).not.toHaveBeenCalled()
     expect([...session.options]).toEqual(held)
     expect([...session.appliedInputOptions]).toEqual(applied)

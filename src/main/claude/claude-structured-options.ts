@@ -1,5 +1,8 @@
 import { ClaudeControlRequestError } from './claude-stream-json-connection'
-import { AgentSessionOptionRejectedError } from '../native-chat/agent-session-wire/structured-agent-session-option-error'
+import {
+  AgentSessionOptionRejectedError,
+  ClaudeEffortValidationError
+} from '../native-chat/agent-session-wire/structured-agent-session-option-error'
 import {
   observeClaudeSettingsApplied,
   readClaudeSettingsEffort,
@@ -75,9 +78,7 @@ export async function setClaudeStructuredOption(
       : null
   const effort = EFFORT_LEVELS.find((value) => value === input.value)
   if (input.key === 'effort' && effort === undefined) {
-    throw new AgentSessionOptionRejectedError(
-      'Claude effort must be low, medium, high, xhigh, or max.'
-    )
+    throw new ClaudeEffortValidationError()
   }
   const apply =
     input.key === 'model'

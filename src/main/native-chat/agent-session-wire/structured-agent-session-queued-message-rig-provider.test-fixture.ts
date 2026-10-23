@@ -6,7 +6,10 @@ import type { StructuredAgentSessionHost } from './structured-agent-session-host
 import { startsWhenPublished } from './structured-agent-session-instant-start.test-support'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import { activeProviderContext } from '../../../shared/agent-session-provider-context'
-import { codexProviderHandle } from '../../../shared/agent-session-provider-handle-encoding'
+import {
+  claudeProviderHandle,
+  codexProviderHandle
+} from '../../../shared/agent-session-provider-handle-encoding'
 import type { AgentSessionRecordStore } from '../../runtime/agent-session-record-store'
 import type { StructuredAgentSessionAdapter } from './structured-agent-session-adapter'
 import type { StructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
@@ -16,6 +19,7 @@ import {
 } from './structured-agent-session-host-test-data'
 
 export type QueuedRigProviderOptions = {
+  agent?: 'claude'
   rewind?: NonNullable<StructuredAgentSessionAdapter['rewind']>
   recoverRewind?: NonNullable<StructuredAgentSessionAdapter['recoverRewind']>
   /** A child started for a chat whose chain already names a thread resumes it, so a chat whose
@@ -100,7 +104,10 @@ export function createQueuedRigProvider(
         ...(options.starting ? { providerChildPhase: 'starting' as const } : {}),
         link: {
           linkId: `link-${fence}`,
-          handle: codexProviderHandle(thread),
+          handle:
+            options.agent === 'claude'
+              ? claudeProviderHandle(thread, null)
+              : codexProviderHandle(thread),
           origin: resumes ? ('resumed' as const) : ('created' as const),
           mintedAtFence: fence,
           observedAt: NOW

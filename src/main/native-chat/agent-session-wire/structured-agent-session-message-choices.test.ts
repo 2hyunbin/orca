@@ -1,5 +1,22 @@
-import { afterEach, beforeEach, expect, it } from 'vitest'
-import { providerDiagnostic, withProviderDiagnostic } from '../../../shared/agent-session-failure'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
+import { sessionFor } from '../../claude/claude-structured-dispatch-test-support'
+import type { ClaudeSession } from '../../claude/claude-structured-session-state'
+import { dispatchClaudeMessage } from '../../claude/claude-structured-message-options'
+import { createClaudeUserMessageQueue } from '../../claude/claude-agent-sdk-user-message-queue'
+import { ClaudeControlRequestError } from '../../claude/claude-stream-json-connection'
+import { AgentJournalSubmissionSchema } from '../../../shared/agent-session-journal-submission-schema'
+import {
+  structuredAgentSessionRecordedRejectionParts,
+  structuredAgentSessionAttemptFailureParts
+} from '../../../shared/structured-agent-session-rejection-words'
+import { agentSessionWriteNoticeEnglish } from '../../../shared/agent-session-refusal-notice'
+import { agentSessionWriteNoticeText } from '../../../renderer/src/components/native-chat/agent-session-write-notice-text'
+import {
+  providerDiagnostic,
+  readWholeAgentSessionFailureFact,
+  withProviderDiagnostic
+} from '../../../shared/agent-session-failure'
 import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import {
   createQueuedMessageTestRig,
@@ -112,6 +129,125 @@ it('rejects a refused choice before prompt input and leaves the next pick saved'
   )
   expect(rig.dispatch).toHaveBeenCalledOnce()
   expect(rig.store.getRecord(SESSION)?.options?.model).toBe('model-b')
+})
+
+it('carries Claude effort validation through the SDK queue and saved desktop/phone rejection, then recovers', async () => {
+  await rig.dispose()
+  rig = await createQueuedMessageTestRig({ agent: 'claude', restartable: true })
+  const queue = createClaudeUserMessageQueue()
+  const prompts: SDKUserMessage[] = []
+  const pump = (async () => {
+    for await (const message of queue.messages) {
+      prompts.push(message)
+    }
+  })()
+  const session = sessionFor(
+    vi.fn((...args: Parameters<ClaudeSession['connection']['send']>) => {
+      // SAFETY: actual dispatch builds the SDK envelope, as the real connection's send does.
+      return queue.push(args[0] as unknown as SDKUserMessage, args[1])
+    })
+  )
+  session.providerSessionId = THREAD
+  const nativeWrite = vi.fn().mockResolvedValue(undefined)
+  Object.assign(session.connection, {
+    applyFlagSettings: nativeWrite,
+    getSettings: () => new Promise(() => {})
+  })
+  rig.dispatch.mockImplementation((input) =>
+    dispatchClaudeMessage(session, input, undefined, { warn: vi.fn(), error: vi.fn() })
+  )
+  const pickEffort = async (value: string) => {
+    const fields = { key: 'effort', value }
+    expect(
+      await rig.host.setOption(QUEUED_RIG_CALLER, {
+        envelope: rig.envelope(fields, 'agentSession.setOption', hostTestOperationId()),
+        ...fields
+      })
+    ).toMatchObject({ ok: true })
+  }
+  try {
+    await pickEffort('banana')
+    const invalid = rig.send('invalid effort')
+    expect(await invalid.result).toMatchObject({ ok: true })
+    await eventually(async () =>
+      expect((await rig.submission(invalid.id))?.dispatchState).toBe('rejected')
+    )
+    const saved = await rig.submission(invalid.id)
+    if (!saved) {
+      throw new Error('missing rejected submission')
+    }
+    const correction =
+      'Claude effort is invalid; choose low, medium, high, xhigh, or max and send again.'
+    expect(AgentJournalSubmissionSchema.parse(saved)).toMatchObject({
+      options: { effort: 'banana' },
+      rejection: { kind: 'claudeEffortInvalid' },
+      reason: correction
+    })
+    expect(saved.rejection).toEqual({ kind: 'claudeEffortInvalid' })
+    expect(nativeWrite).not.toHaveBeenCalled()
+    expect(prompts).toEqual([])
+    expect(session.dispatchWaiters).toEqual([])
+    await rig.restartHostProcess()
+    expect(await rig.submission(invalid.id)).toEqual(saved)
+    expect(
+      agentSessionWriteNoticeText(
+        structuredAgentSessionRecordedRejectionParts(saved, { agentName: 'Claude' }, [])
+      )
+    ).toBe(correction)
+    expect(
+      agentSessionWriteNoticeEnglish(
+        structuredAgentSessionAttemptFailureParts(
+          { kind: 'rejected', reason: saved.reason },
+          { agentName: 'Claude', retryControl: true },
+          readWholeAgentSessionFailureFact(saved.rejection)
+        )
+      )
+    ).toBe(correction)
+
+    await pickEffort('high')
+    nativeWrite.mockRejectedValueOnce(
+      new ClaudeControlRequestError('apply_flag_settings', 'Provider declined this setting')
+    )
+    const provider = rig.send('provider refusal', undefined, { carried: { effort: 'medium' } })
+    await provider.result
+    await eventually(async () =>
+      expect((await rig.submission(provider.id))?.rejection).toEqual({
+        kind: 'providerRejected',
+        detail: { text: 'Provider declined this setting', audience: 'person' }
+      })
+    )
+    expect((await rig.submission(provider.id))?.reason).toBe(
+      "Claude didn't accept this message: Provider declined this setting."
+    )
+    nativeWrite.mockRejectedValueOnce(new Error('private internal implementation detail'))
+    const internal = rig.send('internal refusal', undefined, { carried: { effort: 'low' } })
+    await internal.result
+    await eventually(async () =>
+      expect(await rig.submission(internal.id)).toMatchObject({
+        rejection: { kind: 'providerRejected' },
+        reason: "Claude didn't accept this message."
+      })
+    )
+    expect((await rig.submission(internal.id))?.rejection).toEqual({ kind: 'providerRejected' })
+    expect(prompts).toEqual([])
+    const valid = rig.send('valid effort')
+    expect(await valid.result).toMatchObject({ ok: true })
+    await eventually(async () =>
+      expect((await rig.submission(valid.id))?.handedOverAt).toBeDefined()
+    )
+    expect(nativeWrite.mock.calls.map(([flags]) => flags)).toEqual([
+      { effortLevel: 'medium' },
+      { effortLevel: 'low' },
+      { effortLevel: 'high' }
+    ])
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]?.message.content).toEqual([{ type: 'text', text: 'valid effort' }])
+    expect(session.appliedInputOptions.get('effort')).toBe('high')
+    expect(rig.store.getRecord(SESSION)?.options?.effort).toBe('high')
+  } finally {
+    queue.end()
+    await pump
+  }
 })
 
 it('uses each send’s captured choices when two messages arrive during startup', async () => {
