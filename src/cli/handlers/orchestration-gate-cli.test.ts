@@ -36,6 +36,7 @@ const originalTerminalHandle = process.env.ORCA_TERMINAL_HANDLE
 const originalPaneKey = process.env.ORCA_PANE_KEY
 // Isolate inherited session markers so the runner cannot change the refusal branch.
 const originalStructuredSession = process.env.ORCA_STRUCTURED_SESSION
+const originalCodexThreadId = process.env.CODEX_THREAD_ID
 
 const restoreEnv = (name: string, value: string | undefined): void => {
   if (value === undefined) {
@@ -57,6 +58,7 @@ describe('orchestration gate commands carry caller identity', () => {
     delete process.env.ORCA_TERMINAL_HANDLE
     delete process.env.ORCA_PANE_KEY
     delete process.env.ORCA_STRUCTURED_SESSION
+    delete process.env.CODEX_THREAD_ID
     process.exitCode = 0
   })
 
@@ -66,6 +68,7 @@ describe('orchestration gate commands carry caller identity', () => {
     restoreEnv('ORCA_TERMINAL_HANDLE', originalTerminalHandle)
     restoreEnv('ORCA_PANE_KEY', originalPaneKey)
     restoreEnv('ORCA_STRUCTURED_SESSION', originalStructuredSession)
+    restoreEnv('CODEX_THREAD_ID', originalCodexThreadId)
     process.exitCode = 0
   })
 
