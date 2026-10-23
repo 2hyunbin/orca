@@ -5,6 +5,9 @@ import { getAgentStatusOwner } from '@/store/agent-status-commit'
 import type { AgentStatusEntry } from '@/store/slices/agent-status'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 import type { Tab } from '../../../shared/tab-types'
+import { toRemoteRuntimePtyId } from '../../../shared/remote-runtime-pty-id'
+import { makeTab, makeWorktree } from '@/store/slices/store-test-helpers'
+import type { AppState } from '@/store/types'
 import { makePaneKey } from '../../../shared/stable-pane-id'
 import { getTabAgentExitOwner } from './tab-agent-exit-owner'
 
@@ -30,7 +33,7 @@ const row = (state: AgentStatusEntry['state']): AgentStatusEntry => ({
   stateStartedAt: 10,
   updatedAt: 20
 })
-function setup(titles?: readonly string[]) {
+function setup(titles?: readonly string[], patch?: Partial<AppState>) {
   const store = createStore(createAppState)
   const status = getAgentStatusOwner(store)
   const items: Tab[] = (titles ?? []).map((label, n) => ({
@@ -67,7 +70,8 @@ function setup(titles?: readonly string[]) {
             second: { type: 'leaf', groupId: 'g1' }
           }
         }
-      : {}
+      : {},
+    ...patch
   })
   const service = getTabAgentExitOwner(status)
   const stop = service.start()
@@ -154,6 +158,162 @@ describe('root terminal exit evidence on captured canonical pairs', () => {
       expect(changed).toBe(true)
       expect(clear).not.toHaveBeenCalled()
       expect(store.getState().tabsByWorktree.workspace[0].launchAgent).toBe('codex')
+    }
+  )
+  it.each(['local', 'wsl', 'ssh', 'paired-old', 'paired-current'] as const)(
+    'keeps transport loss distinct from local exit: %s',
+    (kind) => {
+      const pty =
+        kind === 'paired-old'
+          ? toRemoteRuntimePtyId('old')
+          : kind === 'paired-current'
+            ? toRemoteRuntimePtyId('new', 'host')
+            : 'pty-a'
+      const { store, status, service } = setup(undefined, {
+        repos: [
+          {
+            id: 'repo',
+            path: '/workspace',
+            displayName: 'repo',
+            badgeColor: '#000',
+            addedAt: 0,
+            ...(kind === 'ssh' ? { connectionId: 'ssh-host' } : {})
+          }
+        ],
+        worktreesByRepo: {
+          repo: [
+            makeWorktree({
+              id: 'workspace',
+              repoId: 'repo',
+              path: kind === 'wsl' ? '\\\\wsl.localhost\\Ubuntu\\work' : '/workspace'
+            })
+          ]
+        },
+        ptyIdsByTabId: { tab: [pty] },
+        terminalLayoutsByTabId: {
+          tab: {
+            root: { type: 'leaf', leafId: leaf },
+            activeLeafId: leaf,
+            expandedLeafId: null,
+            ptyIdsByLeafId: { [leaf]: pty }
+          }
+        }
+      })
+      const clear = vi.fn(store.getState().clearTabLaunchAgent)
+      store.setState({ clearTabLaunchAgent: clear })
+      status.transact((transaction) => transaction.setEntry(pane, row('working')))
+      expect(service.getObservation('workspace', 'tab')).toBe(true)
+      status.transact((transaction) => transaction.setEntry(pane, undefined))
+      const local = kind === 'local' || kind === 'wsl'
+      expect(clear).toHaveBeenCalledTimes(local ? 1 : 0)
+      if (!local) {
+        status.transact((transaction) => transaction.setEntry(pane, row('done')))
+        expect(clear).toHaveBeenCalledTimes(1)
+      }
+    }
+  )
+
+  it('seeds after registration, forgets departed scopes, and releases its root subscription', () => {
+    const { store, service, status, stop } = setup(['codex', 'zsh'])
+    const cleared = vi.fn(store.getState().clearTabLaunchAgent)
+    store.setState({ clearTabLaunchAgent: cleared })
+    stop()
+    status.transact((transaction) => transaction.setEntry(pane, row('done')))
+    expect(cleared).not.toHaveBeenCalled()
+    expect(service.getObservation('workspace', 'tab', 'g0')).toBe(false)
+    const restart = service.start()
+    stops.push(restart)
+    // One current seed; no replay of the pre-registration accepted completion.
+    expect(cleared).toHaveBeenCalledTimes(1)
+    expect(service.getObservation('workspace', 'tab', 'g1')).toBe(true)
+    status.transact((transaction) => transaction.setEntry(pane, undefined))
+    store.setState({ layoutByWorktree: { workspace: { type: 'leaf', groupId: 'g1' } } })
+    expect(service.getObservation('workspace', 'tab', 'g0')).toBe(false)
+    store.setState({ tabsByWorktree: { workspace: [] } })
+    expect(service.getObservation('workspace', 'tab', 'g1')).toBe(false)
+    store.setState({
+      tabsByWorktree: { workspace: [makeTab({ ...tab, title: 'codex' })] },
+      unifiedTabsByWorktree: {}
+    })
+    expect(service.getObservation('workspace', 'tab')).toBe(true)
+    const changed = vi.fn()
+    const off = service.subscribe('tab', changed)
+    restart()
+    expect(changed).toHaveBeenCalledTimes(1)
+    store.getState().updateTabTitle('tab', 'zsh')
+    expect(changed).toHaveBeenCalledTimes(1)
+    off()
+  })
+
+  it('uses the last saved item in a group, including compound renames and later group changes', () => {
+    const { store, service } = setup(['codex', 'zsh'])
+    const initial = store.getState().unifiedTabsByWorktree.workspace
+    store.setState({
+      unifiedTabsByWorktree: { workspace: [{ ...initial[0], groupId: 'g1' }, initial[1]] }
+    })
+    expect(service.getObservation('workspace', 'tab', 'g1')).toBe(false)
+    const clear = vi.fn(store.getState().clearTabLaunchAgent)
+    store.setState({ clearTabLaunchAgent: clear })
+    store.setState({
+      unifiedTabsByWorktree: { workspace: [initial[1], { ...initial[0], groupId: 'g1' }] }
+    })
+    expect(service.getObservation('workspace', 'tab', 'g1')).toBe(true)
+    store.getState().setTabCustomTitle('tab', 'zsh')
+    expect(clear).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['raw', 'bulk', 'nested', 'overwritten-hint'] as const)(
+    'discovers complete %s producer fallback',
+    (kind) => {
+      const { store, status, service } = setup()
+      const second = makeTab({
+        id: 'other',
+        worktreeId: 'workspace',
+        title: 'zsh',
+        ptyId: 'other-pty',
+        launchAgent: 'codex'
+      })
+      store.setState({ tabsByWorktree: { workspace: [tab, second] } })
+      const rename = (id: string, title: string) => {
+        store.setState((state) => ({
+          tabsByWorktree: {
+            workspace: state.tabsByWorktree.workspace.map((item) =>
+              item.id === id ? { ...item, title } : item
+            )
+          }
+        }))
+      }
+      if (kind === 'raw') {
+        rename('other', 'codex')
+      }
+      if (kind === 'bulk') {
+        store.getState().updateTabTitles([
+          { tabId: 'tab', title: 'codex' },
+          { tabId: 'other', title: 'codex' }
+        ])
+      }
+      if (kind === 'nested') {
+        let nested = false
+        const off = store.subscribe(() => {
+          if (!nested) {
+            nested = true
+            rename('other', 'codex')
+          }
+        })
+        store.getState().updateTabTitle('tab', 'codex')
+        off()
+      }
+      if (kind === 'overwritten-hint') {
+        status.transact(() => {
+          store.getState().updateTabTitle('tab', 'codex')
+          rename('other', 'codex')
+        })
+      }
+      expect(service.getObservation('workspace', 'other')).toBe(true)
+      const clear = vi.fn(store.getState().clearTabLaunchAgent)
+      store.setState({ clearTabLaunchAgent: clear })
+      rename('other', 'zsh')
+      expect(clear).toHaveBeenCalledWith('other')
     }
   )
 })

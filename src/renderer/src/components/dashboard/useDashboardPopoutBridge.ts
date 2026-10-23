@@ -39,7 +39,8 @@ export function repoIconsUnchanged(
   return nextIds.every((id) => id in previous && next[id] === previous[id])
 }
 
-type DashboardSnapshotWatchState = DashboardSnapshotState & Pick<AppState, 'agentStatusEpoch'>
+type DashboardSnapshotWatchState = Omit<DashboardSnapshotState, 'agentStatusByPaneKey'> &
+  Pick<AppState, 'agentStatusEpoch'>
 
 export function dashboardSnapshotInputsChanged(
   state: DashboardSnapshotWatchState,

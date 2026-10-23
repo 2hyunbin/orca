@@ -1,4 +1,4 @@
-import { subscribeAgentStatusState, getAgentStatusState } from '@/store/agent-status'
+import { getAgentStatusState } from '@/store/agent-status'
 import { getAgentStatusEntry } from '@/store/agent-status'
 import { isRemoteRuntimePtyId } from '../../../../../shared/remote-runtime-pty-id'
 import { UNRESOLVED_OWNER_HOST_ID } from '../../../../../shared/execution-host'
@@ -85,28 +85,26 @@ export function installPaneHostCapabilityFlags(session: ConnectPanePtySession): 
     if (initialAgentStatus?.state === 'done') {
       session.setFocusReportSuppressionForAgentCompletion(undefined, initialAgentStatus.agentType)
     }
-    session.unsubscribeWindowsDoneTerminalModeReset = subscribeAgentStatusState(
-      (nextState) => {
-        const nextAgentStatus = nextState.agentStatusByPaneKey[session.cacheKey]
-        const nextAgentStatusState = nextAgentStatus?.state
-        if (nextAgentStatusState === 'done') {
-          session.setFocusReportSuppressionForAgentCompletion(undefined, nextAgentStatus.agentType)
-        } else if (nextAgentStatusState) {
-          session.suppressNativeWindowsIdleCodexFocusReports = false
-        }
-        const nextAgentDoneStartedAt = resolveLatestAgentDoneStartedAt(nextAgentStatus)
-        // Why: a NEW completed turn — same-state `done` pings keep stateStartedAt, so they no-op.
-        if (
-          nextAgentDoneStartedAt !== undefined &&
-          nextAgentDoneStartedAt !== lastAgentDoneStartedAt
-        ) {
-          session.queueAgentIdleTerminalModeReset()
-        }
-        lastAgentDoneStartedAt = nextAgentDoneStartedAt
-      },
-      useAppStore,
-      session.cacheKey
-    )
+    session.unsubscribeWindowsDoneTerminalModeReset = getAgentStatusOwner(
+      useAppStore
+    ).subscribeTransitions(({ next: nextState }) => {
+      const nextAgentStatus = nextState.agentStatusByPaneKey[session.cacheKey]
+      const nextAgentStatusState = nextAgentStatus?.state
+      if (nextAgentStatusState === 'done') {
+        session.setFocusReportSuppressionForAgentCompletion(undefined, nextAgentStatus.agentType)
+      } else if (nextAgentStatusState) {
+        session.suppressNativeWindowsIdleCodexFocusReports = false
+      }
+      const nextAgentDoneStartedAt = resolveLatestAgentDoneStartedAt(nextAgentStatus)
+      // Why: a NEW completed turn — same-state `done` pings keep stateStartedAt, so they no-op.
+      if (
+        nextAgentDoneStartedAt !== undefined &&
+        nextAgentDoneStartedAt !== lastAgentDoneStartedAt
+      ) {
+        session.queueAgentIdleTerminalModeReset()
+      }
+      lastAgentDoneStartedAt = nextAgentDoneStartedAt
+    }, session.cacheKey)
   }
 
   session.localWindowsTerminalCapabilities = hasCachedWindowsTerminalCapabilities()
