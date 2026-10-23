@@ -93,9 +93,10 @@ export function useNativeChatDraftChange(
   setDraft: (value: string) => void,
   setCaret: (caret: number) => void,
   handleDraftOrCaretChange: (value: string, caret: number) => void,
-  setActiveSuggestion: (index: number) => void
+  setActiveSuggestion: (index: number) => void,
+  ime: { draft: string; flushDraftAppends: () => void; flushPendingAttachments: () => void }
 ) {
-  return useCallback(
+  const onDraftChange = useCallback(
     (value: string, element: NativeChatComposerInput) => {
       const nextCaret = element.selectionStart ?? value.length
       setDraft(value)
@@ -103,8 +104,18 @@ export function useNativeChatDraftChange(
       handleDraftOrCaretChange(value, nextCaret)
       setActiveSuggestion(0)
     },
-    [handleDraftOrCaretChange, setDraft]
+    [handleDraftOrCaretChange, setDraft, setCaret, setActiveSuggestion]
   )
+  return {
+    onDraftChange,
+    onImeSettled: (element: NativeChatComposerInput) => {
+      if (element.value !== ime.draft) {
+        onDraftChange(element.value, element)
+      }
+      ime.flushDraftAppends()
+      ime.flushPendingAttachments()
+    }
+  }
 }
 
 import { createNativeChatReturnField } from './native-chat-view-state-memory'

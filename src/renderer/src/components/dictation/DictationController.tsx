@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { DictationIndicator } from './DictationIndicator'
 import {
   useDictationChatInputLease,
-  captureReadyInsertionTarget,
+  captureInsertionTarget,
   insertText,
   type DictationInsertionTarget
 } from './dictation-insertion-target'
@@ -125,10 +125,7 @@ export function DictationController() {
     const sessionId = String(runId)
     dictationRunRef.current = runId
     activeSessionIdRef.current = sessionId
-    insertionTargetRef.current = await captureReadyInsertionTarget()
-    if (dictationRunRef.current !== runId) {
-      return
-    }
+    insertionTargetRef.current = captureInsertionTarget()
     const target = insertionTargetRef.current
     releaseInput.current?.()
     releaseInput.current = target && target.kind !== 'terminal' ? holdInput(target.element) : null

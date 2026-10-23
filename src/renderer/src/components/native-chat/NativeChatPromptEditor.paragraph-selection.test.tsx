@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { createRef } from 'react'
 import { NativeChatViewIdentity, retireNativeChatViewState } from './native-chat-view-state-memory'
+import { Fragment } from '@tiptap/pm/model'
 import { NodeSelection } from '@tiptap/pm/state'
 import { act, cleanup, fireEvent, render, renderHook, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -102,3 +103,49 @@ it('restores the rich editor backward range after keyed park and replaces that r
   expect(inputRef.current?.value).toBe('alpha X gamma')
   retireNativeChatViewState('range-return')
 })
+
+it.each([100, 1000])(
+  'bounds retained selection traversal to the rich input at %s paragraphs',
+  (paragraphs) => {
+    const input = createRef<NativeChatComposerInput>()
+    const rendered = render(
+      <NativeChatPromptEditor
+        inputRef={input}
+        initialValue={Array.from({ length: paragraphs }, () => 'line').join('\n')}
+        disabled={false}
+        placeholder="Message"
+        onChange={vi.fn()}
+        onSelect={vi.fn()}
+      />
+    )
+    const editor = promptEditor(within(rendered.container).getByRole('textbox'))
+    const walk = Fragment.prototype.nodesBetween
+    let visits = 0
+    const spy = vi.spyOn(Fragment.prototype, 'nodesBetween').mockImplementation(function (
+      this: Fragment,
+      from,
+      to,
+      callback,
+      nodeStart,
+      parent
+    ) {
+      walk.call(
+        this,
+        from,
+        to,
+        (...args) => {
+          visits++
+          return callback(...args)
+        },
+        nodeStart,
+        parent
+      )
+    })
+    act(() => editor.commands.setTextSelection({ from: editor.state.doc.content.size - 2, to: 2 }))
+    expect(input.current?.selectionStart).toBe(1)
+    expect(input.current?.selectionEnd).toBe(paragraphs * 5 - 2)
+    expect(visits).toBeGreaterThanOrEqual(paragraphs)
+    expect(visits).toBeLessThanOrEqual(20 * paragraphs)
+    spy.mockRestore()
+  }
+)

@@ -1,42 +1,51 @@
-import {
-  selectedNativeChatTab,
-  selectedNativeChatInputIsReady,
-  awaitSelectedNativeChatInput
-} from './native-chat-input-readiness'
-import { keybindingMatchesAction } from '../../../../shared/keybindings'
-import { getShortcutPlatform } from '@/lib/shortcut-platform'
-import { shouldPreserveEditableFocus } from '../terminal-pane/pane-helpers'
-import { NativeChatPasteRequest } from '@/lib/native-chat-paste-request'
-import { pasteTextIntoTextControl } from '@/lib/text-control-paste'
 import { useCallback, useContext, useLayoutEffect, useSyncExternalStore } from 'react'
 import { useAppStore } from '@/store'
-import { structuredAgentSessionOwnerForTab } from '@/runtime/structured-agent-session-owner'
+import type { WorktreeRuntimeOwnerState } from '@/lib/worktree-runtime-owner-state'
+import {
+  resolveStructuredAgentSessionOwner,
+  structuredAgentSessionOwnerForTab
+} from '@/runtime/structured-agent-session-owner'
 import { selectIdsBeyondHotRetain } from '../terminal-pane/terminal-hidden-view-parking'
-import { NativeChatViewIdentity, retireNativeChatViewState } from './native-chat-view-state-memory'
+import {
+  NativeChatViewIdentity,
+  nativeChatViewIdentities,
+  retireNativeChatViewState
+} from './native-chat-view-state-memory'
 
 export const NATIVE_CHAT_COLD_PARK_DELAY_MS = 30_000
 export const NATIVE_CHAT_HOT_RETAIN_MS = 300_000
 export const NATIVE_CHAT_HOT_RETAIN_LIMIT = 6
 type View = {
-  tabId: string
   visible: boolean
-  admitted: boolean
   hiddenSinceMs: number | null
   lastActivatedSeq: number
   leases: number
 }
 const views = new Map<string, View>()
-const listeners = new Set<() => void>()
+const tabKeys = new Map<string, string>()
+const listeners = new Map<string, Set<() => void>>()
 let sequence = 0
 let timer: ReturnType<typeof setTimeout> | undefined
+let scheduled = false
 export function nativeChatViewKey(tabId: string, host: string | null, sessionId: string): string {
   return JSON.stringify([tabId, host, sessionId])
 }
+function notify(key: string): void {
+  for (const listener of listeners.get(key) ?? []) {
+    listener()
+  }
+}
+function schedule(): void {
+  if (!scheduled) {
+    scheduled = true
+    queueMicrotask(recompute)
+  }
+}
 function recompute(): void {
+  scheduled = false
   clearTimeout(timer)
   const nowMs = Date.now()
   const eligible = [...views].flatMap(([id, view]) =>
-    view.admitted &&
     !view.visible &&
     !view.leases &&
     view.hiddenSinceMs !== null &&
@@ -50,14 +59,12 @@ function recompute(): void {
     hotRetainLimit: NATIVE_CHAT_HOT_RETAIN_LIMIT
   })
   for (const id of parked) {
-    const view = views.get(id)
-    if (view) {
-      view.admitted = false
-    }
+    views.delete(id)
+    notify(id)
   }
   let deadline = Infinity
   for (const view of views.values()) {
-    if (!view.admitted || view.visible || view.leases || view.hiddenSinceMs === null) {
+    if (view.visible || view.leases || view.hiddenSinceMs === null) {
       continue
     }
     const age = nowMs - view.hiddenSinceMs
@@ -70,178 +77,135 @@ function recompute(): void {
     }
   }
   if (Number.isFinite(deadline)) {
-    timer = setTimeout(recompute, Math.max(1, deadline - nowMs))
-  }
-  for (const listener of listeners) {
-    listener()
+    timer = setTimeout(schedule, Math.max(1, deadline - nowMs))
   }
 }
+const ownerInputs = [
+  'repos',
+  'worktreesByRepo',
+  'detectedWorktreesByRepo',
+  'folderWorkspaces',
+  'projectGroups',
+  'restoredRuntimeHostIdByWorkspaceSessionKey',
+  'runtimeEnvironments',
+  'runtimeEnvironmentCatalogHydrated',
+  'removedRuntimeEnvironmentIds'
+] as const satisfies readonly (keyof WorktreeRuntimeOwnerState)[]
+let retirementScheduled = false
 let watching = false
 function watchRetirement(): void {
   if (watching) {
     return
   }
   watching = true
-  const coldDestination = () => {
-    const tab = selectedNativeChatTab()
-    if (!tab || shouldPreserveEditableFocus(document.activeElement)) {
-      return false
-    }
-    return !selectedNativeChatInputIsReady()
-  }
-  document.addEventListener(
-    'keydown',
-    (event) => {
-      if (event.defaultPrevented || event.isComposing || !coldDestination()) {
-        return
-      }
-      const find = keybindingMatchesAction(
-        'chat.find',
-        event,
-        getShortcutPlatform(),
-        useAppStore.getState().keybindings
-      )
-      const typing = event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey
-      if (!find && !typing) {
-        return
-      }
-      event.preventDefault()
-      void awaitSelectedNativeChatInput().then((input) => {
-        if (typing && (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement)) {
-          void pasteTextIntoTextControl(input, event.key, { inputType: 'insertText' })
-        } else if (input) {
-          input.closest('[data-native-chat-root]')?.dispatchEvent(
-            new KeyboardEvent('keydown', {
-              key: event.key,
-              code: event.code,
-              ctrlKey: event.ctrlKey,
-              metaKey: event.metaKey,
-              altKey: event.altKey,
-              shiftKey: event.shiftKey,
-              bubbles: true,
-              cancelable: true
-            })
-          )
-        }
-      })
-    },
-    true
-  )
-  window.addEventListener(
-    'paste',
-    (event) => {
-      if (event.defaultPrevented || !coldDestination()) {
-        return
-      }
-      const accepted = new ClipboardEvent('paste', {
-        clipboardData: event.clipboardData,
-        cancelable: true
-      })
-      event.preventDefault()
-      void awaitSelectedNativeChatInput().then((input) => {
-        if (input) {
-          input.focus({ preventScroll: true })
-          input.dispatchEvent(new NativeChatPasteRequest(accepted))
-        }
-      })
-    },
-    true
-  )
   useAppStore.subscribe((state, previous) => {
-    if (state.unifiedTabsByWorktree === previous.unifiedTabsByWorktree) {
+    const changedWorkspaceHost =
+      (state.activeWorktreeId !== previous.activeWorktreeId ||
+        state.activeWorkspaceExecutionHostId !== previous.activeWorkspaceExecutionHostId) &&
+      [state.activeWorktreeId, previous.activeWorktreeId].some(
+        (id) =>
+          id &&
+          resolveStructuredAgentSessionOwner(state, id) !==
+            resolveStructuredAgentSessionOwner(previous, id)
+      )
+    if (
+      !changedWorkspaceHost &&
+      state.unifiedTabsByWorktree === previous.unifiedTabsByWorktree &&
+      state.settings?.activeRuntimeEnvironmentId ===
+        previous.settings?.activeRuntimeEnvironmentId &&
+      ownerInputs.every((key) => state[key] === previous[key])
+    ) {
       return
     }
-    const identities = new Set(
-      Object.values(state.unifiedTabsByWorktree).flatMap((tabs) =>
-        tabs
-          .filter((tab) => tab.contentType === 'agent-session')
-          .map((tab) =>
-            nativeChatViewKey(tab.id, structuredAgentSessionOwnerForTab(state, tab), tab.entityId)
-          )
-      )
-    )
-    for (const key of views.keys()) {
-      if (!identities.has(key)) {
-        views.delete(key)
-        retireNativeChatViewState(key)
-      }
+    if (retirementScheduled) {
+      return
     }
-    recompute()
+    retirementScheduled = true
+    // Structural updates retire cold return data as well as the admitted working set.
+    queueMicrotask(() => {
+      retirementScheduled = false
+      const current = useAppStore.getState()
+      const identities = new Set<string>()
+      for (const tabs of Object.values(current.unifiedTabsByWorktree)) {
+        for (const tab of tabs) {
+          if (tab.contentType === 'agent-session') {
+            identities.add(
+              nativeChatViewKey(
+                tab.id,
+                structuredAgentSessionOwnerForTab(current, tab),
+                tab.entityId
+              )
+            )
+          }
+        }
+      }
+      for (const key of nativeChatViewIdentities) {
+        if (!identities.has(key)) {
+          views.delete(key)
+          retireNativeChatViewState(key)
+          notify(key)
+        }
+      }
+      for (const [tabId, key] of tabKeys) {
+        if (!identities.has(key)) {
+          tabKeys.delete(tabId)
+        }
+      }
+      schedule()
+    })
   })
 }
 export function useNativeChatViewAdmission(key: string, tabId: string, visible: boolean): boolean {
   useLayoutEffect(() => {
     watchRetirement()
-    for (const [oldKey, previous] of views) {
-      if (previous.tabId === tabId && oldKey !== key) {
-        views.delete(oldKey)
-        retireNativeChatViewState(oldKey)
-      }
-    }
     let view = views.get(key)
+    if (!visible && !view) {
+      return
+    }
+    const oldKey = tabKeys.get(tabId)
+    if (oldKey && oldKey !== key) {
+      views.delete(oldKey)
+      retireNativeChatViewState(oldKey)
+      notify(oldKey)
+    }
+    tabKeys.set(tabId, key)
+    nativeChatViewIdentities.add(key)
     if (!view) {
-      view = {
-        tabId,
-        visible,
-        admitted: visible,
-        hiddenSinceMs: null,
-        lastActivatedSeq: 0,
-        leases: 0
-      }
+      view = { visible: false, hiddenSinceMs: null, lastActivatedSeq: 0, leases: 0 }
       views.set(key, view)
     }
     if (visible) {
-      view.admitted = true
-      if (!view.visible || view.lastActivatedSeq === 0) {
-        view.lastActivatedSeq = ++sequence
-      }
+      view.lastActivatedSeq = ++sequence
       view.hiddenSinceMs = null
     } else if (view.visible) {
       view.hiddenSinceMs = Date.now()
     }
     view.visible = visible
-    recompute()
+    schedule()
     return () => {
       view.visible = false
-      if (view.admitted && view.hiddenSinceMs === null) {
-        view.hiddenSinceMs = Date.now()
-      }
-      recompute()
+      view.hiddenSinceMs ??= Date.now()
+      schedule()
     }
   }, [key, tabId, visible])
-  const subscribe = useCallback((listener: () => void) => {
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
-  }, [])
-  return useSyncExternalStore(subscribe, () => visible || views.get(key)?.admitted === true)
-}
-export function useNativeChatViewLease(): () => () => void {
-  const key = useContext(NativeChatViewIdentity)
-  return useCallback(() => {
-    const view = key === null ? undefined : views.get(key.split('\0')[0] ?? key)
-    if (!view) {
-      return () => {}
-    }
-    view.leases += 1
-    let released = false
-    return () => {
-      if (released) {
-        return
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      const keyed = listeners.get(key) ?? new Set()
+      listeners.set(key, keyed)
+      keyed.add(listener)
+      return () => {
+        keyed.delete(listener)
+        if (keyed.size === 0) {
+          listeners.delete(key)
+        }
       }
-      released = true
-      view.leases -= 1
-      recompute()
-    }
-  }, [key])
+    },
+    [key]
+  )
+  return useSyncExternalStore(subscribe, () => visible || views.has(key))
 }
-
-export function holdNativeChatInput(element: Element | null): () => void {
-  const tabId = element
-    ?.closest('[data-structured-agent-session-overlay-tab-id]')
-    ?.getAttribute('data-structured-agent-session-overlay-tab-id')
-  const view = [...views.values()].find((entry) => entry.tabId === tabId)
+function holdView(key: string | undefined): () => void {
+  const view = key === undefined ? undefined : views.get(key)
   if (!view) {
     return () => {}
   }
@@ -251,7 +215,17 @@ export function holdNativeChatInput(element: Element | null): () => void {
     if (!released) {
       released = true
       view.leases -= 1
-      recompute()
+      schedule()
     }
   }
+}
+export function useNativeChatViewLease(): () => () => void {
+  const key = useContext(NativeChatViewIdentity)
+  return useCallback(() => holdView(key?.split('\0')[0]), [key])
+}
+export function holdNativeChatInput(element: Element | null): () => void {
+  const tabId = element
+    ?.closest('[data-structured-agent-session-overlay-tab-id]')
+    ?.getAttribute('data-structured-agent-session-overlay-tab-id')
+  return holdView(tabId ? tabKeys.get(tabId) : undefined)
 }

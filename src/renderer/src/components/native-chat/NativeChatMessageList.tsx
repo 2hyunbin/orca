@@ -305,7 +305,14 @@ export function NativeChatMessageList({
     loadEarlier,
     jumpToLoaded: requestRailJump
   })
-  const { start: startHistoryJump, abort: beginNavigation } = railHistoryJump
+  const { start: startHistoryJump, abort: abortHistoryJump } = railHistoryJump
+  const readerInput = useNativeChatReaderScrollInput(scrollRef, {
+    onReaderScroll: abortHistoryJump,
+    onTakeScroll: transcriptWindow.cancelAlign,
+    onLeaveEnd: readerLeavesEnd,
+    onScrollGesture: transcriptScroll.forwardedGesture
+  })
+  const beginNavigation = readerInput.beginNavigation
   // Every navigation begins by aborting a history jump still paging, which would
   // otherwise land later and pull the reader away from where they just went.
   const selectRailItem = useCallback(
@@ -338,12 +345,6 @@ export function NativeChatMessageList({
     beginNavigation()
     scrollToBottom()
   }, [beginNavigation, scrollToBottom])
-  const readerInput = useNativeChatReaderScrollInput(scrollRef, {
-    onReaderScroll: beginNavigation,
-    onTakeScroll: transcriptWindow.cancelAlign,
-    onLeaveEnd: readerLeavesEnd,
-    onScrollGesture: transcriptScroll.forwardedGesture
-  })
   useNativeChatMessageListHandle(ref, jumpToLatest, readerInput.revealFindMatch, dismiss, allSlots)
   useNativeChatRailJumpLanding({
     railJump,

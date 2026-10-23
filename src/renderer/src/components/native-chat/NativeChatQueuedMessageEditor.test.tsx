@@ -142,7 +142,8 @@ describe('queued card textarea', () => {
       const edit = editor()
       const answer = vi.fn()
       const promptCancel = vi.fn()
-      const { rerender } = render(view(edit, null, answer, promptCancel))
+      const { rerender } = render(view({ ...edit, acquiring: true }, null, answer, promptCancel))
+      rerender(view(edit, null, answer, promptCancel))
       const field = screen.getByRole('textbox', { name: 'Edit message' })
       expect(document.activeElement).toBe(field)
       rerender(view(edit, prompt, answer, promptCancel))
@@ -159,7 +160,8 @@ describe('queued card textarea', () => {
     'focuses and saves with a %s already open',
     (prompt) => {
       const edit = editor()
-      render(view(edit, prompt))
+      const { rerender } = render(view({ ...edit, acquiring: true }, prompt))
+      rerender(view(edit, prompt))
       const field = screen.getByRole('textbox', { name: 'Edit message' })
       expect(document.activeElement).toBe(field)
       fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -648,4 +650,34 @@ describe('queued card image edit', () => {
       text: 'see that'
     })
   })
+})
+
+it('reattaches an acquired edit range without taking sibling focus or scrolling, then honors a fresh Edit acquisition', () => {
+  const edit = { ...editor(), selection: { from: 2, to: 7, direction: 'backward' as const } }
+  const sibling = document.createElement('textarea')
+  document.body.append(sibling)
+  sibling.focus()
+  const geometry = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
+      return DOMRect.fromRect({ y: this.tagName === 'LI' ? 400 : 0, height: 100, width: 100 })
+    })
+  const rendered = render(view(edit, null))
+  const field = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Edit message' })
+  const list = field.closest('ul')!
+  expect([field.selectionStart, field.selectionEnd, field.selectionDirection]).toEqual([
+    2,
+    7,
+    'backward'
+  ])
+  expect(document.activeElement).toBe(sibling)
+  expect(list.scrollTop).toBe(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  expect(edit.save).toHaveBeenCalledOnce()
+  rendered.rerender(view({ ...edit, acquiring: true }, null))
+  rendered.rerender(view(edit, null))
+  expect(document.activeElement).toBe(field)
+  expect(list.scrollTop).toBe(400)
+  geometry.mockRestore()
+  sibling.remove()
 })

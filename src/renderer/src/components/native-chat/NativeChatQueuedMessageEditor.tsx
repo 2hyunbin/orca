@@ -45,13 +45,19 @@ export function NativeChatQueuedMessageEditor({
       )
     }
   })
+  const acquiring = useRef(editor.acquiring)
   useLayoutEffect(() => {
+    const acquired = acquiring.current && !editor.acquiring
+    acquiring.current = editor.acquiring
     if (editor.acquiring) {
       return
     }
     const textarea = field.current
-    textarea?.focus({ preventScroll: true })
     restoreSelection()
+    if (!acquired || textarea?.closest('[data-native-chat-focused=false]')) {
+      return
+    }
+    textarea?.focus({ preventScroll: true })
     const list = textarea?.closest('ul')
     const row = textarea?.closest('li')
     if (list && row) {

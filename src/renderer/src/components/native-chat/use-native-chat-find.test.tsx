@@ -6,6 +6,7 @@ import type { KeybindingOverrides } from '../../../../shared/keybindings'
 import { dispatchAppMenuPasteEvent } from '@/lib/app-menu-paste'
 import { findOwnedTextControlPasteTarget } from '@/lib/text-control-paste-ownership'
 import { isMacPlatform } from './native-chat-shortcut'
+import { NativeChatViewIdentity, retireNativeChatViewState } from './native-chat-view-state-memory'
 import { NativeChatFindBar } from './NativeChatFindBar'
 import { useNativeChatFind } from './use-native-chat-find'
 import { useNativeChatPasteBridge } from './use-native-chat-paste-bridge'
@@ -731,4 +732,33 @@ describe('native chat find', () => {
     expect(status()).toBe('2/2')
     expect(reveal).not.toHaveBeenCalled()
   })
+})
+
+it('restores an open Find range without stealing sibling focus or selecting its query; explicit Find still selects', () => {
+  const composer = composerHandle()
+  const ui = () => (
+    <NativeChatViewIdentity.Provider value="find-return">
+      <Chat composer={composer} transcript="needle text" />
+    </NativeChatViewIdentity.Provider>
+  )
+  const initial = render(ui())
+  pressModF(initial.container.querySelector('[data-native-chat-root]')!)
+  typeQuery('needle')
+  const before = findInput()!
+  before.setSelectionRange(1, 3)
+  fireEvent.keyUp(before, { key: 'ArrowRight' })
+  initial.unmount()
+  const sibling = document.createElement('textarea')
+  document.body.append(sibling)
+  sibling.focus()
+  const returned = render(ui())
+  const input = findInput()!
+  expect(input.value).toBe('needle')
+  expect([input.selectionStart, input.selectionEnd]).toEqual([1, 3])
+  expect(document.activeElement).toBe(sibling)
+  pressModF(returned.container.querySelector('[data-native-chat-root]')!)
+  expect(document.activeElement).toBe(input)
+  expect([input.selectionStart, input.selectionEnd]).toEqual([0, 6])
+  sibling.remove()
+  retireNativeChatViewState('find-return')
 })

@@ -5,6 +5,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject
@@ -64,6 +65,7 @@ export function useNativeChatFind(
   const [query, setQuery] = useNativeChatReturnState(findQuery, () => '')
   const barRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const requestedFocus = useRef(false)
   const focusBeforeOpenRef = useRef<HTMLElement | null>(null)
 
   const close = useCallback(() => {
@@ -104,10 +106,18 @@ export function useNativeChatFind(
         return
       }
       focusBeforeOpenRef.current = returnFocusTo instanceof HTMLElement ? returnFocusTo : null
+      requestedFocus.current = true
       setIsOpen(true)
     },
     [rootRef]
   )
+
+  useLayoutEffect(() => {
+    if (isOpen && requestedFocus.current && inputRef.current) {
+      requestedFocus.current = false
+      focusInput(inputRef.current)
+    }
+  }, [isOpen])
 
   useEffect(() => {
     // Out of scope in the web client: the browser's own find keeps Mod+F there.

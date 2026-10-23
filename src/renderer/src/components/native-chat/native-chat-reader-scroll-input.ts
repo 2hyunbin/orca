@@ -154,6 +154,7 @@ export function useNativeChatReaderScrollInput(
   }: ReaderScrollCallbacks
 ): {
   scrollerProps: NativeChatReaderScrollInputHandlers
+  beginNavigation: () => void
   railWheel: (deltaY: number) => void
   /** A gesture from a surface the transcript's own handlers never hear: reported where the view is now. */
   forwardedGesture: (gesture: ReaderGesture) => void
@@ -199,6 +200,7 @@ export function useNativeChatReaderScrollInput(
       if (!transcript) {
         return
       }
+      onReaderScroll()
       const geometry = nativeChatFindGeometry(transcript)
       geometry.scrollIntoBoxes(match)
       if (geometry.inView(match, bar)) {
@@ -215,11 +217,16 @@ export function useNativeChatReaderScrollInput(
       if (Math.abs(target - transcript.scrollTop) < 1) {
         return
       }
-      onReaderScroll()
       onLeaveEnd()
       transcript.scrollTop = target
     },
     [onLeaveEnd, onReaderScroll, scrollRef]
   )
-  return { scrollerProps, railWheel, forwardedGesture, revealFindMatch }
+  return {
+    scrollerProps,
+    railWheel,
+    forwardedGesture,
+    revealFindMatch,
+    beginNavigation: onReaderScroll
+  }
 }

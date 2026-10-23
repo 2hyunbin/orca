@@ -2,7 +2,7 @@ import { useNativeChatViewLease } from './native-chat-view-parking-owner'
 import { NativeChatPromptEditor } from './NativeChatPromptEditor'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import type { ClipboardEventHandler, KeyboardEventHandler, RefObject } from 'react'
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffectEvent, useLayoutEffect, useMemo, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import type { useImeEnterGestureOwnership } from '@/lib/ime-composition-keyboard-event'
 import { cn } from '@/lib/utils'
@@ -28,6 +28,8 @@ import { translate } from '@/i18n/i18n'
 import { useNativeChatComposerDraftUnsaved } from './use-native-chat-draft-unsaved'
 
 export type NativeChatComposerFieldProps = {
+  isVisible?: boolean
+
   /** Pane identity published to the drop pipeline so a native file drop lands
    *  only in the composer it was dropped on. */
   /** Owner of the draft the editor's document is saved with. */
@@ -147,6 +149,7 @@ export function NativeChatComposerField({
   isDictating,
   isDictationHoldMode,
   imeEnterGesture,
+  isVisible = true,
   onDraftChange,
   onTextareaSelect,
   onKeyDown,
@@ -216,6 +219,20 @@ export function NativeChatComposerField({
     }
     onImeSettled(element)
   }
+
+  const finishComposition = useEffectEvent((input: NativeChatComposerInput | null) => {
+    if (input && imeEnterGesture.isComposing()) {
+      droppedDraftClearRef.current ||= draft === '' && input.value !== ''
+      imeEnterGesture.reset()
+      settleImeValue(input)
+    }
+    compositionLease.current?.()
+    compositionLease.current = null
+  })
+  useLayoutEffect(() => {
+    const input = textareaRef.current
+    return () => finishComposition(input)
+  }, [isVisible, textareaRef])
 
   // Stable so the memoized option pickers keep their identity.
   const focusComposer = useCallback(() => textareaRef.current?.focus(), [textareaRef])

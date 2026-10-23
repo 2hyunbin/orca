@@ -57,6 +57,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       targetPtyId,
       agent,
       canSend = true,
+      isVisible = true,
       unavailableHint,
       isWorking = false,
       isStopping = false,
@@ -352,15 +353,17 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       setCaret
     })
 
-    const handleDraftChange = useNativeChatDraftChange(
+    const draftInput = useNativeChatDraftChange(
       setDraft,
       setCaret,
       handleDraftOrCaretChange,
-      setActiveSuggestion
+      setActiveSuggestion,
+      { draft, flushDraftAppends, flushPendingAttachments: attachments.flushPendingAttachments }
     )
 
     return (
       <NativeChatComposerField
+        isVisible={isVisible}
         draftScopeKey={draftScopeKey}
         textareaRef={textareaRef}
         draft={draft}
@@ -388,7 +391,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
         isDictating={dictation.isDictating}
         isDictationHoldMode={dictation.isDictationHoldMode}
         imeEnterGesture={imeEnterGesture}
-        onDraftChange={handleDraftChange}
+        {...draftInput}
         onTextareaSelect={(element) => {
           const value = element.value
           const nextCaret = element.selectionStart ?? value.length
@@ -397,13 +400,6 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
           setActiveSuggestion(0)
         }}
         onKeyDown={handleKeyDown}
-        onImeSettled={(element) => {
-          if (element.value !== draft) {
-            handleDraftChange(element.value, element)
-          }
-          flushDraftAppends()
-          attachments.flushPendingAttachments()
-        }}
         onPaste={handlePasteEvent}
         pickerListboxId={picker.listboxId}
         onChoosePickerItem={goalMode.interceptPick(resume.interceptPick(completeItem))}

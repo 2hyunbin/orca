@@ -68,12 +68,6 @@ function createReadOwner(
       return
     }
     snapshot = next
-    if (next.state.cursor) {
-      retainStructuredReadObservation(key, {
-        cursor: next.state.cursor,
-        observationKey: structuredAttentionReadObservation(next.state)
-      })
-    }
     emit()
   }
   const apply = (action: StructuredAgentSessionAction): void => {
@@ -227,6 +221,12 @@ function createReadOwner(
   const deleteIfUnused = (): void => {
     if (activations.size === 0 && listeners.size === 0) {
       if (forgetStructuredReadOwner(key, owner)) {
+        if (snapshot.state.cursor) {
+          retainStructuredReadObservation(key, {
+            cursor: snapshot.state.cursor,
+            observationKey: structuredAttentionReadObservation(snapshot.state)
+          })
+        }
         retainStructuredReadResume(key, snapshot)
       }
     }

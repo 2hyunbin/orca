@@ -6,7 +6,7 @@ import {
 // the rest are reserved as estimated height.
 //
 // The virtualizer owns visible-row anchoring; the transcript scroll hook owns
-// end-follow intent. Geometry alone must never reattach a parked
+// end-follow intent. Geometry alone must never reattach a parked reader.
 //
 // Measurements and scroll offsets share the container's coordinate space.
 
@@ -64,7 +64,7 @@ export function useNativeChatTranscriptWindow(
   options: NativeChatTranscriptWindowOptions
 ): NativeChatTranscriptWindow {
   const { scrollRef, slots, isVisible, revealIndex, typography = DEFAULT_ROW_TYPOGRAPHY } = options
-  const { pinned, reading, restore, setRestoring, reconcile, captureReadingPosition } =
+  const { pinned, reading, restore, cancelRestore, reconcile, captureReadingPosition } =
     useNativeChatTranscriptReading(options)
   const sizerElementRef = useRef<HTMLDivElement | null>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
@@ -207,12 +207,25 @@ export function useNativeChatTranscriptWindow(
     [readScrollMargin]
   )
 
-  const { alignToViewportTop, isAlignPending, endAlign, isAlignHeld } = useNativeChatViewportAlign({
+  const {
+    alignToViewportTop: alignViewport,
+    isAlignPending,
+    endAlign,
+    isAlignHeld
+  } = useNativeChatViewportAlign({
     scrollRef,
     virtualizer,
     finishReaderTakeover,
     programmaticScrollMarks
   })
+
+  const alignToViewportTop = useCallback(
+    (element: HTMLElement) => {
+      cancelRestore()
+      alignViewport(element)
+    },
+    [alignViewport, cancelRestore]
+  )
 
   // Preserve rows above the reader, never compensate growth within the visible
   // row — including its first measurement, which may follow an exact estimate.
@@ -241,6 +254,7 @@ export function useNativeChatTranscriptWindow(
     if (!isVisible || !container) {
       return
     }
+    cancelRestore()
     finishReaderTakeover()
     endAlign()
     // With no windowed row it would resolve the end from its own rows' height, 0, though rows
@@ -257,6 +271,7 @@ export function useNativeChatTranscriptWindow(
       programmaticScrollMarks.mark(container.scrollTop)
     }
   }, [
+    cancelRestore,
     endAlign,
     finishReaderTakeover,
     isVisible,
@@ -272,6 +287,7 @@ export function useNativeChatTranscriptWindow(
       if (!isVisible || !container) {
         return
       }
+      cancelRestore()
       finishReaderTakeover()
       endAlign()
       if (virtualizer.scrollElement) {
@@ -284,7 +300,15 @@ export function useNativeChatTranscriptWindow(
         programmaticScrollMarks.mark(container.scrollTop)
       }
     },
-    [endAlign, finishReaderTakeover, isVisible, programmaticScrollMarks, scrollRef, virtualizer]
+    [
+      cancelRestore,
+      endAlign,
+      finishReaderTakeover,
+      isVisible,
+      programmaticScrollMarks,
+      scrollRef,
+      virtualizer
+    ]
   )
 
   const consumeProgrammaticScroll = useCallback(
@@ -304,9 +328,8 @@ export function useNativeChatTranscriptWindow(
 
   const reconcileReaderScroll = useCallback(
     (isTakingOver: boolean) => {
-      if (isTakingOver && restore.current) {
-        restore.current = null
-        setRestoring(false)
+      if (isTakingOver) {
+        cancelRestore()
       }
       const container = scrollRef.current
       if (
@@ -327,16 +350,16 @@ export function useNativeChatTranscriptWindow(
         readerTakeoverFrameRef.current = null
       })
     },
-    [endAlign, restore, scrollRef, setRestoring, virtualizer]
+    [cancelRestore, endAlign, scrollRef, virtualizer]
   )
 
   // The virtualizer still holds the jump's row as its target, and would write it
   // again as rows measure: rebase it onto where the reader is.
   const cancelAlign = useCallback(() => {
-    if (isAlignHeld()) {
+    if (isAlignHeld() || restore.current) {
       reconcileReaderScroll(true)
     }
-  }, [isAlignHeld, reconcileReaderScroll])
+  }, [isAlignHeld, reconcileReaderScroll, restore])
 
   return {
     captureReadingPosition,

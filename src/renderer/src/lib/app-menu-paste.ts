@@ -1,4 +1,3 @@
-import { awaitSelectedNativeChatInput } from '@/components/native-chat/native-chat-input-readiness'
 import {
   isClipboardTextTooLargeError,
   type ReadClipboardTextOptions
@@ -73,19 +72,6 @@ export async function handleAppMenuPasteRequest({
   nativePasteMode = 'paste'
 }: AppMenuPasteRequestDeps): Promise<AppMenuPasteRequestResult> {
   const startedAtMs = getNowMs()
-  const chatInput = await awaitSelectedNativeChatInput()
-  if (chatInput === false) {
-    return createAppMenuTextControlRejectedResult({
-      reason: 'target-unavailable',
-      redactedDiagnostic: createTextControlRejectedResult(
-        'target-unavailable',
-        0,
-        'app-menu',
-        getNowMs() - startedAtMs
-      ).redactedDiagnostic
-    })
-  }
-  chatInput?.focus({ preventScroll: true })
   if (dispatchOwnedPasteEvent(nativePasteMode)) {
     return { status: 'handled', target: 'terminal' }
   }

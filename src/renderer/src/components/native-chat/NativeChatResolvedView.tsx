@@ -221,6 +221,7 @@ export function NativeChatResolvedView({
   const { card: shownPromptCard, collapsedCard } = promptCardPresentation
   const mountedPromptCard = shownPromptCard ?? collapsedCard
   const rootInput = useNativeChatRootInputRouting({
+    preferredInputRef: find.isOpen ? find.inputRef : undefined,
     tabId: terminalTabId,
     rootRef,
     composerRef,

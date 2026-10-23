@@ -31,10 +31,13 @@ export function useNativeChatTranscriptReading({
   const restore = useRef(
     reading.current.anchor && !reading.current.followingEnd ? reading.current.anchor : null
   )
+  const frame = useRef(0)
   const [restoring, setRestoring] = useState(restore.current !== null)
-  const restoreIndex = restore.current
-    ? slots.findIndex((slot) => nativeChatSlotKey(slot) === restore.current?.rowKey)
-    : -1
+  const rowIndexes = useMemo(
+    () => new Map(slots.map((slot, index) => [nativeChatSlotKey(slot), index])),
+    [slots]
+  )
+  const restoreIndex = restore.current ? (rowIndexes.get(restore.current.rowKey) ?? -1) : -1
   useLayoutEffect(() => {
     const changedEpoch =
       journalEpoch && reading.current.anchor?.epoch && reading.current.anchor.epoch !== journalEpoch
@@ -53,6 +56,11 @@ export function useNativeChatTranscriptReading({
     }
     return indexes
   }, [slots.length, revealIndex, newRowsMarkerIndex, restoring, restoreIndex])
+  const cancelRestore = useCallback(() => {
+    cancelAnimationFrame(frame.current)
+    restore.current = null
+    setRestoring(false)
+  }, [])
   const reconcile = useCallback(
     (virtualizer: ReadingScroll) => {
       const saved = restore.current
@@ -60,7 +68,6 @@ export function useNativeChatTranscriptReading({
       if (!isVisible || !saved || restoreIndex < 0 || !container) {
         return
       }
-      let frame = 0
       let stable = 0
       const deadline = performance.now() + 1000
       virtualizer.scrollToIndex(restoreIndex, { align: 'start', behavior: 'auto' })
@@ -91,12 +98,12 @@ export function useNativeChatTranscriptReading({
           }
         }
         if (performance.now() < deadline) {
-          frame = requestAnimationFrame(reconcile)
+          frame.current = requestAnimationFrame(reconcile)
         }
         // A missed layout deadline keeps the compact anchor for a later authoritative reveal.
       }
-      frame = requestAnimationFrame(reconcile)
-      return () => cancelAnimationFrame(frame)
+      frame.current = requestAnimationFrame(reconcile)
+      return () => cancelAnimationFrame(frame.current)
     },
     [isVisible, restoreIndex, scrollRef]
   )
@@ -106,6 +113,10 @@ export function useNativeChatTranscriptReading({
       if (!isVisible || !container || container.clientHeight <= 0 || restore.current) {
         return
       }
+      if (followingEnd) {
+        reading.current = { followingEnd, anchor: null }
+        return
+      }
       const { top, bottom } = container.getBoundingClientRect()
       const row = Array.from(
         container.querySelectorAll<HTMLElement>('[data-native-chat-row-key]')
@@ -113,10 +124,12 @@ export function useNativeChatTranscriptReading({
         const rect = element.getBoundingClientRect()
         return rect.bottom > top && rect.top < bottom
       })
-      if (followingEnd) {
-        reading.current = { followingEnd, anchor: null }
-      } else if (row?.dataset.nativeChatRowKey) {
+      if (row?.dataset.nativeChatRowKey) {
         const slot = slots[Number(row.dataset.index)]
+        const roster =
+          slot?.kind === 'subagent-entries'
+            ? slots[rowIndexes.get(slot.rosterRowId) ?? -1]
+            : undefined
         const position =
           slot?.kind === 'message'
             ? slot.message.journalPosition
@@ -124,10 +137,9 @@ export function useNativeChatTranscriptReading({
               ? (subagentSections?.rosters.get(slot.agentId)?.position ??
                 subagentSections?.rows.get(slot.agentId)?.[0]?.message.journalPosition)
               : slot?.kind === 'subagent-entries'
-                ? slots.find(
-                    (entry): entry is Extract<NativeChatTranscriptSlot, { kind: 'message' }> =>
-                      entry.kind === 'message' && entry.message.id === slot.rosterRowId
-                  )?.message.journalPosition
+                ? roster?.kind === 'message'
+                  ? roster.message.journalPosition
+                  : undefined
                 : undefined
         reading.current = {
           followingEnd,
@@ -142,7 +154,7 @@ export function useNativeChatTranscriptReading({
         reading.current = { ...reading.current, followingEnd }
       }
     },
-    [isVisible, journalEpoch, reading, scrollRef, slots, subagentSections]
+    [isVisible, journalEpoch, reading, rowIndexes, scrollRef, slots, subagentSections]
   )
-  return { pinned, reading, restore, setRestoring, reconcile, captureReadingPosition }
+  return { pinned, reading, restore, cancelRestore, reconcile, captureReadingPosition }
 }

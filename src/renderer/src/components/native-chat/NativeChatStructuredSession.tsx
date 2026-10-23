@@ -166,9 +166,7 @@ export function NativeChatStructuredSession(
     { sessionId: props.sessionId, isVisible: props.isVisible }
   )
   const paneCommands = useStructuredNativeChatPaneCommands({
-    tabId: props.tabId,
-    groupId: props.groupId,
-    isVisible: props.isVisible,
+    ...props,
     rootRef,
     composerRef,
     questionAnswerInputRef,
@@ -198,12 +196,11 @@ export function NativeChatStructuredSession(
     }
   }
   const rootInput = useNativeChatRootInputRouting({
-    tabId: props.tabId,
+    ...props,
+    preferredInputRef: find.isOpen ? find.inputRef : undefined,
     rootRef,
     composerRef,
     questionAnswerInputRef,
-    isVisible: props.isVisible,
-    isFocusedGroup: props.isFocusedGroup,
     composerReady: composerShown && install.slot.kind !== 'install'
   })
   const questionBody = prompt?.body.kind === 'question' ? prompt.body : null
@@ -268,6 +265,7 @@ export function NativeChatStructuredSession(
     <div
       ref={rootRef}
       data-native-chat-root="true"
+      data-native-chat-focused={props.isVisible && props.isFocusedGroup}
       data-native-chat-working={controller.isWorking ? 'true' : 'false'}
       tabIndex={-1}
       onPointerDownCapture={(event) => {
@@ -396,6 +394,7 @@ export function NativeChatStructuredSession(
           {composerShown ? (
             <NativeChatComposer
               ref={composerRef}
+              isVisible={props.isVisible}
               terminalTabId={props.tabId}
               paneKey={paneKey}
               draftScopeKey={structuredAgentSessionDraftScopeKey(props.sessionId)}
