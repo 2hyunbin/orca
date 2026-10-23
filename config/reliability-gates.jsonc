@@ -11,6 +11,93 @@
   },
   "gates": [
     {
+      "id": "terminal-lifecycle.closed-tab-create-admission",
+      "title": "A shipped runtime refuses stale create identities after a durable tab close",
+      "maturity": "experimental",
+      "protection": "partial",
+      "owner": "terminal-runtime",
+      "layer": "sqlite-runtime-rpc-provider-contract",
+      "surfaces": [
+        "legacy paired terminal.create",
+        "durable host close",
+        "runtime spill partitions"
+      ],
+      "platforms": ["macos", "linux", "windows"],
+      "providers": ["local-daemon", "paired-runtime", "ssh", "wsl", "mobile-relay"],
+      "coveredPlatforms": ["macos"],
+      "coveredProviders": ["paired-runtime"],
+      "coverageNotes": "Real SQLite Store, renderer close entry, cold reload and registered terminal.create handler with a synthetic PTY controller on macOS. The workspace resolver supplies a fixture scope; no physical paired client or PTY is launched. Unseen identities and missing-PTY recovery retain spawn behavior. Other provider/platform execution is an explicit gap.",
+      "motivatingLinks": ["https://github.com/stablyai/orca/issues/21341#issuecomment-5770157948"],
+      "invariant": "An unexpired durable tab-close record in any owning host partition must refuse a stale create of that tab in the same workspace before the PTY controller spawns. Unseen ids, panes with no tab-close record, expired records and split creation retain existing behavior; shipped layout ownership stays off.",
+      "oracle": "Invoke the renderer close entry through a real SQLite Store, freeze and reopen the database, then invoke the registered paired terminal.create handler with the original tab/leaf hints and no command. Both local and runtime-spill close records must return tab_not_found with zero controller spawns and zero inventory reads, and no restored layout. Fresh identities, existing panes without a close record and expired records must still spawn.",
+      "commands": [
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/runtime/terminal-create-closed-tab-durability.test.ts src/main/runtime/orca-runtime-terminal-create-replay-after-close.test.ts src/main/runtime/orca-runtime-terminal-close-records.test.ts src/main/runtime/orca-runtime-terminal-create-idempotency.test.ts src/main/runtime/runtime-pane-admission.test.ts src/main/persistence/terminal-topology/terminal-topology-commit.test.ts src/main/persistence/terminal-topology/terminal-pane-admission-taken-ids-switch-off.test.ts src/main/persistence/terminal-topology/terminal-layout-create-resend.test.ts src/main/persistence/terminal-topology/terminal-close-write-failure-switch-off.test.ts src/main/runtime/orca-runtime-terminal-close-no-widening.test.ts src/main/runtime/terminal-close-observed-exit.test.ts"
+      ],
+      "testFiles": [
+        "src/main/runtime/terminal-create-closed-tab-durability.test.ts",
+        "src/main/runtime/orca-runtime-terminal-create-replay-after-close.test.ts",
+        "src/main/runtime/orca-runtime-terminal-close-records.test.ts",
+        "src/main/runtime/orca-runtime-terminal-create-idempotency.test.ts",
+        "src/main/runtime/runtime-pane-admission.test.ts",
+        "src/main/persistence/terminal-topology/terminal-topology-commit.test.ts",
+        "src/main/persistence/terminal-topology/terminal-pane-admission-taken-ids-switch-off.test.ts",
+        "src/main/persistence/terminal-topology/terminal-layout-create-resend.test.ts",
+        "src/main/persistence/terminal-topology/terminal-close-write-failure-switch-off.test.ts",
+        "src/main/runtime/orca-runtime-terminal-close-no-widening.test.ts",
+        "src/main/runtime/terminal-close-observed-exit.test.ts"
+      ],
+      "assertionRefs": [
+        {
+          "file": "src/main/runtime/terminal-create-closed-tab-durability.test.ts",
+          "assertions": [
+            "refuses a stale id closed in %s before spawning, including after restart",
+            "still accepts a valid unseen identity",
+            "keeps recovery of a persisted pane without an explicit tab close",
+            "preserves the existing close-record expiry policy"
+          ]
+        }
+      ],
+      "evidenceRuns": [
+        {
+          "date": "2026-10-22",
+          "runner": "local",
+          "platform": "macos",
+          "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/runtime/terminal-create-closed-tab-durability.test.ts src/main/runtime/orca-runtime-terminal-create-replay-after-close.test.ts src/main/runtime/orca-runtime-terminal-close-records.test.ts src/main/runtime/orca-runtime-terminal-create-idempotency.test.ts src/main/runtime/runtime-pane-admission.test.ts src/main/persistence/terminal-topology/terminal-topology-commit.test.ts src/main/persistence/terminal-topology/terminal-pane-admission-taken-ids-switch-off.test.ts src/main/persistence/terminal-topology/terminal-layout-create-resend.test.ts src/main/persistence/terminal-topology/terminal-close-write-failure-switch-off.test.ts src/main/runtime/orca-runtime-terminal-close-no-widening.test.ts src/main/runtime/terminal-close-observed-exit.test.ts",
+          "result": "passed",
+          "durationSeconds": 23.76,
+          "summary": "100 tests pass across 11 files, including cold SQLite close-record replay, fresh/unknown/expired controls, split replay, close write failure, idempotency and close lifecycle controls."
+        }
+      ],
+      "runtimeBudget": {
+        "p95Seconds": 45,
+        "scope": "deterministic SQLite and runtime/provider contracts"
+      },
+      "flakeHistory": {
+        "status": "not-started",
+        "evidence": "One focused 11-file pass on macOS; CI soak not collected."
+      },
+      "redGreenEvidence": {
+        "status": "complete",
+        "evidence": "On unmodified production code both actual close/cold-reload/RPC stale-id cases resolve successfully after spawning a replacement PTY; the unseen-id control passes. Admission guard makes both cases reject before the controller is invoked."
+      },
+      "performanceBudget": {
+        "required": true,
+        "evidence": "One constant-time tombstone lookup per existing host partition inside the already serialized explicit pane-admission mutation. No terminal inventory, filesystem scan, network call, subprocess, timer, retry or polling is introduced. Negative RPC controls assert zero spawn and zero inventory reads."
+      },
+      "promotionCriteria": [
+        "Collect 100 CI passes or 14 days without unexplained flakes.",
+        "Exercise live paired desktop wake and host restart on macOS, Linux and Windows."
+      ],
+      "knownGaps": [
+        "No live sleep/wake, network RPC socket, actual PTY spawn or physical peer convergence was exercised; the registered handler and controller boundary are deterministic.",
+        "The actual terminal.close handle path and physical renderer close delivery are covered by adjacent suites rather than this cold-reload oracle.",
+        "Natural process exit and Sleep are not new close authority; only already-existing unexpired tab-close records gate creation. Live reconnects using mustExist continue to bypass fresh admission.",
+        "Windows, Linux, WSL, SSH and phone execution were not physically run. Folder-workspace creation is unchanged but this new end-to-end fixture uses a repository workspace.",
+        "Close records retain their existing 30-day TTL and per-partition cap of 500. No claim of permanent replay protection or complete issue resolution."
+      ],
+      "demotionRule": "Keep experimental or demote if stale replay can spawn, unrelated/fresh panes are refused, the guard adds terminal inventory calls, a close loses durability, or focused ordering tests flake without an explained harness or product defect."
+    },
+    {
       "id": "agent-session.detached-account-restart-progress",
       "title": "Independent hidden account restarts progress within a shared spawn limit",
       "maturity": "experimental",
