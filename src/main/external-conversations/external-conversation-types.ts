@@ -8,6 +8,7 @@ export const CONNECTOR_REFUSALS = [
   'agent_not_reachable',
   'unsupported_agent',
   'delivery_id_reused',
+  'delivery_backlog_full',
   // The three a closed agent's reopen ends on; each asks the user to open it in Orca.
   'agent_asleep_in_window',
   'no_session_to_reopen',

@@ -3,7 +3,7 @@ import type { ExternalConversationLink } from '../../shared/external-conversatio
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { admitConnectorAgent } from './connector-agents'
 import { ConversationChain } from './external-conversation-chain'
-import { DeliveryReceipts, type DeliveryReceiptDb } from './external-conversation-delivery-receipts'
+import type { DeliveryReceipts } from './external-conversation-delivery-receipts'
 import {
   findLink,
   writeLink,
@@ -44,7 +44,8 @@ export function runtimeConversationHost(runtime: OrcaRuntimeService): ExternalCo
 export type ExternalConversationSeamDeps = {
   store: ExternalConversationLinkStore
   readSettings: () => AgentStatusHooksSettings
-  receiptDb: () => DeliveryReceiptDb
+  /** Outlives the seam: a re-enable must not take this process's running deliveries for leftovers. */
+  receipts: DeliveryReceipts
   /** Worktree removals; returns the release. */
   onWorkspaceRemoved: (listener: (worktreeId: string) => void) => () => void
   /** The hook rows linked agents' sessions are read from. */
@@ -65,7 +66,6 @@ type StartInput = Omit<ConversationLaunchInput, 'agent'> & { agent: string }
 export class ExternalConversationSeam {
   private readonly abort = new AbortController()
   private readonly chain = new ConversationChain(this.abort.signal)
-  private readonly receipts: DeliveryReceipts
   /** Conversations this period started, so a second start for one shares its creation. */
   private readonly startedHere = new Set<string>()
   /** Conversations with work sent here, by the workspace their link was on. */
@@ -80,7 +80,6 @@ export class ExternalConversationSeam {
   private readonly releaseSessions: () => void
 
   constructor(private readonly deps: ExternalConversationSeamDeps) {
-    this.receipts = new DeliveryReceipts(deps.receiptDb)
     this.sessions = new LinkedSessionCapture(deps.store, deps.sessionRows)
     // A removed workspace may keep its PTY registered a while; its held and queued sends end now.
     // The event names no host, so a same-path twin's removal is told apart by the link surviving.
@@ -116,7 +115,7 @@ export class ExternalConversationSeam {
     deliveryId: string,
     input: StartInput
   ): Promise<ConversationStart> {
-    const initial = await this.receipts.run(
+    const initial = await this.deps.receipts.run(
       key,
       deliveryId,
       'connector.start',
@@ -168,7 +167,7 @@ export class ExternalConversationSeam {
     text: string
   ): Promise<Delivery> {
     const id = conversationId(key)
-    return this.receipts.run(key, deliveryId, 'connector.send', [text], () => {
+    return this.deps.receipts.run(key, deliveryId, 'connector.send', [text], () => {
       const queued = findLink(this.deps.store, key)
       if (queued) {
         this.linked.set(id, { key, worktreeId: queued.workspace.worktreeId })

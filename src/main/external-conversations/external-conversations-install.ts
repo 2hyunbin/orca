@@ -1,6 +1,6 @@
 import type { GlobalSettings } from '../../shared/global-settings-types'
 import type { RuntimeWorktreeLifecycleEvent } from '../runtime/orca-runtime-core'
-import type { DeliveryReceiptDb } from './external-conversation-delivery-receipts'
+import { DeliveryReceipts, type DeliveryReceiptDb } from './external-conversation-delivery-receipts'
 import type { ExternalConversationLinkStore } from './external-conversation-links'
 import {
   ExternalConversationSeam,
@@ -34,6 +34,8 @@ export function installExternalConversations(
   if (!store) {
     return { current: () => null }
   }
+  // One per process, so leftover settlement only reaches a previous process's receipts.
+  const receipts = new DeliveryReceipts(() => runtime.getOrchestrationDb())
   let seam: ExternalConversationSeam | null = null
   let reconciled = false
   const reconcile = (): void => {
@@ -43,7 +45,7 @@ export function installExternalConversations(
       seam = new ExternalConversationSeam({
         store,
         readSettings: () => store.getSettings(),
-        receiptDb: () => runtime.getOrchestrationDb(),
+        receipts,
         onWorkspaceRemoved: (listener) =>
           runtime.onWorktreeLifecycle((event) => {
             if (event.kind === 'removed') {
