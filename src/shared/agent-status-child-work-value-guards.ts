@@ -35,6 +35,10 @@ export function normalizeChildWorkText(raw: unknown, maxLength: number): string 
   if (preview === undefined) {
     return undefined
   }
+  // oxlint-disable-next-line no-control-regex -- Child previews fold C0, DEL, NEL, LS and PS.
+  if (!/[\u0000-\u001F\u007F\u0085\u2028\u2029]/.test(preview)) {
+    return preview.trim() || undefined
+  }
   let text = ''
   for (let index = 0; index < preview.length; index += 1) {
     text += breaksOneLineText(preview.charCodeAt(index)) ? ' ' : preview[index]
