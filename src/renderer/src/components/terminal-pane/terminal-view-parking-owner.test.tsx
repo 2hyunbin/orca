@@ -10,7 +10,7 @@ import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
 import { capturedPanesByTabId } from './terminal-parked-watcher-registry'
 
 const harness = vi.hoisted(() => ({
-  events: [] as string[],
+  events: new Array<string>(),
   watched: new Set<string>(),
   batches: 0,
   inspections: 0
