@@ -171,7 +171,7 @@ describe('dropped path preparation through the shared copy queue', () => {
     const pending = enqueue({ paths: [source, second, source], consumer: 'local-chat' })
     await started.promise
     await rm(source)
-    await writeFile(second, 'SECOND')
+    await writeFile(second, 'SECOND-rewritten')
     release.resolve(null)
     const result = await pending
     expect(result.paths).toHaveLength(2)
