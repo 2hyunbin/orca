@@ -1,6 +1,3 @@
-// A running Grok chat's own model list, read through the real host, reaches the account's saved
-// catalog: the next chat opens warm even when a session-free listing failed.
-
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
 import { HOST_TEST_SESSION as SESSION } from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
@@ -24,7 +21,6 @@ describe('a live Grok listing', () => {
     }
     const { host } = await openAttachedHostRig({}, undefined, modelCatalog)
 
-    // Its start was saved once as the chat attached; this read is saved too.
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(1)
     await host.readOptions(SESSION)
 
@@ -32,7 +28,7 @@ describe('a live Grok listing', () => {
     const [sessionId, listing] = vi.mocked(modelCatalog.recordLiveListing).mock.calls[1]!
     expect(sessionId).toBe(SESSION)
     expect(listing.models.map((model) => model.id)).toEqual(['grok-4.7', 'grok-4.6'])
-    // The session's picks are no one's default, and only its start says what its config resolved.
+    // Current picks are not defaults; only startup reports config resolution.
     expect(listing.models.every((model) => !model.isDefault)).toBe(true)
     expect(listing).not.toHaveProperty('configuredDefault')
   })
@@ -49,11 +45,9 @@ describe('a live Grok listing', () => {
       stop: vi.fn(),
       providerStarted: vi.fn()
     }
-    // The rig waits for the child to turn ready: bookkeeping never fails a proven start.
     const { host, rig, store, fence } = await openAttachedHostRig({}, undefined, modelCatalog)
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(1)
     expect(store.getRecord(SESSION)?.lease.ownerProcess).not.toBeNull()
-    // The rest of the start still lands, and live options remain readable.
     await expect(host.readOptions(SESSION)).resolves.toMatchObject({ current: expect.any(Object) })
     expect(modelCatalog.recordLiveListing).toHaveBeenCalledTimes(2)
     expect(

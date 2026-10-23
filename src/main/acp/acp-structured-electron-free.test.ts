@@ -1,5 +1,4 @@
-// The ACP lane runs in whatever process hosts the runtime, the headless one included, so nothing
-// it reaches may import Electron.
+// ACP also runs in the headless host, so its dependency graph must exclude Electron.
 
 import { resolve } from 'node:path'
 import { build } from 'esbuild'

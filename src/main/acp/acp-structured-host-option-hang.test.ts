@@ -1,6 +1,3 @@
-// A model or effort pick Grok never answers, through the real host: it must not hold the chat's
-// Stop or Close behind it, and on its own it fails at a bound instead of holding the chat forever.
-
 import { afterEach, describe, expect, it } from 'vitest'
 import { closeProviderTimelineRigs } from '../native-chat/agent-session-timeline/provider-timeline-assembler-test-support'
 import {
@@ -22,7 +19,6 @@ function pick(host: StructuredAgentSessionHost, value: string) {
   return host.setOption(CALLER, { envelope: envelope('agentSession.setOption', fields), ...fields })
 }
 
-/** Whether `promise` settled within `ms`, and how. */
 async function within(promise: Promise<unknown>, ms: number) {
   let timer: ReturnType<typeof setTimeout> | undefined
   const late = new Promise<'pending'>((resolve) => {
@@ -52,7 +48,7 @@ describe('a Grok model pick Grok never answers during send', () => {
     const invalid = host.cancel(CALLER, {
       envelope: envelope('agentSession.cancel', {}, { payloadFingerprint: 'invalid' })
     })
-    // The write runs outside the session's serialize, so even a refused Stop is answered at once.
+    // Stop bypasses the session queue even while an option write stalls.
     expect(await within(invalid, 100)).toMatchObject({ settled: 'resolved' })
     const request = { envelope: envelope('agentSession.cancel', {}) }
     expect(await within(host.cancel(CALLER, request), 2_000)).toMatchObject({ settled: 'resolved' })
@@ -103,7 +99,6 @@ describe('a Grok model pick Grok never answers during send', () => {
       ).toBe('rejected')
     )
     expect(framesOf(rig.child(), 'session/prompt')).toEqual([])
-    // The chat's queue moved on: a later operation runs.
     expect(await within(host.readOptions(SESSION), 1_000)).not.toBe('pending')
     const restore = rig.adapter.dispatch({
       sessionId: SESSION,

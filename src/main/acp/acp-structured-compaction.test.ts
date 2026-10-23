@@ -32,7 +32,6 @@ function withoutCompaction(spec: AcpLaunchSpec): AcpLaunchSpec {
   return rest
 }
 
-/** The command turn the host writes before it hands `/compact` over. */
 async function commandRun(rig: AcpAdapterRig): Promise<StructuredAgentSessionCommandRun> {
   const turn = structuredAgentSessionCommandTurn('compact-1')
   const running = agentJournalTurnBody({ turnId: turn.turnId, state: 'running', startedAt: 4_000 })
@@ -43,7 +42,6 @@ async function commandRun(rig: AcpAdapterRig): Promise<StructuredAgentSessionCom
   return { clientMessageId: 'compact-1', ...turn, running }
 }
 
-/** Starts the agent, sends `/compact`, and returns its prompt frame. */
 async function compact(spec: AcpLaunchSpec, frames?: AcpFixtureFrame[]) {
   const rig = await openAcpAdapterRig({ spec })
   await rig.acquire()
@@ -66,7 +64,6 @@ function replyText(text: string, promptId?: string) {
   }
 }
 
-/** The command's turn once the agent's answer ended it, and the rows inside it. */
 async function ended(rig: AcpAdapterRig, command: StructuredAgentSessionCommandRun) {
   return waitFor(async () => {
     const rows = await rig.rig.rows()
@@ -257,7 +254,7 @@ describe('ACP compaction settlement', () => {
 
   it("fails a compaction the agent answered with an error, in the agent's words", async () => {
     const { rig, command, prompt } = await compact(OPENCODE)
-    // -32000 means signed out to ACP; any other error code is the compaction's own failure.
+    // Only -32000 means signed out; other errors are compaction failures.
     rig.child().agent.fail(prompt, -32603, 'Summarization failed: 500')
     const { turn, inside } = await ended(rig, command)
     expect(turn).toMatchObject({ state: 'completed', outcome: 'failure' })

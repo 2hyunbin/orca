@@ -1,7 +1,4 @@
-// Real children (plain Node, never an agent CLI) behind the real connection. One stops talking
-// mid-turn by closing its stdout while the process keeps running: nothing exited and Orca can still
-// write to it, so, as in the common pattern, the turn runs on until a Stop or close ends the agent.
-// The other exits while a process it started still holds its stdout open: the exit alone ends it.
+// Exercise real child exits separately from stdout EOF, including inherited pipes.
 
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -24,7 +21,6 @@ afterEach(async () => {
   await closeProviderTimelineRigs()
 })
 
-// Answers the handshake and echoes one reply chunk for the prompt, then runs `onPrompt`.
 const agentScript = (onPrompt: string): string => String.raw`
   const fs = require('node:fs')
   fs.writeFileSync(process.env.ORCA_TEST_PID_FILE, String(process.pid))
@@ -63,7 +59,6 @@ const agentScript = (onPrompt: string): string => String.raw`
   setInterval(() => {}, 60000)
 `
 const CLOSES_STDOUT_MID_TURN = agentScript('fs.closeSync(1)')
-// Starts a process that inherits its stdout and outlives it, records that process, then exits.
 const EXITS_HOLDING_STDOUT = agentScript(String.raw`
   const held = require('node:child_process').spawn(
     process.execPath,
@@ -119,7 +114,7 @@ describe('ACP agent that closes its stdout but keeps running', () => {
       { timeout: 10_000, interval: 20 }
     )
     const pid = Number(readFileSync(pidFile, 'utf8'))
-    // Long enough for a closed stream to have reached the adapter.
+    // Allow EOF to propagate before asserting that the turn still runs.
     await new Promise((resolve) => setTimeout(resolve, 500))
     expect((await turns()).at(-1)).toMatchObject({ state: 'running' })
     expect(rig.ended).toEqual([])
