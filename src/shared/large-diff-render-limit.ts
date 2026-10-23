@@ -32,17 +32,7 @@ export type LargeDiffRenderLimit =
     }
 
 export function countLinesEmptyAsZero(content: string): number {
-  if (content.length === 0) {
-    return 0
-  }
-
-  let lineCount = 1
-  for (let index = 0; index < content.length; index += 1) {
-    if (content.charCodeAt(index) === 10) {
-      lineCount += 1
-    }
-  }
-  return lineCount
+  return content.length === 0 ? 0 : countLinesLikeSplit(content)
 }
 
 type BoundedLineCount = {
@@ -61,7 +51,10 @@ export function countLinesEmptyAsZeroUpToLimit(
   let lineCount = 1
   for (let index = 0; index < content.length; index += 1) {
     if (content.charCodeAt(index) !== 10) {
-      continue
+      index = content.indexOf('\n', index + 1)
+      if (index === -1) {
+        break
+      }
     }
     lineCount += 1
     if (lineCount > maxLines) {
@@ -74,9 +67,13 @@ export function countLinesEmptyAsZeroUpToLimit(
 export function countLinesLikeSplit(content: string): number {
   let lineCount = 1
   for (let index = 0; index < content.length; index += 1) {
-    if (content.charCodeAt(index) === 10) {
-      lineCount += 1
+    if (content.charCodeAt(index) !== 10) {
+      index = content.indexOf('\n', index + 1)
+      if (index === -1) {
+        break
+      }
     }
+    lineCount += 1
   }
   return lineCount
 }

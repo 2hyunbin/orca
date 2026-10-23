@@ -124,22 +124,38 @@ function textResult(originalContent: string, modifiedContent = ''): GitDiffTextR
 
 function countBodyReads(body: string) {
   const original = String.prototype.charCodeAt
+  const originalIndexOf = String.prototype.indexOf
   const prefix = body.slice(0, 32)
   let count = 0
   let calls = 0
-  const spy = vi.spyOn(String.prototype, 'charCodeAt')
-  spy.mockImplementation(function (this: string, index: number) {
-    if (this.length === body.length && this.startsWith(prefix)) {
+  const recordRead = (value: string): void => {
+    if (value.length === body.length && value.startsWith(prefix)) {
       count += 1
     }
     // Keep the operation counter independent of the spy's growing per-call history.
     calls += 1
     if (calls % 1024 === 0) {
       spy.mockClear()
+      searchSpy.mockClear()
     }
+  }
+  const spy = vi.spyOn(String.prototype, 'charCodeAt')
+  spy.mockImplementation(function (this: string, index: number) {
+    recordRead(this)
     return original.call(this, index)
   })
-  return { count: () => count, restore: () => spy.mockRestore() }
+  const searchSpy = vi.spyOn(String.prototype, 'indexOf')
+  searchSpy.mockImplementation(function (this: string, search: string, position?: number) {
+    recordRead(this)
+    return originalIndexOf.call(this, search, position)
+  })
+  return {
+    count: () => count,
+    restore: () => {
+      spy.mockRestore()
+      searchSpy.mockRestore()
+    }
+  }
 }
 
 async function flushLoads(): Promise<void> {
@@ -474,7 +490,7 @@ describe('combined diff live result compatibility', () => {
     expect(hook.result.current.registry.loadingIndicesRef.current.size).toBe(0)
     expect(hook.result.current.sectionHeights).toEqual({})
     expect(mocks.fetch).toHaveBeenCalledOnce()
-    expect(reads.count()).toBe(scansBody && response.originalContent === body ? body.length : 0)
+    expect(reads.count() > 0).toBe(scansBody && response.originalContent === body)
   })
 
   it('preserves section identity on unchanged reload and remeasures changed content once', async () => {
