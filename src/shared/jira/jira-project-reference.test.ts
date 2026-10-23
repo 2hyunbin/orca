@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import type { Repo } from './repo-types'
+import type { Repo } from '../repo-types'
 import type { JiraIssue } from './jira-types'
 import {
   findJiraIssueDefaultRepo,
   normalizeJiraProjectReference,
   restrictJiraQueryToProject
 } from './jira-project-reference'
-import { createRepoUpdateSchema } from './rpc-contract/repo-update-params'
+import { createRepoUpdateSchema } from '../rpc-contract/repo-update-params'
 import { z } from 'zod'
 
 const project = { id: '10', key: 'ALP', name: 'Alpha', siteId: 'site-a' }

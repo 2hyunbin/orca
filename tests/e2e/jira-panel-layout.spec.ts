@@ -1,5 +1,5 @@
 import type { Page } from '@stablyai/playwright-test'
-import type { JiraIssue } from '../../src/shared/jira-types'
+import type { JiraIssue } from '../../src/shared/jira/jira-types'
 import { expect, test } from './helpers/orca-app'
 import { waitForSessionReady } from './helpers/store'
 

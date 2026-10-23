@@ -1,4 +1,4 @@
-import type { SecretAtRestProtection } from './secret-at-rest-protection'
+import type { SecretAtRestProtection } from '../secret-at-rest-protection'
 // 'cloud' = Atlassian Cloud (email + API token, Basic auth, REST v3).
 // 'server' = self-hosted Jira Server/Data Center (personal access token,
 // Bearer auth, REST v2). Older stored sites omit the field and mean 'cloud'.
