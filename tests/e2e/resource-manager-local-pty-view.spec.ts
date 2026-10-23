@@ -1,7 +1,12 @@
+import { randomUUID } from 'node:crypto'
 import { expect, test } from './helpers/orca-app'
 import { makeResourceManagerFixtureVisible } from './helpers/resource-manager-visible-fixture'
 import { ensureTerminalVisible, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
-import { waitForActivePanePtyId } from './helpers/terminal'
+import {
+  expectTerminalAccessibilityText,
+  focusActiveTerminalInput,
+  waitForActivePanePtyId
+} from './helpers/terminal'
 
 type PtyViewCounts = { listing: number; metrics: number; kills?: unknown[] }
 
@@ -118,6 +123,17 @@ test.describe('host-qualified local PTY navigation', () => {
         }))
       )
       .toEqual({ id: worktreeId, hostId: 'local', tabId })
+    const suffix = randomUUID()
+    const outputMarker = `LOCAL_PTY_OPEN_${suffix}`
+    // Split the marker so the echoed command cannot satisfy the rendered-output assertion.
+    const command =
+      process.platform === 'win32'
+        ? `Write-Output ('LOCAL_PTY_OPEN_' + '${suffix}')`
+        : `echo "LOCAL_PTY_OPEN_""${suffix}"`
+    await focusActiveTerminalInput(orcaPage)
+    await orcaPage.keyboard.type(command)
+    await orcaPage.keyboard.press('Enter')
+    await expectTerminalAccessibilityText(orcaPage, tabId, outputMarker)
     await orcaPage.evaluate((otherWorktreeId) => {
       window.__store!.getState().setActiveWorktree(otherWorktreeId, 'local')
     }, otherWorktreeId)
