@@ -15,7 +15,7 @@ import { readStructuredWorkerOutput } from '../../orchestration-structured-worke
 import { releaseStructuredWorkerSession } from '../../orchestration-structured-worker-session'
 import { sessionIdFromStructuredWorkerIncarnation } from '../../../../structured-worker-identity'
 import { readExactWorkerOutput } from './worker-output'
-import { exposeWorkerTerminalResource } from './worker-release-completion'
+import { exposeWorkerTerminalResource } from './worker-terminal-resource-presentation'
 import { readFederatedWorkerOutput } from '../federation/federated-worker-read'
 import { showFederatedWorker } from '../federation/federated-worker-show'
 import {
@@ -203,8 +203,33 @@ export const ORCHESTRATION_WORKER_CONTROL_METHODS = [
     name: 'orchestration.workerAbandon',
     permission: 'workspace',
     params: WorkerDispatchParams,
-    handler: (params, { runtime, orchestrationCaller }) => {
+    handler: (params, { runtime, orchestrationCaller, orchestrationCompatibilityEvidence }) => {
       const db = runtime.getOrchestrationDb()
+      // Session identity wins; a terminal-only caller is identified by its launch evidence and pane.
+      const caller = orchestrationCaller
+        ? { handle: orchestrationCaller.address, paneKey: orchestrationCaller.paneKey }
+        : orchestrationCompatibilityEvidence?.terminalHandle
+          ? {
+              handle: orchestrationCompatibilityEvidence.terminalHandle,
+              paneKey:
+                runtime.getTerminalPaneKey(orchestrationCompatibilityEvidence.terminalHandle) ??
+                orchestrationCompatibilityEvidence.paneKey
+            }
+          : null
+      if (
+        caller &&
+        db.isDispatchMessageSender({
+          dispatchId: params.dispatch,
+          handle: caller.handle,
+          paneKey: caller.paneKey
+        })
+      ) {
+        throw new OrchestrationError(
+          'invalid_argument',
+          `You cannot abandon Dispatch ${params.dispatch} while you are working it. Report to its coordinator instead. No effects were applied.`,
+          { effectsApplied: false, dispatchId: params.dispatch }
+        )
+      }
       const abandoned = db.abandonWorkerDispatch(
         params.dispatch,
         runtime.getRuntimeId(),

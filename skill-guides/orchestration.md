@@ -108,6 +108,15 @@ ORCA orchestration worker-start --spec "<worker B task>" --worktree current --ag
 ORCA orchestration check --wait --types "worker_done,escalation,question" --timeout-ms 900000 --json
 ```
 
+After a restart, resume your own Run with `run-use --id <run_id>`. It is refused
+while another coordinator of that Run is still running; replace it with
+`--takeover` only when the user asks. A worker cannot bind the Run it works for
+or an ancestor. A replacement worker may resume a Run owned by its Task. For any other Run,
+its current or last coordinator must first authorize the worker with
+`run-handover --id <run_id> --to-task <task_id>` or `--to <address>`; the worker
+then accepts with `run-use`, even when the prior coordinator is absent or unverifiable. A worker cannot use either takeover flag to replace
+another coordinator; an already-bound no-op remains allowed.
+
 If `worker-start` exits non-zero, do not relaunch. Read the receipt's
 `failedStage` and `residualResources`, then load
 `references/recovery-and-cleanup.md`.
@@ -116,6 +125,8 @@ Use `task-create` plus `worker-start --task <task_id>` for planned fan-out with
 dependencies or a retry of a known Task. Use dependencies only for real ordering
 and prefer parallel waves over chains deeper than three or four steps; nested
 workers obey the depth limit, and a new Run does not reset the caller's depth.
+A dispatched worker starts its own helpers with `worker-start --spec` on the Run
+it works for, without `run-create`; the helpers report to that worker.
 
 A consuming `check` names its caller with `--terminal <handle>`, never `--from`;
 omit it inside the coordinator's own Orca terminal. It returns the bound Run's

@@ -148,7 +148,7 @@ export function bindRun(
       throw new OrchestrationError(
         'run_binding_changed',
         'The Run’s coordinator changed while it was checked. Retry the same command.',
-        { effectsApplied: false }
+        { effectsApplied: false, retryable: true, runId: params.runId }
       )
     }
     if (decision.worker && decision.unchanged) {
@@ -170,14 +170,7 @@ export function bindRun(
       !params.takeoverLegacy &&
       !provenLegacyBinding
     ) {
-      const advice = decision.worker
-        ? ' Ask its coordinator for a hand-over.'
-        : ' Use --takeover only if the user asks to replace it.'
-      throw new OrchestrationError(
-        'run_coordinator_live',
-        `This Run is coordinated by ${params.probed.liveLabel}, which is still open.${advice}`,
-        { effectsApplied: false }
-      )
+      throw runCoordinatorLiveError(params.runId, params.probed.liveLabel, decision.worker)
     }
     const priorAuthority = getRunAuthority(this, params.runId)
     const priorHandover = decision.grantAccepted ? undefined : getRunHandover(this, params.runId)
@@ -253,6 +246,22 @@ export function bindRun(
     throw error
   }
   return this.getRun(params.runId)
+}
+
+// No recoveryCommand on purpose: agents run those mechanically, and the flag must carry user intent.
+function runCoordinatorLiveError(
+  runId: string,
+  label: string,
+  worker: boolean
+): OrchestrationError {
+  const takeoverAdvice = worker
+    ? ' Ask its coordinator for a hand-over with run-handover.'
+    : ` Take it over only if the user asks: orca orchestration run-use --id ${runId} --takeover replaces it, and its unacknowledged mail is replayed to you.`
+  return new OrchestrationError(
+    'run_coordinator_live',
+    `Run ${runId} is coordinated by ${label}, which is still open. Nothing changed. Closing it clears this.${takeoverAdvice}`,
+    { effectsApplied: false, runId, coordinator: label }
+  )
 }
 
 export type RunBindingMethods = {

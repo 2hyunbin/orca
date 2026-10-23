@@ -2,9 +2,13 @@ import { createElement } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MOBILE_WEB_BUNDLE_CAPABILITY } from '../../../src/shared/mobile-web-bundle/mobile-web-bundle-capability'
-import type { MobileWebBundleFetchResult } from '../transport/mobile-web-bundle-fetch'
+import type {
+  MobileWebBundleFetchProgress,
+  MobileWebBundleFetchResult
+} from '../transport/mobile-web-bundle-fetch'
 import type { MobileWebBundleManifestRead } from '../transport/mobile-web-bundle-reply-schemas'
 import type { ActiveGeneration, GenerationStore, StagedGeneration } from './generation-store'
+import type { DownloadProgressFeed } from './download-progress-feed'
 import type { MobileWebShellSessionState } from './mobile-web-shell-session-contract'
 import { markRpcDeliveryUnknown } from '../transport/rpc-delivery-ambiguity'
 
@@ -31,7 +35,11 @@ type Doubles = {
   manifestReads: number
   manifestClients: unknown[]
   manifestRejection: unknown
-  fetches: { signal: AbortSignal; settle: Settle<MobileWebBundleFetchResult> }[]
+  fetches: {
+    signal: AbortSignal
+    onProgress: (progress: MobileWebBundleFetchProgress) => void
+    settle: Settle<MobileWebBundleFetchResult>
+  }[]
   manifest: MobileWebBundleManifestRead
 }
 
@@ -77,7 +85,7 @@ vi.mock('../transport/mobile-endpoint-supervisor-support', () => ({
 vi.mock('../components/host-protocol-gates-context', () => ({
   useHostProtocolGates: () => doubles.gates
 }))
-vi.mock('../transport/client-context', () => ({ useHostClient: () => doubles.connection }))
+vi.mock('../transport/host-client-hooks', () => ({ useHostClient: () => doubles.connection }))
 vi.mock('../transport/rpc-operation', () => ({
   defineRpcOperation: (definition: unknown) => definition,
   runRpcOperation: async (client: unknown) => {
@@ -90,14 +98,17 @@ vi.mock('../transport/rpc-operation', () => ({
   }
 }))
 vi.mock('../transport/mobile-web-bundle-fetch', () => ({
-  fetchMobileWebBundle: (args: { signal: AbortSignal }) =>
+  fetchMobileWebBundle: (args: {
+    signal: AbortSignal
+    onProgress: (progress: MobileWebBundleFetchProgress) => void
+  }) =>
     new Promise<MobileWebBundleFetchResult>((resolve) => {
-      doubles.fetches.push({ signal: args.signal, settle: resolve })
+      doubles.fetches.push({ signal: args.signal, onProgress: args.onProgress, settle: resolve })
     })
 }))
 
 import { BRIDGE_READY_RETRY_MAX_MS } from './bridge/bridge-client-init-handshake'
-import { PAGE_READY_DEADLINE_MS } from './mobile-web-shell-runtime'
+import { DOCUMENT_LOAD_DEADLINE_MS, PAGE_READY_DEADLINE_MS } from './mobile-web-shell-runtime'
 import { SHELL_STALL_LOG_MS } from './shell-lifecycle-log'
 import { connectionLogStore } from '../transport/persisted-connection-log-store'
 import { useMobileWebShellSession } from './use-mobile-web-shell-session'
@@ -128,7 +139,6 @@ function createFakeStore(): {
   staged: () => number
   committed: () => number
   aborted: () => number
-  persisted: () => readonly MobileWebBundleManifestRead[]
 } {
   let settleCacheRead: Settle<ActiveGeneration | null> = () => {}
   let releaseStage: () => void = () => {}
@@ -136,7 +146,6 @@ function createFakeStore(): {
   let staged = 0
   let committed = 0
   let aborted = 0
-  const persisted: MobileWebBundleManifestRead[] = []
   const store: GenerationStore = {
     readActiveGeneration: () =>
       new Promise<ActiveGeneration | null>((resolve) => {
@@ -158,12 +167,9 @@ function createFakeStore(): {
     abortStagedGeneration: async () => {
       aborted += 1
     },
+    openReusableAssets: async () => ({ has: () => false, check: async () => false }),
     sweepStagedGenerations: async () => undefined,
     deleteHostCache: async () => undefined,
-    persistActiveManifest: async (_hostKey, manifest) => {
-      persisted.push(manifest)
-      return 'persisted'
-    },
     recordUpdateFailure: async () => undefined,
     readUpdateFailures: async () => [],
     forgetHostUpdateFailures: async () => undefined
@@ -177,8 +183,7 @@ function createFakeStore(): {
     settleStage: () => releaseStage(),
     staged: () => staged,
     committed: () => committed,
-    aborted: () => aborted,
-    persisted: () => persisted
+    aborted: () => aborted
   }
 }
 
@@ -217,9 +222,11 @@ type Mounted = {
   states: () => readonly MobileWebShellSessionState[]
   /** Whether the page had spoken, as every render of the hook reported it. */
   handshakes: () => readonly boolean[]
+  documentStarted: () => void
   documentLoaded: () => void
   pageReady: () => void
   pagePainted: () => void
+  downloadProgress: () => DownloadProgressFeed
   timers: ReturnType<typeof createTimerSeam>
 }
 
@@ -231,18 +238,22 @@ async function mount(store: GenerationStore): Promise<Mounted> {
   const timers = createTimerSeam()
   const handle: {
     retry: () => void
+    documentStarted: () => void
     documentLoaded: () => void
     pageReady: () => void
     pagePainted: () => void
     states: MobileWebShellSessionState[]
     handshakes: boolean[]
+    downloadProgress: DownloadProgressFeed | null
   } = {
     retry: () => {},
+    documentStarted: () => {},
     documentLoaded: () => {},
     pageReady: () => {},
     pagePainted: () => {},
     states: [],
-    handshakes: []
+    handshakes: [],
+    downloadProgress: null
   }
   function Probe() {
     const session = useMobileWebShellSession({
@@ -256,11 +267,13 @@ async function mount(store: GenerationStore): Promise<Mounted> {
       }
     })
     handle.retry = session.retry
+    handle.documentStarted = session.reportDocumentStarted
     handle.documentLoaded = session.reportDocumentLoaded
     handle.pageReady = session.reportPageReady
     handle.pagePainted = session.reportPagePainted
     handle.states.push(session.state)
     handle.handshakes.push(session.pageReady)
+    handle.downloadProgress = session.downloadProgress
     return null
   }
   const rendered: { tree: ReactTestRenderer | null } = { tree: null }
@@ -277,9 +290,16 @@ async function mount(store: GenerationStore): Promise<Mounted> {
     rerender: () => tree.update(createElement(Probe)),
     states: () => handle.states,
     handshakes: () => handle.handshakes,
+    documentStarted: () => handle.documentStarted(),
     documentLoaded: () => handle.documentLoaded(),
     pageReady: () => handle.pageReady(),
     pagePainted: () => handle.pagePainted(),
+    downloadProgress: () => {
+      if (handle.downloadProgress === null) {
+        throw new Error('the hook never rendered')
+      }
+      return handle.downloadProgress
+    },
     timers
   }
 }
@@ -328,6 +348,7 @@ describe('the hybrid shell runner', () => {
     inFlight.settle({
       manifest: doubles.manifest,
       assets: new Map(),
+      reused: [],
       totalBytes: 2048,
       elapsedMs: 1
     })
@@ -353,22 +374,6 @@ describe('the hybrid shell runner', () => {
     })
   })
 
-  it('writes the fresh manifest onto the generation a same-build cache hit opened', async () => {
-    // Nothing is downloaded on this path, so this call is the only thing that moves the manifest
-    // beside those assets — and that manifest is the whole of the next offline verdict.
-    const fake = createFakeStore()
-    const mounted = await mount(fake.store)
-    fake.settleCacheRead(activeGeneration())
-    await flush()
-
-    expect(doubles.fetches).toHaveLength(0)
-    expect(fake.persisted()).toEqual([doubles.manifest])
-    expect(mounted.states().at(-1)?.kind).toBe('ready')
-    await act(async () => {
-      mounted.tree.unmount()
-    })
-  })
-
   it('takes the staged tree back out when the unmount lands between staging and the commit', async () => {
     const fake = createFakeStore()
     fake.holdStage()
@@ -382,6 +387,7 @@ describe('the hybrid shell runner', () => {
     inFlight.settle({
       manifest: doubles.manifest,
       assets: new Map(),
+      reused: [],
       totalBytes: 2048,
       elapsedMs: 1
     })
@@ -425,6 +431,28 @@ describe('the hybrid shell runner', () => {
     })
   })
 
+  it('moves the download feed as progress is dispatched, without waiting for a render', async () => {
+    const fake = createFakeStore()
+    const mounted = await mount(fake.store)
+    fake.settleCacheRead(null)
+    await flush()
+    const fetch = doubles.fetches[0]
+    if (fetch === undefined) {
+      throw new Error('no download was started')
+    }
+    const heard: number[] = []
+    mounted.downloadProgress().subscribe((fraction) => heard.push(fraction))
+    const renders = mounted.states().length
+    // Outside act: React commits nothing here, as on a JS thread the replies keep busy.
+    fetch.onProgress({ completedAssets: 0, totalAssets: 2, receivedBytes: 1024, totalBytes: 4096 })
+    fetch.onProgress({ completedAssets: 1, totalAssets: 2, receivedBytes: 4096, totalBytes: 4096 })
+    expect(heard).toEqual([0.25, 1])
+    expect(mounted.states()).toHaveLength(renders)
+    await act(async () => {
+      mounted.tree.unmount()
+    })
+  })
+
   it('abandons the download still in flight when Try again starts a new one', async () => {
     const fake = createFakeStore()
     const mounted = await mount(fake.store)
@@ -438,7 +466,13 @@ describe('the hybrid shell runner', () => {
       mounted.retry()
     })
     expect(first.signal.aborted).toBe(true)
-    first.settle({ manifest: doubles.manifest, assets: new Map(), totalBytes: 2048, elapsedMs: 1 })
+    first.settle({
+      manifest: doubles.manifest,
+      assets: new Map(),
+      reused: [],
+      totalBytes: 2048,
+      elapsedMs: 1
+    })
     await flush()
     expect(fake.staged()).toBe(0)
     await act(async () => {
@@ -485,8 +519,9 @@ describe('the wait for the page to speak', () => {
     await act(async () => {
       mounted.documentLoaded()
     })
-    // The other live timer is the log-only stall warning; the checking one was cancelled.
+    // The others are the activation's load wait, spent by this load, and the log-only stall warning.
     expect(live(mounted.timers.armed).map((timer) => timer.delayMs)).toEqual([
+      DOCUMENT_LOAD_DEADLINE_MS,
       SHELL_STALL_LOG_MS,
       PAGE_READY_DEADLINE_MS
     ])
@@ -495,6 +530,24 @@ describe('the wait for the page to speak', () => {
     })
     // Not the failure screen: `document-load-failed` on a session that has not retried deletes the
     // host's cache and runs the flow once more, which is the recovery a republished bundle needs.
+    expect(mounted.states().at(-1)?.kind).toBe('checking')
+    await act(async () => {
+      mounted.tree.unmount()
+    })
+  })
+
+  it('fails a generation whose document the view never finished, instead of spinning forever', async () => {
+    // #28626: iOS 18 refused the shell's own load, which reports nothing at all.
+    const mounted = await ready()
+    await act(async () => {
+      mounted.documentStarted()
+    })
+    expect(
+      live(mounted.timers.armed).filter((timer) => timer.delayMs === DOCUMENT_LOAD_DEADLINE_MS)
+    ).toHaveLength(2)
+    await act(async () => {
+      mounted.timers.fire()
+    })
     expect(mounted.states().at(-1)?.kind).toBe('checking')
     await act(async () => {
       mounted.tree.unmount()
@@ -592,8 +645,11 @@ describe('the wait for the page to speak', () => {
     })
     await flush()
     // Pinned, not merely "moved on": `/h/host-1/tasks` is not the route the bundle lists, so a
-    // re-armed session settles on the native screen. A failure would also leave `checking`.
-    expect(seen.at(-1)?.kind).toBe('native-route')
+    // re-armed session settles on the desktop wall. A failure would also leave `checking`.
+    expect(seen.at(-1)).toEqual({
+      kind: 'wall',
+      verdict: { kind: 'blocked', reason: 'page-route-unlisted' }
+    })
     await act(async () => {
       tree.unmount()
     })

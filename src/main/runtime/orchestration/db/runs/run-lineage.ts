@@ -1,3 +1,4 @@
+import { OrchestrationError } from '../../orchestration-error'
 import type { DispatchContextRow } from '../../types'
 import type { OrchestrationDb } from '../orchestration-db'
 import { refuseRunAuthority, type RunActor } from './run-actor'
@@ -22,8 +23,10 @@ function assertNotAncestor(db: OrchestrationDb, start: ScopedRun, target: string
     path.add(key)
     if (current.home === null) {
       if (current.id === target) {
-        refuseRunAuthority(
-          'A worker cannot coordinate its own Run or an ancestor Run. Use plain orchestration check for your mail and orchestration send to report.'
+        throw new OrchestrationError(
+          'worker_cannot_coordinate_own_run',
+          'A worker cannot coordinate its own Run or an ancestor Run. Use plain orchestration check for your mail and orchestration send to report. No effects were applied.',
+          { effectsApplied: false }
         )
       }
       const authority = getRunAuthority(db, current.id)

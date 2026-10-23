@@ -1,3 +1,4 @@
+import { OrchestrationError } from '../../orchestration-error'
 import type { RunRow } from '../../types'
 import { runBoundToCoordinator, runCoordinatorKey } from '../../orchestration-caller-identity'
 import type { OrchestrationDb } from '../orchestration-db'
@@ -34,8 +35,10 @@ export function authorizeRunBinding(
     runBoundToCoordinator(run, caller) &&
     Boolean(authority && sameExactCaller(lastRunCaller(authority), caller))
   if (actor.kind !== 'root' && takeover && !unchanged) {
-    refuseRunAuthority(
-      'A worker cannot use a takeover flag. Ask this Run’s coordinator for a hand-over.'
+    throw new OrchestrationError(
+      'worker_cannot_take_over_run',
+      'A worker cannot use a takeover flag. Ask this Run’s coordinator for a hand-over with run-handover. No effects were applied.',
+      { effectsApplied: false }
     )
   }
   const callerTarget = handover?.target_caller_key
