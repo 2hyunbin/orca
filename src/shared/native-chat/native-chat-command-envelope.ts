@@ -16,7 +16,7 @@ export type NativeChatCommandEnvelope = { name: string; args: string }
  *  that does not lead with an envelope tag (ordinary prompts, XML pastes). */
 export function parseNativeChatCommandEnvelope(text: string): NativeChatCommandEnvelope | null {
   const trimmed = text.trimStart()
-  if (!trimmed.toLowerCase().startsWith('<command-')) {
+  if (!/^<command-/i.test(trimmed)) {
     return null
   }
   const name = COMMAND_NAME.exec(trimmed)?.[1]?.trim()

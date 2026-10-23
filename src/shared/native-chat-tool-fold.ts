@@ -69,8 +69,7 @@ export function isUndrawnProviderFrameMessage(message: NativeChatMessage): boole
 
 function isInterruptionBoundary(message: NativeChatMessage): boolean {
   return message.blocks.some(
-    (block) =>
-      block.type === 'text' && block.text.trim().toLowerCase().startsWith('[request interrupted')
+    (block) => block.type === 'text' && /^\[request interrupted/i.test(block.text.trim())
   )
 }
 
