@@ -148,6 +148,7 @@ export class LegacyQueuedCards {
     }
     const display = {
       ...state,
+      normalizedHandOffs: new Set(state.normalizedHandOffs),
       items: new Map(state.items),
       submissions: new Map(state.submissions)
     }

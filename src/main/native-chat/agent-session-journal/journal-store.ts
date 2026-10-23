@@ -3,6 +3,7 @@
 
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
 import { randomUUID } from 'node:crypto'
+import { readJournalPublicView } from './journal-public-read'
 import type {
   AgentJournalAcceptanceReceipt,
   AgentJournalCursor,
@@ -33,7 +34,6 @@ import {
 import {
   applyJournalRow,
   createJournalReducerState,
-  renderJournalState,
   resolveJournalItemId,
   type JournalReducerState
 } from './journal-reducer'
@@ -192,7 +192,9 @@ export class AgentSessionJournal {
     sequence: this.state.lastSequence
   })
 
-  snapshot = (): AgentJournalSnapshot => renderJournalState(this.queuedMessages.displayState())
+  snapshot = (): AgentJournalSnapshot => this.publicRead().snapshot
+
+  publicRead = () => readJournalPublicView(this.queuedMessages.displayState())
 
   /** Visits reduced items without allocating and sorting a full snapshot. */
   visitItems = (

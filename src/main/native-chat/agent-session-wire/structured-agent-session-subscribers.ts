@@ -1,3 +1,5 @@
+import type { AgentSessionSubscribeInput } from './agent-session-subscribe-input'
+export type { AgentSessionSubscribeInput } from './agent-session-subscribe-input'
 import type { CurrentRequestsSubscriber } from './agent-session-current-requests'
 // Per-subscriber cursors over one session's journal.
 //
@@ -35,19 +37,6 @@ import { refreshPublishedWork } from './agent-session-work-refresh'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 
 export type AgentSessionSubscriberEmit = (event: AgentSessionSubscribeEvent) => void
-export type AgentSessionSubscribeInput = {
-  id: string
-  sessionId: string
-  emit: AgentSessionSubscriberEmit
-  cursor?: AgentJournalCursor
-  /** Every frame to fit a phone's bridge frame; the RPC sets it for every phone. */
-  boundedFrames?: boolean
-  projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
-  readsCurrentRequests?: boolean
-  /** False for desktops that need exact replay to keep send echoes and current requests. */
-  snapshotCatchUp?: boolean
-}
-
 export type Subscriber = CurrentRequestsSubscriber & {
   id: string
   sessionId: string
@@ -66,6 +55,8 @@ export type Subscriber = CurrentRequestsSubscriber & {
   /** The current-work view the last frame's fields were read under
    *  (`StructuredAgentSessionCurrentWork.viewKey`); a change with no row still owes a frame. */
   workView?: string
+  /** Semantic history baseline actually emitted, independent of token/row progress. */
+  historyView?: string
 }
 
 export type AgentSessionSubscribersHooks = {
@@ -129,12 +120,14 @@ export class AgentSessionSubscribers {
         this.hooks.readCurrentWork?.(input.sessionId, input.journal)
       )
     } else {
+      const view = input.journal.publicRead()
       const work = this.hooks.readCurrentWork?.(input.sessionId, input.journal)
       const page = withPublishedWork(
         readAgentSessionHydrationPage(
           input.journal,
           input.fence,
-          subscriberHistoryReader(subscriber)
+          subscriberHistoryReader(subscriber),
+          view.snapshot
         ),
         work
       )
@@ -148,7 +141,7 @@ export class AgentSessionSubscribers {
           hostNow,
           ...this.activityField(input.sessionId)
         },
-        { currentWork: work }
+        { currentWork: work, historyView: view.normalizationKey }
       )
       subscriber.cursor = page.liveCursor ?? page.window.nextCursor
       refreshPublishedWork(this.deliveryPort(), subscriber, input.journal, work, { hostNow })
@@ -208,13 +201,19 @@ export class AgentSessionSubscribers {
 
   /** Every subscriber back to a bounded tail page. */
   snapshot(sessionId: string, journal: AgentSessionJournal, fence: number): void {
+    const view = journal.publicRead()
     const work = this.hooks.readCurrentWork?.(sessionId, journal)
     // Read once per item form, since bounded-frame subscribers size their page by theirs.
     let storedPage: AgentSessionHistoryPage | undefined
     let boundedPage: AgentSessionHistoryPage | undefined
     const read = (subscriber: Subscriber): AgentSessionHistoryPage =>
       withPublishedWork(
-        readAgentSessionHydrationPage(journal, fence, subscriberHistoryReader(subscriber)),
+        readAgentSessionHydrationPage(
+          journal,
+          fence,
+          subscriberHistoryReader(subscriber),
+          view.snapshot
+        ),
         work
       )
     const pageFor = (subscriber: Subscriber): AgentSessionHistoryPage =>
@@ -234,7 +233,7 @@ export class AgentSessionSubscribers {
           hostNow,
           ...this.activityField(sessionId)
         },
-        { currentWork: work }
+        { currentWork: work, historyView: view.normalizationKey }
       )
       subscriber.cursor = page.liveCursor ?? page.window.nextCursor
       subscriber.fence = fence
@@ -329,6 +328,9 @@ export class AgentSessionSubscribers {
   ): void {
     try {
       emitSubscriberFrame(this.hooks, subscriber, event, options)
+      if (options?.historyView !== undefined && this.isActive(subscriber)) {
+        subscriber.historyView = options.historyView
+      }
     } catch {
       this.drop(subscriber)
     }

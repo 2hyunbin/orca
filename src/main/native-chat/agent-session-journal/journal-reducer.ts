@@ -91,6 +91,8 @@ export type JournalReducerState = {
     string,
     Pick<AgentJournalRenderItem, 'sequence' | 'observedAt' | 'turnScope'>
   >
+  /** Historical display corrections, rebuilt by the hand-off fold on replay. */
+  normalizedHandOffs: Set<string>
   /** The queued messages, folded from their own rows and their hand-offs (`journal-queue-fold.ts`). */
   queue: JournalQueueState
   /** Original adoption evidence, independent of the current epoch's reason/time. */
@@ -121,6 +123,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     queuePauseMarks: createJournalQueuePauseMarks(),
     stoppedHistoryCarried: new Map(),
     queuedHandOffPlaces: new Map(),
+    normalizedHandOffs: new Set(),
     queue: createJournalQueueState(),
     historyOrigin: null
   }

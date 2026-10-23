@@ -327,8 +327,8 @@ export class StructuredAgentSessionHost {
   /** From the record store, never the session map: an idle-released chat has no map entry. */
   handoffStatus = (sessionId: string) => structuredAgentSessionOwnerStatus(this.deps, sessionId)
 
-  history: StructuredAgentSessionBackgroundTaskChannel['history'] = (request, scope) =>
-    this.backgroundTasks.history(request, scope)
+  history: StructuredAgentSessionBackgroundTaskChannel['history'] = (...args) =>
+    this.backgroundTasks.history(...args)
 
   /** The fully reduced timeline, for readers that cannot tolerate a page's ambiguity — rows are
    *  revised or tombstoned in place, so an item's ABSENCE from a bounded page proves nothing. */

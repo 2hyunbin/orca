@@ -6,7 +6,7 @@ import type {
   AgentSessionHistoryResult
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
-import { snapshotLatestTurn } from './agent-session-history-page'
+import { snapshotLatestTurn } from './agent-session-history-latest-turn'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 
 /** The newest turn record as clients are told it, and the prompts still waiting on the person.

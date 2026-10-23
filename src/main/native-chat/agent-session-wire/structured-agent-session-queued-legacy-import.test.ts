@@ -14,6 +14,14 @@ import { activeProviderContext } from '../../../shared/agent-session-provider-co
 import { projectStructuredAgentSessionMessages } from '../../../shared/structured-agent-session-message-projection'
 import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
+import type { AgentSessionSubscribeEvent } from '../../../shared/agent-session-wire'
+import {
+  EMPTY_STRUCTURED_AGENT_SESSION,
+  reduceStructuredAgentSession
+} from '../../../shared/structured-agent-session-reducer'
+import { AgentSessionSubscribers } from './structured-agent-session-subscribers'
+import { readAgentSessionHistory } from './agent-session-history-page'
+import { subscriberHistoryReader } from './agent-session-bounded-frames'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { AgentSessionJournal } from '../agent-session-journal/journal-store'
 import {
@@ -70,7 +78,8 @@ async function handOff(
   card: string,
   text: string,
   as: 'providerRejected' | 'cancelled' | 'accepted',
-  fence = 0
+  fence = 0,
+  beforeAnswer?: () => Promise<void>
 ): Promise<void> {
   const body = message(text)
   const payloadFingerprint = agentSessionSendBodyFingerprint(journal.queuedMessages.sessionId, body)
@@ -88,6 +97,7 @@ async function handOff(
     fence,
     turnScope: AGENT_JOURNAL_THREAD_SCOPE
   })
+  await beforeAnswer?.()
   await journal.resolveDispatch(
     as === 'accepted'
       ? { clientMessageId: attempt, state: 'accepted', providerIdentity: null, fence }
@@ -365,4 +375,130 @@ it('a rewind while the import has failed moves the legacy cards first: a refused
   expect(await rig.drafts()).toEqual(held)
   await nothingSentTo('edited')
   expect(legacyIds()).toEqual([])
+})
+
+it.each([false, true])('converges retained history across adoption (%s)', async (adopt) => {
+  const earlier = journalFor(SESSION)
+  await earlier.open()
+  const append = async (journal: AgentSessionJournal, ordinal: number) => {
+    await journal.appendItem(
+      { provider: 'codex', threadId: 'history', turnId: 't', ordinal },
+      { ...message('x'.repeat(4_000)), role: 'assistant' },
+      { fence: 0, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )
+  }
+  await append(earlier, 0)
+  await handOff(earlier, 'u', 'q', 'stopped words', 'cancelled', 0, async () => {
+    for (let index = 1; index <= 205; index++) {
+      await append(earlier, index)
+    }
+  })
+  const stale = readAgentSessionHistory(earlier, { sessionId: SESSION, direction: 'tail' })
+  if (!stale.ok) {
+    throw new Error('expected old page')
+  }
+  await earlier.close()
+  seedLegacy(SESSION, [['q', 'waiting', 'stopped words']])
+  if (!adopt) {
+    db().exec(`CREATE TEMP TRIGGER b2_fail_import BEFORE DELETE ON queued_messages
+    BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+  }
+  const journal = journalFor(SESSION)
+  await journal.open()
+  if (!adopt) {
+    db().exec('DROP TRIGGER b2_fail_import')
+  }
+  const queue = { queuedMessages: [], queuePause: null, nextQueuedMessageId: null }
+  const feed = new AgentSessionSubscribers({ readQueuePublication: () => queue })
+  const base = { sessionId: SESSION, journal, fence: 0 }
+  const oldEvents: AgentSessionSubscribeEvent[] = []
+  feed.open({
+    ...base,
+    id: 'old',
+    cursor: journal.cursor(),
+    snapshotCatchUp: false,
+    readsCurrentRequests: false,
+    emit: (event) => oldEvents.push(event)
+  })
+  expect(oldEvents).toEqual([
+    {
+      type: 'batch',
+      sessionId: SESSION,
+      fence: 0,
+      hostNow: expect.any(Number),
+      activity: null,
+      ...queue,
+      batch: { cursor: journal.cursor(), items: [], removedItemIds: [], submissions: [] }
+    }
+  ])
+  const corrected: AgentSessionSubscribeEvent[][] = []
+  for (const boundedFrames of [false, true]) {
+    let state = reduceStructuredAgentSession(EMPTY_STRUCTURED_AGENT_SESSION, {
+      type: 'history-page',
+      page: stale.page
+    })
+    const events: AgentSessionSubscribeEvent[] = []
+    corrected.push(events)
+    const reader = subscriberHistoryReader({ boundedFrames })
+    feed.open({
+      ...base,
+      id: `new-${boundedFrames}`,
+      cursor: journal.cursor(),
+      boundedFrames,
+      snapshotCatchUp: true,
+      readsCurrentRequests: true,
+      emit: (event) => {
+        events.push(event)
+        state = reduceStructuredAgentSession(state, { type: 'event', event })
+      }
+    })
+    expect(events[0]?.type).toBe('snapshot')
+    while (state.hasOlder) {
+      const requestedCursor = { epoch: journal.epoch, sequence: state.items[0]!.sequence }
+      const older = readAgentSessionHistory(
+        journal,
+        { sessionId: SESSION, direction: 'before', cursor: requestedCursor },
+        { reader }
+      )
+      if (!older.ok) {
+        throw new Error('expected before page')
+      }
+      state = reduceStructuredAgentSession(state, {
+        type: 'older-page',
+        requestedCursor,
+        page: older.page
+      })
+    }
+    const canonical = journal.snapshot()
+    expect([state.items, state.submissions]).toEqual([canonical.items, canonical.submissions])
+    feed.publish(SESSION, journal)
+    await append(journal, 205)
+    feed.publish(SESSION, journal)
+  }
+  const cursor = journal.cursor()
+  const after = readAgentSessionHistory(journal, { sessionId: SESSION, direction: 'after', cursor })
+  expect(after).toMatchObject({ ok: false, reset: 'cursor_compacted' })
+  if (!adopt) {
+    await journal.queuedMessages.importAtOpen()
+    feed.publish(SESSION, journal)
+  }
+  expect(
+    corrected.map((events) => events.filter((event) => event.type === 'snapshot').length)
+  ).toEqual([1, 1])
+  expect(oldEvents.every((event) => event.type === 'batch')).toBe(true)
+  await journal.close()
+  const reopened = journalFor(SESSION)
+  await reopened.open()
+  const resumed: AgentSessionSubscribeEvent[] = []
+  new AgentSessionSubscribers().open({
+    ...base,
+    journal: reopened,
+    id: 'reopen',
+    cursor: reopened.cursor(),
+    snapshotCatchUp: true,
+    readsCurrentRequests: true,
+    emit: (event) => resumed.push(event)
+  })
+  expect(resumed[0]?.type).toBe('snapshot')
+  await reopened.close()
 })

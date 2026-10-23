@@ -94,6 +94,7 @@ export function foldQueuedHandOffInDoubt(
   state: JournalReducerState,
   submission: AgentJournalSubmission
 ): void {
+  state.normalizedHandOffs.add(submission.clientMessageId)
   const itemId = agentJournalSubmissionKey(submission.clientMessageId)
   const item = state.items.get(itemId)
   const place = state.queuedHandOffPlaces.get(submission.clientMessageId)
