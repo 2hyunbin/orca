@@ -726,16 +726,6 @@ describe('StructuredAgentSessionStatusBridge', () => {
     }
   })
 
-  it('keys the feed by the worktree runtime environment', async () => {
-    mocks.store?.setState({
-      unifiedTabsByWorktree: { 'wt-1': [{ ...structuredTab, executionHostId: 'runtime:env-1' }] }
-    })
-    render(<StructuredAgentSessionStatusBridge />)
-    await waitFor(() => expect(mocks.subscribeStatus).toHaveBeenCalledOnce())
-
-    expect(feed().target).toEqual({ kind: 'environment', environmentId: 'env-1' })
-  })
-
   // Two hosts can publish the same workspace id; the tab records which one holds this chat.
   it("reads a chat's status from the host recorded on its tab, not its workspace", async () => {
     mocks.store?.setState({

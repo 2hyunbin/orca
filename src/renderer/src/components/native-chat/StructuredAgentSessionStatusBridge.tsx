@@ -36,7 +36,7 @@ export {
 type HostGroup = {
   feed: StructuredAgentSessionStatusFeedOwner
   unsubscribe: () => void
-  release: () => void
+  release?: () => void
 }
 type ProjectionInput = {
   tab: StructuredTab
@@ -80,6 +80,8 @@ function sameStatusInput(previous: ProjectionInput | undefined, next: Projection
 
 function installStatusProjection(): () => void {
   const members = new Map<string, Member>()
+  const membersByTabId = new Map<string, Member>()
+  const retired = new Set<Member>()
   const groups = new Map<string, HostGroup>()
   const queue: (() => void)[] = []
   let disposed = false
@@ -163,7 +165,8 @@ function installStatusProjection(): () => void {
       }
     }
   }
-  const project = (inputs: ProjectionInput[], removed: Member[] = []): void => {
+  const project = (inputs: ProjectionInput[]): void => {
+    const removed = [...retired]
     const dirty = inputs.filter(
       (input) => current(input) && !sameStatusInput(input.member.status, input)
     )
@@ -172,10 +175,11 @@ function installStatusProjection(): () => void {
         if (!members.has(old.paneKey)) {
           useAppStore.getState().setStructuredChatSleptAt(old.paneKey, undefined)
         }
-        const replacement = [...members.values()].find((member) => member.tab.id === old.tab.id)
+        const replacement = membersByTabId.get(old.tab.id)
         if (!replacement || replacement.tab.entityId !== old.tab.entityId) {
           useAppStore.getState().clearStructuredSessionLaunchDirectory(old.tab.id, old.tab.entityId)
         }
+        retired.delete(old)
       }
       for (const input of inputs) {
         companions(input)
@@ -204,7 +208,19 @@ function installStatusProjection(): () => void {
       clean()
     }
   }
-  const capture = (selected: Iterable<Member>, removed: Member[] = []): void => {
+  const activateGroups = (): void => {
+    for (const { hostKey, group } of members.values()) {
+      if (hostKey && group && !group.release) {
+        const release = group.feed.activate()
+        if (disposed || groups.get(hostKey) !== group) {
+          release()
+        } else {
+          group.release = release
+        }
+      }
+    }
+  }
+  const capture = (selected: Iterable<Member>): void => {
     const inputs = [...selected].map((member): ProjectionInput => {
       const { tab, group } = member
       const summary = group?.feed.getSnapshot().get(tab.entityId) ?? null
@@ -223,14 +239,16 @@ function installStatusProjection(): () => void {
       }
     })
     enqueue(
-      () => project(inputs, removed),
+      () => {
+        activateGroups()
+        project(inputs)
+      },
       inputs.map(({ member }) => ({ host: member.hostKey, paneKey: member.paneKey }))
     )
   }
   const reconcile = (): void => {
     const state = useAppStore.getState()
     const next = new Map<string, Member>()
-    const activate: (() => void)[] = []
     for (const tab of getStructuredAgentSessionTabs(state.unifiedTabsByWorktree)) {
       const paneKey = structuredAgentSessionPaneKey(tab.id, tab.entityId)
       const target = structuredAgentSessionTargetForHost(
@@ -240,7 +258,7 @@ function installStatusProjection(): () => void {
       let group = hostKey ? groups.get(hostKey) : undefined
       if (!group && target && hostKey) {
         const feed = getStructuredAgentSessionStatusFeed(target)
-        const created: HostGroup = { feed, unsubscribe: () => {}, release: () => {} }
+        const created: HostGroup = { feed, unsubscribe: () => {} }
         groups.set(hostKey, created)
         created.unsubscribe = feed.subscribe(() =>
           boundary(() => {
@@ -249,14 +267,6 @@ function installStatusProjection(): () => void {
             }
           })
         )
-        activate.push(() => {
-          const release = feed.activate()
-          if (disposed || groups.get(hostKey) !== created) {
-            release()
-          } else {
-            created.release = release
-          }
-        })
         group = created
       }
       const old = members.get(paneKey)
@@ -272,22 +282,28 @@ function installStatusProjection(): () => void {
       member.tab = tab
       next.set(paneKey, member)
     }
-    const removed = [...members.values()].filter((member) => !next.has(member.paneKey))
+    for (const member of members.values()) {
+      if (!next.has(member.paneKey)) {
+        retired.add(member)
+      }
+    }
     members.clear()
+    membersByTabId.clear()
     for (const [key, member] of next) {
       members.set(key, member)
+      membersByTabId.set(member.tab.id, member)
     }
     for (const [key, group] of groups) {
       if (![...members.values()].some((member) => member.group === group)) {
         groups.delete(key)
         group.unsubscribe()
-        group.release()
+        group.release?.()
       }
     }
-    for (const start of activate) {
-      start()
-    }
-    capture(members.values(), removed)
+    enqueue(() => {
+      activateGroups()
+      capture(members.values())
+    })
   }
   const unsubscribeApp = useAppStore.subscribe((state: AppState, previous: AppState) => {
     if (
@@ -312,12 +328,15 @@ function installStatusProjection(): () => void {
     unsubscribeLaunch()
     for (const group of groups.values()) {
       group.unsubscribe()
-      boundary(group.release)
+      boundary(() => group.release?.())
     }
     groups.clear()
-    const removed = [...members.values()]
+    for (const member of members.values()) {
+      retired.add(member)
+    }
     members.clear()
-    enqueue(() => project([], removed))
+    membersByTabId.clear()
+    enqueue(() => project([]))
   }
 }
 
