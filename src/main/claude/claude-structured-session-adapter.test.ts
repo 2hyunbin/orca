@@ -571,6 +571,20 @@ describe('ClaudeStructuredSessionAdapter acquisition cleanup', () => {
     await expect(adapter.releaseAcquisition({ sessionId: 'session-1' })).resolves.toBe(true)
   })
 
+  it('forgets the stored crash when the host acknowledges session release', async () => {
+    const claude = fakeClaude()
+    const adapter = await acquired(claude)
+    claude.connections[0].handlers.onExit?.(new Error('retained crash'))
+    await adapter.drainObservedExits()
+    expect(() => adapter.readOptions({ sessionId: 'session-1', fence: 7 })).toThrow(
+      'retained crash'
+    )
+    adapter.acknowledgeSessionRelease('session-1')
+    expect(() => adapter.readOptions({ sessionId: 'session-1', fence: 7 })).toThrow(
+      'no live claude stream-json session'
+    )
+  })
+
   it('keeps shutdown pending until a retained unexpected-exit proof settles', async () => {
     const claude = fakeClaude()
     const adapter = await acquired(claude)

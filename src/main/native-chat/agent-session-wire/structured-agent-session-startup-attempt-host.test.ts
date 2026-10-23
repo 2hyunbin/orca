@@ -6,6 +6,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
+import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
+import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapter'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
@@ -22,7 +24,10 @@ import type {
   StructuredAgentSessionAcquireInput,
   StructuredAgentSessionAdapter
 } from './structured-agent-session-adapter'
-import { NO_STRUCTURED_AGENTS } from './structured-agent-session-adapter-router-test-support'
+import {
+  claudeAndCodexDeclared,
+  NO_STRUCTURED_AGENTS
+} from './structured-agent-session-adapter-router-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
 import {
   HOST_TEST_NOW as NOW,
@@ -49,6 +54,7 @@ let dispatch: Mock<StructuredAgentSessionAdapter['dispatch']>
 let closeSession: Mock<NonNullable<StructuredAgentSessionAdapter['closeSession']>>
 let setOption: Mock<StructuredAgentSessionAdapter['setOption']>
 let startupLimits: Partial<StructuredAgentSessionStartupLimits> | undefined
+let supportsGoals = false
 const providerStarted = vi.fn()
 const recordLiveListing = vi.fn()
 const openGates = new Map<string, (model: string) => void>()
@@ -84,7 +90,7 @@ const publishFirst: StructuredAgentSessionAdapter['acquire'] = async (input) => 
 
 async function startHost(): Promise<void> {
   host = new StructuredAgentSessionHost({
-    agents: NO_STRUCTURED_AGENTS,
+    agents: supportsGoals ? claudeAndCodexDeclared() : NO_STRUCTURED_AGENTS,
     logger: createStructuredAgentSessionLogger(),
     store,
     adapter: {
@@ -125,6 +131,7 @@ async function restartWith(next: StructuredAgentSessionAdapter['acquire']): Prom
   acquire.mockImplementation(next)
   closeSession.mockClear()
   await startHost()
+  acquire.mockClear()
 }
 
 beforeEach(async () => {
@@ -134,6 +141,7 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-startup-attempt-'))
   resetHostTestOperationIds()
   startupLimits = undefined
+  supportsGoals = false
   providerStarted.mockReset()
   recordLiveListing.mockReset()
   openGates.clear()
@@ -272,19 +280,33 @@ describe('a start that ends before it proves itself', () => {
   it('settles what it held as never sent when the agent exits during startup', async () => {
     await restartWith(publishFirst)
     const id = await heldBehindStart('hello')
+    let later: string | undefined
 
-    await host.handleAdapterEvent({
-      type: 'ended',
-      sessionId: SESSION,
-      fence: store.getRecord(SESSION)!.lease.runtimeFence,
-      acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
-      reason: 'exited with code 1',
-      cause: 'unexpected-exit'
-    })
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      await eventually(() => expect(acquire).toHaveBeenCalledTimes(attempt))
+      await eventually(() =>
+        expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
+      )
+      if (attempt === 5) {
+        later = await accept('a later message')
+      }
+      await host.handleAdapterEvent({
+        type: 'ended',
+        sessionId: SESSION,
+        fence: store.getRecord(SESSION)!.lease.runtimeFence,
+        acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
+        reason: 'exited with code 1',
+        cause: 'unexpected-exit'
+      })
+    }
 
     await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
     expect((await submission(id))?.handedOverAt).toBeUndefined()
     expect(dispatch).not.toHaveBeenCalled()
+    await eventually(() => expect(acquire).toHaveBeenCalledTimes(6))
+    await proveOpen()
+    await eventually(async () => expect((await submission(later!))?.dispatchState).toBe('accepted'))
+    expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([later])
     expect(startupAttemptOpen()).toBe(false)
   })
 
@@ -496,4 +518,174 @@ describe('a chat after startup permission backfill', () => {
       expect(store.getRecord(SESSION)?.permissionMode).toBe(mode)
     }
   )
+})
+
+describe('one logical start across physical attempts', () => {
+  beforeEach(() => {
+    supportsGoals = true
+  })
+  async function endAttempt() {
+    const session = host.collaboratorsForTests().sessions.get(SESSION)!
+    const child = session.child!
+    const event = {
+      type: 'ended' as const,
+      sessionId: SESSION,
+      fence: child.fence,
+      acquisitionGeneration: child.generation ?? undefined,
+      reason: 'exited while starting',
+      cause: 'unexpected-exit' as const
+    }
+    await host.handleAdapterEvent(event)
+    await eventually(() => expect(session.child).toBeNull())
+    return event
+  }
+
+  function goal() {
+    const change = { kind: 'set' as const, objective: 'finish startup' }
+    return host.changeThreadGoal(CALLER, {
+      envelope: {
+        sessionId: SESSION,
+        clientOperationId: hostTestOperationId(),
+        expectedRuntimeFence: null,
+        payloadFingerprint: computeAgentSessionPayloadFingerprint({
+          method: 'agentSession.threadGoal',
+          sessionId: SESSION,
+          fields: { change }
+        })
+      },
+      change
+    })
+  }
+
+  it('holds both sends and a joining operation across retry without status or transcript churn', async () => {
+    await restartWith(publishFirst)
+    const phases: (string | undefined)[] = []
+    host.subscribeStatus({
+      id: 'retry-observer',
+      emit: (event) => {
+        if (event.type === 'status') {
+          phases.push(event.session.hostExecutionPhase)
+        }
+      }
+    })
+    const ran = vi.fn<NonNullable<StructuredAgentSessionAdapter['changeThreadGoal']>>(async () => ({
+      ok: true as const
+    }))
+    host.deps.adapter.changeThreadGoal = ran
+    const artifacts: unknown[] = []
+    await host.subscribe({
+      id: 'retry-transcript',
+      sessionId: SESSION,
+      emit: (frame) => {
+        if (frame.type === 'batch') {
+          artifacts.push(...frame.batch.items.filter((item) => item.body.kind === 'status'))
+        }
+      }
+    })
+    const first = await heldBehindStart('first')
+    phases.length = 0
+    const operation = goal()
+    const stale = await endAttempt()
+    const second = await accept('second')
+    expect(await submission(first)).toMatchObject({ dispatchState: 'pending' })
+    expect((await host.readStatusSummary(SESSION))?.hostExecutionPhase).toBe('starting')
+    const reconnect: (string | undefined)[] = []
+    host.subscribeStatus({
+      id: 'during-backoff',
+      emit: (event) => {
+        if (event.type === 'snapshot') {
+          reconnect.push(...event.sessions.map((row) => row.hostExecutionPhase))
+        }
+      }
+    })
+    expect(reconnect).toContain('starting')
+    const during = await host.journalSnapshot(SESSION)
+    expect(during.items.filter((item) => item.body.kind === 'status')).toEqual([])
+    expect(
+      host.collaboratorsForTests().sessions.get(SESSION)?.journal.stopMarks.latest()
+    ).toBeNull()
+    await eventually(() => expect(acquire).toHaveBeenCalledTimes(2))
+    await proveOpen()
+    await host.handleAdapterEvent(stale)
+    await eventually(async () => expect((await submission(second))?.dispatchState).toBe('accepted'))
+    expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([first, second])
+    expect(phases.filter((phase) => phase !== 'starting' && phase !== 'ready')).toEqual([])
+    expect(artifacts).toEqual([])
+    expect((await host.readStatusSummary(SESSION))?.hostExecutionPhase).toBe('ready')
+    expect(await operation).toMatchObject({ ok: true })
+    expect(ran).toHaveBeenCalledTimes(1)
+    expect(ran.mock.calls[0]?.[0]).toMatchObject({
+      fence: host.collaboratorsForTests().sessions.get(SESSION)?.child?.fence
+    })
+    expect(acquire).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a typed refusal or an unproven close final without respawning', async () => {
+    await restartWith(async () => {
+      throw new AgentSessionAcquisitionRefusal('sign in', 'notSignedIn')
+    })
+    const first = await accept('needs login')
+    await eventually(async () => expect((await submission(first))?.dispatchState).toBe('rejected'))
+    expect(acquire).toHaveBeenCalledTimes(1)
+    acquire.mockClear()
+    await restartWith(publishFirst)
+    closeSession.mockResolvedValue(false)
+    const second = await heldBehindStart('unproven process')
+    const child = host.collaboratorsForTests().sessions.get(SESSION)!.child!
+    const { lifetime } = host.collaboratorsForTests()
+    await expect(
+      lifetime.failStartingChild(
+        SESSION,
+        child,
+        new CodexAppServerRequestError('thread/start', -1, 'refused'),
+        1
+      )
+    ).rejects.toThrow('eviction failed')
+    await eventually(async () => expect((await submission(second))?.dispatchState).toBe('rejected'))
+    expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBe(child)
+    expect(acquire).toHaveBeenCalledTimes(1)
+    closeSession.mockResolvedValue(true)
+  })
+
+  it('ends a backoff on Stop and keeps the original ceiling across attempts', async () => {
+    startupLimits = { ceilingMs: 1000 }
+    await restartWith(publishFirst)
+    const first = await heldBehindStart('stop in backoff')
+    await endAttempt()
+    expect(await stop()).toMatchObject({ ok: true })
+    await vi.advanceTimersByTimeAsync(500)
+    expect(acquire).toHaveBeenCalledTimes(1)
+    expect((await host.readStatusSummary(SESSION))?.hostExecutionPhase).toBeUndefined()
+    expect(await submission(first)).toMatchObject({ dispatchState: 'rejected' })
+    acquire.mockClear()
+    const second = await heldBehindStart('one clock')
+    await vi.advanceTimersByTimeAsync(400)
+    await endAttempt()
+    await eventually(() => expect(acquire).toHaveBeenCalledTimes(2))
+    await vi.advanceTimersByTimeAsync(500)
+    await eventually(
+      async () => expect((await submission(second))?.dispatchState).toBe('rejected'),
+      50
+    )
+    expect(acquire).toHaveBeenCalledTimes(2)
+    expect(await submission(second)).toMatchObject(HOST_STOPPED)
+  })
+
+  it('writes one final failure for an operation-only start', async () => {
+    await restartWith(publishFirst)
+    host.deps.adapter.changeThreadGoal = vi.fn(async () => ({ ok: true as const }))
+    const operation = goal()
+    for (let number = 1; number <= 5; number++) {
+      await eventually(() => expect(acquire).toHaveBeenCalledTimes(number))
+      await eventually(() =>
+        expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
+      )
+      await endAttempt()
+    }
+    expect(await operation).toMatchObject({ ok: false })
+    const snapshot = await host.journalSnapshot(SESSION)
+    expect(
+      snapshot.items.filter((item) => item.body.kind === 'status' && item.body.tone === 'error')
+    ).toHaveLength(1)
+  })
 })
