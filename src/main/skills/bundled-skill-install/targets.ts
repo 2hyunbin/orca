@@ -1,5 +1,9 @@
 import { basename, dirname, join, resolve } from 'node:path'
-import { isPathInsideOrEqual } from '../../../shared/cross-platform-path'
+import {
+  nativeSkillPathSemantics,
+  skillPathInside,
+  skillPathsEqual
+} from '../../../shared/skill-path-containment'
 import type { SkillInstallProviderId } from '../../../shared/skill-install-providers'
 import type { ResolvedSkillInstallDestination } from '../skill-install-destinations'
 import {
@@ -93,9 +97,14 @@ export async function resolveBundledSkillTargets(
   }
 
   const roots = new Map<string, BundledSkillTargetRoot>()
+  const semantics = nativeSkillPathSemantics()
   for (const candidate of candidates) {
     const realPath = await resolveBundledSkillRealPath(filesystem, candidate.path)
-    if (workspaceRealPath !== null && !isPathInsideOrEqual(workspaceRealPath, realPath)) {
+    if (
+      workspaceRealPath !== null &&
+      !skillPathsEqual(workspaceRealPath, realPath, semantics) &&
+      !skillPathInside(workspaceRealPath, realPath, semantics)
+    ) {
       continue
     }
     const existing = roots.get(bundledSkillPathKey(realPath))

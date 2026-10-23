@@ -1,6 +1,8 @@
 import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { nativeBundledSkillFilesystem } from './filesystem'
+import { resolveBundledSkillTargets } from './targets'
 import {
   linkDirectory,
   makeSkillHome,
@@ -18,6 +20,31 @@ const EDITED_TEXT = `---\nname: ${NAME}\n---\nmine\n`
 afterEach(removeSkillHomes)
 
 describe('workspace bundled skill targets', () => {
+  it.skipIf(process.platform === 'win32')(
+    'keeps byte-distinct POSIX workspace names separate',
+    async () => {
+      const home = await makeSkillHome()
+      const workspace = join(home.root, 'caf\u00e9')
+      const root = join(workspace, '.claude', 'skills')
+      const filesystem = {
+        ...nativeBundledSkillFilesystem,
+        realpath: async (path: string) => {
+          if (path === workspace) {
+            return workspace
+          }
+          return path === root ? join(home.root, 'cafe\u0301', 'skills') : null
+        }
+      }
+
+      const roots = await resolveBundledSkillTargets(
+        serviceInput(home, { workspaceDirectory: workspace }),
+        filesystem
+      )
+
+      expect(roots.map((target) => target.path)).toEqual([join(workspace, '.agents', 'skills')])
+    }
+  )
+
   it.each([
     ['.claude', false],
     ['.claude', true],
