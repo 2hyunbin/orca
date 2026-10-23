@@ -19,6 +19,7 @@ import {
   resolveAgentPaneAuthorityKey
 } from '../store/slices/agent-pane-authority'
 import { buildWindowApi } from './ipc-events-agent-status-window-test-fixtures'
+import type { AgentStatusSetData } from './ipc-events-agent-status-store-test-fixtures'
 
 const holder = vi.hoisted(() => ({
   getStore: (): ReturnType<typeof createTestStore> => {
@@ -120,7 +121,7 @@ async function witness() {
       }
     })
   )
-  let onSet: ((data: AgentStatusIpcPayload) => void) | undefined
+  let onSet: ((data: AgentStatusSetData) => void) | undefined
   vi.stubGlobal(
     'window',
     buildWindowApi({
@@ -141,8 +142,9 @@ async function witness() {
     leaf: string,
     providerSessionOnly = false,
     runtimeBacked = true
-  ): AgentStatusIpcPayload => ({
+  ): AgentStatusIpcPayload & AgentStatusSetData => ({
     paneKey: key(leaf),
+    connectionId: null,
     state: 'working',
     prompt: '',
     agentType: 'claude',
@@ -164,7 +166,7 @@ async function witness() {
       phase = name
       capture()
     },
-    emit: (data: AgentStatusIpcPayload) => {
+    emit: (data: ReturnType<typeof event>) => {
       if (!onSet) {
         throw new Error('Missing production onSet')
       }

@@ -151,7 +151,13 @@ export async function applyWindowLayoutCommand(
   if (!run?.originalPresentation) {
     markAgentLaunchesClosedByUser(workspace, { kind: 'pane', tabId, leafId })
   }
-  const close = { type: 'closePane' as const, workspace, tabId, leafId, userPaneClose: true }
+  const close: CommandOf<'closePane'> = {
+    type: 'closePane',
+    workspace,
+    tabId,
+    leafId,
+    userPaneClose: true
+  }
   return run
     ? store.applyLayoutCommand(close, holders, run)
     : store.applyLayoutCommand(close, holders)
