@@ -1,6 +1,5 @@
 import {
   agentProviderSessionsEqual,
-  type TerminalLaunchResult,
   type AgentProviderSessionMetadata
 } from '../../../../shared/agent-session-resume'
 import type { TuiAgent } from '../../../../shared/tui-agent'
@@ -29,8 +28,8 @@ type Hold = AgentSessionResumeHold & {
 /** A resumer's share of a hold, settled only from its own create's evidence. */
 export type AgentSessionResumeClaim = {
   /** The exact PTY this resumer's create produced; the hold ends once every such PTY exits. */
-  bind: (ptyId: string, result?: TerminalLaunchResult) => void
-  /** Releases when nothing was dispatched or the spawn proved its exit; otherwise stays held. */
+  bind: (ptyId: string) => void
+  /** Releases on proof this share dispatched no claimed agent, or its spawn exited; otherwise held. */
   settleFailure: (dispatched: boolean, error?: unknown) => void
 }
 
@@ -138,17 +137,11 @@ export class AgentSessionResumeClaims {
   private share(hold: Hold, request: string | undefined): AgentSessionResumeClaim {
     let open = true
     return {
-      bind: (ptyId, result) => {
+      bind: (ptyId) => {
         if (!open) {
           return
         }
         open = false
-        if (result?.agentResumeRefused) {
-          // A known plain shell settles only this share, never another uncertain dispatch.
-          hold.unsettled -= 1
-          this.endIfSettled(hold)
-          return
-        }
         hold.unsettled -= 1 + (request ? (hold.ambiguous.get(request) ?? 0) : 0)
         if (request) {
           hold.ambiguous.delete(request)

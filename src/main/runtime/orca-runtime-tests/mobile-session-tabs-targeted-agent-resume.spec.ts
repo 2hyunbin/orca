@@ -217,6 +217,74 @@ describe('resumeAgentSessionInWorkspace', () => {
     expect(runtime.getTerminalLaunchResult('refused-shell')).toBeDefined()
   })
 
+  it('settles only fresh matching saved results and binds unproven or observed results until exit', async () => {
+    for (const kind of [
+      'matching',
+      'unverifiable',
+      'observed',
+      'other-session',
+      'other-agent',
+      'missing',
+      'contradictory',
+      'unknown'
+    ]) {
+      const fixture = makeSleptWorkspace()
+      const record = storedRecord(fixture)!
+      record.origin = 'live'
+      const matching = savedResumeResult({
+        verdict: kind === 'unverifiable' ? 'unverifiable' : 'chat-home',
+        refused: { agent: 'claude', providerSession: SESSION }
+      })
+      if (!matching.savedResumeDecision) {
+        throw new Error('Saved admission must return its decision')
+      }
+      const receipt =
+        kind === 'unknown'
+          ? {}
+          : {
+              ...matching,
+              savedResumeDecision:
+                kind === 'missing'
+                  ? undefined
+                  : {
+                      ...matching.savedResumeDecision,
+                      agent: kind === 'other-agent' ? 'codex' : 'claude',
+                      providerSession: kind === 'other-session' ? { ...SESSION, id: 'D' } : SESSION,
+                      verdict:
+                        kind === 'contradictory'
+                          ? ('admitted' as const)
+                          : matching.savedResumeDecision.verdict
+                    },
+              ...(kind === 'observed' ? { isReattach: true } : {})
+            }
+      let first = true
+      const { runtime, spawn, openOldPane, resume } = makeRuntime(fixture, {
+        spawn: async (args) => {
+          if (!first) {
+            return { id: 'next-C' }
+          }
+          first = false
+          expect(args).toMatchObject({
+            launchAgent: 'claude',
+            resumeOrigin: 'saved',
+            resumeProviderSession: SESSION
+          })
+          return { id: 'result-pty', ...receipt }
+        }
+      })
+      await openOldPane()
+      const proved = kind === 'matching' || kind === 'unverifiable'
+      const action = { mutationId: `after-${kind}` }
+      if (!proved) {
+        await expect(resume(action)).resolves.toEqual({ ok: false, reason: 'held_elsewhere' })
+        expect(spawn).toHaveBeenCalledOnce()
+        runtime.onPtyExit('result-pty', 0)
+      }
+      await expect(resume(action)).resolves.toMatchObject({ ok: true, ptyId: 'next-C' })
+      expect(spawn).toHaveBeenCalledTimes(2)
+    }
+  })
+
   // Review repro, on the runtime-owned path: the spawn started but its reply was lost.
   it('retains ownership after an ambiguous create with a running resume', async () => {
     const fixture = makeSleptWorkspace()
