@@ -4,9 +4,6 @@ import { okFixture } from '../../test-fixtures'
 
 type Call = { name: string; params: Record<string, unknown> }
 
-/** The runtime half of this seam (`runCurrent` from a coordinator handle, `workerList` filtered by
- *  `run`) is proven in `rpc/methods/orchestration/worker/worker-list-run-scope-rpc.test.ts`; this
- *  half proves the handler asks exactly those two questions and reports what it decided. */
 describe('orchestration worker-list Run scope (CLI handler)', () => {
   let calls: Call[]
   let logged: string[]
