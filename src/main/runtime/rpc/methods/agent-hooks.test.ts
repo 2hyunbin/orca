@@ -33,6 +33,7 @@ function prepareMethod() {
 }
 
 function runtimeWithSettings(enabled = true, disabledTuiAgents: string[] = []): OrcaRuntimeService {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook handler reads only requireStore/getSettings from this runtime fixture.
   return {
     requireStore: () => ({
       getSettings: () => ({
@@ -40,7 +41,6 @@ function runtimeWithSettings(enabled = true, disabledTuiAgents: string[] = []): 
         disabledTuiAgents
       })
     })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the hook handler reads only requireStore/getSettings from this runtime fixture.
   } as unknown as OrcaRuntimeService
 }
 

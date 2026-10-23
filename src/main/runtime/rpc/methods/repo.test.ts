@@ -148,13 +148,13 @@ describe('repo RPC methods', () => {
       kind: 'git' as const,
       externalWorktreeVisibilityLegacy: false
     }
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: repo.add, visibility projection and response envelope use only these supplied runtime methods, including raw settings.
     const runtime = {
       getRuntimeId: () => 'test-runtime',
       addRepo: vi.fn().mockResolvedValue(repo),
       requireStore: () => ({
         getSettings: () => ({ worktreeVisibilityDefaults: { external: 'show' } })
       })
-      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: repo.add, visibility projection and response envelope use only these supplied runtime methods, including raw settings.
     } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: REPO_METHODS })
 
