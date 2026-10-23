@@ -95,8 +95,10 @@ export type OrcadManagedStaleLockReclaimResult =
       lockPath: string
       notRestarted?: string
     }
-  /** The host can't run the command, or another lifecycle step holds it; nothing changed. */
-  | { status: 'unsupported' | 'busy'; message: string }
+  /** The host can't run the command; `lockPath` names the lock to delete by hand. Nothing changed. */
+  | { status: 'unsupported'; message: string; lockPath?: string }
+  /** Another lifecycle step holds the host; nothing changed. */
+  | { status: 'busy'; message: string }
 
 /**
  * Unlinks the server from this desktop without reaching its host, for a host that is gone or

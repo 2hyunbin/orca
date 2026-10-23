@@ -24,6 +24,7 @@ import { orcadSlotDir, type OrcadSlotOptions } from '../../ssh/orcad-recovery-sl
 import { joinRemotePath } from '../../ssh/ssh-remote-platform'
 import { isSshCommandExitError } from '../../ssh/remote-exec/remote-exec-command'
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
+import { ORCAD_LOCK_FILE_NAME } from '../../orcad/orcad-instance-lock'
 import { rebuildOrcadManagedTunnel } from './orcad-managed-tunnel'
 
 const ReclaimAnswerSchema = z.object({
@@ -71,7 +72,13 @@ export function runManagedOrcadStaleLockReclaim(
       })
     )
     if (ran.status !== 'answered') {
-      return { status: ran.status, message: ran.message }
+      return ran.status === 'busy'
+        ? { status: 'busy', message: ran.message }
+        : {
+            status: 'unsupported',
+            message: ran.message,
+            lockPath: joinRemotePath(slot.host, slot.userDataDir, ORCAD_LOCK_FILE_NAME)
+          }
     }
     const { answer } = ran
     if (answer.status !== 'reclaimed') {

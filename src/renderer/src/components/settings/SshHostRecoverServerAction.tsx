@@ -7,7 +7,9 @@ import {
 } from '../../../../shared/orcad-stale-lock-reclaim'
 import type { SshManagedServerStatus } from '../../../../shared/ssh-types'
 import type { ManagedOrcadPreloadApi } from '../../../../preload/api/managed-orcad-api'
+import { quotePosixShellUnlessPlain } from '../../../../shared/shell-argument-quoting'
 import { useMountedRef } from '@/hooks/useMountedRef'
+import { formatUiRelativeTime } from '@/i18n/relative-time-format'
 import { translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
 import { Checkbox } from '../ui/checkbox'
@@ -169,7 +171,7 @@ function OpenRecoverServerDialog({
         {error ? (
           <div className="space-y-2 text-sm">
             <p className="text-destructive">{error}</p>
-            <ManualRecovery detail={detail} />
+            <ManualReclaim detail={detail} />
           </div>
         ) : null}
         <DialogFooter>
@@ -218,13 +220,9 @@ function EligibleLock({
           </dt>
           <dd className="font-mono break-all">{evidence.currentBootId}</dd>
           <dt className="text-muted-foreground">
-            {translate('auto.components.settings.recoverServer.age', 'Age')}
+            {translate('auto.components.settings.recoverServer.written', 'Written')}
           </dt>
-          <dd>
-            {translate('auto.components.settings.recoverServer.ageMinutes', '{{count}} minutes', {
-              count: evidence.ageMinutes
-            })}
-          </dd>
+          <dd>{formatUiRelativeTime(-evidence.ageMinutes * 60_000)}</dd>
         </dl>
       ) : null}
       <p className="font-medium text-status-warning">
@@ -257,16 +255,33 @@ function CheckOutcome({
   return (
     <div className="space-y-2 text-sm">
       <p className="text-destructive">{check.message}</p>
-      {check.status === 'unsupported' || check.status === 'refused' ? (
-        <ManualRecovery detail={detail} />
-      ) : null}
+      {check.status === 'refused' ? <ManualReclaim detail={detail} /> : null}
+      {/* The host can't run the reclaim command, so only a delete by hand is offered. */}
+      {check.status === 'unsupported' ? <ManualLockDelete lockPath={check.lockPath} /> : null}
     </div>
   )
 }
 
-function ManualRecovery({ detail }: { detail: string }): React.JSX.Element {
+function ManualReclaim({ detail }: { detail: string }): React.JSX.Element {
   const command = staleLockReclaimCommandFrom(detail)
   if (!command) {
+    return <ManualLockDelete lockPath={undefined} />
+  }
+  return (
+    <div className="space-y-1.5">
+      <p className="text-muted-foreground">
+        {translate(
+          'auto.components.settings.recoverServer.manualCommand',
+          'Run this on the host, or delete the lock file shown in Details:'
+        )}
+      </p>
+      <LiteralCommand command={command} />
+    </div>
+  )
+}
+
+function ManualLockDelete({ lockPath }: { lockPath: string | undefined }): React.JSX.Element {
+  if (!lockPath) {
     return (
       <p className="text-muted-foreground">
         {translate(
@@ -280,14 +295,26 @@ function ManualRecovery({ detail }: { detail: string }): React.JSX.Element {
     <div className="space-y-1.5">
       <p className="text-muted-foreground">
         {translate(
-          'auto.components.settings.recoverServer.manualCommand',
-          'Run this on the host, or delete the lock file shown in Details:'
+          'auto.components.settings.recoverServer.manualDeleteCommand',
+          'Delete the lock on the host by hand:'
         )}
       </p>
-      <pre className="whitespace-pre-wrap break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground select-text">
-        {command}
-      </pre>
+      <LiteralCommand command={`rm ${quotePosixShellUnlessPlain(lockPath)}`} />
+      <p className="font-medium text-status-warning">
+        {translate(
+          'auto.components.settings.recoverServer.manualDeleteWarning',
+          'Only do this if no other machine sharing this home runs Orca for this profile.'
+        )}
+      </p>
     </div>
+  )
+}
+
+function LiteralCommand({ command }: { command: string }): React.JSX.Element {
+  return (
+    <pre className="whitespace-pre-wrap break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground select-text">
+      {command}
+    </pre>
   )
 }
 

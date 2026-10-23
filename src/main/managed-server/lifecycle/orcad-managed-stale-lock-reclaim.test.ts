@@ -80,7 +80,8 @@ describe('runManagedOrcadStaleLockReclaim', () => {
   it('never guesses from an orcad that answers without JSON', async () => {
     mocks.exec.mockRejectedValue(sshCommandExitError('orcad', 1, 'Error: lock held'))
     const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', { yes: true })
-    expect(result.status).toBe('unsupported')
+    // Main names the lock for a manual delete; the renderer never parses it out of the detail.
+    expect(result).toMatchObject({ status: 'unsupported', lockPath: '/home/dev/.orca/orcad.lock' })
     expect(mocks.wake).not.toHaveBeenCalled()
   })
 

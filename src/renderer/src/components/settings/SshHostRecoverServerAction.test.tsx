@@ -113,11 +113,27 @@ describe('Recover server', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
-  it('points to the manual recovery when the host can’t run the check', async () => {
-    reclaimStaleLock.mockResolvedValueOnce({ status: 'unsupported', message: 'no answer' })
+  it('offers only a delete by hand when the host can’t run the check', async () => {
+    reclaimStaleLock.mockResolvedValueOnce({
+      status: 'unsupported',
+      message: 'no answer',
+      lockPath: '/home/dev/.orca/orcad.lock'
+    })
     const container = await render()
     expect(container.textContent).toContain('no answer')
-    expect(container.textContent).toContain(COMMAND)
+    expect(container.textContent).toContain('rm /home/dev/.orca/orcad.lock')
+    expect(container.textContent).not.toContain('--reclaim-stale-lock')
     expect(button(container, 'Clear lock and restart')).toBeUndefined()
+  })
+
+  it('names the reclaim command when the host refused the reclaim', async () => {
+    reclaimStaleLock.mockResolvedValueOnce({
+      status: 'refused',
+      message: 'still running',
+      lockPath: '/home/dev/.orca/orcad.lock'
+    })
+    const container = await render()
+    expect(container.textContent).toContain(COMMAND)
+    expect(container.textContent).not.toContain('rm /home')
   })
 })

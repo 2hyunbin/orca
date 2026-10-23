@@ -13348,13 +13348,14 @@
           "host": "Host",
           "lockBoot": "Written during boot",
           "currentBoot": "Current boot",
-          "age": "Age",
-          "ageMinutes": "{{count}} minutes",
           "warning": "Only continue if no other machine sharing this home runs Orca for this profile.",
           "none": "There is no lock to clear any more. Reconnect to start this host’s Orca server.",
           "manualCommand": "Run this on the host, or delete the lock file shown in Details:",
           "manualDelete": "Delete the lock file shown in Details once you are sure no other machine uses it.",
-          "action": "Recover server…"
+          "action": "Recover server…",
+          "written": "Written",
+          "manualDeleteCommand": "Delete the lock on the host by hand:",
+          "manualDeleteWarning": "Only do this if no other machine sharing this home runs Orca for this profile."
         }
       },
       "right": {
