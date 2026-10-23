@@ -54,11 +54,11 @@ it('retains CLI work and mail across restart, refuses takeover, and completes a 
   ]) {
     vi.stubEnv(name, '')
   }
-  const { main } = await import('../../cli/index')
-  const { OrchestrationDb } = await import('./orchestration/db')
-  const { OrcaRuntimeRpcServer } = await import('./runtime-rpc')
-  const fixture = await import('./orchestration-mailbox-notification-test-harness')
-  const { registerBoundPty } = await import('./bind-first-pane.test-fixture')
+  const { main } = await import('./index')
+  const { OrchestrationDb } = await import('../main/runtime/orchestration/db')
+  const { OrcaRuntimeRpcServer } = await import('../main/runtime/runtime-rpc')
+  const fixture = await import('../main/runtime/orchestration-mailbox-notification-test-harness')
+  const { registerBoundPty } = await import('../main/runtime/bind-first-pane.test-fixture')
   const coord = fixture.TERMINAL_HANDLE
   const worker = fixture.SECOND_TERMINAL_HANDLE
   const predecessor = 'term_predecessor'
