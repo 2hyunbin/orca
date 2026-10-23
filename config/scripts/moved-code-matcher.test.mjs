@@ -65,6 +65,9 @@ describe('moved-code matcher and changed-line gate', () => {
       if (args[0] === 'ls-files') {
         return ''
       }
+      if (args.includes('--name-status')) {
+        return 'M\0fixture.mjs\0'
+      }
       if (args.includes('--name-only')) {
         return 'fixture.mjs\0'
       }

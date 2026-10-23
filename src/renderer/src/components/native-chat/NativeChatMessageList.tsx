@@ -1,5 +1,5 @@
 import {
-  NATIVE_CHAT_TRANSCRIPT_OUTER_CLASS,
+  nativeChatTranscriptOuterClass,
   NATIVE_CHAT_TRANSCRIPT_COLUMN_CLASS
 } from './native-chat-appearance-style'
 import { NativeChatJumpToLatest } from './NativeChatJumpToLatest'
@@ -11,7 +11,7 @@ import { translate } from '@/i18n/i18n'
 import type { NativeChatLiveSession } from './use-native-chat-live-session'
 import { useNativeChatTranscriptProjection } from './use-native-chat-transcript-projection'
 import { structuredQuestionTranscript } from '../../../../shared/structured-agent-question-projection'
-import { nativeChatTaskListPredecessors } from './native-chat-task-list-history'
+import { nativeChatTaskListPredecessors } from '../../../../shared/native-chat-task-list-history'
 import { NativeChatDockedTaskList } from './NativeChatDockedTaskList'
 import { useNativeChatTurnStatus } from './use-native-chat-turn-status'
 import { NativeChatAwaitingInputRow } from './NativeChatAwaitingInputRow'
@@ -26,7 +26,7 @@ import {
   NativeChatTranscriptItems,
   NativeChatWaitingTranscriptItems
 } from './NativeChatTranscriptItems'
-import type { NativeChatTranscriptRowContext } from './NativeChatTranscriptRow'
+import { useNativeChatTranscriptRowContext } from './use-native-chat-transcript-row-context'
 import type { StructuredAgentSessionHostWork } from './use-structured-agent-session-transport-state'
 import type { NativeChatDeliveryNotice } from './NativeChatMessageRow'
 import {
@@ -63,7 +63,6 @@ import type { NativeChatSettledTurns } from '../../../../shared/native-chat-turn
 import type { NativeChatDiffReveal, NativeChatDiffTarget } from './native-chat-turn-diffs'
 import { useNativeChatTurnDiffs } from './use-native-chat-turn-diffs'
 import { transcriptTailRow } from './native-chat-transcript-tail-row'
-import { structuredAgentLabel } from '@/lib/structured-agent-session-launch-label'
 
 /** The turn is blocked on the reader. `shown`: the pane draws the prompt itself, as a card;
  *  `unshown`: it cannot (the prompt is only in the agent's terminal). */
@@ -337,40 +336,22 @@ export function NativeChatMessageList({
     release: setNavigationRequest
   })
 
-  const rowContext = useMemo<NativeChatTranscriptRowContext>(
-    () => ({
-      agentName: structuredAgentLabel(session.agent),
-      actionablePromptIds: hostWork?.actionablePromptIds,
-      expandSignal,
-      revealedDiff,
-      taskListPredecessors,
-      expandedTurnIds,
-      deliveryNotices,
-      allowFileUriLinks,
-      runtimeContext,
-      onLinkClick,
-      onToggleExpandedTurn: toggleExpandedTurn,
-      subagentDisclosure,
-      onScrollMessageToTop: scrollMessageToTop,
-      onRevealDiff: revealDiff
-    }),
-    [
-      session.agent,
-      hostWork,
-      allowFileUriLinks,
-      expandSignal,
-      expandedTurnIds,
-      deliveryNotices,
-      onLinkClick,
-      revealDiff,
-      revealedDiff,
-      runtimeContext,
-      scrollMessageToTop,
-      taskListPredecessors,
-      subagentDisclosure,
-      toggleExpandedTurn
-    ]
-  )
+  const rowContext = useNativeChatTranscriptRowContext({
+    agent: session.agent,
+    hostWork,
+    expandSignal,
+    revealedDiff,
+    taskListPredecessors,
+    expandedTurnIds,
+    deliveryNotices,
+    allowFileUriLinks,
+    runtimeContext,
+    onLinkClick,
+    onToggleExpandedTurn: toggleExpandedTurn,
+    subagentDisclosure,
+    onScrollMessageToTop: scrollMessageToTop,
+    onRevealDiff: revealDiff
+  })
 
   return (
     <NativeChatDisclosureContext.Provider value={disclosures}>
@@ -393,12 +374,11 @@ export function NativeChatMessageList({
                 loadingEarlier={loadingEarlier}
               />
             ) : null}
-            <div className={NATIVE_CHAT_TRANSCRIPT_OUTER_CLASS}>
+            <div className={nativeChatTranscriptOuterClass(rail.visible)}>
               <div
                 ref={measureContent}
                 data-native-chat-transcript-column
-                // Why: matches composer width with 5px horizontal inset
-                // on each side so content is slightly narrower than the input box.
+                // Shares the composer's maximum width; rail clearance and the 5px inner inset narrow constrained panes.
                 className={NATIVE_CHAT_TRANSCRIPT_COLUMN_CLASS}
               >
                 <NativeChatTranscriptItems
