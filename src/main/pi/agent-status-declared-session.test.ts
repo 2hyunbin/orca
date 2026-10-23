@@ -95,7 +95,11 @@ describe('declared session authority', () => {
     child.model = { provider: 'child', id: 'model' }
     child.resolvePlanReview = vi.fn(() => true)
     child.ui = { onTerminalInput: vi.fn(() => stopInput) }
-    await helper.callHook('tool_approval_requested', { toolName: 'bash' }, child)
+    await helper.callHook(
+      'tool_approval_requested',
+      { toolName: 'bash', approvalMode: 'yolo' },
+      child
+    )
     await helper.callHook(
       'plan_review_requested',
       { reviewId: 'review', planContent: 'plan', options: [] },
@@ -116,18 +120,25 @@ describe('declared session authority', () => {
     const root = session('lead', 'main')
     root.model = { provider: 'lead', id: 'model' }
     await harness.callHook('session_start', {}, root)
-    await vi.waitFor(() => expect(harness.fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2))
+    await vi.waitFor(() => expect(harness.fetchMock.mock.calls.length).toBeGreaterThanOrEqual(1))
     const payloads = (): Record<string, unknown>[] =>
       harness.fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).payload)
     expect(
       payloads().every((payload) => payload.session_id === 'lead' && payload.model === 'lead/model')
     ).toBe(true)
-    expect(payloads().map((payload) => payload.hook_event_name)).toContain(
-      'tool_approval_requested'
-    )
+    expect(payloads().at(-1)).toMatchObject({
+      hook_event_name: 'plan_review_requested',
+      review_id: 'review'
+    })
     expect(payloads().some((payload) => payload.review_id === 'abandoned')).toBe(false)
     await helper.callHook('plan_review_resolved', { reviewId: 'review' }, child)
     expect(stopInput).toHaveBeenCalledOnce()
+    await vi.waitFor(() =>
+      expect(payloads().at(-1)).toMatchObject({
+        hook_event_name: 'tool_approval_requested',
+        tool_name: 'bash'
+      })
+    )
     await helper.callHook('tool_call', { toolName: 'ask', input: { question: 'choose' } }, child)
     await vi.waitFor(() => expect(payloads().at(-1)?.tool_name).toBe('ask'))
     // Advisor tools have a sub identity on the selected session's own runner.

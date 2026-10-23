@@ -88,6 +88,36 @@ it.skipIf(!process.env.ORCA_PI_TEST_PACKAGE)(
         id: lead.getSessionId(),
         transcriptPath: lead.getSessionFile()
       })
+      const { ExtensionRunner } = await import(
+        /* @vite-ignore */ pathToFileURL(join(root, 'dist/core/extensions/runner.js')).href
+      )
+      const sdkManager = SessionManager.inMemory(directory)
+      const sdkRunner = new ExtensionRunner([], { invalidate: () => {} }, directory, sdkManager, {})
+      const sdkContext = sdkRunner.createContext()
+      const sdkChild = h.registerSession()
+      await sdkChild.callHook('session_start', { reason: 'startup' }, sdkContext)
+      await sdkChild.callHook(
+        'tool_call',
+        {
+          toolName: 'ask_user_question',
+          input: { questions: [{ question: 'SDK-owned question?' }] }
+        },
+        sdkContext
+      )
+      await vi.waitFor(() => expect(accepted.at(-1)?.payload.state).toBe('blocked'))
+      // Direct disposal invalidates this runner without requiring a shutdown event.
+      sdkRunner.invalidate()
+      expect(() => sdkContext.sessionManager).toThrow()
+      await h.callHook(
+        'message_end',
+        { message: { role: 'assistant', content: 'After SDK invalidation' } },
+        { sessionManager: lead }
+      )
+      await vi.waitFor(() =>
+        expect(accepted.at(-1)?.payload.lastAssistantMessage).toBe('After SDK invalidation')
+      )
+      expect(accepted.at(-1)?.payload.interactivePrompt).toBeUndefined()
+      expect(accepted.at(-1)?.providerSession?.id).toBe(lead.getSessionId())
       let manager = lead
       let runtime = { callHook: h.callHook }
       for (const reason of ['new', 'resume', 'fork', 'reload'] as const) {

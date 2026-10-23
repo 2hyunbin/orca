@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makePaneKey } from '../../shared/stable-pane-id'
 import { normalizeHookPayload } from '../../shared/agent-hook-listener'
-import { createHookListenerState } from '../../shared/agent-hook-listener/listener-state'
+import {
+  createHookListenerState,
+  clearPaneCacheState
+} from '../../shared/agent-hook-listener/listener-state'
+import { cacheRelayLegacyAgentStatus } from '../../shared/agent-status-legacy-relay-cache'
+import { buildOmpPlanReviewAnswer } from '../../shared/omp-plan-review-prompt'
 import {
   createAgentStatusExtensionHarness,
   type HookContext
@@ -12,6 +17,12 @@ const context = (id: string, file?: string): HookContext => ({
   isIdle: () => true,
   ui: { setTitle: vi.fn() }
 })
+const receiverEnv = {
+  ORCA_TAB_ID: 'source-lifetime',
+  ORCA_PANE_KEY: makePaneKey('source-lifetime', '44444444-4444-4444-8444-444444444444'),
+  ORCA_AGENT_HOOK_ENV: 'production',
+  ORCA_AGENT_HOOK_VERSION: '1'
+}
 const flush = () => vi.advanceTimersByTimeAsync(0)
 const payloads = (h: ReturnType<typeof createAgentStatusExtensionHarness>) =>
   h.fetchMock.mock.calls.map((call) => JSON.parse(String(call[1]?.body)).payload)
@@ -207,16 +218,11 @@ describe('selected source lifetime', () => {
     'retires only the originating %s attention and derives the lead close state',
     async (kind) => {
       const state = createHookListenerState()
-      const normalized: string[] = []
+      const normalized: NonNullable<ReturnType<typeof normalizeHookPayload>>[] = []
       const h = createAgentStatusExtensionHarness({
         kind,
         argv: ['node', kind],
-        env: {
-          ORCA_TAB_ID: 'source-lifetime',
-          ORCA_PANE_KEY: makePaneKey('source-lifetime', '44444444-4444-4444-8444-444444444444'),
-          ORCA_AGENT_HOOK_ENV: 'production',
-          ORCA_AGENT_HOOK_VERSION: '1'
-        },
+        env: receiverEnv,
         existsSync: () => true,
         fetchImpl: async (_url, init) => {
           const event = normalizeHookPayload(
@@ -226,7 +232,12 @@ describe('selected source lifetime', () => {
             'production'
           )
           if (event) {
-            normalized.push(event.payload.state)
+            expect(
+              cacheRelayLegacyAgentStatus(state, event, 16, (pane) =>
+                clearPaneCacheState(state, pane)
+              )
+            ).toBe(true)
+            normalized.push(event)
           }
           return { ok: true }
         }
@@ -236,7 +247,7 @@ describe('selected source lifetime', () => {
       await h.callHook('agent_start', {}, root)
       await h.callHook('agent_end', {}, root)
       await flush()
-      expect(normalized.at(-1)).toBe('done')
+      expect(normalized.at(-1)?.payload.state).toBe('done')
       const child = h.registerSession()
       const childCtx = context('child')
       await child.callHook('session_start', {}, childCtx)
@@ -260,12 +271,69 @@ describe('selected source lifetime', () => {
           childCtx
         )
         await flush()
-        expect(normalized.at(-1)).toBe('blocked')
+        expect(normalized.at(-1)?.payload.state).toBe('blocked')
         await child.callHook('tool_execution_start', { toolName }, childCtx)
         await child.callHook('tool_execution_end', { toolName }, childCtx)
         await flush()
-        expect(normalized.at(-1)).toBe('done')
+        expect(normalized.at(-1)?.payload.state).toBe('done')
       }
+      const questionTool = kind === 'pi' ? 'ask_user_question' : 'ask'
+      const input = { questions: [{ question: 'Keep this request?', options: ['yes', 'no'] }] }
+      await child.callHook('tool_call', { toolName: questionTool, input }, childCtx)
+      await flush()
+      await h.callHook('before_agent_start', { prompt: 'A real lead turn' }, root)
+      await flush()
+      expect(normalized.at(-1)).toMatchObject({
+        hookEventName: 'before_agent_start',
+        hasExplicitPrompt: true,
+        providerSession: { id: 'lead' },
+        payload: {
+          state: 'blocked',
+          prompt: 'A real lead turn',
+          interactivePrompt: JSON.stringify(input)
+        }
+      })
+      await h.callHook('agent_start', {}, root)
+      await h.callHook(
+        'tool_execution_start',
+        { toolName: 'bash', input: { command: 'pwd' } },
+        root
+      )
+      await flush()
+      expect(normalized.at(-1)?.payload.toolName).toBe(questionTool)
+      await h.callHook(
+        'message_end',
+        { message: { role: 'assistant', content: 'A real lead reply' } },
+        root
+      )
+      await flush()
+      expect(normalized.at(-1)?.payload).toMatchObject({
+        state: 'blocked',
+        prompt: 'A real lead turn',
+        lastAssistantMessage: 'A real lead reply',
+        interactivePrompt: JSON.stringify(input)
+      })
+      await h.callHook('agent_end', {}, root)
+      await flush()
+      expect(normalized.at(-1)?.payload.state).toBe('blocked')
+      await h.callHook('before_agent_start', { prompt: 'Next lead turn' }, root)
+      await h.callHook('agent_start', {}, root)
+      await flush()
+      expect(normalized.at(-1)?.payload.lastAssistantMessage).toBeUndefined()
+      const ownerOpen = kind === 'pi' ? 'ui_prompt_start' : 'tool_approval_requested'
+      const ownerClose = kind === 'pi' ? 'ui_prompt_end' : 'tool_approval_resolved'
+      await h.callHook(ownerOpen, { toolName: 'bash', approvalMode: 'yolo' }, root)
+      await h.callHook(ownerClose, { toolName: 'bash' }, root)
+      await flush()
+      expect(normalized.at(-1)?.payload).toMatchObject({
+        state: 'blocked',
+        interactivePrompt: JSON.stringify(input)
+      })
+      await child.callHook('tool_execution_end', { toolName: questionTool }, childCtx)
+      await flush()
+      expect(normalized.at(-1)?.payload.state).toBe('working')
+      expect(normalized.at(-1)?.payload.interactivePrompt).toBeUndefined()
+      expect(normalized.at(-1)?.payload.toolInput).toBeUndefined()
       await h.callHook('agent_start', {}, root)
       await child.callHook(
         'tool_call',
@@ -278,53 +346,83 @@ describe('selected source lifetime', () => {
         childCtx
       )
       await flush()
-      expect(normalized.at(-1)).toBe('working')
+      expect(normalized.at(-1)?.payload.state).toBe('working')
       const open = kind === 'pi' ? 'ui_prompt_start' : 'tool_approval_requested'
       const close = kind === 'pi' ? 'ui_prompt_end' : 'tool_approval_resolved'
-      await h.callHook(open, { toolName: 'lead-tool' }, root)
-      await child.callHook(open, { toolName: 'child-tool' }, childCtx)
-      await child.callHook(close, { toolName: 'child-tool' }, childCtx)
+      await h.callHook(open, { toolName: 'lead-tool', approvalMode: 'yolo' }, root)
+      await child.callHook(open, { toolName: 'child-tool', approvalMode: 'yolo' }, childCtx)
+      await child.callHook(close, { toolName: 'child-tool', approvalMode: 'yolo' }, childCtx)
       await flush()
-      expect(normalized.at(-1)).toBe(kind === 'pi' ? 'waiting' : 'blocked')
-      await h.callHook(close, { toolName: 'lead-tool' }, root)
+      expect(normalized.at(-1)?.payload.state).toBe(kind === 'pi' ? 'waiting' : 'blocked')
+      await h.callHook(close, { toolName: 'lead-tool', approvalMode: 'yolo' }, root)
       const other = h.registerSession()
       const otherCtx = context('other')
       await other.callHook('session_start', {}, otherCtx)
-      await child.callHook(open, { toolName: 'bash' }, childCtx)
-      await other.callHook(open, { toolName: 'read' }, otherCtx)
+      await child.callHook(open, { toolName: 'bash', approvalMode: 'yolo' }, childCtx)
+      await other.callHook(open, { toolName: 'read', approvalMode: 'yolo' }, otherCtx)
       await child.callHook('session_shutdown', {}, childCtx)
       await flush()
-      expect(normalized.at(-1)).toBe(kind === 'pi' ? 'waiting' : 'blocked')
+      expect(normalized.at(-1)?.payload.state).toBe(kind === 'pi' ? 'waiting' : 'blocked')
       await h.callHook('agent_end', {}, root)
       await other.callHook('session_shutdown', {}, otherCtx)
       await flush()
-      expect(normalized.at(-1)).toBe('done')
+      expect(normalized.at(-1)?.payload.state).toBe('done')
       await h.callHook('agent_start', {}, root)
-      await h.callHook(open, { toolName: 'lead-tool' }, root)
+      await h.callHook(open, { toolName: 'lead-tool', approvalMode: 'yolo' }, root)
       // A new turn also retires an abandoned wait on that same source.
       await h.callHook('agent_start', {}, root)
       const fresh = h.registerSession()
       const freshCtx = context('fresh')
       await fresh.callHook('session_start', {}, freshCtx)
-      await fresh.callHook(open, { toolName: 'fresh-tool' }, freshCtx)
-      await fresh.callHook(close, { toolName: 'fresh-tool' }, freshCtx)
+      await fresh.callHook(open, { toolName: 'fresh-tool', approvalMode: 'yolo' }, freshCtx)
+      await fresh.callHook(close, { toolName: 'fresh-tool', approvalMode: 'yolo' }, freshCtx)
       await flush()
-      expect(normalized.at(-1)).toBe('working')
+      expect(normalized.at(-1)?.payload.state).toBe('working')
       expect(payloads(h).every((payload) => payload.session_id === 'lead')).toBe(true)
     }
   )
 
-  it('drains early attention once with linear work and constant ordinary/retirement work', async () => {
+  it('bounds activation and active-close work by current opens with zero ordinary or historical replay', async () => {
     const measure = async (n: number) => {
       let visits = 0
-      const h = createAgentStatusExtensionHarness({ kind: 'omp', onMapEntry: () => visits++ })
+      const state = createHookListenerState()
+      let admitted: ReturnType<typeof normalizeHookPayload>
+      const h = createAgentStatusExtensionHarness({
+        kind: 'omp',
+        env: receiverEnv,
+        onMapEntry: () => visits++,
+        fetchImpl: async (_url, init) => {
+          admitted = normalizeHookPayload(
+            state,
+            'omp',
+            JSON.parse(String(init?.body)),
+            'production'
+          )
+          if (admitted) {
+            expect(
+              cacheRelayLegacyAgentStatus(state, admitted, 16, (pane) =>
+                clearPaneCacheState(state, pane)
+              )
+            ).toBe(true)
+          }
+          return { ok: true }
+        }
+      })
       const sources: { child: ReturnType<typeof h.registerSession>; ctx: HookContext }[] = []
       for (let i = 0; i < n; i++) {
         const child = h.registerSession()
         const ctx = { ...context(String(i)), agent: { kind: 'sub' as const } }
         await child.callHook('session_start', {}, ctx)
-        await child.callHook('tool_approval_requested', { toolName: 'bash' }, ctx)
-        await child.callHook('tool_approval_requested', { toolName: 'read' }, ctx)
+        await child.callHook(
+          'tool_approval_requested',
+          { toolName: 'bash', approvalMode: 'yolo' },
+          ctx
+        )
+        await child.callHook(
+          'tool_approval_requested',
+          { toolName: 'read', approvalMode: 'yolo' },
+          ctx
+        )
         sources.push({ child, ctx })
       }
       const abandoned = sources.pop()!
@@ -345,9 +443,242 @@ describe('selected source lifetime', () => {
       await flush()
       expect(visits - before).toBe(0)
       expect(payloads(h).at(-1)?.hook_event_name).toBe('agent_start')
+      expect(admitted?.payload).toMatchObject({ state: 'blocked', toolName: 'read' })
+      before = visits
+      for (const { child, ctx } of sources) {
+        const start = visits
+        await child.callHook('session_shutdown', {}, ctx)
+        expect(visits - start).toBeLessThanOrEqual(4 * n)
+      }
+      expect(visits - before).toBeLessThanOrEqual(4 * n * n)
+      await flush()
+      expect(admitted?.payload.state).toBe('working')
+      before = visits
+      await h.callHook('agent_start', {}, root)
+      await flush()
+      expect(visits - before).toBe(0)
+      expect(admitted?.payload.state).toBe('working')
+      expect(payloads(h).at(-1)).not.toHaveProperty('approval_mode')
       return drain
     }
     expect(await measure(100)).toBeLessThanOrEqual(10 * (await measure(10)) + 20)
+  })
+
+  it('clears coalesced approval/plan closes through admitted metadata and keeps source-local answers', async () => {
+    const state = createHookListenerState()
+    let row: ReturnType<typeof normalizeHookPayload>
+    let release: (() => void) | undefined
+    let hold = false
+    const h = createAgentStatusExtensionHarness({
+      kind: 'omp',
+      env: receiverEnv,
+      fetchImpl: async (_url, init) => {
+        row = normalizeHookPayload(state, 'omp', JSON.parse(String(init?.body)), 'production')
+        if (row) {
+          expect(
+            cacheRelayLegacyAgentStatus(state, row, 16, (pane) => clearPaneCacheState(state, pane))
+          ).toBe(true)
+        }
+        if (hold) {
+          hold = false
+          await new Promise<void>((resolve) => {
+            release = resolve
+          })
+        }
+        return { ok: true }
+      }
+    })
+    const root = context('lead')
+    await h.callHook('session_start', {}, root)
+    await h.callHook('before_agent_start', { prompt: 'Lead prompt' }, root)
+    await h.callHook(
+      'message_end',
+      { message: { role: 'assistant', content: 'Lead preview' } },
+      root
+    )
+    await flush()
+    await h.callHook('agent_end', {}, root)
+    await flush()
+    const child = h.registerSession()
+    const childCtx = context('child')
+    await child.callHook('session_start', {}, childCtx)
+    hold = true
+    await child.callHook(
+      'tool_approval_requested',
+      { toolName: 'bash', reason: 'Confirm deletion', approvalMode: 'yolo' },
+      childCtx
+    )
+    await flush()
+    expect(row?.payload).toMatchObject({ state: 'blocked', toolInput: 'Confirm deletion' })
+    await child.callHook('tool_approval_resolved', { toolName: 'bash', approved: true }, childCtx)
+    await h.callHook('model_select', { model: { provider: 'test', id: 'next' } }, root)
+    release?.()
+    await flush()
+    expect(payloads(h).at(-1)?.hook_event_name).toBe('model_select')
+    expect(row?.payload).toMatchObject({
+      state: 'done',
+      prompt: 'Lead prompt',
+      lastAssistantMessage: 'Lead preview',
+      model: 'test/next'
+    })
+    expect(row?.payload.toolInput).toBeUndefined()
+    let listener: ((data: string) => { consume?: boolean } | undefined) | undefined
+    const resolvePlanReview = vi.fn(() => true)
+    childCtx.resolvePlanReview = resolvePlanReview
+    childCtx.ui = {
+      onTerminalInput: (handler) => {
+        listener = handler
+        return () => {
+          listener = undefined
+        }
+      }
+    }
+    await child.callHook(
+      'plan_review_requested',
+      {
+        reviewId: 'review',
+        planContent: '# A real plan',
+        options: [{ id: 'execute', label: 'Execute' }]
+      },
+      childCtx
+    )
+    await flush()
+    expect(row?.payload.state).toBe('blocked')
+    expect(listener?.(buildOmpPlanReviewAnswer('review', 'execute'))).toEqual({ consume: true })
+    expect(resolvePlanReview).toHaveBeenCalledWith('review', 'execute')
+    hold = true
+    await h.callHook('model_select', { model: { provider: 'test', id: 'final' } }, root)
+    await child.callHook(
+      'plan_review_resolved',
+      { reviewId: 'review', choice: 'execute' },
+      childCtx
+    )
+    h.emitPiEvent('task:subagent:lifecycle', { id: 'finished', status: 'completed' })
+    release?.()
+    await flush()
+    expect(listener).toBeUndefined()
+    expect(row?.payload.state).toBe('done')
+    expect(row?.payload.interactivePrompt).toBeUndefined()
+    expect(row?.payload.toolInput).toBeUndefined()
+    await child.callHook(
+      'plan_review_requested',
+      { reviewId: 'abandoned', planContent: '# Pending', options: [] },
+      childCtx
+    )
+    await child.callHook('agent_start', {}, childCtx)
+    expect(listener).toBeUndefined()
+    await h.callHook('agent_start', {}, root)
+    h.emitPiEvent('task:subagent:lifecycle', { id: 'running', status: 'started' })
+    root.resolvePlanReview = resolvePlanReview
+    root.ui = childCtx.ui
+    await h.callHook(
+      'plan_review_requested',
+      { reviewId: 'owner', planContent: '# Owner plan', options: [] },
+      root
+    )
+    await h.callHook('agent_end', {}, root)
+    await h.callHook('plan_review_resolved', { reviewId: 'owner' }, root)
+    await flush()
+    expect(row?.payload.state).toBe('working')
+    expect(row?.payload.interactivePrompt).toBeUndefined()
+    h.emitPiEvent('task:subagent:lifecycle', { id: 'running', status: 'completed' })
+    await flush()
+    expect(row?.payload.state).toBe('done')
+  })
+
+  it('retires disposed Pi modal sources once and reveals a live idle question without shutdown', async () => {
+    let visits = 0
+    const h = createAgentStatusExtensionHarness({
+      kind: 'pi',
+      argv: ['node', '/usr/bin/pi'],
+      onMapEntry: () => visits++
+    })
+    const root = context('lead')
+    await h.callHook('session_start', {}, root)
+    await h.callHook('agent_start', {}, root)
+    const child = h.registerSession()
+    let disposed = false
+    let probes = 0
+    const manager = context('disposed').sessionManager
+    const stale: HookContext = {
+      isIdle: () => true,
+      get sessionManager() {
+        probes++
+        if (disposed) {
+          throw new Error('Extension context is no longer active')
+        }
+        return manager
+      }
+    }
+    await child.callHook('session_start', {}, stale)
+    await child.callHook('ui_prompt_start', {}, stale)
+    const live = h.registerSession()
+    const liveCtx = context('idle-live')
+    await live.callHook('session_start', {}, liveCtx)
+    await live.callHook(
+      'tool_call',
+      { toolName: 'request_user_input', input: { questions: [{ question: 'Still alive?' }] } },
+      liveCtx
+    )
+    await flush()
+    expect(payloads(h).at(-1)?.ui_prompt_active).toBe(true)
+    disposed = true
+    const before = visits
+    probes = 0
+    await h.callHook('message_end', { message: { role: 'assistant', content: 'Lead text' } }, root)
+    await flush()
+    expect(visits - before).toBeLessThanOrEqual(8)
+    expect(probes).toBe(1)
+    expect(payloads(h).at(-1)).toMatchObject({
+      role: 'assistant',
+      text: 'Lead text',
+      tool_name: 'request_user_input'
+    })
+    expect(payloads(h).at(-1)?.ui_prompt_active).not.toBe(true)
+    const after = visits
+    await h.callHook('message_end', { message: { role: 'assistant', content: 'More text' } }, root)
+    await flush()
+    expect(visits).toBe(after)
+    await live.callHook('agent_start', {}, liveCtx)
+    await flush()
+    expect(payloads(h).at(-1)).not.toHaveProperty('tool_input')
+    await live.callHook('session_shutdown', {}, liveCtx)
+    await h.callHook('agent_start', {}, root)
+    await flush()
+    expect(payloads(h).at(-1)?.ui_prompt_active).not.toBe(true)
+  })
+
+  it('removes retired owner presentation before a declared OMP successor first publishes', async () => {
+    const h = createAgentStatusExtensionHarness({ kind: 'pi', title: 'omp' })
+    const old: HookContext = { ...context('old', '/old.jsonl'), agent: { kind: 'main' } }
+    await h.callHook('session_start', {}, old)
+    const child = h.registerSession()
+    const childCtx: HookContext = { ...context('child'), agent: { kind: 'sub' } }
+    await child.callHook('session_start', {}, childCtx)
+    await child.callHook(
+      'tool_call',
+      { toolName: 'ask', input: { question: 'Still live?' } },
+      childCtx
+    )
+    await h.callHook(
+      'tool_approval_requested',
+      { toolName: 'bash', approvalMode: 'yolo', reason: 'Retired owner' },
+      old
+    )
+    await flush()
+    await h.callHook('session_shutdown', { reason: 'new' }, old)
+    // OMP contexts hold a plain manager reference that remains readable after shutdown.
+    expect(old.sessionManager?.getSessionId?.()).toBe('old')
+    const next = h.registerSession()
+    const nextCtx: HookContext = { ...context('next', '/next.jsonl'), agent: { kind: 'main' } }
+    await next.callHook('session_start', {}, nextCtx)
+    await flush()
+    const successor = payloads(h).filter((payload) => payload.session_id === 'next')
+    expect(successor.length).toBeGreaterThan(0)
+    for (const payload of successor) {
+      expect(payload).toMatchObject({ tool_name: 'ask', tool_input: { question: 'Still live?' } })
+      expect(payload).not.toHaveProperty('approval_mode')
+    }
   })
 
   it('keeps Prime always active through shutdown and re-registration', async () => {

@@ -213,7 +213,8 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
       : [
           '  if (authority === "retired") return',
           '  if (!relayed && authority !== "legacy" && postAttention(hookEventName, extra)) return',
-          '  if (authority !== "main" && authority !== "legacy") return'
+          '  if (authority !== "main" && authority !== "legacy") return',
+          '  if (authority === "main" && extra.session_boundary !== true) extra = attentionSnapshot(extra)'
         ]),
     '  const ompRuntime = isOmpRuntime()',
     // Why: the body is built at delivery, so the session is pinned here, where the event happened.
@@ -235,7 +236,7 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     "    hookEventName: ompRuntime && hookEventName === 'model_select' && previousCompletion ? 'agent_end' : hookEventName,",
     // Why: every coalesced snapshot must retain an open modal, not just its start event.
     kind === 'pi'
-      ? '    extra: { ...extra, ...(!ompRuntime && (piUiState.depth > 0 || scope.openModals > 0) ? { ui_prompt_active: true } : {}) },'
+      ? '    extra: { ...extra, ...(!ompRuntime && (piUiState.depth > 0) ? { ui_prompt_active: true } : {}) },'
       : '    extra,',
     '    metadata,',
     '    ompRuntime,',

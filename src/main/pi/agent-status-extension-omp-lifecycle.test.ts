@@ -25,11 +25,13 @@ describe('OMP agent_end contract', () => {
     harness.emitPiEvent('task:subagent:lifecycle', { id: 'child-1', status: 'started' })
     await harness.callHook('agent_settled', undefined, { isIdle: () => true })
 
-    expect(postedHookNames(harness.fetchMock)).toEqual(['agent_start'])
+    expect(postedHookNames(harness.fetchMock).length).toBeGreaterThan(0)
+    expect(postedHookNames(harness.fetchMock).every((name) => name === 'agent_start')).toBe(true)
 
     harness.emitPiEvent('task:subagent:lifecycle', { id: 'child-1', status: 'completed' })
-    await vi.waitFor(() =>
-      expect(postedHookNames(harness.fetchMock)).toEqual(['agent_start', 'agent_end'])
+    await vi.waitFor(() => expect(postedHookNames(harness.fetchMock).at(-1)).toBe('agent_end'))
+    expect(postedHookNames(harness.fetchMock).filter((name) => name === 'agent_end')).toHaveLength(
+      1
     )
   })
 

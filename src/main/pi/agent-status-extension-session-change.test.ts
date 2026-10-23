@@ -74,7 +74,12 @@ describe('Pi session changes', () => {
           session_file: '/sessions/A.jsonl',
           session_boundary: true
         },
-        { hook_event_name: 'session_start', session_id: 'B', session_file: '/sessions/B.jsonl' }
+        {
+          hook_event_name: 'session_start',
+          is_idle: true,
+          session_id: 'B',
+          session_file: '/sessions/B.jsonl'
+        }
       ])
     }
   )
@@ -216,14 +221,18 @@ describe('Pi session changes', () => {
   })
 
   it('retries the old session’s completion before sending anything newer', async () => {
-    let attempts = 0
-    const harness = createPi(async () => {
-      attempts += 1
-      // The close-out follows session_start and agent_start; fail its first delivery.
-      if (attempts === 3) {
-        throw new Error('Orca restarting')
+    let failed = false
+    const harness = createAgentStatusExtensionHarness({
+      kind: 'pi',
+      existsSync: () => true,
+      fetchImpl: async (_url, init) => {
+        const payload = JSON.parse(String(init?.body)).payload
+        if (payload.session_boundary === true && !failed) {
+          failed = true
+          throw new Error('Orca restarting')
+        }
+        return { ok: true }
       }
-      return { ok: true }
     })
     await holdRunOpen(harness)
     await harness.replacePiSession('new')
@@ -330,6 +339,7 @@ describe('Pi session changes', () => {
     await vi.advanceTimersByTimeAsync(0)
     expect(posts(harness).at(-1)).toEqual({
       hook_event_name: 'agent_end',
+      is_idle: true,
       session_id: 'A',
       session_file: '/sessions/A.jsonl'
     })
