@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { openFilePathLinkAtBufferPosition } from './terminal-file-link-hit-testing'
 import { openDetectedFilePath } from './terminal-file-open-routing'
 import { createTerminalLinkTestDoubles } from './terminal-link-handlers-test-fixtures'
+import { getTerminalPathExistsCacheKey } from './terminal-path-exists-cache'
 import { makeBuffer, makeBufferLine } from './terminal-link-provider-buffer-fixtures'
 import {
   createDeferred,
@@ -60,14 +61,17 @@ function hostAnswers(answer: (relativePath: string) => HostAnswer): void {
   })
 }
 
-function clickFirstPath(onOpenFailure = vi.fn()): boolean {
+function clickFirstPath(
+  onOpenFailure = vi.fn(),
+  pathExistsCache = new Map<string, boolean>()
+): boolean {
   return openFilePathLinkAtBufferPosition(BUFFER, { x: 4, y: 1 }, 80, {
     startupCwd: '/srv/repo',
     worktreeId: 'wt-1',
     worktreePath: '/srv/repo',
     runtimeEnvironmentId: 'env-1',
     terminalHandle: 'term-1',
-    pathExistsCache: new Map(),
+    pathExistsCache,
     onOpenFailure
   })
 }
@@ -88,6 +92,25 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
       { forceContentReload: true }
     )
     expect(onOpenFailure).not.toHaveBeenCalled()
+  })
+
+  it('stops re-asking an older host about the joined guess it cannot answer', async () => {
+    setPlatform('Macintosh')
+    hostAnswers((path) => (path === 'a.txt' ? { exists: true } : { error: 'ENOTDIR' }))
+    const pathExistsCache = new Map<string, boolean>()
+
+    clickFirstPath(vi.fn(), pathExistsCache)
+    await flushDoubleRaf()
+    // Why: forget a.txt so the second click is as ambiguous as the first.
+    pathExistsCache.clear()
+    runtimeEnvironmentCallMock.mockClear()
+    clickFirstPath(vi.fn(), pathExistsCache)
+    await flushDoubleRaf()
+
+    expect(runtimeEnvironmentCallMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'files.pathsExist' })
+    )
+    expect(openFileMock).toHaveBeenCalledTimes(2)
   })
 
   it('says why when the clicked path is gone, naming it rather than a joined guess', async () => {
@@ -146,7 +169,10 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
 
   it('reports a missing path but stays quiet for a bare dotted word', async () => {
     setPlatform('Macintosh')
-    statMock.mockRejectedValue(new Error('ENOENT: no such file'))
+    // Why Once: a lasting rejection would leak into later tests.
+    statMock
+      .mockRejectedValueOnce(new Error('ENOENT: no such file'))
+      .mockRejectedValueOnce(new Error('ENOENT: no such file'))
     const onOpenFailure = vi.fn()
     const deps = { startupCwd: '/repo', worktreeId: 'wt-1', worktreePath: '/repo', onOpenFailure }
 
@@ -178,7 +204,9 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
       async (path: string) => path === '/repo/foo.ts.map'
     )
     const buffer = makeBuffer([makeBufferLine('/repo/foo.ts'), makeBufferLine('.map')])
-    const pathExistsCache = new Map([['active\0/repo/foo.ts', true]])
+    const pathExistsCache = new Map([
+      [getTerminalPathExistsCacheKey({ absolutePath: '/repo/foo.ts' }), true]
+    ])
     const deps = { startupCwd: '/repo', worktreeId: 'wt-1', worktreePath: '/repo', pathExistsCache }
 
     openFilePathLinkAtBufferPosition(buffer, { x: 4, y: 1 }, 80, deps)
@@ -207,5 +235,35 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
 
     expect(statMock).toHaveBeenCalledTimes(1)
     expect(statMock).toHaveBeenCalledWith({ filePath: '/repo/other.txt' })
+  })
+
+  it('supersedes an earlier open still in flight as soon as an ambiguous click starts', async () => {
+    setPlatform('Macintosh')
+    const earlierStat = createDeferred<{ isDirectory: boolean }>()
+    statMock.mockImplementationOnce(() => earlierStat.promise)
+    const probe = createDeferred<boolean>()
+    vi.mocked(window.api.shell.pathExists).mockImplementation(async (path: string) =>
+      path === '/repo/a.txt' ? probe.promise : false
+    )
+    const deps = { startupCwd: '/repo', worktreeId: 'wt-1', worktreePath: '/repo' }
+
+    openDetectedFilePath('/repo/earlier.txt', null, null, deps)
+    openFilePathLinkAtBufferPosition(
+      makeBuffer([makeBufferLine('/repo/a.txt'), makeBufferLine('/repo/b.txt')]),
+      { x: 4, y: 1 },
+      80,
+      deps
+    )
+    earlierStat.resolve({ isDirectory: false })
+    await flushAsyncWork()
+    expect(openFileMock).not.toHaveBeenCalled()
+
+    probe.resolve(true)
+    await flushDoubleRaf()
+    expect(openFileMock).toHaveBeenCalledTimes(1)
+    expect(openFileMock).toHaveBeenCalledWith(
+      expect.objectContaining({ filePath: '/repo/a.txt' }),
+      { forceContentReload: true }
+    )
   })
 })

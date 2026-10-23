@@ -91,9 +91,10 @@ export function shouldOpenTerminalFileWithSystemDefault(fileContext: TerminalFil
 
 let latestOpenDetectedFilePathRequestId = 0
 
-/** For work that decides what to open before calling in: true until any later open starts. */
-export function captureDetectedFilePathOpenTurn(): () => boolean {
-  const requestId = latestOpenDetectedFilePathRequestId
+/** Supersedes earlier opens now, for a click still deciding what to open; true until a later open. */
+export function reserveDetectedFilePathOpenTurn(): () => boolean {
+  const requestId = ++latestOpenDetectedFilePathRequestId
+  cancelPendingEditorLineRevealFrames()
   return () => requestId === latestOpenDetectedFilePathRequestId
 }
 
