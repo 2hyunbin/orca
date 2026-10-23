@@ -154,6 +154,7 @@ describe('repo RPC methods', () => {
       requireStore: () => ({
         getSettings: () => ({ worktreeVisibilityDefaults: { external: 'show' } })
       })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: repo.add, visibility projection and response envelope use only these supplied runtime methods, including raw settings.
     } as unknown as OrcaRuntimeService
     const dispatcher = new RpcDispatcher({ runtime, methods: REPO_METHODS })
 
