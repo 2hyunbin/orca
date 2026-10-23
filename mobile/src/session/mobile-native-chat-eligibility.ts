@@ -125,6 +125,11 @@ export function withRememberedNativeChatIdentity(
   })
 }
 
+/** False only when this phone's memory alone names the tab's chat agent; chat writes stay locked. */
+export function isMobileNativeChatAgentConfirmed(tab: MobileNativeChatTab | null): boolean {
+  return resolveMobileNativeChat(tab, true)?.agentConfirmed !== false
+}
+
 /** Whether the tab can toggle into native chat — gates the long-press item. */
 export function canShowMobileNativeChat(
   tab: MobileNativeChatTab | null,
