@@ -1,6 +1,9 @@
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
-import type { AgentJournalStatusItem } from '../../../shared/agent-session-journal-types'
+import type {
+  AgentJournalStatusItem,
+  AgentJournalTurnScope
+} from '../../../shared/agent-session-journal-types'
 import type { AgentSessionCancelResult } from '../../../shared/agent-session-wire'
 import { latestJournalDispatchObservation } from '../agent-session-journal/journal-dispatch-observation'
 import type { AgentSessionCancelOutcome } from './structured-agent-session-adapter'
@@ -100,10 +103,18 @@ export async function performCancel(
   }
 }
 
+/** A chat Stop's accepted target and request feedback survive later dispatch settlement. */
+export type AcceptedChatStop = {
+  turnId: string | null
+  turnScope: AgentJournalTurnScope
+  requestNoteWrite?: Promise<void>
+}
+
 type PerformCancelInput = {
   clientOperationId: string
   /** Absent: whatever the conversation has in flight; present: only while that turn is current. */
   turnId?: string
+  acceptedStop?: AcceptedChatStop
   prompt?: { itemId: string; expectedRevision: number }
   /** Ends the provider child, for a running command the provider did not take the Stop on, or a
    *  turn whose interrupt failed. */
@@ -141,15 +152,19 @@ async function cancelAndNote(
   const work = () => contextStructuredAgentSessionCurrentWork(ctx)
   // The turn the Stop names, read before the cancel settles it: the note reports on that turn.
   const turnScope =
+    input.acceptedStop?.turnScope ??
     (input.turnId !== undefined
       ? structuredAgentSessionNamedTurnScope(ctx.journal, input.turnId)
-      : null) ?? work().turnScope()
+      : null) ??
+    work().turnScope()
   // Only the provider's end or the child's ends a command. A command the provider has not opened a
   // turn for, would not interrupt, or was already asked to stop, ends with its child; that child's
   // dead-generation settlement writes the command's verdict.
   const liveTurnId = work().activeTurnId()
   // Read with the live turn, before the cancel settles it: the note is keyed by this turn.
-  const stoppedTurnId = structuredAgentSessionStoppedTurnId(work(), input.turnId)
+  const stoppedTurnId = input.acceptedStop
+    ? input.acceptedStop.turnId
+    : structuredAgentSessionStoppedTurnId(work(), input.turnId)
   const namesTurnNotLive = structuredAgentSessionStopNamesTurnNotLive(input.turnId, liveTurnId)
   const runningCommand =
     input.stopChild !== undefined &&
@@ -166,7 +181,7 @@ async function cancelAndNote(
     stoppedTurnId ?? input.clientOperationId
   )
   let stoppedTurn: string | undefined = stoppedTurnId ?? undefined
-  let noteWritten = false
+  let noteWritten = input.acceptedStop?.requestNoteWrite !== undefined
   const writeNote = (body: AgentJournalStatusItem): Promise<void> => {
     noteWritten = true
     // A child end this Stop caused moved the fence past `ctx.fence`.
@@ -176,7 +191,11 @@ async function cancelAndNote(
       { identity: noteIdentity, body, stoppedTurn, fallbackScope: turnScope }
     )
   }
-  const requestNoteWrite = endsSession && !namesTurnNotLive ? writeNote(note) : undefined
+  const requestNoteWrite = input.acceptedStop
+    ? input.acceptedStop.requestNoteWrite
+    : endsSession && !namesTurnNotLive
+      ? writeNote(note)
+      : undefined
   // The provider's own answer; unset when its cancel threw, leaving the effect unknown.
   let taken: boolean | undefined
   // The provider could not interrupt the turn, or its cancel threw: the turn may run on.
@@ -227,13 +246,15 @@ async function cancelAndNote(
   }
   // A Stop naming a turn that has since ended keeps the session only when the provider declined
   // it: an interrupt, answered or not, can stop a follow-up whose turn has not opened.
-  if (endsSession && (!namesTurnNotLive || taken !== false)) {
+  if (endsSession && (input.acceptedStop || !namesTurnNotLive || taken !== false)) {
     // An interrupt the provider took is worth waiting on, turn row or not: a Stop before the echo
     // has none, and the echo still opens the turn the Stop interrupted.
     binding.closedByWindDown = true
     // The child's end confirms the Stop, so a refused or unconfirmed interrupt says nothing more.
     const ended: AgentJournalStatusItem | null =
-      note === null ? null : { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED }
+      note === null || (input.acceptedStop && !requestNoteWrite)
+        ? null
+        : { kind: 'status', text: STOP_NOTE_CANCELLATION_REQUESTED }
     const stopNoteWrite = ended !== null ? (requestNoteWrite ?? writeNote(ended)) : undefined
     input.endSession?.({
       waitsForProvider: taken === true,

@@ -175,10 +175,16 @@ export function cancelStructuredAgentSessionTurn(
   const stoppedPrePrompt =
     !prompt && params.turnId === undefined
       ? abortProviderWaitForStop(context, caller, params.envelope, plan)
-      : false
+      : null
   // A card's Cancel stops whatever the chat has in flight, as the Stop button does; it reaches the
   // Stop only for a card the live turn raised (`cancelStructuredAgentSessionPrompt`).
-  const stopped = prompt ? { envelope: params.envelope } : { ...params, stoppedPrePrompt }
+  const stopped = prompt
+    ? { envelope: params.envelope }
+    : {
+        ...params,
+        stoppedPrePrompt: stoppedPrePrompt?.reached === true,
+        stoppedSend: stoppedPrePrompt?.handedOver === true
+      }
   return mutateWithChatStop(context, caller, stopped, plan, (ctx, stop) =>
     prompt
       ? cancelStructuredAgentSessionPrompt(
@@ -199,7 +205,7 @@ function abortProviderWaitForStop(
   caller: StructuredAgentSessionCaller,
   envelope: AgentSessionMutationEnvelope,
   plan: MutationPlan<AgentSessionCancelResult>
-): boolean {
+): { reached: boolean; handedOver: boolean } | null {
   const { store } = context.deps
   if (
     !agentSessionMutationAdmitsNow({
@@ -210,7 +216,7 @@ function abortProviderWaitForStop(
       now: context.now
     })
   ) {
-    return false
+    return null
   }
   return context.acquireAborts.abort(envelope.sessionId, 'stopped while starting')
 }

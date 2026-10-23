@@ -6,8 +6,10 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 import { JournalStopAcceptor } from '../agent-session-journal/journal-stop-acceptance'
+import { AGENT_JOURNAL_THREAD_SCOPE } from '../../../shared/agent-session-journal-types'
 import {
   HOST_TEST_SESSION as SESSION,
+  HOST_TEST_THREAD as THREAD,
   hostTestAttachParams,
   hostTestOperationId
 } from './structured-agent-session-host-test-data'
@@ -84,6 +86,49 @@ it('writes no request for an empty unpublished acquisition', async () => {
   expect(
     (await rig.host.journalSnapshot(SESSION)).items.filter((item) => item.body.kind === 'status')
   ).toEqual([])
+})
+
+it('keeps the accepted Stop when dispatch rejects during acceptance, ending a late-opening turn', async () => {
+  rig = await createQueuedMessageTestRig()
+  rig.dispatch.mockImplementationOnce((input) =>
+    waitForPromiseWithSignal(new Promise<never>(() => {}), input.signal)
+  )
+  const sent = rig.send('hello')
+  await sent.result
+  await eventually(() => expect(rig.dispatch).toHaveBeenCalledOnce())
+  const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const accept = JournalStopAcceptor.prototype.accept
+  vi.spyOn(JournalStopAcceptor.prototype, 'accept').mockImplementationOnce(async function (
+    this: JournalStopAcceptor,
+    ...args
+  ) {
+    await eventually(() => expect(journal.submissions()[0]?.dispatchState).toBe('rejected'))
+    return accept.apply(this, args)
+  })
+  rig.cancelTurn.mockResolvedValueOnce({ cancelled: false })
+  // A provider's turn-open notification can trail the cancelled preparation's answer.
+  rig.closeSession.mockImplementationOnce(async () => {
+    await journal.appendItem(
+      { provider: 'codex', threadId: THREAD, turnId: 'late-turn', ordinal: 900 },
+      { kind: 'turn', turnId: 'late-turn', state: 'running' },
+      { fence: 1, turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    )
+    return true
+  })
+
+  expect(await rig.stop()).toMatchObject({ ok: true, value: { cancelled: true } })
+  await eventually(() =>
+    expect(rig.host.collaboratorsForTests().sessions.get(SESSION)?.child ?? null).toBeNull()
+  )
+  expect(rig.closeSession).toHaveBeenCalledOnce()
+  const snapshot = await rig.host.journalSnapshot(SESSION)
+  expect(snapshot.items.filter((item) => item.body.kind === 'status')).toMatchObject([
+    { body: { text: 'Cancellation requested.' } }
+  ])
+  expect(snapshot.items.find((item) => item.body.kind === 'turn')?.body).toMatchObject({
+    state: 'interrupted',
+    outcome: 'cancellation'
+  })
 })
 
 // The round-2 repro: a Stop at a start whose save is slow, while the person picks an option. The
