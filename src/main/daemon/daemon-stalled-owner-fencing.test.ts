@@ -19,6 +19,7 @@ let directory: string
 let server: DaemonServer
 let client: DaemonClient
 const shutdownRequested = vi.fn()
+const rpcCompleted = vi.fn()
 
 beforeEach(async () => {
   vi.clearAllMocks()
@@ -29,7 +30,8 @@ beforeEach(async () => {
     socketPath: getDaemonSocketPath(directory),
     tokenPath: join(directory, 'daemon.token'),
     spawnSubprocess: () => createMockSubprocess(),
-    onShutdownRequested: shutdownRequested
+    onShutdownRequested: shutdownRequested,
+    onRpcShutdown: rpcCompleted
   })
   await server.start()
   client = new DaemonClient({
@@ -124,7 +126,41 @@ it('does not acknowledge recovery when native session disposal fails after admis
       'Terminal service disposal could not be verified'
     )
     expect(shutdownRequested).toHaveBeenCalled()
+    await vi.waitFor(() => expect(rpcCompleted).toHaveBeenCalledExactlyOnceWith(undefined), {
+      timeout: 3000
+    })
   } finally {
     dispose.mockRestore()
   }
+})
+
+it('only selects hard exit after reviewed disposal and final RPC shutdown completion', async () => {
+  const request = await reviewedRequest()
+  let release: (() => void) | undefined
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const original = TerminalHost.prototype.dispose
+  const dispose = vi
+    .spyOn(TerminalHost.prototype, 'dispose')
+    .mockImplementationOnce(async function (this: TerminalHost) {
+      await pending
+      await original.call(this)
+    })
+  const shutdown = client.request('shutdownStalledOwner', request)
+  await vi.waitFor(() => expect(dispose).toHaveBeenCalledOnce())
+  expect(rpcCompleted).not.toHaveBeenCalled()
+  release?.()
+  await expect(shutdown).resolves.toEqual({ status: 'restarted', killedCount: 1 })
+  await vi.waitFor(() =>
+    expect(rpcCompleted).toHaveBeenCalledExactlyOnceWith('verified-stalled-owner')
+  )
+  dispose.mockRestore()
+})
+
+it('preserves ordinary process exit for a generic daemon shutdown', async () => {
+  await client.request('shutdown', { killSessions: true })
+  await vi.waitFor(() => expect(rpcCompleted).toHaveBeenCalledExactlyOnceWith(undefined), {
+    timeout: 3000
+  })
 })

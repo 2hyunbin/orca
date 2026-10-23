@@ -257,10 +257,7 @@ export class DaemonRequestRouter {
     killSessions: boolean,
     requireDisposal = false
   ): Promise<Record<string, never>> {
-    this.options.log.log('shutdown', {
-      reason: 'rpc',
-      killSessions: killSessions === true
-    })
+    this.options.log.log('shutdown', { reason: 'rpc', killSessions: killSessions === true })
     const serverClose = this.options.lifecycle.beginOrdinaryShutdownFence()
     let disposalFailed = false
     if (killSessions) {
@@ -273,16 +270,18 @@ export class DaemonRequestRouter {
         })
       }
     }
+    const mode = requireDisposal && !disposalFailed ? 'verified-stalled-owner' : undefined
     const controlSocket = this.options.connections.get(clientId)?.controlSocket
     if (controlSocket) {
       this.options.lifecycle.deferRpcShutdownUntilReply(
         clientId,
         requestId,
         controlSocket,
-        serverClose
+        serverClose,
+        mode
       )
     } else {
-      this.options.lifecycle.finishRpcShutdownWithoutReply(serverClose)
+      this.options.lifecycle.finishRpcShutdownWithoutReply(serverClose, mode)
     }
     if (requireDisposal && disposalFailed) {
       throw new Error('Terminal service disposal could not be verified')
