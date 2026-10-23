@@ -70,3 +70,45 @@ export function nodeFileContentsEqualSync(
     closeSync(descriptor)
   }
 }
+
+function readComparisonChunkSync(descriptor: number, chunk: Buffer): number {
+  let length = 0
+  while (length < chunk.length) {
+    const read = readSync(descriptor, chunk, length, chunk.length - length, null)
+    if (read === 0) {
+      break
+    }
+    length += read
+  }
+  return length
+}
+
+export function nodeFilesEqualSync(leftPath: string, rightPath: string): boolean {
+  const left = openSync(leftPath, 'r')
+  try {
+    const right = openSync(rightPath, 'r')
+    try {
+      if (fstatSync(left).size !== fstatSync(right).size) {
+        return false
+      }
+      const a = Buffer.allocUnsafe(NODE_FILE_CONTENT_COMPARE_CHUNK_BYTES)
+      const b = Buffer.allocUnsafe(a.length)
+      while (true) {
+        const length = readComparisonChunkSync(left, a)
+        if (length !== readComparisonChunkSync(right, b)) {
+          return false
+        }
+        if (length === 0) {
+          return true
+        }
+        if (!a.subarray(0, length).equals(b.subarray(0, length))) {
+          return false
+        }
+      }
+    } finally {
+      closeSync(right)
+    }
+  } finally {
+    closeSync(left)
+  }
+}

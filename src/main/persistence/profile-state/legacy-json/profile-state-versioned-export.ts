@@ -1,5 +1,6 @@
-import { lstatSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { lstatSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname } from 'node:path'
+import { nodeFilesEqualSync } from '../../../../shared/node-file-content-equality'
 import { bestEffortFsyncDirectorySync, fsyncFileSync } from '../../../../shared/secure-file'
 import { durableWriteTempPath, publishFileDurableSync } from '../../../durable-file-write'
 import {
@@ -22,9 +23,7 @@ export function writeVersionedProfileStateExport(
     const targetPath = profileStateJsonExportPath(dataFile, revision)
     mkdirSync(dirname(targetPath), { recursive: true })
     if (!publishFileDurableSync(stagingPath, targetPath)) {
-      const staged = readFileSync(stagingPath)
-      const existing = readFileSync(targetPath)
-      if (!staged.equals(existing)) {
+      if (!nodeFilesEqualSync(stagingPath, targetPath)) {
         throw new Error(
           `Profile state export revision ${revision} already exists with different content`
         )
