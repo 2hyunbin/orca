@@ -29,6 +29,11 @@ export type WslMoveDispatchRow = { dispatchId: string; worktreeId: string | null
 
 export type WslMoveGateFactSources = {
   listTerminals: (workspaceIds: readonly string[]) => readonly WslMoveLiveTerminal[]
+  /**
+   * The pane a terminal is bound to, for one the runtime rediscovered after a relaunch and has not
+   * named yet; without it the terminal reads unverifiable and blocks every move.
+   */
+  paneKeyForPty?: (ptyId: string) => string | null
   inspect: (ptyId: string) => Promise<TerminalProcessInspection>
   /** The hook server's rows for a pane. */
   agentRows: (paneKey: string) => readonly AgentStatusIpcPayload[]
@@ -55,7 +60,7 @@ export async function collectWslMoveGateInputs(
   sources: WslMoveGateFactSources,
   scope: WslMoveTerminalScope
 ): Promise<WslMoveGateInputs> {
-  const terminals = sources.listTerminals(scope.workspaceIds)
+  const terminals = withPaneKeys(sources, sources.listTerminals(scope.workspaceIds))
   const probes = await probePtyRunningWorkWithInspection(
     terminals.map((terminal) => terminal.ptyId),
     { timeoutMs: PROBE_TIMEOUT_MS },
@@ -156,16 +161,25 @@ async function readGuestForegrounds(
 
 /** The panes the pause carries, read while their sessions still run. */
 export function listWslMovePanes(
-  sources: Pick<WslMoveGateFactSources, 'listTerminals'>,
+  sources: Pick<WslMoveGateFactSources, 'listTerminals' | 'paneKeyForPty'>,
   scope: WslMoveTerminalScope
 ): WslMoveRestoreHintPane[] {
-  return sources
-    .listTerminals(scope.workspaceIds)
-    .flatMap((terminal) =>
-      terminal.paneKey
-        ? [{ paneKey: terminal.paneKey, sessionId: terminal.ptyId, wslDistro: terminal.wslDistro }]
-        : []
-    )
+  return withPaneKeys(sources, sources.listTerminals(scope.workspaceIds)).flatMap((terminal) =>
+    terminal.paneKey
+      ? [{ paneKey: terminal.paneKey, sessionId: terminal.ptyId, wslDistro: terminal.wslDistro }]
+      : []
+  )
+}
+
+function withPaneKeys(
+  sources: Pick<WslMoveGateFactSources, 'paneKeyForPty'>,
+  terminals: readonly WslMoveLiveTerminal[]
+): WslMoveLiveTerminal[] {
+  return terminals.map((terminal) =>
+    terminal.paneKey
+      ? terminal
+      : { ...terminal, paneKey: sources.paneKeyForPty?.(terminal.ptyId) ?? null }
+  )
 }
 
 function agentFacts(

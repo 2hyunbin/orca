@@ -277,6 +277,29 @@ describe('collectWslMoveGateInputs with a guest foreground reader', () => {
     expect(gone.panes[0]?.foreground).toBe('unverifiable')
   })
 
+  // A terminal the runtime rediscovered after a relaunch carries no pane key until a layout names
+  // it again, and a paneless terminal reads unverifiable: the bound pane is asked for instead.
+  it('finds a reattached terminal its pane when the runtime has not named it yet', async () => {
+    const inputs = await collectWslMoveGateInputs(
+      {
+        ...base,
+        listTerminals: () => [
+          {
+            ptyId: 'pty-1',
+            workspaceId: WT,
+            paneKey: null,
+            wslDistro: 'Ubuntu',
+            foregroundAgent: null
+          }
+        ],
+        paneKeyForPty: (ptyId) => (ptyId === 'pty-1' ? KEY_A : null),
+        guestForegrounds: async () => new Map([[KEY_A, 'shell-idle']])
+      },
+      scope
+    )
+    expect(inputs.panes).toMatchObject([{ paneKey: KEY_A, foreground: 'shell-idle' }])
+  })
+
   it('leaves a slept pane idle without asking the distro, which has no shell of it left', async () => {
     // awin: every slept pane read unverifiable, so Sleep could no longer quiet a project.
     const guestForegrounds = vi.fn(async () => new Map([[KEY_A, 'unverifiable' as const]]))
