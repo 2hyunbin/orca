@@ -118,6 +118,11 @@ async function renderPreamble(worker: 'chat' | 'terminal'): Promise<string> {
 
 /** The turn text the structured lane sends a chat for one message on `mailbox`. */
 async function renderChatPointer(mailbox: string): Promise<string> {
+  db.db
+    .prepare(
+      "INSERT OR IGNORE INTO runs (id, objective, coordinator_handle, consumer_generation, legacy) VALUES ('run_parity', 'mail parity', 'coord', 1, 0)"
+    )
+    .run()
   const texts: string[] = []
   const message = db.insertMessage({ from: 'term_peer', to: mailbox, subject: 'hi' })
   const delivery = new OrchestrationStructuredMailboxPointerDelivery({
@@ -136,8 +141,6 @@ async function renderChatPointer(mailbox: string): Promise<string> {
         stopInForce: false,
         submission: undefined,
         owner: null,
-        latestTurn: null,
-        acceptedUnopened: false,
         personStopped: false,
         diedTurnId: null
       }),

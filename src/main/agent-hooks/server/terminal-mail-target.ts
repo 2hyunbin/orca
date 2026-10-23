@@ -15,12 +15,19 @@ export type TerminalMailTarget = {
 export function openTerminalMailTarget(
   row: AgentHookEventPayload | undefined
 ): TerminalMailTarget | null {
+  return row?.restoredUnconfirmed || row?.agentPresence?.ended || row?.providerSessionOnly
+    ? null
+    : historicalTerminalMailTarget(row)
+}
+
+function historicalTerminalMailTarget(
+  row: AgentHookEventPayload | undefined
+): TerminalMailTarget | null {
   const turn = row?.hostTurn
   const process = row?.agentPresence?.process
   if (
     !row ||
     row.connectionId !== null ||
-    row.restoredUnconfirmed ||
     !process ||
     !turn ||
     turn.currentTurnKey === 'seed' ||
@@ -64,21 +71,71 @@ export function readTerminalMailTarget(value: unknown): TerminalMailTarget | nul
 
 export class TerminalMailTargets {
   private readonly abandoned = new Map<string, TerminalMailTarget>()
+  private readonly retired = new Map<string, TerminalMailTarget>()
+  private readonly examined = new WeakSet<AgentHookEventPayload>()
 
-  read(row: AgentHookEventPayload | undefined): TerminalMailTarget | null {
-    return row?.agentPresence?.ended || row?.providerSessionOnly
-      ? null
-      : openTerminalMailTarget(row)
+  read = openTerminalMailTarget
+
+  observeRow(
+    before: AgentHookEventPayload | null | undefined,
+    after: AgentHookEventPayload | null | undefined
+  ): void {
+    if (!after) {
+      return
+    }
+    if (before && this.examined.has(before)) {
+      this.examined.add(after)
+    }
+    const key = before?.paneKey ?? after.paneKey
+    const proof = this.abandoned.get(key) ?? historicalTerminalMailTarget(before ?? undefined)
+    if (!proof) {
+      return
+    }
+    const turn = after.hostTurn
+    if (
+      (before &&
+        (before.connectionId !== after.connectionId || before.worktreeId !== after.worktreeId)) ||
+      after.payload.mainAgent?.outcome === 'cancellation' ||
+      after.payload.mainAgent?.stopping ||
+      (turn &&
+        turn.currentTurnKey !== 'seed' &&
+        (turn.owner !== proof.owner ||
+          turn.currentTurnKey !== proof.turnKey ||
+          turn.completed?.turnKey === proof.turnKey))
+    ) {
+      this.abandoned.delete(key)
+      this.retired.set(JSON.stringify(proof), proof)
+      if (before) {
+        this.examined.add(before)
+      }
+      this.examined.add(after)
+      const oldest = this.retired.keys().next().value
+      if (this.retired.size > 256 && oldest !== undefined) {
+        this.retired.delete(oldest)
+      }
+    } else if (key !== after.paneKey && this.abandoned.delete(key)) {
+      this.abandoned.set(after.paneKey, { ...proof, paneKey: after.paneKey })
+    }
   }
 
   observeExit(
     row: AgentHookEventPayload | undefined,
     process: AgentProcessIdentity | undefined
   ): void {
-    const target = openTerminalMailTarget(row)
+    const target = this.read(row)
     if (!target || !process || !isSameAgentProcess(target.process, process)) {
       return
     }
+    if (this.retired.has(JSON.stringify(target))) {
+      return
+    }
+    if (row) {
+      this.examined.add(row)
+    }
+    this.remember(target)
+  }
+
+  private remember(target: TerminalMailTarget): void {
     this.abandoned.set(target.paneKey, target)
     if (this.abandoned.size > 256) {
       const oldest = this.abandoned.keys().next().value
@@ -93,6 +150,10 @@ export class TerminalMailTargets {
     row: AgentHookEventPayload | undefined,
     exit: AgentProcessIdentity | undefined
   ): boolean {
+    this.observeRow(undefined, row)
+    if (this.retired.has(JSON.stringify(target))) {
+      return false
+    }
     const turn = row?.hostTurn
     if (row?.payload.mainAgent?.outcome === 'cancellation') {
       return false
@@ -110,13 +171,22 @@ export class TerminalMailTargets {
     if (proof && sameTerminalMailTarget(proof, target)) {
       return true
     }
-    const retained = openTerminalMailTarget(row)
-    return Boolean(
+    if (!row || this.examined.has(row)) {
+      return false
+    }
+    const retained = historicalTerminalMailTarget(row)
+    const proven = Boolean(
       row?.providerSessionOnly &&
+      row.agentPresence?.ended &&
       retained &&
       exit &&
       sameTerminalMailTarget(retained, target) &&
       isSameAgentProcess(exit, target.process)
     )
+    if (proven) {
+      this.examined.add(row)
+      this.remember(target)
+    }
+    return proven
   }
 }

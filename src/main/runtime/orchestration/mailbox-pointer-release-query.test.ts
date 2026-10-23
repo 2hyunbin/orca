@@ -11,7 +11,7 @@ function assertTargetedRelease(db: OrchestrationDb): void {
   const sql = prepare.mock.calls.find(([query]) => query.startsWith('UPDATE messages'))?.[0]
   prepare.mockRestore()
   expect(sql).toBeDefined()
-  const plan = db.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(1, 'absent-pty') as {
+  const plan = db.db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(1, 1, 'absent-pty') as {
     detail: string
   }[]
   expect(plan.some(({ detail }) => detail.includes('SCAN messages'))).toBe(false)
@@ -47,7 +47,11 @@ describe('PTY mailbox reservation cleanup', () => {
         })
       }
       expect(read('reserved')).toMatchObject({ delivered_at: null, read: 0 })
-      expect(read('written')).toMatchObject({ delivered_at: expect.any(String), read: 0 })
+      expect(read('written')).toMatchObject({
+        delivered_at: null,
+        read: 0,
+        handoff: expect.any(String)
+      })
       expect(read('entered')).toMatchObject({ delivered_at: expect.any(String), read: 0 })
       expect(read('read')).toMatchObject({ delivered_at: '2026-01-01 00:00:00', read: 1 })
       expect(read('other')).toMatchObject({ pointer_enter_pending: 1, pointer_pty_id: 'other-pty' })

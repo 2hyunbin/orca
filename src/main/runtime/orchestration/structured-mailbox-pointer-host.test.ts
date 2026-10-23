@@ -65,7 +65,7 @@ describe('structured mailbox pointer host', () => {
   it('reads the journal epoch and host admission frontier without inferring a receiving turn', async () => {
     hostRef.current = {
       journalSnapshot: () => ({ cursor: { epoch: 'epoch' }, items: [], submissions: [] }),
-      readMailHandoffEvidenceNow: () => ({ frontier: 'frontier' })
+      readMailHandoffEvidence: async () => ({ epoch: 'epoch', frontier: 'frontier' })
     }
     expect(await createStructuredMailboxPointerHost().readSessionFacts('s1')).toEqual({
       epoch: 'epoch',
@@ -77,7 +77,7 @@ describe('structured mailbox pointer host', () => {
     // Null retains the pointer; an empty answer would send into a session this runtime cannot see.
     expect(await createStructuredMailboxPointerHost().readSessionFacts('s1')).toBeNull()
     hostRef.current = {
-      journalSnapshot: () => {
+      readMailHandoffEvidence: async () => {
         throw new Error('agent_session_ownership_unknown')
       }
     }
@@ -198,11 +198,19 @@ describe('structured mailbox pointer host', () => {
   })
 
   it('separates a not-attached refusal from a real one', async () => {
-    for (const [code, expected] of [
-      ['agent_session_ownership_unknown', { kind: 'unattached' }],
-      ['agent_session_conflict', { kind: 'sent', state: 'rejected', nonAdmission: 'refused' }]
+    for (const [code, expected, details] of [
+      ['agent_session_ownership_unknown', { kind: 'unattached' }, {}],
+      ['agent_session_conflict', { kind: 'sent', state: 'rejected' }, {}],
+      ['agent_session_operation_invalid', { kind: 'sent', state: 'rejected' }, undefined],
+      [
+        'agent_session_operation_invalid',
+        { kind: 'held' },
+        { reason: 'conversationCommandInFlight' }
+      ]
     ] as const) {
-      hostRef.current = { send: async () => ({ ok: false, refusal: { code, message: 'no' } }) }
+      hostRef.current = {
+        send: async () => ({ ok: false, refusal: { code, details, message: 'no' } })
+      }
       await expect(
         createStructuredMailboxPointerHost().send({
           beforeRun: () => true,

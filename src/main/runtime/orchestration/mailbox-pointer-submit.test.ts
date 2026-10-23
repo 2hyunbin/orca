@@ -261,11 +261,7 @@ describe('orchestration mailbox pointer submit', () => {
     } else {
       expect(writePty).not.toHaveBeenCalled()
       if (targetOverride) {
-        expect(settleMailboxPointerEnter).toHaveBeenCalledWith(
-          ['msg-1'],
-          { ptyId, processIncarnation: expectedTarget.processIncarnation },
-          [MAILBOX_POINTER_WRITE_ATTEMPTED]
-        )
+        expect(settleMailboxPointerEnter).not.toHaveBeenCalled()
         expect(releaseMailboxPointerEnter).not.toHaveBeenCalled()
         expect(redrive).not.toHaveBeenCalled()
       } else {
@@ -499,7 +495,7 @@ describe('orchestration mailbox pointer submit', () => {
     expect(settleMailboxPointerEnter).toHaveBeenCalledWith(
       ['msg-surviving'],
       { ptyId, processIncarnation: target.processIncarnation },
-      [MAILBOX_POINTER_WRITE_ATTEMPTED, MAILBOX_POINTER_ENTER_ATTEMPTED]
+      [MAILBOX_POINTER_ENTER_ATTEMPTED]
     )
     expect(releaseMailboxPointerEnter).toHaveBeenCalledWith(
       ['msg-surviving'],

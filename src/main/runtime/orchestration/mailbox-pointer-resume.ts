@@ -6,8 +6,7 @@ import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
 import type { OrchestrationMailboxLeaf } from './mailbox-owner'
 import {
   MAILBOX_POINTER_ENTER_ATTEMPTED,
-  MAILBOX_POINTER_RESERVED,
-  MAILBOX_POINTER_WRITE_ATTEMPTED
+  MAILBOX_POINTER_RESERVED
 } from './db/messages/mailbox-pointer-enter-state'
 import type {
   OrchestrationMailboxDeliveryFlight,
@@ -75,10 +74,7 @@ export function resumePendingOrchestrationMailboxPointer<
       }
       for (const group of byTarget.values()) {
         db.releaseMailboxPointerEnter(group.ids, group.target, [MAILBOX_POINTER_RESERVED])
-        db.settleMailboxPointerEnter(group.ids, group.target, [
-          MAILBOX_POINTER_WRITE_ATTEMPTED,
-          MAILBOX_POINTER_ENTER_ATTEMPTED
-        ])
+        db.settleMailboxPointerEnter(group.ids, group.target, [MAILBOX_POINTER_ENTER_ATTEMPTED])
       }
     }
     return false
@@ -87,10 +83,7 @@ export function resumePendingOrchestrationMailboxPointer<
     // Same-incarnation recovery cannot tell whether pointer text or Enter reached the PTY.
     args.deps
       .getDb()
-      ?.settleMailboxPointerEnter(messageIds, persistedTarget!, [
-        MAILBOX_POINTER_WRITE_ATTEMPTED,
-        MAILBOX_POINTER_ENTER_ATTEMPTED
-      ])
+      ?.settleMailboxPointerEnter(messageIds, persistedTarget!, [MAILBOX_POINTER_ENTER_ATTEMPTED])
     args.deps
       .getDb()
       ?.releaseMailboxPointerEnter(messageIds, persistedTarget!, [MAILBOX_POINTER_RESERVED])

@@ -93,7 +93,8 @@ export function stageMailboxPointerEnter(
 export function markMailboxPointerWriteAttempted(
   this: OrchestrationDb,
   ids: string[],
-  target: MailboxPointerReservationTarget
+  target: MailboxPointerReservationTarget,
+  refusedEnter = false
 ): boolean {
   return (
     mutatePointerMessages(
@@ -107,7 +108,7 @@ export function markMailboxPointerWriteAttempted(
             AND id IN (${placeholders})`,
         leadingParams: [
           MAILBOX_POINTER_WRITE_ATTEMPTED,
-          MAILBOX_POINTER_RESERVED,
+          refusedEnter ? MAILBOX_POINTER_ENTER_ATTEMPTED : MAILBOX_POINTER_RESERVED,
           target.ptyId,
           target.processIncarnation
         ]
@@ -192,11 +193,12 @@ export function releasePendingMailboxPointerForPty(this: OrchestrationDb, ptyId:
     .prepare(
       `UPDATE messages
        SET handoff = CASE WHEN pointer_enter_pending = ? THEN handoff
+             WHEN pointer_enter_pending = 2 THEN '${UNKNOWN_MAIL_HANDOFF}'
              WHEN json_valid(handoff) AND json_extract(handoff, '$.kind') = 'terminal'
                THEN json_set(handoff, '$.phase', 'offered')
              ELSE COALESCE(handoff, '${UNKNOWN_MAIL_HANDOFF}') END,
            delivered_at = CASE
-             WHEN read = 0 AND pointer_enter_pending = ? THEN NULL
+             WHEN read = 0 AND pointer_enter_pending IN (?, 2) THEN NULL
              WHEN read = 0 THEN COALESCE(delivered_at, datetime('now'))
              ELSE delivered_at
            END,

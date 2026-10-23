@@ -2,7 +2,11 @@ import { selectTerminalMailHandoff, terminalMailHandoffCanSubmit } from './termi
 import { afterEach, expect, it } from 'vitest'
 import { OrchestrationDb } from './db'
 import { readMailHandoff, type StructuredMailHandoff } from './mail-handoff'
-import { selectStructuredMailHandoff, type StructuredMailEvidence } from './mailbox-settlement'
+import {
+  selectStructuredMailHandoff,
+  structuredMailMaySubmit,
+  type StructuredMailEvidence
+} from './mailbox-settlement'
 import type { TerminalMailTarget } from '../../agent-hooks/server/terminal-mail-target'
 
 const databases: OrchestrationDb[] = []
@@ -62,7 +66,7 @@ it('rotating a never-admitted recovery transport preserves its original failed-o
     version: 1,
     kind: 'structured',
     sessionId: 'session',
-    epoch: 'epoch',
+    epoch: 'destination-epoch',
     frontier: 'prior-host',
     operationId: 'old-operation',
     authorizationId: 'one-recovery',
@@ -70,17 +74,19 @@ it('rotating a never-admitted recovery transport preserves its original failed-o
     phase: 'reserved',
     authority: db.mailboxHandoffAuthority('consumer'),
     nonAdmission: 'refused',
-    recoverySource: 'original-failed-notice'
+    recoverySource: {
+      sessionId: 'original-session',
+      epoch: 'original-epoch',
+      clientMessageId: 'original-failed-notice'
+    }
   }
   db.reserveMailHandoff('consumer', message, reference, true)
   const evidence: StructuredMailEvidence = {
-    epoch: 'epoch',
+    epoch: 'destination-epoch',
     frontier: 'new-host',
     stopInForce: false,
     submission: undefined,
     owner: null,
-    latestTurn: null,
-    acceptedUnopened: false,
     personStopped: false,
     diedTurnId: null
   }
@@ -88,17 +94,43 @@ it('rotating a never-admitted recovery transport preserves its original failed-o
     db,
     mailbox: 'consumer',
     sessionId: 'session',
-    epoch: 'epoch',
+    epoch: 'destination-epoch',
     frontier: 'new-host',
     waiters: undefined,
     reservedTypes: undefined,
-    readEvidence: async () => evidence
+    readEvidence: async (reference) =>
+      reference.clientMessageId === 'original-failed-notice'
+        ? {
+            ...evidence,
+            epoch: 'original-epoch',
+            owner: { itemId: 'T1', turn: { turnId: 'T1', state: 'completed', outcome: 'failure' } }
+          }
+        : evidence
   })
   expect(selected?.reference).toMatchObject({
     authorizationId: 'one-recovery',
-    recoverySource: 'original-failed-notice'
+    recoverySource: {
+      sessionId: 'original-session',
+      epoch: 'original-epoch',
+      clientMessageId: 'original-failed-notice'
+    }
   })
   expect(selected?.reference.operationId).not.toBe('old-operation')
+  if (!selected) {
+    throw new Error('Missing reserved recovery')
+  }
+  expect(structuredMailMaySubmit(selected.reference, () => evidence)).toBe(false)
+  expect(
+    structuredMailMaySubmit(selected.reference, (source) =>
+      source.sessionId === 'original-session'
+        ? {
+            ...evidence,
+            epoch: 'original-epoch',
+            owner: { itemId: 'T1', turn: { turnId: 'T1', state: 'completed', outcome: 'failure' } }
+          }
+        : evidence
+    )
+  ).toBe(true)
   expect(db.getMessageById(message.id)?.recovery_used).toBe(1)
   expect(readMailHandoff(db.getMessageById(message.id)?.handoff)).toEqual(selected?.reference)
 })

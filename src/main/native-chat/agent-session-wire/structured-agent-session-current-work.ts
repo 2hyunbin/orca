@@ -1,3 +1,5 @@
+import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
+import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
 import { currentRequestsProjection } from './agent-session-current-requests'
 // The host's one operational projection of a chat's current work: the live generation's running
 // turn, the prompts it raised that still wait on the person, the sends it owes, and the queued
@@ -307,8 +309,14 @@ export class StructuredAgentSessionCurrentWork {
   /** The running turn of a generation this host saw die on its own (its root gone, nobody asked),
    *  or that a runtime this one replaced held: its settlement writes it interrupted, so it reads so
    *  before that lands. */
-  diedTurn(): { item: AgentJournalRenderItem; turnId: string } | null {
-    const running = this.journal.runningTurn()
+  diedTurn(itemId?: string): { item: AgentJournalRenderItem; turnId: string } | null {
+    const item = itemId ? this.journal.item(itemId) : null
+    const turn = item && isRootAgentJournalItem(item) ? readAgentJournalTurn(item.body) : null
+    const running = itemId
+      ? item && turn?.state === 'running'
+        ? { item, turnId: turn.turnId }
+        : null
+      : this.journal.runningTurn()
     if (!running || this.isCurrentItem(running.item.itemId)) {
       return null
     }

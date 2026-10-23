@@ -265,10 +265,11 @@ export class AgentSessionJournal {
 
   historyOrigin = () => this.state.historyOrigin
 
+  mailHandoffs = () => this.state.mailHandoffs
+
   submission = (clientMessageId: string) => this.state.submissions.get(clientMessageId)
 
-  submissionHandoff = (clientMessageId: string) =>
-    journalSubmissionHandoff(this.state, clientMessageId)
+  submissionHandoff = (id: string) => journalSubmissionHandoff(this.state, id)
 
   pendingSubmissions = () => this.submissions().filter((entry) => entry.dispatchState === 'pending')
 

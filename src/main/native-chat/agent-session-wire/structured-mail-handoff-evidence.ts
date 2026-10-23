@@ -14,7 +14,7 @@ export function readStructuredMailHandoffEvidence(
 ) {
   const submission =
     journal.submission(clientMessageId) ??
-    journal.submissions().find((candidate) => candidate.queuedMessageId === clientMessageId)
+    journal.submission(journal.mailHandoffs().queuedSubmission(clientMessageId) ?? '')
   const boundary = host.deps.store.getRecord(sessionId)?.providerContextBoundary
   const owner =
     submission && (!boundary || submission.fence > boundary.afterFence)
@@ -31,27 +31,15 @@ export function readStructuredMailHandoffEvidence(
     frontier: JSON.stringify([
       incarnation,
       boundary?.operationId ?? null,
-      journal
-        .submissions()
-        .reduce(
-          (latest, candidate) =>
-            candidate.dispatchState === 'accepted' &&
-            candidate.origin === 'client' &&
-            candidate.source?.kind !== 'agent'
-              ? Math.max(latest, candidate.submittedSequence ?? 0)
-              : latest,
-          0
-        )
+      journal.mailHandoffs().personSequence
     ]),
     stopInForce: journal.queuedMessages.userStopInForce() !== null,
     submission,
     owner,
-    latestTurn: journal.newestTurn(),
-    acceptedUnopened: journal.stopMarks.latestAcceptedSendUnopened(),
     personStopped: owner
       ? journal.stopMarks.personStopDecides(owner.turn.turnId, owner.turn.completedAt)
       : false,
-    diedTurnId: work?.diedTurn()?.turnId ?? null
+    diedTurnId: owner ? (work?.diedTurn(owner.itemId)?.turnId ?? null) : null
   }
 }
 

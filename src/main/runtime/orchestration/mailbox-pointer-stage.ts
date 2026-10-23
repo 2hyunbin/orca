@@ -6,6 +6,7 @@ import type {
 } from './mailbox-pointer-delivery-contract'
 import {
   shouldReleaseOrchestrationPointer,
+  messageTypeHasOrchestrationWaiter,
   type OrchestrationMessageWaiter
 } from './mailbox-pointer-eligibility'
 import type { OrchestrationMailboxLeaf } from './mailbox-owner'
@@ -16,7 +17,7 @@ import type {
 import { submitOrchestrationMailboxPointer } from './mailbox-pointer-submit'
 import type { OrchestrationMailboxPointerSubmitTarget } from './mailbox-pointer-submit'
 import { isSettledWrite, type WriteSettlement } from '../../../shared/pty-write-settlement'
-import { terminalMailHandoffCanSubmit } from './terminal-mail-settlement'
+import { revalidateTerminalMailHandoff } from './terminal-mail-settlement'
 
 type StagePointerArgs<TWaiter extends OrchestrationMessageWaiter> = {
   deps: PointerDeliveryDependencies<TWaiter>
@@ -47,13 +48,35 @@ export function stageOrchestrationMailboxPointer<TWaiter extends OrchestrationMe
     ptyId,
     processIncarnation: expectedTarget.processIncarnation
   }
-  const validateHandoff = (): boolean =>
-    terminalMailHandoffCanSubmit(
+  const validateHandoff = (): boolean => {
+    const previous = args.messages
+    const survivors = revalidateTerminalMailHandoff(
       db,
       args.mailboxHandle,
       args.messages,
+      args.deps.readMailTarget?.(args.leaf) ?? null,
       (target) => args.deps.mailTargetWasAbandoned?.(target) ?? false
+    ).filter(
+      (message) =>
+        !messageTypeHasOrchestrationWaiter(
+          args.deps.getMessageWaiters(args.mailboxHandle),
+          message.type
+        )
     )
+    if (!survivors.length) {
+      return false
+    }
+    args.messages = survivors
+    const detached = previous.filter(
+      (message) => !survivors.some((current) => current.id === message.id)
+    )
+    db?.releaseMailboxPointerEnter(
+      detached.map((message) => message.id),
+      reservationTarget,
+      [2]
+    )
+    return args.messages.length > 0
+  }
   if (
     !db ||
     !validateHandoff() ||
@@ -93,7 +116,14 @@ export function stageOrchestrationMailboxPointer<TWaiter extends OrchestrationMe
       preserveAmbiguousWrite()
       return
     }
-    finishPointerWriteAndStageEnter(args, ptyId, flight, expectedTarget, settlement)
+    finishPointerWriteAndStageEnter(
+      args,
+      ptyId,
+      flight,
+      expectedTarget,
+      settlement,
+      validateHandoff
+    )
   }
   const preserveAmbiguousWrite = (): void => {
     if (!args.state.isCurrentFlight(ptyId, flight)) {
@@ -126,7 +156,8 @@ function finishPointerWriteAndStageEnter<TWaiter extends OrchestrationMessageWai
   ptyId: string,
   flight: OrchestrationMailboxDeliveryFlight,
   expectedTarget: OrchestrationMailboxPointerSubmitTarget,
-  settlement: Extract<WriteSettlement, { outcome: 'accepted' | 'refused' }>
+  settlement: Extract<WriteSettlement, { outcome: 'accepted' | 'refused' }>,
+  validateHandoff: () => boolean
 ): void {
   let delayedSettle = false
   try {
@@ -144,6 +175,7 @@ function finishPointerWriteAndStageEnter<TWaiter extends OrchestrationMessageWai
     }
     if (
       !db ||
+      !validateHandoff() ||
       shouldReleaseOrchestrationPointer(
         db,
         args.mailboxHandle,
@@ -156,6 +188,7 @@ function finishPointerWriteAndStageEnter<TWaiter extends OrchestrationMessageWai
       }
       return
     }
+    flight.stagedMessageIds = args.messages.map((message) => message.id)
     if (
       [args.leaf.lastOscTitle, args.leaf.paneTitle, args.deps.getTabTitle(args.leaf.tabId)].some(
         isCursorAgentTitle
@@ -170,13 +203,11 @@ function finishPointerWriteAndStageEnter<TWaiter extends OrchestrationMessageWai
       submitOrchestrationMailboxPointer(
         {
           mailboxOwner: args.deps.mailboxOwner,
-          validateHandoff: () =>
-            terminalMailHandoffCanSubmit(
-              args.deps.getDb(),
-              args.mailboxHandle,
-              args.messages,
-              (target) => args.deps.mailTargetWasAbandoned?.(target) ?? false
-            ),
+          validateHandoff: () => {
+            const valid = validateHandoff()
+            flight.stagedMessageIds = args.messages.map((message) => message.id)
+            return valid ? args.messages : false
+          },
           state: args.state,
           getDb: args.deps.getDb,
           resolveSubmitTarget: args.deps.resolveSubmitTarget,

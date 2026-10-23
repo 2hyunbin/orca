@@ -4,29 +4,64 @@ import type { AutomaticMailHandoff } from '../../mail-handoff'
 import { exposeMessageListTimestamps } from '../utc-timestamp'
 import { generateId } from '../generated-id'
 import { runLifecycleWriteTransaction } from '../lifecycle-write-transaction-runner'
+import { potentiallyLiveRemoteAttachmentSql } from '../federation/remote-attachment-liveness'
 
-export function mailboxHandoffAuthority(this: OrchestrationDb, mailbox: string): string {
+export function mailboxHandoffAuthority(
+  this: OrchestrationDb,
+  mailbox: string,
+  route = ''
+): string {
   if (mailbox.startsWith('run:')) {
-    return (
-      JSON.stringify(
-        this.db
-          .prepare(`SELECT consumer_generation, coordinator_handle,
-      coordinator_orca_session_id FROM runs WHERE id = ? AND legacy = 0`)
-          .get(mailbox.slice(4))
-      ) ?? ''
-    )
+    const row = this.db
+      .prepare(`SELECT consumer_generation, coordinator_handle,
+      coordinator_pane_key, coordinator_orca_session_id, coordinator_orca_session_id_generation
+      FROM runs WHERE id = ? AND legacy = 0
+      AND (coordinator_handle IS NOT NULL OR coordinator_pane_key IS NOT NULL OR
+        (coordinator_orca_session_id IS NOT NULL AND
+         coordinator_orca_session_id_generation = consumer_generation))`)
+      .get(mailbox.slice(4))
+    return row ? JSON.stringify(['run', row]) : ''
   }
   if (mailbox.startsWith('dispatch:')) {
-    return (
-      JSON.stringify(
-        this.db
-          .prepare(`SELECT consumer_generation, assignee_handle, status
-      FROM dispatch_contexts WHERE id = ?`)
-          .get(mailbox.slice(9))
-      ) ?? ''
-    )
+    const id = mailbox.slice(9)
+    const local = this.db
+      .prepare(`SELECT consumer_generation, assignee_handle, assignee_pane_key,
+      assignee_orca_session_id, process_incarnation FROM dispatch_contexts
+      WHERE id = ? AND status IN ('pending', 'dispatched')
+      AND (? = '' OR assignee_pane_key = ? OR assignee_orca_session_id = ?)`)
+      .get(id, route, route, route)
+    if (local) {
+      return JSON.stringify([route, 'dispatch', local])
+    }
+    const attachment = this.db
+      .prepare(`SELECT consumer_generation, home_run_id, pane_key,
+      terminal_handle, process_incarnation FROM remote_dispatch_attachments
+      WHERE dispatch_id = ? AND ${potentiallyLiveRemoteAttachmentSql()}
+      AND (? = '' OR pane_key = ?)`)
+      .get(id, route, route)
+    return attachment ? JSON.stringify([route, 'attachment', attachment]) : ''
   }
   return mailbox
+}
+
+function currentAuthority(db: OrchestrationDb, mailbox: string, expected: string): boolean {
+  if (!expected) {
+    return false
+  }
+  let route = ''
+  if (mailbox.startsWith('dispatch:')) {
+    try {
+      const parsed: unknown = JSON.parse(expected)
+      if (Array.isArray(parsed) && typeof parsed[0] === 'string') {
+        route = parsed[0]
+      } else {
+        return false
+      }
+    } catch {
+      return false
+    }
+  }
+  return db.mailboxHandoffAuthority(mailbox, route) === expected
 }
 
 export function getAutomaticMailCandidates(
@@ -60,7 +95,7 @@ export function reserveMailHandoff(
   recovery: boolean
 ): MessageRow | undefined {
   return runLifecycleWriteTransaction(this.db, 'mail_handoff_reservation', () => {
-    if (this.mailboxHandoffAuthority(mailbox) !== reference.authority) {
+    if (!currentAuthority(this, mailbox, reference.authority)) {
       return undefined
     }
     const handoff = JSON.stringify(reference)
@@ -88,7 +123,7 @@ export function isMailHandoffCurrent(
   authority: string
 ): boolean {
   return (
-    this.mailboxHandoffAuthority(mailbox) === authority &&
+    currentAuthority(this, mailbox, authority) &&
     messages.every((message) => {
       const current = this.getMessageById(message.id)
       return (
@@ -108,7 +143,7 @@ export function recordMailHandoff(
   reference: AutomaticMailHandoff
 ): void {
   runLifecycleWriteTransaction(this.db, 'mail_handoff_receipt', () => {
-    if (this.mailboxHandoffAuthority(mailbox) !== reference.authority) {
+    if (!currentAuthority(this, mailbox, reference.authority)) {
       return
     }
     const update = this.db.prepare(`UPDATE messages SET handoff = ?,

@@ -1,5 +1,11 @@
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
+import { isAdmissibleAgentJournalMessageBody } from '../../../shared/agent-session-journal-schemas'
+import type { CommandReceiptRead } from '../../native-chat/agent-session-journal/command-receipt-table'
 import type { OrchestrationDb } from './db'
+import {
+  reconcileStructuredMailInput,
+  recordStructuredMailHandoff as record
+} from './structured-mailbox-pointer-receipt'
 import { formatMessagePointer } from './formatter'
 import type { OrchestrationCliCommand } from './cli-command'
 import type { OrchestrationMessageWaiter } from './mailbox-pointer-eligibility'
@@ -10,9 +16,9 @@ import type {
   StructuredPointerRetainReason
 } from './structured-session-pointer-delivery'
 import { readMailHandoff, type StructuredMailHandoff } from './mail-handoff'
-import { drainLegacyMailHandoff } from './legacy-mail-handoff'
+import { reconcileLegacyMailHandoff } from './legacy-mail-handoff'
 import {
-  mailHandoffWasCut,
+  structuredMailMaySubmit,
   mailTransportWasRefused,
   selectStructuredMailHandoff,
   type StructuredMailEvidence
@@ -26,18 +32,17 @@ export type StructuredPointerSendOutcome =
       clientMessageId?: string
       nonAdmission?: 'refused' | 'expired'
     }
-  | { kind: 'held' | 'superseded' | 'unattached' }
+  | { kind: 'held' | 'superseded' | 'unattached'; noEffect?: boolean }
   | { kind: 'queued'; clientMessageId?: string }
 
-export type StructuredPointerSessionFacts = {
-  epoch: string
-  frontier: string
-}
+export type StructuredPointerSessionFacts = Pick<StructuredMailEvidence, 'epoch' | 'frontier'>
+type MailEvidenceSource = Pick<StructuredMailHandoff, 'sessionId' | 'clientMessageId'>
 
 export type StructuredMailboxPointerHost = {
+  readReceipt?: (reference: StructuredMailHandoff) => CommandReceiptRead
   readSessionFacts: (sessionId: string) => Promise<StructuredPointerSessionFacts | null>
-  readHandoffEvidence: (reference: StructuredMailHandoff) => Promise<StructuredMailEvidence | null>
-  readHandoffEvidenceNow: (reference: StructuredMailHandoff) => StructuredMailEvidence | null
+  readHandoffEvidence: (reference: MailEvidenceSource) => Promise<StructuredMailEvidence | null>
+  readHandoffEvidenceNow: (reference: MailEvidenceSource) => StructuredMailEvidence | null
   hasActionablePromptNow: (sessionId: string) => boolean | null
   send: (input: {
     sessionId: string
@@ -75,16 +80,16 @@ export class OrchestrationStructuredMailboxPointerDelivery<
 
   constructor(private readonly deps: StructuredPointerDeliveryDependencies<TWaiter>) {}
 
-  deliverForHandle(mailbox: string, reservedTypes?: ReadonlySet<string>): boolean {
-    const target = this.deps.resolveStructuredTarget(mailbox)
+  deliverForHandle(mailboxHandle: string, reservedTypes?: ReadonlySet<string>): boolean {
+    const target = this.deps.resolveStructuredTarget(mailboxHandle)
     if (!target) {
       return false
     }
-    if (this.inFlight.has(mailbox)) {
-      this.changedDuringFlight.add(mailbox)
+    if (this.inFlight.has(mailboxHandle)) {
+      this.changedDuringFlight.add(mailboxHandle)
       return true
     }
-    void this.deliver(mailbox, target, reservedTypes).catch(() => undefined)
+    void this.deliver(mailboxHandle, target, reservedTypes).catch(() => undefined)
     return true
   }
 
@@ -112,6 +117,8 @@ export class OrchestrationStructuredMailboxPointerDelivery<
     this.inFlight.add(mailbox)
     this.parkedUntilJournalEdge.set(mailbox, { sessionId: target.sessionId, reservedTypes })
     try {
+      const reconciled = new Set<string>()
+      const replanned = new Set<string>()
       for (;;) {
         const db = this.deps.getDb()
         if (!db) {
@@ -123,24 +130,7 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           this.retain(mailbox, target.sessionId, 'session-not-attached')
           return
         }
-        const legacy = db.getStructuredPointerOperation(mailbox)
-        if (legacy?.session_id === target.sessionId) {
-          const evidence = await this.deps.host.readHandoffEvidence({
-            version: 1,
-            kind: 'structured',
-            sessionId: target.sessionId,
-            epoch: session.epoch,
-            frontier: session.frontier,
-            operationId: legacy.operation_id,
-            authorizationId: legacy.operation_id,
-            clientMessageId: legacy.operation_id,
-            phase: 'reserved',
-            authority: db.mailboxHandoffAuthority(mailbox)
-          })
-          if (evidence) {
-            drainLegacyMailHandoff(db, legacy, evidence)
-          }
-        }
+        await reconcileLegacyMailHandoff(db, mailbox, target.sessionId, this.deps.host)
         const batch = await selectStructuredMailHandoff({
           db,
           mailbox,
@@ -149,7 +139,35 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           frontier: session.frontier,
           waiters: this.deps.getMessageWaiters(mailbox),
           reservedTypes,
-          readEvidence: (reference) => this.deps.host.readHandoffEvidence(reference)
+          readEvidence: (reference) => this.deps.host.readHandoffEvidence(reference),
+          skipOperations: reconciled,
+          manifest: (messages) => ({
+            members: messages.map((message) => message.id),
+            dispatchId: target.dispatchId,
+            runtimeFence: fence,
+            context: this.deps.host.currentContextClearOperationId(target.sessionId),
+            body: JSON.stringify({
+              kind: 'message',
+              role: 'user',
+              blocks: [
+                {
+                  type: 'text',
+                  text: formatMessagePointer(
+                    messages.length,
+                    mailbox,
+                    this.deps.getCliCommand()
+                  ).trim()
+                }
+              ],
+              from: structuredMailSource({
+                db,
+                mailboxHandle: mailbox,
+                dispatchId: target.dispatchId,
+                batch: messages,
+                senderName: this.deps.senderName
+              })
+            })
+          })
         })
         if (!batch) {
           if (
@@ -163,66 +181,67 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           }
           return
         }
-        const { messages, reference } = batch
-        const context = this.deps.host.currentContextClearOperationId(target.sessionId)
+        let { messages, reference } = batch
+        const manifest = reference.manifest
+        if (
+          !manifest ||
+          !reconcileStructuredMailInput(this.deps.host, db, mailbox, messages, reference)
+        ) {
+          reconciled.add(reference.operationId)
+          continue
+        }
         const current = (): boolean => {
           const next = this.deps.resolveStructuredTarget(mailbox)
           return (
             next?.sessionId === target.sessionId &&
             next.dispatchId === target.dispatchId &&
-            this.deps.host.currentContextClearOperationId(target.sessionId) === context &&
+            this.deps.host.currentContextClearOperationId(target.sessionId) === manifest.context &&
+            this.deps.host.currentFence(target.sessionId) === manifest.runtimeFence &&
+            manifest.members.length === messages.length &&
+            manifest.members.every((id, index) => messages[index]?.id === id) &&
             db.isMailHandoffCurrent(mailbox, messages, reference.authority) &&
             messages.every((message) => {
               const reserved = readMailHandoff(message.handoff)
-              if (reserved?.kind !== 'structured') {
-                return false
-              }
-              const now = this.deps.host.readHandoffEvidenceNow(reserved)
-              if (
-                !now ||
-                now.epoch !== reserved.epoch ||
-                (message.recovery_used && now.stopInForce)
-              ) {
-                return false
-              }
-              if (!reserved.recoverySource) {
-                return true
-              }
-              const source = { ...reserved, clientMessageId: reserved.recoverySource }
-              const evidence = this.deps.host.readHandoffEvidenceNow(source)
-              return evidence !== null && mailHandoffWasCut(source, evidence)
+              return (
+                reserved?.kind === 'structured' &&
+                structuredMailMaySubmit(reserved, this.deps.host.readHandoffEvidenceNow)
+              )
             })
           )
         }
         if (!current()) {
+          if (reference.nonAdmission && !replanned.has(reference.operationId)) {
+            replanned.add(reference.operationId)
+            record(db, mailbox, messages, (member) => ({ ...member, nonAdmission: 'held' }))
+          } else {
+            reconciled.add(reference.operationId)
+          }
+          continue
+        }
+        const body: unknown = JSON.parse(manifest.body)
+        if (!isAdmissibleAgentJournalMessageBody(body)) {
           return
         }
-        const body: AgentJournalMessageItem = {
-          kind: 'message',
-          role: 'user',
-          blocks: [
-            {
-              type: 'text',
-              text: formatMessagePointer(messages.length, mailbox, this.deps.getCliCommand()).trim()
-            }
-          ],
-          from: structuredMailSource({
-            db,
-            mailboxHandle: mailbox,
-            dispatchId: target.dispatchId,
-            batch: messages,
-            senderName: this.deps.senderName
-          })
+        const neverAdmitted = Boolean(reference.nonAdmission)
+        record(db, mailbox, messages, ({ nonAdmission: _result, ...member }) => member)
+        messages = messages
+          .map((message) => db.getMessageById(message.id))
+          .filter((message) => message !== undefined)
+        const attempt = readMailHandoff(messages[0]?.handoff)
+        if (attempt?.kind !== 'structured') {
+          return
         }
+        reference = attempt
         const outcome = await this.deps.host.send({
           sessionId: target.sessionId,
           dispatchId: target.dispatchId,
           operationId: reference.operationId,
-          expectedRuntimeFence: fence,
+          expectedRuntimeFence: manifest.runtimeFence,
           body,
           beforeRun: current
         })
         if (outcome.kind === 'held') {
+          record(db, mailbox, messages, (member) => ({ ...member, nonAdmission: 'held' }))
           this.retain(mailbox, target.sessionId, 'turn-unsettled')
           return
         }
@@ -231,23 +250,27 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           return
         }
         if (outcome.kind === 'superseded') {
-          return
+          if (!outcome.noEffect || replanned.has(reference.operationId)) {
+            reconciled.add(reference.operationId)
+          }
+          if (outcome.noEffect) {
+            record(db, mailbox, messages, (member) => ({ ...member, nonAdmission: 'held' }))
+            replanned.add(reference.operationId)
+          }
+          continue
         }
         if (outcome.kind === 'sent' && outcome.state !== 'accepted') {
-          if (outcome.nonAdmission === 'expired') {
+          const nonAdmission =
+            outcome.nonAdmission === 'expired' && !neverAdmitted ? undefined : outcome.nonAdmission
+          if (nonAdmission === 'expired') {
             this.changedDuringFlight.add(mailbox)
           }
           const evidence = this.deps.host.readHandoffEvidenceNow(reference)
-          if (outcome.nonAdmission || (evidence && mailTransportWasRefused(evidence))) {
-            for (const message of messages) {
-              const member = readMailHandoff(message.handoff)
-              if (member?.kind === 'structured') {
-                db.recordMailHandoff(mailbox, [message], {
-                  ...member,
-                  nonAdmission: outcome.nonAdmission ?? 'refused'
-                })
-              }
-            }
+          if (nonAdmission || (evidence && mailTransportWasRefused(evidence))) {
+            record(db, mailbox, messages, (member) => ({
+              ...member,
+              nonAdmission: nonAdmission ?? 'refused'
+            }))
           }
           this.retain(
             mailbox,
@@ -256,16 +279,11 @@ export class OrchestrationStructuredMailboxPointerDelivery<
           )
           return
         }
-        for (const message of messages) {
-          const member = readMailHandoff(message.handoff)
-          if (member?.kind === 'structured') {
-            db.recordMailHandoff(mailbox, [message], {
-              ...member,
-              phase: 'offered',
-              clientMessageId: outcome.clientMessageId ?? reference.clientMessageId
-            })
-          }
-        }
+        record(db, mailbox, messages, (member) => ({
+          ...member,
+          phase: 'offered',
+          clientMessageId: outcome.clientMessageId ?? reference.clientMessageId
+        }))
         reservedTypes = undefined
         const next = this.deps.resolveStructuredTarget(mailbox)
         if (!next || next.sessionId !== target.sessionId) {

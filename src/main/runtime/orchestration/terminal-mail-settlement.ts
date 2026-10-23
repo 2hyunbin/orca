@@ -1,4 +1,7 @@
-import type { TerminalMailTarget } from '../../agent-hooks/server/terminal-mail-target'
+import {
+  sameTerminalMailTarget,
+  type TerminalMailTarget
+} from '../../agent-hooks/server/terminal-mail-target'
 import type { OrchestrationDb } from './db'
 import { ORCHESTRATION_DELIVERY_BATCH_LIMIT, type MessageRow } from './db'
 import { readMailHandoff, type TerminalMailHandoff } from './mail-handoff'
@@ -12,6 +15,7 @@ export function selectTerminalMailHandoff(input: {
   db: OrchestrationDb
   mailbox: string
   target: TerminalMailTarget | null
+  route?: string
   wasAbandoned: (target: TerminalMailTarget) => boolean
   waiters: ReadonlySet<OrchestrationMessageWaiter> | undefined
   reservedTypes: ReadonlySet<string> | undefined
@@ -25,7 +29,10 @@ export function selectTerminalMailHandoff(input: {
       excluded.add(type)
     }
   }
-  const authority = input.db.mailboxHandoffAuthority(input.mailbox)
+  const authority = input.db.mailboxHandoffAuthority(input.mailbox, input.route)
+  if (!authority) {
+    return []
+  }
   const id = mintAgentSessionOperationId(Date.now())
   const messages: MessageRow[] = []
   let afterSequence = 0
@@ -38,7 +45,11 @@ export function selectTerminalMailHandoff(input: {
     for (const message of candidates) {
       afterSequence = message.sequence
       const prior = readMailHandoff(message.handoff)
-      if (prior && (prior.kind !== 'terminal' || prior.authority !== authority)) {
+      if (
+        prior &&
+        (prior.kind !== 'terminal' ||
+          (prior.authority !== authority && (prior.phase !== 'reserved' || prior.recoverySource)))
+      ) {
         continue
       }
       const recovery = prior?.kind === 'terminal' && prior.phase === 'offered'
@@ -59,6 +70,10 @@ export function selectTerminalMailHandoff(input: {
         version: 1,
         kind: 'terminal',
         id: prior?.kind === 'terminal' && !recovery ? prior.id : id,
+        authorizationId:
+          prior?.kind === 'terminal' && !recovery
+            ? (prior.authorizationId ?? prior.id)
+            : mintAgentSessionOperationId(Date.now()),
         authority,
         phase: 'reserved',
         target: input.target,
@@ -105,8 +120,39 @@ export function terminalMailHandoffCanSubmit(
     return (
       handoff === null ||
       (handoff.kind === 'terminal' &&
-        handoff.authority === db.mailboxHandoffAuthority(mailbox) &&
+        db.isMailHandoffCurrent(mailbox, [current], handoff.authority) &&
         (!handoff.recoverySource || wasAbandoned(handoff.recoverySource)))
     )
+  })
+}
+
+export function revalidateTerminalMailHandoff(
+  db: OrchestrationDb | null,
+  mailbox: string,
+  messages: readonly { id: string; handoff?: string | null }[],
+  target: TerminalMailTarget | null,
+  wasAbandoned: (target: TerminalMailTarget) => boolean
+): MessageRow[] {
+  if (!db) {
+    return []
+  }
+  return messages.flatMap((message) => {
+    if (!terminalMailHandoffCanSubmit(db, mailbox, [message], wasAbandoned)) {
+      return []
+    }
+    const current = db.getMessageById(message.id)
+    if (!current) {
+      return []
+    }
+    const reference = readMailHandoff(current.handoff)
+    if (
+      reference?.kind === 'terminal' &&
+      (!reference.target || !target || !sameTerminalMailTarget(reference.target, target))
+    ) {
+      db.recordMailHandoff(mailbox, [current], { ...reference, target })
+      const refreshed = db.getMessageById(message.id)
+      return refreshed ? [refreshed] : []
+    }
+    return [current]
   })
 }

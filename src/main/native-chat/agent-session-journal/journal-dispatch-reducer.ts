@@ -67,6 +67,7 @@ export function applyJournalDispatchRow(
   if (row.state === 'accepted') {
     noteTurnAccepted(state, submission)
   }
+  state.mailHandoffs.submission(row.clientMessageId, submission)
   if (row.state !== 'accepted' || !row.providerItemId) {
     return
   }

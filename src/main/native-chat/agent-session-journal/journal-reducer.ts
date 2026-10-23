@@ -1,3 +1,4 @@
+import { JournalMailHandoffs } from './journal-submission-handoff'
 import { journalItemDeclaresEcho } from './journal-item-echo'
 // THE reducer. One implementation folds rows into the render model, and both
 // the live append path and replay call it — a live-only shortcut is how a
@@ -67,6 +68,7 @@ export type JournalReducerState = {
   /** Turn ids whose record a tombstone removed, as a rewind does: over, though no row shows it. */
   removedTurnIds: Set<string>
   submissions: Map<string, AgentJournalSubmission>
+  mailHandoffs: JournalMailHandoffs
   submissionTurnScopes: Map<string, AgentJournalTurnScope | null>
   receipts: Map<string, AgentJournalAcceptanceReceipt>
   /** Provider item id → the submission slot that adopted it. Stops an accepted
@@ -102,6 +104,7 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     tombstones: new Map(),
     removedTurnIds: new Set(),
     submissions: new Map(),
+    mailHandoffs: new JournalMailHandoffs(),
     submissionTurnScopes: new Map(),
     receipts: new Map(),
     aliases: new Map(),

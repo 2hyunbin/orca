@@ -7,7 +7,7 @@ import { drainLegacyMailHandoff } from './legacy-mail-handoff'
 import { readMailHandoff } from './mail-handoff'
 import { selectStructuredMailHandoff, type StructuredMailEvidence } from './mailbox-settlement'
 
-it.each(['accepted', 'rejected'] as const)(
+it.each(['accepted', 'rejected', 'missing-membership'] as const)(
   'upgrades a legacy %s notice without suppressing unrelated pre-upgrade mail',
   async (dispatchState) => {
     const directory = mkdtempSync(join(tmpdir(), 'orca-mail-handoff-upgrade-'))
@@ -34,15 +34,13 @@ it.each(['accepted', 'rejected'] as const)(
           clientMessageId: 'legacy-operation',
           fence: 1,
           payloadFingerprint: 'payload',
-          dispatchState,
+          dispatchState: dispatchState === 'rejected' ? 'rejected' : 'accepted',
           providerItemId: null,
           reason: 'provider_write_failed',
           submittedAt: 1,
           resolvedAt: 2
         },
         owner: null,
-        latestTurn: null,
-        acceptedUnopened: false,
         personStopped: false,
         diedTurnId: null,
         legacyNotice: {
@@ -51,6 +49,35 @@ it.each(['accepted', 'rejected'] as const)(
           dispatchId: null,
           messages: [{ messageId: member.id, runId: member.run_id, from: member.from_handle }]
         }
+      }
+      if (dispatchState === 'missing-membership') {
+        drainLegacyMailHandoff(db, db.getStructuredPointerOperation('consumer')!, {
+          ...evidence,
+          legacyNotice: null
+        })
+        expect(db.getStructuredPointerOperation('consumer')?.operation_id).toBe('legacy-operation')
+        expect(
+          [member, fresh].map((row) => readMailHandoff(db.getMessageById(row.id)?.handoff))
+        ).toEqual([
+          { version: 1, kind: 'unknown' },
+          { version: 1, kind: 'unknown' }
+        ])
+        const later = db.insertMessage({ from: 'sender', to: 'consumer', subject: 'after upgrade' })
+        expect(
+          db
+            .getAutomaticMailCandidates('consumer', {
+              afterSequence: 0,
+              excludeTypes: [],
+              limit: 50
+            })
+            .map((row) => row.id)
+        ).toEqual([later.id])
+        expect(db.getUnreadMessages('consumer').map((row) => row.id)).toEqual([
+          member.id,
+          fresh.id,
+          later.id
+        ])
+        return
       }
       drainLegacyMailHandoff(db, db.getStructuredPointerOperation('consumer')!, evidence)
       expect(db.getStructuredPointerOperation('consumer')).toBeUndefined()
@@ -72,7 +99,9 @@ it.each(['accepted', 'rejected'] as const)(
           readEvidence: async () => evidence
         })
       const batch = await select()
-      expect(batch?.messages.map((row) => row.id)).toEqual([fresh.id])
+      expect(batch?.messages.map((row) => row.id)).toEqual(
+        dispatchState === 'accepted' ? [fresh.id] : [member.id, fresh.id]
+      )
       db.markAsRead([fresh.id])
       const remaining = await select()
       if (dispatchState === 'accepted') {

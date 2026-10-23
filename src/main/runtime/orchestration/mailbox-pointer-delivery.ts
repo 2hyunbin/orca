@@ -119,6 +119,7 @@ export class OrchestrationMailboxPointerDelivery<TWaiter extends OrchestrationMe
       db,
       mailbox: mailboxHandle,
       target: this.deps.readMailTarget?.(leaf) ?? null,
+      route: `${leaf.tabId}:${leaf.leafId}`,
       wasAbandoned: (target) => this.deps.mailTargetWasAbandoned?.(target) ?? false,
       waiters,
       reservedTypes: options.reservedTypes

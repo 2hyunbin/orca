@@ -18,11 +18,9 @@ import { isLocalHookConnectionId } from '../../../shared/wsl-hook-relay-contract
 import type { EnrichedAgentHookEventPayload } from './server-types'
 import { AgentHookServerAuthorityFences } from './server-authority-fences'
 import { recordAgentExit } from './agent-exit-evidence'
-import { TerminalMailTargets, type TerminalMailTarget } from './terminal-mail-target'
+import type { TerminalMailTarget } from './terminal-mail-target'
 
 export abstract class AgentHookServerCleanup extends AgentHookServerAuthorityFences {
-  private readonly terminalMailTargets = new TerminalMailTargets()
-
   readTerminalMailTarget(paneKey: string): TerminalMailTarget | null {
     return this.terminalMailTargets.read(
       this.state.lastStatusByPaneKey.get(this.resolvePaneKeyAlias(paneKey))

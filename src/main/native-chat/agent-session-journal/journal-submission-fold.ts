@@ -41,6 +41,7 @@ export function applyJournalSubmission(
     // A stored value this build cannot read only loses the choices it carried, never the row.
     ...(options ? { options } : {})
   })
+  state.mailHandoffs.submission(row.clientMessageId, state.submissions.get(row.clientMessageId))
   const itemId = agentJournalSubmissionKey(row.clientMessageId)
   // A message handed over later belongs to no turn until its handover names one.
   const turnScope = row.handoverRecorded
@@ -122,6 +123,7 @@ export function acceptSubmissionFromProviderItem(
   submission.providerItemId = providerItemId
   submission.reason = null
   submission.resolvedAt = row.ts
+  state.mailHandoffs.submission(submission.clientMessageId, submission)
   delete submission.recovered
   state.receipts.set(submission.clientMessageId, {
     clientMessageId: submission.clientMessageId,

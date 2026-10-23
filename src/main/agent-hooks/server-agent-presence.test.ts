@@ -98,7 +98,43 @@ describe('host-owned hook presence', () => {
     await hook(server, 'SessionStart', 'successor', undefined, 4002)
     expect(server.terminalMailTargetWasAbandoned(target)).toBe(true)
     await hook(server, 'UserPromptSubmit', 'successor', undefined, 4002)
+    server.clearPaneState(PANE)
     expect(server.terminalMailTargetWasAbandoned(target)).toBe(false)
+    await hook(server, 'SessionStart', 'third', undefined, 4003)
+    expect(server.terminalMailTargetWasAbandoned(target)).toBe(false)
+  })
+
+  it('restores only the saved exact unfinished root and matching exited process as historical proof', async () => {
+    const userDataPath = mkdtempSync(join(tmpdir(), 'orca-mail-proof-restart-'))
+    const first = new AgentHookServer()
+    servers.push(first)
+    await first.start({ env: 'production', userDataPath })
+    await hook(first, 'SessionStart')
+    await hook(first, 'UserPromptSubmit')
+    const target = first.readTerminalMailTarget(PANE)
+    if (!target) {
+      throw new Error('Missing actual receiving process')
+    }
+    probe.mockResolvedValue('exited')
+    await first.checkAgentPresence(PANE)
+    expect(first.terminalMailTargetWasAbandoned(target)).toBe(true)
+    first.flushStatusPersistSync()
+    first.stop()
+    const restarted = new AgentHookServer()
+    servers.push(restarted)
+    await restarted.start({ env: 'production', userDataPath })
+    expect(restarted.readTerminalMailTarget(PANE)).toBeNull()
+    expect(
+      restarted.terminalMailTargetWasAbandoned({
+        ...target,
+        process: { ...target.process, startTime: 'wrong' }
+      })
+    ).toBe(false)
+    expect(restarted.terminalMailTargetWasAbandoned(target)).toBe(true)
+    await hook(restarted, 'SessionStart', 'successor', undefined, 4002)
+    await hook(restarted, 'UserPromptSubmit', 'successor', undefined, 4002)
+    restarted.clearPaneState(PANE)
+    expect(restarted.terminalMailTargetWasAbandoned(target)).toBe(false)
   })
 
   it('does not recover a mail target after its root completed normally before process exit', async () => {

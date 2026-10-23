@@ -1,36 +1,54 @@
-import {
-  readTerminalMailTarget,
-  type TerminalMailTarget
-} from '../../agent-hooks/server/terminal-mail-target'
+import { z } from 'zod'
+import { readTerminalMailTarget } from '../../agent-hooks/server/terminal-mail-target'
 
-export type TerminalMailHandoff = {
-  version: 1
-  kind: 'terminal'
-  id: string
-  authority: string
-  phase: 'reserved' | 'offered'
-  target: TerminalMailTarget | null
-  recoverySource?: TerminalMailTarget
-}
-
-export type StructuredMailHandoff = {
-  version: 1
-  kind: 'structured'
-  sessionId: string
-  epoch: string
-  operationId: string
-  clientMessageId: string
-  phase: 'reserved' | 'offered'
-  authorizationId: string
-  frontier: string
-  nonAdmission?: 'refused' | 'expired'
-  recoverySource?: string
-  authority: string
-}
-
+const terminalTarget = z.unknown().transform((value, ctx) => {
+  if (value === null) {
+    return null
+  }
+  const target = readTerminalMailTarget(value)
+  if (target) {
+    return target
+  }
+  ctx.addIssue({ code: 'custom', message: 'Unproved terminal target' })
+  return z.NEVER
+})
+const source = z.object({ sessionId: z.string(), epoch: z.string(), clientMessageId: z.string() })
+const manifest = z.object({
+  members: z.array(z.string()).min(1).max(50),
+  body: z.string(),
+  dispatchId: z.string().nullable(),
+  runtimeFence: z.number(),
+  context: z.string().optional()
+})
+const structured = z.object({
+  version: z.literal(1),
+  kind: z.literal('structured'),
+  sessionId: z.string(),
+  epoch: z.string(),
+  operationId: z.string(),
+  clientMessageId: z.string(),
+  phase: z.enum(['reserved', 'offered']),
+  authorizationId: z.string(),
+  frontier: z.string(),
+  authority: z.string(),
+  nonAdmission: z.enum(['held', 'refused', 'expired']).optional(),
+  recoverySource: z.union([source, z.string()]).optional(),
+  manifest: manifest.optional()
+})
+const terminal = z.object({
+  version: z.literal(1),
+  kind: z.literal('terminal'),
+  id: z.string(),
+  authorizationId: z.string().optional(),
+  authority: z.string(),
+  phase: z.enum(['reserved', 'offered']),
+  target: terminalTarget,
+  recoverySource: terminalTarget.optional()
+})
+export type StructuredMailHandoff = z.infer<typeof structured>
+export type TerminalMailHandoff = z.infer<typeof terminal>
 export type AutomaticMailHandoff = StructuredMailHandoff | TerminalMailHandoff
 export type MailHandoff = AutomaticMailHandoff | { version: 1; kind: 'unknown' }
-
 export const UNKNOWN_MAIL_HANDOFF = JSON.stringify({ version: 1, kind: 'unknown' })
 
 export function readMailHandoff(value: string | null | undefined): MailHandoff | null {
@@ -38,81 +56,21 @@ export function readMailHandoff(value: string | null | undefined): MailHandoff |
     return null
   }
   try {
-    const parsed: unknown = JSON.parse(value)
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'version' in parsed &&
-      parsed.version === 1 &&
-      'kind' in parsed &&
-      parsed.kind === 'terminal' &&
-      'id' in parsed &&
-      typeof parsed.id === 'string' &&
-      'authority' in parsed &&
-      typeof parsed.authority === 'string' &&
-      'phase' in parsed &&
-      (parsed.phase === 'reserved' || parsed.phase === 'offered') &&
-      'target' in parsed
-    ) {
-      const target = readTerminalMailTarget(parsed.target)
-      const source =
-        'recoverySource' in parsed ? readTerminalMailTarget(parsed.recoverySource) : null
-      return {
-        version: 1,
-        kind: 'terminal',
-        id: parsed.id,
-        authority: parsed.authority,
-        phase: parsed.phase,
-        target,
-        ...(source ? { recoverySource: source } : {})
-      }
-    }
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'version' in parsed &&
-      parsed.version === 1 &&
-      'kind' in parsed &&
-      parsed.kind === 'structured' &&
-      'sessionId' in parsed &&
-      typeof parsed.sessionId === 'string' &&
-      'epoch' in parsed &&
-      typeof parsed.epoch === 'string' &&
-      'operationId' in parsed &&
-      typeof parsed.operationId === 'string' &&
-      'clientMessageId' in parsed &&
-      typeof parsed.clientMessageId === 'string' &&
-      'phase' in parsed &&
-      (parsed.phase === 'reserved' || parsed.phase === 'offered') &&
-      'authority' in parsed &&
-      typeof parsed.authority === 'string' &&
-      'authorizationId' in parsed &&
-      typeof parsed.authorizationId === 'string' &&
-      'frontier' in parsed &&
-      typeof parsed.frontier === 'string'
-    ) {
-      return {
-        version: 1,
-        kind: 'structured',
-        sessionId: parsed.sessionId,
-        epoch: parsed.epoch,
-        operationId: parsed.operationId,
-        clientMessageId: parsed.clientMessageId,
-        phase: parsed.phase,
-        authorizationId: parsed.authorizationId,
-        frontier: parsed.frontier,
-        ...('nonAdmission' in parsed &&
-        (parsed.nonAdmission === 'refused' || parsed.nonAdmission === 'expired')
-          ? { nonAdmission: parsed.nonAdmission }
-          : {}),
-        ...('recoverySource' in parsed && typeof parsed.recoverySource === 'string'
-          ? { recoverySource: parsed.recoverySource }
-          : {}),
-        authority: parsed.authority
-      }
+    const parsed = z.union([structured, terminal]).safeParse(JSON.parse(value))
+    if (parsed.success) {
+      return parsed.data
     }
   } catch {
     /* Unreadable ownership is unknown, never fresh. */
   }
   return { version: 1, kind: 'unknown' }
+}
+
+export function structuredRecoverySource(
+  reference: StructuredMailHandoff
+): StructuredMailHandoff | null {
+  const original = reference.recoverySource
+  return original
+    ? { ...reference, ...(typeof original === 'string' ? { clientMessageId: original } : original) }
+    : null
 }

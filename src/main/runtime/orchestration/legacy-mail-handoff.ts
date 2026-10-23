@@ -1,3 +1,4 @@
+import type { StructuredMailboxPointerHost } from './structured-mailbox-pointer-delivery'
 import type { OrchestrationDb } from './db'
 import { runLifecycleWriteTransaction } from './db/lifecycle-write-transaction-runner'
 import { UNKNOWN_MAIL_HANDOFF, type StructuredMailHandoff } from './mail-handoff'
@@ -54,4 +55,22 @@ export function drainLegacyMailHandoff(
       .run(operation.mailbox_handle, marker)
     db.deleteStructuredPointerOperation(operation.mailbox_handle)
   })
+}
+
+export async function reconcileLegacyMailHandoff(
+  db: OrchestrationDb,
+  mailbox: string,
+  sessionId: string,
+  host: StructuredMailboxPointerHost
+): Promise<void> {
+  const legacy = db.getStructuredPointerOperation(mailbox)
+  if (legacy?.session_id === sessionId) {
+    const evidence = await host.readHandoffEvidence({
+      sessionId,
+      clientMessageId: legacy.operation_id
+    })
+    if (evidence) {
+      drainLegacyMailHandoff(db, legacy, evidence)
+    }
+  }
 }

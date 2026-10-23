@@ -1,8 +1,10 @@
+import '../runtime/rpc/unused-default-rpc-methods.test-fixture'
 // A message sent while a Grok prompt runs steers: the running prompt is cancelled (the session
 // stays) and the message goes as the next prompt. The adapter holds a steer only while that cancel
 // lands; the host's queue holds everything else.
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { z } from 'zod'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readAgentJournalTurn } from '../../shared/agent-session-turn-record'
 import { DISPATCH_REJECTED_CANCELLED } from '../../shared/structured-agent-session-dispatch-rejection'
 import {
@@ -361,3 +363,265 @@ describe('Steer on a Grok card, through the host', () => {
     await rig.host.close(SESSION, 'user-close')
   })
 })
+
+// A real execution host, ACP adapter and RPC dispatcher; only the ACP child is scripted.
+it.each(['fresh', 'mixed', 'invalidation', 'held-epoch'] as const)(
+  'drains five mail obligations as one ACP input (%s), with exact check replay and ack',
+  async (history) => {
+    const { OrchestrationDb } = await import('../runtime/orchestration/db')
+    const { OrcaRuntimeService } = await import('../runtime/orca-runtime')
+    const { RpcDispatcher } = await import('../runtime/rpc/dispatcher')
+    const { ORCHESTRATION_METHODS } = await import('../runtime/rpc/methods/orchestration')
+    const { ORCHESTRATION_CONTRACT_VERSION } = await import('../../shared/protocol-version')
+    const { idOf, resultOf } =
+      await import('../runtime/rpc/orchestration-session-caller-test-fixture')
+    const { setStructuredAgentSessionHost } =
+      await import('../native-chat/agent-session-wire/structured-agent-session-registry')
+    const { createStructuredMailboxPointerHost } =
+      await import('../runtime/orchestration/structured-mailbox-pointer-host')
+    const { OrchestrationStructuredMailboxPointerDelivery } =
+      await import('../runtime/orchestration/structured-mailbox-pointer-delivery')
+    const db = new OrchestrationDb(':memory:')
+    const runtime = new OrcaRuntimeService()
+    runtime.setOrchestrationDb(db)
+    vi.spyOn(runtime, 'ensureStructuredAgentSessionHost').mockResolvedValue()
+    const f = await openAttachedHostRig()
+    setStructuredAgentSessionHost(f.host)
+    const rpc = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
+    let request = 0
+    const call = async (method: string, params: Record<string, unknown> = {}) => {
+      const response = await rpc.dispatch({
+        id: ++request,
+        method,
+        params,
+        authToken: 'test',
+        orchestrationContractVersion: ORCHESTRATION_CONTRACT_VERSION,
+        orchestrationRequestId: `backlog-${request}`,
+        orchestrationCompatibilityEvidence: { agentSessionId: SESSION }
+      })
+      expect(response).toMatchObject({ ok: true })
+      return resultOf(response)
+    }
+    try {
+      const runId = idOf((await call('orchestration.runCreate', { objective: 'backlog' })).run)
+      const mailbox = `run:${runId}`
+      const pointerHost = createStructuredMailboxPointerHost()
+      const delivery = new OrchestrationStructuredMailboxPointerDelivery({
+        getDb: () => db,
+        getMessageWaiters: () => undefined,
+        resolveStructuredTarget: () => ({ sessionId: SESSION, dispatchId: null }),
+        getCliCommand: () => 'orca',
+        senderName: () => null,
+        host: pointerHost
+      })
+      const insert = () =>
+        db.insertMessage({ from: 'worker', to: mailbox, runId, subject: 'result' })
+      const first = insert()
+      let prompts = 0
+      if (history === 'mixed' || history === 'invalidation') {
+        delivery.deliverForHandle(mailbox)
+        const failed = await f.rig.frame('session/prompt')
+        f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(failed), 'working'))
+        await waitFor(() =>
+          expect(JSON.parse(db.getMessageById(first.id)!.handoff!).phase).toBe('offered')
+        )
+        f.rig.child().agent.fail(failed, -32603, 'Internal error')
+        await waitFor(async () =>
+          expect((await f.turns())[0]).toMatchObject({ outcome: 'failure' })
+        )
+        prompts = 1
+      } else if (history === 'fresh') {
+        await send(f.host, 'working before mail')
+        const working = await f.rig.frame('session/prompt')
+        f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(working), 'working'))
+        await f.rig.settle()
+        await f.host.flushStreamedEvents(SESSION)
+        answersCancels(f.rig.child().agent)
+        prompts = 1
+      }
+      if (history === 'held-epoch') {
+        const held = vi.spyOn(pointerHost, 'send').mockResolvedValue({ kind: 'held' })
+        delivery.deliverForHandle(mailbox)
+        await waitFor(() => expect(held).toHaveBeenCalledTimes(1))
+        const original = JSON.parse(db.getMessageById(first.id)!.handoff!)
+        delivery.onJournalActivity(SESSION)
+        await waitFor(() => expect(held).toHaveBeenCalledTimes(2))
+        expect(JSON.parse(db.getMessageById(first.id)!.handoff!).operationId).toBe(
+          original.operationId
+        )
+        const journal = f.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+        await journal.replaceEpochItems('handle_forked', f.fence(), [])
+        expect(journal.cursor().epoch).not.toBe(original.epoch)
+        held.mockRestore()
+      }
+      const messages = [first, ...Array.from({ length: 4 }, insert)]
+      let invalidated = false
+      const actualSend = f.host.send.bind(f.host)
+      const sendSpy = vi.spyOn(f.host, 'send').mockImplementation(async (...args) => {
+        if (history === 'invalidation' && !invalidated) {
+          invalidated = true
+          db.getOrCreateMailboxDelivery({
+            runId,
+            mailboxHandle: mailbox,
+            consumerGeneration: db.getRun(runId)!.consumer_generation,
+            limit: 1
+          })
+        }
+        return actualSend(...args)
+      })
+      delivery.deliverForHandle(mailbox)
+      const pointer = await f.rig.frame('session/prompt', prompts).catch((error) => {
+        console.error(
+          'backlog diagnostic',
+          history,
+          db.getUnreadMessages(mailbox),
+          sendSpy.mock.calls.length
+        )
+        throw error
+      })
+      await f.rig.settle()
+      expect(f.rig.sent('session/prompt')).toHaveLength(prompts + 1)
+      expect(f.rig.sent('session/cancel')).toHaveLength(history === 'fresh' ? 1 : 0)
+      expect(JSON.stringify(pointer.params)).toContain(
+        `You have ${history === 'invalidation' ? 4 : 5} orchestration messages`
+      )
+      expect(messages.map((m) => db.getMessageById(m.id)!.recovery_used)).toEqual([
+        history === 'mixed' || history === 'invalidation' ? 1 : 0,
+        0,
+        0,
+        0,
+        0
+      ])
+      expect(
+        new Set(
+          messages
+            .slice(history === 'invalidation' ? 1 : 0)
+            .map((m) => JSON.parse(db.getMessageById(m.id)!.handoff!).authorizationId)
+        ).size
+      ).toBe(history === 'invalidation' ? 4 : 5)
+      f.rig.child().agent.notify('session/update', replyChunk(promptIdOf(pointer), 'checking'))
+      await waitFor(() =>
+        expect(JSON.parse(db.getMessageById(messages.at(-1)!.id)!.handoff!).phase).toBe('offered')
+      )
+      if (history === 'mixed') {
+        const journal = f.host.collaboratorsForTests().sessions.get(SESSION)!.journal
+        const maps = z
+          .object({ items: z.instanceof(Map), submissions: z.instanceof(Map) })
+          .parse(Object.getOwnPropertyDescriptor(journal, 'state')?.value)
+        const costs: number[][] = []
+        for (const scale of [10, 100]) {
+          for (let index = 0; index < scale * 10; index++) {
+            await journal.appendItem(
+              {
+                provider: 'legacy',
+                agent: 'grok',
+                sessionId: SESSION,
+                recordId: `history-${scale}-${index}`
+              },
+              message('historical output'),
+              { fence: f.fence(), turnScope: { kind: 'thread' } }
+            )
+          }
+          await f.host.flushStreamedEvents(SESSION)
+          await journal.readInOrder(() => undefined)
+          await new Promise<void>((resolve) => setImmediate(resolve))
+          let reading = false
+          const scanCounts = [0, 0, 0]
+          let lookups = 0
+          const mapsToMeasure = [maps.items, maps.submissions]
+          const scans = mapsToMeasure.map((map, index) =>
+            vi.spyOn(map, 'values').mockImplementation(() => {
+              if (reading) {
+                scanCounts[index]++
+              }
+              return Map.prototype.values.call(map)
+            })
+          )
+          const snapshot = journal.snapshot.bind(journal)
+          const snapshotSpy = vi.spyOn(journal, 'snapshot').mockImplementation(() => {
+            if (reading) {
+              scanCounts[2]++
+            }
+            return snapshot()
+          })
+          const gets = mapsToMeasure.map((map) =>
+            vi.spyOn(map, 'get').mockImplementation((key) => {
+              if (reading) {
+                lookups++
+              }
+              return Map.prototype.get.call(map, key)
+            })
+          )
+          const candidates = vi.spyOn(db, 'getAutomaticMailCandidates')
+          const readEvidence = f.host.readMailHandoffEvidenceNow.bind(f.host)
+          const evidence = vi
+            .spyOn(f.host, 'readMailHandoffEvidenceNow')
+            .mockImplementation((...args) => {
+              reading = true
+              try {
+                return readEvidence(...args)
+              } finally {
+                reading = false
+              }
+            })
+          for (let trigger = 0; trigger < scale; trigger++) {
+            const calls = candidates.mock.calls.length
+            delivery.deliverForHandle(mailbox)
+            await vi.waitFor(() => expect(candidates.mock.calls.length).toBe(calls + 2), {
+              interval: 1
+            })
+          }
+          const rows = candidates.mock.results.reduce(
+            (sum, result) => sum + (result.type === 'return' ? result.value.length : 0),
+            0
+          )
+          const work = [candidates.mock.calls.length, rows, evidence.mock.calls.length, lookups]
+          expect(scanCounts).toEqual([0, 0, 0])
+          expect(work[0]).toBe(scale * 2)
+          expect(rows).toBeLessThanOrEqual(scale * 6)
+          expect(work[2]).toBeLessThanOrEqual(scale * 3)
+          expect(work[3]).toBeLessThanOrEqual(scale * 30)
+          costs.push(work)
+          for (const spy of [...scans, snapshotSpy, ...gets, candidates, evidence]) {
+            spy.mockRestore()
+          }
+        }
+        costs[1]!.forEach((cost, index) => expect(cost).toBeLessThanOrEqual(costs[0]![index]! * 10))
+        expect(f.rig.sent('session/prompt')).toHaveLength(prompts + 1)
+      }
+      const fetched = await call('orchestration.check')
+      const replay = await call('orchestration.check')
+      expect(replay).toMatchObject({
+        deliveryId: fetched.deliveryId,
+        replayed: true,
+        messages: fetched.messages
+      })
+      const next = await call('orchestration.check', { ack: fetched.deliveryId })
+      if (history === 'invalidation') {
+        expect(next).toMatchObject({ count: 4 })
+        expect(await call('orchestration.check', { ack: next.deliveryId })).toMatchObject({
+          count: 0
+        })
+      } else {
+        expect(next).toMatchObject({ count: 0 })
+      }
+      f.rig.child().agent.reply(pointer, { stopReason: 'end_turn' })
+      await waitFor(async () =>
+        expect(
+          (await f.host.journalSnapshot(SESSION)).items
+            .flatMap((item) => readAgentJournalTurn(item.body) ?? [])
+            .at(-1)
+        ).toMatchObject({ state: 'completed' })
+      )
+      delivery.onJournalActivity(SESSION)
+      await f.rig.settle()
+      expect(db.getUnreadMessages(mailbox)).toHaveLength(0)
+      expect(f.rig.sent('session/prompt')).toHaveLength(prompts + 1)
+      expect(sendSpy.mock.calls.length).toBe(history === 'invalidation' ? 2 : 1)
+    } finally {
+      setStructuredAgentSessionHost(null)
+      vi.restoreAllMocks()
+      db.close()
+    }
+  }
+)
