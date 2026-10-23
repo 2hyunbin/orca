@@ -35,13 +35,15 @@ export async function readDaemonProviderAsyncIoHealth(): Promise<DaemonAsyncIoSt
   if (health.length === 0 || health.some((result) => result.state === 'unverifiable')) {
     return { state: 'unverifiable' }
   }
-  const healthy = health.filter((result) => result.state === 'healthy')
+  const healthyPendingMs = health.flatMap((result) =>
+    result.state === 'healthy' ? [result.pendingMs] : []
+  )
   // Old peers cannot report a stall; they must not pin a recovered owner's warning forever.
-  if (healthy.length === 0) {
+  if (healthyPendingMs.length === 0) {
     return { state: 'unsupported' }
   }
   return {
     state: 'healthy',
-    pendingMs: Math.max(...healthy.map((result) => result.pendingMs))
+    pendingMs: Math.max(...healthyPendingMs)
   }
 }
