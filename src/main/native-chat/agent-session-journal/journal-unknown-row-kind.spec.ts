@@ -135,6 +135,28 @@ export function registerJournalUnknownRowKindTests(): void {
         body: { kind: 'status', text: 'x' }
       },
       tombstone: { ...base, seq: 3, kind: 'tombstone', itemId: 'i', revision: 2 },
+      'text-delta': {
+        ...base,
+        seq: 8,
+        kind: 'text-delta',
+        itemId: 'i',
+        field: 0,
+        revision: 2,
+        predecessor: 1,
+        baseLength: 1,
+        suffix: 'x'
+      },
+      'text-pruned': {
+        ...base,
+        seq: 10,
+        kind: 'text-pruned',
+        itemId: 'i',
+        field: 0,
+        marker: 2,
+        witness: 9,
+        revision: 3,
+        ranges: [[8, 8]]
+      },
       submission: {
         ...base,
         seq: 4,

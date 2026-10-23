@@ -107,6 +107,9 @@ it('saves only increments, reopens an interrupted stream, and catches up through
   await reopened.appendItem(identity, body('CORRECTED'), options)
   expect(r.rows().some((row) => row.kind === 'text-delta')).toBe(false)
   const proof = r.rows().find((row) => row.kind === 'text-pruned')
+  if (!proof) {
+    throw new Error('expected pruning proof')
+  }
   expect(proof).toMatchObject({
     marker: before.sequence,
     revision: 3,
@@ -148,7 +151,7 @@ it('saves only increments, reopens an interrupted stream, and catches up through
   ).toMatchObject({ ok: true, batch: { items: [{ itemId }] } })
   r.database.db
     .prepare('DELETE FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq = ?')
-    .run('chat', reopened.epoch, proof?.seq)
+    .run('chat', reopened.epoch, proof.seq)
   expect(replayJournal(r.database.db, 'chat')?.damage).toMatchObject({ cause: 'sequence-gap' })
 })
 
