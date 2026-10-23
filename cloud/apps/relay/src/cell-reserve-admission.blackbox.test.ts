@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import WebSocket from 'ws'
 import type { RawData } from 'ws'
 import { CELL_FLAG_DEFAULTS, type CellFlags } from './cell-flags.js'
-import type { CellSeatLog } from './cell-seat-log.js'
 import type { RelayConfig } from './config.js'
 import { PostgresDatabase } from './database.js'
 import type { AppliedControlFlags } from './relay-control-flag-channel.js'
@@ -70,12 +69,6 @@ function cellConfig(port: number, issuer: string): RelayConfig {
     publicAssignmentRetryAfterSeconds: 5,
     dataDir: './test-data'
   }
-}
-
-// The registry's private feed log, to plant a seat no session backs.
-function seatLogOf(sessions: object): CellSeatLog {
-  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: HostSessionRegistry holds its feed log as `seatLog`.
-  return (sessions as { seatLog: CellSeatLog }).seatLog
 }
 
 function nextMessage(socket: WebSocket): Promise<Record<string, unknown>> {
@@ -354,76 +347,11 @@ describe('a reserve-mode cell admits from memory with its database wedged', () =
       .map(([line]) => (typeof line === 'string' && line.startsWith('{') ? JSON.parse(line) : null))
       .filter((entry) => entry?.event === 'orca_relay_cell_seat_demote_refused')
     expect(refused).toMatchObject([
-      { outcome: 'not-seated', reason: 'epoch', assignmentEpoch: 8, sessionEpoch: 9, feedEpoch: 9, repaired: false },
-      { outcome: 'not-seated', reason: 'joined-at', sessionEpoch: 9, feedJoinedAtMatches: false, repaired: false }
+      { outcome: 'not-seated', reason: 'epoch', assignmentEpoch: 8, sessionEpoch: 9, feedEpoch: 9 },
+      { outcome: 'not-seated', reason: 'joined-at', sessionEpoch: 9, feedJoinedAtMatches: false }
     ])
     expect(refused[0].relayHostIdDigest).toMatch(/^[0-9a-f]{12}$/)
     expect(JSON.stringify(refused)).not.toContain(identity.hostId)
-  })
-
-  it('repairs a seat its feed lists but no session backs, so every director lets go of it', async () => {
-    const cell = await startCell({ admitMode: 'reserve' })
-    const identity = await cell.host()
-    cell.book(identity, 9)
-    await cell.connect(identity, 9)
-    // A feed seat no session backs, at a generation above the live session's, so the session's
-    // own changes could never replace it.
-    const log = seatLogOf(cell.relay.sessions)
-    log.append({ kind: 'join', userId: 'user-1', relayHostId: identity.hostId, epoch: 8, generation: 5, at: 4_242 })
-    const before = cell.relay.sessions.seatFeed(null)
-    const seq = 'full' in before ? before.seq : 0
-    const seat = { v: 1 as const, userId: 'user-1', relayHostId: identity.hostId, epoch: 8, joinedAt: 4_242 }
-    expect(cell.relay.sessions.demote(seat)).toBe('not-seated')
-    const delta = cell.relay.sessions.seatFeed(seq)
-    expect('changes' in delta && delta.changes).toMatchObject([
-      { kind: 'leave', epoch: 8, generation: 5, closeCode: 4409 },
-      { kind: 'join', epoch: 9, generation: 1 }
-    ])
-    const after = cell.relay.sessions.seatFeed(null)
-    expect('full' in after && after.full.map((entry) => entry.epoch)).toEqual([9])
-    // Asked again, the feed already shows the live seat: nothing more to repair.
-    expect(cell.relay.sessions.demote(seat)).toBe('not-seated')
-    expect(cell.relay.sessions.seatFeed(seq + 2)).toMatchObject({ changes: [] })
-  })
-
-  // The root of an unbacked seat: a session that left the map while its socket was still closing
-  // keeps its seat listed, and the host's next session restarted at generation 1, so the feed
-  // dropped that session's join and went on listing the dead seat.
-  it('lists a new session above a seat the feed still holds for a session already gone', async () => {
-    const cell = await startCell({ admitMode: 'reserve' })
-    const identity = await cell.host()
-    const log = seatLogOf(cell.relay.sessions)
-    log.append({ kind: 'join', userId: 'user-1', relayHostId: identity.hostId, epoch: 8, generation: 5, at: 4_242 })
-    cell.book(identity, 9)
-    expect((await cell.connect(identity, 9)).ack).toMatchObject({ type: 'host-hello-ack', generation: 6 })
-    const page = cell.relay.sessions.seatFeed(null)
-    expect('full' in page && page.full.map((entry) => [entry.epoch, entry.generation])).toEqual([[9, 6]])
-    // The old socket's leave lands late, at its own generation: it no longer removes the live seat.
-    log.append({ kind: 'leave', userId: 'user-1', relayHostId: identity.hostId, epoch: 8, generation: 5, at: 4_243 })
-    const after = cell.relay.sessions.seatFeed(null)
-    expect('full' in after && after.full.map((entry) => entry.epoch)).toEqual([9])
-  })
-
-  // Two desktops sharing one identity take turns on this cell. Each turn replaces the session and
-  // the feed with it, so the seat a director names for the last turn is refused and needs no repair.
-  it('keeps the feed on the live desktop of a duplicate-identity pair taking turns', async () => {
-    const cell = await startCell({ admitMode: 'reserve' })
-    const identity = await cell.host()
-    let previous: { epoch: number; joinedAt: number } | undefined
-    for (const epoch of [9, 10, 11]) {
-      cell.book(identity, epoch)
-      expect((await cell.connect(identity, epoch)).ack).toMatchObject({ type: 'host-hello-ack' })
-      const page = cell.relay.sessions.seatFeed(null)
-      expect('full' in page && page.full.map((entry) => entry.epoch)).toEqual([epoch])
-      if (previous) {
-        const seq = 'full' in page ? page.seq : 0
-        expect(cell.relay.sessions.demote({ v: 1, userId: 'user-1', relayHostId: identity.hostId, ...previous })).toBe(
-          'not-seated'
-        )
-        expect(cell.relay.sessions.seatFeed(seq)).toMatchObject({ changes: [] })
-      }
-      previous = { epoch, joinedAt: 'full' in page ? page.full[0]!.joinedAt : -1 }
-    }
   })
 
   it('leaves a drained seat to its drain grace instead of the shorter demotion close', async () => {
@@ -437,8 +365,6 @@ describe('a reserve-mode cell admits from memory with its database wedged', () =
     const seat = { v: 1 as const, userId: 'user-1', relayHostId: identity.hostId, epoch: 9, joinedAt }
     expect(cell.relay.sessions.demote(seat)).toBe('draining')
     expect(cell.relay.sessions.demote(seat)).toBe('draining')
-    const after = cell.relay.sessions.seatFeed(null)
-    expect('full' in after && after.full.map((entry) => entry.epoch)).toEqual([9])
   })
 
   it('gives every booking unit back when the cell starts to drain', async () => {

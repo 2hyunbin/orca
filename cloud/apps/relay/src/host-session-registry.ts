@@ -35,7 +35,7 @@ import type { AssignmentLeaseShadow } from './assignment-lease-shadow.js'
 import type { RelayAssignmentStore } from './assignment-store.js'
 import type { CellAdmitMode, CellReserveBook } from './cell-reserve-book.js'
 import type { DemoteOutcome, DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
-import { CellSeatLog, type CellSeat, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
+import { CellSeatLog, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
 import { isRelayDatabaseTransientError } from './database.js'
 import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
@@ -789,15 +789,11 @@ export class HostSessionRegistry {
       session.assignmentEpoch !== request.epoch ||
       seat?.joinedAt !== request.joinedAt
     ) {
-      // The director named exactly the seat this feed lists, yet no live session backs it: the
-      // feed is what is wrong, and every director mirrors it, so correct the feed here.
-      const repaired = seat?.epoch === request.epoch && seat.joinedAt === request.joinedAt
-      if (repaired) this.repairUnbackedSeat(seat, session)
+      // What the cell's own feed holds too: a seat it still lists here means feed and session disagree.
       return refused('not-seated', {
         reason: notSeatedReason(session, seat, request),
         ...(session ? { sessionEpoch: session.assignmentEpoch } : {}),
-        ...(seat ? { feedEpoch: seat.epoch, feedJoinedAtMatches: seat.joinedAt === request.joinedAt } : {}),
-        repaired
+        ...(seat ? { feedEpoch: seat.epoch, feedJoinedAtMatches: seat.joinedAt === request.joinedAt } : {})
       })
     }
     // A drain already told this host to go: its own grace stands, never cut to the demotion's.
@@ -1704,11 +1700,7 @@ export class HostSessionRegistry {
       (existing.state === 'orphaned' || existing.state === 'active') &&
       sameHostIdentity(existing.identity, identity)
     )
-    // Above any seat the feed still lists too: a session dropped from the map while its socket is
-    // still closing (drain, regional deadline, idle rehome) keeps its seat until that close lands,
-    // and the generation rule would drop a lower generation's join behind it.
-    const listed = this.seatLog.seatOf(identity.sub, identity.relayHostId)?.generation ?? 0
-    const generation = rebind ? existing!.generation : Math.max(existing?.generation ?? 0, listed) + 1
+    const generation = rebind ? existing!.generation : (existing?.generation ?? 0) + 1
     const ephemeral = nacl.box.keyPair()
     const challengeNonce = randomBytes(nacl.box.nonceLength)
     const challengeSecret = randomBytes(32)
@@ -2055,24 +2047,6 @@ export class HostSessionRegistry {
 
   seatFeed(sinceSeq: number | null): CellSeatFeedPage {
     return { ...this.seatLog.read(sinceSeq), seats: this.seatLog.seatCount() }
-  }
-
-  // Leaves the stale seat as moved (no rejoin from memory at its epoch), then lists the live
-  // session, if any, as it really is. The leave carries the stale seat's own generation, so the
-  // generation rule cannot drop it.
-  private repairUnbackedSeat(seat: CellSeat, session: HostSession | null): void {
-    this.seatLog.append({
-      kind: 'leave',
-      userId: seat.userId,
-      relayHostId: seat.relayHostId,
-      epoch: seat.epoch,
-      generation: seat.generation,
-      closeCode: RELAY_CLOSE_CODE.WRONG_CELL,
-      at: this.now()
-    })
-    if (session?.socket && (session.state === 'active' || session.state === 'drain-only')) {
-      this.appendSeatChange(session, 'join')
-    }
   }
 
   private appendSeatChange(

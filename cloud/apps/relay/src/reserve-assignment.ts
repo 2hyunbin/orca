@@ -438,8 +438,10 @@ export class ReserveAssignment {
     return true
   }
 
-  // The cell repairs its own feed when it refuses a seat it still lists; this only records the answer.
+  // not-seated: the cell holds no session for that exact seat, so the map's copy is stale and
+  // every later reconcile would demote it again. Other answers leave the seat to the feed.
   private settleDemote(seat: DemotedSeat, via: DemoteVia, outcome: string | null): void {
+    const forgotten = outcome === 'not-seated' && this.input.directory.forgetSeat(seat)
     this.log(
       JSON.stringify({
         event: 'orca_relay_reserve_demote_outcome',
@@ -447,7 +449,8 @@ export class ReserveAssignment {
         cellId: seat.cellId,
         epoch: seat.epoch,
         relayHostIdDigest: relayHostLogDigest(seat.relayHostId),
-        outcome: outcome ?? 'unreachable'
+        outcome: outcome ?? 'unreachable',
+        forgotten
       })
     )
   }
