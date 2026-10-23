@@ -549,8 +549,16 @@ describe('reserve assignment on a director', () => {
         demoted: 0
       })
       expect(demoted).toEqual([{ cellId: 'c1', epoch: 10, joinedAt: 1_000 }])
-      const outcome = lines.map((line) => JSON.parse(line)).find((entry) => entry.event === 'orca_relay_reserve_demote_outcome')
-      expect(outcome).toMatchObject({ via: 'reconcile', cellId: 'c1', epoch: 10, outcome: 'not-seated', forgotten: true })
+      const outcome = lines
+        .map((line) => JSON.parse(line))
+        .find((entry) => entry.event === 'orca_relay_reserve_demote_outcome')
+      expect(outcome).toMatchObject({
+        via: 'reconcile',
+        cellId: 'c1',
+        epoch: 10,
+        outcome: 'not-seated',
+        forgotten: true
+      })
       expect(outcome.relayHostIdDigest).toMatch(/^[0-9a-f]{12}$/)
       expect(lines.join('\n')).not.toContain(HOST.relayHostId)
     })
@@ -589,6 +597,27 @@ describe('reserve assignment on a director', () => {
       directory.apply('c1', feed('c1', { seq: 2, full: [seated(11, 2_000)] }), now.value, now.value)
       await settle()
       expect(directory.seatsOnCell('c1').map(({ seat }) => seat.epoch)).toEqual([11])
+    })
+
+    // A rebind keeps epoch and generation and joins again with a new time: that is a new seat.
+    it('never forgets the same epoch rejoined by a rebind while the demotion was in flight', async () => {
+      const { assignment, directory, now } = setup({
+        feeds: [feed('c1', { full: [seated(10, 1_000)] }), feed('c2')],
+        demote: () => 'not-seated'
+      })
+      assignment.demoteSeat(seatOnC1(10, 1_000), 'reconcile')
+      directory.apply(
+        'c1',
+        feed('c1', {
+          full: undefined,
+          seq: 2,
+          changes: [{ seq: 2, kind: 'join', ...HOST, epoch: 10, generation: 1, at: 2_000 }]
+        }),
+        now.value,
+        now.value
+      )
+      await settle()
+      expect(directory.seatsOnCell('c1').map(({ seat }) => seat.joinedAt)).toEqual([2_000])
     })
 
     // Two desktops sharing one identity take turns on c1. Each turn leaves the map one seat

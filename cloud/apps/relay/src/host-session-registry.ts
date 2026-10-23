@@ -791,7 +791,7 @@ export class HostSessionRegistry {
     ) {
       // What the cell's own feed holds too: a seat it still lists here means feed and session disagree.
       return refused('not-seated', {
-        reason: notSeatedReason(session, request),
+        reason: notSeatedReason(session, seat, request),
         ...(session ? { sessionEpoch: session.assignmentEpoch } : {}),
         ...(seat ? { feedEpoch: seat.epoch, feedJoinedAtMatches: seat.joinedAt === request.joinedAt } : {})
       })
@@ -2740,10 +2740,12 @@ function databaseCause(error: unknown): PhoneDatabaseCause {
 
 function notSeatedReason(
   session: HostSession | null,
+  seat: { joinedAt: number } | undefined,
   request: DemoteRequest
-): 'no-session' | 'closed' | 'no-socket' | 'epoch' | 'joined-at' {
+): 'no-session' | 'closed' | 'no-socket' | 'epoch' | 'no-feed-seat' | 'joined-at' {
   if (!session) return 'no-session'
   if (session.state === 'closed') return 'closed'
   if (!session.socket) return 'no-socket'
-  return session.assignmentEpoch !== request.epoch ? 'epoch' : 'joined-at'
+  if (session.assignmentEpoch !== request.epoch) return 'epoch'
+  return seat ? 'joined-at' : 'no-feed-seat'
 }

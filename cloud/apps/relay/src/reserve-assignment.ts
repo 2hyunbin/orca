@@ -434,6 +434,7 @@ export class ReserveAssignment {
         joinedAt: seat.joinedAt
       })
       .then((outcome) => this.settleDemote(seat, via, outcome))
+      .catch(() => console.warn('[orca-relay] reserve demote outcome not recorded'))
     return true
   }
 
