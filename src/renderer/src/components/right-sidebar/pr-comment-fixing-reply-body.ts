@@ -1,4 +1,5 @@
 import type { PRComment } from '../../../../shared/github/comment-types'
+import { stripHtmlComments } from '../../../../shared/html-comment-text'
 
 /** Posted when a selected review comment is sent to AI. */
 export const PR_COMMENT_AI_FIXING_REPLY = 'Fixing. Will be in the next commit'
@@ -24,7 +25,7 @@ const ACK_SNIPPET_MAX_LENGTH = 72
 
 /** First readable line of a comment body, minus HTML comments and markdown markers. */
 function summarizePRCommentBody(body: string): string {
-  const cleaned = body.replace(/<!--[\s\S]*?-->/g, ' ')
+  const cleaned = stripHtmlComments(body, ' ')
   let start = 0
   while (start <= cleaned.length) {
     const newline = cleaned.indexOf('\n', start)

@@ -1,3 +1,4 @@
+import { stripHtmlComments } from '../../../src/shared/html-comment-text'
 import {
   findMobileMarkdownMarkupTagEnd,
   findNextPairedMarkupOpener,
@@ -47,7 +48,7 @@ function decodeHtmlEntities(value: string, preserveEscapedEntities = false): str
 function stripTags(value: string): string {
   const { protectedText, codeSpans, placeholderPrefix } = protectMarkdownCode(value)
   const stripped = decodeHtmlEntities(
-    stripMobileMarkdownMarkupTags(protectedText.replace(/<!--[\s\S]*?-->/g, '')),
+    stripMobileMarkdownMarkupTags(stripHtmlComments(protectedText)),
     true
   )
     .replace(/[ \t]+\n/g, '\n')
