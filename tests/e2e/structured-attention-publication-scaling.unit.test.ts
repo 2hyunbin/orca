@@ -14,6 +14,7 @@ import { SESSION } from '../../src/main/runtime/rpc/methods/structured-agent-ses
 import type { AgentJournalRenderItem } from '../../src/shared/agent-session-journal-types'
 import type { AgentSessionHistoryPage } from '../../src/shared/agent-session-wire'
 import { agentSessionPromptAttentionKey } from '../../src/shared/agent-session-attention'
+import { STRUCTURED_AGENT_SESSION_CLIENT_COALESCE_MS } from '../../src/shared/structured-agent-session-coalescer'
 import { makeUnifiedTab } from '@/store/slices/store-test-helpers'
 import { useAppStore } from '@/store'
 import { StructuredAgentSessionAttentionBridge } from '@/components/native-chat/StructuredAgentSessionAttentionBridge'
@@ -146,7 +147,9 @@ it.each([
           }
         }
       })
-      await new Promise((resolve) => setTimeout(resolve, 30))
+      await new Promise((resolve) =>
+        setTimeout(resolve, STRUCTURED_AGENT_SESSION_CLIENT_COALESCE_MS + 1)
+      )
     })
   }
   await publish([], length)
@@ -162,6 +165,7 @@ it.each([
   for (let revision = 2; revision <= 3; revision += 1) {
     await publish([{ ...items[length - 1]!, revision }], length + revision)
     expect(owner.getSnapshot().state.items).toHaveLength(length)
+    expect(owner.getSnapshot().state.items.at(-1)?.revision).toBe(revision)
   }
   const revisions = { ...observe }
   expect(revisions.roots).toBeGreaterThan(0)
