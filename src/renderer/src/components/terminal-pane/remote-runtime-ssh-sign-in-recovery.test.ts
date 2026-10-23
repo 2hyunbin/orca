@@ -45,6 +45,10 @@ const pendingErrors = [
     message:
       "Error invoking remote method 'runtimeEnvironments:call': Error: SSH host needs you to sign in. Reconnect to sign in."
   },
+  {
+    name: 'cancelled sign-in',
+    message: 'SSH sign-in for SSH host was cancelled. Reconnect to sign in again.'
+  },
   { name: 'connection in progress', message: 'Connection to SSH host is already in progress' }
 ]
 
@@ -143,10 +147,6 @@ describe.each([
   })
 
   it.each([
-    {
-      name: 'cancelled sign-in',
-      message: 'SSH sign-in for SSH host was cancelled. Reconnect to sign in again.'
-    },
     { name: 'rejected credentials', message: 'All configured authentication methods failed' },
     {
       name: 'sign-in message combined with another failure',
