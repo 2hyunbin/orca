@@ -1,3 +1,5 @@
+import { normalizeCrlfLineEndings } from './normalize-crlf-line-endings'
+
 /** jcode's `run --json` envelope, narrowed to the field the answer lives in. */
 type JcodeJsonResult = { text?: unknown }
 
@@ -11,7 +13,7 @@ function isJcodeJsonResult(value: unknown): value is JcodeJsonResult {
 export function cleanGeneratedCommitMessage(raw: string): string {
   // Why: agent output can include very large generated bodies; normalize and
   // unwrap by scanning boundaries instead of building newline-sized arrays.
-  let text = normalizeGeneratedCommitMessageLineFeeds(raw).trim()
+  let text = normalizeCrlfLineEndings(raw).trim()
 
   // Why: jcode --json emits a `{"text": …}` envelope (its plain-text mode
   // mixes thinking and a "[Tokens]…" usage line into stdout); extract the
@@ -89,27 +91,6 @@ export function stripPrefilledReasoningPreamble(text: string): string {
     }
   }
   return text
-}
-
-function normalizeGeneratedCommitMessageLineFeeds(value: string): string {
-  let crlfStart = value.indexOf('\r\n')
-  if (crlfStart === -1) {
-    return value
-  }
-
-  let normalized = value.slice(0, crlfStart)
-  let chunkStart = crlfStart + 2
-  normalized += '\n'
-  crlfStart = value.indexOf('\r\n', chunkStart)
-
-  while (crlfStart !== -1) {
-    normalized += value.slice(chunkStart, crlfStart)
-    normalized += '\n'
-    chunkStart = crlfStart + 2
-    crlfStart = value.indexOf('\r\n', chunkStart)
-  }
-
-  return `${normalized}${value.slice(chunkStart)}`
 }
 
 function findEnclosingCommitMessageFenceBody(text: string): string | null {

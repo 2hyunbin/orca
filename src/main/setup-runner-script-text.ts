@@ -1,3 +1,4 @@
+import { normalizeCrlfLineEndings } from '../shared/normalize-crlf-line-endings'
 import {
   isShebangLine,
   parseSetupScriptShebang,
@@ -68,26 +69,5 @@ export function buildPosixRunnerScript(script: string): string {
     ? `set ${shebang.shellOptions.join(' ')}\n`
     : ''
   const body = shebang ? stripLeadingShebangLine(script) : script
-  return `#!/usr/bin/env bash\nset -e\n${declaredOptions}${normalizeCrlfScriptLineEndings(body)}\n`
-}
-
-function normalizeCrlfScriptLineEndings(script: string): string {
-  let crlfStart = script.indexOf('\r\n')
-  if (crlfStart === -1) {
-    return script
-  }
-
-  let normalized = script.slice(0, crlfStart)
-  let chunkStart = crlfStart + 2
-  normalized += '\n'
-  crlfStart = script.indexOf('\r\n', chunkStart)
-
-  while (crlfStart !== -1) {
-    normalized += script.slice(chunkStart, crlfStart)
-    normalized += '\n'
-    chunkStart = crlfStart + 2
-    crlfStart = script.indexOf('\r\n', chunkStart)
-  }
-
-  return `${normalized}${script.slice(chunkStart)}`
+  return `#!/usr/bin/env bash\nset -e\n${declaredOptions}${normalizeCrlfLineEndings(body)}\n`
 }
