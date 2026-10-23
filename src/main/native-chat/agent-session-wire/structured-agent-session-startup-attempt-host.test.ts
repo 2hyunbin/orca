@@ -277,38 +277,49 @@ describe('a send while the agent starts', () => {
 })
 
 describe('a start that ends before it proves itself', () => {
-  it('settles what it held as never sent when the agent exits during startup', async () => {
-    await restartWith(publishFirst)
-    const id = await heldBehindStart('hello')
-    let later: string | undefined
+  it.each([false, true])(
+    'settles only its own message after startup failure (acquisition refusal: %s)',
+    async (refused) => {
+      await restartWith(publishFirst)
+      const id = await heldBehindStart('hello')
+      let later: string | undefined
 
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      await eventually(() => expect(acquire).toHaveBeenCalledTimes(attempt))
-      await eventually(() =>
-        expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
-      )
-      if (attempt === 5) {
-        later = await accept('a later message')
+      const physicalAttempts = refused ? 1 : 5
+      for (let attempt = 1; attempt <= physicalAttempts; attempt++) {
+        await eventually(() => expect(acquire).toHaveBeenCalledTimes(attempt))
+        await eventually(() =>
+          expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
+        )
+        if (attempt === physicalAttempts) {
+          later = await accept('a later message')
+          if (refused) {
+            acquire.mockRejectedValueOnce(
+              new AgentSessionAcquisitionRefusal('sign in', 'notSignedIn')
+            )
+          }
+        }
+        await host.handleAdapterEvent({
+          type: 'ended',
+          sessionId: SESSION,
+          fence: store.getRecord(SESSION)!.lease.runtimeFence,
+          acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
+          reason: 'exited with code 1',
+          cause: 'unexpected-exit'
+        })
       }
-      await host.handleAdapterEvent({
-        type: 'ended',
-        sessionId: SESSION,
-        fence: store.getRecord(SESSION)!.lease.runtimeFence,
-        acquisitionGeneration: `generation-${acquire.mock.calls.length}`,
-        reason: 'exited with code 1',
-        cause: 'unexpected-exit'
-      })
-    }
 
-    await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
-    expect((await submission(id))?.handedOverAt).toBeUndefined()
-    expect(dispatch).not.toHaveBeenCalled()
-    await eventually(() => expect(acquire).toHaveBeenCalledTimes(6))
-    await proveOpen()
-    await eventually(async () => expect((await submission(later!))?.dispatchState).toBe('accepted'))
-    expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([later])
-    expect(startupAttemptOpen()).toBe(false)
-  })
+      await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+      expect((await submission(id))?.handedOverAt).toBeUndefined()
+      expect(dispatch).not.toHaveBeenCalled()
+      await eventually(() => expect(acquire).toHaveBeenCalledTimes(refused ? 3 : 6))
+      await proveOpen()
+      await eventually(async () =>
+        expect((await submission(later!))?.dispatchState).toBe('accepted')
+      )
+      expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([later])
+      expect(startupAttemptOpen()).toBe(false)
+    }
+  )
 
   it('withdraws what it held on a Stop, without waiting on the handshake', async () => {
     await restartWith(publishFirst)
@@ -671,21 +682,53 @@ describe('one logical start across physical attempts', () => {
     expect(await submission(second)).toMatchObject(HOST_STOPPED)
   })
 
-  it('writes one final failure for an operation-only start', async () => {
+  it('delivers a later message after a delivery step throws', async () => {
     await restartWith(publishFirst)
-    host.deps.adapter.changeThreadGoal = vi.fn(async () => ({ ok: true as const }))
-    const operation = goal()
-    for (let number = 1; number <= 5; number++) {
-      await eventually(() => expect(acquire).toHaveBeenCalledTimes(number))
-      await eventually(() =>
-        expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
-      )
-      await endAttempt()
-    }
-    expect(await operation).toMatchObject({ ok: false })
-    const snapshot = await host.journalSnapshot(SESSION)
-    expect(
-      snapshot.items.filter((item) => item.body.kind === 'status' && item.body.tone === 'error')
-    ).toHaveLength(1)
+    const first = await heldBehindStart('failed preparation')
+    vi.spyOn(
+      host.collaboratorsForTests().runtimeState.deliveryOrder,
+      'beforeSend'
+    ).mockImplementationOnce(() => {
+      throw new Error('delivery preparation failed')
+    })
+    await proveOpen()
+    await eventually(async () => expect((await submission(first))?.dispatchState).toBe('rejected'))
+    const later = await accept('after preparation failed')
+    await eventually(async () => expect((await submission(later))?.dispatchState).toBe('accepted'))
+    expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([later])
   })
+
+  it.each([false, true])(
+    'settles an operation start without rejecting a later message (%s)',
+    async (joins) => {
+      await restartWith(publishFirst)
+      host.deps.adapter.changeThreadGoal = vi.fn(async () => ({ ok: true as const }))
+      const operation = goal()
+      let later: string | undefined
+      for (let number = 1; number <= 5; number++) {
+        await eventually(() => expect(acquire).toHaveBeenCalledTimes(number))
+        await eventually(() =>
+          expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
+        )
+        await endAttempt()
+        if (number === 1 && joins) {
+          later = await accept('my own start')
+        }
+      }
+      expect(await operation).toMatchObject({ ok: false })
+      const snapshot = await host.journalSnapshot(SESSION)
+      expect(
+        snapshot.items.filter((item) => item.body.kind === 'status' && item.body.tone === 'error')
+      ).toHaveLength(1)
+      if (later) {
+        expect(await submission(later)).toMatchObject({ dispatchState: 'pending' })
+        await eventually(() => expect(acquire).toHaveBeenCalledTimes(6))
+        await proveOpen()
+        await eventually(async () =>
+          expect((await submission(later))?.dispatchState).toBe('accepted')
+        )
+        expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([later])
+      }
+    }
+  )
 })
