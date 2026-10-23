@@ -1,7 +1,7 @@
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import type { StructuredAgentSessionReadOwner } from './structured-agent-session-read-owner'
 
-let owners = new Map<string, StructuredAgentSessionReadOwner>()
+const owners = new Map<string, StructuredAgentSessionReadOwner>()
 export function structuredReadOwnerKey(sessionId: string, target: RuntimeClientTarget): string {
   return `${target.kind === 'local' ? 'local' : `environment:${target.environmentId}`}:${sessionId}`
 }
@@ -11,8 +11,9 @@ export function findStructuredAgentSessionReadOwner(
 ): StructuredAgentSessionReadOwner | undefined {
   return owners.get(structuredReadOwnerKey(sessionId, target))
 }
+type ReadRetirement = { owner: StructuredAgentSessionReadOwner | undefined; detached: boolean }
 type PreparedReadRetirement = {
-  owners: Map<string, StructuredAgentSessionReadOwner>
+  retirements: Map<string, ReadRetirement>
   effects: (() => void)[]
 }
 function disposeReadOwner(owner: StructuredAgentSessionReadOwner | undefined): void {
@@ -27,17 +28,26 @@ export function prepareStructuredReadRetirement(
   sessionId: string,
   target: RuntimeClientTarget
 ): PreparedReadRetirement {
-  const prepared = previous ?? { owners: new Map(owners), effects: [] }
+  const prepared = previous ?? { retirements: new Map(), effects: [] }
   const key = structuredReadOwnerKey(sessionId, target)
-  const owner = prepared.owners.get(key)
-  prepared.owners.delete(key)
-  if (owner) {
-    prepared.effects.push(() => disposeReadOwner(owner))
+  if (!prepared.retirements.has(key)) {
+    const retirement = { owner: owners.get(key), detached: false }
+    prepared.retirements.set(key, retirement)
+    prepared.effects.push(() => {
+      if (retirement.detached) {
+        disposeReadOwner(retirement.owner)
+      }
+    })
   }
   return prepared
 }
 export function installStructuredReadRetirement(prepared: PreparedReadRetirement): void {
-  owners = prepared.owners
+  for (const [key, retirement] of prepared.retirements) {
+    if (retirement.owner && owners.get(key) === retirement.owner) {
+      owners.delete(key)
+      retirement.detached = true
+    }
+  }
 }
 /** A closed chat no longer needs an unmounted create page or an active reader. */
 export function retireStructuredAgentSessionReadOwner(

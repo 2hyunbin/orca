@@ -191,6 +191,61 @@ describe('real AppStore status commit boundary', () => {
     expect(point).not.toHaveBeenCalled()
   })
 
+  it.each([false, true])(
+    'composes two stores retiring shared readers (abort outer: %s)',
+    (abort) => {
+      const storeA = createStore(createAppState)
+      const storeB = createStore(createAppState)
+      const ownerA = getAgentStatusOwner(storeA)
+      const ownerB = getAgentStatusOwner(storeB)
+      const target = { kind: 'local' } as const
+      const a = getStructuredAgentSessionReadOwner('reader-a', target)
+      const b = getStructuredAgentSessionReadOwner('reader-b', target)
+      const disposeA = vi.spyOn(a, 'dispose')
+      const disposeB = vi.spyOn(b, 'dispose')
+      const observed: unknown[] = []
+      storeA.subscribe(() =>
+        observed.push([
+          findStructuredAgentSessionReadOwner('reader-a', target),
+          findStructuredAgentSessionReadOwner('reader-b', target),
+          findStructuredAgentSessionReadOwner('reader-c', target)
+        ])
+      )
+      let replacement: typeof a | undefined
+      let unrelated: typeof a | undefined
+      const appA = storeA.getState()
+      const run = (): void =>
+        ownerA.transact((transactionA) => {
+          transactionA.retireReadOwner('reader-a', target)
+          ownerB.transact((transactionB) => {
+            transactionB.retireReadOwner('reader-a', target)
+            transactionB.retireReadOwner('reader-b', target)
+          })
+          expect(findStructuredAgentSessionReadOwner('reader-b', target)).toBeUndefined()
+          expect(disposeA).toHaveBeenCalledTimes(1)
+          expect(disposeB).toHaveBeenCalledTimes(1)
+          replacement = getStructuredAgentSessionReadOwner('reader-a', target)
+          unrelated = getStructuredAgentSessionReadOwner('reader-c', target)
+          storeA.setState({ activeWorktreeId: 'accepted-a' })
+          if (abort) {
+            throw new Error('abort outer retirement')
+          }
+        })
+      if (abort) {
+        expect(run).toThrow('abort outer retirement')
+        expect(storeA.getState()).toBe(appA)
+      } else {
+        run()
+      }
+      expect(observed).toEqual(abort ? [] : [[replacement, undefined, unrelated]])
+      expect(findStructuredAgentSessionReadOwner('reader-a', target)).toBe(replacement)
+      expect(findStructuredAgentSessionReadOwner('reader-b', target)).toBeUndefined()
+      expect(findStructuredAgentSessionReadOwner('reader-c', target)).toBe(unrelated)
+      expect(disposeA).toHaveBeenCalledTimes(1)
+      expect(disposeB).toHaveBeenCalledTimes(1)
+    }
+  )
+
   it('keeps ordinary app recursion and captures completion before synchronous removal', () => {
     const store = createStore(createAppState)
     const owner = getAgentStatusOwner(store)
