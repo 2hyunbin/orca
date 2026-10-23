@@ -30,6 +30,60 @@ Use when reviewing UI implementation quality.
       description: 'Use when reviewing UI implementation quality.'
     })
   })
+
+  it.each(['\n', '\r\n'])('reads multiline fallback paragraphs with %j line endings', (newline) => {
+    const markdown = [
+      '# Design Review',
+      '',
+      '```markdown',
+      '```',
+      '  Review the interface.  ',
+      '\tCheck its behavior.\t',
+      '',
+      'Ignore later paragraphs.'
+    ].join(newline)
+
+    expect(summarizeSkillMarkdown(markdown)).toEqual({
+      name: 'Design Review',
+      description: 'Review the interface. Check its behavior.'
+    })
+  })
+
+  it.each(['', '# Next heading', '```typescript'])(
+    'ends the fallback paragraph at %j',
+    (terminator) => {
+      expect(
+        summarizeSkillMarkdown(
+          `# Design Review\n\nReview the interface.\n${terminator}\nIgnore this.`
+        )
+      ).toEqual({ name: 'Design Review', description: 'Review the interface.' })
+    }
+  )
+
+  it('keeps the whole line that crosses the fallback paragraph length threshold', () => {
+    const firstLine = 'a'.repeat(240)
+    const secondLine = 'b'.repeat(300)
+
+    expect(summarizeSkillMarkdown(`${firstLine}\n${secondLine}\nIgnore this.`)).toEqual({
+      name: null,
+      description: `${firstLine} ${secondLine}`
+    })
+    expect(summarizeSkillMarkdown(`${secondLine}\nIgnore this.`)).toEqual({
+      name: null,
+      description: secondLine
+    })
+  })
+
+  it('preserves bare carriage returns within a fallback paragraph line', () => {
+    expect(summarizeSkillMarkdown('  First\rsecond\r\nthird\r')).toEqual({
+      name: null,
+      description: 'First\rsecond third'
+    })
+  })
+
+  it.each(['', '# Heading\n\n```\n```\n'])('returns no paragraph for %j', (markdown) => {
+    expect(summarizeSkillMarkdown(markdown).description).toBeNull()
+  })
 })
 
 it.each(['', '\uFEFF'])('preserves the last CRLF frontmatter field with BOM %j', (bom) => {

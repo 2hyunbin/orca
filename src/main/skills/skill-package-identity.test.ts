@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { createServer } from 'node:net'
 import { chmod, link, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -25,6 +26,48 @@ afterEach(async () => {
 })
 
 describe('skill package identity', () => {
+  it.each([
+    ['', ''],
+    ['plain\ntext\n', 'plain\ntext\n'],
+    ['first\r\nsecond\rthird\r', 'first\nsecond\nthird\n'],
+    ['a\r\r\nb\r\n\r', 'a\n\nb\n\n'],
+    ['\uFEFFfirst\r\n', 'first\n'],
+    ['\uFEFF\uFEFFfirst', '\uFEFFfirst'],
+    ['漢😀\r\né\uFEFF\r\u2028\u2029', '漢😀\né\uFEFF\n\u2028\u2029']
+  ])('preserves normalized identity for %j', (source, normalized) => {
+    const bytes = Buffer.from(source)
+    const exactSha256 = createHash('sha256').update(bytes).digest('hex')
+    const normalizedSha256 = createHash('sha256').update(normalized).digest('hex')
+    for (const executable of [false, true]) {
+      expect(describeObservedSkillFile('SKILL.md', bytes, executable)).toMatchObject({
+        size: bytes.length,
+        classification: 'text',
+        exactSha256,
+        textNormalizedSha256: normalizedSha256,
+        identitySha256: executable ? exactSha256 : normalizedSha256
+      })
+    }
+    expect(bytes).toEqual(Buffer.from(source))
+  })
+
+  it.each([
+    { values: [0, 13, 10] },
+    { values: [0xc0, 0xaf, 13, 10] },
+    { values: [0xed, 0xa0, 0x80] },
+    { values: [0xf0, 0x9f, 0x98] },
+    { values: [0x80] },
+    { values: [0xef, 0xbb] }
+  ])('keeps invalid UTF-8 and NUL-containing bytes binary: $values', ({ values }) => {
+    const bytes = Buffer.from(values)
+    const digest = createHash('sha256').update(bytes).digest('hex')
+    expect(describeObservedSkillFile('asset.bin', bytes, false)).toMatchObject({
+      classification: 'binary',
+      exactSha256: digest,
+      textNormalizedSha256: null,
+      identitySha256: digest
+    })
+  })
+
   it('matches CRLF installed text to LF bundled files', async () => {
     const root = await temporarySkill()
     await writeFile(join(root, 'SKILL.md'), 'first\r\nsecond\r\n')

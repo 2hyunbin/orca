@@ -72,10 +72,20 @@ function firstHeading(body: string): string | null {
 }
 
 function firstParagraph(body: string): string | null {
-  const lines = body.replace(/\r\n/g, '\n').split('\n')
   const paragraph: string[] = []
-  for (const line of lines) {
-    const trimmed = line.trim()
+  let lineStart = 0
+  while (lineStart < body.length) {
+    if (body.charCodeAt(lineStart) === 10) {
+      if (paragraph.length > 0) {
+        break
+      }
+      lineStart += 1
+      continue
+    }
+    const newline = body.indexOf('\n', lineStart)
+    const lineEnd = newline === -1 ? body.length : newline
+    const trimmed = body.slice(lineStart, lineEnd).trim()
+    lineStart = lineEnd + 1
     if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('```')) {
       if (paragraph.length > 0) {
         break

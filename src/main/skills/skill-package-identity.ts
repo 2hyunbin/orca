@@ -1,3 +1,4 @@
+import { isUtf8 } from 'node:buffer'
 import { createHash } from 'node:crypto'
 import type { Dirent } from 'node:fs'
 import { lstat, open, opendir } from 'node:fs/promises'
@@ -121,8 +122,21 @@ function compareCodeUnits(left: string, right: string): number {
 }
 
 function normalizedText(bytes: Buffer): Buffer {
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-  return Buffer.from(text.replace(/\r\n/g, '\n').replace(/\r/g, '\n'), 'utf8')
+  let sourceStart = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0
+  let carriageReturn = bytes.indexOf(13, sourceStart)
+  if (carriageReturn === -1) {
+    return bytes.subarray(sourceStart)
+  }
+  const normalized = Buffer.allocUnsafe(bytes.length - sourceStart)
+  let written = 0
+  do {
+    written += bytes.copy(normalized, written, sourceStart, carriageReturn)
+    normalized[written++] = 10
+    sourceStart = carriageReturn + (bytes[carriageReturn + 1] === 10 ? 2 : 1)
+    carriageReturn = bytes.indexOf(13, sourceStart)
+  } while (carriageReturn !== -1)
+  written += bytes.copy(normalized, written, sourceStart)
+  return normalized.subarray(0, written)
 }
 
 export function describeObservedSkillFile(
@@ -131,12 +145,8 @@ export function describeObservedSkillFile(
   executable: boolean
 ): ObservedSkillFile {
   let normalized: Buffer | null = null
-  if (!bytes.includes(0)) {
-    try {
-      normalized = normalizedText(bytes)
-    } catch {
-      normalized = null
-    }
+  if (!bytes.includes(0) && isUtf8(bytes)) {
+    normalized = normalizedText(bytes)
   }
   const exactSha256 = sha256(bytes)
   const textNormalizedSha256 =
