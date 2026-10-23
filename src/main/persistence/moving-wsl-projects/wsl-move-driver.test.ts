@@ -183,6 +183,19 @@ describe('moveProjectsToWslHost', () => {
     expect(journal()).toEqual([])
   })
 
+  it('says why when the manifest it signed is not what the journal reads back', async () => {
+    // What the awin run saw as a bare "everything was put back": no journal, no reason.
+    world.exportOverride = (exported, call) =>
+      call === 2
+        ? { ...exported, manifest: { ...exported.manifest, manifestSha256: '0'.repeat(64) } }
+        : exported
+    const result = await moveProjectsToWslHost(world.deps, request)
+
+    expect(result).toMatchObject({ outcome: 'refused', code: 'wsl_move_export_incomplete' })
+    expect(result.outcome === 'refused' && result.reasons?.[0]).toMatch(/digest_mismatch/)
+    expect(journal()).toEqual([])
+  })
+
   it('refuses a second move of the same distro while one runs', async () => {
     let release: () => void = () => {}
     const sleep = world.deps.quiesce.sleepWorkspaces

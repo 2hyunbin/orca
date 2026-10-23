@@ -150,7 +150,11 @@ async function runMove(
     if (isWslMoveScopeChanged(error)) {
       return refusal('wsl_move_scope_changed')
     }
-    throw error
+    // Nothing is journaled yet, so nothing needs putting back; say why instead of a bare reset.
+    console.warn('[wsl-move] Could not prepare the move:', error)
+    return refusal('wsl_move_export_incomplete', {
+      reasons: [`Orca could not prepare these projects' saved state (${describe(error)}).`]
+    })
   }
   const quiesced = await quiesceWslMove(
     journaled,

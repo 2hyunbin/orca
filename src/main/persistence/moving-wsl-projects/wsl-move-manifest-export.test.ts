@@ -299,6 +299,20 @@ describe('exportWslMoveManifest', () => {
     ).not.toThrow()
   })
 
+  it("shares no object with the live state, so a later sleep can't change what was signed", () => {
+    const state = sourceState()
+    const { manifest } = exportWslMoveManifest(storeFor(state), REQUEST)
+    // Sleep and the session freeze mutate the live session after the export signs it.
+    for (const tabs of Object.values(state.workspaceSession.tabsByWorktree)) {
+      for (const tab of tabs) {
+        tab.title = 'renamed by sleep'
+      }
+    }
+    expect(() =>
+      assertOrcadMigrationManifestDigest(JSON.parse(JSON.stringify(manifest)))
+    ).not.toThrow()
+  })
+
   it('refuses to sign a scope naming a project that is no longer here', () => {
     expect(() =>
       exportWslMoveManifest(storeFor(sourceState()), { ...REQUEST, repoIds: ['app', 'gone'] })
