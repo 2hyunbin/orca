@@ -55,12 +55,12 @@ const MAIN: MainSessionTabRows = {
 
 describe("the row writer's order from main (layout-owner build)", () => {
   it("orders and groups the written rows as main's layout does, adding and dropping none", () => {
-    const rows = [terminal('a::1', 'pty-new'), terminal('b::1'), terminal('c::1')]
+    const rows = [terminal('a::1', 'pty-new'), terminal('b::1'), terminal('c::1'), terminal('a::2')]
 
     const ordered = withMainTabOrder(written(rows), MAIN)
 
     // `b`, in no group main holds, joins the written selection's group.
-    expect(ordered.tabs.map((tab) => tab.id)).toEqual(['c::1', 'a::1', 'b::1'])
+    expect(ordered.tabs.map((tab) => tab.id)).toEqual(['c::1', 'a::1', 'a::2', 'b::1'])
     expect(ordered.tabGroups?.map((group) => [group.id, group.tabOrder])).toEqual([
       ['left', ['c']],
       ['right', ['a', 'b']]

@@ -56,14 +56,10 @@ export function withMainTabOrder(
   const groups = withStrayIn(placedGroups, placement.stray, activeIndex)
   const tabGroups = groups.filter((group) => group.tabOrder.length > 0)
   const position = new Map(tabGroups.flatMap((group) => group.tabOrder).map((id, at) => [id, at]))
-  const tabs = written.tabs
-    .map((row, at) => ({ row, at }))
-    .toSorted(
-      (a, b) =>
-        (position.get(orderIdOf(a.row)) ?? position.size) -
-          (position.get(orderIdOf(b.row)) ?? position.size) || a.at - b.at
-    )
-    .map(({ row }) => row)
+  const tabs = written.tabs.toSorted(
+    (a, b) =>
+      (position.get(orderIdOf(a)) ?? position.size) - (position.get(orderIdOf(b)) ?? position.size)
+  )
   const activeGroupId = groups[activeIndex]?.id ?? null
   const { tabGroupLayout: _writtenLayout, ...rest } = written
   return {
