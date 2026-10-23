@@ -22,6 +22,27 @@ export function* iterateProcessOutputLines(output: string): Generator<string> {
   }
 }
 
+export function* iterateProcessOutputLinesFromEnd(value: string): Generator<string> {
+  let lineEnd = value.length
+  let index = value.length - 1
+
+  while (index >= 0) {
+    const code = value.charCodeAt(index)
+    if (code !== 10 && code !== 13) {
+      index--
+      continue
+    }
+
+    const delimiterStart =
+      code === 10 && index > 0 && value.charCodeAt(index - 1) === 13 ? index - 1 : index
+    yield value.slice(index + 1, lineEnd)
+    lineEnd = delimiterStart
+    index = delimiterStart - 1
+  }
+
+  yield value.slice(0, lineEnd)
+}
+
 // Why: command output can include noisy paste-sized rows; port scanners only need early fields.
 export function getProcessOutputFields(line: string, maxFields: number): string[] {
   if (maxFields <= 0) {

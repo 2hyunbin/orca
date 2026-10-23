@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getProcessOutputFields,
   iterateProcessOutputLines,
+  iterateProcessOutputLinesFromEnd,
   PROCESS_OUTPUT_FIELD_SCAN_MAX_CHARS
 } from './process-output-field-scanner'
 
@@ -13,6 +14,21 @@ describe('iterateProcessOutputLines', () => {
       'gamma',
       'delta'
     ])
+  })
+})
+
+describe('iterateProcessOutputLinesFromEnd', () => {
+  it('walks mixed line endings in reverse, including trailing and interior empty lines', () => {
+    expect([...iterateProcessOutputLinesFromEnd('alpha\nbeta\r\n\rgamma\rdelta\n')]).toEqual([
+      '',
+      'delta',
+      'gamma',
+      '',
+      'beta',
+      'alpha'
+    ])
+    expect([...iterateProcessOutputLinesFromEnd('')]).toEqual([''])
+    expect([...iterateProcessOutputLinesFromEnd('\r\n')]).toEqual(['', ''])
   })
 })
 

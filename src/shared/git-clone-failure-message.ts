@@ -1,3 +1,4 @@
+import { iterateProcessOutputLinesFromEnd } from './process-output-field-scanner'
 import { stripCredentialsFromMessage } from './git-remote-error'
 
 // Why: clones run under nonInteractiveGitEnv (GIT_TERMINAL_PROMPT=0, empty SSH_ASKPASS,
@@ -57,7 +58,7 @@ function getGitCloneFailureLine(
   // matching normalizeGitErrorMessage.
   const scrubbedStderr = stripCredentialsFromMessage(stderr)
 
-  for (const rawLine of iterateLinesFromEnd(scrubbedStderr)) {
+  for (const rawLine of iterateProcessOutputLinesFromEnd(scrubbedStderr)) {
     const line = stripAnsi(rawLine).trim()
     if (!line) {
       continue
@@ -74,27 +75,6 @@ function getGitCloneFailureLine(
   }
 
   return formatGitCloneFailureLine(fallbackLine ?? 'unknown error', options)
-}
-
-function* iterateLinesFromEnd(value: string): Generator<string> {
-  let lineEnd = value.length
-  let index = value.length - 1
-
-  while (index >= 0) {
-    const code = value.charCodeAt(index)
-    if (code !== 10 && code !== 13) {
-      index--
-      continue
-    }
-
-    const delimiterStart =
-      code === 10 && index > 0 && value.charCodeAt(index - 1) === 13 ? index - 1 : index
-    yield value.slice(index + 1, lineEnd)
-    lineEnd = delimiterStart
-    index = delimiterStart - 1
-  }
-
-  yield value.slice(0, lineEnd)
 }
 
 function stripAnsi(value: string): string {

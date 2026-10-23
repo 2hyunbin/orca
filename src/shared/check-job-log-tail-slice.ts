@@ -9,6 +9,7 @@ import {
   TERMINAL_CONTROL_CHARACTER_PATTERN
 } from './ansi-escape-sequences'
 import { PR_CHECK_LOG_TAIL_BYTES, sanitizeCheckJobLogExcerpt } from './check-job-log-excerpt'
+import { iterateProcessOutputLinesFromEnd } from './process-output-field-scanner'
 
 export { PR_CHECK_LOG_TAIL_BYTES } from './check-job-log-excerpt'
 
@@ -65,41 +66,79 @@ function joinLogExcerptWithByteCap(prefixLines: string[], recentLines: string[])
   return `${prefix}${separator}${recentTail}`
 }
 
-function collectEarlierErrorLineIndexes(lines: string[], recentStart: number): number[] {
-  const indexes = new Set<number>()
-  // Newest-first errors and descending windows add the newest unique indexes first.
-  for (let index = recentStart - 1; index >= 0; index -= 1) {
-    if (!hasErrorMarker(lines[index] ?? '')) {
-      continue
+function collectEarlierErrorLines(lines: Iterator<string>): {
+  earlierLines: string[]
+  fallbackLines: string[]
+} {
+  const fallbackLines: string[] = []
+  const read = (): IteratorResult<string> => {
+    const next = lines.next()
+    if (
+      !next.done &&
+      fallbackLines.length < PR_CHECK_LOG_TAIL_LINES - PR_CHECK_LOG_TAIL_RECENT_LINES
+    ) {
+      fallbackLines.push(next.value)
     }
-    const contextStart = Math.max(0, index - PR_CHECK_LOG_TAIL_ERROR_CONTEXT_LINES)
-    const contextEnd = Math.min(recentStart - 1, index + PR_CHECK_LOG_TAIL_ERROR_CONTEXT_LINES)
-    for (let contextIndex = contextEnd; contextIndex >= contextStart; contextIndex -= 1) {
-      indexes.add(contextIndex)
-      if (indexes.size === PR_CHECK_LOG_TAIL_MAX_EARLIER_LINES) {
-        return [...indexes].sort((left, right) => left - right)
+    return next
+  }
+  const newer: string[] = []
+  const selected = new Map<number, string>()
+  let current = read()
+  const older = Array.from({ length: PR_CHECK_LOG_TAIL_ERROR_CONTEXT_LINES }, read)
+  let index = 0
+  while (!current.done) {
+    if (hasErrorMarker(current.value)) {
+      const context = [...newer, current.value]
+      for (const line of older) {
+        if (!line.done) {
+          context.push(line.value)
+        }
+      }
+      for (const [offset, line] of context.entries()) {
+        selected.set(index - newer.length + offset, line)
+        if (selected.size === PR_CHECK_LOG_TAIL_MAX_EARLIER_LINES) {
+          break
+        }
       }
     }
+    if (selected.size === PR_CHECK_LOG_TAIL_MAX_EARLIER_LINES) {
+      break
+    }
+    newer.push(current.value)
+    if (newer.length > PR_CHECK_LOG_TAIL_ERROR_CONTEXT_LINES) {
+      newer.shift()
+    }
+    const next = older.shift()
+    if (!next) {
+      break
+    }
+    current = next
+    older.push(read())
+    index += 1
   }
-  return [...indexes].sort((left, right) => left - right)
+  return {
+    earlierLines: [...selected].sort(([left], [right]) => right - left).map(([, line]) => line),
+    fallbackLines: fallbackLines.toReversed()
+  }
 }
 
 function buildCheckLogTail(logText: string): string {
-  const lines = logText.split(/\r\n|\r|\n/)
-  const recentStart = Math.max(0, lines.length - PR_CHECK_LOG_TAIL_RECENT_LINES)
-  const recentLines = lines.slice(recentStart)
+  const lines = iterateProcessOutputLinesFromEnd(logText)
+  const recentFromEnd: string[] = []
+  for (let index = 0; index < PR_CHECK_LOG_TAIL_RECENT_LINES; index += 1) {
+    const next = lines.next()
+    if (next.done) {
+      return applyLogTailByteCap(recentFromEnd.toReversed().join('\n'))
+    }
+    recentFromEnd.push(next.value)
+  }
+  const recentLines = recentFromEnd.toReversed()
 
-  if (recentStart === 0) {
-    return applyLogTailByteCap(lines.join('\n'))
+  const { earlierLines, fallbackLines } = collectEarlierErrorLines(lines)
+  if (earlierLines.length === 0) {
+    return applyLogTailByteCap([...fallbackLines, ...recentLines].join('\n'))
   }
 
-  const earlierIndexes = collectEarlierErrorLineIndexes(lines, recentStart)
-  if (earlierIndexes.length === 0) {
-    return applyLogTailByteCap(lines.slice(-PR_CHECK_LOG_TAIL_LINES).join('\n'))
-  }
-
-  const cappedEarlierIndexes = earlierIndexes.slice(-PR_CHECK_LOG_TAIL_MAX_EARLIER_LINES)
-  const earlierLines = cappedEarlierIndexes.map((index) => lines[index] ?? '')
   // Why: if the recent tail alone exceeds the byte cap, keep the earlier error
   // context visible instead of truncating it back out of the combined excerpt.
   return joinLogExcerptWithByteCap(

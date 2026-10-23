@@ -1,3 +1,4 @@
+import { iterateProcessOutputLinesFromEnd } from './process-output-field-scanner'
 import { isPushHookFailure } from './source-control-push-failure'
 
 // Why: strip `user:password@` on any scheme, but a lone `user@` only on HTTP(S) — SSH's git@host user-info is required, so stripping breaks the URL.
@@ -44,34 +45,13 @@ export function formatSubmodulePushFailureDetail(message: string): string | null
 
 function extractTailLine(message: string): string {
   // Why: last non-empty stderr line is the diagnostic; the full blob risks leaking local paths/env to the UI.
-  for (const rawLine of iterateLinesFromEnd(message)) {
+  for (const rawLine of iterateProcessOutputLinesFromEnd(message)) {
     const line = rawLine.trim()
     if (line.length > 0) {
       return line
     }
   }
   return message
-}
-
-function* iterateLinesFromEnd(value: string): Generator<string> {
-  let lineEnd = value.length
-  let index = value.length - 1
-
-  while (index >= 0) {
-    const code = value.charCodeAt(index)
-    if (code !== 10 && code !== 13) {
-      index--
-      continue
-    }
-
-    const delimiterStart =
-      code === 10 && index > 0 && value.charCodeAt(index - 1) === 13 ? index - 1 : index
-    yield value.slice(index + 1, lineEnd)
-    lineEnd = delimiterStart
-    index = delimiterStart - 1
-  }
-
-  yield value.slice(0, lineEnd)
 }
 
 // Why: Git 2.27+ refuses divergent pulls when no pull.rebase/pull.ff policy is set; detected so callers can retry as merge.
