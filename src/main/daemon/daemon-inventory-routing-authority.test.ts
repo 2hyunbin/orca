@@ -29,6 +29,42 @@ const request = {
   requireUnattached: true
 }
 
+it('revokes incarnation proof when a synthetic exit is followed by owner adoption', async () => {
+  const currentSessions = ['shared']
+  const legacySessions: string[] = []
+  const current = createAdapter('current', currentSessions, undefined, PROTOCOL_VERSION)
+  const legacy = createAdapter('legacy', legacySessions, undefined, PROTOCOL_VERSION)
+  const provider = new DegradedDaemonPtyProvider({
+    current,
+    legacy: [legacy],
+    fallback: createAdapter('fallback')
+  })
+  vi.mocked(current.listProcesses).mockResolvedValue([
+    { id: 'shared', incarnationId: 'old', cwd: '', title: 'old' }
+  ])
+  await provider.discoverDaemonSessions()
+  expect(provider.supportsFencedTermination('shared')).toBe(true)
+
+  provider.fanoutCurrentDaemonSyntheticExits(-1, { replacedByRestart: true })
+  currentSessions.splice(0)
+  vi.mocked(current.listProcesses).mockResolvedValue([])
+  legacySessions.push('shared')
+  vi.mocked(legacy.listProcesses).mockResolvedValue([
+    { id: 'shared', incarnationId: 'new', cwd: '', title: 'new' }
+  ])
+  provider.write('shared', 'replacement input')
+
+  expect(legacy.write).toHaveBeenCalledExactlyOnceWith('shared', 'replacement input')
+  expect(provider.supportsFencedTermination('shared')).toBe(false)
+  expect(provider.providesAgentSessionOwnerListings('shared')).toBe(false)
+  await expect(provider.killFenced(request)).resolves.toEqual({
+    outcome: 'refused',
+    reason: 'replaced'
+  })
+  expect(current.killFenced).not.toHaveBeenCalled()
+  expect(legacy.killFenced).not.toHaveBeenCalled()
+})
+
 describe.each(['router', 'degraded'] as const)('%s inventory input authority', (kind) => {
   afterEach(() => vi.useRealTimers())
 
