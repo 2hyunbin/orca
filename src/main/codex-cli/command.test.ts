@@ -371,7 +371,8 @@ describe('withCliRuntimeOnPath', () => {
     })
     process.env.PATH = ['/opt/inherited/bin', '/usr/bin'].join(delimiter)
 
-    const paired = withCliRuntimeOnPath(join(v20, 'codex'), {}, { platform: 'darwin' })
+    const noPath: NodeJS.ProcessEnv = {}
+    const paired = withCliRuntimeOnPath(join(v20, 'codex'), noPath, { platform: 'darwin' })
     expect(paired.PATH).toBe([v20, '/opt/inherited/bin', '/usr/bin'].join(delimiter))
   })
 
