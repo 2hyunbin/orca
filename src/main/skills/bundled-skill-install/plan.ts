@@ -246,14 +246,18 @@ async function planSkill(
     digest: bundledSkillTextDigest(Buffer.from(source.text, 'utf8')),
     force: input.force === 'all' ? 'all' : new Set((input.force ?? []).map(bundledSkillPathKey))
   }
-  const [sharedRoot, ...agentRoots] = roots
-  const sharedTarget = await planTarget(context, sharedRoot, null)
-  const shared: SharedTarget = {
-    path: sharedTarget.op.path,
-    realPath: join(sharedRoot.realPath, source.name),
-    current: WRITES_SHARED_CURRENT.has(sharedTarget.op.kind)
-  }
-  const planAgents = async (target: SharedTarget) => {
+  const sharedRoot = roots.find((root) => root.role === 'shared')
+  const agentRoots = roots.filter((root) => root.role === 'agent')
+  const sharedTarget = sharedRoot ? await planTarget(context, sharedRoot, null) : null
+  const shared: SharedTarget | null =
+    sharedRoot && sharedTarget
+      ? {
+          path: sharedTarget.op.path,
+          realPath: join(sharedRoot.realPath, source.name),
+          current: WRITES_SHARED_CURRENT.has(sharedTarget.op.kind)
+        }
+      : null
+  const planAgents = async (target: SharedTarget | null) => {
     const agents: PlannedTarget[] = []
     for (const root of agentRoots) {
       agents.push(await planTarget(context, root, target))
@@ -261,27 +265,30 @@ async function planSkill(
     return agents
   }
   let agents = await planAgents(shared)
+  const targets = [...(sharedTarget ? [sharedTarget] : []), ...agents]
   if (!input.installedOnly) {
     return {
       name: source.name,
       digest: context.digest,
-      ops: [sharedTarget, ...agents].map((target) => target.op)
+      ops: targets.map((target) => target.op)
     }
   }
-  if (![sharedTarget, ...agents].some((target) => target.holdsOrcaCopy)) {
+  if (!targets.some((target) => target.holdsOrcaCopy)) {
     return null
   }
   // Why: an empty shared slot is written only to repair an agent's existing link to it; any
   // other plan (a Replace among them) must not add the skill there, so it plans without it.
   const keepShared =
-    isPresent(sharedTarget.op) ||
-    agents.some((target) => target.op.kind === 'keep' && target.op.observed.kind === 'link')
-  if (!keepShared && shared.current) {
+    sharedTarget &&
+    (isPresent(sharedTarget.op) ||
+      agents.some((target) => target.op.kind === 'keep' && target.op.observed.kind === 'link'))
+  if (!keepShared && shared?.current) {
     agents = await planAgents({ ...shared, current: false })
   }
-  const ops = [...(keepShared ? [sharedTarget] : []), ...agents]
-    .filter((target, index) => isPresent(target.op) || (keepShared && index === 0))
-    .map((target) => target.op)
+  const ops = [
+    ...(keepShared ? [sharedTarget.op] : []),
+    ...agents.filter((target) => isPresent(target.op)).map((target) => target.op)
+  ]
   return { name: source.name, digest: context.digest, ops }
 }
 

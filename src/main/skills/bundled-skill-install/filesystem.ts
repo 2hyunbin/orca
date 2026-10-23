@@ -2,6 +2,7 @@ import { constants, createReadStream } from 'node:fs'
 import { createHash } from 'node:crypto'
 import {
   access,
+  chmod,
   cp,
   lstat,
   mkdir,
@@ -34,16 +35,18 @@ export type BundledSkillFilesystem = {
   realpath(path: string): Promise<string | null>
   /** `[]` for a missing directory, null when it cannot be listed. */
   listEntries(directory: string): Promise<SkillDirectoryEntry[] | null>
-  readFile(path: string): Promise<Buffer | null>
+  /** Returns null when the file exceeds maxBytes; bounded reads never load the whole file. */
+  readFile(path: string, maxBytes?: number): Promise<Buffer | null>
   /** Streaming digest when supported; adapters without it fall back to readFile. */
   hashFile?(path: string): Promise<string | null>
   /** Whether the nearest existing ancestor of `directory` accepts new entries. */
   canWrite(directory: string): Promise<boolean>
   /** Creates `path` (and missing parents) holding exactly `files`; dirs 0755, files 0644. */
   writeFolder(path: string, files: readonly { path: string; text: string }[]): Promise<void>
+  /** Creates a private backup directory (0700 on POSIX), tightening existing permissions. */
   ensureDirectory(path: string): Promise<void>
   rename(source: string, target: string): Promise<void>
-  /** Rename into backups, which may sit on another filesystem: copy, verify, then remove. */
+  /** Move into backups (copy/verify/remove across filesystems); directories become private. */
   moveToBackup(source: string, target: string): Promise<void>
   remove(path: string): Promise<void>
   createLink(target: string, linkPath: string): Promise<void>
@@ -152,7 +155,28 @@ export const nativeBundledSkillFilesystem: BundledSkillFilesystem = {
     const listing = await nativeSkillInstallFilesystem.listEntries?.([directory]).catch(() => null)
     return listing?.get(directory) ?? null
   },
-  readFile: (path) => readFile(path).catch(() => null),
+  readFile: async (path, maxBytes) => {
+    if (maxBytes === undefined) {
+      return readFile(path).catch(() => null)
+    }
+    try {
+      const chunks: Buffer[] = []
+      let size = 0
+      for await (const chunk of createReadStream(path, { end: maxBytes })) {
+        if (!Buffer.isBuffer(chunk)) {
+          return null
+        }
+        size += chunk.length
+        if (size > maxBytes) {
+          return null
+        }
+        chunks.push(chunk)
+      }
+      return Buffer.concat(chunks)
+    } catch {
+      return null
+    }
+  },
   hashFile: async (path) => {
     try {
       const hash = createHash('sha256')
@@ -188,10 +212,18 @@ export const nativeBundledSkillFilesystem: BundledSkillFilesystem = {
     }
   },
   ensureDirectory: async (path) => {
-    await mkdir(path, { recursive: true })
+    await mkdir(path, { recursive: true, mode: 0o700 })
+    if (process.platform !== 'win32') {
+      await chmod(path, 0o700)
+    }
   },
   rename: nativeSkillInstallFilesystem.rename,
-  moveToBackup: (source, target) => moveAcrossFilesystems(source, target),
+  moveToBackup: async (source, target) => {
+    await moveAcrossFilesystems(source, target)
+    if (process.platform !== 'win32' && (await lstat(target)).isDirectory()) {
+      await chmod(target, 0o700)
+    }
+  },
   remove: nativeSkillInstallFilesystem.remove,
   createLink: createNativeSkillAlias
 }
