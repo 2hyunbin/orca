@@ -39,6 +39,7 @@ const UNORDERED = /^\s*[-*+]\s+(.*)$/
 const ORDERED = /^\s*\d+[.)]\s+(.*)$/
 // A top-level <details>…</details> or <blockquote>…</blockquote> region.
 const HTML_BLOCK = /<(details|blockquote)\b[^>]*>([\s\S]*?)<\/\1>/i
+const HTML_BLOCK_END = /<\/(?:details|blockquote)>/i
 const SUMMARY = /<summary\b[^>]*>([\s\S]*?)<\/summary>/i
 
 // Removes residual HTML tags from rendered text so stray <b>/<kbd>/<sub> etc. don't
@@ -67,7 +68,8 @@ export function parseMarkdownBlocks(content: string): MarkdownBlock[] {
 function parseSegment(text: string): MarkdownBlock[] {
   const blocks: MarkdownBlock[] = []
   let rest = text
-  let m = HTML_BLOCK.exec(rest)
+  // Without a closing tag, retrying every opener can only scan the remaining text again.
+  let m = HTML_BLOCK_END.test(rest) ? HTML_BLOCK.exec(rest) : null
   while (m) {
     const before = rest.slice(0, m.index)
     if (before.trim().length > 0) {
@@ -82,7 +84,7 @@ function parseSegment(text: string): MarkdownBlock[] {
       blocks.push({ kind: 'quote', text: stripHtmlTags(m[2]).trim() })
     }
     rest = rest.slice(m.index + m[0].length)
-    m = HTML_BLOCK.exec(rest)
+    m = HTML_BLOCK_END.test(rest) ? HTML_BLOCK.exec(rest) : null
   }
   if (rest.trim().length > 0) {
     blocks.push(...parseLines(rest))

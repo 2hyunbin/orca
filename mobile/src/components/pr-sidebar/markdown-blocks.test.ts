@@ -1,7 +1,34 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { parseInline, parseMarkdownBlocks } from './markdown-blocks'
 
 describe('parseMarkdownBlocks', () => {
+  it('keeps an unclosed HTML tail literal without a failing block backreference search', () => {
+    const tail = '<details>\nbody\n<blockquote>\nbody\n'.repeat(256)
+    const original = RegExp.prototype.exec
+    let failedBackreferenceSearchChars = 0
+    const spy = vi.spyOn(RegExp.prototype, 'exec').mockImplementation(function (
+      this: RegExp,
+      input: string
+    ) {
+      const match = original.call(this, input)
+      if (!match && this.source.includes('\\1')) {
+        failedBackreferenceSearchChars += input.length
+      }
+      return match
+    })
+    let blocks: ReturnType<typeof parseMarkdownBlocks> | undefined
+    try {
+      blocks = parseMarkdownBlocks(`<blockquote>quoted</blockquote>\n${tail}`)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(blocks).toEqual([
+      { kind: 'quote', text: 'quoted' },
+      { kind: 'paragraph', text: tail.trim() }
+    ])
+    expect(failedBackreferenceSearchChars).toBe(0)
+  })
+
   it('classifies headings, fenced code, quotes, lists, hr, and paragraphs', () => {
     const md = [
       '# Title',
