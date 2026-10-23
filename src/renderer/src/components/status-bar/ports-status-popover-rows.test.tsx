@@ -16,6 +16,9 @@ const {
   resetStore
 } = vi.hoisted(() => {
   const workspacePortScansByKey: Record<string, WorkspacePortScanResult> = {}
+  const initialProjection: {
+    workspacePortScan: { key: string; result: WorkspacePortScanResult } | null
+  } = { workspacePortScan: null }
   const state = {
     settings: { openLinksInApp: true },
     createBrowserTab: vi.fn(),
@@ -24,7 +27,7 @@ const {
     setWorkspacePortScanRefreshing: vi.fn(),
     recordFeatureInteraction: vi.fn(),
     workspacePortScansByKey,
-    workspacePortScan: null as { key: string; result: WorkspacePortScanResult } | null
+    ...initialProjection
   }
   return {
     activateAndRevealWorktreeMock: vi.fn(),
