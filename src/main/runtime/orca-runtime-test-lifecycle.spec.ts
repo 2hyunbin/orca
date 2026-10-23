@@ -1,6 +1,12 @@
 import * as mocks from './orca-runtime-test-mocks.spec'
+import type { MockInstance } from 'vitest'
+import * as worktreeChangeInvalidators from '../ipc/worktree-change-invalidators'
 import { awaitBackgroundRemovalsInRuntimeTests } from './orca-runtime-background-removal-test-support'
-import { _resetPendingWorktreeRemovalsForTests } from '../worktree-background-removal'
+import { commitFakeSpawnsInRuntimeTests } from './bind-first-pane.test-fixture'
+import {
+  _resetPendingWorktreeRemovalsForTests,
+  _settlePendingWorktreeRemovalsForTests
+} from '../worktree-background-removal'
 import { _resetCanonicalRepoKeyCacheForTests } from '../git/canonical-repo-key'
 
 const { MOCK_GIT_WORKTREES, RuntimeBrowserCommands, _resetTerminalViewAttributesForTest } = mocks
@@ -12,15 +18,15 @@ const { afterEach, applyAgentStatusHooksEnabledMock, assertWorktreeCleanForRemov
   mocks
 const { cancelLegacyWorkerTerminalRecoveryRetriesForTests, closeGitLabMRMock } = mocks
 const { clearConfiguredWorktreeSharedDirectoriesCacheForTests } = mocks
-const { closeLocalWatcherForWorktreePathMock, closeRemoteWatcherForWorktreePathMock } = mocks
+const { closeLocalWatcherForWorktreePathMock } = mocks
 const { computeWorktreePathMock, countGitHubWorkItemsMock, createGitHubIssueMock } = mocks
 const { createGitLabIssueMock, createHostedReviewMock, createSetupRunnerScript } = mocks
 const { createStackedHostedReviewMock, detectInstalledAgentsWithShellPathHydrationMock } = mocks
-const { detectRemoteAgentsMock, electronMocks, ensurePathWithinWorkspaceMock } = mocks
+const { electronMocks, ensurePathWithinWorkspaceMock } = mocks
 const { findExistingWorktreeSymlinkPathsMock, forceDeleteLocalBranchMock } = mocks
-const { forgetLocalWatcherRemovalSnapshotMock, forgetRemoteWatcherRemovalSnapshotMock } = mocks
+const { forgetLocalWatcherRemovalSnapshotMock } = mocks
 const { describeCreatedWorktree } = mocks
-const { getActiveMultiplexerMock, getDefaultTabsLaunch, getEffectiveHooks } = mocks
+const { getDefaultTabsLaunch, getEffectiveHooks } = mocks
 const { getEffectiveHooksFromConfig, getGitHubPRCheckDetailsMock, getGitHubPRChecksMock } = mocks
 const { getGitHubPRCommentsMock, getGitHubPRFileContentsMock, getGitHubWorkItemByOwnerRepoMock } =
   mocks
@@ -29,7 +35,7 @@ const { getGitLabProjectRefForRemoteMock, getGitLabWorkItemByProjectRefMock } = 
 const { getGitLabWorkItemDetailsMock, getGlabKnownHostsMock } = mocks
 const { getHostedReviewCreationEligibilityMock, getHostedReviewForBranchMock, getIssueMock } = mocks
 const { getPRForBranchMock, getPRForBranchOutcomeMock, getPullRequestPushTargetMock } = mocks
-const { getRepoSlugMock, getRepoUpstreamMock, getSshGitProviderMock, hasHooksFile } = mocks
+const { getRepoSlugMock, getRepoUpstreamMock, hasHooksFile } = mocks
 const { installFakeAppEnvironment, invalidateAuthorizedRootsCacheMock } = mocks
 const { listGitHubAssignableUsersMock, listGitHubIssuesMock, listGitHubLabelsMock } = mocks
 const { listGitHubWorkItemsMock, listGitLabIssuesMock, listGitLabLabelsMock } = mocks
@@ -42,26 +48,25 @@ const {
 } = mocks
 const { listWorktreesStrict, loadHooks, markCodexProjectTrustedMock } = mocks
 const { markCopilotFolderTrustedMock, markCursorWorkspaceTrustedMock, mergeGitHubPRMock } = mocks
-const { mergeGitLabMRMock, muxRequestMock, parseOrcaYaml, prepareLocalWorktreeRootForRepoMock } =
-  mocks
-const { registerSshGitProviderMock, removeGitHubPRReviewersMock, removeWorktree } = mocks
+const { mergeGitLabMRMock, parseOrcaYaml, prepareLocalWorktreeRootForRepoMock } = mocks
+const { removeGitHubPRReviewersMock, removeWorktree } = mocks
 const { removeWorktreeLinkedPathsMock, reopenGitLabMRMock, requestGitHubPRReviewersMock } = mocks
 const { rerunGitHubPRChecksMock, resetPlatform, resolveGitHubReviewThreadMock } = mocks
 const { resolveGitLabMRDiscussionMock, resolveLocalGitUsernameMock, resolveSetupRunnerShell } =
   mocks
-const { restoreLocalWatcherAfterFailedRemovalMock, restoreRemoteWatcherAfterFailedRemovalMock } =
-  mocks
+const { restoreLocalWatcherAfterFailedRemovalMock } = mocks
 const { retryGitLabJobMock, runHook, scanLocalRepoWorktreesForResolutionMock } = mocks
 const { setGitHubPRAutoMergeMock, setGitHubPRFileViewedMock, setRuntimeBrowserCommandsFactory } =
   mocks
 const { setRuntimeBrowserUnavailableCause, setRuntimeDesktopSurface } = mocks
-const { setRuntimeTerminalUnavailableCause, shouldRunSetupForCreate, sshGitProviders } = mocks
-const { sshProviderGenerations, unregisterSshGitProviderMock, updateGitHubIssueMock } = mocks
+const { setRuntimeTerminalUnavailableCause, shouldRunSetupForCreate } = mocks
+const { updateGitHubIssueMock } = mocks
 const { updateGitHubPRDetailsMock, updateGitHubPRStateMock, updateGitHubPRTitleMock } = mocks
 const { updateGitLabIssueMock, updateGitLabMRMock, updateGitLabMRReviewersMock, vi } = mocks
 
 // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the prototype carries the removal method the wrapper replaces.
 awaitBackgroundRemovalsInRuntimeTests(mocks.OrcaRuntimeService.prototype as never)
+commitFakeSpawnsInRuntimeTests(mocks.OrcaRuntimeService.prototype)
 
 function resetRuntimeTestMocks(): void {
   _resetCanonicalRepoKeyCacheForTests()
@@ -107,11 +112,8 @@ function resetRuntimeTestMocks(): void {
   electronMocks.ipcMain.removeListener.mockClear()
   electronMocks.ipcMain.emit.mockClear()
   closeLocalWatcherForWorktreePathMock.mockReset().mockResolvedValue(undefined)
-  closeRemoteWatcherForWorktreePathMock.mockReset().mockResolvedValue(undefined)
   restoreLocalWatcherAfterFailedRemovalMock.mockReset().mockResolvedValue(undefined)
-  restoreRemoteWatcherAfterFailedRemovalMock.mockReset().mockResolvedValue(undefined)
   forgetLocalWatcherRemovalSnapshotMock.mockReset()
-  forgetRemoteWatcherRemovalSnapshotMock.mockReset()
   vi.mocked(listWorktrees).mockResolvedValue(MOCK_GIT_WORKTREES)
   vi.mocked(listWorktreesStrict).mockResolvedValue(MOCK_GIT_WORKTREES)
   vi.mocked(describeCreatedWorktree).mockResolvedValue(undefined)
@@ -142,28 +144,7 @@ function resetRuntimeTestMocks(): void {
   resolveLocalGitUsernameMock.mockReset().mockResolvedValue('')
   vi.mocked(forceDeleteLocalBranchMock).mockReset()
   vi.mocked(forceDeleteLocalBranchMock).mockResolvedValue(undefined)
-  sshGitProviders.clear()
-  sshProviderGenerations.clear()
-  getSshGitProviderMock.mockReset()
-  getSshGitProviderMock.mockImplementation((connectionId: string) =>
-    sshGitProviders.get(connectionId)
-  )
-  registerSshGitProviderMock.mockReset()
-  registerSshGitProviderMock.mockImplementation((connectionId: string, provider: unknown) => {
-    sshGitProviders.set(connectionId, provider)
-    sshProviderGenerations.set(connectionId, (sshProviderGenerations.get(connectionId) ?? 0) + 1)
-  })
-  unregisterSshGitProviderMock.mockReset()
-  unregisterSshGitProviderMock.mockImplementation((connectionId: string) => {
-    if (sshGitProviders.delete(connectionId)) {
-      sshProviderGenerations.set(connectionId, (sshProviderGenerations.get(connectionId) ?? 0) + 1)
-    }
-  })
-  muxRequestMock.mockReset()
-  muxRequestMock.mockResolvedValue(undefined)
   applyAgentStatusHooksEnabledMock.mockReset().mockResolvedValue([])
-  getActiveMultiplexerMock.mockReset()
-  getActiveMultiplexerMock.mockReturnValue({ request: muxRequestMock, notify: vi.fn() })
   vi.mocked(createSetupRunnerScript).mockReset()
   vi.mocked(getEffectiveHooks).mockReset()
   vi.mocked(getEffectiveHooksFromConfig).mockReset()
@@ -281,8 +262,6 @@ function resetRuntimeTestMocks(): void {
   listGitHubAssignableUsersMock.mockResolvedValue([])
   detectInstalledAgentsWithShellPathHydrationMock.mockReset()
   detectInstalledAgentsWithShellPathHydrationMock.mockResolvedValue([])
-  detectRemoteAgentsMock.mockReset()
-  detectRemoteAgentsMock.mockResolvedValue([])
   markCodexProjectTrustedMock.mockReset()
   markCopilotFolderTrustedMock.mockReset()
   markCursorWorkspaceTrustedMock.mockReset()
@@ -338,7 +317,31 @@ function resetRuntimeTestMocks(): void {
   getIssueMock.mockResolvedValue(null)
 }
 
-beforeEach(resetRuntimeTestMocks)
-afterEach(resetRuntimeTestMocks)
+let registrationSpy:
+  | MockInstance<typeof worktreeChangeInvalidators.registerWorktreeChangeInvalidator>
+  | undefined
+
+beforeEach(() => {
+  resetRuntimeTestMocks()
+  registrationSpy = vi.spyOn(worktreeChangeInvalidators, 'registerWorktreeChangeInvalidator')
+})
+afterEach(async () => {
+  try {
+    await _settlePendingWorktreeRemovalsForTests()
+  } finally {
+    try {
+      // Runtime fixtures share a process; invalidators must end with their case.
+      for (const result of registrationSpy?.mock.results ?? []) {
+        if (result.type === 'return') {
+          result.value()
+        }
+      }
+    } finally {
+      registrationSpy?.mockRestore()
+      registrationSpy = undefined
+      resetRuntimeTestMocks()
+    }
+  }
+})
 
 export { resetRuntimeTestMocks }

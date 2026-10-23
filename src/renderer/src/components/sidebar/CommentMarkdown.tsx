@@ -6,6 +6,7 @@ import {
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
+import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from 'rehype-sanitize'
 import remend from 'remend'
@@ -20,6 +21,7 @@ import {
   remarkNativeChatFileLinks,
   type FileLinkExists
 } from './comment-markdown-native-chat-file-links'
+import { CommentMarkdownBlockLineContext } from './comment-markdown-code-renderers'
 import { rehypeWordFade } from './comment-markdown-word-fade'
 import { CommentMarkdownWords } from './CommentMarkdownWords'
 import {
@@ -31,6 +33,7 @@ import {
   GITHUB_CALLOUT_SANITIZE_ATTRIBUTE,
   remarkGitHubCallouts
 } from '@/lib/remark-github-callouts'
+import { remarkAutolinkLiteralProseBoundary } from '@/lib/remark-autolink-literal-prose-boundary'
 
 export type { CommentMarkdownLinkClickHandler } from './comment-markdown-element-renderers'
 
@@ -79,7 +82,13 @@ const commentMarkdownFileUriUrlTransform: UrlTransform = (value, key, node) => {
 // plain-text renderer used whitespace-pre-wrap which preserved them. Adding
 // remark-breaks converts single newlines to <br>, keeping backward compat
 // with existing plain-text comments that rely on newline formatting.
-const remarkPlugins = [remarkGfm, remarkGitHubCallouts, remarkBreaks]
+const remarkPlugins = [
+  remarkGfm,
+  remarkCjkFriendly,
+  remarkAutolinkLiteralProseBoundary,
+  remarkGitHubCallouts,
+  remarkBreaks
+]
 
 const GITHUB_REFERENCE_PATTERN = /(?:\b([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+))?#([1-9][0-9]*)\b/g
 
@@ -194,7 +203,7 @@ const commentMarkdownSanitizeSchema = {
     // Why: native chat opts into file URI links after sanitize; the URL
     // transform below still strips them for all other markdown surfaces.
     href: [...(defaultSchema.protocols?.href ?? []), 'file'],
-    src: [...(defaultSchema.protocols?.src ?? []), 'data', 'blob']
+    src: [...(defaultSchema.protocols?.src ?? []), 'data', 'blob', 'orca-jira-image']
   }
 }
 
@@ -252,7 +261,7 @@ const MemoizedMarkdown = React.memo(Markdown)
 function useMarkdownBlocks(content: string, growing: boolean): readonly MarkdownBlock[] {
   const [previous, setPrevious] = React.useState<MarkdownBlockSplit | null>(null)
   if (!growing && previous === null) {
-    return [{ start: 0, text: content }]
+    return [{ start: 0, line: 1, text: content }]
   }
   if (previous?.source === content) {
     return previous.blocks
@@ -342,21 +351,22 @@ const CommentMarkdown = React.memo(
             {...rest}
           >
             {blocks.map((block, index) => (
-              <MemoizedMarkdown
-                key={block.start}
-                remarkPlugins={activeRemarkPlugins}
-                rehypePlugins={wrapsWords ? fadingRehypePlugins : activeRehypePlugins}
-                components={wrapsWords ? fadingComponents : components}
-                urlTransform={
-                  allowFileUriLinks
-                    ? commentMarkdownFileUriUrlTransform
-                    : commentMarkdownUrlTransform
-                }
-              >
-                {growing && index === blocks.length - 1
-                  ? remend(block.text, { linkMode: 'text-only' })
-                  : block.text}
-              </MemoizedMarkdown>
+              <CommentMarkdownBlockLineContext.Provider key={block.start} value={block.line}>
+                <MemoizedMarkdown
+                  remarkPlugins={activeRemarkPlugins}
+                  rehypePlugins={wrapsWords ? fadingRehypePlugins : activeRehypePlugins}
+                  components={wrapsWords ? fadingComponents : components}
+                  urlTransform={
+                    allowFileUriLinks
+                      ? commentMarkdownFileUriUrlTransform
+                      : commentMarkdownUrlTransform
+                  }
+                >
+                  {growing && index === blocks.length - 1
+                    ? remend(block.text, { linkMode: 'text-only' })
+                    : block.text}
+                </MemoizedMarkdown>
+              </CommentMarkdownBlockLineContext.Provider>
             ))}
           </div>
         </CommentMarkdownMermaidSourceContext.Provider>

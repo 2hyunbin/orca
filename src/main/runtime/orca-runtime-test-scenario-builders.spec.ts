@@ -37,7 +37,6 @@ type MobileCreateTestNotifier = {
   renameTerminal: TestMock
   closeTerminal: (tabId: string, leafId?: string) => void
   closeSessionTab: TestMock
-  sleepWorktree: TestMock
   terminalFitOverrideChanged: TestMock
   terminalDriverChanged: TestMock
 }
@@ -342,7 +341,6 @@ function createMobileCreateTestNotifier(
     renameTerminal: vi.fn(),
     closeTerminal,
     closeSessionTab: vi.fn(),
-    sleepWorktree: vi.fn(),
     terminalFitOverrideChanged: vi.fn(),
     terminalDriverChanged: vi.fn()
   }
@@ -358,8 +356,8 @@ function createWorktreeRemovalRuntime(
   }
   return new OrcaRuntimeService(runtimeStore as never, undefined, {
     ...deps,
-    getLocalProvider: () => emptyPtyProvider as never,
-    getSshProvider: () => emptyPtyProvider as never
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: removal sweeps call only listProcesses and shutdown.
+    getLocalProvider: () => emptyPtyProvider as never
   })
 }
 

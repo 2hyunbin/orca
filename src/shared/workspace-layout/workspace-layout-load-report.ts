@@ -3,6 +3,7 @@
 
 import type { WorkspaceSessionState } from '../workspace-session-state-types'
 import type { DiskTable } from './workspace-layout-disk-fields'
+import { editorFileKey } from './workspace-layout-editor-tab-file'
 import { collectLayoutLeafIdsInOrder } from './terminal-pane-tree'
 import { paneKeyOf } from './workspace-layout-model'
 
@@ -20,8 +21,9 @@ export type LayoutLoadChange = {
 type DiskRecord = Record<string, unknown>
 export type DiskRecords = Record<DiskTable, Map<string, DiskRecord>>
 
-function sortedKeys(map: Record<string, unknown> | undefined): string[] | undefined {
-  return map && Object.keys(map).sort()
+// Why absent reads as empty: the Serializer always writes these maps, so a missing one is no change.
+function sortedKeys(map: Record<string, unknown> | undefined): string[] {
+  return Object.keys(map ?? {}).sort()
 }
 
 /** Every record on disk, by the table its fields are listed in. */
@@ -77,7 +79,7 @@ export function diskRecords(session: WorkspaceSessionState): DiskRecords {
     groups.forEach((group) => records.group.set(`${key}|${group.id}`, group))
   }
   for (const [key, files] of Object.entries(session.openFilesByWorktree ?? {})) {
-    files.forEach((file) => records.file.set(`${key}|${file.filePath}`, file))
+    files.forEach((file) => records.file.set(`${key}|${editorFileKey(file)}`, file))
   }
   for (const [key, tabs] of Object.entries(session.browserTabsByWorktree ?? {})) {
     tabs.forEach((tab) => records.browser.set(`${key}|${tab.id}`, tab))

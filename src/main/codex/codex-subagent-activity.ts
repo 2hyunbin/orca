@@ -19,6 +19,9 @@ import {
   readCodexCollabAgentToolCall
 } from './codex-collab-agent-tool-call'
 import type { CodexThreadItem } from './codex-thread-item-identity'
+import { codexSubagentPathLabel, codexSubagentPathSegments } from '../../shared/codex-agent-path'
+
+export { codexSubagentPathSegments } from '../../shared/codex-agent-path'
 
 export const CODEX_SUBAGENT_ITEM_TYPE = 'subAgentActivity'
 export const CODEX_TOKEN_USAGE_METHOD = 'thread/tokenUsage/updated'
@@ -54,11 +57,6 @@ export function readCodexSubagentActivity(item: CodexThreadItem): CodexSubagentA
   }
 }
 
-/** Path segments, empty ones dropped: `/root/list_directory` → 2 segments. */
-export function codexSubagentPathSegments(agentPath: string | null): string[] {
-  return agentPath === null ? [] : agentPath.split('/').filter((part) => part.length > 0)
-}
-
 /** The one path segment that names the parent turn itself rather than a child.
  *  Compared after the same normalization the label uses, not against the raw
  *  string: `/root/` and `/root//` are the same node as `/root`, and a check that
@@ -88,25 +86,16 @@ export function isCodexRootAgentActivity(activity: CodexSubagentActivity): boole
  *  because the caller keys its collision ordinals on this string: ` read ` and
  *  `read` render identically and must therefore collide. */
 export function codexSubagentLabel(activity: CodexSubagentActivity): string | null {
-  const trailing = codexSubagentPathSegments(activity.agentPath).at(-1)?.trim()
-  return trailing !== undefined && trailing.length > 0 ? trailing : null
+  return codexSubagentPathLabel(activity.agentPath)
 }
 
 /** A child the item says exists, from either wire shape Codex announces one with. */
 export type CodexSubagentAnnouncement = {
   agentThreadId: string
   label: string | null
-  /** The item's turn is the one the child was spawned or messaged from. */
-  namesParentTurn: boolean
   /** The item is the spawn itself, so the thread that carried it spawned the child. */
   spawned: boolean
 }
-
-/** Collab calls that hand a helper work from the caller's turn, as an `interacted` activity does. */
-const CODEX_COLLAB_TOOLS_THAT_TASK_A_HELPER: ReadonlySet<string> = new Set([
-  'spawnAgent',
-  'sendInput'
-])
 
 /** The children an item announces: a `subAgentActivity`'s, or every helper a collab call names,
  *  keyed by thread id so repeats announce one child. Neither the tree root nor the session's own
@@ -130,7 +119,6 @@ function readAnnouncements(item: CodexThreadItem): CodexSubagentAnnouncement[] {
           {
             agentThreadId: activity.agentThreadId,
             label: codexSubagentLabel(activity),
-            namesParentTurn: activity.kind === 'started' || activity.kind === 'interacted',
             spawned: activity.kind === 'started'
           }
         ]
@@ -143,13 +131,7 @@ function readAnnouncements(item: CodexThreadItem): CodexSubagentAnnouncement[] {
   // Only a spawn's prompt describes its helper; another call's prompt is a later message to it,
   // so a helper no spawn named reads as any unnamed subagent does.
   const label = spawned ? codexCollabHelperLabel(call.prompt) : null
-  const namesParentTurn = CODEX_COLLAB_TOOLS_THAT_TASK_A_HELPER.has(call.tool)
-  return call.helperThreadIds.map((agentThreadId) => ({
-    agentThreadId,
-    label,
-    namesParentTurn,
-    spawned
-  }))
+  return call.helperThreadIds.map((agentThreadId) => ({ agentThreadId, label, spawned }))
 }
 
 export type CodexThreadTokenTotal = { threadId: string; totalTokens: number }

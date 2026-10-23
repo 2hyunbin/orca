@@ -30,6 +30,7 @@ export async function removeWorktree(
   // forceBranchDelete: for failed-creation rollback (fresh branch, no user work); user deletes leave it false so unmerged commits survive.
   options: RemoveWorktreeOptions = {}
 ): Promise<RemoveWorktreeResult> {
+  options = removalWorkerOptions(options)
   try {
     // Removal deletes branches, and a ref deletion needs the packed-refs lock a
     // running idle pack holds while it rewrites. Waits that window out; the
@@ -100,10 +101,10 @@ function deleteBranchOfRemovedWorktree(
   branchHead: string,
   options: RemoveWorktreeOptions
 ): Promise<RemoveWorktreeResult> {
-  // Why its own span: branch cleanup can reach the network (`fetch --prune`), so a stall here reads as
+  // Why its own span: branch cleanup can reach the network, so a stall here reads as
   // `git worktree remove` being slow unless it is timed separately.
   // Why serialized per repo: concurrent removals in one repo race `packed-refs.lock` and the
-  // remote-tracking ref locks of `fetch --prune` (#2259); the checkout deletes above need not wait.
+  // remote-tracking ref locks of `fetch` (#2259); the checkout deletes above need not wait.
   return runKeyedSerializedOperation(branchCleanupQueueByRepo, repoPath, () =>
     withSpan('worktree.remove.branch_delete', () =>
       deleteBranchAfterWorktreeRemoval(repoPath, branchName, branchHead, options)
@@ -112,26 +113,37 @@ function deleteBranchOfRemovedWorktree(
 }
 
 /**
- * Finishes a removal whose checkout Git no longer registers (it finished deleting, or an earlier
- * run did): leftover files, stale admin records, then the branch. Already-gone parts are done.
- * `assertLeftover` refuses unless the path still holds the removed checkout's own leftover.
+ * Finishes a removal whose checkout Git no longer registers and is gone from disk: stale admin
+ * records, then the branch. Deletes no files: Orca removes a checkout only through Git.
+ * `assertCheckoutGone` refuses while anything is still at the path.
  */
 export async function finishUnregisteredWorktreeRemoval(
   repoPath: string,
   worktreePath: string,
   branch: { name: string; head: string } | null,
-  assertLeftover: () => Promise<void>,
+  assertCheckoutGone: () => Promise<void>,
   options: RemoveWorktreeOptions = {}
 ): Promise<RemoveWorktreeResult> {
+  options = removalWorkerOptions(options)
+  await assertCheckoutGone()
+  await gitExecFileAsync(['worktree', 'prune'], gitExecOptions(repoPath, options)).catch(
+    (error: unknown) => console.warn(`[git] worktree prune failed in ${repoPath}`, error)
+  )
+  return deleteBranchOfUnregisteredWorktree(repoPath, worktreePath, branch, options)
+}
+
+/**
+ * The branch step of a removal once Git no longer registers the checkout, whatever is left on disk:
+ * merged only, as `removeWorktree` does. Prunes nothing and deletes no files.
+ */
+export async function deleteBranchOfUnregisteredWorktree(
+  repoPath: string,
+  worktreePath: string,
+  branch: { name: string; head: string } | null,
+  options: RemoveWorktreeOptions = {}
+): Promise<RemoveWorktreeResult> {
+  options = removalWorkerOptions(options)
   try {
-    await runUnderWorktreeDeleteLimit(async () => {
-      // Why in the slot: the wait can outlast two large deletes, and the path may change meanwhile.
-      await assertLeftover()
-      await removeCheckoutLeftByGit(worktreePath, options)
-    })
-    await gitExecFileAsync(['worktree', 'prune'], gitExecOptions(repoPath, options)).catch(
-      (error: unknown) => console.warn(`[git] worktree prune failed in ${repoPath}`, error)
-    )
     if (!branch?.name || !(await localBranchExists(repoPath, branch.name, options))) {
       return {}
     }
@@ -142,6 +154,11 @@ export async function finishUnregisteredWorktreeRemoval(
     invalidateSparseCheckoutState(repoPath, worktreePath)
     bumpWorktreeScanGeneration(repoPath)
   }
+}
+
+function removalWorkerOptions(options: RemoveWorktreeOptions): RemoveWorktreeOptions {
+  // uv_spawn can block even for async Git; keep native process creation off Electron's UI loop.
+  return process.platform === 'darwin' ? { ...options, spawnOnWorkerThread: true } : options
 }
 
 async function localBranchExists(

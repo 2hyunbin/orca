@@ -8,12 +8,6 @@ import type { SecretAtRestProtection } from './secret-at-rest-protection'
  */
 export type ZcodePlanSite = 'zai' | 'bigmodel'
 
-export const ZCODE_PLAN_SITES: readonly ZcodePlanSite[] = ['zai', 'bigmodel']
-
-export function isZcodePlanSite(value: unknown): value is ZcodePlanSite {
-  return value === 'zai' || value === 'bigmodel'
-}
-
 export const ZCODE_PLAN_SITE_BASE_URLS: Record<ZcodePlanSite, string> = {
   zai: 'https://api.z.ai',
   bigmodel: 'https://open.bigmodel.cn'
@@ -29,4 +23,7 @@ export type ZcodePlanCredentialsStatus = {
   apiKeyConfigured: boolean
   zcodeCliConfigured: boolean
   apiKeyProtection: SecretAtRestProtection | null
+  /** Set when the saved file cannot be used here; 'sealed-elsewhere' means the other Orca app
+   *  on that machine (desktop vs orcad) saved it. */
+  apiKeyUnreadable?: 'sealed-elsewhere' | 'unreadable'
 }

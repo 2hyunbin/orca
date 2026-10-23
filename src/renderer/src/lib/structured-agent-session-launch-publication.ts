@@ -7,6 +7,21 @@ import {
   hasStructuredAgentSessionLaunchCancellationTombstone,
   notifyStructuredLaunchListeners
 } from './structured-agent-session-launch-registry'
+import { forgetUnlistedCreatedChat } from './structured-agent-session-unlisted-created-chats'
+
+function confirmStructuredLaunchFirstMessagePublication(
+  worktreeId: string,
+  sessionId: string
+): void {
+  // Store teardown imports publication bookkeeping; recovery may read the store after it exists.
+  void import('./structured-agent-session-launch-publication-confirmation')
+    .then((confirmation) =>
+      confirmation.confirmStructuredLaunchFirstMessagePublication(worktreeId, sessionId)
+    )
+    .catch((error: unknown) => {
+      console.warn('[native-chat] confirming a published opening message failed', error)
+    })
+}
 
 /** `executionHostId` published the chat; only the host its launch was sent to settles it. */
 export function markStructuredAgentSessionLaunchPublished(
@@ -20,6 +35,10 @@ export function markStructuredAgentSessionLaunchPublished(
     if (persisted?.executionHostId !== executionHostId) {
       return false
     }
+    if (persisted.firstMessage) {
+      confirmStructuredLaunchFirstMessagePublication(worktreeId, sessionId)
+      return false
+    }
     deleteStructuredAgentLaunchRecord(sessionId)
     notifyStructuredLaunchListeners()
     return true
@@ -31,12 +50,17 @@ export function markStructuredAgentSessionLaunchPublished(
   ) {
     return false
   }
+  state.hostListed = true
   if (state.callers.outcome === 'published') {
     return true
   }
   // Still in flight: its own settlement publishes once the picks held during launch land.
   if (state.callers.outcome === 'pending') {
     return true
+  }
+  if (state.intent.params.firstMessage) {
+    confirmStructuredLaunchFirstMessagePublication(worktreeId, sessionId)
+    return false
   }
   state.callers.outcome = 'published'
   deleteStructuredAgentLaunchRecord(sessionId)
@@ -51,6 +75,7 @@ export function markStructuredAgentSessionLaunchesPublished(
   published: Iterable<{ worktreeId: string; sessionId: string }>
 ): void {
   for (const { worktreeId, sessionId } of published) {
+    forgetUnlistedCreatedChat(worktreeId, sessionId, executionHostId)
     if (!hasStructuredAgentSessionLaunchCancellationTombstone(worktreeId, sessionId)) {
       markStructuredAgentSessionLaunchPublished(worktreeId, sessionId, executionHostId)
     }

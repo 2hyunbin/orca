@@ -119,7 +119,6 @@ export function BrowserPagePane({
   const browserTabUrlRef = useRef(browserTab.url)
   // Most-recent observed webview URL; URL sync checks it to avoid force-navigating to an intermediate redirect (which would loop the redirect chain).
   const lastKnownWebviewUrlRef = useRef<string | null>(null)
-  const trackNextLoadingEventRef = useRef(false)
   const recoveryNavigationValidationRef = useRef<{
     committed: boolean
     started: boolean
@@ -151,7 +150,7 @@ export function BrowserPagePane({
   const grabElementShortcut = useShortcutLabel('browser.grabElement')
   const slotViewport = useBrowserPageSlotViewport(workspaceId)
 
-  const zoom = useBrowserPageZoomFeedback(browserTab.id)
+  const zoom = useBrowserPageZoomFeedback()
   const { resourceNotice, setResourceNotice } = useBrowserPageResourceNotices(browserTab.id)
   const guestFocus = useWebviewGuestFocus(webviewRef)
   const {
@@ -181,8 +180,7 @@ export function BrowserPagePane({
     trackingScroller: pageViewport?.scroller ?? null,
     webviewRef,
     setBrowserOverlayViewport,
-    browserAnnotationsLength: annotationSend.browserAnnotations.length,
-    setBrowserAnnotationTrayOpen: annotationSend.setBrowserAnnotationTrayOpen
+    browserAnnotationsLength: annotationSend.browserAnnotations.length
   })
   const nav = useBrowserPageNavigationDownloads({
     browserTabId: browserTab.id,
@@ -190,7 +188,6 @@ export function BrowserPagePane({
     webviewRef,
     activeLoadFailureRef,
     lastKnownWebviewUrlRef,
-    trackNextLoadingEventRef,
     recoveryNavigationValidationRef,
     onSetUrlRef,
     onUpdatePageStateRef,
@@ -229,14 +226,11 @@ export function BrowserPagePane({
     setFindOpen,
     focusAddressBarNow,
     focusWebviewNow,
-    paneZoomLevelRef: zoom.paneZoomLevelRef,
-    setBrowserZoomPercent: zoom.setBrowserZoomPercent,
     pendingAnnotationPayload: grabAnnotations.pendingAnnotationPayload,
     inputLocked,
     faviconUrl: browserTab.faviconUrl,
     webviewRef,
     lastKnownWebviewUrlRef,
-    trackNextLoadingEventRef,
     recoveryNavigationValidationRef,
     activeLoadFailureRef,
     retryGuestRecoveryRef,
@@ -253,7 +247,6 @@ export function BrowserPagePane({
     webviewRef,
     chromeHeaderRef,
     lastKnownWebviewUrlRef,
-    trackNextLoadingEventRef,
     keepAddressBarFocusRef,
     addressBarInputRef,
     browserTabUrlRef,
@@ -264,7 +257,6 @@ export function BrowserPagePane({
   const reload = useBrowserPageReloadActions({
     browserTab,
     webviewRef,
-    trackNextLoadingEventRef,
     retryGuestRecoveryRef,
     onUpdatePageStateRef
   })
@@ -283,8 +275,6 @@ export function BrowserPagePane({
     isActiveRef,
     markupIsActive: markup.isActive,
     webviewRef,
-    paneZoomLevelRef: zoom.paneZoomLevelRef,
-    setBrowserDefaultZoomLevel: zoom.setBrowserDefaultZoomLevel,
     showBrowserZoomFeedback: zoom.showBrowserZoomFeedback,
     reloadWebviewOrRecoverGuest: reload.reloadWebviewOrRecoverGuest,
     startGrabIntent: grabAnnotations.startGrabIntent,
@@ -304,8 +294,7 @@ export function BrowserPagePane({
   const failureExternalUrl = normalizeExternalBrowserUrl(failedNavigationUrl)
   const showFailureOverlay = Boolean(browserTab.loadError) && !isBlankTab
   const browserZoomIndicatorState = getBrowserPageZoomIndicatorState({
-    feedbackVisible: zoom.browserZoomFeedbackVisible,
-    isDefaultZoom: zoom.browserZoomPercent === zoom.browserDefaultZoomPercent
+    feedbackVisible: zoom.browserZoomFeedbackVisible
   })
 
   useEffect(() => {
@@ -388,16 +377,22 @@ export function BrowserPagePane({
               showFailureOverlay={showFailureOverlay}
               browserTab={browserTab}
               failureExternalUrl={failureExternalUrl}
-              failedNavigationUrl={failedNavigationUrl}
               onUpdatePageStateRef={onUpdatePageStateRef}
               retryGuestRecoveryRef={retryGuestRecoveryRef}
               navigateToUrl={nav.navigateToUrl}
-              setResourceNotice={setResourceNotice}
               certificateFailure={certificateFailure}
               sshRouted={Boolean(sessionPartition?.startsWith('persist:orca-browser-v1-'))}
+              autoRetry={{
+                active: isPaintable,
+                whileWindowHidden: isMobileDriven || isRemotelyViewed
+              }}
               isBlankTab={isBlankTab}
               containerRef={containerRef}
               markupPortalContainer={pageViewport?.content ?? null}
+              // Why: a preset page box keeps its size, so a footer below it can take pane height without relayout.
+              markupControlsContainer={
+                browserTab.viewportPresetId ? (pageViewport?.shell ?? null) : null
+              }
               browserOverlayViewport={browserOverlayViewport}
               worktreeId={worktreeId}
               grab={grab}

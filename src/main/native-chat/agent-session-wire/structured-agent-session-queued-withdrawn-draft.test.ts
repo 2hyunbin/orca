@@ -5,8 +5,7 @@
 // under a fresh submission id.
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { JournalQueuedMessages } from '../agent-session-journal/journal-queued-messages'
-import { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import { JournalStopAcceptor } from '../agent-session-journal/journal-stop-acceptance'
 import { HOST_TEST_SESSION as SESSION } from './structured-agent-session-host-test-data'
 import { holdDelivery } from './structured-agent-session-delivery-hold.test-fixture'
 import {
@@ -15,13 +14,19 @@ import {
   type QueuedMessageTestRig
 } from './structured-agent-session-queued-message-rig.test-fixture'
 
+import { createStructuredSessionObservationClock } from './structured-agent-session-observation-clock.test-fixture'
+
 let rig: QueuedMessageTestRig
+const observationClock = createStructuredSessionObservationClock(() => rig.host, SESSION)
+beforeEach(() => observationClock.start())
 
 beforeEach(async () => {
   rig = await createQueuedMessageTestRig()
 })
 
-afterEach(() => rig.dispose())
+afterEach(async () => {
+  await observationClock.restoreBeforeCleanup(() => rig.dispose())
+})
 
 async function queuedDraft(text: string): Promise<string> {
   const queued = await rig.send(text, 'queue-if-active').result
@@ -99,94 +104,32 @@ it('Stop, then a user send: the withdrawn draft and the paused cards behind it d
   expect(await rig.drafts()).toEqual([])
 })
 
-// Bookkeeping never fails a Stop: a withdrawal that throws is reported and counts as nothing
-// withdrawn, so no pause holds the card it did send back, and that card sends again.
-it('a Stop whose withdrawal throws after landing still answers; the draft it released sends again under a fresh id', async () => {
+// One transaction: a Stop whose acceptance cannot be saved takes back nothing, so the card's
+// hand-off it would have held goes out as it was, under its own id.
+it('a Stop whose acceptance fails takes back no hand-off; the draft sends as it was', async () => {
   const working = await rig.workingSend()
   const a = await queuedDraft('A')
   const { release } = holdDelivery()
   await rig.settleAccepted(working, 'working')
   await eventually(async () => expect(await rig.handoff(a)).toBeDefined())
   const firstA = await rig.handoffId(a)
-  const withdraw = AgentSessionJournal.prototype.rejectQueuedSubmissions
   const failing = vi
-    .spyOn(AgentSessionJournal.prototype, 'rejectQueuedSubmissions')
-    .mockImplementation(async function (this: AgentSessionJournal, ...args) {
-      const withdrawn = await withdraw.apply(this, args)
-      // Only the Stop's own withdrawal fails, after it landed; the delivery loop's pass through.
-      if (args[1].rejection.kind === 'cancelled') {
-        throw new Error('disk full')
-      }
-      return withdrawn
-    })
+    .spyOn(JournalStopAcceptor.prototype, 'accept')
+    .mockRejectedValueOnce(new Error('disk full'))
   const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
   try {
     const stopped = rig.stop()
     release()
-    expect(await stopped).toMatchObject({ ok: true })
-    expect(warned).toHaveBeenCalledWith(
-      "[agent-session] stop-queued-bookkeeping: Stop's withdrawal failed",
-      expect.objectContaining({ step: 'withdrawal', error: new Error('disk full') })
-    )
+    expect(await stopped).toMatchObject({
+      ok: false,
+      refusal: { details: { reason: 'stopFailed' } }
+    })
   } finally {
     failing.mockRestore()
     warned.mockRestore()
     release()
   }
-  expect((await rig.submission(firstA))?.dispatchState).toBe('rejected')
-  const before = new Set([working, firstA])
-  await eventually(async () => {
-    expect((await submissionIds()).filter((id) => !before.has(id))).toHaveLength(1)
-    expect(await rig.drafts()).toEqual([])
-  })
-})
-
-/** A consumed card whose delivery is held, so a Stop withdraws it ahead of its handover; the
- *  settlement hook throws on that withdrawal's row, leaving the card owed a return. */
-async function stopWithSkippedSettlement(): Promise<{ a: string; working: string }> {
-  const working = await rig.workingSend()
-  const a = await queuedDraft('A')
-  const { release } = holdDelivery()
-  await rig.settleAccepted(working, 'working')
-  await eventually(async () => expect(await rig.handoff(a)).toBeDefined())
-  const settle = JournalQueuedMessages.prototype.onRowInTransaction
-  let skipped = false
-  const hook = vi
-    .spyOn(JournalQueuedMessages.prototype, 'onRowInTransaction')
-    .mockImplementation(function (this: JournalQueuedMessages, db, row) {
-      if (!skipped && row.kind === 'dispatch' && row.state === 'rejected') {
-        skipped = true
-        throw new Error('bookkeeping failed')
-      }
-      return settle.call(this, db, row)
-    })
-  const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
-  try {
-    const stopped = rig.stop()
-    release()
-    expect(await stopped).toMatchObject({ ok: true })
-  } finally {
-    hook.mockRestore()
-    warned.mockRestore()
-    release()
-  }
-  expect(skipped).toBe(true)
-  return { a, working }
-}
-
-it("a Stop whose withdrawal's settlement was skipped still pauses the card it sent back", async () => {
-  const { a } = await stopWithSkippedSettlement()
-  // The drain heals the skipped return; the Stop's row already pauses whatever comes back.
-  await eventually(async () => expect(await rig.queuePause()).toEqual({ reason: 'stopped' }))
-  await new Promise((resolve) => setTimeout(resolve, 250))
-  // Healed back to waiting, but the Stop's pause holds it: it does not send.
-  expect(await rig.drafts()).toEqual([{ messageId: a, state: 'waiting' }])
-  expect(await rig.resume()).toMatchObject({ ok: true, value: { resumed: true } })
-  await eventually(async () =>
-    expect(
-      (await rig.host.journalSnapshot(SESSION)).submissions.filter(
-        (entry) => entry.queuedMessageId === a
-      )
-    ).toHaveLength(2)
-  )
+  await eventually(async () => expect((await rig.handoff(a))?.handedOverAt).toBeDefined())
+  expect(await rig.handoffId(a)).toBe(firstA)
+  expect((await rig.submission(firstA))?.dispatchState).not.toBe('rejected')
 })

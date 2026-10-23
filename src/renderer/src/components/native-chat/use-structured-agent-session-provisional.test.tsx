@@ -59,8 +59,12 @@ vi.mock('./use-structured-agent-session-sends', () => ({
   }
 }))
 
+vi.mock('@/lib/structured-agent-session-launch-create-support', () => ({
+  useStructuredLaunchCreateSupport: () => false
+}))
+
 vi.mock('@/lib/structured-agent-session-launch-prompt', () => ({
-  takeBackStructuredLaunchPrompts: mocks.takeBackLaunchText
+  takeBackLegacyStructuredLaunchPrompts: mocks.takeBackLaunchText
 }))
 
 vi.mock('./native-chat-session-option-settings-write', () => ({
@@ -115,7 +119,9 @@ describe('useStructuredAgentSession provisional launch gate', () => {
     mocks.pending = []
     readState = sessionState()
     mocks.send.mockReturnValue(true)
-    mocks.call.mockResolvedValue(OPTIONS)
+    mocks.call.mockImplementation(async (_target, method) =>
+      method === 'agentSession.modelCatalog' ? { origin: 'unknown' } : OPTIONS
+    )
     resetHostModelCatalogSnapshotsForTests()
   })
 

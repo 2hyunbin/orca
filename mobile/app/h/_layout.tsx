@@ -13,8 +13,10 @@ import {
 import { HostProtocolGate } from '../../src/components/HostProtocolGate'
 import { HostScreen } from '../../src/host-screen/HostScreen'
 import { HostStack } from '../../src/navigation/host-stack'
+import { HostSidebarRevealContext } from '../../src/layout/host-sidebar-reveal'
 import { HostAreaServingContext } from '../../src/mobile-web-shell/host-area-serving'
 import { usePageOwnsHostArea } from '../../src/mobile-web-shell/page-owns-host-area'
+import { isOverlayPageRoute } from '../../src/new-workspace/overlay-page-route'
 
 // Keep at least this much room for the detail pane when resizing the sidebar.
 const MIN_DETAIL_WIDTH = 320
@@ -33,8 +35,9 @@ function clampSidebarToWindow(width: number, windowWidth: number): number {
 export default function HostGroupLayout() {
   // Wide layout = tablet/foldable canvas (see responsive-layout-metrics).
   const { isWideLayout, width: windowWidth } = useResponsiveLayout()
-  const { hostId, action } = useGlobalSearchParams<{ hostId?: string; action?: string }>()
+  const { hostId } = useGlobalSearchParams<{ hostId?: string }>()
   const pathname = usePathname()
+  const overlayRoute = isOverlayPageRoute(pathname)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(HOST_SIDEBAR_DEFAULT_WIDTH)
 
@@ -66,6 +69,7 @@ export default function HostGroupLayout() {
   }, [windowWidth])
 
   const hideSidebar = useCallback(() => setSidebarOpen(false), [])
+  const revealSidebar = useCallback(() => setSidebarOpen(true), [])
   const [hostAreaServing, setHostAreaServing] = useState(false)
   const pageOwnsHostArea = usePageOwnsHostArea()
   // One owner: the page only with its init fact; natively all but a host route its page is serving.
@@ -75,9 +79,8 @@ export default function HostGroupLayout() {
   const detailHasContent = !!hostId && pathname !== `/h/${hostId}`
   const canCollapseSidebar = showSidebar && detailHasContent
 
-  // Why: there is no reveal button — navigating Back to the base host route brings
-  // the sidebar back (and that route's detail pane is only a placeholder, so a
-  // hidden sidebar would leave nothing useful).
+  // Why: the base host route's detail pane is only a placeholder, so a hidden
+  // sidebar there would leave nothing useful.
   useEffect(() => {
     if (showSidebar && !detailHasContent) {
       setSidebarOpen(true)
@@ -116,14 +119,13 @@ export default function HostGroupLayout() {
   // changes so a fold/rotation doesn't remount the navigator and reset the
   // navigation stack — only the sidebar pane toggles in and out.
   return (
-    <HostProtocolGate hostId={hostId}>
-      <View style={styles.row}>
+    <HostProtocolGate hostId={hostId} transparentWhilePending={overlayRoute}>
+      <View style={[styles.row, overlayRoute && styles.transparent]}>
         {showSidebar && sidebarOpen ? (
           <View style={[styles.sidebar, { width: sidebarWidth }]}>
             <HostScreen
               embedded
               hostId={hostId}
-              action={action}
               onHideSidebar={canCollapseSidebar ? hideSidebar : undefined}
             />
             {/* Dedicated drag handle straddling the right border — see resizer note. */}
@@ -132,7 +134,11 @@ export default function HostGroupLayout() {
         ) : null}
         <View style={styles.detail}>
           <HostAreaServingContext.Provider value={setHostAreaServing}>
-            <HostStack animation={showSidebar ? 'none' : 'default'} />
+            <HostSidebarRevealContext.Provider
+              value={showSidebar && !sidebarOpen ? revealSidebar : null}
+            >
+              <HostStack animation={showSidebar ? 'none' : 'default'} />
+            </HostSidebarRevealContext.Provider>
           </HostAreaServingContext.Provider>
         </View>
       </View>
@@ -145,6 +151,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     backgroundColor: colors.bgBase
+  },
+  transparent: {
+    backgroundColor: 'transparent'
   },
   sidebar: {
     borderRightWidth: 1,

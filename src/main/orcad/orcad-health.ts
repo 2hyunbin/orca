@@ -9,6 +9,10 @@
  * travels back over the daemon's socket.
  */
 import { hashOrcadLauncher } from '../../shared/orcad-build-identity'
+import {
+  confirmPtyProcessCeiling,
+  type PtyProcessCeilingState
+} from '../../shared/pty-process-ceiling-state'
 import process from 'node:process'
 import { checkDaemonHealthWithCoverage, type DaemonHealth } from '../daemon/daemon-health'
 import { ptySpawnHealthPlatformCoverage } from '../daemon/daemon-health-identity'
@@ -16,7 +20,7 @@ import {
   daemonOwnsFreshPersistentPtys,
   getDaemonEndpointFacts,
   readDaemonPidRecord
-} from '../daemon/daemon-init'
+} from '../daemon/daemon-provider-state'
 import type { OrcadProfileStateAuthoritySelection } from './orcad-profile-state-telemetry'
 import { ORCAD_STOP_REQUESTS_CAPABILITY } from '../../shared/orcad-stop-request'
 import type { OrcadIdleStopRecord } from '../../shared/orcad-idle-exit'
@@ -30,9 +34,9 @@ import type { OrcadIdleStopRecord } from '../../shared/orcad-idle-exit'
  *   separately rather than folded into `ok`, because claiming a PTY round trip we did not
  *   perform is the failure mode this surface exists to prevent.
  */
-export type PtySelfTestCoverage = 'pty-spawn' | 'handshake'
+type PtySelfTestCoverage = 'pty-spawn' | 'handshake'
 
-export type PtySelfTest = {
+type PtySelfTest = {
   ok: boolean
   coverage: PtySelfTestCoverage
   /** The daemon's own verdict word, so a failure is diagnosable without re-probing. */
@@ -53,6 +57,9 @@ export type TerminalDaemonHealth = {
   /** The systemd scope unit the daemon self-detected landing in (see daemon-cgroup-scope.ts),
    *  or null when it ran unscoped — the case a combined-unit `systemctl restart` still reaps. */
   cgroupUnit: string | null
+  /** The OS ceiling on the terminals' processes, "on" or "off" with a reason; absent when the
+   *  daemon predates the report. Additive, so older readers ignore it. */
+  processCeiling?: PtyProcessCeilingState | null
   selfTest: PtySelfTest
 }
 
@@ -108,7 +115,7 @@ export function computeOrcadBuildHash(entryPath = process.argv[1]): string {
  * `healthy`; a wedged one times out to `unreachable`, and one whose node-pty or login session
  * is broken answers `pty-spawn-unhealthy`.
  */
-export async function runTerminalDaemonSelfTest(
+async function runTerminalDaemonSelfTest(
   now: () => number = () => Date.now()
 ): Promise<PtySelfTest> {
   const startedAt = now()
@@ -163,6 +170,7 @@ export async function collectTerminalDaemonHealth(): Promise<TerminalDaemonHealt
     entryPath: record?.entryPath ?? null,
     protocolVersion: facts.protocolVersion,
     cgroupUnit: record?.cgroupUnit ?? null,
+    processCeiling: confirmPtyProcessCeiling(record?.processCeiling ?? null),
     selfTest
   }
 }

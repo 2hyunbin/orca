@@ -1,7 +1,7 @@
 import { createBrowserUuid } from '@/lib/browser-uuid'
 import type { TabGroup } from '../../../../../shared/tab-types'
 import type { TabsSlice, TabsSliceGet, TabsSliceSet } from './tabs-slice-contract'
-import { isPaneColumnSplitDropNoOp } from '../pane-column-split-drop-no-op'
+import { isPaneColumnSplitDropNoOp } from '../../../../../shared/workspace-layout/pane-column-split-drop-no-op'
 import {
   collapseGroupLayout,
   buildSplitNode,
@@ -9,7 +9,6 @@ import {
 } from '../../../../../shared/workspace-layout/tab-group-layout-tree'
 import { buildActiveSurfacePatch } from './tabs-surface'
 import {
-  dedupeTabOrder,
   findGroupAndWorktree,
   findGroupForTab,
   findTabAndWorktree,
@@ -17,6 +16,7 @@ import {
   pushRecentTabId,
   sanitizeRecentTabIds
 } from '../tab-group-state'
+import { dedupeTabOrder } from '../../../../../shared/workspace-layout/tab-order'
 
 export function createTabsDropActions(
   set: TabsSliceSet,
@@ -119,7 +119,12 @@ export function createTabsDropActions(
               activeTabId:
                 group.activeTabId === tabId
                   ? // Why: same MRU-aware fallback as moveUnifiedTabToGroup — the drag keeps the user on their previously-active tab.
-                    pickNextActiveTab(dedupedSourceGroupOrder, sourceGroup.recentTabIds, tabId)
+                    pickNextActiveTab(
+                      dedupedSourceGroupOrder,
+                      sourceGroup.recentTabIds,
+                      tabId,
+                      state.unifiedTabsByWorktree[worktreeId]
+                    )
                   : group.activeTabId,
               tabOrder: sourceOrder,
               recentTabIds: sourceRecentTabIds
