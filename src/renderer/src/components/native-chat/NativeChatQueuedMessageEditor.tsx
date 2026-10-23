@@ -40,6 +40,14 @@ export function NativeChatQueuedMessageEditor({
     }
     const textarea = field.current
     textarea?.focus({ preventScroll: true })
+    const selection = editor.selection
+    if (textarea && selection) {
+      textarea.setSelectionRange(
+        Math.min(selection.from, editor.text.length),
+        Math.min(selection.to, editor.text.length),
+        selection.direction
+      )
+    }
     const list = textarea?.closest('ul')
     const row = textarea?.closest('li')
     if (list && row) {
@@ -104,6 +112,14 @@ export function NativeChatQueuedMessageEditor({
         value={editor.text}
         readOnly={editor.acquiring || editor.saving}
         onChange={(event) => editor.change(event.currentTarget.value)}
+        onSelect={(event) => {
+          const input = event.currentTarget
+          editor.select?.({
+            from: input.selectionStart,
+            to: input.selectionEnd,
+            direction: input.selectionDirection
+          })
+        }}
         // Enter or Cmd/Ctrl+Enter saves, Shift+Enter is a newline, Escape cancels; an IME's own
         // Enter and Escape never get here (`ImeTextarea`). Handled keys stay out of the prompt.
         onKeyDown={(event) => {

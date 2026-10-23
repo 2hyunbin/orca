@@ -1,3 +1,4 @@
+import { useNativeChatViewLease } from './native-chat-view-parking-owner'
 import { NativeChatPromptEditor } from './NativeChatPromptEditor'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
 import type { ClipboardEventHandler, KeyboardEventHandler, RefObject } from 'react'
@@ -177,6 +178,8 @@ export function NativeChatComposerField({
         ? mentionFiles.files.length
         : 0
   // Value the IME started from, and whether a programmatic clear was dropped on top of it.
+  const acquireLease = useNativeChatViewLease()
+  const compositionLease = useRef<(() => void) | null>(null)
   const compositionBaseRef = useRef('')
   const imageRow = useMemo(() => imageAttachments.map(({ id }) => id), [imageAttachments])
   const droppedDraftClearRef = useRef(false)
@@ -205,6 +208,8 @@ export function NativeChatComposerField({
   }, [draft, imeEnterGesture, textareaRef])
 
   const settleImeValue = (element: NativeChatComposerInput): void => {
+    compositionLease.current?.()
+    compositionLease.current = null
     if (droppedDraftClearRef.current) {
       droppedDraftClearRef.current = false
       element.value = imeComposedSegment(compositionBaseRef.current, element.value)
@@ -313,6 +318,8 @@ export function NativeChatComposerField({
                   // Settle the interrupted composition before the new one takes browser ownership.
                   flushSync(() => settleImeValue(textareaRef.current!))
                 }
+                compositionLease.current?.()
+                compositionLease.current = acquireLease()
                 compositionBaseRef.current = textareaRef.current!.value
                 imeEnterGesture.setComposing(true)
               }}

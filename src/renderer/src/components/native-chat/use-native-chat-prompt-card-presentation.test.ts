@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { createElement, type ReactNode } from 'react'
+import { NativeChatViewIdentity } from './native-chat-view-state-memory'
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useAppStore } from '../../store'
@@ -73,6 +75,33 @@ describe('dismissed prompt occurrences outlive the view but not the prompt', () 
     view.rerender({ card: null })
     view.rerender({ card: question })
     expect(view.result.current.card).toBe(question)
+  })
+
+  it('keeps a transcript-only dismissal while parked, then retires it on authoritative absence', () => {
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(NativeChatViewIdentity.Provider, { value: 'prompt-return' }, children)
+    const mount = () =>
+      renderHook(
+        ({ card, settled }: { card: InteractivePromptCard; settled: boolean }) =>
+          useNativeChatPromptCardPresentation({
+            paneKey: PANE,
+            card,
+            canSend: true,
+            transcriptSettled: settled
+          }),
+        { wrapper, initialProps: { card: question, settled: true } }
+      )
+    const first = mount()
+    act(() => first.result.current.dismiss())
+    first.unmount()
+    const returned = mount()
+    expect(returned.result.current.card).toBeNull()
+    returned.rerender({ card: null, settled: false })
+    returned.rerender({ card: question, settled: true })
+    expect(returned.result.current.card).toBeNull()
+    returned.rerender({ card: null, settled: true })
+    returned.rerender({ card: question, settled: true })
+    expect(returned.result.current.card).toBe(question)
   })
 
   it('forgets the dismissal when its tab retires', () => {

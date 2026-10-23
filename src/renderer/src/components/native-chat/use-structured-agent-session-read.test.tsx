@@ -1,4 +1,11 @@
 // @vitest-environment happy-dom
+import { EMPTY_STRUCTURED_AGENT_SESSION } from '../../../../shared/structured-agent-session-reducer'
+import {
+  retainStructuredReadResume,
+  takeStructuredReadResume,
+  clearStructuredReadResumeCache
+} from './structured-agent-session-read-resume-cache'
+import type { StructuredAgentSessionReadSnapshot } from './structured-agent-session-read-owner-contract'
 
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -86,6 +93,27 @@ describe('useStructuredAgentSessionRead history window', () => {
     vi.clearAllMocks()
     resetStructuredAgentSessionReadOwnersForTests()
     mocks.subscribe.mockResolvedValue({ unsubscribe: vi.fn() })
+  })
+
+  it('collects its transport and resumes data and cursor together after a cold return', async () => {
+    const items = Array.from({ length: 1000 }, (_, index) =>
+      message(`deep-${index}`, index + 1, 'assistant')
+    )
+    mocks.call.mockResolvedValueOnce({ ok: true, page: page('tail', items, false) })
+    const first = renderHook(() =>
+      useStructuredAgentSessionRead({ sessionId: 'session-a', target: LOCAL_TARGET })
+    )
+    await waitFor(() => expect(first.result.current.state.items).toHaveLength(1000))
+    const cursor = first.result.current.state.cursor
+    first.unmount()
+    const calls = mocks.call.mock.calls.length
+    const returned = renderHook(() =>
+      useStructuredAgentSessionRead({ sessionId: 'session-a', target: LOCAL_TARGET })
+    )
+    expect(returned.result.current.state.items[99]?.itemId).toBe('deep-99')
+    expect(returned.result.current.state.cursor).toEqual(cursor)
+    expect(mocks.call).toHaveBeenCalledTimes(calls)
+    expect(mocks.subscribe.mock.calls.at(-1)?.[1]).toMatchObject({ cursor })
   })
 
   it('restores a realistic 21-turn window across the wire-safe bridge-sized read', async () => {
@@ -537,5 +565,52 @@ describe('useStructuredAgentSessionRead stream failures', () => {
     await waitFor(() => expect(result.current.state.status).toBe('error'))
     expect(result.current.state.error).toBe('journal read failed')
     expect(result.current.state.epoch).toBeNull()
+  })
+})
+
+describe('inactive read data bounds', () => {
+  afterEach(() => {
+    clearStructuredReadResumeCache()
+    vi.useRealTimers()
+  })
+  const snapshot = (error = ''): StructuredAgentSessionReadSnapshot => ({
+    state: {
+      ...EMPTY_STRUCTURED_AGENT_SESSION,
+      epoch: 'cache-epoch',
+      cursor: { epoch: 'cache-epoch', sequence: 17 },
+      error
+    },
+    current: true,
+    loadingOlder: true,
+    olderHistoryGeneration: 0
+  })
+  it('transfers data with its cursor, expires from release, and bounds count, all fields and total bytes', () => {
+    vi.useFakeTimers()
+    retainStructuredReadResume('transfer', snapshot())
+    expect(takeStructuredReadResume('transfer')).toMatchObject({
+      current: false,
+      loadingOlder: false,
+      state: { cursor: { sequence: 17 } }
+    })
+    expect(takeStructuredReadResume('transfer')).toBeUndefined()
+    for (let index = 0; index < 9; index++) {
+      retainStructuredReadResume(`count-${index}`, snapshot())
+    }
+    expect(takeStructuredReadResume('count-0')).toBeUndefined()
+    vi.advanceTimersByTime(300_001)
+    expect(takeStructuredReadResume('count-8')).toBeUndefined()
+    retainStructuredReadResume('oversize-field', snapshot('x'.repeat(8 * 1024 * 1024)))
+    expect(takeStructuredReadResume('oversize-field')).toBeUndefined()
+    const tooMany = snapshot()
+    tooMany.state.items = Array.from({ length: 5001 }, () => message('item', 1, 'assistant'))
+    retainStructuredReadResume('oversize-items', tooMany)
+    expect(takeStructuredReadResume('oversize-items')).toBeUndefined()
+    const large = snapshot('x'.repeat(6 * 1024 * 1024))
+    for (const key of ['bytes-a', 'bytes-b', 'bytes-c']) {
+      retainStructuredReadResume(key, large)
+    }
+    expect(takeStructuredReadResume('bytes-a')).toBeUndefined()
+    expect(takeStructuredReadResume('bytes-b')).toBeDefined()
+    expect(takeStructuredReadResume('bytes-c')).toBeDefined()
   })
 })

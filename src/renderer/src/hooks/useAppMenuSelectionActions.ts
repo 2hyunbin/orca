@@ -1,3 +1,4 @@
+import { awaitSelectedNativeChatInput } from '@/components/native-chat/native-chat-input-readiness'
 import { useEffect } from 'react'
 import {
   dispatchAppMenuSelectionAction,
@@ -6,7 +7,14 @@ import {
 
 export function useAppMenuSelectionActions(): void {
   useEffect(() => {
-    return window.api.ui.onAppMenuSelectionAction((action: AppMenuSelectionAction) => {
+    return window.api.ui.onAppMenuSelectionAction(async (action: AppMenuSelectionAction) => {
+      if (action === 'select-all') {
+        const input = await awaitSelectedNativeChatInput()
+        if (input === false) {
+          return
+        }
+        input?.focus({ preventScroll: true })
+      }
       if (!dispatchAppMenuSelectionAction(action)) {
         window.api.ui.performNativeSelectionAction(action)
       }

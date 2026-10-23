@@ -35,10 +35,12 @@ beforeEach(() => {
 afterEach(() => cleanup())
 
 describe('useAppMenuSelectionActions', () => {
-  it('falls back to native selection when no Orca surface claims the action', () => {
+  it('falls back to native selection when no Orca surface claims the action', async () => {
     render(<Harness />)
 
-    act(() => listener?.('select-all'))
+    await act(async () => {
+      listener?.('select-all')
+    })
 
     expect(performNativeSelectionAction).toHaveBeenCalledWith('select-all')
   })

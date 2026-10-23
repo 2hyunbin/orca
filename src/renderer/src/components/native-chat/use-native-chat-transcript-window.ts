@@ -1,21 +1,21 @@
+import {
+  useNativeChatTranscriptReading,
+  type NativeChatTranscriptWindowOptions
+} from './use-native-chat-transcript-reading'
 // DOM windowing for the transcript: only the rows near the viewport are mounted,
 // the rest are reserved as estimated height.
 //
 // The virtualizer owns visible-row anchoring; the transcript scroll hook owns
-// end-follow intent. Geometry alone must never reattach a parked reader.
+// end-follow intent. Geometry alone must never reattach a parked
 //
 // Measurements and scroll offsets share the container's coordinate space.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { elementScroll, useVirtualizer, type VirtualItem } from '@tanstack/react-virtual'
 import { createProgrammaticScrollMarks } from '@/hooks/programmatic-scroll-marks'
-import {
-  NATIVE_CHAT_ROW_GAP_PX,
-  type NativeChatRowTypography,
-  DEFAULT_ROW_TYPOGRAPHY
-} from './native-chat-row-height-estimate'
-import { nativeChatPinnedRowIndexes, nativeChatTranscriptRange } from './native-chat-pinned-rows'
-import { nativeChatSlotKey, type NativeChatTranscriptSlot } from './native-chat-transcript-slots'
+import { NATIVE_CHAT_ROW_GAP_PX, DEFAULT_ROW_TYPOGRAPHY } from './native-chat-row-height-estimate'
+import { nativeChatTranscriptRange } from './native-chat-pinned-rows'
+import { nativeChatSlotKey } from './native-chat-transcript-slots'
 import {
   nativeChatScrollOffsetWithin,
   useNativeChatViewportAlign
@@ -34,6 +34,7 @@ const UNSEEN_SCROLL_PX = 1
 export const MAX_RETIRED_NATIVE_CHAT_MEASUREMENTS = 512
 
 export type NativeChatTranscriptWindow = {
+  captureReadingPosition: (followingEnd: boolean) => void
   virtualItems: VirtualItem[]
   totalSize: number
   scrollMargin: number
@@ -59,34 +60,17 @@ export type NativeChatTranscriptWindow = {
   reconcileReaderScroll: (isTakingOver: boolean) => void
 }
 
-export function useNativeChatTranscriptWindow({
-  scrollRef,
-  slots,
-  isVisible,
-  revealIndex,
-  newRowsMarkerIndex,
-  typography = DEFAULT_ROW_TYPOGRAPHY
-}: {
-  scrollRef: React.RefObject<HTMLDivElement | null>
-  slots: readonly NativeChatTranscriptSlot[]
-  isVisible: boolean
-  /** Slot the transcript was asked to reveal, or -1. */
-  revealIndex: number
-  /** Slot drawing the "New" marker, or -1. */
-  newRowsMarkerIndex?: number
-  /** Chat text scale; gap scales with the text size. */
-  typography?: NativeChatRowTypography
-}): NativeChatTranscriptWindow {
+export function useNativeChatTranscriptWindow(
+  options: NativeChatTranscriptWindowOptions
+): NativeChatTranscriptWindow {
+  const { scrollRef, slots, isVisible, revealIndex, typography = DEFAULT_ROW_TYPOGRAPHY } = options
+  const reader = useNativeChatTranscriptReading(options)
   const sizerElementRef = useRef<HTMLDivElement | null>(null)
   const [scrollMargin, setScrollMargin] = useState(0)
   const [programmaticScrollMarks] = useState(createProgrammaticScrollMarks)
   const readerTakeoverFrameRef = useRef<number | null>(null)
   const previousMeasurementKeysRef = useRef<ReadonlySet<string> | null>(null)
   const retiredMeasurementCountRef = useRef(0)
-  const pinned = useMemo(
-    () => nativeChatPinnedRowIndexes({ count: slots.length, revealIndex, newRowsMarkerIndex }),
-    [slots.length, revealIndex, newRowsMarkerIndex]
-  )
   // A content-only tail revision must not rebuild measured offsets: doing so
   // breaks the end anchor while the row grows. Structural changes replace it.
   const encodedItemKeys = JSON.stringify(slots.map(nativeChatSlotKey))
@@ -103,8 +87,8 @@ export function useNativeChatTranscriptWindow({
   // expensive is rebuilt by changing it.
   const rangeExtractor = useCallback(
     (range: { startIndex: number; endIndex: number; overscan: number; count: number }) =>
-      nativeChatTranscriptRange(range, pinned),
-    [pinned]
+      nativeChatTranscriptRange(range, reader.pinned),
+    [reader.pinned]
   )
 
   const scaledGapPx = NATIVE_CHAT_ROW_GAP_PX * typography.spacingScale
@@ -137,6 +121,12 @@ export function useNativeChatTranscriptWindow({
       }
     }
   })
+  useLayoutEffect(
+    () => reader.reconcile(virtualizer),
+    [isVisible, reader.restoreIndex, scrollRef, virtualizer]
+  )
+  useLayoutEffect(() => reader.captureReadingPosition(reader.reading.current.followingEnd))
+
   const finishReaderTakeover = useCallback(() => {
     if (readerTakeoverFrameRef.current !== null) {
       window.cancelAnimationFrame(readerTakeoverFrameRef.current)
@@ -316,6 +306,10 @@ export function useNativeChatTranscriptWindow({
 
   const reconcileReaderScroll = useCallback(
     (isTakingOver: boolean) => {
+      if (isTakingOver && reader.restore.current) {
+        reader.restore.current = null
+        reader.setRestoring(false)
+      }
       const container = scrollRef.current
       if (
         !container ||
@@ -347,6 +341,7 @@ export function useNativeChatTranscriptWindow({
   }, [isAlignHeld, reconcileReaderScroll])
 
   return {
+    captureReadingPosition: reader.captureReadingPosition,
     virtualItems: virtualizer.getVirtualItems(),
     totalSize: virtualizer.getTotalSize(),
     scrollMargin,

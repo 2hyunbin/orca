@@ -1,10 +1,12 @@
+import { holdNativeChatInput } from '../native-chat/native-chat-view-parking-owner'
 import { useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store'
 import { useAudioCapture } from '@/hooks/use-audio-capture'
 import { toast } from 'sonner'
 import { DictationIndicator } from './DictationIndicator'
 import {
-  captureInsertionTarget,
+  useDictationChatInputLease,
+  captureReadyInsertionTarget,
   insertText,
   type DictationInsertionTarget
 } from './dictation-insertion-target'
@@ -35,6 +37,7 @@ export function DictationController() {
   dictationStateRef.current = dictationState
   const dictationRunRef = useRef(0)
   const holdGestureActiveRef = useRef(false)
+  const releaseChatInput = useDictationChatInputLease(dictationState)
   const insertionTargetRef = useRef<DictationInsertionTarget | null>(null)
   const activeSessionIdRef = useRef<string | null>(null)
   const stoppedSessionIdsRef = useRef(new Set<string>())
@@ -122,7 +125,14 @@ export function DictationController() {
     const sessionId = String(runId)
     dictationRunRef.current = runId
     activeSessionIdRef.current = sessionId
-    insertionTargetRef.current = captureInsertionTarget()
+    insertionTargetRef.current = await captureReadyInsertionTarget()
+    if (dictationRunRef.current !== runId) {
+      return
+    }
+    const target = insertionTargetRef.current
+    releaseChatInput.current?.()
+    releaseChatInput.current =
+      target && target.kind !== 'terminal' ? holdNativeChatInput(target.element) : null
     stopRequestedDuringStartRef.current = false
     finalTranscriptReceivedRef.current = false
     erroredSessionIdsRef.current.clear()

@@ -1,4 +1,8 @@
-import type { AgentJournalRenderItem } from '../../../../shared/agent-session-journal-types'
+import {
+  retainStructuredReadResume,
+  initialStructuredReadSnapshot
+} from './structured-agent-session-read-resume-cache'
+import { structuredAttentionReadObservation } from './structured-attention-read-observation'
 import type { AgentProviderSessionMetadata } from '../../../../shared/agent-session-resume'
 import { agentProviderSessionsEqual } from '../../../../shared/agent-session-resume'
 import {
@@ -6,7 +10,6 @@ import {
   type AgentSessionHistoryResult
 } from '../../../../shared/agent-session-wire'
 import {
-  EMPTY_STRUCTURED_AGENT_SESSION,
   oldestStructuredAgentSessionCursor,
   reduceStructuredAgentSession,
   type StructuredAgentSessionAction
@@ -14,6 +17,7 @@ import {
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
 import { callStructuredAgentSession } from '@/runtime/structured-agent-session-client'
 import { NATIVE_CHAT_INITIAL_LIMIT, type NativeChatOlderPageResult } from './native-chat-pagination'
+import { countsTowardInitialHistory } from './native-chat-pagination'
 import {
   OLDER_PAGE_ANCHOR_ATTEMPTS,
   readStructuredAgentSessionOlderPage
@@ -30,6 +34,7 @@ export type {
 } from './structured-agent-session-read-owner-contract'
 
 import {
+  retainStructuredReadObservation,
   adoptStructuredReadOwner,
   getOrCreateStructuredReadOwner,
   forgetStructuredReadOwner,
@@ -41,21 +46,12 @@ export {
   resetStructuredAgentSessionReadOwnersForTests
 } from './structured-agent-session-read-owner-registry'
 
-function countsTowardInitialHistory(item: AgentJournalRenderItem): boolean {
-  return item.body.kind !== 'status' || !item.body.providerFrame
-}
-
 function createReadOwner(
   key: string,
   sessionId: string,
   target: RuntimeClientTarget
 ): StructuredAgentSessionReadOwner {
-  let snapshot: StructuredAgentSessionReadSnapshot = {
-    state: EMPTY_STRUCTURED_AGENT_SESSION,
-    loadingOlder: false,
-    olderHistoryGeneration: 0,
-    current: false
-  }
+  let snapshot = initialStructuredReadSnapshot(key)
   let stopActiveRun: (() => void) | null = null
   const retiredHistoryRead = (): boolean => true
   let captureActiveHistoryReadGuard = (): (() => boolean) => retiredHistoryRead
@@ -72,6 +68,12 @@ function createReadOwner(
       return
     }
     snapshot = next
+    if (next.state.cursor) {
+      retainStructuredReadObservation(key, {
+        cursor: next.state.cursor,
+        observationKey: structuredAttentionReadObservation(next.state)
+      })
+    }
     emit()
   }
   const apply = (action: StructuredAgentSessionAction): void => {
@@ -224,13 +226,16 @@ function createReadOwner(
   let owner: StructuredAgentSessionReadOwner
   const deleteIfUnused = (): void => {
     if (activations.size === 0 && listeners.size === 0) {
-      forgetStructuredReadOwner(key, owner)
+      if (forgetStructuredReadOwner(key, owner)) {
+        retainStructuredReadResume(key, snapshot)
+      }
     }
   }
   owner = {
     publishCreated: (page) => {
       if (snapshot.state.epoch === null) {
         apply({ type: 'history-page', page })
+        deleteIfUnused()
       }
     },
     activate: () => {

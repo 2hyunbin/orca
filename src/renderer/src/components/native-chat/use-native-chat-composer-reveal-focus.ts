@@ -81,8 +81,8 @@ export type NativeChatComposerRevealFocusArgs = {
 
 /**
  * Focus the composer whenever this pane reveals it, so a chat you just opened —
- * or switched back to — is ready to type into. Retained panes never unmount, so
- * the reveal edge, not mount, is the signal.
+ * or switched back to — is ready to type into. Warm reveals and cold remounts
+ * share the same focus claim.
  */
 export function useNativeChatComposerRevealFocus({
   tabId,

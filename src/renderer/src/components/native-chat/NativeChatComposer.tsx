@@ -1,11 +1,15 @@
+import { useNativeChatReturnState } from './native-chat-view-state-memory'
 import { useNativeChatComposerNotice } from './use-native-chat-composer-notice'
 import { useNativeChatMobileHoldNotice } from './use-native-chat-mobile-hold-notice'
-import type { NativeChatComposerInput } from './native-chat-composer-input'
 import { forwardRef, useCallback, useState } from 'react'
 import { useNativeChatComposerInterrupt } from './use-native-chat-composer-interrupt'
 import { useNativeChatContextUsageSummary } from './use-native-chat-context-usage-summary'
 import { useNativeChatMentionFiles } from './use-native-chat-mention-files'
-import { useNativeChatDraft } from './use-native-chat-draft'
+import {
+  useNativeChatDraft,
+  useNativeChatDraftChange,
+  composerCaret
+} from './use-native-chat-draft'
 import { useNativeChatComposerRecall } from './use-native-chat-composer-recall'
 import { useNativeChatLaunchDraftAdoption } from './use-native-chat-launch-draft-adoption'
 import { NativeChatComposerField } from './NativeChatComposerField'
@@ -84,7 +88,7 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       draftScopeKey,
       imeEnterGesture.isComposing
     )
-    const [caret, setCaret] = useState(draft.length)
+    const [caret, setCaret] = useNativeChatReturnState(composerCaret, () => draft.length)
     useNativeChatLaunchDraftAdoption({
       terminalTabId,
       agent,
@@ -348,15 +352,11 @@ const NativeChatComposerPane = forwardRef<NativeChatComposerHandle, NativeChatCo
       setCaret
     })
 
-    const handleDraftChange = useCallback(
-      (value: string, element: NativeChatComposerInput) => {
-        const nextCaret = element.selectionStart ?? value.length
-        setDraft(value)
-        setCaret(nextCaret)
-        handleDraftOrCaretChange(value, nextCaret)
-        setActiveSuggestion(0)
-      },
-      [handleDraftOrCaretChange, setDraft]
+    const handleDraftChange = useNativeChatDraftChange(
+      setDraft,
+      setCaret,
+      handleDraftOrCaretChange,
+      setActiveSuggestion
     )
 
     return (

@@ -29,6 +29,7 @@ import type {
   AgentJournalRenderItem
 } from '../../../../shared/agent-session-journal-types'
 import { projectStructuredItemsToNativeChat } from '../../../../shared/structured-agent-session-projection'
+import { NativeChatViewIdentity } from './native-chat-view-state-memory'
 import { NativeChatMessageList } from './NativeChatMessageList'
 import { NATIVE_CHAT_BOTTOM_THRESHOLD_PX } from './native-chat-autoscroll'
 import { NATIVE_CHAT_ROW_GAP_PX } from './native-chat-row-height-estimate'
@@ -98,6 +99,52 @@ describe('windowed transcript', () => {
   })
 
   const transcript = Array.from({ length: TRANSCRIPT_LENGTH }, (_, index) => marker(index))
+
+  it('returns to the exact retained deep row instead of following a remounted transcript to its tail', async () => {
+    restoreLayout()
+    restoreLayout = stubLayout({ scrollGeometry: true, offsetChain: true })
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const root = this.closest<HTMLElement>('[data-native-chat-scroll]')
+        const top = this.hasAttribute('data-index') ? this.offsetTop - (root?.scrollTop ?? 0) : 0
+        const height = this.hasAttribute('data-index') ? this.offsetHeight : this.clientHeight
+        return new DOMRect(0, top, 800, height)
+      })
+    const identity = 'deep-row-cold-return'
+    const rows = Array.from({ length: 1100 }, (_, index) => marker(index))
+    const first = render(
+      <NativeChatViewIdentity.Provider value={identity}>
+        {list(rows)}
+      </NativeChatViewIdentity.Provider>
+    )
+    paint(first.container)
+    const scroller = scrollRoot(first.container)
+    fireEvent.wheel(scroller, { deltaY: -1 })
+    scrollTranscript(first.container, 100 * ROW_PITCH_PX + 13)
+    paint(first.container)
+    const row = first.container.querySelector<HTMLElement>(
+      '[data-native-chat-row-key="message-100"]'
+    )
+    expect(row).not.toBeNull()
+    const saved = scroller.scrollTop
+    first.unmount()
+    const returned = render(
+      <NativeChatViewIdentity.Provider value={identity}>
+        {list(rows)}
+      </NativeChatViewIdentity.Provider>
+    )
+    fireEvent.scroll(scrollRoot(returned.container))
+    await settleVirtualizer(returned.container)
+    expect(
+      returned.container.querySelector('[data-native-chat-row-key="message-100"]')
+    ).not.toBeNull()
+    expect(Math.abs(scrollRoot(returned.container).scrollTop - saved)).toBeLessThanOrEqual(1)
+    scrollTranscript(returned.container, saved + ROW_PITCH_PX)
+    paint(returned.container)
+    expect(scrollRoot(returned.container).scrollTop).toBeLessThan(105 * ROW_PITCH_PX)
+    rect.mockRestore()
+  })
 
   it('mounts a window over the transcript rather than all of it', () => {
     const { container } = render(list(transcript))

@@ -1,8 +1,11 @@
 import {
+  createNativeChatReturnField,
+  useNativeChatReturnState
+} from './native-chat-view-state-memory'
+import {
   useCallback,
   useEffect,
   useRef,
-  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject
 } from 'react'
@@ -15,6 +18,9 @@ import type { NativeChatComposerHandle } from './native-chat-composer-types'
 import type { NativeChatMessageListHandle } from './use-native-chat-reveal-latest'
 import { focusNativeChatPromptCard } from './use-native-chat-prompt-card-focus'
 import { addAppKeyListener, removeAppKeyListener } from '@/lib/app-keyboard-router'
+
+const findOpen = createNativeChatReturnField<boolean>()
+const findQuery = createNativeChatReturnField<string>()
 
 /** The chat's find: open state and query live with the chat, so a reopen keeps the last query. */
 export type NativeChatFind = {
@@ -54,8 +60,8 @@ export function useNativeChatFind(
   composerRef: RefObject<Pick<NativeChatComposerHandle, 'focus'> | null>,
   messageListRef: RefObject<Pick<NativeChatMessageListHandle, 'revealFindMatch'> | null>
 ): NativeChatFind {
-  const [isOpen, setIsOpen] = useState(false)
-  const [query, setQuery] = useState('')
+  const [isOpen, setIsOpen] = useNativeChatReturnState(findOpen, () => false)
+  const [query, setQuery] = useNativeChatReturnState(findQuery, () => '')
   const barRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const focusBeforeOpenRef = useRef<HTMLElement | null>(null)

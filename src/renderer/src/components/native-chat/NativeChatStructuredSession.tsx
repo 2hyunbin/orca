@@ -53,12 +53,14 @@ import { useNativeChatStructuredComposerTransport } from './use-native-chat-stru
 import { NativeChatStructuredGoalStrip } from './NativeChatStructuredGoalStrip'
 import { structuredAgentSessionReadFailureNotice } from './structured-agent-session-read-failure-notice'
 import { useStructuredAgentSessionDeliveryNotices } from './use-structured-agent-session-delivery-notices'
-import { dispatchWasWithdrawn } from '../../../../shared/structured-agent-session-dispatch-rejection'
 import { useNativeChatHostOutage } from './use-native-chat-host-outage'
 import { useNativeChatHostOutageNotice } from './use-native-chat-host-outage-notice'
 import { useNativeChatHostPermissionGate } from './use-native-chat-host-permission-gate'
 import { useNativeChatAvailabilityNotice } from './use-native-chat-availability-notice'
-import { useStructuredAgentSessionStartFailureFacts } from './use-structured-agent-session-start-failure-facts'
+import {
+  useStructuredAgentSessionStartFailureFacts,
+  needsStartFacts
+} from './use-structured-agent-session-start-failure-facts'
 import { pendingPromptsAllUnanswerableHere } from '../../../../shared/agent-session-approval-subject'
 import {
   isClaudeSignInFailureKind,
@@ -109,7 +111,8 @@ export function NativeChatStructuredSession(
     transcriptLoading: controller.status === 'idle' || controller.status === 'loading'
   })
   const { composerError, reportComposerError } = useNativeChatComposerError(
-    controller.commandRefusalCauses
+    controller.commandRefusalCauses,
+    controller.readCurrent
   )
   const [optionPickerRequest, setOptionPickerRequest] =
     useState<NativeChatOptionPickerRequest | null>(null)
@@ -129,11 +132,7 @@ export function NativeChatStructuredSession(
   const hostHeld = hostPermission.sendBlockedReason !== null
   const submits = useStructuredNativeChatSubmitReveal(controller, provisionalLaunch.retry, hostHeld)
   const promptResponse = useStructuredPromptResponseHold(submits.respond)
-  const needsFailureFacts =
-    submits.queuedMessages.cards.some((card) => card.state === 'returned') ||
-    controller.submissions.some(
-      (submission) => submission.dispatchState === 'rejected' && !dispatchWasWithdrawn(submission)
-    )
+  const needsFailureFacts = needsStartFacts(submits.queuedMessages.cards, controller.submissions)
   const startFailures = useStructuredAgentSessionStartFailureFacts(
     controller.journalItems,
     needsFailureFacts || props.agent === 'claude'
@@ -309,6 +308,7 @@ export function NativeChatStructuredSession(
                   key={`${controller.epoch}:${controller.contextClear.clears}`}
                   ref={submits.messageListRef}
                   session={session}
+                  journalEpoch={controller.epoch}
                   journalItems={controller.journalItems}
                   journalSubmissions={controller.submissions}
                   journalLatestTurn={controller.latestTurn}
@@ -381,6 +381,7 @@ export function NativeChatStructuredSession(
           ) : null}
           {prompt && questionBody ? (
             <NativeChatStructuredQuestionCard
+              occurrenceKey={`${prompt.itemId}:${prompt.revision}`}
               key={`${prompt.itemId}:${prompt.revision}`}
               questions={agentSessionPromptQuestions(questionBody)}
               onAnswer={(response) => void promptResponse.respond(prompt, response)}

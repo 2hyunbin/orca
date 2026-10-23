@@ -1,8 +1,12 @@
+import type { NativeChatResolvedPathOptions } from './native-chat-resolved-path-ownership'
+import type { NativeChatPendingAttachmentChips } from './native-chat-session-attachment-drop'
+import type { NativeChatStructuredAttachmentSession } from './native-chat-attachment-upload'
 import type { AgentType } from '../../../../shared/agent-status-types'
 import type { NativeChatAttachmentOwner } from './native-chat-attachment-upload'
 import type { NativeChatReservedAttachment } from './native-chat-session-attachment-drop'
 
 export type UseNativeChatComposerPasteArgs = {
+  destinationIsLive?: () => boolean
   targetKey?: string
   attachmentScopeKey?: string
   agent?: AgentType
@@ -33,4 +37,19 @@ export type UseNativeChatComposerPasteArgs = {
   insertTypedText: (text: string) => boolean
   setCaret: (caret: number) => void
   setNotice: (notice: string | null, errorText?: string) => void
+}
+
+export type UseNativeChatExternalAttachmentsArgs = {
+  destinationIsLive?: () => boolean
+  terminalTabId: string
+  structuredWorktreeId?: string
+  structuredSession?: NativeChatStructuredAttachmentSession
+  disabled: boolean
+  attachResolvedPaths: (
+    paths: string[],
+    connectionId?: string | null,
+    options?: NativeChatResolvedPathOptions
+  ) => void
+  pendingChips: NativeChatPendingAttachmentChips
+  setNotice: (notice: string | null) => void
 }

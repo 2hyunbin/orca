@@ -5,6 +5,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject
 } from 'react'
+import { registerNativeChatReadyInput } from './native-chat-input-readiness'
 import { hasVisibleOverlay } from '@/lib/visible-overlay'
 import { DICTATION_FOCUS_INPUT_EVENT } from '../dictation/dictation-control-events'
 import { routeNativeChatRootKeyToInput } from './native-chat-root-key-routing'
@@ -31,6 +32,29 @@ export function useNativeChatRootInputRouting(
   useNativeChatComposerRevealFocus(args)
   // The one chat visible in the focused group takes keys typed with nothing focused.
   const revealed = args.isVisible && args.isFocusedGroup
+  useEffect(() => {
+    if (!revealed) {
+      return
+    }
+    return registerNativeChatReadyInput(args.tabId, () => {
+      const root = rootRef.current
+      const current = root?.ownerDocument.activeElement
+      if (
+        current instanceof HTMLElement &&
+        root?.contains(current) &&
+        current.matches('input, textarea, [contenteditable=true]')
+      ) {
+        return current
+      }
+      const queued = root?.querySelector<HTMLElement>('[data-queued-message-editor] textarea')
+      return (
+        queued ??
+        questionAnswerInputRef.current ??
+        root?.querySelector<HTMLElement>('[contenteditable=true]') ??
+        null
+      )
+    })
+  }, [args.tabId, args.composerReady, revealed, rootRef, questionAnswerInputRef])
   useEffect(() => {
     const root = rootRef.current
     if (!revealed || !root) {

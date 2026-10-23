@@ -1,3 +1,18 @@
+import { useEffect, useRef } from 'react'
+
+export function useDictationChatInputLease(dictationState: string) {
+  const releaseChatInput = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    if (dictationState === 'idle' || dictationState === 'error') {
+      releaseChatInput.current?.()
+      releaseChatInput.current = null
+    }
+  }, [dictationState])
+  useEffect(() => () => releaseChatInput.current?.(), [])
+  return releaseChatInput
+}
+
+import { awaitSelectedNativeChatInput } from '../native-chat/native-chat-input-readiness'
 import { yieldToEventLoop } from '../../../../shared/event-loop-yield'
 import { getUtf8ChunkEndIndex } from '../../../../shared/utf8-byte-limits'
 import {
@@ -21,6 +36,19 @@ export function captureInsertionTarget(): DictationInsertionTarget | null {
     return focused
   }
   document.dispatchEvent(new Event(DICTATION_FOCUS_INPUT_EVENT))
+  return readFocusedInsertionTarget()
+}
+
+export async function captureReadyInsertionTarget(): Promise<DictationInsertionTarget | null> {
+  const current = captureInsertionTarget()
+  if (current) {
+    return current
+  }
+  const input = await awaitSelectedNativeChatInput()
+  if (input === false) {
+    return null
+  }
+  input?.focus({ preventScroll: true })
   return readFocusedInsertionTarget()
 }
 

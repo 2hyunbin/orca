@@ -1,4 +1,8 @@
 import {
+  createNativeChatReturnField,
+  useNativeChatReturnState
+} from './native-chat-view-state-memory'
+import {
   nativeChatTranscriptOuterClass,
   NATIVE_CHAT_TRANSCRIPT_COLUMN_CLASS
 } from './native-chat-appearance-style'
@@ -20,7 +24,8 @@ import type { NativeChatTurnActivity } from '../../../../shared/native-chat-turn
 import { NativeChatTurnActivityLine } from './NativeChatTurnActivityLine'
 import {
   NativeChatDisclosureContext,
-  useNativeChatDisclosures
+  useNativeChatDisclosures,
+  useNativeChatTranscriptEpoch
 } from './native-chat-disclosure-store'
 import {
   NativeChatTranscriptItems,
@@ -72,9 +77,12 @@ type NavigationRequest =
   | { kind: 'diff'; target: NativeChatDiffReveal }
   | { kind: 'rail'; messageId: string; requestId: number }
 
+const expandedTurns = createNativeChatReturnField<ReadonlySet<string>>()
+
 export function NativeChatMessageList({
   ref,
   session,
+  journalEpoch,
   journalItems,
   journalSubmissions,
   journalLatestTurn: latestTurn,
@@ -96,6 +104,7 @@ export function NativeChatMessageList({
 }: {
   ref?: Parameters<typeof useNativeChatMessageListHandle>[0]
   session: NativeChatLiveSession
+  journalEpoch?: string | null
   journalItems?: readonly AgentJournalRenderItem[]
   /** With the items, what places each row in its turn (structured lane). */
   journalSubmissions?: readonly AgentJournalSubmission[]
@@ -135,7 +144,10 @@ export function NativeChatMessageList({
   )
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
-  const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<string>>(new Set())
+  const [expandedTurnIds, setExpandedTurnIds] = useNativeChatReturnState(
+    expandedTurns,
+    () => new Set()
+  )
   const disclosures = useNativeChatDisclosures()
   const toggleExpandedTurn = useCallback((turnKey: string) => {
     setExpandedTurnIds((current) => toggleNativeChatExpandedKey(current, turnKey))
@@ -153,12 +165,14 @@ export function NativeChatMessageList({
     latestTurn
   )
   const {
+    resetChoices,
     sections: subagentSections,
     subagentRowsInOrder,
     subagentChoices,
     subagentDisclosure,
     openSubagentSections
   } = useNativeChatSubagentSections(messages, subagentRows, subagentRoster)
+  useNativeChatTranscriptEpoch(journalEpoch, disclosures, resetChoices, setExpandedTurnIds)
   // Folded subagent rows stay loaded, so a reopened reply keeps its reveal.
   const loadedMessageIds = useMemo(
     () => new Set([...messages.map(({ id }) => id), ...subagentSections.pathOf.keys()]),
@@ -237,6 +251,9 @@ export function NativeChatMessageList({
   const transcriptWindow = useNativeChatTranscriptWindow({
     scrollRef,
     slots,
+    journalEpoch,
+    readCurrent: session.readCurrent,
+    subagentSections,
     isVisible,
     // One pin serves both: revealing a diff and jumping from the rail are
     // mutually exclusive things to be doing.
@@ -247,6 +264,7 @@ export function NativeChatMessageList({
   const transcriptScroll = useNativeChatTranscriptScroll({
     scrollRef,
     contentRef,
+    captureReadingPosition: transcriptWindow.captureReadingPosition,
     itemCount: slots.length,
     isWorking,
     showsTailRow: tailRow !== null,
