@@ -202,7 +202,7 @@ function createSession(processName: () => string, rootPid = SHELL_PID): FixtureS
     inspectTerminalInterface: (
       snapshot?: Parameters<typeof interfaceEvidence.inspectPosixTerminalInterface>[3]
     ) => interfaceEvidence.inspectPosixTerminalInterface(rootPid, '/bin/zsh', false, snapshot),
-    incarnationId: 'inc-1',
+    incarnationId: '00000000-0000-4000-8000-000000000001',
     get isAlive() {
       return !dead
     },
