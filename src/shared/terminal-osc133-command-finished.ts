@@ -17,18 +17,14 @@ type OscTerminator = {
 
 const OSC_133_PREFIX = '\x1b]133;'
 const MAX_OSC_CARRY_LENGTH = 4096
+// One search avoids rescanning the remaining chunk for an absent terminator.
+// oxlint-disable-next-line no-control-regex -- BEL and ST terminate OSC frames.
+const OSC_TERMINATOR = /\x07|\x1b\\/g
 
 function findOscTerminator(data: string, startIndex: number): OscTerminator | null {
-  const bel = data.indexOf('\x07', startIndex)
-  const st = data.indexOf('\x1b\\', startIndex)
-
-  if (bel === -1 && st === -1) {
-    return null
-  }
-  if (bel !== -1 && (st === -1 || bel < st)) {
-    return { index: bel, length: 1 }
-  }
-  return { index: st, length: 2 }
+  OSC_TERMINATOR.lastIndex = startIndex
+  const match = OSC_TERMINATOR.exec(data)
+  return match ? { index: match.index, length: match[0].length } : null
 }
 
 function parseBestEffortExitCode(value: string | undefined): number | null {
