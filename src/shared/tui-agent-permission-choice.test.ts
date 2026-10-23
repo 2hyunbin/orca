@@ -30,6 +30,28 @@ const legacy = (
 })
 
 describe('one-time move of permission flags out of Arguments', () => {
+  it('imports Grok modes from recorded 1.0.62 help without taking ownership of other modes', () => {
+    // Installed 1.0.62 (1474f9cbdd91) --help, permission-mode excerpt; not captured argv.
+    const recordedHelp = `      --permission-mode <MODE>
+          Permission mode
+
+          [possible values: default, acceptEdits, auto, dontAsk, bypassPermissions, plan]`
+    const option = recordedHelp.trim().split(' ')[0]
+    const modes = recordedHelp.match(/possible values: ([^\]]+)/)?.[1].split(', ')
+    expect(modes).toBeDefined()
+    for (const mode of modes ?? []) {
+      const text = `${option} ${mode} --model grok-code-fast-1`
+      const migrated = migrateAgentPermissionChoice({ agentDefaultArgs: { grok: text } })
+      const choice =
+        mode === 'default' ? 'ask' : mode === 'bypassPermissions' ? 'full-access' : 'own'
+      expect(resolveAgentPermission('grok', migrated).choice).toBe(choice)
+      expect(migrated.agentDefaultArgs.grok).toBe(
+        choice === 'own' ? text : '--model grok-code-fast-1'
+      )
+      expect(resolveTuiAgentLaunchArgs('grok', migrated)).toBe(text)
+    }
+  })
+
   it('turns saved shapes into a stored choice and leaves the rest of the text', () => {
     const migrated = migrateAgentPermissionChoice(
       legacy(
@@ -354,6 +376,21 @@ describe('permission carrier ownership across save, reload and consumers', () =>
     expect(projectAgentLaunchSettings(loaded).agentDefaultArgs[agent]).toBe(launch)
     expect(newChatPermissionModeForSettings(agent, loaded)).toBe(chat)
     expect(agentArgsSetPermission(agent, value)).toBe(carrier)
+  })
+
+  it('keeps a Gemini mode from recorded 0.63.0 help user-owned through import and composition', () => {
+    // Installed 0.63.0 --help, ticket 1916: syntax evidence, without a provider turn.
+    const recordedHelp = `      --approval-mode             Set the approval mode: default (prompt for approval), auto_edit (auto-approve edit tools), yolo (auto-approve all tools), plan (read-only mode)  [string] [choices: "default", "auto_edit", "yolo", "plan"]`
+    const option = recordedHelp.trim().split(/\s+/)[0]
+    const mode = recordedHelp.match(/choices: "([^"]+)"/)?.[1]
+    const text = `${option} ${mode}`
+    expect(text).toBe('--approval-mode default')
+    const imported = migrateAgentPermissionChoice({ agentDefaultArgs: { gemini: text } })
+    expect(imported.agentDefaultArgs.gemini).toBe(text)
+    expect(resolveAgentPermission('gemini', imported).choice).toBe('own')
+    const full = { ...imported, agentPermissionDefault: 'full-access' as const }
+    expect(resolveAgentPermission('gemini', full).choice).toBe('full-access')
+    expect(resolveTuiAgentLaunchArgs('gemini', full)).toBe(text)
   })
 
   it.each(['--approval-mode auto_edit', '--approval-mode=plan', '-y'])(
