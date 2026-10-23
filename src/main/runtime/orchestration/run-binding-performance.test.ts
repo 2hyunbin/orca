@@ -21,10 +21,16 @@ function openDatabase(): OrchestrationDb {
 
 // Count real SQLite date evaluations, forwarding to SQLite's unchanged implementation on a second connection.
 function historyWork(db: OrchestrationDb) {
-  const native: unknown = Reflect.get(db.db, 'db')
-  if (!(native instanceof DatabaseSync)) {
+  const adapter: unknown = db.db
+  if (
+    typeof adapter !== 'object' ||
+    adapter === null ||
+    !('db' in adapter) ||
+    !(adapter.db instanceof DatabaseSync)
+  ) {
     throw new Error('Expected node:sqlite database')
   }
+  const native = adapter.db
   const oracle = new DatabaseSync(':memory:')
   const date = oracle.prepare('SELECT julianday(?) AS value')
   let evaluations = 0
