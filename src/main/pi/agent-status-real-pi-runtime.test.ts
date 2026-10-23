@@ -6,7 +6,10 @@ import { expect, it, vi } from 'vitest'
 import { AgentHookServer } from '../agent-hooks/server'
 import { normalizeHookPayload } from '../../shared/agent-hook-listener'
 import { makePaneKey } from '../../shared/stable-pane-id'
-import { createAgentStatusExtensionHarness } from './agent-status-extension-test-harness'
+import {
+  createAgentStatusExtensionHarness,
+  type HookContext
+} from './agent-status-extension-test-harness'
 
 vi.mock('../telemetry/client', () => ({ track: vi.fn() }))
 vi.mock('../telemetry/cohort-classifier', () => ({ getCohortAtEmit: vi.fn() }))
@@ -36,6 +39,7 @@ it.skipIf(!process.env.ORCA_PI_TEST_PACKAGE)(
     )
     const directory = await mkdtemp(join(tmpdir(), 'orca-pi-session-'))
     const sink = new Sink()
+    const sdkSessions = new Set<{ dispose: () => void }>()
     try {
       const append = (manager: ReturnType<typeof SessionManager.create>) =>
         manager.appendMessage({
@@ -88,33 +92,137 @@ it.skipIf(!process.env.ORCA_PI_TEST_PACKAGE)(
         id: lead.getSessionId(),
         transcriptPath: lead.getSessionFile()
       })
-      const { ExtensionRunner } = await import(
-        /* @vite-ignore */ pathToFileURL(join(root, 'dist/core/extensions/runner.js')).href
+      const [
+        { createAgentSession },
+        { DefaultResourceLoader },
+        { SettingsManager },
+        { ModelRuntime }
+      ] = await Promise.all([
+        import(/* @vite-ignore */ pathToFileURL(join(root, 'dist/core/sdk.js')).href),
+        import(/* @vite-ignore */ pathToFileURL(join(root, 'dist/core/resource-loader.js')).href),
+        import(/* @vite-ignore */ pathToFileURL(join(root, 'dist/core/settings-manager.js')).href),
+        import(/* @vite-ignore */ pathToFileURL(join(root, 'dist/core/model-runtime.js')).href)
+      ])
+      const modelRuntime = await ModelRuntime.create({
+        authPath: join(directory, 'isolated-auth.json'),
+        modelsPath: null,
+        allowModelNetwork: false
+      })
+      const createSdkSource = async (name: string) => {
+        const child = h.registerSession()
+        const settingsManager = SettingsManager.inMemory({ cacheWarming: 'off' })
+        const resourceLoader = new DefaultResourceLoader({
+          cwd: directory,
+          agentDir: join(directory, name),
+          settingsManager,
+          noExtensions: true,
+          noSkills: true,
+          noPromptTemplates: true,
+          noThemes: true,
+          noContextFiles: true,
+          extensionFactories: [
+            (api: {
+              on: (
+                name: string,
+                handler: (event: Record<string, unknown>, ctx: HookContext) => Promise<void>
+              ) => void
+            }) => {
+              for (const hook of [
+                'session_start',
+                'tool_call',
+                'tool_execution_start',
+                'tool_execution_end',
+                'session_shutdown'
+              ]) {
+                api.on(hook, (event, ctx) => child.callHook(hook, event, ctx))
+              }
+            }
+          ]
+        })
+        await resourceLoader.reload()
+        expect(resourceLoader.getExtensions().errors).toEqual([])
+        const { session } = await createAgentSession({
+          cwd: directory,
+          agentDir: join(directory, name),
+          sessionManager: SessionManager.inMemory(directory),
+          settingsManager,
+          resourceLoader,
+          modelRuntime,
+          noTools: 'all'
+        })
+        sdkSessions.add(session)
+        const errors: unknown[] = []
+        const setWidget = vi.fn()
+        await session.bindExtensions({
+          mode: 'interactive',
+          uiContext: { setWidget, onTerminalInput: () => () => {}, notify: vi.fn() },
+          onError: (error: unknown) => errors.push(error)
+        })
+        const ctx = session.extensionRunner.createContext()
+        expect(ctx.hasUI).toBe(true)
+        expect(ctx.isIdle()).toBe(true)
+        ctx.ui.setWidget('question', [name])
+        expect(setWidget).toHaveBeenCalledWith('question', [name])
+        for (const type of ['tool_call', 'tool_execution_start']) {
+          await session.extensionRunner.emit({
+            type,
+            toolName: 'ask_user_question',
+            toolCallId: `call-${name}`,
+            [type === 'tool_call' ? 'input' : 'args']: {
+              questions: [{ id: 'choice', question: `${name}?`, options: ['yes', 'no'] }]
+            }
+          })
+        }
+        expect(errors).toEqual([])
+        return {
+          session,
+          ctx,
+          dispose: () => {
+            session.dispose()
+            sdkSessions.delete(session)
+          }
+        }
+      }
+      const hidden = await createSdkSource('hidden SDK')
+      const visible = await createSdkSource('visible SDK')
+      await vi.waitFor(() =>
+        expect(accepted.at(-1)?.payload.interactivePrompt).toContain('visible SDK?')
       )
-      const sdkManager = SessionManager.inMemory(directory)
-      const sdkRunner = new ExtensionRunner([], { invalidate: () => {} }, directory, sdkManager, {})
-      const sdkContext = sdkRunner.createContext()
-      const sdkChild = h.registerSession()
-      await sdkChild.callHook('session_start', { reason: 'startup' }, sdkContext)
-      await sdkChild.callHook(
-        'tool_call',
-        {
-          toolName: 'ask_user_question',
-          input: { questions: [{ question: 'SDK-owned question?' }] }
-        },
-        sdkContext
-      )
-      await vi.waitFor(() => expect(accepted.at(-1)?.payload.state).toBe('blocked'))
-      // Direct disposal invalidates this runner without requiring a shutdown event.
-      sdkRunner.invalidate()
-      expect(() => sdkContext.sessionManager).toThrow()
+      const leadSubscriptions = h.fetchMock.mock.calls.length
+      // Native disposal invalidates captured getters without a shutdown observation.
+      hidden.dispose()
+      expect(() => hidden.ctx.sessionManager).toThrow()
+      expect(visible.ctx.sessionManager).toBe(visible.session.sessionManager)
       await h.callHook(
         'message_end',
-        { message: { role: 'assistant', content: 'After SDK invalidation' } },
+        { message: { role: 'assistant', content: 'After hidden SDK disposal' } },
         { sessionManager: lead }
       )
       await vi.waitFor(() =>
-        expect(accepted.at(-1)?.payload.lastAssistantMessage).toBe('After SDK invalidation')
+        expect(h.fetchMock.mock.calls.length).toBeGreaterThan(leadSubscriptions)
+      )
+      expect(accepted.at(-1)?.payload).toMatchObject({
+        state: 'blocked',
+        lastAssistantMessage: 'After hidden SDK disposal'
+      })
+      expect(accepted.at(-1)?.payload.interactivePrompt).toContain('visible SDK?')
+      await visible.session.extensionRunner.emit({
+        type: 'tool_execution_end',
+        toolName: 'ask_user_question',
+        toolCallId: 'call-visible SDK',
+        result: { content: [{ type: 'text', text: 'yes' }] },
+        isError: false
+      })
+      await vi.waitFor(() => expect(accepted.at(-1)?.payload.interactivePrompt).toBeUndefined())
+      visible.dispose()
+      expect(() => visible.ctx.sessionManager).toThrow()
+      await h.callHook(
+        'message_end',
+        { message: { role: 'assistant', content: 'After SDK disposal' } },
+        { sessionManager: lead }
+      )
+      await vi.waitFor(() =>
+        expect(accepted.at(-1)?.payload.lastAssistantMessage).toBe('After SDK disposal')
       )
       expect(accepted.at(-1)?.payload.interactivePrompt).toBeUndefined()
       expect(accepted.at(-1)?.providerSession?.id).toBe(lead.getSessionId())
@@ -188,6 +296,9 @@ it.skipIf(!process.env.ORCA_PI_TEST_PACKAGE)(
         ).not.toHaveProperty('session_file')
       }
     } finally {
+      for (const session of sdkSessions) {
+        session.dispose()
+      }
       await rm(directory, { recursive: true, force: true })
     }
   }

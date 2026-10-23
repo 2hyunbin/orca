@@ -7,6 +7,7 @@ import {
 } from '../../shared/agent-hook-listener/listener-state'
 import { cacheRelayLegacyAgentStatus } from '../../shared/agent-status-legacy-relay-cache'
 import { buildOmpPlanReviewAnswer } from '../../shared/omp-plan-review-prompt'
+import * as sessionDispatch from './agent-status-extension-test-context'
 import {
   createAgentStatusExtensionHarness,
   type HookContext
@@ -382,9 +383,29 @@ describe('selected source lifetime', () => {
     }
   )
 
-  it('bounds activation and active-close work by current opens with zero ordinary or historical replay', async () => {
+  it('bounds mutation and activation work by stored sources with zero live ordinary replay', async () => {
     const measure = async (n: number) => {
       let visits = 0
+      let sourceVisits = 0
+      let recordVisits = 0
+      const originalCountingMap = sessionDispatch.createCountingMap
+      const count = vi.spyOn(sessionDispatch, 'createCountingMap').mockImplementation((onEntry) => {
+        const Base = originalCountingMap(onEntry)
+        return class<K, V> extends Base<K, V> {
+          *values(): MapIterator<V> {
+            for (const value of super.values()) {
+              recordVisits++
+              yield value
+            }
+          }
+          *[Symbol.iterator](): MapIterator<[K, V]> {
+            for (const entry of super[Symbol.iterator]()) {
+              sourceVisits++
+              yield entry
+            }
+          }
+        }
+      })
       const state = createHookListenerState()
       let admitted: ReturnType<typeof normalizeHookPayload> | undefined
       const h = createAgentStatusExtensionHarness({
@@ -408,23 +429,46 @@ describe('selected source lifetime', () => {
           return { ok: true }
         }
       })
+      count.mockRestore()
       const sources: { child: ReturnType<typeof h.registerSession>; ctx: HookContext }[] = []
+      let opens = 0
       for (let i = 0; i < n; i++) {
         const child = h.registerSession()
         const ctx = { ...context(String(i)), agent: { kind: 'sub' as const } }
         await child.callHook('session_start', {}, ctx)
-        await child.callHook(
-          'tool_approval_requested',
-          { toolName: 'bash', approvalMode: 'yolo' },
-          ctx
-        )
-        await child.callHook(
-          'tool_approval_requested',
-          { toolName: 'read', approvalMode: 'yolo' },
-          ctx
-        )
+        for (const name of ['tool_call', 'tool_execution_start']) {
+          const beforeSources = sourceVisits
+          const beforeRecords = recordVisits
+          await child.callHook(
+            name,
+            {
+              toolName: 'ask',
+              toolCallId: `call-${i}`,
+              [name === 'tool_call' ? 'input' : 'args']: { question: 'Choose?' }
+            },
+            ctx
+          )
+          opens++
+          expect(sourceVisits - beforeSources).toBe(i + 1)
+          expect(recordVisits - beforeRecords).toBe(i + 1)
+        }
         sources.push({ child, ctx })
       }
+      expect(opens).toBe(2 * n)
+      expect(sourceVisits).toBe(n * (n + 1))
+      expect(recordVisits).toBe(sourceVisits)
+      const replacement = sources.at(-1)!
+      const replacements = 5
+      const beforeReplacement = visits
+      for (let i = 0; i < replacements; i++) {
+        await replacement.child.callHook(
+          'tool_execution_start',
+          { toolName: 'ask', toolCallId: `replace-${i}` },
+          replacement.ctx
+        )
+      }
+      expect(visits - beforeReplacement).toBe(2 * n * replacements)
+      expect(visits).toBe(sourceVisits + recordVisits)
       const abandoned = sources.pop()!
       let before = visits
       await abandoned.child.callHook('session_shutdown', {}, abandoned.ctx)
@@ -443,7 +487,7 @@ describe('selected source lifetime', () => {
       await flush()
       expect(visits - before).toBe(0)
       expect(payloads(h).at(-1)?.hook_event_name).toBe('agent_start')
-      expect(admitted?.payload).toMatchObject({ state: 'blocked', toolName: 'read' })
+      expect(admitted?.payload).toMatchObject({ state: 'blocked', toolName: 'ask' })
       before = visits
       for (const { child, ctx } of sources) {
         const start = visits
