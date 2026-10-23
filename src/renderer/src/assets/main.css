@@ -8,6 +8,7 @@
 @import './markdown-preview.css';
 @import './terminal.css';
 @import './mobile-page.css';
+@import './text-shimmer.css';
 @import '../../../shared/styles/scrollbar-sleek.css';
 
 @font-face {
@@ -3408,37 +3409,6 @@ html.native-shell .app-layout {
 
 .icon-superscript-count[data-multiple-digits='true'] {
   letter-spacing: -0.02em;
-}
-
-.workspace-reference-row[data-stale]::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--foreground) 4%, transparent);
-}
-
-@keyframes workspace-reference-shimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .workspace-reference-row[data-stale]::after {
-    background: linear-gradient(
-      100deg,
-      transparent 30%,
-      color-mix(in srgb, var(--foreground) 8%, transparent) 50%,
-      transparent 70%
-    );
-    background-size: 200% 100%;
-    animation: workspace-reference-shimmer 2.4s ease-in-out infinite;
-  }
 }
 
 .workspace-reference-title {
