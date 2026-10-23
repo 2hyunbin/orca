@@ -518,8 +518,9 @@ describe('reserve assignment on a director', () => {
       const harness = setupSpill(paced, { intake: { perSec: 2, burst: 20, tokens: 0 } })
       const spill = await spillOf(harness)
       // Asia refills its token in 4 s, US in 2 s.
-      await expect(spill?.({ skipOwnRegion: false, rowEpoch: 0 })).rejects.toBeInstanceOf(ReservePaceError)
-      await expect(spill?.({ skipOwnRegion: false, rowEpoch: 0 })).rejects.toMatchObject({ retryAfterSeconds: 2 })
+      await expect(spill?.({ skipOwnRegion: false, rowEpoch: 0 })).rejects.toSatisfy(
+        (error) => error instanceof ReservePaceError && error.retryAfterSeconds === 2
+      )
     })
 
     it('counts a spill once, not as a database fallback or a pace per region', async () => {
