@@ -514,7 +514,12 @@
       "source": "Source: {{source}}",
       "title": "Usage requests",
       "unreachable": "Could not reach this host. Its usage request settings are unknown.",
-      "visibilityMenu": "Meter visibility"
+      "visibilityMenu": "Meter visibility",
+      "keywords": {
+        "requests": "requests",
+        "polling": "polling",
+        "fetch": "fetch"
+      }
     }
   },
   "menu": {
