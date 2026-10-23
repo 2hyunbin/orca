@@ -11,6 +11,10 @@ Screen readers retain the status label, and reduced motion uses a still tint.
 
 ![Animated stale-row shimmer](after.gif)
 
+For alternatives, see the [four-option comparison report](comparison/README.md)
+and [standalone live previews](comparison/index.html). The existing row shimmer is
+preserved alongside official shadcn text-only and metadata-only prototypes.
+
 Captured with Playwright CDP from a hidden Electron renderer on an isolated Xvfb
 display, rendering the actual `WorktreeCardLinkedItemsSection` and application CSS
 with five seeded PRs and two stale references. These are component captures, not
