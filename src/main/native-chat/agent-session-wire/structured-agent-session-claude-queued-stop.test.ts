@@ -8,12 +8,14 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
 import { structuredAgentSessionAgentStatus } from '../../../shared/structured-agent-session-agent-status'
-import { projectStructuredAgentSessionStatusState } from '../../../shared/structured-agent-session-projection'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import { DISPATCH_REJECTED_CANCELLED } from '../../../shared/structured-agent-session-dispatch-rejection'
 import { activeStructuredAgentSessionTurnId } from '../../../shared/structured-agent-session-live-turn'
-import { projectStructuredAgentSessionStatus } from '../../../shared/structured-agent-session-projection'
+import {
+  projectStructuredAgentSessionStatus,
+  projectStructuredAgentSessionStatusState
+} from '../../../shared/structured-agent-session-projection'
 import { ClaudeStructuredSessionAdapter } from '../../claude/claude-structured-session-adapter'
 import {
   claudeFrame as frame,
