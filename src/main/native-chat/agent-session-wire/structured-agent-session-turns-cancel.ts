@@ -107,6 +107,7 @@ export async function performCancel(
 export type AcceptedChatStop = {
   turnId: string | null
   turnScope: AgentJournalTurnScope
+  previouslyStopped: boolean
   requestNoteWrite?: Promise<void>
 }
 
@@ -172,7 +173,9 @@ async function cancelAndNote(
     isStructuredAgentSessionCommandTurnId(liveTurnId) &&
     !namesTurnNotLive
   const stoppedBefore =
-    runningCommand && structuredAgentSessionCommandWasStopped(ctx.journal, liveTurnId)
+    runningCommand &&
+    (input.acceptedStop?.previouslyStopped ??
+      structuredAgentSessionCommandWasStopped(ctx.journal, liveTurnId))
   // One rule for every agent: a chat's Stop ends its session, background work included; the next
   // send resumes the conversation. A task row's Stop has its own targeted path.
   const endsSession = input.endSession !== undefined

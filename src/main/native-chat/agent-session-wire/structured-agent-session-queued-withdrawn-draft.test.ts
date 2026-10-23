@@ -21,7 +21,7 @@ const observationClock = createStructuredSessionObservationClock(() => rig.host,
 beforeEach(() => observationClock.start())
 
 beforeEach(async () => {
-  rig = await createQueuedMessageTestRig()
+  rig = await createQueuedMessageTestRig({ restartable: true })
 })
 
 afterEach(async () => {

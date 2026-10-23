@@ -39,6 +39,7 @@ import {
 import { performCancel, type AcceptedChatStop } from './structured-agent-session-turns-cancel'
 import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import type { AgentSessionTurnContext, TurnOutcome } from './structured-agent-session-turns'
+import { structuredAgentSessionCommandWasStopped } from './structured-agent-session-command-turn'
 
 type ChatStopOutcome = TurnOutcome<AgentSessionCancelResult>
 
@@ -186,6 +187,8 @@ export function mutateWithChatStop<TValue>(
       // Late, or nothing to stop: answered as a no-op, its receipt committed before the answer.
       return { ok: true, value: { ...named, cancelled: false } }
     }
+    const previouslyStopped =
+      target.turnId !== null && structuredAgentSessionCommandWasStopped(ctx.journal, target.turnId)
     const accepted = await accept(ctx, target)
     if (!accepted.ok) {
       return accepted
@@ -202,6 +205,7 @@ export function mutateWithChatStop<TValue>(
     const acceptedStop: AcceptedChatStop = {
       turnId: noteTurnId,
       turnScope: target.turnScope,
+      previouslyStopped,
       ...((target.reach === 'interrupt' && (target.marks || target.turnId !== null)) ||
       accepted.value.settled
         ? {
