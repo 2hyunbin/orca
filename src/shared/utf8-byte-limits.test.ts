@@ -160,3 +160,44 @@ describe('isUtf8ByteLengthWithinLimit native fast path', () => {
     }
   })
 })
+
+describe('getUtf8ByteLength', () => {
+  it.each([
+    { text: 'a', repeat: 2_000_000, bytes: 2_000_000 },
+    { text: 'é', repeat: 700_001, bytes: 1_400_002 },
+    { text: '雪', repeat: 400_001, bytes: 1_200_003 },
+    { text: '\ud800x\udc00😊', repeat: 200_000, bytes: 2_200_000 }
+  ])('counts the full $bytes-byte text with bounded encoding', ({ text, repeat, bytes }) => {
+    expect(getUtf8ByteLength(text.repeat(repeat))).toBe(bytes)
+  })
+
+  it('carries a complete surrogate pair into the next encoding window', () => {
+    const text = `${'x'.repeat(1024 * 1024 - 1)}😊雪`
+    expect(getUtf8ByteLength(text)).toBe(1024 * 1024 - 1 + 4 + 3)
+  })
+
+  it.each([255, 256, 257, 1024 * 1024 - 1, 1024 * 1024, 1024 * 1024 + 1])(
+    'counts a %i-unit prefix ending inside its parent surrogate pair',
+    (length) => {
+      const parent = `${'x'.repeat(length - 1)}😊`
+      expect(getUtf8ByteLength(parent.slice(0, length))).toBe(length - 1 + 3)
+    }
+  )
+
+  it('keeps the scanning fallback when encodeInto is unavailable', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(TextEncoder.prototype, 'encodeInto')
+    try {
+      Object.defineProperty(TextEncoder.prototype, 'encodeInto', {
+        value: undefined,
+        configurable: true
+      })
+      expect(getUtf8ByteLength('雪😊\ud800'.repeat(1000))).toBe(10_000)
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(TextEncoder.prototype, 'encodeInto', descriptor)
+      } else {
+        Reflect.deleteProperty(TextEncoder.prototype, 'encodeInto')
+      }
+    }
+  })
+})

@@ -1,3 +1,4 @@
+import { getUtf8ByteLength } from '../../../../shared/utf8-byte-limits'
 import type { LocalLogTailReadResult } from '../../../../shared/local-log-tail-types'
 
 export const LOCAL_LOG_TAIL_MAX_BYTES = 50 * 1024 * 1024
@@ -28,7 +29,7 @@ export class LocalLogTailDecoder {
     this.initialVisibleContent = snapshotContent.slice(0, lastCompleteLineEnd)
     // Why: rewind to the last complete line, then re-read the trailing record as
     // bytes. This preserves a UTF-8 code point split at the snapshot EOF.
-    this.byteOffset = new TextEncoder().encode(this.initialVisibleContent).byteLength
+    this.byteOffset = getUtf8ByteLength(this.initialVisibleContent)
     this.fileIdentity = fileIdentity
   }
 
