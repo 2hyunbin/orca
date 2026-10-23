@@ -160,7 +160,6 @@ export function mergeClaudeProfilePromptHistory(
   if (!lstatIfPresent(destination)) {
     writeFileSync(destination, '', { flag: 'wx', mode: 0o600 })
   }
-  const shared = new Set(readFileSync(destination, 'utf8').split('\n'))
   const pendings: { name: string; generation: number }[] = []
   for (const item of readdirSync(profile, { withFileTypes: true })) {
     const generation = pendingGeneration(item.name)
@@ -170,6 +169,12 @@ export function mergeClaudeProfilePromptHistory(
   }
   // Why: directory order is not creation order; generations keep prompts in the order they were written.
   pendings.sort((left, right) => left.generation - right.generation)
+  const current = lstatIfPresent(source)
+  const shared = new Set(
+    pendings.length > 0 || current?.isFile()
+      ? readFileSync(destination, 'utf8').split('\n')
+      : undefined
+  )
   // Why: a cross-volume share is refused below; draining first would leak this account's prompts.
   if (platform === 'win32' && pendings.length > 0) {
     if (statSync(profile).dev !== statSync(destination).dev) {
@@ -184,7 +189,6 @@ export function mergeClaudeProfilePromptHistory(
       warnClaudeProfile(report, HISTORY, error)
     }
   }
-  const current = lstatIfPresent(source)
   if (current?.isSymbolicLink()) {
     return realpathSync(source) === realpathSync(destination) ? 'unchanged' : 'user-owned'
   }

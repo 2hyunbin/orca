@@ -7,6 +7,7 @@ vi.mock('node:fs', async (original) => {
   const actual = await original<typeof fs>()
   return {
     ...actual,
+    readFileSync: vi.fn(actual.readFileSync),
     renameSync: vi.fn(actual.renameSync),
     statSync: vi.fn(actual.statSync)
   }
@@ -37,6 +38,21 @@ afterEach(() => {
 const itLinks = it.skipIf(process.platform === 'win32')
 
 describe('Claude profile history sharing', () => {
+  itLinks('does not reread shared prompt history when no profile copy needs merging', async () => {
+    const f = fixture()
+    const sharedHistory = join(f.defaultHome, 'history.jsonl')
+    fs.writeFileSync(sharedHistory, 'existing\n')
+    await f.share()
+    vi.mocked(fs.readFileSync).mockClear()
+
+    expect((await f.share()).surfaces['history.jsonl']).toBe('unchanged')
+    expect(
+      vi.mocked(fs.readFileSync).mock.calls.filter(([file]) => file === sharedHistory)
+    ).toHaveLength(0)
+    expect(fs.realpathSync(join(f.profileHome, 'history.jsonl'))).toBe(sharedHistory)
+    expect(f.history()).toBe('existing\n')
+  })
+
   itLinks(
     'merges session trees without overwriting conflicts and shares future default writes',
     async () => {
