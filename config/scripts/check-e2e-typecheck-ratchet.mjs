@@ -65,6 +65,7 @@ export function main(
     console.error('The baseline may only shrink. Fix it: pnpm check:e2e-typecheck-ratchet --prune')
   }
   if (grown.length + shrunk.length > 0) {
+    console.error(tscOutput)
     return 1
   }
   console.log(`e2e-typecheck ratchet OK — ${totalCount(current)} grandfathered error(s).`)
