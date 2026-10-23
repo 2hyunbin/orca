@@ -89,8 +89,10 @@ function createTranscriptLineFramer(
         segment = pending.join('')
         pending = []
       }
+      const byteLength =
+        maxRecordBytes === Infinity ? Buffer.byteLength(segment, 'utf8') : pendingBytes + 1
       pendingBytes = 0
-      emit(segment.slice(0, -1), Buffer.byteLength(segment, 'utf8'), true)
+      emit(segment.slice(0, -1), byteLength, true)
       lineStart = newlineIndex + 1
       newlineIndex = text.indexOf('\n', lineStart)
     }
@@ -124,7 +126,7 @@ function createTranscriptLineFramer(
       pending.push(tail)
     }
     const line = pending.join('')
-    emit(line, Buffer.byteLength(line, 'utf8'), false)
+    emit(line, maxRecordBytes === Infinity ? Buffer.byteLength(line, 'utf8') : pendingBytes, false)
     pending = []
   }
 }

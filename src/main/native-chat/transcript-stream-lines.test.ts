@@ -94,21 +94,23 @@ describe('decodeTranscriptStream', () => {
     expect(searchedCharacters).toBeLessThanOrEqual(input.length * 2)
   })
 
-  it('joins split UTF-16 surrogate pairs before deriving byte offsets', async () => {
+  it.each([Infinity, 8])('joins split UTF-16 surrogate pairs with byte limit %s', async (limit) => {
     const chunks = ['a\ud83d', '\ude00', '\r', '\n\n', 'tail\r']
     const actual = await decodeTranscriptStream(
       Readable.from(chunks),
       '/chat.jsonl',
       123,
       decode,
-      true
+      true,
+      limit
     )
     const expected = await decodeTranscriptStream(
       Readable.from([chunks.join('')]),
       '/chat.jsonl',
       123,
       decode,
-      true
+      true,
+      limit
     )
     expect(actual).toEqual(expected)
     expect(actual.messages).toHaveLength(2)
