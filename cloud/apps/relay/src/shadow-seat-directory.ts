@@ -333,17 +333,6 @@ export class ShadowSeatDirectory {
     return raw ?? this.admitModeOf(cellId)
   }
 
-  // Drops the map's copy of one exact seat its cell says it does not hold. Not a leave: the cell
-  // never reported one, so nothing is remembered for a rejoin. False when the map moved on.
-  forgetSeat(seat: { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }): boolean {
-    const cursor = this.cells.get(seat.cellId)
-    const key = hostKey(seat.userId, seat.relayHostId)
-    const held = cursor?.seats.get(key)
-    if (!cursor || !held || held.epoch !== seat.epoch || held.joinedAt !== seat.joinedAt) return false
-    this.unseat(cursor, key)
-    return true
-  }
-
   cellIds(): string[] {
     return [...this.cells.keys()]
   }

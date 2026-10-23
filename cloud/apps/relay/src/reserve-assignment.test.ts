@@ -8,7 +8,6 @@ import {
   RESERVE_WRONG_CELL_ROW_READ_MS,
   RESERVE_STARTUP_GATE_MS
 } from './reserve-assignment.js'
-import { reconcileReserveLedger } from './reserve-ledger-writer.js'
 import { ReservePlacer, type ReserveAttempt } from './reserve-placement.js'
 import { ShadowSeatDirectory, type SeatFeedCell, type SeatFeedResponse } from './shadow-seat-directory.js'
 
@@ -507,156 +506,40 @@ describe('reserve assignment on a director', () => {
   })
 
   describe('when a cell answers a demotion', () => {
-    const seatOnC1 = (epoch: number, joinedAt: number) => ({ ...HOST, cellId: 'c1', epoch, joinedAt })
     const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
-    // The ledger row for HOST, as the reconcile reads it.
-    const ledger = (row: { cellId: string; epoch: number }) => ({
-      readRows: async () => new Map([[`${HOST.userId}\u0000${HOST.relayHostId}`, row]]),
-      enqueue: () => undefined
-    })
-    const reconcile = (
-      assignment: ReserveAssignment,
-      directory: ShadowSeatDirectory,
-      row: { cellId: string; epoch: number },
-      now: number
-    ) =>
-      reconcileReserveLedger({
-        writer: ledger(row),
-        seats: () =>
-          directory.seatsOnCell('c1').map(({ userId, relayHostId, seat }) => ({
-            userId,
-            relayHostId,
-            cellId: 'c1',
-            epoch: seat.epoch,
-            joinedAt: seat.joinedAt
-          })),
-        demote: (seat) => assignment.demoteSeat(seat, 'reconcile'),
-        now
-      })
+    const outcomes = (lines: string[]) =>
+      lines
+        .map((line) => JSON.parse(line))
+        .filter((entry) => entry.event === 'orca_relay_reserve_demote_outcome')
 
-    it('forgets a seat its cell says it does not hold, so the reconcile stops naming it', async () => {
+    // The map follows the cell's feed: a refusing cell repairs that feed itself.
+    it('logs the answer by host digest and leaves the seat to the feed', async () => {
       const lines: string[] = []
-      const { assignment, directory, demoted, now } = setup({
+      const { assignment, directory } = setup({
         feeds: [feed('c1', { full: [seated(10, 1_000)] }), feed('c2')],
         demote: () => 'not-seated',
         log: (line) => lines.push(line)
       })
-      await reconcile(assignment, directory, { cellId: 'c1', epoch: 11 }, now.value)
+      assignment.demoteSeat({ ...HOST, cellId: 'c1', epoch: 10, joinedAt: 1_000 }, 'reconcile')
       await settle()
-      expect(directory.seatsOnCell('c1')).toEqual([])
-      expect(await reconcile(assignment, directory, { cellId: 'c1', epoch: 11 }, now.value)).toEqual({
-        upserted: 0,
-        demoted: 0
-      })
-      expect(demoted).toEqual([{ cellId: 'c1', epoch: 10, joinedAt: 1_000 }])
-      const outcome = lines
-        .map((line) => JSON.parse(line))
-        .find((entry) => entry.event === 'orca_relay_reserve_demote_outcome')
-      expect(outcome).toMatchObject({
-        via: 'reconcile',
-        cellId: 'c1',
-        epoch: 10,
-        outcome: 'not-seated',
-        forgotten: true
-      })
-      expect(outcome.relayHostIdDigest).toMatch(/^[0-9a-f]{12}$/)
+      expect(outcomes(lines)).toMatchObject([
+        { via: 'reconcile', cellId: 'c1', epoch: 10, outcome: 'not-seated' }
+      ])
+      expect(outcomes(lines)[0].relayHostIdDigest).toMatch(/^[0-9a-f]{12}$/)
       expect(lines.join('\n')).not.toContain(HOST.relayHostId)
-    })
-
-    it('keeps a seat the cell is draining, as today, and asks again on the next reconcile', async () => {
-      const { assignment, directory, demoted, now } = setup({
-        feeds: [feed('c1', { full: [seated(10, 1_000)] }), feed('c2')],
-        demote: () => 'draining'
-      })
-      await reconcile(assignment, directory, { cellId: 'c1', epoch: 11 }, now.value)
-      await settle()
       expect(directory.seatsOnCell('c1')).toHaveLength(1)
-      await reconcile(assignment, directory, { cellId: 'c1', epoch: 11 }, now.value)
-      expect(demoted).toHaveLength(2)
     })
 
-    it('keeps a seat the cell could not be reached for', async () => {
+    it('records a cell it could not reach as unreachable', async () => {
       const lines: string[] = []
-      const { assignment, directory, now } = setup({
+      const { assignment } = setup({
         feeds: [feed('c1', { full: [seated(10, 1_000)] }), feed('c2')],
         demote: () => null,
         log: (line) => lines.push(line)
       })
-      await reconcile(assignment, directory, { cellId: 'c1', epoch: 11 }, now.value)
+      assignment.demoteSeat({ ...HOST, cellId: 'c1', epoch: 10, joinedAt: 1_000 }, 'reconcile')
       await settle()
-      expect(directory.seatsOnCell('c1')).toHaveLength(1)
-      expect(lines.some((line) => line.includes('"outcome":"unreachable"'))).toBe(true)
-    })
-
-    it('never forgets a newer seat that joined while the demotion was in flight', async () => {
-      const { assignment, directory, now } = setup({
-        feeds: [feed('c1', { full: [seated(10, 1_000)] }), feed('c2')],
-        demote: () => 'not-seated'
-      })
-      assignment.demoteSeat(seatOnC1(10, 1_000), 'reconcile')
-      directory.apply('c1', feed('c1', { seq: 2, full: [seated(11, 2_000)] }), now.value, now.value)
-      await settle()
-      expect(directory.seatsOnCell('c1').map(({ seat }) => seat.epoch)).toEqual([11])
-    })
-
-    // A rebind keeps epoch and generation and joins again with a new time: that is a new seat.
-    it('never forgets the same epoch rejoined by a rebind while the demotion was in flight', async () => {
-      const { assignment, directory, now } = setup({
-        feeds: [feed('c1', { full: [seated(10, 1_000)] }), feed('c2')],
-        demote: () => 'not-seated'
-      })
-      assignment.demoteSeat(seatOnC1(10, 1_000), 'reconcile')
-      directory.apply(
-        'c1',
-        feed('c1', {
-          full: undefined,
-          seq: 2,
-          changes: [{ seq: 2, kind: 'join', ...HOST, epoch: 10, generation: 1, at: 2_000 }]
-        }),
-        now.value,
-        now.value
-      )
-      await settle()
-      expect(directory.seatsOnCell('c1').map(({ seat }) => seat.joinedAt)).toEqual([2_000])
-    })
-
-    // Two desktops sharing one identity take turns on c1. Each turn leaves the map one seat
-    // behind the row; every stale seat is asked about once, and the map ends at the live one.
-    it('converges for a duplicate-identity pair alternating on one cell', async () => {
-      const { assignment, directory, demoted, now } = setup({
-        feeds: [feed('c1', { full: [seated(10, 1_000)] }), feed('c2')],
-        demote: () => 'not-seated'
-      })
-      let seq = 1
-      for (const [epoch, joinedAt] of [
-        [11, 2_000],
-        [12, 3_000]
-      ] as const) {
-        // Two reconciles before the live desktop's join reaches the map: the stale seat is asked once.
-        await reconcile(assignment, directory, { cellId: 'c1', epoch }, now.value)
-        await settle()
-        await reconcile(assignment, directory, { cellId: 'c1', epoch }, now.value)
-        seq += 1
-        directory.apply(
-          'c1',
-          feed('c1', {
-            full: undefined,
-            seq,
-            changes: [{ seq, kind: 'join', ...HOST, epoch, generation: seq, at: joinedAt }]
-          }),
-          now.value,
-          now.value
-        )
-      }
-      expect(demoted).toEqual([
-        { cellId: 'c1', epoch: 10, joinedAt: 1_000 },
-        { cellId: 'c1', epoch: 11, joinedAt: 2_000 }
-      ])
-      expect(directory.seatsOnCell('c1').map(({ seat }) => seat.epoch)).toEqual([12])
-      expect(await reconcile(assignment, directory, { cellId: 'c1', epoch: 12 }, now.value)).toEqual({
-        upserted: 0,
-        demoted: 0
-      })
+      expect(outcomes(lines)).toMatchObject([{ outcome: 'unreachable' }])
     })
   })
 })

@@ -199,7 +199,7 @@ type ReconcileSeat = { userId: string; relayHostId: string; cellId: string; epoc
 // demoted (epoch-checked, closes with 4409), so the desktop re-assigns to what the row names.
 // The demoting director then mints above the row's epoch for that host (see raiseEpochFloor).
 export async function reconcileReserveLedger(input: {
-  writer: Pick<ReserveLedgerWriter, 'readRows' | 'enqueue'>
+  writer: ReserveLedgerWriter
   seats: () => ReconcileSeat[]
   demote?: (seat: ReconcileSeat, row: { cellId: string; epoch: number }) => void
   now: number
