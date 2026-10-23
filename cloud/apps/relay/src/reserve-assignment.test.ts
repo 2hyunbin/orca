@@ -984,27 +984,38 @@ describe('reserve assignment on a director', () => {
       expect(events(lines, 'orca_relay_reserve_drain_replaced')).toHaveLength(1)
     })
 
-    it('ignores a booking that expired unused when its old cell later drains', async () => {
+    // Placement memories are clock-free: a host that never reached c2 is not counted again later.
+    it('counts a host once per drain, also when it asks again after 30 s', async () => {
       const lines: string[] = []
       const { assignment, directory, now } = setup({
-        feeds: [feed('c1', { full: [seated(7)] }), feed('c2')],
+        feeds: [feed('c1', { draining: true, full: [{ ...seated(7), state: 'drain-only' }] }), feed('c2')],
         log: (line) => lines.push(line)
       })
+      await assignment.plan(HOST, { reconnect: true, region: US })
+      now.value += 31_000
+      for (const cellId of ['c1', 'c2']) {
+        directory.apply(cellId, feed(cellId, { draining: cellId === 'c1', full: undefined, seq: 1, changes: [] }), now.value, now.value)
+      }
+      await assignment.plan(HOST, { reconnect: true, region: US })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced')).toHaveLength(1)
+    })
+
+    it('counts afresh once the drained cell restarts', async () => {
+      const lines: string[] = []
+      const { assignment, directory, now } = setup({
+        feeds: [feed('c1', { draining: true, full: [seated(7)] }), feed('c2')],
+        log: (line) => lines.push(line)
+      })
+      await assignment.plan(HOST, { reconnect: true, region: US })
+      // The host came back to the restarted c1, which drains again.
       directory.apply(
-        'c2',
-        feed('c2', {
-          full: undefined,
-          seq: 2,
-          changes: [{ seq: 2, kind: 'reserve', ...HOST, epoch: 8, generation: 0, reservedBy: 'director', at: now.value }]
-        }),
+        'c1',
+        feed('c1', { incarnation: 'c1-incarnation-2', draining: true, full: [seated(20)] }),
         now.value,
         now.value
       )
-      now.value += 30_001
-      directory.apply('c1', feed('c1', { draining: true, full: [seated(7)] }), now.value, now.value)
-      directory.apply('c2', feed('c2', { full: undefined, seq: 2, changes: [] }), now.value, now.value)
       await assignment.plan(HOST, { reconnect: true, region: US })
-      expect(events(lines, 'orca_relay_reserve_drain_replaced').map((entry) => entry.fromCellId)).toEqual(['c1'])
+      expect(events(lines, 'orca_relay_reserve_drain_replaced')).toHaveLength(2)
     })
 
     it('marks its pace as the drain’s, on the reserve lane and in the region fallback', async () => {

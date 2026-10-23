@@ -108,8 +108,10 @@ export class ReserveAssignment {
   private summary: PlacementSummary = emptySummary()
   private summaryAt: number
   private readonly rowFloors = new Map<string, { epoch: number; expiresAt: number }>()
-  // This director's own bookings, until the cell's feed reports them (one poll or more).
-  private readonly ownBookings = new Map<string, { cellId: string; epoch: number; at: number }>()
+  // This director's own bookings, which the cell's feed reports only a poll or more later.
+  private readonly ownBookings = new Map<string, { cellId: string; epoch: number }>()
+  // Hosts already counted off each drained cell, for that cell incarnation's drain.
+  private readonly drainCounted = new Map<string, { incarnation: string | undefined; hosts: Set<string> }>()
 
   constructor(
     private readonly input: {
@@ -200,7 +202,7 @@ export class ReserveAssignment {
       .at(-1)
     const booking = directory.bookingOf(identity.userId, identity.relayHostId)
     const rowFloor = this.rowFloor(identity, now)
-    const drainedFrom = this.drainSource(identity, seats, left, booking, now)
+    const drainedFrom = this.drainSource(identity, seats, left, booking)
     const known = [
       ...seats.map((seat) => seat.epoch),
       ...(left ? [left.epoch] : []),
@@ -285,7 +287,7 @@ export class ReserveAssignment {
     }
     const placed = await placeFresh()
     if (placed) {
-      if (drainedFrom !== undefined) this.recordDrainReplaced(drainedFrom, placed)
+      if (drainedFrom !== undefined) this.recordDrainReplaced(identity, drainedFrom, placed)
       return { kind: 'answer', assignment: placed, lane: 'placement' }
     }
     return { kind: 'database', epochFloor, regionReserve, reserveSpill }
@@ -297,22 +299,16 @@ export class ReserveAssignment {
 
   // Keyed on the cell, not the leave: a same-cap drain (graceMs 0) has the host re-ask before
   // its leave reaches the map, but the cell's feed says draining from the first poll after.
-  // Only the newest grant counts, so a host already re-booked elsewhere is not counted again;
-  // a booking counts only while it can still be used.
+  // Only the newest grant counts, so a host already re-booked elsewhere is not a drain re-ask.
   private drainSource(
     identity: Identity,
     seats: readonly ShadowSeat[],
     left: { cellId: string; epoch: number } | undefined,
-    booking: { cellId: string; epoch: number; at: number } | undefined,
-    now: number
+    booking: { cellId: string; epoch: number } | undefined
   ): string | undefined {
     const own = this.ownBookings.get(hostKey(identity))
-    const bookings = [booking, own].filter(
-      (entry): entry is { cellId: string; epoch: number; at: number } =>
-        entry !== undefined && now - entry.at <= CELL_RESERVE_TTL_MS
-    )
     let newest: { cellId: string; epoch: number; state?: string } | undefined
-    for (const entry of [...seats, ...(left ? [left] : []), ...bookings]) {
+    for (const entry of [...seats, ...(left ? [left] : []), ...(booking ? [booking] : []), ...(own ? [own] : [])]) {
       if (!newest || entry.epoch > newest.epoch) newest = entry
     }
     if (!newest) return undefined
@@ -323,7 +319,17 @@ export class ReserveAssignment {
 
   // Only the reserve lane's own answers: a database-lane placement off the drained (isolated)
   // cell already logs orca_relay_sticky_replaced_off_isolated_cell, and the canary sums both.
-  private recordDrainReplaced(fromCellId: string, placed: RelayAssignment): void {
+  // Each host counts once per drain: the canary bar must never pass on a host counted twice.
+  private recordDrainReplaced(identity: Identity, fromCellId: string, placed: RelayAssignment): void {
+    const incarnation = this.input.directory.cellState(fromCellId)?.incarnation
+    let counted = this.drainCounted.get(fromCellId)
+    if (!counted || counted.incarnation !== incarnation) {
+      counted = { incarnation, hosts: new Set() }
+      this.drainCounted.set(fromCellId, counted)
+    }
+    const key = hostKey(identity)
+    if (counted.hosts.has(key)) return
+    counted.hosts.add(key)
     this.summary.drainReplaced[fromCellId] = (this.summary.drainReplaced[fromCellId] ?? 0) + 1
     this.log(
       JSON.stringify({
@@ -711,7 +717,7 @@ export class ReserveAssignment {
   private rememberOwnBooking(identity: Identity, cellId: string, epoch: number): void {
     const key = hostKey(identity)
     this.ownBookings.delete(key)
-    this.ownBookings.set(key, { cellId, epoch, at: this.now() })
+    this.ownBookings.set(key, { cellId, epoch })
     if (this.ownBookings.size > OWN_BOOKINGS_MAX) {
       this.ownBookings.delete(this.ownBookings.keys().next().value!)
     }
@@ -795,6 +801,13 @@ export class ReserveAssignment {
     const now = this.now()
     if (now - this.summaryAt < SUMMARY_INTERVAL_MS) return
     this.summaryAt = now
+    // A drain ends when the cell stops reporting it or restarts; its next drain counts afresh.
+    for (const [cellId, counted] of this.drainCounted) {
+      const state = this.input.directory.cellState(cellId)
+      if (!state || state.draining === false || state.incarnation !== counted.incarnation) {
+        this.drainCounted.delete(cellId)
+      }
+    }
     const { latenciesMs, outcomes, cells } = this.summary.dryRun
     latenciesMs.sort((left, right) => left - right)
     const percentile = (share: number) =>
