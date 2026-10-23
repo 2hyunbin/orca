@@ -3,6 +3,9 @@ import { escapeRegex } from './string-utils'
 import type { JiraIssueKeyCasing } from './ui-chrome-types'
 import { JIRA_ISSUE_KEY_PATTERN } from './jira-issue-url'
 
+const MAX_WORKSPACE_SLUG_LENGTH = 48
+const WORKSPACE_SLUG_PREFIX_WINDOW = 4096
+
 function normalizeApostrophes(input: string): string {
   return input.replace(/[\u2018\u2019]/g, "'")
 }
@@ -19,8 +22,23 @@ function stripDanglingDisplayApostrophes(input: string): string {
     .replace(/([\p{L}\p{N}])'(?=$|[^\p{L}\p{N}])/gu, '$1')
 }
 
+function workspaceSlugPrefix(input: string): string {
+  if (input.length <= WORKSPACE_SLUG_PREFIX_WINDOW) {
+    return input
+  }
+  const prefix = input.slice(0, WORKSPACE_SLUG_PREFIX_WINDOW)
+  const preserved = /[a-z0-9_]/gi
+  // Every match survives normalization; one extra proves the slug prefix is complete.
+  for (let count = 0; count <= MAX_WORKSPACE_SLUG_LENGTH; count += 1) {
+    if (!preserved.test(prefix)) {
+      return input
+    }
+  }
+  return input.slice(0, preserved.lastIndex)
+}
+
 export function slugifyForWorkspaceName(input: string): string {
-  const normalized = removeIntraWordApostrophes(input)
+  const normalized = removeIntraWordApostrophes(workspaceSlugPrefix(input))
     .trim()
     .toLowerCase()
     .replace(/[\\/]+/g, '-')
@@ -32,7 +50,7 @@ export function slugifyForWorkspaceName(input: string): string {
       // must match the main-process sanitizer before workspace creation.
       .replace(/\.{2,}/g, '.')
       .replace(/^[.-]+|[.-]+$/g, '')
-      .slice(0, 48)
+      .slice(0, MAX_WORKSPACE_SLUG_LENGTH)
       .replace(/[-._]+$/g, '')
   )
 }

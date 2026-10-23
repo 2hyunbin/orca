@@ -30,6 +30,16 @@ describe('slugifyForWorkspaceName', () => {
   })
 
   it.each([
+    [`${'a'.repeat(47)}’K${' remaining words'.repeat(400)}`, `${'a'.repeat(47)}k`],
+    [`${'_'.repeat(49)}${' remaining words'.repeat(400)}`, ''],
+    [`${'.'.repeat(4096)}Late Name`, 'late-name'],
+    [`${'日本語'.repeat(1400)}Late Name`, 'late-name'],
+    [`${'a'.repeat(47)}${' '.repeat(4096)}b c`, 'a'.repeat(47)]
+  ])('keeps normalization context and later words in long prompts', (input, expected) => {
+    expect(slugifyForWorkspaceName(input)).toBe(expected)
+  })
+
+  it.each([
     9, 10, 11, 12, 13, 32, 160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201,
     8202, 8232, 8233, 8239, 8287, 12288, 65279
   ])('folds pasted whitespace U+%i beside punctuation and the length boundary', (code) => {
