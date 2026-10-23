@@ -178,9 +178,8 @@ function comparableFilterValue(
 export function activeWorkspaceRowFilterKeys(
   filters: WorkspaceRowFilters
 ): (keyof WorkspaceRowFilters)[] {
-  return WORKSPACE_ROW_FILTER_KEYS.filter(
-    (key) => key in changedWorkspaceRowFilters(filters, NO_WORKSPACE_ROW_FILTERS)
-  )
+  const changed = changedWorkspaceRowFilters(filters, NO_WORKSPACE_ROW_FILTERS)
+  return WORKSPACE_ROW_FILTER_KEYS.filter((key) => key in changed)
 }
 
 /** The badge count: each active filter once, projects one per selected known project. */
