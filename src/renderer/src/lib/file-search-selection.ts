@@ -1,9 +1,6 @@
 export type FileSearchSelectedTextProvider = () => string | null | undefined
 export const FILE_SEARCH_SELECTED_TEXT_MAX_CHARS = 2 * 1024
 
-const LINE_FEED_CODE_UNIT = 10
-const CARRIAGE_RETURN_CODE_UNIT = 13
-
 type ProviderEntry = {
   id: number
   provider: FileSearchSelectedTextProvider
@@ -17,28 +14,17 @@ export function normalizeSelectedTextForFileSearch(text: string | null | undefin
     return null
   }
   let normalized = ''
+  const lineBreaks = /[\r\n]+/g
   let lineStart = 0
-  for (let index = 0; index <= text.length; index += 1) {
-    const codeUnit = index < text.length ? text.charCodeAt(index) : LINE_FEED_CODE_UNIT
-    if (
-      index < text.length &&
-      codeUnit !== LINE_FEED_CODE_UNIT &&
-      codeUnit !== CARRIAGE_RETURN_CODE_UNIT
-    ) {
-      continue
-    }
-    normalized = appendSelectedTextSearchLine(normalized, text, lineStart, index)
-    if (normalized.length >= FILE_SEARCH_SELECTED_TEXT_MAX_CHARS) {
+  while (lineStart <= text.length) {
+    const lineBreak = lineBreaks.exec(text)
+    const lineEnd = lineBreak?.index ?? text.length
+    normalized = appendSelectedTextSearchLine(normalized, text, lineStart, lineEnd)
+    // Another nonempty line needs room for a separator and one character.
+    if (normalized.length >= FILE_SEARCH_SELECTED_TEXT_MAX_CHARS - 1 || !lineBreak) {
       break
     }
-    if (
-      codeUnit === CARRIAGE_RETURN_CODE_UNIT &&
-      index + 1 < text.length &&
-      text.charCodeAt(index + 1) === LINE_FEED_CODE_UNIT
-    ) {
-      index += 1
-    }
-    lineStart = index + 1
+    lineStart = lineEnd + lineBreak[0].length
   }
   return normalized.length > 0 ? normalized : null
 }
