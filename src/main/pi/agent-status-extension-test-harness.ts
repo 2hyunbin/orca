@@ -249,10 +249,12 @@ export function createAgentStatusExtensionHarness(args: {
       events,
       on(name: string, handler: HookHandler) {
         const previous = target[name]
-        target[name] = async (event, ctx) => {
-          await previous?.(event, ctx)
-          await handler(event, ctx)
-        }
+        target[name] = previous
+          ? async (event, ctx) => {
+              await previous(event, ctx)
+              await handler(event, ctx)
+            }
+          : handler
       }
     })
   }
@@ -260,10 +262,7 @@ export function createAgentStatusExtensionHarness(args: {
     await handlers[name]?.(event, hookContext)
   }
   const registerLikePi = (): void => {
-    for (const [name, listener] of busSubscriptions) {
-      piEvents.off(name, listener)
-    }
-    busSubscriptions = []
+    busSubscriptions.splice(0).forEach(([name, listener]) => piEvents.off(name, listener))
     for (const key of Object.keys(handlers)) {
       delete handlers[key]
     }
