@@ -39,15 +39,17 @@ function nativeChatUserMessageContentKey(
   }
   let text = normalizedNativeChatUserMessageText(message) ?? ''
   // Some CLIs retain pasted attachment paths as prompt text instead of image markers.
-  const paths = sentImagePaths?.filter(Boolean) ?? []
-  const normalizedPaths = paths.map(normalizeNativeChatPendingText)
-  for (const prefix of [normalizedPaths.join(' '), normalizedPaths.join('')]) {
-    if (prefix && (text === prefix || text.startsWith(`${prefix} `))) {
-      text = text.slice(prefix.length).trimStart()
-      if (!text) {
-        return nativeChatPendingContentKey({ text: '', imagePaths: paths })
+  if (sentImagePaths?.length) {
+    const paths = sentImagePaths.filter(Boolean)
+    const normalizedPaths = paths.map(normalizeNativeChatPendingText)
+    for (const prefix of [normalizedPaths.join(' '), normalizedPaths.join('')]) {
+      if (prefix && (text === prefix || text.startsWith(`${prefix} `))) {
+        text = text.slice(prefix.length).trimStart()
+        if (!text) {
+          return nativeChatPendingContentKey({ text: '', imagePaths: paths })
+        }
+        break
       }
-      break
     }
   }
   if (text) {
@@ -224,17 +226,21 @@ export function selectPendingIndicesRepresentedByUserRows(
   rows: readonly NativeChatGluedUserRow[]
 ): Set<number> {
   const represented = new Set<number>()
+  if (rows.length === 0) {
+    return represented
+  }
   const remaining = pending.map((entry, index) => {
     const continuation = nativeChatContinuationSendText(entry.text)
+    const literal = normalizeNativeChatPendingText(entry.text)
     return {
       index,
-      literal: normalizeNativeChatPendingText(entry.text),
-      text: continuation ?? normalizeNativeChatPendingText(entry.text),
+      literal,
+      text: continuation ?? literal,
       continuation: continuation !== null
     }
   })
   // A lone continuation can be represented without a second queued send.
-  if (rows.length === 0 || (pending.length < 2 && !remaining.some((entry) => entry.continuation))) {
+  if (pending.length < 2 && !remaining.some((entry) => entry.continuation)) {
     return represented
   }
   for (const row of rows) {
