@@ -9,7 +9,10 @@ import {
   onJiraImageCacheInvalidated
 } from './runtime-jira-image-cache'
 import { replaceRuntimeEnvironmentRevisions } from './runtime-environment-revision'
-import { jiraImageReference } from '../../../shared/jira/jira-attachment-image'
+import {
+  JIRA_IMAGE_MAX_BYTES,
+  jiraImageReference
+} from '../../../shared/jira/jira-attachment-image'
 
 const { download } = vi.hoisted(() => ({ download: vi.fn() }))
 vi.mock('./runtime-jira-image-client', () => ({ readRuntimeJiraImage: download }))
@@ -251,5 +254,27 @@ describe('bounded Jira Blob image cache', () => {
     expect(download).not.toHaveBeenCalled()
     image.release()
     expect(migrateLegacyJiraImages('![bad](data:image/png;base64,A===)', target)).toBe('![bad]()')
+  })
+
+  it('preserves all bytes of an old-host image at the supported size limit', async () => {
+    const expected = Buffer.alloc(JIRA_IMAGE_MAX_BYTES)
+    for (let index = 0; index < expected.length; index += 1) {
+      expected[index] = index % 256
+    }
+    const body = migrateLegacyJiraImages(
+      `![shot](data:image/png;base64,${expected.toString('base64')})`,
+      target
+    )
+    const reference = jiraImageReference(body.slice('![shot]('.length, -1))
+    expect(reference).not.toBeNull()
+    const blob: unknown = createUrl.mock.calls[0]?.[0]
+    if (!(blob instanceof Blob) || !reference) {
+      throw new Error('Expected migrated image Blob')
+    }
+    expect(blob.type).toBe('image/png')
+    expect(Buffer.from(await blob.arrayBuffer()).equals(expected)).toBe(true)
+    const image = await acquire(reference)
+    expect(download).not.toHaveBeenCalled()
+    image.release()
   })
 })
