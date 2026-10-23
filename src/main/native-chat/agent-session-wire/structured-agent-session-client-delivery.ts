@@ -63,7 +63,6 @@ export class StructuredAgentSessionClientDelivery {
     })
     this.turnCompletionFeed = new StructuredAgentSessionTurnCompletionFeed({
       sessions,
-      starting,
       now,
       readStatusState: (sessionId, journal) =>
         this.statusFeed.journalProjection(sessionId, journal)?.state ?? null

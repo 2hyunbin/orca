@@ -18,7 +18,7 @@ import type {
 import { failedProviderChildStart } from './structured-agent-session-provider-child'
 import { structuredAgentSessionEndedChildFailure } from './structured-agent-session-ended-child-failure'
 
-/** A queued message whose child died while it waited inherits that child's failure. */
+/** A failed start applies only to the queued message that requested it. */
 export function startThatFailedWhileQueued(
   session: StructuredAgentSessionHostSession,
   oldest: AgentJournalSubmission
@@ -26,11 +26,7 @@ export function startThatFailedWhileQueued(
   const ended = failedProviderChildStart(session)
   if (
     !ended ||
-    (ended.generation !== null &&
-      hasStructuredAgentSessionStartFailureRow(
-        session.journal.snapshot().items,
-        ended.generation
-      )) ||
+    ended.startedFor !== oldest.clientMessageId ||
     oldest.acceptedSequence === undefined ||
     ended.endedAt.epoch !== session.journal.cursor().epoch ||
     ended.endedAt.sequence < oldest.acceptedSequence
@@ -53,12 +49,14 @@ export function refusedStructuredAgentSessionStart(
   }: Extract<StructuredAgentSessionResumeOutcome, { ok: false }>
 ): { startKey: string | null; cause: StructuredAgentSessionStartFailureCause } {
   if (expired) {
-    return { startKey: null, cause: { failure: agentSessionFailureFact('hostStopped') } }
+    return { startKey, cause: { failure: agentSessionFailureFact('hostStopped') } }
+  }
+  if (failure) {
+    return { startKey, cause: { failure } }
   }
   return {
     startKey,
     cause: {
-      ...(failure ? { failure } : {}),
       refusal,
       ...(diagnostic ? { diagnostic } : {}),
       ...(argumentProblem ? { argumentProblem } : {}),
@@ -103,26 +101,21 @@ export function hasStructuredAgentSessionStartFailureRow(
 }
 
 /**
- * A start the delivery loop needed and did not get: every queued message rejected with the same
- * words, then the start's row. A failed owned open also records its cause before any message.
+ * A failed start settles its selected message, or only its row when no message requested it.
  */
 export async function recordStructuredAgentSessionStartFailure(
   session: Pick<StructuredAgentSessionHostSession, 'journal'> & { fence: number },
   failure: StructuredAgentSessionStartFailure,
-  /** Only these of what is queued: the rest was accepted after the start was asked for. */
-  which?: (submission: AgentJournalSubmission) => boolean
+  clientMessageId: string | null
 ): Promise<void> {
-  const oldest = oldestQueuedSubmission(session)
-  const startKey = failure.startKey ?? oldest?.clientMessageId
+  const selected = session.journal
+    .submissions()
+    .find(
+      (entry) => entry.clientMessageId === clientMessageId && isQueuedAgentJournalSubmission(entry)
+    )
+  const startKey = failure.startKey ?? clientMessageId
   const rejection = { reason: failure.reason, rejection: failure.rejection }
-  const select =
-    which ?? ((entry: AgentJournalSubmission) => entry.clientMessageId === oldest?.clientMessageId)
-  const chosen = select
-    ? session.journal
-        .submissions()
-        .filter((entry) => isQueuedAgentJournalSubmission(entry) && select(entry))
-    : null
-  if (startKey === undefined || chosen?.length === 0) {
+  if (startKey === null || (clientMessageId !== null && !selected)) {
     return
   }
   await session.journal.appendLifecycleBatch({
@@ -130,19 +123,19 @@ export async function recordStructuredAgentSessionStartFailure(
     fence: session.fence,
     recovered: true,
     mutations: [structuredAgentSessionStartFailureRow(startKey, failure)],
-    ...(chosen
+    ...(selected
       ? {
-          dispatches: chosen.map(({ clientMessageId }) => ({
-            clientMessageId,
-            fence: session.fence,
-            state: 'rejected' as const,
-            recovered: true as const,
-            ...rejection
-          }))
+          dispatches: [
+            {
+              clientMessageId: selected.clientMessageId,
+              fence: session.fence,
+              state: 'rejected' as const,
+              recovered: true as const,
+              ...rejection
+            }
+          ]
         }
-      : oldest
-        ? { rejectsQueued: rejection }
-        : {})
+      : {})
   })
 }
 

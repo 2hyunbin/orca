@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { CodexAppServerRequestError } from '../../codex/codex-app-server-request-error'
+import { withProviderRequestTimeout } from '../../provider-process/provider-request-timeout'
 import { AgentSessionAcquisitionRefusal } from './structured-agent-session-adapter'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
@@ -309,6 +310,12 @@ describe('a start that ends before it proves itself', () => {
       }
 
       await eventually(async () => expect((await submission(id))?.dispatchState).toBe('rejected'))
+      expect(await submission(id)).toMatchObject(
+        agentSessionFailureWords(
+          agentSessionFailureFact(refused ? 'notSignedIn' : 'providerStartFailed'),
+          { agentName: 'Codex', surface: 'rejection' }
+        )
+      )
       expect((await submission(id))?.handedOverAt).toBeUndefined()
       expect(dispatch).not.toHaveBeenCalled()
       await eventually(() => expect(acquire).toHaveBeenCalledTimes(refused ? 3 : 6))
@@ -682,6 +689,31 @@ describe('one logical start across physical attempts', () => {
     expect(await submission(second)).toMatchObject(HOST_STOPPED)
   })
 
+  it('keeps an elapsed provider-step deadline final and preserves its words', async () => {
+    await restartWith(publishFirst)
+    const first = await heldBehindStart('initialize deadline')
+    const { sessions, lifetime } = host.collaboratorsForTests()
+    const requestTimeout = { method: 'initialize', timeoutMs: 60_000 }
+    await vi.advanceTimersByTimeAsync(60_000)
+    await lifetime.failStartingChild(
+      SESSION,
+      sessions.get(SESSION)!.child!,
+      withProviderRequestTimeout(
+        new CodexAppServerRequestError('initialize', -1, 'deadline'),
+        requestTimeout
+      ),
+      60_000
+    )
+    await eventually(async () => expect((await submission(first))?.dispatchState).toBe('rejected'))
+    expect(await submission(first)).toMatchObject(
+      agentSessionFailureWords(agentSessionFailureFact('startFailed', { requestTimeout }), {
+        agentName: 'Codex',
+        surface: 'rejection'
+      })
+    )
+    expect(acquire).toHaveBeenCalledTimes(1)
+  })
+
   it('delivers a later message after a delivery step throws', async () => {
     await restartWith(publishFirst)
     const first = await heldBehindStart('failed preparation')
@@ -698,18 +730,34 @@ describe('one logical start across physical attempts', () => {
     expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([later])
   })
 
-  it.each([false, true])(
-    'settles an operation start without rejecting a later message (%s)',
-    async (joins) => {
+  it.each([
+    { joins: false, failsWrite: false },
+    { joins: true, failsWrite: false },
+    { joins: true, failsWrite: true }
+  ])(
+    'settles an operation start without rejecting a later message (joins: $joins, write fails: $failsWrite)',
+    async ({ joins, failsWrite }) => {
       await restartWith(publishFirst)
       host.deps.adapter.changeThreadGoal = vi.fn(async () => ({ ok: true as const }))
       const operation = goal()
       let later: string | undefined
+      let restoreWrite: (() => void) | undefined
       for (let number = 1; number <= 5; number++) {
         await eventually(() => expect(acquire).toHaveBeenCalledTimes(number))
         await eventually(() =>
           expect(host.collaboratorsForTests().sessions.get(SESSION)?.child).toBeTruthy()
         )
+        if (number === 5 && failsWrite) {
+          const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+          const append = journal.appendLifecycleBatch.bind(journal)
+          const write = vi.spyOn(journal, 'appendLifecycleBatch').mockImplementation((input) => {
+            if (input.settlementId.startsWith('start-failure:')) {
+              return Promise.reject(new Error('failure write unavailable'))
+            }
+            return append(input)
+          })
+          restoreWrite = () => write.mockRestore()
+        }
         await endAttempt()
         if (number === 1 && joins) {
           later = await accept('my own start')
@@ -719,15 +767,30 @@ describe('one logical start across physical attempts', () => {
       const snapshot = await host.journalSnapshot(SESSION)
       expect(
         snapshot.items.filter((item) => item.body.kind === 'status' && item.body.tone === 'error')
-      ).toHaveLength(1)
+      ).toHaveLength(failsWrite ? 0 : 1)
       if (later) {
+        const expectedMessages = [later]
         expect(await submission(later)).toMatchObject({ dispatchState: 'pending' })
+        if (failsWrite) {
+          await eventually(() =>
+            expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(
+              false
+            )
+          )
+          expect(await submission(later)).toMatchObject({ dispatchState: 'pending' })
+          restoreWrite?.()
+          expectedMessages.push(await accept('after the journal recovered'))
+        }
         await eventually(() => expect(acquire).toHaveBeenCalledTimes(6))
         await proveOpen()
         await eventually(async () =>
           expect((await submission(later))?.dispatchState).toBe('accepted')
         )
-        expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual([later])
+        await eventually(() =>
+          expect(dispatch.mock.calls.map(([input]) => input.clientMessageId)).toEqual(
+            expectedMessages
+          )
+        )
       }
     }
   )

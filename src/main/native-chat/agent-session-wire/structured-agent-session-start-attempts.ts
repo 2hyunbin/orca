@@ -8,6 +8,7 @@ import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
 import type { StructuredAgentSessionAttachLock } from './structured-agent-session-attach-lock'
 import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
+import type { StructuredAgentSessionHostSession } from './structured-agent-session-host-types'
 import { structuredAgentSessionStartFlightLock } from './structured-agent-session-start-flight'
 import { isStructuredAgentSessionStartupExpired } from './structured-agent-session-startup-attempt-contract'
 import { refusedStructuredAgentSessionStart } from './structured-agent-session-start-eligibility'
@@ -15,8 +16,10 @@ import {
   refusedStructuredAgentSessionStart as failedStart,
   recordStructuredAgentSessionStartFailure
 } from './structured-agent-session-start-failure-row'
-import { oldestQueuedSubmission } from './structured-agent-session-start-failure-row'
-import { structuredAgentSessionStartFailure } from './structured-agent-session-failure-text'
+import {
+  structuredAgentSessionStartFailure,
+  structuredAgentSessionStartFailureFact
+} from './structured-agent-session-failure-text'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
 import { sameProviderChild } from './structured-agent-session-provider-child'
 
@@ -45,15 +48,12 @@ export function registerStructuredAgentSessionStart(
     })
   const outcome = context.tasks.trackAttach(
     Promise.resolve()
-      .then(async () => {
-        let result: StructuredAgentSessionResumeOutcome = {
-          ok: false,
-          refusal: startFailure().refusal
-        }
+      .then(async (): Promise<StructuredAgentSessionResumeOutcome> => {
+        let result: StructuredAgentSessionResumeOutcome = failedStructuredAgentSessionStart()
         for (let number = 0; number < 5; number++) {
           throwIfSignalAborted(acquire.signal)
           if (attempts.pastCeiling(registeredAt)) {
-            result = { ...startFailure(), expired: true }
+            result = { ...failedStructuredAgentSessionStart(), expired: true }
             break
           }
           const lock = structuredAgentSessionStartFlightLock({
@@ -63,19 +63,11 @@ export function registerStructuredAgentSessionStart(
             flights,
             serialize: context.serialize
           })
-          const stillQueued = await lock.commit(
-            async () =>
-              !startedFor ||
-              context.sessions
-                .get(sessionId)
-                ?.journal.submissions()
-                .some(
-                  (entry) =>
-                    entry.clientMessageId === startedFor && isQueuedAgentJournalSubmission(entry)
-                )
+          const stillQueued = await lock.commit(async () =>
+            structuredAgentSessionStartStillQueued(context.sessions.get(sessionId), startedFor)
           )
           if (!stillQueued) {
-            return { ok: false, aborted: true, refusal: startFailure().refusal }
+            return { ...failedStructuredAgentSessionStart(), aborted: true }
           }
           result = await run(lock, attemptId)
           if (result.ok) {
@@ -102,13 +94,11 @@ export function registerStructuredAgentSessionStart(
                 )
               }
               return {
-                ok: false as const,
-                refusal: startFailure().refusal,
+                ...failedStructuredAgentSessionStart(),
                 startKey: ended.generation,
-                failure:
-                  handle.result.failure ??
-                  ended.failure ??
-                  agentSessionFailureFact('providerExited'),
+                failure: structuredAgentSessionStartFailureFact({
+                  exit: handle.result.failure ?? ended.failure
+                }),
                 retry: handle.result.retry ?? ended.cause === 'exit'
               }
             })
@@ -125,34 +115,38 @@ export function registerStructuredAgentSessionStart(
         }
         return result
       })
-      .catch((error: unknown) => {
+      .catch((error: unknown): StructuredAgentSessionResumeOutcome => {
         if (!acquire.signal.aborted) {
           context.deps.logger.warn('starting the agent failed', { sessionId, error })
-          return { ...startFailure(), failure: agentSessionFailureFact('hostFault') }
+          return {
+            ...failedStructuredAgentSessionStart(),
+            failure: agentSessionFailureFact('hostFault')
+          }
         }
         const expired = isStructuredAgentSessionStartupExpired(acquire.signal.reason)
         return {
-          ok: false as const,
-          refusal: startFailure().refusal,
+          ...failedStructuredAgentSessionStart(),
           ...(expired ? { expired: true as const } : { aborted: true as const })
         }
       })
-      .then(async (result) => {
-        if (!result.ok && !result.aborted) {
+      .then(async (result): Promise<StructuredAgentSessionResumeOutcome> => {
+        if (!result.ok && !result.aborted && (startedFor !== undefined || children.length > 0)) {
           await context.serialize(sessionId, async () => {
             const session = context.sessions.get(sessionId)
-            if (session && !oldestQueuedSubmission(session)) {
+            if (session) {
               const record = context.deps.store.getRecord(sessionId)
               const failure = failedStart(record, result)
               await recordStructuredAgentSessionStartFailure(
                 { journal: session.journal, fence: record?.lease.runtimeFence ?? 0 },
                 {
-                  startKey: failure.startKey ?? attemptId,
+                  startKey:
+                    children.at(-1)?.generation ?? failure.startKey ?? startedFor ?? attemptId,
                   ...structuredAgentSessionStartFailure(
                     failure.cause,
                     structuredAgentSessionFailureWordsContext(record)
                   )
-                }
+                },
+                startedFor ?? null
               )
             }
           })
@@ -170,7 +164,10 @@ export function registerStructuredAgentSessionStart(
   return outcome
 }
 
-function startFailure(): Extract<StructuredAgentSessionResumeOutcome, { ok: false }> {
+export function failedStructuredAgentSessionStart(): Extract<
+  StructuredAgentSessionResumeOutcome,
+  { ok: false }
+> {
   return {
     ok: false,
     refusal: refuseUnclassified(
@@ -178,4 +175,18 @@ function startFailure(): Extract<StructuredAgentSessionResumeOutcome, { ok: fals
       agentSessionWriteNoticeEnglish(['restartFailed'])
     )
   }
+}
+
+export function structuredAgentSessionStartStillQueued(
+  session: Pick<StructuredAgentSessionHostSession, 'journal'> | undefined,
+  startedFor: string | undefined
+): boolean {
+  return (
+    startedFor === undefined ||
+    session?.journal
+      .submissions()
+      .some(
+        (entry) => entry.clientMessageId === startedFor && isQueuedAgentJournalSubmission(entry)
+      ) === true
+  )
 }

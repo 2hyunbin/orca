@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionConversationLifetimeHost } from './structured-agent-session-conversation-lifetime-host'
 import { retryableStructuredAgentSessionStart } from './structured-agent-session-start-retry'
 // How a conversation is reached, closed and swept — the host's lifetime rules in one place.
 //
@@ -11,14 +12,12 @@ import {
   agentSessionRefusalError
 } from '../../../shared/agent-session-wire-refusals'
 import { createJournalOpenReadRefusals } from '../agent-session-journal/journal-open-failure'
-import type { StructuredAgentSessionConversations } from './structured-agent-session-conversations'
 import { releaseLeaseOfEndedStructuredAgentSessionChild } from './structured-agent-session-child-close'
 import {
   holdClosedStructuredAgentSessionSends,
   closeStructuredAgentSessionConversationUnderSerialize,
   stopStructuredAgentSessionAgentUnderSerialize,
   type StructuredAgentSessionCloseCause,
-  type StructuredAgentSessionLifetimeContext,
   type StructuredAgentSessionStopEnding
 } from './structured-agent-session-host-lifetime'
 import type {
@@ -40,26 +39,19 @@ import {
   providerStartupFailureFact,
   structuredAgentSessionStartFailure
 } from './structured-agent-session-failure-text'
-import { recordStructuredAgentSessionStartFailure } from './structured-agent-session-start-failure-row'
+import {
+  oldestQueuedSubmission,
+  recordStructuredAgentSessionStartFailure
+} from './structured-agent-session-start-failure-row'
 import { structuredAgentSessionFailureWordsContext } from './structured-agent-session-send-preparation'
 
 export type StructuredAgentSessionConversationLifetime = ReturnType<
   typeof createStructuredAgentSessionConversationLifetime
 >
 
-export function createStructuredAgentSessionConversationLifetime(host: {
-  /** Resolved per call: the host's collaborators are assigned after this is built. */
-  context: () => StructuredAgentSessionLifetimeContext
-  sessions: StructuredAgentSessionConversations
-  serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
-  /** PR 1's one open function, for a caller inside the session's serialize. */
-  open: (sessionId: string) => Promise<StructuredAgentSessionHostSession | null>
-  deliveryActive: (sessionId: string) => boolean
-  /** The handle closed: `listed` keeps the chat's row in the agent-status store for its tab. */
-  closeStatus: (sessionId: string, options: { listed: boolean }) => void
-  /** Child work the provider reported running and not over, recorded or not. */
-  childWorkOpen: (sessionId: string) => boolean
-}) {
+export function createStructuredAgentSessionConversationLifetime(
+  host: StructuredAgentSessionConversationLifetimeHost
+) {
   let disposed = false
   const { sessions, serialize } = host
   const deps = () => host.context().deps
@@ -274,7 +266,8 @@ export function createStructuredAgentSessionConversationLifetime(host: {
               {
                 startKey: child.generation,
                 ...structuredAgentSessionStartFailure({ failure }, wording)
-              }
+              },
+              oldestQueuedSubmission(session)?.clientMessageId ?? null
             ).catch((writeError: unknown) =>
               deps().logger.warn('recording a failed provider open failed', {
                 scope: 'provider-open-failure',

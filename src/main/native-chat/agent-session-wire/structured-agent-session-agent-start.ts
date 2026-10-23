@@ -14,20 +14,21 @@ import {
 import { argumentProblemOf } from '../structured-agent-arguments-error'
 import {
   agentSessionRefusalFromReference,
-  readAgentSessionRefusalReference,
-  refuseUnclassified
+  readAgentSessionRefusalReference
 } from '../../../shared/agent-session-wire-refusals'
-import { agentSessionWriteNoticeEnglish } from '../../../shared/agent-session-refusal-notice'
 import type {
   AgentSessionAttachResult,
   AgentSessionMutationResult,
   AgentSessionWireRefusal
 } from '../../../shared/agent-session-wire'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
-import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
 import { attachStructuredAgentSessionForStart } from './structured-agent-session-attach-orchestration'
 import type { StructuredAgentSessionAttachLock } from './structured-agent-session-attach-lock'
-import { registerStructuredAgentSessionStart } from './structured-agent-session-start-attempts'
+import {
+  failedStructuredAgentSessionStart,
+  registerStructuredAgentSessionStart,
+  structuredAgentSessionStartStillQueued
+} from './structured-agent-session-start-attempts'
 import { retryableStructuredAgentSessionAcquisition } from './structured-agent-session-start-retry'
 import { failedCreateRefusal } from './structured-agent-session-failed-create-refusal'
 import {
@@ -75,16 +76,8 @@ export function claimStructuredAgentSessionAgent(
 ): StructuredAgentSessionStartClaim {
   const session = context.sessions.get(sessionId)
   const child = session?.child
-  if (
-    startedFor &&
-    !session?.journal
-      .submissions()
-      .some(
-        (submission) =>
-          submission.clientMessageId === startedFor && isQueuedAgentJournalSubmission(submission)
-      )
-  ) {
-    return { outcome: Promise.resolve({ ok: false, aborted: true, refusal: startFailedRefusal() }) }
+  if (!structuredAgentSessionStartStillQueued(session, startedFor)) {
+    return { outcome: Promise.resolve({ ...failedStructuredAgentSessionStart(), aborted: true }) }
   }
   const flight = context.runtimeState.startFlights.get(sessionId)
   if (flight) {
@@ -94,11 +87,12 @@ export function claimStructuredAgentSessionAgent(
     return { outcome: Promise.resolve({ ok: true }) }
   }
   return {
-    outcome:
-      context.runtimeState.startFlights.get(sessionId)?.outcome ??
-      registerStructuredAgentSessionStart(context, sessionId, startedFor, (lock, attemptId) =>
-        runStart(context, sessionId, startedFor, lock, attemptId)
-      )
+    outcome: registerStructuredAgentSessionStart(
+      context,
+      sessionId,
+      startedFor,
+      (lock, attemptId) => runStart(context, sessionId, startedFor, lock, attemptId)
+    )
   }
 }
 
@@ -136,7 +130,7 @@ export function claimOperationStart(
         sessionId,
         error
       })
-      return { ok: false, refusal: startFailedRefusal() }
+      return failedStructuredAgentSessionStart()
     })
   }
 }
@@ -224,13 +218,6 @@ async function runStart(
         { reason: 'noProviderChild' },
         'The session attached without a provider child to write to.'
       )
-}
-
-function startFailedRefusal(): AgentSessionWireRefusal {
-  return refuseUnclassified(
-    'agent_session_owner_restart_failed',
-    agentSessionWriteNoticeEnglish(['restartFailed'])
-  )
 }
 
 function withDiagnostic(
