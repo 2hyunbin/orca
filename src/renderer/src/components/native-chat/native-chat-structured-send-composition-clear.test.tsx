@@ -392,7 +392,11 @@ describe('a send handed back while the IME owns the editor', () => {
     expect(window.document.querySelector('[data-native-chat-skill]')).not.toBeNull()
 
     await act(async () => pressEnter(input))
-    expect(structured.send.mock.lastCall?.[2]?.skills).toEqual([returnedSkill])
+    expect(structured.send).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({ skills: [returnedSkill] })
+    )
     changePrompt(input, '$review')
     expect(promptSkillRefs(readNativeChatComposerDraft(scope).document)).toEqual([])
   })
