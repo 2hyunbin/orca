@@ -229,8 +229,13 @@ function sameJson(left: unknown, right: unknown): boolean {
   if (!isRecord(left) || !isRecord(right)) {
     return false
   }
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
-  return [...keys].every((key) => sameJson(left[key], right[key]))
+  return (
+    Object.keys(left).every((key) => sameJson(left[key], right[key])) &&
+    Object.keys(right).every(
+      (key) =>
+        Object.prototype.propertyIsEnumerable.call(left, key) || sameJson(left[key], right[key])
+    )
+  )
 }
 
 function isRecord(value: unknown): value is Json {
