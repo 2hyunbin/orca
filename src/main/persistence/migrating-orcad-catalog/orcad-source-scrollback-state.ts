@@ -45,7 +45,7 @@ export function projectOrcadMigrationSessionScrollback(
   leaveBehind = false,
   /**
    * A WSL move's slept panes: their history is the daemon's checkpoint, never a renderer snapshot,
-   * so without this a moved terminal opens empty. Read only for a leaf with neither.
+   * so without this a moved terminal opens empty. Taken first: the move slept the pane just now.
    */
   sleptLeafScrollback?: (tabId: string, leafId: string) => Buffer | null
 ): ProjectedOrcadMigrationScrollback {
@@ -66,7 +66,7 @@ export function projectOrcadMigrationSessionScrollback(
     const slept = new Map<string, Buffer>()
     if (sleptLeafScrollback) {
       for (const leafId of collectLeafIds(sourceLayout.root)) {
-        const bytes = leafIds.has(leafId) ? null : sleptLeafScrollback(tabId, leafId)
+        const bytes = sleptLeafScrollback(tabId, leafId)
         if (bytes && bytes.length > 0) {
           slept.set(leafId, bytes)
           leafIds.add(leafId)
@@ -74,15 +74,21 @@ export function projectOrcadMigrationSessionScrollback(
       }
     }
     for (const leafId of [...leafIds].sort(compareKeys)) {
-      const buffer = inlineLeafBuffer(localOnly, sourceLayout.buffersByLeafId, leafId)
-      const sourceRef = sourceLayout.scrollbackRefsByLeafId?.[leafId]
+      // The move just slept this pane: its checkpoint is newer than any snapshot saved before.
       const sleptBytes = slept.get(leafId)
+      const buffer = sleptBytes
+        ? null
+        : inlineLeafBuffer(localOnly, sourceLayout.buffersByLeafId, leafId)
+      const sourceRef = sourceLayout.scrollbackRefsByLeafId?.[leafId]
       const ref =
         buffer || sleptBytes ? makeTerminalScrollbackSnapshotRef(tabId, leafId) : sourceRef
-      const bytes = buffer
-        ? Buffer.from(buffer, 'utf8')
-        : (sleptBytes ??
-          (sourceRef ? readTerminalScrollbackStoredBytesSync(sourceRef, storage) : null))
+      const bytes =
+        sleptBytes ??
+        (buffer
+          ? Buffer.from(buffer, 'utf8')
+          : sourceRef
+            ? readTerminalScrollbackStoredBytesSync(sourceRef, storage)
+            : null)
       if (
         !ref ||
         !bytes ||

@@ -196,6 +196,24 @@ describe('moveProjectsToWslHost', () => {
     expect(journal()).toEqual([])
   })
 
+  it("refuses rather than move a slept pane whose history it can't fully read", async () => {
+    const dispose = vi.fn()
+    world.deps.sleptScrollback = async () => ({
+      buffers: new Map(),
+      problems: ['saved terminal history Orca could not fully read for tab t1'],
+      dispose
+    })
+    const result = await moveProjectsToWslHost(world.deps, request)
+
+    expect(result).toMatchObject({
+      outcome: 'refused',
+      code: 'wsl_move_export_incomplete',
+      reasons: ['saved terminal history Orca could not fully read for tab t1']
+    })
+    expect(journal()).toEqual([])
+    expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
   it('refuses a second move of the same distro while one runs', async () => {
     let release: () => void = () => {}
     const sleep = world.deps.quiesce.sleepWorkspaces

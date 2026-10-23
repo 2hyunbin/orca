@@ -23,7 +23,12 @@ import {
 } from './wsl-move-cutover-journal'
 import { journalWslMove } from './wsl-move-delta-plan'
 import type { WslMoveDriverDeps, WslMoveHost } from './wsl-move-driver-ports'
-import { readSleptScrollback, withSleptSnapshots } from './wsl-move-slept-scrollback'
+import {
+  readSleptScrollback,
+  sleptScrollbackReader,
+  withSleptSnapshots,
+  type WslMoveSleptScrollback
+} from './wsl-move-slept-scrollback'
 import {
   exportRequestOf,
   isWslMoveScopeChanged,
@@ -121,69 +126,81 @@ async function runMove(
     return paused
   }
   const { panes } = paused
-  const slept = await readSleptScrollback(deps, panes, distro)
-  let journaled: WslMoveCutover
+  const slept = await readSleptScrollback(deps, panes, distro, migrationId)
   try {
-    // The slept state, which the session freeze then holds for the rest of the move.
-    const exported = deps.exportManifest(
-      exportRequestOf(prepared, migrationId, startedAt, slept)
+    if (slept.problems.length > 0) {
+      return refusal('wsl_move_export_incomplete', { reasons: [...slept.problems] })
+    }
+    let journaled: WslMoveCutover
+    try {
+      // The slept state, which the session freeze then holds for the rest of the move.
+      const exported = deps.exportManifest(
+        exportRequestOf(prepared, migrationId, startedAt, sleptScrollbackReader(slept))
+      )
+      if (exported.blockers.length > 0) {
+        return refusal('wsl_move_export_incomplete', { reasons: [...exported.blockers] })
+      }
+      journaled = journalWslMove({
+        userDataPath: deps.userDataPath,
+        plan: prepared.plan,
+        manifest: exported.manifest,
+        destinationName: host.name,
+        automationsToReenable: exported.automationsToReenable,
+        now: () => startedAt
+      })
+    } catch (error) {
+      // A write that landed before it threw would leave a record no host ever saw: drop it.
+      await resetWslMoveToZero(
+        { userDataPath: deps.userDataPath, destination: null },
+        migrationId
+      ).catch(() => {})
+      const tooLarge = manifestTooLargeRefusal(error)
+      if (tooLarge) {
+        return tooLarge
+      }
+      if (describe(error) === 'wsl_move_already_in_flight') {
+        return refusal('wsl_move_already_in_flight')
+      }
+      if (isWslMoveScopeChanged(error)) {
+        return refusal('wsl_move_scope_changed')
+      }
+      // Nothing is journaled yet, so nothing needs putting back; say why instead of a bare reset.
+      console.warn('[wsl-move] Could not prepare the move:', error)
+      return refusal('wsl_move_export_incomplete', {
+        reasons: [`Orca could not prepare these projects' saved state (${describe(error)}).`]
+      })
+    }
+    const quiesced = await quiesceWslMove(
+      journaled,
+      { workspaceIds: scope.workspaceIds, workspaceKeys: scope.workspaceKeys, panes },
+      {
+        ...deps.quiesce,
+        gateInputs: () => deps.gateInputs(scope),
+        writeCutover: (cutover) => writeWslMoveCutover(deps.userDataPath, cutover),
+        removeCutover: (id) => removeWslMoveCutover(deps.userDataPath, id),
+        now: deps.now
+      }
     )
-    if (exported.blockers.length > 0) {
-      return refusal('wsl_move_export_incomplete', { reasons: [...exported.blockers] })
+    if (quiesced.outcome === 'refused') {
+      // A refusal before the fence leaves the `prepared` record; nothing reached the host.
+      await resetWslMoveToZero(
+        { userDataPath: deps.userDataPath, destination: null },
+        migrationId
+      ).catch(() => {})
+      if (!quiesced.fenceLifted) {
+        return putBack(deps, host, migrationId, `pause:${quiesced.reason}`)
+      }
+      return quiesced.reason === 'terminals-blocked'
+        ? refusal('wsl_move_terminals_blocked', { blockers: quiesced.blockers ?? [] })
+        : refusal('wsl_move_pause_failed', { detail: pauseDetail(quiesced.reason, quiesced.detail) })
     }
-    journaled = journalWslMove({
-      userDataPath: deps.userDataPath,
-      plan: prepared.plan,
-      manifest: exported.manifest,
-      destinationName: host.name,
-      automationsToReenable: exported.automationsToReenable,
-      now: () => startedAt
-    })
-  } catch (error) {
-    const tooLarge = manifestTooLargeRefusal(error)
-    if (tooLarge) {
-      return tooLarge
+    try {
+      return await moveQuiesced(deps, host, quiesced.cutover, prepared, running, slept)
+    } catch (error) {
+      return putBack(deps, host, migrationId, describe(error))
     }
-    if (describe(error) === 'wsl_move_already_in_flight') {
-      return refusal('wsl_move_already_in_flight')
-    }
-    if (isWslMoveScopeChanged(error)) {
-      return refusal('wsl_move_scope_changed')
-    }
-    // Nothing is journaled yet, so nothing needs putting back; say why instead of a bare reset.
-    console.warn('[wsl-move] Could not prepare the move:', error)
-    return refusal('wsl_move_export_incomplete', {
-      reasons: [`Orca could not prepare these projects' saved state (${describe(error)}).`]
-    })
-  }
-  const quiesced = await quiesceWslMove(
-    journaled,
-    { workspaceIds: scope.workspaceIds, workspaceKeys: scope.workspaceKeys, panes },
-    {
-      ...deps.quiesce,
-      gateInputs: () => deps.gateInputs(scope),
-      writeCutover: (cutover) => writeWslMoveCutover(deps.userDataPath, cutover),
-      removeCutover: (id) => removeWslMoveCutover(deps.userDataPath, id),
-      now: deps.now
-    }
-  )
-  if (quiesced.outcome === 'refused') {
-    // A refusal before the fence leaves the `prepared` record; nothing reached the host.
-    await resetWslMoveToZero(
-      { userDataPath: deps.userDataPath, destination: null },
-      migrationId
-    ).catch(() => {})
-    if (!quiesced.fenceLifted) {
-      return putBack(deps, host, migrationId, `pause:${quiesced.reason}`)
-    }
-    return quiesced.reason === 'terminals-blocked'
-      ? refusal('wsl_move_terminals_blocked', { blockers: quiesced.blockers ?? [] })
-      : refusal('wsl_move_pause_failed', { detail: pauseDetail(quiesced.reason, quiesced.detail) })
-  }
-  try {
-    return await moveQuiesced(deps, host, quiesced.cutover, prepared, running, slept)
-  } catch (error) {
-    return putBack(deps, host, migrationId, describe(error))
+  } finally {
+    slept.dispose()
   }
 }
 
@@ -193,7 +210,7 @@ async function moveQuiesced(
   quiesced: WslMoveCutover,
   prepared: WslMovePrepared,
   running: RunningWslMove,
-  slept: ReadonlyMap<string, Buffer>
+  slept: WslMoveSleptScrollback
 ): Promise<WslMoveResult> {
   const { signal } = running.controller
   const { distro } = prepared.plan
@@ -207,7 +224,9 @@ async function moveQuiesced(
   const startedAt = new Date(quiesced.startedAt)
   let again: ReturnType<WslMoveDriverDeps['exportManifest']>
   try {
-    again = deps.exportManifest(exportRequestOf(prepared, migrationId, startedAt, slept))
+    again = deps.exportManifest(
+      exportRequestOf(prepared, migrationId, startedAt, sleptScrollbackReader(slept))
+    )
   } catch (error) {
     throw isWslMoveScopeChanged(error) ? new WslMoveStop('wsl_move_scope_changed') : error
   }
