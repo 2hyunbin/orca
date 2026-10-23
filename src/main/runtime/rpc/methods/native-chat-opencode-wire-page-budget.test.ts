@@ -280,7 +280,7 @@ it('replaces an unsendable newest raw group with one stable localized notice', (
   expect(only.beforeOffset).toBe(42)
 })
 
-it('keeps append batches complete and admits every serialized batch', () => {
+it('measures append rows once, keeps batches complete, and admits every serialized batch', () => {
   const messages = Array.from({ length: 12 }, (_, index) => [
     message(`${index}:reasoning`, index, 'Я'.repeat(100_000)),
     message(String(index), index, 'Я'.repeat(100_000))
@@ -288,7 +288,14 @@ it('keeps append batches complete and admits every serialized batch', () => {
   for (let index = 0; index < messages.length; index += 2) {
     messages[index].role = 'reasoning'
   }
-  const batches = nativeChatRpcAppendBatches(messages)
+  const stringify = vi.spyOn(JSON, 'stringify')
+  let batches: NativeChatMessage[][]
+  try {
+    batches = nativeChatRpcAppendBatches(messages)
+    expect(stringify.mock.calls.map(([value]) => value)).toEqual(messages)
+  } finally {
+    stringify.mockRestore()
+  }
   expect(batches.length).toBeGreaterThan(1)
   expect(batches.flat()).toEqual(messages)
   for (const batch of batches) {
@@ -300,6 +307,28 @@ it('keeps append batches complete and admits every serialized batch', () => {
       )
     ).toBe(true)
   }
+})
+
+it('accounts for an oversized append group using its replacement notice', () => {
+  const before = message('before', 1, 'before')
+  const after = message('after', 3, 'after')
+  const batches = nativeChatRpcAppendBatches([
+    before,
+    message('large', 2, 'Я'.repeat(1_100_000)),
+    after
+  ])
+
+  expect(batches).toHaveLength(1)
+  expect(batches[0]).toEqual([
+    before,
+    expect.objectContaining({
+      id: 'large',
+      role: 'system',
+      transcriptOffset: 2,
+      blocks: [expect.objectContaining({ presentation: 'history-item-too-large' })]
+    }),
+    after
+  ])
 })
 
 it('does not manufacture a paging cursor for legacy messages without optional offsets', () => {

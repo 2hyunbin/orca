@@ -83,9 +83,12 @@ export function nativeChatRpcAppendBatches(
   let batch: NativeChatMessage[] = []
   let bytes = 2
   for (const group of rowGroups(messages)) {
-    const bounded =
-      groupBytes(group) > HISTORY_PAGE_CONTENT_BUDGET_BYTES ? [oversizedRow(group[0])] : group
-    const size = groupBytes(bounded)
+    let bounded = group
+    let size = groupBytes(group)
+    if (size > HISTORY_PAGE_CONTENT_BUDGET_BYTES) {
+      bounded = [oversizedRow(group[0])]
+      size = groupBytes(bounded)
+    }
     if (batch.length > 0 && bytes + size > HISTORY_PAGE_CONTENT_BUDGET_BYTES) {
       batches.push(batch)
       batch = []
