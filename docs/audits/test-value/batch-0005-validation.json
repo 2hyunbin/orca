@@ -16,9 +16,9 @@
   },
   "tracker": {
     "counts": {
-      "files": 16953,
+      "files": 16955,
       "declarations": 119010,
-      "reviewed": 874,
+      "reviewed": 876,
       "stale": 0,
       "unreviewed": 16079,
       "removed": 9
@@ -30,7 +30,7 @@
     {
       "command": "node docs/audits/test-value/refresh.mjs",
       "result": "passed; all original and final hashes reconciled, no missing original declaration decisions or stale records",
-      "log": "/tmp/orca-audit-5-refresh-final.log"
+      "log": "/tmp/orca-audit-5-refresh-ci-repair.log"
     },
     {
       "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm run check:code-quality:changed -- origin/main",
@@ -50,6 +50,16 @@
     {
       "command": "git diff --check origin/main",
       "result": "passed"
+    },
+    {
+      "command": "Cloud-only relay typecheck, 29-case blackbox suite, and lint from clean source-only scratch",
+      "result": "passed; process-host dist absent before each endpoint; no root/package node_modules",
+      "evidence": "docs/audits/test-value/reviews/cloud-0005-validation.json"
+    },
+    {
+      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm run check:code-quality:changed -- 89b3d382847f10b31a731ebd7e18aad022a4b15a",
+      "result": "passed after CI repair; zero new findings",
+      "log": "/tmp/orca-audit-5-ci-repair-quality.log"
     }
   ],
   "runtime_evidence": {
@@ -77,11 +87,11 @@
   "batch_evidence": [
     {
       "path": "docs/audits/test-value/reviews/cloud-0005.jsonl",
-      "sha256": "5eecbc3db127841ea2dae970d82f148a73bb3908ed9b428b471e28c108c673f3"
+      "sha256": "e88fa1e37492846a0418e1c809058d4025087d7ee4edb46aa43c5cfed2d34577"
     },
     {
       "path": "docs/audits/test-value/reviews/cloud-0005-validation.json",
-      "sha256": "245c13cc7cd73b0411455032be62b0b8729f3174d2c3325ace26065f54cc625e"
+      "sha256": "1ed8c714ee9e7bfe34605cd3eedd2be71d3b5a1c87835bc3e781f4d4925e1aa1"
     },
     {
       "path": "docs/audits/test-value/reviews/config-0005.jsonl",
@@ -248,5 +258,16 @@
     "Comprehensive audit remains in progress: 16,079 current candidates pending; runner/entrypoint reconciliation is separately in progress and has identified additional support/workflow candidates.",
     "Local Linux runs do not establish native Windows/macOS or live mobile desktop behavior. Background launch policy preserved.",
     "Historical proof drift refusals and measurement-only limitations are explicit in per-batch records. Production findings are reproduced and documented, not changed."
-  ]
+  ],
+  "supplemental_tooling_files": 2,
+  "tooling_changes": {
+    "files": ["cloud/package.json", "cloud/apps/relay/package.json"],
+    "purpose": "Build the unchanged process-host package before relay test/typecheck/lint in Cloud-only installs; no production-source or dependency changes."
+  },
+  "ci_failures_before_repair": {
+    "head": "c6dd181495e37e5ab1f14dd0516379e6b3010cb0",
+    "cloud": "Unbuilt process-host package; repaired in tooling scripts and verified from clean source.",
+    "windows": "Unchanged agent-foreground-process-git-bash.win32.test.ts timed out waiting for ssh-agent token; fresh push will revalidate.",
+    "test_loc": "GitHub installation API rate limit (HTTP403) while fetching trusted summary script; infrastructure failure."
+  }
 }

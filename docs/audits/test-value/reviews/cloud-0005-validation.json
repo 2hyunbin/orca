@@ -6,8 +6,8 @@
   "implementation_base": "8f6283b32bcdefa746613e4c28d04bb1fe954eb9",
   "original_snapshot_commit": "453630a86881a0e27f6cbfc58a048b3603fefc00",
   "original_hash_reconciliation": "All 40 original SHA256 values independently match audit-5 base 8f6283b32bcdefa746613e4c28d04bb1fe954eb9. Snapshot was captured on audit-4 head but every selected source is byte-identical. Reviewed SHA256 values were rechecked after all source edits stopped.",
-  "reviewed_files": 40,
-  "support_files": 7,
+  "reviewed_files": 42,
+  "support_files": 9,
   "original_declarations": 346,
   "final_declarations": 330,
   "decisions": {
@@ -58,7 +58,9 @@
     "cloud/packages/push-contract/src/send-messages.test.ts",
     "cloud/packages/relay-contract/src/contract.test.ts",
     "cloud/packages/relay-contract/src/idle-regional-rehome.test.ts",
-    "cloud/packages/relay-contract/src/persistence-invariants.test.ts"
+    "cloud/packages/relay-contract/src/persistence-invariants.test.ts",
+    "cloud/package.json",
+    "cloud/apps/relay/package.json"
   ],
   "checks": [
     {
@@ -231,6 +233,51 @@
       "log": "/tmp/orca-cloud5-probes.log",
       "log_sha256": "89c51bb4b12dbe9ba6c85599104706f32884d2c70e9ea852cff344e44e36c2ab",
       "scope": "Standalone real SQLite probe verifies recorder success/rollback and reproduces two production findings; not a committed runnable test or a claim that the production issues are fixed."
+    },
+    {
+      "command": ["pnpm", "--filter", "@orca-cloud/relay", "typecheck"],
+      "cwd": "/tmp/orca-audit-5-cloud-isolated/cloud",
+      "exit": 0,
+      "log": "/tmp/orca-audit-5-cloud-isolated-final-typecheck.log",
+      "log_sha256": "004e3e9d974b367b7936a119f9d72f864004956b5a50cf27864123f602f344ec",
+      "scope": "CI import repair: actual package scripts from source-only scratch. Root node_modules absent, process-host dist deleted immediately before this command, background launch enabled, no overlapping package builders. Repeated validation does not add cases to the original audit totals."
+    },
+    {
+      "command": ["pnpm", "--filter", "@orca-cloud/relay", "test", "src/relay.blackbox.test.ts"],
+      "cwd": "/tmp/orca-audit-5-cloud-isolated/cloud",
+      "exit": 0,
+      "log": "/tmp/orca-audit-5-cloud-isolated-final-test.log",
+      "log_sha256": "2c7410ae87ae8065333d00d3b63ae038db4550c4bc4785f628fb1904a5a466c2",
+      "scope": "CI import repair: actual package scripts from source-only scratch. Root node_modules absent, process-host dist deleted immediately before this command, background launch enabled, no overlapping package builders. Repeated validation does not add cases to the original audit totals.",
+      "files_passed": 1,
+      "tests_passed": 29
+    },
+    {
+      "command": ["pnpm", "--filter", "@orca-cloud/relay", "lint"],
+      "cwd": "/tmp/orca-audit-5-cloud-isolated/cloud",
+      "exit": 0,
+      "log": "/tmp/orca-audit-5-cloud-isolated-final-lint.log",
+      "log_sha256": "9e50e40221ab88899ef5a6d87c1a4f92dd3249604b302132bc5062f817e39d10",
+      "scope": "CI import repair: actual package scripts from source-only scratch. Root node_modules absent, process-host dist deleted immediately before this command, background launch enabled, no overlapping package builders. Repeated validation does not add cases to the original audit totals."
+    },
+    {
+      "command": [
+        "pnpm",
+        "exec",
+        "oxfmt",
+        "--check",
+        "--config",
+        "/tmp/orca-audit-5-cloud-oxfmtrc.json",
+        "--ignore-path",
+        "/dev/null",
+        "cloud/package.json",
+        "cloud/apps/relay/package.json"
+      ],
+      "cwd": "/home/neil/orca/workspaces/orca/comprehensive-test-audit-5",
+      "exit": 0,
+      "log": "/tmp/orca-audit-5-cloud-tooling-format.log",
+      "log_sha256": "db18dad3f63a09aac07c06d926b7ad30fe62fa1a7057638a0ec63e29eb052d36",
+      "scope": "Root formatter settings with ignorePatterns removed in a temporary config because root intentionally excludes cloud; no checked-in formatter change."
     }
   ],
   "mutation_controls": [
@@ -433,7 +480,7 @@
     "server_configuration_changes": false,
     "other_databases_modified": false
   },
-  "diff_check": "git diff --check passes; only 19 selected cloud test/support files differ; tracker/README, production source, staging, commits and audit-4 checkout untouched by this worker.",
+  "diff_check": "git diff --check passes. Original batch: 19 selected cloud test/support edits. CI repair adds only two Cloud package-manifest tooling edits and supplemental zero-case reviews. Blackbox source hash is unchanged by the repair; production source, tracker/README, staging and commits are untouched by this worker.",
   "final_declaration_counts": {
     "cloud/apps/relay/src/relay-schema-catalog-precheck-postgres.test.ts": 8,
     "cloud/apps/relay/src/relay-schema-lock-targets.test.ts": 4,
@@ -474,6 +521,47 @@
     "cloud/packages/relay-contract/src/contract.test.ts": 14,
     "cloud/packages/relay-contract/src/idle-regional-rehome.test.ts": 6,
     "cloud/packages/relay-contract/src/persistence-invariants.test.ts": 4,
-    "cloud/packages/relay-contract/src/region-correction.test.ts": 5
+    "cloud/packages/relay-contract/src/region-correction.test.ts": 5,
+    "cloud/package.json": 0,
+    "cloud/apps/relay/package.json": 0
+  },
+  "original_selected_files": 40,
+  "supplemental_tooling_files": 2,
+  "ci_import_repair": {
+    "source_commit": "c6dd181495e37e5ab1f14dd0516379e6b3010cb0",
+    "failed_pr": 32498,
+    "cause": "Cloud installs link @orca/process-host to its source package but do not compile its dist. TypeScript default types and Vite default entry resolution require dist; runner Node source conditions do not change either resolver. Existing local root-generated dist hid both failures.",
+    "source_only_failures": {
+      "typecheck": "TS2307 at relay.blackbox.test.ts:2",
+      "suite": "Vitest could not resolve @orca/process-host and collected zero tests"
+    },
+    "rejected_source_import": {
+      "specifier": "../../../../src/packages/process-host/src/run-process.js",
+      "runtime_tests_passed": 29,
+      "typecheck": "TS6059 outside relay rootDir plus process-host unchecked-index errors under the relay compiler options; not retained"
+    },
+    "rejected_source_conditions": {
+      "typecheck": "customConditions resolved the source package but still checked its implementation under relay noUncheckedIndexedAccess, producing two errors; not retained"
+    },
+    "final_change": "cloud build:process-host compiles the unchanged package using its own tsconfig and Cloud-installed Node types; relay pretest/typecheck invoke it, and lint reuses typecheck. Bare package import is unchanged. No production source/config or dependency changes.",
+    "scratch": "/tmp/orca-audit-5-cloud-isolated",
+    "isolation": "460 tracked Cloud/process-host source files initially copied; package tsconfig then copied for compilation. No scratch-root node_modules or process-host node_modules. Cloud dependency-store links were reused and pnpm populated additional scratch Cloud dependencies. Every final endpoint began with process-host dist absent and generated its own package outputs. NODE_PATH and NODE_OPTIONS were empty. No root package build was run or overlapped.",
+    "experiments": "/tmp/orca-audit-5-cloud-import-experiments.json",
+    "isolation_manifest": "/tmp/orca-audit-5-cloud-isolation.json",
+    "original_blackbox_reviewed_sha256": "09b523a0b14cf4ece11c3431a7b634a48027faf6d161a795d078c718291fc37c",
+    "supplemental_tooling_reviews": ["cloud/package.json", "cloud/apps/relay/package.json"],
+    "supplemental_review_source_commit": "c6dd181495e37e5ab1f14dd0516379e6b3010cb0",
+    "final_hashes": {
+      "cloud/package.json": "8c7a69eeb03c04b01a63d3733b807cfd751affadad6ef3f053476379166c47a8",
+      "cloud/apps/relay/package.json": "3eba59ed9fd74708cb2052986b986c3837e4b98a404cdedaf7480221860b422f"
+    },
+    "runtime_totals": "Final 29-case blackbox rerun repeats existing cases; 346 original declarations and 431 prior aggregate runtime passes are unchanged. Two zero-case tooling reviews are additional to the original 40 selected files.",
+    "cloud_0006_reconciliation": "The read-only /tmp cloud-0006 manifest records predate this repair. Their original hashes remain pinned; final reviewed hashes/scripts require a superseding re-review when integrated.",
+    "limitations": [
+      "Validation used Linux Node 26.8.1/pnpm 12.14.0; CI Node 24 and macOS/Windows runtime results are not established locally.",
+      "Compilation is deliberately triggered only by relay test/typecheck/lint consumers; the production Cloud build command remains unchanged.",
+      "The dev compiler invocation writes process-host dist directly rather than the root package atomic builder. Do not overlap it with another builder for the same package/checkout.",
+      "PostgreSQL/network production behavior was not rerun for this import/tooling-only repair; all 29 retained blackbox cases use real loopback processes/HTTP/WebSockets and SQLite."
+    ]
   }
 }

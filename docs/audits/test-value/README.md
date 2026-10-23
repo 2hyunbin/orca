@@ -47,7 +47,7 @@ Batch validation lives in `reviews/<area>-<batch>-validation.json`. Local log pa
 
 [PR #32426](https://github.com/stablyai/orca/pull/32426) merged another 204 original files and 1,104 case records, plus one upstream re-review with nine records and 83 separately enumerated mobile auxiliary controls. Its 42 changed test/support files removed 153 net lines. Required-check discovery reported no configured checks; the full PR aggregate passed with no failed checks. Squash commit `89b3d382847f10b31a731ebd7e18aad022a4b15a`.
 
-The next batch adds 184 original files and 1,692 case records, plus four separately enumerated mobile fixture controls. Its 59 changed test/support files remove 60 net lines. Case records include static declarations and explicitly classified manual controls; they are not runtime test totals. One superseding review covers all 12 current unit-selection declarations (25 expanded cases) after an upstream change.
+The next batch adds 184 original files and 1,692 case records, plus four separately enumerated mobile fixture controls and two supplemental Cloud tooling-manifest reviews. Its 59 changed test/support files remove 60 net lines. Case records include static declarations and explicitly classified manual controls; they are not runtime test totals. One superseding review covers all 12 current unit-selection declarations (25 expanded cases) after an upstream change.
 
 Further completed review records:
 
@@ -109,7 +109,7 @@ Further completed review records:
 | `config-0005-rereview` | 1 re-review |           12 | Retain full selection for shared runtime inputs and current conservative planning boundaries.                       |
 | `mobile-0005`          |          50 |          302 | Hold real stale callbacks, stage media bytes before disconnect and verify deferred action delivery.                 |
 
-Two production findings are recorded in `reviews/cloud-0005-validation.json`: audit rows added after `stop()` can still persist at the batch threshold, and queue overflow during an in-flight reserve-ledger insert can lose a queued identity. This test-only batch reproduces and records them without changing production behavior.
+Two production findings are recorded in `reviews/cloud-0005-validation.json`: audit rows added after `stop()` can still persist at the batch threshold, and queue overflow during an in-flight reserve-ledger insert can lose a queued identity. This batch reproduces and records them without changing production behavior. Cloud-only relay test/typecheck/lint now build the unchanged process-host package before resolving its compiled exports; this prerequisite was validated with generated outputs absent.
 
 Archived proofs retain historical source/dependency fences. A drift rejection is recorded as a limitation, never as a current-head test pass. Permanent suites read only as supporting evidence remain pending unless they have their own completed review.
 

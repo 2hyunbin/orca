@@ -1,10 +1,10 @@
 {
-  "source_commit": "eeb13aa33c4a6271a86c887e7d2ed2372362c683",
-  "scanned_source_files": 37095,
+  "source_commit": "c6dd181495e37e5ab1f14dd0516379e6b3010cb0",
+  "scanned_source_files": 37097,
   "counts": {
-    "files": 16953,
+    "files": 16955,
     "declarations": 119010,
-    "reviewed": 874,
+    "reviewed": 876,
     "stale": 0,
     "unreviewed": 16079,
     "removed": 9
@@ -18,8 +18,8 @@
       "unreviewed": 0
     },
     "cloud": {
-      "files": 227,
-      "reviewed": 227,
+      "files": 229,
+      "reviewed": 229,
       "stale": 0,
       "unreviewed": 0
     },
