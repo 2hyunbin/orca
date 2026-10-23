@@ -106,6 +106,7 @@ export class LegacyQueuedCards {
   private revision = 0
   private stored: { revision: number; rows: readonly QueuedMessageRow[] } | null = null
   private viewed: {
+    owner: JournalReducerState
     key: string
     cards: readonly QueuedMessageRow[]
     display?: JournalReducerState
@@ -129,13 +130,13 @@ export class LegacyQueuedCards {
       this.viewed = null
       return []
     }
-    if (this.viewed?.key !== key) {
-      const state = this.deps.state()
+    const state = this.deps.state()
+    if (this.viewed?.key !== key || this.viewed.owner !== state) {
       const cards = this.rows().flatMap((row) => {
         const change = legacyQueuedChange(state, row)
         return change ? [queuedCardFromChange(state, row.messageId, change)] : []
       })
-      this.viewed = { key, cards }
+      this.viewed = { owner: state, key, cards }
     }
     return this.viewed.cards
   }

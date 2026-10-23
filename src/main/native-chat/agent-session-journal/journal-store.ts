@@ -3,7 +3,7 @@
 
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
 import { randomUUID } from 'node:crypto'
-import { readJournalPublicView } from './journal-public-read'
+import { createJournalPublicReader } from './journal-public-read'
 import type {
   AgentJournalAcceptanceReceipt,
   AgentJournalCursor,
@@ -81,6 +81,7 @@ export class AgentSessionJournal {
   private readonly mintEpoch: () => string
 
   private state: JournalReducerState
+  private readonly readPublic = createJournalPublicReader()
   private openedThrough: AgentJournalCursor = { epoch: '', sequence: 0 }
   private reopenUnmarked: AgentJournalCursor | null = null
   private onCommitted: (() => void) | null = null
@@ -194,7 +195,8 @@ export class AgentSessionJournal {
 
   snapshot = (): AgentJournalSnapshot => this.publicRead().snapshot
 
-  publicRead = () => readJournalPublicView(this.queuedMessages.displayState())
+  publicRead = () =>
+    this.readPublic(this.state, this.queuedMessages.displayState(), this.queuedMessages.revision())
 
   /** Visits reduced items without allocating and sorting a full snapshot. */
   visitItems = (
