@@ -87,9 +87,10 @@ export abstract class OrcaRuntimeWithWriteTerminalAgentPrompt extends OrcaRuntim
     const pasteByteLength = Buffer.byteLength(pastePayload, 'utf8')
     const pasteIngestMs = getTerminalPasteIngestMs(writeHostPlatform, pasteByteLength)
     // A ready Claude composer never settles this gate, adding its full 8s cap; desktop paste submits in about 2s.
-    const renderGate = options.composerReady
-      ? null
-      : this.createAgentPromptRenderGate(ptyId, pasteIngestMs, agent)
+    const renderGate =
+      options.composerReady || options.waitForRender === false
+        ? null
+        : this.createAgentPromptRenderGate(ptyId, pasteIngestMs, agent)
     const waitTextCache: AgentPromptWaitTextCache = {}
     const preSubmitBaseline = submitWithPaste
       ? this.getAgentPromptActivity(handle, ptyId, waitTextCache)
