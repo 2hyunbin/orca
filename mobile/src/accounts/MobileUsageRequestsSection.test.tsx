@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { createElement, Fragment, Suspense } from 'react'
 import { act, create, type ReactTestRenderer } from 'react-test-renderer'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { RpcClient } from '../transport/rpc-client'
@@ -65,17 +65,71 @@ async function mount(client: RpcClient, policyRevision = 1) {
   mounted.push(tree)
   return tree
 }
+function usageSwitches(tree: ReactTestRenderer) {
+  return tree.root.findAll((node) => String(node.type) === 'Switch')
+}
 function switchFor(tree: ReactTestRenderer, name: string) {
-  return tree.root
-    .findAll((node) => node.type === 'Switch')
-    .find((node) => String(node.props.accessibilityLabel).startsWith(name))
+  return usageSwitches(tree).find((node) => String(node.props.accessibilityLabel).startsWith(name))
 }
 
 describe('mobile host usage request controls', () => {
+  it('preserves the committed host write when a different client render suspends and is discarded', async () => {
+    const write = deferred<ReturnType<typeof reply>>()
+    const suspended = deferred<void>()
+    const send = vi
+      .fn<RpcClient['sendRequest']>()
+      .mockResolvedValueOnce(reply({ claude: false }))
+      .mockReturnValueOnce(write.promise)
+    const first = clientWith(send)
+    const second = clientWith(async () => reply())
+    function Suspend({ suspend }: { suspend: boolean }) {
+      if (suspend) {
+        throw suspended.promise
+      }
+      return null
+    }
+    function Host({ client, suspend }: { client: RpcClient; suspend: boolean }) {
+      return createElement(
+        Suspense,
+        { fallback: 'Loading host' },
+        createElement(
+          Fragment,
+          null,
+          createElement(MobileUsageRequestsSection, {
+            client,
+            connected: true,
+            hostName: 'build-host'
+          }),
+          createElement(Suspend, { suspend })
+        )
+      )
+    }
+    let tree!: ReactTestRenderer
+    await act(async () => {
+      tree = create(createElement(Host, { client: first, suspend: false }))
+    })
+    mounted.push(tree)
+    act(() => {
+      switchFor(tree, 'Claude')?.props.onValueChange(true)
+    })
+    await act(async () => {
+      tree.update(createElement(Host, { client: second, suspend: true }))
+    })
+    expect(JSON.stringify(tree.toJSON())).toContain('Loading host')
+    await act(async () => {
+      write.resolve(reply({ claude: true }))
+    })
+    await act(async () => {
+      tree.update(createElement(Host, { client: first, suspend: false }))
+    })
+    expect(switchFor(tree, 'Claude')?.props.value).toBe(true)
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
   it('shows unsupported host settings as unknown without false Off controls', async () => {
     const client = clientWith(async () => ({ id: 'old', ok: true, result: { settings: {} } }))
     const tree = await mount(client)
-    expect(tree.root.findAll((node) => node.type === 'Switch')).toHaveLength(0)
+    expect(usageSwitches(tree)).toHaveLength(0)
     expect(JSON.stringify(tree.toJSON())).toContain('unknown')
   })
 
@@ -87,7 +141,7 @@ describe('mobile host usage request controls', () => {
       .mockReturnValueOnce(write.promise)
     const client = clientWith(send)
     const tree = await mount(client)
-    expect(tree.root.findAll((node) => node.type === 'Switch')).toHaveLength(10)
+    expect(usageSwitches(tree)).toHaveLength(10)
     act(() => {
       switchFor(tree, 'Kimi')?.props.onValueChange(false)
     })
@@ -122,17 +176,18 @@ describe('mobile host usage request controls', () => {
     await act(async () => {
       switchFor(tree, 'ZCode')?.props.onValueChange(false)
     })
-    expect(tree.root.findAll((node) => node.type === 'Switch')).toHaveLength(0)
+    expect(usageSwitches(tree)).toHaveLength(0)
     expect(JSON.stringify(tree.toJSON())).toContain('unknown')
   })
 
-  it('ignores a late write after changing clients', async () => {
+  it('ignores a late write after changing clients and returning to the original client', async () => {
     const write = deferred<ReturnType<typeof reply>>()
     const first = clientWith(
       vi
         .fn<RpcClient['sendRequest']>()
         .mockResolvedValueOnce(reply())
         .mockReturnValueOnce(write.promise)
+        .mockResolvedValueOnce(reply())
     )
     const second = clientWith(async () => reply())
     const tree = await mount(first)
@@ -145,6 +200,15 @@ describe('mobile host usage request controls', () => {
           client: second,
           connected: true,
           hostName: 'other-host'
+        })
+      )
+    })
+    await act(async () => {
+      tree.update(
+        createElement(MobileUsageRequestsSection, {
+          client: first,
+          connected: true,
+          hostName: 'build-host'
         })
       )
     })
@@ -213,7 +277,7 @@ describe('mobile host usage request controls', () => {
     await act(async () => {
       write.resolve(reply({ claude: false }))
     })
-    expect(tree.root.findAll((node) => node.type === 'Switch')).toHaveLength(0)
+    expect(usageSwitches(tree)).toHaveLength(0)
     await act(async () => {
       tree.update(
         createElement(MobileUsageRequestsSection, {

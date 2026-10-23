@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { Suspense } from 'react'
+import { act, cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getDefaultSettings } from '../../../../shared/constants'
 import type { RuntimeClientTarget } from '../../../../shared/runtime-client-target'
@@ -53,6 +54,47 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('usage request host acknowledgement', () => {
+  it('preserves the committed host write when a different host render suspends and is discarded', async () => {
+    const write = deferred<{ settings: ReturnType<typeof projection> }>()
+    const suspended = deferred<void>()
+    fake.rpc
+      .mockResolvedValueOnce({ settings: projection({ claude: false }) })
+      .mockReturnValueOnce(write.promise)
+    function Host({ owner, suspend }: { owner: RuntimeClientTarget; suspend: boolean }) {
+      const model = useModel(owner)
+      if (suspend) {
+        throw suspended.promise
+      }
+      return (
+        <button onClick={() => void model.requestPolicy?.update('claude', true)}>
+          {String(model.requestPolicy?.enabled?.claude)}
+        </button>
+      )
+    }
+    const tree = render(
+      <Suspense fallback="Loading host">
+        <Host owner={ownerA} suspend={false} />
+      </Suspense>
+    )
+    await waitFor(() => expect(tree.getByRole('button').textContent).toBe('false'))
+    fireEvent.click(tree.getByRole('button'))
+    tree.rerender(
+      <Suspense fallback="Loading host">
+        <Host owner={ownerB} suspend />
+      </Suspense>
+    )
+    expect(tree.getByText('Loading host')).toBeDefined()
+    await act(async () => {
+      write.resolve({ settings: projection({ claude: true }) })
+    })
+    tree.rerender(
+      <Suspense fallback="Loading host">
+        <Host owner={ownerA} suspend={false} />
+      </Suspense>
+    )
+    await waitFor(() => expect(tree.getByRole('button').textContent).toBe('true'))
+    expect(fake.rpc).toHaveBeenCalledTimes(2)
+  })
   it('keeps old or malformed hosts unknown instead of claiming requests are off', async () => {
     fake.rpc.mockResolvedValueOnce({ settings: {} })
     const hook = renderHook(() => useModel(ownerA))

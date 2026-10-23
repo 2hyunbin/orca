@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, Switch } from 'react-native'
 import {
   USAGE_REQUEST_PROVIDERS,
@@ -43,10 +43,11 @@ export function MobileUsageRequestsSection({
     message: string | null
   } | null>(null)
   const [pending, setPending] = useState(false)
-  const current = useRef({ client, connected })
-  if (current.current.client !== client || current.current.connected !== connected) {
-    current.current = { client, connected }
-  }
+  const ownerEpoch = useMemo(() => ({ client, connected }), [client, connected])
+  const current = useRef(ownerEpoch)
+  useLayoutEffect(() => {
+    current.current = ownerEpoch
+  }, [ownerEpoch])
   const active = useRef(true)
   const writing = useRef(false)
   const writeSerial = useRef(0)
@@ -66,7 +67,7 @@ export function MobileUsageRequestsSection({
     let currentLoad = true
     const serial = writeSerial.current
     const readSerialNumber = ++readSerial.current
-    const owner = current.current
+    const owner = ownerEpoch
     void (async () => {
       try {
         const reply = await usageRequestSettingsRead.request(client)
@@ -105,9 +106,9 @@ export function MobileUsageRequestsSection({
     return () => {
       currentLoad = false
     }
-  }, [client, connected, policyRevision])
+  }, [client, connected, policyRevision, ownerEpoch])
 
-  const selected = loaded?.owner === current.current ? loaded : null
+  const selected = loaded?.owner === ownerEpoch ? loaded : null
   const enabled = connected ? selected?.enabled : null
   const update = async (provider: UsageRequestProvider, value: boolean) => {
     if (!client || !enabled || !connected || writing.current) {

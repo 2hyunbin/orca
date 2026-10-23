@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
@@ -68,11 +68,11 @@ export function useUsageHostSettings(
 ): UsageHostSettingsModel {
   const ownerEnvironmentId = owner.kind === 'environment' ? owner.environmentId : null
   const ownerKey = ownerEnvironmentId ?? 'local'
-  const currentOwner = useRef({ key: ownerKey })
-  if (currentOwner.current.key !== ownerKey) {
-    currentOwner.current = { key: ownerKey }
-  }
-  const ownerEpoch = currentOwner.current
+  const ownerEpoch = useMemo(() => ({ key: ownerKey }), [ownerKey])
+  const currentOwner = useRef(ownerEpoch)
+  useLayoutEffect(() => {
+    currentOwner.current = ownerEpoch
+  }, [ownerEpoch])
   const localPolicyRevision = useAppStore((s) => s.rateLimits?.usageRequestPolicy?.revision)
   const refreshLocalSettings = useAppStore((s) => s.fetchSettings)
   const hydratePersistedUI = useAppStore((s) => s.hydratePersistedUI)
