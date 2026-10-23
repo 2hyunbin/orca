@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OrcadMigrationManifest } from '../../../shared/orcad-migration/orcad-migration-manifest'
 import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import type { TerminalModes } from '../../daemon/terminal-modes'
 import { makeTerminalScrollbackSnapshotRef } from '../../terminal-scrollback-snapshots'
 import { projectOrcadMigrationSessionScrollback } from '../migrating-orcad-catalog/orcad-source-scrollback-state'
 import {
@@ -81,7 +82,7 @@ function withModes<T extends ReturnType<typeof restored>>(
         mouseTracking: false,
         applicationCursor: false,
         alternateScreen
-      } as never
+      } satisfies TerminalModes
     }
   }
 }
