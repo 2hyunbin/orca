@@ -15,8 +15,8 @@ import { AiVaultChatForkSourceSchema } from '../../../../shared/ai-vault-chat-fo
 import type { AiVaultAgent } from '../../../../shared/ai-vault-types'
 import { agentLabel } from '../../../../shared/ai-vault-session-filters'
 import { parseExecutionHostId } from '../../../../shared/execution-host'
+import { pendingNativeChatCliSwitches as pending } from '@/lib/pending-conversation-surface-switches'
 
-const pending = new Set<string>()
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach((listener) => listener())
 
@@ -69,9 +69,9 @@ export async function runNativeChatCliSwitch(args: {
   if (pending.has(args.sessionId) || !target || !hostId) {
     return
   }
-  pending.add(args.sessionId)
-  changed()
+  pending.set(args.sessionId, args)
   try {
+    changed()
     // Fail closed: a host that doesn't advertise the switch never receives it.
     if (!(await supportsInPlaceSwitch(target, args.agent))) {
       throw new Error(nativeChatCliSwitchFailureText(null, args.agent))
@@ -106,7 +106,16 @@ export async function runNativeChatCliSwitch(args: {
     toast.error(nativeChatCliSwitchFailureText(error, args.agent))
   } finally {
     pending.delete(args.sessionId)
-    changed()
-    args.onComplete?.()
+    try {
+      useAppStore.setState((state) => ({
+        agentConversationsByPaneKey: state.agentConversationsByPaneKey
+      }))
+    } finally {
+      try {
+        changed()
+      } finally {
+        args.onComplete?.()
+      }
+    }
   }
 }

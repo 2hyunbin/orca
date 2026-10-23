@@ -19,6 +19,10 @@ import {
 import { adoptingAgentOnHost } from '../right-sidebar/ai-vault-session-resume-in-chat-launch'
 import { callRuntimeRpc } from '@/runtime/runtime-rpc-client'
 import { captureSourceTerminal } from './cli-chat-resume-terminal-capture'
+import {
+  isCliChatResumePending,
+  pendingCliChatResumes as pending
+} from '@/lib/pending-conversation-surface-switches'
 
 /** The execution host closes only the captured shell; refused or unknown closes leave it alone. */
 async function retireSwitchedTerminalPane(
@@ -35,7 +39,6 @@ async function retireSwitchedTerminalPane(
   })
 }
 
-const pending = new Map<string, AbortController>()
 const listeners = new Set<() => void>()
 const changed = () => listeners.forEach((listener) => listener())
 const keyFor = (source: CliChatResumeSource) =>
@@ -52,7 +55,7 @@ const subscribe = (listener: () => void) => {
 export function useCliChatResumePending(source: CliChatResumeSource | null): boolean {
   return useSyncExternalStore(
     subscribe,
-    () => !!source && pending.has(keyFor(source)),
+    () => !!source && isCliChatResumePending(keyFor(source)),
     () => false
   )
 }
@@ -61,7 +64,7 @@ export function useCliChatResumePending(source: CliChatResumeSource | null): boo
  *  that already holds it, revealed. The terminal pane closes once the chat has it. */
 export async function runCliChatResume(source: CliChatResumeSource): Promise<void> {
   const key = keyFor(source)
-  if (pending.has(key)) {
+  if (isCliChatResumePending(key)) {
     return
   }
   const target = structuredAgentSessionTargetForHost(source.executionHostId)
@@ -90,24 +93,15 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
     return
   }
   const release = () => {
-    if (pending.get(key) === controller) {
-      pending.delete(key)
+    const operation = pending.get(controller)
+    if (operation?.key === key) {
+      operation.key = null
       changed()
     }
   }
-  pending.set(key, controller)
-  changed()
-  const sourceIncarnation = captureSourceTerminal(source)
-  const stopSource = useAppStore.subscribe(() => {
-    if (!isCurrent()) {
-      controller.abort()
-      release()
-    }
-  })
-  const timer = setTimeout(
-    () => controller.abort(new Error('Conversation preparation timed out.')),
-    30_000
-  )
+  pending.set(controller, { key, source })
+  let stopSource = () => {}
+  let timer: ReturnType<typeof setTimeout> | undefined
   let dispatched = false
   const handoff = () => {
     if (dispatched) {
@@ -123,6 +117,18 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
   }
   let inPlace = false
   try {
+    changed()
+    const sourceIncarnation = captureSourceTerminal(source)
+    stopSource = useAppStore.subscribe(() => {
+      if (!isCurrent()) {
+        controller.abort()
+        release()
+      }
+    })
+    timer = setTimeout(
+      () => controller.abort(new Error('Conversation preparation timed out.')),
+      30_000
+    )
     let retireSource = false
     try {
       await waitForPromiseWithSignal(sourceIncarnation, controller.signal)
@@ -191,14 +197,14 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
       } else if (
         result.kind === 'failed' &&
         !result.notified &&
-        pending.get(key) === controller &&
+        pending.get(controller)?.key === key &&
         (await reportCliChatResumeFailure(source, result.error, target))
       ) {
         retireSource = inPlace
       }
     } catch (error) {
       if (
-        pending.get(key) === controller &&
+        pending.get(controller)?.key === key &&
         (await reportCliChatResumeFailure(source, error, target))
       ) {
         retireSource = inPlace
@@ -214,6 +220,13 @@ export async function runCliChatResume(source: CliChatResumeSource): Promise<voi
   } finally {
     clearTimeout(timer)
     stopSource()
-    release()
+    try {
+      release()
+    } finally {
+      pending.delete(controller)
+      useAppStore.setState((state) => ({
+        agentConversationsByPaneKey: state.agentConversationsByPaneKey
+      }))
+    }
   }
 }

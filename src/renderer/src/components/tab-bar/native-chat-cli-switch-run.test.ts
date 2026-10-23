@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('sonner', () => ({ toast: { error: mocks.toast } }))
 vi.mock('@/store', () => ({
   useAppStore: {
+    setState: vi.fn(),
     getState: () => ({ settings: {}, closeUnifiedTab: mocks.closeUnifiedTab })
   }
 }))
