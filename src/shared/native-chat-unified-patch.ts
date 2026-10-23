@@ -264,7 +264,7 @@ export function editLinesFromWholeFile(
   content: string,
   kind: 'add' | 'del'
 ): { lines: NativeChatEditLine[]; truncated: boolean } {
-  const body = splitEditContent(content)
+  const body = splitEditContent(content, MAX_EDIT_LINES)
   return {
     lines: body.lines.map((text, index) => ({
       kind,

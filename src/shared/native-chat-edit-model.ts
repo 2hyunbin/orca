@@ -38,17 +38,22 @@ export type EditContentLines = { lines: string[]; truncated: boolean }
 /** The one row splitter for every edit shape. Splits on both newline forms so a
  *  CRLF file never carries a trailing `\r` into a row, where it would render as
  *  a stray character, defeat the phantom-row guard, and reach the clipboard. */
-export function splitEditContent(content: string): EditContentLines {
+export function splitEditContent(content: string, maxLines?: number): EditContentLines {
   if (content.length === 0) {
     return { lines: [], truncated: false }
   }
-  const truncated = content.length > MAX_EDIT_CHARS
+  let truncated = content.length > MAX_EDIT_CHARS
   const body = truncated ? content.slice(0, MAX_EDIT_CHARS) : content
-  const lines = body.split(/\r?\n/)
+  // Two extra rows preserve overflow detection when a trailing newline is dropped.
+  const lines = body.split(/\r?\n/, maxLines === undefined ? undefined : maxLines + 2)
   // Tested against the clipped body: on the un-clipped string this popped a
   // real line whenever the slice fired.
   if (body.endsWith('\n')) {
     lines.pop()
+  }
+  if (maxLines !== undefined && lines.length > maxLines) {
+    lines.length = maxLines
+    truncated = true
   }
   return { lines, truncated }
 }

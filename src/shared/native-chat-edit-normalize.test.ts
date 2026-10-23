@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { editFilesFromToolPair, isEditToolName } from './native-chat-edit-normalize'
-import { MAX_EDIT_CHARS, unifiedLineNumber } from './native-chat-edit-model'
+import { MAX_EDIT_CHARS, MAX_EDIT_LINES, unifiedLineNumber } from './native-chat-edit-model'
 import { editLinesFromUnifiedPatch } from './native-chat-unified-patch'
 import { unwrapBeginPatch } from './native-chat-begin-patch'
 
@@ -389,6 +389,41 @@ describe('editFilesFromToolPair', () => {
     // The clipped body ends mid-line, so its one row is real and must survive.
     expect(files?.[0]?.lines).toHaveLength(1)
   })
+
+  it.each([MAX_EDIT_LINES, MAX_EDIT_LINES + 1])(
+    'preserves whole-file rows and truncation at the %i-line boundary across providers',
+    (lineCount) => {
+      const rows = Array.from({ length: lineCount }, (_, index) => `line-${index}`)
+      const content = `${rows.join('\r\n')}\r\n`
+      const pairs: Parameters<typeof settledFiles>[0][] = [
+        { name: 'Write', input: { file_path: 'file.ts', content } },
+        {
+          name: 'apply_patch',
+          input: { changes: [{ path: 'file.ts', kind: { type: 'add' }, diff: content }] }
+        },
+        {
+          name: 'apply_patch',
+          input: { changes: [{ path: 'file.ts', kind: { type: 'delete' }, diff: content }] }
+        },
+        {
+          name: 'apply_patch',
+          input: {
+            input: `*** Begin Patch\n*** Add File: file.ts\n${rows.map((row) => `+${row}`).join('\n')}\n*** End Patch`
+          }
+        }
+      ]
+
+      for (const pair of pairs) {
+        const files = settledFiles(pair)
+        expect(files).toHaveLength(1)
+        expect(files?.[0]?.lines).toHaveLength(MAX_EDIT_LINES)
+        expect(files?.[0]?.lines.at(-1)?.text).toBe(`line-${MAX_EDIT_LINES - 1}`)
+        expect(gutter(files).at(-1)).toBe(MAX_EDIT_LINES)
+        expect(files?.[0]?.truncated).toBe(lineCount > MAX_EDIT_LINES)
+        expect((files?.[0]?.added ?? 0) + (files?.[0]?.removed ?? 0)).toBe(MAX_EDIT_LINES)
+      }
+    }
+  )
 
   it('reads Codex structured changes, stripping the move marker from the body', () => {
     const files = settledFiles({
