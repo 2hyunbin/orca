@@ -26,6 +26,11 @@ export function startThatFailedWhileQueued(
   const ended = failedProviderChildStart(session)
   if (
     !ended ||
+    (ended.generation !== null &&
+      hasStructuredAgentSessionStartFailureRow(
+        session.journal.snapshot().items,
+        ended.generation
+      )) ||
     oldest.acceptedSequence === undefined ||
     ended.endedAt.epoch !== session.journal.cursor().epoch ||
     ended.endedAt.sequence < oldest.acceptedSequence
@@ -42,15 +47,18 @@ export function refusedStructuredAgentSessionStart(
     refusal,
     diagnostic,
     argumentProblem,
-    expired
+    expired,
+    failure,
+    startKey = null
   }: Extract<StructuredAgentSessionResumeOutcome, { ok: false }>
-): { startKey: null; cause: StructuredAgentSessionStartFailureCause } {
+): { startKey: string | null; cause: StructuredAgentSessionStartFailureCause } {
   if (expired) {
     return { startKey: null, cause: { failure: agentSessionFailureFact('hostStopped') } }
   }
   return {
-    startKey: null,
+    startKey,
     cause: {
+      ...(failure ? { failure } : {}),
       refusal,
       ...(diagnostic ? { diagnostic } : {}),
       ...(argumentProblem ? { argumentProblem } : {}),
@@ -107,10 +115,12 @@ export async function recordStructuredAgentSessionStartFailure(
   const oldest = oldestQueuedSubmission(session)
   const startKey = failure.startKey ?? oldest?.clientMessageId
   const rejection = { reason: failure.reason, rejection: failure.rejection }
-  const chosen = which
+  const select =
+    which ?? ((entry: AgentJournalSubmission) => entry.clientMessageId === oldest?.clientMessageId)
+  const chosen = select
     ? session.journal
         .submissions()
-        .filter((entry) => isQueuedAgentJournalSubmission(entry) && which(entry))
+        .filter((entry) => isQueuedAgentJournalSubmission(entry) && select(entry))
     : null
   if (startKey === undefined || chosen?.length === 0) {
     return

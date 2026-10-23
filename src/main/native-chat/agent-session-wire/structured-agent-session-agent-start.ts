@@ -7,6 +7,7 @@
 
 import {
   providerDiagnosticOf,
+  type SubmissionRejectionFact,
   type AgentSessionArgumentProblem,
   type ProviderDiagnostic
 } from '../../../shared/agent-session-failure'
@@ -24,11 +25,10 @@ import type {
 } from '../../../shared/agent-session-wire'
 import type { StructuredAgentSessionAttachContext } from './structured-agent-session-attach-context'
 import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
-import { randomUUID } from 'node:crypto'
 import { attachStructuredAgentSessionForStart } from './structured-agent-session-attach-orchestration'
 import type { StructuredAgentSessionAttachLock } from './structured-agent-session-attach-lock'
-import { structuredAgentSessionStartFlightLock } from './structured-agent-session-start-flight'
-import { isStructuredAgentSessionStartupExpired } from './structured-agent-session-startup-attempt-contract'
+import { registerStructuredAgentSessionStart } from './structured-agent-session-start-attempts'
+import { retryableStructuredAgentSessionAcquisition } from './structured-agent-session-start-retry'
 import { failedCreateRefusal } from './structured-agent-session-failed-create-refusal'
 import {
   joinClosingStructuredAgentSessionChild,
@@ -55,6 +55,9 @@ export type StructuredAgentSessionResumeOutcome =
       /** The start went silent or hit its ceiling before it proved itself: Orca stopped it. */
       expired?: true
       argumentProblem?: AgentSessionArgumentProblem
+      retry?: boolean
+      failure?: SubmissionRejectionFact
+      startKey?: string | null
     }
 
 /** The attach's caller key: the ledger row a start settles is Orca's own. */
@@ -83,13 +86,19 @@ export function claimStructuredAgentSessionAgent(
   ) {
     return { outcome: Promise.resolve({ ok: false, aborted: true, refusal: startFailedRefusal() }) }
   }
+  const flight = context.runtimeState.startFlights.get(sessionId)
+  if (flight) {
+    return { outcome: flight.outcome }
+  }
   if (child && !child.close) {
     return { outcome: Promise.resolve({ ok: true }) }
   }
   return {
     outcome:
       context.runtimeState.startFlights.get(sessionId)?.outcome ??
-      registerStart(context, sessionId, startedFor)
+      registerStructuredAgentSessionStart(context, sessionId, startedFor, (lock, attemptId) =>
+        runStart(context, sessionId, startedFor, lock, attemptId)
+      )
   }
 }
 
@@ -130,52 +139,6 @@ export function claimOperationStart(
       return { ok: false, refusal: startFailedRefusal() }
     })
   }
-}
-
-/** Inside the register step, before any wait: the controller a Stop, close or quit aborts, the
- *  startup clock, and quit's drain all cover the start from here. */
-function registerStart(
-  context: StructuredAgentSessionAttachContext,
-  sessionId: string,
-  startedFor: string | undefined
-): Promise<StructuredAgentSessionResumeOutcome> {
-  const { runtimeState } = context
-  const attemptId = randomUUID()
-  const acquire = runtimeState.acquireAborts.begin(sessionId)
-  runtimeState.startupAttempts.begin(sessionId, attemptId)
-  const lock = structuredAgentSessionStartFlightLock({
-    sessionId,
-    attemptId,
-    signal: acquire.signal,
-    flights: runtimeState.startFlights,
-    serialize: context.serialize
-  })
-  const outcome = context.tasks.trackAttach(
-    Promise.resolve()
-      .then(() => runStart(context, sessionId, startedFor, lock, attemptId))
-      .catch((error: unknown) => {
-        if (!acquire.signal.aborted) {
-          throw error
-        }
-        const expired = isStructuredAgentSessionStartupExpired(acquire.signal.reason)
-        return {
-          ok: false as const,
-          refusal: startFailedRefusal(),
-          ...(expired ? { expired: true as const } : { aborted: true as const })
-        }
-      })
-      .finally(() => {
-        acquire.end()
-        runtimeState.startFlights.end(sessionId, attemptId)
-        runtimeState.startupAttempts.abandon(sessionId, attemptId)
-      })
-  )
-  runtimeState.startFlights.register(sessionId, {
-    attemptId,
-    outcome,
-    abort: acquire.abort
-  })
-  return outcome
 }
 
 async function runStart(
@@ -283,7 +246,8 @@ function withDiagnostic(
     ...(diagnostic ? { diagnostic } : {}),
     ...(aborted ? { aborted: true as const } : {}),
     ...(expired ? { expired: true as const } : {}),
-    ...(argumentProblem ? { argumentProblem } : {})
+    ...(argumentProblem ? { argumentProblem } : {}),
+    retry: retryableStructuredAgentSessionAcquisition(error)
   }
 }
 

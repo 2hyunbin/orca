@@ -206,6 +206,7 @@ export class StructuredAgentSessionStatusFeed {
     const summary = structuredAgentSessionStatusSummary({
       sessionId,
       session,
+      starting: this.deps.starting?.(sessionId),
       journal: source,
       record,
       state: projection.state,

@@ -21,6 +21,7 @@ export function structuredAgentSessionStatusSummary({
   record,
   state,
   stopping,
+  starting,
   childWork,
   namingFailure,
   now
@@ -35,6 +36,7 @@ export function structuredAgentSessionStatusSummary({
   record: AgentSessionRecord | null
   state: StructuredAgentSessionStatusState
   /** A person's Stop is still ending the work it stopped. */
+  starting?: boolean
   stopping: boolean
   childWork: Pick<AgentSessionStatusSummary, 'children' | 'backgroundTasks'>
   namingFailure: StructuredChatNamingFailure | undefined
@@ -51,10 +53,10 @@ export function structuredAgentSessionStatusSummary({
     sessionId,
     workspaceId: session.params.location.workspaceId,
     agent: session.params.provider,
-    ...(session.child
+    ...(session.child || starting
       ? {
           hostExecutionOwned: true as const,
-          hostExecutionPhase: session.child.phase
+          hostExecutionPhase: session.child?.phase ?? 'starting'
         }
       : {}),
     ...(session.restartResume ? { restartResume: { phase: session.restartResume.phase } } : {}),

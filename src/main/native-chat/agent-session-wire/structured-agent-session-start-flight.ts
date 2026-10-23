@@ -10,13 +10,17 @@
 import { throwIfSignalAborted, waitForPromiseWithSignal } from '../../../shared/abort-signal-reason'
 import type { StructuredAgentSessionAttachLock } from './structured-agent-session-attach-lock'
 import type { StructuredAgentSessionEndedEvent } from './structured-agent-session-adapter'
+import { sameProviderChild } from './structured-agent-session-provider-child'
+import type { StructuredAgentSessionProviderChildIdentity } from './structured-agent-session-host-types'
 import type { StructuredAgentSessionResumeOutcome } from './structured-agent-session-agent-start'
 
 export type StructuredAgentSessionStartFlight = {
   /** The start's generation: the startup attempt it mints carries the same id. */
   readonly abort: () => void
   readonly attemptId: string
-  /** Settles once the start is over: its child published, refused, or aborted. */
+  signal?: AbortSignal
+  children?: StructuredAgentSessionProviderChildIdentity[]
+  /** Settles once the logical start is ready, refused, or aborted. */
   readonly outcome: Promise<StructuredAgentSessionResumeOutcome>
 }
 
@@ -40,6 +44,22 @@ export class StructuredAgentSessionStartFlights {
 
   register(sessionId: string, flight: StructuredAgentSessionStartFlight): void {
     this.flying.set(sessionId, flight)
+  }
+
+  published(sessionId: string, child: StructuredAgentSessionProviderChildIdentity): void {
+    const flight = this.get(sessionId)
+    if (flight) {
+      ;(flight.children ??= []).push({ generation: child.generation, fence: child.fence })
+    }
+  }
+
+  ownsChild(sessionId: string, child: StructuredAgentSessionProviderChildIdentity): boolean {
+    return this.get(sessionId)?.children?.some((owned) => sameProviderChild(owned, child)) === true
+  }
+
+  projectsStarting(sessionId: string): boolean {
+    const flight = this.get(sessionId)
+    return !!flight?.children?.length && !flight.signal?.aborted
   }
 
   end(sessionId: string, attemptId: string): void {

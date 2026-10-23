@@ -68,7 +68,8 @@ export class StructuredAgentSessionHost {
     this.queued,
     (sessionId) => this.restartResume.onAgentStarted(sessionId),
     (sessionId) => this.backgroundTasks.publish(sessionId),
-    (sessionId) => this.backgroundTasks.read(sessionId)
+    (sessionId) => this.backgroundTasks.read(sessionId),
+    (sessionId) => this.runtimeState?.startFlights.projectsStarting(sessionId) ?? false
   )
   private readonly subscribers = this.clientDelivery.subscribers
   private readonly tasks = new StructuredAgentSessionTaskQueue()
@@ -116,6 +117,7 @@ export class StructuredAgentSessionHost {
       startProviderChild: (sessionId, startedFor) =>
         agentStart.claimStructuredAgentSessionAgent(this.attachContext(), sessionId, startedFor),
       deliveryOrder: this.runtimeState.deliveryOrder,
+      startFlights: this.runtimeState.startFlights,
       readiness: (id, child) => this.runtimeState.startupAttempts.readiness(id, child),
       // Put to rest like an idle agent: the stop writes nothing, and the next start is new.
       stopOutgrownAgent: (id) => this.lifetime.stopAgent(id, { cause: 'evict', resting: true }),

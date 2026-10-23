@@ -14,8 +14,8 @@
 // earlier host process left queued is never handed over: the open, or this loop's first step,
 // settles it first (`journal-unsent-send-hold.ts`).
 
+import type { StructuredAgentSessionStartFlights } from './structured-agent-session-start-flight'
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
-import type { AgentJournalCursor } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
@@ -29,7 +29,6 @@ import type {
   StructuredAgentSessionProviderChildIdentity
 } from './structured-agent-session-host-types'
 import {
-  acceptedNoLaterThan,
   oldestQueuedSubmission,
   recordStructuredAgentSessionStartFailure,
   refusedStructuredAgentSessionStart,
@@ -52,6 +51,7 @@ import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
+  startFlights?: Pick<StructuredAgentSessionStartFlights, 'has'>
   deliveryOrder: StructuredAgentSessionDeliveryOrder
   sessions: ReadonlyMap<string, StructuredAgentSessionHostSession>
   adapter: StructuredAgentSessionAdapter
@@ -92,7 +92,8 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
 
 type Prepared =
   | 'stop'
-  | { start: StructuredAgentSessionStartClaim; acceptedBy: AgentJournalCursor }
+  | 'continue'
+  | { start: StructuredAgentSessionStartClaim }
   | {
       ok: true
       awaited: StructuredAgentSessionProviderChildIdentity
@@ -153,6 +154,9 @@ export class StructuredAgentSessionDeliveryLoop {
         if (prepared === 'stop') {
           return
         }
+        if (prepared === 'continue') {
+          continue
+        }
         if ('start' in prepared) {
           // Outside the serialize: sends are accepted while the agent starts.
           const started = await prepared.start.outcome
@@ -164,15 +168,7 @@ export class StructuredAgentSessionDeliveryLoop {
           }
           // The start's refusal, as the failure every queued message it was for is rejected with.
           const failure = refusedStructuredAgentSessionStart(this.deps.record(sessionId), started)
-          if (started.refusal.details?.reason !== 'previousExitUnverifiable') {
-            await this.deps.serialize(sessionId, () => this.fail(sessionId, failure))
-            return
-          }
-          // An unproven close fails only what was queued when the start was asked for: a later
-          // ask runs the close again, so its verdict no longer holds for what came after.
-          await this.deps.serialize(sessionId, () =>
-            this.recordFailure(sessionId, failure, prepared.acceptedBy)
-          )
+          await this.deps.serialize(sessionId, () => this.recordFailure(sessionId, failure))
           continue
         }
         if (prepared.readiness) {
@@ -244,6 +240,9 @@ export class StructuredAgentSessionDeliveryLoop {
     if (!oldest || (session.child && work && structuredAgentSessionCommandRunning(work))) {
       return this.stop(sessionId)
     }
+    if (this.deps.startFlights?.has(sessionId)) {
+      return { start: this.deps.startProviderChild(sessionId, oldest.clientMessageId) }
+    }
     const failedStart = startThatFailedWhileQueued(session, oldest)
     if (failedStart) {
       return this.fail(sessionId, failedStart)
@@ -252,8 +251,7 @@ export class StructuredAgentSessionDeliveryLoop {
     const child = this.deps.sessions.get(sessionId)?.child
     if (!child || child.close) {
       return {
-        start: this.deps.startProviderChild(sessionId, oldest.clientMessageId),
-        acceptedBy: session.journal.cursor()
+        start: this.deps.startProviderChild(sessionId, oldest.clientMessageId)
       }
     }
     // The child this run waits on; handover checks it is still the one there.
@@ -343,16 +341,12 @@ export class StructuredAgentSessionDeliveryLoop {
     return pending ?? 'continue'
   }
 
-  private async fail(sessionId: string, failure: StartFailure): Promise<'stop'> {
+  private async fail(sessionId: string, failure: StartFailure): Promise<'continue'> {
     await this.recordFailure(sessionId, failure)
-    return this.stop(sessionId)
+    return 'continue'
   }
 
-  private async recordFailure(
-    sessionId: string,
-    failure: StartFailure,
-    acceptedBy?: AgentJournalCursor
-  ): Promise<void> {
+  private async recordFailure(sessionId: string, failure: StartFailure): Promise<void> {
     const session = this.deps.sessions.get(sessionId)
     if (session) {
       await recordStructuredAgentSessionStartFailure(
@@ -363,8 +357,7 @@ export class StructuredAgentSessionDeliveryLoop {
             failure.cause,
             this.deps.failureTextContext(sessionId)
           )
-        },
-        acceptedBy && acceptedNoLaterThan(session.journal, acceptedBy)
+        }
       )
     }
   }

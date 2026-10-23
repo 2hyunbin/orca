@@ -64,7 +64,7 @@ export type StructuredAgentSessionDeadGenerationInput = {
   failureTextContext?: AgentSessionFailureWordsContext
   /** The provider never finished starting: the start that failed, keyed by the child's
    *  generation. Its row is the one the delivery loop writes for the same start. */
-  exitedDuringStartup?: { generation: string | null }
+  exitedDuringStartup?: { generation: string | null; flightOwned?: boolean }
   /** The exit, watched: what that child's own translator could only end `unverifiable` (its stream
    *  closed before the exit was proven) is revised in this batch. */
   exit?: StructuredAgentSessionWatchedExit
@@ -115,6 +115,7 @@ export function planStructuredAgentSessionDeadGeneration(
     // in the words it rejected the message with; this row is for a command, goal or rewind start.
     // A row already written stays: rejected is terminal, so its words are not reworded.
     const recordedByDeliveryLoop =
+      input.exitedDuringStartup.flightOwned ||
       input.journal.submissions?.().some(isQueuedAgentJournalSubmission) ||
       hasStructuredAgentSessionStartFailureRow(allItems, startKey)
     if (!recordedByDeliveryLoop) {

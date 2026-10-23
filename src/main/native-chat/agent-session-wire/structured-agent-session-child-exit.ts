@@ -77,7 +77,7 @@ export type StructuredAgentSessionChildExitContext<
   /** An ended child's start, if still open, has nothing left to time. */
   startupAttempts?: Pick<StructuredAgentSessionStartupAttempts, 'childEnded'>
   /** The start in flight outside the serialize, whose child is not on record until it publishes. */
-  startFlights?: Pick<StructuredAgentSessionStartFlights, 'deferExit'>
+  startFlights?: Pick<StructuredAgentSessionStartFlights, 'deferExit' | 'ownsChild'>
   abortOpen?: (sessionId: string) => void
   serialize: <T>(sessionId: string, task: () => Promise<T>) => Promise<T>
   now: () => number
@@ -270,7 +270,12 @@ export async function endExitedStructuredAgentSessionChildUnderSerialize<
           )),
       ...(startFailure ? { exitFailure: startFailure } : {}),
       ...(startFailed && child.generation
-        ? { exitedDuringStartup: { generation: child.generation } }
+        ? {
+            exitedDuringStartup: {
+              generation: child.generation,
+              flightOwned: context.startFlights?.ownsChild(sessionId, child)
+            }
+          }
         : {}),
       exit: watched,
       ...(unrunRejection ? { unrunRejection } : {})

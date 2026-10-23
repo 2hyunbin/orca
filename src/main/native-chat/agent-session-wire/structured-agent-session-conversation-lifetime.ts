@@ -1,3 +1,4 @@
+import { retryableStructuredAgentSessionStart } from './structured-agent-session-start-retry'
 // How a conversation is reached, closed and swept — the host's lifetime rules in one place.
 //
 // A conversation is reached only through `conversation`, which opens it at rest and starts no
@@ -258,30 +259,34 @@ export function createStructuredAgentSessionConversationLifetime(host: {
           openMs,
           error
         })
+        const { runtimeState: runtime } = host.context()
+        const owned = runtime.startFlights.ownsChild(sessionId, child)
+        if (owned) {
+          const retry = retryableStructuredAgentSessionStart(error)
+          runtime.startupAttempts.childFailed(sessionId, child, failure, retry)
+        }
         try {
-          await recordStructuredAgentSessionStartFailure(
-            { journal: session.journal, fence: child.fence },
-            {
-              startKey: child.generation,
-              ...structuredAgentSessionStartFailure(
-                { failure },
-                structuredAgentSessionFailureWordsContext(deps().store.getRecord(sessionId))
-              )
-            }
-          ).catch((writeError: unknown) =>
-            deps().logger.warn('recording a failed provider open failed', {
-              scope: 'provider-open-failure',
-              sessionId,
-              error: writeError
-            })
-          )
-          await stopAgent(sessionId, {
-            cause: 'host-stop',
-            reason: error instanceof Error ? error.message : String(error),
-            failure
-          })
+          if (!owned) {
+            const record = deps().store.getRecord(sessionId)
+            const wording = structuredAgentSessionFailureWordsContext(record)
+            await recordStructuredAgentSessionStartFailure(
+              { journal: session.journal, fence: child.fence },
+              {
+                startKey: child.generation,
+                ...structuredAgentSessionStartFailure({ failure }, wording)
+              }
+            ).catch((writeError: unknown) =>
+              deps().logger.warn('recording a failed provider open failed', {
+                scope: 'provider-open-failure',
+                sessionId,
+                error: writeError
+              })
+            )
+          }
+          const reason = error instanceof Error ? error.message : String(error)
+          await stopAgent(sessionId, { cause: 'host-stop', reason, failure })
         } finally {
-          host.context().runtimeState.startupAttempts.childEnded(sessionId, child)
+          runtime.startupAttempts.childEnded(sessionId, child)
         }
       }),
     /** Quit has begun: nothing opens a conversation or sweeps one after this. */

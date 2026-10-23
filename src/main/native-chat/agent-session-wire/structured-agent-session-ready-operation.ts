@@ -256,8 +256,11 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
   try {
     let { child, readiness } = selected
     if (!child) {
+      const start = selected.start?.outcome ?? Promise.resolve(undefined)
+      const ready = start.then(() => 'ready' as const)
+      const elapsed = waitForStructuredAgentSessionStart(ready, deadline - Date.now())
       const started = await waitForPromiseWithSignal(
-        selected.start?.outcome ?? Promise.resolve(undefined),
+        elapsed.then((ready) => (ready === 'ready' ? start : undefined)),
         authority?.signal
       ).catch((error: unknown) => {
         if (authority?.signal.aborted) {
@@ -266,7 +269,7 @@ export async function runWithReadyStructuredAgentSessionOperation<T>(
         throw error
       })
       if (!started?.ok) {
-        return started ?? operationDidNotRun()
+        return started ?? operationDidNotRun(!authority?.signal.aborted && Date.now() >= deadline)
       }
       const selection = selectStructuredAgentSessionOperationChild(context, envelope.sessionId)
       if (!selection.ok || !selection.child) {
