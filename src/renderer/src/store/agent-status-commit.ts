@@ -6,6 +6,7 @@ import {
   prepareStructuredReadRetirement,
   installStructuredReadRetirement
 } from '../components/native-chat/structured-agent-session-read-owner-registry'
+import { removedStructuredReaders } from './structured-tab-read-retirement'
 import type { AgentStatusEntry } from './slices/agent-status-contract'
 import type { StoreSetArgs } from './react-commit-cascade-write-probe'
 import {
@@ -141,10 +142,27 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
     appFrame = { live }
     appDepth++
     try {
-      if (args[1] === true) {
-        rawSet(...args)
+      const resolved =
+        args[1] === true
+          ? ([typeof args[0] === 'function' ? args[0](get()) : args[0], true] as const)
+          : ([typeof args[0] === 'function' ? args[0](get()) : args[0], args[1]] as const)
+      const requested = resolved[0]
+      const previous = get()
+      if (
+        requested.unifiedTabsByWorktree &&
+        requested.unifiedTabsByWorktree !== previous.unifiedTabsByWorktree
+      ) {
+        const next = Object.assign({}, previous, requested)
+        if (removedStructuredReaders(previous, next).length > 0) {
+          // Close intent can be refused; only the accepted tab removal ends its reader lifetime.
+          owner.transact(() => write(next, true))
+          return
+        }
+      }
+      if (resolved[1] === true) {
+        rawSet(...resolved)
       } else {
-        rawSet(...args)
+        rawSet(...resolved)
       }
     } finally {
       appFrame = previousFrame
@@ -199,6 +217,9 @@ function createAgentStatusOwner(rawSet: StoreApi<AppState>['setState'], get: () 
       let result: Result
       try {
         result = operation(transaction)
+        for (const { sessionId, target } of removedStructuredReaders(previous, prepared.app)) {
+          transaction.retireReadOwner(sessionId, target)
+        }
         for (const key of prepared.dirty) {
           if (shallow(previousLive[key], prepared.draft?.[key])) {
             if (prepared.draft && previousLive[key]) {
