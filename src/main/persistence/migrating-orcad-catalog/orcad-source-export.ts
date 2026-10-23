@@ -65,7 +65,7 @@ export class OrcadSourceExportPersistence {
     source: OrcadMigrationManifestSource,
     catalog: OrcadMigrationCatalogPayload,
     destinationEnvironmentId?: string,
-    sleptLeafScrollback?: (tabId: string, leafId: string) => Buffer | null
+    daemonHistoryLeaf?: (tabId: string, leafId: string) => boolean
   ): OrcadMigrationSourceDormantInspection {
     const runtime = this[orcadSourceExportContext]
     return collectOrcadMigrationSourceDormantState(
@@ -74,7 +74,7 @@ export class OrcadSourceExportPersistence {
       catalog,
       runtime.terminalScrollbackSnapshotStorage,
       destinationEnvironmentId,
-      sleptLeafScrollback
+      daemonHistoryLeaf
     )
   }
 

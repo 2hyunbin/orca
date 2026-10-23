@@ -86,6 +86,8 @@ export type OrcadMigrationBlobInstall = {
   worktreeHasLiveShells?: (worktreeId: string) => boolean
   deferredShellHistoryWorktreeIds: Set<string>
   paneWorktreeId: (paneKey: string) => string | null
+  /** The workspace's folder on this host, or null when it is not here. */
+  workspacePath: (worktreeId: string) => string | null
   now: number
 }
 
@@ -115,6 +117,7 @@ function installTerminalHistory(install: OrcadMigrationBlobInstall): void {
     root: install.root,
     historyRoot: install.terminalHistoryRoot,
     paneWorktreeId: install.paneWorktreeId,
+    workspacePath: install.workspacePath,
     now: install.now
   })
 }

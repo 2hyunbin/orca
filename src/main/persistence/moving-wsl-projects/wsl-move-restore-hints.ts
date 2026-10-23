@@ -69,7 +69,7 @@ export async function captureWslMoveRestoreHints(
       capture.noCwdPaneKeys.push(pane.paneKey)
       continue
     }
-    const linux = hostLinuxCwd(detection.restoreInfo.cwd, pane, distro)
+    const linux = wslMoveHostLinuxCwd(detection.restoreInfo.cwd, pane, distro)
     if (!linux) {
       capture.noCwdPaneKeys.push(pane.paneKey)
       continue
@@ -84,7 +84,11 @@ export async function captureWslMoveRestoreHints(
 }
 
 // Accept Linux spelling only with evidence the session ran in this distro.
-function hostLinuxCwd(cwd: string, pane: WslMoveRestoreHintPane, distro: string): string | null {
+export function wslMoveHostLinuxCwd(
+  cwd: string,
+  pane: WslMoveRestoreHintPane,
+  distro: string
+): string | null {
   const fromUnc = wslUncPathToLinux(cwd, distro)
   if (fromUnc) {
     return fromUnc
