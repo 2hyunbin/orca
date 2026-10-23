@@ -23,6 +23,8 @@ import { reopenNewerDaemonTerminals } from '../../../daemon/daemon-newer-protoco
 import type { NewerDaemonReopenResult } from '../../../../shared/newer-daemon-hold'
 import type { WorkspaceLayoutStream } from '../../workspace-layout-stream'
 import { collectPersistedTerminalLeafIds } from '../../mobile-session-layout-projection'
+import { getDaemonHistoryDir } from '../../../daemon/daemon-launch-paths'
+import { seedSessionFromStoredScrollback } from '../../terminal/recovery/stored-scrollback-session-seed'
 
 function tabHasSolePane(tab: RuntimeMobileSessionTerminalTab): boolean {
   return collectPersistedTerminalLeafIds(tab.parentLayout).length <= 1
@@ -95,6 +97,41 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     })
   }
 
+  /**
+   * A session carrying the pane's stored scrollback when it has no terminal of its own, so its start
+   * cold-restores that history for every client; undefined when there is none to carry.
+   */
+  private async seedStoredScrollbackSession(
+    { worktreeId, tabId, leafId }: RestoredPane,
+    cwd: string | undefined
+  ): Promise<string | undefined> {
+    const ref =
+      this.getWorkspaceSessionForWorktree(worktreeId)?.terminalLayoutsByTabId?.[tabId]
+        ?.scrollbackRefsByLeafId?.[leafId]
+    const read = this.store?.readTerminalScrollbackSnapshotAsync
+    if (!ref || !read) {
+      return undefined
+    }
+    try {
+      const scrollback = await read.call(this.store, ref)
+      if (!scrollback) {
+        return undefined
+      }
+      // Why the workspace folder: a cold restore starts the shell where the record says it was.
+      const folder =
+        cwd ?? (await this.resolveTerminalWorkspaceLaunchScope(`id:${worktreeId}`)).path
+      return seedSessionFromStoredScrollback({
+        historyDir: getDaemonHistoryDir(),
+        worktreeId,
+        scrollback,
+        cwd: folder
+      })
+    } catch {
+      // Why: history is best effort; the pane still starts, only without what it showed before.
+      return undefined
+    }
+  }
+
   /** The pane's stored terminal; undefined while unbound, null once main no longer holds it. */
   private storedPaneBinding({
     worktreeId,
@@ -151,6 +188,12 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
       }
     }
     try {
+      const startSessionId =
+        sessionId ??
+        (await this.seedStoredScrollbackSession(
+          { worktreeId, tabId: tab.parentTabId, leafId: tab.leafId },
+          tab.startupCwd
+        ))
       const created = await this.createRuntimeOwnedMobileSessionTerminal(
         worktreeId,
         targetsHost,
@@ -159,7 +202,7 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
           identity: {
             tabId: tab.parentTabId,
             leafId: tab.leafId,
-            sessionId
+            sessionId: startSessionId
           },
           cwd: tab.startupCwd,
           command: agentStartup.command,
