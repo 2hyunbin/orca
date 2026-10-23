@@ -3,6 +3,7 @@
 import { act } from 'react'
 import type React from 'react'
 import { makeFolderWorkspace } from '../../store/slices/worktrees-slice-test-fixtures'
+import { getLineageInputs } from '../sidebar/visible-worktree-indexes'
 import type * as WorktreeRepoIndex from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import { cleanup, fireEvent, render } from '@testing-library/react'
@@ -529,34 +530,47 @@ it.each([10, 100])(
     let traversed = 0
     const items = Array.from({ length: n }, (_, i) => makeWorktree({ id: `row-${i}` }))
     seed(items)
-    const observed = items.slice()
-    items.forEach((row, index) => {
-      Object.defineProperty(observed, index, {
-        get() {
-          traversed++
-          return row
-        }
-      })
-    })
-    storeState.worktreesByRepo = { [REPO_ID]: observed }
+    const heldRows = getLineageInputs(storeState).worktreeMap
     const change = vi.fn()
     const { rerender } = render(
       <ComposerParentWorktreePicker repoId={REPO_ID} value="row-0" onChange={change} />
     )
     expect(trigger().textContent).toContain('row-0')
-    traversed = 0
-    act(() => {
-      storeState.projectHostSetups = []
-      storeWrites.set({ projectHostSetups: [] })
+    const nativeValues = heldRows.values
+    const observedValues = vi.spyOn(heldRows, 'values').mockImplementation(function (
+      this: Map<string, Worktree>
+    ) {
+      const iterator = nativeValues.call(this)
+      const next = iterator.next.bind(iterator)
+      iterator.next = () => {
+        const entry = next()
+        if (!entry.done) {
+          traversed++
+        }
+        return entry
+      }
+      return iterator
     })
-    rerender(
-      <ComposerParentWorktreePicker repoId={REPO_ID} value="row-0" onChange={change} disabled />
-    )
-    expect(traversed).toBe(0)
-    storeState.worktreesByRepo = {
-      [REPO_ID]: [{ ...items[0]!, displayName: 'Renamed' }, ...items.slice(1)]
+    try {
+      expect([...heldRows.values()]).toEqual(items)
+      expect(traversed).toBe(n)
+      traversed = 0
+      act(() => {
+        storeState.projectHostSetups = []
+        storeWrites.set({ projectHostSetups: [] })
+      })
+      rerender(
+        <ComposerParentWorktreePicker repoId={REPO_ID} value="row-0" onChange={change} disabled />
+      )
+      expect(getLineageInputs(storeState).worktreeMap).toBe(heldRows)
+      expect(traversed).toBe(0)
+      storeState.worktreesByRepo = {
+        [REPO_ID]: [{ ...items[0]!, displayName: 'Renamed' }, ...items.slice(1)]
+      }
+      rerender(<ComposerParentWorktreePicker repoId={REPO_ID} value="row-0" onChange={change} />)
+      expect(trigger().textContent).toContain('Renamed')
+    } finally {
+      observedValues.mockRestore()
     }
-    rerender(<ComposerParentWorktreePicker repoId={REPO_ID} value="row-0" onChange={change} />)
-    expect(trigger().textContent).toContain('Renamed')
   }
 )

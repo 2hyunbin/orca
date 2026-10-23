@@ -1,10 +1,12 @@
-import { getWorktreeLineageSelection } from '../../../../shared/sidebar-list/worktree-lineage-projection'
+import {
+  getWorktreeLineageSelection,
+  getLineageRenderInfo
+} from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getLineageInputs } from './visible-worktree-indexes'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/store'
 import { useAllWorktrees, useRepoById, useRepoMap } from '@/store/selectors'
 import type { Worktree } from '../../../../shared/worktree/types'
-import { getLineageRenderInfo } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getWorkspaceStatus } from './workspace-status'
 import { getEligibleWorktreeParents } from './worktree-parent-candidates'
 import {

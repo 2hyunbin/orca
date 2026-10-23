@@ -1,6 +1,8 @@
 import { showWorkspaceListChangedToast } from './stale-workspace-list-toast'
-import { createWorktreeDeleteAdmission } from './worktree-delete-request'
-import { toWorktreeDeleteIdentities } from './worktree-delete-request'
+import {
+  createWorktreeDeleteAdmission,
+  toWorktreeDeleteIdentities
+} from './worktree-delete-request'
 import { draggedWorktreeCopiesOf } from './worktree-list/drag/dragged-worktree-copies'
 import React, { useCallback } from 'react'
 

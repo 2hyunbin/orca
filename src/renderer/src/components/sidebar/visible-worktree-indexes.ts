@@ -8,11 +8,11 @@ import { routeForOwner } from '@/lib/worktree-owner-route'
 import {
   findWorktreeLineageRow,
   sameWorktreeLineageIdentity,
-  type WorktreeLineageIdentity
+  type WorktreeLineageIdentity,
+  getWorkspaceLineageRows
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import type { Worktree } from '../../../../shared/worktree/types'
 import type { AppState } from '@/store/types'
-import { getWorkspaceLineageRows } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { mergeWorkspaceLineageRecords } from '../../../../shared/resolved-worktree-lineage'
 export { getWorkspaceLineageRows as getLineageAncestorIndex } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 

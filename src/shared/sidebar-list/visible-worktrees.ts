@@ -1,7 +1,8 @@
 import {
   getWorktreeLineageIdentity,
   sameWorktreeLineageIdentity,
-  getRepresentedWorktreeLineageRow
+  getRepresentedWorktreeLineageRow,
+  getSidebarLineageParentsByIdentity
 } from './worktree-lineage-projection'
 import type { WorktreeLineage } from '../worktree/lineage-types'
 import type { Worktree } from '../worktree/types'
@@ -11,7 +12,6 @@ import {
   type WorkspaceRowFactReader,
   type WorkspaceRowFilters
 } from '../workspace-view/workspace-row-filters'
-import { getSidebarLineageParentsByIdentity } from './worktree-lineage-projection'
 
 export type VisibleSidebarWorktreeInputs = {
   /** Every catalog row, one per host-qualified identity. */

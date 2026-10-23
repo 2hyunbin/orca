@@ -1,7 +1,8 @@
 import { getLineageInputs } from '../sidebar/visible-worktree-indexes'
 import {
   getWorktreeLineageIdentity,
-  findWorktreeLineageRow
+  findWorktreeLineageRow,
+  getWorktreeLineageProjection
 } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 import { composeWorktreeHostIdentity } from '../../../../shared/worktree/host-qualified-identity'
 import { folderWorkspaceToWorktree } from '../../../../shared/folder-workspace-worktree'
@@ -11,7 +12,6 @@ import type { FolderWorkspace } from '../../../../shared/folder-workspace-types'
 import type { WorkspaceLineage, WorktreeLineage } from '../../../../shared/worktree/lineage-types'
 import type { Worktree } from '../../../../shared/worktree/types'
 import { compareWorktreeDisplayName } from '@/lib/worktree-display-name-order'
-import { getWorktreeLineageProjection } from '../../../../shared/sidebar-list/worktree-lineage-projection'
 
 export type AttachedWorktreeResolution = {
   folderWorkspace: FolderWorkspace | null

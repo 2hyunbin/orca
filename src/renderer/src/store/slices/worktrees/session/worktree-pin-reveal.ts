@@ -1,6 +1,7 @@
 import {
   findWorktreeLineageRow,
-  getWorktreeLineageIdentity
+  getWorktreeLineageIdentity,
+  getWorktreeLineageProjection
 } from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
 import type { WorktreeMetaBatchUpdate, WorktreeSlice } from '../../worktree-helpers'
 import type { WorktreeSliceGet, WorktreeSliceSet } from '../listing/worktree-slice-types'
@@ -8,7 +9,6 @@ import {
   getActiveSidebarWorkspaceId,
   parseWorkspaceKey
 } from '../../../../../../shared/workspace-scope'
-import { getWorktreeLineageProjection } from '../../../../../../shared/sidebar-list/worktree-lineage-projection'
 import { getLineageInputs } from '../../../../components/sidebar/visible-worktree-indexes'
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import { getIndexedWorktreesById } from '../../../worktree-repo-index'

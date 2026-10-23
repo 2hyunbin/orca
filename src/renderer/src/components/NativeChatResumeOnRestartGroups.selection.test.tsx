@@ -7,12 +7,8 @@ import { createRoot, type Root } from 'react-dom/client'
 import { renderHook } from '@testing-library/react'
 import { useLineageAncestors } from './native-chat-resume-workspace-lookups'
 import { groupResumeCandidates } from './native-chat-resume-on-restart-grouping'
-import { lineage } from './native-chat-resume-tree.test-support'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { useAppStore } from '../store'
-import { getHostContextLabel } from '../../../shared/worktree/host-context-labels'
-import type { ExecutionHostId } from '../../../shared/execution-host'
 import {
+  lineage,
   candidate,
   chatBox,
   countOf,
@@ -25,6 +21,10 @@ import {
   unretryable,
   worktree
 } from './native-chat-resume-tree.test-support'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { useAppStore } from '../store'
+import { getHostContextLabel } from '../../../shared/worktree/host-context-labels'
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import { ResumeTreeHarness as Harness } from './NativeChatResumeTreeHarness.test-support'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
