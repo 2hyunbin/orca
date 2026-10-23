@@ -50,6 +50,6 @@
     "No product runtime or wire behavior changes. macOS/Windows native paths are not involved in this batch; VM deadlines and path operations use Node cross-platform APIs.",
     "Action source self-containment and one metadata-host literal scan were removed; README no longer claims the test enforces artifact independence.",
     "Docs source-text, layout/style and historical filename blacklists were removed. Passing retained unit tests does not establish every deployed route or visual behavior. Real docs build is covered by CI; no new UI validation is claimed.",
-    "This is a completed three-file batch; archived proof files listed in /tmp/orca-root-0008-pending-notes.md remain unreviewed."
+    "This is a completed three-file batch; archived proof files are separately reviewed and recorded in later batches. Supporting reads here do not establish their completion."
   ]
 }
