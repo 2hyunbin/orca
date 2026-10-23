@@ -191,6 +191,8 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
   private var bridgeInstalled = false
   private var bridgeTarget = MobileWebShellBridgeTarget<WKFrameInfo>()
   private(set) var webView: WKWebView!
+  /// An id issued for a spare whose page is gone: nothing loads, and the first apply says so.
+  private var dead = false
   private var generationDirectory = ""
   private var sessionId = ""
   private var applied: MobileWebShellAppliedProps?
@@ -200,7 +202,8 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
   private var isolationFailed = false
   private let loadState = MobileWebShellLoadStateMachine()
 
-  override init() {
+  init(dead: Bool = false) {
+    self.dead = dead
     super.init()
     let configuration = WKWebViewConfiguration()
     configuration.allowsInlineMediaPlayback = true
@@ -232,6 +235,9 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     installNetworkBlock(into: configuration.userContentController)
   }
 
+  /// A page that can still be shown: its content process is alive and no load failure was reported.
+  var isUsable: Bool { !dead && !loadState.isTerminal }
+
   func apply(generationDirectory: String, sessionId: String, bridgeEnabled: Bool) {
     self.generationDirectory = generationDirectory
     self.sessionId = sessionId
@@ -239,6 +245,14 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     propsDidUpdate()
   }
 
+  /// The spare pool's teardown: nothing loads in it again, and the content process goes with it.
+  func destroy() {
+    dead = true
+    clearBridgeTarget()
+    pendingDocumentUrl = nil
+    webView.stopLoading()
+    webView.removeFromSuperview()
+  }
 
   /// Props arrive in no defined order, so neither setter starts anything; this does, once both are
   /// in. A repeat of the same triple is not a retry: a retry is a remount under a new React key.
@@ -252,6 +266,10 @@ final class MobileWebShellPage: NSObject, WKNavigationDelegate, WKUIDelegate {
     )
     guard applied?.matches(next) != true else { return }
     applied = next
+    if dead {
+      emit(loadState.failed(.renderProcessGone))
+      return
+    }
     clearBridgeTarget()
     loadState.reset()
     pendingDocumentUrl = nil
