@@ -128,7 +128,8 @@ function buildLocaleLowercaseIndex(text: string): {
   originalEndByNormalizedOffset: number[] | null
 } {
   // ASCII has no contextual casing or multi-unit characters, so every offset stays identical.
-  if (!/[\u0080-\uffff]/.test(text)) {
+  const firstNonAscii = text.search(/[\u0080-\uffff]/)
+  if (firstNonAscii === -1) {
     return {
       text: text.toLocaleLowerCase(),
       originalStartByNormalizedOffset: null,
@@ -136,12 +137,12 @@ function buildLocaleLowercaseIndex(text: string): {
     }
   }
 
-  let normalized = ''
+  let normalized = text.slice(0, firstNonAscii).toLocaleLowerCase()
   let originalStartByNormalizedOffset: number[] | null = null
   let originalEndByNormalizedOffset: number[] | null = null
-  let originalOffset = 0
+  let originalOffset = firstNonAscii
 
-  for (const char of text) {
+  for (const char of text.slice(firstNonAscii)) {
     const normalizedChar = char.toLocaleLowerCase()
     const originalEnd = originalOffset + char.length
     if (!originalStartByNormalizedOffset && (char.length !== 1 || normalizedChar.length !== 1)) {
