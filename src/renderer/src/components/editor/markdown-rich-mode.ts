@@ -204,6 +204,8 @@ function isHtmlOrJsxFragment(fragment: string): boolean {
 
 function stripMarkdownCode(content: string): string {
   let sanitized = ''
+  let copyStart = 0
+  let fenceNewlines = 0
   let activeFence: '`' | '~' | null = null
   let lineStart = 0
 
@@ -216,17 +218,36 @@ function stripMarkdownCode(content: string): string {
     if (fenceMatch) {
       const fenceMarker = fenceMatch[1][0] as '`' | '~'
       activeFence = activeFence === fenceMarker ? null : fenceMarker
-    } else if (!activeFence) {
-      sanitized += line.replace(/`+[^`\n]*`+/g, '')
     }
-
-    if (index < content.length) {
-      sanitized += '\n'
+    if (fenceMatch || activeFence) {
+      if (copyStart < lineStart) {
+        sanitized += content.slice(copyStart, lineStart)
+      }
+      if (index < content.length) {
+        fenceNewlines += 1
+      }
+      copyStart = index + 1
+      if (!activeFence) {
+        sanitized += '\n'.repeat(fenceNewlines)
+        fenceNewlines = 0
+      }
+    } else {
+      const stripped = line.replace(/`+[^`\n]*`+/g, '')
+      if (stripped !== line || lineEnd < index) {
+        if (copyStart < lineStart) {
+          sanitized += content.slice(copyStart, lineStart)
+        }
+        sanitized += stripped
+        if (index < content.length) {
+          sanitized += '\n'
+        }
+        copyStart = index + 1
+      }
     }
     lineStart = index + 1
   }
 
-  return sanitized
+  return sanitized + '\n'.repeat(fenceNewlines) + content.slice(copyStart)
 }
 
 function preservesEmbeddedHtml(contentWithoutCode: string, roundTripOutput: string): boolean {
