@@ -35,6 +35,26 @@ describe('normalizeMarkdownReferenceLinks', () => {
     ).toBe('[Docs](https://example.com/docs)\r\n\r\n')
   })
 
+  it.each([
+    ['[prefix [Text][docs]', '[prefix [Text](https://example.com/docs)'],
+    ['[prefix [Docs][]', '[prefix [Docs](https://example.com/docs)'],
+    ['[missing][unknown] [Docs]', '[missing][unknown] [Docs](https://example.com/docs)'],
+    ['[bad][open [Docs]', '[bad][open [Docs](https://example.com/docs)']
+  ])('continues after rejected reference lookahead in %s', (source, expected) => {
+    expect(normalizeMarkdownReferenceLinks(`${source}\n\n[docs]: https://example.com/docs\n`)).toBe(
+      `${expected}\n\n`
+    )
+  })
+
+  it('skips escaped closers and accepts closers after paired backslashes', () => {
+    const source = String.raw`[first\] text][docs] [second\\][docs] [Docs] \[Docs]`
+    const expected = String.raw`[first\] text](https://example.com/docs) [second\\](https://example.com/docs) [Docs](https://example.com/docs) \[Docs]`
+
+    expect(normalizeMarkdownReferenceLinks(`${source}\n\n[docs]: https://example.com/docs\n`)).toBe(
+      `${expected}\n\n`
+    )
+  })
+
   it('ignores definitions inside fenced code blocks', () => {
     const markdown = ['```md', '[docs]: https://example.com/docs', '```', '', '[Docs]'].join('\n')
 

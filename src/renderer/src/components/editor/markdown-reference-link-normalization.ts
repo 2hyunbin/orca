@@ -117,13 +117,17 @@ function isEscaped(content: string, index: number): boolean {
   return backslashCount % 2 === 1
 }
 
-function findClosingBracket(content: string, start: number): number {
-  for (let index = start; index < content.length; index += 1) {
-    if (content[index] === ']' && !isEscaped(content, index)) {
-      return index
+function createClosingBracketCursor(content: string): (start: number) => number {
+  let closingIndex: number | null = null
+  return (start) => {
+    if (closingIndex === null || (closingIndex !== -1 && closingIndex < start)) {
+      closingIndex = content.indexOf(']', start)
+      while (closingIndex !== -1 && isEscaped(content, closingIndex)) {
+        closingIndex = content.indexOf(']', closingIndex + 1)
+      }
     }
+    return closingIndex
   }
-  return -1
 }
 
 function formatInlineReferenceLink(text: string, definition: ReferenceLinkDefinition): string {
@@ -141,6 +145,9 @@ function replaceReferenceLinks(
 ): string {
   let result = ''
   let index = 0
+  // Text and label probes advance independently after rejected references.
+  const findTextClose = createClosingBracketCursor(markdown)
+  const findLabelClose = createClosingBracketCursor(markdown)
   const isInsideFence = createMarkdownFenceRangeCursor(getMarkdownFenceRanges(markdown))
 
   while (index < markdown.length) {
@@ -150,7 +157,7 @@ function replaceReferenceLinks(
       continue
     }
 
-    const closingTextIndex = findClosingBracket(markdown, index + 1)
+    const closingTextIndex = findTextClose(index + 1)
     if (closingTextIndex === -1) {
       result += markdown[index]
       index += 1
@@ -166,7 +173,7 @@ function replaceReferenceLinks(
     }
 
     if (afterText === '[') {
-      const closingLabelIndex = findClosingBracket(markdown, closingTextIndex + 2)
+      const closingLabelIndex = findLabelClose(closingTextIndex + 2)
       if (closingLabelIndex !== -1) {
         const rawLabel = markdown.slice(closingTextIndex + 2, closingLabelIndex)
         const label = normalizeReferenceLabel(rawLabel || text)
