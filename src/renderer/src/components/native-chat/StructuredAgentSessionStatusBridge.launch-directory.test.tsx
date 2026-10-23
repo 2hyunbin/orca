@@ -380,7 +380,7 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
       .mockResolvedValueOnce({ unsubscribe: released[0] })
       .mockResolvedValueOnce({ unsubscribe: released[1] })
     const remoteLease = vi.spyOn(remote, 'activate')
-    const tabs = [
+    const tabs: Tab[] = [
       floatingTab,
       { ...floatingTab, id: 'second', entityId: 'session-2' },
       { ...floatingTab, id: 'remote', entityId: 'session-3', executionHostId: 'runtime:paired' }
