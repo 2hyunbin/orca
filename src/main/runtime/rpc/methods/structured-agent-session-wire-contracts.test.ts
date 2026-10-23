@@ -471,7 +471,7 @@ describe('agentSession.send reply timing', () => {
     expect(hostCalls.waitForSendSettlement).not.toHaveBeenCalled()
   })
 
-  it('keeps an old phone image send immediate and never recovers its interrupted send as a hidden card', async () => {
+  it('keeps an old phone image send immediate and returns its interrupted unsent image as a card', async () => {
     const rig = await createQueuedMessageTestRig()
     hostCalls.send.mockImplementation(rig.host.send.bind(rig.host))
     const imageSend = () => {
@@ -512,12 +512,12 @@ describe('agentSession.send reply timing', () => {
       release()
       await closed
       rig.crashRestartHostProcess()
-      expect(await rig.drafts()).toEqual([])
+      expect(await rig.drafts()).toEqual([{ messageId: interrupted.id, state: 'waiting' }])
       expect(await rig.submission(interrupted.id)).toMatchObject({
         source: { kind: 'user' },
         dispatchState: 'rejected'
       })
-      expect(await rig.submission(interrupted.id)).not.toHaveProperty('keptAsQueuedMessageId')
+      expect((await rig.submission(interrupted.id))?.keptAsQueuedMessageId).toBe(interrupted.id)
     } finally {
       release()
       await rig.dispose()

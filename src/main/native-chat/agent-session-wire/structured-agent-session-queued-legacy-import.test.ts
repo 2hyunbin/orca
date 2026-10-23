@@ -243,6 +243,7 @@ it("moves an earlier build's cards into the journal, each action its own card, t
 
   // The next open moves the rest in one transaction: answered cards write nothing, and a refusal
   // is written only where its hand-off is not in this epoch.
+  await rig.settleAccepted(await rig.handoffId('ret-gone'), 'received-returned-card')
   await rig.restartHostProcess()
   expect(await rig.drafts()).toEqual(published.slice(2))
   expect(legacyIds()).toEqual(['broken'])

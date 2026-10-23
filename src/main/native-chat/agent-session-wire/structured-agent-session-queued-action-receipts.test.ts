@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import { holdLane } from './structured-agent-session-delivery-hold.test-fixture'
+import { openRigTurnFor } from './structured-agent-session-queued-rig-turn.test-fixture'
 import { AGENT_SESSION_MAX_NEW_OPERATION_AGE_MS } from '../../../shared/agent-session-host-authority'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import {
@@ -638,8 +639,10 @@ describe('source-bound ordinary Continue', () => {
 it.each(['send-now', 'automatic'] as const)(
   'clears Sleep on queued submission only: %s',
   async (mode) => {
-    await rig.workingSend()
+    const working = await rig.workingSend()
     const draftId = await queuedDraft('retained through Sleep')
+    await openRigTurnFor(rig, working)
+    await rig.settleAccepted(working, 'received')
     expect(await rig.host.sleepWorkspace('workspace-1', true)).toEqual({
       stoppedSessionIds: [SESSION]
     })

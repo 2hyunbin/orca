@@ -70,7 +70,7 @@ export class JournalQueuedMessages {
   /** Moves with every card change, so publication memos recompute only when they must. */
   revision(): string {
     const { epoch, queue } = this.deps.state()
-    return `${epoch}:${queue.revision}:${this.legacy.key()}:${this.deps.state().lastSequence}:${this.recoveryWork()?.workViewKey() ?? ''}`
+    return `${epoch}:${queue.revision}:${this.legacy.key()}:${this.deps.state().lastSequence}:${this.recoveryWork()?.recoveryViewKey() ?? ''}`
   }
 
   /** The cards every reader sees, in queue order: the fold's, and any an earlier build wrote that

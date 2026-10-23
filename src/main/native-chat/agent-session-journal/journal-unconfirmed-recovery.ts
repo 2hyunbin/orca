@@ -17,7 +17,7 @@ export type JournalRecoveryWork = {
   owesSend: (submission: AgentJournalSubmission) => boolean
   generationEnded: (submission: AgentJournalSubmission) => boolean
   activeTurnId: () => string | null
-  workViewKey: () => string
+  recoveryViewKey: () => string
 }
 
 /** Row order, rather than a turn's creation position, proves the end followed handover. */

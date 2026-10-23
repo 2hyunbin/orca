@@ -182,6 +182,15 @@ export class StructuredAgentSessionCurrentWork {
     return `${this.viewKey()}|${this.working() ? 1 : 0}|${sends.join(',')}`
   }
 
+  recoveryViewKey(): string {
+    const held = this.heldSends?.()
+    return JSON.stringify([
+      this.viewKey(),
+      held ? [...held].sort() : null,
+      [...structuredAgentSessionHandingOver(this.journal)].sort()
+    ])
+  }
+
   /** A send as clients are told it. One handed to the live child that it no longer holds, with no
    *  answer, reads in doubt: no client counts it as work, and its echo or refusal still settles it. */
   publishedSubmission = (submission: AgentJournalSubmission): AgentJournalSubmission =>
