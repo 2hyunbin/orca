@@ -266,19 +266,28 @@ function CheckOutcome({
 
 function ManualRecovery({ detail }: { detail: string }): React.JSX.Element {
   const command = staleLockReclaimCommandFrom(detail)
+  if (!command) {
+    return (
+      <p className="text-muted-foreground">
+        {translate(
+          'auto.components.settings.recoverServer.manualDelete',
+          'Delete the lock file shown in Details once you are sure no other machine uses it.'
+        )}
+      </p>
+    )
+  }
   return (
-    <p className="text-muted-foreground">
-      {command
-        ? translate(
-            'auto.components.settings.recoverServer.manualCommand',
-            'Run {{command}} on the host, or delete the lock file shown in Details.',
-            { command }
-          )
-        : translate(
-            'auto.components.settings.recoverServer.manualDelete',
-            'Delete the lock file shown in Details once you are sure no other machine uses it.'
-          )}
-    </p>
+    <div className="space-y-1.5">
+      <p className="text-muted-foreground">
+        {translate(
+          'auto.components.settings.recoverServer.manualCommand',
+          'Run this on the host, or delete the lock file shown in Details:'
+        )}
+      </p>
+      <pre className="whitespace-pre-wrap break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground select-text">
+        {command}
+      </pre>
+    </div>
   )
 }
 

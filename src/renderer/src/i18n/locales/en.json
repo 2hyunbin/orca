@@ -13352,7 +13352,7 @@
           "ageMinutes": "{{count}} minutes",
           "warning": "Only continue if no other machine sharing this home runs Orca for this profile.",
           "none": "There is no lock to clear any more. Reconnect to start this host’s Orca server.",
-          "manualCommand": "Run {{command}} on the host, or delete the lock file shown in Details.",
+          "manualCommand": "Run this on the host, or delete the lock file shown in Details:",
           "manualDelete": "Delete the lock file shown in Details once you are sure no other machine uses it.",
           "action": "Recover server…"
         }
