@@ -606,6 +606,9 @@
     },
     "request": {
       "pairedServerWorkspace": "Este espaço de trabalho está em um servidor pareado. Use as abas do navegador desse servidor."
+    },
+    "managedProfile": {
+      "createFailed": "Não foi possível criar o perfil do navegador deste espaço de trabalho. Feche esta aba e abra uma nova para tentar novamente."
     }
   },
   "settings": {
@@ -731,6 +734,20 @@
           "notifications": "notificações",
           "clipboard": "área de transferência"
         }
+      },
+      "profileScope": {
+        "optionShared": "Compartilhado",
+        "keywordRepo": "repositório",
+        "keywordIsolate": "isolar",
+        "optionRepoTooltip": "Os espaços de trabalho de cada repositório compartilham um perfil, criado na primeira utilização.",
+        "optionSharedTooltip": "Novas abas usam o perfil Padrão (ou o escolhido em Sessão e Cookies).",
+        "optionWorktreeTooltip": "Cada espaço de trabalho obtém seu próprio perfil, excluído com o espaço de trabalho.",
+        "description": "Compartilhe um perfil padrão em qualquer lugar ou forneça a cada repositório ou espaço de trabalho seus próprios cookies e armazenamento, para que os servidores de desenvolvimento locais parem de compartilhar logins.",
+        "optionWorktree": "Por espaço de trabalho",
+        "title": "Perfil para novas abas",
+        "repoProfileLabel": "Repositório: {{name}}",
+        "worktreeProfileLabel": "Espaço de trabalho: {{name}}",
+        "optionRepo": "Por repositório"
       }
     },
     "chat": {
@@ -10402,7 +10419,25 @@
             "databaseCount_one": "{{value0}} banco de dados",
             "databaseCount_other": "{{value0}} bancos de dados",
             "scanning": "Verificando {{value0}}",
-            "scanned": "Verificação concluída: {{value0}}"
+            "scanned": "Verificação concluída: {{value0}}",
+            "agentChecked": "{{agent}}: {{settled}} de {{total}} candidatos do histórico verificados"
+          },
+          "run": {
+            "source": {
+              "control": {
+                "agent": {
+                  "action": {
+                    "start": {
+                      "git": {
+                        "operation": {
+                          "running": "Aguarde a conclusão da operação do Git em execução."
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
@@ -10717,7 +10752,9 @@
           "branchIdentity": "Branch",
           "branchFolderPathIdentity": "Branch ou caminho da pasta",
           "ef18787206": "Na fila para exclusão",
-          "deleteFailed": "Falha ao excluir"
+          "deleteFailed": "Falha ao excluir",
+          "hideChildWorktrees": "Ocultar árvores de trabalho filhas",
+          "showChildWorktrees": "Mostrar árvores de trabalho filhas"
         },
         "workspace": {
           "status": {
@@ -11564,6 +11601,9 @@
               },
               "chat": {
                 "partial": "O host não conseguiu confirmar que a conversa foi interrompida. Outros painéis podem ter sido fechados; verifique a conexão e tente novamente."
+              },
+              "vm": {
+                "running": "Os terminais do espaço de trabalho pararam, mas a máquina não pôde ser suspensa e ainda está em execução."
               }
             }
           }
@@ -13277,7 +13317,7 @@
           "projectDefaultBaseRef": "padrão do projeto",
           "createFromBaseRef": "Criar a partir de {{baseRef}}",
           "missingWorkspace": "Espaço de trabalho faltando",
-          "runUsageSummary": "{{cost}} est. · {{tokens}} tokens",
+          "runUsageSummary": "{{cost}} estimados · {{tokens}} tokens",
           "usageUnavailable": "Uso indisponível",
           "noRunUsageYet": "Ainda sem uso de execução",
           "noWorkspace": "Nenhum espaço de trabalho",
@@ -15715,7 +15755,7 @@
             "25d6e8a491": "feat/mobile-page",
             "c791677f2f": "Retomar",
             "cf3f98fa3f": "Desconectado",
-            "091355da3d": "M1 Mini · home",
+            "091355da3d": "M1 Mini · casa",
             "0bc1881bc4": "Conectado · 40 worktrees · 5 ativas",
             "19c212e25e": "MacBook Pro",
             "2f1a1d10c4": "Desktops",
@@ -16440,7 +16480,21 @@
             "09a9489aa5": "Mostrar",
             "2a4c4b8e1f": "Copiar",
             "fileUrlUnsupported": "Esta aba do navegador não pode abrir arquivos locais. Use \"Abrir Pré-visualização ao Lado\" no arquivo em vez disso.",
-            "cc4a071d3a": "Anotar elemento da página ({{value0}})"
+            "cc4a071d3a": "Anotar elemento da página ({{value0}})",
+            "undo": "Desfazer",
+            "redo": "Refazer",
+            "paste": "Colar",
+            "selectAll": "Selecionar Tudo",
+            "cut": "Recortar",
+            "searchSelection": "Pesquisar “{{value1}}” em {{value0}}",
+            "inspect": "Inspecionar",
+            "copyImageAddress": "Copiar endereço da imagem",
+            "pasteAndMatchStyle": "Colar e adaptar estilo",
+            "addToDictionary": "Adicionar ao dicionário",
+            "copyImage": "Copiar imagem",
+            "pasteAsPlainText": "Colar como texto simples",
+            "openImageInNewTab": "Abrir imagem em nova aba",
+            "saveImage": "Salvar imagem"
           },
           "BrowserToolbarMenu": {
             "429ef481f9": "Cancelar",
@@ -20256,6 +20310,14 @@
       "stepDownload": "Baixar",
       "stepUnpack": "Descompactar",
       "stepCheck": "Verificar"
+    },
+    "WorkspaceEmptyState": {
+      "title": "O que você gostaria de fazer?",
+      "description": "Não há abas abertas aqui. Inicie um agente ou abra uma ferramenta para começar.",
+      "terminal": "Abrir um terminal",
+      "startAgent": "Iniciar um agente",
+      "browser": "Abrir um navegador",
+      "openFile": "Abrir um arquivo"
     }
   },
   "csv": {
@@ -20939,5 +21001,63 @@
       "loading": "Carregando idioma…",
       "saving": "Salvando idioma…"
     }
+  },
+  "resourceManager": {
+    "pty": {
+      "unavailable": "Indisponível",
+      "ownerUnknown": "Desconhecido",
+      "workspace": "Espaço de trabalho",
+      "binding": "Aba",
+      "idCopied": "ID da sessão do Orca copiado",
+      "cancel": "Cancelar",
+      "unassigned": "Não atribuído",
+      "thisComputer": "Este computador",
+      "retry": "Tentar novamente",
+      "ownerAbsent": "Ausente",
+      "ownerPresent": "Presente",
+      "incarnation": "Instância",
+      "bound": "Com aba",
+      "sessionId": "ID da sessão do Orca",
+      "unbound": "Sem aba",
+      "cwd": "Último diretório de trabalho informado",
+      "pid": "PID",
+      "copyFailed": "Não foi possível copiar o ID da sessão do Orca",
+      "refreshBeforeEnd": "A opção de encerrar fica indisponível até que os PTYs sejam atualizados.",
+      "endUnsupported": "Não é possível encerrar este terminal por aqui. O host não oferece as verificações de segurança necessárias. Feche-o pela aba ou no próprio host.",
+      "agentOwnership": "Evidência de vínculo com o agente",
+      "observationTime": "Horário da observação",
+      "goToTerminal": "Ir para o terminal",
+      "endTitle": "Encerrar {{terminal}}?",
+      "checkingTabs": "Verificando abas…",
+      "detailsNamed": "Detalhes para {{terminal}}",
+      "copyId": "Copiar ID da sessão do Orca",
+      "ending": "Encerrando…",
+      "localOwnedCount_one": "{{count}} PTY do Orca neste computador",
+      "endDescription": "Isso encerra o terminal e seus processos filhos. O trabalho não salvo pode ser perdido.",
+      "lastProcess": "Último processo visto: {{process}}",
+      "localOwnedCount_other": "{{count}} PTYs do Orca neste computador",
+      "loading": "Carregando terminais…",
+      "endNamed": "Encerrar {{terminal}}",
+      "end": "Encerrar terminal",
+      "openNamed": "Abrir {{terminal}}",
+      "withoutTab": "{{count}} sem aba",
+      "observedTime": "Última observação: {{time}}",
+      "noLocalOrcaPtys": "Nenhum PTY local do Orca",
+      "endShort": "Encerrar",
+      "endHint": "Encerrar este terminal e seus processos filhos.",
+      "attached": "Um cliente agora está conectado a este terminal. Atualize antes de tentar novamente.",
+      "claimed": "Um agente assumiu este terminal. Atualize antes de tentar novamente.",
+      "failed": "Não foi possível verificar: os terminais locais não puderam ser atualizados. São mostrados os últimos terminais observados.",
+      "unverifiableEnd": "Não foi possível verificar: o host não confirmou o resultado. O terminal pode ainda estar em execução."
+    },
+    "resources": "Recursos",
+    "refresh": "Atualizar",
+    "killFailed": "Não foi possível encerrar o terminal. As últimas sessões observadas são mantidas.",
+    "localDaemonScope": "Isso afeta os terminais deste computador.",
+    "countUnavailable": "contagem de terminais indisponível",
+    "openToObserve": "Abra Recursos para observar as sessões de terminal.",
+    "killAllLocal": "Encerrar todas as sessões locais",
+    "ptys": "PTYs",
+    "restartLocal": "Reiniciar daemon local"
   }
 }
