@@ -107,7 +107,14 @@ export function startShallowDirectoryWatcher(
           emitUpdates(parent, [name])
         }
       })
-      watcher.on('error', reportError)
+      watcher.on('error', (error) => {
+        // The runtime already closed it; unsubscribe must not wait on its 'close'.
+        if (watchers.get(parent) === watcher) {
+          watchers.delete(parent)
+          boundIdentities.delete(parent)
+        }
+        reportError(error)
+      })
       watchers.set(parent, watcher)
       return true
     } catch (error) {

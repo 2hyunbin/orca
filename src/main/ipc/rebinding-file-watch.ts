@@ -30,15 +30,22 @@ const BIND_VERIFY_DELAY_MS = 50
 
 type FileSnapshot = { identity: string; stamp: string }
 
+// Why: Node closes an errored watcher's handle without emitting 'close', and a
+// later close() is then a silent no-op, so waiting on 'close' alone can hang.
+const WATCHER_CLOSE_TIMEOUT_MS = 1_000
+
 export function closeFileSystemWatcher(watcher: FSWatcher): Promise<void> {
   const { promise, resolve } = Promise.withResolvers<void>()
+  const timer = setTimeout(resolve, WATCHER_CLOSE_TIMEOUT_MS)
+  timer.unref?.()
   watcher.once('close', resolve)
+  watcher.once('error', () => resolve())
   try {
     watcher.close()
   } catch {
     resolve()
   }
-  return promise
+  return promise.finally(() => clearTimeout(timer))
 }
 
 function fileSnapshot(entry: BigIntStats): FileSnapshot {
@@ -104,8 +111,9 @@ export function watchFileAcrossReplacement(
       })
       next.on('error', (error) => {
         if (!closed && watcher === next) {
-          // The runtime closes an errored watcher, so let the next refresh rebind.
-          unbind()
+          // The runtime already closed it; close() would wait for a 'close' that never comes.
+          watcher = null
+          boundIdentity = null
           onError(error)
         }
       })

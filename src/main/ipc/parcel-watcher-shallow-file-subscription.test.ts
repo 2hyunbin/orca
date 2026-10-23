@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PRIMARY_CHECKOUT_METADATA_FILES } from './worktree-git-common-metadata-files'
-import { startShallowFileWatcher } from './parcel-watcher-shallow-file-subscription'
+import {
+  MISSING_FILE_SWEEP_INTERVAL_MS,
+  startShallowFileWatcher
+} from './parcel-watcher-shallow-file-subscription'
 import type { ShallowWatcherSubscription } from './parcel-watcher-shallow-subscription'
 
 let commonDir: string
@@ -105,6 +108,18 @@ describe('shallow file watcher', () => {
     paths = []
     replaceLikeGit('packed-refs', 'repacked')
     await expectEventFor('packed-refs')
+  })
+
+  it('finds a metadata file created later with no sibling write, as pack-refs does', async () => {
+    start()
+    await settle()
+    paths = []
+
+    replaceLikeGit('packed-refs', 'packed')
+
+    await vi.waitFor(() => expect(paths).toContain(join(commonDir, 'packed-refs')), {
+      timeout: MISSING_FILE_SWEEP_INTERVAL_MS + 3_000
+    })
   })
 
   it('reports a missing root as a watch error', async () => {

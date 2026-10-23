@@ -4,10 +4,13 @@ import type { Event as ParcelWatcherEvent } from '@parcel/watcher'
 import type { ShallowWatcherSubscription } from './parcel-watcher-shallow-subscription'
 import { watchFileAcrossReplacement, type RebindingFileWatch } from './rebinding-file-watch'
 
-// Why: files absent at start (packed-refs, config.worktree, logs/HEAD) and
-// bindings that missed a replacement are found by this sweep. Primary git
+// Why: bindings that missed a replacement are found by this sweep. Primary git
 // metadata also has its own backstop poll, so this bounds staleness, not latency.
-const MISSING_FILE_SWEEP_INTERVAL_MS = 30_000
+const REBIND_SWEEP_INTERVAL_MS = 30_000
+// Why: a file created later with no sibling write (packed-refs from pack-refs or
+// gc) is only found by a sweep. Re-statting just the missing paths is one ENOENT
+// each, so they get the git poll cadence instead of waiting for the full sweep.
+export const MISSING_FILE_SWEEP_INTERVAL_MS = 2_000
 
 /** One watch per included file, so a `.git` root never streams objects/, refs/
  *  or worktrees/ churn. Used on macOS, where a directory watch is recursive. */
@@ -78,13 +81,20 @@ export function startShallowFileWatcher(
     if (!disposed) {
       refreshAll(false)
     }
-  }, MISSING_FILE_SWEEP_INTERVAL_MS)
+  }, REBIND_SWEEP_INTERVAL_MS)
   sweepTimer.unref?.()
+  const missingFileTimer = setInterval(() => {
+    if (!disposed) {
+      refreshAll(true)
+    }
+  }, MISSING_FILE_SWEEP_INTERVAL_MS)
+  missingFileTimer.unref?.()
 
   return {
     unsubscribe: async () => {
       disposed = true
       clearInterval(sweepTimer)
+      clearInterval(missingFileTimer)
       await Promise.all([...watches.values()].map((fileWatch) => fileWatch.close()))
     }
   }

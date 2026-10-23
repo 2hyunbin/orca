@@ -113,6 +113,28 @@ describe('shallow watcher subscription', () => {
     }
   })
 
+  it('unsubscribes promptly after the runtime closed an errored watcher', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'orca-shallow-watcher-'))
+    try {
+      const onError = vi.fn()
+      const subscription = startShallowDirectoryWatcher(root, ['HEAD'], () => {}, onError)
+      const state = watcherState.get(root)
+      if (!state) {
+        throw new Error('root was not watched')
+      }
+      // Node closes the handle on error without 'close'; a later close() is a no-op.
+      state.watcher.close = () => {}
+      state.watcher.emit('error', new Error('EPERM'))
+      expect(onError).toHaveBeenCalledOnce()
+
+      const startedAt = Date.now()
+      await subscription.unsubscribe()
+      expect(Date.now() - startedAt).toBeLessThan(500)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it.skipIf(process.platform === 'win32')(
     'preserves a literal backslash in an included filename',
     async () => {
