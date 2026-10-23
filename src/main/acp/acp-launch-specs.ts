@@ -149,8 +149,6 @@ export type AcpLaunchSpec = {
   permissionModeConfig?: {
     values: { ask: string } & Partial<Record<AgentChatPermissionMode, string>>
   }
-  /** Images go to the agent when it also advertises them; off sends text prompts only. */
-  imagePrompts?: true
   /** The agent compacts its conversation when sent `/compact` as a prompt; off hides `/compact`. */
   compaction?: true
   /** Throws when the chat's own arguments would send a copied conversation's CLI elsewhere than
@@ -234,7 +232,6 @@ function openCodeLaunchSpec(
     loginCommand: agentSessionSignInFor(row.agent)?.loginCommand ?? [],
     account: openCodeAcpAccountBinding(),
     installDirectories: ({ homePath }) => [join(homePath, '.opencode', 'bin')],
-    imagePrompts: true,
     readStoredUserMessages: openCodeStoredUserMessagesReader(),
     visualsSkill: loadOpenCodeVisualsSkill,
     compaction: true,
@@ -336,7 +333,6 @@ export const ANTIGRAVITY_LAUNCH_SPEC = {
   permissionModeConfig: {
     values: { ask: 'default', 'accept-edits': 'auto_edit', 'full-access': 'yolo' }
   },
-  imagePrompts: true,
   modelDiscovery: {
     kind: 'unavailable',
     reason: 'the Antigravity server lists its models only in a signed-in session'
