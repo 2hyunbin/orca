@@ -1,4 +1,5 @@
 import type { DaemonAsyncIoStatus } from '../../shared/daemon-async-io-health'
+import { sameEndpointIdentity } from './daemon-endpoint-incarnation'
 import { DegradedDaemonPtyProvider } from './degraded-daemon-pty-provider'
 import { getAllDaemonAdapters, getCurrentDaemonAdapter } from './daemon-provider-routing'
 import { getDaemonProvider } from './daemon-provider-state'
@@ -24,8 +25,9 @@ export async function readDaemonProviderAsyncIoHealth(): Promise<DaemonAsyncIoSt
   }
   const health = getAllDaemonAdapters(provider).map((adapter): DaemonAsyncIoStatus => {
     const result = results.get(adapter)
+    const identity = adapter.getDaemonIdentity()
     // Removed owners cannot warn; new or replaced owners cannot inherit health evidence.
-    return result?.identity && result.identity === adapter.getDaemonIdentity()
+    return result?.identity && identity && sameEndpointIdentity(result.identity, identity)
       ? {
           ...result.health,
           ...(result.health.state === 'stalled' &&

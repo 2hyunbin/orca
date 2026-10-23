@@ -169,3 +169,33 @@ it('keeps targeted recovery available for a legacy owner beside a degraded curre
   ])
   expect(await read()).toEqual({ state: 'stalled', pendingMs: 5000, recoverySupported: true })
 })
+
+it('accepts fresh identity snapshots from the same authenticated daemon', async () => {
+  adapter.getDaemonIdentity.mockImplementation(() => ({
+    pid: 123,
+    startedAtMs: 456,
+    launchNonce: 'original'
+  }))
+  expect(await read()).toEqual({ state: 'stalled', pendingMs: 5000 })
+})
+
+it.each([
+  { pid: 124, startedAtMs: 456, launchNonce: 'original' },
+  { pid: 123, startedAtMs: 457, launchNonce: 'original' },
+  { pid: 123, startedAtMs: 456, launchNonce: 'replacement' },
+  null
+])(
+  'rejects fresh identity snapshots from a changed or disconnected daemon: %j',
+  async (changed) => {
+    adapter.getDaemonIdentity.mockImplementation(() => ({
+      pid: 123,
+      startedAtMs: 456,
+      launchNonce: 'original'
+    }))
+    adapter.getAsyncIoHealth.mockImplementationOnce(async () => {
+      adapter.getDaemonIdentity.mockReturnValue(changed)
+      return { state: 'stalled', pendingMs: 5000 }
+    })
+    expect(await read()).toEqual({ state: 'unverifiable' })
+  }
+)
