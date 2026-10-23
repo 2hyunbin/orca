@@ -2,6 +2,7 @@ import type { SessionStoreEntry } from '@anthropic-ai/claude-agent-sdk'
 import { createReadStream } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { Readable } from 'node:stream'
 import type { AgentSessionRewindFork } from '../../shared/agent-session-rewind'
 import { durableWriteTempPath, renameDurable, writeTempFileDurable } from '../durable-file-write'
 import { splitTranscriptStreamLines } from '../native-chat/transcript-stream-lines'
@@ -19,6 +20,12 @@ function parseTranscriptEntry(line: string): SessionStoreEntry | undefined {
     return isTranscriptEntry(entry) ? entry : undefined
   } catch {
     return undefined
+  }
+}
+
+function* serializeTranscriptLines(entries: readonly SessionStoreEntry[]): Generator<string> {
+  for (const entry of entries) {
+    yield `${JSON.stringify(entry)}\n`
   }
 }
 
@@ -62,7 +69,10 @@ export async function materializeClaudeRewindTranscript(
         try {
           await writeTempFileDurable(
             temporary,
-            `${entries.map((entry) => JSON.stringify(entry)).join('\n')}\n`,
+            Readable.from(serializeTranscriptLines(entries), {
+              objectMode: false,
+              highWaterMark: 512 * 1024
+            }),
             0o600
           )
           await renameDurable(temporary, destination)

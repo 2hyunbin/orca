@@ -107,6 +107,31 @@ describe('durable Claude rewind transcripts', () => {
     expect(await readFile(path, 'utf8')).toBe(original)
   })
 
+  it('preserves complete Unicode records across streamed write chunks', async () => {
+    const text = '🙂é\n"\\'.repeat(64 * 1024)
+    const largeOriginal = original.replaceAll('"ALPHA"', JSON.stringify(text))
+    await writeFile(path, largeOriginal)
+
+    const fork = await forkBefore(secondPrompt)
+    expect(fork?.materialized).toBe(true)
+    const contents = await readFile(join(project, `${fork?.sessionId}.jsonl`), 'utf8')
+    const entries: unknown[] = contents
+      .trimEnd()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+    expect(entries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: { role: 'user', content: text } }),
+        expect.objectContaining({
+          message: { role: 'assistant', content: [{ type: 'text', text }] }
+        })
+      ])
+    )
+    expect(contents).not.toContain('BRAVO')
+    expect(contents.endsWith('\n')).toBe(true)
+    expect(await readFile(path, 'utf8')).toBe(largeOriginal)
+  })
+
   it('skips a torn transcript line instead of failing the rewind', async () => {
     const damaged = `{broken-json}\n${original}{"type":`
     await writeFile(path, damaged)

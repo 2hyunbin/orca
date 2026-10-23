@@ -80,7 +80,7 @@ export async function renameDurable(tmpPath: string, finalPath: string): Promise
  */
 export async function writeTempFileDurable(
   tmpPath: string,
-  payload: string | Uint8Array,
+  payload: string | Uint8Array | Iterable<string | Uint8Array> | AsyncIterable<string | Uint8Array>,
   mode?: number
 ): Promise<void> {
   const handle = await open(tmpPath, 'w', mode)
