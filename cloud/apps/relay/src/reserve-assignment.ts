@@ -37,7 +37,11 @@ const NO_REJOIN_CLOSE_CODES: ReadonlySet<number> = new Set([
 export type ReservePlacementMode = 'off' | 'dry-run' | 'on'
 
 export class ReservePaceError extends Error {
-  constructor(readonly retryAfterSeconds: number) {
+  // drained: the host was re-asking off a draining cell, so the 503 is the drain's, not a fault.
+  constructor(
+    readonly retryAfterSeconds: number,
+    readonly drained = false
+  ) {
     super('reserve_cells_paced')
   }
 }
@@ -46,7 +50,11 @@ type Identity = { userId: string; relayHostId: string }
 
 export type ReservePlan =
   | { kind: 'answer'; assignment: RelayAssignment; lane: 'sticky' | 'placement' | 'rehome' }
-  | { kind: 'retry'; retryAfterSeconds: number; reason: 'map-incomplete' | 'database' | 'paced' }
+  | {
+      kind: 'retry'
+      retryAfterSeconds: number
+      reason: 'map-incomplete' | 'database' | 'paced' | 'paced-drained'
+    }
   | ({ kind: 'database' } & Pick<AssignOptions, 'epochFloor' | 'placeFresh' | 'regionReserve' | 'reserveSpill'>)
 
 // A host whose seat the ledger reconcile demoted mints above its row for this long, so the
@@ -56,6 +64,26 @@ const RESERVE_ROW_FLOOR_MAX = 100_000
 
 // The WRONG_CELL row read's bound: well under a database stall (5-7 s).
 export const RESERVE_WRONG_CELL_ROW_READ_MS = 1_000
+
+// A reserve-mode cell as this director's map holds it, for the reserve-aware cell-status route.
+export type ReserveCellStatus = {
+  admitMode: 'db' | 'reserve'
+  feedStatus: string
+  // Reported, not enforced: callers set their own freshness bound.
+  polledAgeMs: number
+  incarnation: string
+  draining: boolean
+  controls: number
+  seats: number
+  // Null: the cell reports no step-5 numbers (for example before its switch file applies).
+  bookings: number | null
+  units: number | null
+  ceiling: number | null
+  intakePerSec: number | null
+  free: number | null
+}
+
+export type ReserveCellStatusUnavailable = 'placement-off' | 'map-incomplete' | 'no-feed' | 'incarnation-mismatch'
 
 // Rejects after `ms`; the read itself still settles later, and its failure is swallowed.
 async function withinMs<T>(read: Promise<T>, ms: number): Promise<T> {
@@ -157,7 +185,7 @@ export class ReserveAssignment {
     const now = this.now()
     const { directory } = this.input
     // Until every live cell has answered, only a host that may be on an unheard cell waits.
-    const incomplete = !directory.isComplete() && now - this.input.startedAt < RESERVE_STARTUP_GATE_MS
+    const incomplete = this.mapIncomplete(now)
     const seats = directory.seatsOf(identity.userId, identity.relayHostId)
     const left = directory
       .recentlyLeftOf(identity.userId, identity.relayHostId, now)
@@ -165,6 +193,7 @@ export class ReserveAssignment {
       .at(-1)
     const booking = directory.bookingOf(identity.userId, identity.relayHostId)
     const rowFloor = this.rowFloor(identity, now)
+    const drainedFrom = this.drainSource(seats, left)
     const known = [
       ...seats.map((seat) => seat.epoch),
       ...(left ? [left.epoch] : []),
@@ -210,12 +239,12 @@ export class ReserveAssignment {
         return { kind: 'database' }
       }
       // A never-seen host's spill mints above the row the database lane read.
-      const reserveSpill = this.reserveSpill(identity, request.region, epochFloor, seats)
+      const reserveSpill = this.reserveSpill(identity, request.region, epochFloor, seats, drainedFrom)
       return known.length === 0
         ? { kind: 'database', reserveSpill }
         : {
             kind: 'database',
-            regionReserve: this.regionReserve(identity, request.region, epochFloor, seats, now),
+            regionReserve: this.regionReserve(identity, request.region, epochFloor, seats, now, drainedFrom),
             reserveSpill
           }
     }
@@ -236,9 +265,11 @@ export class ReserveAssignment {
       }
     }
     const placeFresh = async (): Promise<RelayAssignment | null> =>
-      await this.placeFresh(identity, request.region, epochFloor, seats)
-    const regionReserve = this.regionReserve(identity, request.region, epochFloor, seats, now)
-    const reserveSpill = incomplete ? undefined : this.reserveSpill(identity, request.region, epochFloor, seats)
+      await this.placeFresh(identity, request.region, epochFloor, seats, false, false, drainedFrom)
+    const regionReserve = this.regionReserve(identity, request.region, epochFloor, seats, now, drainedFrom)
+    const reserveSpill = incomplete
+      ? undefined
+      : this.reserveSpill(identity, request.region, epochFloor, seats, drainedFrom)
     // Where the host was last seen decides who owns it: a database-mode cell keeps today's
     // path, sticky included; only a fresh placement may be booked on a reserve-mode cell.
     const lastOnReserve = lastCellId !== undefined && directory.placementModeOf(lastCellId) === 'reserve'
@@ -246,8 +277,88 @@ export class ReserveAssignment {
       return { kind: 'database', epochFloor, placeFresh, regionReserve, reserveSpill }
     }
     const placed = await placeFresh()
-    if (placed) return { kind: 'answer', assignment: placed, lane: 'placement' }
+    if (placed) {
+      if (drainedFrom !== undefined) this.recordDrainReplaced(drainedFrom, placed)
+      return { kind: 'answer', assignment: placed, lane: 'placement' }
+    }
     return { kind: 'database', epochFloor, regionReserve, reserveSpill }
+  }
+
+  private mapIncomplete(now: number): boolean {
+    return !this.input.directory.isComplete() && now - this.input.startedAt < RESERVE_STARTUP_GATE_MS
+  }
+
+  // Keyed on the cell, not the leave: a same-cap drain (graceMs 0) has the host re-ask before
+  // its leave reaches the map, but the cell's feed says draining from the first poll after.
+  private drainSource(
+    seats: readonly ShadowSeat[],
+    left: { cellId: string; epoch: number } | undefined
+  ): string | undefined {
+    const drainOnly = seats.find((seat) => seat.state === 'drain-only')
+    if (drainOnly) return drainOnly.cellId
+    let newest: { cellId: string; epoch: number } | undefined
+    for (const entry of [...seats, ...(left ? [left] : [])]) {
+      if (!newest || entry.epoch > newest.epoch) newest = entry
+    }
+    return newest && this.input.directory.cellState(newest.cellId)?.draining === true ? newest.cellId : undefined
+  }
+
+  // Only the reserve lane's own answers: a database-lane placement off the drained (isolated)
+  // cell already logs orca_relay_sticky_replaced_off_isolated_cell, and the canary sums both.
+  private recordDrainReplaced(fromCellId: string, placed: RelayAssignment): void {
+    this.summary.drainReplaced[fromCellId] = (this.summary.drainReplaced[fromCellId] ?? 0) + 1
+    this.log(
+      JSON.stringify({
+        event: 'orca_relay_reserve_drain_replaced',
+        fromCellId,
+        toCellId: placed.cellId,
+        region: placed.region
+      })
+    )
+  }
+
+  // The reserve-aware cell-status view, or why this director cannot vouch for the cell now.
+  cellStatus(
+    cellId: string,
+    runtimeIncarnation: string | undefined
+  ): { ok: true; reserve: ReserveCellStatus } | { ok: false; reason: ReserveCellStatusUnavailable } {
+    const now = this.now()
+    if (this.input.mode !== 'on') return { ok: false, reason: 'placement-off' }
+    if (this.mapIncomplete(now)) return { ok: false, reason: 'map-incomplete' }
+    const { directory } = this.input
+    const state = directory.cellState(cellId)
+    const placement = this.placementCells().find((cell) => cell.cellId === cellId)
+    // An older image without these reads as no feed, never as an empty cell.
+    if (
+      !state ||
+      !placement ||
+      state.status === 'no-feed' ||
+      state.incarnation === undefined ||
+      state.polledAt === undefined ||
+      state.draining === undefined ||
+      state.reportedSeats === undefined ||
+      state.reportedControls === undefined
+    ) {
+      return { ok: false, reason: 'no-feed' }
+    }
+    if (state.incarnation !== runtimeIncarnation) return { ok: false, reason: 'incarnation-mismatch' }
+    return {
+      ok: true,
+      reserve: {
+        admitMode: directory.placementModeOf(cellId),
+        feedStatus: state.status,
+        polledAgeMs: now - state.polledAt,
+        incarnation: state.incarnation,
+        draining: state.draining,
+        controls: state.reportedControls,
+        seats: state.reportedSeats,
+        bookings: state.bookings ?? null,
+        units: state.units ?? null,
+        ceiling: state.ceiling ?? null,
+        intakePerSec: state.intake?.perSec ?? null,
+        free: state.ceiling === undefined ? null : this.input.placer.free(placement)
+      }
+    }
   }
 
   // For the share draw's losers: the database lane tries the region first, then this, then spills.
@@ -257,14 +368,15 @@ export class ReserveAssignment {
     region: RelayRegion,
     epochFloor: number,
     seats: readonly ShadowSeat[],
-    now: number
+    now: number,
+    drainedFrom: string | undefined
   ): AssignOptions['regionReserve'] {
     const hasRoom = this.placementCells().some(
       (cell) => this.input.placer.isCandidate(cell, region, now) && this.input.placer.hasSeat(cell)
     )
     if (!hasRoom) return undefined
     return async () => {
-      const placed = await this.placeFresh(identity, region, epochFloor, seats, true)
+      const placed = await this.placeFresh(identity, region, epochFloor, seats, true, false, drainedFrom)
       if (placed) this.summary.regionKept += 1
       return placed
     }
@@ -276,7 +388,8 @@ export class ReserveAssignment {
     identity: Identity,
     region: RelayRegion,
     epochFloor: number,
-    seats: readonly ShadowSeat[]
+    seats: readonly ShadowSeat[],
+    drainedFrom: string | undefined
   ): NonNullable<AssignOptions['reserveSpill']> {
     return async ({ skipOwnRegion, rowEpoch }) => {
       const floor = Math.max(epochFloor, rowEpoch)
@@ -292,7 +405,7 @@ export class ReserveAssignment {
           continue
         }
         try {
-          const placed = await this.placeFresh(identity, target, floor, seats, true, true)
+          const placed = await this.placeFresh(identity, target, floor, seats, true, true, drainedFrom)
           if (placed) {
             this.recordSpill(region, target)
             return placed
@@ -478,7 +591,8 @@ export class ReserveAssignment {
     regionFull = false,
     // The caller counts its own outcome (spill, rehome): no database lane follows it, and a pace
     // may not be the answer.
-    spill = false
+    spill = false,
+    drainedFrom?: string
   ): Promise<RelayAssignment | null> {
     const placements = this.placementCells()
     if (!regionFull && this.random() >= this.input.placer.reservePoolShare(placements, region)) return null
@@ -519,7 +633,7 @@ export class ReserveAssignment {
         if (!spill) {
           this.summary.retries.paced += 1
         }
-        throw new ReservePaceError(result.retryAfterSeconds)
+        throw new ReservePaceError(result.retryAfterSeconds, drainedFrom !== undefined)
       }
       // Database cells in this region take it; a region with none spills as today.
       const hasDatabaseCells = placements.some(
@@ -701,6 +815,8 @@ type PlacementSummary = {
   calls: number
   database: number
   supersedes: number
+  // Reserve-lane placements of hosts re-asking off a draining cell, keyed by that cell.
+  drainReplaced: Record<string, number>
   outcomes: Record<string, number>
   retries: { mapIncomplete: number; database: number; paced: number }
   dryRun: {
@@ -732,6 +848,7 @@ function emptySummary(): PlacementSummary {
     calls: 0,
     database: 0,
     supersedes: 0,
+    drainReplaced: Object.create(null),
     outcomes: {},
     retries: { mapIncomplete: 0, database: 0, paced: 0 },
     dryRun: { outcomes: {}, latenciesMs: [], cells: Object.create(null) }

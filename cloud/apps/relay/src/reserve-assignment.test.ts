@@ -893,4 +893,101 @@ describe('reserve assignment on a director', () => {
       expect(outcomes(lines)).toMatchObject([{ outcome: 'unreachable' }])
     })
   })
+
+  describe('for a host re-asking off a draining cell', () => {
+    const events = (lines: string[], event: string) =>
+      lines.map((line) => JSON.parse(line)).filter((entry) => entry.event === event)
+    const flushedSummary = async (assignment: ReserveAssignment, now: { value: number }, lines: string[]) => {
+      now.value += 60_001
+      await assignment.plan({ ...HOST, relayHostId: 'zzzzzzzzzzzzzzzz' }, { reconnect: false, region: US })
+      return events(lines, 'orca_relay_reserve_placement_summary')[0]
+    }
+
+    // graceMs 0: the host re-asks while its seat still shows, but the cell's feed already says draining.
+    it('counts the placement by source cell before any leave lands', async () => {
+      const lines: string[] = []
+      const { assignment, now } = setup({
+        feeds: [feed('c1', { draining: true, full: [seated(7)] }), feed('c2')],
+        log: (line) => lines.push(line)
+      })
+      expect(await assignment.plan(HOST, { reconnect: true, region: US })).toMatchObject({
+        kind: 'answer',
+        lane: 'placement',
+        assignment: { cellId: 'c2', assignmentEpoch: 8 }
+      })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced')).toEqual([
+        { event: 'orca_relay_reserve_drain_replaced', fromCellId: 'c1', toCellId: 'c2', region: US }
+      ])
+      expect((await flushedSummary(assignment, now, lines)).drainReplaced).toEqual({ c1: 1 })
+    })
+
+    it('counts a drain-only seat, and a newest leave on a draining cell', async () => {
+      const lines: string[] = []
+      const drainOnly = setup({
+        feeds: [feed('c1', { full: [{ ...seated(7), state: 'drain-only' }] }), feed('c2')],
+        log: (line) => lines.push(line)
+      })
+      await drainOnly.assignment.plan(HOST, { reconnect: true, region: US })
+      const left = setup({ feeds: [feed('c1', { draining: true }), feed('c2')], log: (line) => lines.push(line) })
+      left.directory.apply(
+        'c1',
+        feed('c1', {
+          draining: true,
+          full: undefined,
+          seq: 3,
+          changes: [
+            { seq: 2, kind: 'join', ...HOST, epoch: 7, generation: 1, at: 1 },
+            { seq: 3, kind: 'leave', ...HOST, epoch: 7, generation: 1, closeCode: 4503, at: 2 }
+          ]
+        }),
+        left.now.value,
+        left.now.value
+      )
+      await left.assignment.plan(HOST, { reconnect: true, region: US })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced').map((entry) => entry.fromCellId)).toEqual([
+        'c1',
+        'c1'
+      ])
+    })
+
+    it('marks its pace as the drain’s, on the reserve lane and in the region fallback', async () => {
+      const { assignment } = setup({
+        feeds: [feed('c1', { draining: true, full: [seated(7)] }), feed('c2')],
+        reserve: () => ({ outcome: 'intake' })
+      })
+      await expect(assignment.plan(HOST, { reconnect: true, region: US })).rejects.toMatchObject({ drained: true })
+      const plan = await assignment.plan(HOST, { reconnect: true, region: US, regionCorrection: true })
+      await expect(plan.kind === 'database' ? plan.regionReserve?.() : null).rejects.toMatchObject({ drained: true })
+    })
+
+    it('leaves every other host as today: no drain count, and a plain pace', async () => {
+      const lines: string[] = []
+      const { assignment } = setup({ feeds: [feed('c1', { full: [seated(7)] }), feed('c2')], log: (line) => lines.push(line) })
+      // A seat on another draining cell than the newest one does not count either.
+      const paced = setup({
+        feeds: [feed('c1', { full: [seated(7)] }), feed('c2', { draining: true, full: [seated(6)] })],
+        reserve: () => ({ outcome: 'intake' })
+      })
+      expect(await assignment.plan({ ...HOST, relayHostId: 'qrstuvwxyzabcdef' }, { reconnect: false, region: US })).toMatchObject({
+        kind: 'answer',
+        lane: 'placement'
+      })
+      await expect(
+        paced.assignment.plan(HOST, { reconnect: false, region: US })
+      ).rejects.toMatchObject({ drained: false })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced')).toEqual([])
+    })
+
+    // The database lane logs orca_relay_sticky_replaced_off_isolated_cell for these; counting both would double the canary's sum.
+    it('does not count a placement the database lane makes through its region fallback', async () => {
+      const lines: string[] = []
+      const { assignment } = setup({
+        feeds: [feed('c1', { draining: true, full: [seated(7)] }), feed('c2')],
+        log: (line) => lines.push(line)
+      })
+      const plan = await assignment.plan(HOST, { reconnect: true, region: US, regionCorrection: true })
+      await expect(plan.kind === 'database' ? plan.regionReserve?.() : null).resolves.toMatchObject({ cellId: 'c2' })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced')).toEqual([])
+    })
+  })
 })
