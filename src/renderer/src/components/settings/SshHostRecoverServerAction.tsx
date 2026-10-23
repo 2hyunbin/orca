@@ -330,7 +330,7 @@ function ManualLockDelete({ lockPath }: { lockPath: string | undefined }): React
 
 function LiteralCommand({ command }: { command: string }): React.JSX.Element {
   return (
-    <pre className="whitespace-pre-wrap break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-[11px] leading-relaxed text-muted-foreground select-text">
+    <pre className="whitespace-pre-wrap break-all rounded-md border border-border bg-background px-3 py-2 font-mono text-2xs leading-relaxed text-muted-foreground select-text">
       {command}
     </pre>
   )
