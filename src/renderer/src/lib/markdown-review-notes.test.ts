@@ -207,6 +207,36 @@ describe('markdown review notes', () => {
     expect(split).not.toHaveBeenCalled()
   })
 
+  it.each(['\r\n', '\r', '\n', '\r\r\n', '\ud83d\ude00'])(
+    '%j survives a large selected-text quote boundary',
+    (boundary) => {
+      const firstLines = 'item\n'.repeat(300)
+      const prefix = `${firstLines}${'x'.repeat(65_535 - firstLines.length)}`
+      const tail = `${boundary}next\r\nlast\rline\nend\u2028tail`
+      const expectedTail =
+        boundary === '\ud83d\ude00'
+          ? '\ud83d\ude00next\n> last\n> line\n> end\u2028tail'
+          : `${boundary === '\r\r\n' ? '\n> ' : ''}\n> next\n> last\n> line\n> end\u2028tail`
+
+      const formatted = formatMarkdownReviewNotes(
+        [note({ selectedText: `${prefix}${tail}`, body: 'check this' })],
+        ''
+      )
+
+      expect(formatted).toBe(
+        [
+          'File: README.md',
+          'Source: markdown',
+          '',
+          'Line 2',
+          'Excerpt:',
+          `${'> item\n'.repeat(300)}> ${'x'.repeat(65_535 - firstLines.length)}${expectedTail}`,
+          'User comment: "check this"'
+        ].join('\n')
+      )
+    }
+  )
+
   it('groups multiple notes for one markdown file under a single header', () => {
     const formatted = formatMarkdownReviewNotes(
       [

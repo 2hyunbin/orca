@@ -191,7 +191,32 @@ function formatMarkdownReviewNoteDetails(note: MarkdownReviewNote, content: stri
 }
 
 function quoteMarkdownReviewText(text: string): string {
-  return `> ${text.replace(/\r\n|\r|\n/g, '\n> ')}`
+  const chunkSize = 64 * 1024
+  if (text.length <= chunkSize) {
+    return `> ${text.replace(/\r\n|\r|\n/g, '\n> ')}`
+  }
+  const lineBreak = /\r\n|\r|\n/g
+  const sample = text.slice(0, chunkSize)
+  for (let count = 0; count < 256; count += 1) {
+    if (!lineBreak.test(sample)) {
+      return `> ${text.replace(/\r\n|\r|\n/g, '\n> ')}`
+    }
+  }
+  // Flatten dense replacements in bounded windows instead of retaining one string per line.
+  let quoted = '> '
+  for (let offset = 0; offset < text.length;) {
+    let end = Math.min(offset + chunkSize, text.length)
+    if (text.charCodeAt(end - 1) === 13 && text.charCodeAt(end) === 10) {
+      end += 1
+    }
+    const chunk = text.slice(offset, end)
+    const normalized = chunk.includes('\r')
+      ? chunk.split('\r\n').join('\n').split('\r').join('\n')
+      : chunk
+    quoted += normalized.split('\n').join('\n> ')
+    offset = end
+  }
+  return quoted
 }
 
 export function formatMarkdownReviewNotes(
