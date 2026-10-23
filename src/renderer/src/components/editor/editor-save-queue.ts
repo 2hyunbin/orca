@@ -28,6 +28,7 @@ import { isEditorLargePasteInFlight } from './editor-large-paste-in-flight'
 import {
   markEditorSaveRefusal,
   settleEditorRecordAfterWrite,
+  settleEditorWriteWithoutViews,
   setModelExternalMutation,
   waitForModelBaselineRestamps
 } from './editor-save-rebaseline'
@@ -42,9 +43,10 @@ import {
 import { withEditorFileWriteLock } from './editor-file-write-lock'
 import {
   editorSaveWriterView,
-  isEditorWritableView,
-  liveEditorRecordView
+  liveEditorRecordView,
+  liveEditorSaveWriter
 } from './editor-save-writer-view'
+import { editorBufferIdForFile } from '@/store/slices/editor/buffers/editor-buffer-identity-cache'
 import { createEditorSaveSlots, type EditorSaveRequest } from './editor-save-slots'
 import { EditorSaveDiscardedError, editorDiscardEpoch } from './editor-discard-epoch'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
@@ -87,23 +89,20 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
 
   const writeSave = async (
     writerId: string,
-    writerRecordId: string,
+    writerViewIds: readonly string[],
     request: EditorSaveRequest
   ): Promise<EditorSaveResult> => {
     const { trigger } = request
     const state = store.getState()
     // Why: the write-lock wait may have closed the writer; another view of its record holds the text.
-    const liveFile = liveEditorRecordView(state, writerId, writerRecordId, isEditorWritableView)
+    const liveFile = liveEditorSaveWriter(state, writerId, writerViewIds, trigger)
     if (!liveFile) {
       return 'failed'
     }
     const fileId = liveFile.id
-    // Why: completion resolves views through this record, since `fileId` may close mid-write.
-    const recordId = recordKeyOf(fileId)
-    // Why writable first: markFileDirty ignores read-only views, so one can't settle the record.
-    const liveViewOfRecord = (): OpenFile | null =>
-      liveEditorRecordView(store.getState(), fileId, recordId, isEditorWritableView) ??
-      liveEditorRecordView(store.getState(), fileId, recordId)
+    // Why views, not the record id: `fileId` may close mid-write, and a re-key keeps views, not ids.
+    const recordViewIds = [fileId, ...editorBufferSiblingViewIds(state, fileId)]
+    const identityKey = editorBufferIdForFile(liveFile, state)
     if (liveFile.csvPreviewOnly === true) {
       throw new Error('Large CSV previews are read-only.')
     }
@@ -195,7 +194,7 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
       clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
       markEditorSaveRefusal(
         store.getState(),
-        liveViewOfRecord() ?? liveFile,
+        liveEditorRecordView(store.getState(), recordViewIds) ?? liveFile,
         writeResult.diskConflict
       )
       return writeResult.diskConflict === 'not-utf8' ? 'failed' : 'blocked-stale'
@@ -204,9 +203,11 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     if (writeResult.unchanged) {
       clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
     }
-    const savedView = liveViewOfRecord()
+    const savedView = liveEditorRecordView(store.getState(), recordViewIds)
     if (savedView) {
       settleEditorRecordAfterWrite(store.getState, savedView.id, contentToSave)
+    } else {
+      settleEditorWriteWithoutViews(store.getState(), recordViewIds, identityKey, contentToSave)
     }
     window.dispatchEvent(
       new CustomEvent<EditorFileSavedDetail>(ORCA_EDITOR_FILE_SAVED_EVENT, {
@@ -225,7 +226,12 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const slots = createEditorSaveSlots(async (request) => {
     // Why: the asking view may close while this waits; the record it was queued under still saves.
     const askedView = (): OpenFile | null =>
-      liveEditorRecordView(store.getState(), request.fileId, request.recordId, isEditorWritableView)
+      liveEditorSaveWriter(
+        store.getState(),
+        request.fileId,
+        editorBufferViewIds(store.getState(), request.recordId),
+        request.trigger
+      )
     const asked = askedView()
     if (asked) {
       await waitForModelBaselineRestamps(store.getState(), asked)
@@ -235,10 +241,10 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     if (!view) {
       return 'failed'
     }
-    const recordId = recordKeyOf(view.id)
+    const viewIds = editorBufferSiblingViewIds(store.getState(), view.id)
     // Why: an edit tab, its unstaged diff and a combined-diff section can all write one file.
     return withEditorFileWriteLock(editorPathHoldKey(store.getState(), view, view.filePath), () =>
-      writeSave(view.id, recordId, request)
+      writeSave(view.id, viewIds, request)
     )
   })
 

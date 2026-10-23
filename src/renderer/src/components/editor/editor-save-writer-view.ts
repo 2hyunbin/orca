@@ -1,10 +1,7 @@
 import type { AppState } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import { assertEditorFileOperationCurrent } from '@/lib/editor-file-operation-owner'
-import {
-  editorBufferSiblingViewIds,
-  editorBufferViewIds
-} from '@/store/slices/editor/buffers/editor-buffer-views'
+import { editorBufferSiblingViewIds } from '@/store/slices/editor/buffers/editor-buffer-views'
 import type { EditorSaveTrigger } from './editor-save-disk-precondition'
 import { canAutoSaveOpenFile } from './editor-autosave'
 
@@ -24,6 +21,24 @@ export function isEditorWritableView(view: OpenFile): boolean {
   return view.readOnly !== true && view.csvPreviewOnly !== true
 }
 
+/** The first open view of `viewIds` a save of `trigger` may write through, on a current owner. */
+export function firstEditorSaveWriter(
+  state: AppState,
+  viewIds: readonly string[],
+  trigger: EditorSaveTrigger
+): OpenFile | null {
+  // Why: the record's first view may be a CSV preview or read-only; writing through it throws.
+  const mayWrite = (view: OpenFile): boolean =>
+    trigger === 'autosave' ? canAutoSaveOpenFile(view) : isEditorWritableView(view)
+  for (const viewId of viewIds) {
+    const view = state.openFiles.find((openFile) => openFile.id === viewId)
+    if (view && mayWrite(view) && hasCurrentProvenance(state, view)) {
+      return view
+    }
+  }
+  return null
+}
+
 /**
  * The view a save writes through. An explicit save uses the view that asked; autosave and restart
  * use the first writable view whose owner is still current (one opened before a reconnect isn't).
@@ -37,38 +52,29 @@ export function editorSaveWriterView(
   if (trigger === 'user' || trigger === 'overwrite') {
     return asked
   }
-  // Why: the record's first view may be a CSV preview or read-only; writing through it throws.
-  const mayWrite = (view: OpenFile): boolean =>
-    trigger === 'autosave' ? canAutoSaveOpenFile(view) : isEditorWritableView(view)
-  for (const viewId of editorBufferSiblingViewIds(state, fileId)) {
-    const view = state.openFiles.find((openFile) => openFile.id === viewId)
-    if (view && mayWrite(view) && hasCurrentProvenance(state, view)) {
-      return view
-    }
-  }
+  const writer = firstEditorSaveWriter(state, editorBufferSiblingViewIds(state, fileId), trigger)
   // Why: restart keeps the asking view so its owner error explains the refusal.
-  return trigger === 'autosave' ? null : asked
+  return writer ?? (trigger === 'autosave' ? null : asked)
 }
 
 /**
- * `viewId` while it is open, else another open view of `recordId` that `accept`s: a save outlives
- * the tab that asked, but the record's other views still hold its text.
+ * `viewId` while it is open, else the writer among the views its record had: a save outlives the
+ * tab that asked, but the record's other views still hold its text.
  */
-export function liveEditorRecordView(
+export function liveEditorSaveWriter(
   state: AppState,
   viewId: string,
-  recordId: string,
-  accept: (view: OpenFile) => boolean = () => true
+  recordViewIds: readonly string[],
+  trigger: EditorSaveTrigger
 ): OpenFile | null {
-  const own = state.openFiles.find((openFile) => openFile.id === viewId)
-  if (own) {
-    return own
-  }
-  for (const id of editorBufferViewIds(state, recordId)) {
-    const view = state.openFiles.find((openFile) => openFile.id === id)
-    if (view && accept(view)) {
-      return view
-    }
-  }
-  return null
+  return (
+    state.openFiles.find((openFile) => openFile.id === viewId) ??
+    firstEditorSaveWriter(state, recordViewIds, trigger)
+  )
+}
+
+/** The first open view of `viewIds`, writable first: only a writable view can mark the record clean. */
+export function liveEditorRecordView(state: AppState, viewIds: readonly string[]): OpenFile | null {
+  const open = viewIds.flatMap((id) => state.openFiles.find((file) => file.id === id) ?? [])
+  return open.find(isEditorWritableView) ?? open[0] ?? null
 }
