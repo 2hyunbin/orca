@@ -470,10 +470,13 @@ describe('Resume', () => {
     const draftId = await queuedDraft('paused twice')
     await rig.stop()
     const operationId = hostTestOperationId()
+    const { held, release } = holdDelivery()
     expect(await rig.resume(operationId)).toMatchObject({ ok: true, value: { resumed: true } })
-    await handedOver(draftId)
-    // The second Stop takes the card's unanswered send back, and it waits again under that Stop.
-    await rig.stop()
+    await held
+    // Still host-held: the second Stop returns the card to waiting under its own pause.
+    const stopping = rig.stop()
+    release()
+    await stopping
     await eventually(async () =>
       expect(await rig.drafts()).toEqual([{ messageId: draftId, state: 'waiting' }])
     )
