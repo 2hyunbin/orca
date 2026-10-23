@@ -1,7 +1,7 @@
 import {
   pairedRuntimeConnectionFromOffer,
   type PairedRuntimeConnection
-} from './paired-runtime-connection'
+} from '../../paired-runtime-connection'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer, type WebSocket } from 'ws'
@@ -12,12 +12,12 @@ import {
   generateKeyPair,
   publicKeyFromBase64,
   publicKeyToBase64
-} from './e2ee-crypto'
-import { encodePairingOffer, parsePairingCode } from './pairing'
+} from '../../e2ee-crypto'
+import { encodePairingOffer, parsePairingCode } from '../../pairing'
 import {
   subscribeRemoteRuntimeRequest,
   type RemoteRuntimeSubscription
-} from './remote-runtime-client'
+} from '../../remote-runtime-client'
 
 const servers: WebSocketServer[] = []
 

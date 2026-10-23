@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RuntimeRpcResponse } from './runtime-rpc-envelope'
+import type { RuntimeRpcResponse } from '../../runtime-rpc-envelope'
 import {
   closeSharedControlLogicalSubscription,
   createSharedControlSubscription,
   handleSharedControlLogicalResponse,
   replaySharedControlSubscriptions
 } from './remote-runtime-shared-control-subscriptions'
-import type { SharedControlLogicalSubscription } from './remote-runtime-shared-control-types'
+import type { SharedControlLogicalSubscription } from '../../remote-runtime-shared-control-types'
 
 function makeSubscriptions(): {
   subscriptions: Map<string, SharedControlLogicalSubscription<unknown>>

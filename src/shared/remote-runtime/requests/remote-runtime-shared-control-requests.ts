@@ -1,16 +1,16 @@
 import { randomUUID } from 'node:crypto'
-import { abortSignalReason } from './abort-signal-reason'
-import { serializeRemoteRuntimeRpcRequest } from './remote-runtime-memory-limits'
+import { abortSignalReason } from '../../abort-signal-reason'
+import { serializeRemoteRuntimeRpcRequest } from '../../remote-runtime-memory-limits'
 import {
   prepareRemoteRuntimeRequest,
   releaseRemoteRuntimePreparedRequest,
   type RemoteRuntimePreparedRequest
 } from './remote-runtime-prepared-request-admission'
 import { remoteRuntimeTimeoutError } from './remote-runtime-request-frames'
-import type { RuntimeOrchestrationEnvelope, RuntimeRpcResponse } from './runtime-rpc-envelope'
-import { toRemoteRuntimeClientError } from './remote-runtime-shared-control-protocol'
-import { rejectSharedControlPendingRequest } from './remote-runtime-shared-control-state'
-import type { SharedControlPendingRequest } from './remote-runtime-shared-control-types'
+import type { RuntimeOrchestrationEnvelope, RuntimeRpcResponse } from '../../runtime-rpc-envelope'
+import { toRemoteRuntimeClientError } from '../../remote-runtime-shared-control-protocol'
+import { rejectSharedControlPendingRequest } from '../../remote-runtime-shared-control-state'
+import type { SharedControlPendingRequest } from '../../remote-runtime-shared-control-types'
 
 const MAX_RETAINED_METHOD_CHARS = 256
 

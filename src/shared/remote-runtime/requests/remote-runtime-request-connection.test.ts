@@ -1,11 +1,11 @@
 import {
   pairedRuntimeConnectionFromOffer,
   type PairedRuntimeConnection
-} from './paired-runtime-connection'
+} from '../../paired-runtime-connection'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer, type WebSocket } from 'ws'
-import { encodePairingOffer, parsePairingCode } from './pairing'
+import { encodePairingOffer, parsePairingCode } from '../../pairing'
 import {
   decrypt,
   deriveSharedKey,
@@ -13,9 +13,9 @@ import {
   generateKeyPair,
   publicKeyFromBase64,
   publicKeyToBase64
-} from './e2ee-crypto'
+} from '../../e2ee-crypto'
 import { RemoteRuntimeRequestConnection } from './remote-runtime-request-connection'
-import { remoteRuntimeClientCapabilities } from './remote-runtime-client-capabilities'
+import { remoteRuntimeClientCapabilities } from '../../remote-runtime-client-capabilities'
 
 type TestServer = {
   wss: WebSocketServer

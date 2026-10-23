@@ -1,4 +1,4 @@
-import { pairedRuntimeConnectionFromOffer } from './paired-runtime-connection'
+import { pairedRuntimeConnectionFromOffer } from '../../paired-runtime-connection'
 /**
  * The subscribe path is the one that regressed: its connect failure rejects the subscribe
  * promise rather than reaching `onError`, and that rejection crosses `ipcMain.handle`, which
@@ -9,14 +9,14 @@ import { pairedRuntimeConnectionFromOffer } from './paired-runtime-connection'
  */
 import { createServer, type Server, type Socket } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { generateKeyPair, publicKeyToBase64 } from './e2ee-crypto'
-import { RemoteRuntimeClientError } from './remote-runtime-client-error'
+import { generateKeyPair, publicKeyToBase64 } from '../../e2ee-crypto'
+import { RemoteRuntimeClientError } from '../../remote-runtime-client-error'
 import {
   isRecoverableRemoteRuntimeConnectionError,
   toRemoteRuntimeClientErrorLike
-} from './remote-runtime-client-error-classification'
+} from '../../remote-runtime-client-error-classification'
 import { subscribeRemoteRuntimeTransport } from './remote-runtime-subscription-transport'
-import { withRemoteRuntimeTailscaleHint } from './remote-runtime-tailscale-hint'
+import { withRemoteRuntimeTailscaleHint } from '../../remote-runtime-tailscale-hint'
 
 const servers = new Set<Server>()
 const sockets = new Set<Socket>()

@@ -1,13 +1,13 @@
-import type { PairedE2EEClientHandshake } from './paired-e2ee-client-handshake'
-import type { RemoteRuntimeHandshakeState } from './remote-runtime-client-handshake'
-import { RemoteRuntimeClientError } from './remote-runtime-client-error'
+import type { PairedE2EEClientHandshake } from '../../paired-e2ee-client-handshake'
+import type { RemoteRuntimeHandshakeState } from '../../remote-runtime-client-handshake'
+import { RemoteRuntimeClientError } from '../../remote-runtime-client-error'
 import {
   isKeepaliveFrame,
   RuntimeRpcEnvelopeSchema,
   type RuntimeRpcResponse
-} from './runtime-rpc-envelope'
+} from '../../runtime-rpc-envelope'
 import { parseRemoteRuntimeJsonText } from './remote-runtime-request-frames'
-import type { RuntimeStatus } from './runtime-types'
+import type { RuntimeStatus } from '../../runtime-types'
 
 type RequestResponseRouterOptions<TResult> = {
   handshake: PairedE2EEClientHandshake
