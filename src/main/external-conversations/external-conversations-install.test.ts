@@ -49,7 +49,8 @@ function runtime() {
       }
     },
     subscribeAgentProviderSessionChangesFn: null,
-    getAgentStatusRowsForPane: (): AgentStatusIpcPayload[] => []
+    getAgentStatusRowsForPane: (): AgentStatusIpcPayload[] => [],
+    agentTransitions: { latestRow: vi.fn(() => null), subscribe: vi.fn(() => () => {}) }
   }
 }
 
@@ -73,6 +74,7 @@ describe('installExternalConversations', () => {
     expect(meta).not.toHaveBeenCalled()
     expect(folders).not.toHaveBeenCalled()
     expect(rows).not.toHaveBeenCalled()
+    expect(host.agentTransitions.subscribe).not.toHaveBeenCalled()
   })
 
   it('builds the seam on first use when the setting is already on', () => {

@@ -1,8 +1,13 @@
+import type { AgentPaneChange } from '../agent-hooks/agent-transition-detector'
+import type { PendingPrompt } from '../../shared/agent-pending-prompt'
 import type { AgentStatusHooksSettings } from '../../shared/agent-status-hooks-setting'
+import type { AgentStatusIpcPayload } from '../../shared/agent-status-ipc-payload'
 import type { ExternalConversationLink } from '../../shared/external-conversation-link'
 import type { OrcaRuntimeService } from '../runtime/orca-runtime'
 import { admitConnectorAgent } from './connector-agents'
 import { ConversationChain } from './external-conversation-chain'
+import { ConversationEvents, type ConversationWatchListener } from './external-conversation-events'
+import { ConversationPrompts, type PromptTerminal } from './external-conversation-prompts'
 import type { DeliveryReceipts } from './external-conversation-delivery-receipts'
 import {
   findLink,
@@ -34,7 +39,7 @@ export type ExternalConversationHost = {
   terminal: ConversationTerminal
 }
 
-export type ConversationTerminal = FollowUpTerminal & ReopenTerminal
+export type ConversationTerminal = FollowUpTerminal & ReopenTerminal & PromptTerminal
 
 export function runtimeConversationHost(runtime: OrcaRuntimeService): ExternalConversationHost {
   return { launcher: runtimeConversationLauncher(runtime), terminal: runtime }
@@ -50,6 +55,10 @@ export type ExternalConversationSeamDeps = {
   onProviderSessionsChanged: (
     listener: (sessions: readonly { paneKey: string; sessionId: string }[]) => void
   ) => () => void
+  /** The hook store's newest row for a pane. */
+  readHookRow: (paneKey: string) => AgentStatusIpcPayload | null
+  /** The transition detector's pane changes; returns the release. */
+  onAgentPaneChange: (listener: (change: AgentPaneChange) => void) => () => void
 }
 
 type StartInput = Omit<ConversationLaunchInput, 'agent'> & { agent: string }
@@ -64,11 +73,15 @@ export class ExternalConversationSeam {
   // Bind each lane to its first admitted process; null means no published process could be proven.
   private readonly admitted = new WeakMap<AbortSignal, AgentPromptExpectedBinding | null>()
   private readonly sessions: LinkedSessionCapture
+  private readonly prompts: ConversationPrompts
+  /** Built by the first watcher, so an unwatched seam subscribes to nothing. */
+  private events: ConversationEvents | null = null
   private readonly releaseRemovals: () => void
   private readonly releaseSessions: () => void
 
   constructor(private readonly deps: ExternalConversationSeamDeps) {
     this.sessions = new LinkedSessionCapture(deps.store, deps.sessionRows)
+    this.prompts = new ConversationPrompts(deps.readSettings, deps.readHookRow)
     // Cancel removed-workspace lanes; surviving links distinguish same-path twins on other hosts.
     this.releaseRemovals = deps.onWorkspaceRemoved((worktreeId) => {
       for (const [id, { key, worktreeId: linkedTo }] of this.linked) {
@@ -92,7 +105,56 @@ export class ExternalConversationSeam {
   dispose(reason: 'connectors_disabled'): void {
     this.releaseRemovals()
     this.releaseSessions()
+    this.events?.dispose()
     this.abort.abort(reason)
+  }
+
+  pendingPrompt(host: ExternalConversationHost, key: ConversationKey): PendingPrompt | null {
+    return this.prompts.pending(host.terminal, this.requireLink(key).link)
+  }
+
+  answer(
+    host: ExternalConversationHost,
+    key: ConversationKey,
+    promptId: string,
+    optionId: string
+  ): Promise<Delivery> {
+    if (this.abort.signal.aborted) {
+      return Promise.resolve(refused('connectors_disabled'))
+    }
+    return this.prompts.answer(host.terminal, this.requireLink(key).link, {
+      promptId,
+      optionId,
+      signal: this.abort.signal
+    })
+  }
+
+  /** A snapshot of every linked conversation first, then its events; returns the release. */
+  watch(host: ExternalConversationHost, listener: ConversationWatchListener): () => void {
+    if (this.abort.signal.aborted) {
+      throw new Error('connectors_disabled')
+    }
+    this.events ??= new ConversationEvents({
+      store: this.deps.store,
+      readHookRow: this.deps.readHookRow,
+      onAgentPaneChange: this.deps.onAgentPaneChange,
+      pendingPrompt: (link) => this.prompts.pending(host.terminal, link),
+      setTimer: (run, delayMs) => {
+        const timer = setTimeout(run, delayMs)
+        timer.unref?.()
+        return { cancel: () => clearTimeout(timer) }
+      },
+      now: Date.now
+    })
+    return this.events.watch(listener)
+  }
+
+  private requireLink(key: ConversationKey): LinkedConversation {
+    const linked = findLink(this.deps.store, key)
+    if (!linked) {
+      throw new Error('external_conversation_not_found')
+    }
+    return linked
   }
 
   async start(
@@ -124,12 +186,9 @@ export class ExternalConversationSeam {
             { ...input, agent },
             signal,
             (workspace, paneKey) => {
-              writeLink(this.deps.store, workspace, {
-                ...key,
-                paneKey,
-                agent,
-                createdAt: Date.now()
-              })
+              const link = { ...key, paneKey, agent, createdAt: Date.now() }
+              writeLink(this.deps.store, workspace, link)
+              this.events?.linked({ workspace, link })
               this.startedHere.add(conversationId(key))
               this.sessions.capture(key, paneKey)
             },
@@ -215,6 +274,7 @@ export class ExternalConversationSeam {
       (paneKey) => {
         relinked.paneKey = paneKey
         writeLink(this.deps.store, workspace, relinked)
+        this.events?.linked({ workspace, link: relinked })
         this.sessions.capture(key, paneKey)
       }
     )
