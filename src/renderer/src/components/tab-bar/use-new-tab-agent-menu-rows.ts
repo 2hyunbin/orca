@@ -43,12 +43,20 @@ import { readDetectedAgentsForTarget } from '@/lib/agent-detection-target-invent
 import { useChatProgramFacts } from '@/lib/host-chat-program-acquisition'
 import { readChatProgram } from '@/lib/host-chat-program'
 import { resolveAgentMenuSelection } from '@/lib/agent-menu-selection'
+import { useHostAgentMenuSettings } from '@/components/settings/use-host-agent-launch-preferences'
 import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { AgentLaunchSurface } from '@/lib/agent-session-launch-plan'
 
 export type NewTabAgentMenuModel =
   | { state: 'loading'; placeholderCount: number }
-  | { state: 'settled'; rows: NewTabAgentMenuRow[]; detection: UseDetectedAgentsResult }
+  | {
+      state: 'settled'
+      rows: NewTabAgentMenuRow[]
+      detection: UseDetectedAgentsResult
+      /** The default these rows were ordered by, so the new-agent badge marks the same agent. */
+      defaultTuiAgent?: GlobalSettings['defaultTuiAgent']
+    }
 
 function catalogUnlearned(
   host: string,
@@ -109,7 +117,7 @@ export function useAgentMenuObservation(
     readLocalRuntimeCapabilityObservation,
     readLocalRuntimeCapabilityObservation
   )
-  const settings = useAppStore((state) => state.settings)
+  const desktopSettings = useAppStore((state) => state.settings)
   const workspace =
     typeof target === 'string'
       ? { kind: workspaceKindForWorktreeId(target), worktreeId: target }
@@ -138,6 +146,12 @@ export function useAgentMenuObservation(
   )
   const state = useAppStore.getState()
   const input = buildAgentLaunchRouteInput(state, { agent: 'claude', workspace })
+  const { settings, pending: preferencesPending } = useHostAgentMenuSettings(
+    unresolvedTarget ? null : facts,
+    desktopSettings,
+    open || worktreeShown,
+    open
+  )
   const chatEnabled = isNativeChatEnabled(settings)
   const plain = !chatEnabled || hostChatAnswer(input) === 'no-chats'
   const local = facts.executionHostId === LOCAL_EXECUTION_HOST_ID
@@ -203,7 +217,8 @@ export function useAgentMenuObservation(
   // Only dependencies that can enable an action hold the cold fill; failed inventory ends its own.
   const loading =
     !unresolvedTarget &&
-    ((detection.detectedIds === null && detectionTarget !== undefined && !inventoryFailed) ||
+    (preferencesPending ||
+      (detection.detectedIds === null && detectionTarget !== undefined && !inventoryFailed) ||
       (!plain &&
         (capabilityPending ||
           (!local && localAcquiring) ||
@@ -244,7 +259,7 @@ export function useAgentMenuObservation(
         state: 'loading',
         placeholderCount: Math.max(chatAgents.length, detection.detectedIds?.length ?? 0, 2)
       }
-    : { state: 'settled', rows, detection }
+    : { state: 'settled', rows, detection, defaultTuiAgent: settings?.defaultTuiAgent }
   return {
     model,
     detection,
@@ -262,6 +277,7 @@ export function useAgentMenuObservation(
         inventoryReady:
           target === null ||
           (detectionTarget !== undefined &&
+            !preferencesPending &&
             (inventoryFailed || (detection.detectedIds !== null && (!cliMissing || chatRow)))),
         cliMissing,
         answer:

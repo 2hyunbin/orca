@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getAgentCatalog } from '@/lib/agent-catalog'
 import {
   pickSourceControlLaunchAgent,
   resolveSourceControlLaunchAgentScope
@@ -8,7 +7,6 @@ import { useAppStore } from '@/store'
 import { useRepoById } from '@/store/selectors'
 import { renderSourceControlActionCommandTemplate } from '../../../../shared/source-control-ai-actions'
 import { getRepoExecutionHostId } from '../../../../shared/execution-host'
-import { isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
 import type { TuiAgent } from '../../../../shared/tui-agent'
 import type { SourceControlAgentActionDialogProps } from './SourceControlAgentActionDialog'
 import type { UseSourceControlAgentActionDialogResult } from './source-control-agent-action-dialog-result'
@@ -20,7 +18,7 @@ import {
   buildSourceControlAgentSaveTargets,
   buildSourceControlAgentScopeNote,
   buildSourceControlAgentStatusCopy,
-  isSourceControlAgentDetectedAndEnabled
+  buildSourceControlAgentAvailability
 } from './source-control-agent-action-dialog-support'
 import { useSourceControlAgentActionStart } from './useSourceControlAgentActionStart'
 
@@ -41,6 +39,7 @@ export function useSourceControlAgentActionDialog({
   promptDelivery = 'submit-after-ready',
   launchPlatform,
   launchSource,
+  recoveryContext,
   savedAgentId,
   onSaveAgentDefault,
   onLaunchAccepted,
@@ -148,22 +147,15 @@ export function useSourceControlAgentActionDialog({
 
   const closeDialog = useCallback(() => onOpenChange(false), [onOpenChange])
 
-  const enabledDetectedAgents = useMemo(
-    () => launchableAgents.filter((agent) => isTuiAgentEnabled(agent, disabledAgents)),
-    [launchableAgents, disabledAgents]
-  )
-  const agentOptions = useMemo(
+  const { agentOptions, selectedAgentUnavailable, hasEnabledAgents } = useMemo(
     () =>
-      getAgentCatalog().filter(
-        (entry) => enabledDetectedAgents.includes(entry.id) || entry.id === selectedAgent
-      ),
-    [enabledDetectedAgents, selectedAgent]
+      buildSourceControlAgentAvailability({
+        detectedAgents: launchableAgents,
+        disabledAgents,
+        selectedAgent
+      }),
+    [launchableAgents, disabledAgents, selectedAgent]
   )
-  const selectedAgentUnavailable = Boolean(
-    selectedAgent &&
-    !isSourceControlAgentDetectedAndEnabled(selectedAgent, launchableAgents, disabledAgents)
-  )
-  const hasEnabledAgents = enabledDetectedAgents.length > 0
   const commandInput = renderSourceControlActionCommandTemplate(commandTemplate, {
     basePrompt: baseCommandInput
   })
@@ -179,41 +171,49 @@ export function useSourceControlAgentActionDialog({
     ...(repo ? { executionHostId: getRepoExecutionHostId(repo) } : {})
   })
 
-  const { deliveryPlan, resetDeliveryPlan, isStarting, handleStart, startWithDetectedAgents } =
-    useSourceControlAgentActionStart({
-      selectedAgent,
-      commandInput,
-      trimmedCommandInput,
-      agentArgs,
-      agentArgsApply,
-      commandTemplate,
-      saveLaunchRecipe,
-      saveTargetValue,
-      actionId,
-      repoId,
-      settings,
-      repo,
-      worktreeId,
-      groupId,
-      promptDelivery,
-      launchPlatform,
-      // Why: an SSH host runs the plain `orca` shim; keep the previewed command
-      // label aligned with the real remote launch (no `orca-ide` rename).
-      isRemote: typeof connectionId === 'string',
-      launchSource,
-      connectionUnavailable,
-      refreshDetectedAgents: refreshLaunchableAgents,
-      onStart,
-      onSaveAgentDefault,
-      onLaunchAccepted,
-      onLaunchAborted,
-      onLaunched,
-      onClose: closeDialog
-    })
+  const {
+    deliveryPlan,
+    resetDeliveryPlan,
+    cancelStart,
+    isStarting,
+    handleStart,
+    startWithDetectedAgents
+  } = useSourceControlAgentActionStart({
+    open,
+    connectionId,
+    selectedAgent,
+    commandInput,
+    trimmedCommandInput,
+    agentArgs,
+    agentArgsApply,
+    commandTemplate,
+    saveLaunchRecipe,
+    saveTargetValue,
+    actionId,
+    repoId,
+    settings,
+    repo,
+    worktreeId,
+    groupId,
+    promptDelivery,
+    launchPlatform,
+    // Why: an SSH host runs the plain `orca` shim; keep the previewed command
+    // label aligned with the real remote launch (no `orca-ide` rename).
+    isRemote: typeof connectionId === 'string',
+    launchSource,
+    recoveryContext,
+    connectionUnavailable,
+    refreshDetectedAgents: refreshLaunchableAgents,
+    onStart,
+    onSaveAgentDefault,
+    onLaunchAccepted,
+    onLaunchAborted,
+    onLaunched,
+    onClose: closeDialog
+  })
 
   const canStart =
-    Boolean(trimmedCommandInput) &&
-    Boolean(selectedAgent) &&
+    Boolean(trimmedCommandInput && selectedAgent) &&
     !selectedAgentUnavailable &&
     !connectionUnavailable &&
     !detecting &&
@@ -222,13 +222,14 @@ export function useSourceControlAgentActionDialog({
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (!nextOpen) {
+        cancelStart()
         resetDeliveryPlan()
         setSaveLaunchRecipe(true)
         setSaveTargetValue(defaultSaveTargetValue)
       }
       onOpenChange(nextOpen)
     },
-    [defaultSaveTargetValue, onOpenChange, resetDeliveryPlan]
+    [cancelStart, defaultSaveTargetValue, onOpenChange, resetDeliveryPlan]
   )
 
   const discoveryOutcome = discovery?.cycle === openCycle ? discovery.outcome : 'pending'

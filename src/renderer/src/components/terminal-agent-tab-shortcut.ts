@@ -2,6 +2,7 @@ import type { KeybindingActionId, KeybindingOverrides } from '../../../shared/ke
 import type { TuiAgent } from '../../../shared/tui-agent'
 import { useAppStore } from '../store'
 import { readDetectedAgentsForWorktree } from '@/lib/agent-detection-target-inventory'
+import { readAgentLaunchPreferencesForWorktree } from '@/components/settings/use-host-agent-launch-preferences'
 import {
   listBoundAgentTabActions,
   resolveDefaultAgentForNewTab,
@@ -27,13 +28,13 @@ export function resolveTerminalAgentTabShortcut({
   matchShortcut: (actionId: KeybindingActionId) => boolean
 }): TerminalAgentTabShortcut {
   const state = useAppStore.getState()
+  const preferences = readAgentLaunchPreferencesForWorktree(state, activeWorktreeId)
   if (matchShortcut('tab.newAgent')) {
     const detectedAgentIds = readDetectedAgentsForWorktree(state, activeWorktreeId)
-    const chosen = state.settings?.defaultTuiAgent
+    const chosen = preferences.defaultTuiAgent
     const agent = resolveDefaultAgentForNewTab({
-      defaultTuiAgent: chosen,
+      ...preferences,
       detectedAgentIds,
-      disabledTuiAgents: state.settings?.disabledTuiAgents,
       chatIn: { store: state, worktreeId: activeWorktreeId }
     })
     const workspace = worktreeLaunchWorkspace(activeWorktreeId)
@@ -47,7 +48,7 @@ export function resolveTerminalAgentTabShortcut({
           pendingAgent: resolveDefaultAgentForWorktreeNewTab(useAppStore.getState, activeWorktreeId)
         }
   }
-  for (const bound of listBoundAgentTabActions(keybindings, state.settings?.disabledTuiAgents)) {
+  for (const bound of listBoundAgentTabActions(keybindings, preferences.disabledTuiAgents)) {
     if (matchShortcut(bound.actionId)) {
       return { actionId: bound.actionId, agent: bound.agent }
     }
