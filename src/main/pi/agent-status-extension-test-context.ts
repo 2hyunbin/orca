@@ -32,13 +32,13 @@ export type FakeCurlChild = {
 
 export function createCountingMap(onEntry?: () => void) {
   return class<K, V> extends Map<K, V> {
-    *values() {
+    *values(): MapIterator<V> {
       for (const value of super.values()) {
         onEntry?.()
         yield value
       }
     }
-    *[Symbol.iterator]() {
+    *[Symbol.iterator](): MapIterator<[K, V]> {
       for (const entry of super[Symbol.iterator]()) {
         onEntry?.()
         yield entry

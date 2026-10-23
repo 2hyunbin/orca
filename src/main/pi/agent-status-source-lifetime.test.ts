@@ -318,7 +318,7 @@ describe('selected source lifetime', () => {
     const measure = async (n: number) => {
       let visits = 0
       const h = createAgentStatusExtensionHarness({ kind: 'omp', onMapEntry: () => visits++ })
-      const sources = []
+      const sources: { child: ReturnType<typeof h.registerSession>; ctx: HookContext }[] = []
       for (let i = 0; i < n; i++) {
         const child = h.registerSession()
         const ctx = { ...context(String(i)), agent: { kind: 'sub' as const } }
