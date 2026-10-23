@@ -234,7 +234,7 @@ describe('declared session authority', () => {
         transcriptPath: '/sessions/lead.jsonl'
       })
       let current = root
-      for (const reason of ['new', 'resume', 'fork', 'reload']) {
+      for (const reason of ['new', 'resume', 'fork', 'reload'] as const) {
         const next =
           reason === 'reload' ? current : session(reason === 'resume' ? 'helper' : reason, 'main')
         delete next.agent

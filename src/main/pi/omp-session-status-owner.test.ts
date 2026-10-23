@@ -58,7 +58,7 @@ describe('session selection without declared roles', () => {
     await harness.callHook('session_start', {}, guessed)
     const declared = harness.registerSession()
     const main = {
-      agent: { kind: 'main' },
+      agent: { kind: 'main' as const },
       sessionManager: { getSessionId: () => 'lead', getSessionFile: () => '/lead.jsonl' }
     }
     await declared.callHook('session_start', {}, main)
