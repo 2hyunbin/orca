@@ -1,7 +1,4 @@
-import {
-  collectCompactWorkspaceWords,
-  foldWorkspaceNameWhitespaceToHyphen
-} from './workspace-name-text-scanner'
+import { collectCompactWorkspaceWords } from './workspace-name-text-scanner'
 import { escapeRegex } from './string-utils'
 import type { JiraIssueKeyCasing } from './ui-chrome-types'
 import { JIRA_ISSUE_KEY_PATTERN } from './jira-issue-url'
@@ -28,7 +25,7 @@ export function slugifyForWorkspaceName(input: string): string {
     .toLowerCase()
     .replace(/[\\/]+/g, '-')
   return (
-    foldWorkspaceNameWhitespaceToHyphen(normalized)
+    normalized
       .replace(/[^a-z0-9._-]+/g, '-')
       .replace(/-+/g, '-')
       // Why: git check-ref-format rejects any ref containing `..`, so previews

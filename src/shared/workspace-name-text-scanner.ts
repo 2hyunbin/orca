@@ -1,20 +1,3 @@
-export function foldWorkspaceNameWhitespaceToHyphen(input: string): string {
-  let result = ''
-  let pendingHyphen = false
-  for (let index = 0; index < input.length; index += 1) {
-    if (isWorkspaceNameWhitespace(input.charCodeAt(index))) {
-      pendingHyphen = true
-      continue
-    }
-    if (pendingHyphen) {
-      result += '-'
-      pendingHyphen = false
-    }
-    result += input[index]
-  }
-  return result
-}
-
 export function collectCompactWorkspaceWords(
   input: string,
   maxWords: number,
