@@ -148,10 +148,15 @@ export function tabOrderMoves(from: readonly string[], to: readonly string[]): T
   if (held.size !== from.length || !sameOrder([...held].sort(), [...to].sort())) {
     return []
   }
-  if (sameOrder(from, to)) {
+  const firstChangedIndex = from.findIndex((id, index) => id !== to[index])
+  if (firstChangedIndex === -1) {
     return []
   }
   for (const [index, tabId] of to.entries()) {
+    // A single move must displace one of the first mismatching tabs.
+    if (index !== firstChangedIndex && tabId !== from[firstChangedIndex]) {
+      continue
+    }
     const others = (order: readonly string[]) => order.filter((id) => id !== tabId)
     if (sameOrder(others(from), others(to))) {
       return [{ tabId, index }]

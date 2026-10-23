@@ -32,6 +32,22 @@ describe('tabOrderMoves', () => {
     }
   })
 
+  it('detects a late adjacent swap without rescanning the order for every tab', () => {
+    const from = Array.from({ length: 128 }, (_, index) => `tab-${index}`)
+    const to = [...from]
+    to.splice(125, 2, 'tab-126', 'tab-125')
+    let reads = 0
+    Object.defineProperty(from, 0, {
+      get() {
+        reads++
+        return 'tab-0'
+      }
+    })
+
+    expect(tabOrderMoves(from, to)).toEqual([{ tabId: 'tab-126', index: 125 }])
+    expect(reads).toBeLessThan(10)
+  })
+
   it('is nothing for the same order or orders holding different tabs', () => {
     expect(tabOrderMoves(['a', 'b'], ['a', 'b'])).toEqual([])
     expect(tabOrderMoves(['a', 'b'], ['b', 'c'])).toEqual([])
