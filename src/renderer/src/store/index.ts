@@ -63,6 +63,7 @@ import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../shared/sidebar-inputs-swit
 import { withReactCommitCascadeWriteProbe } from './react-commit-cascade-write-probe'
 import { withStoreIdentityChurnProbe } from './store-identity-churn-probe'
 import { withEditorBufferRecords } from './editor-buffer-record-lifecycle'
+import { withAgentStatusCommit } from './agent-status-commit'
 import { attachEditorBufferIdentityEvents } from './editor-buffer-identity-events'
 import {
   registerRendererMemoryProfileContributor,
@@ -81,7 +82,7 @@ const withDevelopmentStoreProbes = (createState: StateCreator<AppState, [], []>)
 
 // Why buffer records outermost: the probes must see each caller's own partial and frame.
 // Why e2e checks the buffer invariant too: a writer that skips the record must fail there, not drift.
-export const useAppStore = create<AppState>()(
+export const createAppState: StateCreator<AppState, [], []> = withAgentStatusCommit(
   withEditorBufferRecords(
     withDevelopmentStoreProbes(
       withReactCommitCascadeWriteProbe((...a) => {
@@ -148,6 +149,8 @@ export const useAppStore = create<AppState>()(
     import.meta.env.DEV || e2eConfig.exposeStore
   )
 )
+
+export const useAppStore = create<AppState>()(createAppState)
 
 registerHttpLinkStoreAccessor(() => useAppStore.getState())
 attachEditorBufferIdentityEvents(() => useAppStore.getState())
