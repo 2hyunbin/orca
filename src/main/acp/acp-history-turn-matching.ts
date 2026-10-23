@@ -1,3 +1,4 @@
+import { OrderedAvailability } from './acp-history-ordered-availability'
 import {
   agentJournalItemKey,
   parseAgentJournalItemKey
@@ -148,25 +149,69 @@ export function matchAcpHistoryTurns(
           source.startedAt <= importedAt)
       ) {
         kind.set(source.turn, 'adopted')
-        boundaries.set(
-          source.turn,
-          Math.max(...(adoptedSequence.length ? adoptedSequence : [...adopted.values()]))
-        )
+        if (scope.identity === 'user-message-id') {
+          let sequence = -Infinity
+          for (const value of adoptedSequence) {
+            check()
+            sequence = Math.max(sequence, value)
+          }
+          boundaries.set(source.turn, sequence)
+        }
       }
     }
   }
   if (scope.identity === 'user-message-id') {
     const used = new Set(matched.values())
-    const boundary = (id: string) => {
-      const at = boundaries.get(id)
-      return at === undefined ? undefined : natives.filter((native) => native.sequence < at).length
+    for (const [id, sequence] of boundaries) {
+      let low = 0
+      let high = natives.length
+      while (low < high) {
+        check()
+        const middle = Math.floor((low + high) / 2)
+        if (natives[middle].sequence < sequence) {
+          low = middle + 1
+        } else {
+          high = middle
+        }
+      }
+      boundaries.set(id, low)
+    }
+    const occurrences = new Map<string, number[]>()
+    const byText = new Map<string, number[]>()
+    const positions: number[] = []
+    for (const [index, { source }] of candidates.entries()) {
+      check()
+      const held = occurrences.get(source.turn) ?? []
+      held.push(index)
+      occurrences.set(source.turn, held)
+      positions.push(index)
+    }
+    const anchors = new OrderedAvailability(positions, check, false)
+    for (const [index, { source }] of candidates.entries()) {
+      check()
+      if (matched.has(source.turn) || boundaries.has(source.turn)) {
+        anchors.set(index, true)
+      }
+    }
+    for (const [index, native] of natives.entries()) {
+      check()
+      if (!native.output && native.text !== null && !used.has(index)) {
+        const ranks = byText.get(native.text) ?? []
+        ranks.push(index)
+        byText.set(native.text, ranks)
+      }
+    }
+    const available = new Map<string, OrderedAvailability>()
+    for (const [text, ranks] of byText) {
+      check()
+      available.set(text, new OrderedAvailability(ranks, check))
     }
     let floor = -1
     for (const [index, candidate] of candidates.entries()) {
       check()
       const id = candidate.source.turn
       const exact = matched.get(id)
-      const edge = boundary(id)
+      const edge = boundaries.get(id)
       if (exact !== undefined) {
         floor = exact
         continue
@@ -182,19 +227,25 @@ export function matchAcpHistoryTurns(
       if (text === null) {
         continue
       }
+      const nextAnchor = anchors.after(index)
+      const nextId = nextAnchor && candidates[nextAnchor.value]?.source.turn
       const ceiling =
-        candidates
-          .slice(index + 1)
-          .map(({ source }) => matched.get(source.turn) ?? boundary(source.turn))
-          .find((value) => value !== undefined) ?? natives.length
-      for (let next = floor + 1; next < ceiling; next++) {
-        const native = natives[next]
-        if (native && !native.output && !used.has(next) && native.text === text) {
-          kind.set(id, 'native')
-          matched.set(id, next)
-          used.add(next)
-          floor = next
-          break
+        nextId === undefined
+          ? natives.length
+          : (matched.get(nextId) ?? boundaries.get(nextId) ?? natives.length)
+      const group = available.get(text)
+      const next = group?.after(floor)
+      if (next && next.value < ceiling) {
+        kind.set(id, 'native')
+        matched.set(id, next.value)
+        used.add(next.value)
+        floor = next.value
+        group?.set(next.index, false)
+        for (const position of occurrences.get(id) ?? []) {
+          check()
+          if (position > index) {
+            anchors.set(position, true)
+          }
         }
       }
     }

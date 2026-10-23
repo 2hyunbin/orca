@@ -133,6 +133,7 @@ export function acpHistoryTurns(
   check: () => void = () => {}
 ): AcpHistoryTurn[] {
   const turns: AcpHistoryTurn[] = []
+  const messageIds = new Set<string>()
   let current: AcpHistoryTurn | undefined
   let lastUser: AcpHistoryUser | undefined
   let userKey: string | number | undefined
@@ -169,6 +170,7 @@ export function acpHistoryTurns(
         throw new Error('unattributed-history-user')
       }
       if (root) {
+        messageIds.clear()
         current = {
           turn: null,
           user: { blocks: [], boundary: unmarked(frame) },
@@ -230,7 +232,8 @@ export function acpHistoryTurns(
     }
     if (identity === 'user-message-id' && update.messageId) {
       const id = update.messageId.replace(REASONING_SUFFIX, '')
-      if (!current.messageIds.includes(id)) {
+      if (!messageIds.has(id)) {
+        messageIds.add(id)
         current.messageIds.push(id)
       }
     }
