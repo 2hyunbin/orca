@@ -58,11 +58,15 @@ it('leaves historical caches out of automatic invocations', async () => {
     automatic: true,
     apply: true,
     testsStopped: true,
+    worktreesStopped: true,
     excludeWorktree: '/dev-worktree'
   }
   await reclaimWorktreeSpace(options)
   expect(options.execute.mock.calls.flatMap(([spec]) => spec.args).join(' ')).not.toContain(
     'reclaim-release-test-caches'
+  )
+  expect(options.execute.mock.calls.flatMap(([spec]) => spec.args).join(' ')).not.toContain(
+    'reclaim-worktree-generated-files'
   )
   for (const [spec] of options.execute.mock.calls) {
     expect(spec.args).toEqual(
