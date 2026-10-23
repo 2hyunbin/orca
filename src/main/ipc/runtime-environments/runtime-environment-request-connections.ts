@@ -240,10 +240,6 @@ export function reconnectRemoteRuntimeSharedControlConnection(environmentId: str
   sharedControlConnections.get(environmentId)?.connection.reconnectNow()
 }
 
-export function retryRemoteRuntimeSharedControlConnectionNow(environmentId: string): void {
-  sharedControlConnections.get(environmentId)?.connection.retryNow()
-}
-
 export function pauseRemoteRuntimeSharedControlRetry(environmentId: string): void {
   sharedControlConnections.get(environmentId)?.connection.pauseStandingRetry()
 }
