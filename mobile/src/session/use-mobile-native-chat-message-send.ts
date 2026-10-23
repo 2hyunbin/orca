@@ -22,6 +22,7 @@ import {
   AGENT_TUI_CLEAR_INPUT_LINE,
   buildAgentTuiClearInputForText
 } from '../../../src/shared/agent-tui-input-clear'
+import { buildNativeChatPasteBytes } from '../../../src/shared/native-chat-paste-bytes'
 
 export type MobileNativeChatMessageSend = {
   /** Composer send that syncs the draft (clear on send, restore on rejection). */
@@ -194,7 +195,8 @@ export function useMobileNativeChatMessageSend(args: {
         : await sendMobileNativeChatMessageWithOutcome({
             client,
             terminal: handle,
-            text,
+            // Same bytes as the desktop composer: raw multi-line keystrokes lose text on ConPTY hosts.
+            text: buildNativeChatPasteBytes(text),
             ...(requireWriteSettlement ? { requireWriteSettlement } : {}),
             ...(resolvedLaunchDraft ? { resolvedLaunchDraft } : {}),
             deadline,

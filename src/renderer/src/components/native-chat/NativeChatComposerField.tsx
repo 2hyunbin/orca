@@ -185,6 +185,9 @@ export function NativeChatComposerField({
   const compositionBaseRef = useRef('')
   const imageRow = useMemo(() => imageAttachments.map(({ id }) => id), [imageAttachments])
   const droppedDraftClearRef = useRef(false)
+  // The draft the editor last reported or was given. Why: a chip's node view renders the composer
+  // (flushSync) inside the editor's change, before onChange, with a draft the editor already passed.
+  const editorDraftRef = useRef<string | null>(null)
 
   // Browser owns the provisional value; React synchronizes drafts only between IME sessions.
   useLayoutEffect(() => {
@@ -200,10 +203,10 @@ export function NativeChatComposerField({
       return
     }
     droppedDraftClearRef.current = false
-    if (textarea.value === draft) {
-      return
+    if (draft !== editorDraftRef.current && textarea.value !== draft) {
+      textarea.value = draft
     }
-    textarea.value = draft
+    editorDraftRef.current = draft
   }, [draft, imeEnterGesture, textareaRef])
 
   const settleImeValue = (element: NativeChatComposerInput): void => {
@@ -292,7 +295,11 @@ export function NativeChatComposerField({
               initialValue={draft}
               disabled={disabled}
               onCommit={onDraftCommit}
-              onChange={(input) => onDraftChange(input.value, input)}
+              onChange={(input) => {
+                const value = input.value
+                editorDraftRef.current = value
+                onDraftChange(value, input)
+              }}
               onKeyDownCapture={(event) => {
                 if (!imeEnterGesture.ownsKeyDown(event)) {
                   onKeyDown(event)
