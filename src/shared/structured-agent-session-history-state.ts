@@ -67,9 +67,12 @@ export function mergeItems(
   removedIds: readonly string[]
 ): AgentJournalRenderItem[] {
   const removed = new Set(removedIds)
-  const byId = new Map(
-    current.filter((item) => !removed.has(item.itemId)).map((item) => [item.itemId, item])
-  )
+  const byId = new Map<string, AgentJournalRenderItem>()
+  for (const item of current) {
+    if (!removed.has(item.itemId)) {
+      byId.set(item.itemId, item)
+    }
+  }
   for (const item of incoming) {
     const prior = byId.get(item.itemId)
     if (!prior || item.revision >= prior.revision) {
