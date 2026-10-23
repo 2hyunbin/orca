@@ -85,11 +85,11 @@ export function createSessionTabsTabDeltaEncoder(
         reused += 1
         return baseIndex
       })
-      if (reused === 0) {
-        return full(frame)
-      }
       const baseRevision = previous.revision
       const tabsRevision = record(frame.worktree, tabJson)
+      if (reused === 0) {
+        return { ...frame, tabsRevision }
+      }
       const { tabs: _tabs, ...rest } = frame
       return { ...rest, tabsRevision, tabsDelta: { baseRevision, tabs: refs } }
     }

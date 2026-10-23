@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { SESSION_TABS_TAB_DELTA_RUNTIME_CAPABILITY } from './session-tabs-runtime-capabilities'
 import {
   createSessionTabsTabDeltaDecoder,
@@ -123,6 +123,36 @@ describe('session tabs tab delta', () => {
     expect(decoder.decode(changed)).toEqual({
       ok: true,
       result: wire({ type: 'updated', ...next })
+    })
+  })
+
+  it('records a fully changed frame once and uses it as the next delta base', () => {
+    const encoder = createSessionTabsTabDeltaEncoder(CAPABLE)
+    const decoder = createSessionTabsTabDeltaDecoder()
+    decoder.decode({ type: 'snapshot', ...encoder.full(frame(1, seventeenTabs())) })
+    const next = frame(
+      2,
+      seventeenTabs().map((_, index) => terminalTab(index, 'working'))
+    )
+    const stringify = vi.spyOn(JSON, 'stringify')
+    let changed: ReturnType<typeof encoder.update>
+    try {
+      changed = encoder.update(next)
+      expect(stringify).toHaveBeenCalledTimes(next.tabs.length)
+    } finally {
+      stringify.mockRestore()
+    }
+    expect(changed).toEqual({ ...next, tabsRevision: 2 })
+    expect(decoder.decode({ type: 'updated', ...changed })).toEqual({
+      ok: true,
+      result: { type: 'updated', ...next }
+    })
+    const following = frame(3, [next.tabs[0]!])
+    const delta = encoder.update(following)
+    expect(delta).toMatchObject({ tabsRevision: 3, tabsDelta: { baseRevision: 2, tabs: [0] } })
+    expect(decoder.decode({ type: 'updated', ...delta })).toEqual({
+      ok: true,
+      result: { type: 'updated', ...following }
     })
   })
 
