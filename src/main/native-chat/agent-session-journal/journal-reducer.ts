@@ -287,16 +287,19 @@ export function journalEchoClaimant(
   // now — and, in journals written before this state moved, an `unknown` carrying
   // the transport marker. Replaying an older journal must not let such a row alias
   // the echo of a later, genuinely delivered resend of the same text.
-  const submission = [...state.submissions.values()]
-    .sort((left, right) => left.submittedAt - right.submittedAt)
-    .find(
-      (candidate) =>
-        (contextSequence === 0 || (candidate.acceptedSequence ?? 0) > contextSequence) &&
-        candidate.dispatchState !== 'rejected' &&
-        !isWriteFailureSubmission(candidate) &&
-        candidate.payloadFingerprint === fingerprint &&
-        state.items.get(agentJournalSubmissionKey(candidate.clientMessageId))?.revision === 0
-    )
+  let submission: AgentJournalSubmission | undefined
+  for (const candidate of state.submissions.values()) {
+    if (
+      (!submission || candidate.submittedAt < submission.submittedAt) &&
+      (contextSequence === 0 || (candidate.acceptedSequence ?? 0) > contextSequence) &&
+      candidate.dispatchState !== 'rejected' &&
+      !isWriteFailureSubmission(candidate) &&
+      candidate.payloadFingerprint === fingerprint &&
+      state.items.get(agentJournalSubmissionKey(candidate.clientMessageId))?.revision === 0
+    ) {
+      submission = candidate
+    }
+  }
   return submission ? agentJournalSubmissionKey(submission.clientMessageId) : null
 }
 

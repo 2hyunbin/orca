@@ -316,6 +316,37 @@ describe('submission and dispatch state machine', () => {
     expect(state.receipts.get('cm_2')?.providerItemId).toBe('claude:session-1:user-1')
   })
 
+  it('claims identical sends by timestamp, keeping insertion order for clock ties', () => {
+    const body = userText('same message')
+    const state = fold([
+      { ...submission, body, payloadFingerprint: sendFingerprint(body), ts: 30 },
+      {
+        ...submission,
+        ...base(2),
+        clientMessageId: 'cm_2',
+        body,
+        payloadFingerprint: sendFingerprint(body),
+        ts: 10
+      },
+      {
+        ...submission,
+        ...base(3),
+        clientMessageId: 'cm_3',
+        body,
+        payloadFingerprint: sendFingerprint(body),
+        ts: 10
+      },
+      { kind: 'item', itemId: 'claude:session-1:user-1', revision: 1, body, ...base(4) },
+      { kind: 'item', itemId: 'claude:session-1:user-2', revision: 1, body, ...base(5) }
+    ])
+
+    expect(state.receipts.get('cm_2')?.providerItemId).toBe('claude:session-1:user-1')
+    expect(state.receipts.get('cm_3')?.providerItemId).toBe('claude:session-1:user-2')
+    expect(state.submissions.get('cm_1')?.dispatchState).toBe('pending')
+    expect(state.aliases.get('claude:session-1:user-1')).toBe(agentJournalSubmissionKey('cm_2'))
+    expect(state.aliases.get('claude:session-1:user-2')).toBe(agentJournalSubmissionKey('cm_3'))
+  })
+
   it('does not give a newer identical echo to a legacy unknown write failure', () => {
     const body = userText('same message')
     const state = fold([
