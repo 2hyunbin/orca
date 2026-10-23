@@ -1,3 +1,4 @@
+import { installRealWorkerThreadChildProcesses } from './worker-thread-child-process/worker-thread-child-process-real.test-fixtures'
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -125,3 +126,5 @@ describe('local Windows worktree removal recovery (live Git)', () => {
     }
   )
 })
+
+installRealWorkerThreadChildProcesses()
