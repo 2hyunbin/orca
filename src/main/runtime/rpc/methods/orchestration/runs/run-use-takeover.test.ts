@@ -10,7 +10,7 @@ import {
   WORKTREE_ID
 } from '../../../../orchestration-mailbox-notification-test-harness'
 import { RpcDispatcher } from '../../../dispatcher'
-import { ORCHESTRATION_METHODS } from '..'
+import { ORCHESTRATION_METHODS } from '../../orchestration'
 import {
   createSessionCallerHarness,
   idOf,
