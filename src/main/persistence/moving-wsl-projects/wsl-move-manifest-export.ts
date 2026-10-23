@@ -152,14 +152,18 @@ export function exportWslMoveManifest(
     { ...catalog, ...(hasDormantState(dormantState) ? { dormantState } : {}) },
     rewriter
   )
-  const unsigned = {
-    version: ORCAD_MIGRATION_MANIFEST_VERSION,
-    migrationId: request.migrationId,
-    createdAt: request.now().toISOString(),
-    source,
-    payload,
-    destinationEnvironmentId: request.destinationEnvironmentId
-  }
+  // Sign the JSON the journal and the host read back: an in-memory Date (a row added this session)
+  // canonicalizes to "{}" here but to its string there, and the host refuses the digest.
+  const unsigned: Omit<OrcadMigrationManifest, 'manifestSha256'> = JSON.parse(
+    JSON.stringify({
+      version: ORCAD_MIGRATION_MANIFEST_VERSION,
+      migrationId: request.migrationId,
+      createdAt: request.now().toISOString(),
+      source,
+      payload,
+      destinationEnvironmentId: request.destinationEnvironmentId
+    })
+  )
   const manifest = parseOrcadMigrationManifest({
     ...unsigned,
     manifestSha256: computeOrcadMigrationManifestSha256(unsigned)

@@ -286,6 +286,19 @@ describe('exportWslMoveManifest', () => {
     expect(exportWslMoveManifest(storeFor(state), REQUEST).blockers).toEqual([])
   })
 
+  it('signs what the host and the journal will read, even with in-memory dates', () => {
+    // A row added this session can still hold a Date the next load would read back as a string. The
+    // signature covered "{}" for it while the host hashed the string, so the first move after adding
+    // a project reset with a digest mismatch until a restart (D1b-10 run on awin).
+    const state = sourceState()
+    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the in-memory shape the load normalizes.
+    ;(state.repos[0] as unknown as Record<string, unknown>).lastSeenAt = new Date('2026-10-20T00:00:00.000Z')
+    const { manifest } = exportWslMoveManifest(storeFor(state), REQUEST)
+    expect(() =>
+      assertOrcadMigrationManifestDigest(JSON.parse(JSON.stringify(manifest)))
+    ).not.toThrow()
+  })
+
   it('refuses to sign a scope naming a project that is no longer here', () => {
     expect(() =>
       exportWslMoveManifest(storeFor(sourceState()), { ...REQUEST, repoIds: ['app', 'gone'] })
