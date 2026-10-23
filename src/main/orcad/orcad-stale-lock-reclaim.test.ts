@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -133,6 +134,21 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
     expect(result.exitCode).toBe(0)
     expect(existsSync(lockPath)).toBe(false)
+  })
+
+  it('refuses, rather than reporting nothing to do, when the lock cannot be reached', async () => {
+    const root = makeRoot()
+    writeLock(root, holderRecord())
+    chmodSync(root, 0o000)
+    try {
+      const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
+      expect(result).toMatchObject({
+        exitCode: 1,
+        message: expect.stringContaining('cannot be read')
+      })
+    } finally {
+      chmodSync(root, 0o700)
+    }
   })
 
   it('probes an IPv6 WebSocket endpoint by its bare address', async () => {

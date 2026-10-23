@@ -23,6 +23,7 @@ import { readBoundedLockFile } from './orcad-instance-lock-reclaim'
 import { orcadLockHolderLocality } from './orcad-lock-holder-locality'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
 import { readOrcadProcessIncarnation } from './orcad-process-start-time'
+import { hasErrorCode } from '../daemon/daemon-process-inspection'
 import { resolveUserDataPath } from './orcad-app-paths'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { readRuntimeMetadata } from '../runtime/runtime-metadata'
@@ -56,9 +57,10 @@ export async function reclaimStaleOrcadInstanceLock(
   const lockPath = join(dataRoot, ORCAD_LOCK_FILE_NAME)
   const contents = readBoundedLockFile(lockPath)
   if (contents === null) {
-    return statOrNull(lockPath)
-      ? refuse(`The lock ${lockPath} cannot be read. Check it by hand before deleting it.`)
-      : { exitCode: 0, message: `No orcad instance lock at ${lockPath}; nothing to reclaim.` }
+    // Only a confirmed absence is nothing to do; a permission or I/O error hides a lock.
+    return lockIsAbsent(lockPath)
+      ? { exitCode: 0, message: `No orcad instance lock at ${lockPath}; nothing to reclaim.` }
+      : refuse(`The lock ${lockPath} cannot be read. Check it by hand before deleting it.`)
   }
   const holder = parseOrcadInstanceLockRecord(contents)
   if (!holder) {
@@ -215,6 +217,15 @@ export function probeOrcadEndpoint(endpoint: string): Promise<OrcadEndpointProbe
 
 function currentBootId(): string | null {
   return readOrcadProcessIncarnation(process.pid)?.bootId ?? null
+}
+
+function lockIsAbsent(path: string): boolean {
+  try {
+    statSync(path)
+    return false
+  } catch (error) {
+    return hasErrorCode(error, 'ENOENT')
+  }
 }
 
 function statOrNull(path: string): { mtimeMs: number } | null {
