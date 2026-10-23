@@ -644,6 +644,28 @@ describe('re-placing a host off a cell isolated for a roll', () => {
       ])
     })
 
+    describe('when no database cell has room anywhere', () => {
+      const onUsReserve = { ...onReserve, cellId: 'us-reserve', region: 'us-central1' as const }
+      const isolateWithNoDatabaseRoom = async () => {
+        const harness = await setup()
+        const first = await harness.store.assign(IDENTITY, 'asia-east2')
+        await harness.isolateForRoll(first.cellId)
+        for (const cell of CELLS.filter((entry) => entry.region === 'us-central1')) {
+          await harness.park(cell.id, 'migration-only')
+        }
+        return { ...harness, first }
+      }
+
+      // Today's rule: a live isolated cell keeps a host no other cell can take.
+      it('keeps the pin and never asks the spill', async () => {
+        const { store, first } = await isolateWithNoDatabaseRoom()
+        const reserveSpill = vi.fn(async () => onUsReserve)
+        const kept = await store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { reserveSpill })
+        expect(kept).toMatchObject({ cellId: first.cellId, assignmentEpoch: first.assignmentEpoch })
+        expect(reserveSpill).not.toHaveBeenCalled()
+      })
+    })
+
     it('does not hold a host whose preferred region is elsewhere', async () => {
       const { store, isolateForRoll, park } = await setup()
       const first = await store.assign(IDENTITY, 'us-central1')

@@ -469,7 +469,7 @@ export function createRelayApp(
         .setExpirationTime('5m')
         .sign(config.assignmentSigningKey)
     // Step 5: switched-on cells answer from the map; anything else keeps today's path below.
-    let step5: Pick<AssignOptions, 'epochFloor' | 'placeFresh' | 'regionReserve'> = {}
+    let step5: Pick<AssignOptions, 'epochFloor' | 'placeFresh' | 'regionReserve' | 'reserveSpill'> = {}
     if (operations.reservePlacement && body.data.regionCorrection?.action !== 'report') {
       let plan: ReservePlan
       try {
@@ -504,7 +504,12 @@ export function createRelayApp(
         context.header('Retry-After', String(plan.retryAfterSeconds))
         return context.json({ error: 'assignment_temporarily_unavailable' }, 503)
       }
-      step5 = { epochFloor: plan.epochFloor, placeFresh: plan.placeFresh, regionReserve: plan.regionReserve }
+      step5 = {
+        epochFloor: plan.epochFloor,
+        placeFresh: plan.placeFresh,
+        regionReserve: plan.regionReserve,
+        reserveSpill: plan.reserveSpill
+      }
     }
     let admission: { release(): void } | null = null
     let lane: AssignmentAdmissionLane = 'placement'
