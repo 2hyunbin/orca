@@ -1,5 +1,5 @@
 import * as ExpoCrypto from 'expo-crypto'
-import type { OrcaMobileWebShellSparesModule } from '../../modules/orca-mobile-web-shell/src'
+import type { OrcaMobileWebShellSparesModule } from '../../modules/orca-mobile-web-shell/src/spares'
 import { encodeBase64Url } from '../transport/mobile-endpoint-supervisor-support'
 import { BRIDGE_READY_RETRY_MAX_MS } from './bridge/bridge-client-init-handshake'
 import type { GenerationStore } from './generation-store'
@@ -54,17 +54,4 @@ export function createMobileWebShellRuntime(
       return () => clearTimeout(handle)
     }
   }
-}
-
-/**
- * The id a generation opens under: a page already booted from it is taken as is, because its id is
- * the one the view adopts it by. No pool, none for this directory, or a pool that fails is a mint.
- */
-export async function openedSessionId(
-  runtime: MobileWebShellRuntime,
-  hostKey: string,
-  directory: string
-): Promise<string> {
-  const spare = await runtime.spares?.takeSpare(hostKey, directory).catch(() => null)
-  return spare ?? runtime.mintSessionId()
 }

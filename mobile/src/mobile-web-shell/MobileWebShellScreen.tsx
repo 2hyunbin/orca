@@ -149,7 +149,7 @@ export function MobileWebShellScreen({
   const popShellStack = useShellStackPop()
   const { isWideLayout } = useResponsiveLayout()
   const { droppedBinaryFrames, reportDroppedBinaryFrames } = useMobileWebShellDroppedFrames()
-  // The screen's own, so the session and the refill below share one pool.
+  // Built once for the screen's life: the session keeps the first runtime it is handed.
   const [shellRuntime] = useState(
     () => runtime ?? createMobileWebShellRuntime(OrcaMobileWebShellSpares)
   )

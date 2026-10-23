@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
-import { AppState } from 'react-native'
-import { useFocusEffect } from 'expo-router'
+import { useEffect } from 'react'
+import { useIsFocused } from 'expo-router'
+import type { OrcaMobileWebShellSparesModule } from '../../modules/orca-mobile-web-shell/src/spares'
+import { useAppActive } from '../hooks/use-app-active'
+import { generationDirectoryPath } from './generation-store-file-system'
 import { deriveHostCacheKey } from './host-cache-key'
 import type { MobileWebShellRuntime } from './mobile-web-shell-runtime'
 
@@ -20,33 +22,40 @@ export function useSparePageRefill(args: {
   runtime: MobileWebShellRuntime
 }): void {
   const { hostId, generationDirectory, painted, ownsHostArea, runtime } = args
-  const [focused, setFocused] = useState(false)
-  const [active, setActive] = useState(AppState.currentState === 'active')
-  useFocusEffect(
-    useCallback(() => {
-      setFocused(true)
-      return () => setFocused(false)
-    }, [])
-  )
+  const focused = useIsFocused()
+  const active = useAppActive()
+  const { spares } = runtime
+  const directory = painted && !ownsHostArea && focused && active ? generationDirectory : null
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => {
-      setActive(state === 'active')
-    })
-    return () => subscription.remove()
-  }, [])
-  const directory =
-    runtime.spares !== undefined && painted && !ownsHostArea && focused && active
-      ? generationDirectory
-      : null
-  useEffect(() => {
-    if (directory === null) {
+    if (directory === null || spares === undefined) {
       return
     }
-    const timer = setTimeout(() => {
-      void runtime.spares
-        ?.prepareSpare(deriveHostCacheKey(hostId), directory, runtime.mintSessionId())
-        .catch(() => undefined)
+    let live = true
+    const cancel = runtime.setTimer(() => {
+      void refill(runtime, spares, deriveHostCacheKey(hostId), directory, () => live)
     }, SPARE_REFILL_DELAY_MS)
-    return () => clearTimeout(timer)
-  }, [directory, hostId, runtime])
+    return () => {
+      live = false
+      cancel()
+    }
+  }, [directory, hostId, runtime, spares])
+}
+
+async function refill(
+  runtime: MobileWebShellRuntime,
+  spares: OrcaMobileWebShellSparesModule,
+  hostKey: string,
+  directory: string,
+  isLive: () => boolean
+): Promise<void> {
+  // A screen left behind by an update shows a generation the store has deleted; a spare booted from
+  // it would fail and evict the one booted from the current tree.
+  const current = await runtime
+    .createStore()
+    .readActiveGeneration(hostKey)
+    .catch(() => null)
+  if (!isLive() || current === null || generationDirectoryPath(current.directory) !== directory) {
+    return
+  }
+  await spares.prepareSpare(hostKey, directory, runtime.mintSessionId()).catch(() => undefined)
 }

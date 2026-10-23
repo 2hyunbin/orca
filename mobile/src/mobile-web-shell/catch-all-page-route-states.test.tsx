@@ -104,7 +104,8 @@ vi.mock('expo-router', () => ({
   usePathname: () => '/h/host-1',
   useNavigation: () => ({ setOptions: vi.fn() }),
   useNavigationContainerRef: () => ({ getRootState: () => undefined }),
-  useFocusEffect: () => {}
+  useFocusEffect: () => {},
+  useIsFocused: () => true
 }))
 vi.mock('../../modules/orca-mobile-web-shell/src', async () => {
   const React = await import('react')
