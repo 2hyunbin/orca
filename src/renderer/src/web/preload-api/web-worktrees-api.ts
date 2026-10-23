@@ -1,3 +1,4 @@
+import { WORKTREE_GENERATED_BRANCH_INTENT_RUNTIME_CAPABILITY } from '../../../../shared/worktree-runtime-capabilities'
 import { ORCA_SIDEBAR_INPUTS_IS_MAIN } from '../../../../shared/sidebar-inputs-switch'
 import type { Worktree, WorkspaceAttachment } from '../../../../shared/worktree/types'
 import type { WorkspaceAttachmentMutation } from '../../../../shared/workspace-attachment-mutation'
@@ -69,10 +70,20 @@ export function createWorktreesApi(): NonNullable<Partial<PreloadApi>['worktrees
       if (args.linkedItems !== undefined) {
         await assertAttachmentWriteSupported(args)
       }
+      const environmentId = requireActiveEnvironment().id
+      const automatic =
+        args.branchNaming === 'automatic' &&
+        (await getRemoteRuntimeStatus().catch(() => undefined))?.capabilities?.includes(
+          WORKTREE_GENERATED_BRANCH_INTENT_RUNTIME_CAPABILITY
+        )
+      if (args.branchNaming) {
+        assertActiveEnvironment(environmentId)
+      }
       invalidateRuntimeWorktreeCaches()
       const owned = await callRuntimeResultWithOwner<{ worktree: Worktree }>('worktree.create', {
         repo: args.repoId,
         name: args.name,
+        ...(automatic ? { branchNaming: 'automatic' } : {}),
         // Absent means user-typed, which is what the host must assume — so send it only when true.
         ...(args.nameWasGenerated ? { nameWasGenerated: true } : {}),
         ...(args.displayNameKind ? { displayNameKind: args.displayNameKind } : {}),

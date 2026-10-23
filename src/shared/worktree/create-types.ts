@@ -97,6 +97,7 @@ export type CreateWorktreeArgs = {
    *  in that pool, so a name the user typed must stay reusable. Defaults to false, which keeps
    *  CLI and automation callers on the pre-retirement behavior. */
   nameWasGenerated?: boolean
+  branchNaming?: 'automatic'
   /** Optional user-facing label to persist separately from the git-safe
    *  branch/path seed. Used when a workspace is created from a GitHub or
    *  Linear artifact whose title should remain readable in the sidebar. */

@@ -20,6 +20,7 @@ export function firstWorkRenameDeps(
     | 'getRepo'
     | 'getRepos'
     | 'getWorktreeMeta'
+    | 'getWorktreeMetaForHost'
     | 'setWorktreeMeta'
     | 'getFolderWorkspace'
     | 'updateFolderWorkspace'
@@ -33,6 +34,10 @@ export function firstWorkRenameDeps(
     | 'notifyWorktreeFolderRenamed'
   >
 ): FirstWorkBranchRenameDeps {
+  const branchMeta = (worktreeId: string) => {
+    const target = resolveWorktreeMetaOwner(store, worktreeId)
+    return target ? store.getWorktreeMetaForHost?.(worktreeId, target.hostId) : undefined
+  }
   return {
     getSettings: () => store.getSettings(),
     getRepo: (repoId) => store.getRepo(repoId),
@@ -62,10 +67,33 @@ export function firstWorkRenameDeps(
             true
         : store.getWorktreeMeta(worktreeId)?.pendingFirstAgentMessageRename === true
     },
-    canRenameOrcaCreatedBranch: (worktreeId) => {
-      const meta = store.getWorktreeMeta(worktreeId)
-      // Why: a user branch could coincidentally match a creature name; only Orca-stamped worktrees are safe to auto-rename.
-      return !!meta?.orcaCreationSource && meta.preserveBranchOnDelete !== true
+    getBranchRenameGrant: (worktreeId) => {
+      const meta = branchMeta(worktreeId)
+      return typeof meta?.generatedBranch === 'string' &&
+        meta.generatedBranch.trim() &&
+        meta.instanceId &&
+        meta.hostId
+        ? { branch: meta.generatedBranch, instanceId: meta.instanceId, hostId: meta.hostId }
+        : undefined
+    },
+    clearBranchRenameGrant: (worktreeId, grant) => {
+      const target = resolveWorktreeMetaOwner(store, worktreeId)
+      const meta = branchMeta(worktreeId)
+      if (
+        target?.hostId === grant.hostId &&
+        meta?.instanceId === grant.instanceId &&
+        meta.generatedBranch === grant.branch
+      ) {
+        store.setWorktreeMeta(target, { generatedBranch: null })
+      }
+    },
+    isDisplayNamePinned: (worktreeId, grant) => {
+      const meta = branchMeta(worktreeId)
+      return (
+        meta?.displayNameIsPinned !== false ||
+        (grant !== undefined &&
+          (meta?.instanceId !== grant.instanceId || meta?.hostId !== grant.hostId))
+      )
     },
     setDisplayName: (worktreeId, displayName) => {
       rememberBranchRenameFailureOutput(worktreeId, null)

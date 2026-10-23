@@ -28,10 +28,10 @@ export function gitResponder(opts: {
       }
       throw noUpstreamError
     }
-    if (args[0] === 'rev-parse') {
+    if (args[0] === 'symbolic-ref') {
       return { stdout: `${opts.currentBranch}\n`, stderr: '' }
     }
-    if (args[0] === 'show-ref') {
+    if (args[0] === 'show-ref' || (args[0] === 'rev-parse' && args.includes('--verify'))) {
       const ref = args.at(-1) ?? ''
       if ((opts.existingRefs ?? []).includes(ref)) {
         return { stdout: '', stderr: '' }
@@ -74,7 +74,13 @@ export function makeBranchRenameDeps(
       getRepo: () => repo,
       getAgentEnvResolvers: () => undefined,
       getCurrentDisplayName: () => 'Nautilus-8',
-      canRenameOrcaCreatedBranch: () => true,
+      getBranchRenameGrant: () => ({
+        branch: 'you/Nautilus',
+        instanceId: 'instance-1',
+        hostId: 'local'
+      }),
+      clearBranchRenameGrant: mockFn(),
+      isDisplayNamePinned: () => false,
       setDisplayName,
       renameWorktreeFolder,
       setRenameError,

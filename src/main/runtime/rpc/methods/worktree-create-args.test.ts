@@ -27,6 +27,14 @@ describe('buildManagedWorktreeCreateArgs', () => {
     })
   })
 
+  it('forwards explicit automatic intent without inventing it for older callers', () => {
+    expect(build({ repo: 'id:repo-1', name: '検索', branchNaming: 'automatic' })).toHaveProperty(
+      'branchNaming',
+      'automatic'
+    )
+    expect(build({ repo: 'id:repo-1', name: '検索' })).not.toHaveProperty('branchNaming')
+  })
+
   it('keeps the legacy CLI marker on a name-only create request', () => {
     const args = buildManagedWorktreeCreateArgs(
       WorktreeCreate.parse({ repo: 'id:repo-1', name: 'feature' }),

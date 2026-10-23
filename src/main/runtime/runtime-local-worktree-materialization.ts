@@ -1,3 +1,4 @@
+import { isAutomaticBranchCreation } from '../worktree-generated-branch'
 import type { LocalGitExecOptions } from '../git/repo-default-base-ref'
 import { randomUUID } from 'node:crypto'
 import { getRepoExecutionHostId } from '../../shared/execution-host'
@@ -28,7 +29,7 @@ export async function materializeRuntimeLocalWorktree<T>(args: {
   request: RuntimeManagedWorktreeCreateArgs
   repo: Repo
   store: RuntimeStore
-  settings: Parameters<typeof getWorktreeCreationLayout>[1]
+  settings: Parameters<typeof getWorktreeCreationLayout>[1] & { autoRenameBranchFromWork?: boolean }
   created: GitWorktreeInfo
   remoteTrackingBase: RemoteTrackingBase | null
   sparseDirectories: string[]
@@ -77,6 +78,12 @@ export async function materializeRuntimeLocalWorktree<T>(args: {
   const meta = timing.timeSync('persist_metadata', () =>
     store.setWorktreeMeta(hostWorktreeTargetForRepo(worktreeId, repo), {
       instanceId: randomUUID(),
+      generatedBranch:
+        !checkoutExistingBranch &&
+        isAutomaticBranchCreation(request, settings) &&
+        created.branch === branchName
+          ? branchName
+          : null,
       ...getProjectHostSetupWorktreeMeta(store.getProjectHostSetups?.() ?? [], repo),
       lastActivityAt: now,
       createdAt: now,

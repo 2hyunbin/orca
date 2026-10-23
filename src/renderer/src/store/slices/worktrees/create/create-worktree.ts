@@ -1,3 +1,4 @@
+import { WORKTREE_GENERATED_BRANCH_INTENT_RUNTIME_CAPABILITY } from '../../../../../../shared/worktree-runtime-capabilities'
 import { runtimeRpcTargetForAuthorityKey } from '@/runtime/runtime-client-target'
 import { repoHostId } from '../listing/worktree-host-ownership'
 import {
@@ -20,6 +21,7 @@ import {
 } from '../../../../../../shared/new-workspace/worktree-create-retry-policy'
 import {
   assertRuntimeEnvironmentCapability,
+  runtimeEnvironmentSupportsCapability,
   callRuntimeRpc
 } from '../../../../runtime/runtime-rpc-client'
 import type { RuntimeClientTarget } from '../../../../../../shared/runtime-client-target'
@@ -191,6 +193,17 @@ export function createCreateWorktree(
         : runtimeTargetForRepoOwner(get(), repoId)
       if (!target) {
         throw new Error('The project host is unresolved. Choose a host and retry.')
+      }
+      if (
+        !branchNameOverride &&
+        get().settings.autoRenameBranchFromWork &&
+        (target.kind === 'local' ||
+          (await runtimeEnvironmentSupportsCapability(
+            target.environmentId,
+            WORKTREE_GENERATED_BRANCH_INTENT_RUNTIME_CAPABILITY
+          ).catch(() => false)))
+      ) {
+        request.branchNaming = 'automatic'
       }
       const creationHostId = adoptFromEndpoint(target, {
         kind: 'createdWorktree',

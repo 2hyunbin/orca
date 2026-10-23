@@ -20,6 +20,7 @@ export type RuntimeManagedWorktreeCreateArgs = {
   repoSelector: RuntimeRepoSelector
   name: string
   nameWasGenerated?: boolean
+  branchNaming?: CreateWorktreeArgs['branchNaming']
   navigation?: RuntimeNavigationTarget
   baseBranch?: string
   compareBaseRef?: string

@@ -39,6 +39,18 @@ export async function probeBranchUpstream(exec: GitExec): Promise<BranchUpstream
   }
 }
 
+export async function readCurrentBranch(exec: GitExec): Promise<string> {
+  try {
+    // Symbolic HEAD exists even before the first commit.
+    return (await exec(['symbolic-ref', '--quiet', '--short', 'HEAD'])).stdout.trim()
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 1) {
+      return ''
+    }
+    throw error
+  }
+}
+
 async function localBranchExists(exec: GitExec, branch: string): Promise<boolean> {
   try {
     await exec(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`])
@@ -77,7 +89,11 @@ export async function resolveUniqueBranchName(
   return null
 }
 
-/** Rename the currently checked-out branch (`git branch -m <newBranch>`). */
-export async function renameCurrentBranch(exec: GitExec, newBranch: string): Promise<void> {
-  await exec(['branch', '-m', newBranch])
+/** Rename the expected branch, even if checkout changes while Git is starting. */
+export async function renameCurrentBranch(
+  exec: GitExec,
+  newBranch: string,
+  expectedBranch: string
+): Promise<void> {
+  await exec(['branch', '-m', expectedBranch, newBranch])
 }

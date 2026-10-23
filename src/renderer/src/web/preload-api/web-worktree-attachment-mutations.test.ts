@@ -29,6 +29,23 @@ beforeEach(() => {
   mocks.call.mockResolvedValue({ result: { worktree: { id: 'wt' } }, hostId: 'runtime:env' })
 })
 
+it.each([true, false])(
+  'sends automatic branch intent only to a capable paired owner (%s)',
+  async (supported) => {
+    mocks.status.mockResolvedValue({
+      capabilities: supported ? ['worktree.generated-branch-intent.v1'] : []
+    })
+    await createWorktreesApi().create({ repoId: 'repo', name: '検索', branchNaming: 'automatic' })
+    const params = mocks.call.mock.calls[0]?.[1]
+    expect(params).toMatchObject({ name: '検索' })
+    if (supported) {
+      expect(params.branchNaming).toBe('automatic')
+    } else {
+      expect(params).not.toHaveProperty('branchNaming')
+    }
+  }
+)
+
 describe('paired web attachment mutation compatibility', () => {
   it.each([{ linkedPR: null }, { linkedIssue: 9 }, { linkedIssue: null }])(
     'forwards legacy scalar writes without a collection capability: %j',

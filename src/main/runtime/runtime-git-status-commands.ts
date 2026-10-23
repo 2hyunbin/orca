@@ -79,6 +79,11 @@ export class RuntimeGitStatusCommands {
     branch: string
   ): Promise<RuntimeGitCheckoutResult> {
     const target = await this.host.resolveRuntimeGitTarget(worktreeSelector)
+    try {
+      this.host.relinquishGeneratedBranch?.(target.worktree)
+    } catch (error) {
+      console.warn('[git-checkout] could not clear automatic branch naming:', error)
+    }
     await requireRuntimeGitProvider(target).checkoutBranch(target.worktree.path, branch)
     return { ok: true, branch }
   }

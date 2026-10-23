@@ -50,6 +50,7 @@ function sharedCreateFields(
   const { options } = request
   return {
     name: attempt.name,
+    ...(request.branchNaming ? { branchNaming: request.branchNaming } : {}),
     ...(options?.nameWasGenerated ? { nameWasGenerated: true } : {}),
     baseBranch: request.baseBranch,
     ...(request.compareBaseRef ? { compareBaseRef: request.compareBaseRef } : {}),

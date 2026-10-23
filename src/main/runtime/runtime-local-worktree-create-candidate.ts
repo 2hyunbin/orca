@@ -1,3 +1,4 @@
+import { generatedBranchSeed, isAutomaticBranchCreation } from '../worktree-generated-branch'
 import type { Repo } from '../../shared/repo-types'
 import { WorktreeCreateCollisionError } from '../../shared/new-workspace/worktree-create-collision'
 import type { CreateWorktreeArgs } from '../../shared/worktree/create-types'
@@ -50,6 +51,7 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
   request: RuntimeManagedWorktreeCreateArgs
   repo: Repo
   settings: ReturnType<typeof getWorktreePathSettings> & {
+    autoRenameBranchFromWork?: boolean
     branchPrefix: string
     branchPrefixCustom?: string
   }
@@ -61,6 +63,9 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
   localWorktreeGitOptions: { wslDistro?: string }
   hostedReviewExecutionContext?: HostedReviewExecutionOptions
 }): Promise<RuntimeLocalWorktreeCreateCandidate> {
+  const automatic = isAutomaticBranchCreation(args.request, args.settings)
+  const branchSeed =
+    automatic && args.request.branchNaming === 'automatic' ? generatedBranchSeed() : undefined
   const sanitizedName = sanitizeWorktreeName(args.request.name)
   let effectiveRequestedName = args.request.name
   let effectiveSanitizedName = sanitizedName
@@ -106,7 +111,7 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
       args.repo.path,
       selectedExistingLocalBranchName ??
         getBranchNameOverrideCandidate(args.request.branchNameOverride, suffix),
-      effectiveSanitizedName,
+      branchSeed ? getWorktreeCreateCandidate(branchSeed, suffix) : effectiveSanitizedName,
       args.settings,
       args.username,
       args.localWorktreeGitOptions
@@ -131,7 +136,7 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
           branchName,
           args.baseBranch,
           args.localWorktreeGitOptions,
-          preferExistingBranch ? undefined : tryExistingBranch
+          preferExistingBranch || automatic ? undefined : tryExistingBranch
         )
     if (checkoutExistingBranch && !selectedExistingLocalBranchName) {
       selectedExistingLocalBranchName = branchName
