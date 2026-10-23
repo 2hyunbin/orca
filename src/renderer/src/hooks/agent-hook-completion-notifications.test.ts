@@ -190,6 +190,14 @@ describe('agent hook completion notifications', () => {
       observe({ paneKey, worktreeId: 'wt-1', payload: status('blocked', 500, 400) })
       observe({ paneKey, worktreeId: 'wt-1', payload: status('working', 600, 600, 'run-2') })
       expect(dismiss).toHaveBeenCalledOnce()
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('done', 700, 600, 'run-2') })
+      const sentBeforeRebind = dispatchTerminalNotification.mock.calls.length
+      mockStoreState.ptyIdsByTabId = { 'tab-1': ['pty-2'] }
+      mockStoreState.tabsByWorktree = { 'wt-1': [{ id: 'tab-1', ptyId: 'pty-2' }] }
+      observe({ paneKey, worktreeId: 'wt-1', payload: status('done', 700, 600, 'run-2') })
+      vi.advanceTimersByTime(HOOK_DONE_QUIET_MS)
+      expect(dispatchTerminalNotification).toHaveBeenCalledTimes(sentBeforeRebind)
+      expect(dismiss).toHaveBeenCalledOnce()
     } finally {
       dispatchTerminalNotification.mockReset()
       vi.unstubAllGlobals()

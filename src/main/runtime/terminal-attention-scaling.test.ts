@@ -148,6 +148,7 @@ it.each([
         proved
           ? {
               ...row,
+              terminalHandle: 'positive-fixture-terminal',
               runId: 'positive-fixture-run',
               executionId: 'positive-fixture-execution',
               turnStartedAt: start
