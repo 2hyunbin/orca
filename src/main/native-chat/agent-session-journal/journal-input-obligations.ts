@@ -1,4 +1,7 @@
-import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
+import {
+  agentJournalSubmissionKey,
+  parseAgentJournalItemKey
+} from '../../../shared/agent-session-journal-item-key'
 import type {
   AgentJournalSubmission,
   AgentJournalStatusItem
@@ -14,10 +17,17 @@ import type {
   JournalTombstoneRow
 } from './journal-row-schema'
 import type { JournalRecoveryWork } from './journal-unconfirmed-recovery'
+import { foldQueuedHandOffInDoubt } from './journal-submission-fold'
+import { queuedHandOffOutcome } from './journal-dispatch-settlement'
+import type { QueuedMessageRow } from './queued-message-table'
+import type { JournalItemLinkageVisitor } from './journal-store-contracts'
 
 export function createJournalInputObligations() {
   return {
     sources: new Map<string, JournalSubmissionRow>(),
+    families: new Map<string, JournalSubmissionRow>(),
+    rejections: new Map<string, JournalDispatchRow>(),
+    presentations: new Map<string, JournalRow | QueuedMessageRow>(),
     handovers: new Map<string, JournalDispatchRow>(),
     echoes: new Set<string>(),
     candidates: new Map<string, AgentJournalSubmission>(),
@@ -36,6 +46,13 @@ export function foldJournalInputObligations(
   const input = state.inputs
   if (row.kind === 'submission') {
     input.sources.set(row.clientMessageId, row)
+    if (row.queuedMessageId) {
+      const previous = input.families.get(row.queuedMessageId)
+      if (previous) {
+        input.candidates.delete(previous.clientMessageId)
+      }
+      input.families.set(row.queuedMessageId, row)
+    }
   }
   if (row.kind === 'dispatch' && !dispatchApplies) {
     return
@@ -55,6 +72,17 @@ export function foldJournalInputObligations(
     )
   }
   if (row.kind === 'submission' || row.kind === 'dispatch') {
+    const send = state.submissions.get(row.clientMessageId)
+    if (
+      row.kind === 'dispatch' &&
+      row.state === 'rejected' &&
+      send &&
+      input.sources.get(row.clientMessageId)?.queuedMessageId &&
+      queuedHandOffOutcome(send) === 'inDoubt'
+    ) {
+      input.rejections.set(row.clientMessageId, row)
+      foldQueuedHandOffInDoubt(send)
+    }
     refreshJournalInputCandidate(state, row.clientMessageId)
   }
   if (row.kind === 'queue' && row.change.op === 'queued') {
@@ -198,10 +226,38 @@ export function journalInputAttemptEnded(
 
 export function refreshJournalInputCandidate(state: JournalReducerState, id: string): void {
   const send = state.submissions.get(id)
-  if (send && (send.dispatchState === 'pending' || send.dispatchState === 'unknown')) {
+  const family = state.inputs.sources.get(id)?.queuedMessageId
+  if (
+    send &&
+    (send.dispatchState === 'pending' || send.dispatchState === 'unknown') &&
+    (!family || state.inputs.families.get(family)?.clientMessageId === id)
+  ) {
     state.inputs.candidates.set(id, send)
   } else {
     state.inputs.candidates.delete(id)
   }
   state.inputs.revision++
+}
+
+export function journalInputPresentationMember(
+  state: JournalReducerState,
+  itemId: string
+): boolean {
+  const identity = parseAgentJournalItemKey(itemId)
+  return (
+    identity?.provider !== 'orca' ||
+    !state.inputs.rejections.has(identity.clientMessageId) ||
+    state.inputs.presentations.has(identity.clientMessageId)
+  )
+}
+
+export function visitJournalInputItems(
+  state: JournalReducerState,
+  visit: JournalItemLinkageVisitor
+): void {
+  for (const item of state.items.values()) {
+    if (journalInputPresentationMember(state, item.itemId)) {
+      visit(item.itemId, item.sequence, item.body, item)
+    }
+  }
 }

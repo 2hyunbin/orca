@@ -6,6 +6,7 @@ import type {
   AgentSessionHistoryResult
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
+import type { HistoryReader } from './agent-session-history-page-bounds'
 import {
   readAgentSessionHistory,
   type AgentSessionHistoryScope
@@ -27,11 +28,15 @@ export function readStructuredAgentSessionHistoryResult(input: {
   record: AgentSessionRecord | null
   request: AgentSessionHistoryRequest
   scope?: AgentSessionHistoryScope
+  reader?: HistoryReader
   /** The host's current-work projection, which the page's turn and prompt fields state. */
   work?: AgentSessionPublishedWork
 }): AgentSessionHistoryResult {
   const result = withPublishedWorkResult(
-    readAgentSessionHistory(input.journal, input.request, { scope: input.scope }),
+    readAgentSessionHistory(input.journal, input.request, {
+      scope: input.scope,
+      reader: input.reader
+    }),
     input.work
   )
   const fence = input.record?.lease.runtimeFence

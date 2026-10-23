@@ -2,7 +2,8 @@ import { journalContextCursor } from './journal-context-cursor'
 import { journalDispatchRowApplies } from './journal-dispatch-settlement'
 import {
   createJournalInputObligations,
-  foldJournalInputObligations
+  foldJournalInputObligations,
+  journalInputPresentationMember
 } from './journal-input-obligations'
 import { journalItemDeclaresEcho } from './journal-item-echo'
 // THE reducer. One implementation folds rows into the render model, and both
@@ -325,6 +326,7 @@ export function renderJournalState(state: JournalReducerState): AgentJournalSnap
   // The journal position is the sole ordering key; map insertion order is not,
   // because a re-created item re-enters the map after the items that followed it.
   const items = [...state.items.values()]
+    .filter((item) => journalInputPresentationMember(state, item.itemId))
     .map((item) => projectJournalStopNote(item, state.items))
     .sort(compareAgentJournalItems)
   return {

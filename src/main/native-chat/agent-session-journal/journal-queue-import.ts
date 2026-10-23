@@ -6,15 +6,14 @@
 
 import { dispatchWasWithdrawn } from '../../../shared/structured-agent-session-dispatch-rejection'
 import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
-import { journalDispatchRowApplies, queuedHandOffOutcome } from './journal-dispatch-settlement'
+import { journalDispatchRowApplies, queuedHandOffInDoubt } from './journal-dispatch-settlement'
 import { journalQueueRowBuilder, type JournalQueuedChange } from './journal-queue-events'
-import { refreshJournalInputCandidate } from './journal-input-obligations'
 import { queuedCardFromChange } from './journal-queue-fold'
 import { queuedChangeOf } from './journal-queue-retention'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalOperationReceipt } from './journal-row-writer'
 import type { JournalQueuedMessagesDeps } from './journal-store-contracts'
-import { foldQueuedHandOffInDoubt } from './journal-submission-fold'
+import { placeQueuedHandOffInDoubt } from './journal-submission-fold'
 import {
   QUEUED_MESSAGE_HELD_DELIVERY_UNCONFIRMED,
   type QueuedMessageRow
@@ -71,11 +70,14 @@ function unconfirmedHandOff(
   state: JournalReducerState,
   row: QueuedMessageRow
 ):
-  | { attempt: string; holdReason?: undefined }
+  | { attempt: string; holdReason?: undefined; recovers?: undefined }
   | { attempt?: undefined; holdReason: string; recovers?: string }
   | null {
   const attempts = [...state.submissions.values()]
-    .filter((submission) => submission.queuedMessageId === row.messageId)
+    .filter(
+      (submission) =>
+        state.inputs.sources.get(submission.clientMessageId)?.queuedMessageId === row.messageId
+    )
     .sort((a, b) => (a.submittedSequence ?? 0) - (b.submittedSequence ?? 0))
   if (!attempts.some(handOffInDoubt)) {
     return null
@@ -92,7 +94,7 @@ function unconfirmedHandOff(
 }
 
 function handOffInDoubt(submission: AgentJournalSubmission): boolean {
-  return submission.dispatchState === 'rejected' && queuedHandOffOutcome(submission) === 'inDoubt'
+  return queuedHandOffInDoubt(submission)
 }
 
 /** Waiting, returned, or handed off as a send a later row may still answer (as the fold keeps it),
@@ -230,9 +232,20 @@ export class LegacyQueuedCards {
             : legacyQueuedChange(this.deps.state(), row)
           if (change) {
             this.changes.set(row.messageId, change)
-            const original = change.attempt ?? change.recovers
-            if (original) {
-              this.witnesses.set(original, { messageId: row.messageId, change })
+            const state = this.deps.state()
+            for (const send of state.submissions.values()) {
+              if (
+                state.inputs.sources.get(send.clientMessageId)?.queuedMessageId === row.messageId &&
+                journalDispatchRowApplies(send)
+              ) {
+                this.witnesses.set(send.clientMessageId, { messageId: row.messageId, change })
+              }
+            }
+            const selected = change.attempt ?? change.recovers
+            const send = selected && state.submissions.get(selected)
+            if (send) {
+              state.inputs.presentations.set(send.clientMessageId, row)
+              placeQueuedHandOffInDoubt(state, send)
             }
           }
           return change ? [journalQueueRowBuilder(this.deps.state, row.messageId, change)] : []
@@ -247,19 +260,6 @@ export class LegacyQueuedCards {
         this.deps.committed()
       })
       .catch((error: unknown) => {
-        const state = this.deps.state()
-        for (const [id, witness] of this.witnesses) {
-          if (!state.queue.cards.has(witness.messageId)) {
-            const send = state.submissions.get(id)
-            if (send && handOffInDoubt(send)) {
-              foldQueuedHandOffInDoubt(state, send)
-              refreshJournalInputCandidate(state, id)
-              if (witness.change.recovers === id) {
-                state.inputs.candidates.delete(id)
-              }
-            }
-          }
-        }
         console.warn('[journal-open] queued-message import skipped:', {
           sessionId: this.deps.sessionId,
           error: error instanceof Error ? error.message : String(error)

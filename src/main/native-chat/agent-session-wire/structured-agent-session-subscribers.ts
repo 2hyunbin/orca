@@ -32,6 +32,7 @@ import { subscriberHistoryReader } from './agent-session-bounded-frames'
 import { rememberSessionActivity } from './structured-agent-session-activity-retention'
 import { refreshDerivedStopNotes } from './agent-session-stop-note-refresh'
 import { refreshPublishedWork } from './agent-session-work-refresh'
+import type { HistoryReader } from './agent-session-history-page-bounds'
 import type { StructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 
 export type AgentSessionSubscriberEmit = (event: AgentSessionSubscribeEvent) => void
@@ -43,30 +44,24 @@ export type AgentSessionSubscribeInput = {
   /** Every frame to fit a phone's bridge frame; the RPC sets it for every phone. */
   boundedFrames?: boolean
   projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
+  readHistorySnapshot?: HistoryReader['snapshot']
   readsCurrentRequests?: boolean
   /** False for desktops that need exact replay to keep send echoes and current requests. */
   snapshotCatchUp?: boolean
 }
 
-export type Subscriber = CurrentRequestsSubscriber & {
+export type Subscriber = {
   id: string
-  sessionId: string
   emit: AgentSessionSubscriberEmit
   cursor: AgentJournalCursor
   fence: number
-  boundedFrames: boolean
-  projectQueuePublication?: SubscriberFieldState['projectQueuePublication']
+  readHistorySnapshot?: HistoryReader['snapshot']
   snapshotCatchUp?: boolean
-  commands?: AgentSessionSlashCommand[] | null
-  /** Canonical publication last sent — never advanced on a page that withheld
-   *  it, or the final replacement would be suppressed by the identity dedup. */
-  queuePublication?: QueuePublication
-  /** Fingerprint of the background-task roster last SENT. */
-  backgroundTasks?: string
   /** The current-work view the last frame's fields were read under
    *  (`StructuredAgentSessionCurrentWork.viewKey`); a change with no row still owes a frame. */
   workView?: string
-}
+} & CurrentRequestsSubscriber &
+  SubscriberFieldState
 
 export type AgentSessionSubscribersHooks = {
   readCommands?: (sessionId: string) => AgentSessionSlashCommand[] | undefined
@@ -111,6 +106,7 @@ export class AgentSessionSubscribers {
       fence: input.fence,
       boundedFrames: input.boundedFrames === true,
       projectQueuePublication: input.projectQueuePublication,
+      readHistorySnapshot: input.readHistorySnapshot,
       readsCurrentRequests: input.readsCurrentRequests === true,
       snapshotCatchUp: input.snapshotCatchUp !== false
     }
@@ -218,9 +214,11 @@ export class AgentSessionSubscribers {
         work
       )
     const pageFor = (subscriber: Subscriber): AgentSessionHistoryPage =>
-      subscriber.boundedFrames
-        ? (boundedPage ??= read(subscriber))
-        : (storedPage ??= read(subscriber))
+      subscriber.readHistorySnapshot
+        ? read(subscriber)
+        : subscriber.boundedFrames
+          ? (boundedPage ??= read(subscriber))
+          : (storedPage ??= read(subscriber))
     const hostNow = this.now()
     for (const subscriber of this.subscribers(sessionId)) {
       const page = pageFor(subscriber)

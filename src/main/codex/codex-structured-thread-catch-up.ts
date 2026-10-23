@@ -145,7 +145,7 @@ export async function catchUpCodexThread(input: {
       Object.assign(view, readCodexHistoryJournalView(history, input.threadId))
       const missing = paginate
         ? await discoverCodexHistory(read, view)
-        : { pages: [], rewound: view.latest !== null && !seen.has(view.latest) }
+        : { pages: [], order: [...seen], rewound: view.latest !== null && !seen.has(view.latest) }
       const staging = createCodexHistoryImportPlan({
         sessionId: input.sessionId,
         threadId: input.threadId,
@@ -156,28 +156,32 @@ export async function catchUpCodexThread(input: {
         check
       })
       try {
-        const loaded = new Set<string>()
+        const order = new Map(missing.order.map((id, index) => [id, index]))
+        const rank = (turn: Record<string, unknown>) => order.get(String(turn.id)) ?? Infinity
+        const supplied = returned
+          .filter(
+            (turn) =>
+              turn.itemsView !== 'summary' &&
+              turn.itemsView !== 'notLoaded' &&
+              Array.isArray(turn.items) &&
+              selectCodexHistoryTurn(turn, view)
+          )
+          .sort((a, b) => rank(a) - rank(b))
+        let next = 0
         for await (const turn of loadCodexHistory(read, missing.pages, confirmReceipts)) {
           check()
-          staging.restore(turn)
-          loaded.add(String(turn.id))
-          await yieldTurn()
-        }
-        for (const turn of returned) {
-          if (
-            !loaded.has(String(turn.id)) &&
-            turn.itemsView !== 'summary' &&
-            selectCodexHistoryTurn(turn, {
-              ...view,
-              incomplete: new Set([
-                ...(view.incomplete ?? []),
-                ...(view.latest ? [view.latest] : [])
-              ])
-            })
-          ) {
-            staging.restore(turn)
+          while (next < supplied.length && rank(supplied[next]!) <= rank(turn)) {
+            staging.restore(supplied[next++]!)
             await yieldTurn()
           }
+          if (selectCodexHistoryTurn(turn, view)) {
+            staging.restore(turn)
+          }
+          await yieldTurn()
+        }
+        while (next < supplied.length) {
+          staging.restore(supplied[next++]!)
+          await yieldTurn()
         }
         const plan = staging.finish()
         Object.assign(view, readCodexHistoryJournalView(history, input.threadId))

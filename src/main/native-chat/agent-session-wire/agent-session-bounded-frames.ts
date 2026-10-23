@@ -28,8 +28,14 @@ const BOUNDED_FRAME_READER: HistoryReader = {
 }
 
 /** How a subscriber's rows are read, and so how its pages are sized. */
-export function subscriberHistoryReader(subscriber: { boundedFrames: boolean }): HistoryReader {
-  return subscriber.boundedFrames ? BOUNDED_FRAME_READER : CLIENT_HISTORY_READER
+export function subscriberHistoryReader(subscriber: {
+  boundedFrames: boolean
+  readHistorySnapshot?: HistoryReader['snapshot']
+}): HistoryReader {
+  const reader = subscriber.boundedFrames ? BOUNDED_FRAME_READER : CLIENT_HISTORY_READER
+  return subscriber.readHistorySnapshot
+    ? { ...reader, snapshot: subscriber.readHistorySnapshot }
+    : reader
 }
 
 /** The latest turn and the activity line are each a few hundred bytes, their ids and text bounded

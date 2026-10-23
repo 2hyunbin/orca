@@ -3,6 +3,11 @@
 // import runs once per open, all-or-nothing, until no readable legacy row is left.
 
 import type { AgentSessionExecutionOptions } from '../../../shared/agent-session-execution-options'
+import { readCodexHistoryJournalView } from '../../codex/codex-history-journal-view'
+import { catchUpCodexThread } from '../../codex/codex-structured-thread-catch-up'
+import { createDeferredStructuredAgentSessionEventSink } from './structured-agent-session-event-sink'
+import { testEventSinkLogging } from './structured-agent-session-logger-test-support'
+import { readAgentSessionHistory } from './agent-session-history-page'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
@@ -517,6 +522,15 @@ it.each([false, true])(
     }
     for (const id of ['proof', 'edited', 'deleted', 'sent']) {
       await handOff(journal, `U-${id}`, `Q-${id}`, 'original', 'cancelled', 0, true, original)
+      await handOff(
+        journal,
+        `V-${id}`,
+        `Q-${id}`,
+        'previous independent edit',
+        id === 'deleted' ? 'providerRejected' : id === 'edited' ? 'accepted' : 'cancelled',
+        0,
+        true
+      )
     }
     await handOff(journal, 'refusal', 'refused', 'original', 'providerRejected', 0, true)
     await journal.close()
@@ -564,11 +578,17 @@ it.each([false, true])(
     expect(independent).toMatchObject({
       state: 'waiting',
       consumedAs: null,
-      recovers: 'U-proof',
+      recovers: 'V-proof',
       body: editedBody,
       options
     })
     expect(journal.submission('U-proof')?.dispatchState).toBe('unknown')
+    expect(readCodexHistoryJournalView(journal, 'thread').unresolvedIds).toContain('U-proof')
+    expect(journal.item(agentJournalSubmissionKey('U-proof'))).toBeNull()
+    expect(journal.presentationRemoved(agentJournalSubmissionKey('U-proof'))).toBe(true)
+    expect(
+      journal.queuedMessages.list().filter((card) => card.messageId.startsWith('recovery:U-'))
+    ).toEqual([])
     const before = journal.cursor()
     expect(
       await journal.queuedMessages.update({
@@ -604,16 +624,74 @@ it.each([false, true])(
         fence: 0,
         providerIdentity: { provider: 'codex', threadId: 'thread', turnId: id, ordinal: 0 }
       })
-    for (const id of ['proof', 'edited', 'deleted', 'sent']) {
-      await proof(`U-${id}`)
+    const beforeProof = journal.cursor()
+    const frontier = readCodexHistoryJournalView(journal, 'thread').latest
+    const sink = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
+    sink.bind({ journal, fence: 0, publish: () => {} })
+    await catchUpCodexThread({
+      connection: {
+        request: async () => {
+          throw new Error('whole source must not paginate')
+        }
+      },
+      threadId: 'thread',
+      sessionId: session,
+      sink: sink.sink,
+      paginate: false,
+      returnedTurns: [
+        {
+          id: 'hidden-U',
+          status: 'completed',
+          itemsView: 'full',
+          items: [
+            {
+              type: 'userMessage',
+              id: 'u',
+              clientId: 'U-proof',
+              content: [{ type: 'text', text: 'original' }]
+            },
+            { type: 'agentMessage', id: 'a', text: 'hidden reply must not return' }
+          ]
+        }
+      ],
+      onReceipt: (clientMessageId, providerIdentity) =>
+        journal.acceptLate({ clientMessageId, providerIdentity, state: 'accepted', fence: 0 })
+    })
+    await sink.drained()
+    sink.close()
+    expect(readCodexHistoryJournalView(journal, 'thread').latest).toBe(frontier)
+    const forward = readAgentSessionHistory(journal, {
+      sessionId: session,
+      direction: 'after',
+      cursor: beforeProof
+    })
+    expect(
+      forward.page.items.some((item) => item.itemId === agentJournalSubmissionKey('U-proof'))
+    ).toBe(false)
+    expect(forward.page.removedItemIds).toContain(agentJournalSubmissionKey('U-proof'))
+    for (const id of ['proof', 'edited', 'deleted']) {
+      if (id !== 'proof') {
+        await proof(`U-${id}`)
+      }
       expect(journal.submission(`U-${id}`)?.dispatchState).toBe('accepted')
       expect(journal.receiptFor(`U-${id}`)).not.toBeNull()
       expect(journal.submissionBody(`U-${id}`)).toEqual(original.body)
       expect(journal.submission(`U-${id}`)?.options).toEqual(original.options)
+      expect(journal.item(agentJournalSubmissionKey(`U-${id}`))).toBeNull()
+      expect(journal.submission(`V-${id}`)?.dispatchState).toBe(
+        id === 'deleted' ? 'rejected' : id === 'edited' ? 'accepted' : 'unknown'
+      )
     }
+    await proof('V-deleted')
+    expect(journal.submission('V-deleted')?.dispatchState).toBe('rejected')
     await proof('refusal')
     expect(journal.submission('refusal')?.dispatchState).toBe('rejected')
     await journal.replaceEpochItems('handle_forked', 0, [])
+    await journal.close()
+    await open()
+    await proof('U-sent')
+    expect(journal.item(agentJournalSubmissionKey('U-sent'))).toBeNull()
+    expect(readCodexHistoryJournalView(journal, 'thread').latest).toBe(frontier)
     await journal.close()
     await open()
     expect(
@@ -622,13 +700,13 @@ it.each([false, true])(
     expect(journal.queuedMessages.get('Q-proof')).toMatchObject(independent)
     expect(journal.queuedMessages.get('Q-edited')).toMatchObject({
       state: 'waiting',
-      recovers: 'U-edited',
       body: {
         ...editedBody,
         blocks: [{ type: 'text', text: 'second independent edit' }, editedBody.blocks[1]]
       },
       options
     })
+    expect(journal.queuedMessages.get('Q-edited')?.recovers).toBeUndefined()
     expect(journal.queuedMessages.get('Q-deleted')?.state).toBe('withdrawn')
     expect(journal.queuedMessages.get('Q-sent')).toMatchObject({
       state: 'dispatched',

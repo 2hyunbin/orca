@@ -12,11 +12,11 @@ import { readAgentSessionExecutionOptions } from '../../../shared/agent-session-
 import { structuredAgentSessionCommandTurnIdentity } from '../../../shared/structured-agent-session-command-turn-identity'
 import { agentSessionSendBodyFingerprint } from '../../../shared/structured-agent-session-send-mutation'
 import { readStoredRejectionFact } from './journal-dispatch-reducer'
-import { queuedHandOffOutcome } from './journal-dispatch-settlement'
+import { queuedHandOffInDoubt, queuedHandOffOutcome } from './journal-dispatch-settlement'
 import type { JournalQueueRow, JournalQueuedChange } from './journal-queue-events'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalRow } from './journal-row-schema'
-import { foldQueuedHandOffInDoubt } from './journal-submission-fold'
+import { placeQueuedHandOffInDoubt } from './journal-submission-fold'
 import type { QueuedMessageRow } from './queued-message-table'
 
 export type JournalQueueState = {
@@ -147,7 +147,7 @@ export function foldJournalQueueRow(state: JournalReducerState, row: JournalRow)
     const card = cardHandedOffAs(state, submission)
     if (card && submission) {
       setCard(state, settledHandOff(state, card, submission))
-      settleHandOffInDoubt(state, row.clientMessageId)
+      settleHandOffInDoubt(state, row.clientMessageId, row)
     }
   } else if (row.kind === 'item' || row.kind === 'lifecycle-batch') {
     spendReportedCommandCards(state)
@@ -163,10 +163,10 @@ function applyQueueRow(state: JournalReducerState, row: JournalQueueRow): void {
       change.recovers &&
       state.submissions.get(change.recovers)?.queuedMessageId === row.messageId
     ) {
-      settleHandOffInDoubt(state, change.recovers)
+      settleHandOffInDoubt(state, change.recovers, row)
     }
     if (card.consumedAs !== null) {
-      settleHandOffInDoubt(state, card.consumedAs)
+      settleHandOffInDoubt(state, card.consumedAs, row)
     }
     return
   }
@@ -215,10 +215,15 @@ function settledHandOff(
 
 /** The card's own hand-off, refused while it may have reached the agent: read as sent
  *  (`foldQueuedHandOffInDoubt`). */
-function settleHandOffInDoubt(state: JournalReducerState, clientMessageId: string): void {
+function settleHandOffInDoubt(
+  state: JournalReducerState,
+  clientMessageId: string,
+  row: JournalRow
+): void {
   const submission = state.submissions.get(clientMessageId)
-  if (submission?.dispatchState === 'rejected' && queuedHandOffOutcome(submission) === 'inDoubt') {
-    foldQueuedHandOffInDoubt(state, submission)
+  if (submission && queuedHandOffInDoubt(submission)) {
+    state.inputs.presentations.set(clientMessageId, row)
+    placeQueuedHandOffInDoubt(state, submission)
   }
 }
 

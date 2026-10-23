@@ -3,6 +3,7 @@
 
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
 import { randomUUID } from 'node:crypto'
+import { journalInputPresentationMember, visitJournalInputItems } from './journal-input-obligations'
 import type {
   AgentJournalAcceptanceReceipt,
   AgentJournalCursor,
@@ -199,15 +200,10 @@ export class AgentSessionJournal {
   /** Visits reduced items without allocating and sorting a full snapshot. */
   visitItems = (
     visit: (itemId: string, sequence: number, body: AgentJournalItemBody) => void
-  ): void => {
-    for (const item of this.state.items.values()) {
-      visit(item.itemId, item.sequence, item.body)
-    }
-  }
+  ): void => this.visitItemsWithLinkage(visit)
 
   /** One reduced item's body by its journal key, for a writer revising a row it can name. */
-  itemBody = (itemId: string): AgentJournalItemBody | null =>
-    this.state.items.get(itemId)?.body ?? null
+  itemBody = (itemId: string): AgentJournalItemBody | null => this.item(itemId)?.body ?? null
 
   /** Host-only: the stopped messages each handed-over send carried, by its client message id. */
   stoppedHistoryCarried = (): ReadonlyMap<string, readonly string[]> =>
@@ -217,15 +213,15 @@ export class AgentSessionJournal {
     this.state.inputs.sources.get(clientMessageId)?.body ?? null
 
   /** One reduced item with its attribution, for a writer that needs the turn a row joined. */
-  item = (itemId: string): AgentJournalRenderItem | null => this.state.items.get(itemId) ?? null
+  item = (itemId: string): AgentJournalRenderItem | null =>
+    journalInputPresentationMember(this.state, itemId)
+      ? (this.state.items.get(itemId) ?? null)
+      : null
 
   /** Visits reduced items with the producer that wrote each, for a producer re-deriving what an
    *  earlier run of this session left. */
-  visitItemsWithLinkage = (visit: JournalItemLinkageVisitor): void => {
-    for (const item of this.state.items.values()) {
-      visit(item.itemId, item.sequence, item.body, item)
-    }
-  }
+  visitItemsWithLinkage = (visit: JournalItemLinkageVisitor): void =>
+    visitJournalInputItems(this.state, visit)
 
   /** The turn this journal records as running, with its record's item, whichever generation
    *  opened it — the same read a client's snapshot gives, without materialising one. Whether it is
@@ -280,7 +276,8 @@ export class AgentSessionJournal {
   })
 
   presentationRemoved = (itemId: string): boolean =>
-    this.state.tombstones.has(this.state.aliases.get(itemId) ?? itemId)
+    this.state.tombstones.has(this.state.aliases.get(itemId) ?? itemId) ||
+    !journalInputPresentationMember(this.state, this.state.aliases.get(itemId) ?? itemId)
 
   canonicalItemId = (itemId: string): string => resolveJournalItemId(this.state, itemId)
 

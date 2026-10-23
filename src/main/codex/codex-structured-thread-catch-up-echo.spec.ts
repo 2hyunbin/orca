@@ -31,6 +31,61 @@ export function registerCodexCatchUpEchoTests(input: {
   threadId: string
 }): void {
   const { chat, turn, codexWith, sessionId: SESSION, threadId: THREAD } = input
+  it('reconciles older completed acquired content and keeps unchanged reacquisition write-free', async () => {
+    const c = await chat({ now: 1_000 })
+    const first = turn(1)
+    await c.open([], {
+      returnedTurns: [
+        { ...first, items: Array.isArray(first.items) ? first.items.slice(0, 1) : [] }
+      ],
+      paginate: false
+    })
+    await c.open([], { returnedTurns: [turn(2)], paginate: false })
+    const whole = [turn(1), turn(2)]
+    await c.open([], { returnedTurns: whole, paginate: false })
+    expect(c.texts()).toContain('assistant:answer 1')
+    const before = c.journal.cursor()
+    await c.reopen()
+    await c.open([], { returnedTurns: whole, paginate: false })
+    expect(c.journal.cursor()).toEqual(before)
+    expect(c.texts().filter((text) => text === 'assistant:answer 1')).toHaveLength(1)
+  })
+
+  it('selects acquired history linearly at N and 10N without copying the saved turn set', async () => {
+    const counts: number[] = []
+    for (const n of [100, 1_000]) {
+      const c = await chat({ now: 1_000 })
+      const turns: Record<string, unknown>[] = []
+      for (let i = 0; i < n; i++) {
+        await c.journal.appendItem(
+          { provider: 'codex', threadId: THREAD, turnId: `turn-${i}`, ordinal: 0 },
+          { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'saved' }] },
+          { fence: 1 }
+        )
+        turns.push({ ...turn(i), items: [] })
+      }
+      let visits = 0
+      const iterator = Set.prototype[Symbol.iterator]
+      Set.prototype[Symbol.iterator] = function* () {
+        const tracked = this.size === n && this.has('turn-0')
+        for (const value of iterator.call(this)) {
+          if (tracked) {
+            visits++
+          }
+          yield value
+        }
+      }
+      try {
+        await c.open([], { returnedTurns: turns, paginate: false })
+      } finally {
+        Set.prototype[Symbol.iterator] = iterator
+      }
+      counts.push(visits)
+    }
+    expect(counts[1]).toBeLessThanOrEqual(counts[0]! * 12)
+    expect(counts[1]).toBeLessThan(20_000)
+    console.info('history selection set-entry visits N=100/1000:', counts)
+  })
   it('uses saved native IDs only for display, preserving sends and drafts through outside echoes and replay', async () => {
     const c = await chat({ now: 1_000 })
     const body: AgentJournalMessageItem = {
@@ -276,7 +331,16 @@ export function registerCodexCatchUpEchoTests(input: {
       aggregatedOutput: '/workspace',
       exitCode: 0
     })
-    const source = codexWith([turn(1), current])
+    const first = turn(1)
+    await c.open([], {
+      returnedTurns: [
+        { ...first, items: Array.isArray(first.items) ? first.items.slice(0, 1) : [] }
+      ],
+      paginate: false
+    })
+    const turns = [first, current]
+    const source = codexWith(turns)
+    let fullReads = 0
     const codex = fakeCodex({
       'thread/resume': () => ({
         thread: {
@@ -285,7 +349,12 @@ export function registerCodexCatchUpEchoTests(input: {
           turns: [{ ...current, items: current.items.slice(0, 1) }]
         }
       }),
-      'thread/turns/list': (params) => source.request('thread/turns/list', params)
+      'thread/turns/list': (params) => {
+        if (params?.itemsView === 'full') {
+          fullReads++
+        }
+        return source.request('thread/turns/list', params)
+      }
     })
     const open = async () => {
       const adapter = adapterFor(codex, { resumeThreadId: THREAD })
@@ -324,6 +393,31 @@ export function registerCodexCatchUpEchoTests(input: {
     const before = c.journal.cursor()
     await open()
     expect(c.journal.cursor()).toEqual(before)
+    expect(fullReads).toBe(1)
+    const hiddenTool = {
+      type: 'commandExecution',
+      id: 'older-tool',
+      command: 'pwd',
+      status: 'completed',
+      aggregatedOutput: '/older',
+      exitCode: 0
+    }
+    turns[0] = { ...first, items: [...(Array.isArray(first.items) ? first.items : []), hiddenTool] }
+    await open()
+    // An identical known summary supplies no discovery signal for unseen intermediate tools.
+    expect(fullReads).toBe(1)
+    expect(c.journal.cursor()).toEqual(before)
+    turns.unshift(turn(0))
+    turns.push(turn(3))
+    await open()
+    // The newly selected page also acquires its known sibling's full content.
+    expect(fullReads).toBe(3)
+    expect(
+      c.journal.snapshot().items.filter((item) => item.body.kind === 'tool-call')
+    ).toHaveLength(2)
+    const acquired = c.journal.cursor()
+    await open()
+    expect(c.journal.cursor()).toEqual(acquired)
     // A lifecycle identity alone cannot discard newly supplied current-turn content.
     codex.routes['thread/resume'] = () => ({
       thread: {

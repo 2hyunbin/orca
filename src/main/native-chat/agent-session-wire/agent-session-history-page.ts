@@ -93,9 +93,9 @@ export function readAgentSessionHistory(
   journal: AgentSessionJournal,
   request: AgentSessionHistoryRequest,
   {
-    snapshot = journal.snapshot(),
     scope = 'every-agent',
-    reader = CLIENT_HISTORY_READER
+    reader = CLIENT_HISTORY_READER,
+    snapshot = reader.snapshot?.(journal) ?? journal.snapshot()
   }: {
     /** Reduced state to read against. A synchronous multi-page catch-up passes one
      *  snapshot for the whole run so each page costs its own rows, not the timeline. */
@@ -154,11 +154,11 @@ export function createAgentSessionCatchUpReader(
   journal: AgentSessionJournal,
   reader: HistoryReader = CLIENT_HISTORY_READER
 ): (request: AgentSessionHistoryRequest) => AgentSessionHistoryResult {
-  let snapshot = journal.snapshot()
+  let snapshot = reader.snapshot?.(journal) ?? journal.snapshot()
   return (request) => {
     const live = journal.cursor()
     if (live.epoch !== snapshot.cursor.epoch || live.sequence !== snapshot.cursor.sequence) {
-      snapshot = journal.snapshot()
+      snapshot = reader.snapshot?.(journal) ?? journal.snapshot()
     }
     return readAgentSessionHistory(journal, request, { snapshot, reader })
   }
@@ -169,7 +169,7 @@ export function readAgentSessionHydrationPage(
   fence?: number,
   reader: HistoryReader = CLIENT_HISTORY_READER
 ): AgentSessionHistoryPage {
-  return buildHydrationPage(journal.snapshot(), fence, reader)
+  return buildHydrationPage(reader.snapshot?.(journal) ?? journal.snapshot(), fence, reader)
 }
 
 function buildHydrationPage(

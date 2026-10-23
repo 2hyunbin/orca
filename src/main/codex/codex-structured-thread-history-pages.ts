@@ -69,10 +69,6 @@ export function selectCodexHistoryTurn(
   if (anchor.unresolvedOrigin) {
     throw new Error('no-legacy-origin')
   }
-  const id = turnId(turn)
-  if (anchor.known.has(id) && !anchor.incomplete?.has(id)) {
-    return false
-  }
   if (anchor.importedAt !== null) {
     if (typeof turn.startedAt !== 'number' || !Number.isFinite(turn.startedAt)) {
       throw new Error('undated-turn')
@@ -108,7 +104,14 @@ export async function discoverCodexHistory(
         throw new Error('repeated-turn')
       }
       seen.add(id)
-      if (!selectCodexHistoryTurn(turn, anchor)) {
+      const missingAnswer =
+        !anchor.assistants?.has(id) &&
+        Array.isArray(turn.items) &&
+        turn.items.some((item) => readCodexJournalRecord(item).type === 'agentMessage')
+      if (
+        !selectCodexHistoryTurn(turn, anchor) ||
+        (anchor.known.has(id) && anchor.terminal?.has(id) && !missingAnswer)
+      ) {
         continue
       }
       selected.add(id)
@@ -123,7 +126,11 @@ export async function discoverCodexHistory(
     cursor = page.next
     await setImmediate()
   } while (cursor !== null)
-  return { pages, rewound: anchor.latest !== null && !seen.has(anchor.latest) }
+  return {
+    pages,
+    order: [...seen].toReversed(),
+    rewound: anchor.latest !== null && !seen.has(anchor.latest)
+  }
 }
 
 /** Same cursor semantics in both views; reject a provider that changed selection between reads. */
@@ -151,12 +158,6 @@ export async function* loadCodexHistory(
       await onReadTurn(turn)
     }
     for (const turn of page.turns.toReversed()) {
-      if (!descriptor.selected.has(turnId(turn))) {
-        continue
-      }
-      if (turn.itemsView !== 'full' || !Array.isArray(turn.items)) {
-        throw new Error('summary-turn')
-      }
       yield turn
     }
   }

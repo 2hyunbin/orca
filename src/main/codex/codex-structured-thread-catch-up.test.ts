@@ -155,6 +155,11 @@ describe('Codex chat catch-up', () => {
         { kind: 'turn', turnId: `turn-${n}`, state: 'completed' },
         { fence: 1 }
       )
+      await c.journal.appendItem(
+        { provider: 'codex', threadId: THREAD, turnId: `turn-${n}`, ordinal: 1 },
+        { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: `answer ${n}` }] },
+        { fence: 1 }
+      )
     }
     const proof = (id: string) => ({
       ...turn(1_029),
@@ -435,6 +440,12 @@ describe('Codex chat catch-up', () => {
         { fence: 1 }
       )
       await c.open([known], {
+        connection: {
+          request: async (_method, params) => ({
+            data: [params?.itemsView === 'summary' ? { ...known, items: [] } : known],
+            nextCursor: null
+          })
+        },
         onReceipt: (id, providerIdentity) =>
           c.journal.acceptLate({
             clientMessageId: id,
@@ -536,7 +547,12 @@ describe('Codex chat catch-up', () => {
     await c.reopen()
     await c.open([turn(1), turn(2), turn(3)])
     expect(c.journal.snapshot().items.slice(0, before.length)).toEqual(before)
-    expect(c.texts().slice(-3)).toEqual(['(continued-outside)', 'user:ask 2', 'assistant:answer 2'])
+    expect(c.texts().slice(-4)).toEqual([
+      '(continued-outside)',
+      'user:ask 2',
+      'assistant:answer 2',
+      'assistant:answer 3'
+    ])
     await c.open([turn(1), turn(2), turn(3), turn(4)])
     expect(c.texts().slice(-3)).toEqual(['(continued-outside)', 'user:ask 4', 'assistant:answer 4'])
   })

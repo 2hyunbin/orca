@@ -90,7 +90,17 @@ export function placeHandedOverMessage(
  * withdrawal before any turn opened reads as a person's own send a Stop took back. Derived on
  * every fold from the stored rejection, which stays as written.
  */
-export function foldQueuedHandOffInDoubt(
+export function foldQueuedHandOffInDoubt(submission: AgentJournalSubmission): void {
+  if (dispatchWasWithdrawn(submission) && !submission.answeredInTurn) {
+    return
+  }
+  submission.dispatchState = 'unknown'
+  submission.reason = DISPATCH_DOUBT_PROVIDER_ENDED_UNANSWERED
+  submission.recovered = true
+  delete submission.rejection
+}
+
+export function placeQueuedHandOffInDoubt(
   state: JournalReducerState,
   submission: AgentJournalSubmission
 ): void {
@@ -103,12 +113,7 @@ export function foldQueuedHandOffInDoubt(
   }
   if (dispatchWasWithdrawn(submission) && !submission.answeredInTurn) {
     delete submission.queuedMessageId
-    return
   }
-  submission.dispatchState = 'unknown'
-  submission.reason = DISPATCH_DOUBT_PROVIDER_ENDED_UNANSWERED
-  submission.recovered = true
-  delete submission.rejection
 }
 
 /** A rejected message — queued, handed over, or sent directly — joins the conversation where it was
