@@ -51,7 +51,8 @@ it('keeps Check failed when the plan request fails', async () => {
     />
   )
   expect(await screen.findByText('Check failed')).toBeDefined()
-  expect(screen.getByRole('button', { name: 'Update' })).toBeDefined()
+  expect(screen.getByRole('button', { name: 'Re-check' })).toBeDefined()
+  expect(screen.queryByRole('button', { name: 'Update' })).toBeNull()
   expect(screen.queryByText('Update Orca on the server to install its skills.')).toBeNull()
 })
 
