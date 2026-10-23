@@ -194,25 +194,21 @@ function quotePortableUnixArg(value: string): string {
     return "''"
   }
   const parts: string[] = []
-  let literal = ''
-  const flushLiteral = (): void => {
-    if (literal) {
-      parts.push(`'${literal}'`)
-      literal = ''
+  let literalStart = 0
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code !== 39 && code !== 92) {
+      continue
     }
-  }
-  for (const char of value) {
-    if (char === "'") {
-      flushLiteral()
-      parts.push(`"'"`)
-    } else if (char === '\\') {
-      flushLiteral()
-      parts.push(`"\\\\"`)
-    } else {
-      literal += char
+    if (index > literalStart) {
+      parts.push(`'${value.slice(literalStart, index)}'`)
     }
+    parts.push(code === 39 ? `"'"` : `"\\\\"`)
+    literalStart = index + 1
   }
-  flushLiteral()
+  if (literalStart < value.length) {
+    parts.push(`'${value.slice(literalStart)}'`)
+  }
   return parts.join('')
 }
 

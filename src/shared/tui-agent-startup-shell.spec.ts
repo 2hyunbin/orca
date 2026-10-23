@@ -112,6 +112,13 @@ describe('one Unix startup dialect', () => {
     expect(quoteStartupArg('', 'posix')).toBe(`''`)
   })
 
+  it('preserves literal runs between adjacent quotes and backslashes', () => {
+    const literal = `${'x'.repeat(100_000)}😊\ud800`
+    expect(quoteStartupArg(`'${literal}\\${literal}''`, 'posix')).toBe(
+      `"'"'${literal}'"\\\\"'${literal}'"'""'"`
+    )
+  })
+
   it('keeps the sh-family grammar claims that do hold for fish', () => {
     expect(commandSeparator('posix')).toBe('; ')
     expect(isPosixStartupShell('posix')).toBe(true)
