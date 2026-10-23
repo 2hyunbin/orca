@@ -11,17 +11,6 @@ import {
 import { gitResponder, workingEvent } from './agent-hooks/first-work-branch-rename-test-harness'
 import { mergeWorktree } from './ipc/worktree-metadata-merge'
 
-vi.mock('./text-generation/commit-message-text-generation', () => ({
-  resolveTextGenerationParams: () => ({
-    ok: true,
-    params: { agentId: 'claude', model: 'fixture' }
-  }),
-  generateBranchNameFromContext: async () => ({ success: true, slug: 'fix-auth' })
-}))
-vi.mock('./text-generation/commit-message-agent-environment', () => ({
-  prepareLocalCommitMessageAgentEnv: async () => ({ ok: true })
-}))
-
 export const labelOnlyCreateRequests: Pick<
   CreateWorktreeArgs,
   'name' | 'displayName' | 'displayNameKind' | 'nameWasGenerated'

@@ -52,6 +52,17 @@ const mocks = vi.hoisted(() => ({
   }
 }))
 
+vi.mock('../text-generation/commit-message-text-generation', () => ({
+  resolveTextGenerationParams: () => ({
+    ok: true,
+    params: { agentId: 'claude', model: 'fixture' }
+  }),
+  generateBranchNameFromContext: async () => ({ success: true, slug: 'fix-auth' })
+}))
+vi.mock('../text-generation/commit-message-agent-environment', () => ({
+  prepareLocalCommitMessageAgentEnv: async () => ({ ok: true })
+}))
+
 vi.mock('../git/runner', () => ({ gitExecFileAsync: mocks.git }))
 vi.mock('../project-runtime-git-options', () => ({
   getLocalProjectGitExecOptions: () => ({ cwd: '/repo', ...mocks.routing() }),
