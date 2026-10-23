@@ -65,7 +65,6 @@ export function useAiVaultSessionRefresh(
   const { scan, applyScan } = useAppliedAiVaultScan()
   const associations = useAiVaultAssociationObservation(executionHostScope)
   const associationsRef = useRef(associations)
-  associationsRef.current = associations
   const scanResult = scan?.result ?? null
   const sessions = scanResult?.sessions ?? EMPTY_AI_VAULT_SESSIONS
   const [loading, setLoading] = useState(false)
@@ -95,7 +94,8 @@ export function useAiVaultSessionRefresh(
   // Keep render pure for React Doctor; layout effect still lands before refresh effects.
   useLayoutEffect(() => {
     sessionLimitRef.current = sessionLimit
-  }, [sessionLimit])
+    associationsRef.current = associations
+  }, [associations, sessionLimit])
   const currentScanScopeKey = useCallback(
     () =>
       `${aiVaultSessionResultCacheKey(

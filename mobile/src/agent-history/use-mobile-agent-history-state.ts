@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore
+} from 'react'
 import { mobileStructuredSessionStatusFeed } from '../session/mobile-structured-session-status-feed'
 import type { AgentSessionConversationNames } from '../../../src/shared/agent-session-conversation-names'
 import { useForceReconnect } from '../transport/host-client-hooks'
@@ -117,7 +125,9 @@ export function useMobileAgentHistoryState(params: MobileAgentHistoryStateParams
     [hostId, client, clientGeneration, connState, worktreeId, worktrees, worktreesLoaded, scope]
   )
   const identityRef = useRef(identity)
-  identityRef.current = identity
+  useLayoutEffect(() => {
+    identityRef.current = identity
+  }, [identity])
   const activeLoads = useRef(0)
   const pendingAssociationLoad = useRef<(() => void) | null>(null)
 
