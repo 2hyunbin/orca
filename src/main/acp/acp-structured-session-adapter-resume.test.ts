@@ -297,7 +297,7 @@ describe('reattaching a Grok chat the journal holds', () => {
     ])
   })
 
-  it('writes nothing of the reattach into a sink the host binds only after the start', async () => {
+  it('writes no replay rows when the host binds the sink between acquire and open', async () => {
     const reopen = onReopen()
     const rig = await openAcpAdapterRig({
       ...resume,
@@ -312,25 +312,37 @@ describe('reattaching a Grok chat the journal holds', () => {
     await exchange(rig, 'hi', true)
     await rig.adapter.closeSession(SESSION)
     const before = await rig.rig.rows()
-    // The host's order: a fresh sink per start, bound to the journal once the start succeeded.
+    // The host binds after acquiring the child, before opening its provider session.
     const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging(SESSION))
-    await rig.adapter.acquire({
-      identity: {
+    try {
+      const acquired = await rig.adapter.acquire({
+        identity: {
+          sessionId: SESSION,
+          workspaceId: 'workspace-1',
+          hostId: 'local',
+          agent: 'grok',
+          providerHandle: null
+        },
+        fence: 2,
+        spawnToken: 'spawn-2',
+        events: deferred.sink
+      })
+      deferred.bind({ journal: rig.rig.journal, fence: 2, publish: () => {} })
+      await rig.adapter.open({
         sessionId: SESSION,
-        workspaceId: 'workspace-1',
-        hostId: 'local',
-        agent: 'grok',
-        providerHandle: null
-      },
-      fence: 2,
-      spawnToken: 'spawn-2',
-      events: deferred.sink
-    })
-    deferred.bind({ journal: rig.rig.journal, fence: 2, publish: () => {} })
-    expect(await deferred.drained()).toMatchObject({ ok: true })
-    expect((await rig.rig.rows()).map((row) => row.itemId)).toEqual(before.map((row) => row.itemId))
-    await rig.adapter.closeSession(SESSION)
-    deferred.close()
+        fence: 2,
+        acquisitionGeneration: acquired.acquisitionGeneration,
+        signal: new AbortController().signal
+      })
+      expect(rig.sent('session/load')).toHaveLength(1)
+      expect(await deferred.drained()).toMatchObject({ ok: true })
+      expect((await rig.rig.rows()).map((row) => row.itemId)).toEqual(
+        before.map((row) => row.itemId)
+      )
+    } finally {
+      deferred.close()
+      await rig.adapter.closeSession(SESSION)
+    }
   })
 
   it('starts a new session in place of a created one that session/load reports missing', async () => {
