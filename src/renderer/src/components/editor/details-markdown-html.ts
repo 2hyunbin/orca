@@ -1,7 +1,7 @@
 import type { MarkdownToken } from '@tiptap/core'
 import {
+  createMarkdownFenceRangeCursor,
   getMarkdownFenceRanges,
-  isInsideMarkdownFenceRange,
   type MarkdownFenceRanges
 } from './markdown-fence-scanner'
 
@@ -113,6 +113,7 @@ export function matchDetailsHtmlBlock(
   const detailsTagPattern = /<\/?details\b[^>]*>/gi
   detailsTagPattern.lastIndex = start
   const fenceRanges = precomputedFenceRanges ?? getMarkdownFenceRanges(content)
+  const isInsideFence = createMarkdownFenceRangeCursor(fenceRanges)
 
   let depth = 0
 
@@ -123,7 +124,7 @@ export function matchDetailsHtmlBlock(
     }
 
     const tag = tagMatch[0]
-    if (tagMatch.index !== start && isInsideMarkdownFenceRange(tagMatch.index, fenceRanges)) {
+    if (tagMatch.index !== start && isInsideFence(tagMatch.index)) {
       continue
     }
 
