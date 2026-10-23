@@ -244,7 +244,9 @@ describe('AutomationsPage run navigation', () => {
             typeof target === 'object' &&
             target !== null &&
             'kind' in target &&
-            target.kind === 'environment'
+            target.kind === 'environment' &&
+            'environmentId' in target &&
+            target.environmentId === 'gpu'
           ) {
             return fresh.promise
           }
