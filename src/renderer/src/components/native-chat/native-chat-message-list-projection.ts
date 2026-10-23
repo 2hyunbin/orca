@@ -75,14 +75,15 @@ export function createNativeChatMessageListProjection(): (
       conversation: sameConversation ? previous.conversation : conversation,
       subagentRows: sameSubagents ? previous.subagentRows : subagentRows
     }
-    byId = new Map(
-      [
-        ...conversation,
-        ...Array.from(subagentRows.values())
-          .flat()
-          .map((row) => row.message)
-      ].map((message) => [message.id, message])
-    )
+    byId = new Map()
+    for (const message of conversation) {
+      byId.set(message.id, message)
+    }
+    for (const rows of subagentRows.values()) {
+      for (const row of rows) {
+        byId.set(row.message.id, row.message)
+      }
+    }
     return previous
   }
 }
