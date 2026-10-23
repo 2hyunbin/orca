@@ -76,25 +76,29 @@ function setContainsRange(values: Set<number>, min: number, max: number): boolea
   return true
 }
 
-function formatParsedRruleSchedule(
-  schedule: NonNullable<ReturnType<typeof tryParseAutomationRrule>>
-): string {
-  if (schedule.preset === 'hourly') {
+function formatScheduleDescriptor(schedule: AutomationScheduleDescriptor): string {
+  if (schedule.kind === 'invalid') {
+    return 'Invalid schedule'
+  }
+  if (schedule.kind === 'custom') {
+    return schedule.expression ?? 'Custom schedule'
+  }
+  if (schedule.kind === 'hourly') {
     return `Hourly at :${String(schedule.minute).padStart(2, '0')}`
   }
   const time = formatTime(schedule.hour, schedule.minute)
-  if (schedule.preset === 'daily') {
+  if (schedule.kind === 'daily') {
     return `Daily at ${time}`
   }
-  if (schedule.preset === 'weekdays') {
+  if (schedule.kind === 'weekdays') {
     return `Weekdays at ${time}`
   }
   return `${EN_DAY_NAMES[schedule.dayOfWeek]}s at ${time}`
 }
 
-function classifyParsedCronSchedule(rule: ParsedCron): AutomationCronScheduleClassification {
+function classifyParsedCronSchedule(rule: ParsedCron): AutomationScheduleDescriptor {
   if (!cronHasPossibleOccurrence(rule, Date.now())) {
-    return { kind: 'invalid', label: 'Invalid schedule' }
+    return { kind: 'invalid' }
   }
   const minute = getSingleSetValue(rule.minutes)
   const hour = getSingleSetValue(rule.hours)
@@ -111,18 +115,16 @@ function classifyParsedCronSchedule(rule: ParsedCron): AutomationCronScheduleCla
   if (minute !== null && setContainsRange(rule.hours, 0, 23) && unrestrictedMonth && everyDay) {
     return {
       kind: 'hourly',
-      minute,
-      label: `Hourly at :${String(minute).padStart(2, '0')}`
+      minute
     }
   }
   if (minute !== null && hour !== null && unrestrictedMonth && everyDay) {
-    return { kind: 'daily', hour, minute, label: `Daily at ${formatTime(hour, minute)}` }
+    return { kind: 'daily', hour, minute }
   }
   // Weekday/weekly names only read true under AND; under OR the day-of-month half fires too.
   if (minute !== null && hour !== null && unrestrictedCalendar && !matchesEitherDayField) {
-    const time = formatTime(hour, minute)
     if (setContainsExactly(rule.daysOfWeek, [1, 2, 3, 4, 5])) {
-      return { kind: 'weekdays', hour, minute, label: `Weekdays at ${time}` }
+      return { kind: 'weekdays', hour, minute }
     }
     const dayOfWeek = getSingleSetValue(rule.daysOfWeek)
     if (dayOfWeek !== null) {
@@ -130,19 +132,19 @@ function classifyParsedCronSchedule(rule: ParsedCron): AutomationCronScheduleCla
         kind: 'weekly',
         hour,
         minute,
-        dayOfWeek,
-        label: `${EN_DAY_NAMES[dayOfWeek]}s at ${time}`
+        dayOfWeek
       }
     }
   }
-  return { kind: 'custom', label: 'Custom schedule' }
+  return { kind: 'custom' }
 }
 
 export function classifyAutomationCronSchedule(
   schedule: string
 ): AutomationCronScheduleClassification {
   try {
-    return classifyParsedCronSchedule(parseCronExpression(schedule.trim()))
+    const descriptor = classifyParsedCronSchedule(parseCronExpression(schedule.trim()))
+    return { ...descriptor, label: formatScheduleDescriptor(descriptor) }
   } catch {
     return { kind: 'invalid', label: 'Invalid schedule' }
   }
@@ -150,26 +152,10 @@ export function classifyAutomationCronSchedule(
 
 export function formatAutomationSchedule(scheduleExpression: string): string {
   try {
-    const trimmed = scheduleExpression.trim()
-    const schedule = parseSchedule(trimmed)
-    if (schedule.kind === 'cron') {
-      return classifyParsedCronSchedule(schedule).label
-    }
-    const rrule = tryParseAutomationRrule(trimmed)
-    if (rrule === null) {
-      return escapeTerminalControlCharacters(trimmed, true)
-    }
-    return formatParsedRruleSchedule(rrule)
+    return formatScheduleDescriptor(describeAutomationSchedule(scheduleExpression))
   } catch {
     return 'Invalid schedule'
   }
-}
-
-function toScheduleDescriptor(
-  classification: AutomationCronScheduleClassification
-): AutomationScheduleDescriptor {
-  const { label: _label, ...descriptor } = classification
-  return descriptor
 }
 
 /**
@@ -183,7 +169,7 @@ export function describeAutomationSchedule(
     const trimmed = scheduleExpression.trim()
     const schedule = parseSchedule(trimmed)
     if (schedule.kind === 'cron') {
-      return toScheduleDescriptor(classifyParsedCronSchedule(schedule))
+      return classifyParsedCronSchedule(schedule)
     }
     const rrule = tryParseAutomationRrule(trimmed)
     if (rrule === null) {

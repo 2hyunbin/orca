@@ -207,6 +207,10 @@ describe('automation schedules', () => {
   })
 
   it('exposes a locale-free descriptor for callers that render their own copy', () => {
+    vi.spyOn(Intl, 'DateTimeFormat').mockImplementation(function () {
+      throw new Error('Descriptors must not depend on a localized clock formatter')
+    })
+
     expect(describeAutomationSchedule('30 12 * * 7')).toEqual({
       kind: 'weekly',
       hour: 12,
@@ -214,6 +218,11 @@ describe('automation schedules', () => {
       dayOfWeek: 0
     })
     expect(describeAutomationSchedule('5 * * * *')).toEqual({ kind: 'hourly', minute: 5 })
+    expect(describeAutomationSchedule('15 10 * * *')).toEqual({
+      kind: 'daily',
+      hour: 10,
+      minute: 15
+    })
     expect(describeAutomationSchedule('15 10 * * MON-FRI')).toEqual({
       kind: 'weekdays',
       hour: 10,
@@ -231,6 +240,7 @@ describe('automation schedules', () => {
       dayOfWeek: 5
     })
     expect(describeAutomationSchedule('*/30 9-17 * * MON-FRI')).toEqual({ kind: 'custom' })
+    expect(describeAutomationSchedule('0 9 * * MON,WED,FRI')).toEqual({ kind: 'custom' })
     expect(describeAutomationSchedule('FREQ=YEARLY')).toEqual({ kind: 'invalid' })
   })
 
