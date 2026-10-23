@@ -152,16 +152,16 @@ export function normalizeClaudeEvent(
   }
 
   const eventToolUseId = readFirstString(hookPayload, ['tool_use_id', 'toolUseId'])
-  const previousTool = state.lastToolByPaneKey.get(paneKey)
-  const isParallelSiblingCompletionDuringQuestion =
+  const isParallelSiblingActivityDuringWait =
     eventAgentId === undefined &&
     previousLead?.state === 'waiting' &&
-    isAskUserQuestionTool(previousTool?.toolName) &&
-    (eventName === 'PostToolUse' || eventName === 'PostToolUseFailure') &&
+    (eventName === 'PreToolUse' ||
+      eventName === 'PostToolUse' ||
+      eventName === 'PostToolUseFailure') &&
     previousLead.waitingToolUseId !== undefined &&
     eventToolUseId !== undefined &&
     eventToolUseId !== previousLead.waitingToolUseId
-  if (isParallelSiblingCompletionDuringQuestion) {
+  if (isParallelSiblingActivityDuringWait) {
     return buildClaudeCachedLeadStatusPayload(state, eventName, paneKey, hookPayload)
   }
 
@@ -304,7 +304,7 @@ export function normalizeClaudeEvent(
     ...(taskWakeupTurn ? { taskWakeupTurn: true as const } : {}),
     ...(outcome ? { outcome } : {}),
     ...(isWaitingInducing && eventAgentId ? { waitingAgentId: eventAgentId } : {}),
-    ...(isAskUserQuestionWait && waitingToolUseId !== undefined ? { waitingToolUseId } : {}),
+    ...(isWaitingInducing && waitingToolUseId !== undefined ? { waitingToolUseId } : {}),
     ...(stateBeforeWait ? { stateBeforeWait } : {}),
     ...(turnCompletedAt !== undefined ? { turnCompletedAt } : {})
   })

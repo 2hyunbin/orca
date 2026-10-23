@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { AgentHookEventPayload } from './listener-event'
 import {
-  isClaudePermissionSettledByReplay,
+  isClaudePermissionSettled,
   MAX_CLAUDE_SETTLED_REQUESTS,
   readClaudeSettledRequests,
   retainClaudeSettledRequests
@@ -94,18 +94,10 @@ describe('retained Claude request settlements', () => {
       isReplay: true,
       claudeSettledRequests: [{ toolUseId: 'tool-1', toolAgentId: 'child-1' }]
     }
-    expect(isClaudePermissionSettledByReplay(waiting, replay)).toBe(true)
-    expect(isClaudePermissionSettledByReplay(waiting, { ...replay, isReplay: undefined })).toBe(
-      false
-    )
-    expect(isClaudePermissionSettledByReplay({ ...waiting, toolAgentId: undefined }, replay)).toBe(
-      false
-    )
-    expect(isClaudePermissionSettledByReplay(waiting, { ...replay, connectionId: 'conn-2' })).toBe(
-      false
-    )
-    expect(isClaudePermissionSettledByReplay(waiting, { ...replay, launchToken: 'launch-2' })).toBe(
-      false
-    )
+    expect(isClaudePermissionSettled(waiting, replay)).toBe(true)
+    expect(isClaudePermissionSettled(waiting, { ...replay, isReplay: undefined })).toBe(true)
+    expect(isClaudePermissionSettled({ ...waiting, toolAgentId: undefined }, replay)).toBe(false)
+    expect(isClaudePermissionSettled(waiting, { ...replay, connectionId: 'conn-2' })).toBe(false)
+    expect(isClaudePermissionSettled(waiting, { ...replay, launchToken: 'launch-2' })).toBe(false)
   })
 })
