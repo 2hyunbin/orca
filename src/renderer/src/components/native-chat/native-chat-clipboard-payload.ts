@@ -42,13 +42,13 @@ export function textOnlyLabelsCopiedFiles(text: string, files: readonly string[]
   if (files.length === 0) {
     return false
   }
+  const lines = text.trim().split(/\r\n|\r|\n/, files.length + 1)
+  if (lines.length !== files.length) {
+    return false
+  }
   const names = files.map(lastPathSegment).sort()
-  const labels = text
-    .trim()
-    .split(/\r\n|\r|\n/)
-    .map((line) => labelledFileName(line.trim()))
-    .sort()
-  return labels.length === names.length && labels.every((label, i) => label === names[i])
+  const labels = lines.map((line) => labelledFileName(line.trim())).sort()
+  return labels.every((label, i) => label === names[i])
 }
 
 /** The event's text/plain, unless it only labels the files being attached. */

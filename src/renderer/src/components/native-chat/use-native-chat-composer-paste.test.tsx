@@ -618,7 +618,13 @@ describe('file-manager copies', () => {
       [png('a.png'), new File(['pdf'], 'b.pdf', { type: 'application/pdf' })],
       'a.png\nb.pdf'
     ],
-    ['a file label with a trailing newline', [png('shot.png')], 'shot.png\r\n']
+    ['a file label with a trailing newline', [png('shot.png')], 'shot.png\r\n'],
+    [
+      'reordered labels with mixed newline forms',
+      [png('a.png'), png('b.png'), png('c.png')],
+      ' c.png \r\n a.png \r b.png '
+    ],
+    ['duplicate file names', [png('shot.png'), png('shot.png')], 'shot.png\nshot.png']
   ])('attaches %s without inserting its name', async (_label, files, text) => {
     mocks.saveClipboardImageAsTempFile.mockResolvedValue('/tmp/shot.png')
     const insertTypedText = vi.fn(() => true)
@@ -637,6 +643,13 @@ describe('file-manager copies', () => {
 
   it.each([
     ['rich text with an image rendition', [png('image.png')], 'Quarterly numbers'],
+    ['extra text after the matching file name', [png('image.png')], 'image.png\nKeep this text'],
+    ['fewer labels than files', [png('image.png'), png('other.png')], 'image.png'],
+    [
+      'an empty line between labels',
+      [png('image.png'), png('other.png')],
+      'image.png\n\nother.png'
+    ],
     [
       'a non-image file, which is not attached',
       [new File(['pdf'], 'b.pdf', { type: 'application/pdf' })],
