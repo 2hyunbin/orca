@@ -3,6 +3,8 @@
 /** Scripts written without spaces, where each character is its own word. */
 export const SPACELESS_SCRIPT_RANGES = String.raw`\u2e80-\ud7ff\uf900-\uffef`
 const SPACELESS_SCRIPT_CHAR = new RegExp(`[${SPACELESS_SCRIPT_RANGES}]`, 'u')
+const WORD_END = new RegExp(`[\\s${SPACELESS_SCRIPT_RANGES}]`, 'u')
+const NEXT_WORD_END = new RegExp(WORD_END.source, 'gu')
 
 /** Shared with whatever splits the drawn text into words, so both end words alike. */
 export function isSpacelessScriptChar(char: string): boolean {
@@ -27,7 +29,7 @@ export type NativeChatTextRevealFrames = {
 }
 
 function endsWord(char: string): boolean {
-  return /\s/.test(char) || isSpacelessScriptChar(char)
+  return WORD_END.test(char)
 }
 
 export function pacedTextEnd(text: string, position: number, holdPartialWord: boolean): number {
@@ -35,9 +37,13 @@ export function pacedTextEnd(text: string, position: number, holdPartialWord: bo
   if (from >= text.length) {
     return text.length
   }
+  if (endsWord(text[from])) {
+    return from
+  }
   let end = from
-  while (end < text.length && !endsWord(text[end])) {
-    end += 1
+  if (from < text.length) {
+    NEXT_WORD_END.lastIndex = from
+    end = NEXT_WORD_END.exec(text)?.index ?? text.length
   }
   if (end < text.length || !holdPartialWord) {
     return end

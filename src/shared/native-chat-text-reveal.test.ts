@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   advanceNativeChatText,
   arriveNativeChatText,
@@ -14,6 +14,23 @@ describe('pacedTextEnd', () => {
     expect(pacedTextEnd('hello bra', 7, false)).toBe('hello bra'.length)
     expect(pacedTextEnd('こんにちは世界', 3, true)).toBe(3)
   })
+  it('finds the end of a long token without testing every character', () => {
+    const word = 'x'.repeat(64 * 1024)
+    const text = `prefix ${word} suffix`
+    const test = vi.spyOn(RegExp.prototype, 'test')
+    let end: number
+    let calls: number
+    try {
+      end = pacedTextEnd(text, 100, true)
+      calls = test.mock.calls.length
+    } finally {
+      test.mockRestore()
+    }
+    expect(end).toBe('prefix '.length + word.length)
+    expect(calls).toBeLessThanOrEqual(4)
+    expect(pacedTextEnd('short next', 1, true)).toBe(5)
+  })
+
   it('never stops inside an emoji', () => {
     const text = 'ok 👍👍 done'
     for (let position = 0; position <= text.length; position += 1) {
