@@ -47,7 +47,10 @@ import {
   wslMoveSleptSpoolRoot
 } from '../persistence/moving-wsl-projects/wsl-move-slept-scrollback'
 import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
-import { captureWslMoveRestoreHints } from '../persistence/moving-wsl-projects/wsl-move-restore-hints'
+import {
+  captureWslMoveRestoreHints,
+  type WslMoveRestoreHintPane
+} from '../persistence/moving-wsl-projects/wsl-move-restore-hints'
 import {
   isWslMoveProjectFenced,
   wslMoveProjectRefForWorkspace
@@ -86,6 +89,25 @@ export function registerWslSleepShellCwdReader(): void {
     const rows = paneKey ? await readWslGuestPaneProcesses(distro) : null
     return paneKey && rows ? readWslGuestPaneShellCwd(rows, paneKey) : null
   })
+}
+
+/** Each live bridge pane's shell folder, one process read per distro. */
+async function readWslMovePaneShellCwds(
+  panes: readonly WslMoveRestoreHintPane[]
+): Promise<Map<string, string>> {
+  const cwds = new Map<string, string>()
+  const distros = new Set(panes.flatMap((pane) => (pane.wslDistro ? [pane.wslDistro] : [])))
+  for (const distro of distros) {
+    const rows = await readWslGuestPaneProcesses(distro)
+    for (const pane of panes) {
+      const cwd =
+        rows && pane.wslDistro === distro ? readWslGuestPaneShellCwd(rows, pane.paneKey) : null
+      if (cwd) {
+        cwds.set(pane.paneKey, cwd)
+      }
+    }
+  }
+  return cwds
 }
 
 export function createWslMoveDriverDeps(
@@ -153,6 +175,7 @@ export function createWslMoveDriverDeps(
     exportManifest: (request) => exportWslMoveManifest(store, request),
     gateInputs: (scope) => collectWslMoveGateInputs(facts, scope),
     listPanes: (scope) => listWslMovePanes(facts, scope),
+    ...(process.platform === 'win32' ? { shellCwds: readWslMovePaneShellCwds } : {}),
     sleptSessionPanes: (workspaceIds, reported) =>
       listWslMoveSleptSessionPanes(store.getWorkspaceSession(), workspaceIds, reported),
     quiesce: {
