@@ -142,12 +142,16 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
       })
       const leases = [vi.spyOn(local, 'activate'), vi.spyOn(remote, 'activate')]
       const listeners = [vi.spyOn(local, 'subscribe'), vi.spyOn(remote, 'subscribe')]
-      const tabs = Array.from({ length: count }, (_, i) => ({
-        ...floatingTab,
-        id: `chat-${i}`,
-        entityId: `session-${i}`,
-        executionHostId: i % 2 ? 'runtime:paired' : 'local'
-      }))
+      const tabs = Array.from(
+        { length: count },
+        (_, i) =>
+          ({
+            ...floatingTab,
+            id: `chat-${i}`,
+            entityId: `session-${i}`,
+            executionHostId: i % 2 ? 'runtime:paired' : 'local'
+          }) satisfies Tab
+      )
       useAppStore.setState({ unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: tabs } })
       let commits = 0
       const stop = useAppStore.subscribe((state, previous) => {
