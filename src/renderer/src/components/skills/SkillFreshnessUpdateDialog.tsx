@@ -44,7 +44,7 @@ function RunHeadline({ run }: { run: SkillUpdateRun }): React.JSX.Element | null
       </div>
     )
   }
-  if (run.state === 'done' && run.summary.ok) {
+  if (run.state === 'done' && run.summary.ok && !run.needsAttention) {
     const { changedCount, leftAloneCount } = run.summary
     const updated =
       changedCount === 1
@@ -74,10 +74,12 @@ function RunHeadline({ run }: { run: SkillUpdateRun }): React.JSX.Element | null
     return (
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
         <AlertTriangle className="size-4 text-amber-600 dark:text-amber-400" />
-        {translate(
-          'auto.components.skills.SkillFreshnessUpdateDialog.finishedWithProblems',
-          'Some skills need attention'
-        )}
+        {run.summary.ok
+          ? translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
+          : translate(
+              'auto.components.skills.SkillFreshnessUpdateDialog.finishedWithProblems',
+              'Some skills need attention'
+            )}
       </div>
     )
   }
@@ -220,10 +222,11 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
   const phase = skillRowPhase(run)
   const isRunning = phase === 'pending'
   const showResult = phase === 'result'
+  const needsAttention = run.state === 'done' && run.needsAttention
   const livePlan = reviewed.plan
   const canUpdate =
     !isRunning &&
-    !showResult &&
+    (!showResult || needsAttention) &&
     livePlan !== null &&
     !reviewed.loading &&
     summarizeBundledSkillPlan(livePlan).hasWork
@@ -309,7 +312,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
         ) : null}
 
         <SkillUpdateFooter
-          showResult={showResult}
+          showResult={showResult && !needsAttention}
           isRunning={isRunning}
           checking={state.loading}
           updatePlan={shownSummary?.hasWork ? shownPlan : null}

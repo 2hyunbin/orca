@@ -68,14 +68,14 @@ async function finish(result: BundledSkillInstallResult): Promise<void> {
   })
 }
 
-function ran(status: 'done' | 'failed'): BundledSkillInstallResult {
+function ran(status: 'done' | 'failed', name = 'orca-cli'): BundledSkillInstallResult {
   return {
     scope: 'global',
     skills: [
       {
-        name: 'orca-cli',
+        name,
         status: 'ran',
-        ops: [{ path: '/home/u/.agents/skills/orca-cli', kind: 'update', status }]
+        ops: [{ path: `/home/u/.agents/skills/${name}`, kind: 'update', status }]
       }
     ]
   }
@@ -146,6 +146,28 @@ describe('SkillUpdateStatusSegment', () => {
       'Some skill updates were skipped — click to see details'
     )
   })
+
+  it.each([false, true])(
+    'keeps recovery needing attention visible (mixed run: %s)',
+    async (mixed) => {
+      await render()
+      await start(mixed ? ['orca-cli', 'orchestration'] : ['orca-cli'])
+      const result = ran('done')
+      result.skills[0].ops[0].kind = 'restore'
+      if (mixed) {
+        result.skills.push(ran('done', 'orchestration').skills[0])
+      }
+      await finish(result)
+
+      expect(container?.textContent).toContain('Needs attention')
+      expect(container?.textContent).not.toContain('Skills updated')
+      expect(container?.querySelector('.text-emerald-500')).toBeNull()
+      await act(async () => {
+        vi.advanceTimersByTime(SKILL_UPDATE_SUCCESS_LINGER_MS * 3)
+      })
+      expect(container?.querySelector('button')).not.toBeNull()
+    }
+  )
 
   it('reopens the update dialog when clicked', async () => {
     await render()

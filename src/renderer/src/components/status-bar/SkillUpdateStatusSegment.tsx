@@ -43,7 +43,7 @@ export function SkillUpdateStatusSegment({
         )
       }
     }
-    if (run.state === 'done' && run.summary.ok) {
+    if (run.state === 'done' && run.summary.ok && !run.needsAttention) {
       return {
         icon: <CheckCircle2 className="size-3 text-emerald-500" />,
         label: translate(
@@ -70,10 +70,13 @@ export function SkillUpdateStatusSegment({
     }
     return {
       icon: <AlertCircle className="size-3 text-yellow-500" />,
-      label: translate(
-        'auto.components.status.bar.SkillUpdateStatusSegment.attentionLabel',
-        'Skills need attention'
-      ),
+      label:
+        run.state === 'done' && run.summary.ok && run.needsAttention
+          ? translate('auto.components.skills.skillPlanOpCopy.needsAttention', 'Needs attention')
+          : translate(
+              'auto.components.status.bar.SkillUpdateStatusSegment.attentionLabel',
+              'Skills need attention'
+            ),
       tooltip: translate(
         'auto.components.status.bar.SkillUpdateStatusSegment.attentionTooltip',
         'Some skill updates were skipped — click to see details'

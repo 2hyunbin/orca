@@ -318,6 +318,48 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(button('Done')).toBeTruthy()
   })
 
+  it.each([false, true])('keeps Update available after recovery (mixed run: %s)', async (mixed) => {
+    const repair = planOf([
+      sharedEntry('orca-cli', 'restore'),
+      ...(mixed ? [sharedEntry('orchestration', 'update')] : [])
+    ])
+    const update = planOf([sharedEntry('orca-cli', 'update')], '3'.repeat(64))
+    mocks.plan = repair
+    skillsApi.bundledExecute.mockResolvedValueOnce(doneResult(repair))
+    render()
+
+    click(button(mixed ? 'Update 2 skills' : 'Update 1 skill'))
+    await flush()
+
+    expect(container.textContent).not.toContain(mixed ? 'Updated 1 skill' : 'Updated 0 skills')
+    expect(container.querySelector('.text-status-success')).toBeNull()
+    expect(container.querySelector('.lucide-triangle-alert')?.parentElement?.textContent).toBe(
+      'Needs attention'
+    )
+    expect(getSkillUpdateRun()).toMatchObject({
+      state: 'done',
+      summary: { ok: true, exitCode: 0, changedCount: mixed ? 1 : 0 }
+    })
+
+    mocks.plan = null
+    render()
+    expect(button(mixed ? 'Update 2 skills' : 'Update 1 skill').disabled).toBe(true)
+
+    mocks.plan = update
+    skillsApi.bundledExecute.mockResolvedValueOnce(doneResult(update))
+    render()
+    expect(button('Update 1 skill').disabled).toBe(false)
+    click(button('Update 1 skill'))
+    await flush()
+
+    expect(skillsApi.bundledExecute).toHaveBeenLastCalledWith({
+      planDigest: update.planDigest,
+      force: []
+    })
+    expect(container.textContent).toContain('Updated 1 skill')
+    expect(button('Done')).toBeTruthy()
+  })
+
   it('counts skills rather than folders in the preview and result headlines', async () => {
     const plan = planOf([
       planEntry('orca-cli', [
