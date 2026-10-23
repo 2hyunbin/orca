@@ -65,8 +65,15 @@ class MobileWebShellSpareSlotsTest {
     var booted = false
     assertFalse(slots.park("host-a", "/gen/1", "s1") { booted = true; FakePage() })
     assertFalse(booted)
-    assertTrue(slots.wasIssued("s1"))
-    assertFalse(slots.wasIssued("s2"))
+    assertFalse(slots.reserve("s1"))
+  }
+
+  @Test
+  fun `an id a view already loads is never parked`() {
+    assertTrue(slots.reserve("s1"))
+    var booted = false
+    assertFalse(slots.park("host-a", "/gen/1", "s1") { booted = true; FakePage() })
+    assertFalse(booted)
   }
 
   @Test
@@ -89,14 +96,19 @@ class MobileWebShellSpareSlotsTest {
   }
 
   @Test
-  fun `discarding a host leaves another host's spare and every claimed one`() {
+  fun `discarding a host takes its parked and claimed spares and leaves another host's`() {
     val parked = park("s1", hostKey = "host-a")
     slots.discard("host-b")
     assertFalse(parked.destroyed)
-    slots.take("host-a", "/gen/1")
     slots.discard("host-a")
-    slots.discard(null)
-    assertFalse(parked.destroyed)
+    assertTrue(parked.destroyed)
+    val claimed = park("s2", hostKey = "host-a")
+    slots.take("host-a", "/gen/1")
+    val other = park("s3", hostKey = "host-b")
+    slots.discard("host-a")
+    assertTrue(claimed.destroyed)
+    assertNull(slots.adopt("s2"))
+    assertFalse(other.destroyed)
   }
 
   @Test

@@ -44,7 +44,7 @@ final class OrcaMobileWebShellView: ExpoView, MobileWebShellPageSink {
     let spare = pool.adopt(sessionId: sessionId)
     // An id the pool issued whose page is gone must not get a second WebView; the page reports a
     // dead content process, and the remount mints a fresh id.
-    let page = spare?.page ?? MobileWebShellPage(dead: pool.wasIssued(sessionId: sessionId))
+    let page = spare?.page ?? MobileWebShellPage(dead: !pool.reserve(sessionId: sessionId))
     host(page.webView)
     page.sink = self
     if let spare {

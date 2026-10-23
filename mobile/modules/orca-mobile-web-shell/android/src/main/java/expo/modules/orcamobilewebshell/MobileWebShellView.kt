@@ -28,10 +28,11 @@ internal class OrcaMobileWebShellView(
   private var adoptedReady: String? = null
 
   private val sink = object : MobileWebShellPageSink {
-    override fun onLoadState(payload: Map<String, Any>) = this@OrcaMobileWebShellView.onLoadState(payload)
-    override fun onBridgeMessage(json: String) =
+    override fun pageLoadState(payload: Map<String, Any>) =
+      this@OrcaMobileWebShellView.onLoadState(payload)
+    override fun pageBridgeMessage(json: String) =
       this@OrcaMobileWebShellView.onBridgeMessage(mapOf("json" to json))
-    override fun onExternalNavigation(url: String) =
+    override fun pageExternalNavigation(url: String) =
       this@OrcaMobileWebShellView.onExternalNavigation(mapOf("url" to url))
   }
 
@@ -58,7 +59,7 @@ internal class OrcaMobileWebShellView(
     // An id the pool issued whose page is gone has no WebView to show and must not get a second
     // one; the page reports a dead renderer, and the remount mints a fresh id.
     val page = spare?.page
-      ?: MobileWebShellPage(context, withWebView = !MobileWebShellSparePool.wasIssued(sessionId))
+      ?: MobileWebShellPage(context, withWebView = MobileWebShellSparePool.reserve(sessionId))
     page.webView?.let { addView(it, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)) }
     page.sink = sink
     if (spare != null) {
@@ -70,7 +71,7 @@ internal class OrcaMobileWebShellView(
 
   /** Hands the adopted spare's `ready` to the shell again, until the shell has answered it. */
   fun replayPageReady() {
-    adoptedReady?.let(sink::onBridgeMessage)
+    adoptedReady?.let(sink::pageBridgeMessage)
   }
 
   fun postBridgeMessage(json: String) {

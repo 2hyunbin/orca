@@ -71,19 +71,21 @@ final class MobileWebShellSparePool {
 
   /// The spare's session id when it was booted from `directory` and is still alive.
   func take(hostKey: String, directory: String) -> String? {
-    guard let spare = slots.take(hostKey: hostKey, directory: directory) else { return nil }
-    DispatchQueue.main.asyncAfter(deadline: .now() + claimExpirySeconds) { [weak self] in
-      self?.slots.expire(sessionId: spare.sessionId)
+    guard let sessionId = slots.take(hostKey: hostKey, directory: directory)?.sessionId else {
+      return nil
     }
-    return spare.sessionId
+    DispatchQueue.main.asyncAfter(deadline: .now() + claimExpirySeconds) { [weak self] in
+      self?.slots.expire(sessionId: sessionId)
+    }
+    return sessionId
   }
 
   func adopt(sessionId: String) -> MobileWebShellSpare? {
     slots.adopt(sessionId: sessionId)?.page
   }
 
-  func wasIssued(sessionId: String) -> Bool {
-    slots.wasIssued(sessionId: sessionId)
+  func reserve(sessionId: String) -> Bool {
+    slots.reserve(sessionId: sessionId)
   }
 
   func discard(hostKey: String?) {
