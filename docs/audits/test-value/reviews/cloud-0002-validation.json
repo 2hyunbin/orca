@@ -95,6 +95,22 @@
     {
       "command": "Verify each original SHA-256 against git show at source_commit, final SHA-256 against working tree, original declaration line/title coverage and file evidence existence",
       "result": "50 records, 449 original declaration sites and all final hashes verified; all 9 changed test files belong to this batch."
+    },
+    {
+      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm --filter @orca-cloud/relay test src/admin-token-verifier.test.ts src/cell-phone-path.blackbox.test.ts",
+      "cwd": "cloud",
+      "result": "27 tests passed in 2 files after CI-requested curly braces and Array.find corrections.",
+      "log": "/tmp/orca-cloud-0002-ci-quality-tests.log"
+    },
+    {
+      "command": "pnpm run check:code-quality:changed 551108aea82245cdc77c41986a15542f52bed20b",
+      "result": "Passed: zero new findings across 19 changed root/mobile files in all six scans and the casting rationale check. Root gate excludes cloud.",
+      "log": "/tmp/orca-pr-32305-quality-final.log"
+    },
+    {
+      "command": "ORCA_BACKGROUND_LAUNCH=1 node config/scripts/check-react-doctor-changed.mjs 551108aea82245cdc77c41986a15542f52bed20b",
+      "result": "Passed: zero errors, including changed cloud test lines. This is the gate that rejected the original PR head.",
+      "log": "/tmp/orca-pr-32305-react-doctor-final.log"
     }
   ],
   "failures_and_corrections": [
@@ -112,6 +128,10 @@
     {
       "failure": "Initial pg_stat_activity observer could accept another suite waiting on the same table.",
       "correction": "Assign unique application_name values to the fixture pools and restrict observation to the stores[1] name; retain database/table/FOR UPDATE and lock-wait filters."
+    },
+    {
+      "failure": "PR #32305 React Doctor changed-lines gate rejected four brace-free continue guards and filter(predicate)[0]. The earlier whole-file comparison disabled curly and did not establish the CI gate.",
+      "correction": "Add braces around each guard and use find(predicate); rerun the actual changed-code quality gate and both affected suites."
     }
   ],
   "important_retained_boundaries": [

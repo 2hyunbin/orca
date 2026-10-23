@@ -78,7 +78,9 @@ describe('Relay admin route authorization', () => {
       expect(relayAdminIdentityMayAccess('capacity', route)).toBe(true)
     }
     for (const route of mutationRoutes) {
-      if (capacityRoutes.includes(route)) continue
+      if (capacityRoutes.includes(route)) {
+        continue
+      }
       expect(relayAdminIdentityMayAccess('capacity', route)).toBe(false)
     }
     expect(relayAdminIdentityMayAccess('capacity', '/v1/admin/evacuation-status')).toBe(false)
@@ -99,7 +101,9 @@ describe('Relay admin route authorization', () => {
       expect(relayAdminIdentityMayAccess('monitor', route)).toBe(true)
     }
     for (const route of [...mutationRoutes, ...fenceReads]) {
-      if (monitorReads.includes(route)) continue
+      if (monitorReads.includes(route)) {
+        continue
+      }
       expect(relayAdminIdentityMayAccess('monitor', route)).toBe(false)
     }
     // Read-only on-call lookup: monitor and fence read it, capacity and asia-proof do not.
@@ -116,7 +120,9 @@ describe('Relay admin route authorization', () => {
       expect(relayAdminIdentityMayAccess('fence', route)).toBe(true)
     }
     for (const route of mutationRoutes) {
-      if (fenceReads.includes(route)) continue
+      if (fenceReads.includes(route)) {
+        continue
+      }
       expect(relayAdminIdentityMayAccess('fence', route)).toBe(false)
     }
   })
@@ -126,7 +132,9 @@ describe('Relay admin route authorization', () => {
       expect(relayAdminIdentityMayAccess('fence-broker', route)).toBe(true)
     }
     for (const route of [...mutationRoutes, ...fenceReads]) {
-      if (brokerRoutes.includes(route)) continue
+      if (brokerRoutes.includes(route)) {
+        continue
+      }
       expect(relayAdminIdentityMayAccess('fence-broker', route)).toBe(false)
     }
   })

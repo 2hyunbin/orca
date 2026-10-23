@@ -488,7 +488,7 @@ describe('the memory phone path', () => {
     reserve.database.failing = null
     reserve.database.statements.length = 0
     expect(await confirm('confirm-c', inFlight.basisConnId)).toMatchObject({ type: 'device-resume-confirmed' })
-    expect(reserve.phoneStatements().filter((sql) => !sql.includes('relay_assignment'))[0]).toEqual(RESUME_DEVICE_READ)
+    expect(reserve.phoneStatements().find((sql) => !sql.includes('relay_assignment'))).toEqual(RESUME_DEVICE_READ)
     // And new resumes take the database path again.
     const connOpen = nextFrame(seated.socket, 'conn-open')
     await reserve.dialPhone(seated.identity.hostId, token(1))
@@ -504,4 +504,3 @@ describe('the memory phone path', () => {
     expect(reserve.relay.runtimeCounts().resumeAuditDropped).toBe(2)
   })
 })
-
