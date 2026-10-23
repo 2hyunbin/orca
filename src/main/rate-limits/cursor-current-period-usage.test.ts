@@ -216,11 +216,59 @@ describe('Cursor Unified Ultra current-period usage', () => {
     expect(limits.monthly).toBeUndefined()
   })
 
-  it('keeps older plans on their existing request and mapping path', async () => {
-    respond(CURRENT, { ...SUMMARY, membershipType: 'pro' })
+  it('keeps an active non-unified plan on the summary without the extra request', async () => {
+    const plan = { ...SUMMARY.individualUsage.plan, totalPercentUsed: 12, autoPercentUsed: 12 }
+    respond(CURRENT, { ...SUMMARY, membershipType: 'pro', individualUsage: { plan } })
     const limits = await fetchCursorRateLimits({ authReadResult: AUTH })
     expect(limits.planType).toBe('pro')
     expect(limits.monthly?.resetsAt).toBe(Date.parse(SUMMARY.billingCycleEnd))
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  // Weekly plans are not all unified_*: e.g. an enterprise seat moved to weekly Premium.
+  it('uses a weekly current period behind idle non-unified summary pools', async () => {
+    const endMs = Date.parse(END)
+    const weekly = {
+      ...CURRENT,
+      billingCycleStart: String(Date.parse(START)),
+      billingCycleEnd: String(endMs)
+    }
+    respond(weekly, { ...SUMMARY, membershipType: 'enterprise' })
+    const limits = await fetchCursorRateLimits({ authReadResult: AUTH })
+    expect(limits).toMatchObject({ status: 'ok', planType: 'enterprise' })
+    expect(limits.monthly).toMatchObject({
+      usedPercent: PERCENT,
+      windowMinutes: 10080,
+      resetsAt: endMs
+    })
+  })
+
+  it.each([
+    [
+      'a monthly period',
+      () =>
+        Response.json({
+          ...CURRENT,
+          billingCycleStart: SUMMARY.billingCycleStart,
+          billingCycleEnd: SUMMARY.billingCycleEnd,
+          planUsage: { totalPercentUsed: 9 }
+        })
+    ],
+    ['HTTP 429', () => new Response(null, { status: 429 })],
+    ['a network failure', () => Promise.reject(new Error('test network failure'))]
+  ])(
+    'keeps idle non-unified summary pools when current-period returns %s',
+    async (_label, current) => {
+      fetchMock.mockImplementation(async (url) =>
+        url === SUMMARY_URL ? Response.json({ ...SUMMARY, membershipType: 'pro' }) : current()
+      )
+      const limits = await fetchCursorRateLimits({ authReadResult: AUTH })
+      expect(limits.status).toBe('ok')
+      expect(limits.monthly).toMatchObject({
+        usedPercent: 0,
+        resetsAt: Date.parse(SUMMARY.billingCycleEnd)
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    }
+  )
 })

@@ -168,7 +168,9 @@ export function mapCursorUsageSummary(summary: CursorUsageSummary): CursorUsageM
   }
 }
 
-export function mapCursorCurrentPeriodUsage(payload: unknown): CursorUsageMapping | null {
+export type CursorCurrentPeriodUsage = CursorUsageMapping & { periodMinutes: number }
+
+export function mapCursorCurrentPeriodUsage(payload: unknown): CursorCurrentPeriodUsage | null {
   const parsed = cursorCurrentPeriodSchema.safeParse(payload)
   if (!parsed.success) {
     return null
@@ -189,7 +191,9 @@ export function mapCursorCurrentPeriodUsage(payload: unknown): CursorUsageMappin
     billingCycleEnd: endMs,
     individualUsage: { plan: parsed.data.planUsage }
   })
-  return mapped.monthly || mapped.buckets.length > 0 ? mapped : null
+  return mapped.monthly || mapped.buckets.length > 0
+    ? { ...mapped, periodMinutes: windowMinutesFor(startMs, endMs) }
+    : null
 }
 
 /**
