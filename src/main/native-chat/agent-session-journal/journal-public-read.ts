@@ -11,20 +11,14 @@ export function readJournalPublicView(state: JournalReducerState): {
     const item = state.items.get(agentJournalSubmissionKey(id))
     const submission = state.submissions.get(id)
     return item && submission
-      ? [
-          [
-            id,
-            item.sequence,
-            item.observedAt,
-            item.turnScope,
-            submission.dispatchState,
-            submission.queuedMessageId ?? null
-          ]
-        ]
+      ? [[id, item.sequence, item.observedAt, item.turnScope, submission.queuedMessageId ?? null]]
       : []
   })
+  let snapshot: AgentJournalSnapshot | undefined
   return {
-    snapshot: renderJournalState(state),
+    get snapshot() {
+      return (snapshot ??= renderJournalState(state))
+    },
     normalizationKey: corrections.length === 0 ? '' : JSON.stringify([state.epoch, corrections])
   }
 }

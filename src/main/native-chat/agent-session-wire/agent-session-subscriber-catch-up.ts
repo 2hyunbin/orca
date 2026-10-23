@@ -75,7 +75,7 @@ export function deliverToSubscriber(
   if (
     subscriber.snapshotCatchUp !== false &&
     subscriber.readsCurrentRequests &&
-    subscriber.cursor.epoch === view.snapshot.cursor.epoch &&
+    subscriber.cursor.epoch === journal.epoch &&
     view.normalizationKey !== '' &&
     subscriber.historyView !== view.normalizationKey
   ) {

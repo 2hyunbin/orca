@@ -8,6 +8,7 @@ import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
 import {
   AGENT_JOURNAL_THREAD_SCOPE,
+  type AgentJournalAnsweredTurnIdentity,
   type AgentJournalMessageItem
 } from '../../../shared/agent-session-journal-types'
 import { activeProviderContext } from '../../../shared/agent-session-provider-context'
@@ -79,7 +80,8 @@ async function handOff(
   text: string,
   as: 'providerRejected' | 'cancelled' | 'accepted',
   fence = 0,
-  beforeAnswer?: () => Promise<void>
+  beforeAnswer?: () => Promise<void>,
+  answeredInTurn?: AgentJournalAnsweredTurnIdentity
 ): Promise<void> {
   const body = message(text)
   const payloadFingerprint = agentSessionSendBodyFingerprint(journal.queuedMessages.sessionId, body)
@@ -101,7 +103,7 @@ async function handOff(
   await journal.resolveDispatch(
     as === 'accepted'
       ? { clientMessageId: attempt, state: 'accepted', providerIdentity: null, fence }
-      : { clientMessageId: attempt, state: 'rejected', ...words(as), fence }
+      : { clientMessageId: attempt, state: 'rejected', ...words(as), fence, answeredInTurn }
   )
 }
 
@@ -319,6 +321,81 @@ it("moves an earlier build's cards into the journal, each action its own card, t
   await reopened.close()
 })
 
+it.each([100, 1_000])(
+  'unchanged caught-up publications do not materialize %i historical items',
+  async (size) => {
+    const earlier = journalFor(SESSION)
+    await earlier.open()
+    await handOff(earlier, 'u', 'q', 'stopped words', 'cancelled', 0, async () => {
+      for (let ordinal = 0; ordinal < size; ordinal++) {
+        await earlier.appendItem(
+          { provider: 'codex', threadId: 'history', turnId: 't', ordinal },
+          { ...message('old answer'), role: 'assistant' },
+          { fence: 0 }
+        )
+      }
+    })
+    await earlier.close()
+    seedLegacy(SESSION, [['q', 'waiting', 'stopped words']])
+    db().exec(`CREATE TEMP TRIGGER b2_perf_fail_import BEFORE DELETE ON queued_messages
+    BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+    const journal = journalFor(SESSION)
+    await journal.open()
+    db().exec('DROP TRIGGER b2_perf_fail_import')
+    const feed = new AgentSessionSubscribers()
+    const events: AgentSessionSubscribeEvent[] = []
+    let visits = 0
+    function counted<T>(iterator: MapIterator<T>): MapIterator<T> {
+      const next = iterator.next.bind(iterator)
+      iterator.next = (...args) => {
+        const result = next(...args)
+        if (!result.done) {
+          visits++
+        }
+        return result
+      }
+      return iterator
+    }
+    const values = Map.prototype.values
+    const entries = Map.prototype[Symbol.iterator]
+    const valuesRead = vi.spyOn(Map.prototype, 'values').mockImplementation(function (
+      this: Map<unknown, unknown>
+    ) {
+      return counted(values.call(this))
+    })
+    const entriesRead = vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function (
+      this: Map<unknown, unknown>
+    ) {
+      return counted(entries.call(this))
+    })
+    try {
+      feed.open({
+        sessionId: SESSION,
+        journal,
+        fence: 0,
+        id: 'perf',
+        cursor: journal.cursor(),
+        snapshotCatchUp: true,
+        readsCurrentRequests: true,
+        emit: (event) => events.push(event)
+      })
+      expect(events[0]?.type).toBe('snapshot')
+      expect(visits).toBeGreaterThanOrEqual(size)
+      visits = 0
+      for (let publication = 0; publication < 5; publication++) {
+        feed.publish(SESSION, journal)
+      }
+      // Only the one subscriber per publish; history copies/materialization would add N visits.
+      expect(visits).toBe(5)
+    } finally {
+      entriesRead.mockRestore()
+      valuesRead.mockRestore()
+    }
+    expect(events.filter((event) => event.type === 'snapshot')).toHaveLength(1)
+    await journal.close()
+  }
+)
+
 it('a rewind while the import has failed moves the legacy cards first: a refused one stays returned', async () => {
   // Made before the clear, which leaves the chat no provider handle to read.
   const earlier = journalFor(SESSION)
@@ -377,7 +454,15 @@ it('a rewind while the import has failed moves the legacy cards first: a refused
   expect(legacyIds()).toEqual([])
 })
 
-it.each([false, true])('converges retained history across adoption (%s)', async (adopt) => {
+const retainedHistoryCases = [
+  { adopt: false, proof: 'none' },
+  { adopt: true, proof: 'none' },
+  { adopt: false, proof: 'dispatch' },
+  { adopt: true, proof: 'dispatch' },
+  { adopt: false, proof: 'item' },
+  { adopt: true, proof: 'item' }
+]
+it.each(retainedHistoryCases)('retained history: $adopt / $proof', async ({ adopt, proof }) => {
   const earlier = journalFor(SESSION)
   await earlier.open()
   const append = async (journal: AgentSessionJournal, ordinal: number) => {
@@ -388,11 +473,25 @@ it.each([false, true])('converges retained history across adoption (%s)', async 
     )
   }
   await append(earlier, 0)
-  await handOff(earlier, 'u', 'q', 'stopped words', 'cancelled', 0, async () => {
-    for (let index = 1; index <= 205; index++) {
-      await append(earlier, index)
-    }
-  })
+  await handOff(
+    earlier,
+    'u',
+    'q',
+    'stopped words',
+    'cancelled',
+    0,
+    async () => {
+      for (let index = 1; index <= 205; index++) {
+        await append(earlier, index)
+      }
+    },
+    proof === 'none'
+      ? undefined
+      : {
+          turn: { provider: 'codex', threadId: 'history', turnId: 't', ordinal: -1 },
+          via: 'steer'
+        }
+  )
   const stale = readAgentSessionHistory(earlier, { sessionId: SESSION, direction: 'tail' })
   expect(stale.ok).toBe(true)
   await earlier.close()
@@ -430,13 +529,15 @@ it.each([false, true])('converges retained history across adoption (%s)', async 
     }
   ])
   const corrected: AgentSessionSubscribeEvent[][] = []
+  const clients: (() => ReturnType<typeof reduceStructuredAgentSession>)[] = []
   for (const boundedFrames of [false, true]) {
     let state = reduceStructuredAgentSession(EMPTY_STRUCTURED_AGENT_SESSION, {
       type: 'history-page',
-      page: stale.page
+      page: structuredClone(stale.page)
     })
     const events: AgentSessionSubscribeEvent[] = []
     corrected.push(events)
+    clients.push(() => state)
     const reader = subscriberHistoryReader({ boundedFrames })
     feed.open({
       ...base,
@@ -447,7 +548,10 @@ it.each([false, true])('converges retained history across adoption (%s)', async 
       readsCurrentRequests: true,
       emit: (event) => {
         events.push(event)
-        state = reduceStructuredAgentSession(state, { type: 'event', event })
+        state = reduceStructuredAgentSession(state, {
+          type: 'event',
+          event: structuredClone(event)
+        })
       }
     })
     expect(events[0]?.type).toBe('snapshot')
@@ -462,7 +566,7 @@ it.each([false, true])('converges retained history across adoption (%s)', async 
       state = reduceStructuredAgentSession(state, {
         type: 'older-page',
         requestedCursor,
-        page: older.page
+        page: structuredClone(older.page)
       })
     }
     const canonical = journal.snapshot()
@@ -472,11 +576,53 @@ it.each([false, true])('converges retained history across adoption (%s)', async 
     feed.publish(SESSION, journal)
   }
   const cursor = journal.cursor()
-  const after = readAgentSessionHistory(journal, { sessionId: SESSION, direction: 'after', cursor })
+  const after = readAgentSessionHistory(journal, {
+    sessionId: SESSION,
+    direction: 'after',
+    cursor
+  })
   expect(after).toMatchObject({ ok: false, reset: 'cursor_compacted' })
   if (!adopt) {
     await journal.queuedMessages.importAtOpen()
     feed.publish(SESSION, journal)
+  }
+  if (proof !== 'none') {
+    const placed = journal
+      .snapshot()
+      .items.find((item) => item.itemId === agentJournalSubmissionKey('u'))
+    const loaded = clients.map((client) => client().items.length)
+    const normalizationKey = journal.publicRead().normalizationKey
+    const identity = {
+      provider: 'codex' as const,
+      threadId: 'history',
+      turnId: 't',
+      ordinal: 206
+    }
+    if (proof === 'dispatch') {
+      await journal.acceptLate({
+        clientMessageId: 'u',
+        state: 'accepted',
+        fence: 0,
+        providerIdentity: identity
+      })
+    }
+    await journal.appendItem(identity, message('stopped words'), { fence: 0 })
+    feed.publish(SESSION, journal)
+    expect(journal.submission('u')?.dispatchState).toBe('accepted')
+    expect(journal.receiptFor('u')).not.toBeNull()
+    expect(journal.publicRead().normalizationKey).toBe(normalizationKey)
+    expect(clients.map((client) => client().items.length)).toEqual(loaded)
+    for (const client of clients) {
+      expect(client().items.find((item) => item.itemId === placed?.itemId)).toMatchObject({
+        sequence: placed?.sequence,
+        observedAt: placed?.observedAt,
+        turnScope: placed?.turnScope,
+        revision: 1
+      })
+      expect(
+        client().submissions.find((submission) => submission.clientMessageId === 'u')?.dispatchState
+      ).toBe('accepted')
+    }
   }
   expect(
     corrected.map((events) => events.filter((event) => event.type === 'snapshot').length)

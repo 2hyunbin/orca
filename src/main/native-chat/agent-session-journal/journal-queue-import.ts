@@ -105,7 +105,11 @@ export class LegacyQueuedCards {
   /** Moves after every commit that deleted legacy rows. */
   private revision = 0
   private stored: { revision: number; rows: readonly QueuedMessageRow[] } | null = null
-  private viewed: { key: string; cards: readonly QueuedMessageRow[] } | null = null
+  private viewed: {
+    key: string
+    cards: readonly QueuedMessageRow[]
+    display?: JournalReducerState
+  } | null = null
 
   constructor(private readonly deps: LegacyDeps) {}
 
@@ -122,6 +126,7 @@ export class LegacyQueuedCards {
   cards(): readonly QueuedMessageRow[] {
     const key = this.key()
     if (key === '') {
+      this.viewed = null
       return []
     }
     if (this.viewed?.key !== key) {
@@ -138,7 +143,11 @@ export class LegacyQueuedCards {
   /** Failed adoption must not hide a spent message; derive its adopted display on copies only. */
   displayState(): JournalReducerState {
     const state = this.deps.state()
-    const handedOff = this.cards().flatMap((card) => {
+    const cards = this.cards()
+    if (this.viewed?.display) {
+      return this.viewed.display
+    }
+    const handedOff = cards.flatMap((card) => {
       const submission =
         card.consumedAs === null ? undefined : state.submissions.get(card.consumedAs)
       return submission && handOffInDoubt(submission) ? [{ ...submission }] : []
@@ -155,6 +164,9 @@ export class LegacyQueuedCards {
     for (const submission of handedOff) {
       display.submissions.set(submission.clientMessageId, submission)
       foldQueuedHandOffInDoubt(display, submission)
+    }
+    if (this.viewed) {
+      this.viewed.display = display
     }
     return display
   }
