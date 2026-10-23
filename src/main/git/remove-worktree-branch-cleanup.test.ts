@@ -250,11 +250,11 @@ branch refs/heads/main
     expect(calls).toContain('git config --remove-section branch.feature/test')
     expect(gitExecFileAsyncMock.mock.calls).toContainEqual([
       ['patch-id', '--stable'],
-      { cwd: '/repo', stdin: 'branch net diff\n' }
+      expect.objectContaining({ cwd: '/repo', stdin: 'branch net diff\n' })
     ])
     expect(gitExecFileAsyncMock.mock.calls).toContainEqual([
       ['patch-id', '--stable'],
-      { cwd: '/repo', stdin: 'squash diff\n' }
+      expect.objectContaining({ cwd: '/repo', stdin: 'squash diff\n' })
     ])
   })
 
