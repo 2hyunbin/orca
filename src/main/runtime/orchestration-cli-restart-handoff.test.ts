@@ -1,8 +1,15 @@
+import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { OrchestrationDb } from './orchestration/db'
+
+const cliPath = join(process.cwd(), 'src/cli/index.ts')
+const tsxLoader = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href
 
 const entity = z.object({ id: z.string() })
 const check = z.object({
@@ -28,6 +35,8 @@ it('retains CLI work and mail across restart, refuses takeover, and completes a 
   for (const name of [
     'HOME',
     'USERPROFILE',
+    'APPDATA',
+    'LOCALAPPDATA',
     'XDG_CONFIG_HOME',
     'XDG_CACHE_HOME',
     'XDG_DATA_HOME',
@@ -54,11 +63,9 @@ it('retains CLI work and mail across restart, refuses takeover, and completes a 
   ]) {
     vi.stubEnv(name, '')
   }
-  const { main } = await import('./index.js')
-  const { OrchestrationDb } = await import('../main/runtime/orchestration/db.js')
-  const { OrcaRuntimeRpcServer } = await import('../main/runtime/runtime-rpc.js')
-  const fixture = await import('../main/runtime/orchestration-mailbox-notification-test-harness.js')
-  const { registerBoundPty } = await import('../main/runtime/bind-first-pane.test-fixture.js')
+  const { OrcaRuntimeRpcServer } = await import('./runtime-rpc')
+  const fixture = await import('./orchestration-mailbox-notification-test-harness')
+  const { registerBoundPty } = await import('./bind-first-pane.test-fixture')
   const coord = fixture.TERMINAL_HANDLE
   const worker = fixture.SECOND_TERMINAL_HANDLE
   const predecessor = 'term_predecessor'
@@ -85,27 +92,50 @@ it('retains CLI work and mail across restart, refuses takeover, and completes a 
   }
   let runtime = runtimeForDatabase()
   let server = new OrcaRuntimeRpcServer({ runtime, userDataPath: home })
-  const output = vi.spyOn(console, 'log').mockImplementation(() => {})
-  const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
-  const originalExitCode = process.exitCode
-
   async function cli(handle: string, args: string[], exitCode = 0): Promise<unknown> {
-    vi.stubEnv('ORCA_TERMINAL_HANDLE', handle)
-    vi.stubEnv('ORCA_PANE_KEY', runtime.getTerminalPaneKey(handle) ?? '')
-    vi.stubEnv(
-      'ORCA_AGENT_LAUNCH_TOKEN',
-      handle === coord ? fixture.LAUNCH_TOKEN : handle === worker ? fixture.SECOND_LAUNCH_TOKEN : ''
+    const child = spawn(
+      process.execPath,
+      [
+        '--import',
+        tsxLoader,
+        '--conditions=orca-source',
+        cliPath,
+        'orchestration',
+        ...args,
+        '--json'
+      ],
+      {
+        cwd: home,
+        env: {
+          ...process.env,
+          ORCA_TERMINAL_HANDLE: handle,
+          ORCA_PANE_KEY: runtime.getTerminalPaneKey(handle) ?? '',
+          ORCA_AGENT_LAUNCH_TOKEN:
+            handle === coord
+              ? fixture.LAUNCH_TOKEN
+              : handle === worker
+                ? fixture.SECOND_LAUNCH_TOKEN
+                : ''
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+        timeout: 15_000
+      }
     )
-    output.mockClear()
-    stderr.mockClear()
-    process.exitCode = 0
-    await main(['orchestration', ...args, '--json'], home)
-    expect(
-      process.exitCode,
-      JSON.stringify({ args, output: output.mock.calls, stderr: stderr.mock.calls })
-    ).toBe(exitCode)
-    expect(output.mock.calls).toHaveLength(1)
-    const response: unknown = JSON.parse(String(output.mock.calls.at(-1)?.[0]))
+    let stdout = ''
+    let stderr = ''
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => {
+      stdout += chunk
+    })
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => {
+      stderr += chunk
+    })
+    const code = await new Promise<number | null>((resolveExit, rejectExit) => {
+      child.once('close', resolveExit)
+      child.once('error', rejectExit)
+    })
+    expect(code, JSON.stringify({ args, stdout, stderr })).toBe(exitCode)
+    const response: unknown = JSON.parse(stdout)
     expect(response).toMatchObject({ ok: exitCode === 0 })
     return response
   }
@@ -250,9 +280,8 @@ it('retains CLI work and mail across restart, refuses takeover, and completes a 
       result: { dispatch: { id: dispatch, status: 'completed' } }
     })
   } finally {
-    process.exitCode = originalExitCode
     await server.stop()
     db.close()
     rmSync(home, { recursive: true, force: true })
   }
-})
+}, 120_000)
