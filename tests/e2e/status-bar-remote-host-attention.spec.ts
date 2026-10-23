@@ -166,7 +166,7 @@ test('remote host counts and actionable attention preserve rendered status-bar g
       for (const condition of CONDITIONS) {
         for (const count of COUNTS) {
           await page.evaluate(
-            async ({ count, hostId, status }) => {
+            ({ count, hostId, status }) => {
               const store = window.__store
               if (!store) {
                 throw new Error('store unavailable')
@@ -188,8 +188,6 @@ test('remote host counts and actionable attention preserve rendered status-bar g
                 ),
                 runtimeStatusByEnvironmentId: new Map([[hostId, status]])
               })
-              await new Promise(requestAnimationFrame)
-              await new Promise(requestAnimationFrame)
             },
             { count, hostId: HOST_ID, status: hostStatus(condition) }
           )
