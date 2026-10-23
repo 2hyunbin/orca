@@ -1,4 +1,5 @@
 import { createDetailsMatcher, isEditableDetailsHtmlBlock } from './details-markdown-html'
+import { skipMarkdownBacktickRun } from './markdown-code-span-scanner'
 import { formatMarkdownDocLinkBody, parseMarkdownDocLink } from './markdown-doc-links'
 import { normalizeMarkdownReferenceLinks } from './markdown-reference-link-normalization'
 import type { RichMarkdownEditorCodec } from './rich-markdown-source-transport'
@@ -89,10 +90,7 @@ export function encodeRawMarkdownHtmlForRichEditor(
     }
 
     if (normalizedContent[index] === '`') {
-      let tickCount = 0
-      while (normalizedContent[index + tickCount] === '`') {
-        tickCount += 1
-      }
+      const tickCount = skipMarkdownBacktickRun(normalizedContent, index) - index
 
       // Why: the closing backtick sequence must be exactly tickCount backticks,
       // not a longer run. We scan forward to find the first exact match.
@@ -111,7 +109,7 @@ export function encodeRawMarkdownHtmlForRichEditor(
           closingIndex = candidate
           break
         }
-        searchFrom = candidate + 1
+        searchFrom = skipMarkdownBacktickRun(normalizedContent, candidate + tickCount)
       }
 
       if (closingIndex !== -1) {
