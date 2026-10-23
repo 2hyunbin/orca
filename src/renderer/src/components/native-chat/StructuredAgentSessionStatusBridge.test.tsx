@@ -17,10 +17,10 @@ import type * as RuntimeRpcClientModule from '@/runtime/runtime-rpc-client'
 
 const mocks = vi.hoisted(() => ({
   setAgentStatus: vi.fn(),
-  store: null as null | {
+  store: ((): {
     getState: () => AppState
     setState: (state: Partial<AppState>) => void
-  },
+  } | null => null)(),
   subscribeStatus: vi.fn(),
   subscribeTranscript: vi.fn(),
   supportsCapability: vi.fn(),
