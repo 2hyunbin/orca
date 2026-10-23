@@ -7,15 +7,18 @@ import {
   type AgentSessionDeltaWindow
 } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import { CodexItemStreamRetention } from './codex-item-stream-retention'
-import { appendCodexItemAndPublish } from './codex-structured-journal-sink'
-import { codexJournalItem, codexStreamingJournalItem } from './codex-structured-item-translation'
-import { withJournalReasoningLifecycle } from '../native-chat/agent-session-journal/journal-reasoning-row'
+import {
+  appendCodexItemAndPublish,
+  appendCodexRunningStream
+} from './codex-structured-journal-sink'
+import { codexJournalItem } from './codex-structured-item-translation'
 import {
   codexStructuredItemKey,
   MAX_CODEX_ITEM_STREAM_PENDING_PATCHES,
   MAX_CODEX_ITEM_STREAM_PENDING_PATCH_BYTES,
   MAX_CODEX_ITEM_STREAM_RETAINED_BYTES,
   codexItemStreamState,
+  codexToolStreamWindowDue,
   pendingPatchBytes
 } from './codex-structured-item-stream-bounds'
 import {
@@ -117,19 +120,12 @@ export function createCodexStructuredItemStreams(
     state: CodexItemStreamState,
     text: string,
     window?: AgentSessionDeltaWindow
-  ): boolean => {
-    const translated = codexStreamingJournalItem(state.item, text)
-    if (!translated.body) {
-      return true
-    }
-    // A stream only ever carries an item that has not completed yet.
-    const body = withJournalReasoningLifecycle(translated.body, { state: 'running' })
-    return appendCodexItemAndPublish(deps.sink, state.identity, body, {
+  ): boolean =>
+    appendCodexRunningStream(deps.sink, state, text, {
       ...attributionOf(key),
       ...(window ? { streamText: { ...window, field: 0 } } : {}),
       ...(state.startedAt === undefined ? {} : { observedAt: state.startedAt })
-    }).accepted
-  }
+    })
 
   const persist = (key: string, text: string): boolean => {
     const state = states.get(key)
@@ -153,7 +149,13 @@ export function createCodexStructuredItemStreams(
         return false
       }
       if (state.item.type !== 'agentMessage' && state.item.type !== 'reasoning') {
+        if (!codexToolStreamWindowDue(window, checkpointLengths.get(key))) {
+          return true
+        }
         return persist(key, window.text())
+      }
+      if (state.item.type === 'reasoning' && !window.hasText) {
+        return true
       }
       if (!append(key, state, 'x', window)) {
         return false

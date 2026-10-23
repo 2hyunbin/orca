@@ -1,4 +1,5 @@
 import type { AgentJournalItemIdentity } from '../../shared/agent-session-journal-types'
+import type { AgentSessionDeltaWindow } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import { toolExecutionMetadata } from '../../shared/native-chat-tool-identity'
 import type { CodexItemStreamState } from './codex-structured-item-stream-contracts'
 import type { CodexThreadItem } from './codex-thread-item-identity'
@@ -8,6 +9,11 @@ export const MAX_CODEX_ITEM_STREAM_PENDING_PATCHES = 128
 export const MAX_CODEX_ITEM_STREAM_RETAINED_BYTES = 32 * 1024 * 1024
 export const MAX_CODEX_ITEM_STREAM_PENDING_PATCH_BYTES = 8 * 1024 * 1024
 export const MAX_CODEX_ITEM_STREAM_ITEM_BYTES = 64 * 1024
+
+export function codexToolStreamWindowDue(window: AgentSessionDeltaWindow, previous = 0): boolean {
+  const length = window.replace ? window.text().length : window.baseLength + window.suffix.length
+  return previous === 0 || length >= Math.max(previous + 32, Math.ceil(previous * 1.125))
+}
 
 export function codexStructuredItemKey(threadId: string, itemId: string): string {
   const key = `${encodeURIComponent(threadId)}:${encodeURIComponent(itemId)}`

@@ -528,13 +528,15 @@ describe('deferred structured agent-session event sink', () => {
     const bound = target(6, log)
     deferred.bind(bound)
     await deferred.drained()
-    const written = vi.mocked(bound.journal.appendItem).mock.calls.flatMap(([id, body]) => {
-      const block = body.kind === 'message' ? body.blocks[0] : undefined
-      const text = block?.type === 'text' ? block.text : ''
-      return text.startsWith('Looking') || text === 'An aside.'
-        ? [`${text.startsWith('Looking') ? 'reply' : 'aside'} ${agentJournalItemKey(id)}`]
-        : []
-    })
+    const written = vi
+      .mocked(bound.journal.appendItem)
+      .mock.calls.flatMap(([id, body, options]) => {
+        const block = body.kind === 'message' ? body.blocks[0] : undefined
+        const text = options.streamText?.text() ?? (block?.type === 'text' ? block.text : '')
+        return text.startsWith('Looking') || text === 'An aside.'
+          ? [`${text.startsWith('Looking') ? 'reply' : 'aside'} ${agentJournalItemKey(id)}`]
+          : []
+      })
     const [reply, aside] = written
     // The reply's row is created before the aside and rewritten after it; never moved behind it.
     expect(reply?.startsWith('reply')).toBe(true)

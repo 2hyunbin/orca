@@ -182,7 +182,7 @@ export class ProviderTimelineTextStreams {
     for (const { key, window } of this.coalescer.dirtyWindows()) {
       const stream = this.byId.get(key)
       if (stream && stream !== except) {
-        this.planText(plan, stream, '', false, window)
+        this.planText(plan, stream, '', window)
       }
     }
   }
@@ -230,7 +230,7 @@ export class ProviderTimelineTextStreams {
     for (const stream of finalize ? released : []) {
       const snapshot = this.coalescer.snapshot(stream.id)
       if (snapshot) {
-        this.planText(plan, stream, snapshot.text, true)
+        this.planText(plan, stream, snapshot.text)
       }
     }
     if (released.length > 0) {
@@ -243,10 +243,10 @@ export class ProviderTimelineTextStreams {
     if (finalText === undefined) {
       const snapshot = this.coalescer.snapshot(stream.id)
       if (snapshot) {
-        this.planText(plan, stream, snapshot.text, true)
+        this.planText(plan, stream, snapshot.text)
       }
     } else {
-      this.planText(plan, stream, finalText, true)
+      this.planText(plan, stream, finalText)
     }
     this.planRelease(plan, (each) => each === stream, false)
   }
@@ -269,7 +269,7 @@ export class ProviderTimelineTextStreams {
       return true
     }
     const plan = new ProviderTimelinePlan()
-    this.planText(plan, stream, text, false, window)
+    this.planText(plan, stream, text, window)
     const admission = plan.submit(this.deps.sink)
     // A failed or closed sink can never take it; the session's end owns what it leaves.
     return admission.accepted || admission.reason !== 'backpressure'
@@ -279,14 +279,9 @@ export class ProviderTimelineTextStreams {
     plan: ProviderTimelinePlan,
     stream: ProviderTimelineStream,
     text: string,
-    providerFinal = false,
     window?: AgentSessionDeltaWindow
   ): void {
-    const empty = window
-      ? window.baseLength === 0 && !window.suffix.trim()
-      : providerFinal
-        ? text.length === 0
-        : text.trim().length === 0
+    const empty = window ? !window.hasText : text.trim().length === 0
     if (!stream.written && empty) {
       plan.onAdmitted(() => this.coalescer.markFlushed(stream.id))
       return

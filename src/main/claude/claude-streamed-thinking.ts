@@ -61,6 +61,9 @@ export function createClaudeStreamedThinking(deps: {
     ...(deps.schedule ? { schedule: deps.schedule } : {}),
     producer: deps.producer,
     persistDelta: (identity, window, options) => {
+      if (!window.hasText) {
+        return true
+      }
       const body = journalReasoningBody('x', { state: 'running' })
       if (!body) {
         return true

@@ -30,6 +30,7 @@ export type AgentSessionDeltaSnapshot = {
 }
 
 export type AgentSessionDeltaWindow = {
+  hasText: boolean
   baseLength: number
   suffix: string
   text: () => string
@@ -108,6 +109,7 @@ export function createAgentSessionDeltaCoalescer(
       dirty: boolean
       admittedLength: number
       pending: string[]
+      hasText: boolean
     }
   >()
   let totalRetainedBytes = 0
@@ -123,6 +125,7 @@ export function createAgentSessionDeltaCoalescer(
     const length = stream.textLength
     let whole: string | undefined
     return {
+      hasText: stream.hasText,
       baseLength: stream.admittedLength,
       suffix: stream.truncated ? '' : stream.pending.join(''),
       text: () => (whole ??= chunks.join('').slice(0, length)),
@@ -220,7 +223,8 @@ export function createAgentSessionDeltaCoalescer(
           truncated: false,
           dirty: false,
           admittedLength: 0,
-          pending: []
+          pending: [],
+          hasText: false
         }
         if (!deps.isProtected?.(key)) {
           evictable.add(key)
@@ -245,6 +249,7 @@ export function createAgentSessionDeltaCoalescer(
           ? (next.chunks[0]?.length ?? 0)
           : stream.textLength + delta.length
         stream.chunks = next.chunks
+        stream.hasText ||= next.truncated ? !!next.chunks[0]?.trim() : delta.trim().length > 0
         if (!next.truncated) {
           stream.pending.push(delta)
         }
