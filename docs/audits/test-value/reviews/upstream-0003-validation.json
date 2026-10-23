@@ -202,5 +202,6 @@
   "integration": {
     "delivered_validation_sha256": "16ac06dd18d25756081521bfcd28adf86cfaf6db7a72ed4e51720fc84e77035e",
     "adjustment": "Update the earlier static-estimate sentence to reflect the completed runtime run; preserve all check results and source/case provenance."
-  }
+  },
+  "records_sha256": "1c5d9c8f4d15b59e5c16933ebeaca7789c75daffc225f5ce0eb6ff9b228f42bd"
 }

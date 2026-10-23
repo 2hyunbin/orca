@@ -346,5 +346,6 @@
     "Prior production-path reads, mutations and typechecks remain historical with their original hashes and limitations. None was rerun or promoted to current-native evidence by this comment-only superseding review.",
     "Supporting evidence files are cited with current hashes but are not separately promoted to reviewed by this delivery. No mobile test was needed for the handler-only batch.",
     "Literal array and CLI invocation counts are syntactic occurrences, not additional runtime cases or independently asserted input rows. Four prior consolidated records remain historical and are not recreated as current tests."
-  ]
+  ],
+  "records_sha256": "138b03e6f4b28aea07f7eab562cc622f0f7cc6c372cfc1ff724ecfdf15d89b81"
 }
