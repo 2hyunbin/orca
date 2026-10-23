@@ -9,6 +9,7 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
   return {
     'react-native': () => ({
       ActivityIndicator: 'ActivityIndicator',
+      AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
       AccessibilityInfo: {
         isReduceMotionEnabled: () => Promise.resolve(false),
         addEventListener: () => ({ remove: () => {} })
@@ -157,7 +158,9 @@ export function screenModuleMocks(dependencies: ScreenDependencies) {
           }, [attach])
           return React.createElement('ShellViewProbe', props)
         },
-        parseMobileWebShellLoadState: parseMobileWebShellLoadState
+        parseMobileWebShellLoadState: parseMobileWebShellLoadState,
+        // A binary without the spare pool, which is every screen here: each mount builds its own page.
+        OrcaMobileWebShellSpares: null
       }
     },
     // The wall's release offer: the native hook imports the update checker module.

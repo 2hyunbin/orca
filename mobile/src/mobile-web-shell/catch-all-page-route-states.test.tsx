@@ -34,6 +34,7 @@ const dependencies = vi.hoisted((): Dependencies => {
 })
 
 vi.mock('react-native', () => ({
+  AppState: { currentState: 'active', addEventListener: () => ({ remove: () => {} }) },
   ActivityIndicator: 'ActivityIndicator',
   BackHandler: { addEventListener: () => ({ remove: () => {} }) },
   Keyboard: { addListener: () => ({ remove: () => {} }) },
@@ -111,7 +112,8 @@ vi.mock('../../modules/orca-mobile-web-shell/src', async () => {
   return {
     OrcaMobileWebShellView: (props: OrcaMobileWebShellViewProps) =>
       React.createElement('ShellViewProbe', props),
-    parseMobileWebShellLoadState: loadState.parseMobileWebShellLoadState
+    parseMobileWebShellLoadState: loadState.parseMobileWebShellLoadState,
+    OrcaMobileWebShellSpares: null
   }
 })
 // The wall's release offer: the native hook imports the update checker module.

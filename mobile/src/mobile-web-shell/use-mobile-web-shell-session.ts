@@ -13,6 +13,7 @@ import { download, openCache, readManifest } from './mobile-web-shell-session-ef
 import {
   createMobileWebShellRuntime,
   DOCUMENT_LOAD_DEADLINE_MS,
+  openedSessionId,
   PAGE_READY_DEADLINE_MS,
   type MobileWebShellRuntime
 } from './mobile-web-shell-runtime'
@@ -180,7 +181,8 @@ export function useMobileWebShellSession(args: {
       switch (effect.kind) {
         case 'delete-cache':
           // Reports nothing: the store serialises its own queue, so the sweep and read the reducer
-          // queued behind this one already run after it.
+          // queued behind this one already run after it. A spare booted from the tree goes first.
+          void runtime.spares?.discardSpares(hostKey).catch(() => undefined)
           await store.deleteHostCache(hostKey).catch(() => undefined)
           return
         case 'record-update-failure':
@@ -214,7 +216,7 @@ export function useMobileWebShellSession(args: {
             type: 'activated',
             flow,
             generationDirectory: effect.directory,
-            sessionId: runtime.mintSessionId(),
+            sessionId: await openedSessionId(runtime, hostKey, effect.directory),
             buildId: effect.buildId,
             totalBytes: effect.totalBytes,
             elapsedMs: runtime.now() - startedAtRef.current
