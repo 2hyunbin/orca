@@ -85,13 +85,13 @@ const FIRST_TAB_ID = 'structured-agent-session-session-1'
 const SECOND_TAB_ID = 'structured-agent-session-session-2'
 
 describe('StructuredAgentSessionPaneOverlayLayer', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     mocks.focusGroup.mockClear()
     mocks.mountsByTabId.clear()
     mocks.unmountsByTabId.clear()
     mocks.groupIdByTabId.clear()
     mocks.targetByTabId.clear()
-    mocks.store?.setState({ unifiedTabsByWorktree: {} })
+    await act(async () => mocks.store?.setState({ unifiedTabsByWorktree: {} }))
     mocks.store?.setState(createState(FIRST_TAB_ID))
   })
 
