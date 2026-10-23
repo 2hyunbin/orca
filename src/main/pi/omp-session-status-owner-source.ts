@@ -137,7 +137,7 @@ export function getOmpSessionOwnerHandlerSourceLines(kind: PiAgentKind): string[
     '      const owns = ownsSessionStatus(ctx, name)',
     '      if (authority === "retired") return',
     '      if (!owns && (!isAttention(name, event) || (!ctx?.agent?.kind && authority !== "sub"))) {',
-    '        if (name === "session_shutdown" && authority === "sub") retireRegistration()',
+    '        if (name === "session_shutdown") retireRegistration()',
     '        return',
     '      }',
     '      const result = handler(event, ctx)',

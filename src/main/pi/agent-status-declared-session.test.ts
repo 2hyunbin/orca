@@ -116,6 +116,16 @@ describe('declared session authority', () => {
       { reviewId: 'review', planContent: 'plan', options: [] },
       child
     )
+    const abandoned = harness.registerSession()
+    const stopAbandoned = vi.fn()
+    const abortedContext = { ...child, ui: { onTerminalInput: () => stopAbandoned } }
+    await abandoned.callHook(
+      'plan_review_requested',
+      { reviewId: 'abandoned', options: [] },
+      abortedContext
+    )
+    await abandoned.callHook('session_shutdown', {}, abortedContext)
+    expect(stopAbandoned).toHaveBeenCalledOnce()
     await helper.callHook('session_start', {}, child)
     expect(harness.fetchMock).not.toHaveBeenCalled()
     const root = session('lead', 'main')
@@ -130,6 +140,7 @@ describe('declared session authority', () => {
     expect(payloads().map((payload) => payload.hook_event_name)).toContain(
       'tool_approval_requested'
     )
+    expect(payloads().some((payload) => payload.review_id === 'abandoned')).toBe(false)
     await helper.callHook('plan_review_resolved', { reviewId: 'review' }, child)
     expect(stopInput).toHaveBeenCalledOnce()
     await helper.callHook('tool_call', { toolName: 'ask', input: { question: 'choose' } }, child)
