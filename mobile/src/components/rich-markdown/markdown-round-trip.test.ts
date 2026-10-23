@@ -120,6 +120,16 @@ describe('the editor document, from markdown and back', () => {
     expect(html).not.toContain('&amp;amp;')
   })
 
+  it('keeps unfinished labels as escaped text alongside inline formatting', () => {
+    const { editor } = surface('[unfinished &lt;tag&gt; & value\nsecond [label')
+
+    expect(editor.innerHTML).toBe('<p>[unfinished &lt;tag&gt; &amp; value<br>second [label</p>')
+    expect(editor.querySelector('a, img, em, strong, code, s')).toBeNull()
+    expect(surface('[unfinished and **bold**').editor.querySelector('strong')?.textContent).toBe(
+      'bold'
+    )
+  })
+
   it('preserves explicit ordered-list numbering through the round trip', () => {
     const markdown = ['3. Third step', '4. Fourth step'].join('\n')
     const { scope, html } = surface(markdown)

@@ -9,6 +9,9 @@ import { escapeAttr, escapeHtml, isSafeUrl } from './markdown-escaping'
  * into its own matches, so the next call is usually itself.
  */
 export function renderInline(text: string): string {
+  if (!/[`~*_]|https?:\/\/|\]\(/.test(text)) {
+    return escapeHtml(text)
+  }
   const pattern =
     /(!\[[^\]]*\]\([^)]+\)|`[^`]+`|~~[^~]+~~|\*\*[^*]+\*\*|__[^_]+__|\*[^*\n]+\*|_[^_\n]+_|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s<]+)/g
   let output = ''
