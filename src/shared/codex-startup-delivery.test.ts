@@ -20,6 +20,19 @@ describe('hasCodexNativeDraftFlag', () => {
     expect(hasCodexNativeDraftFlag("codex '--prefill=not-an-option'")).toBe(false)
   })
 
+  it.each([
+    ["codex '' --prefill", true],
+    ['codex "" --prefill=', true],
+    ["codex --pre'fill'", true],
+    ["codex '' '--prefill'", false],
+    ["codex '--pre'fill", false],
+    ['codex ""--prefill', false],
+    ['codex --prefill\\ value', false],
+    ['codex \\"--prefill\\"', false]
+  ])('preserves quote metadata in %j', (command, expected) => {
+    expect(hasCodexNativeDraftFlag(command)).toBe(expected)
+  })
+
   it('does not match non-Codex commands', () => {
     expect(hasCodexNativeDraftFlag("claude --prefill 'review this'")).toBe(false)
   })

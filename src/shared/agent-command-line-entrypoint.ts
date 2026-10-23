@@ -35,10 +35,15 @@ export function isInterpreterProcessName(normalized: string): boolean {
   return STATIC_INTERPRETER_PROCESS_NAMES.has(normalized) || PYTHON_PROCESS_RE.test(normalized)
 }
 
-export function tokenizeCommandLine(commandLine: string): string[] {
-  const tokens: string[] = []
+export function someCommandLineToken(
+  commandLine: string,
+  predicate: (value: string, startsQuoted: boolean, index: number) => boolean
+): boolean {
   let current = ''
   let spanStart = 0
+  let inToken = false
+  let startsQuoted = false
+  let tokenIndex = 0
   let quote: '"' | "'" | null = null
   let escaped = false
   for (let index = 0; index < commandLine.length; index += 1) {
@@ -53,12 +58,15 @@ export function tokenizeCommandLine(commandLine: string): string[] {
         current += commandLine.slice(spanStart, index)
         spanStart = index + 1
         escaped = true
+        inToken = true
         continue
       }
     }
     if ((char === '"' || char === "'") && quote === null) {
       current += commandLine.slice(spanStart, index)
       spanStart = index + 1
+      startsQuoted ||= !inToken
+      inToken = true
       quote = char
       continue
     }
@@ -71,17 +79,31 @@ export function tokenizeCommandLine(commandLine: string): string[] {
     if (/\s/.test(char) && quote === null) {
       current += commandLine.slice(spanStart, index)
       spanStart = index + 1
-      if (current) {
-        tokens.push(current)
+      if (inToken) {
+        if (predicate(current, startsQuoted, tokenIndex)) {
+          return true
+        }
+        tokenIndex += 1
         current = ''
+        inToken = false
+        startsQuoted = false
       }
       continue
     }
+    inToken = true
   }
   current += commandLine.slice(spanStart)
-  if (current) {
-    tokens.push(current)
-  }
+  return inToken && predicate(current, startsQuoted, tokenIndex)
+}
+
+export function tokenizeCommandLine(commandLine: string): string[] {
+  const tokens: string[] = []
+  someCommandLineToken(commandLine, (value) => {
+    if (value) {
+      tokens.push(value)
+    }
+    return false
+  })
   return tokens
 }
 
