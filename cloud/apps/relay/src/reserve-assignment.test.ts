@@ -1018,7 +1018,7 @@ describe('reserve assignment on a director', () => {
       expect(events(lines, 'orca_relay_reserve_drain_replaced')).toHaveLength(2)
     })
 
-    it('marks its pace as the drain’s, on the reserve lane and in the region fallback', async () => {
+    it('marks its pace as the drain’s, on the reserve lane, in the region fallback and in the spill', async () => {
       const { assignment } = setup({
         feeds: [feed('c1', { draining: true, full: [seated(7)] }), feed('c2')],
         reserve: () => ({ outcome: 'intake' })
@@ -1026,6 +1026,9 @@ describe('reserve assignment on a director', () => {
       await expect(assignment.plan(HOST, { reconnect: true, region: US })).rejects.toMatchObject({ drained: true })
       const plan = await assignment.plan(HOST, { reconnect: true, region: US, regionCorrection: true })
       await expect(plan.kind === 'database' ? plan.regionReserve?.() : null).rejects.toMatchObject({ drained: true })
+      await expect(
+        plan.kind === 'database' ? plan.reserveSpill?.({ skipOwnRegion: false, rowEpoch: 0 }) : null
+      ).rejects.toMatchObject({ drained: true })
     })
 
     it('leaves every other host as today: no drain count, and a plain pace', async () => {
