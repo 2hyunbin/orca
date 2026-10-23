@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-ipc-payload'
+import type { TerminalProcessInspection } from '../../../shared/terminal-process-inspection'
 import { describe, expect, it, vi } from 'vitest'
 import { collectWslMoveGateInputs, type WslMoveGateFactSources } from './wsl-move-gate-facts'
 import {
@@ -236,6 +237,44 @@ describe('collectWslMoveGateInputs with a guest foreground reader', () => {
       verdict: 'blocked',
       blockers: [{ kind: 'agent-working' }]
     })
+  })
+
+  // awin verify-6: after an app relaunch Windows could no longer observe the reattached wsl.exe's
+  // children, so every live bridge pane read unverifiable for good and blocked every move.
+  it('asks the distro when Windows cannot observe a reattached pane after a relaunch', async () => {
+    const hostBlind = async (): Promise<TerminalProcessInspection> => ({
+      foregroundProcess: null,
+      hasChildProcesses: false,
+      childProcessEvidence: 'unverifiable'
+    })
+    const idle = await collectWslMoveGateInputs(
+      {
+        ...base,
+        inspect: hostBlind,
+        guestForegrounds: async () => new Map([[KEY_A, 'shell-idle']])
+      },
+      scope
+    )
+    expect(idle.panes[0]?.foreground).toBe('shell-idle')
+    const busy = await collectWslMoveGateInputs(
+      {
+        ...base,
+        inspect: hostBlind,
+        guestForegrounds: async () => new Map([[KEY_A, 'process-running']])
+      },
+      scope
+    )
+    expect(busy.panes[0]?.foreground).toBe('process-running')
+    // No shell found in the distro either: still never idle.
+    const gone = await collectWslMoveGateInputs(
+      {
+        ...base,
+        inspect: hostBlind,
+        guestForegrounds: async () => new Map([[KEY_A, 'unverifiable' as const]])
+      },
+      scope
+    )
+    expect(gone.panes[0]?.foreground).toBe('unverifiable')
   })
 
   it('leaves a slept pane idle without asking the distro, which has no shell of it left', async () => {

@@ -68,7 +68,10 @@ function restored(scrollbackAnsi: string, snapshotAnsi: string, hasUnreadableRec
   }
 }
 
-function withModes<T extends ReturnType<typeof restored>>(detection: T, alternateScreen: boolean): T {
+function withModes<T extends ReturnType<typeof restored>>(
+  detection: T,
+  alternateScreen: boolean
+): T {
   return {
     ...detection,
     restoreInfo: {

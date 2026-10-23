@@ -47,7 +47,12 @@ describe('bringWslMovedProjectBack', () => {
   // its panes stayed bound to dead terminals.
   it('asks for unsaved files to be saved first, before anything is released', async () => {
     openFiles.push({ id: 'f1', relativePath: 'README.md', isDirty: true })
-    const call = stubApi({ released: true, distro: 'Ubuntu', repoIds: ['repo-1'], folderWorkspaceIds: [] })
+    const call = stubApi({
+      released: true,
+      distro: 'Ubuntu',
+      repoIds: ['repo-1'],
+      folderWorkspaceIds: []
+    })
     const confirm = vi.fn(async (_options: ConfirmationDialogOptions) => true)
     await bringWslMovedProjectBack(project, confirm)
     expect(call).not.toHaveBeenCalled()

@@ -5,9 +5,7 @@ import type { WslMoveDriverDeps } from './wsl-move-driver-ports'
 const scope = { workspaceIds: ['wt'], workspaceKeys: new Set(['wt']) }
 const pane = { paneKey: 'tab:leaf', sessionId: 'wt@@a', wslDistro: 'Ubuntu' }
 
-function deps(
-  shellCwds?: WslMoveDriverDeps['shellCwds']
-): Parameters<typeof pauseWslMoveScope>[0] {
+function deps(shellCwds?: WslMoveDriverDeps['shellCwds']): Parameters<typeof pauseWslMoveScope>[0] {
   return {
     gateInputs: async () => ({
       panes: [{ paneKey: pane.paneKey, foreground: 'shell-idle', scrollbackBytes: 0 }],
