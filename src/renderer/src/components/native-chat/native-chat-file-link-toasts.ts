@@ -1,6 +1,7 @@
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { readIpcErrorMessage } from '@/lib/ipc-error'
+import type { FileOpenFailure } from '@/components/terminal-pane/terminal-file-open-routing'
 
 export function showFileLinkNotFoundToast(filePath: string): void {
   toast.error(
@@ -22,6 +23,15 @@ export function showFileLinkUnverifiableToast(filePath: string, error: unknown):
       }
     )
   )
+}
+
+/** Why a file link opened nothing, without claiming a file is gone when the host could not answer. */
+export function showFileLinkOpenFailureToast(filePath: string, failure: FileOpenFailure): void {
+  if (failure.verdict === 'unverifiable') {
+    showFileLinkUnverifiableToast(filePath, failure.error)
+  } else {
+    showFileLinkNotFoundToast(filePath)
+  }
 }
 
 /** e.g. `~/x` when the workspace gives no way to know the home folder. */
