@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as RuntimeMaintenanceModule from '../../ssh/orcad-runtime-maintenance'
 import { getRemoteHostPlatform, type RemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import { sshCommandExitError } from '../../ssh/remote-exec/remote-exec-command'
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -15,7 +16,8 @@ const mocks = vi.hoisted(() => {
   return { host, home, exec: vi.fn(), wake: vi.fn(), rebuild: vi.fn(async () => {}) }
 })
 
-vi.mock('../../ssh/orcad-runtime-maintenance', () => ({
+vi.mock('../../ssh/orcad-runtime-maintenance', async (importOriginal) => ({
+  ...(await importOriginal<typeof RuntimeMaintenanceModule>()),
   withManagedOrcadLifecycle: (
     _path: string,
     _selector: string,
@@ -101,11 +103,8 @@ describe('runManagedOrcadStaleLockReclaim', () => {
     expect(mocks.wake).not.toHaveBeenCalled()
   })
 
-  it.each([
-    ['the wake', () => mocks.wake.mockRejectedValue(new Error('readiness timed out'))],
-    ['the tunnel rebuild', () => mocks.rebuild.mockRejectedValue(new Error('readiness timed out'))]
-  ])('keeps the reclaimed result when %s throws after the lock is gone', async (_step, fail) => {
-    fail()
+  it('keeps the reclaimed result when the wake throws after the lock is gone', async () => {
+    mocks.wake.mockRejectedValue(new Error('readiness timed out'))
     mocks.exec.mockResolvedValue(`${answer('reclaimed', { exitCode: 0, evidence })}\n`)
     const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', {
       yes: true,
@@ -117,6 +116,18 @@ describe('runManagedOrcadStaleLockReclaim', () => {
       evidence,
       notRestarted: expect.stringContaining('readiness timed out')
     })
+  })
+
+  it('reports a started server as restarted even when its forward could not follow it', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mocks.rebuild.mockRejectedValue(new Error('forward refused'))
+    mocks.exec.mockResolvedValue(`${answer('reclaimed', { exitCode: 0, evidence })}\n`)
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', {
+      yes: true,
+      expectNonce: 'n-1'
+    })
+    expect(result).toMatchObject({ status: 'reclaimed', evidence })
+    expect(result).not.toHaveProperty('notRestarted')
   })
 
   it('reads a status a newer orcad added as no answer', async () => {

@@ -20,7 +20,10 @@ import {
 } from '../../../shared/orcad-artifacts'
 import { withOrcadActivationLock } from '../activation/orcad-activation-lock'
 import { readOrcadActivationRecord } from '../activation/orcad-activation-record-store'
-import { withManagedOrcadLifecycle } from '../../ssh/orcad-runtime-maintenance'
+import {
+  followLaunchedServerPort,
+  withManagedOrcadLifecycle
+} from '../../ssh/orcad-runtime-maintenance'
 import { managedOrcadSlot, resolveLinkedOrcadContext } from './orcad-managed-runtime-context'
 import { selectOrcadSlotRuntimeCommand } from '../install/orcad-remote-runtime'
 import { execOrcadRemote } from '../install/orcad-remote-runtime-control'
@@ -29,7 +32,6 @@ import { joinRemotePath } from '../../ssh/ssh-remote-platform'
 import { isSshCommandExitError } from '../../ssh/remote-exec/remote-exec-command'
 import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
 import { ORCAD_LOCK_FILE_NAME } from '../../orcad/orcad-instance-lock'
-import { rebuildOrcadManagedTunnel } from './orcad-managed-tunnel'
 import { errorMessage } from '../../../shared/error-message'
 
 const ReclaimStatusSchema = z.enum(['none', 'eligible', 'refused', 'reclaimed'])
@@ -123,8 +125,8 @@ async function restartAfterReclaim(
         ? wake.reason
         : `The lock was cleared, but this host’s Orca server did not start (${wake.outcome}); reconnect to start it.`
     }
-    // The started server may have bound another port than the forward in use.
-    await rebuildOrcadManagedTunnel(userDataPath, environmentId)
+    // The server runs now; a forward that fails to follow it is the next connect's to rebuild.
+    await followLaunchedServerPort(userDataPath, environmentId)
     return null
   } catch (error) {
     // A lost result would leave the caller's reconnect and note clearing undone.
