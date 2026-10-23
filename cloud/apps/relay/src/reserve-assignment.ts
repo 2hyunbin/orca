@@ -48,6 +48,10 @@ export class ReservePaceError extends Error {
 
 type Identity = { userId: string; relayHostId: string }
 
+function hostKey(identity: Identity): string {
+  return `${identity.userId}\u0000${identity.relayHostId}`
+}
+
 export type ReservePlan =
   | { kind: 'answer'; assignment: RelayAssignment; lane: 'sticky' | 'placement' | 'rehome' }
   | {
@@ -61,6 +65,7 @@ export type ReservePlan =
 // re-assign does not collide with the row again (the mirror refuses an equal epoch).
 export const RESERVE_ROW_FLOOR_TTL_MS = 2 * 60 * 60_000
 const RESERVE_ROW_FLOOR_MAX = 100_000
+const OWN_BOOKINGS_MAX = 100_000
 
 // The WRONG_CELL row read's bound: well under a database stall (5-7 s).
 export const RESERVE_WRONG_CELL_ROW_READ_MS = 1_000
@@ -103,6 +108,8 @@ export class ReserveAssignment {
   private summary: PlacementSummary = emptySummary()
   private summaryAt: number
   private readonly rowFloors = new Map<string, { epoch: number; expiresAt: number }>()
+  // This director's own bookings, until the cell's feed reports them (one poll or more).
+  private readonly ownBookings = new Map<string, { cellId: string; epoch: number; at: number }>()
 
   constructor(
     private readonly input: {
@@ -193,7 +200,7 @@ export class ReserveAssignment {
       .at(-1)
     const booking = directory.bookingOf(identity.userId, identity.relayHostId)
     const rowFloor = this.rowFloor(identity, now)
-    const drainedFrom = this.drainSource(seats, left, booking)
+    const drainedFrom = this.drainSource(identity, seats, left, booking, now)
     const known = [
       ...seats.map((seat) => seat.epoch),
       ...(left ? [left.epoch] : []),
@@ -290,14 +297,22 @@ export class ReserveAssignment {
 
   // Keyed on the cell, not the leave: a same-cap drain (graceMs 0) has the host re-ask before
   // its leave reaches the map, but the cell's feed says draining from the first poll after.
-  // Only the newest grant counts, so a host already re-booked elsewhere is not counted again.
+  // Only the newest grant counts, so a host already re-booked elsewhere is not counted again;
+  // a booking counts only while it can still be used.
   private drainSource(
+    identity: Identity,
     seats: readonly ShadowSeat[],
     left: { cellId: string; epoch: number } | undefined,
-    booking: { cellId: string; epoch: number } | undefined
+    booking: { cellId: string; epoch: number; at: number } | undefined,
+    now: number
   ): string | undefined {
+    const own = this.ownBookings.get(hostKey(identity))
+    const bookings = [booking, own].filter(
+      (entry): entry is { cellId: string; epoch: number; at: number } =>
+        entry !== undefined && now - entry.at <= CELL_RESERVE_TTL_MS
+    )
     let newest: { cellId: string; epoch: number; state?: string } | undefined
-    for (const entry of [...seats, ...(left ? [left] : []), ...(booking ? [booking] : [])]) {
+    for (const entry of [...seats, ...(left ? [left] : []), ...bookings]) {
       if (!newest || entry.epoch > newest.epoch) newest = entry
     }
     if (!newest) return undefined
@@ -621,6 +636,7 @@ export class ReserveAssignment {
       this.summary.calls += result.calls
       if (result.kind === 'placed') {
         this.summary.placed += 1
+        this.rememberOwnBooking(identity, result.cellId, result.epoch)
         this.supersede(identity, seats, result.cellId, result.epoch)
         const cell = this.input.cells().find((entry) => entry.cellId === result.cellId)!
         return {
@@ -680,7 +696,7 @@ export class ReserveAssignment {
 
   // The ledger reconcile demoted this host's seat behind (or level with) a row at `epoch`.
   raiseEpochFloor(identity: Identity, epoch: number): void {
-    const key = `${identity.userId}\u0000${identity.relayHostId}`
+    const key = hostKey(identity)
     const current = this.rowFloors.get(key)
     this.rowFloors.delete(key)
     this.rowFloors.set(key, {
@@ -692,8 +708,17 @@ export class ReserveAssignment {
     }
   }
 
+  private rememberOwnBooking(identity: Identity, cellId: string, epoch: number): void {
+    const key = hostKey(identity)
+    this.ownBookings.delete(key)
+    this.ownBookings.set(key, { cellId, epoch, at: this.now() })
+    if (this.ownBookings.size > OWN_BOOKINGS_MAX) {
+      this.ownBookings.delete(this.ownBookings.keys().next().value!)
+    }
+  }
+
   private rowFloor(identity: Identity, now: number): number | undefined {
-    const key = `${identity.userId}\u0000${identity.relayHostId}`
+    const key = hostKey(identity)
     const floor = this.rowFloors.get(key)
     if (!floor) return undefined
     if (floor.expiresAt > now) return floor.epoch

@@ -963,7 +963,7 @@ describe('reserve assignment on a director', () => {
         feed('c2', {
           full: undefined,
           seq: 2,
-          changes: [{ seq: 2, kind: 'reserve', ...HOST, epoch: 8, generation: 0, reservedBy: 'director', at: 1 }]
+          changes: [{ seq: 2, kind: 'reserve', ...HOST, epoch: 8, generation: 0, reservedBy: 'director', at: now.value }]
         }),
         now.value,
         now.value
@@ -971,6 +971,40 @@ describe('reserve assignment on a director', () => {
       expect(directory.bookingOf(HOST.userId, HOST.relayHostId)).toMatchObject({ cellId: 'c2', epoch: 8 })
       await assignment.plan(HOST, { reconnect: false, region: US })
       expect(events(lines, 'orca_relay_reserve_drain_replaced')).toHaveLength(1)
+    })
+
+    it('counts a host once when it asks again before the new cell reports the booking', async () => {
+      const lines: string[] = []
+      const { assignment } = setup({
+        feeds: [feed('c1', { draining: true, full: [seated(7)] }), feed('c2')],
+        log: (line) => lines.push(line)
+      })
+      await assignment.plan(HOST, { reconnect: true, region: US })
+      await assignment.plan(HOST, { reconnect: false, region: US })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced')).toHaveLength(1)
+    })
+
+    it('ignores a booking that expired unused when its old cell later drains', async () => {
+      const lines: string[] = []
+      const { assignment, directory, now } = setup({
+        feeds: [feed('c1', { full: [seated(7)] }), feed('c2')],
+        log: (line) => lines.push(line)
+      })
+      directory.apply(
+        'c2',
+        feed('c2', {
+          full: undefined,
+          seq: 2,
+          changes: [{ seq: 2, kind: 'reserve', ...HOST, epoch: 8, generation: 0, reservedBy: 'director', at: now.value }]
+        }),
+        now.value,
+        now.value
+      )
+      now.value += 30_001
+      directory.apply('c1', feed('c1', { draining: true, full: [seated(7)] }), now.value, now.value)
+      directory.apply('c2', feed('c2', { full: undefined, seq: 2, changes: [] }), now.value, now.value)
+      await assignment.plan(HOST, { reconnect: true, region: US })
+      expect(events(lines, 'orca_relay_reserve_drain_replaced').map((entry) => entry.fromCellId)).toEqual(['c1'])
     })
 
     it('marks its pace as the drain’s, on the reserve lane and in the region fallback', async () => {
