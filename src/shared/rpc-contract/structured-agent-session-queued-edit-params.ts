@@ -2,13 +2,14 @@ import { z } from 'zod'
 import { Identifier, SessionId } from './structured-agent-session-identifiers'
 import { MutationEnvelope, MAX_BLOCKS, MAX_PROMPT_BYTES } from './structured-agent-session-params'
 import { SendImageRefBlock } from './structured-agent-session-message-params'
+import { isUtf8ByteLengthWithinLimit } from '../utf8-byte-limits'
 
 export const QueuedMessageUpdateParams = z
   .object({
     envelope: MutationEnvelope,
     messageId: Identifier('Invalid queued message id'),
     expectedBodyFingerprint: z.string().regex(/^[0-9a-f]{64}$/),
-    text: z.string().refine((text) => new TextEncoder().encode(text).length <= MAX_PROMPT_BYTES),
+    text: z.string().refine((text) => isUtf8ByteLengthWithinLimit(text, MAX_PROMPT_BYTES)),
     /** The complete ordered image set (`agent-session.queued-message-image-edit.v1`); absent keeps
      *  the card's images, which is what every older client sends. The shared edit rule counts
      *  these with the text block. */

@@ -1,6 +1,7 @@
 import type { AgentJournalMessageItem } from './agent-session-journal-types'
 import { MAX_BLOCKS, MAX_PROMPT_BYTES } from './rpc-contract/structured-agent-session-params'
 import { imageReferenceInsertion, imageReferenceToken } from './native-chat-image-reference'
+import { isUtf8ByteLengthWithinLimit } from './utf8-byte-limits'
 import {
   imageReferencesToPromptMarkers,
   promptMarkersToImageReferences
@@ -25,10 +26,6 @@ export function queuedMessageEditableText(body: AgentJournalMessageItem): string
     return null
   }
   return body.blocks.flatMap((block) => (block.type === 'text' ? [block.text] : [])).join('\n')
-}
-
-function byteLength(value: string): number {
-  return new TextEncoder().encode(value).length
 }
 
 function imageBlocks(body: AgentJournalMessageItem): QueuedMessageImageBlock[] {
@@ -164,7 +161,7 @@ export function queuedMessageWithEdit(
   if (editable === null) {
     return { ok: false, reason: 'not-editable' }
   }
-  if (byteLength(text) > MAX_PROMPT_BYTES) {
+  if (!isUtf8ByteLengthWithinLimit(text, MAX_PROMPT_BYTES)) {
     return { ok: false, reason: 'too-large' }
   }
   if (!text.trim() && (images ? images.length === 0 : imageBlocks(body).length === 0)) {
@@ -184,7 +181,7 @@ export function queuedMessageWithEdit(
     if (blocks.length > MAX_BLOCKS) {
       return { ok: false, reason: 'too-many-blocks' }
     }
-    if (byteLength(JSON.stringify(blocks)) > MAX_PROMPT_BYTES) {
+    if (!isUtf8ByteLengthWithinLimit(JSON.stringify(blocks), MAX_PROMPT_BYTES)) {
       return { ok: false, reason: 'too-large' }
     }
     return { ok: true, body: { ...plainBody, blocks } }
