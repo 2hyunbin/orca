@@ -111,6 +111,7 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
       ],
       stdio: ['pipe', 'ignore', 'ignore']
     })
+    let launched = false
     try {
       // Boot the fixture before saturation; taskkill itself still starts under load.
       await expect.poll(() => existsSync(ready), { timeout: 30_000 }).toBe(true)
@@ -119,6 +120,7 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
         throw new Error('delayed taskkill has no input pipe')
       }
       _setWindowsTaskkillLauncherForTests((rootPid) => {
+        launched = true
         input.end(String(rootPid))
         return delayedTaskkill
       })
@@ -128,7 +130,9 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
         const closed = new Promise<void>((resolve) =>
           delayedTaskkill.once('close', () => resolve())
         )
-        delayedTaskkill.kill()
+        if (!launched) {
+          delayedTaskkill.kill()
+        }
         await closed
       }
       console.log(
