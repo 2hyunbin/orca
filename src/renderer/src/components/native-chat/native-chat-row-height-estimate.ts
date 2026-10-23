@@ -88,11 +88,13 @@ export function estimateNativeChatTextLines(
   let lines = 0
   let lineStart = 0
   for (let index = 0; index <= markdown.length; index += 1) {
-    if (index === markdown.length || markdown[index] === '\n') {
-      const length = index - lineStart
-      lines += Math.max(PROSE_MIN_LINES, Math.ceil(length / charsPerLine))
-      lineStart = index + 1
+    if (index < markdown.length && markdown[index] !== '\n') {
+      const newline = markdown.indexOf('\n', index)
+      index = newline === -1 ? markdown.length : newline
     }
+    const length = index - lineStart
+    lines += Math.max(PROSE_MIN_LINES, Math.ceil(length / charsPerLine))
+    lineStart = index + 1
   }
   return lines
 }
