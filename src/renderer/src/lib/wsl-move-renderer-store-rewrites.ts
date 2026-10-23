@@ -82,8 +82,9 @@ function writeAppliedMarker(marker: string): void {
   }
 }
 
-// Main's refusals that a later call can clear; the rest mean the store is no longer pending.
-const RETRYABLE_RECORD_REASONS: ReadonlySet<string> = new Set(['gated-off', 'failed', 'not-main-window'])
+// Main's refusals a later call can clear. Another window (`not-main-window`) never becomes the main
+// one, and the rest mean the store is no longer pending.
+const RETRYABLE_RECORD_REASONS: ReadonlySet<string> = new Set(['gated-off', 'failed'])
 
 /** True when a store's ledger entry still has to land: the move stays unfinished until it does. */
 async function rewriteMove(move: WslMovePendingRendererRewrite): Promise<boolean> {
@@ -144,8 +145,9 @@ async function rewritePendingMoves(): Promise<boolean> {
       unrecorded = (await rewriteMove(move)) || unrecorded
     }
   } catch (error) {
-    // No bridge to ask (a web client): nothing here could ever record, so no retry.
+    // Transient (main not ready yet); the backoff bounds a bridge that never answers.
     console.warn('[wsl-move] Could not list renderer rewrites:', error)
+    unrecorded = true
   }
   return unrecorded
 }

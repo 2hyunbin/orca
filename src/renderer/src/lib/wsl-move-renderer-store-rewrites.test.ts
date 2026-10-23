@@ -106,12 +106,34 @@ describe('WSL move renderer store rewrites', () => {
     expect(client.record).not.toHaveBeenCalled()
   })
 
-  it('never throws when the move list is unavailable', async () => {
-    client.list.mockRejectedValue(new Error('no bridge'))
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    await expect((await loadRunner()).runWslMoveRendererStoreRewrites()).resolves.toBeUndefined()
-    expect(warn).toHaveBeenCalled()
-    warn.mockRestore()
+  it('never throws when the move list is unavailable, and asks again later', async () => {
+    vi.useFakeTimers()
+    try {
+      client.list.mockRejectedValueOnce(new Error('main not ready')).mockResolvedValue([])
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      await expect((await loadRunner()).runWslMoveRendererStoreRewrites()).resolves.toBeUndefined()
+      expect(warn).toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(client.list).toHaveBeenCalledTimes(2)
+      await vi.advanceTimersByTimeAsync(120_000)
+      expect(client.list).toHaveBeenCalledTimes(2)
+      warn.mockRestore()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not retry a record another window was refused', async () => {
+    vi.useFakeTimers()
+    try {
+      client.list.mockResolvedValue([move({ storeIds: ['quick-open-history'] })])
+      client.record.mockResolvedValue({ recorded: false, reason: 'not-main-window' })
+      await (await loadRunner()).runWslMoveRendererStoreRewrites()
+      await vi.advanceTimersByTimeAsync(120_000)
+      expect(client.record).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('adds a host copy beside each moved entry, then records every store', async () => {
