@@ -271,7 +271,9 @@ function CheckOutcome({
   return (
     <div className="space-y-2 text-sm">
       <p className="text-destructive">{check.message}</p>
-      {check.status === 'refused' ? <ManualReclaim detail={detail} /> : null}
+      {check.status === 'refused' || check.status === 'no-answer' ? (
+        <ManualReclaim detail={detail} />
+      ) : null}
       {/* The host can't run the reclaim command, so only a delete by hand is offered. */}
       {check.status === 'unsupported' ? <ManualLockDelete lockPath={check.lockPath} /> : null}
     </div>

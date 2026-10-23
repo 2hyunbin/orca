@@ -158,12 +158,15 @@ describe('Recover server', () => {
     expect(button(container, 'Clear lock and restart')).toBeUndefined()
   })
 
-  it('names the reclaim command when the host refused the reclaim', async () => {
-    reclaimStaleLock.mockResolvedValueOnce({
+  it.each([
+    {
       status: 'refused',
       message: 'still running',
       lockPath: '/home/dev/.orca/orcad.lock'
-    })
+    } as const,
+    { status: 'no-answer', message: 'no answer understood' } as const
+  ])('names the reclaim command, never a delete, for $status', async (result) => {
+    reclaimStaleLock.mockResolvedValueOnce(result)
     const container = await render()
     expect(container.textContent).toContain(COMMAND)
     expect(container.textContent).not.toContain('rm /home')

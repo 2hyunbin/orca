@@ -92,9 +92,21 @@ describe('runManagedOrcadStaleLockReclaim', () => {
       yes: true,
       expectNonce: 'n-1'
     })
-    // Main names the lock for a manual delete; the renderer never parses it out of the detail.
-    expect(result).toMatchObject({ status: 'unsupported', lockPath: '/home/dev/.orca/orcad.lock' })
+    // The slot supports the command, so nothing here argues for deleting the lock by hand.
+    expect(result).toEqual({ status: 'no-answer', message: expect.any(String) })
     expect(mocks.wake).not.toHaveBeenCalled()
+  })
+
+  it('reads a status a newer orcad added as no answer', async () => {
+    mocks.exec.mockRejectedValue(sshCommandExitError('orcad', 5, `${answer('deferred')}\n`))
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', { yes: false })
+    expect(result.status).toBe('no-answer')
+  })
+
+  it('names the lock to delete by hand only for a slot without the command', async () => {
+    mocks.exec.mockResolvedValue('ORCA_STALE_LOCK_RECLAIM_UNSUPPORTED\n')
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', { yes: false })
+    expect(result).toMatchObject({ status: 'unsupported', lockPath: '/home/dev/.orca/orcad.lock' })
   })
 
   it('runs nothing on a host whose starts never refuse a shared-home lock', async () => {
@@ -148,7 +160,8 @@ describe('runManagedOrcadStaleLockReclaim', () => {
       yes: true,
       expectNonce: 'n-1'
     })
-    expect(result.status).toBe('unsupported')
+    // The fake runtime prints nothing, which a slot with the command reports as no answer.
+    expect(result.status).toBe(invoked ? 'no-answer' : 'unsupported')
     expect(existsSync(join(home, 'invoked'))).toBe(invoked)
   })
 })

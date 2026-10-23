@@ -104,6 +104,8 @@ export type OrcadManagedStaleLockReclaimResult =
     }
   /** The host can't run the command; `lockPath` names the lock to delete by hand. Nothing changed. */
   | { status: 'unsupported'; message: string; lockPath?: string }
+  /** The slot runs the command but gave no answer this client understands; nothing is known. */
+  | { status: 'no-answer'; message: string }
   /** Another lifecycle step holds the host; nothing changed. */
   | { status: 'busy'; message: string }
 

@@ -31,8 +31,11 @@ import { wakeStoppedManagedOrcad } from './orcad-managed-wake'
 import { ORCAD_LOCK_FILE_NAME } from '../../orcad/orcad-instance-lock'
 import { rebuildOrcadManagedTunnel } from './orcad-managed-tunnel'
 
+const ReclaimStatusSchema = z.enum(['none', 'eligible', 'refused', 'reclaimed'])
+
+// Why a string: a newer orcad's status must read as no answer, not as an unparseable reply.
 const ReclaimAnswerSchema = z.object({
-  status: z.enum(['none', 'eligible', 'refused', 'reclaimed']),
+  status: z.string(),
   lockPath: z.string(),
   message: z.string(),
   evidence: z
@@ -49,11 +52,13 @@ const ReclaimAnswerSchema = z.object({
 
 const RECLAIM_UNSUPPORTED_SENTINEL = 'ORCA_STALE_LOCK_RECLAIM_UNSUPPORTED'
 
-type ReclaimAnswer = z.infer<typeof ReclaimAnswerSchema>
+type ReclaimAnswer = Omit<z.infer<typeof ReclaimAnswerSchema>, 'status'> & {
+  status: z.infer<typeof ReclaimStatusSchema>
+}
 
 type SlotReclaim =
   | { status: 'answered'; answer: ReclaimAnswer }
-  | { status: 'unsupported' | 'busy'; message: string }
+  | { status: 'unsupported' | 'no-answer' | 'busy'; message: string }
 
 export function runManagedOrcadStaleLockReclaim(
   userDataPath: string,
@@ -77,13 +82,13 @@ export function runManagedOrcadStaleLockReclaim(
       })
     )
     if (ran.status !== 'answered') {
-      return ran.status === 'busy'
-        ? { status: 'busy', message: ran.message }
-        : {
+      return ran.status === 'unsupported'
+        ? {
             status: 'unsupported',
             message: ran.message,
             lockPath: joinRemotePath(slot.host, slot.userDataDir, ORCAD_LOCK_FILE_NAME)
           }
+        : { status: ran.status, message: ran.message }
     }
     const { answer } = ran
     if (answer.status !== 'reclaimed') {
@@ -150,9 +155,13 @@ async function runOnActiveSlot(
     return unsupported('This host’s Orca server predates the stale-lock recovery.')
   }
   const answer = parseReclaimAnswer(output)
+  // The slot supports the command, so this is no reason to delete the lock by hand.
   return answer
     ? { status: 'answered', answer }
-    : unsupported('This host’s Orca server gave no answer to the stale-lock recovery.')
+    : {
+        status: 'no-answer',
+        message: 'This host’s Orca server gave no answer Orca understands to the stale-lock check.'
+      }
 }
 
 function parseReclaimAnswer(output: string): ReclaimAnswer | null {
@@ -165,7 +174,8 @@ function parseReclaimAnswer(output: string): ReclaimAnswer | null {
   }
   try {
     const parsed = ReclaimAnswerSchema.safeParse(JSON.parse(line))
-    return parsed.success ? parsed.data : null
+    const status = ReclaimStatusSchema.safeParse(parsed.data?.status)
+    return parsed.success && status.success ? { ...parsed.data, status: status.data } : null
   } catch {
     return null
   }
