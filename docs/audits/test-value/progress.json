@@ -1,87 +1,87 @@
 {
-  "source_commit": "6d473f4bea1d190cb3649af97e04f1cdde170c5f",
-  "scanned_source_files": 37059,
+  "source_commit": "cb508dc745545c7d66ad4cea78d987e1742e547e",
+  "scanned_source_files": 37119,
   "counts": {
-    "files": 16610,
-    "declarations": 119017,
-    "reviewed": 105,
+    "files": 16971,
+    "declarations": 118926,
+    "reviewed": 1308,
     "stale": 0,
-    "unreviewed": 16505,
-    "removed": 0
+    "unreviewed": 15663,
+    "removed": 15
   },
-  "reviewed_original_declarations": 720,
+  "reviewed_original_declarations": 9373,
   "areas": {
     ".github": {
-      "files": 2,
-      "reviewed": 0,
+      "files": 3,
+      "reviewed": 3,
       "stale": 0,
-      "unreviewed": 2
+      "unreviewed": 0
     },
     "cloud": {
-      "files": 224,
-      "reviewed": 35,
+      "files": 241,
+      "reviewed": 241,
       "stale": 0,
-      "unreviewed": 189
+      "unreviewed": 0
     },
     "config": {
-      "files": 600,
-      "reviewed": 35,
+      "files": 608,
+      "reviewed": 383,
       "stale": 0,
-      "unreviewed": 565
+      "unreviewed": 225
     },
     "docs": {
-      "files": 52,
-      "reviewed": 0,
+      "files": 106,
+      "reviewed": 106,
       "stale": 0,
-      "unreviewed": 52
+      "unreviewed": 0
     },
     "mobile": {
-      "files": 1260,
-      "reviewed": 35,
+      "files": 1266,
+      "reviewed": 329,
       "stale": 0,
-      "unreviewed": 1225
+      "unreviewed": 937
     },
     "native": {
-      "files": 19,
-      "reviewed": 0,
+      "files": 17,
+      "reviewed": 17,
       "stale": 0,
-      "unreviewed": 19
+      "unreviewed": 0
     },
     "src/cli": {
-      "files": 182,
-      "reviewed": 0,
+      "files": 185,
+      "reviewed": 88,
       "stale": 0,
-      "unreviewed": 182
+      "unreviewed": 97
     },
     "src/main": {
-      "files": 6471,
-      "reviewed": 0,
+      "files": 6627,
+      "reviewed": 102,
       "stale": 0,
-      "unreviewed": 6471
+      "unreviewed": 6525
     },
     "src/packages": {
-      "files": 14,
-      "reviewed": 0,
+      "files": 16,
+      "reviewed": 16,
       "stale": 0,
-      "unreviewed": 14
+      "unreviewed": 0
     },
     "src/preload": {
-      "files": 20,
-      "reviewed": 0,
+      "files": 19,
+      "reviewed": 19,
       "stale": 0,
-      "unreviewed": 20
+      "unreviewed": 0
     },
     "src/renderer": {
-      "files": 5329,
+      "files": 5407,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 5329
+      "unreviewed": 5407
     },
     "src/shared": {
-      "files": 1264,
-      "reviewed": 0,
+      "files": 1302,
+      "reviewed": 4,
       "stale": 0,
-      "unreviewed": 1264
+      "unreviewed": 1298
     },
     "src/wsl-guest": {
       "files": 45,
@@ -90,10 +90,10 @@
       "unreviewed": 45
     },
     "tests": {
-      "files": 1128,
+      "files": 1129,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 1128
+      "unreviewed": 1129
     }
   },
   "errors": []
