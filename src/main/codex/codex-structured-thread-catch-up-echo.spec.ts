@@ -349,11 +349,21 @@ export function registerCodexCatchUpEchoTests(input: {
           turns: [{ ...current, items: current.items.slice(0, 1) }]
         }
       }),
-      'thread/turns/list': (params) => {
+      'thread/turns/list': async (params) => {
         if (params?.itemsView === 'full') {
           fullReads++
         }
-        return source.request('thread/turns/list', params)
+        const page = await source.request('thread/turns/list', params)
+        return params?.itemsView === 'summary'
+          ? {
+              ...page,
+              data: page.data.map((turn) => ({
+                ...turn,
+                itemsView: 'summary',
+                items: Array.isArray(turn.items) ? turn.items.slice(0, 2) : []
+              }))
+            }
+          : page
       }
     })
     const open = async () => {
