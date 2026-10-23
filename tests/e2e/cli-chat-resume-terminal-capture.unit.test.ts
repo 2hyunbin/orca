@@ -88,6 +88,7 @@ it.each(['row', 'incarnation', 'pty', 'workspace', 'leaf', 'host'] as const)(
   async (change) => {
     const harness = createHarness({ registerPtyBacked: true, publishMobileSurface: true })
     seed(harness)
+    let resolvedTerminal: ReturnType<typeof harness.runtime.resolveTerminalPane> | undefined
     rpc.mockImplementation(async () => {
       if (change === 'row') {
         harness.editSession((state) => ({
@@ -102,13 +103,10 @@ it.each(['row', 'incarnation', 'pty', 'workspace', 'leaf', 'host'] as const)(
         }))
       }
       if (change === 'incarnation') {
-        harness.runtime.registerPty(PTY_ID, WORKTREE_ID, null, {
-          tabId: TAB_ID,
-          leafId: LEAF_ID,
-          incarnationId: 'successor'
-        })
+        harness.replacePersistedIncarnation('successor')
       }
       const terminal = harness.runtime.resolveTerminalPane(`${TAB_ID}:${LEAF_ID}`, WORKTREE_ID)
+      resolvedTerminal = terminal
       if (change === 'host') {
         terminal.executionHostId = 'ssh:successor'
       }
@@ -123,10 +121,12 @@ it.each(['row', 'incarnation', 'pty', 'workspace', 'leaf', 'host'] as const)(
       }
       return { terminal }
     })
-    useAppStore.setState({
-      terminalPtyIncarnationsByPaneKey: { [`${TAB_ID}:${LEAF_ID}`]: INCARNATION_ID }
-    })
     expect(await captureSourceTerminal(source(PTY_ID))).toBeNull()
+    if (change === 'incarnation') {
+      expect(rpc).toHaveResolvedWith({ terminal: resolvedTerminal })
+      expect(resolvedTerminal).toMatchObject({ ptyId: PTY_ID, incarnationId: INCARNATION_ID })
+      expect(resolvedTerminal).not.toHaveProperty('presentation')
+    }
   }
 )
 
