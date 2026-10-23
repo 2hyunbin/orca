@@ -763,21 +763,8 @@ export class HostSessionRegistry {
   // A director names this seat the loser of a duplicate: stop taking phones for it now, and
   // close it once its splices have had time to finish. Repeats are one demotion.
   demote(request: DemoteRequest): DemoteOutcome {
-    const refused = (outcome: Exclude<DemoteOutcome, 'demoted'>, detail: Record<string, unknown> = {}) => {
-      console.warn(
-        JSON.stringify({
-          event: 'orca_relay_cell_seat_demote_refused',
-          ...this.logIdentity(),
-          relayHostIdDigest: relayHostLogDigest(request.relayHostId),
-          assignmentEpoch: request.epoch,
-          outcome,
-          ...detail
-        })
-      )
-      return outcome
-    }
     // Only a reserve-mode cell takes demotions, so flipping admitMode back reverts the route.
-    if (!this.reserveMode()) return refused('off')
+    if (!this.reserveMode()) return 'off'
     const session = this.get(request)
     const key = this.key(request.userId, request.relayHostId)
     // The seat the director saw: the same host rejoining here later is a different seat.
@@ -793,17 +780,25 @@ export class HostSessionRegistry {
       // feed is what is wrong, and every director mirrors it, so correct the feed here.
       const repaired = seat?.epoch === request.epoch && seat.joinedAt === request.joinedAt
       if (repaired) this.repairUnbackedSeat(seat, session)
-      return refused('not-seated', {
-        reason: notSeatedReason(session, seat, request),
-        ...(session ? { sessionEpoch: session.assignmentEpoch } : {}),
-        ...(seat ? { feedEpoch: seat.epoch, feedJoinedAtMatches: seat.joinedAt === request.joinedAt } : {}),
-        repaired
-      })
+      console.warn(
+        JSON.stringify({
+          event: 'orca_relay_cell_seat_demote_refused',
+          ...this.logIdentity(),
+          relayHostIdDigest: relayHostLogDigest(request.relayHostId),
+          assignmentEpoch: request.epoch,
+          outcome: 'not-seated',
+          reason: notSeatedReason(session, seat, request),
+          ...(session ? { sessionEpoch: session.assignmentEpoch } : {}),
+          ...(seat ? { feedEpoch: seat.epoch, feedJoinedAtMatches: seat.joinedAt === request.joinedAt } : {}),
+          repaired
+        })
+      )
+      return 'not-seated'
     }
     // A drain already told this host to go: its own grace stands, never cut to the demotion's.
-    if (this.drainSentHosts.has(session.relayHostId) || session.regionalDrainAttemptId) return refused('draining')
+    if (this.drainSentHosts.has(session.relayHostId) || session.regionalDrainAttemptId) return 'draining'
     const socket = session.socket
-    if (this.demotedSeats.get(key) === socket) return refused('already-demoted')
+    if (this.demotedSeats.get(key) === socket) return 'already-demoted'
     this.demotedSeats.set(key, socket)
     this.markSeatDrainOnly(session)
     const timer = setTimeout(() => {
@@ -1704,9 +1699,9 @@ export class HostSessionRegistry {
       (existing.state === 'orphaned' || existing.state === 'active') &&
       sameHostIdentity(existing.identity, identity)
     )
-    // Above any seat the feed still lists too: a session dropped from the map while its socket is
-    // still closing (drain, regional deadline, idle rehome) keeps its seat until that close lands,
-    // and the generation rule would drop a lower generation's join behind it.
+    // Above any seat the feed still lists: a session dropped from the map while its socket is still
+    // closing (drain, regional deadline, idle rehome) keeps its seat listed until that close lands,
+    // and a successor restarting at generation 1 had its seat removed by that late leave.
     const listed = this.seatLog.seatOf(identity.sub, identity.relayHostId)?.generation ?? 0
     const generation = rebind ? existing!.generation : Math.max(existing?.generation ?? 0, listed) + 1
     const ephemeral = nacl.box.keyPair()
