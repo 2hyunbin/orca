@@ -13,6 +13,8 @@ import { WORKSPACE_FILE_PATHS_MIME, writeWorkspaceFileDragSource } from '@/lib/w
 import { joinPath } from '@/lib/path'
 import { useEditorGroupFileDropOwner } from './use-editor-group-file-drop-owner'
 import { captureEditorFileDropOpen } from './editor-dropped-file-open'
+import * as crossPlatformPath from '../../../../shared/cross-platform-path'
+import type * as ExplorerOwner from '../right-sidebar/file-explorer-operation-owner'
 
 const mocks = vi.hoisted(() => ({
   stat: vi.fn(),
@@ -23,6 +25,32 @@ const mocks = vi.hoisted(() => ({
   setActiveTabType: vi.fn(),
   toastError: vi.fn()
 }))
+const validateOwner = vi.hoisted(() => vi.fn())
+vi.mock('../../../../shared/cross-platform-path', async (importOriginal) => {
+  const actual = await importOriginal<typeof crossPlatformPath>()
+  return {
+    ...actual,
+    normalizeRuntimePathForComparison: vi.fn(actual.normalizeRuntimePathForComparison)
+  }
+})
+vi.mock('../right-sidebar/file-explorer-operation-owner', async (importOriginal) => {
+  const actual = await importOriginal<typeof ExplorerOwner>()
+  return {
+    ...actual,
+    captureFileExplorerOperationGuard: (
+      ...args: Parameters<typeof actual.captureFileExplorerOperationGuard>
+    ) => {
+      const guard = actual.captureFileExplorerOperationGuard(...args)
+      return {
+        ...guard,
+        assertCurrent: () => {
+          validateOwner()
+          return guard.assertCurrent()
+        }
+      }
+    }
+  }
+})
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: mocks.rpc }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError } }))
 vi.mock('@/runtime/runtime-file-import-client', () => ({
@@ -76,6 +104,128 @@ afterEach(() => {
 })
 
 describe('editor group OS file drops on remote workspaces', () => {
+  it.each([
+    { paths: 20, groups: 1, catalog: 1 },
+    { paths: 200, groups: 1, catalog: 1 },
+    { paths: 20, groups: 20, catalog: 1 },
+    { paths: 20, groups: 200, catalog: 1 },
+    { paths: 20, groups: 1, catalog: 20 },
+    { paths: 20, groups: 1, catalog: 200 }
+  ])('bounds stamped-drop work at P=$paths G=$groups W=$catalog', async (population) => {
+    let groupVisits = 0
+    let catalogVisits = 0
+    const groups = Array.from({ length: population.groups }, (_, index) => ({
+      get id() {
+        groupVisits += 1
+        return `group-${index}`
+      },
+      worktreeId: 'wt-runtime',
+      activeTabId: null,
+      tabOrder: []
+    }))
+    const baseWorktree = useAppStore.getState().worktreesByRepo['repo-rt'][0]
+    const worktrees = Array.from({ length: population.catalog }, (_, index) => ({
+      ...baseWorktree,
+      get id() {
+        catalogVisits += 1
+        return index === population.catalog - 1 ? 'wt-runtime' : `other-${index}`
+      },
+      hostId: 'ssh:ssh-1' as const,
+      runtimeOwnerEnvironmentId: 'owner-runtime'
+    }))
+    useAppStore.setState({
+      activeWorktreeId: 'wt-runtime',
+      activeWorkspaceExecutionHostId: 'ssh:ssh-1',
+      worktreesByRepo: { 'repo-rt': worktrees },
+      detectedWorktreesByRepo: {},
+      groupsByWorktree: { 'wt-runtime': groups }
+    })
+    for (const [targetId, connection] of sshConnectionStatesAt(3)) {
+      useAppStore.getState().setEnvironmentSshConnectionState('owner-runtime', targetId, connection)
+    }
+    const groupId = `group-${population.groups - 1}`
+    const strips = groups.map((_, index) => (
+      <EditorStrip key={index} worktreeId="wt-runtime" groupId={`group-${index}`} />
+    ))
+    const view = render(
+      <>
+        {strips}
+        <EditorStrip worktreeId="wt-runtime" groupId={groupId} />
+      </>
+    )
+    const detached = view.getAllByTestId('strip')[population.groups]
+    view.rerender(<>{strips}</>)
+    const paths = Array.from(
+      { length: population.paths },
+      (_, index) => `${RUNTIME_PATH}/${index}.ts`
+    )
+    const payload = new Map([[WORKSPACE_FILE_PATHS_MIME, JSON.stringify(paths)]])
+    writeWorkspaceFileDragSource(
+      { setData: (type, value) => payload.set(type, value) },
+      {
+        workspaceId: 'wt-runtime',
+        executionHostId: 'ssh:ssh-1',
+        runtimeEnvironmentId: 'owner-runtime'
+      }
+    )
+    let inFlight = 0
+    let peakInFlight = 0
+    mocks.rpc.mockImplementation(async () => {
+      inFlight += 1
+      peakInFlight = Math.max(peakInFlight, inFlight)
+      await Promise.resolve()
+      inFlight -= 1
+      return { isDirectory: false, size: 1, mtime: 0 }
+    })
+    groupVisits = 0
+    catalogVisits = 0
+    validateOwner.mockClear()
+    const normalize = vi.mocked(crossPlatformPath.normalizeRuntimePathForComparison)
+    normalize.mockClear()
+    const event = new Event('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'dataTransfer', {
+      value: {
+        types: [...payload.keys()],
+        getData: (type: string) => payload.get(type) ?? ''
+      }
+    })
+    act(() => {
+      detached.dispatchEvent(event)
+    })
+    expect(normalize).not.toHaveBeenCalled()
+    const comparisons = vi.spyOn(String.prototype, 'startsWith')
+    act(() => {
+      view.getAllByTestId('strip')[population.groups - 1].dispatchEvent(event)
+    })
+    const decoderComparisons = comparisons.mock.contexts.filter(
+      (path) => typeof path === 'string' && paths.includes(path)
+    ).length
+    comparisons.mockRestore()
+    const normalizations = normalize.mock.calls.length
+    await waitFor(() => expect(mocks.openFile).toHaveBeenCalledTimes(population.paths))
+    expect(normalizations).toBe(population.paths)
+    // Path flavor detection needs two prefix checks per input; parent pruning must stay absent.
+    expect(decoderComparisons).toBeLessThanOrEqual(2 * population.paths)
+    expect(mocks.rpc).toHaveBeenCalledTimes(population.paths)
+    expect(mocks.rpc.mock.calls.map(([, method, args]) => [method, args.relativePath])).toEqual(
+      paths.map((_, index) => ['files.stat', `${index}.ts`])
+    )
+    expect(mocks.openFile.mock.calls.map(([file]) => file.filePath)).toEqual(paths)
+    expect(peakInFlight).toBe(1)
+    const validations = validateOwner.mock.calls.length
+    expect(validations).toBeGreaterThanOrEqual(population.paths)
+    expect(validations).toBeLessThanOrEqual(1 + 2 * population.paths)
+    // Bound collection passes per validation, including capture before delivery.
+    expect(groupVisits).toBeGreaterThanOrEqual(population.groups)
+    expect(groupVisits).toBeLessThanOrEqual(2 * population.groups * validations)
+    expect(catalogVisits).toBeGreaterThanOrEqual(population.catalog)
+    expect(catalogVisits).toBeLessThanOrEqual(2 * population.catalog * (validations + 2))
+    expect(mocks.stat).not.toHaveBeenCalled()
+    expect(mocks.prepare).not.toHaveBeenCalled()
+    expect(mocks.importPaths).not.toHaveBeenCalled()
+    expect(mocks.toastError).not.toHaveBeenCalled()
+  })
+
   it.each(['wt-ssh', 'wt-runtime', 'nested-ssh'])(
     'opens existing explorer files in %s without uploading and skips folders',
     async (kind) => {
