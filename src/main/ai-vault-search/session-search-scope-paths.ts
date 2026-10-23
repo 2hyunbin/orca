@@ -1,6 +1,6 @@
 import {
+  createNormalizedPathInsideOrEqualMatcher,
   getRuntimePathBasename,
-  isPathInsideOrEqual,
   isRuntimePathAbsolute,
   normalizeRuntimePathForComparison,
   resolveRuntimePath
@@ -33,10 +33,14 @@ export class ScopePathSet {
   // The index matches by prefix, so a contained path is one more SQL range for
   // no extra rows.
   folded(): string[] {
-    return this.entries.filter(
-      (candidate) =>
-        !this.entries.some((other) => other !== candidate && isPathInsideOrEqual(other, candidate))
-    )
+    if (this.entries.length < 2) {
+      return [...this.entries]
+    }
+    const matchers = this.entries.map(createNormalizedPathInsideOrEqualMatcher)
+    return this.entries.filter((candidate, index) => {
+      const normalized = normalizeRuntimePathForComparison(candidate)
+      return !matchers.some((matches, otherIndex) => otherIndex !== index && matches(normalized))
+    })
   }
 }
 

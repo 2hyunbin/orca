@@ -134,6 +134,24 @@ describe('project scope', () => {
     expect(paths(resolution)).toEqual(['/home/me/orca/workspaces/app', '/work/app'])
   })
 
+  it('preserves WSL Linux path case while folding UNC aliases', () => {
+    const resolution = resolveSessionSearchScope(
+      { kind: 'project', projectKey: 'repo:repo-1' },
+      catalog({
+        repos: [{ id: 'repo-1', path: '//wsl.localhost/Ubuntu/Work' }],
+        settings: { workspaceDir: '/home/me/ws', nestWorkspaces: false },
+        worktreeMeta: {
+          'repo-1:://wsl$/Ubuntu/Work/Feature': {},
+          'repo-1:://wsl.localhost/Ubuntu/work/feature': {}
+        }
+      })
+    )
+    expect(paths(resolution)).toEqual([
+      '//wsl.localhost/Ubuntu/Work',
+      '//wsl.localhost/Ubuntu/work/feature'
+    ])
+  })
+
   it("uses a repo's own worktree base path instead of the global root", () => {
     const resolution = resolveSessionSearchScope(
       { kind: 'project', projectKey: 'repo:repo-1' },
