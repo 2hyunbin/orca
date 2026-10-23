@@ -60,6 +60,9 @@ export function prepareClaudePermissionObservation(
     failures: 0
   }
   readClaudePermissionObservation(observation, false)
+  if (!observation.anchored && observation.requiresUniqueInput) {
+    observation.toolUseId = undefined
+  }
   state.claudePermissionObservationByPaneKey.set(paneKey, observation)
   return observation.anchored && observation.toolUseId
     ? { ...hook, tool_use_id: observation.toolUseId }

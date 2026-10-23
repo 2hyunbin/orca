@@ -337,6 +337,39 @@ describe('Claude permission result observation', () => {
   )
 
   it.each([false, true])(
+    'does not pin a new request to an unverified preceding tool (relay=%s)',
+    async (remote) => {
+      const pane = await setup(remote)
+      const { lines, tool } = capture('escape')
+      writeFileSync(pane.transcript, `${lines[0]}\n`)
+      await pane.post({
+        hook_event_name: 'PreToolUse',
+        tool_name: tool.name,
+        tool_input: tool.input,
+        tool_use_id: tool.id
+      })
+      const input = { command: 'different unflushed request' }
+      await pane.post({
+        hook_event_name: 'PermissionRequest',
+        tool_name: tool.name,
+        tool_input: input
+      })
+      await pane.tick()
+      expect(pane.row()?.state).toBe('waiting')
+      const next = lines.map((raw) =>
+        raw
+          .replaceAll(tool.id, 'different-tool')
+          .replaceAll('escape2-node-', 'different-node-')
+          .replaceAll(JSON.stringify(tool.input), JSON.stringify(input))
+      )
+      appendFileSync(pane.transcript, `${next.join('\n')}\n`)
+      await pane.tick()
+      await pane.tick()
+      expect(pane.row()).toMatchObject({ state: 'done', interrupted: true })
+    }
+  )
+
+  it.each([false, true])(
     'settles Q1 without an old verdict when P2 precedes its hook (relay=%s)',
     async (remote) => {
       const pane = await setup(remote)
