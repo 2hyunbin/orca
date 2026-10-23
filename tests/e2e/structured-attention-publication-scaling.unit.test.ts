@@ -432,6 +432,7 @@ it.each([
         emitEdge({
           id: 'completion',
           ok: true,
+          _meta: { runtimeId: 'attention-host' },
           result: {
             type: 'prompt',
             prompt: {
