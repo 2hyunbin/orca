@@ -14,7 +14,7 @@ import type { ProviderProcessLaunch } from '../provider-process/provider-process
 import { openCodeAcpAccountBinding } from '../opencode/opencode-structured-account-home'
 
 const GROK = acpLaunchSpecFor('grok')!
-// The user's own OpenCode environment, read without the app's managed-account service.
+// Bypass the app's managed-account service for this fixture.
 const OPENCODE: AcpLaunchSpec = {
   ...acpLaunchSpecFor('opencode')!,
   account: openCodeAcpAccountBinding(() => ({
@@ -33,7 +33,7 @@ const MODEL_STATE = {
       name: 'Grok Build',
       _meta: {
         supportsReasoningEffort: true,
-        // The session's own pick, which must not become a catalog default.
+        // A session pick must not become a catalog default.
         reasoningEffort: 'low',
         reasoningEfforts: [
           { value: 'low', id: 'fast', label: 'Fast' },
@@ -181,9 +181,7 @@ describe('ACP model catalog probes', () => {
       {
         id: 'grok-build',
         label: 'Grok Build',
-        // `initialize`'s currentModelId is not what a session runs, so it names no default.
         isDefault: false,
-        // Grok's option ids, which its effort config option takes, and its own default only.
         efforts: [
           { value: 'fast', label: 'Fast' },
           { value: 'deep', label: 'Deep' }
@@ -243,7 +241,6 @@ describe('ACP model catalog probes', () => {
       expect.objectContaining({
         command: '/opt/opencode/bin/opencode',
         args: ['models', '--verbose'],
-        // Where the project's opencode.json is read, so it lists what a chat there offers.
         cwd: '/work/project',
         env: expect.objectContaining({ OPENCODE_CLIENT: 'acp' })
       }),
@@ -254,7 +251,6 @@ describe('ACP model catalog probes', () => {
     ])
   })
 
-  // Every 2.x release rejects `--verbose`, and its own listings omit providers that report late.
   it('lists OpenCode 2.x from a session it opens and deletes, with no listing command', async () => {
     const { agent, deps, launches } = scriptedOpenCode2(true)
     const success = await createAcpModelCatalogProbe(OPENCODE, deps)(
@@ -266,7 +262,7 @@ describe('ACP model catalog probes', () => {
       'session/new',
       'session/delete'
     ])
-    // In the asking chat's folder, so OpenCode records no project the person never opened.
+    // Avoid recording a project the user never opened.
     expect(agent.frames[1]!.params).toMatchObject({ cwd: '/work/project' })
     expect(agent.frames[2]!.params).toEqual({ sessionId: 'probe-session' })
     expect(launches).toEqual([expect.objectContaining({ args: ['acp'] })])
@@ -288,7 +284,6 @@ describe('ACP model catalog probes', () => {
     expect(agent.frames.map((frame) => frame.method)).toEqual(['initialize'])
   })
 
-  // `omp acp` advertises no delete, so its listing session goes to a folder the probe removes.
   it('lists OMP from a session kept in a folder it removes, in the chat folder', async () => {
     const { agent, deps, launches } = scriptedOpenCode2(false)
     const dataDirectory = await mkdtemp(join(tmpdir(), 'orca-omp-listing-'))
@@ -349,7 +344,7 @@ describe('ACP model catalog probes', () => {
     warn.mockRestore()
   })
 
-  // OpenCode may already have saved the session it never named; nothing is left to delete it by.
+  // An interrupted create can save a session without returning its ID.
   it('stops a listing cut off while OpenCode 2.x creates its session, without deleting', async () => {
     const { agent, deps, closed } = scriptedOpenCode2(true)
     agent.on('session/new', () => {})
@@ -399,7 +394,6 @@ describe('ACP model catalog probes', () => {
     expect(runListing).not.toHaveBeenCalled()
   })
 
-  // The binary may be 2.x, which lists only in a chat's folder; nothing is spawned to find out.
   it('asks `opencode` nothing, not even its version, without a chat folder', async () => {
     const probeVersion = vi.fn(async () => ({ version: '1.18.35' }))
     const probe = createAcpModelCatalogProbe(OPENCODE, {
