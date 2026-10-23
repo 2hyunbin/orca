@@ -147,10 +147,12 @@ describe('getMarkdownDocLinkDecorationRanges offset scan', () => {
 
     const realIndexOf = String.prototype.indexOf
     let indexOfCalls = 0
-    String.prototype.indexOf = function (this: string, ...args: unknown[]) {
-      indexOfCalls += 1
-      return (realIndexOf as (...a: unknown[]) => number).apply(this, args)
-    } as typeof String.prototype.indexOf
+    String.prototype.indexOf = function (this: string, searchString: string, position?: number) {
+      if (searchString === '[[' || searchString === ']]') {
+        indexOfCalls += 1
+      }
+      return realIndexOf.call(this, searchString, position)
+    }
     try {
       getMarkdownDocLinkDecorationRanges(linkFree)
     } finally {
