@@ -60,10 +60,10 @@ export function WorktreeLineageToggle({
             aria-expanded={!collapsed}
             onClick={onToggle}
           >
-            <span className="inline-flex min-w-0 items-center gap-1.5 px-1 py-0.5">
-              <span className="inline-flex min-w-0 items-center gap-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1 px-1 py-0.5">
+              <span className="inline-flex min-w-0 items-center gap-1">
                 <span className="inline-flex min-w-0 items-center gap-1">
-                  {summary.length === 0 ? <Workflow className="size-2.5 shrink-0" /> : null}
+                  <Workflow className="size-2.5 shrink-0" />
                   <span className="shrink-0 tabular-nums">{count}</span>
                   <span className="truncate">
                     {count === 1
@@ -72,7 +72,7 @@ export function WorktreeLineageToggle({
                   </span>
                 </span>
                 {summary.length > 0 ? (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 border-l border-border pl-1.5">
+                  <span className="inline-flex shrink-0 items-center gap-1.5 border-l border-border pl-1">
                     {summary.map((status) => (
                       <span
                         key={status}
@@ -101,8 +101,14 @@ export function WorktreeLineageToggle({
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={8}>
           {collapsed
-            ? translate('auto.components.sidebar.WorktreeCard.8cb634cda6', 'Show child workspaces')
-            : translate('auto.components.sidebar.WorktreeCard.57eaa61b55', 'Hide child workspaces')}
+            ? translate(
+                'auto.components.sidebar.WorktreeCard.showChildWorktrees',
+                'Show children worktrees'
+              )
+            : translate(
+                'auto.components.sidebar.WorktreeCard.hideChildWorktrees',
+                'Hide children worktrees'
+              )}
           {description ? <div>{description}</div> : null}
         </TooltipContent>
       </Tooltip>
