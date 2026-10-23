@@ -1,9 +1,9 @@
 import type { TaskPageLinearInOrcaEffectsModel } from './use-task-page-linear-in-orca-effects'
 import { useEffect } from 'react'
-import { TASK_SEARCH_DEBOUNCE_MS, LINEAR_ITEM_LIMIT } from './task-page-source-context'
-import { clampLinearIssueListLimit } from '../../../shared/linear/issue-read-limits'
+import { TASK_SEARCH_DEBOUNCE_MS, LINEAR_ITEM_LIMIT } from '../../task-page-source-context'
+import { clampLinearIssueListLimit } from '../../../../../shared/linear/issue-read-limits'
 import { useTaskPageLinearCustomViewEffects } from './use-task-page-linear-custom-view-effects'
-export type TaskPageLinearCollectionEffectsPreludeModel = TaskPageLinearInOrcaEffectsModel
+
 export function useTaskPageLinearCollectionEffectsPrelude(model: TaskPageLinearInOrcaEffectsModel) {
   const {
     setTaskResumeState,

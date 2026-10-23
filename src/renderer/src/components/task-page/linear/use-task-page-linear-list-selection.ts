@@ -1,12 +1,12 @@
-import type { TaskPageProviderMetadataModel } from './use-task-page-provider-metadata'
+import type { TaskPageProviderMetadataModel } from '../../use-task-page-provider-metadata'
 import { useState, useMemo, useEffect } from 'react'
-import { LINEAR_ISSUE_LIST_MAX } from '../../../shared/linear/issue-read-limits'
-import { findTaskPageLinearIssue } from '@/components/task-page-cache-selectors'
-import type { LinearTeam } from '../../../shared/linear/workspace-types'
+import { LINEAR_ISSUE_LIST_MAX } from '../../../../../shared/linear/issue-read-limits'
+import { findTaskPageLinearIssue } from './task-page-linear-cache-selectors'
+import type { LinearTeam } from '../../../../../shared/linear/workspace-types'
 import {
   buildLinearTeamUrl,
   getLinearOrganizationUrlKeyFromIssueUrl
-} from '../../../shared/linear/links'
+} from '../../../../../shared/linear/links'
 import {
   reconcileLinearTeamSelection,
   storedLinearTeamSelection

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { LinearIssue } from '../../../shared/linear/issue-types'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 import {
   findLinearWorkflowStateForStatus,
   getLinearStatusSectionState,

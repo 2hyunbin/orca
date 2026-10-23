@@ -1,10 +1,10 @@
-import type { TaskPageJiraListProjectionModel } from './use-task-page-jira-list-projection'
+import type { TaskPageJiraListProjectionModel } from '../../use-task-page-jira-list-projection'
 import { useState, useMemo, useEffect, type SetStateAction } from 'react'
 import { useTeamMembers, useTeamLabels, useTeamStates } from '@/hooks/useIssueMetadata'
 import { useTaskCreationDraftRetention } from '@/components/use-task-creation-draft-retention'
-import { useNewLinearIssueProjects } from './use-new-linear-issue-projects'
+import { useNewLinearIssueProjects } from '../../use-new-linear-issue-projects'
 import { useContextualTour } from '@/components/contextual-tours/use-contextual-tour'
-import { writeNewLinearIssueDraft, writeNewLinearProjectDraft } from './task-page-draft-storage'
+import { writeNewLinearIssueDraft, writeNewLinearProjectDraft } from '../../task-page-draft-storage'
 import { defaultScopeSource } from '@/lib/default-creation-host'
 export function useTaskPageLinearCreationState(model: TaskPageJiraListProjectionModel) {
   const {

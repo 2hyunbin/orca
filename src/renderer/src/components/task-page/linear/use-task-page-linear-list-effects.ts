@@ -1,23 +1,23 @@
-import type { TaskPageGlobalEffectsModel } from './use-task-page-global-effects'
+import type { TaskPageGlobalEffectsModel } from '../../use-task-page-global-effects'
 import { useEffect } from 'react'
-import { isIntegrationCredentialDecryptionError } from '../../../shared/integration-credential-errors'
-import { saveLinearIssueView } from './linear-issue-view-storage'
-import { serializeLinearIssueViewResumeState } from '../../../shared/linear/issue-view-resume-state'
+import { isIntegrationCredentialDecryptionError } from '../../../../../shared/integration-credential-errors'
+import { saveLinearIssueView } from '../../linear-issue-view-storage'
+import { serializeLinearIssueViewResumeState } from '../../../../../shared/linear/issue-view-resume-state'
 import {
   clampLinearIssueListLimit,
   LINEAR_ISSUE_LIST_MAX
-} from '../../../shared/linear/issue-read-limits'
+} from '../../../../../shared/linear/issue-read-limits'
 import {
   buildLinearIssueListReadArgs,
   type LinearIssueListFilterRead,
   shouldForceLinearIssueListRead,
   buildLinearIssueListRequestSignature
 } from '@/components/task-page/linear/task-page-linear-issue-request'
-import type { LinearIssue } from '../../../shared/linear/issue-types'
-import type { LinearCollectionResult } from '../../../shared/linear/workspace-types'
-import { linearIssueAttributeFilterSignature } from '../../../shared/linear/issue-attribute-filter'
-import { reconcileTaskPageLinearIssuesAfterLandingRefresh } from '@/components/task-page-cache-selectors'
-import { LINEAR_ITEM_LIMIT, TASK_SEARCH_DEBOUNCE_MS } from './task-page-source-context'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
+import type { LinearCollectionResult } from '../../../../../shared/linear/workspace-types'
+import { linearIssueAttributeFilterSignature } from '../../../../../shared/linear/issue-attribute-filter'
+import { reconcileTaskPageLinearIssuesAfterLandingRefresh } from './task-page-linear-cache-selectors'
+import { LINEAR_ITEM_LIMIT, TASK_SEARCH_DEBOUNCE_MS } from '../../task-page-source-context'
 export function useTaskPageLinearListEffects(model: TaskPageGlobalEffectsModel) {
   const {
     setTaskResumeState,

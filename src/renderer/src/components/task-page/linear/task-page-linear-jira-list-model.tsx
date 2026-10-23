@@ -1,11 +1,11 @@
-import type { LinearIssue } from '../../../shared/linear/issue-types'
-import type { GitHubWorkItem } from '../../../shared/github/work-item-types'
-import {
-  type LinearOrderBy,
-  type LinearGroupBy,
-  getLinearPriorityLabel,
-  type LinearDisplayProperty
-} from '@/components/task-page-localized-options'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
+import type { GitHubWorkItem } from '../../../../../shared/github/work-item-types'
+import { getLinearPriorityLabel } from '@/components/task-page-localized-options'
+import type {
+  LinearOrderBy,
+  LinearGroupBy,
+  LinearDisplayProperty
+} from '../../../../../shared/linear/issue-view-resume-state'
 import { translate } from '@/i18n/i18n'
 import type { TaskPageJiraLoadError } from '@/components/task-page-jira-load-state'
 import React from 'react'
@@ -13,9 +13,9 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/component
 import { AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { TaskPageGitHubMutationIntent } from '@/components/task-page-github-work-item-mutation-patches'
-import type { TaskSourceContext } from '../../../shared/task-source-context'
+import type { TaskSourceContext } from '../../../../../shared/task-source-context'
 import type { LinearGroupSection } from './task-page-linear-issue-model'
-import { compareNumericLocaleText } from '../../../shared/locale-text-collators'
+import { compareNumericLocaleText } from '../../../../../shared/locale-text-collators'
 export function getLinearPriorityRank(priority: number): number {
   return priority === 0 ? 5 : priority
 }

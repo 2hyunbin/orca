@@ -8759,7 +8759,7 @@
       "src/renderer/src/components/task-page-jira-workspace-actions.test.tsx": 2107,
       "src/renderer/src/components/task-page/linear/task-page-linear-in-orca-issues.test.ts": 81,
       "src/renderer/src/components/task-page-linear-issue-empty-state.test.ts": 29,
-      "src/renderer/src/components/task-page-linear-issue-grouping.test.ts": 1344,
+      "src/renderer/src/components/task-page/linear/task-page-linear-issue-grouping.test.ts": 1344,
       "src/renderer/src/components/task-page/linear/task-page-linear-issue-request.test.ts": 52,
       "src/renderer/src/components/task-page/linear/task-page-linear-team-selection.test.ts": 39,
       "src/renderer/src/components/task-page-list-chrome-visibility.test.ts": 36,

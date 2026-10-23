@@ -4,16 +4,16 @@ import { resolveLinearIssueAttributeFilterPrimaryTeam } from '@/components/linea
 import {
   type LinearIssueAttributeFilter,
   linearIssueAttributeFilterSignature
-} from '../../../shared/linear/issue-attribute-filter'
-import { setLinearWorkspaceIssueFilter } from '../../../shared/linear/issue-view-resume-state'
-import { LINEAR_ITEM_LIMIT } from './task-page-source-context'
+} from '../../../../../shared/linear/issue-attribute-filter'
+import { setLinearWorkspaceIssueFilter } from '../../../../../shared/linear/issue-view-resume-state'
+import { LINEAR_ITEM_LIMIT } from '../../task-page-source-context'
 import {
   type LinearPrimaryTeamObservation,
   shouldClearTeamDerivedFacets,
   teamDerivedFacetsForPrimaryTeamChange,
   isLinearIssueSearchActive
 } from '@/components/task-page/linear/task-page-linear-issue-request'
-import { folderWorkspaceToWorktree } from '../../../shared/folder-workspace-worktree'
+import { folderWorkspaceToWorktree } from '../../../../../shared/folder-workspace-worktree'
 import { buildLinearIssueWorkspaceAttachmentIndex } from '@/lib/linear-issue-workspace-attachment'
 import {
   collectLinkedLinearIssueRefsFromWorktrees,

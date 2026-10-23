@@ -1,6 +1,6 @@
 import type { TaskPageLinearListProjectionModel } from './use-task-page-linear-list-projection'
 import React, { useMemo, useCallback } from 'react'
-import type { LinearIssue } from '../../../shared/linear/issue-types'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 import {
   writeLinearBoardIssueDragData,
   readLinearBoardIssueDragData
@@ -10,7 +10,7 @@ import { linearUpdateIssue } from '@/runtime/runtime-linear-issue-mutations'
 import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import { useAppStore } from '@/store'
-import type { LinearDisplayProperty } from '@/components/task-page-localized-options'
+import type { LinearDisplayProperty } from '../../../../../shared/linear/issue-view-resume-state'
 import { groupLinearIssues } from './task-page-linear-jira-list-model'
 import type { LinearGroupSection } from './task-page-linear-issue-model'
 import {

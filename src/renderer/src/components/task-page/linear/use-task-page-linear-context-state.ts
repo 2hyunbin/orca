@@ -1,12 +1,12 @@
 import type { TaskPageLinearViewStatePreludeModel } from './use-task-page-linear-view-state'
 import { useState, useRef } from 'react'
-import type { LinearCollectionResult } from '../../../shared/linear/workspace-types'
-import type { LinearIssue } from '../../../shared/linear/issue-types'
+import type { LinearCollectionResult } from '../../../../../shared/linear/workspace-types'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 import type {
   LinearCustomViewSummary,
   LinearProjectSummary
-} from '../../../shared/linear/project-types'
-import { LINEAR_ITEM_LIMIT } from './task-page-source-context'
+} from '../../../../../shared/linear/project-types'
+import { LINEAR_ITEM_LIMIT } from '../../task-page-source-context'
 import { useTaskPageLinearContextActions } from './use-task-page-linear-context-actions'
 export function useTaskPageLinearContextStatePrelude(model: TaskPageLinearViewStatePreludeModel) {
   const [linearCustomViewsResult, setLinearCustomViewsResult] = useState<

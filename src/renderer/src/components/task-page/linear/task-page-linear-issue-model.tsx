@@ -1,10 +1,10 @@
-import type { LinearIssue } from '../../../shared/linear/issue-types'
-import type { LinearCustomViewModel } from '../../../shared/linear/project-types'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
+import type { LinearCustomViewModel } from '../../../../../shared/linear/project-types'
 import type {
   LinearCollectionResult,
   LinearWorkflowState
-} from '../../../shared/linear/workspace-types'
-import type { TaskSourceContext } from '../../../shared/task-source-context'
+} from '../../../../../shared/linear/workspace-types'
+import type { TaskSourceContext } from '../../../../../shared/task-source-context'
 import React, { useState, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store'
 import { useTeamStates } from '@/hooks/useIssueMetadata'

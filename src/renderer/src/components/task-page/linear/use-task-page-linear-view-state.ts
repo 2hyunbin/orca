@@ -1,27 +1,27 @@
-import type { TaskPageDetailRoutingModel } from './use-task-page-detail-routing'
+import type { TaskPageDetailRoutingModel } from '../../use-task-page-detail-routing'
 import { useState, useMemo, useRef } from 'react'
+import type { LinearMode } from '@/components/task-page-localized-options'
 import type {
-  LinearMode,
   LinearViewMode,
   LinearGroupBy,
   LinearOrderBy,
   LinearDisplayProperty
-} from '@/components/task-page-localized-options'
-import type { LinearIssue } from '../../../shared/linear/issue-types'
-import type { LinearCollectionResult } from '../../../shared/linear/workspace-types'
+} from '../../../../../shared/linear/issue-view-resume-state'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
+import type { LinearCollectionResult } from '../../../../../shared/linear/workspace-types'
 import type {
   LinearProjectSummary,
   LinearProjectDetail
-} from '../../../shared/linear/project-types'
-import { LINEAR_ITEM_LIMIT } from './task-page-source-context'
-import type { LinearIssueAttributeFilter } from '../../../shared/linear/issue-attribute-filter'
+} from '../../../../../shared/linear/project-types'
+import { LINEAR_ITEM_LIMIT } from '../../task-page-source-context'
+import type { LinearIssueAttributeFilter } from '../../../../../shared/linear/issue-attribute-filter'
 import {
   selectLinearWorkspaceIssueFilter,
   DEFAULT_LINEAR_VIEW_MODE,
   DEFAULT_LINEAR_GROUP_BY,
   DEFAULT_LINEAR_ORDER_BY,
   LINEAR_DISPLAY_PROPERTIES
-} from '../../../shared/linear/issue-view-resume-state'
+} from '../../../../../shared/linear/issue-view-resume-state'
 import type {
   LinearIssueListFilterRead,
   LinearPrimaryTeamObservation

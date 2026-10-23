@@ -1,20 +1,18 @@
-import type { TaskPageLinearCollectionEffectsPreludeModel } from './use-task-page-linear-collection-effects'
+import type { TaskPageLinearInOrcaEffectsModel } from './use-task-page-linear-in-orca-effects'
 import { useEffect } from 'react'
 import {
   LINEAR_CUSTOM_VIEW_MODELS,
   mergeLinearCollectionResults
 } from './task-page-linear-issue-model'
-import { LINEAR_ITEM_LIMIT } from './task-page-source-context'
-import type { LinearCollectionResult } from '../../../shared/linear/workspace-types'
-import type { LinearIssue } from '../../../shared/linear/issue-types'
+import { LINEAR_ITEM_LIMIT } from '../../task-page-source-context'
+import type { LinearCollectionResult } from '../../../../../shared/linear/workspace-types'
+import type { LinearIssue } from '../../../../../shared/linear/issue-types'
 import type {
   LinearCustomViewSummary,
   LinearProjectSummary
-} from '../../../shared/linear/project-types'
-import { clampLinearIssueListLimit } from '../../../shared/linear/issue-read-limits'
-export function useTaskPageLinearCustomViewEffects(
-  model: TaskPageLinearCollectionEffectsPreludeModel
-) {
+} from '../../../../../shared/linear/project-types'
+import { clampLinearIssueListLimit } from '../../../../../shared/linear/issue-read-limits'
+export function useTaskPageLinearCustomViewEffects(model: TaskPageLinearInOrcaEffectsModel) {
   const {
     getCachedLinearCustomViews,
     listLinearCustomViews,
