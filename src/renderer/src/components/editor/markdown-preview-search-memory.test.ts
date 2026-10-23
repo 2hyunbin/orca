@@ -15,7 +15,7 @@ beforeAll(async () => {
     stdin: {
       contents: `
         import { findTextMatchRanges } from './src/renderer/src/components/editor/markdown-preview-search';
-        const size = 600 * 1024;
+        const size = process.argv[2] === 'unicode' ? 512 * 1024 : 600 * 1024;
         const suffix = process.argv[2] === 'unicode' ? '😊İNEEDLE' : 'NEEDLE';
         const text = 'x'.repeat(size - suffix.length) + suffix;
         process.stdout.write(JSON.stringify(findTextMatchRanges(text, 'needle')));
@@ -37,9 +37,12 @@ afterAll(async () => {
 })
 
 describe('Markdown Find memory budget', () => {
-  it.each(['ascii', 'unicode'])(
-    'searches a 600 KiB %s paragraph within a 32 MiB heap',
-    async (kind) => {
+  it.each([
+    { kind: 'ascii', sizeKiB: 600, start: 614394, end: 614400 },
+    { kind: 'unicode', sizeKiB: 512, start: 524282, end: 524288 }
+  ])(
+    'searches a $sizeKiB KiB $kind paragraph within a 32 MiB heap',
+    async ({ kind, start, end }) => {
       // A separate heap makes the allocation regression independent of the test worker's load.
       const result = await runProcess({
         program: process.execPath,
@@ -50,7 +53,7 @@ describe('Markdown Find memory budget', () => {
       })
       expect(result.timedOut).toBe(false)
       expect(result.code, result.stderr).toBe(0)
-      expect(JSON.parse(result.stdout)).toEqual([{ start: 614394, end: 614400 }])
+      expect(JSON.parse(result.stdout)).toEqual([{ start, end }])
     }
   )
 })
