@@ -198,6 +198,7 @@ describe('getPiAgentStatusExtensionSource', () => {
     let sessionFile: string | undefined = '/tmp/s'
     const sessionManager = { getSessionId: () => sessionId, getSessionFile: () => sessionFile }
 
+    await harness.callHook('session_start', {}, { sessionManager })
     await harness.callHook('agent_start', undefined, { sessionManager })
     sessionId = 'omp-session-9'
     await harness.callHook('before_agent_start', { prompt: 'hi' }, { sessionManager })
@@ -234,7 +235,10 @@ describe('getPiAgentStatusExtensionSource', () => {
       getHeader: () => ({ parentSession: '/tmp/root.jsonl' })
     }
 
-    await harness.callHook('agent_start', undefined, { sessionManager: child })
+    await harness.callHook('session_start', {}, { sessionManager: root })
+    const helper = harness.registerSession()
+    await helper.callHook('session_start', {}, { sessionManager: child })
+    await helper.callHook('agent_start', undefined, { sessionManager: child })
     await harness.callHook('agent_start', undefined, { sessionManager: root })
 
     await vi.waitFor(() => expect(harness.fetchMock).toHaveBeenCalledTimes(1))
@@ -272,6 +276,7 @@ describe('getPiAgentStatusExtensionSource', () => {
         getSessionId: () => sessionId,
         getSessionFile: () => `/tmp/${sessionId}.jsonl`
       }
+      await harness.callHook('session_start', {}, { sessionManager })
       await harness.callHook('agent_start', undefined, { sessionManager })
       sessionId = 'omp-session-9'
       await harness.callHook(

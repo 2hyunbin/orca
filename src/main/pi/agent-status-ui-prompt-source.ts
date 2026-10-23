@@ -9,7 +9,7 @@ export function getPiAgentStatusUiPromptHandlerSourceLines(kind: PiAgentKind): s
   return [
     "  onStatus('ui_prompt_start', () => {",
     '    // Idle utility dialogs are not agent work; do not create a completion boundary for them.',
-    '    if (isOmpRuntime() || !piUiState.turnInFlight) return',
+    '    if (isOmpRuntime() || (!piUiState.turnInFlight && authority !== "sub")) return',
     '    piUiState.depth++',
     '    if (piUiState.depth > 1) return',
     "    post('ui_prompt_start')",

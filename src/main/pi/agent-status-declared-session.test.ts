@@ -181,44 +181,101 @@ describe('declared session authority', () => {
     )
   })
 
-  it('preserves the unfixed Pi startup identity-only behavior', async () => {
-    const sink = new StatusSink()
-    const accepted: ReturnType<typeof normalizeHookPayload>[] = []
-    const harness = createAgentStatusExtensionHarness({
-      kind: 'pi',
-      argv: ['node', '/usr/bin/pi'],
-      existsSync: () => true,
-      env: {
-        ORCA_PANE_KEY: paneKey,
-        ORCA_TAB_ID: 'declared-session',
-        ORCA_AGENT_HOOK_ENV: 'production',
-        ORCA_AGENT_HOOK_VERSION: '1'
-      },
-      fetchImpl: async (_url, init) => {
-        accepted.push(sink.accept(JSON.parse(String(init?.body)), 'pi') ?? null)
-        return { ok: true }
+  it.each(['pi', 'omp'] as const)(
+    'keeps a tool-spawned helper off the %s pane and restart identity',
+    async (kind) => {
+      const sink = new StatusSink()
+      const accepted: ReturnType<typeof normalizeHookPayload>[] = []
+      const harness = createAgentStatusExtensionHarness({
+        kind,
+        argv: kind === 'pi' ? ['node', '/usr/bin/pi'] : ['bun', '/opt/omp/bin/omp'],
+        existsSync: () => true,
+        env: {
+          ORCA_PANE_KEY: paneKey,
+          ORCA_TAB_ID: 'declared-session',
+          ORCA_AGENT_HOOK_ENV: 'production',
+          ORCA_AGENT_HOOK_VERSION: '1'
+        },
+        fetchImpl: async (_url, init) => {
+          accepted.push(sink.accept(JSON.parse(String(init?.body)), kind) ?? null)
+          return { ok: true }
+        }
+      })
+      const root = session('lead', 'main')
+      delete root.agent
+      const child = session('helper', 'sub')
+      delete child.agent
+      await harness.callHook('session_start', { reason: 'startup' }, root)
+      await harness.callHook('before_agent_start', { prompt: 'lead work' }, root)
+      await harness.callHook('agent_start', {}, root)
+      await harness.callHook('tool_execution_start', { toolName: 'task' }, root)
+      // The task constructs its own runtime while the lead turn is in progress.
+      const helper = harness.registerSession()
+      await helper.callHook('session_start', { reason: 'startup' }, child)
+      await helper.callHook('before_agent_start', { prompt: 'helper work' }, child)
+      await helper.callHook('agent_start', {}, child)
+      await settle()
+      expect(accepted.every((event) => event?.providerSession?.id === 'lead')).toBe(true)
+      await harness.callHook('agent_end', {}, root)
+      await helper.callHook(
+        'message_end',
+        { message: { role: 'assistant', content: 'helper reply' } },
+        child
+      )
+      await helper.callHook('agent_end', {}, child)
+      await helper.callHook('session_shutdown', {}, child)
+      await vi.waitFor(() => expect(accepted.at(-1)?.payload.state).toBe('done'))
+      expect(accepted.at(-1)).toMatchObject({
+        providerSession: { id: 'lead' },
+        payload: kind === 'omp' ? { prompt: 'lead work' } : {}
+      })
+      expect(sink.savedRow()?.providerSession).toMatchObject({
+        id: 'lead',
+        transcriptPath: '/sessions/lead.jsonl'
+      })
+      let current = root
+      for (const reason of ['new', 'resume', 'fork', 'reload']) {
+        const next =
+          reason === 'reload' ? current : session(reason === 'resume' ? 'helper' : reason, 'main')
+        delete next.agent
+        const previousSessionFile = current.sessionManager?.getSessionFile?.()
+        if (kind === 'pi') {
+          const old = { ...harness.handlers }
+          await (reason === 'reload'
+            ? harness.reloadPi()
+            : harness.replacePiSession(reason, String(next.sessionManager?.getSessionFile?.())))
+          await harness.callHook(
+            'session_start',
+            { reason, ...(reason === 'reload' ? {} : { previousSessionFile }) },
+            next
+          )
+          const count = accepted.length
+          await old.before_agent_start({ prompt: 'stale' }, current)
+          await settle()
+          expect(accepted).toHaveLength(count)
+        } else {
+          await harness.callHook(
+            reason === 'fork' ? 'session_branch' : 'session_switch',
+            { reason },
+            next
+          )
+        }
+        await harness.callHook('before_agent_start', { prompt: reason }, next)
+        await settle()
+        await vi.waitFor(() =>
+          expect(accepted.at(-1)?.providerSession?.id).toBe(next.sessionManager?.getSessionId?.())
+        )
+        current = next
       }
-    })
-    const root = session('lead', 'main')
-    delete root.agent
-    const child = session('helper', 'sub')
-    delete child.agent
-    await harness.callHook('session_start', { reason: 'startup' }, root)
-    await settle()
-    expect(accepted.at(-1)).toMatchObject({
-      providerSessionOnly: true,
-      providerSession: { id: 'lead' }
-    })
-    const helper = harness.registerSession()
-    await helper.callHook('session_start', { reason: 'startup' }, child)
-    await settle()
-    expect(accepted.at(-1)).toMatchObject({
-      providerSessionOnly: true,
-      providerSession: { id: 'helper', transcriptPath: '/sessions/helper.jsonl' }
-    })
-    expect(sink.savedRow()?.providerSession).toMatchObject({
-      id: 'helper',
-      transcriptPath: '/sessions/helper.jsonl'
-    })
-  })
+      // A fresh process can select a former helper, regardless of its saved parent header.
+      const restarted = createAgentStatusExtensionHarness({ kind, existsSync: () => true })
+      await restarted.callHook('session_start', { reason: 'startup' }, child)
+      await restarted.callHook('agent_start', {}, child)
+      await vi.waitFor(() =>
+        expect(
+          JSON.parse(String(restarted.fetchMock.mock.calls.at(-1)?.[1]?.body)).payload.session_id
+        ).toBe('helper')
+      )
+    }
+  )
 })

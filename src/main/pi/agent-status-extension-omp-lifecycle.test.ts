@@ -57,6 +57,7 @@ describe('OMP agent_end contract', () => {
   it('keeps one lifecycle subscription across extension reloads', async () => {
     const harness = createAgentStatusExtensionHarness({ kind: 'pi' })
     await harness.reloadPi()
+    await harness.callHook('session_start', { reason: 'reload' })
     expect(harness.piEventListenerCount('task:subagent:lifecycle')).toBe(1)
     expect(harness.piEventListenerCount('subagent:async-started')).toBe(1)
     expect(harness.piEventListenerCount('subagent:async-complete')).toBe(1)
@@ -66,6 +67,7 @@ describe('OMP agent_end contract', () => {
 
   it('accepts the pi-subagents async lifecycle aliases', async () => {
     const harness = createAgentStatusExtensionHarness({ kind: 'pi' })
+    await harness.callHook('session_start', { reason: 'reload' })
     harness.emitPiEvent('subagent:async-started', { id: 'child-1' })
     await harness.callHook('agent_settled')
     expect(postedHookNames(harness.fetchMock)).toEqual(['agent_start'])

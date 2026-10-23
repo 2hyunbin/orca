@@ -95,6 +95,7 @@ describe('OMP model reporting', () => {
       return { sessionManager }
     }
 
+    await harness.callHook('session_start', {}, session('omp-a'))
     await harness.callHook('agent_start', undefined, { ...session('omp-a'), model: DEEPSEEK })
     await settled(harness.fetchMock, 1)
     await harness.callHook('agent_start', undefined, { ...session('omp-b'), model: null })

@@ -299,7 +299,6 @@ export function getPiAgentStatusHandlerSourceLines(kind: PiAgentKind): string[] 
     '    pendingAgentEndCheck = setTimeout(checkPendingAgentEnd, 0)',
     "    if (typeof pendingAgentEndCheck.unref === 'function') pendingAgentEndCheck.unref()",
     '  })',
-    '  if (!isOmpRuntime()) activateRegistration()',
     ''
   ]
 }

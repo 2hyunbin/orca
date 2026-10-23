@@ -131,6 +131,7 @@ describe('OMP completion delivery', () => {
         isIdle: () => true,
         sessionManager: { getSessionId: () => id, getSessionFile: () => `/sessions/${id}.jsonl` }
       }
+      await harness.callHook('session_start', {}, ctx)
       await harness.callHook('agent_start', {}, ctx)
       await vi.advanceTimersByTimeAsync(0)
       let acknowledge: ((value: { ok: boolean }) => void) | undefined
@@ -150,6 +151,7 @@ describe('OMP completion delivery', () => {
       await vi.advanceTimersByTimeAsync(0)
       id = 'B'
       await harness.callHook('session_switch', { reason: 'new' }, ctx)
+      await harness.callHook('session_start', {}, ctx)
       await harness.callHook('agent_start', {}, ctx)
       if (delivery === 'in-flight failure') {
         fail?.(new Error('late failure'))
