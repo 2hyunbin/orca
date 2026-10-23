@@ -244,7 +244,6 @@ describe('ACP caller-owned waits', () => {
     const { agent, runtime } = fixture({
       onRequest: (method) =>
         new Promise((resolve, reject) => {
-          // '_vendor/silent' ignores the abort: the runtime never answers for it.
           if (method !== '_vendor/silent') {
             withdrawal.signal.addEventListener('abort', () =>
               method === '_vendor/plan'
@@ -275,14 +274,14 @@ describe('ACP caller-owned waits', () => {
 
   it('keeps a handler answer that finishes saving after its owner withdraws requests', async () => {
     const withdrawal = new AbortController()
-    // A real I/O hop, the shape of a journal write the handler commits before replying.
+    // Use real I/O to model a journal write committing after cancellation.
     const save = (): Promise<void> => readFile(import.meta.filename).then(() => undefined)
     const userAnswer = deferred<void>()
     const { agent, runtime } = fixture({
       onRequest: (method) =>
         new Promise((resolve) => {
           if (method === '_vendor/plan') {
-            // The user already approved; the save started before the stop and replies after it.
+            // Approval precedes Stop; the in-flight save finishes afterward.
             void userAnswer.promise.then(save).then(() => resolve({ outcome: 'approved' }))
           } else {
             withdrawal.signal.addEventListener(
