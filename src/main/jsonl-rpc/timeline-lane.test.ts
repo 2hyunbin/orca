@@ -18,7 +18,7 @@ afterEach(async () => {
   await closeProviderTimelineRigs()
 })
 
-async function rig() {
+async function rig(admitBeforeBlock = 0) {
   const journal = await openProviderTimelineRig({ agent: 'pi' })
   let blocked = true
   const pauseReading = vi.fn(),
@@ -26,7 +26,7 @@ async function rig() {
     onInputAccepted = vi.fn(),
     onFailed = vi.fn()
   const lane = new JsonlRpcTimelineLane({
-    sink: refusingSink(journal.sink, () => blocked),
+    sink: refusingSink(journal.sink, () => blocked && admitBeforeBlock-- <= 0),
     sessionId: SESSION,
     agent: 'pi',
     generation: GENERATION,
@@ -117,6 +117,28 @@ describe('JSON-lines timeline admission', () => {
     await test.lane.drained()
     expect(test.lane.openTurnId).not.toBeNull()
     expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('retains the refused suffix ahead of later batches after admitting a prefix', async () => {
+    const test = await rig(1)
+    const item = (text: string) => ({
+      type: 'item.close' as const,
+      item: text,
+      body: { kind: 'status' as const, tone: 'info' as const, text }
+    })
+    test.lane.apply([item('first'), item('second')])
+    test.lane.apply([item('third')])
+    expect((await test.journal.rows()).map((row) => row.body)).toEqual([
+      { kind: 'status', tone: 'info', text: 'first' }
+    ])
+
+    test.unblock()
+    test.lane.retry()
+    await test.lane.drained()
+    expect((await test.journal.rows()).map((row) => row.body)).toEqual(
+      ['first', 'second', 'third'].map((text) => ({ kind: 'status', tone: 'info', text }))
+    )
+    expect(test.onFailed).not.toHaveBeenCalled()
   })
 
   it('bounds data already parsed in a batch after the reader pauses', async () => {

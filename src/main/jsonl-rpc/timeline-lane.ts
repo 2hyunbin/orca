@@ -74,21 +74,22 @@ export class JsonlRpcTimelineLane {
     if (this.ended || this.sealed) {
       return
     }
-    const pending = events.map((event) => ({
+    let consumed = 0
+    // Try the current frame first; only a refused suffix becomes retained head work.
+    while (this.held.length === 0 && consumed < events.length && !this.ended) {
+      if (!this.consume(events[consumed])) {
+        break
+      }
+      consumed++
+    }
+    this.notify()
+    if (consumed === events.length || this.ended) {
+      return
+    }
+    const pending = events.slice(consumed).map((event) => ({
       event,
       bytes: Buffer.byteLength(JSON.stringify(event))
     }))
-    // Try the current frame first; only a refused suffix becomes retained head work.
-    while (this.held.length === 0 && pending.length > 0 && !this.ended) {
-      if (!this.consume(pending[0].event)) {
-        break
-      }
-      pending.shift()
-    }
-    this.notify()
-    if (pending.length === 0 || this.ended) {
-      return
-    }
     const bytes = pending.reduce((total, entry) => total + entry.bytes, 0)
     if (
       this.heldEvents + pending.length > MAX_HELD_EVENTS ||
