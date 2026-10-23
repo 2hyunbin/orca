@@ -1,3 +1,4 @@
+import { ownRetainedString } from '../../../../shared/own-retained-string'
 import type { KernelOutputType } from '../../../../shared/notebook-kernel-types'
 import { isRecord } from './ipynb-parse'
 
@@ -15,9 +16,56 @@ type StreamText = { text: string; tailStart: number; trailingReturn: boolean }
 // Why: weak output keys keep cursors off saved notebook data and release them with discarded outputs.
 const streamTextByOutput = new WeakMap<NotebookOutput, StreamText>()
 
+const STREAM_NORMALIZATION_WINDOW = 64 * 1024
+
+function rewriteCarriageReturnLines(text: string): string {
+  return text.replace(/^[^\n]*\r(?=[^\n])/gm, '')
+}
+
 /** Applies terminal-style `\r` rewrites (progress bars), keeping a trailing `\r` for the next chunk. */
 export function collapseCarriageReturns(text: string): string {
+  if (text.length > STREAM_NORMALIZATION_WINDOW) {
+    return collapseLargeStreamCarriageReturns(text)
+  }
   return text.replace(/\r+\n/g, '\n').replace(/^[^\n]*\r(?=[^\n])/gm, '')
+}
+
+function collapseLargeStreamCarriageReturns(text: string): string {
+  const firstReturn = text.indexOf('\r')
+  if (firstReturn === -1) {
+    return text
+  }
+  const firstNewline = text.indexOf('\n')
+  if (firstNewline === -1) {
+    const lastRewrite = text.lastIndexOf('\r', text.length - 2)
+    return lastRewrite === -1 ? text : text.slice(lastRewrite + 1)
+  }
+  if (!text.includes('\n', firstNewline + 1)) {
+    return rewriteCarriageReturnLines(text.replace(/\r+\n/g, '\n'))
+  }
+  const prefixStart = Math.max(0, firstReturn - STREAM_NORMALIZATION_WINDOW)
+  const prefixNewline = text.slice(prefixStart, firstReturn).lastIndexOf('\n')
+  const firstLineStart = prefixNewline === -1 ? 0 : prefixStart + prefixNewline + 1
+  const chunks: string[] = [text.slice(0, firstLineStart)]
+  for (let start = firstLineStart; start < text.length;) {
+    const target = Math.min(start + STREAM_NORMALIZATION_WINDOW, text.length)
+    // Complete LF-delimited lines keep CR runs and progress rewrites inside one block.
+    let end = text.lastIndexOf('\n', target - 1) + 1
+    if (end <= start) {
+      const nextNewline = text.indexOf('\n', target)
+      end = nextNewline === -1 ? text.length : nextNewline + 1
+    }
+    const block = text.slice(start, end)
+    if (block.length > STREAM_NORMALIZATION_WINDOW) {
+      chunks.push(rewriteCarriageReturnLines(block.replace(/\r+\n/g, '\n')))
+    } else {
+      const normalized = block.split(/\r+\n/).join('\n')
+      const rewritten = rewriteCarriageReturnLines(normalized)
+      chunks.push(rewritten === normalized ? normalized : ownRetainedString(rewritten))
+    }
+    start = end
+  }
+  return chunks.join('')
 }
 
 function splitStreamText(text: string, prefix = ''): StreamText {

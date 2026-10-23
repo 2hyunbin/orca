@@ -57,6 +57,24 @@ describe('collapseCarriageReturns', () => {
     expect(collapseCarriageReturns('a\r\nb')).toBe('a\nb')
     expect(collapseCarriageReturns('x\r1%\r')).toBe('1%\r')
   })
+
+  it.each([65_534, 65_535, 65_536, 65_537, 131_071])(
+    'preserves complete lines and progress rewrites around a %i-unit line',
+    (length) => {
+      const prefix = 'row\r\n'.repeat(20_000)
+      const line = 'x'.repeat(length)
+      const text = `${prefix}${line}${'\r'.repeat(70_000)}\nold\rnew\r\r\nend\r`
+      expect(collapseCarriageReturns(text)).toBe(`${'row\n'.repeat(20_000)}${line}\nnew\nend\r`)
+    }
+  )
+
+  it('preserves trailing returns and a single newline in large stream lines', () => {
+    const line = 'x'.repeat(100_000)
+    expect(collapseCarriageReturns(`${line}10%\r20%\r`)).toBe('20%\r')
+    expect(collapseCarriageReturns(`${line}\r`)).toBe(`${line}\r`)
+    expect(collapseCarriageReturns(`${line}old\rfirst\u2028last\r`)).toBe('first\u2028last\r')
+    expect(collapseCarriageReturns(`${line}\r\r\nold\rnew\r`)).toBe(`${line}\nnew\r`)
+  })
 })
 
 describe('applyKernelOutput', () => {
