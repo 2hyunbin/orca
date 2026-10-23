@@ -589,6 +589,95 @@ describe('Claude chat catch-up', () => {
     expect(c.warn).not.toHaveBeenCalled()
   })
 
+  // P known prompts and J reduced items grow independently; this ceiling retains the P×J cost.
+  it.each([10, 100].flatMap((prompts) => [1_000, 10_000].map((items) => ({ prompts, items }))))(
+    'bounds retained-leaf work for $prompts known prompts and $items journal items',
+    async ({ prompts, items }) => {
+      const c = await chat()
+      await c.live()
+      const expected = [...c.rows(), '(continued-outside)']
+      const rows: Record<string, unknown>[] = [
+        reply('saved-leaf', 'earlier-prompt', 'msg_saved', { type: 'text', text: 'earlier' }, 0),
+        prompt('p1', 'saved-leaf', 'ask 1', 1),
+        ...chatTurn.slice(1)
+      ]
+      for (let n = 1; n < prompts; n++) {
+        rows.push(
+          prompt(`outside-p${n}`, n === 1 ? 'a1' : `outside-a${n - 1}`, `ask ${n}`, n * 2 + 1),
+          reply(
+            `outside-a${n}`,
+            `outside-p${n}`,
+            `msg_outside${n}`,
+            { type: 'text', text: `answer ${n}` },
+            n * 2 + 2
+          )
+        )
+        expected.push(`user:ask ${n}`, `assistant:answer ${n}`)
+      }
+      const alias = agentJournalItemKey({ provider: 'claude', sessionId: SID, uuid: 'p1' })
+      const canonical = c.journal.canonicalItemId(alias)
+      expect(canonical).not.toBe(alias)
+      const submissions = c.journal.snapshot().submissions
+      await c.write(rows)
+      expect(await c.open('saved-leaf')).toBe(true)
+      expect(c.rows()).toEqual(expected)
+      expect(c.journal.snapshot().submissions).toEqual(submissions)
+      await c.journal.appendLifecycleBatch({
+        settlementId: 'perf-padding',
+        fence: 1,
+        mutations: Array.from({ length: items - c.journal.snapshot().items.length }, (_, n) => ({
+          kind: 'item' as const,
+          identity: { provider: 'claude' as const, sessionId: SID, uuid: `padding${n}` },
+          body: { kind: 'message' as const, role: 'assistant' as const, blocks: [] },
+          turnScope: { kind: 'thread' as const }
+        }))
+      })
+      const before = c.journal.snapshot()
+      const itemCount = before.items.length
+      expect(itemCount).toBe(items)
+      let associationVisits = 0
+      let viewVisits = 0
+      const visitItems = c.journal.visitItems.bind(c.journal)
+      const visitLinked = c.journal.visitItemsWithLinkage.bind(c.journal)
+      vi.spyOn(c.journal, 'visitItems').mockImplementation((visit) =>
+        visitItems((...args) => {
+          associationVisits++
+          visit(...args)
+        })
+      )
+      vi.spyOn(c.journal, 'visitItemsWithLinkage').mockImplementation((visit) =>
+        visitLinked((...args) => {
+          viewVisits++
+          visit(...args)
+        })
+      )
+      c.journal.visitItems(() => {})
+      c.journal.visitItemsWithLinkage(() => {})
+      expect([associationVisits, viewVisits]).toEqual([itemCount, itemCount])
+      associationVisits = viewVisits = 0
+      const committed = vi.fn()
+      c.journal.observeCommits(committed)
+      const tail = vi.spyOn(transcriptTail, 'readClaudeTranscriptTail')
+      expect(await c.open('saved-leaf')).toBe(true)
+      expect(tail).toHaveBeenCalledOnce()
+      expect(
+        (await tail.mock.results[0].value)?.rows.filter((row) => row.type === 'user')
+      ).toHaveLength(prompts)
+      expect(c.journal.snapshot()).toEqual(before)
+      expect(c.journal.canonicalItemId(alias)).toBe(canonical)
+      expect(committed).not.toHaveBeenCalled()
+      expect(c.warn).not.toHaveBeenCalled()
+      expect(associationVisits).toBeLessThanOrEqual(prompts * itemCount)
+      expect(viewVisits).toBeLessThanOrEqual(2 * itemCount)
+      console.info('retained-leaf operation counts', {
+        prompts,
+        itemCount,
+        associationVisits,
+        viewVisits
+      })
+    }
+  )
+
   it('matches an accepted queued human prompt by its provider source UUID without settling it', async () => {
     const c = await chat()
     await c.live()
