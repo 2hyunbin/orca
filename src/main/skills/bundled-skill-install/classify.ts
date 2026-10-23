@@ -13,8 +13,9 @@ export type ClassifiedBundledSkillPath = {
 }
 
 const SKILL_FILE = 'SKILL.md'
+const MAX_SKILL_BYTES = 64 * 1024
 const FRONTMATTER = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u
-const FRONTMATTER_NAME = /^name:[ \t]*(["']?)(.+?)\1[ \t]*$/mu
+const FRONTMATTER_NAME = /^name:[ \t]*(.*)$/mu
 
 /** sha256 of LF-normalised text, so a pre-#8624 CRLF clone still matches its release. */
 export function bundledSkillTextDigest(bytes: Uint8Array): string {
@@ -30,7 +31,14 @@ export function bundledSkillTextDigest(bytes: Uint8Array): string {
 
 function frontmatterName(bytes: Buffer): string | null {
   const frontmatter = FRONTMATTER.exec(bytes.toString('utf8'))?.[1]
-  return (frontmatter && FRONTMATTER_NAME.exec(frontmatter)?.[2]?.trim()) || null
+  const value = frontmatter ? FRONTMATTER_NAME.exec(frontmatter)?.[1]?.trim() : null
+  if (!value) {
+    return null
+  }
+  const quote = value[0]
+  return (quote === '"' || quote === "'") && value.endsWith(quote)
+    ? value.slice(1, -1).trim() || null
+    : value
 }
 
 async function observeTree(
@@ -95,7 +103,7 @@ export async function classifyBundledSkillPath(
     .map((entry) => `${entry.name}:${entry.kind}`)
     .sort()
   const bytes = entries.includes(`${SKILL_FILE}:file`)
-    ? await filesystem.readFile(join(path, SKILL_FILE))
+    ? await filesystem.readFile(join(path, SKILL_FILE), MAX_SKILL_BYTES)
     : null
   const skillDigest = bytes ? bundledSkillTextDigest(bytes) : null
   const observed: BundledSkillObserved = { kind: 'folder', entries, skillDigest }

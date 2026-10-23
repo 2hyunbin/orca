@@ -119,3 +119,53 @@ describe("force: 'all'", () => {
     expect(kept.sort()).toEqual([EDITED_TEXT, OTHER_TEXT].sort())
   })
 })
+
+describe('an escaping workspace shared root', () => {
+  it.each([
+    { installedOnly: false, text: null, force: undefined, kinds: ['write', 'write'] },
+    { installedOnly: true, text: null, force: undefined, kinds: [] },
+    { installedOnly: true, text: OLD_TEXT, force: undefined, kinds: ['update'] },
+    { installedOnly: true, text: EDITED_TEXT, force: undefined, kinds: ['leave'] },
+    { installedOnly: true, text: EDITED_TEXT, force: 'all' as const, kinds: ['replace'] }
+  ])(
+    'plans agents without shared content: $installedOnly, $force, $kinds',
+    async ({ installedOnly, text, force, kinds }) => {
+      const home = await makeSkillHome()
+      const project = join(home.root, 'project')
+      const claude = join(project, '.claude', 'skills', NAME)
+      const openclaude = join(project, '.openclaude', 'skills', NAME)
+      await writeCopy(home.shared, OLD_TEXT)
+      await mkdir(join(project, '.agents'), { recursive: true })
+      await mkdir(dirname(claude), { recursive: true })
+      await mkdir(dirname(openclaude), { recursive: true })
+      await linkDirectory(dirname(home.shared), join(project, '.agents', 'skills'))
+      if (text) {
+        await writeCopy(claude, text)
+      }
+
+      const { plan } = await previewAndInstall({
+        ...serviceInput(home, { workspaceDirectory: project, agents: ['claude', 'openclaude'] }),
+        installedOnly,
+        force
+      })
+
+      const ops = plan.skills.flatMap((skill) => skill.ops)
+      expect(ops.map((op) => op.kind)).toEqual(kinds)
+      expect(ops.map((op) => op.path)).toEqual(
+        kinds.length === 2 ? [claude, openclaude] : kinds.length === 1 ? [claude] : []
+      )
+      for (const op of ops) {
+        expect(op.role).toBe('agent')
+        expect(op.linkTarget).toBeUndefined()
+        expect(op.requires).toBeUndefined()
+        if (op.kind !== 'leave') {
+          expect(op.content).toBe('files')
+        }
+      }
+      expect(await snapshot(home.shared)).toBe(`dir[SKILL.md]:${OLD_TEXT}`)
+      if (installedOnly) {
+        expect(await snapshot(openclaude)).toBe('missing')
+      }
+    }
+  )
+})
