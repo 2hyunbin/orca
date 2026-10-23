@@ -19,9 +19,7 @@ export type NativeChatToolRunOutcome = {
 }
 
 /** Whether the run may be marked done: settled, nothing failed or cut short,
- *  nothing still running. The running test is repeated after `selectActiveToolCall` on
- *  purpose — that one reports no active call once the turn is known to be over,
- *  and an item still running cannot inherit completion from its turn.
+ *  nothing still running. A running call cannot inherit completion from its turn.
  *
  *  A call carrying no lifecycle `state` is not a failure and not in flight, so a
  *  legacy transcript still settles; nothing here demands an explicit `completed`
@@ -50,9 +48,9 @@ export function nativeChatToolRunOutcome(
     failedCallCount,
     interruptedCallCount,
     succeeded:
-      selectActiveToolCall(blocks, { activeTurnIsWorking }) === null &&
       !hasRunningCall &&
       failedCallCount === 0 &&
-      interruptedCallCount === 0
+      interruptedCallCount === 0 &&
+      selectActiveToolCall(blocks, { activeTurnIsWorking }) === null
   }
 }
