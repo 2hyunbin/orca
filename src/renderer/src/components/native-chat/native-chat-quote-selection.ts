@@ -71,6 +71,25 @@ function isSelectableText(node: Text): boolean {
 
 /** The text as a markdown blockquote, then the blank line that ends it so a reply can follow. */
 export function formatNativeChatQuote(text: string): string {
-  const lines = text.trim().split(/\r?\n/)
-  return `${lines.map((line) => (line.trim() ? `> ${line}` : '>')).join('\n')}\n\n`
+  const trimmed = text.trim()
+  const chunkSize = 64 * 1024
+  if (trimmed.length <= chunkSize) {
+    return `${quoteNativeChatLines(trimmed)}\n\n`
+  }
+  let quoted = ''
+  for (let offset = 0; offset < trimmed.length;) {
+    const newline = trimmed.indexOf('\n', offset + chunkSize)
+    const end = newline === -1 ? trimmed.length : newline
+    const lineEnd = newline !== -1 && trimmed.charCodeAt(end - 1) === 13 ? end - 1 : end
+    quoted += `${offset > 0 ? '\n' : ''}${quoteNativeChatLines(trimmed.slice(offset, lineEnd))}`
+    offset = end + 1
+  }
+  return `${quoted}\n\n`
+}
+
+function quoteNativeChatLines(text: string): string {
+  return text
+    .split(/\r?\n/)
+    .map((line) => (line.trim() ? `> ${line}` : '>'))
+    .join('\n')
 }
