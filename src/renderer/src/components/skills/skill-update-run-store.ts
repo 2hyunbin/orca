@@ -22,6 +22,7 @@ export type SkillUpdateRun =
       finishedAt: number
       result: BundledSkillInstallResult
       summary: BundledSkillResultSummary
+      needsAttention: boolean
     }
   /** The request itself failed; nothing says what reached the disk. */
   | { state: 'error'; targetKey: string; names: string[]; finishedAt: number; message: string }
@@ -59,7 +60,7 @@ function slotFor(targetKey: string): RunSlot {
 }
 
 function isSuccess(run: SkillUpdateRun): boolean {
-  return run.state === 'done' && run.summary.ok
+  return run.state === 'done' && run.summary.ok && !run.needsAttention
 }
 
 function clearSuccessTimer(slot: RunSlot): void {
@@ -138,14 +139,18 @@ export async function startSkillUpdateRun(request: {
   const settled = await executeBundledSkillsOnTarget(target, request.planDigest, {
     force: request.force
   }).then(
-    (result): SkillUpdateRun => ({
-      state: 'done',
-      targetKey,
-      names,
-      finishedAt: Date.now(),
-      result,
-      summary: summarizeBundledSkillOutcomes(result)
-    }),
+    (result): SkillUpdateRun => {
+      const summary = summarizeBundledSkillOutcomes(result)
+      return {
+        state: 'done',
+        targetKey,
+        names,
+        finishedAt: Date.now(),
+        result,
+        summary,
+        needsAttention: summary.skills.some((skill) => skill.text === 'Needs attention')
+      }
+    },
     (error: unknown): SkillUpdateRun => ({
       state: 'error',
       targetKey,

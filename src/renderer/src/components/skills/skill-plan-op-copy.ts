@@ -11,10 +11,30 @@ import {
   bundledSkillInstallAgents,
   bundledSkillOutcomeText,
   summarizeBundledSkillPlan,
-  type BundledSkillPlanState
+  type BundledSkillPlanState,
+  type BundledSkillResultSummary
 } from '../../../../shared/bundled-skill-summary'
 import { SKILL_INSTALL_PROVIDERS } from '../../../../shared/skill-install-providers'
 import { translate } from '@/i18n/i18n'
+
+export function updatedSkillsLabel(summary: BundledSkillResultSummary): string {
+  const { changedCount, leftAloneCount } = summary
+  const updated =
+    changedCount === 1
+      ? translate('auto.components.skills.SkillFreshnessUpdateDialog.updatedOne', 'Updated 1 skill')
+      : translate(
+          'auto.components.skills.SkillFreshnessUpdateDialog.updatedMany',
+          'Updated {{value0}} skills',
+          { value0: changedCount }
+        )
+  return leftAloneCount > 0
+    ? translate(
+        'auto.components.skills.SkillFreshnessUpdateDialog.updatedSkipped',
+        '{{value0}} · {{value1}} skipped',
+        { value0: updated, value1: leftAloneCount }
+      )
+    : updated
+}
 
 export function leaveReasonText(reason: string | null | undefined): string {
   if (!reason || !isBundledSkillLeaveReason(reason)) {
