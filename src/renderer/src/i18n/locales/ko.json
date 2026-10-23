@@ -223,7 +223,7 @@
         "keywordIsolate": "격리",
         "optionRepoTooltip": "각 저장소의 워크스페이스는 처음 사용할 때 생성된 하나의 프로필을 공유합니다.",
         "optionSharedTooltip": "새 탭은 기본 프로필(또는 세션 및 쿠키에서 선택한 프로필)을 사용합니다.",
-        "optionWorktreeTooltip": "각 워크스페이스는 워크스페이스과 함께 삭제된 자체 프로필을 갖습니다.",
+        "optionWorktreeTooltip": "각 워크스페이스에는 자체 프로필이 있으며, 워크스페이스가 삭제되면 프로필도 삭제됩니다.",
         "optionWorktree": "워크스페이스별",
         "repoProfileLabel": "저장소: {{name}}",
         "title": "새 탭의 프로필",
