@@ -120,7 +120,11 @@ it('shipping schema dispatch selects a directory user and submits identity, not 
   })
   expect(screen.getByRole('button', { name: 'Create issue' }).hasAttribute('disabled')).toBe(true)
   expect(create).not.toHaveBeenCalled()
-  fireEvent.click(await screen.findByRole('button', { name: 'Ada Lovelace' }))
+  const directoryUser = await screen.findByRole('button', { name: 'Ada Lovelace' })
+  expect(
+    screen.getAllByRole('button', { name: /Ada Lovelace/ }).map((row) => row.textContent)
+  ).toEqual(['Ada Lovelace', 'Use known user ID "Ada Lovelace"'])
+  fireEvent.click(directoryUser)
   expect(search).toHaveBeenCalledWith(source, 'Ada Lovelace', 'site-1')
   expect(screen.getByRole('button', { name: 'Reporter' }).textContent).toBe('Ada Lovelace')
   await submitIdentity('reporter', 'account-123')

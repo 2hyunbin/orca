@@ -156,6 +156,19 @@ export function JiraUserPicker({
             {option.label}
           </button>
         ))}
+        {users.length === 0 && !loading ? (
+          <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
+            {translate('components.jiraUserPicker.empty', 'No users found')}
+          </p>
+        ) : (
+          <JiraUserOptionList
+            users={users}
+            onSelect={(user) => {
+              onSelect(user)
+              setOpen(false)
+            }}
+          />
+        )}
         {allowKnownUserId && knownUserId ? (
           <button
             type="button"
@@ -170,19 +183,6 @@ export function JiraUserPicker({
             })}
           </button>
         ) : null}
-        {users.length === 0 && !loading ? (
-          <p className="px-2 py-1.5 text-[12px] text-muted-foreground">
-            {translate('components.jiraUserPicker.empty', 'No users found')}
-          </p>
-        ) : (
-          <JiraUserOptionList
-            users={users}
-            onSelect={(user) => {
-              onSelect(user)
-              setOpen(false)
-            }}
-          />
-        )}
       </PopoverContent>
     </Popover>
   )
