@@ -2,6 +2,8 @@ import { terminalInterfaceObservationsEqual } from '../../../src/shared/terminal
 import type { TerminalInterfaceObservation } from '../../../src/shared/terminal-interface-observation'
 import type { MobileTerminalTheme } from '../terminal/terminal-webview-contract'
 import type { AgentStatusEntry } from '../../../src/shared/agent-status-types'
+import type { BrowserLoadError } from '../../../src/shared/browser-workspace-types'
+import { browserLoadErrorsEqual } from '../../../src/shared/browser-load-failure'
 
 export type TerminalRecord = {
   handle: string
@@ -27,6 +29,7 @@ export type MobileTerminalSessionTab = {
   status?: 'pending-handle' | 'ready'
   terminal: string | null
   agentStatus?: AgentStatusEntry | null
+  nativeChatIdentity?: unknown
   /** Host-provided launch context still parked as an unsent TUI-input draft. */
   launchDraft?: string
   launchDraftCreatedAt?: number
@@ -64,6 +67,7 @@ type MobileSessionTabLike =
       browserPageId?: string | null
       url?: string
       loading?: boolean
+      loadError?: BrowserLoadError | null
       canGoBack?: boolean
       canGoForward?: boolean
       isActive?: boolean
@@ -141,6 +145,8 @@ function mobileSessionTabEqual(
         a.launchDraft === b.launchDraft &&
         a.launchDraftCreatedAt === b.launchDraftCreatedAt &&
         JSON.stringify(a.agentStatus ?? null) === JSON.stringify(b.agentStatus ?? null) &&
+        JSON.stringify(a.nativeChatIdentity ?? null) ===
+          JSON.stringify(b.nativeChatIdentity ?? null) &&
         mobileTerminalThemesEqual(a.terminalTheme, b.terminalTheme)
       )
     case 'markdown':
@@ -166,6 +172,7 @@ function mobileSessionTabEqual(
         a.browserPageId === b.browserPageId &&
         a.url === b.url &&
         a.loading === b.loading &&
+        browserLoadErrorsEqual(a.loadError, b.loadError) &&
         a.canGoBack === b.canGoBack &&
         a.canGoForward === b.canGoForward
       )

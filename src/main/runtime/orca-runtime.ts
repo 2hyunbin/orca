@@ -50,8 +50,6 @@ import { sidebarInputsFeedDomains } from './sidebar-inputs/sidebar-inputs-feed-d
 import { requireSwitchedOn } from './sidebar-inputs/require-switched-on'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../shared/runtime-session-contracts'
 import { getHostDisplayLabelOverrides } from '../../shared/host-setting-overrides'
-import { installExternalConversations } from '../external-conversations/external-conversations-install'
-import type { ExternalConversationSeam } from '../external-conversations/external-conversation-seam'
 
 // oxlint-disable-next-line typescript/no-unsafe-declaration-merging -- SAFETY: The existing Linear installer supplies the canonical prototype surface.
 class OrcaRuntimeService extends OrcaRuntimeWithTerminalInterfaces {
@@ -172,13 +170,6 @@ class OrcaRuntimeService extends OrcaRuntimeWithTerminalInterfaces {
   }
 
   private structuredAgentAvailability?: ReturnType<typeof installStructuredAgentAvailability>
-
-  private readonly externalConversations = installExternalConversations(this.store, this)
-
-  /** The connector seam while `experimentalConnectors` is on; null refuses every connector call. */
-  getExternalConversationSeam(): ExternalConversationSeam | null {
-    return this.externalConversations.current()
-  }
 
   /** This host's agent health snapshot and every replacement, from first use; returns the release. */
   subscribeStructuredAgentAvailability(read: StructuredAgentAvailabilityReader): () => void {
