@@ -114,7 +114,7 @@ it.each([false, true])(
           onOpenFileFromMobile: () => () => {},
           onOpenDiffFromMobile: () => () => {},
           onCloseTerminal: () => () => {},
-          onSleepWorktree: () => () => {},
+          onWorkspaceSleep: () => () => {},
           onResumeSleepingAgents: () => () => {},
           onTerminalTabCloseRequest: (listener: (value: TerminalTabCloseRequest) => void) => {
             request = listener
