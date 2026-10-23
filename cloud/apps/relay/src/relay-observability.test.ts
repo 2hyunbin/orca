@@ -846,7 +846,7 @@ describe('latency window summarisation', () => {
     { values: [-5, -1, -9, -3, -2], rank: 1, expected: -1 },
     { values: [0, -0, -0, 0], rank: 0.5, expected: -0 },
     { values: new Array<number>(4), rank: 0.5, expected: 0 },
-    { values: [NaN, NaN], rank: 1, expected: NaN },
+    { values: [Number.NaN, Number.NaN], rank: 1, expected: Number.NaN },
     { values: [Infinity, -Infinity], rank: 0.5, expected: -Infinity }
   ])('selects the nearest rank without interpolating (case %#)', ({ values, rank, expected }) => {
     expect(percentile(values, rank)).toBe(expected)
@@ -860,7 +860,11 @@ describe('latency window summarisation', () => {
     { name: 'negative', values: [-5, -1, -9, -3, -2], expected: { p50: -3, p95: -1, max: 0 } },
     { name: 'mixed signs', values: [-2, 3, -7, 0, 11, -0.5], expected: { p50: -0.5, p95: 11, max: 11 } },
     { name: 'signed zero', values: [0, -0, -0, 0], expected: { p50: 0, p95: 0, max: 0 } },
-    { name: 'NaN', values: [NaN, NaN], expected: { p50: NaN, p95: NaN, max: NaN } },
+    {
+      name: 'NaN',
+      values: [Number.NaN, Number.NaN],
+      expected: { p50: Number.NaN, p95: Number.NaN, max: Number.NaN }
+    },
     { name: 'positive infinity', values: [Infinity, 3, 1], expected: { p50: 3, p95: Infinity, max: Infinity } },
     { name: 'negative infinity', values: [-Infinity, -3, -1], expected: { p50: -3, p95: -1, max: 0 } },
     { name: 'both infinities', values: [Infinity, -Infinity, 3, -Infinity], expected: { p50: -Infinity, p95: Infinity, max: Infinity } },
@@ -893,7 +897,7 @@ describe('latency window summarisation', () => {
     } finally {
       sort.mockRestore()
     }
-    const samples = [5, -1, NaN, 3, -0]
+    const samples = [5, -1, Number.NaN, 3, -0]
     const before = [...samples]
     summaryThroughFlush(samples)
     percentile(samples, 0.5)
