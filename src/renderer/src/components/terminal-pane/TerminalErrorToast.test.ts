@@ -13,6 +13,7 @@ vi.mock('@/lib/client-environment-info', () => ({
 }))
 
 import { i18n } from '@/i18n/i18n'
+import { appendPaneTerminalError, terminalErrorForPane } from './terminal-error-accumulation'
 
 import {
   TerminalErrorToast,
@@ -69,6 +70,74 @@ describe('isSshReconnectOwnedTerminalError', () => {
 })
 
 describe('humanizeTerminalError', () => {
+  it('bounds startup row work linearly through accumulated toast renders at N and 10N', () => {
+    const tokenMatches = vi.spyOn(String.prototype, 'match')
+    const translations = vi.spyOn(i18n, 't')
+    try {
+      for (const kind of ['startup', 'mixed', 'unmatched'] as const) {
+        let view: ReturnType<typeof render> | undefined
+        for (const rowCount of [2, 20]) {
+          const rows = Array.from({ length: rowCount }, (_, index) =>
+            kind === 'startup' || (kind === 'mixed' && index % 2 === 0)
+              ? `Attempt ${index}: agent_session_exited_during_start`
+              : `Paste failed ${index}.`
+          )
+          const midpoint = rowCount / 2
+          const errors = appendPaneTerminalError(
+            appendPaneTerminalError({}, 1, rows.slice(0, midpoint).join('\n')),
+            1,
+            rows.slice(midpoint).join('\n')
+          )
+          const error = terminalErrorForPane(null, errors, 1)
+          expect(error).toBe(rows.join('\n'))
+          if (error === null) {
+            throw new Error('Accumulated error missing')
+          }
+          tokenMatches.mockClear()
+          translations.mockClear()
+          const toast = React.createElement(TerminalErrorToast, {
+            error,
+            agentId: 'codex',
+            paneOnClient: false,
+            onDismiss: vi.fn()
+          })
+          if (view) {
+            view.rerender(toast)
+          } else {
+            view = render(toast)
+          }
+
+          const tokenChecks = tokenMatches.mock.calls.filter(
+            ([pattern]) =>
+              pattern instanceof RegExp && pattern.source.includes('agent_(?:session|launch)_')
+          ).length
+          const startupTranslations = translations.mock.calls.filter(
+            ([key]) =>
+              typeof key === 'string' &&
+              key.startsWith('auto.components.terminal.pane.AgentLaunchPaneNotice.')
+          ).length
+          const matchingRows = kind === 'startup' ? rowCount : kind === 'mixed' ? midpoint : 0
+          // Classification and adaptation each visit a row at most once; known exits use two templates.
+          expect(tokenChecks).toBeGreaterThanOrEqual(rowCount)
+          expect(tokenChecks).toBeLessThanOrEqual(2 * rowCount)
+          if (kind === 'startup') {
+            expect(tokenChecks).toBe(2 * rowCount)
+          }
+          expect(startupTranslations).toBe(2 * matchingRows)
+          expect(
+            view.container.textContent?.match(/Codex exited while starting\./g) ?? []
+          ).toHaveLength(matchingRows)
+          expect(view.container.querySelector('a') !== null).toBe(kind !== 'startup')
+          expect(view.container.textContent).not.toContain('agent_session_exited_during_start')
+        }
+        view?.unmount()
+      }
+    } finally {
+      tokenMatches.mockRestore()
+      translations.mockRestore()
+    }
+  })
+
   it.each([false, true])(
     'explains a known exit and retains reporting for independent errors: %s',
     (mixed) => {

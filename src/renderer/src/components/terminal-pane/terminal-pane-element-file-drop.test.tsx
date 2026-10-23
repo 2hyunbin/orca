@@ -184,7 +184,7 @@ function mountSurface(
       2: { left: 220, top: 0, width: 200 }
     },
     renamingPaneId: null,
-    resolveAgentForLeaf: () => null,
+    activeAgentId: null,
     renameInputRef: { current: null },
     paneTitleBackground: 'transparent',
     activatePaneTitleInteraction: activate,

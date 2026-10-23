@@ -37,6 +37,7 @@ export function TerminalPaneSurface({
   controller: TerminalPaneController
 }): React.JSX.Element {
   const {
+    activeAgentId,
     activePane,
     activePaneCanContinueInNewSession,
     activePaneCanResumeInChat,
@@ -94,7 +95,6 @@ export function TerminalPaneSurface({
     renameInputRef,
     renameValue,
     renamingPaneId,
-    resolveAgentForLeaf,
     saveQuickCommand,
     searchOpen,
     searchStateRef,
@@ -125,7 +125,6 @@ export function TerminalPaneSurface({
   const paneOnClient = useAppStore(
     (state) => getKnownExecutionHostIdForWorktree(state, worktreeId) === LOCAL_EXECUTION_HOST_ID
   )
-  const activeAgentId = resolveAgentForLeaf(activePane?.leafId ?? null)
 
   return (
     <>
