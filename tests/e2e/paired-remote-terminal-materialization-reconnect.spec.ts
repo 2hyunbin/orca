@@ -144,6 +144,7 @@ async function parkHostTerminal(
 ): Promise<void> {
   let lastError = 'terminal.stopExact was never attempted'
   for (let attempt = 0; attempt < 10; attempt += 1) {
+    const stopStartedAt = Date.now()
     const stop = await callRuntime<{
       stopped: number
       stoppedPtyIds: string[]
@@ -158,7 +159,32 @@ async function parkHostTerminal(
       return null
     })
     if (stop) {
-      expect(stop.postStopVerified).toBe(true)
+      const diagnostic: Record<string, unknown> = {
+        expectedPtyId: options.expectedPtyId,
+        elapsedMs: Date.now() - stopStartedAt,
+        stop
+      }
+      if (stop.postStopVerified === false) {
+        diagnostic.inventory = await readFreshTerminalInventory(() =>
+          callRuntime<RuntimeTerminalListResult>(page, environmentId, 'terminal.list', {
+            worktree: `id:${worktreeId}`,
+            requireFreshPtyLiveness: true
+          })
+        ).catch((error: unknown) => ({ error: String(error) }))
+        diagnostic.surface = await hostSurfaceStatus(page, environmentId, worktreeId, parentTabId)
+          .then((status) => ({ parentTabId, status }))
+          .catch((error: unknown) => ({ parentTabId, error: String(error) }))
+      }
+      await test
+        .info()
+        .attach('host-terminal-park', {
+          body: JSON.stringify(diagnostic, null, 2),
+          contentType: 'application/json'
+        })
+        .catch((error: unknown) => {
+          diagnostic.attachmentError = String(error)
+        })
+      expect(stop.postStopVerified, JSON.stringify(diagnostic, null, 2)).toBe(true)
       expect(stop.stopped).toBe(1)
       expect(stop.stoppedPtyIds).toEqual([options.expectedPtyId])
       return
