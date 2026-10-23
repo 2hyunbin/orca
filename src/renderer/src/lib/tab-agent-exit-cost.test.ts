@@ -24,7 +24,8 @@ function countedRows<T>(rows: T[], count: () => void): T[] {
       if (typeof key === 'string' && /^\d+$/.test(key)) {
         count()
       }
-      return Reflect.get(target, key)
+      // SAFETY: array proxy keys are forwarded unchanged, including iterator symbols.
+      return target[key as keyof T[]]
     }
   })
 }

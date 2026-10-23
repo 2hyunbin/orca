@@ -1,3 +1,5 @@
+import { getAgentStatusOwner } from '@/store/agent-status-commit'
+import { getTabAgentExitOwner } from './tab-agent-exit-owner'
 import { applyAgentStatusPatch } from '@/store/agent-status-patch'
 // @vitest-environment happy-dom
 
@@ -17,6 +19,7 @@ const LEAF_ID = '11111111-1111-4111-8111-111111111111'
 const SECOND_LEAF_ID = '22222222-2222-4222-8222-222222222222'
 let latestHookAgent: TerminalAgent | null | undefined
 const hookRoots: Root[] = []
+let stopEvidence = () => {}
 
 function HookProbe({ tab }: { tab: TerminalTab }): null {
   latestHookAgent = useTabAgent(tab)
@@ -24,11 +27,14 @@ function HookProbe({ tab }: { tab: TerminalTab }): null {
 }
 
 async function renderHookProbe(tab: TerminalTab): Promise<Root> {
+  stopEvidence()
+  stopEvidence = getTabAgentExitOwner(getAgentStatusOwner(useAppStore)).start()
   const container = document.createElement('div')
   document.body.appendChild(container)
   const root = createRoot(container)
   hookRoots.push(root)
   await act(async () => {
+    useAppStore.setState({ tabsByWorktree: { [tab.worktreeId]: [tab] } })
     root.render(createElement(HookProbe, { tab }))
   })
   await flushHookEffects()
@@ -37,6 +43,7 @@ async function renderHookProbe(tab: TerminalTab): Promise<Root> {
 
 async function rerenderHookProbe(root: Root, tab: TerminalTab): Promise<void> {
   await act(async () => {
+    useAppStore.setState({ tabsByWorktree: { [tab.worktreeId]: [tab] } })
     root.render(createElement(HookProbe, { tab }))
   })
   await flushHookEffects()
@@ -578,6 +585,7 @@ describe('useTabAgent', () => {
   })
 
   afterEach(() => {
+    stopEvidence()
     hookRoots.splice(0).forEach((root) => {
       act(() => root.unmount())
     })
