@@ -1,45 +1,45 @@
 {
-  "source_commit": "80d4fe99e344f49727eb12d32f2aa20b64e3701d",
-  "scanned_source_files": 37078,
+  "source_commit": "be4b210e2726b9afc5800174d35135df34920e57",
+  "scanned_source_files": 37119,
   "counts": {
-    "files": 16888,
-    "declarations": 119046,
-    "reviewed": 310,
+    "files": 16970,
+    "declarations": 118918,
+    "reviewed": 1347,
     "stale": 0,
-    "unreviewed": 16578,
-    "removed": 5
+    "unreviewed": 15623,
+    "removed": 16
   },
-  "reviewed_original_declarations": 2202,
+  "reviewed_original_declarations": 9785,
   "areas": {
     ".github": {
-      "files": 2,
-      "reviewed": 1,
+      "files": 3,
+      "reviewed": 3,
       "stale": 0,
-      "unreviewed": 1
+      "unreviewed": 0
     },
     "cloud": {
-      "files": 227,
-      "reviewed": 85,
+      "files": 241,
+      "reviewed": 241,
       "stale": 0,
-      "unreviewed": 142
+      "unreviewed": 0
     },
     "config": {
       "files": 607,
-      "reviewed": 85,
+      "reviewed": 392,
       "stale": 0,
-      "unreviewed": 522
+      "unreviewed": 215
     },
     "docs": {
-      "files": 52,
-      "reviewed": 0,
+      "files": 106,
+      "reviewed": 106,
       "stale": 0,
-      "unreviewed": 52
+      "unreviewed": 0
     },
     "mobile": {
-      "files": 1269,
-      "reviewed": 83,
+      "files": 1266,
+      "reviewed": 339,
       "stale": 0,
-      "unreviewed": 1186
+      "unreviewed": 927
     },
     "native": {
       "files": 17,
@@ -49,15 +49,15 @@
     },
     "src/cli": {
       "files": 185,
-      "reviewed": 0,
+      "reviewed": 98,
       "stale": 0,
-      "unreviewed": 185
+      "unreviewed": 87
     },
     "src/main": {
-      "files": 6617,
-      "reviewed": 0,
+      "files": 6627,
+      "reviewed": 112,
       "stale": 0,
-      "unreviewed": 6617
+      "unreviewed": 6515
     },
     "src/packages": {
       "files": 16,
@@ -72,16 +72,16 @@
       "unreviewed": 0
     },
     "src/renderer": {
-      "files": 5403,
+      "files": 5407,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 5403
+      "unreviewed": 5407
     },
     "src/shared": {
-      "files": 1300,
+      "files": 1302,
       "reviewed": 4,
       "stale": 0,
-      "unreviewed": 1296
+      "unreviewed": 1298
     },
     "src/wsl-guest": {
       "files": 45,

@@ -1,3 +1,4 @@
+import { endComposition } from '@/lib/ime-composition-event.test-support'
 import { changePrompt, promptEditor, promptValue } from './native-chat-prompt-editor.test-support'
 // @vitest-environment happy-dom
 
@@ -399,6 +400,24 @@ describe('a send handed back while the IME owns the editor', () => {
     )
     changePrompt(input, '$review')
     expect(promptSkillRefs(readNativeChatComposerDraft(scope).document)).toEqual([])
+  })
+})
+
+// Regression (#30159): a message ending in a composing syllable needed a second Enter.
+describe('the Enter that commits a Hangul composition', () => {
+  it('sends the message once, with its last syllable', async () => {
+    const structured = transport()
+    renderComposer(structured)
+    const input = textarea()
+
+    fireEvent.compositionStart(input)
+    changePrompt(input, '안녕하세요')
+    fireEvent.keyDown(input, { key: 'Process', keyCode: 229, isComposing: true })
+    endComposition(input, '요')
+    await act(async () => pressEnter(input))
+
+    expect(structured.send).toHaveBeenCalledOnce()
+    expect(structured.send).toHaveBeenCalledWith('안녕하세요', [])
   })
 })
 

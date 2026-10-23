@@ -12,7 +12,10 @@ import {
   writeMobileWebBundleTree
 } from './mobile-web-bundle-manifest.mjs'
 import { MOBILE_WEB_PAGE_ROUTES } from './mobile-web-page-routes.mjs'
-import { MobileWebBundleManifestSchema } from '../../src/shared/mobile-web-bundle/manifest-contract.js'
+import {
+  MOBILE_WEB_PAGE_VERSION,
+  MobileWebBundleManifestSchema
+} from '../../src/shared/mobile-web-bundle/manifest-contract.js'
 
 describe('computeMobileWebBundleBuildId', () => {
   const assets = [
@@ -52,9 +55,9 @@ describe('hashedAsset', () => {
     const asset = hashedAsset(Buffer.from('body', 'utf8'), 'js')
 
     expect(asset.path).toBe(`assets/${asset.sha256}.js`)
-    expect(asset.sha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(asset.sha256).toBe('230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5')
     expect(asset.byteLength).toBe(4)
-    expect(asset.contentType).toBe(contentTypeForExtension('js'))
+    expect(asset.contentType).toBe('text/javascript; charset=utf-8')
   })
 
   it('refuses an extension with no registered content type', () => {
@@ -84,7 +87,7 @@ describe('writeMobileWebBundleTree', () => {
         protocolWindow: { runtimeProtocolVersion: 3, minCompatibleRuntimeProtocolVersion: 3 }
       })
       const manifest = JSON.parse(await readFile(join(outDir, 'manifest.json'), 'utf8'))
-      expect(Number.isInteger(manifest.pageVersion)).toBe(true)
+      expect(manifest.pageVersion).toBe(MOBILE_WEB_PAGE_VERSION)
       const parsed = MobileWebBundleManifestSchema.parse(manifest)
       expect(parsed.pageVersion).toBe(manifest.pageVersion)
       expect(parsed.routes).toEqual(MOBILE_WEB_PAGE_ROUTES)
