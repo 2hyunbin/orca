@@ -123,7 +123,7 @@ function SortableQueuedMessage({
     },
     insertion,
     grip: movable ? (
-      <span className="inline-flex shrink-0 opacity-0 group-hover/queued:opacity-100 has-[:focus-visible]:opacity-100">
+      <span className="inline-flex shrink-0 opacity-0 group-hover/queued:opacity-100 has-[:focus-visible]:opacity-100 [@media(hover:none)]:opacity-100">
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
