@@ -1,14 +1,12 @@
 import {
   DEFAULT_WATERMARKS,
-  type StructuredAgentSessionSinkWatermarks
+  type StructuredAgentSessionSinkWatermarks,
+  type StructuredAgentSessionSinkAdmission,
+  type StructuredAgentSessionSinkState,
+  type StructuredAgentSessionSinkBarrier
 } from './structured-agent-session-sink-admission'
 export type { StructuredAgentSessionSinkWatermarks } from './structured-agent-session-sink-admission'
 import { createStructuredAgentSessionTextAppend } from './structured-agent-session-text-append'
-import type {
-  StructuredAgentSessionSinkAdmission,
-  StructuredAgentSessionSinkState,
-  StructuredAgentSessionSinkBarrier
-} from './structured-agent-session-sink-admission'
 export type {
   StructuredAgentSessionSinkAdmission,
   StructuredAgentSessionSinkState,

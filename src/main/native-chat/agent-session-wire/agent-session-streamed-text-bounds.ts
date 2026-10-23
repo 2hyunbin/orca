@@ -1,4 +1,4 @@
-import { AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER } from './agent-session-delta-coalescer'
+export const AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER = '\n[Orca: streamed output truncated]'
 
 export function appendWithinUtf8ByteLimit(
   current: string[],

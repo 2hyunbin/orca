@@ -1,11 +1,15 @@
 import { appendStructuredAgentSessionTextWindow } from '../native-chat/agent-session-wire/structured-agent-session-text-append'
-import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import type { AgentJournalTurnScope } from '../../shared/agent-session-journal-types'
 import { claudeStreamingMessageBody } from './claude-structured-item-translation'
 import { agentJournalLinkageFields } from '../../shared/agent-session-journal-producer'
-import type { AgentJournalItemIdentity } from '../../shared/agent-session-journal-types'
+import type {
+  AgentJournalItemIdentity,
+  AgentJournalTurnScope
+} from '../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
-import type { StructuredAgentSessionAppendOptions } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type {
+  StructuredAgentSessionAppendOptions,
+  StructuredAgentSessionEventSink
+} from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import {
   createAgentSessionDeltaCoalescer,
   type AgentSessionDeltaWindow,

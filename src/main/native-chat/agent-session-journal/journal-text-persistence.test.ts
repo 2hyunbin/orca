@@ -180,6 +180,26 @@ it('bounds each cleanup transaction and drains remaining pieces while the chat i
   await r.stream(0, 'a', 'a')
   for (let n = 1; n <= 300; n++) {
     await r.stream(n, 'a', 'a'.repeat(n + 1))
+    if (n === 150) {
+      const user: AgentJournalMessageItem = {
+        kind: 'message',
+        role: 'user',
+        blocks: [{ type: 'text', text: 'next' }]
+      }
+      await r.journal.queuedMessages.insert({ messageId: 'queued', body: user })
+      await r.journal.appendSubmission({
+        clientMessageId: 'owed',
+        payloadFingerprint: 'fingerprint',
+        body: user,
+        fence: 7
+      })
+      await r.journal.resolveDispatch({
+        clientMessageId: 'owed',
+        fence: 7,
+        state: 'unknown',
+        reason: 'unconfirmed'
+      })
+    }
   }
   const control: AgentJournalItemIdentity = { provider: 'orca', clientMessageId: 'control' }
   await r.journal.appendItem(
@@ -194,7 +214,13 @@ it('bounds each cleanup transaction and drains remaining pieces while the chat i
     options
   )
   r.time(500)
-  await r.journal.appendItem(identity, body('a'.repeat(301)), options)
+  await r.journal.appendLifecycleBatch({
+    settlementId: 'completion',
+    fence: 7,
+    mutations: [
+      { kind: 'item', identity, body: body('a'.repeat(301)), turnScope: AGENT_JOURNAL_THREAD_SCOPE }
+    ]
+  })
   expect(r.rows().filter((row) => row.kind === 'text-delta')).toHaveLength(44)
   await new Promise<void>((resolve) => setImmediate(resolve))
   await r.journal.readInOrder(() => undefined)
@@ -208,6 +234,15 @@ it('bounds each cleanup transaction and drains remaining pieces while the chat i
   const loaded = replayJournal(r.database.db, 'chat')
   expect(loaded?.damage).toBeNull()
   expect(loaded?.state.items.get(agentJournalItemKey(control))?.body.kind).toBe('approval')
+  expect(loaded?.state.queue.cards.get('queued')?.body.blocks).toEqual([
+    { type: 'text', text: 'next' }
+  ])
+  expect(loaded?.state.submissions.get('owed')?.dispatchState).toBe('unknown')
+  expect(
+    r
+      .rows()
+      .filter((row) => row.kind === 'queue' || row.kind === 'submission' || row.kind === 'dispatch')
+  ).toHaveLength(3)
   const invalid = proofs[0]
   r.database.db
     .prepare('UPDATE journal_rows SET row_json = ? WHERE session_id = ? AND epoch = ? AND seq = ?')

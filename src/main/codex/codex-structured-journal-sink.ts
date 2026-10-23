@@ -97,37 +97,14 @@ export function appendCodexItemAndPublish(
   options: StructuredAgentSessionItemAppendOptions
 ): StructuredAgentSessionSinkAdmission {
   if (options.streamText && sink.tryAppendStreamedItem) {
-    return sink.tryAppendTransition
-      ? sink.tryAppendTransition({
-          steps: [
-            {
-              kind: 'item',
-              reservedBytes:
-                Buffer.byteLength(options.streamText.suffix, 'utf8') +
-                Buffer.byteLength(JSON.stringify({ identity, body }), 'utf8') +
-                512,
-              resolve: () => ({ identity, body }),
-              options
-            }
-          ],
-          lifecycle: false,
-          publish: true
-        })
-      : sink.tryAppendStreamedItem(identity, body, options)
+    return sink.tryAppendStreamedItem(identity, body, options)
   }
   if (options.streamText) {
     body = withJournalText(body, options.streamText.field, options.streamText.text())
   }
   const admission = sink.tryAppendItem
     ? sink.tryAppendItem(identity, body, options)
-    : (sink.appendItem(
-        identity,
-        options.streamText
-          ? withJournalText(body, options.streamText.field, options.streamText.text())
-          : body,
-        options
-      ),
-      ADMITTED)
+    : (sink.appendItem(identity, body, options), ADMITTED)
   if (!admission.accepted) {
     return admission
   }
