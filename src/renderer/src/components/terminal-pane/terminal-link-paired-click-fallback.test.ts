@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { openFilePathLinkAtBufferPosition } from './terminal-file-link-hit-testing'
+import { openDetectedFilePath } from './terminal-file-open-routing'
 import { createTerminalLinkTestDoubles } from './terminal-link-handlers-test-fixtures'
 import { makeBuffer, makeBufferLine } from './terminal-link-provider-buffer-fixtures'
 import {
@@ -169,5 +170,42 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
       '/repo/src/gone.ts',
       expect.objectContaining({ verdict: 'missing' })
     )
+  })
+
+  it('checks a longer hard-wrapped name before opening its cached prefix', async () => {
+    setPlatform('Macintosh')
+    vi.mocked(window.api.shell.pathExists).mockImplementation(
+      async (path: string) => path === '/repo/foo.ts.map'
+    )
+    const buffer = makeBuffer([makeBufferLine('/repo/foo.ts'), makeBufferLine('.map')])
+    const pathExistsCache = new Map([['active\0/repo/foo.ts', true]])
+    const deps = { startupCwd: '/repo', worktreeId: 'wt-1', worktreePath: '/repo', pathExistsCache }
+
+    openFilePathLinkAtBufferPosition(buffer, { x: 4, y: 1 }, 80, deps)
+    await flushAsyncWork()
+
+    expect(statMock).toHaveBeenCalledTimes(1)
+    expect(statMock).toHaveBeenCalledWith({ filePath: '/repo/foo.ts.map' })
+  })
+
+  it('drops a slow ambiguous probe once any other file open has started', async () => {
+    setPlatform('Macintosh')
+    const probe = createDeferred<boolean>()
+    vi.mocked(window.api.shell.pathExists).mockImplementation(() => probe.promise)
+    const deps = { startupCwd: '/repo', worktreeId: 'wt-1', worktreePath: '/repo' }
+
+    openFilePathLinkAtBufferPosition(
+      makeBuffer([makeBufferLine('/repo/a.txt'), makeBufferLine('/repo/b.txt')]),
+      { x: 4, y: 1 },
+      80,
+      deps
+    )
+    // Why: e.g. a chat link or the link popover, which never passes through the click fallback.
+    openDetectedFilePath('/repo/other.txt', null, null, deps)
+    probe.resolve(true)
+    await flushAsyncWork()
+
+    expect(statMock).toHaveBeenCalledTimes(1)
+    expect(statMock).toHaveBeenCalledWith({ filePath: '/repo/other.txt' })
   })
 })

@@ -91,6 +91,12 @@ export function shouldOpenTerminalFileWithSystemDefault(fileContext: TerminalFil
 
 let latestOpenDetectedFilePathRequestId = 0
 
+/** For work that decides what to open before calling in: true until any later open starts. */
+export function captureDetectedFilePathOpenTurn(): () => boolean {
+  const requestId = latestOpenDetectedFilePathRequestId
+  return () => requestId === latestOpenDetectedFilePathRequestId
+}
+
 export function openDetectedFilePath(
   filePath: string,
   line: number | null,

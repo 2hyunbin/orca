@@ -1,7 +1,11 @@
 import { dedupeLogicalLines } from './terminal-link-logical-line-deduplication'
 import type { IBufferLine, IBufferRange } from '@xterm/xterm'
 import { extractTerminalFileLinkCandidates } from '@/lib/terminal-links'
-import { openDetectedFilePath, type FileOpenFailure } from './terminal-file-open-routing'
+import {
+  captureDetectedFilePathOpenTurn,
+  openDetectedFilePath,
+  type FileOpenFailure
+} from './terminal-file-open-routing'
 import {
   fileLinkTargetExists,
   resolveFileLinkTarget,
@@ -85,36 +89,37 @@ export function openFilePathLinkAtBufferPosition(
         : undefined
     })
   }
-  const known =
-    longestPath(links.filter((link) => link.cachedExists)) ??
-    longestPath(links.filter((link) => link.isKnownWorktreeRoot))
-  if (known) {
-    open(known)
-    return true
-  }
-
+  const known = longestPath(
+    links.filter((link) => link.cachedExists === true || link.isKnownWorktreeRoot)
+  )
+  // Why longer only: a cached `foo.ts` must not win over an unchecked hard-wrapped `foo.ts.map`.
   const unprobed = links.filter(
     (link, index) =>
       link.cachedExists === undefined &&
+      !link.isKnownWorktreeRoot &&
+      (!known || link.pathText.length > known.pathText.length) &&
       links.findIndex((other) => other.cacheKey === link.cacheKey) === index
   )
-  if (unprobed.length <= 1) {
-    if (unprobed[0]) {
-      open(unprobed[0])
+  if (unprobed.length === 0 || (!known && unprobed.length === 1)) {
+    const link = known ?? unprobed[0]
+    if (link) {
+      open(link)
     }
-    return unprobed.length === 1
+    return link !== undefined
   }
 
   // Why: hard-wrap joining offers guesses like `a.txt/b.txt` that sort first; opening one
   // before its hover probe answers (a host round-trip) fails and hides the real path.
+  const isLatestOpen = captureDetectedFilePathOpenTurn()
   void probeClickedFileLinks(unprobed, deps).then((existing) => {
-    if (gesture !== latestClickGesture) {
+    if (gesture !== latestClickGesture || !isLatestOpen()) {
       return
     }
     // Why the shortest otherwise: it is the path the user sees, and opening it lets the open
     // report the real failure instead of this probe guessing "missing" for a refusal.
     open(
       longestPath(existing) ??
+        known ??
         unprobed.reduce((a, b) => (b.pathText.length < a.pathText.length ? b : a))
     )
   })
