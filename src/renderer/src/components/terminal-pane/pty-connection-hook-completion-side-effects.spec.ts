@@ -17,7 +17,10 @@ import {
   createPane,
   createManager
 } from './pty-connection-test-pane-fixtures'
-import { buildPaneConnectionDeps } from './pty-connection-test-deps'
+import {
+  buildPaneConnectionDeps,
+  createTypedPaneConnectionFixture
+} from './pty-connection-test-deps'
 import {
   createInitialStoreState,
   buildActiveRuntimeEnvironmentState
@@ -145,11 +148,9 @@ export function registerPtyConnectionHookCompletionSideEffectsTests(): void {
         stateHistory: []
       }
 
-      const pane = createPane(1)
-      const manager = createManager(1)
-      const deps = createDeps()
+      const { pane, manager, deps } = await createTypedPaneConnectionFixture(() => mockStoreState)
 
-      const binding = connectPanePty(pane as never, manager as never, deps as never)
+      const binding = connectPanePty(pane, manager, deps)
 
       const titleHandler = createdTransportOptions[0]?.onTitleChange as
         | ((title: string, rawTitle: string) => void)

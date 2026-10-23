@@ -200,10 +200,9 @@ describe('registerPtyHandlers', () => {
           undefined,
           undefined,
           undefined,
-          // SAFETY: The fixture supplies the project-runtime methods this launch reads.
           makeProjectRuntimeStore({
             projectRuntimePreference: { kind: 'wsl', distro: 'Ubuntu-24.04' }
-          }) as never
+          })
         )
         await handlers.get('pty:spawn')!(null, {
           cols: 80,
@@ -247,17 +246,19 @@ describe('registerPtyHandlers', () => {
         undefined,
         undefined,
         undefined,
-        // SAFETY: The fixture supplies the project-runtime methods this launch reads.
         makeProjectRuntimeStore({
           projectRuntimePreference: { kind: 'wsl', distro: 'Ubuntu-24.04' }
-        }) as never
+        })
       )
-      const result = (await handlers.get('pty:spawn')!(null, {
+      const result = await handlers.get('pty:spawn')!(null, {
         cols: 80,
         rows: 24,
         cwd: '/a',
         worktreeId: `repo-1::${worktreePath}`
-      })) as { startupCwdFallback?: { kind: string; cwd: string } }
+      })
+      if (!result || typeof result !== 'object' || !('startupCwdFallback' in result)) {
+        throw new Error('Expected a startup cwd fallback result')
+      }
 
       expect(wslUncDirectoryExistsAsyncMock).toHaveBeenCalledTimes(1)
       expect(providerSpawn).toHaveBeenCalledWith(expect.objectContaining({ cwd: worktreePath }))

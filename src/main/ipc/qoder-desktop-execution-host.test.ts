@@ -179,10 +179,9 @@ describe('desktop Qoder execution-host selection', () => {
           cwd: '/work/project',
           worktreeId: 'repo-1::/work/project'
         },
-        // SAFETY: This launch reaches only the existing project-runtime store slice.
         makeProjectRuntimeStore({
           projectRuntimePreference: { kind: 'wsl', distro: 'Debian' }
-        }) as never
+        })
       )
       expect(providerSpawn).toHaveBeenCalledWith(
         expect.objectContaining({

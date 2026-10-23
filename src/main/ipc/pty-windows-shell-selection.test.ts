@@ -14,6 +14,7 @@ import { setupPtyIpcSuite } from './pty-ipc-test-harness'
 import { createDaemonActiveProviderFixtures } from './pty-ipc-daemon-provider-fixtures'
 import { _setWslCachesForTests } from '../wsl'
 import { registerPtyHandlers } from './pty/register-handlers'
+import { createGlobalSettingsFixture } from '../../shared/global-settings-test-fixture'
 
 vi.mock('electron', () => import('./pty-ipc-mock-registry').then((m) => m.electronModuleMock()))
 vi.mock('fs', () => import('./pty-ipc-mock-registry').then((m) => m.fsModuleMock()))
@@ -217,13 +218,12 @@ describe('registerPtyHandlers', () => {
         undefined,
         undefined,
         () =>
-          ({
+          createGlobalSettingsFixture({
             terminalWindowsShell: 'wsl.exe',
             terminalWindowsWslDistro: 'Debian'
-          }) as never,
+          }),
         undefined,
-        // SAFETY: The fixture supplies the project-runtime methods this launch reads.
-        makeProjectRuntimeStore({ projectRuntimePreference: { kind: 'windows-host' } }) as never
+        makeProjectRuntimeStore({ projectRuntimePreference: { kind: 'windows-host' } })
       )
       await handlers.get('pty:spawn')!(null, {
         cols: 80,
@@ -245,15 +245,14 @@ describe('registerPtyHandlers', () => {
         undefined,
         undefined,
         () =>
-          ({
+          createGlobalSettingsFixture({
             terminalWindowsShell: 'powershell.exe',
             terminalWindowsWslDistro: 'Debian'
-          }) as never,
+          }),
         undefined,
-        // SAFETY: The fixture supplies the project-runtime methods this launch reads.
         makeProjectRuntimeStore({
           projectRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
-        }) as never
+        })
       )
       await handlers.get('pty:spawn')!(null, {
         cols: 80,
@@ -275,14 +274,13 @@ describe('registerPtyHandlers', () => {
         undefined,
         undefined,
         () =>
-          ({
+          createGlobalSettingsFixture({
             terminalWindowsShell: 'powershell.exe'
-          }) as never,
+          }),
         undefined,
-        // SAFETY: The fixture supplies the project-runtime methods this launch reads.
         makeProjectRuntimeStore({
           projectRuntimePreference: { kind: 'wsl', distro: 'Ubuntu' }
-        }) as never
+        })
       )
 
       await expect(
