@@ -10,7 +10,7 @@ import {
   STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY as HEALTH,
   STRUCTURED_AGENT_SESSION_CLIENT_LAUNCH_MODE_CAPABILITY as MODE
 } from '../../../shared/protocol-version'
-const rpc = vi.hoisted(() => ({ call: vi.fn(), subscribe: vi.fn() }))
+const rpc = vi.hoisted(() => ({ call: vi.fn(), subscribe: vi.fn(), direct: vi.fn() }))
 vi.mock('@/runtime/runtime-rpc-client', () => ({ callRuntimeRpc: rpc.call }))
 vi.mock('@/runtime/runtime-rpc-subscribe', () => ({ subscribeRuntimeRpc: rpc.subscribe }))
 import { useAppStore } from '@/store'
@@ -20,8 +20,7 @@ import { acquireAgentLaunchChoices, holdChatProgramFacts } from './host-chat-pro
 import * as chat from './host-chat-program'
 import { resolveQuickWorkspaceAgentSelection } from './quick-workspace-agent-selection'
 import { resolveChecksActionAgent, startFixChecksAgent } from './fix-checks-agent-launch'
-const launch = vi.hoisted(() => ({ direct: vi.fn() }))
-vi.mock('./launch-work-item-direct', () => ({ launchWorkItemDirect: launch.direct }))
+vi.mock('./launch-work-item-direct', () => ({ launchWorkItemDirect: rpc.direct }))
 const CAPS = [CHAT, CATALOG, INSTALL, HEALTH, MODE]
 const workspace = { kind: 'git-worktree', runtimeEnvironmentId: 'B' } as const
 const host = { executionHostId: 'runtime:B', hostCapabilities: CAPS }
@@ -107,9 +106,8 @@ it('keeps one still-detecting action on the current open through learning/reconn
   const action = acquireAgentLaunchChoices(workspace, () => detect.promise).then(settled)
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status()]]) })
   await flush()
-  const handlers = rpc.subscribe.mock.calls.at(-1)![3]
-  handlers.onEvent(frame('grok', 'available'))
-  handlers.onClose()
+  rpc.subscribe.mock.calls.at(-1)![3].onEvent(frame('grok', 'available'))
+  rpc.subscribe.mock.calls.at(-1)![3].onClose()
   useAppStore.setState({ runtimeStatusByEnvironmentId: new Map([['B', status('r1', 1)]]) })
   detect.resolve([])
   await flush()
@@ -124,16 +122,14 @@ it('adapts only absent publication on older hosts and shares the saved Checks ga
   const settings = getDefaultSettings('/tmp')
   settings.experimentalNativeChat = true
   settings.sourceControlAi = getDefaultSourceControlAiSettings()
-  settings.sourceControlAi.actions = {
-    fixChecks: { agentId: 'antigravity', commandInputTemplate: '{basePrompt}' }
-  }
+  settings.sourceControlAi.actions = { fixChecks: { agentId: 'antigravity' } }
   useAppStore.setState({ settings, ensureDetectedAgents: async () => [] })
   await acquireAgentLaunchChoices(local, async () => [])
   const checksAgent = (actionId: 'fixChecks' | 'resolveComments') =>
     resolveChecksActionAgent(useAppStore.getState(), actionId, undefined, local, [])
   expect(checksAgent('fixChecks')).toBe('antigravity')
   expect(checksAgent('resolveComments')).toBeNull()
-  launch.direct.mockResolvedValue(true)
+  rpc.direct.mockResolvedValue(true)
   await startFixChecksAgent({
     repoId: 'missing',
     basePrompt: 'fix checks',
@@ -141,7 +137,7 @@ it('adapts only absent publication on older hosts and shares the saved Checks ga
     launchSource: 'task_page',
     openModalFallback: vi.fn()
   })
-  expect(launch.direct.mock.lastCall?.[0].agentOverride).toBe('antigravity')
+  expect(rpc.direct.mock.lastCall?.[0].agentOverride).toBe('antigravity')
   useAppStore.setState({ settings: { ...settings, disabledTuiAgents: ['antigravity'] } })
   expect(checksAgent('fixChecks')).toBeNull()
   const localChat = { executionHostId: 'local', hostCapabilities: [CHAT] }
