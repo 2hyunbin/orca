@@ -176,13 +176,12 @@ export function installPaneAgentIdentity(session: ConnectPanePtySession): void {
     // Why lazy: the completion coordinator is installed after this tracker.
     onAgentProcessRead: (process) =>
       session.agentCompletionCoordinator?.observeForegroundAgentProcess(process),
-    hasKnownAgentIdentity: session.paneHasKnownAgentIdentity,
+    hasKnownAgentIdentity: () =>
+      useAppStore.getState().paneForegroundAgentByPaneKey[session.cacheKey]?.agentEvidence ===
+      'process-read',
     hasAgentExpectation: () => {
       const state = useAppStore.getState()
-      return (
-        session.paneExpectsLaunchAgent(state) ||
-        Boolean(state.paneForegroundAgentByPaneKey[session.cacheKey]?.agent)
-      )
+      return session.paneExpectsLaunchAgent(state) || session.paneHasKnownAgentIdentity()
     },
     getObservationOwner: () => readPaneObservationOwner(session),
     onConfirmedShellForeground: (reason) => {

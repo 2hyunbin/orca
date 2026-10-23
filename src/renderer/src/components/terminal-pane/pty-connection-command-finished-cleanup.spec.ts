@@ -290,6 +290,14 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         updatedAt: 1
       }
       mockStoreState.agentStatusByPaneKey[paneKey] = { agentType: 'codex', state: 'working' }
+      vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('codex')
+      vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValueOnce('codex')
+      dataCallbackRef.current?.('\x1b]133;C\x07')
+      await vi.advanceTimersByTimeAsync(350)
+      expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agentEvidence).toBe(
+        'process-read'
+      )
+
       if (stoppingOnPurpose) {
         mockStoreState.suppressedPtyExitIds[ptyId] = true
       }
@@ -430,6 +438,14 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         identity: { agentType: 'droid' }
       }
 
+      vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('droid')
+      vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValueOnce('droid')
+      dataCallbackRef.current?.('\x1b]133;C\x07')
+      await vi.advanceTimersByTimeAsync(350)
+      expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agentEvidence).toBe(
+        'process-read'
+      )
+
       // The agent negotiates Kitty keys across a chunk split, then dies armed.
       dataCallbackRef.current?.('\x1b[>')
       dataCallbackRef.current?.('5u')
@@ -485,6 +501,13 @@ export function registerPtyConnectionCommandFinishedCleanupTests(): void {
         launchConfig: { agentArgs: '', agentEnv: {} },
         identity: { agentType: 'droid' }
       }
+      vi.mocked(window.api.pty.getForegroundProcess).mockResolvedValue('droid')
+      vi.mocked(window.api.pty.confirmForegroundProcess).mockResolvedValueOnce('droid')
+      dataCallbackRef.current?.('\x1b]133;C\x07')
+      await vi.advanceTimersByTimeAsync(350)
+      expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]?.agentEvidence).toBe(
+        'process-read'
+      )
       dataCallbackRef.current?.('\x1b]133;D;0\x07')
       await vi.advanceTimersByTimeAsync(350)
       await flushAsyncTicks()

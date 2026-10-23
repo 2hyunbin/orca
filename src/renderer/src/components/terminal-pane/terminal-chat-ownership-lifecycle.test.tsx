@@ -716,6 +716,22 @@ it('composes actual D installer, real Done/launch teardown and mounted pending/c
       accept()
       await finish()
     })
+    expect(row()).toBeUndefined()
+    expect(hook.result.current.chatLeafId).toBe(RIGHT)
+    expect(mocks.state.unifiedTabsByWorktree.wt[0].viewMode).toBe('chat')
+    expect(exited).not.toHaveBeenCalled()
+    expect(ground).not.toHaveBeenCalled()
+    await act(async () => {
+      confirm.mockResolvedValueOnce('codex')
+      session.commandLifecycle.handlePtyData('\x1b]133;C\x07')
+      await vi.advanceTimersByTimeAsync(350)
+      expect(useAppStore.getState().paneForegroundAgentByPaneKey[paneKey]).toMatchObject({
+        agent: 'codex',
+        agentEvidence: 'process-read'
+      })
+      accept()
+      await finish()
+    })
     expect(hook.result.current.chatLeafId).toBeNull()
     expect(ground).toHaveBeenCalledTimes(1)
     const reads = confirm.mock.calls.length
@@ -731,11 +747,13 @@ it('composes actual D installer, real Done/launch teardown and mounted pending/c
     expect(ground).toHaveBeenCalledTimes(1)
     await act(async () => {
       accept()
+      confirm.mockResolvedValueOnce('codex')
       session.commandLifecycle.handlePtyData('\x1b]133;C\x07')
+      await vi.advanceTimersByTimeAsync(350)
       await finish()
     })
     expect(row()).toBeUndefined()
-    expect(ground).toHaveBeenCalledTimes(2) // New C owns a distinct completion episode.
+    expect(ground).toHaveBeenCalledTimes(2) // Actual execution after C owns a distinct departure episode.
     expect(title).toHaveBeenCalledTimes(2)
   } finally {
     session.paneForegroundAgentTracker.dispose()

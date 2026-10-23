@@ -429,6 +429,7 @@ export function registerPtyConnectionForegroundAgentRoutingTests(): void {
       mockStoreState.agentStatusByPaneKey[paneKey] = { agentType: 'droid', state: 'working' }
       mockStoreState.paneForegroundAgentByPaneKey[paneKey] = {
         agent: 'droid',
+        agentEvidence: 'process-read',
         routingTrusted: true,
         shellForeground: false
       }
@@ -438,6 +439,7 @@ export function registerPtyConnectionForegroundAgentRoutingTests(): void {
 
       expect(mockStoreState.paneForegroundAgentByPaneKey[paneKey]).toEqual({
         agent: 'droid',
+        agentEvidence: 'process-read',
         routingRevoked: true,
         routingConfirmationPending: true,
         shellForeground: false

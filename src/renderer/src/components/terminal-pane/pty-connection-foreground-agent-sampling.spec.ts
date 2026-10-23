@@ -356,6 +356,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
         })
         mockStoreState.paneForegroundAgentByPaneKey[cacheKey] = {
           agent: 'pi',
+          agentEvidence: 'process-read',
           routingTrusted: true,
           shellForeground: false
         }
@@ -369,6 +370,7 @@ export function registerPtyConnectionForegroundAgentSamplingTests(): void {
 
         expect(mockStoreState.paneForegroundAgentByPaneKey[cacheKey]).toEqual({
           agent: 'pi',
+          agentEvidence: 'process-read',
           routingRevoked: true,
           routingConfirmationPending: true,
           shellForeground: false

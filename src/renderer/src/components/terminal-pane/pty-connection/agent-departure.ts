@@ -72,12 +72,10 @@ export function installAgentDeparture(session: ConnectPanePtySession): void {
         return false
       }
       session.settleDeferredCommandFinishedStatusDrop({ confirmedShell: true })
-      if (hostPresentation) {
-        return true
-      }
+      return true
     }
     if (
-      (kind === 'foreground-release' || kind === 'command-finished') &&
+      kind === 'foreground-release' &&
       state.paneForegroundAgentByPaneKey[session.cacheKey]?.shellForeground
     ) {
       return true
@@ -85,7 +83,7 @@ export function installAgentDeparture(session: ConnectPanePtySession): void {
     // Shell ownership releases input; only a separately confirmed death retires lifetime state.
     session.deferredCommandFinishedStatusDrop = null
     session.deferredConfirmedShellReconcile = null
-    if (kind === 'foreground-release' || kind === 'command-finished') {
+    if (kind === 'foreground-release') {
       session.paneForegroundAgentTracker.onShellForegroundObserved()
     } else if (kind === 'process-exit' && process) {
       session.paneForegroundAgentTracker.onProcessExitConfirmed(process)

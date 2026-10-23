@@ -212,24 +212,23 @@ export function createPaneForegroundAgentTracker(
         deps.onCommandFinishedUnavailable?.()
         return
       }
-      if ((hasForegroundAgentEvidence || hasKnownAgentEvidence) && !isShellProcess(processName)) {
+      if (!isShellProcess(processName)) {
         // Why: this read may have replaced a cancelled visible-pty confirmation.
         // It publishes nothing, so without settling here the capability it was
         // asked to revalidate would be retained with no read left to clear it.
         deps.onVisibleForegroundSettled?.('inconclusive')
         return
       }
-      if (hasForegroundAgentEvidence || hasKnownAgentEvidence) {
-        releaseForeground(reason)
-      } else {
-        deps.onVisibleForegroundSettled?.('inconclusive')
-      }
+      releaseForeground(reason)
     }
   }
 
   function releaseForeground(reason: 'visible-pty' | 'command-finished' | 'process-exit'): void {
     const accepted = deps.onConfirmedShellForeground?.(reason)
     if (accepted !== false && reason === 'command-finished') {
+      if (accepted === true && (hasForegroundAgentEvidence || hasKnownAgentEvidence)) {
+        deps.onConfirmedShellForeground?.('visible-pty')
+      }
       clearAgentEvidence()
       startupSampled = false
       cancelPendingRead()
