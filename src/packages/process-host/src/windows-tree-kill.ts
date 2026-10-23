@@ -17,7 +17,8 @@ export const WINDOWS_TASKKILL_WAIT_MS = 5_000
  * the root before taskkill reads it orphans the descendants it was about to
  * find. Bounded because a live root keeps its git admission slot until it exits.
  */
-export const WINDOWS_TASKKILL_DEADLINE_MS = 30_000
+export const WINDOWS_TASKKILL_DEADLINE_MS =
+  process.env.ORCA_DIAGNOSTIC_TASKKILL_DEADLINE === '90000' ? 90_000 : 30_000
 /**
  * How long taskkill may keep running once the root has exited.
  * Why short: Node then releases the root's handle, so Windows may reissue the

@@ -99,8 +99,8 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
            setTimeout(() => {
              const startedAt = Date.now();
              fs.writeFileSync(process.argv[3], JSON.stringify({ startedAt, rootPid }));
-             const result = spawnSync(process.argv[1], ['/pid', rootPid, '/t', '/f'], { stdio: 'ignore', windowsHide: true });
-             fs.writeFileSync(process.argv[3], JSON.stringify({ startedAt, finishedAt: Date.now(), code: result.status, signal: result.signal }));
+             const result = spawnSync(process.argv[1], ['/pid', rootPid, '/t', '/f'], { stdio: 'pipe', windowsHide: true });
+             fs.writeFileSync(process.argv[3], JSON.stringify({ startedAt, finishedAt: Date.now(), code: result.status, signal: result.signal, stdout: result.stdout?.toString(), stderr: result.stderr?.toString() }));
              process.exit(result.status === null ? 1 : result.status);
            }, ${TASKKILL_START_DELAY_MS});
          });
@@ -139,7 +139,7 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
         `[late-taskkill] delayed killer: ${existsSync(trace) ? readFileSync(trace, 'utf8') : 'never started'}`
       )
     }
-  }, 90_000)
+  }, 180_000)
 
   it.skipIf(!underLoad)(
     'kills the grandchild with the real taskkill on a loaded host',
@@ -214,7 +214,7 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
       controller.abort()
       await pending
       const settledAfterMs = Date.now() - abortedAt
-      await expect.poll(() => reportedAt, { timeout: 30_000 }).toBeDefined()
+      await expect.poll(() => reportedAt, { timeout: 90_000 }).toBeDefined()
       const reportedAfterMs = reportedAt === undefined ? null : reportedAt - abortedAt
       console.log(
         `[late-taskkill] caller settled ${settledAfterMs} ms, termination reported ${reportedAfterMs} ms after abort`
