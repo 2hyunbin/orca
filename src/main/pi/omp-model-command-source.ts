@@ -4,6 +4,7 @@ export function getOmpModelCommandSourceLines(): string[] {
     "    pi.registerCommand('orca-model', {",
     "      description: 'Switch the model selected in Orca',",
     '      handler: async (selector, ctx) => {',
+    '        if (!ownsSessionStatus(ctx)) return',
     '        const models = ctx.modelRegistry.getAvailable()',
     "        const model = models.find((candidate) => candidate.provider + '/' + candidate.id === selector.trim())",
     '        if (!model) {',

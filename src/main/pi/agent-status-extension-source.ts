@@ -132,6 +132,8 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
   // the same endpoint file the OpenCode plugin reads (process.env is frozen
   // at PTY spawn, so on Orca restart we have to re-read it from disk).
   return [
+    ...(kind === 'pi' ? ['const legacyPiUiState = { depth: 0, turnInFlight: false }'] : []),
+    'export default function (pi): void {',
     '// Why: no package-specific type import here. Pi and OMP expose the same',
     '// extension API, but publish their types under different package names.',
     '// Why: warn-once so a recurring parse error on a malformed endpoint',
@@ -142,7 +144,6 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '// Orca receiver from building an unbounded queue of obsolete snapshots.',
     'const HOOK_POST_TIMEOUT_MS = 1000',
     ...getPiAgentStatusPostQueueSourceLines(kind),
-    ...(kind === 'pi' ? ['let piUiPromptDepth = 0', 'let piTurnInFlight = false'] : []),
     ...modelMetadataSourceLines,
     '',
     ...getPiSubagentSnapshotSourceLines(),
@@ -203,9 +204,14 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '}',
     '',
     ...getPiAgentStatusRuntimeDetectionSourceLines(kind),
+    ...(kind === 'pi'
+      ? ['const piUiState = isOmpRuntime() ? { depth: 0, turnInFlight: false } : legacyPiUiState']
+      : []),
     '',
     // `final` marks the last post of a session that is being closed.
     'function post(hookEventName: string, extra: Record<string, unknown> = {}, final = false): void {',
+    '  if (authority === "retired") return',
+    '  if (isOmpRuntime() && authority !== "main" && authority !== "legacy") { postAttention(hookEventName, extra); return }',
     '  const ompRuntime = isOmpRuntime()',
     // Why: the body is built at delivery, so the session is pinned here, where the event happened.
     '  const metadata = getPostSessionMetadata(ompRuntime)',
@@ -226,7 +232,7 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     "    hookEventName: ompRuntime && hookEventName === 'model_select' && previousCompletion ? 'agent_end' : hookEventName,",
     // Why: every coalesced snapshot must retain an open modal, not just its start event.
     kind === 'pi'
-      ? '    extra: { ...extra, ...(!ompRuntime && piUiPromptDepth > 0 ? { ui_prompt_active: true } : {}) },'
+      ? '    extra: { ...extra, ...(!ompRuntime && piUiState.depth > 0 ? { ui_prompt_active: true } : {}) },'
       : '    extra,',
     '    metadata,',
     '    ompRuntime,',
@@ -291,6 +297,7 @@ export function getPiAgentStatusExtensionSource(kind: PiAgentKind = 'pi'): strin
     '}',
     '',
     ...getPiAgentStatusWslCurlSourceLines(),
-    ...getPiAgentStatusHandlerSourceLines(kind)
+    ...getPiAgentStatusHandlerSourceLines(kind),
+    '}'
   ].join('\n')
 }

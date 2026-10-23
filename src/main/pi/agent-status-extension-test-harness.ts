@@ -7,6 +7,7 @@ import { vi } from 'vitest'
 import { getPiAgentStatusExtensionSource } from './agent-status-extension-source'
 
 export type HookContext = {
+  agent?: { kind: 'main' | 'sub' }
   hasUI?: boolean
   ui?: {
     setEditorText?: (text: string) => void
@@ -66,6 +67,10 @@ export type AgentStatusExtensionHarness = {
   reloadPi: () => Promise<void>
   // An OMP in-process task child: the same module's factory, run again on the child's own bus.
   // Returns an emitter for events on that child's bus.
+  registerSession: () => {
+    callHook: AgentStatusExtensionHarness['callHook']
+    emit: (name: string, event: unknown) => void
+  }
   registerTaskChild: () => (name: string, event: unknown) => void
 }
 
@@ -113,9 +118,7 @@ export function createAgentStatusExtensionHarness(args: {
   statSync?: (path: string) => { mtimeMs: number; size: number; ino: number }
   curlExitCode?: number | null
   fetchImpl?: (...params: Parameters<typeof fetch>) => Promise<unknown>
-  // Runs before the first registration, to leave state an older build would have put on the bus.
   seedEventBus?: (bus: EventEmitter) => void
-  // Pi before 0.84 handed every registration the one shared bus.
   sharedEventBus?: boolean
 }): AgentStatusExtensionHarness {
   const fetchMock = vi.fn(
@@ -219,7 +222,6 @@ export function createAgentStatusExtensionHarness(args: {
   const source = getPiAgentStatusExtensionSource(args.kind)
   const output = transpileExtensionSource(source)
   createContext(context)
-  // Why: a function scope per evaluation, so a Pi reload can evaluate the module again in one realm.
   const evaluateModule = (): NonNullable<typeof module.exports.default> => {
     runInContext(`(function () {\n${output}\n})()`, context)
     const factory = module.exports.default
@@ -231,8 +233,6 @@ export function createAgentStatusExtensionHarness(args: {
   let register = evaluateModule()
 
   const handlers: Record<string, HookHandler> = {}
-  // Why: Pi calls every handler an extension registers for an event, in registration order.
-  let handlerLists: Record<string, HookHandler[]> = {}
   let piEvents = new EventEmitter()
   let busSubscriptions: [string, (event: unknown) => void][] = []
   const commands: AgentStatusExtensionHarness['commands'] = {}
@@ -241,7 +241,6 @@ export function createAgentStatusExtensionHarness(args: {
     target: Record<string, HookHandler>,
     events: PiEventBus = piEvents
   ): void => {
-    handlerLists = {}
     register({
       registerCommand: (name, command) => {
         commands[name] = command
@@ -249,18 +248,17 @@ export function createAgentStatusExtensionHarness(args: {
       setModel: setModelMock,
       events,
       on(name: string, handler: HookHandler) {
-        target[name] = handler
-        ;(handlerLists[name] ??= []).push(handler)
+        const previous = target[name]
+        target[name] = async (event, ctx) => {
+          await previous?.(event, ctx)
+          await handler(event, ctx)
+        }
       }
     })
   }
   const callHook: AgentStatusExtensionHarness['callHook'] = async (name, event, hookContext) => {
-    for (const handler of handlerLists[name] ?? []) {
-      await handler(event, hookContext)
-    }
+    await handlers[name]?.(event, hookContext)
   }
-  // Why: each Pi registration gets its own `pi.events` object, and Pi removes its subscriptions when
-  // the registration is replaced; anything an extension stores on that object goes with it.
   const registerLikePi = (): void => {
     for (const [name, listener] of busSubscriptions) {
       piEvents.off(name, listener)
@@ -284,6 +282,15 @@ export function createAgentStatusExtensionHarness(args: {
     registerInto(handlers)
   }
 
+  const registerSession: AgentStatusExtensionHarness['registerSession'] = () => {
+    const sessionHandlers: Record<string, HookHandler> = {}
+    const bus = new EventEmitter()
+    registerInto(sessionHandlers, bus)
+    return {
+      callHook: (name, event, ctx) => Promise.resolve(sessionHandlers[name]?.(event, ctx)),
+      emit: (name, event) => bus.emit(name, event)
+    }
+  }
   return {
     setModelMock,
     commands,
@@ -310,15 +317,8 @@ export function createAgentStatusExtensionHarness(args: {
       piEvents = new EventEmitter()
       registerLikePi()
     },
-    registerTaskChild: () => {
-      const leadHandlerLists = handlerLists
-      const childBus = new EventEmitter()
-      registerInto({}, childBus)
-      handlerLists = leadHandlerLists
-      return (name, event) => {
-        childBus.emit(name, event)
-      }
-    },
+    registerSession,
+    registerTaskChild: () => registerSession().emit,
     reloadPi: async () => {
       await callHook('session_shutdown', { reason: 'reload' })
       register = evaluateModule()
