@@ -130,6 +130,55 @@ describe('SkillUpdateStatusSegment', () => {
     expect(container?.querySelector('button')).toBeNull()
   })
 
+  it.each([1, 2, 3])('counts completed updates with %i skipped skills', async (skippedCount) => {
+    await render()
+    const names = ['orca-cli', 'orchestration', 'orca-linear', 'computer-use'].slice(
+      0,
+      skippedCount + 1
+    )
+    await start(names)
+    expect(container?.querySelector('[data-tooltip]')?.textContent).toBe(
+      `Updating ${names.length} skills…`
+    )
+    const skills = [...ran('done', names[1]).skills]
+    skills.unshift({
+      name: names[0],
+      status: 'ran',
+      ops: [
+        {
+          path: `/home/u/.claude/skills/${names[0]}`,
+          kind: 'leave',
+          status: 'done',
+          reason: 'edited'
+        }
+      ]
+    })
+    for (const name of names.slice(2)) {
+      skills.push({
+        ...skills[0],
+        name,
+        ops: [{ ...skills[0].ops[0], path: `/home/u/.claude/skills/${name}` }]
+      })
+    }
+    await finish({ scope: 'global', skills })
+
+    expect(container?.textContent).toContain('Skills updated')
+    expect(container?.querySelector('[data-tooltip]')?.textContent).toBe(
+      `Updated 1 skill · ${skippedCount} skipped`
+    )
+  })
+
+  it('counts completed updates when every requested skill changed', async () => {
+    await render()
+    await start(['orca-cli', 'orchestration'])
+    await finish({
+      scope: 'global',
+      skills: [...ran('done').skills, ...ran('done', 'orchestration').skills]
+    })
+
+    expect(container?.querySelector('[data-tooltip]')?.textContent).toBe('Updated 2 skills')
+  })
+
   it('keeps a run with problems visible instead of auto-clearing it', async () => {
     await render()
     await start(['orca-cli'])
@@ -152,12 +201,12 @@ describe('SkillUpdateStatusSegment', () => {
     async (mixed) => {
       await render()
       await start(mixed ? ['orca-cli', 'orchestration'] : ['orca-cli'])
-      const result = ran('done')
-      result.skills[0].ops[0].kind = 'restore'
+      const skills = [...ran('done').skills]
+      skills[0].ops[0].kind = 'restore'
       if (mixed) {
-        result.skills.push(ran('done', 'orchestration').skills[0])
+        skills.push(ran('done', 'orchestration').skills[0])
       }
-      await finish(result)
+      await finish({ scope: 'global', skills })
 
       expect(container?.textContent).toContain('Needs attention')
       expect(container?.textContent).not.toContain('Skills updated')

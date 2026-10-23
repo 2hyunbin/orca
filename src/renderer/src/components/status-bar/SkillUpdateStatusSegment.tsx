@@ -3,6 +3,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { translate } from '@/i18n/i18n'
 import { requestSkillFreshnessUpdateDialog } from '../skills/skill-freshness-update-dialog'
 import { useSkillUpdateRun } from '../skills/skill-update-run-store'
+import { updatedSkillsLabel } from '../skills/skill-plan-op-copy'
 
 // Why: always rendered (not gated by `statusBarItems`). The dialog can be closed
 // while the run continues, so this segment is the only surface left reporting it.
@@ -50,18 +51,7 @@ export function SkillUpdateStatusSegment({
           'auto.components.status.bar.SkillUpdateStatusSegment.successLabel',
           'Skills updated'
         ),
-        tooltip:
-          run.names.length === 1
-            ? translate(
-                'auto.components.status.bar.SkillUpdateStatusSegment.successOne',
-                'Updated {{value0}}',
-                { value0: run.names[0] }
-              )
-            : translate(
-                'auto.components.status.bar.SkillUpdateStatusSegment.successMany',
-                'Updated {{value0}} skills',
-                { value0: run.names.length }
-              ),
+        tooltip: updatedSkillsLabel(run.summary),
         ariaLabel: translate(
           'auto.components.status.bar.SkillUpdateStatusSegment.successAria',
           'Skills updated. Click to open details.'

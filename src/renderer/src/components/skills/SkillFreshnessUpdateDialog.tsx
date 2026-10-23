@@ -17,7 +17,7 @@ import {
 import type { SkillRowPhase } from './SkillUpdateRow'
 import { SkillUpdateRows } from './SkillUpdateRows'
 import { SummaryHeadline } from './skill-freshness-summary-headline'
-import { updateActionLabel } from './skill-plan-op-copy'
+import { updateActionLabel, updatedSkillsLabel } from './skill-plan-op-copy'
 import {
   acknowledgeSkillUpdateRun,
   LOCAL_SKILL_UPDATE_TARGET,
@@ -45,28 +45,10 @@ function RunHeadline({ run }: { run: SkillUpdateRun }): React.JSX.Element | null
     )
   }
   if (run.state === 'done' && run.summary.ok && !run.needsAttention) {
-    const { changedCount, leftAloneCount } = run.summary
-    const updated =
-      changedCount === 1
-        ? translate(
-            'auto.components.skills.SkillFreshnessUpdateDialog.updatedOne',
-            'Updated 1 skill'
-          )
-        : translate(
-            'auto.components.skills.SkillFreshnessUpdateDialog.updatedMany',
-            'Updated {{value0}} skills',
-            { value0: changedCount }
-          )
     return (
       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
         <CheckCircle2 className="size-4 text-status-success" />
-        {leftAloneCount > 0
-          ? translate(
-              'auto.components.skills.SkillFreshnessUpdateDialog.updatedSkipped',
-              '{{value0}} · {{value1}} skipped',
-              { value0: updated, value1: leftAloneCount }
-            )
-          : updated}
+        {updatedSkillsLabel(run.summary)}
       </div>
     )
   }
@@ -254,7 +236,7 @@ export function SkillFreshnessUpdateDialog(): React.JSX.Element {
     }
     void startSkillUpdateRun({
       targetKey: LOCAL_SKILL_UPDATE_TARGET,
-      // Why: only skills with work; the status bar counts these.
+      // Why: only skills with work describe the in-flight run.
       names: summarizeBundledSkillPlan(livePlan)
         .skills.filter((skill) => skill.state !== 'current')
         .map((skill) => skill.name),
