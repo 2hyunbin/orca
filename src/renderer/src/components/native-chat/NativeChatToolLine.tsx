@@ -102,7 +102,7 @@ export function NativeChatToolLine({
     name = block.name
   } else if (isToolResultBlock(block)) {
     name = translate('components.native-chat.tool.result', 'Result')
-    resultPreview = block.output.split('\n')[0]?.slice(0, 80) ?? ''
+    resultPreview = block.output.slice(0, 80).split('\n', 1)[0] ?? ''
   } else {
     return null
   }

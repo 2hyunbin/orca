@@ -182,7 +182,7 @@ export function MobileNativeChatToolLine({
   const commandAlone = label?.command === true && verb !== null && label.target.length > 0
   const mcp = call ? mcpToolIdentity(call.name, call.mcpIdentity) : null
   const name = call ? (mcp ? `${mcp.server} / ${mcp.tool}` : call.name) : RESULT_LABEL
-  const target = label ? label.target : (body?.output.split('\n')[0]?.slice(0, 80) ?? '')
+  const target = label ? label.target : (body?.output.slice(0, 80).split('\n', 1)[0] ?? '')
   const results = useMemo(
     () => (call ? toolWebSearchResults(call.webSearchResults) : NO_SEARCH_RESULTS),
     [call]
