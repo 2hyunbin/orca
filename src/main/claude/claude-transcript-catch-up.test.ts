@@ -1,20 +1,8 @@
-// Turns made outside a Claude chat, through the real path they take: the chat's own reply streamed
-// by the live translator, Claude's transcript on disk → tail reader → isolated translator →
-// deferred sink → on-disk journal. Row shapes follow a captured Claude Code 2.1 session.
-
-import { appendFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentSessionJournalIdentity } from '../../shared/agent-session-journal-types'
-import { claudeProviderHandle } from '../../shared/agent-session-provider-handle-encoding'
-import { createTrackedJournalOpener } from '../native-chat/agent-session-journal/journal-host-database-test-support'
-import { createDeferredStructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
-import { testEventSinkLogging } from '../native-chat/agent-session-wire/structured-agent-session-logger-test-support'
+// Real disk tail → isolated translator → deferred sink → on-disk journal contracts.
+import { describe, expect, it, vi } from 'vitest'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 import * as sessionFileResolver from '../native-chat/session-file-resolver'
 import * as transcriptTail from './claude-transcript-tail'
-import { catchUpClaudeTranscript } from './claude-transcript-catch-up'
 import {
   isStructuredRewindTarget,
   structuredRewindCut
@@ -25,234 +13,18 @@ import { projectJournalBatch } from '../native-chat/agent-session-wire/agent-ses
 import { replacePage, mergeItems } from '../../shared/structured-agent-session-history-state'
 import { AgentJournalRenderItemSchema } from '../../shared/agent-session-journal-schemas'
 import { projectStructuredItemToNativeChat } from '../../shared/structured-agent-session-projection'
-
-const SESSION = 'session-claude-catch-up'
-const SID = '402eff2b-84dc-4e05-8fe8-49fffb2cd3c3'
-
-/** One content block of a saved assistant row. */
-type ClaudeContentPart = { type: string } & Record<string, unknown>
-
-const at = (n: number) => new Date(Date.UTC(2026, 9, 21, 12, 0, n)).toISOString()
-const prompt = (uuid: string, parentUuid: string | null, text: string, n: number) => ({
-  type: 'user',
-  uuid,
-  parentUuid,
-  isSidechain: false,
-  sessionId: SID,
-  promptSource: 'cli',
-  timestamp: at(n),
-  message: { role: 'user', content: text }
-})
-const reply = (
-  uuid: string,
-  parentUuid: string,
-  messageId: string,
-  part: ClaudeContentPart,
-  n: number
-) => ({
-  type: 'assistant',
-  uuid,
-  parentUuid,
-  isSidechain: false,
-  sessionId: SID,
-  apiBlockIndex: 0,
-  timestamp: at(n),
-  message: { id: messageId, role: 'assistant', content: [part] }
-})
-const attachment = (uuid: string, parentUuid: string) => ({
-  type: 'attachment',
-  uuid,
-  parentUuid,
-  isSidechain: false,
-  sessionId: SID,
-  attachment: { type: 'total_tokens_reminder' }
-})
-const bookkeeping = [{ type: 'last-prompt', leafUuid: 'x', sessionId: SID }, { type: 'cost-state' }]
-
-/** The chat's own turn as Claude saves it; its reply is the streamed `msg_a`. */
-const chatTurn = [
-  prompt('p1', null, 'ask 1', 1),
-  attachment('t1', 'p1'),
-  reply('a1', 't1', 'msg_a', { type: 'text', text: 'answer 1' }, 2),
-  ...bookkeeping
-]
-/** A terminal turn on the same conversation: a prompt, a tool call and its result, then a reply. */
-const outsideTurn = [
-  { type: 'queue-operation', operation: 'enqueue', sessionId: SID },
-  prompt('p2', 'a1', 'ask 2', 3),
-  attachment('t2', 'p2'),
-  reply('a2', 't2', 'msg_b', { type: 'tool_use', id: 'toolu_1', name: 'Read', input: {} }, 4),
-  {
-    type: 'user',
-    uuid: 'r2',
-    parentUuid: 'a2',
-    isSidechain: false,
-    sessionId: SID,
-    timestamp: at(5),
-    message: {
-      role: 'user',
-      content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'hello' }]
-    }
-  },
-  reply('a3', 'r2', 'msg_c', { type: 'text', text: 'answer 2' }, 6),
-  ...bookkeeping
-]
-
-const journals = createTrackedJournalOpener()
-const cleanups: (() => Promise<void>)[] = []
-afterEach(async () => {
-  vi.restoreAllMocks()
-  for (const cleanup of cleanups.splice(0)) {
-    await cleanup()
-  }
-})
-
-async function chat(project = '-work', cwd = '/work') {
-  const root = await mkdtemp(join(tmpdir(), 'orca-claude-catch-up-'))
-  const projects = join(root, 'claude-home', 'projects', project)
-  await mkdir(projects, { recursive: true })
-  const transcript = join(projects, `${SID}.jsonl`)
-  await writeFile(transcript, '')
-  const identity = {
-    sessionId: SESSION,
-    workspaceId: 'workspace-1',
-    hostId: 'local',
-    agent: 'claude',
-    providerHandle: claudeProviderHandle(SID, 'a1')
-  } satisfies AgentSessionJournalIdentity
-  const journal = await journals.open({
-    identity,
-    stateDirectory: root,
-    now: () => 1_000
-  })
-  const deferred = createDeferredStructuredAgentSessionEventSink(testEventSinkLogging())
-  deferred.bind({ journal, fence: 1, publish: () => {} })
-  cleanups.push(async () => {
-    deferred.close()
-    await journals.closeAll()
-    await rm(root, { recursive: true, force: true })
-  })
-  const warn = vi.fn()
-  return {
-    journal,
-    replay: () => journals.open({ identity, stateDirectory: root, now: () => 1_000 }),
-    warn,
-    deferred,
-    write: (rows: readonly Record<string, unknown>[]) =>
-      appendFile(transcript, rows.map((row) => `${JSON.stringify(row)}\n`).join('')),
-    /** The chat's own turn, sent and streamed live the way the SDK reports it. */
-    live: async (
-      options: { interrupted?: boolean; tool?: boolean; text?: string; thinking?: string } = {}
-    ) => {
-      const text = options.text ?? 'answer 1'
-      await journal.appendSubmission({
-        clientMessageId: 'send-1',
-        body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'ask 1' }] },
-        payloadFingerprint: 'send-1',
-        fence: 1
-      })
-      await journal.resolveDispatch({
-        clientMessageId: 'send-1',
-        state: 'accepted',
-        providerIdentity: { provider: 'claude', sessionId: SID, uuid: 'p1' },
-        fence: 1
-      })
-      const translator = createClaudeJournalTranslator({ sink: deferred.sink })
-      const frame = (message: Record<string, unknown>) =>
-        translator.handle({ type: 'message', sessionId: SESSION, message, observedAt: 2_000 })
-      const stream = (uuid: string, event: Record<string, unknown>) =>
-        frame({ type: 'stream_event', uuid, session_id: SID, parent_tool_use_id: null, event })
-      stream('s1', { type: 'message_start', message: { id: 'msg_a' } })
-      stream('s2', {
-        type: 'content_block_start',
-        index: 0,
-        content_block: { type: 'text', text: '' }
-      })
-      stream('s3', {
-        type: 'content_block_delta',
-        index: 0,
-        delta: { type: 'text_delta', text }
-      })
-      if (!options.interrupted) {
-        frame({
-          type: 'assistant',
-          uuid: 'a1',
-          session_id: SID,
-          parent_tool_use_id: null,
-          message: { id: 'msg_a', role: 'assistant', content: [{ type: 'text', text }] }
-        })
-      }
-      if (options.tool) {
-        frame({
-          type: 'assistant',
-          uuid: 'call',
-          session_id: SID,
-          parent_tool_use_id: null,
-          message: {
-            id: 'call',
-            role: 'assistant',
-            content: [
-              { type: 'tool_use', id: 'toolu_1', name: 'Read', input: { path: 'original' } }
-            ]
-          }
-        })
-      }
-      if (options.thinking) {
-        stream('thought-start', { type: 'message_start', message: { id: 'msg_thought' } })
-        stream('thought-block', {
-          type: 'content_block_start',
-          index: 0,
-          content_block: { type: 'thinking', thinking: '' }
-        })
-        stream('thought-delta', {
-          type: 'content_block_delta',
-          index: 0,
-          delta: { type: 'thinking_delta', thinking: options.thinking }
-        })
-      }
-      if (options.interrupted) {
-        translator.handle({ type: 'ended', sessionId: SESSION, reason: 'crash', observedAt: 3_000 })
-      } else {
-        frame({ type: 'result', subtype: 'success', session_id: SID, parent_tool_use_id: null })
-      }
-      translator.flush()
-      translator.dispose()
-      await deferred.drained()
-    },
-    open: async (
-      leafUuid: string,
-      options: Pick<
-        Parameters<typeof catchUpClaudeTranscript>[0],
-        'signal' | 'timeoutMs' | 'assertCurrent'
-      > = {}
-    ) => {
-      const covered = await catchUpClaudeTranscript({
-        sessionId: SESSION,
-        providerSessionId: SID,
-        leafUuid,
-        claudeConfigDir: join(root, 'claude-home'),
-        cwd,
-        sink: deferred.sink,
-        logger: { warn, error: vi.fn() },
-        ...options
-      })
-      await deferred.drained()
-      return covered
-    },
-    rows: () =>
-      journal.snapshot().items.flatMap((item) => {
-        const { body } = item
-        if (body.kind === 'message') {
-          const text = body.blocks.map((block) => (block.type === 'text' ? block.text : ''))
-          return [`${body.role}:${text.join('')}`]
-        }
-        if (body.kind === 'tool-call') {
-          return [`tool:${body.name}:${body.state}`]
-        }
-        return body.kind === 'status' && body.presentation ? [`(${body.presentation})`] : []
-      })
-  }
-}
+import {
+  SESSION,
+  SID,
+  at,
+  prompt,
+  reply,
+  attachment,
+  bookkeeping,
+  chatTurn,
+  outsideTurn,
+  chat
+} from './claude-transcript-catch-up-test-support'
 
 describe('Claude chat catch-up', () => {
   it.each(['a1', 'missing-parent'])(
@@ -678,7 +450,7 @@ describe('Claude chat catch-up', () => {
     }
   )
 
-  it('matches an accepted queued human prompt by its provider source UUID without settling it', async () => {
+  it('clears closed scope and restores only a saved queued prompt without settling delivery', async () => {
     const c = await chat()
     await c.live()
     await c.journal.appendSubmission({
@@ -708,11 +480,31 @@ describe('Claude chat catch-up', () => {
       providerIdentity: { provider: 'claude', sessionId: SID, uuid: 'cmd-1' },
       fence: 1
     })
-    const submissions = c.journal.snapshot().submissions
+    const before = c.journal.snapshot()
+    const end = (uuid: string, parentUuid: string) => ({
+      type: 'system',
+      subtype: 'turn_duration',
+      sessionId: SID,
+      uuid,
+      parentUuid,
+      timestamp: 'malformed'
+    })
     await c.write([
       ...chatTurn,
+      end('saved-end', 'a1'),
       {
-        ...attachment('queued-row', 'a1'),
+        ...attachment('unknown-row', 'saved-end'),
+        attachment: {
+          type: 'queued_command',
+          source_uuid: 'unknown-input',
+          commandMode: 'prompt',
+          origin: { kind: 'human' },
+          humanTurn: true,
+          prompt: 'unproved input'
+        }
+      },
+      {
+        ...attachment('queued-row', 'unknown-row'),
         attachment: {
           type: 'queued_command',
           source_uuid: 'cmd-1',
@@ -723,20 +515,38 @@ describe('Claude chat catch-up', () => {
           prompt: 'follow up'
         }
       },
-      reply('a2', 'queued-row', 'msg_b', { type: 'text', text: 'follow up answer' }, 3)
+      reply('a2', 'queued-row', 'msg_b', { type: 'text', text: 'follow up answer' }, 3),
+      end('continued-end', 'a2'),
+      reply('wake', 'continued-end', 'msg_wake', { type: 'text', text: 'background' }, 4),
+      prompt('next', 'wake', 'next request', 5),
+      reply('next-answer', 'next', 'msg_next', { type: 'text', text: 'next answer' }, 6)
     ])
-    expect(await c.open('a1')).toBe(true)
+    expect(await c.open('p1')).toBe(true)
     expect(c.rows()).toEqual([
       'user:ask 1',
       'assistant:answer 1',
       'user:follow up',
       '(continued-outside)',
-      'assistant:follow up answer'
+      'user:unproved input',
+      'assistant:follow up answer',
+      'assistant:background',
+      'user:next request',
+      'assistant:next answer'
     ])
     const imported = c.journal.snapshot().items
-    expect(await c.open('a1')).toBe(true)
+    expect(await c.open('p1')).toBe(true)
     expect(c.journal.snapshot().items).toEqual(imported)
-    expect(c.journal.snapshot().submissions).toEqual(submissions)
+    expect(c.journal.snapshot().submissions).toEqual(before.submissions)
+    for (const item of before.items) {
+      expect(c.journal.item(item.itemId)).toEqual(item)
+    }
+    const unknown = agentJournalItemKey({
+      provider: 'claude',
+      sessionId: SID,
+      uuid: 'unknown-input'
+    })
+    expect(c.journal.item(unknown)?.turnScope).toEqual({ kind: 'unknown' })
+    expect(isStructuredRewindTarget(c.journal, unknown)).toBe(false)
     const answer = c.journal
       .snapshot()
       .items.find(
@@ -747,7 +557,13 @@ describe('Claude chat catch-up', () => {
             agentJournalItemKey({ provider: 'claude', sessionId: SID, uuid: 'block:msg_a:0' })
       )
     expect(answer?.turnScope).toEqual(scope)
-    expect(c.journal.snapshot().items.filter((item) => item.body.kind === 'turn')).toHaveLength(1)
+    const turns = imported.filter((item) => item.body.kind === 'turn')
+    expect(turns).toHaveLength(3)
+    const wake = turns.find((item) => item.body.kind === 'turn' && item.body.turnId === 'wake')!
+    expect(wake.body).toMatchObject({ userItemId: wake.itemId })
+    expect(turns.some((item) => item.body.kind === 'turn' && item.body.turnId === 'next')).toBe(
+      true
+    )
     expect(c.warn).not.toHaveBeenCalled()
   })
 

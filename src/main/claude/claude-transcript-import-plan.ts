@@ -39,6 +39,7 @@ import {
 } from './claude-structured-item-translation'
 import { createClaudeJournalTranslator } from './claude-structured-journal-translation'
 import { createClaudeTranscriptItemReader } from './claude-transcript-item-reader'
+import { idleClaudeJournalTurn } from './claude-session-state-turn-over'
 
 /** An isolated projection of final source items, compared with saved historical content. */
 export function createClaudeTranscriptImportPlan(input: {
@@ -56,6 +57,7 @@ export function createClaudeTranscriptImportPlan(input: {
   const aliases = new Map<string, AgentJournalItemIdentity>()
   let historicalScope: AgentJournalTurnScope | null = null
   let sourceObservedAt: number | undefined
+  let workAt: number | undefined
   const matchSource = (identities: AgentJournalItemIdentity[]) => {
     const matches = identities.flatMap((identity) => {
       const item = saved(agentJournalItemKey(identity))
@@ -90,6 +92,11 @@ export function createClaudeTranscriptImportPlan(input: {
       return { accepted: true } as const
     }
     let body = projected
+    // Idle housekeeping may use the host clock; an unknown historical endpoint cannot.
+    if (body.kind === 'turn' && body.state === 'completed' && workAt === undefined) {
+      const { completedAt: _completedAt, durationMs: _durationMs, ...untimed } = body
+      body = untimed
+    }
     let turnScope =
       projected.kind === 'message' && projected.role === 'user'
         ? options.turnScope
@@ -140,20 +147,13 @@ export function createClaudeTranscriptImportPlan(input: {
     sink,
     fallbackIdPrefix: `history:${input.providerSessionId}`
   })
-  const idle = (observedAt?: number) =>
-    translator.handle({
-      type: 'message',
-      sessionId: input.sessionId,
-      message: {
-        type: 'system',
-        subtype: 'session_state_changed',
-        state: 'idle',
-        session_id: input.providerSessionId
-      },
-      ...(observedAt === undefined ? {} : { observedAt })
-    })
+  const idle = (observedAt = workAt) => {
+    workAt = observedAt
+    idleClaudeJournalTurn(translator, input.sessionId, input.providerSessionId, observedAt)
+    historicalScope = null
+    workAt = undefined
+  }
   const uuids: string[] = []
-  let lastAt: number | undefined
   return {
     restore: (row: Record<string, unknown>) => {
       input.check()
@@ -162,7 +162,12 @@ export function createClaudeTranscriptImportPlan(input: {
       const queued = row.type === 'attachment'
       // The tail reader keeps only rows that carry one.
       const uuid = String(row.uuid)
+      const parsedAt = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN
+      sourceObservedAt = Number.isFinite(parsedAt) && parsedAt > 0 ? parsedAt : undefined
       if (!envelope && !queued) {
+        if (row.type === 'system' && row.subtype === 'turn_duration') {
+          idle(sourceObservedAt)
+        }
         return
       }
       if (envelope?.role === 'assistant') {
@@ -192,9 +197,6 @@ export function createClaudeTranscriptImportPlan(input: {
           }
         }
       }
-      const parsedAt = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN
-      sourceObservedAt = Number.isFinite(parsedAt) ? parsedAt : undefined
-      lastAt = sourceObservedAt ?? lastAt
       const prompt =
         queued ||
         (envelope?.role === 'user' &&
@@ -208,6 +210,9 @@ export function createClaudeTranscriptImportPlan(input: {
       }
       uuids.push(uuid)
       if (!decoded) {
+        if (envelope?.content.length && sourceObservedAt !== undefined) {
+          workAt = Math.max(workAt ?? sourceObservedAt, sourceObservedAt)
+        }
         translator.handle({
           type: 'message',
           sessionId: input.sessionId,
@@ -216,10 +221,9 @@ export function createClaudeTranscriptImportPlan(input: {
         })
         return
       }
-      // Folded input belongs to the ongoing turn; only a physical opener ends its predecessor.
+      // Folded input stays in the ongoing turn; a physical opener also settles its predecessor.
       if (!queued) {
-        idle(sourceObservedAt)
-        historicalScope = null
+        idle()
       }
       const sourceUuid = queued ? claudeText(claudeRecord(row.attachment)?.source_uuid) : null
       const identity: AgentJournalItemIdentity = {
@@ -252,9 +256,7 @@ export function createClaudeTranscriptImportPlan(input: {
     },
     finish: (): HistoryCatchUpPlan | null => {
       input.check()
-      if (uuids.length > 0) {
-        idle(lastAt)
-      }
+      idle()
       translator.flush()
       // A row that renders nothing (a thinking block saved without its text) adds no divider either.
       const rows = [...mutations.values()]
