@@ -193,6 +193,35 @@ describe('remote sibling editor content routing', () => {
     expect(mocks.readRuntimeFileContent).not.toHaveBeenCalled()
   })
 
+  it('reads a read-only sibling view through its owning workspace without moving it', async () => {
+    const activeFile = createOpenFile({
+      id: '/work/repo-b/docs/readme.md',
+      filePath: '/work/repo-b/docs/readme.md',
+      relativePath: '/work/repo-b/docs/readme.md',
+      worktreeId: 'repo-a::/work/repo-a',
+      runtimeEnvironmentId: 'runtime-1',
+      readOnly: true
+    })
+    mocks.findWorkspaceFileRoute.mockReturnValue({
+      worktreeId: 'repo-b::/work/repo-b',
+      relativePath: 'docs/readme.md',
+      executionHostId: 'runtime:runtime-1'
+    })
+    mocks.readRuntimeFileContent.mockResolvedValue({ content: '# readme', isBinary: false })
+
+    await act(async () => root?.render(<HookProbe activeFile={activeFile} />))
+
+    await vi.waitFor(() => expect(latestFileContents[activeFile.id]?.content).toBe('# readme'))
+    expect(mocks.migrateRestoredEditorFileOwner).not.toHaveBeenCalled()
+    expect(mocks.readRuntimeFileContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: { kind: 'environment', environmentId: 'runtime-1' },
+        worktreeId: 'repo-b::/work/repo-b',
+        relativePath: 'docs/readme.md'
+      })
+    )
+  })
+
   it('reports a sibling-owner collision instead of remaining in loading state', async () => {
     const activeFile = createOpenFile({
       id: '/work/repo-b/docs/readme.md',

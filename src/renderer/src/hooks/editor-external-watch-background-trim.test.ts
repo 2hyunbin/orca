@@ -15,7 +15,16 @@ import {
   TEST_REPO
 } from '@/store/slices/worktrees-slice-test-fixtures'
 
-vi.mock('@/store', () => ({ useAppStore: { getState: vi.fn() } }))
+// Why a catalog object: the owner lookup reads the store; the route mock below answers it.
+vi.mock('@/store', () => ({ useAppStore: { getState: vi.fn(() => ({})) } }))
+// Why: the catalog says wt1 holds /r/wt1/a.ts.
+const catalog = vi.hoisted(() => ({ knowsOwner: true }))
+vi.mock('@/lib/runtime-workspace-file-route', () => ({
+  findWorkspaceFileRoute: (_state: unknown, _hostId: string, absolutePath: string) =>
+    catalog.knowsOwner && absolutePath === '/r/wt1/a.ts'
+      ? { worktreeId: 'wt1', relativePath: 'a.ts', executionHostId: 'local' }
+      : null
+}))
 
 type Repo = EditorExternalWatchTargetState['repos'][number]
 type Worktree = EditorExternalWatchTargetState['worktreesByRepo'][string][number]
@@ -107,6 +116,38 @@ describe('background workspace watch trim', () => {
       }
     })
     expect(watchedIds(state)).toEqual(['wt0', 'wt2', 'wt3', 'wt4'])
+  })
+
+  it("watches a read-only view of another workspace's file with that workspace", () => {
+    const state = makeState({
+      worktrees,
+      openFiles: [
+        tab('wt0', {
+          filePath: '/r/wt1/a.ts',
+          relativePath: '/r/wt1/a.ts',
+          readOnly: true
+        })
+      ],
+      activeWorktreeId: 'wt0'
+    })
+    expect(watchedIds(state)).toEqual(['wt1'])
+  })
+
+  it("re-targets a view's watch once the catalog learns its owner", () => {
+    const state = makeState({
+      worktrees,
+      openFiles: [
+        tab('wt0', { filePath: '/r/wt1/a.ts', relativePath: '/r/wt1/a.ts', readOnly: true })
+      ],
+      activeWorktreeId: 'wt0'
+    })
+    catalog.knowsOwner = false
+    try {
+      expect(watchedIds(state)).toEqual(['wt0'])
+    } finally {
+      catalog.knowsOwner = true
+    }
+    expect(watchedIds(state)).toEqual(['wt1'])
   })
 
   it('does not let a deleted workspace hold a warm slot', () => {
