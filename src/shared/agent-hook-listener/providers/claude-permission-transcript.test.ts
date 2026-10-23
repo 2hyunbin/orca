@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -10,6 +10,7 @@ import { applyRelayHookEvent } from '../../../wsl-guest/agent-hook-event-admissi
 
 const directories: string[] = []
 afterEach(() => {
+  vi.restoreAllMocks()
   for (const directory of directories.splice(0)) {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -18,6 +19,7 @@ afterEach(() => {
 it.each([10, 100])(
   'isolates proposals from %i unrelated panes and commits only admitted updates',
   (count) => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_000)
     const directory = mkdtempSync(join(tmpdir(), 'permission-proposal-'))
     directories.push(directory)
     const transcript = join(directory, 'session.jsonl')
