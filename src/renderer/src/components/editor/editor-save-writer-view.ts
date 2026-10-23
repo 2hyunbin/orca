@@ -1,7 +1,10 @@
 import type { AppState } from '@/store'
 import type { OpenFile } from '@/store/slices/editor'
 import { assertEditorFileOperationCurrent } from '@/lib/editor-file-operation-owner'
-import { editorBufferSiblingViewIds } from '@/store/slices/editor/buffers/editor-buffer-views'
+import {
+  editorBufferSiblingViewIds,
+  editorBufferViewIds
+} from '@/store/slices/editor/buffers/editor-buffer-views'
 import type { EditorSaveTrigger } from './editor-save-disk-precondition'
 import { canAutoSaveOpenFile } from './editor-autosave'
 
@@ -15,6 +18,10 @@ function hasCurrentProvenance(state: AppState, file: OpenFile): boolean {
   } catch {
     return false
   }
+}
+
+export function isEditorWritableView(view: OpenFile): boolean {
+  return view.readOnly !== true && view.csvPreviewOnly !== true
 }
 
 /**
@@ -32,9 +39,7 @@ export function editorSaveWriterView(
   }
   // Why: the record's first view may be a CSV preview or read-only; writing through it throws.
   const mayWrite = (view: OpenFile): boolean =>
-    trigger === 'autosave'
-      ? canAutoSaveOpenFile(view)
-      : view.readOnly !== true && view.csvPreviewOnly !== true
+    trigger === 'autosave' ? canAutoSaveOpenFile(view) : isEditorWritableView(view)
   for (const viewId of editorBufferSiblingViewIds(state, fileId)) {
     const view = state.openFiles.find((openFile) => openFile.id === viewId)
     if (view && mayWrite(view) && hasCurrentProvenance(state, view)) {
@@ -43,4 +48,27 @@ export function editorSaveWriterView(
   }
   // Why: restart keeps the asking view so its owner error explains the refusal.
   return trigger === 'autosave' ? null : asked
+}
+
+/**
+ * `viewId` while it is open, else another open view of `recordId` that `accept`s: a save outlives
+ * the tab that asked, but the record's other views still hold its text.
+ */
+export function liveEditorRecordView(
+  state: AppState,
+  viewId: string,
+  recordId: string,
+  accept: (view: OpenFile) => boolean = () => true
+): OpenFile | null {
+  const own = state.openFiles.find((openFile) => openFile.id === viewId)
+  if (own) {
+    return own
+  }
+  for (const id of editorBufferViewIds(state, recordId)) {
+    const view = state.openFiles.find((openFile) => openFile.id === id)
+    if (view && accept(view)) {
+      return view
+    }
+  }
+  return null
 }

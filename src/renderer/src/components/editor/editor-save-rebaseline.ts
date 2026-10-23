@@ -3,6 +3,8 @@ import type { OpenFile } from '@/store/slices/editor'
 import { getWrittenContentDiskSignature } from '../../../../shared/disk-baseline-signature'
 import type { FileWriteDiskConflict } from '../../../../shared/file-write-disk-precondition'
 import { notifyEditorFileCacheStale } from './editor-autosave'
+import { hasPendingEditorBufferChange } from './editor-pending-flush'
+import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
 import {
   pauseAutosaveForNonUtf8File,
   resumeAutosaveForNonUtf8File
@@ -68,5 +70,29 @@ export function rebaselineAfterEditorWrite(state: AppState, fileId: string, cont
     if (!recordDirty) {
       notifyEditorFileCacheStale(sibling.id)
     }
+  }
+}
+
+/** Moves the record `viewId` shows to the written text: its baseline, dirty flag, draft and conflict. */
+export function settleEditorRecordAfterWrite(
+  getState: () => AppState,
+  viewId: string,
+  content: string
+): void {
+  rebaselineAfterEditorWrite(getState(), viewId, content)
+  const state = getState()
+  const currentDraft = state.editorDrafts[viewId]
+  const stillDirty =
+    (currentDraft !== undefined && currentDraft !== content) ||
+    hasPendingEditorBufferChange(state, viewId)
+  state.markFileDirty(viewId, stillDirty)
+  if (!stillDirty) {
+    state.clearEditorDraft(viewId)
+  }
+  // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
+  const savedFile = state.openFiles.find((openFile) => openFile.id === viewId)
+  if (savedFile?.externalMutation === 'changed') {
+    trackExternalChangeConflictAction(savedFile, 'save_overwrite')
+    state.setExternalMutation(viewId, null)
   }
 }

@@ -13,6 +13,7 @@ import { flushPendingEditorBuffer, hasPendingEditorBufferChange } from './editor
 import { createAutoSaveHolds, editorPathHoldKey } from './editor-autosave-holds'
 import {
   editorBufferIdOfView,
+  editorBufferSiblingViewIds,
   editorBufferViewIds
 } from '@/store/slices/editor/buffers/editor-buffer-views'
 import { editorAutoSaveDueRecords } from './editor-autosave-due-records'
@@ -22,12 +23,11 @@ import {
   SELF_WRITE_REMOTE_TTL_MS
 } from './editor-self-write-registry'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
-import { trackExternalChangeConflictAction } from './editor-external-change-telemetry'
 import { editorTabFileAccess } from '@/lib/local-file-access'
 import { isEditorLargePasteInFlight } from './editor-large-paste-in-flight'
 import {
   markEditorSaveRefusal,
-  rebaselineAfterEditorWrite,
+  settleEditorRecordAfterWrite,
   setModelExternalMutation,
   waitForModelBaselineRestamps
 } from './editor-save-rebaseline'
@@ -40,7 +40,11 @@ import {
   type EditorSaveTrigger
 } from './editor-save-disk-precondition'
 import { withEditorFileWriteLock } from './editor-file-write-lock'
-import { editorSaveWriterView } from './editor-save-writer-view'
+import {
+  editorSaveWriterView,
+  isEditorWritableView,
+  liveEditorRecordView
+} from './editor-save-writer-view'
 import { createEditorSaveSlots, type EditorSaveRequest } from './editor-save-slots'
 import { EditorSaveDiscardedError, editorDiscardEpoch } from './editor-discard-epoch'
 import { selectWorktreesByRepo } from '@/store/workspace-record-selectors'
@@ -82,15 +86,24 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   const holds = createAutoSaveHolds(store.getState, () => syncAutoSave())
 
   const writeSave = async (
-    fileId: string,
+    writerId: string,
+    writerRecordId: string,
     request: EditorSaveRequest
   ): Promise<EditorSaveResult> => {
     const { trigger } = request
     const state = store.getState()
-    const liveFile = state.openFiles.find((openFile) => openFile.id === fileId) ?? null
+    // Why: the write-lock wait may have closed the writer; another view of its record holds the text.
+    const liveFile = liveEditorRecordView(state, writerId, writerRecordId, isEditorWritableView)
     if (!liveFile) {
       return 'failed'
     }
+    const fileId = liveFile.id
+    // Why: completion resolves views through this record, since `fileId` may close mid-write.
+    const recordId = recordKeyOf(fileId)
+    // Why writable first: markFileDirty ignores read-only views, so one can't settle the record.
+    const liveViewOfRecord = (): OpenFile | null =>
+      liveEditorRecordView(store.getState(), fileId, recordId, isEditorWritableView) ??
+      liveEditorRecordView(store.getState(), fileId, recordId)
     if (liveFile.csvPreviewOnly === true) {
       throw new Error('Large CSV previews are read-only.')
     }
@@ -180,36 +193,29 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
     }
     if (!writeResult.ok) {
       clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
-      markEditorSaveRefusal(store.getState(), liveFile, writeResult.diskConflict)
+      markEditorSaveRefusal(
+        store.getState(),
+        liveViewOfRecord() ?? liveFile,
+        writeResult.diskConflict
+      )
       return writeResult.diskConflict === 'not-utf8' ? 'failed' : 'blocked-stale'
     }
 
     if (writeResult.unchanged) {
       clearSelfWrite(liveFile.filePath, liveFile.runtimeEnvironmentId)
     }
-    rebaselineAfterEditorWrite(store.getState(), fileId, contentToSave)
-    const nextState = store.getState()
-    const currentDraft = nextState.editorDrafts[fileId]
-    const stillDirty =
-      (currentDraft !== undefined && currentDraft !== contentToSave) ||
-      hasPendingEditorBufferChange(nextState, fileId)
-    nextState.markFileDirty(fileId, stillDirty)
-    if (!stillDirty) {
-      nextState.clearEditorDraft(fileId)
+    const savedView = liveViewOfRecord()
+    if (savedView) {
+      settleEditorRecordAfterWrite(store.getState, savedView.id, contentToSave)
     }
-    // Why: the write made disk match the buffer, so clear any now-stale changed-on-disk conflict.
-    const savedFile = nextState.openFiles.find((openFile) => openFile.id === fileId)
-    if (savedFile?.externalMutation === 'changed') {
-      trackExternalChangeConflictAction(savedFile, 'save_overwrite')
-      nextState.setExternalMutation(fileId, null)
-    }
-
     window.dispatchEvent(
       new CustomEvent<EditorFileSavedDetail>(ORCA_EDITOR_FILE_SAVED_EVENT, {
         detail: {
           fileId,
           content: contentToSave,
-          recordViewIds: editorBufferViewIds(nextState, recordKeyOf(fileId))
+          recordViewIds: savedView
+            ? editorBufferSiblingViewIds(store.getState(), savedView.id)
+            : [fileId]
         }
       })
     )
@@ -217,17 +223,22 @@ export function createEditorSaveQueue(store: AppStoreApi): EditorSaveQueue {
   }
 
   const slots = createEditorSaveSlots(async (request) => {
-    const asked = store.getState().openFiles.find((file) => file.id === request.fileId)
+    // Why: the asking view may close while this waits; the record it was queued under still saves.
+    const askedView = (): OpenFile | null =>
+      liveEditorRecordView(store.getState(), request.fileId, request.recordId, isEditorWritableView)
+    const asked = askedView()
     if (asked) {
       await waitForModelBaselineRestamps(store.getState(), asked)
     }
-    const view = editorSaveWriterView(store.getState(), request.fileId, request.trigger)
+    const current = askedView()
+    const view = current && editorSaveWriterView(store.getState(), current.id, request.trigger)
     if (!view) {
       return 'failed'
     }
+    const recordId = recordKeyOf(view.id)
     // Why: an edit tab, its unstaged diff and a combined-diff section can all write one file.
     return withEditorFileWriteLock(editorPathHoldKey(store.getState(), view, view.filePath), () =>
-      writeSave(view.id, request)
+      writeSave(view.id, recordId, request)
     )
   })
 
