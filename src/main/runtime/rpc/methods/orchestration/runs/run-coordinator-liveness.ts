@@ -85,10 +85,10 @@ async function liveCoordinatorLabel(
   if (key.paneKey === null || (await runtime.coordinatorAgentPresence(key.paneKey)) !== 'live') {
     return null
   }
-  const terminal = key.terminalHandle
-    ? await runtime.showTerminal(key.terminalHandle).catch(() => null)
+  const worktreeId = key.terminalHandle
+    ? runtime.getTerminalWorktreeIdForPaneKey(key.paneKey)
     : null
-  return `the terminal${inWorktree(terminal?.worktreeId)} (${address})`
+  return `the terminal${inWorktree(worktreeId ?? undefined)} (${address})`
 }
 
 function inWorktree(worktreeId: string | undefined): string {

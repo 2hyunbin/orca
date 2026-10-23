@@ -1,5 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRootDispatch } from '../../../../orchestration/db/root-dispatch-test-fixture'
+import { registerBoundPty } from '../../../../bind-first-pane.test-fixture'
+import {
+  createRuntime,
+  PANE_KEY,
+  TAB_ID,
+  LEAF_ID,
+  TERMINAL_HANDLE,
+  WORKTREE_ID
+} from '../../../../orchestration-mailbox-notification-test-harness'
+import { RpcDispatcher } from '../../../dispatcher'
+import { ORCHESTRATION_METHODS } from '..'
 import {
   createSessionCallerHarness,
   idOf,
@@ -55,6 +66,50 @@ describe('run-use against a Run whose coordinator is still running', () => {
       error: { code: 'consumer_fenced' }
     })
   })
+
+  it.each([4, 40])(
+    'labels a live terminal without inspecting output among %i workspaces',
+    async (count) => {
+      const { runtime } = createRuntime(h.db, { checkHookAgentPresence: async () => 'live' })
+      for (let index = 0; index < count; index++) {
+        registerBoundPty(runtime, `pty_${index}`, `repo::/work/other_${index}`, null, {
+          tabId: `tab_${index}`,
+          leafId: `leaf_${index}`
+        })
+      }
+      const getPane = runtime.getTerminalPaneKey.bind(runtime)
+      vi.spyOn(runtime, 'getTerminalPaneKey').mockImplementation((handle) =>
+        handle === WORKER_HANDLE ? 'tab_caller:caller' : getPane(handle)
+      )
+      const metadata = vi.spyOn(runtime, 'getTerminalWorktreeIdForPaneKey')
+      const show = vi.spyOn(runtime, 'showTerminal')
+      const run = h.db.createRun({
+        objective: 'live',
+        coordinatorHandle: TERMINAL_HANDLE,
+        coordinatorPaneKey: PANE_KEY
+      })
+      const before = h.db.getRunRaw(run.id)
+      const dispatcher = new RpcDispatcher({ runtime, methods: ORCHESTRATION_METHODS })
+      expect(runtime.getTerminalWorktreeIdForPaneKey(`${TAB_ID}:${LEAF_ID}`)).toBe(WORKTREE_ID)
+      metadata.mockClear()
+      const refused = await dispatcher.dispatch(
+        orchestrationRequest('orchestration.runUse', { id: run.id, from: WORKER_HANDLE })
+      )
+      expect(refused).toMatchObject({
+        ok: false,
+        error: {
+          code: 'run_coordinator_live',
+          message: expect.stringContaining(
+            `the terminal in mailbox (${TERMINAL_HANDLE}), which is still open.`
+          ),
+          data: { effectsApplied: false }
+        }
+      })
+      expect(metadata).toHaveBeenCalledTimes(1)
+      expect(show).not.toHaveBeenCalled()
+      expect(h.db.getRunRaw(run.id)).toEqual(before)
+    }
+  )
 
   it.each([
     ['its chat was closed', 'closed'],
