@@ -23,6 +23,7 @@ import {
 } from './terminal-tab-parking-policy'
 import { subscribeTerminalParkingInputs } from './terminal-parking-root-inputs'
 export type { TerminalViewParkingInput } from './terminal-tab-parking-policy'
+type TerminalViewParkingHost = Readonly<Record<string, never>>
 const EMPTY: ReadonlySet<string> = new Set()
 const policies = new Map<string, WorkspacePolicy>()
 const listeners = new Map<string, Set<() => void>>()
@@ -104,7 +105,7 @@ function queuePolicy(policy: WorkspacePolicy): void {
   requestFlush()
 }
 export function commitTerminalViewParking(
-  host: object,
+  host: TerminalViewParkingHost,
   input: TerminalViewParkingInput,
   parked: ReadonlySet<string>
 ): void {
@@ -185,7 +186,7 @@ export function commitTerminalViewParking(
   }
   queuePolicy(policy)
 }
-export function detachTerminalViewParking(host: object, worktreeId: string): void {
+export function detachTerminalViewParking(host: TerminalViewParkingHost, worktreeId: string): void {
   const policy = policies.get(worktreeId)
   if (!policy) {
     return
