@@ -1,3 +1,5 @@
+import { snapshotLatestTurn } from './agent-session-history-latest-turn'
+export { snapshotLatestTurn } from './agent-session-history-latest-turn'
 // Paged history over one journal.
 //
 // `tail` and `before` read the REDUCED timeline, so backward paging keeps
@@ -9,7 +11,6 @@
 
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { isRootAgentJournalItem } from '../../../shared/agent-session-journal-producer'
-import { latestStructuredAgentSessionTurn } from '../../../shared/structured-agent-session-live-turn'
 import { isSubagentBlock } from '../../../shared/native-chat-types'
 import type {
   AgentJournalCursor,
@@ -23,7 +24,6 @@ import {
   type AgentSessionHistoryPage,
   type AgentSessionHistoryRequest,
   type AgentSessionHistoryResult,
-  type AgentSessionLatestTurn,
   type AgentSessionSubagentRosterEntry
 } from '../../../shared/agent-session-wire'
 import type { AgentSessionJournal } from '../agent-session-journal/journal-store'
@@ -255,6 +255,7 @@ function readForward(
       rows: window,
       snapshot,
       afterSequence: cursor.sequence,
+      coversGap: since.coversGap,
       canonicalItemId: (itemId) => journal.canonicalItemId(itemId)
     })
     return result.ok
@@ -349,16 +350,4 @@ function buildPage(input: {
     // From the whole timeline, never the page: a long turn's record sits below any window.
     latestTurn: snapshotLatestTurn(input.snapshot)
   }
-}
-
-// A catch-up run pages one snapshot many times; its scan back to the turn record is paid once.
-const latestTurnBySnapshot = new WeakMap<AgentJournalSnapshot, AgentSessionLatestTurn | null>()
-
-export function snapshotLatestTurn(snapshot: AgentJournalSnapshot): AgentSessionLatestTurn | null {
-  let latest = latestTurnBySnapshot.get(snapshot)
-  if (latest === undefined) {
-    latest = latestStructuredAgentSessionTurn(snapshot.items)
-    latestTurnBySnapshot.set(snapshot, latest)
-  }
-  return latest
 }

@@ -7,7 +7,7 @@ import type { JournalRow } from './journal-row-schema'
 /** Saved output extends a turn; client actions and recovery writes do not. Keyed by the fence of
  *  the generation that produced the item (`AgentSessionJournal.itemFence`), as a verdict reads it. */
 export function observeJournalProviderActivity(
-  state: Pick<JournalReducerState, 'providerActivityAt'>,
+  state: Pick<JournalReducerState, 'providerActivityAt' | 'providerActivityWitness' | 'textIndex'>,
   row: JournalRow,
   itemId: string,
   body: AgentJournalItemBody,
@@ -27,7 +27,11 @@ export function observeJournalProviderActivity(
   ) {
     return
   }
-  state.providerActivityAt.set(fence, Math.max(state.providerActivityAt.get(fence) ?? 0, savedAt))
+  if (savedAt >= (state.providerActivityAt.get(fence) ?? 0)) {
+    state.providerActivityAt.set(fence, savedAt)
+    state.providerActivityWitness.set(fence, row.seq)
+    state.textIndex.reconsiderProtected(new Set(state.providerActivityWitness.values()))
+  }
 }
 
 function isProviderActivity(body: AgentJournalItemBody): boolean {

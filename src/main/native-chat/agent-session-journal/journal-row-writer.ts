@@ -47,6 +47,7 @@ export type JournalRowWriterDeps = {
   highestFence: () => number
   nextSequence: () => number
   commit: (rows: readonly JournalRow[], savedAt: number) => void
+  afterCommit?: (rows: readonly JournalRow[]) => void
   /** Rows an OS crash may lose without losing anything but streamed text; they commit without
    *  the per-commit fsync (`isJournalStreamedTextRevision`). */
   streamedTextRevision?: (row: JournalRow) => boolean
@@ -77,6 +78,7 @@ export class JournalRowWriter {
       // sequence the table already holds. The ledger first: it cannot throw, the fold can.
       receipt?.committed()
       this.deps.commit([row], savedAt)
+      this.deps.afterCommit?.([row])
       return row
     })
   }
@@ -119,6 +121,7 @@ export class JournalRowWriter {
     )
     receipt?.committed()
     this.deps.commit(rows, ts)
+    this.deps.afterCommit?.(rows)
     return rows
   }
 

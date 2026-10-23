@@ -28,6 +28,7 @@ import type { JournalWriteBody } from './journal-write-queue'
 import type { JournalAttachmentClaim } from './journal-submission-hook'
 import { claimAgentSessionAttachmentsInTransaction } from '../agent-session-attachments/agent-session-attachment-claims'
 import { isJournalStreamedTextRevision } from './journal-streamed-text-revision'
+import { JournalTextPruner } from './journal-text-pruner'
 
 export type JournalStoreHost = {
   /** Fires the journal's commit listener for a durable change that appended no
@@ -52,6 +53,7 @@ export type JournalStoreHost = {
 }
 
 export type JournalStoreCollaborators = {
+  textPruner: JournalTextPruner
   rowWriter: JournalRowWriter
   epochController: JournalEpochController
   itemAppender: JournalItemAppender
@@ -97,6 +99,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
       ...(previous ? { previous } : {}),
       now: host.now()
     })
+  let textPruner: JournalTextPruner | undefined
   const rowWriter = new JournalRowWriter({
     sessionId: host.identity.sessionId,
     now: host.now,
@@ -106,8 +109,10 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     highestFence: () => host.state().highestFence,
     nextSequence: () => host.state().lastSequence + 1,
     commit: host.commit,
+    afterCommit: (rows) => textPruner?.committed(rows),
     streamedTextRevision: (row) => isJournalStreamedTextRevision(host.state(), row)
   })
+  textPruner = new JournalTextPruner(host, rowWriter)
   const queuedMessages = new JournalQueuedMessages({
     sessionId: host.identity.sessionId,
     serialize: host.serialize,
@@ -125,6 +130,7 @@ export function createJournalStoreCollaborators(host: JournalStoreHost): Journal
     enqueueRows: (plan) => rowWriter.enqueueRows(plan)
   })
   return {
+    textPruner,
     epochController,
     queuedMessages,
     stopMarks: new JournalStopMarks({ state: host.state }),

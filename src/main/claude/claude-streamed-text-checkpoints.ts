@@ -1,9 +1,14 @@
+import { appendStructuredAgentSessionTextWindow } from '../native-chat/agent-session-wire/structured-agent-session-text-append'
+import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type { AgentJournalTurnScope } from '../../shared/agent-session-journal-types'
+import { claudeStreamingMessageBody } from './claude-structured-item-translation'
 import { agentJournalLinkageFields } from '../../shared/agent-session-journal-producer'
 import type { AgentJournalItemIdentity } from '../../shared/agent-session-journal-types'
 import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
 import type { StructuredAgentSessionAppendOptions } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import {
   createAgentSessionDeltaCoalescer,
+  type AgentSessionDeltaWindow,
   type AgentSessionDeltaCoalescerDeps
 } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import type { ClaudeSubagentLinkageSource } from './claude-subagent-linkage'
@@ -17,6 +22,11 @@ export type ClaudeStreamedTextCheckpointDeps = {
     options: StructuredAgentSessionAppendOptions,
     ended?: ClaudeStreamedBlockEnd
   ) => void
+  persistDelta?: (
+    identity: AgentJournalItemIdentity,
+    window: AgentSessionDeltaWindow,
+    options: StructuredAgentSessionAppendOptions
+  ) => boolean
   /** Who produced a block, asked by the scope the block streamed under. */
   producer: ClaudeSubagentLinkageSource
   coalesceMs?: number
@@ -60,8 +70,7 @@ export type ClaudeStreamedTextCheckpoints = {
 /**
  * Growth of a streamed block's row between its deltas and its final frame.
  *
- * The row is rewritten on a widening interval rather than per delta: a 200-line
- * reply would otherwise rewrite the same journal row once per token.
+ * Windows share one cadence; whole values remain available for finalization.
  */
 function sameLinkage(
   left: StructuredAgentSessionAppendOptions,
@@ -102,13 +111,8 @@ export function createClaudeStreamedTextCheckpoints(
     return agentJournalLinkageFields(deps.producer.settledLinkageFor(scope).linkage)
   }
 
-  const persist = (key: string, text: string, force: boolean): void => {
+  const persist = (key: string, text: string): void => {
     latestText.set(key, text)
-    const checkpointLength = checkpointLengths.get(key) ?? 0
-    const nextLength = Math.max(checkpointLength + 32, Math.ceil(checkpointLength * 1.125))
-    if (!force && checkpointLength > 0 && text.length < nextLength) {
-      return
-    }
     const identity = identities.get(key)
     if (!identity) {
       return
@@ -122,7 +126,24 @@ export function createClaudeStreamedTextCheckpoints(
   const coalescer = createAgentSessionDeltaCoalescer({
     ...(deps.coalesceMs === undefined ? {} : { windowMs: deps.coalesceMs }),
     ...(deps.schedule ? { schedule: deps.schedule } : {}),
-    emit: (key, text) => persist(key, text, false)
+    emit: (key, text) => persist(key, text),
+    ...(deps.persistDelta
+      ? {
+          emitDelta: (key: string, window: AgentSessionDeltaWindow) => {
+            const identity = identities.get(key)
+            if (!identity) {
+              return true
+            }
+            const options = producerOptions(key)
+            const accepted = deps.persistDelta?.(identity, window, options) !== false
+            if (accepted) {
+              writtenLinkage.set(key, options)
+              checkpointLengths.set(key, window.baseLength + window.suffix.length)
+            }
+            return accepted
+          }
+        }
+      : {})
   })
 
   const drop = (key: string): void => {
@@ -145,13 +166,13 @@ export function createClaudeStreamedTextCheckpoints(
       coalescer.flushAll()
       for (const [key, text] of latestText) {
         if (checkpointLengths.get(key) !== text.length) {
-          persist(key, text, true)
+          persist(key, text)
         }
       }
     },
     reattribute: () => {
       for (const [key, identity] of identities) {
-        const text = latestText.get(key)
+        const text = coalescer.snapshot(key)?.text ?? latestText.get(key)
         if (text === undefined) {
           continue
         }
@@ -173,7 +194,7 @@ export function createClaudeStreamedTextCheckpoints(
           continue
         }
         coalescer.flush(key)
-        const text = latestText.get(key)
+        const text = coalescer.snapshot(key)?.text ?? latestText.get(key)
         if (text !== undefined) {
           deps.persist(identity, text, producerOptions(key), ended)
         }
@@ -198,4 +219,15 @@ export function createClaudeStreamedTextCheckpoints(
       checkpointLengths.clear()
     }
   }
+}
+
+export function createClaudeStreamedTextAdmission(
+  sink: StructuredAgentSessionEventSink,
+  turnScope: () => AgentJournalTurnScope
+): ClaudeStreamedTextCheckpointDeps['persistDelta'] {
+  return (identity, window, options) =>
+    appendStructuredAgentSessionTextWindow(sink, identity, claudeStreamingMessageBody(''), window, {
+      ...options,
+      turnScope: turnScope()
+    })
 }

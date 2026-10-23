@@ -3,7 +3,7 @@ import type {
   AgentJournalItemBody,
   AgentJournalItemIdentity
 } from '../../../shared/agent-session-journal-types'
-import { journalItemRowBuilder } from './journal-row-builders'
+import { journalStreamedItemBuilder } from './journal-text-writer'
 import type { JournalReducerState } from './journal-reducer'
 import type { JournalAppendResult, JournalItemAppendOptions } from './journal-store-contracts'
 import type { JournalRow } from './journal-row-schema'
@@ -33,7 +33,7 @@ export class JournalItemAppender {
   ): Promise<JournalAppendResult> {
     const itemId = agentJournalItemKey(identity)
     return this.deps
-      .enqueue(journalItemRowBuilder(this.deps.state, identity, body, options), receipt)
+      .enqueue(journalStreamedItemBuilder(this.deps.state, identity, body, options), receipt)
       .then((row) => appendResult(row, itemId))
   }
 
@@ -50,7 +50,7 @@ export class JournalItemAppender {
           throw new NothingResolvedError('journal_item_resolved_to_nothing')
         }
         itemId = agentJournalItemKey(resolved.identity)
-        return journalItemRowBuilder(
+        return journalStreamedItemBuilder(
           this.deps.state,
           resolved.identity,
           resolved.body,
@@ -73,6 +73,6 @@ function appendResult(row: JournalRow, itemId: string): JournalAppendResult {
   return {
     cursor: { epoch: row.epoch, sequence: row.seq },
     itemId,
-    revision: (row as Extract<JournalRow, { kind: 'item' }>).revision
+    revision: row.kind === 'item' || row.kind === 'text-delta' ? row.revision : 0
   }
 }

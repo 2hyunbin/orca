@@ -1,3 +1,20 @@
+import {
+  DEFAULT_WATERMARKS,
+  type StructuredAgentSessionSinkWatermarks
+} from './structured-agent-session-sink-admission'
+export type { StructuredAgentSessionSinkWatermarks } from './structured-agent-session-sink-admission'
+import { createStructuredAgentSessionTextAppend } from './structured-agent-session-text-append'
+import type {
+  StructuredAgentSessionSinkAdmission,
+  StructuredAgentSessionSinkState,
+  StructuredAgentSessionSinkBarrier
+} from './structured-agent-session-sink-admission'
+export type {
+  StructuredAgentSessionSinkAdmission,
+  StructuredAgentSessionSinkState,
+  StructuredAgentSessionSinkBarrier
+} from './structured-agent-session-sink-admission'
+import type { JournalTextAdmission } from '../agent-session-journal/journal-text-rows'
 import type { JournalItemEcho } from '../agent-session-journal/journal-item-echo'
 import { agentJournalItemKey } from '../../../shared/agent-session-journal-item-key'
 import type {
@@ -34,19 +51,6 @@ export type {
 } from './structured-agent-session-journal-views'
 import { StructuredAgentSessionExitObservation } from './structured-agent-session-exit-observation'
 
-export type StructuredAgentSessionSinkAdmission =
-  | { accepted: true }
-  | { accepted: false; reason: 'backpressure' | 'failed' | 'closed' }
-
-export type StructuredAgentSessionSinkState = {
-  queuedBytes: number
-  queuedOperations: number
-  backpressured: boolean
-  failed: boolean
-}
-
-export type StructuredAgentSessionSinkBarrier = { ok: true } | { ok: false; error: unknown }
-
 /** Linkage a producer stamps on the rows it writes. Absent on every append the
  *  session's own agent makes, which is what makes absence mean root. */
 export type StructuredAgentSessionAppendOptions = AgentJournalProducerLinkage & {
@@ -66,6 +70,7 @@ export type StructuredAgentSessionPublishOptions = Pick<
 
 /** An item write states which turn its row belongs to; the write that creates the row decides. */
 export type StructuredAgentSessionItemAppendOptions = StructuredAgentSessionAppendOptions & {
+  streamText?: JournalTextAdmission
   echoOf?: JournalItemEcho['echoOf']
   turnScope: AgentJournalTurnScope
   /** A reusable child's row a later run can resume: this child now executes it
@@ -96,6 +101,11 @@ export type StructuredAgentSessionEventSink = StructuredAgentSessionTransitionSi
   written?(): Promise<StructuredAgentSessionSinkBarrier>
   setActivity?(activity: AgentSessionTurnActivity | null): void
   tryAppendItem?(
+    identity: AgentJournalItemIdentity,
+    body: AgentJournalItemBody,
+    options: StructuredAgentSessionItemAppendOptions
+  ): StructuredAgentSessionSinkAdmission
+  tryAppendStreamedItem?(
     identity: AgentJournalItemIdentity,
     body: AgentJournalItemBody,
     options: StructuredAgentSessionItemAppendOptions
@@ -174,31 +184,9 @@ export type DeferredStructuredAgentSessionEventSink = {
   state(): StructuredAgentSessionSinkState
 }
 
-export type StructuredAgentSessionSinkWatermarks = {
-  pauseQueuedBytes: number
-  maxQueuedBytes: number
-  lowQueuedBytes: number
-  pauseQueuedOperations: number
-  maxQueuedOperations: number
-  lowQueuedOperations: number
-  maxLifecycleQueuedBytes: number
-  maxLifecycleQueuedOperations: number
-}
-
 export type StructuredAgentSessionReadingControl = {
   pauseReading(): void
   resumeReading(): void
-}
-
-const DEFAULT_WATERMARKS: StructuredAgentSessionSinkWatermarks = {
-  pauseQueuedBytes: 16 * 1024 * 1024,
-  maxQueuedBytes: 32 * 1024 * 1024,
-  lowQueuedBytes: 8 * 1024 * 1024,
-  pauseQueuedOperations: 512,
-  maxQueuedOperations: 1_024,
-  lowQueuedOperations: 256,
-  maxLifecycleQueuedBytes: 16 * 1024 * 1024,
-  maxLifecycleQueuedOperations: 1_024
 }
 
 export function createDeferredStructuredAgentSessionEventSink(deps: {
@@ -269,7 +257,9 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
   ) =>
     queue.submit(
       {
-        bytes: estimateStructuredAgentSessionItemBytes(identity, body),
+        bytes:
+          estimateStructuredAgentSessionItemBytes(identity, body) +
+          (options.streamText ? Buffer.byteLength(options.streamText.suffix, 'utf8') : 0),
         run: (bound) =>
           bound.journal.appendItem(
             identity,
@@ -286,6 +276,7 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
       observeExit: exit.record,
       appendItem: (identity, body, options) => void appendItem(identity, body, options),
       tryAppendItem: appendItem,
+      tryAppendStreamedItem: createStructuredAgentSessionTextAppend(queue),
       ...resolvedAppend,
       ...createStructuredAgentSessionTransitionMembers(queue),
       journalEpoch: queue.journalEpoch,

@@ -1,3 +1,4 @@
+import type { JournalTextAdmission } from './journal-text-rows'
 import type { JournalItemEcho } from './journal-item-echo'
 import type { AgentJournalDispatchRejection } from '../../../shared/agent-session-failure-words'
 import type {
@@ -30,7 +31,12 @@ export type AgentSessionJournalOptions = {
 }
 
 export type JournalReadSince =
-  | { ok: true; rows: JournalRow[]; cursor: AgentJournalCursor }
+  | {
+      ok: true
+      rows: JournalRow[]
+      cursor: AgentJournalCursor
+      coversGap?: (first: number, last: number) => boolean
+    }
   | { ok: false; reset: AgentJournalResetReason }
 
 export type ResolveDispatchInput = {
@@ -66,6 +72,7 @@ export type JournalAppendResult = {
 }
 
 export type JournalItemAppendOptions = AgentJournalRowAttribution & {
+  streamText?: JournalTextAdmission
   echoOf?: JournalItemEcho['echoOf']
   fence: number
   /** The generation whose execution produced the item: set by a provider's observation, and by

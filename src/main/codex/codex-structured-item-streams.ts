@@ -2,7 +2,10 @@ import {
   AGENT_JOURNAL_THREAD_SCOPE,
   type AgentJournalRowAttribution
 } from '../../shared/agent-session-journal-types'
-import { createAgentSessionDeltaCoalescer } from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
+import {
+  createAgentSessionDeltaCoalescer,
+  type AgentSessionDeltaWindow
+} from '../native-chat/agent-session-wire/agent-session-delta-coalescer'
 import { CodexItemStreamRetention } from './codex-item-stream-retention'
 import { appendCodexItemAndPublish } from './codex-structured-journal-sink'
 import { codexJournalItem, codexStreamingJournalItem } from './codex-structured-item-translation'
@@ -86,7 +89,7 @@ export function createCodexStructuredItemStreams(
         break
       }
       const pending = coalescer.snapshot(oldest)
-      if (pending && pending.text.length > 0 && !persist(oldest, pending.text, true)) {
+      if (pending && pending.text.length > 0 && !persist(oldest, pending.text)) {
         // Keep the state (and its buffered text) until the sink recovers. A
         // bounded map is preferable to silently losing streamed output.
         break
@@ -109,7 +112,12 @@ export function createCodexStructuredItemStreams(
     }
   }
 
-  const append = (key: string, state: CodexItemStreamState, text: string): boolean => {
+  const append = (
+    key: string,
+    state: CodexItemStreamState,
+    text: string,
+    window?: AgentSessionDeltaWindow
+  ): boolean => {
     const translated = codexStreamingJournalItem(state.item, text)
     if (!translated.body) {
       return true
@@ -118,20 +126,12 @@ export function createCodexStructuredItemStreams(
     const body = withJournalReasoningLifecycle(translated.body, { state: 'running' })
     return appendCodexItemAndPublish(deps.sink, state.identity, body, {
       ...attributionOf(key),
+      ...(window ? { streamText: { ...window, field: 0 } } : {}),
       ...(state.startedAt === undefined ? {} : { observedAt: state.startedAt })
     }).accepted
   }
 
-  const shouldPersist = (key: string, textLength: number): boolean => {
-    const checkpointLength = checkpointLengths.get(key) ?? 0
-    const nextLength = Math.max(checkpointLength + 32, Math.ceil(checkpointLength * 1.125))
-    return !(checkpointLength > 0 && textLength < nextLength)
-  }
-
-  const persist = (key: string, text: string, force: boolean): boolean => {
-    if (!force && !shouldPersist(key, text.length)) {
-      return true
-    }
+  const persist = (key: string, text: string): boolean => {
     const state = states.get(key)
     if (state && append(key, state, text)) {
       checkpointLengths.set(key, text.length)
@@ -147,10 +147,25 @@ export function createCodexStructuredItemStreams(
     maxTotalRetainedBytes: deps.maxTotalRetainedBytes,
     isProtected: (key) => states.isPersistent(key),
     schedule: deps.schedule,
-    shouldEmit: shouldPersist,
-    emit: (key, text) => {
-      return persist(key, text, false)
-    }
+    emitDelta: (key, window) => {
+      const state = states.get(key)
+      if (!state) {
+        return false
+      }
+      if (state.item.type !== 'agentMessage' && state.item.type !== 'reasoning') {
+        return persist(key, window.text())
+      }
+      if (!append(key, state, 'x', window)) {
+        return false
+      }
+      checkpointLengths.set(
+        key,
+        window.replace ? window.text().length : window.baseLength + window.suffix.length
+      )
+      pendingCheckpoints.delete(key)
+      return true
+    },
+    emit: (key, text) => persist(key, text)
   })
 
   const ensureState = (
@@ -178,7 +193,7 @@ export function createCodexStructuredItemStreams(
     for (const key of pendingCheckpoints) {
       const snapshot = coalescer.snapshot(key)
       if (snapshot && checkpointLengths.get(key) !== snapshot.text.length) {
-        flushed = persist(key, snapshot.text, true) && flushed
+        flushed = persist(key, snapshot.text) && flushed
       } else {
         pendingCheckpoints.delete(key)
       }

@@ -60,14 +60,15 @@ export function resolveJournalResume(
  *  than render a partial timeline. */
 export function findSequenceGap(
   sequences: readonly number[],
-  expectedFirst: number
+  expectedFirst: number,
+  coversGap?: (first: number, last: number) => boolean
 ): { gapAt: number } | null {
   let expected = expectedFirst
   for (const sequence of sequences) {
-    if (sequence !== expected) {
+    if (sequence !== expected && (sequence < expected || !coversGap?.(expected, sequence - 1))) {
       return { gapAt: expected }
     }
-    expected += 1
+    expected = sequence + 1
   }
   return null
 }

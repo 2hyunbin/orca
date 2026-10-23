@@ -1,3 +1,4 @@
+import type { JournalTextPruner } from './journal-text-pruner'
 // Append-only journal store for one agent session. It owns the chat's fold and write queue, and no
 // connection: every statement goes through the host's one journal database.
 
@@ -75,6 +76,7 @@ import { journalThreadGoalSource, type JournalThreadGoalSource } from './journal
 export { AgentSessionJournalError } from './journal-write-guards'
 
 export class AgentSessionJournal {
+  private readonly textPruner: JournalTextPruner
   private readonly identity: AgentSessionJournalIdentity
   private readonly database: JournalHostDatabase
   private readonly now: () => number
@@ -132,6 +134,7 @@ export class AgentSessionJournal {
       enqueue: (build, receipt) => this.rowWriter.enqueue(build, receipt)
     })
     this.rowWriter = collaborators.rowWriter
+    this.textPruner = collaborators.textPruner
     this.epochController = collaborators.epochController
     this.itemAppender = collaborators.itemAppender
     this.lifecycleBatchAppender = collaborators.lifecycleBatchAppender
@@ -171,11 +174,13 @@ export class AgentSessionJournal {
   async open(): Promise<void> {
     await this.restore()
     this.openedThrough = this.cursor()
+    this.textPruner.schedule()
   }
 
   /** Refuses every later write and resolves once the admitted ones have landed. Holds no
    *  connection, so there is nothing to release and nothing that can fail. */
   close(): Promise<void> {
+    this.textPruner.close()
     this.queuedMessages.editLeases.dispose()
     this.queue.markClosed()
     return this.queue.drain()
@@ -280,7 +285,8 @@ export class AgentSessionJournal {
   readSince(cursor: AgentJournalCursor, limit?: number): JournalReadSince {
     const { sessionId } = this.identity
     const rowsAfter = journalRowsAfterReader(this.database.db, sessionId, this.state.epoch, limit)
-    return readJournalSince({ state: this.state, rowsAfter }, cursor, () => this.cursor())
+    const result = readJournalSince({ state: this.state, rowsAfter }, cursor, () => this.cursor())
+    return result.ok ? { ...result, coversGap: this.state.textIndex.covers } : result
   }
 
   /** Upsert by stable identity. The revision is assigned here so a caller

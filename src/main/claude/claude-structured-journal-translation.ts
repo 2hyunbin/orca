@@ -18,7 +18,10 @@ import { createClaudeStreamedThinking } from './claude-streamed-thinking'
 import { ClaudeSubagentIdentities } from './claude-subagent-identities'
 import { ClaudeJournaledSubagents } from './claude-subagent-journaled-identities'
 import { createClaudeStreamedBlockRegistry } from './claude-streamed-block-identity'
-import { createClaudeStreamedTextCheckpoints } from './claude-streamed-text-checkpoints'
+import {
+  createClaudeStreamedTextCheckpoints,
+  createClaudeStreamedTextAdmission
+} from './claude-streamed-text-checkpoints'
 import {
   claudeFrameParentRef,
   claudeStreamTurnStartSource,
@@ -117,6 +120,7 @@ export function createClaudeJournalTranslator(
     ...(deps.coalesceMs === undefined ? {} : { coalesceMs: deps.coalesceMs }),
     ...(deps.schedule ? { schedule: deps.schedule } : {}),
     producer: subagents.linkage,
+    persistDelta: createClaudeStreamedTextAdmission(deps.sink, turnScope),
     persist: (identity, text, options) => {
       const body = claudeStreamingMessageBody(text)
       deps.sink.appendItem(identity, body, { ...options, turnScope: turnScope() })

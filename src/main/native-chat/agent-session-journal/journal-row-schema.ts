@@ -1,4 +1,9 @@
 import type { JournalItemEcho } from './journal-item-echo'
+import {
+  journalTextRowContent,
+  type JournalTextDeltaRow,
+  type JournalTextPrunedRow
+} from './journal-text-rows'
 // Persisted journal row shapes plus read-time upcasting.
 //
 // The journal is append-only, so migration is upcasting on read and never an
@@ -242,6 +247,8 @@ export const MAX_JOURNAL_LIFECYCLE_BATCH_BYTES = 1_500_000
 export const MAX_JOURNAL_LIFECYCLE_BATCH_MUTATIONS = 200
 
 export type JournalRow =
+  | JournalTextDeltaRow
+  | JournalTextPrunedRow
   | JournalEpochRow
   | JournalItemRow
   | JournalTombstoneRow
@@ -266,7 +273,7 @@ export function serializeJournalRow(row: JournalRow): string {
  * Parse one persisted line. Older versions are upcast; newer versions and newer
  * kinds are reported as unreadable so the caller fails closed.
  */
-export function parseJournalRow(line: string): JournalRowParse {
+export function parseJournalRow(line: string, preserveVersion = false): JournalRowParse {
   let parsed: unknown
   try {
     parsed = JSON.parse(line)
@@ -285,6 +292,9 @@ export function parseJournalRow(line: string): JournalRowParse {
     return { ok: false, unreadable: true }
   }
   const upcast = upcastRow(record, version)
+  if (preserveVersion) {
+    upcast.v = version
+  }
   dropUnusableRowAnnotations(upcast)
   if (isJournalRow(upcast)) {
     return { ok: true, row: upcast }
@@ -294,14 +304,8 @@ export function parseJournalRow(line: string): JournalRowParse {
 
 /** Read-time upcast chain. Each step raises a row exactly one version. */
 function upcastRow(record: Record<string, unknown>, version: number): Record<string, unknown> {
-  let current = record
-  let at = version
-  while (at < AGENT_SESSION_JOURNAL_SCHEMA_VERSION) {
-    // No upcasters yet — v1 is the first shipped schema. New cases go here.
-    current = { ...current, v: at + 1 }
-    at += 1
-  }
-  return current
+  // No shape converters yet: versions differ only in the kinds their readers understand.
+  return { ...record, v: Math.max(version, AGENT_SESSION_JOURNAL_SCHEMA_VERSION) }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -390,7 +394,9 @@ const ROW_CONTENT_CHECK_BY_KIND: Record<
       ...mutations.map((mutation) => lifecycleMutationContent(mutation))
     )
   },
-  queue: journalQueueRowContent
+  queue: journalQueueRowContent,
+  'text-delta': (record) => fieldsContent(journalTextRowContent(record)),
+  'text-pruned': (record) => fieldsContent(journalTextRowContent(record))
 }
 export const KNOWN_ROW_KINDS = new Map(Object.entries(ROW_CONTENT_CHECK_BY_KIND))
 

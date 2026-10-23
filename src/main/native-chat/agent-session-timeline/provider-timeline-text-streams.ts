@@ -19,6 +19,7 @@ import {
 } from '../../../shared/agent-session-journal-types'
 import {
   createAgentSessionDeltaCoalescer,
+  type AgentSessionDeltaWindow,
   type AgentSessionDeltaCoalescerDeps
 } from '../agent-session-wire/agent-session-delta-coalescer'
 import { estimateStructuredAgentSessionItemBytes } from '../agent-session-wire/structured-agent-session-event-sink-estimate'
@@ -86,7 +87,8 @@ export class ProviderTimelineTextStreams {
       ...(deps.schedule ? { schedule: deps.schedule } : {}),
       // Every stream here is one this assembler holds open; the shared budget counts them.
       isProtected: () => true,
-      emit: (id, text) => this.flushOnWindow(id, text)
+      emit: (id, text) => this.flushOnWindow(id, text),
+      emitDelta: (id, window) => this.flushOnWindow(id, '', window)
     })
   }
 
@@ -177,10 +179,10 @@ export class ProviderTimelineTextStreams {
 
   /** Every stream's unwritten text, ahead of whatever the event writes. */
   planFlush(plan: ProviderTimelinePlan, except?: ProviderTimelineStream): void {
-    for (const { key, snapshot } of this.coalescer.dirty()) {
+    for (const { key, window } of this.coalescer.dirtyWindows()) {
       const stream = this.byId.get(key)
       if (stream && stream !== except) {
-        this.planText(plan, stream, snapshot.text)
+        this.planText(plan, stream, '', false, window)
       }
     }
   }
@@ -221,9 +223,16 @@ export class ProviderTimelineTextStreams {
   /** Ends the streams `which` selects once the event is admitted; their text was flushed by it. */
   planRelease(
     plan: ProviderTimelinePlan,
-    which: (stream: ProviderTimelineStream) => boolean
+    which: (stream: ProviderTimelineStream) => boolean,
+    finalize = true
   ): void {
     const released = [...this.streams.values()].filter(which)
+    for (const stream of finalize ? released : []) {
+      const snapshot = this.coalescer.snapshot(stream.id)
+      if (snapshot) {
+        this.planText(plan, stream, snapshot.text, true)
+      }
+    }
     if (released.length > 0) {
       plan.onAdmitted(() => released.forEach((stream) => this.forget(stream)))
     }
@@ -232,14 +241,14 @@ export class ProviderTimelineTextStreams {
   /** Ends one stream with the provider's final text, else what streamed. */
   planClose(plan: ProviderTimelinePlan, stream: ProviderTimelineStream, finalText?: string): void {
     if (finalText === undefined) {
-      const owed = this.coalescer.dirty().find(({ key }) => key === stream.id)
-      if (owed) {
-        this.planText(plan, stream, owed.snapshot.text)
+      const snapshot = this.coalescer.snapshot(stream.id)
+      if (snapshot) {
+        this.planText(plan, stream, snapshot.text, true)
       }
     } else {
       this.planText(plan, stream, finalText, true)
     }
-    this.planRelease(plan, (each) => each === stream)
+    this.planRelease(plan, (each) => each === stream, false)
   }
 
   flush(): void {
@@ -254,13 +263,13 @@ export class ProviderTimelineTextStreams {
   }
 
   /** The window's flush: false keeps the text for a retry, but only while the sink is merely full. */
-  private flushOnWindow(id: string, text: string): boolean {
+  private flushOnWindow(id: string, text: string, window?: AgentSessionDeltaWindow): boolean {
     const stream = this.byId.get(id)
     if (!stream) {
       return true
     }
     const plan = new ProviderTimelinePlan()
-    this.planText(plan, stream, text)
+    this.planText(plan, stream, text, false, window)
     const admission = plan.submit(this.deps.sink)
     // A failed or closed sink can never take it; the session's end owns what it leaves.
     return admission.accepted || admission.reason !== 'backpressure'
@@ -270,18 +279,29 @@ export class ProviderTimelineTextStreams {
     plan: ProviderTimelinePlan,
     stream: ProviderTimelineStream,
     text: string,
-    providerFinal = false
+    providerFinal = false,
+    window?: AgentSessionDeltaWindow
   ): void {
-    const empty = providerFinal ? text.length === 0 : text.trim().length === 0
+    const empty = window
+      ? window.baseLength === 0 && !window.suffix.trim()
+      : providerFinal
+        ? text.length === 0
+        : text.trim().length === 0
     if (!stream.written && empty) {
       plan.onAdmitted(() => this.coalescer.markFlushed(stream.id))
       return
     }
     const body = this.message(stream, text)
     plan.item({
-      reservedBytes: estimateStructuredAgentSessionItemBytes(stream.row.identity, body),
+      reservedBytes:
+        estimateStructuredAgentSessionItemBytes(stream.row.identity, body) +
+        (window ? Buffer.byteLength(window.suffix, 'utf8') : 0),
       resolve: (journal) => this.resolveText(stream, body, journal),
-      options: { ...stream.producer, turnScope: stream.scope }
+      options: {
+        ...stream.producer,
+        turnScope: stream.scope,
+        ...(window ? { streamText: { ...window, field: 0 } } : {})
+      }
     })
     plan.onAdmitted(() => {
       stream.written = true

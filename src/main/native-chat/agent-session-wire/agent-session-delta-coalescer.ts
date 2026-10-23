@@ -1,11 +1,11 @@
+import { appendWithinUtf8ByteLimit } from './agent-session-streamed-text-bounds'
 // Server-side coalescing for streamed assistant text.
 //
 // Providers emit one notification per token. Journaling each one would write a
 // row and wake every subscriber per token, so a single long answer costs
 // thousands of appends and thousands of stream frames on a phone. Deltas are
-// therefore accumulated and flushed on a short window; the journal row is a
-// SNAPSHOT of the text so far, which is also what makes dropping intermediate
-// frames safe for a reconnecting client.
+// therefore accumulated and flushed on a short window. The host saves suffixes;
+// subscriber frames still carry the committed whole value.
 //
 // The window applies to text only. Lifecycle — an item completing, a turn
 // ending, an approval arriving — bypasses it by flushing first, so nothing can
@@ -29,11 +29,19 @@ export type AgentSessionDeltaSnapshot = {
   truncated: boolean
 }
 
+export type AgentSessionDeltaWindow = {
+  baseLength: number
+  suffix: string
+  text: () => string
+  replace?: true
+  observedBytes: number
+  truncated: boolean
+}
+
 export type AgentSessionDeltaCoalescerDeps = {
   /** Called with the FULL text accumulated for the key, not the increment. */
   emit: (key: string, text: string, snapshot: AgentSessionDeltaSnapshot) => unknown
-  /** False accepts a skipped snapshot; sink refusal is reported by emit. */
-  shouldEmit?: (key: string, textLength: number) => boolean
+  emitDelta?: (key: string, window: AgentSessionDeltaWindow) => unknown
   windowMs?: number
   maxRetainedBytes?: number
   maxTotalRetainedBytes?: number
@@ -62,6 +70,8 @@ export type AgentSessionDeltaCoalescer = {
   dirty: () => { key: string; snapshot: AgentSessionDeltaSnapshot }[]
   /** The caller wrote this stream's current text itself; nothing is owed until it grows. */
   markFlushed: (key: string) => void
+  window: (key: string) => AgentSessionDeltaWindow | null
+  dirtyWindows: () => { key: string; window: AgentSessionDeltaWindow }[]
 }
 
 function defaultSchedule(run: () => void, ms: number): () => void {
@@ -88,31 +98,62 @@ export function createAgentSessionDeltaCoalescer(
       observedBytes: number
       truncated: boolean
       dirty: boolean
+      admittedLength: number
+      pending: string[]
     }
   >()
   let totalRetainedBytes = 0
   let cancelTimer: (() => void) | null = null
   const evictable = new Set<string>()
 
+  const windowFor = (key: string): AgentSessionDeltaWindow | null => {
+    const stream = streams.get(key)
+    if (!stream) {
+      return null
+    }
+    const chunks = stream.chunks
+    const length = stream.textLength
+    let whole: string | undefined
+    return {
+      baseLength: stream.admittedLength,
+      suffix: stream.truncated ? '' : stream.pending.join(''),
+      text: () => (whole ??= chunks.join('').slice(0, length)),
+      ...(stream.truncated ? { replace: true as const } : {}),
+      observedBytes: stream.observedBytes,
+      truncated: stream.truncated
+    }
+  }
+
+  const markFlushed = (key: string): void => {
+    const stream = streams.get(key)
+    if (stream) {
+      stream.dirty = false
+      stream.admittedLength = stream.textLength
+      stream.pending = []
+    }
+  }
+
   const flushKey = (key: string): boolean => {
     const stream = streams.get(key)
     if (!stream?.dirty) {
       return true
     }
-    if (deps.shouldEmit?.(key, stream.textLength) === false) {
-      stream.dirty = false
+    const window = windowFor(key)
+    if (!window) {
       return true
     }
-    const text = stream.chunks.join('')
-    const emitted = deps.emit(key, text, {
-      text,
-      observedBytes: stream.observedBytes,
-      truncated: stream.truncated
-    })
+    const text = deps.emitDelta ? '' : window.text()
+    const emitted = deps.emitDelta
+      ? deps.emitDelta(key, window)
+      : deps.emit(key, text, {
+          text,
+          observedBytes: stream.observedBytes,
+          truncated: stream.truncated
+        })
     if (emitted === false) {
       return false
     }
-    stream.dirty = false
+    markFlushed(key)
     return true
   }
 
@@ -169,7 +210,9 @@ export function createAgentSessionDeltaCoalescer(
           textLength: 0,
           observedBytes: 0,
           truncated: false,
-          dirty: false
+          dirty: false,
+          admittedLength: 0,
+          pending: []
         }
         if (!deps.isProtected?.(key)) {
           evictable.add(key)
@@ -194,6 +237,9 @@ export function createAgentSessionDeltaCoalescer(
           ? (next.chunks[0]?.length ?? 0)
           : stream.textLength + delta.length
         stream.chunks = next.chunks
+        if (!next.truncated) {
+          stream.pending.push(delta)
+        }
         stream.retainedBytes = next.retainedBytes
         stream.truncated = next.truncated
         stream.dirty = true
@@ -246,81 +292,12 @@ export function createAgentSessionDeltaCoalescer(
             ]
           : []
       ),
-    markFlushed: (key) => {
-      const stream = streams.get(key)
-      if (stream) {
-        stream.dirty = false
-      }
-    }
+    markFlushed,
+    dirtyWindows: () =>
+      [...streams].flatMap(([key, stream]) => {
+        const window = stream.dirty ? windowFor(key) : null
+        return window ? [{ key, window }] : []
+      }),
+    window: windowFor
   }
-}
-
-function appendWithinUtf8ByteLimit(
-  current: string[],
-  currentBytes: number,
-  delta: string,
-  deltaBytes: number,
-  maxBytes: number
-): { chunks: string[]; retainedBytes: number; truncated: boolean } {
-  const available = Math.max(0, maxBytes - currentBytes)
-  if (deltaBytes <= available) {
-    // The caller owns the per-stream array; append in place so each token is
-    // amortized O(1) instead of copying the complete prefix on every delta.
-    if (delta.length > 0) {
-      current.push(delta)
-    }
-    return {
-      chunks: current,
-      retainedBytes: currentBytes + deltaBytes,
-      truncated: false
-    }
-  }
-  return truncateStreamPrefix(current, delta, maxBytes)
-}
-
-function truncateStreamPrefix(
-  current: string[],
-  delta: string,
-  maxBytes: number
-): { chunks: string[]; retainedBytes: number; truncated: boolean } {
-  const marker = Buffer.from(AGENT_SESSION_STREAMED_TEXT_TRUNCATION_MARKER, 'utf8')
-  const headBytes = Math.max(0, maxBytes - marker.byteLength)
-  const boundedHead = Number.isSafeInteger(maxBytes) && maxBytes >= 0
-  const combined = boundedHead
-    ? Buffer.allocUnsafe(headBytes)
-    : Buffer.concat([
-        ...current.map((chunk) => Buffer.from(chunk, 'utf8')),
-        Buffer.from(delta, 'utf8')
-      ])
-  let end = boundedHead
-    ? writeStreamPrefix(combined, current, delta)
-    : Math.min(combined.byteLength, headBytes)
-  if (!boundedHead) {
-    while (end > 0 && (combined[end] & 0b1100_0000) === 0b1000_0000) {
-      end -= 1
-    }
-  }
-  const visibleMarker = marker.subarray(0, Math.min(marker.byteLength, maxBytes - end))
-  const text = combined.subarray(0, end).toString('utf8') + visibleMarker.toString('utf8')
-  return {
-    chunks: text ? [text] : [],
-    retainedBytes: Buffer.byteLength(text, 'utf8'),
-    truncated: true
-  }
-}
-
-function writeStreamPrefix(buffer: Buffer, chunks: string[], delta: string): number {
-  let end = 0
-  for (const chunk of chunks) {
-    if (end === buffer.length) {
-      return end
-    }
-    const written = buffer.write(chunk, end, buffer.length - end, 'utf8')
-    end += written
-    // Encode each chunk independently to preserve split-surrogate replacement.
-    if (written < Buffer.byteLength(chunk, 'utf8')) {
-      return end
-    }
-  }
-  return end + buffer.write(delta, end, buffer.length - end, 'utf8')
 }

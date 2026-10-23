@@ -13,6 +13,9 @@ export function isJournalStreamedTextRevision(
   state: JournalReducerState,
   row: JournalRow
 ): boolean {
+  if (row.kind === 'text-delta') {
+    return !row.recovered
+  }
   if (row.kind !== 'item' || row.recovered) {
     return false
   }

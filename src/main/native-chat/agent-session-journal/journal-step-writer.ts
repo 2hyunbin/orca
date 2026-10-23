@@ -11,7 +11,7 @@ import type {
 import type { JournalResolvedItem } from './journal-item-appender'
 import type { JournalLifecycleBatchAppender } from './journal-lifecycle-batch-appender'
 import type { JournalReducerState } from './journal-reducer'
-import { journalItemRowBuilder } from './journal-row-builders'
+import { journalStreamedItemBuilder } from './journal-text-writer'
 import type { JournalRow } from './journal-row-schema'
 import type { JournalRowWriter } from './journal-row-writer'
 import type { JournalWriteBody } from './journal-write-queue'
@@ -53,6 +53,13 @@ export class JournalStepWriter {
     const resolved = step.resolve()
     return resolved === null
       ? []
-      : [journalItemRowBuilder(this.deps.state, resolved.identity, resolved.body, step.options)]
+      : [
+          journalStreamedItemBuilder(
+            this.deps.state,
+            resolved.identity,
+            resolved.body,
+            step.options
+          )
+        ]
   }
 }

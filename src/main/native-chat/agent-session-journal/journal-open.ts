@@ -19,6 +19,7 @@ import {
   readJournalSessionEpoch
 } from './journal-row-table'
 import { parseJournalRow, type JournalRow } from './journal-row-schema'
+import { loadJournalTextIndex, type JournalTextIndex } from './journal-text-index'
 
 /** Every epoch row is sequence 1, and no compaction moves that floor. */
 const FIRST_JOURNAL_SEQUENCE = 1
@@ -45,22 +46,41 @@ export function replayJournal(db: Database.Database, sessionId: string): Journal
   if (epoch === null) {
     return null
   }
-  const fold = startJournalRowFold({ sessionId, epoch })
+  const proofs = loadJournalTextIndex(db, sessionId, epoch)
+  const fold = startJournalRowFold({ sessionId, epoch, textIndex: proofs.index })
   for (const entry of iterateJournalEpochRows(db, sessionId, epoch)) {
     if (!fold.add(entry)) {
       break
     }
   }
-  return fold.finish()
+  const result = fold.finish()
+  return {
+    ...result,
+    newer: result.newer ?? (proofs.newer === null ? null : { sequence: proofs.newer }),
+    damage:
+      result.newer || proofs.newer !== null
+        ? null
+        : (result.damage ??
+          (proofs.invalidAt === null
+            ? null
+            : { sequence: proofs.invalidAt, cause: 'unparseable-row' }))
+  }
 }
 
 /** The same fold, fed a row at a time, for a caller that yields between batches of rows. */
-export function startJournalRowFold(input: { sessionId: string; epoch: string }): {
+export function startJournalRowFold(input: {
+  sessionId: string
+  epoch: string
+  textIndex?: JournalTextIndex
+}): {
   /** False once the fold has stopped: the rest of the rows are not read. */
   add: (entry: { seq: number; rowJson: string; ts?: number }) => boolean
   finish: () => JournalLoad
 } {
   const state = createJournalReducerState(input.sessionId, input.epoch)
+  if (input.textIndex) {
+    state.textIndex = input.textIndex
+  }
   let expectedSequence = FIRST_JOURNAL_SEQUENCE
   let damage: JournalDamage | null = null
   let anchored = false
@@ -69,7 +89,7 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
 
   const add = (entry: { seq: number; rowJson: string; ts?: number }): boolean => {
     empty = false
-    const parsed = parseJournalRow(entry.rowJson)
+    const parsed = parseJournalRow(entry.rowJson, true)
     if (!parsed.ok && parsed.unreadable) {
       newer = { sequence: entry.seq }
       return false
@@ -80,7 +100,7 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
       return true
     }
     // A body naming another sequence than its key: writes would number past the key.
-    if (parsed.row.seq !== entry.seq) {
+    if (parsed.row.seq !== entry.seq || parsed.row.epoch !== input.epoch) {
       damage ??= { sequence: entry.seq, cause: 'misnumbered-row' }
       return true
     }
@@ -88,18 +108,22 @@ export function startJournalRowFold(input: { sessionId: string; epoch: string })
       return true
     }
     const row = parsed.row
-    if (row.seq !== expectedSequence) {
+    if (row.seq !== expectedSequence && !state.textIndex.covers(expectedSequence, row.seq - 1)) {
       const cause = expectedSequence === FIRST_JOURNAL_SEQUENCE ? 'no-epoch-row' : 'sequence-gap'
       damage = { sequence: expectedSequence, cause }
       return true
     }
-    expectedSequence += 1
+    expectedSequence = row.seq + 1
     if (row.seq === FIRST_JOURNAL_SEQUENCE && row.kind !== 'epoch') {
       damage = { sequence: row.seq, cause: 'no-epoch-row' }
       return true
     }
     anchored = true
-    applyJournalRow(state, row, entry.ts)
+    try {
+      applyJournalRow(state, row, entry.ts)
+    } catch {
+      damage = { sequence: row.seq, cause: 'unparseable-row' }
+    }
     return true
   }
   const finish = (): JournalLoad => {

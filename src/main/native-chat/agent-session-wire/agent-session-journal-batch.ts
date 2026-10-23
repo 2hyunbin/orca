@@ -32,10 +32,12 @@ export function projectJournalBatch(input: {
   /** Sequence the subscriber has already applied. */
   afterSequence: number
   canonicalItemId?: (itemId: string) => string
+  coversGap?: (first: number, last: number) => boolean
 }): JournalBatchProjection {
   const gap = findSequenceGap(
     input.rows.map((row) => row.seq),
-    input.afterSequence + 1
+    input.afterSequence + 1,
+    input.coversGap
   )
   if (gap) {
     return { ok: false, reset: 'journal_gap' }
@@ -58,7 +60,12 @@ export function projectJournalBatch(input: {
       // Host-only: no item; the queue pause it feeds is published beside the list.
       continue
     }
-    if (row.kind === 'item' || row.kind === 'tombstone') {
+    if (
+      row.kind === 'item' ||
+      row.kind === 'tombstone' ||
+      row.kind === 'text-delta' ||
+      row.kind === 'text-pruned'
+    ) {
       touchedItemIds.add(
         input.canonicalItemId?.(row.itemId) ?? aliases.get(row.itemId) ?? row.itemId
       )

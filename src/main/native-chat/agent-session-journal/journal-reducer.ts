@@ -1,4 +1,6 @@
+import { applyJournalTextDelta } from './journal-text-fold'
 import { journalItemDeclaresEcho } from './journal-item-echo'
+import { JournalTextIndex } from './journal-text-index'
 // THE reducer. One implementation folds rows into the render model, and both
 // the live append path and replay call it — a live-only shortcut is how a
 // reconnect starts disagreeing with the screen it replaced.
@@ -66,6 +68,8 @@ export type JournalReducerState = {
   itemExecutionOwners: Map<string, number>
   /** Latest saved output per owner, rebuilt during the existing row fold. */
   providerActivityAt: Map<number, number>
+  providerActivityWitness: Map<number, number>
+  textIndex: JournalTextIndex
   /** Revision of a removed item, so a late lower revision cannot resurrect it. */
   tombstones: Map<string, number>
   /** Turn ids whose record a tombstone removed, as a rewind does: over, though no row shows it. */
@@ -109,6 +113,8 @@ export function createJournalReducerState(sessionId: string, epoch: string): Jou
     itemFences: new Map(),
     itemExecutionOwners: new Map(),
     providerActivityAt: new Map(),
+    providerActivityWitness: new Map(),
+    textIndex: new JournalTextIndex(),
     tombstones: new Map(),
     removedTurnIds: new Set(),
     submissions: new Map(),
@@ -133,6 +139,7 @@ export function applyJournalRow(
 ): void {
   applyJournalRowFacts(state, row, savedAt)
   foldJournalQueueRow(state, row)
+  state.textIndex.changed(row, new Set(state.providerActivityWitness.values()))
 }
 
 function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, savedAt: number): void {
@@ -146,7 +153,14 @@ function applyJournalRowFacts(state: JournalReducerState, row: JournalRow, saved
   if (row.kind === 'queue') {
     return
   }
+  if (row.kind === 'text-pruned') {
+    return
+  }
   state.lastActivityAt = Math.max(state.lastActivityAt, row.ts)
+  if (row.kind === 'text-delta') {
+    applyJournalTextDelta(state, row, savedAt)
+    return
+  }
   if (row.kind === 'item') {
     if (journalItemRevisionIsStale(state, row.itemId, row.revision)) {
       return

@@ -1,3 +1,4 @@
+import { appendStructuredAgentSessionTextWindow } from '../native-chat/agent-session-wire/structured-agent-session-text-append'
 import type {
   AgentJournalItemIdentity,
   AgentJournalMessageItem,
@@ -59,6 +60,18 @@ export function createClaudeStreamedThinking(deps: {
     ...(deps.coalesceMs === undefined ? {} : { coalesceMs: deps.coalesceMs }),
     ...(deps.schedule ? { schedule: deps.schedule } : {}),
     producer: deps.producer,
+    persistDelta: (identity, window, options) => {
+      const body = journalReasoningBody('x', { state: 'running' })
+      if (!body) {
+        return true
+      }
+      const startedAt = open.get(agentJournalItemKey(identity))?.startedAt
+      return appendStructuredAgentSessionTextWindow(deps.sink, identity, body, window, {
+        ...options,
+        turnScope: deps.turnScope(),
+        ...(startedAt === undefined ? {} : { observedAt: startedAt })
+      })
+    },
     persist: (identity, text, options, ended) => {
       const body = journalReasoningBody(
         text,

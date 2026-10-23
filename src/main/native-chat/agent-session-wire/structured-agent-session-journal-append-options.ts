@@ -18,6 +18,7 @@ export function structuredAgentSessionJournalAppendOptions(
 ): JournalItemAppendOptions {
   return {
     fence,
+    ...(options.streamText ? { streamText: options.streamText } : {}),
     ...journalItemEchoFields(options),
     ownerFence: fence,
     ...(options.executes ? { executionOwner: fence } : {}),

@@ -36,7 +36,7 @@ export function planProviderTimelineBarrier(
   const replaced = decision.closes ? streams.get(decision.closes) : undefined
   streams.planFlush(plan, replaced)
   if (replaced) {
-    streams.planRelease(plan, (stream) => stream === replaced)
+    streams.planRelease(plan, (stream) => stream === replaced, false)
   }
   if (event.type === 'session.ended') {
     streams.planRelease(plan, () => true)
