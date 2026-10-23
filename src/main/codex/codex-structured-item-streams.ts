@@ -14,11 +14,11 @@ import {
 import { codexJournalItem } from './codex-structured-item-translation'
 import {
   codexStructuredItemKey,
-  MAX_CODEX_ITEM_STREAM_PENDING_PATCHES,
   MAX_CODEX_ITEM_STREAM_PENDING_PATCH_BYTES,
   MAX_CODEX_ITEM_STREAM_RETAINED_BYTES,
   codexItemStreamState,
   codexToolStreamWindowDue,
+  evictCodexPendingPatches,
   pendingPatchBytes
 } from './codex-structured-item-stream-bounds'
 import {
@@ -98,20 +98,6 @@ export function createCodexStructuredItemStreams(
         break
       }
       forgetState(oldest)
-    }
-  }
-
-  const trimPendingPatches = (): void => {
-    while (pendingPatches.size > MAX_CODEX_ITEM_STREAM_PENDING_PATCHES) {
-      const oldest = pendingPatches.keys().next().value
-      if (typeof oldest !== 'string') {
-        break
-      }
-      const pending = pendingPatches.get(oldest)
-      if (pending) {
-        retainedPatchBytes = Math.max(0, retainedPatchBytes - pendingPatchBytes(pending))
-      }
-      pendingPatches.delete(oldest)
     }
   }
 
@@ -268,7 +254,10 @@ export function createCodexStructuredItemStreams(
           }
           retainedPatchBytes = Math.max(0, retainedPatchBytes - previousBytes) + nextBytes
           pendingPatches.set(key, nextPending)
-          trimPendingPatches()
+          retainedPatchBytes = Math.max(
+            0,
+            retainedPatchBytes - evictCodexPendingPatches(pendingPatches)
+          )
           if (streamFlushed) {
             const admission = flushPatch(key)
             if (!admission.accepted) {
