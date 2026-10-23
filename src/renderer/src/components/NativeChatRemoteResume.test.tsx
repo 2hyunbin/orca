@@ -28,8 +28,12 @@ import {
   type NativeChatRestartStore
 } from './native-chat-resume-on-restart-store'
 import type { RuntimeEnvironmentStatus } from '../../../shared/runtime-host-status'
+import * as runtimeRpc from '@/runtime/runtime-rpc-client'
+import * as hostOffer from './native-chat-restart-host-offer'
+import { getStructuredAgentSessionStatusFeed } from '@/runtime/structured-agent-session-status-feed'
 
 const rpc = vi.hoisted(() => vi.fn<RestartRpc>())
+const subscriptions = vi.hoisted(() => ({ opened: 0, closed: 0 }))
 const stream: ResumeStatusStream = vi.hoisted(() => ({ emit: () => {}, snapshot: new Map() }))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: rpc,
@@ -37,9 +41,14 @@ vi.mock('@/runtime/structured-agent-session-client', () => ({
     _target: unknown,
     emit: ResumeStatusStream['emit']
   ) => {
+    subscriptions.opened++
     stream.emit = emit
     emit({ type: 'snapshot', sessions: [] })
-    return { unsubscribe: () => {} }
+    return {
+      unsubscribe: () => {
+        subscriptions.closed++
+      }
+    }
   }
 }))
 vi.mock('sonner', async () =>
@@ -54,12 +63,276 @@ afterEach(() => {
   }
   vi.useRealTimers()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
+
+it.each([10, 100])(
+  'shares discovery and bounds contact work across %i paired owners',
+  async (size) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    vi.spyOn(runtimeRpc, 'runtimeEnvironmentSupportsCapability').mockResolvedValue(true)
+    subscriptions.opened = subscriptions.closed = 0
+    const historyIds = Array.from({ length: 1_000 }, (_, i) => `saved-${i}`)
+    let transferred = 0
+    const history = vi.fn(async () => {
+      transferred += historyIds.length
+      return historyIds
+    })
+    vi.stubGlobal('api', { runtimeEnvironments: { desktopCreatedChatIds: history } })
+    let idReads = 0
+    const environments = Array.from({ length: size }, (_, i) => ({
+      ...pairedEnvironment(`paired-${i}`),
+      get id() {
+        idReads++
+        return `paired-${i}`
+      }
+    }))
+    const statuses = new Map(environments.map((env) => [env.id, ready('r1')]))
+    const observed: NativeChatRestartStore[][] = []
+    function Lifecycle({ index }: { index: number }) {
+      observed[index] = useNativeChatRestartRuntimes().map(({ store }) => store)
+      return null
+    }
+    rpc.mockResolvedValue({ sessions: [] })
+    useAppStore.setState({
+      runtimeEnvironments: environments,
+      runtimeStatusByEnvironmentId: statuses
+    })
+    idReads = 0
+    await mount(
+      <>
+        <Lifecycle index={0} />
+        <Lifecycle index={1} />
+      </>
+    )
+    expect(idReads).toBeLessThanOrEqual(20 * size)
+    expect(rpc).toHaveBeenCalledTimes(size)
+    expect(history).not.toHaveBeenCalled()
+    expect(subscriptions.opened).toBe(0)
+    expect(observed[0]).toEqual(observed[1])
+    const owners = [...observed[0]]
+    for (let frame = 0; frame < 10; frame++) {
+      idReads = 0
+      await act(async () =>
+        useAppStore.setState({ runtimeStatusByEnvironmentId: new Map(statuses) })
+      )
+      expect(idReads).toBeLessThanOrEqual(20 * size)
+    }
+    expect(rpc).toHaveBeenCalledTimes(size)
+    rpc.mockResolvedValue({ sessions: [{ ...offered[0], sessionId: 'saved-0' }] })
+    await act(async () =>
+      useAppStore.setState({
+        runtimeStatusByEnvironmentId: new Map(
+          environments.map((env) => [env.id, { ...ready('r1'), hostContactEpoch: 1 }])
+        )
+      })
+    )
+    expect(rpc).toHaveBeenCalledTimes(2 * size)
+    expect(history).toHaveBeenCalledTimes(size)
+    expect(transferred).toBe(size * 1_000)
+    expect(subscriptions.opened).toBe(size)
+    expect(observed[0]).toEqual(owners)
+    expect(observed[1]).toEqual(owners)
+    expect(owners.every((owner) => owner.startedHere('saved-0'))).toBe(true)
+    idReads = 0
+    await act(async () =>
+      useAppStore.setState({
+        runtimeStatusByEnvironmentId: new Map(
+          environments.map((env) => [env.id, { ...ready('r1'), hostContactEpoch: 2 }])
+        )
+      })
+    )
+    expect(idReads).toBeLessThanOrEqual(21 * size)
+    expect(rpc).toHaveBeenCalledTimes(3 * size)
+    expect(history).toHaveBeenCalledTimes(2 * size)
+    expect(transferred).toBe(2 * size * 1_000)
+    expect(subscriptions.opened).toBe(size)
+    await act(async () => Promise.all(owners.map((owner) => owner.refreshNativeChatRestartOffer())))
+    expect(history).toHaveBeenCalledTimes(2 * size)
+    await act(async () => useAppStore.setState({ runtimeEnvironments: [] }))
+    expect(subscriptions.closed).toBe(size)
+    expect(vi.getTimerCount()).toBe(0)
+  }
+)
+
+it.each([513, 5_130])(
+  'bounds bulk resume and repeated status work for %i offered chats',
+  async (size) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    vi.spyOn(runtimeRpc, 'runtimeEnvironmentSupportsCapability').mockResolvedValue(true)
+    const ids = Array.from({ length: size }, (_, i) => `scale-${i}`)
+    let candidateReads = 0
+    const onTarget = hostOffer.restartOfferOnTarget
+    vi.spyOn(hostOffer, 'restartOfferOnTarget').mockImplementation((answer, target) => {
+      const result = onTarget(answer, target)
+      for (const candidate of result.candidates) {
+        const id = candidate.sessionId
+        Object.defineProperty(candidate, 'sessionId', {
+          get: () => {
+            candidateReads++
+            return id
+          }
+        })
+      }
+      return result
+    })
+    let publishedRows = 0
+    const many = ids.map((sessionId) => ({
+      ...offered[0],
+      get sessionId() {
+        publishedRows++
+        return sessionId
+      }
+    }))
+    const history = vi.fn(async () => ids)
+    vi.stubGlobal('api', { runtimeEnvironments: { desktopCreatedChatIds: history } })
+    let remote: NativeChatRestartStore | undefined
+    let offset = 0
+    let active = 0
+    let peak = 0
+    const firstReply = Promise.withResolvers<void>()
+    rpc.mockImplementation(async (_target, method, params) => {
+      if (method === 'agentSession.restartResumable') {
+        return { sessions: many }
+      }
+      active++
+      peak = Math.max(peak, active)
+      const chunk = params?.sessionIds ?? []
+      if (offset === 0) {
+        await firstReply.promise
+      }
+      offset += chunk.length
+      active--
+      return {
+        sessions: many.slice(offset),
+        failed: [],
+        continued: chunk.map((sessionId) => ({ sessionId, outcome: 'continued' }))
+      }
+    })
+    useAppStore.setState({
+      settings: { ...getDefaultSettings(''), experimentalNativeChat: false },
+      runtimeEnvironments: [pairedEnvironment('ssh')],
+      runtimeStatusByEnvironmentId: new Map([['ssh', ready('r1')]])
+    })
+    function Fixture() {
+      remote = useNativeChatRestartRuntimes()[0]?.store
+      return <NativeChatResumeStatusSegment iconOnly={false} />
+    }
+    await mount(<Fixture />)
+    expect(publishedRows).toBeGreaterThan(0)
+    expect(publishedRows).toBeLessThanOrEqual(size)
+    const feed = getStructuredAgentSessionStatusFeed({ kind: 'environment', environmentId: 'ssh' })
+    const snapshot = feed.getSnapshot
+    const instrumented = new WeakSet<object>()
+    let lookups = 0
+    vi.spyOn(feed, 'getSnapshot').mockImplementation(() => {
+      const value = snapshot()
+      if (!instrumented.has(value)) {
+        instrumented.add(value)
+        const get = value.get.bind(value)
+        vi.spyOn(value, 'get').mockImplementation((id) => {
+          lookups++
+          return get(id)
+        })
+      }
+      return value
+    })
+    for (let frame = 0; frame < 10; frame++) {
+      await act(async () =>
+        stream.emit({
+          type: 'status',
+          session: {
+            sessionId: ids[0],
+            workspaceId: 'workspace',
+            agent: 'codex',
+            status: 'working',
+            latestPrompt: `activity-${frame}`,
+            updatedAt: Date.now()
+          }
+        })
+      )
+    }
+    await act(async () => vi.advanceTimersByTimeAsync(500))
+    expect(
+      rpc.mock.calls.filter(([, method]) => method === 'agentSession.restartResumable')
+    ).toHaveLength(2)
+    expect(publishedRows).toBeLessThanOrEqual(2 * size)
+    candidateReads = 0
+    let action: Promise<void> | undefined
+    await act(async () => {
+      action = remote!.continueNativeChatRestartOffer(ids)
+    })
+    expect(candidateReads).toBeLessThanOrEqual(16 * size)
+    for (let frame = 0; frame < 10; frame++) {
+      lookups = candidateReads = 0
+      await act(async () =>
+        stream.emit({
+          type: 'status',
+          session: {
+            sessionId: ids[0],
+            workspaceId: 'workspace',
+            agent: 'codex',
+            status: 'working',
+            latestPrompt: 'unchanged prompt',
+            updatedAt: Date.now(),
+            restartResume: { phase: 'queued' }
+          }
+        })
+      )
+      // One offered pass and one progress pass; the compact view reads candidates linearly.
+      expect(lookups).toBeGreaterThan(0)
+      expect(lookups).toBeLessThanOrEqual(2 * size)
+      expect(candidateReads).toBeLessThanOrEqual(16 * size)
+    }
+    expect(history).toHaveBeenCalledTimes(1)
+    expect(
+      rpc.mock.calls.filter(([, method]) => method === 'agentSession.restartResumable')
+    ).toHaveLength(2)
+    candidateReads = 0
+    await act(async () => {
+      firstReply.resolve()
+      await action
+    })
+    const chunks = rpc.mock.calls
+      .filter(([, method]) => method === 'agentSession.restartContinue')
+      .map(([, , params]) => params?.sessionIds ?? [])
+    expect(chunks).toHaveLength(Math.ceil(size / 512))
+    expect(chunks.every((chunk) => chunk.length <= 512)).toBe(true)
+    expect(chunks.flat()).toEqual(ids)
+    expect(peak).toBe(1)
+    const remainingVolume = chunks.reduce(
+      (total, _, index) => total + Math.max(size - 512 * (index + 1), 0),
+      0
+    )
+    expect(publishedRows).toBeLessThanOrEqual(2 * size + remainingVolume)
+    // Each reply republishes remaining offers and reprojects the fixed run in the compact view.
+    expect(candidateReads).toBeLessThanOrEqual(
+      16 * size * (chunks.length + 2) + 4 * remainingVolume
+    )
+    expect(remote!.getNativeChatRestartRun()?.continued).toHaveLength(size)
+    expect(document.body.textContent).toContain(`${size} chats resumed`)
+    expect(vi.mocked(toast)).toHaveBeenCalledTimes(1)
+    await act(async () => useAppStore.setState({ runtimeEnvironments: [] }))
+    expect(vi.getTimerCount()).toBe(0)
+  }
+)
 function store() {
   const value = createNativeChatRestartStore({ kind: 'environment', environmentId: 'ssh' })
   stores.push(value)
   vi.stubGlobal('api', { runtimeEnvironments: { desktopCreatedChatIds: async () => ['a'] } })
   return value
+}
+function pairedEnvironment(id: string) {
+  return {
+    id,
+    name: 'Server',
+    createdAt: 0,
+    updatedAt: 0,
+    lastUsedAt: null,
+    runtimeId: 'r1',
+    endpoints: [],
+    preferredEndpointId: 'none'
+  }
 }
 function ready(runtimeId: string): RuntimeEnvironmentStatus {
   return {
@@ -429,18 +702,7 @@ it('enrolls an ordinary paired desktop once and shares resuming with target cons
     return null
   }
   useAppStore.setState({
-    runtimeEnvironments: [
-      {
-        id: target.environmentId,
-        name: 'Desktop',
-        createdAt: 0,
-        updatedAt: 0,
-        lastUsedAt: null,
-        runtimeId: 'r1',
-        endpoints: [],
-        preferredEndpointId: 'none'
-      }
-    ],
+    runtimeEnvironments: [{ ...pairedEnvironment(target.environmentId), name: 'Desktop' }],
     runtimeStatusByEnvironmentId: new Map([[target.environmentId, ready('r1')]])
   })
   rpc.mockResolvedValue({ sessions: offered })
@@ -493,18 +755,7 @@ it.each(['available', 'unavailable', 'other-desktop'])(
         ...useAppStore.getState().settings,
         experimentalNativeChat: false
       },
-      runtimeEnvironments: [
-        {
-          id: 'ssh',
-          name: 'Server',
-          createdAt: 0,
-          updatedAt: 0,
-          lastUsedAt: null,
-          runtimeId: 'r1',
-          endpoints: [],
-          preferredEndpointId: 'none'
-        }
-      ],
+      runtimeEnvironments: [pairedEnvironment('ssh')],
       runtimeStatusByEnvironmentId: new Map([['ssh', ready('r1')]])
     })
     function Fixture() {
