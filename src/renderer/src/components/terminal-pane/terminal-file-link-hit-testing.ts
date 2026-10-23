@@ -3,11 +3,11 @@ import type { IBufferLine, IBufferRange } from '@xterm/xterm'
 import { extractTerminalFileLinkCandidates } from '@/lib/terminal-links'
 import {
   getTerminalFileContext,
-  reserveDetectedFilePathOpenTurn,
   openDetectedFilePath,
   type FileOpenFailure,
   type TerminalFileContext
 } from './terminal-file-open-routing'
+import { reserveDetectedFilePathOpenTurn } from './terminal-file-open-turn'
 import {
   fileLinkTargetExists,
   mayCheckFileLinkTargetUnprompted,

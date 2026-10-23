@@ -8,10 +8,8 @@ import {
   buildCandidateLogicalLinesForBufferPosition,
   openFilePathLinkAtBufferPosition
 } from './terminal-file-link-hit-testing'
-import {
-  isHtmlFilePath,
-  shouldOpenTerminalFileWithSystemDefault
-} from './terminal-file-open-routing'
+import { shouldOpenTerminalFileWithSystemDefault } from './terminal-file-open-routing'
+import { isHtmlFilePath, localHtmlFileDestinations } from './local-html-file-destinations'
 import { fileLinkTargetExists, resolveFileLinkTarget } from './terminal-file-link-target'
 import {
   buildHardWrappedPathLogicalLineCandidates,
@@ -180,7 +178,7 @@ export function createFilePathLinkProvider(
                       ? getTerminalWorktreePathOpenHint(canOpenWithSystemDefault, showActions)
                       : canOpenWithSystemDefault
                         ? isHtmlFilePath(mappedPath)
-                          ? getTerminalHtmlFileOpenHint(showActions)
+                          ? getTerminalHtmlFileOpenHint(localHtmlFileDestinations(), showActions)
                           : showActions
                             ? openLinkHint
                             : getTerminalFileOpenHint(false)

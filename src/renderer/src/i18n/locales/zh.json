@@ -3542,12 +3542,15 @@
             "restoring": "正在恢复终端…"
           },
           "AgentLaunchPaneNotice": {
-            "commandNotFound": "在此计算机上找不到其命令。",
+            "agent": "智能体",
+            "commandNotFound": "无法启动 {{agent}}，因为在此计算机上找不到其命令。",
             "copyPrompt": "复制提示",
-            "exitedDuringStart": "它在启动时退出了。",
-            "notStarted": "智能体无法启动。",
-            "unconfirmed": "无法确认智能体已启动。",
-            "workspaceGone": "其工作区已不可用。"
+            "exitedDuringStart": "{{agent}} 在启动时退出了。",
+            "notStarted": "无法启动 {{agent}}。",
+            "restoreWorkspace": "请恢复工作区文件夹或打开可用的工作区，然后重试。",
+            "tryInTerminal": "请在此文件夹的终端中运行它以查看原因，然后重试。",
+            "unconfirmed": "无法确认 {{agent}} 已启动。请先检查其终端，再重试。",
+            "workspaceGone": "无法启动 {{agent}}，因为其工作区已不可用。"
           },
           "TerminalSleepingPaneOverlay": {
             "pausedDetail": "由于主机意外停止，自动恢复已暂停。您的会话已保存。",
@@ -9678,6 +9681,11 @@
               "invert": "反转",
               "opposite": "相反"
             },
+            "linkRoutingBackground": {
+              "background": "后台",
+              "focus": "焦点",
+              "tab": "标签页"
+            },
             "72c58f7792": "网页视图",
             "82ba1c80ea": "本地主机",
             "bea27bac4b": "链接",
@@ -11888,6 +11896,10 @@
           "titleOrca": "按住 Shift 在 Orca 中打开",
           "descriptionSystem": "链接在 Orca 中打开，因此 {{chord}}+点击会将其发送到系统浏览器。",
           "descriptionOrca": "链接在系统浏览器中打开。启用后，{{chord}}+点击会改在 Orca 内置浏览器中打开。"
+        },
+        "BrowserLinkRoutingBackgroundSetting": {
+          "title": "在后台打开链接",
+          "description": "终端、聊天和 Markdown 中的链接会在浏览器中打开，焦点仍停留在你点击的位置。"
         },
         "PluginConsentDialog": {
           "workerTrust": "后台工作进程 — 运行自己的进程",
@@ -19703,7 +19715,8 @@
     "jiraUserPicker": {
       "select": "选择{{value0}}",
       "search": "搜索用户",
-      "empty": "没有找到用户"
+      "empty": "没有找到用户",
+      "useKnownId": "使用已知用户 ID“{{value0}}”"
     },
     "status": {
       "bar": {
