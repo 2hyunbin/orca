@@ -34,7 +34,6 @@ export const WorktreeCreate = z
     /** Set by clients that fell back to a generated creature name. Absent means user-typed, so the
      *  host neither skips a retired candidate nor retires the name it lands on. */
     nameWasGenerated: z.boolean().optional(),
-    branchNaming: z.literal('automatic').optional(),
     baseBranch: OptionalString,
     compareBaseRef: OptionalString,
     branchNameOverride: OptionalString,

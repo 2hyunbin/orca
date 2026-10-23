@@ -1,4 +1,3 @@
-import { WORKTREE_GENERATED_BRANCH_INTENT_RUNTIME_CAPABILITY } from '../../../src/shared/worktree-runtime-capabilities'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { readAgentLaunchSupport, type AgentLaunchSupport } from './agent-launch-request'
 import type { RpcClient } from '../transport/rpc-client'
@@ -20,7 +19,6 @@ export const MOBILE_WORKTREE_CREATE_IDEMPOTENCY_CAPABILITY = 'worktree.create-id
 const STATUS_CUTOVER_MAX_RETRIES = 5
 
 export type NewWorktreeRuntimeCapabilities = {
-  generatedBranchIntent: boolean
   tasksSupported: boolean
   worktreeCreateIdempotency: WorktreeCreateIdempotencySupport | false
   /** Whether the host can route a create through `agent.launch`, and what that launch supports;
@@ -50,9 +48,6 @@ export async function readNewWorktreeRuntimeCapabilities(
       const advertisedIdempotency = result.worktreeCreateIdempotency
       return {
         tasksSupported: capabilities.includes(MOBILE_TASKS_CAPABILITY),
-        generatedBranchIntent: capabilities.includes(
-          WORKTREE_GENERATED_BRANCH_INTENT_RUNTIME_CAPABILITY
-        ),
         agentLaunch: readAgentLaunchSupport(capabilities),
         worktreeCreateIdempotency: supportsIdempotency
           ? advertisedIdempotency === undefined
@@ -84,7 +79,6 @@ export function useNewWorktreeRuntimeCapabilities(
   tasksSupported: boolean
   hostPlatform: NodeJS.Platform | null
   getWorktreeCreateCutoverSupport: () => Promise<WorktreeCreateIdempotencySupport | false>
-  getGeneratedBranchIntentSupport: () => Promise<boolean>
   getAgentLaunchSupport: () => Promise<AgentLaunchSupport | false>
 } {
   const [capabilityState, setCapabilityState] = useState<{
@@ -196,10 +190,6 @@ export function useNewWorktreeRuntimeCapabilities(
     () => getCapabilities().then((capabilities) => capabilities?.agentLaunch ?? false),
     [getCapabilities]
   )
-  const getGeneratedBranchIntentSupport = useCallback(
-    () => getCapabilities().then((capabilities) => capabilities?.generatedBranchIntent ?? false),
-    [getCapabilities]
-  )
   const capabilities =
     capabilityState?.client === client &&
     capabilityState?.generation === client?.getGeneration?.() &&
@@ -210,7 +200,6 @@ export function useNewWorktreeRuntimeCapabilities(
     tasksSupported: capabilities?.tasksSupported ?? false,
     hostPlatform: capabilities?.hostPlatform ?? null,
     getWorktreeCreateCutoverSupport,
-    getAgentLaunchSupport,
-    getGeneratedBranchIntentSupport
+    getAgentLaunchSupport
   }
 }

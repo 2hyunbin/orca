@@ -1,7 +1,7 @@
-import { generatedBranchSeed, isAutomaticBranchCreation } from '../worktree-generated-branch'
 /* eslint-disable max-lines */
 // Why: worktree create helpers (local + remote) split out of worktrees.ts; the cohesive create flow runs this file just over the per-file line limit.
 
+import { selectWorktreeCreateBranchSeed } from '../worktree-create-branch-seed'
 import { worktreeCreateGit } from '../git/worktree-create-git-executor'
 import { getStoredRepoExecutionHostId } from '../repo-execution-host'
 import type { BrowserWindow } from 'electron'
@@ -1061,9 +1061,7 @@ async function performLocalWorktreeCreate(
       : {})
   })
 
-  const automatic = isAutomaticBranchCreation(args, settings)
-  const branchSeed =
-    automatic && args.branchNaming === 'automatic' ? generatedBranchSeed() : undefined
+  const branchSeed = selectWorktreeCreateBranchSeed(args, settings.autoRenameBranchFromWork)
   const requestedName = args.name
   const sanitizedName = sanitizeWorktreeName(args.name)
   const displayNameRequest = resolveWorktreeCreateDisplayNameRequest(
@@ -1277,7 +1275,7 @@ async function performLocalWorktreeCreate(
             branchName,
             baseBranch,
             localWorktreeGitOptions,
-            preferExistingBranch || automatic ? undefined : tryExistingBranch
+            preferExistingBranch ? undefined : tryExistingBranch
           )
       if (checkoutExistingBranch && !selectedExistingLocalBranchName) {
         // Path retries must retain the adopted branch.
@@ -1578,8 +1576,6 @@ async function performLocalWorktreeCreate(
   const metaUpdates: Partial<WorktreeMeta> = {
     // Why: path-derived IDs can be reused after external deletion; rotate instance identity so stale lineage can't attach to the new occupant.
     instanceId: randomUUID(),
-    generatedBranch:
-      automatic && !checkoutExistingBranch && created.branch === branchName ? branchName : null,
     ...(store.getProjectHostSetups
       ? getProjectHostSetupWorktreeMeta(store.getProjectHostSetups(), repo)
       : {}),

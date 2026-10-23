@@ -38,36 +38,6 @@ function fakeClient(script: (method: string, call: number) => unknown, calls: Ca
 }
 
 describe('createBlankWorkspace', () => {
-  it.each([true, false])(
-    'keeps old hosts on the legacy named-create path (%s)',
-    async (supported) => {
-      const calls: Call[] = []
-      const client = fakeClient(() => ({ worktree: { id: 'wt' } }), calls)
-      await createBlankWorkspace({
-        client,
-        repoId: 'repo',
-        baseName: '検索',
-        createdWithAgentId: undefined,
-        comment: undefined,
-        setupDecision: 'inherit',
-        nameWasGenerated: false,
-        generatedBranchIntentSupported: supported,
-        worktreeCreateIdempotency: false,
-        agentLaunchSupported: false
-      })
-      expect(calls[0]?.params).toMatchObject({
-        name: '検索',
-        displayName: '検索',
-        displayNameKind: 'user'
-      })
-      if (supported) {
-        expect(calls[0]?.params).toHaveProperty('branchNaming', 'automatic')
-      } else {
-        expect(calls[0]?.params).not.toHaveProperty('branchNaming')
-      }
-    }
-  )
-
   it('pins a manually entered blank-workspace name and sends no agent-launch fields', async () => {
     const calls: Call[] = []
     const client = fakeClient(() => ({ worktree: { id: 'wt-1' } }), calls)

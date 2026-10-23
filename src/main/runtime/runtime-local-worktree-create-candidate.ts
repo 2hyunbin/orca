@@ -1,4 +1,4 @@
-import { generatedBranchSeed, isAutomaticBranchCreation } from '../worktree-generated-branch'
+import { selectWorktreeCreateBranchSeed } from '../worktree-create-branch-seed'
 import type { Repo } from '../../shared/repo-types'
 import { WorktreeCreateCollisionError } from '../../shared/new-workspace/worktree-create-collision'
 import type { CreateWorktreeArgs } from '../../shared/worktree/create-types'
@@ -51,9 +51,9 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
   request: RuntimeManagedWorktreeCreateArgs
   repo: Repo
   settings: ReturnType<typeof getWorktreePathSettings> & {
-    autoRenameBranchFromWork?: boolean
     branchPrefix: string
     branchPrefixCustom?: string
+    autoRenameBranchFromWork?: boolean
   }
   worktreePathSettings: ReturnType<typeof getWorktreePathSettings>
   workspaceRoot: string
@@ -63,9 +63,10 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
   localWorktreeGitOptions: { wslDistro?: string }
   hostedReviewExecutionContext?: HostedReviewExecutionOptions
 }): Promise<RuntimeLocalWorktreeCreateCandidate> {
-  const automatic = isAutomaticBranchCreation(args.request, args.settings)
-  const branchSeed =
-    automatic && args.request.branchNaming === 'automatic' ? generatedBranchSeed() : undefined
+  const branchSeed = selectWorktreeCreateBranchSeed(
+    args.request,
+    args.settings.autoRenameBranchFromWork
+  )
   const sanitizedName = sanitizeWorktreeName(args.request.name)
   let effectiveRequestedName = args.request.name
   let effectiveSanitizedName = sanitizedName
@@ -136,7 +137,7 @@ export async function resolveRuntimeLocalWorktreeCreateCandidate(args: {
           branchName,
           args.baseBranch,
           args.localWorktreeGitOptions,
-          preferExistingBranch || automatic ? undefined : tryExistingBranch
+          preferExistingBranch ? undefined : tryExistingBranch
         )
     if (checkoutExistingBranch && !selectedExistingLocalBranchName) {
       selectedExistingLocalBranchName = branchName

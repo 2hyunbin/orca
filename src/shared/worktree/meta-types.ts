@@ -20,8 +20,6 @@ import type { ExternalConversationLink } from '../external-conversation-link'
 export type WorktreeMeta = {
   /** Immutable per-workspace-instance ID used to reject stale lineage after path reuse. */
   instanceId?: string
-  /** Exact provisional ref this instance created; absence never grants automatic renaming. */
-  generatedBranch?: string | null
   /** See Worktree.projectId. Persisted for project-first workspace ownership. */
   projectId?: string
   /** See Worktree.hostId. Persisted for project-first workspace ownership. */

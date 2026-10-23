@@ -179,13 +179,6 @@ export abstract class OrcaRuntimeWithFileCommands extends OrcaRuntimeWithPreserv
 
   protected readonly gitCommands = new RuntimeGitCommands({
     resolveRuntimeGitTarget: (selector) => this.resolveRuntimeGitTarget(selector),
-    relinquishGeneratedBranch: (worktree) => {
-      const store = this.requireStore()
-      const target = worktreeRowTarget(store, worktree)
-      if (target) {
-        store.setWorktreeMeta(target, { generatedBranch: null })
-      }
-    },
     getRuntimeSettings: () => this.requireStore().getSettings(),
     getCommitMessageAgentEnvironment: () => this.accounts.getCommitMessageAgentEnvironment(),
     // Why: resolved worktrees are cached for a second, so link/unlink would lag

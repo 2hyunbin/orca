@@ -92,12 +92,7 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
   const [error, setError] = useState('')
   const runtime = useNewWorkspaceRuntimeContext(client, visible, hostId)
   const repoRuntime = useNewWorktreeRuntimeCapabilities(client, visible)
-  const {
-    tasksSupported,
-    getWorktreeCreateCutoverSupport,
-    getAgentLaunchSupport,
-    getGeneratedBranchIntentSupport
-  } = repoRuntime
+  const { tasksSupported, getWorktreeCreateCutoverSupport, getAgentLaunchSupport } = repoRuntime
   // The desktop's own run target is named for the desktop, whichever host the picked repo is on.
   const desktopPlatform = useHostDescriptor(hostId)?.platform ?? null
   const hostPlatform = repoServer ? desktopPlatform : repoRuntime.hostPlatform
@@ -163,7 +158,6 @@ function NewWorktreeModalContent(props: NewWorktreeModalProps) {
     setTrustedOrcaHooks: runtime.setTrustedOrcaHooks,
     getWorktreeCreateCutoverSupport,
     getAgentLaunchSupport,
-    getGeneratedBranchIntentSupport,
     transitionDrawer: navigation.transitionDrawer,
     setError,
     onCreated: (worktreeId, name, warning) => onCreated(worktreeId, name, warning, repoServer),

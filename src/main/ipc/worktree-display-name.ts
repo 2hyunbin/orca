@@ -74,9 +74,6 @@ export function resolveWorktreeCreateDisplayNameMeta(
     }
     return { displayName: requestedDisplayName, displayNameIsPinned: true }
   }
-  if (kind === 'generated') {
-    return { displayName: fallback.requestedName, displayNameIsPinned: false }
-  }
   // A user label that sanitizes away is an empty label, so keep the generated fallback automatic.
   if (kind === 'user') {
     return { displayNameIsPinned: false }

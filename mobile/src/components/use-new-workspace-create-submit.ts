@@ -57,7 +57,6 @@ export function useNewWorkspaceCreateSubmit(args: {
   trustedOrcaHooks: PersistedTrustedOrcaHooks
   setTrustedOrcaHooks: (trust: PersistedTrustedOrcaHooks) => void
   getWorktreeCreateCutoverSupport: () => Promise<WorktreeCreateIdempotencySupport | false>
-  getGeneratedBranchIntentSupport?: () => Promise<boolean>
   getAgentLaunchSupport: () => Promise<AgentLaunchSupport | false>
   transitionDrawer: (view: Exclude<NewWorktreeDrawerView, 'transition'>) => void
   setError: Dispatch<SetStateAction<string>>
@@ -173,7 +172,6 @@ export function useNewWorkspaceCreateSubmit(args: {
             client,
             repoId: selectedRepo.id,
             baseName,
-            generatedBranchIntentSupported: await args.getGeneratedBranchIntentSupport?.(),
             nameWasGenerated: !trimmedName,
             createdWithAgentId,
             comment: trimmedNote,

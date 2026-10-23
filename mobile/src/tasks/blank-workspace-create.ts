@@ -22,7 +22,6 @@ export async function createBlankWorkspace(args: {
   /** True when `baseName` is a generated creature name rather than one the user typed; only then
    *  may the host retire it. */
   nameWasGenerated: boolean
-  generatedBranchIntentSupported?: boolean
   worktreeCreateIdempotency: WorktreeCreateIdempotencyProbe
   /** Whether the host can settle the surface itself; false keeps the agent-first create. */
   agentLaunchSupported: WorktreeCreateAgentLaunch['supported']
@@ -41,7 +40,6 @@ export async function createBlankWorkspace(args: {
         repo: `id:${args.repoId}`,
         setupDecision: args.setupDecision,
         name,
-        ...(args.generatedBranchIntentSupported ? { branchNaming: 'automatic' as const } : {}),
         ...(args.nameWasGenerated
           ? { displayNameKind: 'generated' as const }
           : { displayName: args.baseName, displayNameKind: 'user' as const }),

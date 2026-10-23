@@ -42,13 +42,6 @@ export function mergeWorktreeMetaForWrite(
     ...normalizeGitHubPRSuppressionUpdate(normalizedUpdates),
     ...identity
   }
-  if (
-    identity &&
-    existing?.instanceId !== identity.instanceId &&
-    updates.generatedBranch === undefined
-  ) {
-    updated.generatedBranch = null
-  }
   updated.linkedWorkItem = normalizeWorkspaceLinkedItem(updated.linkedWorkItem)
   const sourceContext = normalizeStoredTaskSourceContext(updated.linkedTaskSourceContext)
   updated.linkedTaskSourceContext = isWorkspaceLinkedItemSourceContextMatch(

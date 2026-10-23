@@ -129,7 +129,7 @@ describe('resolveUniqueBranchName', () => {
 describe('renameCurrentBranch', () => {
   it('runs git branch -m with the new name', async () => {
     const exec: GitExec = vi.fn().mockResolvedValue({ stdout: '', stderr: '' })
-    await renameCurrentBranch(exec, 'you/fix-auth', 'you/Nautilus')
-    expect(exec).toHaveBeenCalledWith(['branch', '-m', 'you/Nautilus', 'you/fix-auth'])
+    await renameCurrentBranch(exec, 'you/fix-auth')
+    expect(exec).toHaveBeenCalledWith(['branch', '-m', 'you/fix-auth'])
   })
 })

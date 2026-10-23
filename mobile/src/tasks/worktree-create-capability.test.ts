@@ -58,7 +58,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
         ])
       )
     ).resolves.toEqual({
-      generatedBranchIntent: false,
       tasksSupported: true,
       worktreeCreateIdempotency: { dedupeTtlMs: 20_000 },
       agentLaunch: false,
@@ -74,7 +73,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
         statusClient([{ capabilities: [AGENT_LAUNCH_RUNTIME_CAPABILITY] }])
       )
     ).resolves.toEqual({
-      generatedBranchIntent: false,
       tasksSupported: false,
       worktreeCreateIdempotency: false,
       // Advertising the method is not advertising the ledger: `operationId` degrades silently on a
@@ -97,7 +95,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
         ])
       )
     ).resolves.toEqual({
-      generatedBranchIntent: false,
       tasksSupported: false,
       worktreeCreateIdempotency: false,
       agentLaunch: { replay: true },
@@ -131,7 +128,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
     await expect(
       readNewWorktreeRuntimeCapabilities(statusClient([['worktree.create-idempotency.v1']]))
     ).resolves.toEqual({
-      generatedBranchIntent: false,
       tasksSupported: false,
       worktreeCreateIdempotency: { dedupeTtlMs: WORKTREE_CREATE_DEDUPE_TTL_CLIENT_CEILING_MS },
       agentLaunch: false,
@@ -150,7 +146,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
         ])
       )
     ).resolves.toEqual({
-      generatedBranchIntent: false,
       tasksSupported: false,
       worktreeCreateIdempotency: { dedupeTtlMs: 0 },
       agentLaunch: false,
@@ -176,7 +171,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
           ])
         )
       ).resolves.toEqual({
-        generatedBranchIntent: false,
         tasksSupported: false,
         worktreeCreateIdempotency: { dedupeTtlMs: 0 },
         agentLaunch: false,
@@ -196,7 +190,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
         ])
       )
     ).resolves.toEqual({
-      generatedBranchIntent: false,
       tasksSupported: false,
       worktreeCreateIdempotency: { dedupeTtlMs: WORKTREE_CREATE_DEDUPE_TTL_LEGACY_HOST_MS },
       agentLaunch: false,
@@ -217,7 +210,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
           ])
         )
       ).resolves.toEqual({
-        generatedBranchIntent: false,
         tasksSupported: false,
         worktreeCreateIdempotency: { dedupeTtlMs: 0 },
         agentLaunch: false,
@@ -238,7 +230,6 @@ describe('readNewWorktreeRuntimeCapabilities', () => {
         ])
       )
     ).resolves.toEqual({
-      generatedBranchIntent: false,
       tasksSupported: false,
       worktreeCreateIdempotency: { dedupeTtlMs: 30_000 },
       agentLaunch: false,
