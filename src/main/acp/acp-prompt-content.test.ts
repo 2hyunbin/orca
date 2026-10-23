@@ -10,6 +10,7 @@ import {
   AcpPromptContentError,
   acpPromptBlocks
 } from './acp-prompt-content'
+import { resolveAcpPeerOptions } from './acp-peer-limits'
 
 const PNG = Buffer.from('89504e470d0a1a0a', 'hex')
 const dir = mkdtempSync(join(tmpdir(), 'acp-prompt-content-'))
@@ -146,6 +147,26 @@ describe('ACP prompt content', () => {
       attachment: { reason: 'totalTooLarge' }
     })
     expect(ACP_PROMPT_IMAGE_MAX_BYTES * (4 / 3)).toBeLessThan(16 * 1024 * 1024)
+  })
+
+  it('admits the exact encoded line budget and refuses the next byte', async () => {
+    const text = { type: 'text' as const, text: '"\\\n\u0000中😀\ud800' }
+    const body = message(
+      text,
+      { type: 'image-ref', path: join(dir, 'fallback.svg') },
+      { type: 'image-ref', path: pngPath },
+      { type: 'text', text: '\udc00' },
+      { type: 'image-ref', url: `data:image/png;base64,${PNG.toString('base64')}` }
+    )
+    const budget = resolveAcpPeerOptions().maxLineBytes - 64 * 1024
+    const initial = await acpPromptBlocks(body, true)
+    const padding = 'x'.repeat(budget - Buffer.byteLength(JSON.stringify(initial)))
+    text.text += padding
+    const exact = await acpPromptBlocks(body, true)
+    expect(Buffer.byteLength(JSON.stringify(exact))).toBe(budget)
+    expect(exact.filter((block) => block.type === 'image')).toHaveLength(2)
+    text.text += 'x'
+    expect(await refusal(body)).toMatchObject({ attachment: { reason: 'totalTooLarge' } })
   })
 
   it('leaves a text-only message to the agent, however long', async () => {
