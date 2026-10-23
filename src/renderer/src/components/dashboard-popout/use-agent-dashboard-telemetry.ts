@@ -34,10 +34,6 @@ export function useAgentDashboardTelemetry(surface: AgentDashboardSurface): void
       }
       stopObserving = installWindowVisibilityInterval({
         run: observe,
-        runOnVisible: () => {
-          lastObservedDay = -1
-          observe()
-        },
         intervalMs: 60_000
       })
     })

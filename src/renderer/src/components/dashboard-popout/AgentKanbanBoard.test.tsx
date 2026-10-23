@@ -10,14 +10,6 @@ import type {
 } from '../../../../shared/dashboard-snapshot'
 import type { RepoIcon } from '../../../../shared/repo-icon'
 import { i18n } from '@/i18n/i18n'
-
-const telemetryTrack = vi.hoisted(() => vi.fn())
-
-vi.mock('@/lib/telemetry', () => ({
-  track: telemetryTrack,
-  trackWithResult: () => Promise.resolve(true),
-  getConsentState: () => Promise.resolve({ effective: 'enabled' })
-}))
 import { AgentKanbanBoard } from './AgentKanbanBoard'
 
 // Stub the card and dialog so the board test stays free of xterm / Radix
@@ -105,7 +97,6 @@ describe('AgentKanbanBoard', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en')
     localStorage.clear()
-    telemetryTrack.mockClear()
     vi.stubGlobal(
       'matchMedia',
       vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
@@ -125,14 +116,6 @@ describe('AgentKanbanBoard', () => {
     renderBoard([])
     const headers = screen.getAllByText(/Needs You|Working|Done/)
     expect(headers.map((h) => h.textContent)).toEqual(['Needs You', 'Working', 'Done'])
-  })
-
-  it('records an opening after the pop-out board mounts', () => {
-    renderBoard([])
-
-    expect(telemetryTrack).toHaveBeenCalledWith('agent_dashboard_opened', {
-      surface: 'popout'
-    })
   })
 
   it('hides the agent map from dashboard chrome', () => {

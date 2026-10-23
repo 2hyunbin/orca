@@ -117,6 +117,31 @@ describe('dashboard visible-use telemetry', () => {
     expect(track).toHaveBeenCalledTimes(2)
   })
 
+  it('retains a confirmed observation across visibility changes and observes the next visible day', async () => {
+    vi.setSystemTime(new Date('2026-10-22T12:00:00Z'))
+    renderHook(() => useAgentDashboardTelemetry('popout'))
+    await flushConsent()
+
+    for (let index = 0; index < 3; index++) {
+      visibility = 'hidden'
+      act(() => document.dispatchEvent(new Event('visibilitychange')))
+      visibility = 'visible'
+      act(() => document.dispatchEvent(new Event('visibilitychange')))
+      await flushConsent()
+    }
+    expect(track.mock.calls.filter(([event]) => event === 'agent_dashboard_active')).toHaveLength(1)
+
+    visibility = 'hidden'
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    vi.setSystemTime(new Date('2026-10-24T12:00:00Z'))
+    visibility = 'visible'
+    act(() => document.dispatchEvent(new Event('visibilitychange')))
+    await flushConsent()
+
+    expect(track.mock.calls.filter(([event]) => event === 'agent_dashboard_active')).toHaveLength(2)
+    expect(track.mock.calls.filter(([event]) => event === 'agent_dashboard_opened')).toHaveLength(1)
+  })
+
   it('sends only two visible-use observations across 24 hours without rerendering the board', async () => {
     vi.setSystemTime(new Date('2026-10-22T12:00:00Z'))
     let renders = 0
