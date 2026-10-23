@@ -1,6 +1,3 @@
-// A close, dispose or quit while a turn runs: the agent is asked to cancel it and given the Stop's
-// grace to end it before its process goes, as a Stop does; an idle close goes at once.
-
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   closeProviderTimelineRigs,
@@ -22,7 +19,6 @@ afterEach(async () => {
   await closeProviderTimelineRigs()
 })
 
-/** What Orca had written, and whether the turn had ended, when it first asked the child to close. */
 function watchClose(child: FakeAcpChild, turn: { ended: boolean }) {
   const atClose: { cancels: number | null; turnEnded: boolean | null } = {
     cancels: null,
@@ -37,7 +33,6 @@ function watchClose(child: FakeAcpChild, turn: { ended: boolean }) {
   return atClose
 }
 
-/** The agent ends the cancelled turn a moment after Orca asks. */
 function answerCancel(child: FakeAcpChild, prompt: FakeFrame, turn: { ended: boolean }) {
   child.agent.on('session/cancel', () =>
     setTimeout(() => {
