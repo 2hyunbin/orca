@@ -794,12 +794,12 @@ jobs:
       fast_release: true
       javascript_source_sha: ${{ needs.release-javascript.outputs.supported == 'true' && needs.release-javascript.outputs.source_sha || '' }}
 
-  # Prefetch the installer during notarization; the publisher still waits for Mac success.
+  # Wait outside the publisher runner so cold runtime builds cannot exhaust its timeout.
   publish-adhoc-win:
-    needs: [orcad-template-support, build-adhoc-win]
+    needs: [orcad-template-support, build-adhoc-win, build-adhoc-mac]
     if: >-
       !cancelled() && needs.orcad-template-support.result == 'success' &&
-      needs.build-adhoc-win.result == 'success'
+      needs.build-adhoc-win.result == 'success' && needs.build-adhoc-mac.result == 'success'
     permissions:
       contents: read
       actions: read
@@ -808,4 +808,3 @@ jobs:
     with:
       channel: adhoc
       tag: v${{ needs.orcad-template-support.outputs.version }}
-      wait_for_mac_job: build-adhoc-mac
