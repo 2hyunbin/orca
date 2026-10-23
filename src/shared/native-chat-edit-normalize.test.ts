@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { editFilesFromToolPair, isEditToolName } from './native-chat-edit-normalize'
 import { MAX_EDIT_CHARS, unifiedLineNumber } from './native-chat-edit-model'
 import { editLinesFromUnifiedPatch } from './native-chat-unified-patch'
-import { unwrapBeginPatch } from './native-chat-begin-patch'
+import { editFilesFromBeginPatch, unwrapBeginPatch } from './native-chat-begin-patch'
 
 const gutter = (files: ReturnType<typeof editFilesFromToolPair>): (number | null)[] =>
   (files ?? []).flatMap((file) => file.lines.map((line) => unifiedLineNumber(line)))
@@ -605,5 +605,78 @@ describe('editFilesFromToolPair', () => {
     expect(settledFiles({ name: 'Bash', input: { command: 'ls' } })).toBeNull()
     expect(isEditToolName('Bash')).toBe(false)
     expect(isEditToolName('Edit')).toBe(true)
+  })
+})
+
+describe('editFilesFromBeginPatch', () => {
+  it.each([
+    { kind: 'Add', sign: '+', changeKind: 'added' },
+    { kind: 'Delete', sign: '-', changeKind: 'deleted' }
+  ])('applies the character cap after stripping $kind line signs', ({ kind, sign, changeKind }) => {
+    for (const length of [MAX_EDIT_CHARS - 1, MAX_EDIT_CHARS, MAX_EDIT_CHARS + 1]) {
+      const [file] = editFilesFromBeginPatch(
+        `*** Begin Patch\n*** ${kind} File: first.txt\n${sign}${'x'.repeat(length)}\n*** End Patch`
+      )
+      expect(file).toMatchObject({
+        path: 'first.txt',
+        changeKind,
+        lineNumbersKnown: true,
+        truncated: length > MAX_EDIT_CHARS
+      })
+      expect(file?.lines).toHaveLength(1)
+      expect(file?.lines[0]?.text).toBe('x'.repeat(Math.min(length, MAX_EDIT_CHARS)))
+      expect(file?.lines[0] && unifiedLineNumber(file.lines[0])).toBe(1)
+    }
+  })
+
+  it.each(['', 'y', '😀'])('preserves a newline at the exact character cap before %j', (tail) => {
+    const [file] = editFilesFromBeginPatch(
+      `*** Begin Patch\n*** Add File: first.txt\n+${'x'.repeat(MAX_EDIT_CHARS - 1)}\n+${tail}\n*** End Patch`
+    )
+    expect(file?.truncated).toBe(tail.length > 0)
+    expect(file?.lines.map((line) => line.text)).toEqual(['x'.repeat(MAX_EDIT_CHARS - 1)])
+  })
+
+  it('keeps moves and later files after a capped body, without counting control lines', () => {
+    const files = editFilesFromBeginPatch(
+      [
+        '*** Begin Patch',
+        '*** Update File: old.txt',
+        `*** Environment ID: ${'e'.repeat(MAX_EDIT_CHARS)}`,
+        '@@ -42 +41 @@',
+        '-old',
+        '+new',
+        ...Array.from({ length: 40_000 }, () => '+tail'),
+        '*** End of File',
+        '*** Move to: ignored.txt',
+        '*** Move to: new.txt',
+        '*** Add File: added.txt',
+        '+added',
+        '*** Delete File: gone.txt',
+        '*** End Patch'
+      ].join('\r\n')
+    )
+    expect(files.map((file) => [file.path, file.oldPath, file.changeKind, file.truncated])).toEqual(
+      [
+        ['new.txt', 'old.txt', 'renamed', true],
+        ['added.txt', null, 'added', false],
+        ['gone.txt', null, 'deleted', false]
+      ]
+    )
+    expect(files[0]?.lines).toHaveLength(2_000)
+    expect(files[0]?.lines.slice(0, 2)).toEqual([
+      { kind: 'del', text: 'old', oldLineNumber: 42, newLineNumber: null },
+      { kind: 'add', text: 'new', oldLineNumber: null, newLineNumber: 41 }
+    ])
+    expect(files[1]?.lines.map((line) => line.text)).toEqual(['added'])
+    expect(files[2]?.lines).toEqual([])
+  })
+
+  it('preserves bare carriage returns, blank rows, and a final unterminated row', () => {
+    const [file] = editFilesFromBeginPatch(
+      '*** Begin Patch\r\n*** Add File: first.txt\r\n+\r\r\n+😀\r+tail\n+\n+last\r'
+    )
+    expect(file?.lines.map((line) => line.text)).toEqual(['', '😀\r+tail', '', 'last\r'])
+    expect(file?.truncated).toBe(false)
   })
 })

@@ -1,4 +1,4 @@
-import { finalizeEditFile, type NativeChatEditFile } from './native-chat-edit-model'
+import { MAX_EDIT_CHARS, finalizeEditFile, type NativeChatEditFile } from './native-chat-edit-model'
 import { editLinesFromUnifiedPatch, editLinesFromWholeFile } from './native-chat-unified-patch'
 
 const BEGIN = '*** Begin Patch'
@@ -107,18 +107,30 @@ function envelopeArgument(
 
 /** Splits a `*** Begin Patch` envelope into one entry per file it touches. */
 export function editFilesFromBeginPatch(envelope: string): NativeChatEditFile[] {
-  const sections: { kind: 'Add' | 'Update' | 'Delete'; path: string; body: string[] }[] = []
+  const sections: {
+    kind: 'Add' | 'Update' | 'Delete'
+    path: string
+    body: string[]
+    bodyLength: number
+  }[] = []
   const moves = new Map<number, string>()
 
-  // Split on both newline forms once, so every marker below can be matched
-  // exactly rather than each pattern having to tolerate a trailing `\r`.
-  for (const raw of envelope.split(/\r?\n/)) {
+  for (let start = 0; start <= envelope.length;) {
+    const newline = envelope.indexOf('\n', start)
+    const end = newline === -1 ? envelope.length : newline
+    const raw = envelope.slice(
+      start,
+      newline !== -1 && envelope.charCodeAt(end - 1) === 13 ? end - 1 : end
+    )
+    start = end + 1
     const header = FILE_HEADER.exec(raw)
-    if (header) {
+    const kind = header?.[1]
+    if (header && (kind === 'Add' || kind === 'Update' || kind === 'Delete')) {
       sections.push({
-        kind: header[1] as 'Add' | 'Update' | 'Delete',
+        kind,
         path: header[2]!.trim(),
-        body: []
+        body: [],
+        bodyLength: 0
       })
       continue
     }
@@ -130,19 +142,25 @@ export function editFilesFromBeginPatch(envelope: string): NativeChatEditFile[] 
     if (raw === BEGIN || raw === END || CONTROL_LINE.test(raw) || sections.length === 0) {
       continue
     }
-    sections.at(-1)!.body.push(raw)
+    const section = sections.at(-1)!
+    // Keep one extra character so the existing card limit still reports truncation.
+    const remaining = MAX_EDIT_CHARS + 1 - section.bodyLength
+    if (remaining <= 0) {
+      continue
+    }
+    const sign = section.kind === 'Add' ? '+' : section.kind === 'Delete' ? '-' : null
+    const content = sign && raw.startsWith(sign) ? raw.slice(1) : raw
+    const separator = section.body.length > 0 ? '\n' : ''
+    const part = separator + content.slice(0, remaining - separator.length)
+    section.body.push(part)
+    section.bodyLength += part.length
   }
 
   return sections.flatMap((section, index) => {
-    const body = section.body.join('\n')
+    const body = section.body.join('')
     const moved = moves.get(index) ?? null
     if (section.kind === 'Add' || section.kind === 'Delete') {
-      const sign = section.kind === 'Add' ? '+' : '-'
-      // Add/Delete bodies carry a sign per line but no hunk header.
-      const stripped = section.body
-        .map((line) => (line.startsWith(sign) ? line.slice(1) : line))
-        .join('\n')
-      const whole = editLinesFromWholeFile(stripped, section.kind === 'Add' ? 'add' : 'del')
+      const whole = editLinesFromWholeFile(body, section.kind === 'Add' ? 'add' : 'del')
       return [
         finalizeEditFile({
           path: section.path,
