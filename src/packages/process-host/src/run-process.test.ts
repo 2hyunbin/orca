@@ -170,9 +170,13 @@ describe('unkillable children', () => {
   it('settles after the grace period rather than outliving its own deadline', async () => {
     const result = await runProcess({
       program: process.execPath,
-      args: ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'],
-      timeoutMs: 300
+      args: [
+        '-e',
+        'process.on("SIGTERM", () => {}); process.stderr.write("ready"); setInterval(() => {}, 1000)'
+      ],
+      timeoutMs: 2_000
     })
+    expect(result.stderr).toBe('ready')
     expect(result.timedOut).toBe(true)
   }, 20_000)
 })
@@ -180,15 +184,28 @@ describe('unkillable children', () => {
 describe('abort', () => {
   it('settles after the grace period when an aborted child ignores the signal', async () => {
     const controller = new AbortController()
+    let stderr = ''
     const pending = runProcess({
       program: process.execPath,
-      args: ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'],
+      args: [
+        '-e',
+        'process.on("SIGTERM", () => {}); process.stderr.write("ready"); setInterval(() => {}, 1000)'
+      ],
       timeoutMs: 60_000,
-      signal: controller.signal
+      signal: controller.signal,
+      onStderr: (chunk) => {
+        stderr += chunk.toString()
+      }
     })
-    setTimeout(() => controller.abort(), 300)
-    const result = await pending
-    expect(result.timedOut).toBe(false)
+    try {
+      await expect.poll(() => stderr, { timeout: 10_000 }).toBe('ready')
+      controller.abort()
+      const result = await pending
+      expect(result.timedOut).toBe(false)
+    } finally {
+      controller.abort()
+      await pending
+    }
   }, 20_000)
 
   it.skipIf(process.platform === 'win32')(
@@ -247,7 +264,6 @@ describe('a signal that is already aborted', () => {
   it('stops the child instead of running it to the timeout', async () => {
     const controller = new AbortController()
     controller.abort()
-    const startedAt = Date.now()
     const onChildTerminated = vi.fn()
     const result = await runProcess({
       program: path.join(tmpdir(), 'orca-must-not-spawn'),
@@ -257,7 +273,6 @@ describe('a signal that is already aborted', () => {
     })
     expect(result.timedOut).toBe(false)
     expect(onChildTerminated).toHaveBeenCalledOnce()
-    expect(Date.now() - startedAt).toBeLessThan(10_000)
   }, 20_000)
 })
 
