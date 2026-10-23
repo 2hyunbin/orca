@@ -43,13 +43,14 @@ function valuesEqual(a: unknown, b: unknown, policy: ValueEqualityPolicy): boole
     return false
   }
   if (policy.absentKeyEqualsUndefined) {
-    return (
-      Object.keys(a).every((key) => valuesEqual(a[key], b[key], policy)) &&
-      Object.keys(b).every(
-        (key) =>
-          Object.prototype.propertyIsEnumerable.call(a, key) || valuesEqual(a[key], b[key], policy)
-      )
-    )
+    const keys = new Set(Object.keys(a))
+    const otherKeys = Object.keys(b)
+    for (const key of keys) {
+      if (!valuesEqual(a[key], b[key], policy)) {
+        return false
+      }
+    }
+    return otherKeys.every((key) => keys.has(key) || valuesEqual(a[key], b[key], policy))
   }
   const keys = Object.keys(a)
   if (keys.length !== Object.keys(b).length) {

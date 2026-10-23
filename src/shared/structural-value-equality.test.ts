@@ -79,6 +79,27 @@ describe('structuralValuesEqual', () => {
 })
 
 describe('structuralValuesEqualIgnoringUndefined', () => {
+  it('compares keys added to the left record by a getter when the right record enumerated them', () => {
+    const left: Record<string, unknown> = {
+      get trigger() {
+        left.value = 1
+        return 0
+      }
+    }
+    expect(structuralValuesEqualIgnoringUndefined(left, { trigger: 0, value: 2 })).toBe(false)
+  })
+
+  it('ignores keys added to the right record after comparison started', () => {
+    const right: Record<string, unknown> = { trigger: 0 }
+    const left = {
+      get trigger() {
+        right.value = 2
+        return 0
+      }
+    }
+    expect(structuralValuesEqualIgnoringUndefined(left, right)).toBe(true)
+  })
+
   it('compares a non-enumerable value when the other record enumerates its key', () => {
     const nonEnumerable = Object.defineProperty({}, 'value', { value: 1 })
     expect(structuralValuesEqualIgnoringUndefined(nonEnumerable, { value: 1 })).toBe(true)
