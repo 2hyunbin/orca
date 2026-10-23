@@ -9,7 +9,7 @@ export function registerRepoGitUsernameHandler(store: Store): void {
     if (!repo || isFolderRepo(repo)) {
       return ''
     }
-    // Why: an SSH repo's git config lives on a host this process does not serve.
+    // SSH Git config is unavailable to this local handler.
     if (repo.connectionId) {
       return ''
     }

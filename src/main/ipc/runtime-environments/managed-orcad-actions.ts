@@ -1,4 +1,3 @@
-/** The managed-server actions behind both the Managed servers settings and runtime RPC. */
 import {
   cancelManagedOrcadStop,
   forgetManagedOrcadEnvironment,
@@ -26,11 +25,10 @@ export type ManagedOrcadActionOptions = {
   getUserDataPath: () => string
   getActiveEnvironmentId: () => string | null | undefined
   invalidateTransport: (environmentId: string) => Promise<void> | void
-  /** Drops the SSH host's stale update/serving notes once an update verified its server. */
+  /** Clear stale update/serving notes only after verified update. */
   clearHostServerNotes: (sshTargetId: string, environmentId: string) => void
-  /** Drops the SSH host's stale managed-server state once its server is unlinked. */
+  /** Clear host managed-server state after unlinking. */
   clearHostServerStatus: (sshTargetId: string) => void
-  /** Holds what an unlinked server leaves in the profile. */
   store: RemovedServerStore
 }
 
@@ -48,7 +46,7 @@ export function createManagedOrcadActions(
     status: (selector) => getManagedOrcadRuntimeStatus(userDataPath(), selector),
     update: async (selector, force) => {
       const result = await updateManagedOrcadEnvironment(userDataPath(), { selector, force })
-      // Why: a restarted orcad drops the old connection; reconnect on the new one.
+      // Restarted servers drop the old connection.
       if (result.outcome === 'updated') {
         await options.invalidateTransport(result.environment.id)
       }
@@ -95,14 +93,14 @@ export function createManagedOrcadActions(
   }
 }
 
-/** Desktop-only: the host status line offers it when the launching SSH session ended (#25934). */
+/** Desktop recovery when the launching SSH session ended (#25934). */
 export async function restartManagedOrcad(
   options: ManagedOrcadActionOptions,
   selector: string
 ): Promise<OrcadManagedRestartResult> {
   const result = await restartManagedOrcadEnvironment(options.getUserDataPath(), selector)
   if (result.outcome === 'restarted') {
-    // Why: the restarted orcad dropped the old connection; reconnect on the new one.
+    // Restarted servers drop the old connection.
     await options.invalidateTransport(result.environmentId)
     const environment = resolveEnvironment(options.getUserDataPath(), result.environmentId)
     const targetId = getOrcadSshDeployment(environment)?.sshTargetId
