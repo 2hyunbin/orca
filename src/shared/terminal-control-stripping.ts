@@ -58,16 +58,6 @@ export function stripTerminalControl(data: string): string {
 }
 
 function terminalControlMayAffectText(data: string): boolean {
-  for (let index = 0; index < data.length; index += 1) {
-    const code = data.charCodeAt(index)
-    if (
-      code === 0x0d ||
-      code === 0x1b ||
-      (code <= 0x1f && code !== 0x0a) ||
-      (code >= 0x7f && code <= 0x9f)
-    ) {
-      return true
-    }
-  }
-  return false
+  // oxlint-disable-next-line no-control-regex -- Terminal control bytes are the intended matches.
+  return /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/.test(data)
 }
