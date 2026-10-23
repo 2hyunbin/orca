@@ -1,8 +1,7 @@
+import { isUtf8ByteLengthWithinLimit } from '../../../src/shared/utf8-byte-limits'
 import { buildTerminalShortcutKey } from './terminal-accessory-keys'
 
 const TERMINAL_LIVE_INPUT_MAX_BYTES = 256 * 1024
-
-const encoder = new TextEncoder()
 
 type TerminalLiveSpecialKeyId =
   | 'arrowDown'
@@ -102,7 +101,7 @@ export function isTerminalLiveInputWithinByteLimit(
   text: string,
   maxBytes = TERMINAL_LIVE_INPUT_MAX_BYTES
 ): boolean {
-  return encoder.encode(text).byteLength <= maxBytes
+  return maxBytes >= 0 && isUtf8ByteLengthWithinLimit(text, maxBytes)
 }
 
 export function defaultTerminalLiveInputHandles(
