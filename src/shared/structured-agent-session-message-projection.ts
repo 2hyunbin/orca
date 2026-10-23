@@ -124,11 +124,14 @@ export function projectStructuredAgentSessionMessages(
   // Runs on every streaming commit, so a chat with no such send pays nothing for placing one.
   const placement =
     stoppedBeforeStart.size > 0 ? placeStoppedSends(items, submissions, stoppedBeforeStart) : null
-  const inPlace = structuredAgentSessionRejectedShownInPlace(
-    submissions,
-    structuredAgentSessionCommandItemIds(items),
-    items.filter((item) => isAgentSessionContextClear(item.body)).map((item) => item.sequence)
-  )
+  const inPlace =
+    rejected.size > 0
+      ? structuredAgentSessionRejectedShownInPlace(
+          submissions,
+          structuredAgentSessionCommandItemIds(items),
+          items.filter((item) => isAgentSessionContextClear(item.body)).map((item) => item.sequence)
+        )
+      : new Set<string>()
   const visibleItems: AgentJournalRenderItem[] = []
   const unsentItems: AgentJournalRenderItem[] = []
   for (const item of items) {
@@ -138,7 +141,9 @@ export function projectStructuredAgentSessionMessages(
       visibleItems.push(item)
     }
   }
-  const journalled = new Set(visibleItems.map((item) => item.itemId))
+  const journalled = new Set(
+    optimistic.length > 0 ? visibleItems.map((item) => item.itemId) : undefined
+  )
   // Not delivered yet, so nothing the agent does meanwhile — a command it waits behind — comes
   // after it. Its handover places it in the conversation.
   const queued = new Set(
