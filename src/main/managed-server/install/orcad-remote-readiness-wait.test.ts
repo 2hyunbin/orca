@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { runProcess } from '@orca/process-host'
 import { orcadReadinessWaitCommand } from './orcad-remote-readiness-wait'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
+import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 
 const roots: string[] = []
 afterEach(() => {
@@ -36,5 +37,27 @@ describe.skipIf(process.platform === 'win32')('the host-side readiness wait', ()
     })
     // A counted loop would take about 8 x (0.25 s + 1 s) here.
     expect(Date.now() - startedAt).toBeLessThan(4_500)
+  })
+
+  // The wait ends only on an exit the host proved; a live or unnamed PID waits out its deadline.
+  it.each([
+    ['ends at once when the launched PID is gone', true],
+    ['waits while the launched PID still runs', false]
+  ])('%s', async (_case, exited) => {
+    const root = mkdtempSync(join(tmpdir(), 'orcad-readiness-wait-'))
+    roots.push(root)
+    const slot = join(root, 'slot')
+    mkdirSync(slot)
+    const pidFile = join(slot, '.orcad-pid')
+    const command = orcadReadinessWaitCommand(getRemoteHostPlatform('linux-x64'), slot, 2)
+    const prefix = exited
+      ? `sh -c 'echo $$ > "$1"' orcad-test ${quotePosixShell(pidFile)};`
+      : `echo ${process.pid} > ${quotePosixShell(pidFile)};`
+    const { stdout } = await runProcess({
+      program: '/bin/sh',
+      args: ['-c', `${prefix} ${command}`],
+      timeoutMs: 30_000
+    })
+    expect(stdout.startsWith('ORCAD_LAUNCH_EXITED\n')).toBe(exited)
   })
 })
