@@ -64,12 +64,8 @@ export function isBoundedString(
   ) {
     return false
   }
-  for (let index = 0; index < value.length; index += 1) {
-    if (isControlCharCode(value.charCodeAt(index))) {
-      return false
-    }
-  }
-  return true
+  // oxlint-disable-next-line no-control-regex -- IDs reject C0 and DEL by contract.
+  return !/[\u0000-\u001F\u007F]/.test(value)
 }
 
 export function isTimestamp(value: unknown): value is number {
