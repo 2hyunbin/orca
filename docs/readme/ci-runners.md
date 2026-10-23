@@ -29,6 +29,8 @@ changing a runner label inside `release-cut.yml` breaks signing provenance.
 - Intel Mac and Windows ARM qualification retain their native GitHub runners;
   Blacksmith does not offer these architectures.
 - Windows desktop lifecycle tests retain their existing GitHub desktop images.
+- Mac SSH hostile-host tests retain GitHub images because Blacksmith's shell
+  initialization restores the toolchain PATH that these fixtures must hide.
 - Linux libc qualification keeps its pinned manylinux and Alpine containers,
   regardless of the host runner pool.
 

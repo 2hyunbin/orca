@@ -223,7 +223,7 @@ jobs:
           - os: macos-15-intel
             target: darwin-x64
             cell: macos-x64-local-sshd
-    runs-on: ${{ fromJSON('{"macos-15":"blacksmith-6vcpu-macos-15"}')[matrix.os] || matrix.os }}
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     env:
       ORCA_BACKGROUND_LAUNCH: '1'
