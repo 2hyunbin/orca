@@ -147,7 +147,12 @@ export async function readWslMoveSleptScrollbackFromHistory(
           `${snapshotAnsi.length} chars, cwd ${detection.restoreInfo.cwd ? 'set' : 'none'}` +
           `${detection.cwdFromSpawn ? ' (spawn folder)' : ''}`
       )
-      const bytes = capped(Buffer.from(`${scrollbackAnsi}${snapshotAnsi}`, 'utf8'))
+      // Cold restore fills scrollbackAnsi from snapshotAnsi for a normal screen, so both hold the
+      // whole buffer; on the alternate screen scrollbackAnsi is the normal buffer behind the TUI.
+      const buffer = detection.restoreInfo.modes?.alternateScreen
+        ? scrollbackAnsi || snapshotAnsi
+        : snapshotAnsi || scrollbackAnsi
+      const bytes = capped(Buffer.from(buffer, 'utf8'))
       if (bytes.length === 0) {
         continue
       }
