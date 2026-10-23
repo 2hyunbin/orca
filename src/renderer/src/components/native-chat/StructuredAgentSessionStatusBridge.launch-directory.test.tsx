@@ -133,6 +133,48 @@ function feed(index = 0): { target: unknown; emit: (event: AgentSessionStatusEve
   return { target: call[0], emit: call[1] }
 }
 
+// Observe actual collection work without replacing the private members or groups.
+function measureMembership(trigger: () => void) {
+  const work = { members: 0, groups: 0 }
+  function observe<T>(iterator: MapIterator<T>): MapIterator<T> {
+    const next = iterator.next.bind(iterator)
+    iterator.next = () => {
+      const item = next()
+      const value: unknown = Array.isArray(item.value) ? item.value[1] : item.value
+      if (!item.done && value && typeof value === 'object') {
+        if ('paneKey' in value && 'group' in value && 'tab' in value) {
+          work.members += 1
+        }
+        if ('feed' in value && 'unsubscribe' in value) {
+          work.groups += 1
+        }
+      }
+      return item
+    }
+    return iterator
+  }
+  const values = Map.prototype.values
+  const entries = Map.prototype[Symbol.iterator]
+  const spies = [
+    vi.spyOn(Map.prototype, 'values').mockImplementation(function (this: Map<unknown, unknown>) {
+      return observe(values.call(this))
+    }),
+    vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function (
+      this: Map<unknown, unknown>
+    ) {
+      return observe(entries.call(this))
+    })
+  ]
+  try {
+    act(trigger)
+    return work
+  } finally {
+    for (const spy of spies) {
+      spy.mockRestore()
+    }
+  }
+}
+
 describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -152,16 +194,29 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
     resetStructuredAgentSessionStatusFeedsForTests()
   })
 
-  it.each([10, 100])(
-    'bounds real status triggers and first-snapshot companion writes for %i sessions',
-    async (count) => {
-      const local = getStructuredAgentSessionStatusFeed({ kind: 'local' })
-      const remote = getStructuredAgentSessionStatusFeed({
-        kind: 'environment',
-        environmentId: 'paired'
-      })
-      const leases = [vi.spyOn(local, 'activate'), vi.spyOn(remote, 'activate')]
-      const listeners = [vi.spyOn(local, 'subscribe'), vi.spyOn(remote, 'subscribe')]
+  it.each([
+    [10, 2],
+    [100, 2],
+    [10, 10],
+    [100, 100]
+  ])(
+    'bounds real status triggers and first-snapshot companion writes for %i sessions on %i hosts',
+    async (count, hostCount) => {
+      const perHost = count / hostCount
+      const feeds = Array.from({ length: hostCount }, (_, i) =>
+        getStructuredAgentSessionStatusFeed(
+          i === 0
+            ? { kind: 'local' }
+            : {
+                kind: 'environment',
+                environmentId: hostCount === 2 ? 'paired' : `paired-${i}`
+              }
+        )
+      )
+      const leases = feeds.map((owner) => vi.spyOn(owner, 'activate'))
+      const listeners = feeds.map((owner) => vi.spyOn(owner, 'subscribe'))
+      const reads = feeds.map((owner) => vi.spyOn(owner, 'getSessionObservation'))
+      const snapshots = feeds.map((owner) => vi.spyOn(owner, 'getSnapshot'))
       let idReads = 0
       const owners = vi.spyOn(statusOwner, 'structuredAgentSessionOwnerForTab')
       const projects = vi.spyOn(statusProjection, 'projectStatus')
@@ -175,7 +230,10 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
               return `chat-${i}`
             },
             entityId: `session-${i}`,
-            executionHostId: i % 2 ? 'runtime:paired' : 'local'
+            executionHostId:
+              i % hostCount
+                ? `runtime:${hostCount === 2 ? 'paired' : `paired-${i % hostCount}`}`
+                : 'local'
           }) satisfies Tab
       )
       useAppStore.setState({ unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: tabs } })
@@ -197,7 +255,7 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
         }
       })
       const view = render(<StructuredAgentSessionStatusBridge />)
-      await waitFor(() => expect(mocks.subscribeStatus).toHaveBeenCalledTimes(2))
+      await waitFor(() => expect(mocks.subscribeStatus).toHaveBeenCalledTimes(hostCount))
       const rows = tabs.map((tab, i) =>
         summary({ sessionId: tab.entityId, updatedAt: 100 + i, launchDirectory: '/project' })
       )
@@ -206,30 +264,32 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
         mocks.applyStatus.mockClear()
         owners.mockClear()
         projects.mockClear()
+        for (const read of [...reads, ...snapshots]) {
+          read.mockClear()
+        }
       }
       const linearWork = () => {
         expect(owners.mock.calls.length).toBeLessThanOrEqual(5 * count)
         expect(idReads).toBeLessThanOrEqual(8 * count)
       }
-      resetWork()
-      act(() => feed(0).emit({ type: 'snapshot', sessions: rows }))
-      expect(commits).toBe(1)
-      expect(statuses()).toHaveLength(count / 2)
-      expect(projects).toHaveBeenCalledTimes(count / 2)
-      expect(mocks.applyStatus).toHaveBeenCalledTimes(count / 2)
-      expect([sleepWrites, directoryWrites, publications]).toEqual([
-        count / 2,
-        count / 2,
-        1 + count
-      ])
-      linearWork()
-      resetWork()
-      act(() => feed(1).emit({ type: 'snapshot', sessions: rows }))
-      expect(commits).toBe(1)
-      expect(projects).toHaveBeenCalledTimes(count / 2)
-      expect(mocks.applyStatus).toHaveBeenCalledTimes(count / 2)
-      expect([sleepWrites, directoryWrites, publications]).toEqual([count / 2, 0, 1 + count / 2])
-      linearWork()
+      for (let i = 0; i < hostCount; i += 1) {
+        resetWork()
+        const work = measureMembership(() => feed(i).emit({ type: 'snapshot', sessions: rows }))
+        expect(work).toEqual({ members: 0, groups: hostCount })
+        expect(reads.reduce((sum, read) => sum + read.mock.calls.length, 0)).toBe(perHost)
+        expect(snapshots.reduce((sum, read) => sum + read.mock.calls.length, 0)).toBe(
+          perHost * (i === 0 ? 2 : 1)
+        )
+        expect(commits).toBe(1)
+        expect(projects).toHaveBeenCalledTimes(perHost)
+        expect(mocks.applyStatus).toHaveBeenCalledTimes(perHost)
+        expect([sleepWrites, directoryWrites, publications]).toEqual([
+          perHost,
+          i === 0 ? perHost : 0,
+          1 + perHost * (i === 0 ? 2 : 1)
+        ])
+        linearWork()
+      }
       for (const spy of [...leases, ...listeners]) {
         expect(spy).toHaveBeenCalledOnce()
       }
@@ -246,15 +306,18 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
       expect(useAppStore.getState().agentStatusByPaneKey).toBe(before)
       linearWork()
       resetWork()
-      act(() =>
+      const statusWork = measureMembership(() =>
         feed(0).emit({ type: 'status', session: { ...rows[0], status: 'working', updatedAt: 500 } })
       )
+      expect(statusWork).toEqual({ members: 0, groups: hostCount })
+      expect(reads.reduce((sum, read) => sum + read.mock.calls.length, 0)).toBe(perHost)
+      expect(snapshots.reduce((sum, read) => sum + read.mock.calls.length, 0)).toBe(2 * perHost)
       expect(commits).toBe(1)
       expect(projects).toHaveBeenCalledOnce()
       expect(mocks.applyStatus).toHaveBeenCalledOnce()
       linearWork()
       resetWork()
-      act(() =>
+      const activationWork = measureMembership(() =>
         useAppStore.setState(
           tabActivationPatch(
             useAppStore.getState(),
@@ -265,6 +328,8 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
           )
         )
       )
+      expect(activationWork.members).toBeLessThanOrEqual(4 * count)
+      expect(activationWork.groups).toBeLessThanOrEqual(5 * hostCount)
       expect(commits).toBe(0)
       expect(projects).toHaveBeenCalledOnce()
       expect(mocks.applyStatus).not.toHaveBeenCalled()
@@ -281,13 +346,16 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
           (tab) => tab.executionHostId !== 'local'
         )
       resetWork()
-      act(() =>
+      const removalWork = measureMembership(() =>
         useAppStore.setState({
           unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: remaining }
         })
       )
+      expect(removalWork.members).toBeLessThanOrEqual(4 * count)
+      expect(removalWork.groups).toBeLessThanOrEqual(5 * hostCount)
+      expect(mocks.unsubscribe).toHaveBeenCalledOnce()
       expect(commits).toBe(1)
-      expect(statuses()).toHaveLength(count / 2)
+      expect(statuses()).toHaveLength(count - perHost)
       expect(projects).not.toHaveBeenCalled()
       expect(mocks.applyStatus).not.toHaveBeenCalled()
       linearWork()
@@ -295,11 +363,91 @@ describe('StructuredAgentSessionStatusBridge pinned launch directory', () => {
       projects.mockRestore()
       stop()
       view.unmount()
-      for (const spy of [...leases, ...listeners]) {
+      for (const spy of [...leases, ...listeners, ...reads, ...snapshots]) {
         spy.mockRestore()
       }
     }
   )
+
+  it('keeps shared leases and a later host reintroduced synchronously by feed release', async () => {
+    const local = getStructuredAgentSessionStatusFeed({ kind: 'local' })
+    const remote = getStructuredAgentSessionStatusFeed({
+      kind: 'environment',
+      environmentId: 'paired'
+    })
+    const released = [vi.fn(), vi.fn()]
+    mocks.subscribeStatus
+      .mockResolvedValueOnce({ unsubscribe: released[0] })
+      .mockResolvedValueOnce({ unsubscribe: released[1] })
+    const remoteLease = vi.spyOn(remote, 'activate')
+    const tabs = [
+      floatingTab,
+      { ...floatingTab, id: 'second', entityId: 'session-2' },
+      { ...floatingTab, id: 'remote', entityId: 'session-3', executionHostId: 'runtime:paired' }
+    ]
+    useAppStore.setState({ unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: tabs } })
+    const view = render(<StructuredAgentSessionStatusBridge />)
+    await waitFor(() => expect(mocks.subscribeStatus).toHaveBeenCalledTimes(2))
+    act(() => {
+      feed(0).emit({
+        type: 'snapshot',
+        sessions: tabs.slice(0, 2).map((tab) =>
+          summary({
+            sessionId: tab.entityId,
+            hostExecutionOwned: true,
+            sleptAt: 5,
+            launchDirectory: '/project'
+          })
+        )
+      })
+      feed(1).emit({
+        type: 'snapshot',
+        sessions: [summary({ sessionId: 'session-3', sleptAt: 7 })]
+      })
+    })
+    act(() =>
+      useAppStore.setState({
+        unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: tabs.slice(1) }
+      })
+    )
+    expect(released.every((release) => release.mock.calls.length === 0)).toBe(true)
+    expect(statuses()).toHaveLength(2)
+    expect(pins().second?.sessionId).toBe('session-2')
+    expect(pins()[floatingTab.id]).toBeUndefined()
+    let reenter = true
+    const stop = local.subscribe(() => {
+      if (!reenter) {
+        return
+      }
+      reenter = false
+      useAppStore.setState({
+        unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: [tabs[2]] }
+      })
+    })
+    try {
+      act(() =>
+        useAppStore.setState({ unifiedTabsByWorktree: { [FLOATING_TERMINAL_WORKTREE_ID]: [] } })
+      )
+      expect(reenter).toBe(false)
+      expect(released[0]).toHaveBeenCalledOnce()
+      expect(released[1]).not.toHaveBeenCalled()
+      expect(remoteLease).toHaveBeenCalledOnce()
+      act(() =>
+        feed(1).emit({
+          type: 'status',
+          session: summary({ sessionId: 'session-3', status: 'working', updatedAt: 900 })
+        })
+      )
+      expect(statuses()).toEqual([expect.objectContaining({ updatedAt: 900, state: 'working' })])
+      expect(pins()).toEqual({})
+      expect(Object.values(useAppStore.getState().structuredChatSleptAtByPaneKey)).toEqual([null])
+      view.unmount()
+      expect(released[1]).toHaveBeenCalledOnce()
+    } finally {
+      stop()
+      remoteLease.mockRestore()
+    }
+  })
 
   it.each(['publication', 'release'] as const)(
     'rederives removed companions and host activation after a one-shot %s failure',

@@ -34,6 +34,7 @@ export {
 } from './structured-agent-session-status-hooks'
 
 type HostGroup = {
+  members: Member[]
   feed: StructuredAgentSessionStatusFeedOwner
   unsubscribe: () => void
   release?: () => void
@@ -209,10 +210,10 @@ function installStatusProjection(): () => void {
     }
   }
   const activateGroups = (): void => {
-    for (const { hostKey, group } of members.values()) {
-      if (hostKey && group && !group.release) {
+    for (const [hostKey, group] of groups) {
+      if (groups.get(hostKey) === group && group.members.length && !group.release) {
         const release = group.feed.activate()
-        if (disposed || groups.get(hostKey) !== group) {
+        if (disposed || groups.get(hostKey) !== group || !group.members.length) {
           release()
         } else {
           group.release = release
@@ -258,12 +259,12 @@ function installStatusProjection(): () => void {
       let group = hostKey ? groups.get(hostKey) : undefined
       if (!group && target && hostKey) {
         const feed = getStructuredAgentSessionStatusFeed(target)
-        const created: HostGroup = { feed, unsubscribe: () => {} }
+        const created: HostGroup = { members: [], feed, unsubscribe: () => {} }
         groups.set(hostKey, created)
         created.unsubscribe = feed.subscribe(() =>
           boundary(() => {
             if (!disposed) {
-              capture([...members.values()].filter((member) => member.group === created))
+              capture(created.members)
             }
           })
         )
@@ -289,13 +290,18 @@ function installStatusProjection(): () => void {
     }
     members.clear()
     membersByTabId.clear()
+    for (const group of groups.values()) {
+      group.members = []
+    }
     for (const [key, member] of next) {
       members.set(key, member)
       membersByTabId.set(member.tab.id, member)
+      member.group?.members.push(member)
     }
     for (const [key, group] of groups) {
-      if (![...members.values()].some((member) => member.group === group)) {
+      if (groups.get(key) === group && !group.members.length) {
         groups.delete(key)
+        group.members = []
         group.unsubscribe()
         group.release?.()
       }
@@ -327,6 +333,7 @@ function installStatusProjection(): () => void {
     unsubscribeApp()
     unsubscribeLaunch()
     for (const group of groups.values()) {
+      group.members = []
       group.unsubscribe()
       boundary(() => group.release?.())
     }
