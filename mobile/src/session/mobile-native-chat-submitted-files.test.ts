@@ -62,6 +62,7 @@ it('consumes only submitted completed files after storage handoff through the se
       connState: 'connected',
       nativeChatScopeKey: scope,
       nativeChatInputLeaseReady: true,
+      nativeChatAgentConfirmed: true,
       getActiveWorktreeConnectionId: async () => null,
       beforeTerminalSend: async () => true,
       nativeChatBaseSend: baseSend,
