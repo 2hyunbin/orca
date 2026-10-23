@@ -12,10 +12,7 @@ export const ZSH_WRAPPER_DIR_MARKER_CONTENT = `# Orca-generated zsh startup wrap
 export const ZSH_FEATURE_CHANNEL_BLOCK = `builtin typeset -ga _orca_shell_features
 _orca_shell_features=(\${(s:,:)\${${SHELL_STARTUP_FEATURE_ENV}:-}})
 builtin unset ${SHELL_STARTUP_FEATURE_ENV}
-# Why ORCA_HISTFILE is consumed HERE and not in the deferred hook: a user config
-# that replaces precmd_functions wholesale drops the hook, and an exported value
-# nothing will ever consume is then inherited by every child of this pane,
-# including a nested Orca (#11146). Captured non-exported, it cannot escape.
+# Consume now: user config can drop the deferred hook, leaving exported history state to leak into children.
 builtin typeset -g _orca_histfile="\${ORCA_HISTFILE:-}"
 builtin unset ORCA_HISTFILE
 __orca_has_feature() { (( \${_orca_shell_features[(Ie)$1]} )) }`
@@ -29,12 +26,9 @@ export const SHELL_STARTUP_IDENTITY_MARKER_BLOCK = `__orca_has_feature identity 
 // Restore and consume ZDOTDIR before user startup files; reject stale Orca wrapper paths.
 export const ZSH_ZDOTDIR_HANDBACK_BLOCK = `__orca_usable_zdotdir() {
   [[ -n "\${1:-}" ]] || return 1
-  # Orca's own dir, by marker file or by the shape older builds wrote.
   [[ "$1" != */shell-ready/zsh ]] || return 1
   [[ ! -f "$1/${ZSH_WRAPPER_DIR_MARKER_FILE}" ]] || return 1
-  # A directory holding no zsh startup file at all is not a config root,
-  # whoever wrote it — and a stale value pointing at one would stop zsh from
-  # ever reading the user's real .zshenv.
+  # Reject empty config roots so stale wrapper state cannot hide the user's real .zshenv.
   local _orca_startup_file
   for _orca_startup_file in .zshenv .zshrc .zprofile .zlogin; do
     [[ -r "$1/$_orca_startup_file" ]] && return 0
@@ -83,12 +77,7 @@ export function getZshShellReadyMarkerRegistrationBlock(
     zle accept-line
   fi`
     : ''
-  return `# Why: capture the prior zle-line-init so the marker chains to it. On a
-# re-source we are already the bound widget, so keep the function captured
-# the first time instead of clobbering it to empty (which would silently
-# drop the user's widget on every prompt after the second source). Only
-# user-defined widgets are chainable as plain functions; builtin/completion
-# forms (rare for zle-line-init) are left unchained.
+  return `# Preserve the original user widget across re-sourcing; builtin/completion widgets cannot chain as plain functions.
 if [[ "\${widgets[zle-line-init]:-}" == "user:__orca_prompt_mark" ]]; then
   :
 elif (( \${+widgets[zle-line-init]} )) && [[ "\${widgets[zle-line-init]}" == user:* ]]; then
@@ -98,8 +87,7 @@ else
 fi
 __orca_prompt_mark() {
 ${markerBlock}
-  # Why: call the prior hook as a plain function, not an aliased widget, so
-  # $WIDGET stays zle-line-init for add-zle-hook-widget dispatchers.
+  # Call as a function so $WIDGET remains zle-line-init for add-zle-hook-widget dispatchers.
   if [[ -n "\${__orca_prev_line_init_fn:-}" ]]; then
     "\${__orca_prev_line_init_fn}" "$@"
   fi${startupCommandBlock}
