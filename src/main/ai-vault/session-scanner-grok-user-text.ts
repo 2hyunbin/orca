@@ -76,10 +76,11 @@ export function stripGrokUserQueryEnvelope(text: string): string {
 }
 
 export function isGrokBootstrapContextText(text: string): boolean {
-  const normalized = text.trim().toLowerCase()
-  if (!normalized.startsWith('<user_info>')) {
+  const trimmed = text.trim()
+  if (!/^<user_info>/i.test(trimmed)) {
     return false
   }
+  const normalized = trimmed.toLowerCase()
   const userInfoEnd = normalized.indexOf('</user_info>')
   if (userInfoEnd === -1) {
     // Open-ended user_info dump with no query: treat as bootstrap noise.
@@ -95,7 +96,10 @@ export function isGrokBootstrapContextText(text: string): boolean {
 }
 
 function startsWithIgnoreCaseTag(text: string, tagName: string): boolean {
-  const lower = text.trimStart().toLowerCase()
+  const lower = text
+    .trimStart()
+    .slice(0, tagName.length + 2)
+    .toLowerCase()
   return lower.startsWith(`<${tagName}>`) || lower.startsWith(`<${tagName} `)
 }
 
