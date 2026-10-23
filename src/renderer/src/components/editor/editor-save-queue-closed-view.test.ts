@@ -7,7 +7,7 @@ import {
   closedViewWorktree,
   createClosedViewHarness,
   type ClosedViewHarness
-} from './editor-save-closed-view-test-fixture'
+} from './editor-save-closed-view.test-fixture'
 
 vi.mock('@/lib/connection-context', () => ({ getConnectionIdForFile: () => undefined }))
 
