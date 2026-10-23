@@ -186,7 +186,7 @@ describe('session selection without declared roles', () => {
           lastAssistantMessage: 'B remains live'
         })
         expect(admitted?.payload.interactivePrompt).toBeUndefined()
-        const burst = []
+        const burst: Awaited<ReturnType<typeof open>>[] = []
         for (let i = 0; i < n; i++) {
           burst.push(await open(n + 3 + i))
         }
