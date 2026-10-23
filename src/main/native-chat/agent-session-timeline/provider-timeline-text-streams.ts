@@ -329,10 +329,11 @@ export class ProviderTimelineTextStreams {
     this.forget(stream)
     this.stopped.delete(stream.key)
     this.stopped.set(stream.key, turnItemId)
-    for (const [oldest] of [...this.stopped].slice(
-      0,
-      Math.max(0, this.stopped.size - MAX_STOPPED_STREAMS)
-    )) {
+    while (this.stopped.size > MAX_STOPPED_STREAMS) {
+      const oldest = this.stopped.keys().next().value
+      if (oldest === undefined) {
+        break
+      }
       this.stopped.delete(oldest)
     }
   }
