@@ -10,6 +10,7 @@ import { selectTabBarAgentProjections } from '../tab-bar/tab-agent-types-by-tab-
 import { act, cleanup, renderHook } from '@testing-library/react'
 import { useState } from 'react'
 import type { AppState } from '@/store/types'
+import type { Tab } from '../../../../shared/tab-types'
 import type { ConnectPanePtySession } from './pty-connection/connect-pane-pty-session'
 import { installInterruptInputIntent } from './pty-connection/interrupt-input-intent'
 import { createPane } from './pty-connection-test-pane-fixtures'
@@ -28,10 +29,23 @@ import { makePaneKey } from '../../../../shared/stable-pane-id'
 
 const LEFT = '11111111-1111-4111-8111-111111111111'
 const RIGHT = '22222222-2222-4222-8222-222222222222'
+type ViewMode = NonNullable<Tab['viewMode']>
 const mocks = vi.hoisted(() => {
   const layouts: Record<string, TerminalLayoutSnapshot> = {}
   const foreground: Record<string, PaneForegroundAgentEntry> = {}
-  const tab = { id: 'tab', entityId: 'tab', contentType: 'terminal', viewMode: 'chat' }
+  const tab: Tab = {
+    id: 'tab',
+    entityId: 'tab',
+    groupId: 'group',
+    worktreeId: 'wt',
+    contentType: 'terminal',
+    label: 'Terminal',
+    customLabel: null,
+    color: null,
+    sortOrder: 0,
+    createdAt: 0,
+    viewMode: 'chat'
+  }
   const state = {
     terminalLayoutsByTabId: layouts,
     unifiedTabsByWorktree: { wt: [tab] },
@@ -44,7 +58,7 @@ const mocks = vi.hoisted(() => {
     setTabLayout: (_id: string, layout: TerminalLayoutSnapshot) => {
       layouts.tab = layout
     },
-    setTabViewMode: (_id: string, mode: string) => {
+    setTabViewMode: (_id: string, mode: ViewMode) => {
       state.unifiedTabsByWorktree = { wt: [{ ...tab, viewMode: mode }] }
     },
     toggleTabViewMode: (id: string): void => {
@@ -93,7 +107,7 @@ vi.mock('../../store', async () => {
         }))
     }
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: supplies the real status slice and every external field read by these mounted hooks; unrelated app services are inert.
-    return state as AppState
+    return state as unknown as AppState
   })
   return { useAppStore }
 })

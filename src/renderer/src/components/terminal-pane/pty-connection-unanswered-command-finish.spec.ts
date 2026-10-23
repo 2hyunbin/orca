@@ -75,6 +75,7 @@ export function registerPtyConnectionUnansweredCommandFinishTests(): void {
       connectPanePty(
         createPane(1) as never,
         createManager(1) as never,
+        // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: connection deps fixture supplies every dependency consumed by the installer.
         createDeps({
           tabId,
           isVisibleRef: { current: false },
