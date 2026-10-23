@@ -184,11 +184,11 @@ export const MessageRow = memo(function MessageRow(
 function sameMessageRowProps(previous: MessageRowProps, next: MessageRowProps): boolean {
   const { workRun: previousRun, ...previousRest } = previous
   const { workRun: nextRun, ...nextRest } = next
-  const nextProps = new Map(Object.entries(nextRest))
+  const nextProps: Record<string, unknown> = nextRest
   return (
-    Object.keys(previousRest).length === nextProps.size &&
+    Object.keys(previousRest).length === Object.keys(nextProps).length &&
     Object.entries(previousRest).every(
-      ([key, value]) => nextProps.has(key) && Object.is(value, nextProps.get(key))
+      ([key, value]) => Object.hasOwn(nextProps, key) && Object.is(value, nextProps[key])
     ) &&
     previousRun?.length === nextRun?.length &&
     (previousRun ?? []).every((member, index) => member === nextRun?.[index])
