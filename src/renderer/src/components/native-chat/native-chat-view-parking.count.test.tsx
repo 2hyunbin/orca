@@ -6,6 +6,7 @@ import {
   holdNativeChatInput
 } from './native-chat-view-parking-owner'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { useLayoutEffect } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useAppStore, type AppState } from '@/store'
@@ -368,18 +369,20 @@ describe('real structured chat presentation population', () => {
 function Candidate({
   tab,
   visible,
-  onRender
+  onCommit
 }: {
   tab: Tab
   visible: boolean
-  onRender?: () => void
+  onCommit?: () => void
 }) {
-  onRender?.()
   const admitted = useNativeChatViewAdmission(
     nativeChatViewKey(tab.id, 'local', tab.entityId),
     tab.id,
     visible
   )
+  useLayoutEffect(() => {
+    onCommit?.()
+  })
   return <output data-structured-agent-session-overlay-tab-id={tab.id} data-admitted={admitted} />
 }
 
@@ -463,7 +466,7 @@ it.each([27, 270])(
     let retiredCells = 0
     let sourceVisits = 0
     let comparisons = 0
-    let notifications = 0
+    let committedUpdates = 0
     const entries = Map.prototype[Symbol.iterator]
     const values = Map.prototype.values
     const observe = (value: unknown) => {
@@ -542,7 +545,7 @@ it.each([27, 270])(
             key={tab.id}
             tab={tab}
             visible={index === active || active === -2}
-            onRender={() => notifications++}
+            onCommit={() => committedUpdates++}
           />
         ))}
       </>
@@ -588,12 +591,12 @@ it.each([27, 270])(
     await act(async () => rendered.rerender(tree()))
     const beforeDeadline = policyVisits
     comparisons = 0
-    notifications = 0
+    committedUpdates = 0
     await act(async () => vi.advanceTimersByTimeAsync(30_001))
     expect(policyVisits - beforeDeadline).toBe(count + 6)
     expect(comparisons).toBeGreaterThan(0)
     expect(comparisons).toBeLessThan(4 * count * Math.ceil(Math.log2(count)))
-    expect(notifications).toBe(count - 6)
+    expect(committedUpdates).toBe(count - 6)
     await act(async () => useAppStore.setState({ unifiedTabsByWorktree: {} }))
     expect(sourceVisits).toBe(0)
     expect(retiredCells).toBe(4 * count)
