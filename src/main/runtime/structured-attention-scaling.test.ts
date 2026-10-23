@@ -1,4 +1,10 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
+import { agentJournalItemKey } from '../../shared/agent-session-journal-item-key'
+import {
+  HOST_TEST_SESSION as SESSION,
+  HOST_TEST_THREAD as THREAD
+} from '../native-chat/agent-session-wire/structured-agent-session-host-test-data'
+import { StructuredAgentSessionTurnCompletionFeed } from '../native-chat/agent-session-wire/structured-agent-session-turn-completion-feed'
 import {
   structuredAttentionScaling,
   assertSnapshotCosts
@@ -21,8 +27,35 @@ it.each([
     expect(rootCosts[0]).toMatchObject({ items: items + 1, submissions })
     assertSnapshotCosts(rootCosts)
     flow.reset()
-    await flow.writeTurn('measured', operation, 'running')
-    await flow.writeTurn('measured', operation, 'running')
+    const rootId = agentJournalItemKey({
+      provider: 'codex',
+      threadId: THREAD,
+      turnId: 'measured',
+      ordinal: 0
+    })
+    let revision = flow.journal.item(rootId)!.revision
+    let cursor = flow.journal.cursor()
+    const publications = vi
+      .spyOn(StructuredAgentSessionTurnCompletionFeed.prototype, 'observe')
+      .mockClear()
+    const sameRootUpdates: { revision: number; sequence: number }[] = []
+    for (let index = 0; index < 2; index += 1) {
+      await flow.writeTurn('measured', operation, 'running')
+      const accepted = flow.journal.item(rootId)!
+      const next = flow.journal.cursor()
+      expect(accepted).toMatchObject({
+        itemId: rootId,
+        body: { kind: 'turn', turnId: 'measured', state: 'running' }
+      })
+      expect(accepted.revision).toBeGreaterThan(revision)
+      expect(next.epoch).toBe(cursor.epoch)
+      expect(next.sequence).toBeGreaterThan(cursor.sequence)
+      expect(publications).toHaveBeenCalledTimes(index + 1)
+      expect(publications).toHaveBeenLastCalledWith(SESSION, flow.journal)
+      sameRootUpdates.push({ revision: accepted.revision, sequence: next.sequence })
+      revision = accepted.revision
+      cursor = next
+    }
     expect(flow.starts()).toBe(0)
     expect(flow.snapshots.filter((cost) => cost.phase === 'new-root')).toEqual([])
     await flow.writeTurn('measured', operation, 'completed')
@@ -45,6 +78,7 @@ it.each([
       submissions,
       subscribers,
       rootCosts,
+      sameRootUpdates,
       attribution: flow.snapshots.filter((cost) => cost.phase === 'provenance')
     })
   } finally {

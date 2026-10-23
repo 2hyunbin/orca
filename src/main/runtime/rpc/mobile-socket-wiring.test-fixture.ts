@@ -1,4 +1,4 @@
-import { vi } from 'vitest'
+import { expect, vi } from 'vitest'
 import type { WebSocket } from 'ws'
 import type { DeviceRegistry } from '../device-registry'
 import type { MobileSocketTransport } from './mobile-socket-wiring'
@@ -68,15 +68,15 @@ export async function authenticatedDesktopSockets(
   const desktop = generateKeyPair()
   const client = generateKeyPair()
   const transport = new FakeTransport()
+  const advertised = [
+    ...Array.from({ length: capabilities - 1 }, () => 'session-tabs.close-intent.v1' as const),
+    'browser.clientHost.v1' as const
+  ]
+  const onText = vi.fn()
   const wiring = new MobileSocketWiring({
     deviceRegistry: registryFor(deviceId, 'fixture-token', 'runtime'),
     e2eeKeypair: { ...desktop, publicKeyB64: Buffer.from(desktop.publicKey).toString('base64') },
-    onText: (socket) => {
-      socket.clientCapabilities = [
-        ...Array.from({ length: capabilities - 1 }, () => 'session-tabs.close-intent.v1' as const),
-        'browser.clientHost.v1'
-      ]
-    },
+    onText,
     onBinary: () => {},
     onClose: () => {}
   })
@@ -93,9 +93,20 @@ export async function authenticatedDesktopSockets(
     )
     transport.receive(
       socket,
-      encrypt(JSON.stringify({ type: 'e2ee_auth', deviceToken: 'fixture-token' }), key)
+      encrypt(
+        JSON.stringify({
+          type: 'e2ee_auth',
+          deviceToken: 'fixture-token',
+          clientCapabilities: advertised
+        }),
+        key
+      )
     )
     transport.receive(socket, encrypt('{"id":"fixture","method":"status.get"}', key))
+  }
+  expect(onText).toHaveBeenCalledTimes(count)
+  for (const [socket] of onText.mock.calls) {
+    expect(socket).toMatchObject({ device: { deviceId }, clientCapabilities: advertised })
   }
   return {
     wiring,
