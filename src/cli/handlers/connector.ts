@@ -4,10 +4,13 @@ import { printResult } from '../format'
 import { RuntimeClientError } from '../runtime-client'
 import { getRequiredWorktreeSelector } from '../selectors'
 
-type ConnectorDelivery = { outcome: string; reason?: string }
+type ConnectorDelivery = { outcome: string; reason?: string; reopened?: boolean }
 
-function formatDelivery(delivery: ConnectorDelivery): string {
-  return delivery.reason ? `${delivery.outcome}: ${delivery.reason}` : delivery.outcome
+export function formatDelivery(delivery: ConnectorDelivery): string {
+  if (delivery.reason) {
+    return `${delivery.outcome}: ${delivery.reason}`
+  }
+  return delivery.reopened ? `${delivery.outcome} (reopened the agent)` : delivery.outcome
 }
 
 /** `unknown` cannot say whether this call started the agent, so only the definite answers claim it. */
@@ -72,5 +75,12 @@ export const CONNECTOR_HANDLERS: Record<string, CommandHandler> = {
       target
     })
     printResult(result, json, (value) => formatConnectorStart(value.initial))
+  },
+  'connector send': async ({ flags, client, json }) => {
+    const result = await callConnector<ConnectorDelivery>(client, 'connector.send', {
+      ...conversationParams(flags),
+      text: getRequiredStringFlag(flags, 'text')
+    })
+    printResult(result, json, formatDelivery)
   }
 }
