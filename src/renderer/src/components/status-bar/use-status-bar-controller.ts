@@ -15,7 +15,7 @@ import { useStatusBarMenuFocusHandoff } from './ProviderDetailsMenu'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/lib/close-all-context-menus'
 import { useStatusBarDensity } from './status-bar-density'
 import { getUsageOwnerHostScope, useOwnerUsageRateLimits } from './use-owner-usage-rate-limits'
-import { isOwnerNotSetUpPlaceholder } from './owner-usage-rate-limits'
+import { hasFetchingUsageRequests, isOwnerNotSetUpPlaceholder } from './owner-usage-rate-limits'
 
 export function useStatusBarController(floatingTerminalOpen: boolean) {
   const floatingTerminalShortcut = useShortcutLabel('floatingTerminal.toggle')
@@ -205,22 +205,7 @@ export function useStatusBarController(floatingTerminalOpen: boolean) {
   )
   // Why: one-time nudge — once dismissed, stays hidden even if providers reconnect later.
   const showEmptyUsageCta = isEmptyUsageState && !usageEmptyStateDismissed
-  const anyFetching = [
-    claude,
-    codex,
-    gemini,
-    opencodeGo,
-    kimi,
-    antigravity,
-    minimax,
-    grok,
-    cursor,
-    zcode
-  ].some(
-    (provider) =>
-      provider?.status === 'fetching' &&
-      rateLimits.usageRequestPolicy?.enabled[provider.provider] !== false
-  )
+  const anyFetching = hasFetchingUsageRequests(rateLimits)
 
   const floatingTerminalActionLabel = floatingTerminalOpen
     ? 'Minimize Floating Workspace'

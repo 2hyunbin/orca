@@ -17,6 +17,7 @@ import { fetchOpenCodeGoUsage } from '../opencode-go-usage-source-selection'
 import { RateLimitServiceFetchPolicy } from './service-fetch-policy'
 import type { ProviderRateLimits } from './service-types'
 import type { FetchAllCyclePrepared } from './service-full-cycle-types'
+import { applyOpenCodeGoApiKeyError } from './service-opencode-go-result'
 
 export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServiceFetchPolicy {
   protected async prepareFetchAllCycle(
@@ -288,18 +289,7 @@ export abstract class RateLimitServiceFullCyclePreparation extends RateLimitServ
     if (signal.aborted) {
       return null
     }
-    // Why: the decrypt error only replaces a result with no usage and no diagnosis of its own; a real cookie error stays visible.
-    if (
-      openCodeGoApiKeyError &&
-      opencodeGoResult.status === 'fulfilled' &&
-      opencodeGoResult.value.status === 'unavailable'
-    ) {
-      opencodeGoResult.value = {
-        ...opencodeGoResult.value,
-        error: openCodeGoApiKeyError,
-        status: 'error'
-      }
-    }
+    applyOpenCodeGoApiKeyError(opencodeGoResult, openCodeGoApiKeyError)
     return {
       claudeTarget,
       claudeGeneration,

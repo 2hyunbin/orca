@@ -8,6 +8,7 @@ import { useHostClient } from '../transport/host-client-hooks'
 import { colors, spacing } from '../theme/mobile-theme'
 import { styles } from './mobile-accounts-screen-styles'
 import { MobileUsageRequestsSection } from './MobileUsageRequestsSection'
+import { MobileAccountUsageWindows } from './MobileAccountUsageWindows'
 import { useNow } from '../hooks/use-now'
 import { ClaudeIcon, OpenAIIcon } from '../components/AgentIcons'
 import {
@@ -16,10 +17,7 @@ import {
   decodeAccountsSnapshot,
   getActiveProviderRateLimits,
   getInactiveProviderUsage,
-  getUsageBarState,
-  getWindowResetLabel,
   hasActiveProviderUsage,
-  UsageBar,
   UsageRequestsDisabledNotice
 } from '../components/AccountUsage'
 import {
@@ -210,16 +208,6 @@ export function MobileAccountsScreen() {
         : state.activeAccountId
     const activeUsage = getActiveProviderRateLimits(snapshot, provider)
     const requestsDisabled = snapshot.rateLimits.usageRequestPolicy?.enabled[provider] === false
-    const activeSessionBar = getUsageBarState(
-      activeUsage,
-      'session',
-      requestsDisabled ? false : undefined
-    )
-    const activeWeeklyBar = getUsageBarState(
-      activeUsage,
-      'weekly',
-      requestsDisabled ? false : undefined
-    )
     const resetCredit = provider === 'codex' ? getCodexResetCreditSummary(activeUsage, now) : null
     const Icon = provider === 'claude' ? ClaudeIcon : OpenAIIcon
     return (
@@ -243,22 +231,11 @@ export function MobileAccountsScreen() {
                   holds the system-default login's rate limits — surface them
                   here so non-managed users still see their usage. */}
               {activeAccountId === null && hasActiveProviderUsage(activeUsage) ? (
-                <View style={styles.usageRow}>
-                  <UsageBar
-                    label="5h"
-                    usedPercent={activeSessionBar.usedPercent}
-                    unavailable={activeSessionBar.unavailable}
-                    loading={activeSessionBar.loading}
-                    resetText={getWindowResetLabel(activeUsage, 'session', now)}
-                  />
-                  <UsageBar
-                    label="7d"
-                    usedPercent={activeWeeklyBar.usedPercent}
-                    unavailable={activeWeeklyBar.unavailable}
-                    loading={activeWeeklyBar.loading}
-                    resetText={getWindowResetLabel(activeUsage, 'weekly', now)}
-                  />
-                </View>
+                <MobileAccountUsageWindows
+                  limits={activeUsage}
+                  now={now}
+                  isFetching={requestsDisabled ? false : undefined}
+                />
               ) : null}
             </View>
             <View style={styles.rowTrailing}>
@@ -280,8 +257,6 @@ export function MobileAccountsScreen() {
               !requestsDisabled &&
               ((isActive && usage?.status === 'fetching') ||
                 (!isActive && inactiveEntry?.isFetching === true))
-            const sessionBar = getUsageBarState(usage, 'session', isFetching)
-            const weeklyBar = getUsageBarState(usage, 'weekly', isFetching)
             return (
               <View key={account.id}>
                 <View style={styles.separator} />
@@ -299,22 +274,7 @@ export function MobileAccountsScreen() {
                     <Text style={styles.rowTitle} numberOfLines={1}>
                       {account.email}
                     </Text>
-                    <View style={styles.usageRow}>
-                      <UsageBar
-                        label="5h"
-                        usedPercent={sessionBar.usedPercent}
-                        unavailable={sessionBar.unavailable}
-                        loading={sessionBar.loading}
-                        resetText={getWindowResetLabel(usage, 'session', now)}
-                      />
-                      <UsageBar
-                        label="7d"
-                        usedPercent={weeklyBar.usedPercent}
-                        unavailable={weeklyBar.unavailable}
-                        loading={weeklyBar.loading}
-                        resetText={getWindowResetLabel(usage, 'weekly', now)}
-                      />
-                    </View>
+                    <MobileAccountUsageWindows limits={usage} now={now} isFetching={isFetching} />
                     {usage?.error ? (
                       <Text style={styles.errorText} numberOfLines={1}>
                         {usage.error}

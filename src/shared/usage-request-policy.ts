@@ -24,16 +24,22 @@ export const USAGE_REQUEST_PROVIDERS = [
   'zcode'
 ] as const satisfies readonly UsageRequestProvider[]
 
+type UsageRequestPolicyInput = Record<string, unknown>
+
+function isUsageRequestPolicyInput(value: unknown): value is UsageRequestPolicyInput {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
 export function normalizeUsageRequestEnabled(value: unknown): UsageRequestEnabled {
   const normalized: UsageRequestEnabled = {}
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isUsageRequestPolicyInput(value)) {
     return normalized
   }
   for (const provider of USAGE_REQUEST_PROVIDERS) {
     if (provider === 'antigravity' || !Object.hasOwn(value, provider)) {
       continue
     }
-    const enabled: unknown = Reflect.get(value, provider)
+    const enabled = value[provider]
     if (typeof enabled === 'boolean') {
       normalized[provider] = enabled
     }
