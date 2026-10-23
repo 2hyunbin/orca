@@ -14,7 +14,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { linkSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { userInfo } from 'node:os'
+import { hostname, userInfo } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 import { z } from 'zod'
@@ -34,6 +34,10 @@ import {
 import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
+import {
+  ORCAD_RECLAIM_STALE_LOCK_COMMAND,
+  ORCAD_RECLAIM_STALE_LOCK_FLAG
+} from '../../shared/orcad-stale-lock-reclaim'
 import {
   MAX_ORCAD_LOCK_BYTES,
   readBoundedLockFile,
@@ -68,7 +72,9 @@ const OrcadLockRecordSchema = z.object({
    * The holder's machine (as profile-state owners record it). Absent from older writers. A PID is
    * evidence only on the machine that issued it, and a shared home can put two on one data root.
    */
-  machineIdentity: z.string().min(1).max(255).optional().catch(undefined)
+  machineIdentity: z.string().min(1).max(255).optional().catch(undefined),
+  /** The holder's hostname, absent from older writers; evidence for `--reclaim-stale-lock`. */
+  host: z.string().min(1).max(255).optional().catch(undefined)
 })
 
 export type OrcadLockRecord = z.infer<typeof OrcadLockRecordSchema>
@@ -104,6 +110,11 @@ export type OrcadInstanceLockHooks = OrcadDataRootPrivacyHooks & {
   machineIdentity?: () => string | null
   /** Whether no other machine can reach the data root, for records that name no machine. */
   dataRootIsOnLocalDisk?: (dataRoot: string) => boolean
+  /**
+   * `--reclaim-stale-lock` only: the user confirmed this exact unverifiable record is stale. Its
+   * PID is then judged as this machine's, which is what the user vouched for.
+   */
+  reclaimConfirmed?: (holder: OrcadLockRecord) => boolean
 }
 
 function defaultIdentity(): string {
@@ -172,7 +183,8 @@ export function acquireOrcadInstanceLock(
     acquiredAt: (hooks.now ?? (() => new Date()))().toISOString(),
     nonce: randomUUID(),
     role: hooks.role ?? 'orcad',
-    ...(machineIdentity ? { machineIdentity } : {})
+    ...(machineIdentity ? { machineIdentity } : {}),
+    host: hostname()
   }
   const serialized = JSON.stringify(record)
 
@@ -248,15 +260,17 @@ export function acquireOrcadInstanceLock(
     )
   }
   const locality = orcadLockHolderLocality(existing, record, dataRootIsLocal)
-  if (locality !== 'local') {
+  if (locality !== 'local' && !(locality === 'unknown' && hooks.reclaimConfirmed?.(existing))) {
     // Its PID means nothing here, so neither a missing nor a reused one proves it exited.
     throw new OrcadInstanceLockError(
-      'orcad_instance_lock_held',
+      'orcad_instance_lock_holder_unverifiable',
       `${describeLockHolder(existing)} (pid ${existing.pid}, started ${existing.acquiredAt}) ` +
         `holds the data root ${dataRoot}${locality === 'foreign' ? ' from another machine' : ''}. ` +
         'Orca cannot check from here whether it is still running, because this data root may be ' +
-        `shared with other machines. Stop it there, or if it is not running anywhere, delete ` +
-        `${lockPath} and try again.`
+        'shared with other machines. Stop it there. If it is not running anywhere, run ' +
+        `\`${ORCAD_RECLAIM_STALE_LOCK_COMMAND}\` (\`orcad ${ORCAD_RECLAIM_STALE_LOCK_FLAG}\` for a ` +
+        'managed server) on the machine it ran on to check and clear it, or delete ' +
+        `${lockPath} once you are sure.`
     )
   }
   // The desktop takes this lock only after Electron's single-instance lock, which already proves
@@ -282,7 +296,7 @@ export function acquireOrcadInstanceLock(
  * Same machine: the same machine identity, or (records without one) the same kernel boot. A record
  * that names neither is local only when no other machine can reach the data root.
  */
-function orcadLockHolderLocality(
+export function orcadLockHolderLocality(
   holder: OrcadPeerMachine,
   self: OrcadPeerMachine,
   dataRootIsOnLocalDisk: () => boolean

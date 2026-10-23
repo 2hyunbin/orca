@@ -495,7 +495,7 @@ describe('acquireOrcadInstanceLock', () => {
     for (const role of ['orcad', 'desktop'] as const) {
       expect(() => acquireOrcadInstanceLock(root, hooks({ role }))).toThrow(
         expect.objectContaining({
-          code: 'orcad_instance_lock_held',
+          code: 'orcad_instance_lock_holder_unverifiable',
           message: expect.stringContaining('from another machine')
         })
       )
@@ -519,11 +519,11 @@ describe('acquireOrcadInstanceLock', () => {
     writeFileSync(lockPath, JSON.stringify(persistedRecord({ bootId: 'boot-1' })))
     const shared = { dataRootIsOnLocalDisk: () => false }
     expect(() => acquireOrcadInstanceLock(root, hooks(shared))).toThrow(
-      expect.objectContaining({ code: 'orcad_instance_lock_held' })
+      expect.objectContaining({ code: 'orcad_instance_lock_holder_unverifiable' })
     )
     expect(() =>
       acquireOrcadInstanceLock(root, hooks({ ...shared, machineIdentity: () => null }))
-    ).toThrow(expect.objectContaining({ code: 'orcad_instance_lock_held' }))
+    ).toThrow(expect.objectContaining({ code: 'orcad_instance_lock_holder_unverifiable' }))
     expect(readOrcadInstanceLockRecord(lockPath)?.nonce).toBe('stale')
 
     // The same kernel boot is this machine.

@@ -6,6 +6,7 @@ import { stripElectronRunAsNode } from '../runtime/orca-app-executable'
 import { resolveCliStatusCaller } from '../runtime/status-caller'
 import { getServeSuperviseValidationError } from '../runtime/serve-supervised-service'
 import { getOptionalServePort } from '../runtime/serve-port-flag'
+import { resolveLaunchUserDataPath } from '../runtime/launch-user-data-path'
 import { getServeOptionValidationError } from '../../shared/serve-option-validation'
 
 function envRecord(): Record<string, string> {
@@ -82,6 +83,21 @@ export const CORE_HANDLERS: Record<string, CommandHandler> = {
     printResult(result, json, formatCliStatus)
   },
   serve: async ({ flags, json }) => {
+    if (flags.get('reclaim-stale-lock') === true) {
+      // Why lazy: only this mode needs orcad's lock code, and every other command skips loading it.
+      const { reclaimStaleOrcadInstanceLock } =
+        await import('../../main/orcad/orcad-stale-lock-reclaim.js')
+      const result = await reclaimStaleOrcadInstanceLock(resolveLaunchUserDataPath(), {
+        yes: flags.get('yes') === true
+      })
+      if (json) {
+        console.log(JSON.stringify({ reclaimed: result.exitCode === 0, message: result.message }))
+      } else {
+        ;(result.exitCode === 0 ? console.log : console.error)(result.message)
+      }
+      process.exitCode = result.exitCode
+      return
+    }
     const projectRootValue = flags.get('project-root')
     const projectRoot = typeof projectRootValue === 'string' ? projectRootValue : null
     const noPairing = flags.get('no-pairing') === true

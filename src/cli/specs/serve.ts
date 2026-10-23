@@ -6,7 +6,7 @@ export const SERVE_COMMAND_SPECS: CommandSpec[] = [
     path: ['serve'],
     summary: 'Start an Orca runtime server without opening a desktop window',
     usage:
-      'orca serve [--port <port>] [--pairing-address <host>] [--mobile-pairing] [--no-pairing] [--grant-desktop-control] [--project-root <path>] [--recipe-json] [--supervise] [--force] [--json]',
+      'orca serve [--port <port>] [--pairing-address <host>] [--mobile-pairing] [--no-pairing] [--grant-desktop-control] [--project-root <path>] [--recipe-json] [--supervise] [--force] [--reclaim-stale-lock [--yes]] [--json]',
     allowedFlags: [
       ...GLOBAL_FLAGS,
       'port',
@@ -17,7 +17,9 @@ export const SERVE_COMMAND_SPECS: CommandSpec[] = [
       'project-root',
       'recipe-json',
       'supervise',
-      'force'
+      'force',
+      'reclaim-stale-lock',
+      'yes'
     ],
     notes: [
       'Runs in the foreground and prints the bound endpoint, advertised endpoint, and pairing status. Stop it with Ctrl+C.',
@@ -28,6 +30,7 @@ export const SERVE_COMMAND_SPECS: CommandSpec[] = [
       "A paired client cannot drive this machine's desktop (orca computer) unless the offer was created with --grant-desktop-control.",
       'When the web client bundle is available, the server also prints a browser URL with the pairing data embedded.',
       'Exits with code 3, without starting anything, when another Orca already serves this profile or cannot be shown to have stopped.',
+      "--reclaim-stale-lock starts nothing. When a start refuses because this profile's lock may belong to an Orca on another machine sharing this home (for example after a reboot, on a network home), it checks that the lock was written on this host in an earlier boot, is at least 2 minutes old, and that nothing answers at its holder's endpoints, then prints what it found. Add --yes, once you are sure no other machine sharing this home runs Orca for this profile, to clear the lock. On a managed SSH server, run `orcad --reclaim-stale-lock` from its install instead.",
       'On macOS, after Orca serve aborts at startup (it could not register with Launch Services), later runs from the same environment refuse for 30 minutes with exit code 78. Use --force to try anyway.',
       '--supervise is for service managers (launchd, systemd). Orca serve then restarts the server itself with growing delays instead of exiting when it stops, waits while an update replaces the app, and waits while another Orca serves this profile. After 6 failures in 15 minutes it gives up and exits with code 0 so the manager stops too, and later supervised runs refuse until a new build is installed or --force is passed. Not available on Windows yet.',
       'Experimental and off by default: set ORCA_TERMINAL_PROCESS_CEILING=<n> (64 or more) before the terminal host starts to have the OS cap how many processes each terminal may run (Linux, through a systemd user scope per terminal, which needs a user manager that outlives logout; Windows, through a job per terminal). `orca serve` reports the ceiling as on or off, with the reason.',
@@ -38,7 +41,8 @@ export const SERVE_COMMAND_SPECS: CommandSpec[] = [
       'orca serve --json',
       'orca serve --project-root /workspace/repo --pairing-address wss://sandbox.example.com --recipe-json',
       'orca serve --port 6768 --pairing-address 100.64.1.20',
-      'orca serve --pairing-address 100.64.1.20 --mobile-pairing'
+      'orca serve --pairing-address 100.64.1.20 --mobile-pairing',
+      'orca serve --reclaim-stale-lock'
     ]
   },
   {
