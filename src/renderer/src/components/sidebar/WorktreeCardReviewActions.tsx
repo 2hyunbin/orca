@@ -2,7 +2,7 @@ import { useState, type MouseEvent } from 'react'
 import type { WorkspaceAttachment } from '../../../../shared/worktree/types'
 import type { WorktreeCardPrDisplay } from './worktree-card-pr-display'
 import { workspaceAttachmentProviderLabel } from './worktree-attachment-editing'
-import { ChevronDown, MonitorUp } from 'lucide-react'
+import { Ellipsis, MonitorUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -53,7 +53,7 @@ export function WorktreeCardReviewActions({
         aria-label={moreActionsLabel}
         onClick={(event) => event.stopPropagation()}
       >
-        <ChevronDown className="size-3" />
+        <Ellipsis className="size-3" />
       </Button>
     </DropdownMenuTrigger>
   )

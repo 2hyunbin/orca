@@ -16,7 +16,8 @@ export function WorktreeCardReviewDetailSection({
   onOpenReviewInOrca,
   onUnlinkReview,
   closeHover,
-  onOpenLink
+  onOpenLink,
+  onManageLinks
 }: {
   review: WorktreeCardPrDisplay | null
   reviewMenuOpen: boolean
@@ -25,6 +26,7 @@ export function WorktreeCardReviewDetailSection({
   onUnlinkReview?: () => void
   closeHover: () => void
   onOpenLink: (url: string, event: MouseEvent) => void
+  onManageLinks?: (event: MouseEvent) => void
 }): React.JSX.Element | null {
   if (!review) {
     return null
@@ -44,6 +46,7 @@ export function WorktreeCardReviewDetailSection({
       <DetailHeader
         icon={<Link2 className="size-3" />}
         label={`${translate('workspace.links.reviews', 'Reviews')} · 1`}
+        onAddReference={onManageLinks}
       />
       <div className="py-1.5">
         <WorktreeCardReferenceRow

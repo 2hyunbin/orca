@@ -1,6 +1,5 @@
 import React from 'react'
-import { Link2, Plus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Link2 } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import type { WorkspaceAttachment, Worktree } from '../../../../shared/worktree/types'
 import {
@@ -66,6 +65,9 @@ export function WorktreeCardLinkedItemsSection({
       rows: rows.filter((row) => row.item.type === 'issue')
     }
   ].filter((group) => group.rows.length)
+  if (!showItems && (rows.length > 0 || review || issue || linearIssue || jiraIssue || !onManage)) {
+    return null
+  }
   const open = (item: WorkspaceAttachment, event: React.MouseEvent): void => {
     event.stopPropagation()
     if (item.url) {
@@ -88,6 +90,7 @@ export function WorktreeCardLinkedItemsSection({
               <DetailHeader
                 icon={<Link2 className="size-3" />}
                 label={`${group.label} · ${group.rows.length}`}
+                onAddReference={onManage}
               />
               <div className="divide-y divide-border">
                 {group.rows.map(({ item, key, url, detail, live }) => {
@@ -151,19 +154,12 @@ export function WorktreeCardLinkedItemsSection({
             </div>
           ))
         : null}
-      {onManage ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          onClick={onManage}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
-          <Plus />
-          {rows.length
-            ? translate('workspace.links.manage', 'Manage links…')
-            : translate('workspace.links.addReference', 'Add reference')}
-        </Button>
+      {!rows.length && onManage ? (
+        <DetailHeader
+          icon={<Link2 className="size-3" />}
+          label={translate('workspace.links.title', 'Linked work')}
+          onAddReference={onManage}
+        />
       ) : null}
     </WorktreeCardDetailSection>
   )

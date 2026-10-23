@@ -236,6 +236,7 @@ function ActivityThreadHoverCardContent({
         {/* GitHub / GitLab Issue */}
         <WorktreeCardIssueDetailSection
           issue={secondary.hoverIssue}
+          onManageLinks={dismissAndRun(foundation.handleManageLinks)}
           issueMenuOpen={detailsHoverControl.issueMenuOpen}
           onIssueMenuOpenChange={detailsHoverControl.handleIssueMenuOpenChange}
           onCopyIssueLink={secondary.hoverIssue?.url ? handleCopyIssueLink : undefined}
@@ -347,6 +348,7 @@ function ActivityThreadHoverCardContent({
         {/* Pull Request / Review */}
         <WorktreeCardReviewDetailSection
           review={secondary.hoverReview}
+          onManageLinks={dismissAndRun(foundation.handleManageLinks)}
           reviewMenuOpen={detailsHoverControl.reviewMenuOpen}
           onReviewMenuOpenChange={detailsHoverControl.handleReviewMenuOpenChange}
           onOpenReviewInOrca={secondary.handleOpenReviewInOrca}

@@ -57,7 +57,7 @@ describe('WorktreeCardDetailsHover', () => {
     expect(markup.indexOf('feature/local-branch')).toBeLessThan(markup.indexOf('PR #456'))
   })
 
-  it('puts review-only actions beside the title link', () => {
+  it('puts review-only actions after the metadata and adds references from the header', () => {
     const markup = renderToStaticMarkup(
       <WorktreeCardDetailsHover
         issue={null}
@@ -78,6 +78,7 @@ describe('WorktreeCardDetailsHover', () => {
         onOpenReviewInOrca={vi.fn()}
         onOpenReviewInBrowser={vi.fn()}
         onUnlinkReview={vi.fn()}
+        onManageLinks={vi.fn()}
       >
         <span>Linked PR</span>
       </WorktreeCardDetailsHover>
@@ -85,6 +86,11 @@ describe('WorktreeCardDetailsHover', () => {
 
     expect(markup).toContain('Reviews · 1')
     expect(markup).toContain('aria-label="More PR actions"')
+    expect(markup.indexOf('PR #456 · GitHub')).toBeLessThan(
+      markup.indexOf('aria-label="More PR actions"')
+    )
+    expect(markup).toContain('aria-label="Add reference"')
+    expect(markup).not.toContain('Manage links…')
     expect(markup).toContain('href="https://github.com/acme/orca/pull/456"')
     expect(markup).toContain('Open in Orca')
     expect(markup).toContain('Unlink PR from workspace')

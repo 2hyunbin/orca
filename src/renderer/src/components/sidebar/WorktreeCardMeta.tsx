@@ -224,6 +224,7 @@ export function WorktreeCardDetailsHover({
             <>
               <WorktreeCardIssueDetailSection
                 issue={issue}
+                onManageLinks={onManageLinks ? dismissAndRun(onManageLinks) : undefined}
                 issueMenuOpen={issueMenuOpen}
                 onIssueMenuOpenChange={handleIssueMenuOpenChange}
                 onCopyIssueLink={issue?.url ? handleCopyIssueLink : undefined}
@@ -245,6 +246,7 @@ export function WorktreeCardDetailsHover({
                 <WorktreeCardDetailSection>
                   <DetailHeader
                     icon={<LinearIcon className="size-3 text-muted-foreground" />}
+                    onAddReference={onManageLinks ? dismissAndRun(onManageLinks) : undefined}
                     label={translate(
                       'auto.components.sidebar.WorktreeCardMeta.5e982e6128',
                       'Linear {{value0}}',
@@ -305,6 +307,7 @@ export function WorktreeCardDetailsHover({
                 <WorktreeCardDetailSection>
                   <DetailHeader
                     icon={<JiraIcon className="size-3 text-muted-foreground" />}
+                    onAddReference={onManageLinks ? dismissAndRun(onManageLinks) : undefined}
                     label={translate(
                       'auto.components.sidebar.WorktreeCardMeta.jiraIssue',
                       'Jira {{value0}}',
@@ -332,6 +335,7 @@ export function WorktreeCardDetailsHover({
 
               <WorktreeCardReviewDetailSection
                 review={review}
+                onManageLinks={onManageLinks ? dismissAndRun(onManageLinks) : undefined}
                 reviewMenuOpen={reviewMenuOpen}
                 onReviewMenuOpenChange={handleReviewMenuOpenChange}
                 onOpenReviewInOrca={onOpenReviewInOrca}

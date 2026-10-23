@@ -250,7 +250,7 @@ export function ReviewChecksIndicator({
             getReviewChecksTone(status)
           )}
         >
-          <Icon className="size-3" aria-hidden />
+          <Icon className="size-2.5" aria-hidden />
         </span>
       </TooltipTrigger>
       <TooltipContent side="top" sideOffset={4}>

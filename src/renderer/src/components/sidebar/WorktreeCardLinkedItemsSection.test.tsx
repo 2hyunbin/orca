@@ -184,15 +184,21 @@ describe('workspace linked references in hover details', () => {
       'false'
     )
   })
-  it('dismisses hover before managing links and exposes no second picker', () => {
+  it('opens link management from either section header and dismisses hover', () => {
     const onManage = vi.fn()
     const { container } = render(<Fixture onManage={onManage} />)
     fireEvent.click(screen.getByRole('button', { name: 'Hover workspace' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Manage links…' }))
-    expect(onManage).toHaveBeenCalledTimes(1)
-    expect(container.querySelector('[data-hover-open]')?.getAttribute('data-hover-open')).toBe(
-      'false'
-    )
+    const addButtons = screen.getAllByRole('button', { name: 'Add reference' })
+    expect(addButtons).toHaveLength(2)
+    expect(screen.queryByText('Manage links…')).toBeNull()
+    for (const button of addButtons) {
+      fireEvent.click(screen.getByRole('button', { name: 'Hover workspace' }))
+      fireEvent.click(button)
+      expect(container.querySelector('[data-hover-open]')?.getAttribute('data-hover-open')).toBe(
+        'false'
+      )
+    }
+    expect(onManage).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('combobox')).toBeNull()
   })
   it('opens metadata management for a URL-less reference and handles attachment-only folders', () => {
