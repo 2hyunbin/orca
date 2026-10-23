@@ -53,6 +53,7 @@ export function encodeRawMarkdownHtmlForRichEditor(
   let activeFence: '`' | '~' | null = null
   let activeFenceLength = 0
   let result = ''
+  let copyStart = 0
   const nonWhitespace = /\S/g
   const fencePrefix = /(`{3,}|~{3,})/y
   let fenceProbe = -1
@@ -82,8 +83,6 @@ export function encodeRawMarkdownHtmlForRichEditor(
     }
 
     if (activeFence) {
-      const nextChar = normalizedContent[index]
-      result += nextChar
       index += 1
       continue
     }
@@ -115,8 +114,6 @@ export function encodeRawMarkdownHtmlForRichEditor(
       }
 
       if (closingIndex !== -1) {
-        const rawSpan = normalizedContent.slice(index, closingIndex + tickCount)
-        result += rawSpan
         index = closingIndex + tickCount
         continue
       }
@@ -127,21 +124,25 @@ export function encodeRawMarkdownHtmlForRichEditor(
       if (detailsHtml && isEditableDetailsHtmlBlock(detailsHtml)) {
         // Why: <details>/<summary> is an editable rich-mode node; raw passthrough
         // would make toggle blocks reopen as inert HTML instead.
-        result += detailsHtml.raw
         index += detailsHtml.raw.length
         continue
       }
 
       if (detailsHtml) {
-        result += transport.create('block-html', detailsHtml.raw)
+        result +=
+          normalizedContent.slice(copyStart, index) +
+          transport.create('block-html', detailsHtml.raw)
         index += detailsHtml.raw.length
+        copyStart = index
         continue
       }
 
       const blockHtml = matchBlockHtml(normalizedContent, index)
       if (blockHtml) {
-        result += transport.create('block-html', blockHtml)
+        result +=
+          normalizedContent.slice(copyStart, index) + transport.create('block-html', blockHtml)
         index += blockHtml.length
+        copyStart = index
         continue
       }
     }
@@ -154,8 +155,10 @@ export function encodeRawMarkdownHtmlForRichEditor(
         authoredEnd === -1
           ? transport.authoredPrefix
           : normalizedContent.slice(index, authoredEnd + 2)
-      result += transport.create('literal', authoredOccurrence)
+      result +=
+        normalizedContent.slice(copyStart, index) + transport.create('literal', authoredOccurrence)
       index += authoredOccurrence.length
+      copyStart = index
       continue
     }
 
@@ -163,8 +166,11 @@ export function encodeRawMarkdownHtmlForRichEditor(
       if (htmlSuperscriptLinks) {
         const superscriptLink = matchHtmlSuperscriptLinkSource(normalizedContent, index)
         if (superscriptLink) {
-          result += transport.create('html-superscript-link', JSON.stringify(superscriptLink.value))
+          result +=
+            normalizedContent.slice(copyStart, index) +
+            transport.create('html-superscript-link', JSON.stringify(superscriptLink.value))
           index = superscriptLink.end
+          copyStart = index
           continue
         }
       }
@@ -174,8 +180,10 @@ export function encodeRawMarkdownHtmlForRichEditor(
           ? null
           : (normalizedContent.slice(index).match(INLINE_HTML_PATTERN)?.[0] ?? null)
       if (inlineHtml) {
-        result += transport.create('inline-html', inlineHtml)
+        result +=
+          normalizedContent.slice(copyStart, index) + transport.create('inline-html', inlineHtml)
         index += inlineHtml.length
+        copyStart = index
         continue
       }
     }
@@ -195,20 +203,18 @@ export function encodeRawMarkdownHtmlForRichEditor(
         const rawTarget = normalizedContent.slice(index + 2, closingIndex)
         const link = parseMarkdownDocLink(rawTarget)
         if (link && !isReservedRichMarkdownTransportBody(rawTarget)) {
-          result += transport.create(
-            'document-link',
-            formatMarkdownDocLinkBody(link.target, link.alias)
-          )
+          result +=
+            normalizedContent.slice(copyStart, index) +
+            transport.create('document-link', formatMarkdownDocLinkBody(link.target, link.alias))
           index = closingIndex + 2
+          copyStart = index
           continue
         }
       }
     }
 
-    const nextChar = normalizedContent[index]
-    result += nextChar
     index += 1
   }
 
-  return result
+  return result + normalizedContent.slice(copyStart)
 }
