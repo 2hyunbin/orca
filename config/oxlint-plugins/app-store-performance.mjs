@@ -157,26 +157,30 @@ function isModuleScope(node) {
   )
 }
 
-/** Records module-scope `const selectX = (state) => ...` so identifier selectors resolve. */
-function recordNamedSelector(node, state) {
-  if (!isModuleScope(node)) {
-    return
-  }
-  const declared =
-    node.type === 'FunctionDeclaration'
-      ? [[node.id, node]]
-      : node.declarations.map((declarator) => [declarator.id, declarator.init])
-  for (const [id, initializer] of declared) {
-    const name = identifierName(id)
-    if (name && functionNode(initializer)) {
-      state.namedSelectors.set(name, initializer)
+/** Resolve the binding at the use site, including nested lexical shadows. */
+function variableFor(node, state) {
+  const name = identifierName(node)
+  for (let scope = name && state.sourceCode.getScope(node); scope; scope = scope.upper) {
+    const variable = scope.set.get(name)
+    if (variable) {
+      return variable
     }
   }
+  return null
 }
 
-/** Inline function, or a module-scope selector referenced by name. */
+/** Inline function, or a module-scope selector referenced by its lexical binding. */
 function resolveSelector(argument, state) {
-  return functionNode(argument) ?? state.namedSelectors.get(identifierName(argument)) ?? null
+  if (functionNode(argument)) {
+    return argument
+  }
+  const declaration = variableFor(argument, state)?.defs[0]?.node
+  if (declaration?.type === 'FunctionDeclaration' && isModuleScope(declaration)) {
+    return declaration
+  }
+  return declaration?.type === 'VariableDeclarator' && isModuleScope(declaration.parent)
+    ? functionNode(declaration.init)
+    : null
 }
 
 /**
@@ -186,8 +190,8 @@ function resolveSelector(argument, state) {
  */
 function expandThroughNamedHelper(expression, state) {
   const helper =
-    expression?.type === 'CallExpression'
-      ? state.namedSelectors.get(identifierName(expression.callee))
+    expression?.type === 'CallExpression' && expression.callee.type === 'Identifier'
+      ? resolveSelector(expression.callee, state)
       : undefined
   const returned = helper ? returnedExpressions(helper) : []
   return returned.length > 0 && returned.every((entry) => allocates(entry, true))
@@ -195,11 +199,11 @@ function expandThroughNamedHelper(expression, state) {
     : [expression]
 }
 
-function createRuleState() {
+function createRuleState(sourceCode) {
   return {
     appStoreHooks: new Set(),
     shallowHooks: new Set(),
-    namedSelectors: new Map(),
+    sourceCode,
     weakMaps: new Set(),
     deferredCalls: []
   }
@@ -261,24 +265,22 @@ function requireSelectorRule() {
  * Selector arguments are collected during traversal and judged at Program:exit so a
  * selector hoisted below its call site still resolves.
  */
-function deferredSelectorRule(inspect) {
-  const state = createRuleState()
+function deferredSelectorRule(sourceCode, inspect) {
+  const state = createRuleState(sourceCode)
   return {
     ImportDeclaration(node) {
       recordImports(node, state)
     },
-    FunctionDeclaration(node) {
-      recordNamedSelector(node, state)
-    },
     VariableDeclaration(node) {
-      recordNamedSelector(node, state)
       if (isModuleScope(node)) {
         for (const entry of node.declarations) {
+          const variable = variableFor(entry.id, state)
           if (
+            variable &&
             entry.init?.type === 'NewExpression' &&
             identifierName(entry.init.callee) === 'WeakMap'
           ) {
-            state.weakMaps.add(identifierName(entry.id))
+            state.weakMaps.add(variable)
           }
         }
       }
@@ -307,8 +309,8 @@ function deferredSelectorRule(inspect) {
   }
 }
 
-function noIdentitySelectorRule() {
-  return deferredSelectorRule(({ selector }) =>
+function noIdentitySelectorRule(sourceCode) {
+  return deferredSelectorRule(sourceCode, ({ selector }) =>
     isIdentitySelector(selector)
       ? {
           node: selector,
@@ -319,8 +321,8 @@ function noIdentitySelectorRule() {
   )
 }
 
-function noFreshSelectorResultRule() {
-  return deferredSelectorRule(({ selector, shallow, state }) => {
+function noFreshSelectorResultRule(sourceCode) {
+  return deferredSelectorRule(sourceCode, ({ selector, shallow, state }) => {
     if (shallow || !selector) {
       return null
     }
@@ -350,8 +352,8 @@ function nestedFreshValues(expression) {
   return []
 }
 
-function noNestedFreshUnderShallowRule() {
-  return deferredSelectorRule(({ selector, shallow, state }) => {
+function noNestedFreshUnderShallowRule(sourceCode) {
+  return deferredSelectorRule(sourceCode, ({ selector, shallow, state }) => {
     if (!shallow || !selector) {
       return null
     }
@@ -400,55 +402,26 @@ function walkBody(node, visit) {
   }
 }
 
-function parameterNames(parameter) {
-  const names = new Set()
-  walkBody(parameter, (node) => {
-    if (
-      node.type === 'Identifier' &&
-      !(node.parent?.type === 'Property' && node.parent.key === node && !node.parent.computed)
-    ) {
-      names.add(node.name)
-    }
-  })
-  return names
-}
-
-function noStateIgnoringSelectorRule() {
-  return deferredSelectorRule(({ selector }) => {
+function noStateIgnoringSelectorRule(sourceCode) {
+  return deferredSelectorRule(sourceCode, ({ selector }) => {
     if (!selector) {
       return null
     }
-    const names = parameterNames(selector.params[0])
-    let referenced = false
-    // References inside nested callbacks still depend on the selector's snapshot.
-    const visit = (node) => {
-      if (!node || typeof node !== 'object') {
-        return
-      }
-      if (
-        node.type === 'Identifier' &&
-        names.has(node.name) &&
-        !(
-          node.parent?.type === 'MemberExpression' &&
-          node.parent.property === node &&
-          !node.parent.computed
-        ) &&
-        !(node.parent?.type === 'Property' && node.parent.key === node && !node.parent.computed)
-      ) {
-        referenced = true
-      }
-      for (const [key, child] of Object.entries(node)) {
-        if (key === 'parent') {
-          continue
-        }
-        if (Array.isArray(child)) {
-          child.forEach(visit)
-        } else {
-          visit(child)
-        }
-      }
-    }
-    visit(selector.body)
+    const parameter = selector.params[0]
+    const referenced = sourceCode
+      .getDeclaredVariables(selector)
+      .some(
+        (variable) =>
+          variable.defs.some(
+            (definition) =>
+              definition.type === 'Parameter' &&
+              definition.name.start >= parameter.start &&
+              definition.name.end <= parameter.end
+          ) &&
+          variable.references.some(
+            (reference) => reference.isRead() && reference.identifier.start >= selector.body.start
+          )
+      )
     return referenced
       ? null
       : {
@@ -460,52 +433,77 @@ function noStateIgnoringSelectorRule() {
 }
 
 function scansTabMap(selector, state, depth = 0) {
-  const aliases = new Set()
-  const isMap = (node) => SCANNED_MAPS.has(propertyName(node)) || aliases.has(identifierName(node))
-  let scan = null
-  let cached = false
+  const aliases = new Map()
+  // A map is identified by the receiver's binding and the listed property, not its spelling alone.
+  const mapSource = (node) => {
+    if (node?.type === 'Identifier') {
+      return aliases.get(variableFor(node, state))
+    }
+    const owner = node?.type === 'MemberExpression' && variableFor(node.object, state)
+    return owner && SCANNED_MAPS.has(propertyName(node)) ? [owner, propertyName(node)] : null
+  }
+  const recordPattern = (pattern, owner) => {
+    for (const property of pattern?.type === 'ObjectPattern' ? pattern.properties : []) {
+      const name = !property.computed && (identifierName(property.key) ?? property.key?.value)
+      const variable = variableFor(property.value, state)
+      if (variable && SCANNED_MAPS.has(name)) {
+        aliases.set(variable, [owner ?? variable, name])
+      }
+    }
+  }
+  recordPattern(selector.params[0])
+  const scans = []
+  const cached = []
   const helpers = []
   walkBody(selector.body, (node) => {
-    if (node.type === 'VariableDeclarator' && isMap(node.init)) {
-      aliases.add(identifierName(node.id))
+    if (node.type === 'VariableDeclarator') {
+      const map = mapSource(node.init)
+      const variable = variableFor(node.id, state)
+      if (map && variable) {
+        aliases.set(variable, map)
+      }
+      recordPattern(node.id, variableFor(node.init, state))
     }
-    if (
-      node.type === 'BinaryExpression' &&
-      ['===', '!=='].includes(node.operator) &&
-      (isMap(node.left) || isMap(node.right))
-    ) {
-      cached = true
+    if (node.type === 'BinaryExpression' && ['===', '!=='].includes(node.operator)) {
+      const map = mapSource(node.left) ?? mapSource(node.right)
+      if (map) {
+        cached.push(map)
+      }
     }
     if (node.type === 'CallExpression') {
       const method = propertyName(node.callee)
-      if (
-        method === 'get' &&
-        state.weakMaps.has(identifierName(node.callee.object)) &&
-        node.arguments.some(isMap)
-      ) {
-        cached = true
+      if (method === 'get' && state.weakMaps.has(variableFor(node.callee.object, state))) {
+        const map = mapSource(node.arguments[0])
+        if (map) {
+          cached.push(map)
+        }
       }
       if (
         identifierName(node.callee.object) === 'Object' &&
-        ['keys', 'values', 'entries'].includes(method) &&
-        isMap(node.arguments[0])
+        ['keys', 'values', 'entries'].includes(method)
       ) {
-        scan ??= node
+        const map = mapSource(node.arguments[0])
+        if (map) {
+          scans.push({ node, map })
+        }
       }
-      const helper = state.namedSelectors.get(identifierName(node.callee))
+      const helper = node.callee.type === 'Identifier' && resolveSelector(node.callee, state)
       if (helper) {
         helpers.push(helper)
       }
     }
-    if (node.type === 'ForInStatement' && isMap(node.right)) {
-      scan ??= node
+    if (node.type === 'ForInStatement') {
+      const map = mapSource(node.right)
+      if (map) {
+        scans.push({ node, map })
+      }
     }
   })
-  if (cached) {
-    return null
-  }
+  const scan = scans.find(
+    ({ map }) => !cached.some(([owner, name]) => owner === map[0] && name === map[1])
+  )
   if (scan || depth === 1) {
-    return scan
+    return scan?.node ?? null
   }
   for (const helper of helpers) {
     const found = scansTabMap(helper, state, depth + 1)
@@ -516,8 +514,8 @@ function scansTabMap(selector, state, depth = 0) {
   return null
 }
 
-function noTabMapScanInSelectorRule() {
-  return deferredSelectorRule(({ selector, state }) => {
+function noTabMapScanInSelectorRule(sourceCode) {
+  return deferredSelectorRule(sourceCode, ({ selector, state }) => {
     const scan = selector && scansTabMap(selector, state)
     return scan
       ? {
@@ -531,7 +529,7 @@ function noTabMapScanInSelectorRule() {
 
 function bindContext(createVisitors) {
   return (context) => {
-    const visitors = createVisitors()
+    const visitors = createVisitors(context.sourceCode)
     for (const [nodeType, visit] of Object.entries(visitors)) {
       visitors[nodeType] = visit.bind(context)
     }

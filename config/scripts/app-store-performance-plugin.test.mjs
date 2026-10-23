@@ -119,8 +119,9 @@ const sources = {
     }
     let previous, value
     const identityCached = state => {
+      const { tabsByWorktree: tabs } = state
       if (previous !== state.tabsByWorktree) {
-        value = Object.entries(state.tabsByWorktree)
+        value = Object.entries(tabs)
         previous = state.tabsByWorktree
       }
       return value
@@ -140,7 +141,48 @@ const sources = {
       const CachedNested = () => useAppStore(useShallow((state) => ({ rows: selectCachedRows(state) })))
       // An unknown helper cannot be resolved, so it must not be guessed at.
       const External = () => useAppStore((state) => externalBuild(state))
-    `
+    `,
+  lexicalBindings: `
+    import { useAppStore } from '@/store'
+    const select = () => 42
+    function lookup(s) { return Object.keys(s.tabsByWorktree).length }
+    function View() {
+      const select = s => s.activeId
+      const lookup = s => s.activeId
+      useAppStore(select)
+      return useAppStore(s => lookup(s))
+    }
+    const Shadowed = () => useAppStore(s => fixedRows.some(s => s.enabled))
+    const Captured = () => useAppStore(s => fixedRows.some(row => row.id === s.activeId))
+  `,
+  unrelatedCaches: `
+    import { useAppStore } from '@/store'
+    const cache = new WeakMap()
+    const other = readOtherSnapshot()
+    let previous
+    const identity = s => {
+      if (previous !== s.tabsByWorktree) {
+        previous = s.tabsByWorktree
+        inspect(Object.keys(s.tabsByWorktree))
+      }
+      return Object.keys(s.unifiedTabsByWorktree).length
+    }
+    const weak = s => {
+      const hit = cache.get(other.tabsByWorktree)
+      if (hit) return hit
+      return Object.keys(s.tabsByWorktree).length
+    }
+    const Identity = () => useAppStore(identity)
+    const Weak = () => useAppStore(weak)
+  `,
+  destructuredMaps: `
+    import { useAppStore } from '@/store'
+    const Parameter = () => useAppStore(({ tabsByWorktree }) => Object.keys(tabsByWorktree).length)
+    const Local = () => useAppStore(s => {
+      const { unifiedTabsByWorktree: tabs } = s
+      return Object.keys(tabs).length
+    })
+  `
 }
 
 const diagnosticsBySource = new Map()
@@ -235,5 +277,26 @@ describe('per-write selector work', () => {
   })
   it('allows same-file WeakMap and identity-guard caches', () => {
     expect(diagnosticsBySource.get(sources.cachedMaps)).toEqual([])
+  })
+  it('resolves lexical bindings and distinguishes shadowed callback parameters from captures', () => {
+    const diagnostics = diagnosticsBySource.get(sources.lexicalBindings)
+    expect(diagnostics.map(({ code }) => code)).toEqual([
+      'app-store-performance(no-state-ignoring-selector)'
+    ])
+    expect(diagnostics[0].labels[0].span.offset).toBe(
+      sources.lexicalBindings.indexOf('s => fixedRows.some(s => s.enabled)')
+    )
+  })
+  it('does not exempt scans of a different map from a recognized cache', () => {
+    expect(diagnosticsBySource.get(sources.unrelatedCaches).map(({ code }) => code)).toEqual([
+      'app-store-performance(no-tab-map-scan-in-selector)',
+      'app-store-performance(no-tab-map-scan-in-selector)'
+    ])
+  })
+  it('recognizes listed maps destructured from parameters or local snapshots', () => {
+    expect(diagnosticsBySource.get(sources.destructuredMaps).map(({ code }) => code)).toEqual([
+      'app-store-performance(no-tab-map-scan-in-selector)',
+      'app-store-performance(no-tab-map-scan-in-selector)'
+    ])
   })
 })
