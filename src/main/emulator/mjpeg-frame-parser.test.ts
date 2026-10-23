@@ -21,6 +21,17 @@ describe('extractJpegFrames', () => {
     expect(second.pending.length).toBe(0)
   })
 
+  it('keeps an accumulated partial frame independent of both inputs', () => {
+    const pending = Buffer.from(JPEG_A.subarray(0, 3))
+    const chunk = Buffer.from(JPEG_A.subarray(3, 4))
+    const partial = extractJpegFrames(pending, chunk)
+
+    pending.fill(0)
+    chunk.fill(0)
+    expect(partial.pending).toEqual(JPEG_A.subarray(0, 4))
+    expect(extractJpegFrames(partial.pending, JPEG_A.subarray(4)).frames).toEqual([JPEG_A])
+  })
+
   it('preserves a split JPEG start marker', () => {
     const first = extractJpegFrames(Buffer.alloc(0), Buffer.from([0x00, 0xff]))
     const second = extractJpegFrames(first.pending, JPEG_A.subarray(1))
