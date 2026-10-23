@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { getConnectionId } from '@/lib/connection-context'
 import { openFilePathLinkAtBufferPosition } from './terminal-file-link-hit-testing'
 import { openDetectedFilePath } from './terminal-file-open-routing'
 import { createTerminalLinkTestDoubles } from './terminal-link-handlers-test-fixtures'
@@ -377,6 +378,30 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
     expect(runtimeEnvironmentCallMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ method: 'files.stat' })
     )
+    expect(openFileMock).not.toHaveBeenCalled()
+  })
+
+  it('drops the click when the workspace moves to another host while candidates are checked', async () => {
+    setPlatform('Macintosh')
+    vi.mocked(getConnectionId).mockReturnValue('ssh-1')
+    const probe = createDeferred<unknown>()
+    const fsPathsExist = vi.fn(() => probe.promise)
+    window.api.fs.pathsExist = fsPathsExist
+    const deps = { startupCwd: '/home/u/proj', worktreeId: 'wt-1', worktreePath: '/home/u/proj' }
+
+    openFilePathLinkAtBufferPosition(
+      makeBuffer([makeBufferLine('/home/u/proj/a.txt'), makeBufferLine('/home/u/proj/b.txt')]),
+      { x: 4, y: 1 },
+      80,
+      deps
+    )
+    await flushAsyncWork()
+    expect(fsPathsExist).toHaveBeenCalled()
+    vi.mocked(getConnectionId).mockReturnValue(null)
+    probe.resolve([{ exists: false }, { exists: true }])
+    await flushDoubleRaf()
+
+    expect(statMock).not.toHaveBeenCalled()
     expect(openFileMock).not.toHaveBeenCalled()
   })
 })

@@ -54,7 +54,8 @@ export function isMissingRuntimePathError(error: unknown): boolean {
     message.includes('not found') ||
     message.includes('no such file') ||
     // Why: older hosts reject a path under a file (`a.txt/b.txt`) with ENOTDIR; it is just as absent.
-    message.includes('enotdir')
+    // The full errno text, so a file merely named `enotdir…` is not read as absence.
+    message.includes('enotdir: not a directory')
   )
 }
 

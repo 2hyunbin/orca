@@ -2,9 +2,11 @@ import { dedupeLogicalLines } from './terminal-link-logical-line-deduplication'
 import type { IBufferLine, IBufferRange } from '@xterm/xterm'
 import { extractTerminalFileLinkCandidates } from '@/lib/terminal-links'
 import {
+  getTerminalFileContext,
   reserveDetectedFilePathOpenTurn,
   openDetectedFilePath,
-  type FileOpenFailure
+  type FileOpenFailure,
+  type TerminalFileContext
 } from './terminal-file-open-routing'
 import {
   fileLinkTargetExists,
@@ -122,12 +124,14 @@ export function openFilePathLinkAtBufferPosition(
   // Why: hard-wrap joining offers guesses like `a.txt/b.txt` that sort first; opening one
   // before its hover probe answers (a host round-trip) fails and hides the real path.
   const isLatestOpen = reserveDetectedFilePathOpenTurn()
-  const environmentId = runtimeTargetEnvironmentId(toProbe[0].fileContext.target)
-  const pairing = environmentId ? getRuntimeEnvironmentRevision(environmentId) : undefined
+  const clickedHost = fileHostFingerprint(toProbe[0].fileContext)
   void probeClickedFileLinks(toProbe, deps).then((existing) => {
-    const repaired = environmentId && getRuntimeEnvironmentRevision(environmentId) !== pairing
-    // Why: a re-paired server may be another machine; its same-named file is not the one clicked.
-    if (gesture !== latestClickGesture || !isLatestOpen() || repaired) {
+    // Why: if the workspace's host or pairing changed meanwhile, a same-named file there is not
+    // the one clicked.
+    const currentHost = fileHostFingerprint(
+      getTerminalFileContext(deps.worktreeId, deps.worktreePath, deps.runtimeEnvironmentId)
+    )
+    if (gesture !== latestClickGesture || !isLatestOpen() || currentHost !== clickedHost) {
       return
     }
     const found = longestPath(existing)
@@ -139,6 +143,11 @@ export function openFilePathLinkAtBufferPosition(
     }
   })
   return true
+}
+
+function fileHostFingerprint(context: TerminalFileContext): string {
+  const environmentId = runtimeTargetEnvironmentId(context.target)
+  return JSON.stringify([context, environmentId && getRuntimeEnvironmentRevision(environmentId)])
 }
 
 async function probeClickedFileLinks(
