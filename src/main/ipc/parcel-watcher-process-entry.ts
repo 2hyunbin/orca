@@ -63,6 +63,7 @@ function main(): void {
   let pendingCrawlStartedAt: number | null = null
   let activeSubscriptionCrawlId: number | null = null
   let subscriptionActivityRevision = 0
+  let lastNativeCallbackAt = 0
   let nativeLifecycleTail = Promise.resolve()
 
   // Native subscribes run one at a time under runNativeWatcherLifecycleExclusive.
@@ -128,6 +129,7 @@ function main(): void {
           return await watcher.subscribe(
             dir,
             (err, events) => {
+              lastNativeCallbackAt = Date.now()
               if (rootDeleted) {
                 return
               }
@@ -238,11 +240,15 @@ function main(): void {
     }
   })
 
-  void startWatcherDeliveryCanary(() => ({
-    revision: subscriptionActivityRevision,
-    liveSubscriptions: liveSubscriptionIds.size,
-    pendingCrawlStartedAt
-  }))
+  void startWatcherDeliveryCanary(
+    () => ({
+      revision: subscriptionActivityRevision,
+      liveSubscriptions: liveSubscriptionIds.size,
+      pendingCrawlStartedAt,
+      lastNativeCallbackAt
+    }),
+    (state) => send({ op: 'delivery-health', state })
+  )
 
   // Why: if the host dies (or kills us during shutdown), exit immediately —
   // process death releases every native watcher handle without running the

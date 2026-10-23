@@ -2,18 +2,20 @@ const CRASH_WINDOW_MS = 2 * 60_000
 const MAX_CRASHES_PER_WINDOW = 3
 export const CRASH_FUSE_COOLDOWN_INITIAL_MS = 5 * 60_000
 export const CRASH_FUSE_COOLDOWN_MAX_MS = 60 * 60_000
-// A trial child that survives this long resets the cooldown escalation.
+// A trial child whose canary confirms delivery this long resets the escalation.
 export const CRASH_FUSE_TRIAL_STABLE_MS = 10 * 60_000
 
 /**
  * Opens after repeated child crashes, then half-opens after an exponential
  * cooldown so native watching is retried instead of staying off until restart.
- * Callers keep their polling fallback while the fuse is open.
+ * Native watching is paused while the fuse is open; only callers with their
+ * own polling fallback keep seeing changes.
  */
 export class WatcherProcessCrashFuse {
   private crashTimes: number[] = []
   private openUntil: number | null = null
   private trialStartedAt: number | null = null
+  private healthySince: number | null = null
   private trips = 0
 
   recordCrash(now = Date.now()): void {
@@ -38,10 +40,25 @@ export class WatcherProcessCrashFuse {
     return this.openUntil !== null
   }
 
+  /** A new child has not proven delivery yet. */
+  noteChildStarted(): void {
+    this.healthySince = null
+  }
+
+  recordDeliveryHealth(state: 'healthy' | 'stalled', now = Date.now()): void {
+    this.settle(now)
+    if (state === 'stalled') {
+      this.healthySince = null
+      return
+    }
+    this.healthySince ??= now
+  }
+
   reset(): void {
     this.crashTimes = []
     this.openUntil = null
     this.trialStartedAt = null
+    this.healthySince = null
     this.trips = 0
   }
 
@@ -53,9 +70,10 @@ export class WatcherProcessCrashFuse {
     this.trips++
     this.openUntil = now + cooldownMs
     this.trialStartedAt = null
+    this.healthySince = null
     this.crashTimes = []
     console.error(
-      `[parcel-watcher-process] crash fuse open; polling fallback for ${Math.round(cooldownMs / 1000)}s before retrying native file watching`
+      `[parcel-watcher-process] crash fuse open; native file watching paused for ${Math.round(cooldownMs / 1000)}s`
     )
   }
 
@@ -63,11 +81,18 @@ export class WatcherProcessCrashFuse {
     if (this.openUntil !== null && now >= this.openUntil) {
       this.openUntil = null
       this.trialStartedAt = now
+      this.healthySince = null
       console.warn(
         '[parcel-watcher-process] crash fuse cooldown elapsed; retrying native file watching'
       )
     }
-    if (this.trialStartedAt !== null && now - this.trialStartedAt >= CRASH_FUSE_TRIAL_STABLE_MS) {
+    // Why: surviving is not enough; a trial child whose canary never armed or
+    // delivered has not shown the fault is gone.
+    if (
+      this.trialStartedAt !== null &&
+      this.healthySince !== null &&
+      now - this.healthySince >= CRASH_FUSE_TRIAL_STABLE_MS
+    ) {
       this.trialStartedAt = null
       this.trips = 0
     }

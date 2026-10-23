@@ -18,7 +18,9 @@ vi.mock('node:fs', () => ({
 }))
 vi.mock('node:fs/promises', () => ({ stat: statMock }))
 vi.mock('./shallow-watch-delivery-probe', () => ({
-  detectShallowWatchDelivery: detectShallowWatchDeliveryMock
+  detectShallowWatchDelivery: detectShallowWatchDeliveryMock,
+  hasShallowWatchDelivered: () => false,
+  noteShallowWatchDelivered: vi.fn()
 }))
 vi.mock('@parcel/watcher', () => ({ subscribe: subscribeMock }))
 
@@ -190,6 +192,61 @@ describe('parcel watcher process canary', () => {
     await vi.advanceTimersByTimeAsync(30_000)
 
     expect(exitSpy).toHaveBeenCalledWith(2)
+  })
+
+  it('keeps the child when another native subscription delivers during the probe', async () => {
+    let independentListener: (() => void) | undefined
+    let repoCallback: ((err: Error | null, events: unknown[]) => void) | undefined
+    watchMock.mockImplementation((_dir: string, _opts: unknown, listener: () => void) => {
+      independentListener = listener
+      return Object.assign(new EventEmitter(), { close: () => undefined })
+    })
+    writeFileSyncMock.mockImplementation((path: string) => {
+      independentListener?.()
+      if (path.endsWith('canary-probe.txt')) {
+        repoCallback?.(null, [])
+      }
+    })
+    subscribeMock
+      .mockResolvedValueOnce({ unsubscribe: vi.fn() })
+      .mockImplementationOnce(async (_dir, callback) => {
+        repoCallback = callback
+        return { unsubscribe: vi.fn() }
+      })
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
+
+    await import('./parcel-watcher-process-entry')
+    await vi.advanceTimersByTimeAsync(0)
+    process.emit('message', { op: 'subscribe', id: 1, dir: '/repo', opts: {} }, undefined)
+
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(exitSpy).not.toHaveBeenCalled()
+  })
+
+  it('reports canary health transitions to the host', async () => {
+    let canaryCallback: ((err: Error | null) => void) | undefined
+    subscribeMock
+      .mockImplementationOnce(async (_dir, callback) => {
+        canaryCallback = callback
+        return { unsubscribe: vi.fn() }
+      })
+      .mockResolvedValueOnce({ unsubscribe: vi.fn() })
+    writeFileSyncMock.mockImplementation(() => canaryCallback?.(null))
+    const sendMock = vi.fn()
+    process.send = sendMock
+
+    await import('./parcel-watcher-process-entry')
+    await vi.advanceTimersByTimeAsync(0)
+    process.emit('message', { op: 'subscribe', id: 1, dir: '/repo', opts: {} }, undefined)
+    await vi.advanceTimersByTimeAsync(30_000)
+
+    const healthMessages = sendMock.mock.calls.filter(
+      ([message]) => message.op === 'delivery-health'
+    )
+    expect(healthMessages.map(([message]) => message)).toEqual([
+      { op: 'delivery-health', state: 'healthy' }
+    ])
   })
 
   it('invalidates an outstanding probe when another subscription starts crawling', async () => {

@@ -9,13 +9,14 @@
 // A missed canary can also mean the OS event source itself is stalled (an
 // overloaded macOS fseventsd delays every client). A restart cannot fix that
 // and recreating every stream adds load, so before exiting the canary checks
-// whether an independent fs.watch on the same dir also stays silent.
-import { mkdtempSync, rmSync, watch, writeFileSync } from 'node:fs'
+// whether an independent fs.watch on the same dir also stays silent, and
+// reports the stall to the host so callers can rescan instead of going stale.
+import { type FSWatcher, mkdtempSync, rmSync, watch, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type * as ParcelWatcher from '@parcel/watcher'
 import { loadParcelWatcher } from './parcel-watcher-module-loader'
-import { detectShallowWatchDelivery } from './shallow-watch-delivery-probe'
+import { hasShallowWatchDelivered, noteShallowWatchDelivered } from './shallow-watch-delivery-probe'
 import { errorMessage } from '../../shared/error-message'
 
 const CANARY_INTERVAL_MS = 10_000
@@ -26,29 +27,32 @@ const INDEPENDENT_PROBE_WINDOW_MS = 5_000
 const INDEPENDENT_PROBE_WRITE_INTERVAL_MS = 1_000
 export const CANARY_STALL_BACKOFF_INITIAL_MS = 30_000
 export const CANARY_STALL_BACKOFF_MAX_MS = 5 * 60_000
-// Why: inotify/ReadDirectoryChanges crawls hold Parcel's backend mutex and
-// legitimately starve the canary; only a crawl this old is treated as stuck.
-export const CANARY_PENDING_CRAWL_GRACE_MS = 10 * 60_000
+// Why: a deadlock can look like a stall (e.g. fs.watch muted by the same
+// fault); bound it with a restart that the host's crash fuse still rate-limits.
+export const CANARY_STALL_RESTART_AFTER_MS = 15 * 60_000
 
 export type WatcherCanaryActivity = {
   revision: number
   liveSubscriptions: number
   /** Start time of the in-flight native subscribe, or null when none is running. */
   pendingCrawlStartedAt: number | null
+  /** Last time any native subscription callback fired in this process. */
+  lastNativeCallbackAt: number
 }
+
+export type WatcherDeliveryHealth = 'healthy' | 'stalled'
 
 /** Returns the revision a probe is valid for, or null when the canary is disarmed. */
 export function armedCanaryRevision(
   activity: WatcherCanaryActivity,
-  now: number,
   platform: NodeJS.Platform
 ): number | null {
   if (activity.pendingCrawlStartedAt !== null) {
     // Why: FSEvents subscribe does not crawl, so a pending subscribe there is
-    // most likely stuck behind the deadlock the canary exists to catch.
-    const stuck =
-      platform === 'darwin' || now - activity.pendingCrawlStartedAt >= CANARY_PENDING_CRAWL_GRACE_MS
-    return stuck ? activity.revision : null
+    // most likely stuck behind the deadlock the canary exists to catch. Crawls
+    // elsewhere (huge or network trees) hold Parcel's backend mutex for as long
+    // as they take, and a restart would only re-crawl from scratch.
+    return platform === 'darwin' ? activity.revision : null
   }
   return activity.liveSubscriptions > 0 ? activity.revision : null
 }
@@ -62,56 +66,9 @@ type IndependentProbeVerdict =
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-async function probeIndependentDelivery(
-  canaryDir: string,
-  nativeDeliveredSince: (time: number) => boolean
-): Promise<IndependentProbeVerdict> {
-  const startedAt = Date.now()
-  let independentSeen = false
-  let watcherFailed = false
-  let watcher: ReturnType<typeof watch>
-  try {
-    watcher = watch(canaryDir, { persistent: false }, () => {
-      independentSeen = true
-    })
-    watcher.on('error', () => {
-      watcherFailed = true
-    })
-  } catch {
-    return 'unavailable'
-  }
-  try {
-    for (
-      let elapsed = 0;
-      elapsed < INDEPENDENT_PROBE_WINDOW_MS;
-      elapsed += INDEPENDENT_PROBE_WRITE_INTERVAL_MS
-    ) {
-      try {
-        // Repeated writes: FSEvents streams start asynchronously and can miss the first one.
-        writeFileSync(join(canaryDir, 'canary-probe.txt'), String(Date.now()))
-      } catch {
-        return 'inconclusive'
-      }
-      await sleep(INDEPENDENT_PROBE_WRITE_INTERVAL_MS)
-      if (nativeDeliveredSince(startedAt)) {
-        return 'native-delivered'
-      }
-    }
-    if (independentSeen) {
-      return 'independent-only'
-    }
-    return watcherFailed ? 'unavailable' : 'silent'
-  } finally {
-    try {
-      watcher.close()
-    } catch {
-      // Probe teardown is best-effort.
-    }
-  }
-}
-
 export async function startWatcherDeliveryCanary(
-  getActivity: () => WatcherCanaryActivity
+  getActivity: () => WatcherCanaryActivity,
+  onHealthChange: (health: WatcherDeliveryHealth) => void = () => undefined
 ): Promise<void> {
   const configuredCanaryDir = process.env.ORCA_WATCHER_CANARY_DIR
   let canaryDir: string
@@ -145,17 +102,82 @@ export async function startWatcherDeliveryCanary(
       // Temp dir cleanup is best-effort.
     }
   })
-  // Why: measure fs.watch while delivery is healthy; a host where fs.watch is
-  // always mute cannot tell a stall from a deadlock, so it keeps restarting.
-  const independentWatchWorks = Promise.resolve(detectShallowWatchDelivery()).then(
-    (works) => works === true,
-    () => false
-  )
+
+  // One long-lived fs.watch on the canary dir: canary writes keep proving it
+  // works, and a stall probe only checks whether it delivered since time T.
+  // Why: opening one per probe makes macOS rebuild the shared FSEventStream.
+  let independentLastEventAt = 0
+  let independentWatch: FSWatcher | null = null
+  const ensureIndependentWatch = (): boolean => {
+    if (independentWatch) {
+      return true
+    }
+    try {
+      const created = watch(canaryDir, { persistent: false }, () => {
+        independentLastEventAt = Date.now()
+        noteShallowWatchDelivered()
+      })
+      created.on('error', () => {
+        if (independentWatch === created) {
+          independentWatch = null
+        }
+        try {
+          created.close()
+        } catch {
+          // Already failed; close is best-effort.
+        }
+      })
+      independentWatch = created
+      return true
+    } catch {
+      return false
+    }
+  }
+  ensureIndependentWatch()
+
+  const nativeDeliveredSince = (time: number): boolean =>
+    lastEventAt >= time || getActivity().lastNativeCallbackAt >= time
+
+  const probeIndependentDelivery = async (): Promise<IndependentProbeVerdict> => {
+    const startedAt = Date.now()
+    if (!ensureIndependentWatch()) {
+      return 'unavailable'
+    }
+    for (
+      let elapsed = 0;
+      elapsed < INDEPENDENT_PROBE_WINDOW_MS;
+      elapsed += INDEPENDENT_PROBE_WRITE_INTERVAL_MS
+    ) {
+      try {
+        // Repeated writes: FSEvents can coalesce or delay a single one.
+        writeFileSync(join(canaryDir, 'canary-probe.txt'), String(Date.now()))
+      } catch {
+        return 'inconclusive'
+      }
+      await sleep(INDEPENDENT_PROBE_WRITE_INTERVAL_MS)
+      // Why: any native callback (not just the canary's) proves the shared
+      // debounce thread is alive, so the child is not deadlocked.
+      if (nativeDeliveredSince(startedAt)) {
+        return 'native-delivered'
+      }
+    }
+    if (independentLastEventAt >= startedAt) {
+      return 'independent-only'
+    }
+    return independentWatch ? 'silent' : 'unavailable'
+  }
 
   let misses = 0
   let stallBackoffMs: number | null = null
-  const stableRevision = (): number | null =>
-    armedCanaryRevision(getActivity(), Date.now(), process.platform)
+  let stallStartedAt: number | null = null
+  let health: WatcherDeliveryHealth | null = null
+  const setHealth = (next: WatcherDeliveryHealth): void => {
+    if (health !== next) {
+      health = next
+      onHealthChange(next)
+    }
+  }
+  const stableRevision = (): number | null => armedCanaryRevision(getActivity(), process.platform)
   const nextProbeDelay = (): number => stallBackoffMs ?? CANARY_NEXT_PROBE_DELAY_MS
   const schedule = (delayMs: number): void => {
     setTimeout(() => void tick(), delayMs)
@@ -163,9 +185,11 @@ export async function startWatcherDeliveryCanary(
   const markDelivered = (): void => {
     misses = 0
     if (stallBackoffMs !== null) {
-      stallBackoffMs = null
       process.stderr.write('[parcel-watcher-process] system file events recovered after stall\n')
     }
+    stallBackoffMs = null
+    stallStartedAt = null
+    setHealth('healthy')
   }
   const restart = (reason: string): void => {
     process.stderr.write(
@@ -177,8 +201,8 @@ export async function startWatcherDeliveryCanary(
   const tick = async (): Promise<void> => {
     const activityRevision = stableRevision()
     if (activityRevision === null) {
+      // Stall state survives a disarm so a long stall still reaches its cap.
       misses = 0
-      stallBackoffMs = null
       schedule(CANARY_INTERVAL_MS)
       return
     }
@@ -207,11 +231,7 @@ export async function startWatcherDeliveryCanary(
       schedule(nextProbeDelay())
       return
     }
-    if (!(await independentWatchWorks)) {
-      restart('canary starved')
-      return
-    }
-    const verdict = await probeIndependentDelivery(canaryDir, (time) => lastEventAt >= time)
+    const verdict = await probeIndependentDelivery()
     if (stableRevision() !== activityRevision) {
       misses = 0
       schedule(nextProbeDelay())
@@ -231,10 +251,23 @@ export async function startWatcherDeliveryCanary(
       return
     }
     if (verdict === 'silent') {
+      // Why: a host where fs.watch never delivered cannot tell a stall from a
+      // deadlock; any earlier delivery in this process proves it can.
+      if (!hasShallowWatchDelivered()) {
+        restart('canary starved; fs.watch never delivered in this process')
+        return
+      }
+      const now = Date.now()
+      stallStartedAt ??= now
+      if (now - stallStartedAt >= CANARY_STALL_RESTART_AFTER_MS) {
+        restart(`system file events stalled for ${Math.round((now - stallStartedAt) / 60_000)} min`)
+        return
+      }
       stallBackoffMs =
         stallBackoffMs === null
           ? CANARY_STALL_BACKOFF_INITIAL_MS
           : Math.min(stallBackoffMs * 2, CANARY_STALL_BACKOFF_MAX_MS)
+      setHealth('stalled')
       process.stderr.write(
         `[parcel-watcher-process] system file events stalled (canary and fs.watch probe both silent); keeping watcher process, next check in ${stallBackoffMs / 1000}s\n`
       )

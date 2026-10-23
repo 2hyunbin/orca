@@ -2,23 +2,17 @@ import { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WatcherCanaryActivity } from './parcel-watcher-delivery-canary'
 
-const { detectShallowWatchDeliveryMock, subscribeMock, watchMock, writeFileSyncMock } = vi.hoisted(
-  () => ({
-    detectShallowWatchDeliveryMock: vi.fn(),
-    subscribeMock: vi.fn(),
-    watchMock: vi.fn(),
-    writeFileSyncMock: vi.fn()
-  })
-)
+const { subscribeMock, watchMock, writeFileSyncMock } = vi.hoisted(() => ({
+  subscribeMock: vi.fn(),
+  watchMock: vi.fn(),
+  writeFileSyncMock: vi.fn()
+}))
 
 vi.mock('node:fs', () => ({
   mkdtempSync: vi.fn(() => '/tmp/orca-watcher-canary-test'),
   rmSync: vi.fn(),
   watch: watchMock,
   writeFileSync: writeFileSyncMock
-}))
-vi.mock('./shallow-watch-delivery-probe', () => ({
-  detectShallowWatchDelivery: detectShallowWatchDeliveryMock
 }))
 vi.mock('@parcel/watcher', () => ({ subscribe: subscribeMock }))
 
@@ -28,17 +22,39 @@ describe('watcher delivery canary', () => {
   const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform')!
   let originalExitListeners: NodeJS.ExitListener[]
   let delivery: Delivery
+  let activity: WatcherCanaryActivity
   let canaryWrites: number[]
+  let health: string[]
   let stderr: string[]
   let exitSpy: ReturnType<typeof vi.spyOn>
+  let onProbeWrite: () => void
 
   const setPlatform = (platform: NodeJS.Platform): void => {
     Object.defineProperty(process, 'platform', { value: platform, configurable: true })
   }
 
-  const start = async (activity: WatcherCanaryActivity): Promise<void> => {
+  const start = async (overrides: Partial<WatcherCanaryActivity> = {}): Promise<void> => {
+    activity = {
+      revision: 1,
+      liveSubscriptions: 1,
+      pendingCrawlStartedAt: null,
+      lastNativeCallbackAt: 0,
+      ...overrides
+    }
     const { startWatcherDeliveryCanary } = await import('./parcel-watcher-delivery-canary')
-    await startWatcherDeliveryCanary(() => activity)
+    await startWatcherDeliveryCanary(
+      () => activity,
+      (state) => health.push(state)
+    )
+  }
+
+  /** One healthy check proves fs.watch delivers in this process, then delivery stops. */
+  const startHealthyThenStall = async (): Promise<void> => {
+    delivery = { native: true, independent: true }
+    await start()
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(health).toEqual(['healthy'])
+    delivery = { native: false, independent: false }
   }
 
   beforeEach(() => {
@@ -49,14 +65,15 @@ describe('watcher delivery canary', () => {
     originalExitListeners = process.listeners('exit')
     delivery = { native: false, independent: false }
     canaryWrites = []
+    health = []
     stderr = []
+    onProbeWrite = () => undefined
     let nativeCallback: ((err: Error | null) => void) | undefined
     let independentListener: (() => void) | undefined
     subscribeMock.mockReset().mockImplementation(async (_dir, callback) => {
       nativeCallback = callback
       return { unsubscribe: vi.fn() }
     })
-    detectShallowWatchDeliveryMock.mockReset().mockResolvedValue(true)
     watchMock.mockReset().mockImplementation((_dir, _opts, listener: () => void) => {
       independentListener = listener
       return Object.assign(new EventEmitter(), {
@@ -68,6 +85,8 @@ describe('watcher delivery canary', () => {
     writeFileSyncMock.mockReset().mockImplementation((path: string) => {
       if (path.endsWith('canary.txt')) {
         canaryWrites.push(Date.now())
+      } else {
+        onProbeWrite()
       }
       if (delivery.native) {
         nativeCallback?.(null)
@@ -95,29 +114,37 @@ describe('watcher delivery canary', () => {
     vi.restoreAllMocks()
   })
 
-  it('keeps the child and backs off when the system event source is stalled', async () => {
-    await start({ revision: 1, liveSubscriptions: 1, pendingCrawlStartedAt: null })
+  it('keeps the child, backs off and reports the stall when the system event source stalls', async () => {
+    await startHealthyThenStall()
 
     await vi.advanceTimersByTimeAsync(300_000)
 
     expect(exitSpy).not.toHaveBeenCalled()
-    expect(watchMock).toHaveBeenCalled()
     expect(stderr.join('')).toContain('system file events stalled')
-    // Checks at 10 s and 20 s miss; each stalled probe then doubles the wait (30 s, 60 s, 120 s).
-    expect(canaryWrites).toEqual([10_000, 20_000, 60_000, 130_000, 260_000])
+    expect(health).toEqual(['healthy', 'stalled'])
+    // Healthy at 10 s; misses at 20 s and 30 s; then each silent probe doubles the wait.
+    expect(canaryWrites).toEqual([10_000, 20_000, 30_000, 70_000, 140_000, 270_000])
 
     delivery.native = true
     await vi.advanceTimersByTimeAsync(270_000)
 
     expect(exitSpy).not.toHaveBeenCalled()
     expect(stderr.join('')).toContain('system file events recovered')
-    const afterRecovery = canaryWrites.filter((time) => time > 260_000)
-    expect(afterRecovery.slice(0, 3)).toEqual([510_000, 520_000, 530_000])
+    expect(health).toEqual(['healthy', 'stalled', 'healthy'])
+  })
+
+  it('keeps one fs.watch for the life of the child instead of one per probe', async () => {
+    await startHealthyThenStall()
+
+    await vi.advanceTimersByTimeAsync(600_000)
+
+    expect(health).toContain('stalled')
+    expect(watchMock).toHaveBeenCalledOnce()
   })
 
   it('restarts when fs.watch still delivers but the native canary is starved', async () => {
     delivery.independent = true
-    await start({ revision: 1, liveSubscriptions: 1, pendingCrawlStartedAt: null })
+    await start()
 
     await vi.advanceTimersByTimeAsync(30_000)
 
@@ -125,18 +152,56 @@ describe('watcher delivery canary', () => {
     expect(stderr.join('')).toContain('canary starved while fs.watch delivered')
   })
 
-  it('keeps the previous restart behaviour where fs.watch was never proven to work', async () => {
-    detectShallowWatchDeliveryMock.mockResolvedValue(false)
-    await start({ revision: 1, liveSubscriptions: 1, pendingCrawlStartedAt: null })
+  it('restarts when fs.watch has never delivered in this process', async () => {
+    await start()
 
-    await vi.advanceTimersByTimeAsync(25_000)
+    await vi.advanceTimersByTimeAsync(30_000)
 
     expect(exitSpy).toHaveBeenCalledWith(2)
-    expect(watchMock).not.toHaveBeenCalled()
+    expect(stderr.join('')).toContain('fs.watch never delivered in this process')
+  })
+
+  it('accepts fs.watch proof from any later delivery, not a one-shot startup check', async () => {
+    // fs.watch is silent through startup, then delivers once during a healthy check.
+    delivery = { native: true, independent: false }
+    await start()
+    await vi.advanceTimersByTimeAsync(15_000)
+    delivery.independent = true
+    await vi.advanceTimersByTimeAsync(10_000)
+    delivery = { native: false, independent: false }
+
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(exitSpy).not.toHaveBeenCalled()
+    expect(health).toEqual(['healthy', 'stalled'])
+  })
+
+  it('does not restart while another native subscription keeps delivering', async () => {
+    delivery.independent = true
+    onProbeWrite = () => {
+      activity.lastNativeCallbackAt = Date.now()
+    }
+    await start()
+
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    expect(exitSpy).not.toHaveBeenCalled()
+    expect(stderr.join('')).not.toContain('stalled')
+  })
+
+  it('bounds a stall that never recovers with a restart', async () => {
+    await startHealthyThenStall()
+
+    await vi.advanceTimersByTimeAsync(13 * 60_000)
+    expect(exitSpy).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(7 * 60_000)
+    expect(exitSpy).toHaveBeenCalledWith(2)
+    expect(stderr.join('')).toContain('system file events stalled for')
   })
 
   it('does not restart when the native canary answers the independent probe', async () => {
-    await start({ revision: 1, liveSubscriptions: 1, pendingCrawlStartedAt: null })
+    await start()
     await vi.advanceTimersByTimeAsync(25_000)
     delivery.native = true
 
@@ -149,40 +214,47 @@ describe('watcher delivery canary', () => {
   it('detects a deadlocked pending subscribe on macOS', async () => {
     setPlatform('darwin')
     delivery.independent = true
-    await start({ revision: 1, liveSubscriptions: 0, pendingCrawlStartedAt: 0 })
+    await start({ liveSubscriptions: 0, pendingCrawlStartedAt: 0 })
 
     await vi.advanceTimersByTimeAsync(30_000)
 
     expect(exitSpy).toHaveBeenCalledWith(2)
   })
 
-  it('waits out a long crawl on crawling backends before treating it as stuck', async () => {
-    delivery.independent = true
-    await start({ revision: 1, liveSubscriptions: 1, pendingCrawlStartedAt: 0 })
+  it.each(['linux', 'win32'] as const)(
+    'stays disarmed for a crawl of any length on %s',
+    async (platform) => {
+      setPlatform(platform)
+      delivery.independent = true
+      await start({ pendingCrawlStartedAt: 0 })
 
-    await vi.advanceTimersByTimeAsync(9 * 60_000)
-    expect(canaryWrites).toEqual([])
-    expect(exitSpy).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(60 * 60_000)
 
-    await vi.advanceTimersByTimeAsync(2 * 60_000)
-    expect(exitSpy).toHaveBeenCalledWith(2)
-  })
+      expect(canaryWrites).toEqual([])
+      expect(exitSpy).not.toHaveBeenCalled()
+    }
+  )
 })
 
 describe('armedCanaryRevision', () => {
+  const idle = {
+    revision: 4,
+    liveSubscriptions: 0,
+    pendingCrawlStartedAt: null,
+    lastNativeCallbackAt: 0
+  }
+
   it('arms for live subscriptions and disarms when idle', async () => {
     const { armedCanaryRevision } = await import('./parcel-watcher-delivery-canary')
-    const idle = { revision: 4, liveSubscriptions: 0, pendingCrawlStartedAt: null }
-    expect(armedCanaryRevision(idle, 0, 'linux')).toBeNull()
-    expect(armedCanaryRevision({ ...idle, liveSubscriptions: 2 }, 0, 'win32')).toBe(4)
+    expect(armedCanaryRevision(idle, 'linux')).toBeNull()
+    expect(armedCanaryRevision({ ...idle, liveSubscriptions: 2 }, 'win32')).toBe(4)
   })
 
-  it('arms during a pending subscribe on macOS but only after the crawl grace elsewhere', async () => {
-    const { armedCanaryRevision, CANARY_PENDING_CRAWL_GRACE_MS } =
-      await import('./parcel-watcher-delivery-canary')
-    const pending = { revision: 7, liveSubscriptions: 1, pendingCrawlStartedAt: 1_000 }
-    expect(armedCanaryRevision(pending, 1_000, 'darwin')).toBe(7)
-    expect(armedCanaryRevision(pending, 1_000, 'linux')).toBeNull()
-    expect(armedCanaryRevision(pending, 1_000 + CANARY_PENDING_CRAWL_GRACE_MS, 'win32')).toBe(7)
+  it('arms during a pending subscribe only on macOS', async () => {
+    const { armedCanaryRevision } = await import('./parcel-watcher-delivery-canary')
+    const pending = { ...idle, revision: 7, liveSubscriptions: 1, pendingCrawlStartedAt: 1_000 }
+    expect(armedCanaryRevision(pending, 'darwin')).toBe(7)
+    expect(armedCanaryRevision(pending, 'linux')).toBeNull()
+    expect(armedCanaryRevision(pending, 'win32')).toBeNull()
   })
 })

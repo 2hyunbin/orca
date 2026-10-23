@@ -60,19 +60,50 @@ describe('WatcherProcessCrashFuse', () => {
     expect(cooldown).toBe(CRASH_FUSE_COOLDOWN_MAX_MS)
   })
 
-  it('resets escalation after a trial child stays healthy', () => {
+  it('resets escalation only after the trial child confirms delivery for the stable period', () => {
     const fuse = new WatcherProcessCrashFuse()
     tripAt(fuse, 0)
     const trialAt = 80_000 + CRASH_FUSE_COOLDOWN_INITIAL_MS
     expect(fuse.isOpen(trialAt)).toBe(false)
+    fuse.noteChildStarted()
+    const healthyAt = trialAt + 60_000
+    fuse.recordDeliveryHealth('healthy', healthyAt)
 
-    const healthyAt = trialAt + CRASH_FUSE_TRIAL_STABLE_MS
-    expect(fuse.isOpen(healthyAt)).toBe(false)
+    expect(fuse.isOpen(healthyAt + CRASH_FUSE_TRIAL_STABLE_MS)).toBe(false)
 
-    tripAt(fuse, healthyAt + 1)
-    const reopenedAt = healthyAt + 1 + 80_000
+    tripAt(fuse, healthyAt + CRASH_FUSE_TRIAL_STABLE_MS + 1)
+    const reopenedAt = healthyAt + CRASH_FUSE_TRIAL_STABLE_MS + 1 + 80_000
     expect(fuse.isOpen(reopenedAt + CRASH_FUSE_COOLDOWN_INITIAL_MS - 1)).toBe(true)
     expect(fuse.isOpen(reopenedAt + CRASH_FUSE_COOLDOWN_INITIAL_MS)).toBe(false)
+  })
+
+  it('keeps escalating when the trial child survives without ever confirming delivery', () => {
+    const fuse = new WatcherProcessCrashFuse()
+    tripAt(fuse, 0)
+    const trialAt = 80_000 + CRASH_FUSE_COOLDOWN_INITIAL_MS
+    expect(fuse.isOpen(trialAt)).toBe(false)
+    fuse.noteChildStarted()
+
+    const crashAt = trialAt + 3 * CRASH_FUSE_TRIAL_STABLE_MS
+    expect(fuse.isOpen(crashAt)).toBe(false)
+    fuse.recordCrash(crashAt)
+
+    expect(fuse.isOpen(crashAt + 2 * CRASH_FUSE_COOLDOWN_INITIAL_MS - 1)).toBe(true)
+  })
+
+  it('does not count a stalled stretch toward the stable period', () => {
+    const fuse = new WatcherProcessCrashFuse()
+    tripAt(fuse, 0)
+    const trialAt = 80_000 + CRASH_FUSE_COOLDOWN_INITIAL_MS
+    expect(fuse.isOpen(trialAt)).toBe(false)
+    fuse.recordDeliveryHealth('healthy', trialAt)
+    fuse.recordDeliveryHealth('stalled', trialAt + CRASH_FUSE_TRIAL_STABLE_MS - 1)
+
+    const crashAt = trialAt + 2 * CRASH_FUSE_TRIAL_STABLE_MS
+    expect(fuse.isOpen(crashAt)).toBe(false)
+    fuse.recordCrash(crashAt)
+
+    expect(fuse.isOpen(crashAt + 2 * CRASH_FUSE_COOLDOWN_INITIAL_MS - 1)).toBe(true)
   })
 
   it('closes immediately when explicitly reset', () => {
