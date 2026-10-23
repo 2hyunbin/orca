@@ -1,12 +1,22 @@
 import { runProcess } from '@orca/process-host'
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 
 const cliPath = join(process.cwd(), 'out', 'cli', 'index.js')
-const describeIfBuilt = existsSync(cliPath) ? describe : describe.skip
+const compiledCli = existsSync(cliPath)
+const cliEntryArgs = compiledCli
+  ? [cliPath]
+  : [
+      '--import',
+      pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href,
+      '--conditions=orca-source',
+      join(process.cwd(), 'src', 'cli', 'index.ts')
+    ]
 const entityResult = z.object({ result: z.record(z.string(), z.unknown()) })
 const entity = z.object({ id: z.string() })
 
@@ -19,7 +29,7 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describeIfBuilt('Run ownership through the compiled CLI and real host', () => {
+describe(`Run ownership through the ${compiledCli ? 'compiled' : 'source'} CLI and real host`, () => {
   it('bounds explicit grants and lets a replacement inherit Task-owned Runs', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orca-run-ownership-cli-'))
     for (const name of [
@@ -75,7 +85,7 @@ describeIfBuilt('Run ownership through the compiled CLI and real host', () => {
     async function cli(handle: string, args: string[], exitCode = 0): Promise<unknown> {
       const output = await runProcess({
         program: process.execPath,
-        args: [cliPath, 'orchestration', ...args, '--json'],
+        args: [...cliEntryArgs, 'orchestration', ...args, '--json'],
         cwd: home,
         timeoutMs: 15_000,
         env: {
