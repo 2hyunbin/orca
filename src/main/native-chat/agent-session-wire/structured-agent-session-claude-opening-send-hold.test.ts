@@ -43,6 +43,18 @@ import { claudeUnwrittenUserMessageError } from '../../claude/claude-agent-sdk-u
 import { claudeStructuredPermissionOptions } from '../../claude/claude-structured-launch-resolution'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
+import { runningStructuredAgentSessionTurnItemBySequence } from '../../../shared/structured-agent-session-live-turn'
+import type * as LiveTurn from '../../../shared/structured-agent-session-live-turn'
+
+vi.mock('../../../shared/structured-agent-session-live-turn', async (importOriginal) => {
+  const actual = await importOriginal<typeof LiveTurn>()
+  return {
+    ...actual,
+    runningStructuredAgentSessionTurnItemBySequence: vi.fn(
+      actual.runningStructuredAgentSessionTurnItemBySequence
+    )
+  }
+})
 
 vi.mock('./structured-agent-session-outgrown-child', async (importOriginal) => {
   const actual = await importOriginal<typeof OutgrownChild>()
@@ -630,6 +642,7 @@ async function olderHostSends(count: number, answer?: 'accepted' | 'notSignedIn'
  *  `newestTurn` reader there), and what the CLI holds, built by the adapter itself on each read. */
 function countRetirementReads() {
   const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const runningScans: { phase: string; visits: number }[] = []
   const counts = {
     checks: 0,
     linkageVisits: 0,
@@ -638,19 +651,42 @@ function countRetirementReads() {
     heldSets: 0,
     heldVisits: 0,
     rejections: 0,
+    runningScans,
     afterCheck: async (_check: number): Promise<void> => undefined
   }
   let inside = false
+  let phase: string | null = null
+  const running = vi.mocked(runningStructuredAgentSessionTurnItemBySequence)
+  const originalRunning = running.getMockImplementation()!
+  onTestFinished(() => void running.mockImplementation(originalRunning))
+  running.mockImplementation((items) => {
+    const scan = phase ? { phase, visits: 0 } : null
+    if (scan) {
+      counts.runningScans.push(scan)
+    }
+    return originalRunning({
+      *[Symbol.iterator]() {
+        for (const item of items) {
+          if (scan) {
+            scan.visits += 1
+          }
+          yield item
+        }
+      }
+    })
+  })
   const retire = vi.mocked(retireOutgrownStructuredAgentSessionChild)
   const actual = retire.getMockImplementation()!
   onTestFinished(() => void retire.mockImplementation(actual))
   retire.mockImplementation(async (...args) => {
     counts.checks += 1
     inside = true
+    phase = `owner-${counts.checks}`
     try {
       return await actual(...args)
     } finally {
       inside = false
+      phase = counts.checks === 2 ? 'turnScope' : null
       await counts.afterCheck(counts.checks)
     }
   })
@@ -672,7 +708,22 @@ function countRetirementReads() {
   const resolveDispatch = journal.resolveDispatch.bind(journal)
   journal.resolveDispatch = (input, cards, receipt) => {
     counts.rejections += input.state === 'rejected' ? 1 : 0
-    return resolveDispatch(input, cards, receipt)
+    phase = null
+    return resolveDispatch(
+      input,
+      cards,
+      receipt && {
+        ...receipt,
+        write: (...args) => {
+          phase = 'receipt.write'
+          try {
+            return receipt.write(...args)
+          } finally {
+            phase = null
+          }
+        }
+      }
+    )
   }
   const { heldSends } = adapter
   adapter.heldSends = (sessionId) => {
@@ -745,9 +796,23 @@ describe.each([20, 200])('with %i earlier sends', (count) => {
     await eventually(() => expect(host.currentWork(SESSION)?.activeTurnId()).not.toBeNull())
     await pickPermission('ask')
     const counts = countRetirementReads()
+    const dispatch = vi.spyOn(adapter, 'dispatch')
     await send('STEER prompt')
     await eventually(() => expect(written(connection, 'STEER prompt')).toBeDefined())
     expect(counts).toMatchObject({ checks: 2, newestTurn: 0 })
+    const { items } = await snapshot()
+    expect(counts.runningScans).toEqual(
+      ['owner-1', 'owner-2', 'turnScope', 'receipt.write'].map((phase) => ({
+        phase,
+        visits: items.length
+      }))
+    )
+    const addedScans = counts.runningScans.filter(({ phase }) => phase !== 'turnScope')
+    expect(addedScans.reduce((total, scan) => total + scan.visits, 0)).toBe(3 * items.length)
+    expect(dispatch).toHaveBeenCalledTimes(1)
+    expect(
+      connection.sent.filter((message) => JSON.stringify(message).includes('STEER prompt'))
+    ).toHaveLength(1)
     expect(connection.closeCount).toBe(0)
   })
 

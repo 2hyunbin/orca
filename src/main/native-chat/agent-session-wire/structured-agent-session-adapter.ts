@@ -1,4 +1,4 @@
-import type { StructuredAgentSessionPreparedAdmission } from './structured-agent-session-execution-options'
+import type { StructuredAgentSessionPreparedAdmission } from './structured-agent-session-prepared-admission'
 import type { AiVaultConversationCopy } from '../../../shared/ai-vault-resume-preparation'
 import type { AgentSessionAccountKind } from '../../../shared/agent-session-availability'
 import type {

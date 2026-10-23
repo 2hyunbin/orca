@@ -164,13 +164,14 @@ export async function retireOutgrownStructuredAgentSessionChild(
     deps.next?.queuedMessageId === undefined
       ? deps.work.currentWork()?.activeTurnId()
       : null
-  const steer = turnId
-    ? (providerTurn: () => string | null) =>
-        session.child === child &&
-        !child.close &&
-        deps.work.currentWork()?.activeTurnId() === turnId &&
-        providerTurn() === turnId
-    : undefined
+  const steer =
+    turnId && child
+      ? (providerTurn: () => string | null) =>
+          session.child === child &&
+          !child.close &&
+          deps.work.currentWork()?.activeTurnId() === turnId &&
+          providerTurn() === turnId
+      : undefined
   const keepOptions = mail || steer !== undefined
   const otherReason =
     structuredAgentSessionChildReportedSignedOut(session) ||
