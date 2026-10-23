@@ -18,7 +18,7 @@ const SAVE_COALESCE_MS = 500
 export type AgentModelCatalogPersistence = {
   load: () => Promise<AgentModelCatalogEntry[]>
   /** Fire-and-forget, coalesced; a failed write never surfaces to a caller. */
-  save: (entries: readonly AgentModelCatalogEntry[]) => void
+  save: (entries: () => Iterable<AgentModelCatalogEntry>) => void
   /** Writes a coalesced save now; the delay timer is unref'd, so quit must not rely on it. */
   flush: () => Promise<void>
 }
@@ -165,38 +165,68 @@ export function createAgentModelCatalogFilePersistence(
   directory: string
 ): AgentModelCatalogPersistence {
   const filePath = join(directory, 'agent-model-catalog.json')
-  let pending: readonly AgentModelCatalogEntry[] | null = null
+  let entries: () => Iterable<AgentModelCatalogEntry> = () => []
+  let accepted = 0
+  let durable = 0
+  let due = 0
+  let lastStart = -Infinity
   let timer: ReturnType<typeof setTimeout> | null = null
-  let writing = Promise.resolve()
+  let writing: Promise<void> | null = null
+  let flushing = false
 
+  const schedule = (): void => {
+    if (timer !== null || writing || accepted === durable) {
+      return
+    }
+    timer = setTimeout(
+      () => {
+        timer = null
+        void drain()
+      },
+      Math.max(0, due - Date.now(), lastStart + SAVE_COALESCE_MS - Date.now())
+    )
+    timer.unref?.()
+  }
+  const drain = (): Promise<void> => {
+    writing ??= Promise.resolve().then(async () => {
+      try {
+        do {
+          const revision = accepted
+          const payload = JSON.stringify({
+            version: SCHEMA_VERSION,
+            entries: Array.from(entries(), persistedEntry)
+          })
+          lastStart = Date.now()
+          due = 0
+          await mkdir(dirname(filePath), { recursive: true })
+          const tmpPath = `${filePath}.tmp`
+          await writeFile(tmpPath, payload, 'utf8')
+          await rename(tmpPath, filePath)
+          durable = revision
+        } while (flushing && durable !== accepted)
+      } catch (error) {
+        due = 0
+        console.warn('[agent-model-catalog] could not persist model lists:', error)
+      } finally {
+        writing = null
+        flushing = false
+        if (due) {
+          schedule()
+        }
+      }
+    })
+    return writing
+  }
   const flush = (): Promise<void> => {
     if (timer !== null) {
       clearTimeout(timer)
       timer = null
     }
-    const entries = pending
-    pending = null
-    if (!entries) {
-      return writing
+    if (accepted === durable) {
+      return writing ?? Promise.resolve()
     }
-    writing = writing.then(async () => {
-      try {
-        await mkdir(dirname(filePath), { recursive: true })
-        const tmpPath = `${filePath}.tmp`
-        await writeFile(
-          tmpPath,
-          JSON.stringify({
-            version: SCHEMA_VERSION,
-            entries: entries.map(persistedEntry)
-          }),
-          'utf8'
-        )
-        await rename(tmpPath, filePath)
-      } catch {
-        // Bookkeeping only; the in-memory store stays authoritative this run.
-      }
-    })
-    return writing
+    flushing = true
+    return drain()
   }
 
   return {
@@ -214,12 +244,11 @@ export function createAgentModelCatalogFilePersistence(
         return []
       }
     },
-    save(entries) {
-      pending = [...entries]
-      if (timer === null) {
-        timer = setTimeout(flush, SAVE_COALESCE_MS)
-        timer.unref?.()
-      }
+    save(source) {
+      entries = source
+      accepted++
+      due ||= Date.now() + SAVE_COALESCE_MS
+      schedule()
     },
     flush
   }

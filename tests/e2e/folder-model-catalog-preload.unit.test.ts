@@ -30,9 +30,13 @@ vi.mock('@/runtime/host-structured-agents', () => ({
   subscribeHostStructuredAgents: () => () => {}
 }))
 
-it.each(['pi', 'opencode2', 'grok'] as const)(
+it.each([
+  ['pi', true],
+  ['opencode2', true],
+  ['grok', false]
+] as const)(
   '%s upgrade preload preserves account rows without borrowing folder-sensitive inventory',
-  async (agent) => {
+  async (agent, expectedFolderScope) => {
     const directory = await mkdtemp(join(tmpdir(), 'pi-rpc-inventory-preload-'))
     let stop = () => {}
     try {
@@ -62,6 +66,7 @@ it.each(['pi', 'opencode2', 'grok'] as const)(
         agent === 'pi'
           ? piDiscovery.kind === 'probe' && piDiscovery.listsInChatFolder === true
           : acpListingNeedsChatFolder(acpLaunchSpecFor(agent)!.modelDiscovery)
+      expect(folderScoped).toBe(expectedFolderScope)
       const variable = { pi: 'PI_CODING_AGENT_DIR', opencode2: 'OPENCODE_HOME', grok: 'GROK_HOME' }[
         agent
       ]
@@ -112,9 +117,9 @@ it.each(['pi', 'opencode2', 'grok'] as const)(
       }
       const saved = structuredClone(frame.record.values)
       const ids = () => frame.catalog?.models.map((model) => model.id) ?? []
-      expect(ids().includes('provider/old')).toBe(!folderScoped)
+      expect(ids().includes('provider/old')).toBe(!expectedFolderScope)
       const failed = await service.read({ agent, workspacePath: '/work/b', waitForListing: true })
-      if (folderScoped) {
+      if (expectedFolderScope) {
         expect(failed.origin).toBe('unknown')
       }
       snapshots.recordHostModelCatalogSnapshot(target, agent, launch.worktree, failed)
@@ -124,13 +129,13 @@ it.each(['pi', 'opencode2', 'grok'] as const)(
         failed,
         launch
       )
-      expect(ids().includes('provider/old')).toBe(!folderScoped)
+      expect(ids().includes('provider/old')).toBe(!expectedFolderScope)
       expect(frame.record.values).toEqual(saved)
       expect(await service.read({ agent, savedOnly: true })).toEqual(account)
       expect(store.get(key)).toEqual(oldEntry)
       expect((await persistence.load())[0]).toEqual(oldEntry)
       const { modelsDifferByWorkspace, ...oldHost } = account
-      expect(modelsDifferByWorkspace).toBe(folderScoped ? true : undefined)
+      expect(modelsDifferByWorkspace).toBe(expectedFolderScope ? true : undefined)
       snapshots.recordHostModelCatalogSnapshot(target, agent, null, oldHost)
       expect(firstFrameOptionState(agent, target, launch).catalog?.models[0]?.id).toBe(
         'provider/old'

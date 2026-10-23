@@ -64,6 +64,7 @@ export class AgentModelCatalogStore {
   private readonly partialAttempts = new Map<string, { agent: string; at: number }>()
   private nextListingOrder = 0
   private persistence: AgentModelCatalogPersistence | null = null
+  private readonly persistedEntries = () => this.entries.values()
   private readonly now: () => number
 
   constructor(options?: { now?: () => number }) {
@@ -198,7 +199,7 @@ export class AgentModelCatalogStore {
       return
     }
     this.entries.set(fingerprint, entry)
-    this.persistence?.save([...this.entries.values()])
+    this.persistence?.save(this.persistedEntries)
     this.listingWaiters.notify(fingerprint)
   }
 
@@ -246,7 +247,7 @@ export class AgentModelCatalogStore {
     this.evictOverCap()
     // Live sessions re-list every turn; an unchanged listing only refreshes the in-memory age.
     if (!previous || agentModelCatalogListingKey(previous) !== agentModelCatalogListingKey(entry)) {
-      this.persistence?.save([...this.entries.values()])
+      this.persistence?.save(this.persistedEntries)
     }
     return entry
   }

@@ -1,4 +1,6 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { rename, writeFile } from 'node:fs/promises'
+import type * as FileSystem from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -20,6 +22,11 @@ import {
   type AgentModelCatalogSessionAccess,
   type AgentModelCatalogSuccess
 } from './agent-model-catalog-store'
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const fs = await importOriginal<typeof FileSystem>()
+  return { ...fs, writeFile: vi.fn(fs.writeFile), rename: vi.fn(fs.rename) }
+})
 
 function models(...ids: string[]): AgentSessionModelOption[] {
   return ids.map((id, index) => ({
@@ -270,7 +277,7 @@ describe('agent model catalog store', () => {
     settleOlder(success('gpt-old'))
     expect((await older)!.models[0]!.id).toBe('gpt-old')
     expect(store.get('fp-1')!.models[0]!.id).toBe('gpt-old')
-    expect(save).toHaveBeenCalledWith(
+    expect(Array.from(save.mock.calls[0]![0]())).toEqual(
       expect.arrayContaining([expect.objectContaining({ fingerprint: 'fp-1' })])
     )
   })
@@ -468,15 +475,176 @@ describe('agent model catalog store', () => {
     expect(saved?.models[0]?.serviceTiers).toEqual(serviceTiers)
   })
 
-  it('writes a coalesced save at once when flushed', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-'))
+  it.each([10, 100])(
+    'paces %i changes and drains only the latest retained state',
+    async (count) => {
+      const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-writer-'))
+      const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
+      const write = vi.mocked(writeFile).mockClear()
+      const persistence = createAgentModelCatalogFilePersistence(directory)
+      let visits = 0
+      const capture = vi.fn(function* (source: Parameters<typeof persistence.save>[0]) {
+        for (const entry of source()) {
+          visits++
+          yield entry
+        }
+      })
+      const save = persistence.save
+      const notify = vi.spyOn(persistence, 'save').mockImplementation((source) => {
+        save(() => capture(source))
+      })
+      const store = new AgentModelCatalogStore()
+      await store.attachPersistence(persistence)
+      vi.useFakeTimers()
+      try {
+        store.recordSuccess('fp-0', 'grok', success('initial'), 'discovery')
+        await vi.advanceTimersByTimeAsync(250)
+        for (let i = 1; i < count; i++) {
+          store.recordSuccess(`fp-${i}`, 'grok', success('initial'), 'discovery')
+        }
+        expect(capture).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(249)
+        expect(write).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1)
+        await store.flushPersistence()
+        expect(capture).toHaveBeenCalledTimes(1)
+        expect(write).toHaveBeenCalledTimes(1)
+        expect(await persistence.load()).toHaveLength(count)
+
+        for (let i = count; i < AGENT_MODEL_CATALOG_MAX_ENTRIES; i++) {
+          store.recordSuccess(`fp-${i}`, 'grok', success('initial'), 'discovery')
+        }
+        const started = Promise.withResolvers<void>()
+        const release = Promise.withResolvers<void>()
+        write.mockImplementationOnce(async (...args) => {
+          started.resolve()
+          await release.promise
+          return fs.writeFile(...args)
+        })
+        await vi.advanceTimersByTimeAsync(499)
+        expect(capture).toHaveBeenCalledTimes(1)
+        await vi.advanceTimersByTimeAsync(1)
+        await started.promise
+        await vi.advanceTimersByTimeAsync(250)
+        for (let i = 0; i < count; i++) {
+          store.recordSuccess(`new-${i}`, 'grok', success(`latest-${i}`, 'chosen'), 'live')
+        }
+        expect(store.get('fp-0')).toBeNull()
+        expect(capture).toHaveBeenCalledTimes(2)
+        expect(write.mock.calls[1]?.[1]).not.toContain('latest-')
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect(write).toHaveBeenCalledTimes(2)
+        const first = store.flushPersistence()
+        const second = store.flushPersistence()
+        expect(first).toBe(second)
+        store.recordSuccess(`new-${count - 1}`, 'grok', success('final', 'chosen'), 'live')
+        store.recordConfiguredDefault(`new-${count - 1}`, { modelId: 'chosen', effort: 'high' })
+        release.resolve()
+        await Promise.all([first, second])
+        expect(capture).toHaveBeenCalledTimes(3)
+        expect(visits).toBe(count + 2 * AGENT_MODEL_CATALOG_MAX_ENTRIES)
+        expect(write).toHaveBeenCalledTimes(3)
+        expect(new Set(notify.mock.calls.map(([source]) => source)).size).toBe(1)
+        const restarted = new AgentModelCatalogStore()
+        await restarted.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+        expect(await persistence.load()).toHaveLength(AGENT_MODEL_CATALOG_MAX_ENTRIES)
+        expect(restarted.get('fp-0')).toBeNull()
+        expect(restarted.get(`new-${count - 1}`)?.configured).toMatchObject({ modelId: 'chosen' })
+        expect(restarted.get(`new-${count - 1}`)?.live?.models[0]?.id).toBe('final')
+        await vi.advanceTimersByTimeAsync(2_000)
+        expect(write).toHaveBeenCalledTimes(3)
+      } finally {
+        vi.useRealTimers()
+        rmSync(directory, { recursive: true, force: true })
+      }
+    }
+  )
+
+  it('keeps the first change during IO on its normal 500ms cadence', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-cadence-'))
+    const fs = await vi.importActual<typeof FileSystem>('node:fs/promises')
+    const started = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    const completed = Promise.withResolvers<void>()
+    const write = vi
+      .mocked(writeFile)
+      .mockClear()
+      .mockImplementationOnce(async (...args) => {
+        started.resolve()
+        await release.promise
+        return fs.writeFile(...args)
+      })
+    vi.mocked(rename).mockImplementationOnce(async (...args) => {
+      await fs.rename(...args)
+      completed.resolve()
+    })
     const store = new AgentModelCatalogStore()
     await store.attachPersistence(createAgentModelCatalogFilePersistence(directory))
-    store.recordSuccess('fp-1', 'grok', success('gpt-a'), 'discovery')
-    await store.flushPersistence()
-    const persisted = await createAgentModelCatalogFilePersistence(directory).load()
-    expect(persisted.map((entry) => entry.fingerprint)).toEqual(['fp-1'])
+    vi.useFakeTimers()
+    try {
+      store.recordSuccess('fp', 'grok', success('old'), 'live')
+      await vi.advanceTimersByTimeAsync(500)
+      await started.promise
+      await vi.advanceTimersByTimeAsync(250)
+      store.recordSuccess('fp', 'grok', success('new'), 'live')
+      release.resolve()
+      await completed.promise
+      await vi.advanceTimersByTimeAsync(499)
+      expect(write).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(1)
+      await store.flushPersistence()
+      expect(write).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
+
+  it.each(['write', 'rename'] as const)(
+    'keeps failed %s dirty for an explicit retry',
+    async (stage) => {
+      const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-retry-'))
+      const store = new AgentModelCatalogStore()
+      const persistence = createAgentModelCatalogFilePersistence(directory)
+      await store.attachPersistence(persistence)
+      store.recordSuccess('fp', 'grok', success('old'), 'discovery')
+      await store.flushPersistence()
+      const file = join(directory, 'agent-model-catalog.json')
+      const old = readFileSync(file, 'utf8')
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      const operation = vi.mocked(stage === 'write' ? writeFile : rename)
+      const failed = Promise.withResolvers<void>()
+      operation.mockImplementationOnce(async () => {
+        await failed.promise
+        throw new Error('disk unavailable')
+      })
+      vi.useFakeTimers()
+      try {
+        store.recordSuccess('fp', 'grok', success('intermediate'), 'live')
+        const flushing = store.flushPersistence()
+        await vi.advanceTimersByTimeAsync(0)
+        store.recordSuccess('fp', 'grok', success('latest', 'chosen'), 'live')
+        store.recordConfiguredDefault('fp', { modelId: 'chosen' })
+        failed.resolve()
+        await flushing
+        expect(warn).toHaveBeenCalledTimes(1)
+        expect(readFileSync(file, 'utf8')).toBe(old)
+        expect(store.get('fp')?.live?.models[0]?.id).toBe('latest')
+        const attempts = operation.mock.calls.length
+        await vi.advanceTimersByTimeAsync(5_000)
+        expect(operation).toHaveBeenCalledTimes(attempts)
+        await store.flushPersistence()
+        const [loaded] = await persistence.load()
+        expect(loaded?.live?.models[0]?.id).toBe('latest')
+        expect(loaded?.configured?.modelId).toBe('chosen')
+        expect(operation).toHaveBeenCalledTimes(attempts + 1)
+      } finally {
+        vi.useRealTimers()
+        warn.mockRestore()
+        rmSync(directory, { recursive: true, force: true })
+      }
+    }
+  )
 
   it('loads nothing from a malformed persistence file', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'agent-model-catalog-'))
