@@ -6,7 +6,7 @@ export async function probeDaemonSessionOwner<T extends IPtyProvider>(opts: {
   providers: readonly T[]
   routes: ReadonlyMap<string, IPtyProvider>
   removeRoute: (id: string) => void
-  inventory: () => Promise<OwnerInventory<T>>
+  inventory: () => Promise<{ value: OwnerInventory<T>; release: () => void }>
   currentEpoch: () => number
 }): Promise<boolean | null> {
   const { sessionId, providers, routes } = opts
@@ -23,12 +23,17 @@ export async function probeDaemonSessionOwner<T extends IPtyProvider>(opts: {
       opts.removeRoute(sessionId)
     }
   }
-  const inventory = await opts.inventory()
-  if (inventory.epoch !== opts.currentEpoch()) {
-    return null
+  const reader = await opts.inventory()
+  try {
+    const inventory = reader.value
+    if (inventory.epoch !== opts.currentEpoch()) {
+      return null
+    }
+    if ((inventory.candidatesBySessionId.get(sessionId)?.length ?? 0) > 0) {
+      return true
+    }
+    return inventory.complete && providers.length > 0 ? false : null
+  } finally {
+    reader.release()
   }
-  if ((inventory.candidatesBySessionId.get(sessionId)?.length ?? 0) > 0) {
-    return true
-  }
-  return inventory.complete && providers.length > 0 ? false : null
 }

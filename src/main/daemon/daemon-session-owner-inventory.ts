@@ -4,7 +4,6 @@ import { TerminalSessionOwnerUnverifiedError } from './daemon-errors'
 import { chooseSessionOwner, type OwnerCandidate } from './daemon-session-owner-choice'
 import { randomUUID } from 'node:crypto'
 import { worktreePtyOwnership } from '../providers/worktree-pty-ownership'
-import { awaitDaemonWorkWithinCallerDeadline } from './daemon-request-deadline'
 
 export type ProviderInventory<T> = {
   provider: T
@@ -17,78 +16,6 @@ export type OwnerInventory<T extends IPtyProvider> = {
   complete: boolean
   epoch: number
   failure?: { error: unknown }
-}
-
-export type PendingOwnerInventory<T extends IPtyProvider> = {
-  promise: Promise<OwnerInventory<T>>
-  entries: ProviderInventory<T>[]
-  epoch: number
-  deadlineMs: number
-}
-
-export async function awaitDaemonOwnerInventory<T extends IPtyProvider>(
-  pending: PendingOwnerInventory<T>,
-  currentEpoch: () => number,
-  deadlineMs?: number
-): Promise<OwnerInventory<T>> {
-  if (
-    deadlineMs !== undefined &&
-    !(await awaitDaemonWorkWithinCallerDeadline(
-      pending.promise.then(() => {}),
-      deadlineMs
-    ))
-  ) {
-    throw new TerminalSessionOwnerUnverifiedError('inventory deadline')
-  }
-  const inventory = await pending.promise
-  if (inventory.epoch !== currentEpoch()) {
-    throw new TerminalSessionOwnerUnverifiedError('stale inventory')
-  }
-  if (inventory.failure) {
-    throw inventory.failure.error
-  }
-  return inventory
-}
-
-export function acquireDaemonOwnerInventory<T extends IPtyProvider>(opts: {
-  providers: readonly T[]
-  epoch: number
-  deadlineMs: number
-  shouldQueryProvider: (provider: T) => boolean
-  isProviderGone: (provider: T, error: unknown) => boolean
-  providerFailed: (provider: T) => void
-  index: (pending: PendingOwnerInventory<T>) => OwnerInventory<T>
-  settled: (pending: PendingOwnerInventory<T>) => void
-}): PendingOwnerInventory<T> {
-  const entries: ProviderInventory<T>[] = opts.providers.map((provider) => ({
-    provider,
-    processes: null
-  }))
-  const work = Promise.all(
-    entries.map(async (entry) => {
-      const { provider } = entry
-      if (!opts.shouldQueryProvider(provider)) {
-        return
-      }
-      try {
-        entry.processes = await provider.listProcesses({ deadlineMs: opts.deadlineMs })
-      } catch (error) {
-        if (opts.isProviderGone(provider, error)) {
-          entry.processes = []
-          return
-        }
-        opts.providerFailed(provider)
-        entry.failure = { error }
-      }
-    })
-  )
-  const pending: PendingOwnerInventory<T> = {
-    entries,
-    epoch: opts.epoch,
-    deadlineMs: opts.deadlineMs,
-    promise: work.then(() => opts.index(pending)).finally(() => opts.settled(pending))
-  }
-  return pending
 }
 
 const inventorySourceIds = new WeakMap<IPtyProvider, string>()
@@ -175,6 +102,20 @@ function selectInventoryOwner<T>(
     : undefined
 }
 
+export function findDaemonInventoryOwner<T extends IPtyProvider>(
+  inventory: OwnerInventory<T>,
+  sessionId: string,
+  expectedIncarnationId?: string,
+  expectedIncarnationIsAuthoritative = false
+): OwnerCandidate<T> | undefined {
+  return selectInventoryOwner(
+    inventory.candidatesBySessionId.get(sessionId) ?? [],
+    inventory.complete,
+    expectedIncarnationId,
+    expectedIncarnationIsAuthoritative
+  )
+}
+
 export function resolveDaemonInventoryOwner<T extends IPtyProvider>(
   inventory: OwnerInventory<T>,
   sessionId: string,
@@ -184,9 +125,9 @@ export function resolveDaemonInventoryOwner<T extends IPtyProvider>(
   expectedIncarnationIsAuthoritative = false
 ): DaemonSessionOwnerResolution<T> {
   const candidates = inventory.candidatesBySessionId.get(sessionId) ?? []
-  const owner = selectInventoryOwner(
-    candidates,
-    inventory.complete,
+  const owner = findDaemonInventoryOwner(
+    inventory,
+    sessionId,
     expectedIncarnationId,
     expectedIncarnationIsAuthoritative
   )

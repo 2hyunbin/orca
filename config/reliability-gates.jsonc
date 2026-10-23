@@ -12949,26 +12949,38 @@
       "providers": ["daemon", "local"],
       "coveredPlatforms": ["macos"],
       "coveredProviders": ["daemon", "local"],
-      "coverageNotes": "Deterministic provider contracts cover complete, incomplete, conflicting, refused, and identity-invalidated owner inventories; degraded fallback/current/legacy routing; repeated stale-binding classification; and fresh-session reattach without local fallback during unresolved ownership. Main IPC contracts cover exact persisted-binding retirement and one fresh replacement after confirmed absence. Live Linux, Windows, WSL, SSH, paired-runtime, and packaged-upgrade journeys remain uncollected.",
+      "coverageNotes": "Deterministic provider contracts cover complete, incomplete, conflicting, refused, and identity-invalidated owner inventories; degraded fallback/current/legacy routing; repeated stale-binding classification; and fresh-session reattach without local fallback during unresolved ownership. Main IPC contracts cover exact persisted-binding retirement and one fresh replacement after confirmed absence. Inventory lifecycle contracts additionally cover fresh cleanup after a restore timeout, serialized queued readers, positive-only borrowed observations, stale authority, queue expiry/failure draining, and bounded partial indexing. Live Linux, Windows, WSL, SSH, paired-runtime, and packaged-upgrade journeys remain uncollected.",
       "motivatingLinks": [
         "https://github.com/stablyai/orca/pull/6830",
         "https://github.com/stablyai/orca/pull/6866",
         "https://github.com/stablyai/orca/pull/7002",
         "https://github.com/stablyai/orca/pull/12776"
       ],
-      "invariant": "Daemon startup reconciliation must preserve valid live daemon sessions and reap only true orphans. A persisted binding stays fail-closed while any possible owner is incomplete, conflicting, refusing attach, or identity-invalidated, but complete authoritative absence from every configured provider must retire that exact stale binding and let retry or reopen converge without attaching it through local fallback or duplicating a PTY.",
-      "oracle": "Hold exact fallback, current-daemon, and legacy-daemon inventories behind controlled promises. No attach may settle or dispatch until every provider answers. Complete zero-candidate inventories must report SessionNotFound; incomplete, duplicate, refused, and identity-invalidated attempts must remain owner-unverified. In degraded mode, repeated stale attempts scan each eligible provider once per attempt and dispatch no attach, then one explicit fresh spawn and exact reattach use only the recorded fresh route. Main IPC must compare-and-swap retire only the matching persisted PTY/incarnation, emit one synthetic exit, and create one different fresh PTY.",
+      "invariant": "Daemon startup reconciliation must preserve valid live daemon sessions and reap only true orphans. A persisted binding stays fail-closed while any possible owner is incomplete, conflicting, refusing attach, or identity-invalidated, but complete authoritative absence from every configured provider must retire that exact stale binding and let retry or reopen converge without attaching it through local fallback or duplicating a PTY. Absence and replacement proof require provider observations dispatched after the reader boundary; borrowed observations may prove only positive liveness or exact ownership. A superseded epoch cannot write routes or certify absence, and independently bounded readers must not multiply concurrent provider scans or partial indexing.",
+      "oracle": "Hold exact fallback, current-daemon, and legacy-daemon inventories behind controlled promises. Without unique incarnation proof, no attach may settle or dispatch until every provider answers. Complete zero-candidate inventories must report SessionNotFound; incomplete, duplicate, refused, and identity-invalidated attempts must remain owner-unverified. In degraded mode, repeated stale attempts scan each eligible provider once per attempt and dispatch no attach, then one explicit fresh spawn and exact reattach use only the recorded fresh route. Main IPC must compare-and-swap retire only the matching persisted PTY/incarnation, emit one synthetic exit, and create one different fresh PTY. A strict sweep after timed-out restore must freshly discover and stop an externally created target. Staggered fresh readers share one queued batch after the active acquisition and its readers drain; expired batches issue no RPC. Responsive and wedged diagnostic scans retain one-scan positive restore/probe/fenced-owner proof. One hundred timeout readers over 4,096 rows perform 8,192 id reads for one partial revision, not 819,200.",
       "commands": [
-        "pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/daemon-session-owner-resolution.test.ts src/main/daemon/daemon-pty-router.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts src/main/ipc/pty-dead-owner-respawn.test.ts src/main/ipc/pty-persisted-incarnation-repair.test.ts --reporter=dot"
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/main/daemon/daemon-session-owner-resolution.test.ts src/main/daemon/daemon-session-owner-inventory-lifecycle.test.ts src/main/daemon/daemon-pty-router.test.ts src/main/daemon/degraded-daemon-pty-provider.test.ts src/main/ipc/pty-dead-owner-respawn.test.ts src/main/ipc/pty-persisted-incarnation-repair.test.ts --reporter=dot"
       ],
       "testFiles": [
         "src/main/daemon/daemon-session-owner-resolution.test.ts",
+        "src/main/daemon/daemon-session-owner-inventory-lifecycle.test.ts",
         "src/main/daemon/daemon-pty-router.test.ts",
         "src/main/daemon/degraded-daemon-pty-provider.test.ts",
         "src/main/ipc/pty-dead-owner-respawn.test.ts",
         "src/main/ipc/pty-persisted-incarnation-repair.test.ts"
       ],
       "assertionRefs": [
+        {
+          "file": "src/main/daemon/daemon-session-owner-inventory-lifecycle.test.ts",
+          "assertions": [
+            "post-restore strict cleanup discovers and stops a terminal created outside the resolver",
+            "staggered later-deadline readers serialize into one fresh batch without invalidating earlier consumers",
+            "invalidated list, resolution and probe observations cannot prove absence or roll back newer routes",
+            "responsive and wedged diagnostics share positive restore, liveness and fenced-owner proof without extra provider calls",
+            "borrowed observations never prove absence or replacement; expired batches and failed scans drain without stray RPCs",
+            "one hundred timeout readers share one 4,096-row partial index per provider-completion revision"
+          ]
+        },
         {
           "file": "src/main/daemon/daemon-session-owner-resolution.test.ts",
           "assertions": [
@@ -13027,7 +13039,7 @@
       },
       "performanceBudget": {
         "required": true,
-        "evidence": "One unresolved attempt performs one concurrent listProcesses call per eligible provider, concurrent pane attempts coalesce onto that inventory, and no polling, sleep, timer, subprocess, listener, or retry loop is added. Confirmed absence is not cached; repeated explicit attempts remain bounded to one fanout each. Reattaching the newly recorded fresh route adds no inventory or daemon spawn."
+        "evidence": "At most one acquisition dispatches listProcesses per eligible provider at a time; one queued fresh batch coalesces staggered readers. Twenty increasing diagnostic deadlines retain one acquisition. Reader leases drain in finally; expired queued batches dispatch zero RPCs, and the default RPC budget begins at dispatch. Borrowed-positive and fresh-absence stages share one original two-second resolution deadline. One hundred timeout readers index a 4,096-row partial revision once (8,192 id reads); a provider completion permits one new index. No polling, sleep, subprocess, listener, or retry loop is added. Fresh absence is not cached. Reattaching an exact recorded route adds no inventory or daemon spawn. Fresh cleanup can time out safely behind a genuinely wedged provider; pre-existing ambiguous-list fallback batching debt remains outside this gate."
       },
       "promotionCriteria": [
         "Wire reconcileOnStartup or mark the production wiring gap explicitly.",
