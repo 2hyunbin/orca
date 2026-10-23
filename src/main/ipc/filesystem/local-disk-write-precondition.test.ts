@@ -264,6 +264,22 @@ describe('checkLocalDiskWritePrecondition', () => {
 describe('a changed disk that already holds the save', () => {
   const baseline = { expectedSignature: getDiskBaselineSignature('original') }
 
+  it.each([1, 2, 3])(
+    'compares the whole save with %i bytes left before a multibyte encoding boundary',
+    async (remaining) => {
+      const filePath = join(base, 'large.ts')
+      const content = `${'x'.repeat(1024 * 1024 - remaining)}😊雪\ud800\udc00\ud800\nlast`
+      await writeFile(filePath, content)
+
+      await expect(checkLocalDiskWritePrecondition(filePath, baseline, content)).resolves.toBe(
+        'identical'
+      )
+      await expect(
+        checkLocalDiskWritePrecondition(filePath, baseline, `${content.slice(0, -1)}T`)
+      ).resolves.toBe('changed')
+    }
+  )
+
   it.each([
     ['the same length as the baseline', 'origin2'],
     ['a length the baseline cannot decode to', 'x'.repeat(100)],

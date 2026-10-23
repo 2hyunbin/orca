@@ -26,6 +26,32 @@ import {
 } from './local-regular-file-read'
 
 const HASH_SLICE_BYTES = 1024 * 1024
+const utf8Encoder = new TextEncoder()
+let comparisonBuffer = Buffer.alloc(0)
+
+function matchesWrittenUtf8(buffer: Buffer, content: string, contentBytes: number): boolean {
+  if (buffer.length !== contentBytes) {
+    return false
+  }
+  if (comparisonBuffer.length === 0) {
+    comparisonBuffer = Buffer.allocUnsafe(HASH_SLICE_BYTES)
+  }
+  let textOffset = 0
+  let byteOffset = 0
+  while (textOffset < content.length) {
+    const { read, written } = utf8Encoder.encodeInto(content.slice(textOffset), comparisonBuffer)
+    if (
+      !buffer
+        .subarray(byteOffset, byteOffset + written)
+        .equals(comparisonBuffer.subarray(0, written))
+    ) {
+      return false
+    }
+    textOffset += read
+    byteOffset += written
+  }
+  return byteOffset === buffer.length
+}
 
 /** Why sliced: hashing tens of MB in one go stalls the main process; yielding keeps windows responsive. */
 export async function diskSignatureOfUtf8(buffer: Buffer): Promise<string> {
@@ -59,19 +85,20 @@ export async function checkLocalDiskWritePrecondition(
   }
   const { handle, stats } = opened
   try {
-    const written = Buffer.from(content, 'utf8')
+    const written = content.length <= HASH_SLICE_BYTES ? Buffer.from(content, 'utf8') : null
+    const writtenLength = written?.length ?? Buffer.byteLength(content, 'utf8')
     const expectedLength = diskBaselineSignatureLength(precondition.expectedSignature)
     // Why: the signature pins the decoded length, so a size neither it nor the save can match skips reading a huge file.
     const baselineFits =
       expectedLength !== null && utf8ByteSizeCanDecodeToLength(stats.size, expectedLength)
-    if (!baselineFits && stats.size !== written.length) {
+    if (!baselineFits && stats.size !== writtenLength) {
       return 'changed'
     }
     let buffer: Buffer
     try {
       buffer = await readLocalFileBounded(
         handle,
-        Math.max(baselineFits ? expectedLength * 3 : 0, written.length),
+        Math.max(baselineFits ? expectedLength * 3 : 0, writtenLength),
         stats.size
       )
     } catch (error) {
@@ -81,7 +108,7 @@ export async function checkLocalDiskWritePrecondition(
       }
       throw error
     }
-    if (buffer.equals(written)) {
+    if (written ? buffer.equals(written) : matchesWrittenUtf8(buffer, content, writtenLength)) {
       return 'identical'
     }
     if (!baselineFits || (await diskSignatureOfUtf8(buffer)) !== precondition.expectedSignature) {
