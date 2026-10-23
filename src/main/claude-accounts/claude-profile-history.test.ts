@@ -160,6 +160,25 @@ describe('Claude profile history sharing', () => {
     fs.appendFileSync(join(f.profileHome, 'history.jsonl'), 'after-link\n')
     expect(f.history()).toBe('d1\np1\np2\nafter-link\n')
   })
+  itLinks('leaves private prompt history in place when shared history cannot be read', async () => {
+    const f = fixture()
+    const shared = join(f.defaultHome, 'history.jsonl')
+    const own = join(f.profileHome, 'history.jsonl')
+    fs.writeFileSync(shared, 'default\n')
+    fs.writeFileSync(own, 'private\n')
+    fs.chmodSync(shared, 0)
+    try {
+      const report = await f.share()
+      expect(report.surfaces['history.jsonl']).toBe('failed')
+      expect(report.warnings).toContainEqual(expect.objectContaining({ surface: 'history.jsonl' }))
+      expect(fs.lstatSync(own).isSymbolicLink()).toBe(false)
+      expect(fs.readFileSync(own, 'utf8')).toBe('private\n')
+      expect(fs.existsSync(join(f.profileHome, 'history.jsonl.orca-profile-merge'))).toBe(false)
+    } finally {
+      fs.chmodSync(shared, 0o600)
+    }
+    expect(f.history()).toBe('default\n')
+  })
   itLinks('adds only the new lines of a CLI rewrite of the shared file', async () => {
     const f = fixture()
     fs.writeFileSync(join(f.defaultHome, 'history.jsonl'), 'd1\nd2\n')
