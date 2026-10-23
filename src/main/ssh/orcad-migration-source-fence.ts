@@ -34,7 +34,10 @@ import {
   type OrcadMigrationPreflightStore
 } from './targets/ssh-target-orcad-preflight'
 import { orcadMigrationRefusalReason } from './orcad-migration-refusal-reason'
-import { preservesOrcadMigrationBridgedPanes } from './orcad-migration-bridged-panes'
+import {
+  preservesOrcadMigrationBridgedPanes,
+  type OrcadMigrationPaneLeasePredicate
+} from './orcad-migration-bridged-panes'
 
 export const ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS = 'orcad_migration_leave_behind_terminals'
 export const ORCAD_MIGRATION_LEAVE_BEHIND_TERMINALS_REASON =
@@ -91,6 +94,7 @@ export async function fenceOrcadMigrationSource(args: {
   destinationName: string
   /** Taken by the caller while the relay could still answer; see orcad-migration-terminal-gate. */
   terminalProof: OrcadMigrationTerminalVerdict
+  isBridgedPaneLease?: OrcadMigrationPaneLeasePredicate
   now?: () => Date
   signal?: AbortSignal
 }): Promise<OrcadMigrationFenceResult> {
@@ -149,7 +153,8 @@ export async function fenceOrcadMigrationSource(args: {
     !preservesOrcadMigrationBridgedPanes(
       manifest.payload,
       args.store.getSshRemotePtyLeases(target.id),
-      proof.bridgedPtyIds
+      proof.bridgedPtyIds,
+      args.isBridgedPaneLease
     )
   ) {
     return refuse(

@@ -14,7 +14,7 @@ import {
   getPreferredPairingOffer,
   type KnownRuntimeEnvironment
 } from '../../../shared/runtime-environments'
-import type { SshTarget } from '../../../shared/ssh-types'
+import type { SshRemotePtyLease, SshTarget } from '../../../shared/ssh-types'
 import { closeTestStores, createSqliteTestStore } from '../../persistence-test-harness'
 import { Store } from '../../persistence/loading-store/store'
 import { listOrcadMigrationSourceCutovers } from '../../ssh/orcad-migration-cutover-journal'
@@ -113,12 +113,14 @@ const convert = (
   censusHost: OrcadManagedConversionArgs['censusHost'] = async () => ({
     verdict: 'exited',
     count: 0
-  })
+  }),
+  isBridgedPaneLease?: OrcadManagedConversionArgs['isBridgedPaneLease']
 ) =>
   convertSshTargetToManagedOrcad(userDataPath, {
     sshTargetId: TARGET.id,
     name: 'Managed',
     censusHost,
+    isBridgedPaneLease,
     destinationFor: () => destination,
     releaseDirectSession,
     now: () => new Date('2026-10-02T00:00:00.000Z')
@@ -166,6 +168,17 @@ describe('converting an SSH host into a managed server', () => {
           state: 'detached',
           createdAt: 1,
           updatedAt: 1
+        },
+        {
+          targetId: TARGET.id,
+          ptyId: 'older-agent-pty',
+          tabId: 'closed-tab',
+          leafId,
+          worktreeId,
+          state: 'expired',
+          supersededBy: 'agent-pty',
+          createdAt: 1,
+          updatedAt: 1
         }
       ]
       const reportDirectory = join(userDataPath, 'reported-profile')
@@ -177,17 +190,20 @@ describe('converting an SSH host into a managed server', () => {
       mocks.state.targetStore = new SshConnectionStore(store as never)
       const retire = vi.spyOn(store, 'markSshRemotePtyLease')
       const census = async () => ({ verdict, count: 1 })
-      const refused = await convert(census)
+      const isBridgedPaneLease = (lease: SshRemotePtyLease): boolean => lease.ptyId === 'agent-pty'
+      const refused = await convert(census, isBridgedPaneLease)
       expect(refused).toMatchObject({ outcome: 'refused', canLeaveBehind: true })
       expect(destination.commits).toBe(0)
       expect(store.getSshTarget(TARGET.id)?.managedServerLeaveBehind).toBeUndefined()
       store.updateSshTarget(TARGET.id, {
         managedServerLeaveBehind: { confirmedAt: '2026-10-23T00:00:00.000Z' }
       })
-      await expect(convert(census)).resolves.toMatchObject({ outcome: 'converted' })
+      await expect(convert(census, isBridgedPaneLease)).resolves.toMatchObject({
+        outcome: 'converted'
+      })
       expect(destination.commits).toBe(1)
       const [journal] = listOrcadMigrationSourceCutovers(userDataPath)
-      expect(journal?.bridgedPtyIds).toEqual(['agent-pty'])
+      expect(journal?.bridgedPtyIds).toEqual(['agent-pty', 'older-agent-pty'])
       const moved = journal?.manifest.payload.dormantState?.workspaceSession
       expect(moved?.tabsByWorktree[worktreeId]?.map((tab) => tab.id)).toEqual([tabId])
       expect(moved?.terminalLayoutsByTabId[tabId]).toMatchObject({ root: { type: 'leaf', leafId } })
@@ -196,7 +212,8 @@ describe('converting an SSH host into a managed server', () => {
         store.getWorkspaceSession(hostId)?.terminalLayoutsByTabId[tabId]?.scrollbackRefsByLeafId
       ).toEqual({ [leafId]: ref })
       expect(store.getSshRemotePtyLeases(TARGET.id)).toEqual([
-        expect.objectContaining({ ptyId: 'agent-pty', state: 'detached', tabId, leafId })
+        expect.objectContaining({ ptyId: 'agent-pty', state: 'detached', tabId, leafId }),
+        expect.objectContaining({ ptyId: 'older-agent-pty', state: 'expired' })
       ])
       expect(retire).not.toHaveBeenCalled()
     }

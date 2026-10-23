@@ -2,13 +2,15 @@ import type { OrcadMigrationCatalogPayload } from '../../shared/orcad-migration/
 import type { SshRemotePtyLease } from '../../shared/ssh-types'
 import { collectLeafIds } from '../../shared/terminal-pane-layout-tree'
 import { normalizeWorkspaceSessionKeyToWorkspaceId } from '../../shared/workspace-scope'
-import { isBridgeableLease } from './legacy-relay/legacy-relay-bridge-leases'
+
+export type OrcadMigrationPaneLeasePredicate = (lease: SshRemotePtyLease) => boolean
 
 /** Skipping saved state is safe only if every bridged terminal keeps its tab and stable leaf. */
 export function preservesOrcadMigrationBridgedPanes(
   payload: OrcadMigrationCatalogPayload,
   leases: readonly SshRemotePtyLease[],
-  bridgedPtyIds: readonly string[]
+  bridgedPtyIds: readonly string[],
+  isBridgedPaneLease?: OrcadMigrationPaneLeasePredicate
 ): boolean {
   if (bridgedPtyIds.length === 0) {
     return true
@@ -39,7 +41,7 @@ export function preservesOrcadMigrationBridgedPanes(
   const leasesById = new Map(leases.map((lease) => [lease.ptyId, lease]))
   return bridgedPtyIds.every((ptyId) => {
     const lease = leasesById.get(ptyId)
-    if (lease && !isBridgeableLease(lease)) {
+    if (lease && isBridgedPaneLease && !isBridgedPaneLease(lease)) {
       return true
     }
     if (!lease?.tabId || !lease.leafId) {

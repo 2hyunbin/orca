@@ -4,9 +4,10 @@ import {
   DORMANT_WORKTREE_ID,
   dormantState,
   manifest
-} from '../persistence-orcad-migration-catalog-fixture'
-import type { SshRemotePtyLease } from '../../shared/ssh-types'
-import { preservesOrcadMigrationBridgedPanes } from './orcad-migration-bridged-panes'
+} from '../../persistence-orcad-migration-catalog-fixture'
+import type { SshRemotePtyLease } from '../../../shared/ssh-types'
+import { preservesOrcadMigrationBridgedPanes } from '../orcad-migration-bridged-panes'
+import { isBridgeableLease } from './legacy-relay-bridge-leases'
 
 const LEASE: SshRemotePtyLease = {
   targetId: 'ssh-prod',
@@ -40,7 +41,8 @@ describe('preserving the relay bridge when skipping saved state', () => {
               worktreeId: `ssh:ssh-prod|${owner}`
             }
           ],
-          [LEASE.ptyId]
+          [LEASE.ptyId],
+          isBridgeableLease
         )
       ).toBe(true)
     }
@@ -51,7 +53,9 @@ describe('preserving the relay bridge when skipping saved state', () => {
     const session = payload.dormantState!.workspaceSession!
     session.terminalLayoutsByTabId[LEASE.tabId!]!.root = { type: 'leaf', leafId: 'other-leaf' }
     session.terminalLayoutsByTabId[LEASE.tabId!]!.activeLeafId = 'other-leaf'
-    expect(preservesOrcadMigrationBridgedPanes(payload, [LEASE], [LEASE.ptyId])).toBe(false)
+    expect(
+      preservesOrcadMigrationBridgedPanes(payload, [LEASE], [LEASE.ptyId], isBridgeableLease)
+    ).toBe(false)
   })
 
   it('refuses a tab that moved to another workspace or whose lease identity is unknown', () => {
@@ -65,10 +69,13 @@ describe('preserving the relay bridge when skipping saved state', () => {
             worktreeId: 'folder:other-folder'
           }
         ],
-        [LEASE.ptyId]
+        [LEASE.ptyId],
+        isBridgeableLease
       )
     ).toBe(false)
-    expect(preservesOrcadMigrationBridgedPanes(payload, [], [LEASE.ptyId])).toBe(false)
+    expect(preservesOrcadMigrationBridgedPanes(payload, [], [LEASE.ptyId], isBridgeableLease)).toBe(
+      false
+    )
   })
 
   it('does not require the omitted pane of a superseded lease the bridge never serves', () => {
@@ -83,8 +90,12 @@ describe('preserving the relay bridge when skipping saved state', () => {
       preservesOrcadMigrationBridgedPanes(
         payload,
         [LEASE, superseded],
-        [LEASE.ptyId, superseded.ptyId]
+        [LEASE.ptyId, superseded.ptyId],
+        isBridgeableLease
       )
     ).toBe(true)
+    expect(
+      preservesOrcadMigrationBridgedPanes(payload, [LEASE, superseded], [superseded.ptyId])
+    ).toBe(false)
   })
 })

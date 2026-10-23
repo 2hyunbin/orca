@@ -21,7 +21,10 @@ import {
   resolveOrcadPreflightTarget
 } from './ssh-target-orcad-claims'
 import { collectUntransferredDependentBlockers } from './ssh-target-orcad-dependents'
-import { preservesOrcadMigrationBridgedPanes } from '../orcad-migration-bridged-panes'
+import {
+  preservesOrcadMigrationBridgedPanes,
+  type OrcadMigrationPaneLeasePredicate
+} from '../orcad-migration-bridged-panes'
 
 export type OrcadMigrationPreflightStore = OrcadMigrationExportStore &
   Pick<
@@ -77,7 +80,8 @@ export function preflightOrcadMigrationExport(
 export function leaveBehindClearsOrcadMigrationBlockers(
   store: OrcadMigrationPreflightStore & Pick<Store, 'createOrcadMigrationLeaveBehindView'>,
   targetId: string,
-  bridgedPtyIds: readonly string[] = []
+  bridgedPtyIds: readonly string[] = [],
+  isBridgedPaneLease?: OrcadMigrationPaneLeasePredicate
 ): boolean {
   const view = store.createOrcadMigrationLeaveBehindView(targetId)
   const preflight = preflightOrcadMigrationExport(
@@ -97,7 +101,8 @@ export function leaveBehindClearsOrcadMigrationBlockers(
     preservesOrcadMigrationBridgedPanes(
       createOrcadMigrationManifest(view, target).payload,
       store.getSshRemotePtyLeases(targetId),
-      bridgedPtyIds
+      bridgedPtyIds,
+      isBridgedPaneLease
     )
   )
 }

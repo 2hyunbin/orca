@@ -168,6 +168,20 @@ async function verifyRunningRelayUpgrade(
           )
         }
         state.workspaceSessionsByHostId = partitions
+        state.sshRemotePtyLeases = [
+          ...z.array(z.unknown()).parse(state.sshRemotePtyLeases),
+          {
+            targetId,
+            ptyId: `old-${ours.relayPtyId}`,
+            tabId: 'closed-tab',
+            leafId: seeded.terminalLeafId,
+            worktreeId: seeded.worktreeId,
+            state: 'expired',
+            supersededBy: ours.relayPtyId,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          }
+        ]
       })
     }
 
