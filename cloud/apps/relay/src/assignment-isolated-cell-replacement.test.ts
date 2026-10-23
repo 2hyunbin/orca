@@ -297,8 +297,8 @@ describe('re-placing a host off a cell isolated for a roll', () => {
     const second = await store.assign(IDENTITY, 'us-central1')
 
     // Identical, not merely same-celled: the clock has not moved, so every
-    // field including the lease deadline must match.
-    expect(second).toEqual(first)
+    // field including the lease deadline must match; only the first was placed.
+    expect(second).toEqual({ ...first, placed: undefined })
     // One row read answers both the stranded rule and the roll-stamp check.
     expect(counter.count('relay_cell_admission')).toBe(1)
     expect(counter.count('relay_assignment_migrations')).toBe(0)
@@ -584,7 +584,7 @@ describe('re-placing a host off a cell isolated for a roll', () => {
       const regionReserve = vi.fn(async () => onReserve)
       await expect(
         store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { regionReserve })
-      ).resolves.toEqual(onReserve)
+      ).resolves.toEqual({ ...onReserve, placed: true })
       expect(regionReserve).toHaveBeenCalledOnce()
       expect(jsonEvents(warn, 'orca_relay_sticky_replaced_off_isolated_cell')).toEqual([
         {
@@ -639,7 +639,7 @@ describe('re-placing a host off a cell isolated for a roll', () => {
       warn.mockClear()
       await expect(
         store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, { placeFresh: async () => onReserve })
-      ).resolves.toEqual(onReserve)
+      ).resolves.toEqual({ ...onReserve, placed: true })
       expect(jsonEvents(warn, 'orca_relay_sticky_replaced_off_isolated_cell')).toMatchObject([
         { fromCellId: first.cellId, toCellId: 'asia-reserve', via: 'reserve' }
       ])

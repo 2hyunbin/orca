@@ -189,6 +189,9 @@ export type RelayAssignment = AssignmentIdentity & {
   region?: RelayRegion
 }
 
+// `placed`: this assign minted the answer (a new epoch or a reserve booking); absent for the existing row.
+export type AssignedRelayAssignment = RelayAssignment & { placed?: true }
+
 // Set only by reconnect verification, for a host whose home cell is isolated for
 // a roll right now: its next assign re-places it rather than re-granting the pin.
 export type ResolvedRelayAssignment = RelayAssignment & { homeCellRollIsolated?: true }
@@ -1015,7 +1018,7 @@ export class RelayAssignmentStore {
     // Step 5: a fresh placement may first be booked on a reserve-mode cell, outside any
     // transaction; and a database mint stays above every epoch the director's map knew.
     step5: AssignOptions = {}
-  ): Promise<RelayAssignment> {
+  ): Promise<AssignedRelayAssignment> {
     const sticky = await this.assignStickyWithLockRetry(identity, lockMode, preferredRegion)
     if (sticky && !('isolatedFrom' in sticky)) return sticky
     let isolatedFrom = sticky?.isolatedFrom
@@ -1042,7 +1045,7 @@ export class RelayAssignmentStore {
           })
         )
       }
-      return reserved
+      return reserved && { ...reserved, placed: true as const }
     }
     const booked = step5.placeFresh ? await bookReserve(step5.placeFresh) : null
     if (booked) return booked
@@ -1092,7 +1095,7 @@ export class RelayAssignmentStore {
     epochFloor = 0,
     hostRequested = false,
     keepRegion = false
-  ): Promise<RelayAssignment> {
+  ): Promise<AssignedRelayAssignment> {
     const deadline = Date.now() + ASSIGNMENT_LOCK_RETRY_DEADLINE_MS
     let inventoryScope: AssignmentInventoryScope = 'none'
     while (true) {
@@ -1386,7 +1389,7 @@ export class RelayAssignmentStore {
     hostRequested = false,
     // Refuse to spill out of placementRegion: AssignmentRegionFull instead.
     keepRegion = false
-  ): Promise<RelayAssignment> {
+  ): Promise<AssignedRelayAssignment> {
     const now = this.now()
     // An isolated retry takes its tier's rows before anything reassigns this,
     // so a lock timeout there must retry the same tier, not fall to 'all'.
@@ -1771,7 +1774,7 @@ export class RelayAssignmentStore {
         now
       )
       return {
-        assignment: { ...identity, ...target, assignmentEpoch, leaseExpiresAt },
+        assignment: { ...identity, ...target, assignmentEpoch, leaseExpiresAt, placed: true as const },
         events
       }
     }).catch((error: unknown) => {
