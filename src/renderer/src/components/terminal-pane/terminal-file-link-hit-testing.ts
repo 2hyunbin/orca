@@ -114,7 +114,8 @@ export function openFilePathLinkAtBufferPosition(
       (!best || link.pathText.length > best.pathText.length)
   )
   if (toProbe.length === 0 || (!best && toProbe.length === 1)) {
-    const link = best ?? toProbe[0]
+    // Why the visible path last: a click on a path already known missing still says so.
+    const link = best ?? toProbe[0] ?? (shown && /[\\/]/.test(shown.pathText) ? shown : undefined)
     if (link) {
       open(link)
     }

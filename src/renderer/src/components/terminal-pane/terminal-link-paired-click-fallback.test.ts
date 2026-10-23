@@ -1,3 +1,4 @@
+import type { PathExistenceResult } from '../../../../shared/path-existence-batch'
 import { describe, expect, it, vi } from 'vitest'
 import { getConnectionId } from '@/lib/connection-context'
 import { openFilePathLinkAtBufferPosition } from './terminal-file-link-hit-testing'
@@ -384,7 +385,7 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
   it('drops the click when the workspace moves to another host while candidates are checked', async () => {
     setPlatform('Macintosh')
     vi.mocked(getConnectionId).mockReturnValue('ssh-1')
-    const probe = createDeferred<unknown>()
+    const probe = createDeferred<PathExistenceResult[]>()
     const fsPathsExist = vi.fn(() => probe.promise)
     window.api.fs.pathsExist = fsPathsExist
     const deps = { startupCwd: '/home/u/proj', worktreeId: 'wt-1', worktreePath: '/home/u/proj' }
@@ -403,5 +404,26 @@ describe('a modifier-click on a paired-server path followed by more paths', () =
 
     expect(statMock).not.toHaveBeenCalled()
     expect(openFileMock).not.toHaveBeenCalled()
+  })
+
+  it('still says why when every candidate is already known missing', async () => {
+    setPlatform('Macintosh')
+    hostAnswers(() => ({ exists: false }))
+    const onOpenFailure = vi.fn()
+    const pathExistsCache = new Map(
+      [
+        '/srv/repo/a.txt',
+        '/srv/repo/a.txt/srv/repo/b.txt',
+        '/srv/repo/a.txt/srv/repo/b.txt/srv/repo/c.txt'
+      ].map((path) => [runtimeKey(path), false])
+    )
+
+    expect(clickFirstPath(onOpenFailure, pathExistsCache)).toBe(true)
+    await flushDoubleRaf()
+
+    expect(onOpenFailure).toHaveBeenCalledWith(
+      '/srv/repo/a.txt',
+      expect.objectContaining({ verdict: 'missing' })
+    )
   })
 })
