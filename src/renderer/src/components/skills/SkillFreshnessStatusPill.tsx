@@ -1,4 +1,5 @@
 import type { BundledSkillPlan } from '../../../../shared/bundled-skill-plan'
+import type { BundledSkillTarget } from '@/lib/bundled-skill-target'
 import type { BundledSkillUnsupportedReason } from '@/runtime/runtime-bundled-skills-client'
 import { useSkillFreshness } from '@/hooks/useSkillFreshness'
 import { useActiveProjectSkillRuntime } from '@/hooks/useActiveProjectSkillRuntime'
@@ -99,10 +100,12 @@ export function SkillUnsupportedStatusPill({
 
 export function SkillPlanStatusPill({
   plan,
-  skillName
+  skillName,
+  target
 }: {
   plan: BundledSkillPlan | null
   skillName: string
+  target?: BundledSkillTarget | null
 }): React.JSX.Element {
   const status = getSkillFreshnessDisplayStatus(plan, skillName)
   const entry = plan?.skills.find((skill) => skill.name === skillName)
@@ -140,7 +143,7 @@ export function SkillPlanStatusPill({
             'gap-1 px-1.5 text-[11px]',
             needsAttention && 'text-amber-500 hover:text-amber-500'
           )}
-          onClick={() => requestSkillFreshnessUpdateDialog()}
+          onClick={() => requestSkillFreshnessUpdateDialog(target)}
         >
           {needsAttention ? <AlertTriangle className="size-3" /> : null}
           {translate('auto.components.skills.SkillFreshnessStatusPill.details', 'Details')}

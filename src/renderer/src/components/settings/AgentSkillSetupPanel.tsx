@@ -87,6 +87,7 @@ function BundledAgentSkillSetupPanel({
     <SkillPlanStatusPill
       skillName={freshnessSkillName ?? activeSkillNames[0]}
       plan={plan ?? null}
+      target={target}
     />
   )
 

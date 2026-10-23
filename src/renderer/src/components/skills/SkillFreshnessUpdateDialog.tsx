@@ -29,7 +29,7 @@ import {
 } from './skill-update-run-store'
 import {
   consumeSkillFreshnessUpdateDialogRequest,
-  getSkillFreshnessUpdateDialogRequest,
+  getSkillFreshnessUpdateDialogOpenRequest,
   subscribeSkillFreshnessUpdateDialog
 } from './skill-freshness-update-dialog'
 import { useReviewedSkillPlan } from './use-reviewed-skill-plan'
@@ -229,15 +229,17 @@ function SkillUpdateFooter({
 }
 
 export function SkillFreshnessUpdateDialog(): React.JSX.Element {
-  const target = useActiveProjectSkillRuntime().bundledSkillTarget
+  const activeTarget = useActiveProjectSkillRuntime().bundledSkillTarget
+  const openRequest = useSyncExternalStore(
+    subscribeSkillFreshnessUpdateDialog,
+    getSkillFreshnessUpdateDialogOpenRequest,
+    getSkillFreshnessUpdateDialogOpenRequest
+  )
+  const open = openRequest !== null
+  const target = openRequest?.target === undefined ? activeTarget : openRequest.target
   const targetKey = target ? bundledSkillTargetKey(target) : null
   const state = useSkillFreshness(target)
   const run = useSkillUpdateRun(targetKey)
-  const open = useSyncExternalStore(
-    subscribeSkillFreshnessUpdateDialog,
-    getSkillFreshnessUpdateDialogRequest,
-    getSkillFreshnessUpdateDialogRequest
-  )
   const [force, setForce] = useState<string[]>([])
   // Why: Replace choices name one host's paths, so another host starts without them.
   const [forceTargetKey, setForceTargetKey] = useState(targetKey)
