@@ -111,23 +111,12 @@ export function createStructuredAgentSessionConversationDelivery(input: {
             const record = deps.store.getRecord(sessionId)
             return record !== null && deps.hasOpenDispatch?.(record) === true
           },
-          providerHoldsDispatch: () => {
-            if (deps.adapter.holdsDispatch?.(sessionId) === true) {
-              return true
-            }
-            const work = hostStructuredAgentSessionCurrentWork(
+          providerHoldsDispatch: () =>
+            deps.adapter.holdsDispatch?.(sessionId) === true ||
+            hostStructuredAgentSessionCurrentWork(
               { store: deps.store, sessions },
               sessionId
-            )
-            return (
-              session?.journal
-                .submissions()
-                .some(
-                  (submission) =>
-                    !isQueuedAgentJournalSubmission(submission) && work?.owesSend(submission)
-                ) === true
-            )
-          }
+            )?.holdsHandedOverSend() === true
         },
         launchPermission: async () => {
           const record = deps.store.getRecord(sessionId)

@@ -6,7 +6,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { agentJournalSubmissionKey } from '../../../shared/agent-session-journal-item-key'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { agentSessionSendSubmission } from '../../../shared/agent-session-wire'
@@ -25,6 +25,8 @@ import { openTestAgentSessionRecordStore } from '../../runtime/agent-session-rec
 import { structuredClaudeLifecycleEvent } from '../../runtime/structured-claude-runtime-adapter'
 import { openTestJournalHostDatabase } from '../agent-session-journal/journal-host-database-test-support'
 import { StructuredAgentSessionHost } from './structured-agent-session-host'
+import { retireOutgrownStructuredAgentSessionChild } from './structured-agent-session-outgrown-child'
+import type * as OutgrownChild from './structured-agent-session-outgrown-child'
 import {
   HOST_TEST_NOW as NOW,
   HOST_TEST_SESSION as SESSION,
@@ -39,6 +41,18 @@ import { isStructuredAgentSessionMainAgentWorking } from '../../../shared/struct
 import { DISPATCH_DOUBT_PROVIDER_IDLE } from '../agent-session-journal/journal-dispatch-doubt-reasons'
 import { claudeUnwrittenUserMessageError } from '../../claude/claude-agent-sdk-user-message-queue'
 import { claudeStructuredPermissionOptions } from '../../claude/claude-structured-launch-resolution'
+import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
+import { agentSessionFailureWords } from '../../../shared/agent-session-failure-words'
+
+vi.mock('./structured-agent-session-outgrown-child', async (importOriginal) => {
+  const actual = await importOriginal<typeof OutgrownChild>()
+  return {
+    ...actual,
+    retireOutgrownStructuredAgentSessionChild: vi.fn(
+      actual.retireOutgrownStructuredAgentSessionChild
+    )
+  }
+})
 
 const CALLER = { callerKey: 'client-1' }
 const CAPABILITIES = ['interrupt_receipt_v1', 'interrupt_cancel_queued_v1', 'msg_lifecycle_v1']
@@ -578,4 +592,203 @@ it('sends a message that joins an unproven Stop close to the resumed child, and 
   })
   frame(resumed, { ...written(resumed, 'Carry on.')!, isReplay: true, parent_tool_use_id: null })
   await eventually(() => expect(written(resumed, 'And this.')).toBeDefined())
+})
+
+/** Rows an older host wrote as it sent them, at the live child's fence: never answered, and the
+ *  CLI holding none of them, unless each was accepted or refused as not signed in. */
+async function olderHostSends(count: number, answer?: 'accepted' | 'notSignedIn'): Promise<void> {
+  const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const fence = store.getRecord(SESSION)!.lease.runtimeFence
+  for (let index = 0; index < count; index += 1) {
+    const clientMessageId = `older-${index}`
+    const body = hostTestMessage(clientMessageId)
+    await journal.appendSubmission({
+      clientMessageId,
+      payloadFingerprint: clientMessageId,
+      body,
+      fence
+    })
+    if (answer === 'accepted') {
+      await journal.resolveDispatch({
+        clientMessageId,
+        fence,
+        state: 'accepted',
+        providerIdentity: null
+      })
+    } else if (answer === 'notSignedIn') {
+      await journal.resolveDispatch({
+        clientMessageId,
+        fence,
+        state: 'rejected',
+        ...agentSessionFailureWords(agentSessionFailureFact(answer), { surface: 'rejection' })
+      })
+    }
+  }
+}
+
+/** What the delivery loop's retirement checks read: the journal's history, wake debt (its only
+ *  `newestTurn` reader there), and what the CLI holds, built by the adapter itself on each read. */
+function countRetirementReads() {
+  const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const counts = {
+    checks: 0,
+    linkageVisits: 0,
+    submissionsCopied: 0,
+    newestTurn: 0,
+    heldSets: 0,
+    heldVisits: 0,
+    rejections: 0,
+    afterCheck: async (_check: number): Promise<void> => undefined
+  }
+  let inside = false
+  const retire = vi.mocked(retireOutgrownStructuredAgentSessionChild)
+  const actual = retire.getMockImplementation()!
+  onTestFinished(() => void retire.mockImplementation(actual))
+  retire.mockImplementation(async (...args) => {
+    counts.checks += 1
+    inside = true
+    try {
+      return await actual(...args)
+    } finally {
+      inside = false
+      await counts.afterCheck(counts.checks)
+    }
+  })
+  const { visitItemsWithLinkage, submissions, newestTurn } = journal
+  journal.visitItemsWithLinkage = (visit) =>
+    visitItemsWithLinkage((...item) => {
+      counts.linkageVisits += inside ? 1 : 0
+      visit(...item)
+    })
+  journal.submissions = () => {
+    const all = submissions()
+    counts.submissionsCopied += inside ? all.length : 0
+    return all
+  }
+  journal.newestTurn = () => {
+    counts.newestTurn += inside ? 1 : 0
+    return newestTurn()
+  }
+  const resolveDispatch = journal.resolveDispatch.bind(journal)
+  journal.resolveDispatch = (input, cards) => {
+    counts.rejections += input.state === 'rejected' ? 1 : 0
+    return resolveDispatch(input, cards)
+  }
+  const { heldSends } = adapter
+  adapter.heldSends = (sessionId) => {
+    const held = heldSends(sessionId)
+    counts.heldSets += inside ? 1 : 0
+    counts.heldVisits += inside ? (held?.size ?? 0) : 0
+    return held
+  }
+  return counts
+}
+
+/** A person's pick of another permission mode, which writes the chat's record only. */
+async function pickPermission(value: string): Promise<void> {
+  const fields = { key: 'permissionMode', value }
+  const picked = await host.setOption(CALLER, {
+    envelope: {
+      sessionId: SESSION,
+      clientOperationId: hostTestOperationId(),
+      expectedRuntimeFence: store.getRecord(SESSION)!.lease.runtimeFence,
+      payloadFingerprint: computeAgentSessionPayloadFingerprint({
+        method: 'agentSession.setOption',
+        sessionId: SESSION,
+        fields
+      })
+    },
+    ...fields
+  })
+  expect(picked).toMatchObject({ ok: true })
+}
+
+// Each send is checked twice, before and after the wait for its child: the second check is what
+// sees a change made during that wait, so it must stay, and stay one pass over history.
+it('re-derives the retirement check after the wait, so a sign-out reported in it is honored', async () => {
+  const connection = claude.connections[0]!
+  const counts = countRetirementReads()
+  counts.afterCheck = async (check) => (check === 1 ? olderHostSends(1, 'notSignedIn') : undefined)
+  await send('CHANGED prompt')
+  await eventually(() => expect(written(claude.connections[1]!, 'CHANGED prompt')).toBeDefined())
+  expect(written(connection, 'CHANGED prompt')).toBeUndefined()
+  expect(connection.closeCount).toBe(1)
+})
+
+describe.each([20, 200])('with %i earlier sends', (count) => {
+  it('checks an ordinary send twice, each check one pass over history', async () => {
+    await olderHostSends(count, 'accepted')
+    const counts = countRetirementReads()
+    await send('ORDINARY prompt')
+    await eventually(() => expect(written(claude.connections[0]!, 'ORDINARY prompt')).toBeDefined())
+    const { items, submissions } = await snapshot()
+    expect(submissions).toHaveLength(count + 1)
+    expect(counts).toMatchObject({
+      checks: 2,
+      linkageVisits: 2 * items.length,
+      submissionsCopied: 2 * submissions.length,
+      newestTurn: 0,
+      heldSets: 0
+    })
+  })
+
+  it('keeps an agent mid-turn through a permission change, deriving no wake debt', async () => {
+    await olderHostSends(count, 'accepted')
+    const connection = claude.connections[0]!
+    await send('FIRST prompt')
+    await eventually(() => expect(written(connection, 'FIRST prompt')).toBeDefined())
+    frame(connection, {
+      ...written(connection, 'FIRST prompt')!,
+      isReplay: true,
+      parent_tool_use_id: null
+    })
+    await eventually(() => expect(host.currentWork(SESSION)?.activeTurnId()).not.toBeNull())
+    await pickPermission('ask')
+    const counts = countRetirementReads()
+    await send('STEER prompt')
+    await eventually(() => expect(written(connection, 'STEER prompt')).toBeDefined())
+    expect(counts).toMatchObject({ checks: 2, newestTurn: 0 })
+    expect(connection.closeCount).toBe(0)
+  })
+
+  it('refuses each queued model change behind an admitted send, reading what the CLI holds once per check', async () => {
+    claudeFrames.initProof = 'none'
+    const connection = claude.connections[0]!
+    frame(connection, {
+      type: 'system',
+      subtype: 'init',
+      uuid: 'haiku-root',
+      model: 'claude-haiku-4-5',
+      permissionMode: 'default'
+    })
+    await olderHostSends(count)
+    const admitted = await send('ADMITTED prompt')
+    await eventually(() => expect(written(connection, 'ADMITTED prompt')).toBeDefined())
+    expect(adapter.holdsDispatch(SESSION)).toBe(false)
+    const counts = countRetirementReads()
+    const blocked: string[] = []
+    for (let index = 0; index < count; index += 1) {
+      blocked.push(await send(`BLOCKED ${index}`, { model: 'opus' }))
+    }
+    await eventually(async () => {
+      const rejected = (await snapshot()).submissions.filter(
+        (entry) => entry.dispatchState === 'rejected'
+      )
+      expect(rejected.map((entry) => entry.clientMessageId).sort()).toEqual([...blocked].sort())
+    })
+    // The admitted send is the one send the CLI holds, read once per check however many older
+    // unanswered rows come before it.
+    expect(counts).toMatchObject({
+      checks: count,
+      rejections: count,
+      heldSets: count,
+      heldVisits: count
+    })
+    expect(
+      (await snapshot()).submissions.find((entry) => entry.clientMessageId === admitted)
+    ).toMatchObject({ dispatchState: 'pending' })
+    expect(connection.closeCount).toBe(0)
+    expect(connection.calls.some(({ subtype }) => subtype === 'set_model')).toBe(false)
+    expect(claude.connections).toHaveLength(1)
+  }, 60_000)
 })

@@ -239,6 +239,54 @@ describe('retireOutgrownStructuredAgentSessionChild', () => {
     expect(before.stopAgent).toHaveBeenCalledWith('session')
   })
 
+  it('says why a model change waits, reading wake debt only when open work leaves that open', async () => {
+    const settled: AgentChildWorkView = {
+      ...liveChildWork,
+      state: 'done',
+      membership: 'settled',
+      outcome: 'succeeded',
+      settledAt: 200
+    }
+    const refuse = async (work: Partial<typeof idle>, children: AgentChildWorkView[]) => {
+      const childWork = vi.fn(() => children)
+      const refusal = await retireOutgrownStructuredAgentSessionChild(
+        'session',
+        conversation({ newestTurnEndedAt: 100 }),
+        {
+          work: { ...idle, childWork, ...work },
+          next: {
+            clientMessageId: 'next',
+            fence: 2,
+            payloadFingerprint: 'next',
+            dispatchState: 'pending',
+            providerItemId: null,
+            reason: null,
+            submittedAt: 0,
+            resolvedAt: null
+          },
+          requiresModelTransitionRestart: () => true,
+          stopAgent: vi.fn(async () => undefined),
+          logger: { warn: vi.fn(), error: vi.fn() }
+        }
+      )
+      return { refusal, wakeDebtReads: childWork.mock.calls.length }
+    }
+    const waits = (reason: string, wakeDebtReads: number) => ({
+      refusal: { details: { reason } },
+      wakeDebtReads
+    })
+    expect(await refuse({ childWorkOpen: () => true }, [settled])).toMatchObject(
+      waits('backgroundTasksRunning', 0)
+    )
+    expect(await refuse({}, [settled])).toMatchObject(waits('backgroundTasksRunning', 1))
+    expect(await refuse({ providerHoldsDispatch: () => true }, [settled])).toMatchObject(
+      waits('backgroundTasksRunning', 1)
+    )
+    expect(await refuse({ providerHoldsDispatch: () => true }, [])).toMatchObject(
+      waits('messagesUnsettled', 1)
+    )
+  })
+
   it('logs a stop that fails and lets the send go on', async () => {
     const { warn } = await retire(
       signedOut,

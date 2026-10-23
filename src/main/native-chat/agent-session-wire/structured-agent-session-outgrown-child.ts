@@ -156,20 +156,20 @@ export async function retireOutgrownStructuredAgentSessionChild(
   if (!otherReason && !modelTransition) {
     return
   }
-  const wakeDebt = owesWakeUp(session.journal, deps.work.childWork())
-  if (
-    structuredAgentSessionChildHasOpenWork(
-      modelTransition && !otherReason ? { ...deps.work, hasOpenDispatch: () => false } : deps.work
-    ) ||
-    wakeDebt
-  ) {
+  const open = structuredAgentSessionChildHasOpenWork(
+    modelTransition && !otherReason ? { ...deps.work, hasOpenDispatch: () => false } : deps.work
+  )
+  if (open && !modelTransition) {
+    return
+  }
+  // Wake debt is derived only where it decides: keeping an idle child, or why a model change waits.
+  const background =
+    (open && deps.work.childWorkOpen()) || owesWakeUp(session.journal, deps.work.childWork())
+  if (open || background) {
     return modelTransition
       ? {
           code: 'agent_session_operation_invalid',
-          details: {
-            reason:
-              deps.work.childWorkOpen() || wakeDebt ? 'backgroundTasksRunning' : 'messagesUnsettled'
-          }
+          details: { reason: background ? 'backgroundTasksRunning' : 'messagesUnsettled' }
         }
       : undefined
   }
