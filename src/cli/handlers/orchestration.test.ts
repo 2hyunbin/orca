@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const callMock = vi.fn()
-// worker_done carries a CLI-minted request id so its runtime_unavailable retries replay one mutation.
+// Reuse one mutation identity when retrying worker_done after runtime_unavailable.
 const WORKER_DONE_REQUEST = { orchestrationRequestId: expect.any(String) }
 const getTerminalHandleMock = vi.hoisted(() => vi.fn())
 const originalTerminalHandle = process.env.ORCA_TERMINAL_HANDLE
 const originalPaneKey = process.env.ORCA_PANE_KEY
-// Why: a structured-session marker inherited from the runner diverts these cases to the
-// structured refusal, so which branch they exercise would depend on who ran them.
+// Isolate inherited session markers so the runner cannot change the refusal branch.
 const originalStructuredSession = process.env.ORCA_STRUCTURED_SESSION
 const originalCliCommand = process.env.ORCA_CLI_COMMAND
 const originalExitCode = process.exitCode
@@ -15,7 +14,6 @@ function lifecycleGroupRecipientError(type: 'worker_done' | 'heartbeat'): string
   return `${type} messages belong to one exact Dispatch and cannot target a group address.`
 }
 
-// Why: isolate the handler's flag-to-param mapping; printResult only writes output.
 vi.mock('../format', () => ({ printResult: vi.fn() }))
 vi.mock('../selectors', () => ({ getTerminalHandle: getTerminalHandleMock }))
 
@@ -274,10 +272,7 @@ describe('orchestration send structured payload flags', () => {
         ])
       )
 
-      // Why: pre-payload-authority runtimes only complete a worker_done whose
-      // sender equals the recorded (equally stale) assignee handle, and
-      // coordinator replies route to the sender row the worker's env-handle
-      // `check` actually reads — so lifecycle sends must stay env-verbatim.
+      // Older hosts match lifecycle senders to stale assignee handles, so preserve the env spelling.
       expect(callMock).toHaveBeenCalledTimes(1)
       expect(callMock).toHaveBeenCalledWith(
         'orchestration.send',
@@ -332,8 +327,7 @@ describe('orchestration send structured payload flags', () => {
     process.env.ORCA_STRUCTURED_SESSION = '1'
     getTerminalHandleMock.mockResolvedValue('term_sibling_pane')
 
-    // The refusal must not recommend --from: the explicit-flag branch returns before this guard,
-    // so the advice would succeed against a handle that necessarily belongs to another pane.
+    // --from bypasses this guard and could select another pane; never recommend it as recovery.
     await expect(
       invokeSend(
         new Map<string, string | boolean>([
@@ -440,8 +434,7 @@ describe('orchestration timeout flag validation', () => {
       ])
     )
 
-    // Why: --peek rides with unread:false so pre-peek runtimes fall back to
-    // the non-consuming all mode instead of the destructive mark-read default.
+    // unread:false keeps --peek non-consuming when older runtimes ignore the peek field.
     expect(callMock).toHaveBeenCalledWith('orchestration.check', {
       terminal: 'term_worker',
       terminalPaneKey: undefined,
@@ -479,8 +472,7 @@ describe('orchestration timeout flag validation', () => {
     }
     expect(response.result.messages.map((m) => m.id)).toEqual(['msg_new'])
     expect(response.result.count).toBe(1)
-    // Why: the pre-peek runtime built `formatted` from all rows, including
-    // the read one the filter just removed.
+    // Older formatted output includes read rows removed by the client filter.
     expect(response.result.formatted).toBeUndefined()
   })
 

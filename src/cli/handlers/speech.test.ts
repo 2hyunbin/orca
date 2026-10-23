@@ -17,7 +17,6 @@ describe('orca speech openai-key set', () => {
     await expect(readOpenAiKeyFromStdin(piped('sk-test-', 'abc\n'))).resolves.toBe('sk-test-abc')
   })
 
-  // Why: a key typed as an argument would sit in shell history and process listings.
   it('refuses an interactive terminal instead of waiting on it', async () => {
     const terminal = Object.assign(chunks(), { isTTY: true })
     await expect(readOpenAiKeyFromStdin(terminal)).rejects.toThrow('Pipe the key on stdin')
