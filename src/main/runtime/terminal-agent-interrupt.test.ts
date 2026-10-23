@@ -18,7 +18,10 @@ function row(state: AgentStatusIpcPayload['state']): AgentStatusIpcPayload {
 }
 
 function harness() {
-  const state = { row: row('working') as AgentStatusIpcPayload | null, incarnation: 'inc-1' }
+  const state: { row: AgentStatusIpcPayload | null; incarnation: string } = {
+    row: row('working'),
+    incarnation: 'inc-1'
+  }
   const keys: string[] = []
   const runtime = {
     getTerminalHandleForPaneKey: (paneKey: string) => (paneKey === PANE ? 'term-1' : null),
