@@ -330,6 +330,30 @@ describe('a reserve-mode cell admits from memory with its database wedged', () =
     expect(cell.book(identity, 9)).toEqual([{ outcome: 'ok' }])
   })
 
+  it('logs why it refused a demotion, by host digest, so a director can tell a stale seat', async () => {
+    const cell = await startCell({ admitMode: 'reserve' })
+    const identity = await cell.host()
+    cell.book(identity, 9)
+    await cell.connect(identity, 9)
+    const page = cell.relay.sessions.seatFeed(null)
+    const joinedAt = 'full' in page ? page.full[0]!.joinedAt : -1
+    const seat = { v: 1 as const, userId: 'user-1', relayHostId: identity.hostId, epoch: 9 }
+    // startCell already silences console.warn; this reads that same spy.
+    const warn = vi.spyOn(console, 'warn')
+    warn.mockClear()
+    expect(cell.relay.sessions.demote({ ...seat, epoch: 8, joinedAt })).toBe('not-seated')
+    expect(cell.relay.sessions.demote({ ...seat, joinedAt: joinedAt - 1 })).toBe('not-seated')
+    const refused = warn.mock.calls
+      .map(([line]) => (typeof line === 'string' && line.startsWith('{') ? JSON.parse(line) : null))
+      .filter((entry) => entry?.event === 'orca_relay_cell_seat_demote_refused')
+    expect(refused).toMatchObject([
+      { outcome: 'not-seated', reason: 'epoch', assignmentEpoch: 8, sessionEpoch: 9, feedEpoch: 9 },
+      { outcome: 'not-seated', reason: 'joined-at', sessionEpoch: 9, feedJoinedAtMatches: false }
+    ])
+    expect(refused[0].relayHostIdDigest).toMatch(/^[0-9a-f]{12}$/)
+    expect(JSON.stringify(refused)).not.toContain(identity.hostId)
+  })
+
   it('leaves a drained seat to its drain grace instead of the shorter demotion close', async () => {
     const cell = await startCell({ admitMode: 'reserve' })
     const identity = await cell.host()

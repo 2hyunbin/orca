@@ -422,17 +422,36 @@ export class ReserveAssignment {
   }
 
   // Fire-and-forget; the cell checks the seat's epoch and join itself. False: no such cell listed.
-  demoteSeat(seat: { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }): boolean {
+  demoteSeat(seat: DemotedSeat, via: DemoteVia): boolean {
     const cell = this.input.cells().find((entry) => entry.cellId === seat.cellId)
     if (!cell) return false
-    void this.input.client.demote(cell, {
-      v: 1,
-      userId: seat.userId,
-      relayHostId: seat.relayHostId,
-      epoch: seat.epoch,
-      joinedAt: seat.joinedAt
-    })
+    void this.input.client
+      .demote(cell, {
+        v: 1,
+        userId: seat.userId,
+        relayHostId: seat.relayHostId,
+        epoch: seat.epoch,
+        joinedAt: seat.joinedAt
+      })
+      .then((outcome) => this.settleDemote(seat, via, outcome))
     return true
+  }
+
+  // not-seated: the cell holds no session for that exact seat, so the map's copy is stale and
+  // every later reconcile would demote it again. Other answers leave the seat to the feed.
+  private settleDemote(seat: DemotedSeat, via: DemoteVia, outcome: string | null): void {
+    const forgotten = outcome === 'not-seated' && this.input.directory.forgetSeat(seat)
+    this.log(
+      JSON.stringify({
+        event: 'orca_relay_reserve_demote_outcome',
+        via,
+        cellId: seat.cellId,
+        epoch: seat.epoch,
+        relayHostIdDigest: relayHostLogDigest(seat.relayHostId),
+        outcome: outcome ?? 'unreachable',
+        forgotten
+      })
+    )
   }
 
   // Supersede at placement: the old seats this director's map holds on reserve cells are told
@@ -456,9 +475,9 @@ export class ReserveAssignment {
     toCellId: string,
     via: 'placement' | 'feed'
   ): void {
-    if (!this.demoteSeat(seat)) return
+    if (!this.demoteSeat(seat, via)) return
     this.summary.supersedes += 1
-    this.input.log?.(
+    this.log(
       JSON.stringify({
         event: 'orca_relay_reserve_supersede',
         relayHostIdDigest: relayHostLogDigest(seat.relayHostId),
@@ -479,7 +498,7 @@ export class ReserveAssignment {
       latenciesMs.length === 0
         ? null
         : Math.round(latenciesMs[Math.min(latenciesMs.length - 1, Math.floor(share * latenciesMs.length))]!)
-    ;(this.input.log ?? ((line: string) => console.log(line)))(
+    this.log(
       JSON.stringify({
         event: 'orca_relay_reserve_placement_summary',
         mode: this.input.mode,
@@ -489,7 +508,14 @@ export class ReserveAssignment {
     )
     this.summary = emptySummary()
   }
+
+  private log(line: string): void {
+    ;(this.input.log ?? ((entry: string) => console.log(entry)))(line)
+  }
 }
+
+type DemotedSeat = { userId: string; relayHostId: string; cellId: string; epoch: number; joinedAt: number }
+type DemoteVia = 'reconcile' | 'placement' | 'feed'
 
 type PlacementSummary = {
   sticky: number

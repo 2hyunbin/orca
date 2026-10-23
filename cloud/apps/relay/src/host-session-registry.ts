@@ -34,7 +34,7 @@ import type { AssignmentLeaseClass } from './assignment-lease.js'
 import type { AssignmentLeaseShadow } from './assignment-lease-shadow.js'
 import type { RelayAssignmentStore } from './assignment-store.js'
 import type { CellAdmitMode, CellReserveBook } from './cell-reserve-book.js'
-import type { DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
+import type { DemoteOutcome, DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
 import { CellSeatLog, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
 import { isRelayDatabaseTransientError } from './database.js'
 import { printableCloseReason } from './control-close-reason-text.js'
@@ -762,9 +762,22 @@ export class HostSessionRegistry {
 
   // A director names this seat the loser of a duplicate: stop taking phones for it now, and
   // close it once its splices have had time to finish. Repeats are one demotion.
-  demote(request: DemoteRequest): 'demoted' | 'already-demoted' | 'draining' | 'not-seated' | 'off' {
+  demote(request: DemoteRequest): DemoteOutcome {
+    const refused = (outcome: Exclude<DemoteOutcome, 'demoted'>, detail: Record<string, unknown> = {}) => {
+      console.warn(
+        JSON.stringify({
+          event: 'orca_relay_cell_seat_demote_refused',
+          ...this.logIdentity(),
+          relayHostIdDigest: relayHostLogDigest(request.relayHostId),
+          assignmentEpoch: request.epoch,
+          outcome,
+          ...detail
+        })
+      )
+      return outcome
+    }
     // Only a reserve-mode cell takes demotions, so flipping admitMode back reverts the route.
-    if (!this.reserveMode()) return 'off'
+    if (!this.reserveMode()) return refused('off')
     const session = this.get(request)
     const key = this.key(request.userId, request.relayHostId)
     // The seat the director saw: the same host rejoining here later is a different seat.
@@ -776,12 +789,17 @@ export class HostSessionRegistry {
       session.assignmentEpoch !== request.epoch ||
       seat?.joinedAt !== request.joinedAt
     ) {
-      return 'not-seated'
+      // What the cell's own feed holds too: a seat it still lists here means feed and session disagree.
+      return refused('not-seated', {
+        reason: notSeatedReason(session, request),
+        ...(session ? { sessionEpoch: session.assignmentEpoch } : {}),
+        ...(seat ? { feedEpoch: seat.epoch, feedJoinedAtMatches: seat.joinedAt === request.joinedAt } : {})
+      })
     }
     // A drain already told this host to go: its own grace stands, never cut to the demotion's.
-    if (this.drainSentHosts.has(session.relayHostId) || session.regionalDrainAttemptId) return 'draining'
+    if (this.drainSentHosts.has(session.relayHostId) || session.regionalDrainAttemptId) return refused('draining')
     const socket = session.socket
-    if (this.demotedSeats.get(key) === socket) return 'already-demoted'
+    if (this.demotedSeats.get(key) === socket) return refused('already-demoted')
     this.demotedSeats.set(key, socket)
     this.markSeatDrainOnly(session)
     const timer = setTimeout(() => {
@@ -2718,4 +2736,14 @@ function controlErrorCode(type: string, error: unknown): string {
 
 function databaseCause(error: unknown): PhoneDatabaseCause {
   return isRelayDatabaseTransientError(error) ? 'database_transient' : 'error'
+}
+
+function notSeatedReason(
+  session: HostSession | null,
+  request: DemoteRequest
+): 'no-session' | 'closed' | 'no-socket' | 'epoch' | 'joined-at' {
+  if (!session) return 'no-session'
+  if (session.state === 'closed') return 'closed'
+  if (!session.socket) return 'no-socket'
+  return session.assignmentEpoch !== request.epoch ? 'epoch' : 'joined-at'
 }
