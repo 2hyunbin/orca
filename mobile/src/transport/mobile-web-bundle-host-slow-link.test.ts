@@ -10,11 +10,6 @@ import type { RpcClient } from './rpc-client'
 import type { RpcResponse } from './types'
 import { fetchMobileWebBundle } from './mobile-web-bundle-fetch'
 
-const host = vi.hoisted(() => ({ root: '' }))
-vi.mock('../../../src/shared/app-environment', () => ({
-  hasAppEnvironment: () => true,
-  getAppEnvironment: () => ({ getAppPath: () => host.root })
-}))
 vi.mock('expo-crypto', async () => {
   const crypto = await import('node:crypto')
   return {
@@ -24,7 +19,10 @@ vi.mock('expo-crypto', async () => {
   }
 })
 
-import { MOBILE_WEB_BUNDLE_METHODS } from '../../../src/main/runtime/rpc/methods/mobile-web-bundle'
+import {
+  installMobileWebBundleAppPath,
+  mobileWebBundleDispatcher
+} from '../../../src/main/runtime/rpc/methods/mobile-web-bundle.test-fixture'
 import { resetBundledMobileWebBundleCacheForTests } from '../../../src/main/runtime/bundled-mobile-web-bundle'
 
 let scratch: string | undefined
@@ -39,7 +37,7 @@ afterEach(() => {
 
 it('verifies a host-served bundle over a 20 KiB/s link including incompressible assets', async () => {
   scratch = mkdtempSync(join(tmpdir(), 'orca-bundle-slow-link-'))
-  host.root = scratch
+  installMobileWebBundleAppPath(scratch)
   const root = join(scratch, 'out', 'mobile-web')
   mkdirSync(join(root, 'assets'), { recursive: true })
   const files = new Map([
@@ -70,12 +68,16 @@ it('verifies a host-served bundle over a 20 KiB/s link including incompressible 
   }
   writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest))
 
-  const invoke = async (name: string, params: unknown): Promise<unknown> => {
-    const method = MOBILE_WEB_BUNDLE_METHODS.find((method) => method.name === name)
-    if (!method) {
-      throw new Error(`Missing host method ${name}`)
+  const dispatcher = mobileWebBundleDispatcher()
+  const invoke = async (method: string, params: unknown): Promise<unknown> => {
+    const response = await dispatcher.dispatch(
+      { id: 'host-read', authToken: 'tok', method, params },
+      { connectionId: 'slow-link' }
+    )
+    if (!response.ok) {
+      throw new Error(response.error.message)
     }
-    return Reflect.apply(method.handler, null, [params, { connectionId: 'slow-link' }])
+    return response.result
   }
   const opened = await invoke('mobileWeb.bundle.manifest', null)
   const grid: unknown = Object(opened).rangeBytes

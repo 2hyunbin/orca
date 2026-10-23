@@ -117,6 +117,8 @@ describe('mobileWeb.bundle.range on an install that carries a bundle', () => {
           assetByteLength: asset.byteLength,
           sha256: asset.sha256
         })
+        expect(decoded(result).byteLength).toBe(Math.min(RANGE_BYTES, asset.byteLength - offset))
+        expect(result.eof).toBe(offset + RANGE_BYTES >= asset.byteLength)
         pieces.push(decoded(result))
         if (result.eof) {
           break
