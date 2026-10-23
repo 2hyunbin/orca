@@ -55,28 +55,38 @@ export function WorktreeLineageToggle({
             type="button"
             variant="outline"
             size="chip"
-            className="relative z-10 h-auto min-h-4.5 max-w-full flex-wrap"
+            className="relative z-10 h-auto min-h-4.5 max-w-full"
             aria-label={ariaLabel}
             aria-describedby={description ? descriptionId : undefined}
             aria-expanded={!collapsed}
             onClick={onToggle}
           >
-            <Workflow className="size-2.5 shrink-0" />
-            <span className="shrink-0">{label}</span>
-            {summary.map((status) => (
-              <span
-                key={status}
-                className="inline-flex shrink-0 items-center gap-0.5 tabular-nums"
-                data-child-worktree-status={status}
-                aria-hidden="true"
-              >
-                <StatusIndicator status={status} showTooltip={false} />
-                {counts.get(status)}
+            <span className="inline-flex min-w-0 items-center gap-2 px-1 py-0.5">
+              <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="inline-flex shrink-0 items-center gap-1">
+                  <Workflow className="size-2.5 shrink-0" />
+                  <span className="truncate">{label}</span>
+                </span>
+                {summary.length > 0 ? (
+                  <span className="inline-flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-l border-border pl-2">
+                    {summary.map((status) => (
+                      <span
+                        key={status}
+                        className="inline-flex shrink-0 items-center gap-0.5 tabular-nums"
+                        data-child-worktree-status={status}
+                        aria-hidden="true"
+                      >
+                        <StatusIndicator status={status} showTooltip={false} />
+                        {counts.get(status)}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </span>
-            ))}
-            <ChevronDown
-              className={cn('size-2.5 shrink-0 transition-transform', collapsed && '-rotate-90')}
-            />
+              <ChevronDown
+                className={cn('size-2.5 shrink-0 transition-transform', collapsed && '-rotate-90')}
+              />
+            </span>
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right" sideOffset={8}>
