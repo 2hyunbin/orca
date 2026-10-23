@@ -41,7 +41,9 @@ class FullAtReserveDatabase implements RelayDatabase {
 
   async queryLocked(sql: string, params?: unknown[], options?: RelayLockOptions): Promise<SqlRow[]> {
     const rows = await this.delegate.queryLocked(sql, params, options)
-    if (!this.armed || sql.trim() !== 'SELECT * FROM relay_cells WHERE cell_id = ?') return rows
+    if (!this.armed || sql.trim() !== 'SELECT * FROM relay_cells WHERE cell_id = ?') {
+      return rows
+    }
     return rows.map((row) => ({ ...row, reserved_requests: row.capacity_requests }))
   }
 
@@ -76,7 +78,9 @@ describe('reserve spill before relay_capacity_exhausted', () => {
   })
 
   const closeAllDatabaseCells = async () => {
-    for (const cell of CELLS) await store.configureCell(cell, 'migration-only')
+    for (const cell of CELLS) {
+      await store.configureCell(cell, 'migration-only')
+    }
   }
   const assignAsia = async (step5: AssignOptions) =>
     await store.assign(IDENTITY, 'asia-east2', 'asia-east2', undefined, step5)
@@ -123,6 +127,16 @@ describe('reserve spill before relay_capacity_exhausted', () => {
       throw new ReservePaceError(4)
     })
     await expect(assignAsia({ reserveSpill })).rejects.toBeInstanceOf(ReservePaceError)
+  })
+
+  it('answers an in-region reserve pace before any spill', async () => {
+    await closeAllDatabaseCells()
+    const reserveSpill = vi.fn(async () => ON_US_RESERVE)
+    const regionReserve = async () => {
+      throw new ReservePaceError(2)
+    }
+    await expect(assignAsia({ regionReserve, reserveSpill })).rejects.toBeInstanceOf(ReservePaceError)
+    expect(reserveSpill).not.toHaveBeenCalled()
   })
 
   it('does not spill a reservation race: the host retries and re-picks', async () => {

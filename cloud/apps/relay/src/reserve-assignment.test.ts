@@ -514,16 +514,34 @@ describe('reserve assignment on a director', () => {
       expect(correction).toEqual({ kind: 'database' })
     })
 
-    it('counts spills in the summary and per region pair', async () => {
-      const lines: Array<Record<string, unknown>> = []
-      const harness = setupSpill(fullCounts, {}, (line) => lines.push(JSON.parse(line)))
-      await (await spillOf(harness))?.({ skipOwnRegion: false, rowEpoch: 0 })
-      harness.now.value += 60_000
-      await harness.assignment.plan(HOST, { reconnect: true, region: ASIA })
-      expect(lines.find((line) => line.event === 'orca_relay_reserve_placement_summary')).toMatchObject({ spill: 1 })
-      expect(lines.filter((line) => line.event === 'orca_relay_reserve_spill')).toEqual([
-        { event: 'orca_relay_reserve_spill', fromRegion: ASIA, toRegion: US, count: 1 }
-      ])
+    it('answers the shortest pace when every region paces', async () => {
+      const harness = setupSpill(paced, { intake: { perSec: 2, burst: 20, tokens: 0 } })
+      const spill = await spillOf(harness)
+      // Asia refills its token in 4 s, US in 2 s.
+      await expect(spill?.({ skipOwnRegion: false, rowEpoch: 0 })).rejects.toBeInstanceOf(ReservePaceError)
+      await expect(spill?.({ skipOwnRegion: false, rowEpoch: 0 })).rejects.toMatchObject({ retryAfterSeconds: 2 })
+    })
+
+    it('counts a spill once, not as a database fallback or a pace per region', async () => {
+      for (const [asiaReserve, label] of [
+        [fullCounts, 'full'],
+        [paced, 'paced']
+      ] as const) {
+        const lines: Record<string, unknown>[] = []
+        const harness = setupSpill(asiaReserve, {}, (line) => lines.push(JSON.parse(line)))
+        await (await spillOf(harness))?.({ skipOwnRegion: false, rowEpoch: 0 })
+        harness.now.value += 60_000
+        await harness.assignment.plan(HOST, { reconnect: true, region: ASIA })
+        expect(lines.find((line) => line.event === 'orca_relay_reserve_placement_summary'), label).toMatchObject({
+          spill: 1,
+          placed: 1,
+          database: 0,
+          retries: { paced: 0 }
+        })
+        expect(lines.filter((line) => line.event === 'orca_relay_reserve_spill'), label).toEqual([
+          { event: 'orca_relay_reserve_spill', fromRegion: ASIA, toRegion: US, count: 1 }
+        ])
+      }
     })
   })
 

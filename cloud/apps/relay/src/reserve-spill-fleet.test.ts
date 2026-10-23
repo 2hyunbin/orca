@@ -1,15 +1,26 @@
 import type { RelayRegion } from '@orca-cloud/relay-contract'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RelayAssignmentStore } from './assignment-store.js'
 import type { CellReserveClient } from './cell-reserve-client.js'
-import type { RelayCellConfig } from './config.js'
+import type { RelayCellConfig, RelayConfig } from './config.js'
 import { openInMemoryRelayDatabase, type RelayDatabase } from './database.js'
 import { ReserveAssignment } from './reserve-assignment.js'
 import { ReservePlacer } from './reserve-placement.js'
 import { ShadowSeatDirectory, type SeatFeedCell } from './shadow-seat-directory.js'
 
-// A fleet with no database-mode cell: the real plan and the real store, with each reserve
-// cell's own booking rule played by a ceiling of two seats.
+const fakes = vi.hoisted(() => ({
+  verifyRelayToken: vi.fn(async (token: string) => ({ sub: 'user-1', relayHostId: token }))
+}))
+
+vi.mock('./relay-token-verifier.js', () => ({
+  createRelayTokenVerifier: () => fakes.verifyRelayToken,
+  readBearer: (value: string | undefined) => value?.replace(/^Bearer /, '') ?? null
+}))
+
+import { createRelayApp } from './app.js'
+
+// A fleet with no database-mode cell, through /v1/assign: the real plan and the real store,
+// with each reserve cell's own booking rule played by a ceiling of two seats.
 
 const CEILING = 2
 const CELLS: RelayCellConfig[] = [
@@ -30,7 +41,9 @@ describe('an all-reserve two-region fleet', () => {
     database = await openInMemoryRelayDatabase()
     store = new RelayAssignmentStore(database, () => now)
     await store.reconcileCells(CELLS)
-    for (const cell of CELLS) await store.setCellAdmitMode(cell.id, 'reserve')
+    for (const cell of CELLS) {
+      await store.setCellAdmitMode(cell.id, 'reserve')
+    }
     const feedCells: SeatFeedCell[] = CELLS.map((cell) => ({
       cellId: cell.id,
       cellUrl: cell.url,
@@ -62,7 +75,9 @@ describe('an all-reserve two-region fleet', () => {
     const client = {
       reserve: async (target: { cellId: string }) => {
         const count = booked.get(target.cellId) ?? 0
-        if (count >= CEILING) return { outcome: 'full' }
+        if (count >= CEILING) {
+          return { outcome: 'full' }
+        }
         booked.set(target.cellId, count + 1)
         return { outcome: 'ok' }
       },
@@ -84,28 +99,73 @@ describe('an all-reserve two-region fleet', () => {
       log: () => undefined
     })
     // A director's estimate starts empty; the first look starts the refill clock.
-    for (const cell of reserve.placementCells()) placer.hasBudget(cell)
+    for (const cell of reserve.placementCells()) {
+      placer.hasBudget(cell)
+    }
     now += 1_000
   })
 
   afterEach(async () => await database.close())
 
-  // What /v1/assign does with a fresh host's plan.
-  const assignFresh = async (host: number, region: RelayRegion) => {
-    const identity = { userId: 'user-1', relayHostId: `fleethost${String(host).padStart(7, '0')}` }
-    const plan = await reserve.plan(identity, { reconnect: false, region })
-    if (plan.kind === 'answer') return plan.assignment
-    if (plan.kind === 'retry') throw new Error(`retry:${plan.reason}`)
-    return await store.assign(identity, region, region, undefined, { ...plan, hostRequested: true })
-  }
-
-  it('seats US hosts on the Asia reserve cell once US is full, then refuses', async () => {
-    const regions: Array<string | undefined> = []
-    for (let host = 0; host < 2 * CEILING; host++) {
-      regions.push((await assignFresh(host, 'us-central1')).region)
+  it('seats US hosts on the Asia reserve cell once US is full, counted as fallbacks, then refuses', async () => {
+    const recordRegionSelection = vi.fn()
+    const app = createRelayApp(config(), {
+      store: {} as never,
+      assignments: store,
+      reservePlacement: reserve,
+      drain: vi.fn(),
+      ready: vi.fn(async () => true),
+      recordRegionSelection
+    })
+    const ask = async (host: number) => {
+      const relayHostId = `fleethost${String(host).padStart(7, '0')}`
+      return await app.request('/v1/assign', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${relayHostId}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ v: 1, relayHostId, preferredRegion: 'us-central1' })
+      })
     }
-    expect(regions).toEqual(['us-central1', 'us-central1', 'asia-east2', 'asia-east2'])
-    await expect(assignFresh(2 * CEILING, 'us-central1')).rejects.toThrow('relay_capacity_exhausted')
+    const cellUrls: string[] = []
+    for (let host = 0; host < 2 * CEILING; host++) {
+      const response = await ask(host)
+      expect(response.status).toBe(200)
+      cellUrls.push(((await response.json()) as { cellUrl: string }).cellUrl)
+    }
+    expect(cellUrls).toEqual([CELLS[0]!.url, CELLS[0]!.url, CELLS[1]!.url, CELLS[1]!.url])
+    expect(recordRegionSelection.mock.calls.map(([input]) => input.fallback)).toEqual([false, false, true, true])
+    const refused = await ask(2 * CEILING)
+    expect(refused.status).toBe(503)
+    expect(await refused.json()).toEqual({ error: 'relay_capacity_exhausted' })
     expect(await database.query(`SELECT cell_id FROM relay_assignments`)).toEqual([])
   })
 })
+
+function config(): RelayConfig {
+  return {
+    port: 8080,
+    publicUrl: 'https://relay.example.test',
+    cellUrl: 'https://relay.example.test',
+    region: 'us-central1',
+    authIssuer: 'https://auth.example.test',
+    authAudience: 'orca-relay',
+    jwksUrl: 'https://auth.example.test/jwks',
+    assignmentSigningKey: new TextEncoder().encode('assignment-key-with-at-least-32-bytes'),
+    role: 'director',
+    cellId: 'director',
+    cells: [],
+    adminAudience: 'https://relay.example.test/v1/admin/drain',
+    deployServiceAccount: 'deploy@example.test',
+    runtimeServiceAccount: 'runtime@example.test',
+    adminJwksUrl: 'https://auth.example.test/jwks',
+    databasePoolMax: 3,
+    publicAssignmentsEnabled: true,
+    regionalPlacementEnabled: true,
+    publicAssignmentConcurrency: 2,
+    publicAssignmentQueueMax: 128,
+    publicAssignmentWaitMs: 4_000,
+    publicResolveConcurrency: 1,
+    publicResolveWaitMs: 5_000,
+    publicAssignmentRetryAfterSeconds: 5,
+    dataDir: './data'
+  }
+}

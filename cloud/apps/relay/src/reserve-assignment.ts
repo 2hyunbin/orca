@@ -196,7 +196,9 @@ export class ReserveAssignment {
     // The database lane answers it, so the window exchange follows: no memory answer, no share
     // draw, only the in-region fallback, once the map is complete and knows the host.
     if (request.regionCorrection) {
-      if (incomplete) return { kind: 'database' }
+      if (incomplete) {
+        return { kind: 'database' }
+      }
       // A never-seen host's spill mints above the row the database lane read.
       const reserveSpill = this.reserveSpill(identity, request.region, epochFloor, seats)
       return known.length === 0
@@ -271,23 +273,33 @@ export class ReserveAssignment {
       const now = this.now()
       let paced: ReservePaceError | undefined
       for (const target of [region, ...RELAY_REGIONS.filter((other) => other !== region)]) {
-        if (skipOwnRegion && target === region) continue
-        const hasRoom = this.placementCells().some(
-          (cell) => this.input.placer.isCandidate(cell, target, now) && this.input.placer.hasSeat(cell)
-        )
-        if (!hasRoom) continue
+        const hasRoom =
+          !(skipOwnRegion && target === region) &&
+          this.placementCells().some(
+            (cell) => this.input.placer.isCandidate(cell, target, now) && this.input.placer.hasSeat(cell)
+          )
+        if (!hasRoom) {
+          continue
+        }
         try {
-          const placed = await this.placeFresh(identity, target, floor, seats, true)
+          const placed = await this.placeFresh(identity, target, floor, seats, true, true)
           if (placed) {
             this.recordSpill(region, target)
             return placed
           }
         } catch (error) {
-          if (!(error instanceof ReservePaceError)) throw error
-          paced ??= error
+          if (!(error instanceof ReservePaceError)) {
+            throw error
+          }
+          if (!paced || error.retryAfterSeconds < paced.retryAfterSeconds) {
+            paced = error
+          }
         }
       }
-      if (paced) throw paced
+      if (paced) {
+        this.summary.retries.paced += 1
+        throw paced
+      }
       return null
     }
   }
@@ -368,7 +380,9 @@ export class ReserveAssignment {
     epochFloor: number,
     seats: readonly ShadowSeat[] = [],
     // The database lane found the region full: no share draw, and no other region.
-    regionFull = false
+    regionFull = false,
+    // The spill counts its own outcome: no database lane follows it, and a pace may not be the answer.
+    spill = false
   ): Promise<RelayAssignment | null> {
     const placements = this.placementCells()
     if (!regionFull && this.random() >= this.input.placer.reservePoolShare(placements, region)) return null
@@ -406,7 +420,9 @@ export class ReserveAssignment {
         }
       }
       if (result.kind === 'pace') {
-        this.summary.retries.paced += 1
+        if (!spill) {
+          this.summary.retries.paced += 1
+        }
         throw new ReservePaceError(result.retryAfterSeconds)
       }
       // Database cells in this region take it; a region with none spills as today.
@@ -415,7 +431,9 @@ export class ReserveAssignment {
       )
       if (hasDatabaseCells) break
     }
-    this.summary.database += 1
+    if (!spill) {
+      this.summary.database += 1
+    }
     return null
   }
 

@@ -1056,7 +1056,9 @@ export class RelayAssignmentStore {
       try {
         reserved = await book()
       } catch (error) {
-        if (!(isolatedFrom && error instanceof ReservePaceError)) throw error
+        if (!(isolatedFrom && error instanceof ReservePaceError)) {
+          throw error
+        }
         reserved = null
       }
       return reserved && reservedOn(reserved)
@@ -1084,14 +1086,20 @@ export class RelayAssignmentStore {
       try {
         return await placeOnDatabase(false)
       } catch (error) {
-        if (!(error instanceof AssignmentCapacityExhausted) || !step5.reserveSpill) throw error
+        if (!(error instanceof AssignmentCapacityExhausted) || !step5.reserveSpill) {
+          throw error
+        }
         const spilled = await step5.reserveSpill({ skipOwnRegion, rowEpoch: error.rowEpoch })
-        if (!spilled) throw error
+        if (!spilled) {
+          throw error
+        }
         return reservedOn(spilled)
       }
     }
     const regionReserve = step5.regionReserve
-    if (!regionReserve) return await placeOrSpill(false)
+    if (!regionReserve) {
+      return await placeOrSpill(false)
+    }
     try {
       return await placeOnDatabase(true)
     } catch (error) {
