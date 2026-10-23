@@ -114,11 +114,15 @@ function withWindowOnlyRows(
     if (!windowOnly.has(row.id)) {
       return
     }
-    const after = windowRows
-      .slice(0, index)
-      .toReversed()
-      .find((previous) => merged.some((entry) => entry.id === previous.id))
-    const at = after ? merged.findIndex((entry) => entry.id === after.id) + 1 : 0
+    let at = 0
+    for (let previous = index - 1; previous >= 0; previous -= 1) {
+      const previousId = windowRows[previous]!.id
+      const found = merged.findIndex((entry) => entry.id === previousId)
+      if (found !== -1) {
+        at = found + 1
+        break
+      }
+    }
     merged.splice(at, 0, row)
   })
   return merged

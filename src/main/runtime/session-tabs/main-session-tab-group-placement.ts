@@ -22,11 +22,15 @@ export function withWindowOnlyIds(
     if (!windowOnly.has(id) || order.includes(id)) {
       return
     }
-    const after = windowOrder
-      .slice(0, index)
-      .toReversed()
-      .find((previous) => order.includes(previous))
-    order.splice(after === undefined ? 0 : order.indexOf(after) + 1, 0, id)
+    let at = 0
+    for (let previous = index - 1; previous >= 0; previous -= 1) {
+      const found = order.indexOf(windowOrder[previous]!)
+      if (found !== -1) {
+        at = found + 1
+        break
+      }
+    }
+    order.splice(at, 0, id)
   })
   return order
 }

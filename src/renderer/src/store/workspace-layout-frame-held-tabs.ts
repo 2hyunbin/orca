@@ -74,11 +74,15 @@ function heldOrder(
     if (!heldIds.has(id)) {
       return
     }
-    const before = drawnOrder
-      .slice(0, index)
-      .toReversed()
-      .find((previous) => order.includes(previous))
-    order.splice(before === undefined ? 0 : order.indexOf(before) + 1, 0, id)
+    let at = 0
+    for (let previous = index - 1; previous >= 0; previous -= 1) {
+      const found = order.indexOf(drawnOrder[previous]!)
+      if (found !== -1) {
+        at = found + 1
+        break
+      }
+    }
+    order.splice(at, 0, id)
   })
   return order
 }
