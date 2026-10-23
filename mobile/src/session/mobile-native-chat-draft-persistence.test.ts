@@ -17,7 +17,9 @@ import {
   deleteMobileNativeChatDrafts,
   appendMobileNativeChatDraft,
   clearMobileNativeChatDraftForSend,
-  captureMobileChatDraftOwner
+  captureMobileChatDraftOwner,
+  restoreMobileChatDraft,
+  updateMobileNativeChatDraftImages
 } from './mobile-native-chat-draft-store'
 import {
   mobileChatDraftStorageKey,
@@ -181,12 +183,15 @@ it('owns the complete base before editing and protects unread drafts through mem
     'sent during recovery'
   )
   editMobileNativeChatDraft(scope, 'currently unsent')
-  await persistMobileNativeChatDraft(scope)
+  await expect(persistMobileNativeChatDraft(scope)).rejects.toThrow('Draft was not saved')
   expect(write).not.toHaveBeenCalled()
   read = Promise.resolve(JSON.stringify({ text: '/clear', images: [] }))
   await hydrateMobileNativeChatDraft(scope)
   await persistMobileNativeChatDraft(scope)
   expect(readMobileNativeChatDraft(scope).text).toBe('/clear\n\ncurrently unsent')
+  await persistMobileNativeChatDraft(scope)
+  expect(write).toHaveBeenCalledOnce()
+  editMobileNativeChatDraft(scope, (text) => `${text}!`)
   write.mockRejectedValueOnce(new Error('disk full'))
   await expect(persistMobileNativeChatDraft(scope)).rejects.toThrow('disk full')
 })
@@ -428,6 +433,150 @@ it('coalesces typing around an exact copy and never authorizes a removed or expi
   await persistMobileNativeChatDraft(scope)
   expect(captureMobileChatDraftOwner(scope)).toBeDefined()
 })
+
+/** Each write waits for the test to settle it; `saved` is what a reload reads. */
+function heldWrites() {
+  const writes: { value: string | null; settle: (error?: Error) => void }[] = []
+  const state = { saved: null as string | null, inFlight: 0, peak: 0 }
+  const write = vi.fn(
+    (_key: string, value: string | null) =>
+      new Promise<void>((resolve, reject) => {
+        state.peak = Math.max(state.peak, ++state.inFlight)
+        writes.push({
+          value,
+          settle: (error) => {
+            state.inFlight--
+            if (error) {
+              reject(error)
+              return
+            }
+            state.saved = value
+            resolve()
+          }
+        })
+      })
+  )
+  publishMobileChatDraftStorage({
+    read: async () => state.saved,
+    write,
+    removeWorkspace: async () => {}
+  })
+  return { writes, state, write }
+}
+
+it('settles an exact copy apart from older and later writes and reloads the complete later draft', async () => {
+  vi.useFakeTimers()
+  const scope = 'host\0workspace\0tab'
+  const { writes, state } = heldWrites()
+  const image = (id: string) => ({
+    id,
+    path: `/tmp/${id}.png`,
+    previewUri: `file:///tmp/${id}.png`
+  })
+  await hydrateMobileNativeChatDraft(scope)
+  editMobileNativeChatDraft(scope, 'A')
+  const older = persistMobileNativeChatDraft(scope)
+  const pendingCopy = appendMobileNativeChatDraft(scope, {
+    text: 'Q $review',
+    images: [image('q')],
+    skills: [{ name: 'review', path: '/q/SKILL.md' }]
+  })
+  await vi.advanceTimersByTimeAsync(0)
+  const copied = readMobileNativeChatDraft(scope)
+  editMobileNativeChatDraft(scope, (text) => `${text}\nC`)
+  restoreMobileChatDraft(captureMobileChatDraftOwner(scope)!, '$review', [
+    { name: 'review', path: '/c/SKILL.md' }
+  ])
+  updateMobileNativeChatDraftImages(captureMobileChatDraftOwner(scope), (images) => [
+    ...images,
+    image('c')
+  ])
+  let laterSettled = false
+  const later = persistMobileNativeChatDraft(scope).finally(() => {
+    laterSettled = true
+  })
+  await vi.advanceTimersByTimeAsync(250)
+  expect(writes).toHaveLength(1)
+
+  writes[0]!.settle()
+  await older
+  await vi.advanceTimersByTimeAsync(0)
+  expect(JSON.parse(writes[1]!.value!)).toMatchObject({ text: copied.text, skills: copied.skills })
+  writes[1]!.settle()
+  const receipt = await pendingCopy
+  expect(receipt && receipt.valid()).toBe(true)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(laterSettled).toBe(false)
+  const complete = readMobileNativeChatDraft(scope)
+  expect(JSON.parse(writes[2]!.value!)).toMatchObject({
+    text: complete.text,
+    skills: [
+      { name: 'review', path: '/q/SKILL.md' },
+      { name: 'review', path: '/c/SKILL.md' }
+    ]
+  })
+  writes[2]!.settle(new Error('disk full'))
+  await expect(later).rejects.toThrow('disk full')
+  expect(receipt && receipt.valid()).toBe(true)
+  await vi.advanceTimersByTimeAsync(1000)
+  expect(writes).toHaveLength(3)
+
+  const retry = persistMobileNativeChatDraft(scope)
+  await vi.advanceTimersByTimeAsync(0)
+  writes[3]!.settle()
+  await retry
+  expect(state.peak).toBe(1)
+  resetMobileNativeChatDraftStoreForTests()
+  await hydrateMobileNativeChatDraft(scope)
+  expect(readMobileNativeChatDraft(scope)).toMatchObject({
+    text: complete.text,
+    images: complete.images.map(({ id }) => expect.objectContaining({ id })),
+    skills: complete.skills
+  })
+  editMobileNativeChatDraft(scope, 'D')
+  const removed = persistMobileNativeChatDraft(scope)
+  await deleteMobileNativeChatDrafts('host', 'workspace')
+  await expect(removed).rejects.toThrow('Draft was not saved')
+  expect(receipt && receipt.valid()).toBe(false)
+})
+
+it.each([100, 1000])(
+  'keeps one ordinary slot and three writes for %i edits behind a stalled write, ending in the clear',
+  async (edits) => {
+    vi.useFakeTimers()
+    const scope = `bound-${edits}\0workspace\0tab`
+    const { writes, state } = heldWrites()
+    await hydrateMobileNativeChatDraft(scope)
+    editMobileNativeChatDraft(scope, 'A')
+    void persistMobileNativeChatDraft(scope)
+    const pendingCopy = appendMobileNativeChatDraft(scope, { text: 'Q', images: [] })
+    await vi.advanceTimersByTimeAsync(0)
+    editMobileNativeChatDraft(scope, 'typing')
+    const owner = captureMobileChatDraftOwner(scope)!
+    const slot = owner.ordinary
+    for (let index = 0; index < edits; index++) {
+      editMobileNativeChatDraft(scope, `typing ${index}`)
+      await vi.advanceTimersByTimeAsync(index % 100 === 0 ? 250 : 5)
+    }
+    expect(owner.ordinary).toBe(slot)
+    expect(vi.getTimerCount()).toBeLessThanOrEqual(2)
+    const typed = readMobileNativeChatDraft(scope)
+    clearMobileNativeChatDraftForSend(owner, typed.editGeneration, typed.text)
+    for (let index = 0; index < 3; index++) {
+      writes[index]!.settle()
+      await vi.advanceTimersByTimeAsync(0)
+    }
+    const receipt = await pendingCopy
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(writes.map(({ value }) => value && JSON.parse(value).text)).toEqual([
+      'A',
+      'A\n\nQ',
+      null
+    ])
+    expect(receipt && receipt.valid()).toBe(true)
+    expect(state.peak).toBe(1)
+  }
+)
 
 it('expires public copy authority without releasing blocked physical work or issuing an expired pin', async () => {
   vi.useFakeTimers()

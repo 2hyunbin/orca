@@ -1,12 +1,6 @@
-import { imageReferenceToken } from '../../../src/shared/native-chat-image-reference'
-import {
-  imageReferencesToPromptMarkers,
-  promptMarkersToImageReferences
-} from '../../../src/shared/native-chat-image-transcript-markers'
-import { appendReturnedDraftText } from '../../../src/shared/returned-draft-text'
-import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
 import { composerSkillOccurrences } from '../../../src/shared/composer-skill-occurrences'
-import { mobileChatDraftStorageKey } from './mobile-native-chat-draft-data'
+import { mobileChatDraftStorageKey, type Draft } from './mobile-native-chat-draft-data'
+export type { Draft } from './mobile-native-chat-draft-data'
 import {
   mobileChatDraftStorage,
   subscribeMobileChatDraftStorage,
@@ -22,18 +16,23 @@ export type Copy = {
   expired: boolean
   finish: (saved: boolean) => void
 }
+type Ordinary = {
+  due: boolean
+  result: Promise<void>
+  finish: (saved: boolean, error?: unknown) => void
+}
 export type MobileChatDraftOwner = {
   scope: string
   logicalDraft: symbol
   storage: ReturnType<typeof mobileChatDraftStorage>
   draft: Draft
   state: 'unread' | 'recovery' | 'known'
-  acknowledged: number
+  acknowledged: number | undefined
   error: string | null
   read?: { wait: Promise<void>; finish: () => void }
-  active?: { work: Promise<void>; copy?: Copy }
+  active?: { work: Promise<void>; copy?: Copy; ordinary?: Ordinary }
   timer?: ReturnType<typeof setTimeout>
-  latest: boolean
+  ordinary?: Ordinary
   copy?: Copy
 }
 export type MobileChatDraftCopy = { valid: () => boolean }
@@ -62,9 +61,8 @@ export function activate(scope: string): MobileChatDraftOwner {
       storage,
       draft: EMPTY,
       state: storage ? (removing(scope) ? 'recovery' : 'unread') : 'known',
-      acknowledged: 0,
-      error: null,
-      latest: false
+      acknowledged: undefined,
+      error: null
     }
     owners.set(scope, owner)
   }
@@ -76,7 +74,9 @@ export function cancelTimer(owner: MobileChatDraftOwner): void {
 }
 export function retire(owner: MobileChatDraftOwner): void {
   cancelTimer(owner)
-  owner.latest = false
+  owner.ordinary?.finish(false)
+  owner.ordinary = undefined
+  owner.active?.ordinary?.finish(false)
   owner.copy?.finish(false)
   owner.read?.finish()
   owners.delete(owner.scope)
@@ -110,18 +110,42 @@ export function problem(owner: MobileChatDraftOwner, message: string): void {
   owner.error = message
   notify()
 }
-export function request(owner: MobileChatDraftOwner, deferred = false): void {
-  owner.latest ||= !deferred
+export function request(owner: MobileChatDraftOwner, deferred = false): Promise<void> {
+  let ordinary = owner.ordinary
+  if (!ordinary) {
+    let finish: Ordinary['finish'] = () => {}
+    const result = new Promise<void>((resolve, reject) => {
+      finish = (saved, error) =>
+        saved ? resolve() : reject(error ?? new Error('Draft was not saved'))
+    })
+    void result.catch(() => undefined)
+    ordinary = { due: false, result, finish }
+    owner.ordinary = ordinary
+  }
+  if (!live(owner) || !owner.storage || owner.state !== 'known' || removing(owner.scope)) {
+    owner.ordinary = undefined
+    ordinary.finish(false)
+    return ordinary.result
+  }
+  ordinary.due ||= !deferred
   cancelTimer(owner)
-  if (deferred) {
+  if (ordinary.due) {
+    pump(owner)
+  } else {
     owner.timer = setTimeout(() => {
       owner.timer = undefined
-      owner.latest = true
+      ordinary.due = true
       pump(owner)
     }, 250)
-  } else {
-    pump(owner)
   }
+  return ordinary.result
+}
+export async function persistMobileNativeChatDraft(scope: string): Promise<void> {
+  const owner = owners.get(scope)
+  if (!owner) {
+    throw new Error('Draft was not saved')
+  }
+  await request(owner)
 }
 export function replace(owner: MobileChatDraftOwner, draft: Draft, deferred = false): void {
   if (!live(owner)) {
@@ -143,15 +167,28 @@ export function pump(owner: MobileChatDraftOwner): void {
     return
   }
   const copy = owner.copy?.draft && !owner.copy.expired ? owner.copy : undefined
-  if (!copy && !owner.latest) {
+  const ordinary = copy ? undefined : owner.ordinary
+  if (!copy && !ordinary?.due) {
     return
   }
   const draft = copy?.draft ?? owner.draft
-  owner.latest = false
+  if (ordinary) {
+    owner.ordinary = undefined
+    if (owner.acknowledged === draft.editGeneration) {
+      ordinary.finish(true)
+      return
+    }
+  }
   const images = draft.images.map(({ previewUri, ...image }) => ({
     ...image,
     ...(/^(https?:|file:|content:)/i.test(previewUri) ? { previewUri } : {})
   }))
+  const active: NonNullable<MobileChatDraftOwner['active']> = {
+    work: Promise.resolve(),
+    copy,
+    ordinary
+  }
+  owner.active = active
   const work = (async () =>
     storage.write(
       mobileChatDraftStorageKey(owner.scope),
@@ -167,8 +204,11 @@ export function pump(owner: MobileChatDraftOwner): void {
     .then(
       () => {
         if (!live(owner)) {
+          ordinary?.finish(false)
+          copy?.finish(false)
           return
         }
+        ordinary?.finish(true)
         owner.acknowledged = draft.editGeneration
         owner.error = null
         if (copy) {
@@ -176,9 +216,9 @@ export function pump(owner: MobileChatDraftOwner): void {
         }
       },
       (error: unknown) => {
+        ordinary?.finish(false, error)
+        copy?.finish(false)
         if (live(owner)) {
-          owner.latest = false
-          copy?.finish(false)
           if (!copy) {
             problem(
               owner,
@@ -186,7 +226,6 @@ export function pump(owner: MobileChatDraftOwner): void {
             )
           }
         }
-        throw error
       }
     )
     .finally(() => {
@@ -199,7 +238,7 @@ export function pump(owner: MobileChatDraftOwner): void {
         notify()
       }
     })
-  owner.active = { work: settled, copy }
+  active.work = settled
   void settled.catch(() => undefined)
 }
 export function writeDraft(
@@ -224,51 +263,4 @@ export function writeDraft(
     },
     true
   )
-}
-
-export type Draft = {
-  text: string
-  images: PendingNativeChatImage[]
-  skills?: { name: string; path: string }[]
-  editGeneration: number
-}
-export function combine(
-  current: Draft,
-  addition: Pick<Draft, 'text' | 'images' | 'skills'>,
-  recovery = false
-): Draft {
-  const images = [...current.images]
-  let text = promptMarkersToImageReferences(
-    addition.text,
-    addition.images.map((image) => image.id)
-  )
-  for (const image of addition.images) {
-    const collision = images.find((held) => held.id === image.id)
-    if (collision && JSON.stringify(collision) === JSON.stringify(image)) {
-      continue
-    }
-    const id = collision ? `${image.id}-${current.editGeneration}-${images.length}` : image.id
-    text = text.replaceAll(imageReferenceToken(image.id), imageReferenceToken(id))
-    images.push({ ...image, id })
-  }
-  const original = promptMarkersToImageReferences(
-    current.text,
-    current.images.map((image) => image.id)
-  )
-  return {
-    text: imageReferencesToPromptMarkers(
-      recovery
-        ? original && text
-          ? `${original}\n\n${text}`
-          : original + text
-        : appendReturnedDraftText(original, text, 'append-repeated'),
-      images.map((image) => image.id)
-    ),
-    images,
-    skills: [
-      ...composerSkillOccurrences(current.text, current.skills ?? []).map(({ ref }) => ref),
-      ...composerSkillOccurrences(addition.text, addition.skills ?? []).map(({ ref }) => ref)
-    ],
-    editGeneration: current.editGeneration + 1
-  }
 }

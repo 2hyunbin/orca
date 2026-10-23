@@ -204,7 +204,8 @@ export function appendToNativeChatComposerDraft(
   scopeKey: string,
   addition: NativeChatComposerDraftAddition,
   owner?: NativeChatComposerDraftOwner,
-  acknowledge?: (saved: Promise<boolean>) => void
+  acknowledge?: (saved: Promise<boolean>) => void,
+  appended?: (addition: NativeChatComposerDraftAddition, previous: NativeChatComposerDraft) => void
 ): boolean {
   const before = records.get(scopeKey)
   const current = readNativeChatComposerDraft(scopeKey)
@@ -233,6 +234,9 @@ export function appendToNativeChatComposerDraft(
   // Capture this transaction before append subscribers can replace the draft.
   if (!journaled) {
     acknowledge?.(nativeChatComposerDraftWriteSettled(scopeKey))
+  }
+  if (text !== current.text) {
+    appended?.(placed, current)
   }
   return journaled
 }

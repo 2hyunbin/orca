@@ -1,3 +1,4 @@
+import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
 import type { NativeChatComposerDraftAddition } from './native-chat-composer-draft-addition'
 import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
 import type { JSONContent } from '@tiptap/react'
@@ -41,7 +42,14 @@ export function writeNativeChatDraftCache(
 }
 
 // Why: a composer mid-IME-composition keeps showing what it had, so it is told what was appended.
-const appendListeners = new Map<string, Set<(text: string, previous: string) => void>>()
+type AppendListener = (
+  addition: NativeChatComposerDraftAddition,
+  previous: NativeChatComposerDraft
+) => void
+const appendListeners = new Map<string, Set<AppendListener>>()
+export type NativeChatDraftCommit = (
+  change: Pick<NativeChatComposerDraft, 'text' | 'document' | 'pastedTextFiles'>
+) => void
 
 /** Puts text back after whatever is typed, and tells a mounted composer to show it. True once it
  *  is durable, so the copy it came from may go. */
@@ -58,25 +66,21 @@ export function appendNativeChatDraftCache(
   if (text === '' && !images?.length) {
     return true
   }
-  const previous = readNativeChatDraftCache(scopeKey)
   // Durable now: the copy it came from (a send handed back, a queued card) goes right after this.
   const { acknowledge, ...addition } = options ?? {}
-  const durable = appendToNativeChatComposerDraft(
+  return appendToNativeChatComposerDraft(
     scopeKey,
     { text, images, ...addition },
     owner,
-    acknowledge
+    acknowledge,
+    (effective, previous) =>
+      appendListeners.get(scopeKey)?.forEach((listener) => listener(effective, previous))
   )
-  // Why: an addition the draft already held adds nothing, so a composer must not show it again.
-  if (readNativeChatDraftCache(scopeKey) !== previous) {
-    appendListeners.get(scopeKey)?.forEach((listener) => listener(text, previous))
-  }
-  return durable
 }
 
 export function subscribeToNativeChatDraftAppend(
   scopeKey: string,
-  listener: (text: string, previous: string) => void
+  listener: AppendListener
 ): () => void {
   const listeners = appendListeners.get(scopeKey) ?? new Set()
   appendListeners.set(scopeKey, listeners)

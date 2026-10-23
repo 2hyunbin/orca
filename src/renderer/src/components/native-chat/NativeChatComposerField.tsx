@@ -1,3 +1,4 @@
+import type { NativeChatDraftCommit } from './native-chat-draft-cache'
 import type { ComposerImageReference } from '../../../../shared/structured-agent-session-send-mutation'
 import { NativeChatPromptEditor } from './NativeChatPromptEditor'
 import type { NativeChatComposerInput } from './native-chat-composer-input'
@@ -61,6 +62,7 @@ export type NativeChatComposerFieldProps = {
   isDictating: boolean
   isDictationHoldMode: boolean
   imeEnterGesture: ReturnType<typeof useImeEnterGestureOwnership>
+  onDraftCommit?: NativeChatDraftCommit
   onDraftChange: (value: string, element: NativeChatComposerInput) => void
   onTextareaSelect: (element: NativeChatComposerInput) => void
   onKeyDown: KeyboardEventHandler<HTMLElement>
@@ -149,6 +151,7 @@ export function NativeChatComposerField({
   isDictationHoldMode,
   imeEnterGesture,
   onDraftChange,
+  onDraftCommit,
   onTextareaSelect,
   onKeyDown,
   onImeSettled,
@@ -288,6 +291,7 @@ export function NativeChatComposerField({
               inputRef={textareaRef}
               initialValue={draft}
               disabled={disabled}
+              onCommit={onDraftCommit}
               onChange={(input) => onDraftChange(input.value, input)}
               onKeyDownCapture={(event) => {
                 if (!imeEnterGesture.ownsKeyDown(event)) {

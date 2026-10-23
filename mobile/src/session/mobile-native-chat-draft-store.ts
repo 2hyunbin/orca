@@ -2,7 +2,12 @@ import {
   imageReferencesToPromptMarkers,
   promptMarkersToImageReferences
 } from '../../../src/shared/native-chat-image-transcript-markers'
-import { mobileChatDraftStorageKey, parseMobileChatDraft } from './mobile-native-chat-draft-data'
+import {
+  mobileChatDraftStorageKey,
+  parseMobileChatDraft,
+  combine,
+  type Draft
+} from './mobile-native-chat-draft-data'
 import {
   mobileChatDraftStorage,
   mobileChatDraftRemoving as removing,
@@ -13,8 +18,6 @@ import type { PendingNativeChatImage } from './mobile-native-chat-image-attachme
 import { useSyncExternalStore, type SetStateAction } from 'react'
 import {
   EMPTY,
-  combine,
-  type Draft,
   WAIT_MS,
   owners,
   mobileNativeChatLaunchDraftSeeds,
@@ -35,6 +38,7 @@ import {
 } from './mobile-native-chat-draft-owner'
 export {
   mobileNativeChatLaunchDraftSeeds,
+  persistMobileNativeChatDraft,
   captureMobileChatDraftOwner,
   mobileChatDraftOwnerLive,
   type MobileChatDraftOwner,
@@ -174,7 +178,7 @@ export async function hydrateMobileNativeChatDraft(scope: string): Promise<void>
       }
       owner.state = 'known'
       owner.error = null
-      if (owner.draft.editGeneration !== owner.acknowledged) {
+      if (owner.draft.editGeneration !== (owner.acknowledged ?? 0)) {
         request(owner)
       }
       notify()
@@ -224,10 +228,14 @@ export async function appendMobileNativeChatDraft(
     }
     copy.draft = combine(owner.draft, addition)
     owner.draft = copy.draft
-    owner.latest = false
+    const ordinary = owner.ordinary
+    owner.ordinary = undefined
     cancelTimer(owner)
-    notify()
+    if (ordinary) {
+      void result.then((saved) => ordinary.finish(saved))
+    }
     pump(owner)
+    notify()
   })
   const saved = await result
   if (owner.copy === copy && owner.active?.copy !== copy) {
@@ -235,14 +243,6 @@ export async function appendMobileNativeChatDraft(
   }
   notify()
   return saved ? { valid: () => !copy.expired && live(owner) && !removing(scope) } : false
-}
-export async function persistMobileNativeChatDraft(scope: string): Promise<void> {
-  const owner = owners.get(scope)
-  if (!owner) {
-    return
-  }
-  request(owner)
-  await owner.active?.work
 }
 export function mobileChatDraftLifecycle(foreground: boolean): void {
   if (foreground) {
@@ -252,7 +252,7 @@ export function mobileChatDraftLifecycle(foreground: boolean): void {
     if (foreground && owner.state !== 'known') {
       void hydrateMobileNativeChatDraft(owner.scope)
     }
-    if (owner.draft.editGeneration !== owner.acknowledged) {
+    if (owner.draft.editGeneration !== (owner.acknowledged ?? 0)) {
       request(owner)
     }
   }

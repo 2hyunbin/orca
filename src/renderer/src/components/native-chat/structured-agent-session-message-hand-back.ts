@@ -1,7 +1,6 @@
 import type { JSONContent } from '@tiptap/react'
-import { imageReferenceToken } from '../../../../shared/native-chat-image-reference'
 import { composerSkillOccurrences } from '../../../../shared/structured-agent-session-send-mutation'
-import { promptTextContent } from './native-chat-prompt-document-text'
+import { promptTextContent, promptDocumentLeafText } from './native-chat-prompt-document-text'
 import type { NativeChatComposerDraftAddition } from './native-chat-composer-draft-addition'
 import type { AgentJournalMessageItem } from '../../../../shared/agent-session-journal-types'
 import { structuredAgentSessionDraftScopeKey } from './native-chat-composer-draft-store'
@@ -61,7 +60,7 @@ export function returnMessageToComposer(
   for (const paragraph of document?.content ?? []) {
     paragraph.content = paragraph.content?.flatMap((node) => {
       if (node.type !== 'text' || !node.text) {
-        offset += imageReferenceToken(String(node.attrs?.attachmentId)).length
+        offset += promptDocumentLeafText(node.type, node.attrs).length
         return [node]
       }
       const start = offset

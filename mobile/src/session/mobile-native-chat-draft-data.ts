@@ -1,3 +1,11 @@
+import { imageReferenceToken } from '../../../src/shared/native-chat-image-reference'
+import {
+  imageReferencesToPromptMarkers,
+  promptMarkersToImageReferences
+} from '../../../src/shared/native-chat-image-transcript-markers'
+import { appendReturnedDraftText } from '../../../src/shared/returned-draft-text'
+import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
+import { composerSkillOccurrences } from '../../../src/shared/composer-skill-occurrences'
 import { z } from 'zod'
 import { SendImageRefBlock } from '../../../src/shared/rpc-contract/structured-agent-session-message-params'
 
@@ -62,5 +70,52 @@ export function parseMobileChatDraft(
     return parsed.success ? parsed.data : null
   } catch {
     return null
+  }
+}
+
+export type Draft = {
+  text: string
+  images: PendingNativeChatImage[]
+  skills?: { name: string; path: string }[]
+  editGeneration: number
+}
+export function combine(
+  current: Draft,
+  addition: Pick<Draft, 'text' | 'images' | 'skills'>,
+  recovery = false
+): Draft {
+  const images = [...current.images]
+  let text = promptMarkersToImageReferences(
+    addition.text,
+    addition.images.map((image) => image.id)
+  )
+  for (const image of addition.images) {
+    const collision = images.find((held) => held.id === image.id)
+    if (collision && JSON.stringify(collision) === JSON.stringify(image)) {
+      continue
+    }
+    const id = collision ? `${image.id}-${current.editGeneration}-${images.length}` : image.id
+    text = text.replaceAll(imageReferenceToken(image.id), imageReferenceToken(id))
+    images.push({ ...image, id })
+  }
+  const original = promptMarkersToImageReferences(
+    current.text,
+    current.images.map((image) => image.id)
+  )
+  return {
+    text: imageReferencesToPromptMarkers(
+      recovery
+        ? original && text
+          ? `${original}\n\n${text}`
+          : original + text
+        : appendReturnedDraftText(original, text, 'append-repeated'),
+      images.map((image) => image.id)
+    ),
+    images,
+    skills: [
+      ...composerSkillOccurrences(current.text, current.skills ?? []).map(({ ref }) => ref),
+      ...composerSkillOccurrences(addition.text, addition.skills ?? []).map(({ ref }) => ref)
+    ],
+    editGeneration: current.editGeneration + 1
   }
 }

@@ -28,6 +28,7 @@ import { clearNativeChatDraftCacheForTests } from './native-chat-draft-cache'
 import type { StructuredAgentSessionWrite } from './use-structured-agent-session-mutate'
 import type { NativeChatStructuredComposerTransport } from './native-chat-composer-types'
 import * as handback from './structured-agent-session-message-hand-back'
+import { promptSkillRefs } from './native-chat-prompt-document'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
@@ -57,6 +58,19 @@ const message: AgentSessionQueuedMessage = {
   }
 }
 
+// A pasted-text leaf before the selections must not shift which occurrence binds which file.
+const pasted = '[Pasted text](orca-paste:12345678-1234-1234-1234-123456789abc)'
+const pastedMessage: AgentSessionQueuedMessage = {
+  ...message,
+  body: {
+    ...message.body,
+    blocks: [
+      { type: 'text', text: `${pasted} $review $review [Image #1]` },
+      message.body.blocks[1]!
+    ]
+  }
+}
+
 afterEach(() => {
   cleanup()
   clearNativeChatDraftCacheForTests()
@@ -64,7 +78,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-function harness(write: StructuredAgentSessionWrite, prompt = false) {
+function harness(write: StructuredAgentSessionWrite, prompt = false, queued = message) {
   const send = vi.fn<NativeChatStructuredComposerTransport['send']>(() => true)
   const transport: NativeChatStructuredComposerTransport = {
     send,
@@ -85,7 +99,7 @@ function harness(write: StructuredAgentSessionWrite, prompt = false) {
   const hook = renderHook(() => {
     const queue = useStructuredAgentSessionQueuedMessages({
       enabled: true,
-      queuedMessages: [message],
+      queuedMessages: [queued],
       queuePause: { reason: 'stopped' },
       submissions: [],
       hasPendingPrompt: prompt,
@@ -116,98 +130,111 @@ function harness(write: StructuredAgentSessionWrite, prompt = false) {
   return { ...hook, send, mutate }
 }
 
-it('durably appends full mail before conditional Delete, then sends as an ordinary user message', async () => {
-  const storage = createMemoryNativeChatComposerDraftStorage()
-  setNativeChatComposerDraftStorageForTests(storage)
-  await hydrateNativeChatComposerDrafts()
-  const old = { name: 'old', path: '/legacy/SKILL.md' }
-  updateNativeChatComposerDraft(
-    scope,
-    {
-      text: 'already typing $old',
-      document: {
-        type: 'doc',
-        content: [
-          {
-            type: 'paragraph',
-            content: [
-              { type: 'text', text: 'already typing ' },
-              { type: 'nativeChatSkill', attrs: { token: '$old', path: old.path } }
-            ]
-          }
-        ]
-      }
-    },
-    'immediate'
-  )
-  const calls = vi.fn((..._args: unknown[]) => {})
-  const write: StructuredAgentSessionWrite = async <T,>(
-    ...args: Parameters<StructuredAgentSessionWrite>
-  ) => {
-    calls(...args)
-    const draft = readNativeChatComposerDraft(scope)
-    expect(draft.text).toContain('already typing $old\n\n$review')
-    expect(draft.images[0]?.reference).toEqual(image)
-    expect(draft.document?.content?.flatMap((node) => node.content ?? [])).toContainEqual({
-      type: 'nativeChatSkill',
-      attrs: { token: '$review', path: skills[0]?.path }
-    })
-    // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this flow issues only queuedMessageDelete.
-    return { kind: 'done', value: { deleted: true, messageId: 'mail' } as T }
-  }
-  let hook = harness(write)
-  await act(() => hook.result.current.queue.edit('mail'))
-  expect(hook.result.current.queue.editor).toBeUndefined()
-  expect(calls).toHaveBeenCalledExactlyOnceWith(
-    'agentSession.queuedMessageDelete',
-    'agentSession.queuedMessageDelete',
-    {
-      messageId: 'mail',
-      expectedBodyFingerprint: agentSessionSendBodyFingerprint('session', message.body)
+it.each([
+  ['its text', '', message],
+  ['a pasted-text leaf', `${pasted} `, pastedMessage]
+])(
+  'durably appends full mail with %s before conditional Delete, then sends it as an ordinary user message',
+  async (_label, lead, queued) => {
+    const storage = createMemoryNativeChatComposerDraftStorage()
+    setNativeChatComposerDraftStorageForTests(storage)
+    await hydrateNativeChatComposerDrafts()
+    const old = { name: 'old', path: '/legacy/SKILL.md' }
+    updateNativeChatComposerDraft(
+      scope,
+      {
+        text: 'already typing $old',
+        document: {
+          type: 'doc',
+          content: [
+            {
+              type: 'paragraph',
+              content: [
+                { type: 'text', text: 'already typing ' },
+                { type: 'nativeChatSkill', attrs: { token: '$old', path: old.path } }
+              ]
+            }
+          ]
+        }
+      },
+      'immediate'
+    )
+    const calls = vi.fn((..._args: unknown[]) => {})
+    const write: StructuredAgentSessionWrite = async <T,>(
+      ...args: Parameters<StructuredAgentSessionWrite>
+    ) => {
+      calls(...args)
+      const draft = readNativeChatComposerDraft(scope)
+      expect(draft.text).toContain(`already typing $old\n\n${lead}$review`)
+      expect(draft.images[0]?.reference).toEqual(image)
+      expect(draft.document?.content?.flatMap((node) => node.content ?? [])).toContainEqual({
+        type: 'nativeChatSkill',
+        attrs: { token: '$review', path: skills[0]?.path }
+      })
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this flow issues only queuedMessageDelete.
+      return { kind: 'done', value: { deleted: true, messageId: 'mail' } as T }
     }
-  )
-  await nativeChatComposerDraftWritesSettled()
-  hook.unmount()
-  clearNativeChatComposerDraftsForTests()
-  setNativeChatComposerDraftStorageForTests(storage)
-  await hydrateNativeChatComposerDrafts()
-  const draft = readNativeChatComposerDraft(scope)
-  const inputRef = createRef<NativeChatComposerInput>()
-  const editor = render(
-    <NativeChatPromptEditor
-      inputRef={inputRef}
-      scopeKey={scope}
-      initialValue={draft.text}
-      disabled={false}
-      placeholder="Message"
-      onChange={vi.fn()}
-      onSelect={vi.fn()}
-    />
-  )
-  await waitFor(() =>
-    expect(editor.container.querySelectorAll('[data-native-chat-skill]')).toHaveLength(3)
-  )
-  expect(inputRef.current?.value).toBe(draft.text)
-  hook = harness(write)
-  await act(() => hook.result.current.submit(inputRef.current?.value ?? ''))
-  const [text, attachments, request] = hook.send.mock.calls[0]!
-  const sent = structuredAgentSessionSendBody(
-    text,
-    attachments.map((attachment) => ({ ...attachment, previewUri: '' })),
-    request?.skills
-  )
-  expect(sent).toEqual({
-    kind: 'message',
-    role: 'user',
-    blocks: [
-      { type: 'text', text: 'already typing $old\n\n$review $review [Image #1]' },
-      { type: 'image-ref', ...image }
-    ],
-    skills: [old, ...skills]
-  })
-  expect(hook.mutate).not.toHaveBeenCalled()
-  expect(readNativeChatComposerDraft(scope).text).toBe('')
-})
+    let hook = harness(write, false, queued)
+    await act(() => hook.result.current.queue.edit('mail'))
+    expect(hook.result.current.queue.editor).toBeUndefined()
+    expect(calls).toHaveBeenCalledExactlyOnceWith(
+      'agentSession.queuedMessageDelete',
+      'agentSession.queuedMessageDelete',
+      {
+        messageId: 'mail',
+        expectedBodyFingerprint: agentSessionSendBodyFingerprint('session', queued.body)
+      }
+    )
+    await nativeChatComposerDraftWritesSettled()
+    hook.unmount()
+    clearNativeChatComposerDraftsForTests()
+    setNativeChatComposerDraftStorageForTests(storage)
+    await hydrateNativeChatComposerDrafts()
+    const draft = readNativeChatComposerDraft(scope)
+    const inputRef = createRef<NativeChatComposerInput>()
+    const editor = render(
+      <NativeChatPromptEditor
+        inputRef={inputRef}
+        scopeKey={scope}
+        initialValue={draft.text}
+        disabled={false}
+        placeholder="Message"
+        onChange={vi.fn()}
+        onSelect={vi.fn()}
+      />
+    )
+    await waitFor(() =>
+      expect(editor.container.querySelectorAll('[data-native-chat-skill]')).toHaveLength(3)
+    )
+    expect(inputRef.current?.value).toBe(draft.text)
+    expect(promptSkillRefs(draft.document)).toEqual([old, ...skills])
+    hook = harness(write, false, queued)
+    await act(() => hook.result.current.submit(inputRef.current?.value ?? ''))
+    if (lead) {
+      // An unsaved paste stays literal: Send refuses it and keeps the whole draft.
+      expect(hook.send).not.toHaveBeenCalled()
+      expect(readNativeChatComposerDraft(scope).text).toBe(draft.text)
+      return
+    }
+    const [text, attachments, request] = hook.send.mock.calls[0]!
+    const sent = structuredAgentSessionSendBody(
+      text,
+      attachments.map((attachment) => ({ ...attachment, previewUri: '' })),
+      request?.skills
+    )
+    expect(sent).toEqual({
+      kind: 'message',
+      role: 'user',
+      blocks: [
+        { type: 'text', text: `already typing $old\n\n${lead}$review $review [Image #1]` },
+        { type: 'image-ref', ...image }
+      ],
+      skills: [old, ...skills]
+    })
+    expect(hook.mutate).not.toHaveBeenCalled()
+    expect(readNativeChatComposerDraft(scope).text).toBe('')
+  }
+)
 
 it('retains the copied draft after Delete refusal and appends again on a deliberate retry', async () => {
   const write: StructuredAgentSessionWrite = async () => ({

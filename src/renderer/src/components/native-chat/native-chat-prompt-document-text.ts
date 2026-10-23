@@ -1,10 +1,23 @@
-import { isLoneStructuredAgentSessionConversationCommand } from '../../../../shared/structured-agent-session-composer'
 import type { JSONContent } from '@tiptap/react'
-import { splitImageReferences } from '../../../../shared/native-chat-image-reference'
+import {
+  imageReferenceToken,
+  splitImageReferences
+} from '../../../../shared/native-chat-image-reference'
 import { NATIVE_CHAT_PASTED_TEXT_TOKEN } from './native-chat-pasted-text-reference'
 
 export const IMAGE_REFERENCE_NODE = 'nativeChatImageReference'
 export const FILE_REFERENCE_NODE = 'nativeChatFileReference'
+
+/** JSON and editor nodes serialize every atom through the same projection. */
+export function promptDocumentLeafText(
+  type: string | undefined,
+  attrs?: JSONContent['attrs']
+): string {
+  if (type === IMAGE_REFERENCE_NODE) {
+    return imageReferenceToken(String(attrs?.attachmentId))
+  }
+  return type === 'hardBreak' ? '\n' : String(attrs?.token ?? '')
+}
 
 /** Every path from text to a document goes through here, so each image token becomes its chip and
  *  each pasted text still saving its pill. */
@@ -61,8 +74,8 @@ export function appendPromptDocumentText(
   const kept = before.trimEnd()
   if (
     kept === '' ||
-    isLoneStructuredAgentSessionConversationCommand(kept) ||
-    !after.startsWith(kept)
+    !after.startsWith(kept) ||
+    (incoming !== undefined && !after.startsWith(`${kept}\n\n`))
   ) {
     return incoming ?? (document ? promptTextContent(after) : undefined)
   }

@@ -31,6 +31,21 @@ export function placeNativeChatComposerDraftAddition(
   draft: NativeChatComposerDraft,
   addition: NativeChatComposerDraftAddition
 ): NativeChatComposerDraftAddition {
+  if (
+    addition.document &&
+    appendReturnedDraftText(draft.text, addition.text ?? '', addition.textPolicy) === draft.text
+  ) {
+    const kept = appendPromptDocumentText(draft.document, draft.text, draft.text.trimEnd())
+    const incoming = appendPromptDocumentText(
+      addition.document,
+      addition.text ?? '',
+      (addition.text ?? '').trimEnd()
+    )
+    const tail = kept?.content?.slice(-(incoming?.content?.length ?? 0))
+    if (JSON.stringify(tail) !== JSON.stringify(incoming?.content)) {
+      addition = { ...addition, textPolicy: 'append-repeated' }
+    }
+  }
   if (!addition.fromUser || !addition.images) {
     return addition
   }
