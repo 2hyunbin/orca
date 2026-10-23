@@ -148,7 +148,7 @@ describe('reserve-aware cell status', () => {
 
   it('answers a database cell with the opt-in as today, plus reserve: null', async () => {
     const { status } = await setup()
-    const today = await (await status({ cellId: 'cell-b' })).json()
+    const today = await statusBody(await status({ cellId: 'cell-b' }))
     const response = await status({ cellId: 'cell-b', view: 'reserve-aware' })
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ ...today, status: { ...today.status, reserve: null } })
@@ -161,7 +161,7 @@ describe('reserve-aware cell status', () => {
     now.value += 20_000
     const response = await status({ cellId: 'cell-a', view: 'reserve-aware' })
     expect(response.status).toBe(200)
-    const body = await response.json()
+    const body = await statusBody(response)
     expect(body.status).toMatchObject({
       cellId: 'cell-a',
       admissionState: 'general',
@@ -200,7 +200,7 @@ describe('reserve-aware cell status', () => {
       now.value,
       now.value
     )
-    const body = await (await status({ cellId: 'cell-a', view: 'reserve-aware' })).json()
+    const body = await statusBody(await status({ cellId: 'cell-a', view: 'reserve-aware' }))
     expect(body.status.reserve).toMatchObject({
       admitMode: 'db',
       bookings: null,
@@ -293,6 +293,11 @@ describe('reserve-aware cell status', () => {
     expect(sourceFetch).toHaveBeenCalledTimes(2)
   })
 })
+
+async function statusBody(response: Response) {
+  // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the route answers { v, status } on 200.
+  return (await response.json()) as { v: number; status: Record<string, unknown> }
+}
 
 function config(overrides: Partial<RelayConfig> = {}): RelayConfig {
   return {
