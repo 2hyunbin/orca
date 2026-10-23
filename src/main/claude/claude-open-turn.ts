@@ -241,6 +241,6 @@ export class ClaudeOpenTurn {
       options: item.options
     })
     // Keyed apart, so this never replaces the start's publication while it still waits to run.
-    this.deps.sink.publish({ coalescingKey: item.publishCoalescingKey })
+    this.deps.sink.publish({ criticalRoot: true, coalescingKey: item.publishCoalescingKey })
   }
 }

@@ -111,7 +111,7 @@ export function claudeTurnLifecycleItem(
         : { turnId, state: 'running', startedAt, ...requested, userItemId }
     ),
     // The running row's ts is the turn start itself, so clients read no append lag.
-    options: end ? {} : { observedAt: startedAt },
+    options: { criticalRoot: true, ...(end ? {} : { observedAt: startedAt }) },
     publishCoalescingKey: end ? 'publish' : `turn-start:${sessionId}:${turnId}`
   }
 }

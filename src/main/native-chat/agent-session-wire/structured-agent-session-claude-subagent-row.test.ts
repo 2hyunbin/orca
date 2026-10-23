@@ -51,7 +51,6 @@ import {
 } from './structured-agent-session-host-test-data'
 
 const CALLER = { callerKey: 'client-1' }
-
 let releaseBarriers: (() => void)[] = []
 let claudeFrames: { replayUuid: null; initProof?: 'none' }
 let root: string

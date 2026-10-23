@@ -52,13 +52,15 @@ export type StructuredAgentSessionSinkBarrier = { ok: true } | { ok: false; erro
 export type StructuredAgentSessionAppendOptions = AgentJournalProducerLinkage & {
   /** Marks a critical lifecycle operation for lifecycle barriers and diagnostics. */
   lifecycle?: boolean
+  /** Root control events remain ordered even when ordinary input is paused. */
+  criticalRoot?: true
   /** Host clock to stamp on the row instead of its append time. */
   observedAt?: number
 }
 
 export type StructuredAgentSessionPublishOptions = Pick<
   StructuredAgentSessionAppendOptions,
-  'lifecycle'
+  'lifecycle' | 'criticalRoot'
 > & {
   /** A publication still waiting with this key is replaced by this one. */
   coalescingKey?: string
@@ -212,7 +214,6 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
   onBackpressureChange?: (backpressured: boolean, state: StructuredAgentSessionSinkState) => void
 }): DeferredStructuredAgentSessionEventSink {
   const exit = new StructuredAgentSessionExitObservation()
-  const watermarks = { ...DEFAULT_WATERMARKS, ...deps.watermarks }
   const failed = (error: unknown): void => {
     deps.logger.error('writing provider events to the chat journal failed', {
       scope: 'journal-event-sink',
@@ -222,7 +223,7 @@ export function createDeferredStructuredAgentSessionEventSink(deps: {
     deps.onFailed?.(error)
   }
   const queue = new StructuredAgentSessionSinkQueue({
-    watermarks,
+    watermarks: { ...DEFAULT_WATERMARKS, ...deps.watermarks },
     onFailed: failed,
     ...(deps.readingControl ? { readingControl: deps.readingControl } : {}),
     ...(deps.onBackpressureChange ? { onBackpressureChange: deps.onBackpressureChange } : {})
