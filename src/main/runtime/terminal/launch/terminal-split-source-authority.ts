@@ -13,7 +13,7 @@ import {
 } from '../../claude-agent-teams-shim-env'
 import { applyClaudeEnvPatch } from '../../../claude-accounts/environment'
 import { worktreeIdsEqual } from '../../../../shared/worktree/id'
-import { splitPanePendingError } from './terminal-split-retry'
+import { splitPanePendingError, splitPaneClosedError } from './terminal-split-retry'
 import {
   SPLIT_PANE_APPEAR_TIMEOUT_MS,
   SPLIT_PANE_START_TIMEOUT_MS
@@ -203,16 +203,23 @@ export abstract class OrcaRuntimeWithResolveTerminalSplitSourceAuthority extends
           this.graphSyncCallbacks.splice(idx, 1)
         }
       }
-      const giveUp = (): void => {
+      const giveUp = (error: Error): void => {
         stopWatching()
-        reject(splitPanePendingError(tabId, leafId))
+        reject(error)
       }
       let timer = setTimeout(() => {
-        if (listedLeaf()) {
-          timer = setTimeout(giveUp, startMs - appearMs)
-        } else {
-          giveUp()
+        if (!listedLeaf()) {
+          giveUp(splitPanePendingError(tabId, leafId))
+          return
         }
+        timer = setTimeout(() => {
+          // A pane listed at the first deadline and gone now was closed; it cannot still start.
+          giveUp(
+            listedLeaf()
+              ? splitPanePendingError(tabId, leafId)
+              : splitPaneClosedError(tabId, leafId)
+          )
+        }, startMs - appearMs)
       }, appearMs)
 
       const check = (): void => {

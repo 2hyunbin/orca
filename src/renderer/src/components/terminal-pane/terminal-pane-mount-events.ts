@@ -17,6 +17,7 @@ import {
 } from './terminal-pane-lifecycle-primitives'
 import { applyTerminalPaneCloseRequest } from './terminal-pane-lifecycle-close'
 import {
+  claimRuntimeSplitLeafId,
   registerTerminalPaneSplitRequestHandler,
   resolveTerminalPaneSplitSourceId
 } from './terminal-pane-split-request-routing'
@@ -52,6 +53,10 @@ export function installTerminalPaneMountEvents(args: {
         mgr.getNumericIdForLeaf(leafId)
       )
       if (sourcePaneId < 0) {
+        return
+      }
+      // A split that attaches an existing PTY (ptyId) starts nothing, so only spawning ones are claimed.
+      if (!detail.ptyId && detail.newLeafId && !claimRuntimeSplitLeafId(detail.newLeafId)) {
         return
       }
       const splitOptions = {

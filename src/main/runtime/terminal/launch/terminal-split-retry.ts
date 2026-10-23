@@ -47,6 +47,7 @@ export class RendererSplitLedger {
 
   /** Marks listed panes seen; returns whether any split is still waiting to be seen. */
   observe(isListed: (tabId: string, leafId: string) => boolean): boolean {
+    this.prune()
     let unseen = false
     for (const [leafId, entry] of this.entries) {
       if (!entry.seen && isListed(entry.request.tabId, leafId)) {
@@ -78,7 +79,7 @@ export function splitPanePendingError(tabId: string, leafId: string): TerminalSp
       tabId,
       splitMayStillComplete: true,
       nextSteps: [
-        `Do not split again. Re-run the same command with --retry-split ${leafId} to wait for this pane and get its handle.`,
+        `Do not split again. With an orca CLI that has --retry-split, re-run the same command with --retry-split ${leafId} to wait for this pane and get its handle.`,
         LIST_BEFORE_SPLITTING
       ]
     }
@@ -92,9 +93,9 @@ export function splitRetryUnknownError(tabId: string, leafId: string): TerminalS
   )
 }
 
-export function splitRetryClosedError(tabId: string, leafId: string): TerminalSplitOutcomeError {
+export function splitPaneClosedError(tabId: string, leafId: string): TerminalSplitOutcomeError {
   return new TerminalSplitOutcomeError(
-    `Split pane ${leafId} in tab ${tabId} opened and was closed since; it was not split again.`,
+    `Split pane ${leafId} in tab ${tabId} opened and was then closed.`,
     { splitId: leafId, tabId, splitMayStillComplete: false, nextSteps: [] }
   )
 }

@@ -7,7 +7,7 @@ import type { RuntimeTerminalSplit } from '../../../../shared/runtime-types'
 import { randomUUID } from 'node:crypto'
 import {
   RendererSplitLedger,
-  splitRetryClosedError,
+  splitPaneClosedError,
   splitRetryUnknownError,
   type RendererSplitRequest
 } from './terminal-split-retry'
@@ -120,7 +120,7 @@ export abstract class OrcaRuntimeWithSplitTerminal extends OrcaRuntimeWithStopEx
       throw splitRetryUnknownError(tabId, leafId)
     }
     if (entry.seen && !this.leaves.has(this.getLeafKey(tabId, leafId))) {
-      throw splitRetryClosedError(tabId, leafId)
+      throw splitPaneClosedError(tabId, leafId)
     }
     // A remounted source pane gets a new runtime id; the window routes by the live one.
     const source = this.leaves.get(this.getLeafKey(tabId, entry.request.sourceLeafId))

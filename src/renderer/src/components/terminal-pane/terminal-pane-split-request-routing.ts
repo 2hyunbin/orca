@@ -123,6 +123,25 @@ export function takeQueuedTerminalPaneSplitRequests(
   return requests
 }
 
+// Why 256: main's split ledger holds 128 ids; this outlives it so no replay it allows re-makes a pane.
+const MADE_RUNTIME_SPLIT_LEAF_CAPACITY = 256
+const madeRuntimeSplitLeafIds = new Set<string>()
+
+/** Main may re-send a split by its leaf id; one this window already made stays made, even closed. */
+export function claimRuntimeSplitLeafId(leafId: string): boolean {
+  if (madeRuntimeSplitLeafIds.has(leafId)) {
+    return false
+  }
+  madeRuntimeSplitLeafIds.add(leafId)
+  for (const oldest of madeRuntimeSplitLeafIds) {
+    if (madeRuntimeSplitLeafIds.size <= MADE_RUNTIME_SPLIT_LEAF_CAPACITY) {
+      break
+    }
+    madeRuntimeSplitLeafIds.delete(oldest)
+  }
+  return true
+}
+
 export function cancelQueuedTerminalPaneSplitRequests(tabId: string, worktreeId?: string): void {
   removeQueuedRequestsForTarget(tabId, worktreeId)
   releaseSplitMountLease(tabId, worktreeId)
@@ -188,4 +207,5 @@ export function _resetTerminalPaneSplitRequestRoutingForTests(): void {
   splitMountLeasesByTarget.clear()
   splitMountLeaseListeners.clear()
   splitMountLeaseTabIds = new Set()
+  madeRuntimeSplitLeafIds.clear()
 }

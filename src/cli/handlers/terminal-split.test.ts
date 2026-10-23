@@ -15,11 +15,12 @@ function splitClient(call: ReturnType<typeof vi.fn>, capabilities: string[]): Ru
   return client as unknown as RuntimeClient
 }
 
-function retrySplit(client: RuntimeClient) {
+function retrySplit(client: RuntimeClient, splitId = 'leaf-1') {
   return TERMINAL_HANDLERS['terminal split']({
     flags: new Map([
       ['terminal', 'term_1'],
-      ['retry-split', 'leaf-1']
+      ['command', 'agent --task 1'],
+      ['retry-split', splitId]
     ]),
     client,
     cwd: '/tmp/worktree',
@@ -53,6 +54,16 @@ describe('terminal split --retry-split', () => {
     await expect(retrySplit(splitClient(call, []))).rejects.toThrow(
       /does not support --retry-split/
     )
+    expect(call).not.toHaveBeenCalled()
+  })
+
+  // An unset shell variable gives a blank id; dropping it would split again and re-run --command.
+  it('refuses a blank retry id instead of making a fresh split', async () => {
+    const call = vi.fn()
+
+    await expect(
+      retrySplit(splitClient(call, [TERMINAL_SPLIT_RETRY_RUNTIME_CAPABILITY]), '')
+    ).rejects.toThrow(/--retry-split/)
     expect(call).not.toHaveBeenCalled()
   })
 })

@@ -126,13 +126,29 @@ describe.skipIf(ORCA_LAYOUT_OWNER_IS_MAIN)(
 
       await expect(
         harness.runtime.splitTerminal(harness.handle, { retrySplit: leafId })
-      ).rejects.toThrow('was closed')
+      ).rejects.toThrow('was then closed')
       await expect(
         harness.runtime.splitTerminal(harness.handle, {
           retrySplit: '22222222-2222-4222-8222-222222222222'
         })
       ).rejects.toThrow('no record of split')
       expect(harness.rendererSplitTerminal).toHaveBeenCalledTimes(1)
+    })
+
+    it('reports a pane that opened and closed during the wait as closed, not as still starting', async () => {
+      const harness = createHarness()
+      const split = harness.runtime
+        .splitTerminal(harness.handle, { command: 'agent' })
+        .catch((error: unknown) => error)
+      const leafId = harness.rendererSplitTerminal.mock.calls[0]?.[2]?.newLeafId
+      harness.publish([{ leafId, paneRuntimeId: 2, ptyId: null }])
+      await vi.advanceTimersByTimeAsync(10_000)
+      harness.publish()
+      await vi.advanceTimersByTimeAsync(20_000)
+
+      await expect(split).resolves.toMatchObject({
+        data: { splitId: leafId, splitMayStillComplete: false }
+      })
     })
   }
 )

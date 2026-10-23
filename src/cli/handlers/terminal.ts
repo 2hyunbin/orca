@@ -233,7 +233,10 @@ export const TERMINAL_HANDLERS: Record<string, CommandHandler> = {
     ) {
       throw new RuntimeClientError('invalid_argument', '--direction must be horizontal or vertical')
     }
-    const retrySplit = getOptionalStringFlag(flags, 'retry-split')
+    // A blank id (an unset variable) must not fall through to a fresh split of the same command.
+    const retrySplit = flags.has('retry-split')
+      ? getRequiredStringFlag(flags, 'retry-split')
+      : undefined
     // Why refused rather than sent: an older host strips the unknown param and splits again,
     // starting a second copy of the command the retry exists to avoid.
     if (retrySplit !== undefined) {
