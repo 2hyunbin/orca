@@ -1,8 +1,9 @@
-import { mkdir, readFile, readdir, symlink } from 'node:fs/promises'
+import { mkdir, readFile, readdir } from 'node:fs/promises'
 import { dirname, join, relative } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { previewBundledSkillInstall } from './service'
 import {
+  linkDirectory,
   makeSkillHome,
   NAME,
   NEW_TEXT,
@@ -79,7 +80,10 @@ describe('installedOnly', () => {
     const home = await makeSkillHome()
     await writeCopy(home.cursor, OLD_TEXT)
     await mkdir(dirname(home.claude), { recursive: true })
-    await symlink(relative(dirname(home.claude), home.shared), home.claude)
+    await linkDirectory(
+      process.platform === 'win32' ? home.shared : relative(dirname(home.claude), home.shared),
+      home.claude
+    )
     const input = { ...serviceInput(home, { agents: ['claude', 'cursor'] }), installedOnly: true }
     const { plan } = await previewAndInstall(input)
     expect(opsOf(plan)).toEqual([

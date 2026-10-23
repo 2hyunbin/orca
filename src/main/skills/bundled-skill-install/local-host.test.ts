@@ -1,4 +1,4 @@
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const { detectMock } = vi.hoisted(() => ({ detectMock: vi.fn() }))
@@ -12,8 +12,8 @@ import {
 } from '../../../shared/claude-profile-routing'
 import { localBundledSkillInput } from './local-host'
 
-const HOME = join('/', 'home', 'u')
-const USER_DATA = join('/', 'data', 'orca')
+const HOME = resolve('/', 'home', 'u')
+const USER_DATA = resolve('/', 'data', 'orca')
 
 afterEach(() => {
   detectMock.mockReset()
