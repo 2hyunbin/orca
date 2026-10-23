@@ -15059,7 +15059,7 @@
       },
       "performanceBudget": {
         "required": true,
-        "evidence": "Only a CLI request with non-empty text plus Enter and no interrupt adds a bounded fresh foreground read and one non-retrying liveness check. Positively identified Claude and Codex reuse the O(prompt bytes) chunked prompt sender plus one PTY-local listener until post-marker quiescence or the bounded fallback. Every other agent and shell retains the existing direct-send path. Text-only, bare Enter, interrupt, mobile, renderer stream input, and query replies add no work. Eligible durable Pi candidates use at most three targeted confirmations total (classification, frame, Enter), existing bounded output-chain awaits, no polling, timers, snapshots, inventory scans or listeners."
+        "evidence": "Only a CLI request with non-empty text plus Enter and no interrupt adds a bounded fresh foreground read and one non-retrying liveness check. Positively identified Claude and Codex reuse the O(prompt bytes) chunked prompt sender plus one PTY-local listener until post-marker quiescence or the bounded fallback. Every other agent and shell retains the existing direct-send path. Text-only, bare Enter, interrupt, mobile, renderer stream input, and query replies add no work. The eligible durable Pi route adds at most three targeted confirmations (classification, frame, Enter) beyond existing settled-agent classification, existing bounded output-chain awaits, no polling, timers, snapshots, inventory scans or listeners."
       },
       "promotionCriteria": [
         "Collect live Codex and Claude CLI sends on representative slow systems.",
