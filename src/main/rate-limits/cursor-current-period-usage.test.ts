@@ -225,6 +225,14 @@ describe('Cursor Unified Ultra current-period usage', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps an unlimited non-unified plan barless without the extra request', async () => {
+    respond(CURRENT, { ...SUMMARY, membershipType: 'enterprise', isUnlimited: true })
+    const limits = await fetchCursorRateLimits({ authReadResult: AUTH })
+    expect(limits).toMatchObject({ status: 'ok', planType: 'enterprise' })
+    expect(limits.monthly).toBeUndefined()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   // Weekly plans are not all unified_*: e.g. an enterprise seat moved to weekly Premium.
   it('uses a weekly current period behind idle non-unified summary pools', async () => {
     const endMs = Date.parse(END)

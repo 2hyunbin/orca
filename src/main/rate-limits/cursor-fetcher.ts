@@ -253,8 +253,11 @@ export async function fetchCursorRateLimits(
       (bucket) => bucket.name !== CURSOR_ON_DEMAND_BUCKET_NAME
     )
     // Why: weekly plans keep obsolete monthly zeros in the summary, so only idle pools justify a request.
+    // Unlimited non-unified plans keep main's no-bar result without the extra request.
     const summaryPoolsIdle =
-      planPools.length > 0 && planPools.every((bucket) => bucket.usedPercent === 0)
+      !mapped.isUnlimited &&
+      planPools.length > 0 &&
+      planPools.every((bucket) => bucket.usedPercent === 0)
     if (unified || summaryPoolsIdle) {
       const current = await fetchCurrentPeriodUsage(session, options.signal, unified)
       if (current.kind === 'result') {
