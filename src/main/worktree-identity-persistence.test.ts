@@ -12,6 +12,7 @@ import type { Store } from './persistence/loading-store/store'
 import {
   createStore,
   makeRepo,
+  makeWorktreeLineage,
   readDataFile,
   testState,
   writeDataFile
@@ -188,13 +189,17 @@ describe('host-qualified worktree metadata', () => {
   it('omits genuinely absent saved edges without copying unprojected rows or consulting owners', () => {
     const store = createStoreWithRepo()
     const repo = store.getRepos()[0]
-    const row = mergeWorktree(repo.id, {
-      path: '/workspace/feature',
-      head: '',
-      branch: '',
-      isBare: false,
-      isMainWorktree: false
-    })
+    const row = mergeWorktree(
+      repo.id,
+      {
+        path: '/workspace/feature',
+        head: '',
+        branch: '',
+        isBare: false,
+        isMainWorktree: false
+      },
+      undefined
+    )
     const rows = [row]
     const ownerRead = vi.spyOn(store, 'getWorktreeMeta')
     const edgeRead = vi.spyOn(store, 'getAllWorktreeLineage')
@@ -212,6 +217,9 @@ describe('host-qualified worktree metadata', () => {
       projectWorktreeLineageWithHostPeers(store, repo, [{ ...row, savedLineage: null }])[0]
         .savedLineage
     ).toBeNull()
+    const stale = { ...row, savedLineage: makeWorktreeLineage({ worktreeId: row.id }) }
+    expect(withSavedWorktreeLineage(store, repo, [stale])[0].savedLineage).toBeNull()
+    expect(projectWorktreeLineageWithHostPeers(store, repo, [stale])[0].savedLineage).toBeNull()
   })
 
   it('stores independent metadata for colliding locators on two hosts', () => {

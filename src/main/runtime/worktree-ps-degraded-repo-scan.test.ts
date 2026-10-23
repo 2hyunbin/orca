@@ -121,7 +121,12 @@ function makeStore(options: StoreOptions = {}) {
     removeWorktreeMeta: () => {},
     getAllWorktreeLineage: () => lineageById,
     getAllWorkspaceLineage: () => ({}),
-    removeWorktreeLineage: options.removeWorktreeLineage ?? vi.fn(),
+    removeWorktreeLineage:
+      options.removeWorktreeLineage ??
+      vi.fn(({ id }: HostWorktreeTarget) => {
+        delete lineageById[id]
+        listeners.forEach((listener) => listener())
+      }),
     getGitHubCache: () => undefined as never,
     getSettings: () => ({
       workspaceDir: '/tmp/workspaces',
@@ -367,7 +372,7 @@ describe('worktree.ps on a degraded repo scan', () => {
     expect(first.worktrees.find((row) => row.worktreeId === WORKTREE_ID)).toMatchObject({
       parentWorktreeId: MAIN_WORKTREE_ID
     })
-    delete store.getAllWorktreeLineage()[WORKTREE_ID]
+    store.removeWorktreeLineage(hostWorktreeTarget({ id: WORKTREE_ID, hostId: 'local' }))
     const second = await runtime.getWorktreePs(10_000)
     expect(second.worktrees.find((row) => row.worktreeId === WORKTREE_ID)).toMatchObject({
       parentWorktreeId: null

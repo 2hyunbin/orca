@@ -67,15 +67,26 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
     if (!Number.isInteger(limit) || limit <= 0) {
       throw new Error('invalid_limit')
     }
-    const { worktrees: resolvedWorktrees, platformByRepoId } = this.visibleResolvedWorktreeSnapshot(
+    let publication = this.visibleResolvedWorktreeSnapshot(
       await this.listResolvedWorktreeSnapshot(),
       sourceDefaultsSupported
     )
-    const freshPtyLiveness = await this.refreshPtyWorktreeRecordsFromController(resolvedWorktrees)
+    const generation = this.resolvedWorktrees.generation
+    const freshPtyLiveness = await this.refreshPtyWorktreeRecordsFromController(
+      publication.worktrees
+    )
+    if (generation !== this.resolvedWorktrees.generation) {
+      publication = this.visibleResolvedWorktreeSnapshot(
+        await this.listResolvedWorktreeSnapshot(),
+        sourceDefaultsSupported
+      )
+    }
+    const { worktrees: resolvedWorktrees, folderWorktrees, platformByRepoId } = publication
     const repoById = new Map((this.store?.getRepos() ?? []).map((repo) => [repo.id, repo]))
     const summaries = buildRuntimeWorktreePsSummaries({
       store: this.store,
       resolvedWorktrees,
+      folderWorktrees,
       platformByRepoId
     })
 

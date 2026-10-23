@@ -1,3 +1,4 @@
+import type { Worktree } from '../../../shared/worktree/types'
 import { readWorktreeLineageCorpus } from '../../worktree-lineage-candidates'
 import { OrcaRuntimeWithReadKittyFile } from '../orca-runtime-read-kitty-file'
 import type { RuntimeWorkspaceRepoScanRefresh } from './workspace-repo-scan-refresh'
@@ -125,8 +126,16 @@ export abstract class RuntimeWorkspaceCatalog extends OrcaRuntimeWithReadKittyFi
       )
     )
     const current = readWorktreeLineageCorpus(this.store)
-    const worktrees = current.project(perRepoWorktrees.flat())
-    return { worktrees, platformByRepoId }
+    const gitRows = perRepoWorktrees.flat()
+    const projected = current.project<Worktree & Partial<Pick<ResolvedWorktree, 'git'>>>([
+      ...gitRows,
+      ...current.folders
+    ])
+    const worktrees = projected
+      .slice(0, gitRows.length)
+      .filter((row): row is ResolvedWorktree => row.git !== undefined)
+    const folderWorktrees = projected.slice(gitRows.length)
+    return { worktrees, folderWorktrees, platformByRepoId }
   }
 
   /** Bind the runtime-owned scan cache and folder-workspace stamping into the row resolver. */

@@ -58,14 +58,21 @@ export function getSavedWorktreeLineage(
   lineageById: Readonly<Record<string, WorktreeLineage>>,
   metadata?: Readonly<Record<string, WorktreeMeta>>
 ): WorktreeLineage | null | undefined {
+  const saved = row.savedLineage
+  if (saved !== undefined || lineageStoreKeyForRow(row)) {
+    return saved !== undefined ? saved : row.lineage
+  }
+  const ownerHostId = metadata?.[row.id]?.hostId
+  if (ownerHostId && ownerHostId !== row.hostId) {
+    return null
+  }
   return getSavedWorktreeLineageFromFields(
     row.id,
     row.hostId,
     row.runtimeOwnerEnvironmentId,
-    row.savedLineage,
     row.lineage,
     lineageById[row.id],
-    metadata?.[row.id]?.hostId
+    ownerHostId
   )
 }
 
@@ -73,14 +80,10 @@ export function getSavedWorktreeLineageFromFields(
   id: string,
   hostId: Worktree['hostId'],
   runtimeOwnerEnvironmentId: Worktree['runtimeOwnerEnvironmentId'],
-  savedLineage: Worktree['savedLineage'],
   lineage: Worktree['lineage'],
   ownEdge: WorktreeLineage | undefined,
   ownerHostId?: WorktreeMeta['hostId']
 ): WorktreeLineage | null | undefined {
-  if (savedLineage !== undefined) {
-    return savedLineage
-  }
   if (
     runtimeOwnerEnvironmentId ??
     (hostId?.startsWith('runtime:') ? hostId.slice('runtime:'.length) : '')

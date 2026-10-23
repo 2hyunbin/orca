@@ -68,7 +68,6 @@ function savedLineageReader(
       row.id,
       row.hostId ?? hostId,
       row.runtimeOwnerEnvironmentId,
-      undefined,
       edge,
       edge,
       (raw === undefined ? store.getWorktreeMeta?.(row.id) : raw[row.id])?.hostId
@@ -85,7 +84,9 @@ export function withSavedWorktreeLineage<T extends Worktree>(
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
   const workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
   if (!hasSavedLineageRecords(lineageById) && !hasSavedLineageRecords(workspaceLineage)) {
-    return rows
+    return rows.every((row) => row.savedLineage === undefined || row.savedLineage === null)
+      ? rows
+      : rows.map((row) => (row.savedLineage === undefined ? row : { ...row, savedLineage: null }))
   }
   const savedLineage = savedLineageReader(store, repo, workspaceLineage)
   return rows.map((row) => {
@@ -103,12 +104,11 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
 ) {
   const lineageById = store.getAllWorktreeLineage?.() ?? {}
   const rows = input
-  const savedLineage = savedLineageReader(
-    store,
-    repo,
-    store.getAllWorkspaceLineage?.() ?? {},
-    rawMetadata
-  )
+  const workspaceLineage = store.getAllWorkspaceLineage?.() ?? {}
+  const savedLineage =
+    hasSavedLineageRecords(lineageById) || hasSavedLineageRecords(workspaceLineage)
+      ? savedLineageReader(store, repo, workspaceLineage, rawMetadata)
+      : undefined
   const project = (peers: readonly Worktree[] = []) =>
     projectPublishedWorktreeLineage(rows, lineageById, savedLineage, peers)
   if (rows.length === 0) {
@@ -188,29 +188,24 @@ export function projectWorktreeLineageWithHostPeers<T extends Worktree>(
 function projectPublishedWorktreeLineage<T extends Worktree>(
   worktrees: readonly T[],
   lineageById: Readonly<Record<string, WorktreeLineage>>,
-  savedLineage: ReturnType<typeof savedLineageReader>,
+  savedLineage: ReturnType<typeof savedLineageReader> | undefined,
   knownPeers: readonly Worktree[] = []
 ): WorktreeWithResolvedLineage<T>[] {
   const allWorktrees: readonly Worktree[] = [...worktrees, ...knownPeers]
   const indicesById = new Map<string, number[]>()
+  let hasSavedCarrier = false
   allWorktrees.forEach((worktree, index) => {
     const indices = indicesById.get(worktree.id) ?? []
     indices.push(index)
     indicesById.set(worktree.id, indices)
+    hasSavedCarrier ||= worktree.savedLineage !== undefined
   })
-  const savedLineageByChildIndex = new Map<number, WorktreeLineage | null>()
   const validLineageByChildIndex = new Map<number, WorktreeLineage>()
   const parentIndexByChildIndex = new Map<number, number>()
   const childIdsByParentIndex = new Map<number, string[]>()
 
   allWorktrees.forEach((child, childIndex) => {
     const lineage = lineageById[child.id]
-    if (childIndex < worktrees.length) {
-      const saved = savedLineage(child, lineage)
-      if (saved !== undefined) {
-        savedLineageByChildIndex.set(childIndex, saved)
-      }
-    }
     if (!lineage) {
       return
     }
@@ -236,15 +231,30 @@ function projectPublishedWorktreeLineage<T extends Worktree>(
     childIdsByParentIndex.set(parentIndex, children)
   }
 
-  return worktrees.map((worktree, index) => {
+  const project = (worktree: T, index: number) => {
     const lineage = validLineageByChildIndex.get(index) ?? null
-    const projected = {
+    return {
       ...worktree,
       parentWorktreeId: lineage?.parentWorktreeId ?? null,
       childWorktreeIds: childIdsByParentIndex.get(index) ?? [],
       lineage
     }
-    const saved = savedLineageByChildIndex.get(index)
+  }
+  if (!savedLineage) {
+    if (!hasSavedCarrier) {
+      return worktrees.map(project)
+    }
+    return worktrees.map((worktree, index) => {
+      const projected = project(worktree, index)
+      if (worktree.savedLineage !== undefined) {
+        projected.savedLineage = null
+      }
+      return projected
+    })
+  }
+  return worktrees.map((worktree, index) => {
+    const projected = project(worktree, index)
+    const saved = savedLineage(worktree, lineageById[worktree.id])
     if (saved !== undefined) {
       projected.savedLineage = saved
     }
