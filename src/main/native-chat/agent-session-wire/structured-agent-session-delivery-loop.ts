@@ -15,11 +15,7 @@
 // settles it first (`journal-unsent-send-hold.ts`).
 
 import type { StructuredAgentSessionDeliveryOrder } from './structured-agent-session-delivery-order'
-import type {
-  AgentJournalCursor,
-  AgentJournalSubmission
-} from '../../../shared/agent-session-journal-types'
-import type { AgentSessionRefusalReference } from '../../../shared/agent-session-wire-refusals'
+import type { AgentJournalSubmission } from '../../../shared/agent-session-journal-types'
 import type { AgentSessionRecord } from '../../../shared/agent-session-record'
 import type { AgentChildWorkView } from '../../../shared/agent-status-child-work-view'
 import { agentSessionFailureFact } from '../../../shared/agent-session-failure'
@@ -39,6 +35,7 @@ import {
 } from './structured-agent-session-start-failure-row'
 import {
   beginSubmissionHandover,
+  type StructuredAgentSessionPreparedDelivery,
   type StructuredAgentSessionPendingHandover
 } from './structured-agent-session-handover'
 import { structuredAgentSessionNextHandover } from './structured-agent-session-opening-send'
@@ -52,7 +49,10 @@ import { waitsForCodexTurnOptions } from './structured-agent-session-message-opt
 import type { StructuredAgentSessionRanRecorder } from './structured-agent-session-ran-options'
 import { sameProviderChild } from './structured-agent-session-provider-child'
 import type { StructuredAgentSessionAcquireAborts } from './structured-agent-session-acquire-aborts'
-import { rejectBlockedStructuredAgentSessionTransition } from './structured-agent-session-outgrown-child'
+import {
+  rejectBlockedStructuredAgentSessionTransition,
+  type StructuredAgentSessionChildTransition
+} from './structured-agent-session-outgrown-child'
 
 export type StructuredAgentSessionDeliveryLoopDeps = {
   deliveryOrder: StructuredAgentSessionDeliveryOrder
@@ -68,7 +68,7 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   retireOutgrownChild: (
     sessionId: string,
     next: AgentJournalSubmission
-  ) => Promise<AgentSessionRefusalReference | void>
+  ) => Promise<StructuredAgentSessionChildTransition>
   readiness: (
     sessionId: string,
     child: StructuredAgentSessionProviderChildIdentity
@@ -95,17 +95,6 @@ export type StructuredAgentSessionDeliveryLoopDeps = {
   acquireAborts: Pick<StructuredAgentSessionAcquireAborts, 'begin'>
   recordRanOptions?: StructuredAgentSessionRanRecorder
 }
-
-type Prepared =
-  | 'stop'
-  | 'continue'
-  | { start: StructuredAgentSessionStartClaim; acceptedBy: AgentJournalCursor }
-  | {
-      ok: true
-      awaited: StructuredAgentSessionProviderChildIdentity
-      readiness: StructuredAgentSessionStartReadiness | null
-      before: Promise<void>
-    }
 
 /** A failed start before it is worded; `fail` words it once, through the one wording point. */
 type StartFailure = NonNullable<ReturnType<typeof startThatFailedWhileQueued>>
@@ -234,7 +223,7 @@ export class StructuredAgentSessionDeliveryLoop {
   }
 
   /** Settles what an earlier host process left queued, then makes the session ready. */
-  private async prepare(sessionId: string): Promise<Prepared> {
+  private async prepare(sessionId: string): Promise<StructuredAgentSessionPreparedDelivery> {
     const session = this.deps.sessions.get(sessionId)
     if (!session || this.disposed) {
       return this.stop(sessionId)
@@ -263,7 +252,9 @@ export class StructuredAgentSessionDeliveryLoop {
     if (failedStart) {
       return this.fail(sessionId, failedStart)
     }
-    if (await rejectBlockedStructuredAgentSessionTransition(this.deps, sessionId, oldest)) {
+    if (
+      (await rejectBlockedStructuredAgentSessionTransition(this.deps, sessionId, oldest)) === true
+    ) {
       return 'continue'
     }
     const child = this.deps.sessions.get(sessionId)?.child
@@ -323,10 +314,12 @@ export class StructuredAgentSessionDeliveryLoop {
       return this.stop(sessionId)
     }
     // Re-derive for the actual next input after proving the awaited child still exists.
-    if (
-      (await rejectBlockedStructuredAgentSessionTransition(this.deps, sessionId, next)) ||
-      session.child !== awaitedChild
-    ) {
+    const transition = await rejectBlockedStructuredAgentSessionTransition(
+      this.deps,
+      sessionId,
+      next
+    )
+    if (transition === true || session.child !== awaitedChild) {
       return 'continue'
     }
     if (
@@ -354,7 +347,8 @@ export class StructuredAgentSessionDeliveryLoop {
       },
       next,
       // Re-read right before the provider call, which runs outside the serialize.
-      () => this.deps.sessions.get(sessionId)?.child === awaitedChild && !awaitedChild.close
+      () => this.deps.sessions.get(sessionId)?.child === awaitedChild && !awaitedChild.close,
+      typeof transition === 'function' ? transition : undefined
     )
     return pending ?? 'continue'
   }

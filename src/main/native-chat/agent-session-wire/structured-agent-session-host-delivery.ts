@@ -95,6 +95,7 @@ export function createStructuredAgentSessionConversationDelivery(input: {
         : sessions.get(sessionId)
       return retireOutgrownStructuredAgentSessionChild(sessionId, session, {
         next,
+        turnScopedSteering: deps.store.getRecord(sessionId)?.provider === 'claude',
         requiresModelTransitionRestart: (submission) =>
           session?.child?.phase === 'ready' &&
           deps.adapter.requiresModelTransitionRestart?.({

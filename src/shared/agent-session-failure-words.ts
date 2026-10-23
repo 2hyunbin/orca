@@ -138,6 +138,9 @@ function couldNot(verb: 'couldNotStart' | 'couldNotRestart'): Sentence {
     if (installationFailure) {
       return installationFailure
     }
+    if (!context.command && fact.refusal?.details?.reason === 'messagesUnsettled') {
+      return joinSentences([say('agentStillWorking'), say('waitForTurn')])
+    }
     const failed = say(verb, agent(say, context))
     const blocked = commandRefusedByReason(say, context, fact)
     if (blocked) {
@@ -304,8 +307,7 @@ export function agentSessionFailureSentence(
   /** Desktop passes its translations; the host and the phone keep English. */
   say: AgentSessionFailureSay = sayAgentSessionFailureEnglish
 ): string {
-  const sentence: Sentence = FAILURE_SENTENCES[fact.kind]
-  return sentence(context, fact, surface, say)
+  return FAILURE_SENTENCES[fact.kind](context, fact, surface, say)
 }
 
 /** The markers released clients hide, for the rejections that had one before rows carried a fact.

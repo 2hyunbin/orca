@@ -1,3 +1,4 @@
+import type { StructuredAgentSessionPreparedAdmission } from './structured-agent-session-execution-options'
 import type { AiVaultConversationCopy } from '../../../shared/ai-vault-resume-preparation'
 import type { AgentSessionAccountKind } from '../../../shared/agent-session-availability'
 import type {
@@ -283,6 +284,8 @@ export type StructuredAgentSessionAdapter = StructuredAgentSessionAdapterStop & 
     requestedAt?: number
     /** Revalidate after preparation, immediately before writing to the provider. */
     beforeDispatch?: () => Promise<void>
+    /** Prepared local input; the host commits write-ahead custody before synchronously offering it. */
+    admitPreparedInput?: StructuredAgentSessionPreparedAdmission
     /** Local preparation boundary before choices can mutate the provider. */
     onInputPreparation?: () => void
     /** In-process checkpoint after applying choices, before capturing execution evidence. */

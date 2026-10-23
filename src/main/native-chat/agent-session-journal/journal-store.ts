@@ -357,9 +357,10 @@ export class AgentSessionJournal {
   /** A dispatch transition (`JournalSubmissionWriter.resolveDispatch`). */
   resolveDispatch(
     input: ResolveDispatchInput,
-    cards?: () => JournalQueuePlan
+    cards?: () => JournalQueuePlan,
+    receipt?: JournalOperationReceipt
   ): Promise<AgentJournalCursor> {
-    return this.submissionWriter.resolveDispatch(input, cards)
+    return this.submissionWriter.resolveDispatch(input, cards, receipt)
   }
 
   /** A provider's late receipt (`JournalSubmissionWriter.acceptLate`). */

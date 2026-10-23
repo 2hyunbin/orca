@@ -22,22 +22,27 @@ import {
   type AgentSessionFailureWordsContext
 } from '../../../shared/agent-session-failure-words'
 
+export type StructuredAgentSessionChildTransition =
+  | AgentSessionRefusalReference
+  | ((providerTurn: () => string | null) => boolean)
+  | void
+
 export async function rejectBlockedStructuredAgentSessionTransition(
   deps: {
     retireOutgrownChild: (
       sessionId: string,
       next: AgentJournalSubmission
-    ) => Promise<AgentSessionRefusalReference | void>
+    ) => Promise<StructuredAgentSessionChildTransition>
     sessions: ReadonlyMap<string, Pick<StructuredAgentSessionHostSession, 'journal'>>
     conversationFence: (sessionId: string) => number
     failureTextContext: (sessionId: string) => AgentSessionFailureWordsContext
   },
   sessionId: string,
   next: AgentJournalSubmission
-): Promise<boolean> {
+): Promise<boolean | ((providerTurn: () => string | null) => boolean)> {
   const refusal = await deps.retireOutgrownChild(sessionId, next)
-  if (!refusal) {
-    return false
+  if (!refusal || typeof refusal === 'function') {
+    return refusal ?? false
   }
   await deps.sessions.get(sessionId)?.journal.resolveDispatch({
     clientMessageId: next.clientMessageId,
@@ -135,32 +140,51 @@ export async function retireOutgrownStructuredAgentSessionChild(
     }
     /** The mode a start of the chat would launch with now. */
     launchPermission?: () => Promise<AgentChatPermissionMode | null>
+    turnScopedSteering?: boolean
     next?: AgentJournalSubmission
     requiresModelTransitionRestart?: (next: AgentJournalSubmission) => boolean
     stopAgent: (sessionId: string) => Promise<void>
     logger: StructuredAgentSessionLogger
   }
-): Promise<AgentSessionRefusalReference | void> {
+): Promise<StructuredAgentSessionChildTransition> {
   if (!session) {
     return
   }
   const body =
     deps.next && session.journal.itemBody(agentJournalSubmissionKey(deps.next.clientMessageId))
-  if (body?.kind === 'message' && body.from?.orchestration?.message === 'mail-notice') {
-    return
-  }
+  const mail = body?.kind === 'message' && body.from?.orchestration?.message === 'mail-notice'
+  const child = session.child
+  const turnId =
+    deps.turnScopedSteering &&
+    child?.phase === 'ready' &&
+    !child.close &&
+    body?.kind === 'message' &&
+    !body.command &&
+    !mail &&
+    deps.next?.queuedMessageId === undefined
+      ? deps.work.currentWork()?.activeTurnId()
+      : null
+  const steer = turnId
+    ? (providerTurn: () => string | null) =>
+        session.child === child &&
+        !child.close &&
+        deps.work.currentWork()?.activeTurnId() === turnId &&
+        providerTurn() === turnId
+    : undefined
+  const keepOptions = mail || steer !== undefined
   const otherReason =
     structuredAgentSessionChildReportedSignedOut(session) ||
-    (await launchedWithOtherPermissionMode(session.child, deps.launchPermission))
-  const modelTransition = deps.next && deps.requiresModelTransitionRestart?.(deps.next) === true
+    (!keepOptions && (await launchedWithOtherPermissionMode(session.child, deps.launchPermission)))
+  const modelTransition =
+    !keepOptions && deps.next && deps.requiresModelTransitionRestart?.(deps.next) === true
   if (!otherReason && !modelTransition) {
-    return
+    return steer
   }
   const open = structuredAgentSessionChildHasOpenWork(
     modelTransition && !otherReason ? { ...deps.work, hasOpenDispatch: () => false } : deps.work
   )
   if (open && !modelTransition) {
-    return
+    return steer
   }
   // Wake debt is derived only where it decides: keeping an idle child, or why a model change waits.
   const background =

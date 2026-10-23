@@ -670,9 +670,9 @@ function countRetirementReads() {
     return newestTurn()
   }
   const resolveDispatch = journal.resolveDispatch.bind(journal)
-  journal.resolveDispatch = (input, cards) => {
+  journal.resolveDispatch = (input, cards, receipt) => {
     counts.rejections += input.state === 'rejected' ? 1 : 0
-    return resolveDispatch(input, cards)
+    return resolveDispatch(input, cards, receipt)
   }
   const { heldSends } = adapter
   adapter.heldSends = (sessionId) => {

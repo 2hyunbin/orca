@@ -9,10 +9,15 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { computeAgentSessionPayloadFingerprint } from '../../../shared/agent-session-mutation-envelope'
 import { readAgentJournalTurn } from '../../../shared/agent-session-turn-record'
+import { isQueuedAgentJournalSubmission } from '../../../shared/agent-session-queued-submission'
+import { recordAgentSessionRanOptions } from '../../runtime/agent-session-record-options'
 import { isSubagentBlock } from '../../../shared/native-chat-types'
 import { activeStructuredAgentSessionTurnId } from '../../../shared/structured-agent-session-live-turn'
 import { acpChildWorkStatusSink } from '../../acp/acp-structured-child-work.test-support'
-import { RESUMED_BY_MESSAGE } from '../../claude/claude-captured-task-frames.test-fixture'
+import {
+  MOVED_TO_BACKGROUND,
+  RESUMED_BY_MESSAGE
+} from '../../claude/claude-captured-task-frames.test-fixture'
 import { WAKES_AFTER_ITS_SHELL } from '../../claude/claude-captured-wake-frames.test-fixture'
 import { ClaudeStructuredSessionAdapter } from '../../claude/claude-structured-session-adapter'
 import {
@@ -47,6 +52,8 @@ import {
 
 const CALLER = { callerKey: 'client-1' }
 
+let releaseBarriers: (() => void)[] = []
+let claudeFrames: { replayUuid: null; initProof?: 'none' }
 let root: string
 let host: StructuredAgentSessionHost
 let adapter: ClaudeStructuredSessionAdapter
@@ -60,9 +67,11 @@ let clock = NOW
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-claude-subagent-row-'))
   clock = NOW
+  releaseBarriers = []
   resetHostTestOperationIds()
   const log = recordingStructuredAgentSessionLogger()
-  claude = fakeClaude({ replayUuid: null })
+  claudeFrames = { replayUuid: null }
+  claude = fakeClaude(claudeFrames)
   orchestration = new OrchestrationDb(':memory:')
   adapter = new ClaudeStructuredSessionAdapter({
     resolveLaunch: async ({ permissionMode }) => ({
@@ -118,6 +127,7 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  releaseBarriers.forEach((release) => release())
   setStructuredAgentSessionHost(null)
   await adapter.closeAll()
   await host.flushAllStreamedEvents()
@@ -550,4 +560,289 @@ it('keeps a helper the next child resumes while it is still starting working, pa
   await new Promise((resolve) => setTimeout(resolve, 50))
   expect(claude.connections).toHaveLength(2)
   expect(await savedRows()).toEqual([expect.objectContaining({ id: 'agent-1', state: 'working' })])
+})
+
+it('steers on current choices and returns the same unwritten input to new-turn selection at admission', async () => {
+  const written = (on: FakeConnection, text: string) =>
+    on.sent.find((message) => JSON.stringify(message).includes(text))
+  const snapshot = async () => {
+    await host.flushStreamedEvents(SESSION)
+    return host.journalSnapshot(SESSION)
+  }
+  const send = async (text: string, options?: Record<string, string>) => {
+    const body = hostTestMessage(text)
+    const sent = await host.send(CALLER, {
+      envelope: envelope('agentSession.send', { body, options }),
+      body,
+      options
+    })
+    if (!sent.ok) {
+      throw new Error(JSON.stringify(sent.refusal))
+    }
+    return sent.value.clientMessageId
+  }
+  claudeFrames.initProof = 'none'
+  const first = claude.connections[0]!
+  const journal = host.collaboratorsForTests().sessions.get(SESSION)!.journal
+  const dispatch = vi.spyOn(adapter, 'dispatch')
+  const recorded = vi.spyOn(store, 'reviseSessionOptions')
+  const idle = () =>
+    eventually(() =>
+      expect(host.collaboratorsForTests().conversationDelivery.loop.isRunning(SESSION)).toBe(false)
+    )
+  const init = (on: FakeConnection, permissionMode = 'default') =>
+    frame(on, {
+      type: 'system',
+      subtype: 'init',
+      uuid: `init-${claude.connections.length}`,
+      model: on.launch.options.model === 'opus' ? 'claude-opus-4-6' : 'claude-haiku-4-5',
+      permissionMode
+    })
+  const echo = (on: FakeConnection, text: string) =>
+    frame(on, { ...written(on, text)!, isReplay: true, parent_tool_use_id: null })
+  const finish = (on: FakeConnection, text: string) => {
+    const input = written(on, text)!
+    frame(on, {
+      type: 'assistant',
+      uuid: `reply-${text}`,
+      parent_tool_use_id: null,
+      message: {
+        id: `reply-${text}`,
+        role: 'assistant',
+        content: [{ type: 'text', text: `${text} result` }]
+      },
+      user_message_uuid: input.uuid,
+      user_message_uuids: [input.uuid]
+    })
+    frame(on, {
+      type: 'result',
+      subtype: 'success',
+      uuid: `result-${text}`,
+      is_error: false,
+      terminal_reason: 'completed',
+      user_message_uuid: input.uuid,
+      user_message_uuids: [input.uuid]
+    })
+    frame(on, { type: 'system', subtype: 'session_state_changed', state: 'idle' })
+  }
+  const opened = async (text: string, options?: Record<string, string>) => {
+    const id = await send(text, options)
+    await eventually(() => expect(written(claude.connections.at(-1)!, text)).toBeDefined())
+    const on = claude.connections.at(-1)!
+    init(on)
+    echo(on, text)
+    await eventually(() => expect(host.currentWork(SESSION)?.activeTurnId()).not.toBeNull())
+    await idle()
+    return { id, on }
+  }
+  init(first)
+  await opened('A')
+  for (const captured of MOVED_TO_BACKGROUND.filter(({ at }) => at <= 11_139)) {
+    frame(first, captured.frame)
+  }
+  await eventually(async () =>
+    expect(await savedRows()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ state: 'working' })])
+    )
+  )
+  const choices = { model: 'opus', effort: 'high', fastMode: 'true' }
+  await store.replaceSessionOptions({
+    sessionId: SESSION,
+    fence: store.getRecord(SESSION)!.lease.runtimeFence,
+    options: choices,
+    now: NOW
+  })
+  const controls = first.calls.length
+  const b = await send('B', choices)
+  await eventually(() => expect(written(first, 'B')).toBeDefined())
+  await idle()
+  expect(first.calls.slice(controls)).toEqual([])
+  expect(first.closeCount).toBe(0)
+  expect(claude.connections).toHaveLength(1)
+  const bIndex = dispatch.mock.calls.findIndex(([input]) => input.clientMessageId === b)
+  expect(dispatch.mock.calls[bIndex]![0].executionOptions).toBeUndefined()
+  expect(await dispatch.mock.results[bIndex]!.value).toMatchObject({
+    state: 'admitted',
+    ranOptions: { model: 'claude-haiku-4-5' }
+  })
+  expect(
+    recorded.mock.calls.findLast(([update]) => update === recordAgentSessionRanOptions)?.[1]
+  ).toMatchObject({ model: 'claude-haiku-4-5' })
+  expect(
+    (await snapshot()).submissions.find(({ clientMessageId }) => clientMessageId === b)?.options
+  ).toEqual(choices)
+  expect(await savedRows()).toEqual(
+    expect.arrayContaining([expect.objectContaining({ state: 'working' })])
+  )
+  echo(first, 'B')
+  for (const captured of MOVED_TO_BACKGROUND.filter(({ at }) => at >= 51_275 && at <= 52_441)) {
+    frame(first, captured.frame)
+  }
+  await eventually(async () =>
+    expect(await savedRows()).toEqual(
+      expect.arrayContaining([expect.objectContaining({ state: 'completed' })])
+    )
+  )
+  finish(first, 'A')
+  await eventually(() => expect(host.currentWork(SESSION)?.activeTurnId()).toBeNull())
+  const c = await opened('C', choices)
+  expect(c.on).not.toBe(first)
+  expect(c.on.launch.options).toMatchObject({ model: 'opus', permissionMode: 'auto' })
+  finish(c.on, 'C')
+  await eventually(() => expect(host.currentWork(SESSION)?.activeTurnId()).toBeNull())
+  await opened('same choice', choices)
+  expect(claude.connections).toHaveLength(2)
+
+  // Preparation is complete but pending has not entered the journal lane: still reversible.
+  const release = Promise.withResolvers<void>()
+  releaseBarriers.push(() => release.resolve())
+  const resolve = journal.resolveDispatch.bind(journal)
+  let held = false
+  const pending = vi
+    .spyOn(journal, 'resolveDispatch')
+    .mockImplementation(async (input, cards, receipt) => {
+      if (receipt && !held) {
+        held = true
+        await release.promise
+      }
+      return resolve(input, cards, receipt)
+    })
+  const lateCapture = { ...choices, model: 'haiku' }
+  const late = await send('late preparation', lateCapture)
+  await eventually(() => expect(held).toBe(true))
+  const queuedLate = (await snapshot()).submissions.find(
+    ({ clientMessageId }) => clientMessageId === late
+  )!
+  expect(queuedLate.options).toEqual(lateCapture)
+  expect(queuedLate.handedOverAt).toBeUndefined()
+  expect(isQueuedAgentJournalSubmission(queuedLate)).toBe(true)
+  expect(written(c.on, 'late preparation')).toBeUndefined()
+  expect(adapter.heldSends(SESSION)?.has(late)).toBe(false)
+  finish(c.on, 'same choice')
+  await eventually(() => expect(host.currentWork(SESSION)?.activeTurnId()).toBeNull())
+  release.resolve()
+  await eventually(() =>
+    expect(written(claude.connections.at(-1)!, 'late preparation')).toBeDefined()
+  )
+  pending.mockRestore()
+  const d = claude.connections.at(-1)!
+  expect(d).not.toBe(c.on)
+  expect(d.launch.options).toMatchObject({ model: 'haiku', permissionMode: 'auto' })
+  init(d)
+  echo(d, 'late preparation')
+  await idle()
+
+  // The end is decoded after pending joins the lane, but its lifecycle fold queues behind it.
+  const target = host.currentWork(SESSION)!.activeTurnId()
+  let staged = false
+  let rolledBack = false
+  const queued = vi
+    .spyOn(journal, 'resolveDispatch')
+    .mockImplementation((input, cards, receipt) => {
+      if (!receipt || staged) {
+        return resolve(input, cards, receipt)
+      }
+      staged = true
+      let result!: ReturnType<typeof resolve>
+      return journal
+        .readInOrder(() => {
+          result = resolve(input, cards, {
+            ...receipt,
+            write: (db, row) => {
+              expect(host.currentWork(SESSION)?.activeTurnId()).toBe(target)
+              try {
+                receipt.write(db, row)
+              } catch (error) {
+                rolledBack = true
+                throw error
+              }
+            }
+          })
+          finish(d, 'late preparation')
+          expect(host.currentWork(SESSION)?.activeTurnId()).toBe(target)
+        })
+        .then(() => result)
+    })
+  const lastCapture = { ...choices, model: 'opus' }
+  const final = await send('late journal', lastCapture)
+  await eventually(() => expect(written(claude.connections.at(-1)!, 'late journal')).toBeDefined())
+  queued.mockRestore()
+  expect(rolledBack).toBe(true)
+  const e = claude.connections.at(-1)!
+  expect(e).not.toBe(d)
+  expect(e.launch.options).toMatchObject({ model: 'opus', permissionMode: 'auto' })
+  init(e, 'auto')
+  echo(e, 'late journal')
+  await idle()
+
+  // A returned-promise delay after actual COMMIT/offer is already past local admission.
+  const offered = Promise.withResolvers<void>()
+  const acknowledge = Promise.withResolvers<void>()
+  releaseBarriers.push(() => acknowledge.resolve())
+  const admitted = vi
+    .spyOn(journal, 'resolveDispatch')
+    .mockImplementation((input, cards, receipt) => {
+      const result = resolve(input, cards, receipt)
+      return receipt
+        ? result.then(async (cursor) => {
+            offered.resolve()
+            await acknowledge.promise
+            return cursor
+          })
+        : result
+    })
+  const currentControls = e.calls.length
+  const after = await send('after admission', { model: 'haiku' })
+  await eventually(() => expect(written(e, 'after admission')).toBeDefined())
+  await offered.promise
+  expect(e.calls).toHaveLength(currentControls)
+  finish(e, 'late journal')
+  await eventually(() => expect(host.currentWork(SESSION)?.activeTurnId()).toBeNull())
+  acknowledge.resolve()
+  await idle()
+  admitted.mockRestore()
+  echo(e, 'after admission')
+  finish(e, 'after admission')
+  await eventually(async () =>
+    expect(
+      (await snapshot()).submissions.find(({ clientMessageId }) => clientMessageId === after)
+        ?.dispatchState
+    ).toBe('accepted')
+  )
+  for (const [id, text, capture] of [
+    [late, 'late preparation', lateCapture],
+    [final, 'late journal', lastCapture]
+  ] as const) {
+    expect(
+      claude.connections
+        .flatMap(({ sent }) => sent)
+        .filter(
+          (message) => message.message && JSON.stringify(message.message).includes(`"${text}"`)
+        )
+    ).toHaveLength(1)
+    expect(
+      (await snapshot()).submissions.find(({ clientMessageId }) => clientMessageId === id)
+    ).toMatchObject({ clientMessageId: id, options: capture, dispatchState: 'accepted' })
+  }
+  expect(
+    claude.connections
+      .flatMap(({ sent }) => sent)
+      .filter((message) => JSON.stringify(message).includes('after admission'))
+  ).toHaveLength(1)
+  expect(claude.connections).toHaveLength(4)
+  expect(
+    (await snapshot()).items.flatMap(({ body }) =>
+      body.kind === 'message'
+        ? body.blocks.flatMap((block) => (block.type === 'text' ? [block.text] : []))
+        : []
+    )
+  ).toEqual(
+    expect.arrayContaining([
+      'A result',
+      'C result',
+      'same choice result',
+      'late preparation result',
+      'late journal result'
+    ])
+  )
 })

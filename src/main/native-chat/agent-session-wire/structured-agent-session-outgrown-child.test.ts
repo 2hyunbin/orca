@@ -40,7 +40,7 @@ describe('a send after the agent said it is not signed in', () => {
 
   const fence = () => rig.store.getRecord(SESSION)?.lease.runtimeFence ?? 1
 
-  it('goes to a new agent, and the new agent is kept for the sends after it', async () => {
+  it('recovers a signed-out child for mail after sign-in, then reuses the new child', async () => {
     await foundRestTestChat(rig)
     rig.adapter.dispatch.mockImplementationOnce(async () => ({
       state: 'rejected',
@@ -53,7 +53,18 @@ describe('a send after the agent said it is not signed in', () => {
     expect(rig.adapter.acquire).toHaveBeenCalledTimes(1)
     rig.adapter.closeSession.mockClear()
 
-    expect((await rig.host.send(CALLER, restTestSend('signed in now', fence()))).ok).toBe(true)
+    const mail = restTestSend('signed in now: worker mail', fence())
+    mail.body.from = {
+      kind: 'agent',
+      senders: [],
+      orchestration: {
+        message: 'mail-notice',
+        mailbox: 'agent:worker',
+        dispatchId: null,
+        messages: []
+      }
+    }
+    expect((await rig.host.send(CALLER, mail)).ok).toBe(true)
     await vi.waitFor(() => expect(rig.adapter.dispatch).toHaveBeenCalledTimes(3))
     expect(rig.adapter.closeSession).toHaveBeenCalledWith(SESSION)
     expect(rig.adapter.acquire).toHaveBeenCalledTimes(2)
