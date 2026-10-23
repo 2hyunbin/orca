@@ -202,14 +202,15 @@ export class BridgeTerminalOutputBacklog {
       return head.payload
     }
     const chunks = [head.chunk]
+    let consumed = 0
     let bytes = head.bytes
     let lastUnit = head.chunk.charCodeAt(head.chunk.length - 1)
     // Consecutive output only: anything else in between is state the reader applies in order, and
     // merging across it would deliver bytes out of order. Nothing compares stream ids here, because
     // a backlog belongs to one subscription and every `data` payload on it carries that
     // subscription's single stream id; the comparison that used to be here could not fail.
-    while (this.queue.length > 0) {
-      const nextHeld = this.queue[0]
+    while (consumed < this.queue.length) {
+      const nextHeld = this.queue[consumed]
       if (nextHeld.kind !== 'output') {
         break
       }
@@ -222,7 +223,7 @@ export class BridgeTerminalOutputBacklog {
       if (mergedBytes > allowedBytes) {
         break
       }
-      this.queue.shift()
+      consumed += 1
       this.take(nextHeld.bytes)
       chunks.push(nextHeld.chunk)
       bytes = mergedBytes
@@ -230,6 +231,9 @@ export class BridgeTerminalOutputBacklog {
         lastUnit = nextHeld.chunk.charCodeAt(nextHeld.chunk.length - 1)
       }
       this.merged += 1
+    }
+    if (consumed > 0) {
+      this.queue.splice(0, consumed)
     }
     this.syncSilence()
     return { type: 'data', streamId: head.streamId, chunk: chunks.join('') }
