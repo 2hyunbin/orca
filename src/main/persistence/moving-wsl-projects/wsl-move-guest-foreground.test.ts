@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import type { AgentStatusIpcPayload } from '../../../shared/agent-status-ipc-payload'
 import { describe, expect, it, vi } from 'vitest'
 import { collectWslMoveGateInputs, type WslMoveGateFactSources } from './wsl-move-gate-facts'
 import {
@@ -73,6 +74,28 @@ describe('classifyWslGuestPaneForeground', () => {
     expect(classifyWslGuestPaneForeground([taggedRelay, shellA, child(150, 'vim')], KEY_A)).toBe(
       'process-running'
     )
+  })
+
+  it("names an agent that is the shell's one job, with its own children, as the foreground", () => {
+    // awin verify-4: an idle codex at its prompt read as a running program.
+    const codex = child(150, 'codex', { argc: 3 })
+    const hook = child(160, 'sh', { ppid: 150, argc: 2 })
+    expect(classifyWslGuestPaneForeground([relay, shellA, codex, hook], KEY_A)).toEqual({
+      agent: 'codex'
+    })
+  })
+
+  it('still blocks an agent with a job of the shell beside it', () => {
+    const codex = child(150, 'codex')
+    expect(classifyWslGuestPaneForeground([relay, shellA, codex, child(170, 'sleep')], KEY_A)).toBe(
+      'process-running'
+    )
+    expect(
+      classifyWslGuestPaneForeground(
+        [relay, shellA, codex, child(170, 'node', { ppid: 1, sid: 170 })],
+        KEY_A
+      )
+    ).toBe('process-running')
   })
 
   it('never reads a pane whose shell was not found as idle', () => {
@@ -151,6 +174,36 @@ describe('collectWslMoveGateInputs with a guest foreground reader', () => {
       scope
     )
     expect(failed.panes[0]?.foreground).toBe('unverifiable')
+  })
+
+  it('lets the hook status decide for an agent at its prompt, and keeps a working one blocking', async () => {
+    const rows = (state: AgentStatusIpcPayload['state']) => (): AgentStatusIpcPayload[] => [
+      // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the gate reads only the fields set here.
+      {
+        paneKey: KEY_A,
+        state,
+        prompt: '',
+        agentType: 'codex',
+        connectionId: null,
+        receivedAt: 1,
+        stateStartedAt: 1,
+        providerSession: { key: 'session_id', id: '0f0e0d0c-1111-4111-8111-111111111111' }
+      } as AgentStatusIpcPayload
+    ]
+    const guestForegrounds = async () => new Map([[KEY_A, { agent: 'codex' }]])
+    const idle = await collectWslMoveGateInputs(
+      { ...base, agentRows: rows('done'), guestForegrounds },
+      scope
+    )
+    expect(assessWslMoveTerminals(idle).verdict).toBe('ready')
+    const working = await collectWslMoveGateInputs(
+      { ...base, agentRows: rows('working'), guestForegrounds },
+      scope
+    )
+    expect(assessWslMoveTerminals(working)).toMatchObject({
+      verdict: 'blocked',
+      blockers: [{ kind: 'agent-working' }]
+    })
   })
 
   it('leaves a slept pane idle without asking the distro, which has no shell of it left', async () => {

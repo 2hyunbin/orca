@@ -221,6 +221,23 @@ describe('moveProjectsToWslHost', () => {
     expect(reported).toEqual(sleptPanes)
   })
 
+  it("says in the preview that a slept pane's history can't be read", async () => {
+    // awin verify-4: only Start refused; the preview showed the move as ready.
+    const dispose = vi.fn()
+    world.deps.sleptScrollback = async () => ({
+      buffers: new Map(),
+      problems: ['saved terminal history Orca could not fully read for the tab "build"'],
+      dispose
+    })
+    expect(await previewWslMove(world.deps, request)).toMatchObject({
+      outcome: 'refused',
+      code: 'wsl_move_export_incomplete',
+      reasons: ['saved terminal history Orca could not fully read for the tab "build"']
+    })
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(journal()).toEqual([])
+  })
+
   it('refuses a second move of the same distro while one runs', async () => {
     let release: () => void = () => {}
     const sleep = world.deps.quiesce.sleepWorkspaces

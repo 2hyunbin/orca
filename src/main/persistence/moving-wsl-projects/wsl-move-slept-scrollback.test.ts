@@ -170,12 +170,14 @@ describe('a slept pane on the snapshot channel', () => {
         { paneKey: 'other:22222222-1111-4111-8111-111111111111', sessionId: 'pty-2' }
       ],
       'Ubuntu',
-      spoolRoot()
+      spoolRoot(),
+      // awin verify-4: the refusal named the tab by its id.
+      (tabId) => (tabId === TAB ? 'build watcher' : null)
     )
     expect(slept.buffers.size).toBe(0)
     expect(slept.problems).toEqual([
-      `saved terminal history Orca could not fully read for tab ${TAB}`,
-      'saved terminal history Orca could not fully read for tab other'
+      'saved terminal history Orca could not fully read for the tab "build watcher"',
+      'saved terminal history Orca could not fully read for the tab other'
     ])
     slept.dispose()
   })

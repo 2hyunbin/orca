@@ -1,4 +1,3 @@
-import { toast } from 'sonner'
 import { translate } from '@/i18n/i18n'
 import type { ConfirmationDialogContextValue } from '@/components/confirmation-dialog-context'
 import { useAppStore } from '@/store'
@@ -35,7 +34,16 @@ export async function bringWslMovedProjectBack(
   })
   // On success main reloads the window, which hydrates the whole pre-move session from disk.
   if (!result.released) {
-    toast.error(wslMoveUseHereRefusalMessage(result, project.distro))
+    // A dialog, not a toast: a toast sat behind the update notice on awin and read as nothing.
+    await confirm({
+      title: translate('sidebar.wslMoved.useHereRefusedTitle', "Can't use {{name}} here yet", {
+        name: project.displayName
+      }),
+      description: wslMoveUseHereRefusalMessage(result, project.distro),
+      confirmLabel: translate('sidebar.wslMoved.useHereRefusedOk', 'OK'),
+      acknowledgeOnly: true,
+      initialFocus: 'confirm'
+    })
   }
 }
 

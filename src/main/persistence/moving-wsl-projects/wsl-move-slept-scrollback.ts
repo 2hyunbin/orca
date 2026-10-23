@@ -17,6 +17,7 @@ import { join } from 'node:path'
 import { ORCAD_MIGRATION_SCROLLBACK_CHUNK_BYTES } from '../../../shared/orcad-migration/orcad-migration-scrollback'
 import { isTerminalLeafId, makePaneKey, parsePaneKey } from '../../../shared/stable-pane-id'
 import type { WorkspaceSessionState } from '../../../shared/workspace-session-state-types'
+import type { WslMoveRequest } from '../../../shared/wsl-move/wsl-move-driver-types'
 import { parsePtySessionId } from '../../../shared/pty-session-id-format'
 import { collectLeafIds } from '../../../shared/terminal-pane-layout-tree'
 import { TERMINAL_SCROLLBACK_STORE_BYTE_LIMIT } from '../../../shared/terminal-scrollback-limits'
@@ -68,6 +69,25 @@ export async function readSleptScrollback(
     })
 }
 
+/** For the preview: what a start would refuse for panes slept already, said before the user starts. */
+export async function unreadableSleptHistory(
+  deps: Pick<WslMoveDriverDeps, 'sleptScrollback'>,
+  request: Pick<WslMoveRequest, 'distro' | 'sleptPanes'>,
+  migrationId: string,
+  workspaceIds: readonly string[]
+): Promise<string[]> {
+  const slept = await readSleptScrollback(
+    deps,
+    [],
+    request.distro,
+    migrationId,
+    workspaceIds,
+    request.sleptPanes
+  )
+  slept.dispose()
+  return [...slept.problems]
+}
+
 /** For the export: a slept pane's buffer, read from its spool file only while it is hashed. */
 export function sleptScrollbackReader(
   slept: WslMoveSleptScrollback
@@ -90,7 +110,9 @@ export async function readWslMoveSleptScrollbackFromHistory(
   reader: ColdRestoreReader,
   panes: readonly WslMoveRestoreHintPane[],
   distro: string,
-  spoolRoot: string
+  spoolRoot: string,
+  /** What the tab bar calls it; an id means nothing to the user. */
+  tabTitle: (tabId: string) => string | null = () => null
 ): Promise<WslMoveSleptScrollback> {
   const buffers = new Map<string, WslMoveSleptBuffer>()
   const problems: string[] = []
@@ -112,7 +134,10 @@ export async function readWslMoveSleptScrollbackFromHistory(
       }
       // A checkpoint behind an unreadable log is older than the pane: moving it would lose the rest.
       if (detection.status === 'unreadable' || detection.hasUnreadableRecovery) {
-        problems.push(`saved terminal history Orca could not fully read for tab ${leaf.tabId}`)
+        const title = tabTitle(leaf.tabId)
+        problems.push(
+          `saved terminal history Orca could not fully read for the tab ${title ? `"${title}"` : leaf.tabId}`
+        )
         continue
       }
       const { scrollbackAnsi, snapshotAnsi } = detection.restoreInfo
@@ -249,4 +274,15 @@ export function withSleptSessionPanes(
     known.add(pane.paneKey)
     return true
   })
+}
+
+/** The tab bar's name for a tab of the session, or null for a tab it does not hold. */
+export function wslMoveTabTitle(session: WorkspaceSessionState, tabId: string): string | null {
+  for (const tabs of Object.values(session.tabsByWorktree)) {
+    const tab = tabs.find((candidate) => candidate.id === tabId)
+    if (tab) {
+      return tab.customTitle?.trim() || tab.title.trim() || null
+    }
+  }
+  return null
 }

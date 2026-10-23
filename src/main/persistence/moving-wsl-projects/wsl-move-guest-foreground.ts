@@ -7,9 +7,18 @@
  * `nohup`, `disown`), no daemon it started (`setsid` keeps the key), and no script it runs (a waiting
  * `read` is still a script). The move's Sleep ends all of those, so any of them blocks.
  */
+import { recognizeAgentProcess } from '../../../shared/agent-process-recognition'
 import { isShellProcess } from '../../../shared/shell-process-detection'
 
-export type WslGuestPaneForeground = 'shell-idle' | 'process-running' | 'unverifiable'
+/**
+ * `agent`: the shell's one foreground job is an agent CLI and everything else running is its own
+ * subtree, so its hook status decides; Windows sees only `wsl.exe` and could never say so.
+ */
+export type WslGuestPaneForeground =
+  | 'shell-idle'
+  | 'process-running'
+  | 'unverifiable'
+  | { agent: string }
 
 export type WslGuestProcessRow = {
   pid: number
@@ -90,12 +99,22 @@ export function classifyWslGuestPaneForeground(
       members.set(row.pid, row)
     }
   }
-  for (const row of members.values()) {
-    if (!isShellProcess(row.comm) || row.argc > 1) {
-      return 'process-running'
-    }
+  const busy = [...members.values()].filter((row) => !isShellProcess(row.comm) || row.argc > 1)
+  if (busy.length === 0) {
+    return 'shell-idle'
   }
-  return 'shell-idle'
+  const agents = busy.flatMap((row) => {
+    const agent = row.ppid === shell.pid ? recognizeAgentProcess(row.comm)?.agent : undefined
+    return agent ? [{ pid: row.pid, agent }] : []
+  })
+  // A job beside the agent (`&`, nohup, a daemon it left behind) still dies with the Sleep.
+  if (
+    agents.length === 1 &&
+    busy.every((row) => row.pid === agents[0].pid || descendsFrom(row, agents[0].pid, byPid))
+  ) {
+    return { agent: agents[0].agent }
+  }
+  return 'process-running'
 }
 
 function descendsFrom(

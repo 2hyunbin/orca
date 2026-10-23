@@ -16,15 +16,12 @@ import type {
   WslMoveResult
 } from '../../../shared/wsl-move/wsl-move-driver-types'
 import type { WslMoveCutover } from '../../../shared/wsl-move/wsl-move-cutover'
-import {
-  listWslMoveCutovers,
-  removeWslMoveCutover,
-  writeWslMoveCutover
-} from './wsl-move-cutover-journal'
+import { removeWslMoveCutover, writeWslMoveCutover } from './wsl-move-cutover-journal'
 import { journalSleptWslMove } from './wsl-move-driver-journal'
 import type { WslMoveDriverDeps, WslMoveHost } from './wsl-move-driver-ports'
 import {
   readSleptScrollback,
+  unreadableSleptHistory,
   sleptScrollbackReader,
   withSleptSnapshots,
   type WslMoveSleptScrollback
@@ -41,11 +38,12 @@ import {
   collectWslMoveBlobs,
   commitWslMove,
   sendWslMoveBlobs,
-  stageWslMove
+  stageWslMove,
+  wslMoveCopyBytes
 } from './wsl-move-driver-transfer'
 import { pauseWslMoveScope } from './wsl-move-driver-pause'
 import { quiesceWslMove, type WslMoveQuiesceRefusalReason } from './wsl-move-quiesce'
-import { wslMoveAutomationsPending } from './wsl-move-host-automations-rewrite'
+import { finishWslMove as finish } from './wsl-move-driver-finish'
 import { resetWslMoveToZero } from './wsl-move-reset'
 import { claimWslMoveRun, releaseWslMoveRun, type RunningWslMove } from './wsl-move-running-moves'
 
@@ -62,9 +60,19 @@ export async function previewWslMove(
   deps: WslMoveDriverDeps,
   request: WslMoveRequest
 ): Promise<WslMovePreview> {
-  const prepared = await prepareWslMove(deps, request, deps.newMigrationId(), deps.now())
+  const migrationId = deps.newMigrationId()
+  const prepared = await prepareWslMove(deps, request, migrationId, deps.now())
   if ('outcome' in prepared) {
     return prepared
+  }
+  const unreadable = await unreadableSleptHistory(
+    deps,
+    request,
+    migrationId,
+    prepared.scope.workspaceIds
+  )
+  if (unreadable.length > 0) {
+    return refusal('wsl_move_export_incomplete', { reasons: unreadable })
   }
   const { plan } = prepared
   return {
@@ -218,8 +226,15 @@ async function moveQuiesced(
   )
   stopIfCancelled()
   const blobs = await collectWslMoveBlobs(deps, quiesced, again.worktrees)
-  const bytesTotal = blobs.descriptors.reduce((sum, blob) => sum + blob.byteLength, 0)
-  deps.progress({ distro, step: 'copying', migrationId, phase: staged.phase, bytesTotal })
+  const { snapshotBytes, bytesTotal } = wslMoveCopyBytes(quiesced, blobs.descriptors)
+  deps.progress({
+    distro,
+    step: 'copying',
+    migrationId,
+    phase: staged.phase,
+    bytesSent: snapshotBytes,
+    bytesTotal
+  })
   await sendWslMoveBlobs(host, staged, blobs)
   // Still short of `blobs-transferred`: no commit can exist yet, so a refusal here always resets.
   await proveStillExited(deps, quiesced, prepared)
@@ -259,32 +274,6 @@ async function proveStillExited(
   }
   if (proof.verdict === 'unverifiable') {
     throw new WslMoveStop(`${WSL_MOVE_EXIT_UNVERIFIABLE}: ${proof.reason}`)
-  }
-}
-
-async function finish(
-  deps: WslMoveDriverDeps,
-  distro: string,
-  migrationId: string
-): Promise<WslMoveResult> {
-  deps.progress({ distro, step: 'finishing', migrationId, phase: 'destination-committed' })
-  // Forward only from here: a failed rewrite resumes on the next pass or startup, never resets.
-  await deps.finishOnDesktop().catch((error: unknown) => {
-    console.warn('[wsl-move] Finishing the move on this desktop paused:', error)
-  })
-  const cutover = listWslMoveCutovers(deps.userDataPath).find(
-    (entry) => entry.migrationId === migrationId
-  )
-  const phase = cutover?.phase ?? 'destination-committed'
-  // Never silently off: the result names them, and the rewrite pass keeps retrying them.
-  const automationsPending = cutover ? wslMoveAutomationsPending(cutover) : []
-  deps.progress({ distro, step: 'done', migrationId, phase })
-  return {
-    outcome: 'moved',
-    migrationId,
-    phase,
-    reloadRequired: true,
-    ...(automationsPending.length > 0 ? { automationsPending } : {})
   }
 }
 

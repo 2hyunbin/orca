@@ -43,6 +43,7 @@ import {
   listWslMoveSleptSessionPanes,
   readWslMoveSleptScrollbackFromHistory,
   withSleptSessionPanes,
+  wslMoveTabTitle,
   wslMoveSleptSpoolRoot
 } from '../persistence/moving-wsl-projects/wsl-move-slept-scrollback'
 import { scheduleWslMoveRewriteRetry } from '../persistence/moving-wsl-projects/wsl-move-rewrite-retry'
@@ -165,7 +166,8 @@ export function createWslMoveDriverDeps(
           listWslMoveSleptSessionPanes(store.getWorkspaceSession(), workspaceIds, reported)
         ),
         distro,
-        wslMoveSleptSpoolRoot(userDataPath, migrationId)
+        wslMoveSleptSpoolRoot(userDataPath, migrationId),
+        (tabId) => wslMoveTabTitle(store.getWorkspaceSession(), tabId)
       ),
     shellHistory: (distro, worktrees) => buildWslMoveShellHistoryBlobs({ distro, worktrees }),
     // The window reload is the renderer's (`reloadRequired`), through restart preparation.

@@ -71,12 +71,15 @@ export async function collectWslMoveGateInputs(
     const verdict = verdicts.get(terminal.ptyId) ?? 'unverifiable'
     // The distro is asked only about a pane whose wsl.exe still runs: a slept pane's host process
     // already exited, and it has no guest shell left to find.
+    const answer = verdict === 'live' ? (guest.get(terminal.ptyId) ?? 'process-running') : null
     const foreground =
       verdict === 'exited'
         ? 'shell-idle'
-        : verdict === 'live'
-          ? (guest.get(terminal.ptyId) ?? 'process-running')
-          : 'unverifiable'
+        : answer === null
+          ? 'unverifiable'
+          : typeof answer === 'object'
+            ? 'process-running'
+            : answer
     const pane = terminal.paneKey ? parsePaneKey(terminal.paneKey) : null
     if (!terminal.paneKey || !pane) {
       // A terminal with no pane cannot be restored on the host, so it can never pass as idle.
@@ -87,7 +90,10 @@ export async function collectWslMoveGateInputs(
       })
       continue
     }
-    const agent = agentFacts(sources.agentRows(terminal.paneKey), terminal.foregroundAgent)
+    const agent = agentFacts(
+      sources.agentRows(terminal.paneKey),
+      typeof answer === 'object' && answer !== null ? answer.agent : terminal.foregroundAgent
+    )
     panes.push({
       paneKey: terminal.paneKey,
       foreground,

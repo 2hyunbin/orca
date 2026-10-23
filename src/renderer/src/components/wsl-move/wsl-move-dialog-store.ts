@@ -116,7 +116,10 @@ function refusedPreview(detail: string): WslMovePreview {
 
 async function previewOf(request: WslMoveRequest): Promise<WslMovePreview> {
   try {
-    return await window.api.wslMove.preview(request)
+    return await window.api.wslMove.preview({
+      ...request,
+      sleptPanes: collectWslMoveSleptPaneBindings(useAppStore.getState())
+    })
   } catch (error) {
     console.warn('[wsl-move] Preview failed:', error)
     return refusedPreview('preview-failed')

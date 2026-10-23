@@ -413,6 +413,30 @@ describe('exportWslMoveManifest', () => {
     ).not.toThrow()
   })
 
+  it('carries no desktop PTY binding, so the moved pane reads its history from the host', () => {
+    // awin verify-4: the host's session kept the desktop's PTY ids, so the client took each pane
+    // for a live terminal, skipped the scrollback read, and opened a fresh prompt.
+    const state = sourceState()
+    const leaf = '11111111-1111-4111-8111-111111111111'
+    const tab = state.workspaceSession.tabsByWorktree[WORKTREE]![0]!
+    state.workspaceSession.tabsByWorktree[WORKTREE] = [{ ...tab, ptyId: `${WORKTREE}@@81c7100a` }]
+    state.workspaceSession.terminalLayoutsByTabId = {
+      [tab.id]: {
+        root: { type: 'leaf', leafId: leaf },
+        activeLeafId: leaf,
+        expandedLeafId: null,
+        ptyIdsByLeafId: { [leaf]: `${WORKTREE}@@81c7100a` },
+        buffersByLeafId: { [leaf]: 'history' }
+      }
+    }
+    const { manifest } = exportWslMoveManifest(storeFor(state), REQUEST)
+    const session = manifest.payload.dormantState?.workspaceSession
+    const layout = Object.values(session?.terminalLayoutsByTabId ?? {})[0]
+    expect(layout?.scrollbackRefsByLeafId?.[leaf]).toBeTruthy()
+    expect(layout).not.toHaveProperty('ptyIdsByLeafId')
+    expect(Object.values(session?.tabsByWorktree ?? {}).flat()[0]?.ptyId).toBeNull()
+  })
+
   it("drops a tab's Windows shell choice on purpose, never through the parser", () => {
     // awin verify-3: every preview and move warned that the parser dropped shellOverride.
     const state = sourceState()
