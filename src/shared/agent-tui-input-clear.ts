@@ -36,7 +36,7 @@ export const AGENT_TUI_CLEAR_INPUT_MAX = buildAgentTuiClearInput(AGENT_TUI_CLEAR
 
 /** Logical lines in `text`. Visual wrapping is irrelevant to the clear cost. */
 export function countAgentTuiInputLines(text: string): number {
-  return text.split(/\r\n|\r|\n/).length
+  return (text.match(/\r\n|\r|\n/g)?.length ?? 0) + 1
 }
 
 /** Clear bytes for a buffer believed to hold `text`, with slack for TUI-side edits. */
