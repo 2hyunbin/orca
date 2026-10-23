@@ -41,10 +41,22 @@ function hoveredDocument(...rows: { workspaceId: string; hostIdentity: string }[
   } as unknown as Pick<Document, 'activeElement' | 'querySelectorAll'>
 }
 
+type WorkspaceDeleteTestState = Pick<
+  AppState,
+  | 'activeModal'
+  | 'activeWorkspaceExecutionHostId'
+  | 'activeWorktreeId'
+  | 'deleteFolderWorkspace'
+  | 'deleteStateByWorktreeId'
+  | 'setActiveWorktree'
+  | 'worktreesByRepo'
+  | 'folderWorkspaces'
+>
+
 function state(
   worktrees: Worktree[] = [],
   folderWorkspaces: AppState['folderWorkspaces'] = []
-): AppState {
+): WorkspaceDeleteTestState {
   return {
     activeModal: 'none',
     activeWorkspaceExecutionHostId: worktrees[0]?.hostId ?? null,
@@ -54,7 +66,7 @@ function state(
     setActiveWorktree: vi.fn(),
     worktreesByRepo: { repo: worktrees },
     folderWorkspaces
-  } as unknown as AppState
+  }
 }
 
 describe('hovered workspace delete', () => {
@@ -246,7 +258,7 @@ describe('hovered workspace delete', () => {
 })
 
 const { rejectAppStoreAccess, getCurrentState } = vi.hoisted(() => ({
-  getCurrentState: vi.fn<() => AppState>(),
+  getCurrentState: vi.fn<() => ReturnType<typeof state>>(),
   rejectAppStoreAccess: vi.fn(() => {
     throw new Error('Pure helper tests must not access the app store')
   })
