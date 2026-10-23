@@ -154,7 +154,7 @@ describe('delayed hook completion after retained local process failure', () => {
     // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this exit-only bag supplies every invoked member; the store release and notification admission remain real.
     const exitSession = session as unknown as ConnectPanePtySession
     installPtyExitHibernate(exitSession)
-    transport.disconnect()
+    exitSession.transport.disconnect()
     exitSession.onExit('pty-1', 1)
     sync()
     expect(ptyCoordinatorDispose).toHaveBeenCalledOnce()
