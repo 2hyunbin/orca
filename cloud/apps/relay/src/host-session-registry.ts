@@ -35,7 +35,8 @@ import type { AssignmentLeaseShadow } from './assignment-lease-shadow.js'
 import type { RelayAssignmentStore } from './assignment-store.js'
 import type { CellAdmitMode, CellReserveBook } from './cell-reserve-book.js'
 import type { DemoteRequest, ReserveOutcome, ReserveRequest } from './cell-reserve-contract.js'
-import { CellSeatLog, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
+import { SeatDriftConfirmation, unbackedSeatReason, type UnbackedSeatReason } from './cell-seat-drift.js'
+import { CellSeatLog, type CellSeat, type CellSeatChange, type CellSeatFeedPage } from './cell-seat-log.js'
 import { isRelayDatabaseTransientError } from './database.js'
 import { printableCloseReason } from './control-close-reason-text.js'
 import { ControlRenewalBatch } from './control-renewal-batch.js'
@@ -334,6 +335,7 @@ export class HostSessionRegistry {
   // Seat key -> the demoted control socket. Its own set, not drainSentHosts: it ends with
   // that socket (close, rebind or a new join), so a later booking here is a fresh seat.
   private readonly demotedSeats = new Map<string, WebSocket>()
+  private readonly seatDrift = new SeatDriftConfirmation()
   private reregistration: {
     queue: ReregistrationEntry[]
     // Sessions already queued, given up on, or done in this pass: the rescan skips them.
@@ -776,6 +778,13 @@ export class HostSessionRegistry {
       session.assignmentEpoch !== request.epoch ||
       seat?.joinedAt !== request.joinedAt
     ) {
+      // The director named exactly the seat this feed lists: if no live session backs it, the
+      // feed is what is wrong, and every director mirrors it, so correct the feed now.
+      const unbacked =
+        seat?.epoch === request.epoch && seat.joinedAt === request.joinedAt
+          ? unbackedSeatReason(seat, session)
+          : null
+      if (seat && unbacked) this.repairSeatDrift(seat, session, unbacked, 'demote')
       return 'not-seated'
     }
     // A drain already told this host to go: its own grace stands, never cut to the demotion's.
@@ -1682,7 +1691,11 @@ export class HostSessionRegistry {
       (existing.state === 'orphaned' || existing.state === 'active') &&
       sameHostIdentity(existing.identity, identity)
     )
-    const generation = rebind ? existing!.generation : (existing?.generation ?? 0) + 1
+    // Above any seat the feed still lists: a session dropped from the map while its socket is still
+    // closing (drain, regional deadline, idle rehome) keeps its seat listed until that close lands,
+    // and a successor restarting at generation 1 had its seat removed by that late leave.
+    const listed = this.seatLog.seatOf(identity.sub, identity.relayHostId)?.generation ?? 0
+    const generation = rebind ? existing!.generation : Math.max(existing?.generation ?? 0, listed) + 1
     const ephemeral = nacl.box.keyPair()
     const challengeNonce = randomBytes(nacl.box.nonceLength)
     const challengeSecret = randomBytes(32)
@@ -2028,7 +2041,76 @@ export class HostSessionRegistry {
   }
 
   seatFeed(sinceSeq: number | null): CellSeatFeedPage {
+    this.sweepSeatDrift()
     return { ...this.seatLog.read(sinceSeq), seats: this.seatLog.seatCount() }
+  }
+
+  // Every director mirrors this feed, so it must list exactly the live sessions. Swept on a
+  // director's poll, since only directors read it; drift seen twice in a row is repaired.
+  private sweepSeatDrift(): void {
+    if (!this.seatDrift.due(this.now())) return
+    const found = new Map<string, () => void>()
+    for (const seat of this.seatLog.seatList()) {
+      const session = this.get(seat)
+      const reason = unbackedSeatReason(seat, session)
+      if (!reason) continue
+      const id = JSON.stringify(['seat', seat.userId, seat.relayHostId, seat.epoch, seat.generation, seat.joinedAt])
+      found.set(id, () => this.repairSeatDrift(seat, session, reason, 'sweep'))
+    }
+    for (const session of this.sessions.values()) {
+      if (!liveSeatSession(session) || this.seatLog.seatOf(session.identity.sub, session.relayHostId)) continue
+      const id = JSON.stringify(['session', session.identity.sub, session.relayHostId, session.generation])
+      found.set(id, () => {
+        this.appendSeatChange(session, 'join')
+        this.logSeatDrift(session.relayHostId, { kind: 'unlisted-session', via: 'sweep', sessionEpoch: session.assignmentEpoch })
+      })
+    }
+    for (const id of this.seatDrift.confirm([...found.keys()])) found.get(id)!()
+  }
+
+  // Leaves the stale seat as moved (no rejoin from memory at its epoch), then lists the live
+  // session, if any, as it really is. The leave carries the stale seat's own generation, so the
+  // generation rule cannot drop it.
+  private repairSeatDrift(
+    seat: CellSeat,
+    session: HostSession | null,
+    reason: UnbackedSeatReason,
+    via: 'sweep' | 'demote'
+  ): void {
+    this.seatLog.append({
+      kind: 'leave',
+      userId: seat.userId,
+      relayHostId: seat.relayHostId,
+      epoch: seat.epoch,
+      generation: seat.generation,
+      closeCode: RELAY_CLOSE_CODE.WRONG_CELL,
+      at: this.now()
+    })
+    const relisted = session !== null && liveSeatSession(session)
+    if (relisted) this.appendSeatChange(session, 'join')
+    this.logSeatDrift(seat.relayHostId, {
+      kind: 'unbacked-seat',
+      via,
+      reason,
+      seatEpoch: seat.epoch,
+      seatGeneration: seat.generation,
+      seatAgeMs: this.now() - seat.joinedAt,
+      ...(session
+        ? { sessionEpoch: session.assignmentEpoch, sessionGeneration: session.generation, sessionState: session.state }
+        : {}),
+      relisted
+    })
+  }
+
+  private logSeatDrift(relayHostId: string, detail: Record<string, unknown>): void {
+    console.warn(
+      JSON.stringify({
+        event: 'orca_relay_cell_seat_log_drift',
+        ...this.logIdentity(),
+        relayHostIdDigest: relayHostLogDigest(relayHostId),
+        ...detail
+      })
+    )
   }
 
   private appendSeatChange(
@@ -2718,4 +2800,9 @@ function controlErrorCode(type: string, error: unknown): string {
 
 function databaseCause(error: unknown): PhoneDatabaseCause {
   return isRelayDatabaseTransientError(error) ? 'database_transient' : 'error'
+}
+
+// A session the feed must list: it holds its socket and is seated, active or draining.
+function liveSeatSession(session: HostSession): boolean {
+  return session.socket !== null && (session.state === 'active' || session.state === 'drain-only')
 }
