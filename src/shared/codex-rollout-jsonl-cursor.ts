@@ -17,6 +17,26 @@ export function record(value: unknown): JsonRecord | undefined {
   return typeof value === 'object' && value !== null ? (value as JsonRecord) : undefined
 }
 
+export function readJsonlFirstRecord(filePath: string): JsonRecord | undefined {
+  let fd: number | undefined
+  try {
+    fd = openSync(filePath, 'r')
+    const buffer = Buffer.allocUnsafe(64 * 1024)
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0)
+    const newline = buffer.subarray(0, bytesRead).indexOf(0x0a)
+    if (newline === -1) {
+      return undefined
+    }
+    return record(JSON.parse(buffer.toString('utf8', 0, newline)))
+  } catch {
+    return undefined
+  } finally {
+    if (fd !== undefined) {
+      closeSync(fd)
+    }
+  }
+}
+
 /** Returns undefined when the file is unreadable, distinguishing a vanished rollout from one with no new lines.
  *  `lineFilter` skips JSON.parse for raw lines the caller can reject by substring. */
 export function readJsonlCursor(
