@@ -1,8 +1,8 @@
-import type { NativeChatComposerDraft } from './native-chat-composer-draft-storage'
 import type { NativeChatComposerDraftAddition } from './native-chat-composer-draft-addition'
 import type { NativeChatComposerImageAttachment } from './NativeChatComposerField'
 import type { JSONContent } from '@tiptap/react'
 import type {
+  NativeChatComposerDraft,
   NativeChatComposerDraftImage,
   NativeChatComposerDraftOwner
 } from './native-chat-composer-draft-storage'
