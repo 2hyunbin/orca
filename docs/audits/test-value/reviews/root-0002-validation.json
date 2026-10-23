@@ -22,6 +22,11 @@
     {
       "command": "pnpm exec oxfmt --check <four retained changed preload tests>",
       "result": "passed"
+    },
+    {
+      "command": "ORCA_BACKGROUND_LAUNCH=1 pnpm exec vitest run --config config/vitest.config.ts src/preload",
+      "result": "102 passed across 19 suites after rebase and comment-only reconciliation",
+      "log": "/tmp/orca-root-0002-rebased-validation.log"
     }
   ],
   "regressions_caught": [
@@ -30,5 +35,9 @@
     "recoverable subscription error incorrectly removes dispatch ownership"
   ],
   "mutation_log": "/tmp/orca-root-0002-mutations.log",
-  "temporary_production_mutations": "restored; diff contains test files only"
+  "temporary_production_mutations": "restored; diff contains test files only",
+  "upstream_reconciliation": {
+    "commit": "551108aea82245cdc77c41986a15542f52bed20b",
+    "changes": "Reviewed all seven upstream test diffs as comment-only cleanup. Resolved installer overlap by preserving the real installed listeners and finally cleanup; kept all other upstream comment changes. Refreshed final hashes only, preserving original locations/content hashes."
+  }
 }

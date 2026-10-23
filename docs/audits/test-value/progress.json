@@ -1,12 +1,12 @@
 {
-  "source_commit": "9c080ad6c3373d2620e77eb2470e95a22732cb2a",
-  "scanned_source_files": 37059,
+  "source_commit": "2e253d2071ef96ad8db5bc7c3bc8524dd640827e",
+  "scanned_source_files": 37078,
   "counts": {
-    "files": 16875,
-    "declarations": 118992,
+    "files": 16888,
+    "declarations": 119046,
     "reviewed": 310,
     "stale": 0,
-    "unreviewed": 16565,
+    "unreviewed": 16578,
     "removed": 5
   },
   "reviewed_original_declarations": 2202,
@@ -48,16 +48,16 @@
       "unreviewed": 0
     },
     "src/cli": {
-      "files": 184,
+      "files": 185,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 184
+      "unreviewed": 185
     },
     "src/main": {
-      "files": 6613,
+      "files": 6617,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 6613
+      "unreviewed": 6617
     },
     "src/packages": {
       "files": 16,
@@ -72,16 +72,16 @@
       "unreviewed": 0
     },
     "src/renderer": {
-      "files": 5399,
+      "files": 5403,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 5399
+      "unreviewed": 5403
     },
     "src/shared": {
-      "files": 1297,
+      "files": 1300,
       "reviewed": 4,
       "stale": 0,
-      "unreviewed": 1293
+      "unreviewed": 1296
     },
     "src/wsl-guest": {
       "files": 45,
@@ -90,10 +90,10 @@
       "unreviewed": 45
     },
     "tests": {
-      "files": 1128,
+      "files": 1129,
       "reviewed": 0,
       "stale": 0,
-      "unreviewed": 1128
+      "unreviewed": 1129
     }
   },
   "errors": []
