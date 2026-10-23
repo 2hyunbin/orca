@@ -71,7 +71,7 @@ export function clearCommandMarkerCacheForTests(): void {
 }
 
 function isClearCommand(command: string): boolean {
-  return command.trim().toLowerCase().split(/\s+/)[0] === '/clear'
+  return command.trim().split(/\s+/, 1)[0]?.toLowerCase() === '/clear'
 }
 
 function latestClearSentAt(markers: readonly NativeChatCommandMarker[]): number | null {

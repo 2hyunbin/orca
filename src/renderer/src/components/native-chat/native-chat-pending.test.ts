@@ -889,6 +889,19 @@ describe('command marker cache', () => {
 })
 
 describe('applyCommandMarkerBoundaries', () => {
+  it.each([' /CLEAR focus on tests ', '\u00a0/Clear\u2028arguments', '/clear\t\ud800'])(
+    'recognizes a clear command token in %j',
+    (command) => {
+      const messages = [{ ...assistantMessage('after', 'new answer'), timestamp: 20 }]
+      expect(applyCommandMarkerBoundaries(messages, [{ id: 'c1', command, sentAt: 10 }])).toEqual(
+        messages
+      )
+      expect(applyCommandMarkerBoundaries(messages, [{ id: 'c2', command, sentAt: 30 }])).toEqual(
+        []
+      )
+    }
+  )
+
   it('hides existing transcript messages after a local /clear marker', () => {
     const messages = [
       userMessage('before', 'old prompt'),
