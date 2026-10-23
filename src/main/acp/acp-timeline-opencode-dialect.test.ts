@@ -26,8 +26,7 @@ async function openCodeRig() {
   return { rig, translator, apply, update }
 }
 
-// The shapes OpenCode's ACP server writes for a shell tool: its output and exit code ride under
-// `rawOutput.metadata`, beside the text content.
+// OpenCode puts shell output and exit status in rawOutput.metadata.
 const bashStart = {
   sessionUpdate: 'tool_call',
   toolCallId: 'call-1',
