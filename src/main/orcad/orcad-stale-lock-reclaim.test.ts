@@ -1,10 +1,20 @@
-import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync
+} from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ORCAD_LOCK_FILE_NAME, readOrcadInstanceLockRecord } from './orcad-instance-lock'
 import type { OrcadLockRecord } from './orcad-instance-lock'
+import { orcadLockRecoveryPrefix } from './orcad-instance-lock-reclaim'
 import {
+  probeOrcadEndpoint,
   reclaimStaleOrcadInstanceLock,
   type OrcadStaleLockReclaimHooks
 } from './orcad-stale-lock-reclaim'
@@ -109,6 +119,29 @@ describe.skipIf(process.platform === 'win32')('reclaimStaleOrcadInstanceLock (#3
     expect(readOrcadInstanceLockRecord(join(root, ORCAD_LOCK_FILE_NAME))?.nonce).toBe(
       'stale-holder'
     )
+  })
+
+  it('also clears a reclaimer from the same earlier boot that the reboot cut short', async () => {
+    const root = makeRoot()
+    const lockPath = writeLock(root, holderRecord())
+    const generation = `${orcadLockRecoveryPrefix(lockPath, readFileSync(lockPath, 'utf8'))}0`
+    mkdirSync(generation)
+    writeFileSync(
+      join(generation, 'owner'),
+      JSON.stringify(holderRecord({ pid: 16000, nonce: 'cut-short-reclaimer' }))
+    )
+    const result = await reclaimStaleOrcadInstanceLock(root, { yes: true }, rebootedBox())
+    expect(result.exitCode).toBe(0)
+    expect(existsSync(lockPath)).toBe(false)
+  })
+
+  it('probes an IPv6 WebSocket endpoint by its bare address', async () => {
+    const server = createServer()
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(0, '::1', resolve))
+    const address = server.address()
+    const port = typeof address === 'object' && address ? address.port : 0
+    await expect(probeOrcadEndpoint(`ws://[::1]:${port}`)).resolves.toBe('answers')
   })
 
   it.each([

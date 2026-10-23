@@ -15,12 +15,12 @@ import process from 'node:process'
 import {
   acquireOrcadInstanceLock,
   ORCAD_LOCK_FILE_NAME,
-  orcadLockHolderLocality,
   parseOrcadInstanceLockRecord,
   type OrcadInstanceLockHooks,
   type OrcadLockRecord
 } from './orcad-instance-lock'
 import { readBoundedLockFile } from './orcad-instance-lock-reclaim'
+import { orcadLockHolderLocality } from './orcad-lock-holder-locality'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
 import { readOrcadProcessIncarnation } from './orcad-process-start-time'
 import { resolveUserDataPath } from './orcad-app-paths'
@@ -69,6 +69,7 @@ export async function reclaimStaleOrcadInstanceLock(
     return refuse(`${refusal} Not reclaiming ${lockPath}.`)
   }
   const evidence = describeEvidence(holder, lockPath, hooks)
+  const currentBoot = (hooks.bootId ?? currentBootId)()
   if (!options.yes) {
     return refuse(
       `${evidence}\nOrca cannot prove from here that it stopped, because this data root may be ` +
@@ -81,7 +82,11 @@ export async function reclaimStaleOrcadInstanceLock(
     // race-safe rename, and still refuses if that PID is running here under the same identity.
     acquireOrcadInstanceLock(dataRoot, {
       ...hooks.lockHooks,
-      reclaimConfirmed: (current) => current.nonce === holder.nonce
+      // Only the record shown above; a reclaimer cut short by the same reboot is just as stale.
+      reclaimConfirmed: (record, role) =>
+        role === 'holder'
+          ? record.nonce === holder.nonce
+          : record.host === holder.host && !!record.bootId && record.bootId !== currentBoot
     }).release()
   } catch (error) {
     return refuse(error instanceof Error ? error.message : String(error))
@@ -186,7 +191,10 @@ export function probeOrcadEndpoint(endpoint: string): Promise<OrcadEndpointProbe
   let target: { path: string } | { host: string; port: number }
   try {
     const url = /^wss?:\/\//u.test(endpoint) ? new URL(endpoint) : null
-    target = url ? { host: url.hostname, port: Number(url.port || 80) } : { path: endpoint }
+    // Why strip brackets: URL keeps them around an IPv6 host, which the socket API rejects.
+    target = url
+      ? { host: url.hostname.replace(/^\[|\]$/gu, ''), port: Number(url.port || 80) }
+      : { path: endpoint }
   } catch {
     return Promise.resolve('unknown')
   }

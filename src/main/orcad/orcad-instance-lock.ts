@@ -34,6 +34,7 @@ import {
 import { hasErrorCode, isProcessAlive } from '../daemon/daemon-process-inspection'
 import { profileStateAccessMachineIdentity } from '../persistence/profile-state/profile-state-access-identity'
 import { orcadDataRootIsOnLocalDisk } from './orcad-data-root-locality'
+import { orcadLockHolderLocality } from './orcad-lock-holder-locality'
 import {
   ORCAD_RECLAIM_STALE_LOCK_COMMAND,
   ORCAD_RECLAIM_STALE_LOCK_FLAG
@@ -111,10 +112,10 @@ export type OrcadInstanceLockHooks = OrcadDataRootPrivacyHooks & {
   /** Whether no other machine can reach the data root, for records that name no machine. */
   dataRootIsOnLocalDisk?: (dataRoot: string) => boolean
   /**
-   * `--reclaim-stale-lock` only: the user confirmed this exact unverifiable record is stale. Its
-   * PID is then judged as this machine's, which is what the user vouched for.
+   * `--reclaim-stale-lock` only: the user confirmed this unverifiable record (the lock's holder, or
+   * an earlier reclaimer cut short) is stale. Its PID is then judged as this machine's.
    */
-  reclaimConfirmed?: (holder: OrcadLockRecord) => boolean
+  reclaimConfirmed?: (record: OrcadLockRecord, role: 'holder' | 'recovery-owner') => boolean
 }
 
 function defaultIdentity(): string {
@@ -214,6 +215,12 @@ export function acquireOrcadInstanceLock(
 
   const dataRootIsLocal = (): boolean =>
     (hooks.dataRootIsOnLocalDisk ?? orcadDataRootIsOnLocalDisk)(dataRoot)
+  const judgedHere = (holder: OrcadLockRecord, role: 'holder' | 'recovery-owner'): boolean => {
+    const locality = orcadLockHolderLocality(holder, record, dataRootIsLocal)
+    return (
+      locality === 'local' || (locality === 'unknown' && !!hooks.reclaimConfirmed?.(holder, role))
+    )
+  }
   // A recovery lock is ours by the same record, and broken only on the same proof of exit.
   const recoveryOwner: OrcadLockRecoveryOwner = {
     record: serialized,
@@ -222,7 +229,7 @@ export function acquireOrcadInstanceLock(
       return Boolean(
         owner &&
         owner.identity === identity &&
-        orcadLockHolderLocality(owner, record, dataRootIsLocal) === 'local' &&
+        judgedHere(owner, 'recovery-owner') &&
         (!isAlive(owner.pid) || holderIdentity(owner) === 'differs')
       )
     }
@@ -260,7 +267,7 @@ export function acquireOrcadInstanceLock(
     )
   }
   const locality = orcadLockHolderLocality(existing, record, dataRootIsLocal)
-  if (locality !== 'local' && !(locality === 'unknown' && hooks.reclaimConfirmed?.(existing))) {
+  if (!judgedHere(existing, 'holder')) {
     // Its PID means nothing here, so neither a missing nor a reused one proves it exited.
     throw new OrcadInstanceLockError(
       'orcad_instance_lock_holder_unverifiable',
@@ -290,47 +297,6 @@ export function acquireOrcadInstanceLock(
   }
   reclaimAndPublish(lockPath, dataRoot, existingContents, publish, recoveryOwner)
   return makeLock(lockPath, record)
-}
-
-/**
- * Same machine: the same machine identity, or (records without one) the same kernel boot. A record
- * that names neither is local only when no other machine can reach the data root.
- */
-export function orcadLockHolderLocality(
-  holder: OrcadPeerMachine,
-  self: OrcadPeerMachine,
-  dataRootIsOnLocalDisk: () => boolean
-): 'local' | 'foreign' | 'unknown' {
-  if (holder.machineIdentity && self.machineIdentity) {
-    return holder.machineIdentity === self.machineIdentity ? 'local' : 'foreign'
-  }
-  if (holder.bootId && holder.bootId === self.bootId) {
-    return 'local'
-  }
-  return dataRootIsOnLocalDisk() ? 'local' : 'unknown'
-}
-
-export type OrcadPeerMachine = Pick<OrcadLockRecord, 'machineIdentity' | 'bootId'>
-
-export function currentOrcadPeerMachine(): OrcadPeerMachine {
-  const machineIdentity = profileStateAccessMachineIdentity()
-  const bootId = readOrcadProcessIncarnation(process.pid)?.bootId
-  return { ...(machineIdentity ? { machineIdentity } : {}), ...(bootId ? { bootId } : {}) }
-}
-
-/**
- * Whether a peer's recorded PID means anything here: same machine and kernel boot. A different or
- * unprovable one leaves the peer unverifiable, never exited.
- */
-export function orcadPeerPidIsJudgeableHere(
-  peer: OrcadPeerMachine,
-  self: OrcadPeerMachine,
-  dataRootIsOnLocalDisk: () => boolean
-): boolean {
-  if (peer.bootId && self.bootId && peer.bootId !== self.bootId) {
-    return false
-  }
-  return orcadLockHolderLocality(peer, self, dataRootIsOnLocalDisk) === 'local'
 }
 
 /** A record without a boot id cannot tell its holder from a reused PID; say so. */
