@@ -40,7 +40,8 @@ export type WatcherCanaryActivity = {
   lastNativeCallbackAt: number
 }
 
-export type WatcherDeliveryHealth = 'healthy' | 'stalled'
+/** 'unknown': the canary disarmed (no live roots, or a crawl) after a stall. */
+export type WatcherDeliveryHealth = 'healthy' | 'stalled' | 'unknown'
 
 /** Returns the revision a probe is valid for, or null when the canary is disarmed. */
 export function armedCanaryRevision(
@@ -201,8 +202,14 @@ export async function startWatcherDeliveryCanary(
   const tick = async (): Promise<void> => {
     const activityRevision = stableRevision()
     if (activityRevision === null) {
-      // Stall state survives a disarm so a long stall still reaches its cap.
       misses = 0
+      // Why: a disarmed canary cannot confirm a stall; end it so the host stops
+      // rescanning, and re-detect it once re-armed.
+      if (health === 'stalled') {
+        stallBackoffMs = null
+        stallStartedAt = null
+        setHealth('unknown')
+      }
       schedule(CANARY_INTERVAL_MS)
       return
     }

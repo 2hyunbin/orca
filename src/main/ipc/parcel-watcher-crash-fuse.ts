@@ -45,13 +45,13 @@ export class WatcherProcessCrashFuse {
     this.healthySince = null
   }
 
-  recordDeliveryHealth(state: 'healthy' | 'stalled', now = Date.now()): void {
+  recordDeliveryHealth(state: 'healthy' | 'stalled' | 'unknown', now = Date.now()): void {
     this.settle(now)
     if (state === 'stalled') {
       this.healthySince = null
-      return
+    } else if (state === 'healthy') {
+      this.healthySince ??= now
     }
-    this.healthySince ??= now
   }
 
   reset(): void {

@@ -17,7 +17,13 @@ vi.mock('node:fs', () => ({
   rmSync: vi.fn()
 }))
 
-import { CANARY_STALL_BACKOFF_INITIAL_MS } from './parcel-watcher-delivery-canary'
+import {
+  CANARY_STALL_BACKOFF_INITIAL_MS,
+  CANARY_STALL_BACKOFF_MAX_MS
+} from './parcel-watcher-delivery-canary'
+import { WatcherProcessCrashFuse } from './parcel-watcher-crash-fuse'
+import { WatcherDeliveryHealthMonitor } from './parcel-watcher-delivery-health'
+import type { WatcherProcessSubscriptionRecord } from './parcel-watcher-process-subscription'
 import { createWatcherProcessSupervisor } from './parcel-watcher-process'
 
 describe('watcher delivery stall reporting', () => {
@@ -49,15 +55,19 @@ describe('watcher delivery stall reporting', () => {
     await vi.advanceTimersByTimeAsync(CANARY_STALL_BACKOFF_INITIAL_MS - 1)
     expect(onOverflow).not.toHaveBeenCalled()
 
-    await vi.advanceTimersByTimeAsync(1)
-    expect(onOverflow).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(CANARY_STALL_BACKOFF_INITIAL_MS)
-    expect(onOverflow).toHaveBeenCalledTimes(2)
+    // Rescans back off with the canary: 30 s, then 60, 120, 240, capped at 300.
+    const rescanTimes: number[] = []
+    onOverflow.mockImplementation(() => rescanTimes.push(Date.now()))
+    const stalledAt = Date.now() - (CANARY_STALL_BACKOFF_INITIAL_MS - 1)
+    await vi.advanceTimersByTimeAsync(20 * 60_000)
+    expect(rescanTimes.map((time) => (time - stalledAt) / 1000)).toEqual([
+      30, 90, 210, 450, 750, 1050
+    ])
 
     child.emit('message', { op: 'delivery-health', state: 'healthy' })
-    expect(onOverflow).toHaveBeenCalledTimes(3)
-    await vi.advanceTimersByTimeAsync(10 * CANARY_STALL_BACKOFF_INITIAL_MS)
-    expect(onOverflow).toHaveBeenCalledTimes(3)
+    expect(onOverflow).toHaveBeenCalledTimes(7)
+    await vi.advanceTimersByTimeAsync(CANARY_STALL_BACKOFF_MAX_MS * 2)
+    expect(onOverflow).toHaveBeenCalledTimes(7)
     supervisor.dispose()
   })
 
@@ -74,5 +84,75 @@ describe('watcher delivery stall reporting', () => {
 
     expect(onOverflow).not.toHaveBeenCalled()
     supervisor.dispose()
+  })
+})
+
+describe('WatcherDeliveryHealthMonitor', () => {
+  const record = (id: number, onOverflow: () => void): WatcherProcessSubscriptionRecord => ({
+    id,
+    dir: `/repo-${id}`,
+    opts: {},
+    callback: vi.fn(),
+    hooks: { onOverflow },
+    interrupted: false,
+    crawlStarted: false
+  })
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('ends the stall with one rescan when the canary disarms', async () => {
+    const onOverflow = vi.fn()
+    const monitor = new WatcherDeliveryHealthMonitor(
+      new Map([[1, record(1, onOverflow)]]),
+      new WatcherProcessCrashFuse()
+    )
+    monitor.childStarted()
+    monitor.update('stalled')
+    await vi.advanceTimersByTimeAsync(CANARY_STALL_BACKOFF_INITIAL_MS)
+    expect(onOverflow).toHaveBeenCalledOnce()
+
+    monitor.update('unknown')
+    expect(onOverflow).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(30 * 60_000)
+    expect(onOverflow).toHaveBeenCalledTimes(2)
+  })
+
+  it('stops rescanning once no subscription is live', async () => {
+    const onOverflow = vi.fn()
+    const records = new Map([[1, record(1, onOverflow)]])
+    const monitor = new WatcherDeliveryHealthMonitor(records, new WatcherProcessCrashFuse())
+    monitor.childStarted()
+    monitor.update('stalled')
+    records.clear()
+
+    await vi.advanceTimersByTimeAsync(30 * 60_000)
+    expect(vi.getTimerCount()).toBe(0)
+
+    records.set(1, record(1, onOverflow))
+    monitor.update('healthy')
+    expect(onOverflow).not.toHaveBeenCalled()
+  })
+
+  it('ignores reports before a child starts and after disposal', async () => {
+    const onOverflow = vi.fn()
+    const monitor = new WatcherDeliveryHealthMonitor(
+      new Map([[1, record(1, onOverflow)]]),
+      new WatcherProcessCrashFuse()
+    )
+    monitor.update('stalled')
+    await vi.advanceTimersByTimeAsync(CANARY_STALL_BACKOFF_INITIAL_MS)
+    expect(vi.getTimerCount()).toBe(0)
+
+    monitor.childStarted()
+    monitor.dispose()
+    monitor.update('stalled')
+    await vi.advanceTimersByTimeAsync(CANARY_STALL_BACKOFF_INITIAL_MS)
+    expect(onOverflow).not.toHaveBeenCalled()
   })
 })

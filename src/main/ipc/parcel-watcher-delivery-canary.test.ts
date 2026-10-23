@@ -133,6 +133,21 @@ describe('watcher delivery canary', () => {
     expect(health).toEqual(['healthy', 'stalled', 'healthy'])
   })
 
+  it('reports the stall over when the canary disarms, and re-detects it once re-armed', async () => {
+    await startHealthyThenStall()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(health).toEqual(['healthy', 'stalled'])
+
+    activity.liveSubscriptions = 0
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(health).toEqual(['healthy', 'stalled', 'unknown'])
+
+    activity.liveSubscriptions = 1
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(health).toEqual(['healthy', 'stalled', 'unknown', 'stalled'])
+    expect(exitSpy).not.toHaveBeenCalled()
+  })
+
   it('keeps one fs.watch for the life of the child instead of one per probe', async () => {
     await startHealthyThenStall()
 

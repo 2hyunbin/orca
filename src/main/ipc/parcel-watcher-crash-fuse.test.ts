@@ -106,6 +106,18 @@ describe('WatcherProcessCrashFuse', () => {
     expect(fuse.isOpen(crashAt + 2 * CRASH_FUSE_COOLDOWN_INITIAL_MS - 1)).toBe(true)
   })
 
+  it('neither starts nor clears the stable period on an unknown report', () => {
+    const fuse = new WatcherProcessCrashFuse()
+    tripAt(fuse, 0)
+    const trialAt = 80_000 + CRASH_FUSE_COOLDOWN_INITIAL_MS
+    expect(fuse.isOpen(trialAt)).toBe(false)
+    fuse.recordDeliveryHealth('unknown', trialAt)
+    const crashAt = trialAt + 2 * CRASH_FUSE_TRIAL_STABLE_MS
+    expect(fuse.isOpen(crashAt)).toBe(false)
+    fuse.recordCrash(crashAt)
+    expect(fuse.isOpen(crashAt + 2 * CRASH_FUSE_COOLDOWN_INITIAL_MS - 1)).toBe(true)
+  })
+
   it('closes immediately when explicitly reset', () => {
     const fuse = new WatcherProcessCrashFuse()
     tripAt(fuse, 0)

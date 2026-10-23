@@ -39,4 +39,4 @@ export type WatcherToHostMessage =
   | { op: 'unsubscribe-failed'; id: number; message: string }
   | { op: 'unsubscribed'; id: number }
   // Internal: child and host always ship in the same build.
-  | { op: 'delivery-health'; state: 'healthy' | 'stalled' }
+  | { op: 'delivery-health'; state: 'healthy' | 'stalled' | 'unknown' }

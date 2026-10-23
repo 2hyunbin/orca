@@ -96,7 +96,7 @@ export class WatcherProcessSupervisor {
     this.shutdown.requested = true
     this.shutdown.disposalRevision++
     this.capacityWait.dispose()
-    this.deliveryHealth.reset()
+    this.deliveryHealth.dispose()
     const proc = this.slot.child
     this.slot.child = null
     this.slot.canaryDir = disposeWatcherSupervisor(
