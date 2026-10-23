@@ -1,5 +1,5 @@
 import type { JiraMediaFormat } from '../../shared/jira/jira-attachment-image'
-import type { JiraFavouriteFilterList } from '../../shared/jira-favourite-filters'
+import type { JiraFavouriteFilterList } from '../../shared/jira/jira-favourite-filters'
 import type {
   JiraIssueSummaryGenerationRequest,
   JiraIssueSummaryGenerationCancellation,
