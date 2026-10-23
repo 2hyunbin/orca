@@ -264,3 +264,15 @@ export function writeDraft(
     true
   )
 }
+export function setMobileNativeChatDraftText(scope: string, update: SetStateAction<string>): void {
+  const owner = owners.get(scope)
+  if (owner) {
+    writeDraft(owner, update, false)
+  }
+}
+export function editMobileNativeChatDraft(scope: string, update: SetStateAction<string>): void {
+  const owner = owners.get(scope)
+  if (owner && owner.state !== 'unread') {
+    writeDraft(owner, update, true)
+  }
+}

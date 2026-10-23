@@ -2,14 +2,14 @@ import { expect, it, vi } from 'vitest'
 import type { AgentSessionQueuedMessage } from '../../../src/shared/agent-session-wire'
 
 const disk = vi.hoisted(() => new Map<string, string>())
-const io = vi.hoisted(() => ({ beforeSet: async () => {} }))
+const io = vi.hoisted(() => ({ beforeSet: async (_key: string, _value: string) => {} }))
 vi.mock('react-native', () => ({ AppState: { addEventListener: () => ({ remove() {} }) } }))
 vi.mock('@react-native-async-storage/async-storage', () => ({
   default: {
     getItem: async (key: string) => disk.get(key) ?? null,
     getAllKeys: async () => [...disk.keys()],
     setItem: async (key: string, value: string) => {
-      await io.beforeSet()
+      await io.beforeSet(key, value)
       disk.set(key, value)
     },
     removeItem: async (key: string) => {
@@ -373,3 +373,249 @@ it('keeps old-shell Edit and conditionally deletes only after a live complete na
     native.closeNativeChatDraftSession('grant-document')
   }
 })
+
+it.each([false, true])(
+  'reopening through an authorized route saves complete memory after native retirement (host area %s)',
+  async (hostArea) => {
+    vi.useFakeTimers()
+    vi.resetModules()
+    disk.clear()
+    io.beforeSet = async () => {}
+    const native = await import('./mobile-native-chat-draft-native-storage')
+    const bridge = await import('../mobile-web-shell/bridge/bridge-draft-storage')
+    const verbs = await import('../mobile-web-shell/bridge/bridge-native-verbs')
+    const host = 'activation-host'
+    const pathname = hostArea ? '/h/activation-host' : '/h/activation-host/session/workspace'
+    const scope = `${host}\0workspace\0B`
+    const key = `orca:mobileChatDraft:${host}:workspace:B`
+    let check = native.nativeChatDraftSession('activation-old')
+    const mayWrite = (key: string) => bridge.pageMayAccessChatDraft(key, host, pathname, hostArea)
+    const makeWriter = () =>
+      bridge.createBridgeDraftWriter({
+        mayWrite,
+        check,
+        commit: native.writeNativeMobileChatDraft,
+        removeWorkspace: native.removeStoredMobileChatDrafts
+      })
+    let writer = makeWriter()
+    vi.resetModules()
+    const page = await import('../mobile-web-shell/bridge/page-draft-storage')
+    const storage = await import('./mobile-native-chat-draft-storage')
+    const owner = await import('./mobile-native-chat-draft-store')
+    const { useMobileNativeChatDrafts } = await import('./use-mobile-native-chat-drafts')
+    const { createFakeBridgePortPair } =
+      await import('../mobile-web-shell/bridge/bridge-port-pair-test-harness')
+    const { createElement } = await import('react')
+    const { act, create } = await import('react-test-renderer')
+    let replaced = false
+    let readsB = 0
+    const writesB: string[] = []
+    const pair = createFakeBridgePortPair({
+      route: { pathname },
+      pageRoutes: ['/h/[hostId]', '/h/[hostId]/session/[worktreeId]'],
+      ownsHostArea: hostArea,
+      routeGrants: [verbs.BRIDGE_CHAT_DRAFT_STORAGE_GRANT],
+      rewriteToPage: (json) => {
+        const frame = JSON.parse(json)
+        if (frame.type === 'init' && replaced) {
+          frame.sessionId = 'activation-new'
+        }
+        return JSON.stringify(frame)
+      },
+      serveNativeVerb: async (verb, params) => {
+        if (verb === 'native.storage.read') {
+          const { key } = verbs.storageReadParamsSchema.parse(params)
+          expect(mayWrite(key)).toBe(true)
+          if (key.endsWith(':B')) {
+            readsB++
+          }
+          return { value: await native.readNativeMobileChatDraft(key, check) }
+        }
+        return writer.write(params)
+      }
+    })
+    let model: ReturnType<typeof useMobileNativeChatDrafts> | undefined
+    function Chat({ tab }: { tab: string }) {
+      model = useMobileNativeChatDrafts({
+        hostId: host,
+        worktreeId: 'workspace',
+        tabId: tab,
+        sessionId: `chat-${tab}`,
+        messages: [],
+        transcriptSettled: true
+      })
+      return null
+    }
+    let root: ReturnType<typeof create> | undefined
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    try {
+      await pair.flush()
+      expect(pair.client.getShellSession()?.route?.pathname).toBe(pathname)
+      page.installPageChatDraftStorage(pair.client)
+      await act(async () => {
+        root = create(createElement(Chat, { tab: 'B' }))
+        await pair.flush()
+      })
+      const addition = {
+        text: 'base $review $review [Image #1]',
+        images: [
+          {
+            id: 'image',
+            path: '/fixtures/image.png',
+            previewUri: 'https://example.com/image.png',
+            reference: { url: 'https://example.com/image.png' }
+          }
+        ],
+        skills: [
+          { name: 'review', path: '/one/SKILL.md' },
+          { name: 'review', path: '/two/SKILL.md' }
+        ]
+      }
+      const receipts: { valid(): boolean }[] = []
+      await act(async () => {
+        const copied = owner.appendMobileNativeChatDraft(scope, addition)
+        await pair.flush()
+        const receipt = await copied
+        if (receipt) {
+          receipts.push(receipt)
+        }
+      })
+      expect(receipts[0]?.valid()).toBe(true)
+      const oldOwner = owner.captureMobileChatDraftOwner(scope)!
+      io.beforeSet = async (writeKey, value) => {
+        if (writeKey === key) {
+          writesB.push(JSON.parse(value).text)
+          if (writesB.length === 1) {
+            await gate
+          }
+        }
+      }
+      await act(async () => {
+        model!.setComposerText('earlier $review $review [Image #1]')
+        await vi.advanceTimersByTimeAsync(250)
+        await pair.flush()
+      })
+      expect(writesB).toHaveLength(1)
+      const oldWait = owner.persistMobileNativeChatDraft(scope).then(
+        () => 'saved',
+        () => 'retired'
+      )
+      await act(async () => {
+        model!.setComposerText('newer $review $review [Image #1]')
+        await vi.advanceTimersByTimeAsync(250)
+      })
+      const complete = owner.readMobileNativeChatDraft(scope)
+      await act(async () => {
+        root!.update(createElement(Chat, { tab: 'A' }))
+        await pair.flush()
+      })
+      writer.dispose()
+      native.closeNativeChatDraftSession('activation-old')
+      expect(() => check(key)).toThrow()
+      check = native.nativeChatDraftSession('activation-new')
+      writer = makeWriter()
+      replaced = true
+      const ready = pair.toShell.find((json) => JSON.parse(json).type === 'ready')!
+      await act(async () => {
+        pair.host.receive(ready)
+        await pair.flush()
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(await oldWait).toBe('retired')
+      expect(owner.mobileChatDraftOwnerLive(oldOwner)).toBe(false)
+      expect(receipts[0]?.valid()).toBe(false)
+      owner.updateMobileNativeChatDraftImages(oldOwner, () => [])
+      release()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0)
+        await pair.flush()
+      })
+      expect(JSON.parse(disk.get(key)!).text).toBe('earlier $review $review [Image #1]')
+      expect(writesB).toHaveLength(1)
+      await act(async () => {
+        root!.update(createElement(Chat, { tab: 'B' }))
+        await pair.flush()
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+      expect(model!.composerText).toBe(complete.text)
+      const { editGeneration: _generation, ...saved } = complete
+      expect(JSON.parse(disk.get(key)!)).toEqual(saved)
+      expect(readsB).toBe(1)
+      expect(writesB).toEqual(['earlier $review $review [Image #1]', complete.text])
+      await act(async () => {
+        owner.mobileChatDraftLifecycle(true)
+        await pair.flush()
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+      expect(writesB).toHaveLength(2)
+      await act(async () => {
+        root!.update(createElement(Chat, { tab: 'A' }))
+        await pair.flush()
+      })
+      await act(async () => {
+        root!.update(createElement(Chat, { tab: 'B' }))
+        await pair.flush()
+      })
+      expect(writesB).toHaveLength(2)
+      let fail = true
+      io.beforeSet = async (writeKey, value) => {
+        if (writeKey === key) {
+          writesB.push(JSON.parse(value).text)
+          if (fail) {
+            throw new Error('Backing unavailable')
+          }
+        }
+      }
+      await act(async () => {
+        model!.setComposerText(`${complete.text} changed`)
+        await vi.advanceTimersByTimeAsync(1000)
+        await pair.flush()
+      })
+      await act(async () => {
+        root!.update(createElement(Chat, { tab: 'A' }))
+        await pair.flush()
+      })
+      const failedAttempts = writesB.length
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000)
+        await pair.flush()
+      })
+      expect(writesB).toHaveLength(failedAttempts)
+      fail = false
+      await act(async () => {
+        root!.update(createElement(Chat, { tab: 'B' }))
+        await pair.flush()
+        await vi.advanceTimersByTimeAsync(30_000)
+      })
+      expect(writesB).toHaveLength(failedAttempts + 1)
+      expect(JSON.parse(disk.get(key)!).text).toBe(`${complete.text} changed`)
+      // Read the physical backing without giving a teardown flush a chance to repair it.
+      await act(async () => {
+        owner.resetMobileNativeChatDraftStoreForTests()
+        const loaded = owner.hydrateMobileNativeChatDraft(scope)
+        await pair.flush()
+        await loaded
+      })
+      expect(owner.readMobileNativeChatDraft(scope)).toMatchObject({
+        ...saved,
+        text: `${complete.text} changed`
+      })
+    } finally {
+      release()
+      await act(async () => {
+        root?.unmount()
+        await pair.flush()
+      })
+      pair.client.close()
+      writer.dispose()
+      storage.publishMobileChatDraftStorage(null)
+      owner.resetMobileNativeChatDraftStoreForTests()
+      native.closeNativeChatDraftSession('activation-new')
+      vi.useRealTimers()
+      io.beforeSet = async () => {}
+    }
+  }
+)

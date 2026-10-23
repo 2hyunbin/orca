@@ -746,3 +746,70 @@ it('flushes current native drafting on background and disposes the adapter lifet
   publishMobileChatDraftStorage(null)
   expect(appState.size).toBe(0)
 })
+
+it('coalesces visible-scope runtime cleanup and activation into one fresh save', async () => {
+  vi.useFakeTimers()
+  const scope = 'visible-runtime\0workspace\0tab'
+  let release = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const oldWrite = vi.fn(async () => {
+    await gate
+  })
+  publishMobileChatDraftStorage({
+    read: async () => null,
+    write: oldWrite,
+    removeWorkspace: async () => {}
+  })
+  let model: ReturnType<typeof useMobileNativeChatDrafts> | undefined
+  function Chat() {
+    model = useMobileNativeChatDrafts({
+      hostId: 'visible-runtime',
+      worktreeId: 'workspace',
+      tabId: 'tab',
+      sessionId: 'chat',
+      messages: [],
+      transcriptSettled: true
+    })
+    return null
+  }
+  let root: ReactTestRenderer | undefined
+  try {
+    await act(async () => {
+      root = create(createElement(Chat))
+    })
+    await act(async () => {
+      model!.setComposerText('earlier')
+      await vi.advanceTimersByTimeAsync(250)
+    })
+    await act(async () => {
+      model!.setComposerText('complete current')
+      await vi.advanceTimersByTimeAsync(250)
+    })
+    const freshWrite = vi.fn(async () => {})
+    await act(async () => {
+      publishMobileChatDraftStorage({
+        read: async () => {
+          throw new Error('Known memory must not reread')
+        },
+        write: freshWrite,
+        removeWorkspace: async () => {}
+      })
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(freshWrite).toHaveBeenCalledExactlyOnceWith(
+      mobileChatDraftStorageKey(scope),
+      JSON.stringify({ text: 'complete current', images: [], skills: [] })
+    )
+    release()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(freshWrite).toHaveBeenCalledOnce()
+    expect(model!.composerText).toBe('complete current')
+  } finally {
+    release()
+    await act(async () => root?.unmount())
+  }
+})

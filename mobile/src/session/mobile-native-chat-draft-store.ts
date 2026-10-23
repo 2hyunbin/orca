@@ -15,7 +15,7 @@ import {
   retryMobileChatDraftRemovals
 } from './mobile-native-chat-draft-storage'
 import type { PendingNativeChatImage } from './mobile-native-chat-image-attachment'
-import { useSyncExternalStore, type SetStateAction } from 'react'
+import { useSyncExternalStore } from 'react'
 import {
   EMPTY,
   WAIT_MS,
@@ -31,31 +31,20 @@ import {
   request,
   replace,
   pump,
-  writeDraft,
   type Copy,
   type MobileChatDraftOwner,
   type MobileChatDraftCopy
 } from './mobile-native-chat-draft-owner'
 export {
   mobileNativeChatLaunchDraftSeeds,
+  setMobileNativeChatDraftText,
+  editMobileNativeChatDraft,
   persistMobileNativeChatDraft,
   captureMobileChatDraftOwner,
   mobileChatDraftOwnerLive,
   type MobileChatDraftOwner,
   type MobileChatDraftCopy
 } from './mobile-native-chat-draft-owner'
-export function setMobileNativeChatDraftText(scope: string, update: SetStateAction<string>): void {
-  const owner = owners.get(scope)
-  if (owner) {
-    writeDraft(owner, update, false)
-  }
-}
-export function editMobileNativeChatDraft(scope: string, update: SetStateAction<string>): void {
-  const owner = owners.get(scope)
-  if (owner && owner.state !== 'unread') {
-    writeDraft(owner, update, true)
-  }
-}
 export function resolveMobileChatDraftSendOwner(captured: MobileChatDraftOwner | undefined) {
   const current = captured && owners.get(captured.scope)
   return current && current.logicalDraft === captured?.logicalDraft && live(current)
@@ -126,7 +115,15 @@ export function updateMobileNativeChatDraftImages(
     replace(captured, next)
   }
 }
-export async function hydrateMobileNativeChatDraft(scope: string): Promise<void> {
+export function hydrateMobileNativeChatDraft(scope: string): Promise<void> {
+  const loaded = loadMobileNativeChatDraft(scope)
+  const owner = owners.get(scope)
+  if (owner?.state === 'known' && owner.draft.editGeneration !== (owner.acknowledged ?? 0)) {
+    request(owner)
+  }
+  return loaded
+}
+async function loadMobileNativeChatDraft(scope: string): Promise<void> {
   const owner = activate(scope)
   retryMobileChatDraftRemovals()
   if (!owner.storage || owner.state === 'known' || removing(scope)) {
@@ -221,7 +218,7 @@ export async function appendMobileNativeChatDraft(
     notify()
   }, WAIT_MS)
   notify()
-  void hydrateMobileNativeChatDraft(scope).then(() => {
+  void loadMobileNativeChatDraft(scope).then(() => {
     if (!live(owner) || owner.state !== 'known' || owner.copy !== copy || copy.expired) {
       copy.finish(false)
       return

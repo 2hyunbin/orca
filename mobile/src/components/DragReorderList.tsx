@@ -76,6 +76,27 @@ export function DragReorderList<ItemT>({
   const keys = items.map(itemKey)
   const keySignature = keys.join(KEY_SEPARATOR)
   const [measured, setMeasured] = useState<Record<string, number>>({})
+  const measurements = useRef(new Map<string, number>())
+  const measurementFrame = useRef<number | null>(null)
+  const publishMeasurements = useCallback(() => {
+    if (measurementFrame.current !== null) {
+      return
+    }
+    measurementFrame.current = requestAnimationFrame(() => {
+      measurementFrame.current = null
+      setMeasured(Object.fromEntries(measurements.current))
+    })
+  }, [])
+  useLayoutEffect(
+    () => () => {
+      if (measurementFrame.current !== null) {
+        cancelAnimationFrame(measurementFrame.current)
+        measurementFrame.current = null
+      }
+      measurements.current.clear()
+    },
+    []
+  )
   const sizes = useSharedValue<Record<string, number>>({})
   const initialPositions = useSharedValue<DragReorderPositions>({})
   const rowSizes = useMemo(
@@ -90,9 +111,6 @@ export function DragReorderList<ItemT>({
   )
   const ready = keys.every((key) => rowSizes[key] > 0)
   const height = Object.values(rowSizes).reduce((sum, size) => sum + size, 0)
-  const onMeasure = useCallback((key: string, height: number) => {
-    setMeasured((current) => (current[key] === height ? current : { ...current, [key]: height }))
-  }, [])
   const positions = useSharedValue<DragReorderPositions>(dragReorderPositionsFromKeys(keys))
   const layout = useDerivedValue(
     () => dragReorderLayout(positions.value, sizes.value),
@@ -109,10 +127,35 @@ export function DragReorderList<ItemT>({
   const currentCatalog = useRef<typeof catalog | null>(catalog)
   useLayoutEffect(() => {
     currentCatalog.current = catalog
+    const present = new Set(keySignature ? keySignature.split(KEY_SEPARATOR) : [])
+    let removed = false
+    for (const key of measurements.current.keys()) {
+      if (!present.has(key)) {
+        measurements.current.delete(key)
+        removed = true
+      }
+    }
+    if (removed) {
+      publishMeasurements()
+    }
     return () => {
       currentCatalog.current = null
     }
-  }, [catalog])
+  }, [catalog, keySignature, publishMeasurements])
+  const onMeasure = useCallback(
+    (key: string, height: number) => {
+      if (
+        currentCatalog.current !== catalog ||
+        rowHeight !== undefined ||
+        measurements.current.get(key) === height
+      ) {
+        return
+      }
+      measurements.current.set(key, height)
+      publishMeasurements()
+    },
+    [catalog, rowHeight, publishMeasurements]
+  )
   useEffect(() => {
     sizes.value = rowSizes
   }, [rowSizes, sizes])
@@ -211,9 +254,7 @@ export function DragReorderList<ItemT>({
   // move up/down accessibility actions that commit the same reorder.
   const moveRowByAccessibilityAction = useCallback(
     (key: string, delta: number) => {
-      const movableKeys = keys.filter(
-        (entry) => !canMove || items.some((item) => itemKey(item) === entry && canMove(item))
-      )
+      const movableKeys = items.filter((item) => !canMove || canMove(item)).map(itemKey)
       const fromIndex = movableKeys.indexOf(key)
       if (fromIndex === -1) {
         return
@@ -226,7 +267,8 @@ export function DragReorderList<ItemT>({
       nextMovable.splice(fromIndex, 1)
       nextMovable.splice(toIndex, 0, key)
       let at = 0
-      const next = keys.map((entry) => (movableKeys.includes(entry) ? nextMovable[at++]! : entry))
+      const movable = new Set(movableKeys)
+      const next = keys.map((entry) => (movable.has(entry) ? nextMovable[at++]! : entry))
       commitReorder(next, key)
     },
     [keys, commitReorder, canMove, items, itemKey]
