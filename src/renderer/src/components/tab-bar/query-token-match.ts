@@ -71,7 +71,8 @@ export function scoreQueryTokens(query: string, values: readonly string[]): Quer
     let best = 0
     for (const candidateToken of candidateTokens) {
       if (candidateToken === queryToken) {
-        best = Math.max(best, 3)
+        best = 3
+        break
       } else if (candidateToken.startsWith(queryToken)) {
         best = Math.max(best, 2)
       } else if (candidateToken.includes(queryToken)) {

@@ -113,7 +113,8 @@ function scoreAgentLaunchOption(
     let best = 0
     for (const candidateToken of candidateTokens) {
       if (candidateToken === queryToken) {
-        best = Math.max(best, 3)
+        best = 3
+        break
       } else if (queryToken.length >= 2 && candidateToken.startsWith(queryToken)) {
         // Why: a single-character prefix matches almost every agent, flooding the
         // list and letting one keystroke auto-launch the wrong agent; require an
