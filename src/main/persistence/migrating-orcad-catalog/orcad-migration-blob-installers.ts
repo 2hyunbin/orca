@@ -21,6 +21,10 @@ import {
   assertOrcadMigrationShellHistoryValid,
   installOrcadMigrationShellHistory
 } from './orcad-shell-history-installer'
+import {
+  assertOrcadMigrationTerminalHistoryValid,
+  installOrcadMigrationTerminalHistory
+} from './orcad-terminal-history-installer'
 import type {
   OrcadTerminalRestoreHintPlacement,
   OrcadTerminalRestoreHintStore
@@ -43,6 +47,9 @@ const BLOB_CONTENT_CHECKS: Partial<Record<OrcadMigrationBlobKind, OrcadMigration
     },
     'shell-history': ({ key, path, manifest }) => {
       assertOrcadMigrationShellHistoryValid(key, path, manifest.payload)
+    },
+    'terminal-history': ({ key, path, manifest }) => {
+      assertOrcadMigrationTerminalHistoryValid(key, path, manifest)
     }
   }
 
@@ -71,6 +78,9 @@ export type OrcadMigrationBlobInstall = {
   terminalRestoreHints: OrcadTerminalRestoreHintStore
   /** This host's getHistoryRoot(). */
   shellHistoryRoot: string
+  /** This host's `getDaemonHistoryDir()`, where its terminals' checkpoints live. */
+  terminalHistoryRoot: string
+  /** The shell binary a new pane on this host would actually run. */
   paneShellPath: () => string
   /** Defer without runtime evidence: shells surviving a restart could overwrite installed history. */
   worktreeHasLiveShells?: (worktreeId: string) => boolean
@@ -83,7 +93,11 @@ export type OrcadMigrationBlobInstall = {
 export function installOrcadMigrationReceivedBlobs(install: OrcadMigrationBlobInstall): void {
   let firstError: unknown = null
   // Keep failures independent so other blob kinds can still install.
-  for (const installKind of [installTerminalRestoreHints, installShellHistory]) {
+  for (const installKind of [
+    installTerminalRestoreHints,
+    installShellHistory,
+    installTerminalHistory
+  ]) {
     try {
       installKind(install)
     } catch (error) {
@@ -93,6 +107,16 @@ export function installOrcadMigrationReceivedBlobs(install: OrcadMigrationBlobIn
   if (firstError !== null) {
     throw firstError
   }
+}
+
+function installTerminalHistory(install: OrcadMigrationBlobInstall): void {
+  installOrcadMigrationTerminalHistory({
+    migration: install.migration,
+    root: install.root,
+    historyRoot: install.terminalHistoryRoot,
+    paneWorktreeId: install.paneWorktreeId,
+    now: install.now
+  })
 }
 
 function installShellHistory(install: OrcadMigrationBlobInstall): void {
