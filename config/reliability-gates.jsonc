@@ -27,7 +27,7 @@
       "invariant": "The relocated Windows daemon must retain the registry package root JS and native binary independently of its install tree, reject incomplete source or mirror files, and preserve an existing mirror while repairing it.",
       "oracle": "Run the real package JS from the relocated entry after deleting the install tree, reach its native loader, refuse each missing source file before staging, and replace each incomplete mirror without deleting its sentinel. Pin the real package name against the Windows packaging allowlist. On Windows, read ProductName through the built native addon from the mirror.",
       "commands": [
-        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/daemon-host-process-package.test.ts src/main/daemon/daemon-host-file-hash-cache.test.ts"
+        "ORCA_BACKGROUND_LAUNCH=1 pnpm test src/main/daemon/daemon-host-process-package.test.ts src/main/daemon/daemon-host-file-hash-cache.test.ts config/scripts/pr-code-change-scope.test.mjs config/scripts/package-electron-runtime-contract.test.mjs"
       ],
       "testFiles": [
         "src/main/daemon/daemon-host-process-package.test.ts",
