@@ -7,6 +7,7 @@
 // docs/plans/2026-06-17-001-feat-native-chat-view-plan.md (U6).
 
 import type { NativeChatMessage } from '../../../../shared/native-chat-types'
+import { ownRetainedString } from '../../../../shared/own-retained-string'
 
 // Why: replicate (not import) the minimal ANSI/control-sequence strip used by
 // agent-session-fork-context.ts so we don't modify that file. Same three
@@ -17,16 +18,8 @@ const OSC_SEQUENCE_PATTERN = new RegExp(`${ESC}\\][^\\u0007]*(?:\\u0007|${ESC}\\
 const SINGLE_ESCAPE_PATTERN = new RegExp(`${ESC}(?:[@-Z\\\\-_]|[()*+\\-./][0-~]|c)`, 'g')
 
 function stripUnsupportedControlCharacters(value: string): string {
-  let result = ''
-  for (const char of value) {
-    const code = char.charCodeAt(0)
-    // Drop C0 control chars except tab (9) and newline (10); keep DEL (127) out.
-    if (code <= 8 || code === 11 || code === 12 || (code >= 14 && code <= 31) || code === 127) {
-      continue
-    }
-    result += char
-  }
-  return result
+  // oxlint-disable-next-line no-control-regex -- removes terminal control bytes.
+  return ownRetainedString(value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]+/g, ''))
 }
 
 /** Strip ANSI/OSC escapes and normalize newlines so the raw scrollback reads as
