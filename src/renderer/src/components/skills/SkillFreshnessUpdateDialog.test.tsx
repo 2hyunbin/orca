@@ -318,6 +318,30 @@ describe('SkillFreshnessUpdateDialog', () => {
     expect(button('Done')).toBeTruthy()
   })
 
+  it('counts skills rather than folders in the preview and result headlines', async () => {
+    const plan = planOf([
+      planEntry('orca-cli', [
+        planOp('update', '/home/u/.agents/skills/orca-cli'),
+        planOp('update', EDITED_PATH)
+      ]),
+      sharedEntry('orchestration', 'update'),
+      planEntry('computer-use', [
+        planOp('leave', '/home/u/.agents/skills/computer-use', { reason: 'edited' }),
+        planOp('leave', '/home/u/.claude/skills/computer-use', { reason: 'shared-not-current' }),
+        planOp('leave', '/home/u/.cursor/skills/computer-use', { reason: 'shared-not-current' })
+      ])
+    ])
+    mocks.plan = plan
+    skillsApi.bundledExecute.mockResolvedValueOnce(doneResult(plan))
+    render()
+
+    expect(container.textContent).toContain('2 updates available')
+    click(button('Update 2 skills'))
+    await flush()
+
+    expect(container.textContent).toContain('Updated 2 skills · 1 skipped')
+  })
+
   it('keeps preview row order through a replacement run and the refreshed plan', async () => {
     const replacementPath = '/home/u/.claude/skills/computer-use'
     mocks.plan = planOf([
