@@ -105,11 +105,19 @@ async function edit(
 }
 
 async function listed(page: Page) {
-  return page.evaluate(async () => ({
-    folders: (await window.api.folderWorkspaces.list()).map((workspace) => workspace.id),
-    repos: (await window.api.repos.list()).map((repo) => repo.id),
-    worktrees: (await window.api.worktrees.listAll()).map((worktree) => worktree.repoId)
-  }))
+  return page.evaluate(async () => {
+    const repos = (await window.api.repos.list()).map((repo) => repo.id)
+    const listings = await Promise.all(
+      repos.map((repoId) => window.api.worktrees.listDetected({ repoId }))
+    )
+    return {
+      folders: (await window.api.folderWorkspaces.list()).map((workspace) => workspace.id),
+      repos,
+      worktrees: listings.flatMap((result) =>
+        result.worktrees.filter((worktree) => worktree.visible).map((worktree) => worktree.repoId)
+      )
+    }
+  })
 }
 
 test('a WSL move journal fences the moving project, then hides it once the host owns it', async (// oxlint-disable-next-line no-empty-pattern -- Playwright requires destructuring to request no fixtures.
