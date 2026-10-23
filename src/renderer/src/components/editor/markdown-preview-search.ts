@@ -6,6 +6,7 @@ import {
   type DomTextSearchScope
 } from '../../lib/dom-text-search-highlights'
 export {
+  createTextMatcher,
   findTextMatchRanges,
   isTextSearchQueryTooLarge as isMarkdownPreviewSearchQueryTooLarge,
   TEXT_SEARCH_QUERY_MAX_BYTES as MARKDOWN_PREVIEW_SEARCH_QUERY_MAX_BYTES,

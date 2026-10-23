@@ -1,10 +1,7 @@
 import type { Root } from 'hast'
 import { yieldToEventLoop } from '../../../../shared/event-loop-yield'
 import { isClipboardTextByteLengthOverLimit } from '../../../../shared/clipboard-text'
-import {
-  findTextMatchRanges,
-  isMarkdownPreviewSearchQueryTooLarge
-} from './markdown-preview-search'
+import { createTextMatcher, isMarkdownPreviewSearchQueryTooLarge } from './markdown-preview-search'
 import {
   countMarkdownPreviewNodes,
   getMarkdownPreviewTreeText,
@@ -174,6 +171,7 @@ export class MarkdownPreviewDocumentEngine {
     if (!query || isMarkdownPreviewSearchQueryTooLarge(query)) {
       return { matches, truncated: false }
     }
+    const findMatches = createTextMatcher(query)
     if (this.searchIndexFailed) {
       throw new Error('Document exceeds the preview search limit.')
     }
@@ -184,7 +182,7 @@ export class MarkdownPreviewDocumentEngine {
       const values = this.searchableText(blockIndex)
       let occurrence = 0
       for (const value of values) {
-        for (const _range of findTextMatchRanges(value, query)) {
+        for (const _range of findMatches(value)) {
           if (matches.length >= MARKDOWN_PREVIEW_MAX_SEARCH_MATCHES) {
             return { matches, truncated: true }
           }

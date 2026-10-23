@@ -1,4 +1,4 @@
-import { findTextMatchRanges, isTextSearchQueryTooLarge } from './text-match-ranges'
+import { createTextMatcher, isTextSearchQueryTooLarge } from './text-match-ranges'
 
 // Why: React owns the searched DOM. Injecting <mark> by splitting its text nodes
 // left React holding stale child pointers (NotFoundError on the next commit), so
@@ -139,7 +139,7 @@ export type DomTextSearchScope = {
 
 function appendTextSearchRanges(
   nodes: Text[],
-  query: string,
+  findMatches: ReturnType<typeof createTextMatcher>,
   ranges: Range[],
   reuse: Range[] | undefined
 ): void {
@@ -149,7 +149,7 @@ function appendTextSearchRanges(
   }
   let nodeIndex = 0
   let offset = 0
-  for (const { start, end } of findTextMatchRanges(text, query)) {
+  for (const { start, end } of findMatches(text)) {
     while (nodeIndex < nodes.length - 1 && offset + nodes[nodeIndex].length <= start) {
       offset += nodes[nodeIndex++].length
     }
@@ -173,6 +173,7 @@ export function findDomTextSearchRanges(
   if (!query || isTextSearchQueryTooLarge(query)) {
     return ranges
   }
+  const findMatches = createTextMatcher(query)
   const { rejectElement, joinedTextSelector, reuse } = scope
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
@@ -210,7 +211,7 @@ export function findDomTextSearchRanges(
       nodes.push(next)
       next = walker.nextNode()
     }
-    appendTextSearchRanges(nodes, query, ranges, reuse)
+    appendTextSearchRanges(nodes, findMatches, ranges, reuse)
     currentNode = next
   }
   return ranges

@@ -19,21 +19,27 @@ export function findTextMatchRanges(
   query: string,
   options: TextMatchOptions = {}
 ): { start: number; end: number }[] {
-  if (!query) {
-    return []
-  }
-  if (isTextSearchQueryTooLarge(query)) {
-    return []
-  }
+  return createTextMatcher(query, options)(text)
+}
 
-  const ranges = options.matchCase
-    ? findCaseSensitiveMatchRanges(text, query)
-    : findCaseInsensitiveMatchRanges(text, query)
-
-  if (!options.wholeWord) {
-    return ranges
+export function createTextMatcher(
+  query: string,
+  options: TextMatchOptions = {}
+): (text: string) => { start: number; end: number }[] {
+  if (!query || isTextSearchQueryTooLarge(query)) {
+    return () => []
   }
-  return ranges.filter((range) => isWholeWordMatch(text, range.start, range.end))
+  const { matchCase, wholeWord } = options
+  const normalizedQuery = matchCase ? query : buildLocaleLowercaseIndex(query).text
+
+  return (text) => {
+    const ranges = matchCase
+      ? findCaseSensitiveMatchRanges(text, normalizedQuery)
+      : findCaseInsensitiveMatchRanges(text, normalizedQuery)
+    return wholeWord
+      ? ranges.filter((range) => isWholeWordMatch(text, range.start, range.end))
+      : ranges
+  }
 }
 
 function findCaseSensitiveMatchRanges(
@@ -57,10 +63,9 @@ function findCaseSensitiveMatchRanges(
 
 function findCaseInsensitiveMatchRanges(
   text: string,
-  query: string
+  normalizedQuery: string
 ): { start: number; end: number }[] {
   const normalizedText = buildLocaleLowercaseIndex(text)
-  const normalizedQuery = buildLocaleLowercaseIndex(query).text
   const matches: { start: number; end: number }[] = []
   let searchStart = 0
 
