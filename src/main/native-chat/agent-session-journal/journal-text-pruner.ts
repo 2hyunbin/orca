@@ -1,3 +1,4 @@
+import { clearImmediate, setImmediate } from 'node:timers'
 import type { JournalStoreHost } from './journal-store-collaborators'
 import type { JournalRowWriter } from './journal-row-writer'
 import type { JournalRow } from './journal-row-schema'

@@ -1,3 +1,4 @@
+import { clearTimeout, setTimeout } from 'node:timers'
 import { appendWithinUtf8ByteLimit } from './agent-session-streamed-text-bounds'
 // Server-side coalescing for streamed assistant text.
 //
