@@ -5,6 +5,10 @@ import baseConfig from './vitest.config'
 import { nodeRuntimePool } from './scripts/vitest-node-runtime-pool'
 
 const contracts = [
+  'src/main/ipc/pty/runtime/spawn-preflight-saved-resume.test.ts',
+  'src/main/native-chat/agent-session-wire/structured-agent-session-terminal-writer-acquire.test.ts',
+  'src/main/runtime/hook-status-resume-sleep-ordering.test.ts',
+  'src/renderer/src/hooks/ipc-events/agent-status-refused-resume.performance.test.ts',
   'src/main/sqlite/sync-database.test.ts',
   'src/main/runtime/orchestration/db/row-column-lists.test.ts',
   'src/shared/native-chat-tool-attribution-allocation.test.ts',

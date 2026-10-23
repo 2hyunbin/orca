@@ -1,3 +1,14 @@
+import {
+  assertCliConversationWritersExited,
+  posixCliWriterShellAlone
+} from '../../runtime/structured-agent-cli-writers'
+import type { AgentSessionRecord } from '../../../shared/agent-session-record'
+import type { SleepingAgentSessionRecord } from '../../../shared/agent-session-resume'
+const physicalSnapshot = vi.hoisted(() => vi.fn())
+vi.mock('../../../shared/process-table-snapshot-reader', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getFreshShellForegroundSnapshot: physicalSnapshot
+}))
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,7 +49,7 @@ const acquire = vi.fn<StructuredAgentSessionAdapter['acquire']>(async ({ fence, 
     observedAt: NOW
   }
 }))
-const assertNoTerminalWriter = vi.fn(async () => {
+const assertNoTerminalWriter = vi.fn(async (_record: AgentSessionRecord) => {
   if (terminalWriting) {
     throw agentSessionRefusalError('agent_session_conflict', {
       reason: 'conversationHeldElsewhere'
@@ -50,8 +61,15 @@ beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), 'orca-terminal-writer-acquire-'))
   resetHostTestOperationIds()
   terminalWriting = false
+  physicalSnapshot.mockReset()
   acquire.mockClear()
-  assertNoTerminalWriter.mockClear()
+  assertNoTerminalWriter.mockReset().mockImplementation(async () => {
+    if (terminalWriting) {
+      throw agentSessionRefusalError('agent_session_conflict', {
+        reason: 'conversationHeldElsewhere'
+      })
+    }
+  })
   store = await openTestAgentSessionRecordStore(root)
   host = new StructuredAgentSessionHost({
     agents: NO_STRUCTURED_AGENTS,
@@ -136,3 +154,153 @@ it('refuses the chat agent start while a terminal writes its conversation, once 
     timeout: 10_000
   })
 })
+
+it.each([10, 100])(
+  'drives acquisition through the real census for %i matching/unrelated panes',
+  async (size) => {
+    let enumerated = 0
+    const saved: Record<string, SleepingAgentSessionRecord> = Object.fromEntries(
+      Array.from({ length: size }, (_, index) => [
+        `pane-${index}`,
+        {
+          paneKey: `pane-${index}`,
+          worktreeId: 'workspace-1',
+          agent: 'codex' as const,
+          providerSession: { key: 'session_id' as const, id: THREAD },
+          state: 'done' as const,
+          prompt: '',
+          capturedAt: 1,
+          updatedAt: 1,
+          origin: 'live' as const
+        }
+      ])
+    )
+    const population = new Proxy(saved, {
+      ownKeys(target) {
+        const keys = Reflect.ownKeys(target)
+        enumerated += keys.length
+        return keys
+      }
+    })
+    let rowVisits = 0
+    let linkVisits = 0
+    const rows = new Proxy(
+      Array.from({ length: size }, (_, index) => ({
+        paneKey: `unrelated-${index}`,
+        connectionId: null,
+        agentType: 'codex',
+        providerSession: { key: 'session_id' as const, id: 'unrelated' },
+        state: 'done' as const,
+        prompt: '',
+        receivedAt: 1,
+        stateStartedAt: 1
+      })),
+      {
+        get(target, key, receiver) {
+          if (typeof key === 'string' && /^\d+$/.test(key)) {
+            rowVisits += 1
+          }
+          return Reflect.get(target, key, receiver)
+        }
+      }
+    )
+    const links = new Proxy(
+      rows.map(() => ({
+        agent: 'codex',
+        id: 'unrelated',
+        paneOwned: true,
+        worktreeId: 'workspace-1',
+        terminal: () => null
+      })),
+      {
+        get(target, key, receiver) {
+          if (typeof key === 'string' && /^\d+$/.test(key)) {
+            linkVisits += 1
+          }
+          return Reflect.get(target, key, receiver)
+        }
+      }
+    )
+    rowVisits = 0
+    const shell = [{ pid: 10, ppid: 1, stat: 'Ss+', command: '/bin/zsh' }]
+    physicalSnapshot.mockResolvedValue(shell)
+    const physical = vi.fn(() => posixCliWriterShellAlone(10))
+    assertNoTerminalWriter.mockImplementation((record) =>
+      assertCliConversationWritersExited(
+        {
+          saved: () => Object.values(population),
+          rows: () => rows,
+          links: () => links,
+          observation: () => null,
+          sleeping: () => false,
+          terminal: () => ({ pane: { ptyId: 'shell', incarnationId: 'i1', identity: 'shell:i1' } }),
+          shellAlone: physical
+        },
+        record.provider,
+        record.providerHandleChain.at(-1)?.handle.nativeId ?? ''
+      )
+    )
+    const start = async () => {
+      await host.close(SESSION, 'evict')
+      await host.revealSession(SESSION)
+      const before = acquire.mock.calls.length
+      await send('acquire after census')
+      await vi.waitFor(() => expect(acquire.mock.calls.length).toBe(before + 1))
+    }
+    for (const record of Object.values(saved)) {
+      record.providerSession.id = 'unrelated'
+    }
+    await start()
+    expect([enumerated, physical.mock.calls.length]).toEqual([2 * size, 0])
+    expect([rowVisits, linkVisits]).toEqual([size, size])
+    for (const record of Object.values(saved)) {
+      record.providerSession.id = THREAD
+    }
+    enumerated = 0
+    rowVisits = 0
+    linkVisits = 0
+    await start()
+    // Across each physical await, existing saved-membership and final coverage revalidate the population.
+    expect(enumerated).toBe((6 * size + 2) * size)
+    expect([rowVisits, linkVisits]).toEqual([(4 * size + 1) * size, size])
+    expect(physical).toHaveBeenCalledTimes(size)
+    expect(physicalSnapshot).toHaveBeenCalledTimes(size)
+
+    await host.close(SESSION, 'evict')
+    await host.revealSession(SESSION)
+    physicalSnapshot.mockResolvedValue([
+      ...shell,
+      { pid: 11, ppid: 10, stat: 'T', command: 'codex' }
+    ])
+    physical.mockClear()
+    const before = acquire.mock.calls.length
+    await rejection(await send('live terminal witness'))
+    expect(acquire).toHaveBeenCalledTimes(before)
+    expect(physical).toHaveBeenCalledTimes(1)
+
+    let finish = () => {}
+    physicalSnapshot.mockResolvedValue(shell)
+    physicalSnapshot.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve(shell)
+        })
+    )
+    physical.mockClear()
+    await send('cancel during physical proof')
+    await vi.waitFor(() => expect(physical).toHaveBeenCalledTimes(1))
+    const closed = host.close(SESSION, 'evict')
+    finish()
+    await closed
+    await assertNoTerminalWriter.mock.results.at(-1)?.value
+    // Closing prevents the late spawn; this inherited census still finishes every physical proof.
+    expect(physical).toHaveBeenCalledTimes(size)
+    expect(acquire).toHaveBeenCalledTimes(before)
+    physicalSnapshot.mockResolvedValue(shell)
+    enumerated = 0
+    await host.revealSession(SESSION)
+    await send('successful successor')
+    await vi.waitFor(() => expect(acquire).toHaveBeenCalledTimes(before + 1))
+    expect(enumerated).toBeLessThanOrEqual((6 * size + 2) * size)
+  }
+)
