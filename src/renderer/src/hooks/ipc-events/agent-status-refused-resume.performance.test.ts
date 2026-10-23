@@ -69,7 +69,10 @@ it.each([10, 100])(
         Object.fromEntries(
           Array.from({ length: size }, (_, index) => {
             const row = event(index)
-            return [index === 0 ? 'tab:leaf' : `other-${index}`, { ...row, updatedAt: 10 }]
+            return [
+              index === 0 ? 'tab:leaf' : `other-${index}`,
+              { ...row, updatedAt: 10, stateHistory: [] }
+            ]
           })
         )
       ),

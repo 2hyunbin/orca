@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AgentStatusEntry } from '@shared/agent-status-types'
+import type { AgentStatusEntry } from '../../../../../shared/agent-status-types'
 import type {
   AgentLaunchConfigRegistryEntry,
   AgentLaunchConfigRegistrationMetadata

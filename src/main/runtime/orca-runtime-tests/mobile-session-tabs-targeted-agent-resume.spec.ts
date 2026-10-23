@@ -11,6 +11,7 @@ import {
   makeWorkspaceSessionWithHeadlessTerminal
 } from '../orca-runtime-test-fixtures.spec'
 import type { AgentStatusIpcPayload } from '../../../shared/agent-status-types'
+import type { TerminalLaunchResult } from '../../../shared/agent-session-resume'
 import type { PtyProcessInfo } from '../../providers/pty-provider-contract'
 import { deterministicAgentSessionUuid } from '../runtime-agent-launch-resolution'
 import { deriveRemoteRuntimeTerminalCreateHandle } from '../remote-runtime-terminal-create-identity'
@@ -231,7 +232,7 @@ describe('resumeAgentSessionInWorkspace', () => {
       const fixture = makeSleptWorkspace()
       const record = storedRecord(fixture)!
       record.origin = 'live'
-      const matching = savedResumeResult({
+      const matching: TerminalLaunchResult = savedResumeResult({
         verdict: kind === 'unverifiable' ? 'unverifiable' : 'chat-home',
         refused: { agent: 'claude', providerSession: SESSION }
       })
