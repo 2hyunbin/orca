@@ -104,9 +104,9 @@ export function aggregateClaudeUsage(turns: ClaudeUsageAttributedTurn[]): {
   const dailyByKey = new Map<string, ClaudeUsageDailyAggregate>()
 
   for (const turn of turns) {
-    const existingSession = sessionsById.get(turn.sessionId)
-    if (!existingSession) {
-      sessionsById.set(turn.sessionId, {
+    let session = sessionsById.get(turn.sessionId)
+    if (!session) {
+      session = {
         sessionId: turn.sessionId,
         firstTimestamp: turn.timestamp,
         lastTimestamp: turn.timestamp,
@@ -122,10 +122,10 @@ export function aggregateClaudeUsage(turns: ClaudeUsageAttributedTurn[]): {
         totalCacheWriteTokens: 0,
         totalCacheWrite1hTokens: 0,
         locationBreakdown: []
-      })
+      }
+      sessionsById.set(turn.sessionId, session)
     }
 
-    const session = sessionsById.get(turn.sessionId)!
     const longContext = longContextTurnTokens(turn.model, turn)
     if (turn.timestamp < session.firstTimestamp) {
       session.firstTimestamp = turn.timestamp
