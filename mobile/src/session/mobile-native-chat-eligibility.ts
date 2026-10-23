@@ -5,6 +5,7 @@ import {
   isNativeChatSupportedAgent,
   nativeChatRequiresLocalTranscript
 } from '../../../src/shared/native-chat-agent-support'
+import type { MobileSessionTab } from './mobile-session-route-types'
 
 // Why: native chat renders an agent's own JSONL transcript, and the host
 // resolver knows these transcript layouts. Agents whose hook reports no
@@ -26,10 +27,19 @@ export type MobileNativeChatResolution = {
   transcriptPath: string | null
 }
 
+/** The last chat identity resolved for a terminal tab, bound to the handle it was seen on. */
+export type MobileNativeChatIdentity = {
+  terminal: string
+  agent: string
+  sessionId: string | null
+  transcriptPath: string | null
+}
+
 export type MobileNativeChatTab = {
   type: string
   launchAgent?: string | null
   agentStatus?: AgentStatusEntry | null
+  nativeChatIdentity?: MobileNativeChatIdentity
   /** Host-provided launch context still parked as an unsent TUI-input draft. */
   launchDraft?: string
   launchDraftCreatedAt?: number
@@ -59,22 +69,50 @@ export function resolveMobileNativeChat(
     return null
   }
   const liveAgent = tab.agentStatus?.agentType ?? null
+  const remembered = tab.nativeChatIdentity ?? null
   const agent = liveAgent
     ? isNativeChatSupportedAgent(liveAgent)
       ? liveAgent
       : null
-    : tab.launchAgent
+    : (tab.launchAgent ?? remembered?.agent ?? null)
   if (!agent || !isNativeChatSupportedAgent(agent)) {
     return null
   }
   if (nativeChatRequiresLocalTranscript(agent) && !nativeChatTranscriptIsLocalReadable) {
     return null
   }
+  const liveSession = tab.agentStatus?.providerSession
+  const rememberedSession = remembered?.agent === agent ? remembered : null
   return {
     agent,
-    sessionId: tab.agentStatus?.providerSession?.id ?? null,
-    transcriptPath: tab.agentStatus?.providerSession?.transcriptPath ?? null
+    sessionId: liveSession?.id ?? rememberedSession?.sessionId ?? null,
+    transcriptPath: liveSession
+      ? (liveSession.transcriptPath ?? null)
+      : (rememberedSession?.transcriptPath ?? null)
   }
+}
+
+/** Why: a status frame that omits the agent or its session (an older host, a re-subscribe) is
+ *  missing evidence, not proof the pane changed, so chat must not flip to the terminal. A new
+ *  handle is a new PTY and starts fresh; a pending (null) handle keeps the last identity. */
+export function withRememberedNativeChatIdentity(
+  tabs: MobileSessionTab[],
+  previous: readonly MobileSessionTab[]
+): MobileSessionTab[] {
+  const previousById = new Map(previous.map((tab) => [tab.id, tab]))
+  return tabs.map((tab) => {
+    if (tab.type !== 'terminal') {
+      return tab
+    }
+    const priorTab = previousById.get(tab.id)
+    const prior = priorTab?.type === 'terminal' ? priorTab.nativeChatIdentity : undefined
+    const carried =
+      prior && (tab.terminal == null || tab.terminal === prior.terminal) ? prior : undefined
+    const { nativeChatIdentity: _hostless, ...live } = tab
+    const resolved = resolveMobileNativeChat({ ...live, nativeChatIdentity: carried }, true)
+    const terminal = tab.terminal ?? carried?.terminal
+    return resolved && terminal ? { ...live, nativeChatIdentity: { terminal, ...resolved } } : live
+  })
 }
 
 /** Whether the tab can toggle into native chat — gates the long-press item. */
@@ -90,7 +128,9 @@ export function resolveMobileNativeChatSessionId(tab: MobileNativeChatTab | null
     return tab.sessionId ?? null
   }
   if (tab?.type === 'terminal') {
-    return tab.agentStatus?.providerSession?.id ?? null
+    return (
+      tab.agentStatus?.providerSession?.id ?? resolveMobileNativeChat(tab, true)?.sessionId ?? null
+    )
   }
   return null
 }

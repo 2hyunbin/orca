@@ -4,8 +4,11 @@ import {
   canShowMobileNativeChat,
   isMobileFolderNativeChatReadable,
   isMobileNativeChatTranscriptReadable,
-  resolveMobileNativeChat
+  resolveMobileNativeChat,
+  resolveMobileNativeChatSessionId,
+  withRememberedNativeChatIdentity
 } from './mobile-native-chat-eligibility'
+import type { MobileSessionTab } from './mobile-session-route-types'
 
 function status(overrides: Partial<AgentStatusEntry> = {}): AgentStatusEntry {
   return {
@@ -206,4 +209,55 @@ it('resolves folder readability from the serving host catalog and rejects Model-
   expect(read('ssh:box')).toBe(false)
   expect(isMobileFolderNativeChatReadable({ folderWorkspaces: [] }, 'folder:one')).toBe(false)
   expect(isMobileFolderNativeChatReadable(null, 'folder:one')).toBe(false)
+})
+
+describe('withRememberedNativeChatIdentity', () => {
+  const terminalTab = (
+    terminal: string | null,
+    agentStatus?: AgentStatusEntry
+  ): MobileSessionTab => ({
+    type: 'terminal',
+    id: 'tab-1',
+    title: 'claude',
+    terminal,
+    isActive: true,
+    ...(agentStatus ? { agentStatus } : {})
+  })
+  const claude = status({
+    agentType: 'claude',
+    providerSession: { key: 'session_id', id: 'sess-1', transcriptPath: '/t/sess-1.jsonl' }
+  })
+  const seen = withRememberedNativeChatIdentity([terminalTab('h1', claude)], [])
+
+  // #31977: a typed `claude` has no launchAgent, so a frame without agentType dropped chat.
+  it('keeps chat on the same handle when a frame omits the agent', () => {
+    const [next] = withRememberedNativeChatIdentity([terminalTab('h1', status())], seen)
+    expect(resolveMobileNativeChat(next)).toEqual({
+      agent: 'claude',
+      sessionId: 'sess-1',
+      transcriptPath: '/t/sess-1.jsonl'
+    })
+    expect(resolveMobileNativeChatSessionId(next)).toBe('sess-1')
+  })
+
+  // #32134: a frame with no agentStatus at all left chat with no session to read.
+  it('keeps the session through a frame with no agent status, and a pending handle', () => {
+    const [pending] = withRememberedNativeChatIdentity([terminalTab(null)], seen)
+    const [back] = withRememberedNativeChatIdentity([terminalTab('h1')], [pending])
+    expect(resolveMobileNativeChat(back)?.sessionId).toBe('sess-1')
+  })
+
+  it('forgets the identity on a new handle or a different live agent', () => {
+    const [restarted] = withRememberedNativeChatIdentity([terminalTab('h2')], seen)
+    expect(resolveMobileNativeChat(restarted)).toBeNull()
+    const [codex] = withRememberedNativeChatIdentity(
+      [terminalTab('h1', status({ agentType: 'codex' }))],
+      seen
+    )
+    expect(resolveMobileNativeChat(codex)).toEqual({
+      agent: 'codex',
+      sessionId: null,
+      transcriptPath: null
+    })
+  })
 })
