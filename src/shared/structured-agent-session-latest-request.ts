@@ -109,16 +109,20 @@ export function hasStructuredAgentSessionRequest(
   submissions: readonly AgentJournalSubmission[],
   currentFence?: number | null
 ): boolean {
-  const sent = new Set(
-    submissions.map((submission) => agentJournalSubmissionKey(submission.clientMessageId))
-  )
+  let sent: ReadonlySet<string> | undefined
   return (
-    items.some(
+    items.findLastIndex(
       (item) =>
         readAgentJournalTurn(item.body) !== null ||
         (item.body.kind === 'message' &&
-          (item.body.role === 'assistant' || (item.body.role === 'user' && !sent.has(item.itemId))))
-    ) ||
+          (item.body.role === 'assistant' ||
+            (item.body.role === 'user' &&
+              !(sent ??= new Set(
+                submissions.map((submission) =>
+                  agentJournalSubmissionKey(submission.clientMessageId)
+                )
+              )).has(item.itemId))))
+    ) !== -1 ||
     submissions.some(
       (submission) =>
         submission.dispatchState === 'accepted' ||
