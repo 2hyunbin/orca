@@ -47,7 +47,8 @@ test("a moved project's browser tab and draft come back on the desktop from a br
     await host.restartServeProcess({
       betweenProcesses: () =>
         seedImportedMovedTab(host.userDataDir, worktreeId, 'moved history\r\n', {
-          openFiles: [openFile]
+          openFiles: [openFile],
+          browserTab: false
         })
     })
     const first = await launchPairedElectronClient(host.offer, testInfo, 'moved-browser-drafts')

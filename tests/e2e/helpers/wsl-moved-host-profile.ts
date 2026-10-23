@@ -22,9 +22,10 @@ type MovedOpenFile = { filePath: string; relativePath: string; dirtyDraftContent
 /** The moved workspace's session rows, keyed as a session partition holds them. */
 export function movedWorkspaceRows(
   worktreeId: string,
-  options: { openFiles?: MovedOpenFile[]; runtimeEnvironmentId?: string } = {}
+  options: { openFiles?: MovedOpenFile[]; runtimeEnvironmentId?: string; browserTab?: boolean } = {}
 ): Record<string, Record<string, unknown>> {
   const files = options.openFiles ?? []
+  const browser = options.browserTab !== false
   const page = {
     id: MOVED_BROWSER_PAGE,
     workspaceId: MOVED_BROWSER,
@@ -67,40 +68,46 @@ export function movedWorkspaceRows(
           sortOrder: 0,
           createdAt: 0
         },
-        {
-          id: MOVED_BROWSER,
-          entityId: MOVED_BROWSER,
-          groupId: MOVED_GROUP,
-          worktreeId,
-          contentType: 'browser',
-          label: 'Browser 1',
-          customLabel: null,
-          color: null,
-          sortOrder: 1,
-          createdAt: 1
-        }
+        ...(browser
+          ? [
+              {
+                id: MOVED_BROWSER,
+                entityId: MOVED_BROWSER,
+                groupId: MOVED_GROUP,
+                worktreeId,
+                contentType: 'browser',
+                label: 'Browser 1',
+                customLabel: null,
+                color: null,
+                sortOrder: 1,
+                createdAt: 1
+              }
+            ]
+          : [])
       ]
     },
-    browserTabsByWorktree: {
-      [worktreeId]: [
-        {
-          id: MOVED_BROWSER,
-          worktreeId,
-          label: 'Browser 1',
-          activePageId: MOVED_BROWSER_PAGE,
-          pageIds: [MOVED_BROWSER_PAGE],
-          url: MOVED_BROWSER_URL,
-          title: 'Moved docs',
-          loading: false,
-          faviconUrl: null,
-          canGoBack: false,
-          canGoForward: false,
-          loadError: null,
-          createdAt: 1
+    browserTabsByWorktree: browser
+      ? {
+          [worktreeId]: [
+            {
+              id: MOVED_BROWSER,
+              worktreeId,
+              label: 'Browser 1',
+              activePageId: MOVED_BROWSER_PAGE,
+              pageIds: [MOVED_BROWSER_PAGE],
+              url: MOVED_BROWSER_URL,
+              title: 'Moved docs',
+              loading: false,
+              faviconUrl: null,
+              canGoBack: false,
+              canGoForward: false,
+              loadError: null,
+              createdAt: 1
+            }
+          ]
         }
-      ]
-    },
-    browserPagesByWorkspace: { [MOVED_BROWSER]: [page] },
+      : {},
+    browserPagesByWorkspace: browser ? { [MOVED_BROWSER]: [page] } : {},
     openFilesByWorktree:
       files.length === 0
         ? {}
@@ -124,7 +131,7 @@ export function movedWorkspaceRows(
           id: MOVED_GROUP,
           worktreeId,
           activeTabId: MOVED_TAB,
-          tabOrder: [MOVED_TAB, MOVED_BROWSER]
+          tabOrder: browser ? [MOVED_TAB, MOVED_BROWSER] : [MOVED_TAB]
         }
       ]
     },
@@ -162,7 +169,12 @@ export function seedImportedMovedTab(
   userDataDir: string,
   worktreeId: string,
   history: string,
-  options: { importedByWslMove?: boolean; openFiles?: MovedOpenFile[] } = {}
+  options: {
+    importedByWslMove?: boolean
+    openFiles?: MovedOpenFile[]
+    /** False as the distro's server holds it after import: no browser, so no browser tab. */
+    browserTab?: boolean
+  } = {}
 ): void {
   const ref = makeTerminalScrollbackSnapshotRef(MOVED_TAB, MOVED_LEAF)
   const roots = [userDataDir, path.join(userDataDir, 'profiles', DEFAULT_LOCAL_ORCA_PROFILE_ID)]
@@ -199,7 +211,8 @@ export function seedImportedMovedTab(
     const openFiles = (options.openFiles ?? []).map(
       ({ dirtyDraftContent: _draft, ...file }) => file
     )
-    withMovedRows(session, movedWorkspaceRows(worktreeId, { openFiles }))
+    const rows = movedWorkspaceRows(worktreeId, { openFiles, browserTab: options.browserTab })
+    withMovedRows(session, rows)
   })
 }
 

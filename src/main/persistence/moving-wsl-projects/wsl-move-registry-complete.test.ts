@@ -36,8 +36,10 @@ import {
 } from './wsl-move-desktop-rewrite-stores'
 import {
   reapplyWslMoveFocusRewrites,
-  reapplyWslMoveRewritesAtUnload
+  reapplyWslMoveRewritesAtUnload,
+  reapplyWslMoveRewritesAtWindowNavigation
 } from './wsl-move-stale-window-reapply'
+import { takeWslMoveRewritesUnderOpenWindow } from './wsl-move-main-rewrite-stores'
 import type { WslMoveHostAutomations } from './wsl-move-host-automations-rewrite'
 import { seedWslMoveCutover } from '../__fixtures__/wsl-mover/wsl-move-journal-seeding'
 import { runWslMoveRetentionPass } from './wsl-move-retention'
@@ -171,6 +173,7 @@ async function retain(): Promise<void> {
 async function restart(): Promise<void> {
   await closeTestStores()
   resetWslMoveDesktopRewriteStoresForTests()
+  takeWslMoveRewritesUnderOpenWindow()
   store = createStore()
   registerRegistry()
 }
@@ -220,6 +223,7 @@ afterEach(async () => {
   vi.unstubAllEnvs()
   vi.restoreAllMocks()
   resetWslMoveDesktopRewriteStoresForTests()
+  takeWslMoveRewritesUnderOpenWindow()
   resetWslMoveFenceForTests()
   await closeTestStores()
   rmSync(testState.dir, { recursive: true, force: true })
@@ -363,7 +367,7 @@ describe('WSL move with the complete desktop rewrite registry', () => {
     expect(store.getWorkspaceSession().activeWorkspaceExecutionHostId).toBe('local')
   })
 
-  it('redoes the additive rewrites once, at the unload of a window open during the rewrite', async () => {
+  it('redoes the additive rewrites at the unload of a window open during the rewrite, until it reloads', async () => {
     windowOpen = true
     seedWslMoveCutover(testState.dir, committedMove())
     loadWslMoveFence(testState.dir)
@@ -381,7 +385,8 @@ describe('WSL move with the complete desktop rewrite registry', () => {
     expect(store.getUI().visibleWorkspaceHostIds).toEqual(['local', HOST])
     expect(hostTabIds()).toEqual(['tab-1'])
 
-    // Once only: a later choice to hide the WSL host stays.
+    // Once the stale document is replaced, a later choice to hide the WSL host stays.
+    reapplyWslMoveRewritesAtWindowNavigation(testState.dir, store)
     store.updateUI({ visibleWorkspaceHostIds: ['local'] })
     expect(reapplyWslMoveRewritesAtUnload(testState.dir, store)).toBe(0)
     expect(store.getUI().visibleWorkspaceHostIds).toEqual(['local'])

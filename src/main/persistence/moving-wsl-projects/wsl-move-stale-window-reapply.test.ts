@@ -21,9 +21,15 @@ import { wslMoverProfile } from '../__fixtures__/wsl-mover/wsl-mover-profiles'
 import { unifiedTab } from '../__fixtures__/wsl-mover/wsl-mover-profile-rows'
 import { runWslMoveDesktopRewritePass } from './wsl-move-desktop-rewrite'
 import { resetWslMoveDesktopRewriteStoresForTests } from './wsl-move-desktop-rewrite-stores'
-import { registerWslMoveMainRewriteStores } from './wsl-move-main-rewrite-stores'
+import {
+  registerWslMoveMainRewriteStores,
+  takeWslMoveRewritesUnderOpenWindow
+} from './wsl-move-main-rewrite-stores'
 import { loadWslMoveFence, resetWslMoveFenceForTests } from './wsl-move-scope-guard'
-import { reapplyWslMoveRewritesAtUnload } from './wsl-move-stale-window-reapply'
+import {
+  reapplyWslMoveRewritesAtUnload,
+  reapplyWslMoveRewritesAtWindowNavigation
+} from './wsl-move-stale-window-reapply'
 
 vi.mock('electron', () => ({
   app: { getPath: () => testState.dir },
@@ -198,6 +204,7 @@ beforeEach(() => {
 afterEach(async () => {
   vi.unstubAllEnvs()
   resetWslMoveDesktopRewriteStoresForTests()
+  takeWslMoveRewritesUnderOpenWindow()
   resetWslMoveFenceForTests()
   await closeTestStores()
   rmSync(testState.dir, { recursive: true, force: true })
@@ -223,12 +230,45 @@ describe('a move rewritten under an open window, then reloaded', () => {
     reapplyWslMoveRewritesAtUnload(testState.dir, store)
     await store.flushPendingOrThrowAsync()
 
-    const host = hostSession()
-    expect(host?.browserPagesByWorkspace?.['bw-web']?.[0]?.url).toBe(BROWSER_URL)
-    expect(host?.browserTabsByWorktree?.[MOVED_ON_HOST]?.map((tab) => tab.id)).toEqual(['bw-web'])
-    expect(
-      host?.openFilesByWorktree?.[MOVED_ON_HOST]?.find((file) => file.filePath === README_ON_HOST)
-        ?.dirtyDraftContent
-    ).toBe(DRAFT)
+    expectMovedBrowserTabAndDraft(hostSession())
+  })
+
+  it('keeps them through a prepared reload, whose first unload the window outlives', async () => {
+    seedWslMoveCutover(testState.dir, committedMove())
+    loadWslMoveFence(testState.dir)
+    await runWslMoveDesktopRewritePass({ userDataPath: testState.dir })
+    // "Reload now" backs up unsaved files: a synthetic unload stages the window's state first...
+    store.setWorkspaceSession(windowMirror(), HOST)
+    reapplyWslMoveRewritesAtUnload(testState.dir, store)
+    // ...and the window, still open, saves its mirror again before the real reload lands.
+    store.setWorkspaceSession(windowMirror(), HOST)
+    reapplyWslMoveRewritesAtUnload(testState.dir, store)
+    reapplyWslMoveRewritesAtWindowNavigation(testState.dir, store)
+    await store.flushPendingOrThrowAsync()
+
+    expectMovedBrowserTabAndDraft(hostSession())
+  })
+
+  it('re-applies them once only: a tab closed in the reloaded window stays closed', async () => {
+    seedWslMoveCutover(testState.dir, committedMove())
+    loadWslMoveFence(testState.dir)
+    await runWslMoveDesktopRewritePass({ userDataPath: testState.dir })
+    store.setWorkspaceSession(windowMirror(), HOST)
+    reapplyWslMoveRewritesAtWindowNavigation(testState.dir, store)
+    // The reloaded window shows the browser tab; the user closes it, then quits.
+    store.setWorkspaceSession(windowMirror(), HOST)
+    reapplyWslMoveRewritesAtUnload(testState.dir, store)
+    await store.flushPendingOrThrowAsync()
+
+    expect(hostSession()?.browserTabsByWorktree?.[MOVED_ON_HOST]).toBeUndefined()
   })
 })
+
+function expectMovedBrowserTabAndDraft(host: WorkspaceSessionState | undefined): void {
+  expect(host?.browserPagesByWorkspace?.['bw-web']?.[0]?.url).toBe(BROWSER_URL)
+  expect(host?.browserTabsByWorktree?.[MOVED_ON_HOST]?.map((tab) => tab.id)).toEqual(['bw-web'])
+  expect(
+    host?.openFilesByWorktree?.[MOVED_ON_HOST]?.find((file) => file.filePath === README_ON_HOST)
+      ?.dirtyDraftContent
+  ).toBe(DRAFT)
+}
