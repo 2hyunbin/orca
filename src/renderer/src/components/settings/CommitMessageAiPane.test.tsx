@@ -1,5 +1,10 @@
 // @vitest-environment happy-dom
 import React from 'react'
+import recordings from '../../../../shared/fixtures/source-control-launch-recordings.json'
+import { normalizeSourceControlActionLaunchPreferences } from '../../../../shared/source-control-ai-actions'
+import { sourceControlActionLaunchOptions } from '../../../../shared/source-control-action-launch-preferences'
+import { buildAgentStartupPlan } from '../../../../shared/tui-agent-startup'
+import { describeSourceControlActionModel } from './source-control-action-model-copy'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -473,4 +478,26 @@ describe('CommitMessageAiPane', () => {
       )
     ).toBe('runtime:env-1')
   })
+})
+
+it('keeps the recorded Antigravity Ask action chat-only in both its hint and terminal command', () => {
+  const capture = recordings.antigravity
+  const preferences = normalizeSourceControlActionLaunchPreferences(capture.launchPreferences)
+  if (!preferences) {
+    throw new Error('Recorded Antigravity action must remain valid')
+  }
+  const plan = buildAgentStartupPlan({
+    agent: 'antigravity',
+    prompt: '',
+    cmdOverrides: {},
+    platform: 'darwin',
+    allowEmptyPromptLaunch: true,
+    agentArgs: capture.agentArgs,
+    ...sourceControlActionLaunchOptions(
+      { agentId: 'antigravity', launchPreferences: preferences },
+      'antigravity'
+    )
+  })
+  expect(plan?.launchCommand).toBe(capture.command)
+  expect(describeSourceControlActionModel('antigravity', preferences)).toContain(capture.routeHint)
 })

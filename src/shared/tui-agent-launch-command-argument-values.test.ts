@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import recordings from './fixtures/source-control-launch-recordings.json'
+import { normalizeSourceControlActionLaunchPreferences } from './source-control-ai-actions'
+import { sourceControlActionLaunchOptions } from './source-control-action-launch-preferences'
 import type { SessionOptionValue } from './native-chat-session-options'
-import { resolveAgentLaunchCommand } from './tui-agent-launch-command'
+import { resolveAgentLaunchCommand, terminalSessionOptionInputs } from './tui-agent-launch-command'
 import { tokenizeStartupCommand } from './tui-agent-startup-shell'
 import type { TuiAgent } from './tui-agent'
 
@@ -34,6 +37,31 @@ describe.each(['posix', 'powershell', 'cmd'] as const)('argument values on %s', 
       sessionOptionsOverrideAgentArgs
     )
   }
+
+  it('compiles the saved Cursor Thinking choice to the recorded real child arguments', () => {
+    const capture = recordings.cursor
+    const options = sourceControlActionLaunchOptions(
+      {
+        agentId: 'cursor',
+        launchPreferences: normalizeSourceControlActionLaunchPreferences(capture.launchPreferences)
+      },
+      'cursor'
+    )
+    const startup = terminalSessionOptionInputs({
+      agent: 'cursor',
+      sessionOptions: options.sessionOptions,
+      yieldToAgentArgs: options.sessionOptionsYieldToAgentArgs,
+      agentArgs: capture.agentArgs,
+      shell
+    })
+    const result = launchAgent(
+      'cursor',
+      startup.sessionOptions ?? {},
+      capture.agentArgs,
+      startup.sessionOptionsOverrideAgentArgs
+    )
+    expect(result.argv).toMatchObject({ ok: true, tokens: ['cursor-agent', ...capture.argv] })
+  })
 
   it.each(['--model=haiku', '--effort=low'])(
     'keeps picks when the system prompt is %s',
