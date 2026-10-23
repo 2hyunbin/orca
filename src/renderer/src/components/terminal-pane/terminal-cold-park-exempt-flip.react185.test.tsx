@@ -117,7 +117,7 @@ vi.mock('./terminal-parked-tab-watchers', async () => {
         { tabs: readonly TerminalTab[]; parkedTabIds: ReadonlySet<string> }
       >
     ) => {
-      for (const [worktreeId, entry] of entries) {
+      for (const entry of entries.values()) {
         ;((args: { tabs: readonly { id: string }[]; parkedTabIds: ReadonlySet<string> }) => {
           harness.syncCalls += 1
           if (harness.syncCalls > 400) {
@@ -134,7 +134,7 @@ vi.mock('./terminal-parked-tab-watchers', async () => {
               harness.watcherEntries.add(tab.id)
             }
           }
-        })({ worktreeId, ...entry })
+        })(entry)
       }
     },
     disposeParkedTerminalWatchersForWorktree: () => {

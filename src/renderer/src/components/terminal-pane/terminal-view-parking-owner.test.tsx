@@ -3,7 +3,7 @@ import { act, StrictMode, Suspense, useEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAppStore } from '../../store'
-import type { TerminalTab } from '../../../../shared/terminal-tab-types'
+import type { TerminalLayoutSnapshot, TerminalTab } from '../../../../shared/terminal-tab-types'
 import { TerminalRuntimeOwners } from '../../app-shell/TerminalRuntimeOwners'
 import TerminalPaneOverlayLayer from './TerminalPaneOverlayLayer'
 import { FLOATING_TERMINAL_WORKTREE_ID } from '../../../../shared/constants'
@@ -168,6 +168,41 @@ describe('root terminal ownership', () => {
     expect(harness.events.filter((e) => e === 'stop:tab')).toHaveLength(1)
     act(() => useAppStore.setState({ tabsByWorktree: {} }))
     expect(vi.getTimerCount()).toBe(0)
+  })
+  it('reconciles detached split PTY and layout replacement without tab chrome', () => {
+    const first = '11111111-1111-4111-8111-111111111111'
+    const second = '22222222-2222-4222-8222-222222222222'
+    const layout = (secondPty: string, activeLeafId = first): TerminalLayoutSnapshot => ({
+      root: {
+        type: 'split',
+        direction: 'vertical',
+        first: { type: 'leaf', leafId: first },
+        second: { type: 'leaf', leafId: second }
+      },
+      activeLeafId,
+      expandedLeafId: null,
+      ptyIdsByLeafId: { [first]: 'pty-first', [second]: secondPty }
+    })
+    useAppStore.setState({
+      ptyIdsByTabId: { tab: ['pty-first', 'pty-old'] },
+      terminalLayoutsByTabId: { tab: layout('pty-old') }
+    })
+    render(<Host park />)
+    render(null)
+    harness.batches = 0
+    act(() =>
+      useAppStore.setState({
+        ptyIdsByTabId: { tab: ['pty-first', 'pty-new'] },
+        terminalLayoutsByTabId: { tab: layout('pty-new') }
+      })
+    )
+    expect(harness.batches).toBe(1)
+    act(() => useAppStore.setState({ runtimePaneTitlesByTabId: { tab: { 1: 'working' } } }))
+    const afterTitleKey = harness.batches
+    act(() => useAppStore.setState({ runtimePaneTitlesByTabId: { tab: { 1: 'idle' } } }))
+    expect(harness.batches).toBe(afterTitleKey)
+    act(() => useAppStore.setState({ terminalLayoutsByTabId: { tab: layout('pty-new', second) } }))
+    expect(harness.batches).toBe(afterTitleKey + 1)
   })
   it('unions two committed hosts and ignores an abandoned render', () => {
     render(

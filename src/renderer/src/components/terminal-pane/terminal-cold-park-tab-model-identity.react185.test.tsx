@@ -67,10 +67,10 @@ vi.mock('./terminal-parked-tab-watchers', () => ({
       { tabs: readonly TerminalTab[]; parkedTabIds: ReadonlySet<string> }
     >
   ) => {
-    for (const [worktreeId, entry] of entries) {
+    for (const entry of entries.values()) {
       ;((args: { parkedTabIds: ReadonlySet<string> }) => {
         harness.renderedParkedSets.push([...args.parkedTabIds].sort())
-      })({ worktreeId, ...entry })
+      })(entry)
     }
   }
 }))
