@@ -470,6 +470,81 @@ it.each([100, 1_000].flatMap((size) => [false, true].map((adopt) => ({ size, ado
   }
 )
 
+it.each([100, 1_000])('raw selection reuse: %i waiting cards', async (size) => {
+  const journal = journalFor(SESSION)
+  const rows = Array.from({ length: size }, (_, i): Legacy => [`waiting-${i}`, 'waiting', 'words'])
+  seedLegacy(SESSION, rows)
+  db().exec(`CREATE TEMP TRIGGER b2_raw_fail_import BEFORE DELETE ON queued_messages
+    BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+  await journal.open()
+  expect(legacyIds()).toHaveLength(size)
+  const feed = new AgentSessionSubscribers()
+  const base = { sessionId: SESSION, journal, fence: 0, cursor: journal.cursor() }
+  const received: AgentSessionSubscribeEvent[][] = [[], [], []]
+  received.forEach((events, index) =>
+    feed.open({
+      ...base,
+      id: String(index),
+      boundedFrames: index === 1,
+      snapshotCatchUp: index !== 2,
+      readsCurrentRequests: index !== 2,
+      emit: (event) => events.push(event)
+    })
+  )
+  let visits = 0
+  const flatMap = Array.prototype.flatMap
+  const scans = vi.spyOn(Array.prototype, 'flatMap')
+  scans.mockImplementation(function (this: { messageId?: string }[], callback, thisArg) {
+    const legacy = this.length === size && this[0]?.messageId === 'waiting-0'
+    return flatMap.call(this, (...args) => {
+      visits += legacy ? 1 : 0
+      return callback.apply(thisArg, args)
+    })
+  })
+  try {
+    const turn = { provider: 'codex' as const, threadId: 'progress', turnId: 't', ordinal: 0 }
+    await journal.appendItem(turn, message('progress'), threadWrite)
+    feed.publish(SESSION, journal)
+    expect(visits).toBe(2 * size)
+    expect(journal.publicRead().normalizationKey).toBe('')
+    expect(journal.queuedMessages.list().filter((c) => c.state === 'waiting')).toHaveLength(size)
+    for (const events of received) {
+      const items = events.flatMap((e) => (e.type === 'batch' ? e.batch.items : []))
+      expect(items.map((i) => i.body)).toContainEqual(message('progress'))
+      expect(events.filter((e) => e.type === 'snapshot')).toHaveLength(0)
+    }
+    visits = 0
+    for (let p = 0; p < 5; p++) {
+      feed.publish(SESSION, journal)
+    }
+    expect(visits).toBe(0)
+    const answered = { turn: { ...turn, ordinal: -1 }, via: 'steer' as const }
+    await handOff(journal, 'u', 'waiting-0', 'words', 'cancelled', 0, undefined, answered)
+    feed.publish(SESSION, journal)
+    const view = journal.publicRead()
+    expect(view.normalizationKey).not.toBe('')
+    expect(view.snapshot.submissions.find((s) => s.clientMessageId === 'u')).toMatchObject({
+      dispatchState: 'unknown',
+      queuedMessageId: 'waiting-0'
+    })
+    const item = view.snapshot.items.find((i) => i.itemId === agentJournalSubmissionKey('u'))
+    expect(item?.body).toEqual(message('words'))
+    expect(item?.sequence).toBeLessThan(journal.cursor().sequence)
+    expect(journal.submission('u')?.dispatchState).toBe('rejected')
+    expect(visits).toBeGreaterThanOrEqual(2 * size)
+    visits = 0
+    for (let p = 0; p < 5; p++) {
+      feed.publish(SESSION, journal)
+    }
+    expect(visits).toBe(0)
+    expect(received.map((es) => es.filter((e) => e.type === 'snapshot').length)).toEqual([1, 1, 0])
+  } finally {
+    scans.mockRestore()
+    db().exec('DROP TRIGGER b2_raw_fail_import')
+    await journal.close()
+  }
+})
+
 it('public metadata follows legacy-only commits, item recreation and epoch replacement', async () => {
   const earlier = journalFor(SESSION)
   await earlier.open()

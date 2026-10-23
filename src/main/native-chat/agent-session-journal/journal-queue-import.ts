@@ -154,6 +154,9 @@ export class LegacyQueuedCards {
       return submission && handOffInDoubt(submission) ? [{ ...submission }] : []
     })
     if (handedOff.length === 0) {
+      if (this.viewed) {
+        this.viewed.display = state
+      }
       return state
     }
     const display = {
