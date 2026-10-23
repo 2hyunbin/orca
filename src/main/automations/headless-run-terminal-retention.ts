@@ -45,7 +45,7 @@ export type HeadlessRunTerminalRetentionDeps = {
   sleepRunWorkspace: (run: AutomationRun) => Promise<boolean>
   /**
    * Whether a sleep of the run's workspace stopped the run's own PTY and still holds it: a sleep
-   * that failed after the stop, to finish, not a dead or replaced pane to forget.
+   * whose result was not recorded, to finish, not a dead or replaced pane to forget.
    */
   runSleepHeld: (run: AutomationRun) => boolean
   /** Drops the closed terminal from the run, keeping its status, error and output. */

@@ -127,7 +127,7 @@ function bindHeadlessRunTerminalRetention(
       await service.markDispatchResult({ runId: run.id, status: run.status, terminalPtyId: null })
       return true
     },
-    // The host's sleep state outlives a sleep that threw after stopping, and a wake clears it.
+    // The host's sleep state outlives a run record that failed to save, and a wake clears it.
     runSleepHeld: (run) =>
       runtime
         .getTerminalSleepClientEventSnapshot()

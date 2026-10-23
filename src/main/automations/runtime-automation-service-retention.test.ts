@@ -227,12 +227,12 @@ describe('headless automation service run terminal retention', () => {
     })
   })
 
-  it('keeps the pane link of a run whose sleep stopped its PTY and then failed, and finishes it', async () => {
+  it('keeps the pane link of a slept run whose record failed to save, and finishes it', async () => {
     const { runtime, service, store } = build(true)
     store.getWorktreeMeta.mockImplementation(firstRunOwnsWorkspace)
     store.listAutomationRuns.mockReturnValue(finishedRuns(1))
     runtime.sleepTerminalsForWorktree.mockImplementationOnce(async () => {
-      // Stopped pty-0, then failed persisting its resume record.
+      // The sleep stopped pty-0 and the host holds it asleep.
       runtime.getTerminalPtyIdForHandle.mockReturnValue(null)
       runtime.getTerminalSleepClientEventSnapshot.mockReturnValue([
         {
@@ -244,15 +244,15 @@ describe('headless automation service run terminal retention', () => {
           terminalHandles: ['handle:tab-0:1']
         }
       ])
-      throw new Error('resume record persistence failed')
+      return { livePtyIds: ['pty-0'], stoppedPtyIds: ['pty-0'] }
     })
     runtime.sleepTerminalsForWorktree.mockResolvedValue({ livePtyIds: [], stoppedPtyIds: [] })
+    vi.mocked(service.markDispatchResult).mockRejectedValueOnce(new Error('disk full'))
     await expect(service.releaseFinishedRunTerminals?.()).resolves.toBe(0)
-    expect(service.markDispatchResult).not.toHaveBeenCalled()
 
     await expect(service.releaseFinishedRunTerminals?.()).resolves.toBe(1)
-    expect(service.markDispatchResult).toHaveBeenCalledTimes(1)
-    expect(service.markDispatchResult).toHaveBeenCalledWith({
+    expect(service.markDispatchResult).toHaveBeenCalledTimes(2)
+    expect(service.markDispatchResult).toHaveBeenLastCalledWith({
       runId: 'r0',
       status: 'completed',
       terminalPtyId: null

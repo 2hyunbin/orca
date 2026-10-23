@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OrcaRuntimeService } from '../orca-runtime-test-mocks.spec'
 import { TEST_WORKTREE_ID, TEST_WORKTREE_PATH, store } from '../orca-runtime-test-fixtures.spec'
 import { RuntimeMachineName } from '../runtime-machine-name'
+import { getDefaultWorkspaceSession } from '../../../shared/constants'
 import type { RuntimeClientEvent } from '../../../shared/runtime-client-events'
 import type { OrcaRuntimeWithStopExactTerminalsForWorktree } from '../terminal/stop/worktree-terminal-stop-targets'
 
@@ -31,8 +32,15 @@ describe('OrcaRuntimeService', () => {
     expect(stopAndWait).not.toHaveBeenCalled()
   })
 
-  it('reports a PTY a sole-terminal sleep stopped before failing to persist its resume as committed', async () => {
-    const runtime = new OrcaRuntimeService(store)
+  it('keeps a PTY a sole-terminal sleep stopped as committed when its resume record fails to save', async () => {
+    const runtime = new OrcaRuntimeService({
+      ...store,
+      getWorkspaceSession: () => getDefaultWorkspaceSession(),
+      setWorkspaceSession: () => {},
+      runDurableMutation: async () => {
+        throw new Error('disk full')
+      }
+    })
     const live = new Set(['pty-run'])
     runtime.setPtyController({
       write: () => true,
@@ -42,7 +50,7 @@ describe('OrcaRuntimeService', () => {
       listProcesses: async () =>
         [...live].map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'Claude' }))
     })
-    vi.spyOn(runtime['sleepResumeRecords'], 'persist').mockRejectedValueOnce(new Error('disk full'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const committed = () =>
       runtime
         .getTerminalSleepClientEventSnapshot()
@@ -53,15 +61,22 @@ describe('OrcaRuntimeService', () => {
         )
     expect(committed()).toEqual([])
 
+    // A lost record costs the resume, not the sleep: the stop stands and the host still holds it.
     await expect(
       runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`, { soleLivePtyId: 'pty-run' })
-    ).rejects.toThrow('disk full')
+    ).resolves.toMatchObject({ stoppedPtyIds: ['pty-run'], postStopVerified: true })
+    expect(consoleError).toHaveBeenCalledWith(
+      '[runtime] could not record slept agent sessions',
+      expect.objectContaining({ worktreeId: TEST_WORKTREE_ID })
+    )
     expect(committed()).toEqual([`${TEST_WORKTREE_ID}|pty-run`])
 
+    // A retry (retention after its run record failed to save) finds nothing live and keeps it held.
     await expect(
       runtime.sleepTerminalsForWorktree(`id:${TEST_WORKTREE_ID}`, { soleLivePtyId: 'pty-run' })
     ).resolves.toMatchObject({ livePtyIds: [] })
     expect(committed()).toEqual([`${TEST_WORKTREE_ID}|pty-run`])
+    consoleError.mockRestore()
   })
 
   it('rejects exact terminal stop when async PTY stop fails', async () => {
