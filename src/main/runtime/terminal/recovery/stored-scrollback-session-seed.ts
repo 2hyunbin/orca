@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getHistorySessionDirName } from '../../../daemon/history-paths'
 import type { SessionMeta } from '../../../daemon/terminal-history-metadata'
@@ -34,6 +34,8 @@ export function seedSessionFromStoredScrollback(seed: StoredScrollbackSessionSee
   if (existsSync(metaPath)) {
     return sessionId
   }
+  // Why: a seed a crash cut short left no meta.json, so it is not a session yet; redo it whole.
+  rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   const meta: SessionMeta = {
     cwd: seed.cwd,

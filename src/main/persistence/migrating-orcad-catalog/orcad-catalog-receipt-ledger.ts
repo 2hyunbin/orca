@@ -47,18 +47,25 @@ export function findOrcadMigrationImportReceipt(
     : undefined
 }
 
-/** Whether a committed WSL move (never an SSH conversion) brought this workspace's project here. */
-export function receiptsImportWorkspaceByWslMove(
+/**
+ * When the latest committed WSL move (never an SSH conversion) brought this workspace's project
+ * here, in epoch ms; null when none did. A tab created after it is the host's own, not a moved one.
+ */
+export function wslMoveImportedAtForWorkspace(
   receipts: readonly OrcadMigrationImportReceipt[],
   workspaceId: string
-): boolean {
+): number | null {
   const repoId = workspaceId.split('::')[0]
-  return receipts.some(
-    (receipt) =>
-      'kind' in receipt.source &&
-      receipt.source.kind === 'local-wsl' &&
-      (receipt.repositoryIds.includes(repoId) || receipt.folderWorkspaceIds.includes(workspaceId))
-  )
+  const times = receipts
+    .filter(
+      (receipt) =>
+        'kind' in receipt.source &&
+        receipt.source.kind === 'local-wsl' &&
+        (receipt.repositoryIds.includes(repoId) || receipt.folderWorkspaceIds.includes(workspaceId))
+    )
+    .map((receipt) => Date.parse(receipt.importedAt))
+    .filter((time) => Number.isFinite(time))
+  return times.length > 0 ? Math.max(...times) : null
 }
 
 /** Appends a receipt; one that ages out of the bounded list keeps its commit as a compact record. */

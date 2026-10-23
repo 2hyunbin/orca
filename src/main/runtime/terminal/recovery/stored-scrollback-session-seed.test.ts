@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -39,6 +39,19 @@ describe('seedSessionFromStoredScrollback', () => {
     expect(await new HistoryReader(dir).detectColdRestoreState(sessionId)).toMatchObject({
       status: 'restored',
       restoreInfo: { scrollbackAnsi: 'built ok\r\n$ ', cwd: '/home/me/project' }
+    })
+  })
+
+  it('redoes a seed a crash cut short before its meta.json landed', async () => {
+    const dir = historyDir()
+    const sessionId = seedSessionFromStoredScrollback(seed(dir))
+    const sessionDir = join(dir, getHistorySessionDirName(sessionId))
+    rmSync(join(sessionDir, 'meta.json'))
+    writeFileSync(join(sessionDir, 'meta.json.tmp'), '{')
+    expect(seedSessionFromStoredScrollback(seed(dir, 'again\r\n'))).toBe(sessionId)
+    expect(existsSync(join(sessionDir, 'meta.json.tmp'))).toBe(false)
+    expect(await new HistoryReader(dir).detectColdRestoreState(sessionId)).toMatchObject({
+      restoreInfo: { scrollbackAnsi: 'again\r\n' }
     })
   })
 

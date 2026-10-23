@@ -7,7 +7,7 @@ import type { StoreRuntimeState } from '../loading-store/store-runtime-state'
 import {
   findOrcadMigrationImportReceipt,
   isOrcadMigrationCommitDurable,
-  receiptsImportWorkspaceByWslMove
+  wslMoveImportedAtForWorkspace
 } from './orcad-catalog-receipt-ledger'
 import { installOrcadMigrationReceivedBlobs } from './orcad-migration-blob-installers'
 import { listOrcadMigrationReceivedBlobNames } from './orcad-migration-blob-staging'
@@ -107,9 +107,9 @@ export class OrcadMigrationBlobInstallPersistence {
     }
   }
 
-  /** Whether a committed WSL move brought this workspace's project here; SSH conversions never do. */
-  isWorkspaceImportedByWslMove(workspaceId: string): boolean {
-    return receiptsImportWorkspaceByWslMove(
+  /** When a committed WSL move brought this workspace's project here; null if none (SSH never counts). */
+  wslMoveImportedAtForWorkspace(workspaceId: string): number | null {
+    return wslMoveImportedAtForWorkspace(
       this[orcadMigrationBlobInstallContext].runtime.state.orcadMigrationImportReceipts ?? [],
       workspaceId
     )

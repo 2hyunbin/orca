@@ -28,9 +28,8 @@ import {
   openPairedClientTab,
   readPairedPaneContent
 } from './helpers/paired-host-terminal'
-import { createRestartSession } from './helpers/orca-restart'
+import { launchHeadlessPairedRuntimeHost } from './helpers/headless-paired-runtime-host'
 import { mutateStoppedProfileState } from './helpers/persisted-profile-state'
-import { waitForSessionReady } from './helpers/store'
 import { quotePosixShell } from '../../src/shared/shell-argument-quoting'
 import { makeTerminalScrollbackSnapshotRef } from '../../src/main/terminal-scrollback-snapshots'
 import { DEFAULT_LOCAL_ORCA_PROFILE_ID } from '../../src/shared/orca-profiles'
@@ -317,28 +316,25 @@ async function openImportedPane(
   const outcome: ImportedOutcome = { marker: '', content: '', browserUrls: [] }
   const root = mkdtempSync(path.join(os.tmpdir(), 'orca-moved-import-'))
   const repoPath = createRepo(root)
-  const host = createRestartSession(testInfo)
-  let launched: Awaited<ReturnType<typeof host.launch>> | undefined
+  // A windowless host, as the distro's orcad is: nothing there restores a pane or a browser tab itself.
+  const host = await launchHeadlessPairedRuntimeHost({ pinnedServePort: true })
   try {
-    launched = await host.launch()
-    await waitForSessionReady(launched.page)
-    const repoId = await launched.page.evaluate(async (repo) => {
-      const result = await window.api.repos.add({ path: repo })
-      if ('error' in result) {
-        throw new Error(result.error)
-      }
-      return result.repo.id
-    }, repoPath)
-    const worktreeId = `${repoId}::${realpathSync(repoPath)}`
-    await host.close(launched.app)
-    launched = undefined
-
+    const added = await host.client.call<{ repo: { id: string } }>('repo.add', {
+      path: repoPath,
+      kind: 'git'
+    })
+    const worktreeId = `${added.result.repo.id}::${realpathSync(repoPath)}`
     outcome.marker = `imported-${randomUUID()} before the move`
-    seedImportedMovedTab(host.userDataDir, worktreeId, `${outcome.marker}\r\n`, importedByWslMove)
-    launched = await host.launch()
-    await waitForSessionReady(launched.page)
-    const offer = await createRuntimeDesktopPairingOffer(launched.page)
-    const client = await launchPairedElectronClient(offer, testInfo, 'moved-import')
+    await host.restartServeProcess({
+      betweenProcesses: () =>
+        seedImportedMovedTab(
+          host.userDataDir,
+          worktreeId,
+          `${outcome.marker}\r\n`,
+          importedByWslMove
+        )
+    })
+    const client = await launchPairedElectronClient(host.offer, testInfo, 'moved-import')
     try {
       const webTabId = toWebTerminalSurfaceTabId(MOVED_TAB)
       await expect
@@ -382,9 +378,6 @@ async function openImportedPane(
       await client.dispose()
     }
   } finally {
-    if (launched) {
-      await host.close(launched.app)
-    }
     await host.dispose()
     rmSync(root, { recursive: true, force: true })
   }
@@ -395,9 +388,9 @@ test("a moved pane's stored history and browser tab show on the desktop that ope
   test.skip(process.platform === 'win32', 'POSIX paths')
   test.setTimeout(600_000)
   const outcome = await openImportedPane(testInfo, true)
-  expect.soft(outcome.content).toContain(outcome.marker)
-  // Known gap, fixed in the next change: a moved browser tab never reaches the desktop.
-  expect.soft(outcome.browserUrls).not.toContain(MOVED_BROWSER_URL)
+  // Exactly once: the desktop's own snapshot read must not paint it a second time over the host's.
+  expect.soft(outcome.content.split(outcome.marker).length - 1).toBe(1)
+  expect.soft(outcome.browserUrls).toContain(MOVED_BROWSER_URL)
 })
 
 test("an ordinary pane's saved snapshot is not replayed by a host start", async (// oxlint-disable-next-line no-empty-pattern -- Playwright requires destructuring to request no fixtures.

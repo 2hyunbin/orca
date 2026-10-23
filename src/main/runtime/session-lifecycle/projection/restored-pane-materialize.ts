@@ -105,12 +105,22 @@ export abstract class OrcaRuntimeWithRestoredPaneStart extends OrcaRuntimeWithBu
     { worktreeId, tabId, leafId }: RestoredPane,
     cwd: string | undefined
   ): Promise<string | undefined> {
-    const ref =
-      this.getWorkspaceSessionForWorktree(worktreeId)?.terminalLayoutsByTabId?.[tabId]
-        ?.scrollbackRefsByLeafId?.[leafId]
+    const session = this.getWorkspaceSessionForWorktree(worktreeId)
+    const ref = session?.terminalLayoutsByTabId?.[tabId]?.scrollbackRefsByLeafId?.[leafId]
+    const tabCreatedAt = session?.tabsByWorktree?.[worktreeId]?.find(
+      (candidate) => candidate.id === tabId
+    )?.createdAt
+    const importedAt = this.store?.wslMoveImportedAtForWorkspace?.(worktreeId) ?? null
     const read = this.store?.readTerminalScrollbackSnapshotAsync
-    // Why only WSL-moved panes: an ordinary pane's snapshot is its own window's to restore.
-    if (!ref || !read || this.store?.isWorkspaceImportedByWslMove?.(worktreeId) !== true) {
+    // Why only panes a WSL move carried: an ordinary pane's snapshot is its own window's to restore,
+    // and a tab opened after the move is the host's own.
+    if (
+      !ref ||
+      !read ||
+      importedAt === null ||
+      tabCreatedAt === undefined ||
+      tabCreatedAt > importedAt
+    ) {
       return undefined
     }
     try {
