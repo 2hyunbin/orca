@@ -14,7 +14,7 @@ import {
   webRuntimeState
 } from './web-runtime-session'
 
-export const WEB_RUNTIME_WORKTREE_LIST_LIMIT = 10_000
+const WEB_RUNTIME_WORKTREE_LIST_LIMIT = 10_000
 
 export async function listAllRuntimeDetectedWorktrees(
   callResult: WebRuntimeResultCaller = callRuntimeResult,

@@ -13,14 +13,14 @@ import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import {
   ORIGIN_HEAD_COMPONENT,
   ORIGIN_REMOTE_URL,
-  makeWorktreeMeta
+  makeWorktreeMeta,
+  expectDetectedWorktreeListResult
 } from './worktrees-test-fixtures'
 import type { WorktreeRuntimeStub } from './worktrees-test-runtime-stub'
 import {
   hostWorktreeTarget,
   type HostWorktreeTarget
 } from '../../shared/worktree/host-qualified-identity'
-import { expectDetectedWorktreeListResult } from './worktrees-list-detected-test-fixture'
 
 const WORKTREE_HANDLER_CHANNELS = [
   'worktrees:listRetiredNames',

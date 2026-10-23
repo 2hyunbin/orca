@@ -2,12 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorktreeMeta } from '../../shared/worktree/meta-types'
 import { listWorktreesMock } from './worktrees-test-module-mocks'
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
-import { makeWorktreeMeta } from './worktrees-test-fixtures'
+import { makeWorktreeMeta, expectDetectedWorktreeListResult } from './worktrees-test-fixtures'
 import {
   hostWorktreeTarget,
   type HostWorktreeTarget
 } from '../../shared/worktree/host-qualified-identity'
-import { expectDetectedWorktreeListResult } from './worktrees-list-detected-test-fixture'
 
 vi.mock('electron', async () =>
   (await import('./worktrees-test-module-mocks')).electronModuleMock()

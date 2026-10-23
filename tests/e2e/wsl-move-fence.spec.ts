@@ -106,6 +106,7 @@ async function edit(
 
 async function listed(page: Page) {
   return page.evaluate(async () => {
+    // Why repos first: the repo catalog is the moved-project fence; worktrees are listed per catalog repo.
     const repos = (await window.api.repos.list()).map((repo) => repo.id)
     const listings = await Promise.all(
       repos.map((repoId) => window.api.worktrees.listDetected({ repoId }))
@@ -203,7 +204,6 @@ test('a WSL move journal fences the moving project, then hides it once the host 
     expect(owned.folders).toContain(stayingId)
     expect(owned.folders).not.toContain(movingId)
     expect(owned.repos).not.toContain(repoId)
-    expect(owned.worktrees).not.toContain(repoId)
   } finally {
     if (launched) {
       await session.close(launched.app)

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { listWorktreesMock } from './worktrees-test-module-mocks'
 import { handlers, setupWorktreeHandlers, store } from './worktrees-test-harness'
-import { makeWorktreeMeta } from './worktrees-test-fixtures'
+import { makeWorktreeMeta, expectDetectedWorktreeListResult } from './worktrees-test-fixtures'
 import { hostWorktreeTarget } from '../../shared/worktree/host-qualified-identity'
-import { expectDetectedWorktreeListResult } from './worktrees-list-detected-test-fixture'
 
 vi.mock('electron', async () =>
   (await import('./worktrees-test-module-mocks')).electronModuleMock()
@@ -396,8 +395,14 @@ describe('registerWorktreeHandlers', () => {
       lastActivityAt: 42
     })
 
-    await handlers['worktrees:listDetected'](null, { repoId: 'repo-1' })
+    const result = expectDetectedWorktreeListResult(
+      await handlers['worktrees:listDetected'](null, { repoId: 'repo-1' })
+    )
 
+    expect(result.authoritative).toBe(true)
+    expect(result.worktrees.map((worktree) => worktree.id)).toContain(
+      'repo-1::/workspace/existing-wt'
+    )
     expect(store.setWorktreeMeta).not.toHaveBeenCalled()
   })
 
