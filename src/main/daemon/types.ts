@@ -173,6 +173,9 @@ export type KillRequest = {
   payload: {
     sessionId: string
     immediate?: boolean
+    expectedIncarnationId?: string
+    requireNoAgentOwner?: boolean
+    requireUnattached?: boolean
   }
 }
 
@@ -350,9 +353,7 @@ export type ListSessionsResult = {
   sessions: SessionInfo[]
 }
 
-export type ShutdownIfIdleResult = {
-  retiring: boolean
-}
+export type { ShutdownIfIdleResult } from './daemon-shutdown-if-idle-result'
 
 export type SystemResolverHealth = 'healthy' | 'unhealthy' | 'unknown'
 
@@ -361,6 +362,7 @@ export type SystemResolverHealthResult = {
 }
 
 export type SessionInfo = {
+  foregroundProcess?: string
   sessionId: string
   incarnationId?: string
   state: SessionState

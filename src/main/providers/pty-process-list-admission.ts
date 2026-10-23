@@ -53,6 +53,8 @@ export class PtyProcessListAdmission {
     const idBytes = retainedStringBytes(value.id)
     const cwdBytes = retainedStringBytes(value.cwd)
     const titleBytes = retainedStringBytes(value.title)
+    const foregroundProcessBytes = retainedOptionalStringBytes(value.foregroundProcess)
+    const inventorySourceBytes = retainedOptionalStringBytes(value.inventorySourceId)
     const worktreeIdBytes = retainedOptionalStringBytes(value.worktreeId)
     const shellPathBytes = retainedOptionalStringBytes(value.shellPath)
     const terminalHandleBytes = retainedOptionalStringBytes(value.terminalHandle)
@@ -68,6 +70,9 @@ export class PtyProcessListAdmission {
       idBytes === null ||
       cwdBytes === null ||
       titleBytes === null ||
+      foregroundProcessBytes === null ||
+      inventorySourceBytes === null ||
+      (value.routed !== undefined && typeof value.routed !== 'boolean') ||
       worktreeIdBytes === null ||
       terminalHandleBytes === null ||
       wslDistroBytes === null ||
@@ -103,6 +108,8 @@ export class PtyProcessListAdmission {
       idBytes +
       cwdBytes +
       titleBytes +
+      foregroundProcessBytes +
+      inventorySourceBytes +
       worktreeIdBytes +
       terminalHandleBytes +
       wslDistroBytes +
@@ -124,6 +131,13 @@ export class PtyProcessListAdmission {
       id: value.id,
       cwd: value.cwd,
       title: value.title,
+      ...(value.inventorySourceId !== undefined
+        ? { inventorySourceId: value.inventorySourceId }
+        : {}),
+      ...(value.routed !== undefined ? { routed: value.routed } : {}),
+      ...(value.foregroundProcess !== undefined
+        ? { foregroundProcess: value.foregroundProcess }
+        : {}),
       ...(value.incarnationId !== undefined ? { incarnationId: value.incarnationId } : {}),
       ...(value.rootProcessId !== undefined ? { rootProcessId: value.rootProcessId } : {}),
       ...(value.worktreeId !== undefined ? { worktreeId: value.worktreeId } : {}),
