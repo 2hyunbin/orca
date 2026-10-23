@@ -6173,9 +6173,7 @@
           "automationCreated": "Created by automation",
           "branchIdentity": "Branch",
           "branchFolderPathIdentity": "Branch or folder path",
-          "ef18787206": "Queued for deletion",
-          "showChildWorktrees": "Show children worktrees",
-          "hideChildWorktrees": "Hide children worktrees"
+          "ef18787206": "Queued for deletion"
         },
         "WorktreeCardAgents": {
           "1b0a156717": "Agents"
@@ -18798,14 +18796,6 @@
     }
   },
   "components": {
-    "WorkspaceEmptyState": {
-      "title": "What would you like to do?",
-      "description": "No tabs are open here. Start an agent or open a tool to get going.",
-      "startAgent": "Start an agent",
-      "terminal": "Open a terminal",
-      "browser": "Open a browser",
-      "openFile": "Open a file"
-    },
     "onboarding": {
       "flow": {
         "stepTooltip": {

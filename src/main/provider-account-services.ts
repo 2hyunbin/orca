@@ -1,7 +1,4 @@
-/**
- * The Claude/Codex account services and the usage service they share, built the same way for
- * the desktop and for orcad. Nothing here may import Electron: orcad bundles this module.
- */
+// Keep Electron imports out: both desktop and orcad bundle these account services.
 import type { Store } from './persistence'
 import { composeUsageRequestPolicyEnabled } from '../shared/usage-request-policy'
 import { RateLimitService } from './rate-limits/service'
@@ -54,8 +51,7 @@ export function createProviderAccountServices(
   )
   const claudeRuntimeAuth = new ClaudeRuntimeAuthService(store)
   const claudeAccounts = new ClaudeAccountService(store, rateLimits, claudeRuntimeAuth)
-  // Why: quota polls are background work and must not boot a stopped distro; user-driven
-  // resets call prepareForRateLimitFetch directly.
+  // Background quota polls must not boot stopped distros; user-driven resets may prepare them.
   rateLimits.setCodexHomePathResolver(async (target, signal) => {
     if (signal?.aborted) {
       return { kind: 'skip' }
@@ -69,8 +65,7 @@ export function createProviderAccountServices(
     return signal?.aborted ? { kind: 'skip' } : codexRuntimeHome.prepareForRateLimitFetch(target)
   })
   rateLimits.setCodexFetchTarget(getInitialCodexRateLimitTarget(store.getSettings()))
-  // Why: Kimi's CLI refreshes its OAuth token in whichever runtime it runs in, so the
-  // usage fetch must read the WSL-side credentials when that's the configured runtime (#12370).
+  // Read credentials where Kimi’s CLI refreshes its token, including WSL (#12370).
   rateLimits.setKimiHomeResolver((signal) =>
     resolveKimiHome(getKimiRuntimeTarget(store.getSettings()), process.platform, signal)
   )
@@ -81,7 +76,7 @@ export function createProviderAccountServices(
   )
   store.onSettingsChanged((updates, settings) => {
     rateLimits.reconcileUsageRequestPolicy()
-    // Why: auto is a live policy; retarget only providers whose settings-derived runtime changed.
+    // Auto runtime selection remains live as provider settings change.
     void syncAccountRuntimeTargets(updates, settings).catch((error) =>
       console.warn('[rate-limits] Failed to apply account runtime target:', error)
     )
@@ -94,8 +89,7 @@ export function createProviderAccountServices(
         )
       })
     }
-    // Why: these three pick the MiniMax host and quota bucket, so a stale snapshot from the
-    // previous endpoint would otherwise sit in the status bar until the next poll.
+    // Clear quota data from the old MiniMax endpoint/group before the next poll.
     if (
       'minimaxEndpoint' in updates ||
       'minimaxGroupId' in updates ||
@@ -109,8 +103,7 @@ export function createProviderAccountServices(
         )
       })
     }
-    // Why: the site picks the GLM Coding Plan quota host, so a stale snapshot from
-    // the previous site would otherwise sit in the status bar until the next poll.
+    // Clear quota data from the old GLM Coding Plan site before the next poll.
     if ('zcodePlanSite' in updates) {
       rateLimits.invalidateZcodeCredentialState()
       void rateLimits.refresh().catch((error: unknown) => {
@@ -128,7 +121,7 @@ export function createProviderAccountServices(
     claudeRuntimeAuth.readUsageAttribution(target)
   )
   void rateLimits.refreshClaudeUsageAttribution()
-  // Why: live Claude sessions stream usage windows through their statusLine command; feeding them here avoids OAuth usage-endpoint polling (and its 429s).
+  // Live statusLine usage avoids OAuth endpoint polling and its 429s.
   options.setClaudeStatusLineListener((event) => {
     rateLimits.ingestLiveClaudeRateLimits(event)
   })

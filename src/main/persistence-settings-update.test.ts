@@ -21,7 +21,6 @@ import {
   isLocalWorktreeScanGenerationCurrent
 } from './local-worktree-scan-generation'
 
-// Stub the ~/.ssh/config parser so the SSH-import test drives the real Store with deterministic hosts, not the operator's actual ~/.ssh/config.
 const { loadUserSshConfigMock, sshConfigHostsToTargetsMock } = vi.hoisted(() => ({
   loadUserSshConfigMock: vi.fn(),
   sshConfigHostsToTargetsMock: vi.fn()
@@ -73,7 +72,6 @@ describe('Store', () => {
     await closeTestStores()
     rmSync(testState.dir, { recursive: true, force: true })
   })
-  // ── 9. Settings: get/update ────────────────────────────────────────
 
   it('round-trips normalized usage opt-outs through partial updates and durable reload', async () => {
     writeDataFile({
@@ -122,7 +120,6 @@ describe('Store', () => {
     expect(updated.terminalFontSize).toBe(16)
     expect(updated.terminalFontWeight).toBe(600)
     expect(updated.terminalFontWeightBold).toBe(800)
-    // Other fields preserved
     expect(updated.branchPrefix).toBe('git-username')
   })
 
