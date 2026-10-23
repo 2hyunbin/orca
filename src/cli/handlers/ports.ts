@@ -1,39 +1,37 @@
 import type { RuntimeWorktreeRecord } from '../../shared/runtime-types'
 import type { WorkspacePortHostScanResult } from '../../shared/workspace-ports'
+import { resolveCurrentAgentWorkspaceSelector } from '../agent-workspace-selector'
 import type { CommandHandler, HandlerContext } from '../dispatch'
 import { getOptionalStringFlag } from '../flags'
 import { printResult } from '../format'
 import { formatPortsScan } from '../ports-format'
 import { RuntimeClientError, type RuntimeRpcSuccess } from '../runtime-client'
-import { normalizeWorktreeSelectorForCaller, resolveCurrentWorktreeSelection } from '../selectors'
+import { normalizeWorktreeSelectorForCaller } from '../selectors'
 
-type PortsTarget = { selector: string; worktreeId: string | null }
+type PortsTarget = { selector: string; worktreePath: string | null }
 
-// Why: Orca ties listeners only to git worktrees, so a folder workspace shows its host's listeners.
-function isFolderWorkspaceSelector(selector: string): boolean {
+// Why: Orca ties listeners only to repo-backed workspaces, so a native folder shows its host's listeners.
+function isNativeFolderSelector(selector: string): boolean {
   return (selector.startsWith('id:') ? selector.slice(3) : selector).startsWith('folder:')
 }
 
 export async function resolvePortsTarget(
   ctx: Pick<HandlerContext, 'flags' | 'cwd' | 'client'>,
-  options: { needsWorktreeId: boolean }
+  options: { needsWorktreePath: boolean }
 ): Promise<PortsTarget> {
   const { flags, cwd, client } = ctx
   const explicit = getOptionalStringFlag(flags, 'worktree')
-  if (!explicit || explicit === 'active' || explicit === 'current') {
-    const current = await resolveCurrentWorktreeSelection(cwd, client)
-    return isFolderWorkspaceSelector(current.worktreeId)
-      ? { selector: current.selector, worktreeId: null }
-      : current
-  }
-  const selector = await normalizeWorktreeSelectorForCaller(explicit, cwd, client)
-  if (!options.needsWorktreeId || isFolderWorkspaceSelector(selector)) {
-    return { selector, worktreeId: null }
+  const selector =
+    !explicit || explicit === 'active' || explicit === 'current'
+      ? await resolveCurrentAgentWorkspaceSelector(cwd, client)
+      : await normalizeWorktreeSelectorForCaller(explicit, cwd, client)
+  if (!options.needsWorktreePath || isNativeFolderSelector(selector)) {
+    return { selector, worktreePath: null }
   }
   const shown = await client.call<{ worktree: RuntimeWorktreeRecord }>('worktree.show', {
     worktree: selector
   })
-  return { selector, worktreeId: shown.result.worktree.id }
+  return { selector, worktreePath: shown.result.worktree.git.path }
 }
 
 // Why: an older runtime has no host-scoped scan; its raw method_not_found reads as a CLI bug.
@@ -56,14 +54,16 @@ export async function scanPortsOnWorkspaceHost(
   }
 }
 
+// Why the path, not the id: folder workspace instances share one path, and attribution names only
+// the first of them as owner.
 export function selectWorkspacePorts(
   scan: WorkspacePortHostScanResult,
-  worktreeId: string | null
+  worktreePath: string | null
 ): WorkspacePortHostScanResult {
   const ports = scan.ports
     .filter(
       (port) =>
-        worktreeId === null || (port.kind === 'workspace' && port.owner.worktreeId === worktreeId)
+        worktreePath === null || (port.kind === 'workspace' && port.owner.path === worktreePath)
     )
     .sort((a, b) => a.port - b.port || (a.processName ?? '').localeCompare(b.processName ?? ''))
   return { ...scan, ports }
@@ -72,12 +72,12 @@ export function selectWorkspacePorts(
 export const PORTS_HANDLERS: Record<string, CommandHandler> = {
   ports: async ({ flags, client, cwd, json }) => {
     const all = flags.get('all') === true
-    const target = await resolvePortsTarget({ flags, cwd, client }, { needsWorktreeId: !all })
+    const target = await resolvePortsTarget({ flags, cwd, client }, { needsWorktreePath: !all })
     const response = await scanPortsOnWorkspaceHost(client, target.selector)
-    const worktreeId = all ? null : target.worktreeId
-    const result = selectWorkspacePorts(response.result, worktreeId)
+    const worktreePath = all ? null : target.worktreePath
+    const result = selectWorkspacePorts(response.result, worktreePath)
     printResult({ ...response, result }, json, (scan) =>
-      formatPortsScan(scan, { showOwner: worktreeId === null })
+      formatPortsScan(scan, { showOwner: worktreePath === null })
     )
   }
 }

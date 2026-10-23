@@ -96,6 +96,18 @@ const hostScan = okFixture('req_scan', {
   ]
 })
 
+const noFolders = okFixture('req_folders', { folderWorkspaces: [] })
+
+function folderCatalog(folderPath: string): ReturnType<typeof okFixture>[] {
+  return [
+    okFixture('req_folders', {
+      folderWorkspaces: [{ id: 'f1', folderPath, projectGroupId: 'local' }]
+    }),
+    okFixture('req_groups', { groups: [{ id: 'local' }] }),
+    okFixture('req_repos', { repos: [] })
+  ]
+}
+
 function captureOutput(): () => string {
   const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
   const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -115,18 +127,21 @@ describe('orca ports', () => {
   it('scans the host of the worktree containing cwd and keeps only its ports', async () => {
     queueFixtures(
       callMock,
+      noFolders,
       worktreeListFixture([
         buildWorktree('/tmp/repo', 'main'),
         buildWorktree('/tmp/repo/feature', 'feature/foo')
       ]),
+      okFixture('req_show', { worktree: buildWorktree('/tmp/repo/feature', 'feature/foo') }),
       hostScan
     )
     const output = captureOutput()
 
     await main(['ports', '--json'], '/tmp/repo/feature/src')
 
-    expect(callMock).toHaveBeenCalledTimes(2)
-    expect(callMock).toHaveBeenNthCalledWith(2, 'workspacePorts.scanHost', {
+    expect(callMock).toHaveBeenCalledTimes(4)
+    expect(callMock).toHaveBeenNthCalledWith(3, 'worktree.show', { worktree: `id:${FEATURE_ID}` })
+    expect(callMock).toHaveBeenNthCalledWith(4, 'workspacePorts.scanHost', {
       worktree: `id:${FEATURE_ID}`
     })
     const printed = JSON.parse(output())
@@ -138,7 +153,9 @@ describe('orca ports', () => {
   it('prints one row per port with pid, process, host, protocol, match, and url', async () => {
     queueFixtures(
       callMock,
+      noFolders,
       worktreeListFixture([buildWorktree('/tmp/repo/feature', 'feature/foo')]),
+      okFixture('req_show', { worktree: buildWorktree('/tmp/repo/feature', 'feature/foo') }),
       hostScan
     )
     const output = captureOutput()
@@ -177,6 +194,7 @@ describe('orca ports', () => {
   it('lists every listener on the host with its owner under --all', async () => {
     queueFixtures(
       callMock,
+      noFolders,
       worktreeListFixture([buildWorktree('/tmp/repo/feature', 'feature/foo')]),
       hostScan
     )
@@ -184,10 +202,63 @@ describe('orca ports', () => {
 
     await main(['ports', '--all'], '/tmp/repo/feature')
 
+    expect(callMock).not.toHaveBeenCalledWith('worktree.show', expect.anything())
+
     expect(output().split('\n').slice(0, 4)).toEqual([
       '3000  workspace=feature  pid=3001  node  localhost  http  match=command',
       '4000  workspace=other  pid=4001  node  localhost  http  match=cwd',
       '5173  workspace=feature  pid=5174  node  localhost  http  match=cwd  url=http://dev.test:5173',
+      '5432  workspace=(none)  pid=77  postgres  localhost  unknown'
+    ])
+  })
+
+  it.each([
+    ['a standalone native folder', '/tmp/folder', '/tmp/folder/src'],
+    ['a native folder nested in a git worktree', '/tmp/repo/feature/docs', '/tmp/repo/feature/docs']
+  ])('shows the host listeners for %s containing cwd', async (_label, folderPath, cwd) => {
+    queueFixtures(callMock, ...folderCatalog(folderPath), hostScan)
+    const output = captureOutput()
+
+    await main(['ports'], cwd)
+
+    expect(callMock).toHaveBeenCalledWith('workspacePorts.scanHost', { worktree: 'id:folder:f1' })
+    expect(callMock).not.toHaveBeenCalledWith('worktree.list', expect.anything())
+    expect(output()).toContain('5432  workspace=(none)  pid=77  postgres')
+  })
+
+  it('keeps the ports of a folder workspace instance that shares its path with the owner', async () => {
+    const instance = {
+      ...buildWorktree('/tmp/repo/feature', 'feature/foo'),
+      id: `${FEATURE_ID}::workspace:second`
+    }
+    queueFixtures(callMock, okFixture('req_show', { worktree: instance }), hostScan)
+    const output = captureOutput()
+
+    await main(['ports', '--worktree', `id:${instance.id}`, '--json'], '/tmp')
+
+    expect(JSON.parse(output()).result.ports.map((port: WorkspacePort) => port.port)).toEqual([
+      3000, 5173
+    ])
+  })
+
+  it('adds the worktree id to owner names shared by two workspaces under --all', async () => {
+    const twin = workspacePort(4000, 'repo2::/tmp/twin/feature')
+    queueFixtures(
+      callMock,
+      okFixture('req_scan', {
+        executionHostId: 'local',
+        platform: 'darwin',
+        scannedAt: 1,
+        ports: [workspacePort(3000, FEATURE_ID), twin, externalPort]
+      })
+    )
+    const output = captureOutput()
+
+    await main(['ports', '--worktree', 'branch:feature', '--all'], '/tmp')
+
+    expect(output().split('\n').slice(0, 3)).toEqual([
+      `3000  workspace=feature (${FEATURE_ID})  pid=3001  node  localhost  http  match=cwd`,
+      '4000  workspace=feature (repo2::/tmp/twin/feature)  pid=4001  node  localhost  http  match=cwd',
       '5432  workspace=(none)  pid=77  postgres  localhost  unknown'
     ])
   })

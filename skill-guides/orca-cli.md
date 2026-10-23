@@ -100,7 +100,7 @@ ORCA worktree set --worktree active --pr null --gitlab-mr null --json
 ORCA worktree rm --worktree id:<repoId>::<worktreePath> --force --json
 ```
 
-Ports: `ORCA ports --json` lists the listening ports Orca tied to the current workspace (`--worktree <selector>` for another one, `--all` for every listener on that workspace's host). Each row has `port`, `pid`, `processName`, `connectHost`, `protocol`, `owner.confidence` (`cwd` or `command`), and `advertisedUrl` when the dev server printed one in an Orca terminal. Use this to find a dev server's port instead of running `lsof` yourself. If `unavailableReason` is set, the scan could not run on that host.
+Ports: `ORCA ports --json` lists the listening ports Orca tied to the current workspace (`--worktree <selector>` for another one, `--all` for every listener on that workspace's host). Each row has `port`, `pid`, `processName`, `connectHost`, `protocol`, and `kind` (`workspace`, `container`, or `external`). Only `workspace` rows have `owner` (with `owner.confidence`: `cwd` or `command`) and, when the dev server printed one in an Orca terminal, `advertisedUrl`. Use this to find a dev server's port instead of running `lsof` yourself. If `unavailableReason` is set, the scan could not run on that host.
 
 Use `repo set --external-worktree-visibility show` to show a repo's non-Orca worktrees.
 `hide` hides them; `inherit` clears the repo override and follows the global default.
