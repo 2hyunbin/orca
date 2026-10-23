@@ -15,6 +15,7 @@ import {
 } from './pty-connection-test-async'
 import { NORMAL_BUFFER_PROLOGUE } from './pty-connection-test-constants'
 import {
+  terminalWriteText,
   LEAF_1,
   createMockTransport,
   createPane,
@@ -174,7 +175,8 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
       const pane = createPane(1)
       pane.terminal.rows = 4
       pane.terminal.cols = 20
-      pane.terminal.write = vi.fn((data: string, callback?: () => void) => {
+      pane.terminal.write = vi.fn((data: string | Uint8Array, callback?: () => void) => {
+        data = terminalWriteText(data)
         written.push(data)
         callback?.()
       })
@@ -242,7 +244,8 @@ export function registerPtyConnectionColdRestoreRepaintTests(): void {
       pane.terminal.cols = destinationCols
       let sawViewportClear = false
       const preResizeBarrier = { release: null as (() => void) | null }
-      pane.terminal.write = vi.fn((data: string, callback?: () => void) => {
+      pane.terminal.write = vi.fn((data: string | Uint8Array, callback?: () => void) => {
+        data = terminalWriteText(data)
         written.push(data)
         operations.push({ kind: 'write', data })
         if (data === viewportClear) {
