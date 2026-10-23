@@ -1,5 +1,5 @@
 import { readPinnedBunVersion } from './pinned-bun-executable.mjs'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { availableParallelism, totalmem } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -59,6 +59,7 @@ const baselineName =
       : 'check-main-sync-spawn-ratchet.mjs'
 const baselineFile = path.join(root, 'config/scripts', `.benchmark-baseline-${baselineName}`)
 const runnerFile = path.join(output, 'baseline-smoke-runner.mjs')
+const mobileBundle = path.join(output, 'smoke-mobile-web')
 writeFileSync(baselineFile, baselineSource(`config/scripts/${baselineName}`))
 
 try {
@@ -98,6 +99,9 @@ try {
     }
     report.parity = `Identical counts and symbols for all ${analyzed} production files; both reject malformed syntax.`
   } else if (comparison === 'smoke') {
+    await command('pnpm', ['run', 'build:mobile-web'], 'critical-path-smoke-mobile-web')
+    rmSync(mobileBundle, { recursive: true, force: true })
+    cpSync(path.join(root, 'out', 'mobile-web'), mobileBundle, { recursive: true })
     const steps = [
       [process.execPath, ['config/scripts/ensure-native-runtime.mjs', '--runtime=node']],
       ['pnpm', ['run', 'build:cli']],
@@ -126,6 +130,8 @@ for (const [program, args] of ${JSON.stringify(steps)}) {
       let result
       if (comparison === 'smoke') {
         rmSync(path.join(root, 'out'), { recursive: true, force: true })
+        // Both measured builds require the same mobile bundle prepared outside the timer.
+        cpSync(mobileBundle, path.join(root, 'out', 'mobile-web'), { recursive: true })
         result =
           arm === 'baseline'
             ? await command(process.execPath, [runnerFile], `smoke-${pair}-${arm}`)
