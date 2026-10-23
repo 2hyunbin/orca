@@ -177,7 +177,10 @@ export function exportWslMoveManifest(
   const manifestSha256 = computeOrcadMigrationManifestSha256(normalized)
   if (manifestSha256 !== computeOrcadMigrationManifestSha256(unsigned)) {
     // Not refused (the parsed form is what moves), but a field the parser drops does not move.
-    console.warn('[wsl-move] The manifest parser dropped fields of the exported state.')
+    console.warn(
+      '[wsl-move] The manifest parser dropped fields of the exported state:',
+      differingPaths(unsigned, normalized).join(', ')
+    )
   }
   const manifest: OrcadMigrationManifest = { ...normalized, manifestSha256 }
   const worktreeIds = scopedWorktreeIds(repos, { ...catalog, dormantState })
@@ -262,4 +265,33 @@ function scopedWorktreeIds(
     }
   }
   return [...ids].sort(compareKeys)
+}
+
+/** The first few JSON paths where the parsed manifest differs from the export, for the log. */
+function differingPaths(left: unknown, right: unknown, path = '$', found: string[] = []): string[] {
+  if (found.length >= 8) {
+    return found
+  }
+  if (typeof left !== 'object' || left === null || typeof right !== 'object' || right === null) {
+    if (JSON.stringify(left) !== JSON.stringify(right)) {
+      found.push(path)
+    }
+    return found
+  }
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)])
+  for (const key of keys) {
+    // Array indexes are folded so one dropped field names its shape, not every row.
+    const step = Array.isArray(left) ? `${path}[]` : `${path}.${key}`
+    const before = found.length
+    differingPaths(
+      (left as Record<string, unknown>)[key],
+      (right as Record<string, unknown>)[key],
+      step,
+      found
+    )
+    if (Array.isArray(left) && found.length > before) {
+      return found
+    }
+  }
+  return found
 }

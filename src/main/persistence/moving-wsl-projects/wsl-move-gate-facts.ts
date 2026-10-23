@@ -62,17 +62,21 @@ export async function collectWslMoveGateInputs(
     sources.inspect
   )
   const verdicts = new Map(probes.map((probe) => [probe.ptyId, probe.verdict]))
-  const guest = await readGuestForegrounds(sources, terminals)
+  const guest = await readGuestForegrounds(
+    sources,
+    terminals.filter((terminal) => verdicts.get(terminal.ptyId) === 'live')
+  )
   const panes: WslMovePaneFacts[] = []
   for (const terminal of terminals) {
     const verdict = verdicts.get(terminal.ptyId) ?? 'unverifiable'
+    // The distro is asked only about a pane whose wsl.exe still runs: a slept pane's host process
+    // already exited, and it has no guest shell left to find.
     const foreground =
-      guest.get(terminal.ptyId) ??
-      (verdict === 'exited'
+      verdict === 'exited'
         ? 'shell-idle'
         : verdict === 'live'
-          ? 'process-running'
-          : 'unverifiable')
+          ? (guest.get(terminal.ptyId) ?? 'process-running')
+          : 'unverifiable'
     const pane = terminal.paneKey ? parsePaneKey(terminal.paneKey) : null
     if (!terminal.paneKey || !pane) {
       // A terminal with no pane cannot be restored on the host, so it can never pass as idle.

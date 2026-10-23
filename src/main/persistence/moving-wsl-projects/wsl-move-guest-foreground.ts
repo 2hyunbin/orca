@@ -67,9 +67,11 @@ export function classifyWslGuestPaneForeground(
 ): WslGuestPaneForeground {
   const byPid = new Map(rows.map((row) => [row.pid, row]))
   const tagged = rows.filter((row) => row.paneKey === paneKey)
-  const taggedPids = new Set(tagged.map((row) => row.pid))
-  // The pane's shell: a tagged shell whose parent is not tagged (its parent is the WSL relay).
-  const shells = tagged.filter((row) => !taggedPids.has(row.ppid) && isShellProcess(row.comm))
+  // The pane's shell: the topmost tagged shell. The WSL relay above it may carry the key too, so
+  // tagged non-shell ancestors don't hide it.
+  const shells = tagged.filter(
+    (row) => isShellProcess(row.comm) && !hasTaggedShellAncestor(row, paneKey, byPid)
+  )
   if (shells.length !== 1) {
     // None, or a second root (a tagged daemon that is itself a shell): never read as idle.
     return shells.length === 0 ? 'unverifiable' : 'process-running'
@@ -110,6 +112,24 @@ function descendsFrom(
       return false
     }
     seen.add(current.pid)
+  }
+  return false
+}
+
+function hasTaggedShellAncestor(
+  row: WslGuestProcessRow,
+  paneKey: string,
+  byPid: ReadonlyMap<number, WslGuestProcessRow>
+): boolean {
+  const seen = new Set<number>()
+  for (let current = byPid.get(row.ppid); current; current = byPid.get(current.ppid)) {
+    if (seen.has(current.pid)) {
+      return false
+    }
+    seen.add(current.pid)
+    if (current.paneKey === paneKey && isShellProcess(current.comm)) {
+      return true
+    }
   }
   return false
 }

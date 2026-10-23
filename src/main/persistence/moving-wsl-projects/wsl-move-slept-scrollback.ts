@@ -87,6 +87,7 @@ export async function readWslMoveSleptScrollbackFromHistory(
 ): Promise<WslMoveSleptScrollback> {
   const buffers = new Map<string, WslMoveSleptBuffer>()
   const problems: string[] = []
+  const noCheckpoint: string[] = []
   const dispose = (): void => rmSync(spoolRoot, { recursive: true, force: true })
   try {
     mkdirSync(spoolRoot, { recursive: true, mode: 0o700 })
@@ -99,6 +100,7 @@ export async function readWslMoveSleptScrollbackFromHistory(
         .detectColdRestoreState(pane.sessionId, { ignoreCleanEnd: true, wslDistro: distro })
         .catch(() => ({ status: 'unreadable' as const, sessionId: pane.sessionId }))
       if (detection.status === 'none') {
+        noCheckpoint.push(leaf.tabId)
         continue
       }
       // A checkpoint behind an unreadable log is older than the pane: moving it would lose the rest.
@@ -123,6 +125,12 @@ export async function readWslMoveSleptScrollbackFromHistory(
     dispose()
     throw error
   }
+  // The awin run moved panes empty with no trace of why: say what each pane had.
+  console.info(
+    `[wsl-move] Slept terminal history: ${buffers.size} carried, ${problems.length} unreadable, ` +
+      `${noCheckpoint.length} with no checkpoint${noCheckpoint.length > 0 ? ` (${noCheckpoint.join(', ')})` : ''}, ` +
+      `of ${panes.length} panes`
+  )
   return { buffers, problems, dispose }
 }
 

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { collectWslMoveGateInputs, type WslMoveGateFactSources } from './wsl-move-gate-facts'
 import {
   classifyWslGuestPaneForeground,
@@ -64,6 +64,15 @@ describe('classifyWslGuestPaneForeground', () => {
     const rows = [relay, shellA, shellB, child(250, 'vim', { ppid: 200, sid: 200, paneKey: KEY_B })]
     expect(classifyWslGuestPaneForeground(rows, KEY_A)).toBe('shell-idle')
     expect(classifyWslGuestPaneForeground(rows, KEY_B)).toBe('process-running')
+  })
+
+  it('finds the shell under a WSL relay that carries the pane key too', () => {
+    // awin: a live pane read unverifiable because its relay held the key above the shell.
+    const taggedRelay = { ...relay, paneKey: KEY_A }
+    expect(classifyWslGuestPaneForeground([taggedRelay, shellA], KEY_A)).toBe('shell-idle')
+    expect(classifyWslGuestPaneForeground([taggedRelay, shellA, child(150, 'vim')], KEY_A)).toBe(
+      'process-running'
+    )
   })
 
   it('never reads a pane whose shell was not found as idle', () => {
@@ -142,5 +151,24 @@ describe('collectWslMoveGateInputs with a guest foreground reader', () => {
       scope
     )
     expect(failed.panes[0]?.foreground).toBe('unverifiable')
+  })
+
+  it('leaves a slept pane idle without asking the distro, which has no shell of it left', async () => {
+    // awin: every slept pane read unverifiable, so Sleep could no longer quiet a project.
+    const guestForegrounds = vi.fn(async () => new Map([[KEY_A, 'unverifiable' as const]]))
+    const slept = await collectWslMoveGateInputs(
+      {
+        ...base,
+        inspect: async () => ({
+          foregroundProcess: null,
+          hasChildProcesses: false,
+          childProcessEvidence: 'no-children'
+        }),
+        guestForegrounds
+      },
+      scope
+    )
+    expect(slept.panes[0]?.foreground).toBe('shell-idle')
+    expect(guestForegrounds).not.toHaveBeenCalled()
   })
 })
