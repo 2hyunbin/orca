@@ -30,6 +30,7 @@ type MobileSearchFieldProps = {
   returnKeyType?: TextInputProps['returnKeyType']
   onSubmitEditing?: TextInputProps['onSubmitEditing']
   onBlur?: TextInputProps['onBlur']
+  onFocus?: TextInputProps['onFocus']
   editable?: boolean
   accessibilityLabel?: string
 }
@@ -50,6 +51,7 @@ export function MobileSearchField({
   returnKeyType = 'search',
   onSubmitEditing,
   onBlur,
+  onFocus,
   editable = true,
   accessibilityLabel
 }: MobileSearchFieldProps) {
@@ -114,7 +116,10 @@ export function MobileSearchField({
         editable={editable}
         returnKeyType={returnKeyType}
         onSubmitEditing={onSubmitEditing}
-        onFocus={() => setFocused(true)}
+        onFocus={(event) => {
+          setFocused(true)
+          onFocus?.(event)
+        }}
         onBlur={(event) => {
           setFocused(false)
           onBlur?.(event)

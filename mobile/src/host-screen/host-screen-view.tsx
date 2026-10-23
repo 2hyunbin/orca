@@ -8,12 +8,17 @@ import { hostScreenStyles as styles } from './host-screen-styles'
 import { HostScreenHeader } from './host-screen-header'
 import { HostScreenOverlays } from './host-screen-overlays'
 import { HostWorkspaceList } from './host-workspace-list'
+import { HostBottomToolbar } from './host-bottom-toolbar'
 import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostScreenView({ controller }: { controller: HostScreenController }) {
   // The large title scrolls with the list; the bar shows the name once it has gone under.
   const [titleCollapsed, setTitleCollapsed] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  // Phone only: search and New workspace live in a toolbar under the thumb.
+  const [searchActive, setSearchActive] = useState(false)
+  const [toolbarHeight, setToolbarHeight] = useState(0)
+  const phoneToolbar = !controller.embedded
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = event.nativeEvent.contentOffset.y
     setTitleCollapsed(y > LARGE_TITLE_COLLAPSE_OFFSET)
@@ -44,11 +49,25 @@ export function HostScreenView({ controller }: { controller: HostScreenControlle
       <SafeAreaView style={styles.topChromeSafeArea} edges={['top']}>
         <HostScreenHeader
           controller={controller}
-          titleVisible={titleCollapsed}
-          scrolled={scrolled}
+          titleVisible={titleCollapsed || (phoneToolbar && searchActive)}
+          scrolled={scrolled || (phoneToolbar && searchActive)}
         />
       </SafeAreaView>
-      <HostWorkspaceList controller={controller} onScroll={onScroll} />
+      <HostWorkspaceList
+        controller={controller}
+        onScroll={onScroll}
+        bottomChrome={phoneToolbar ? toolbarHeight : 0}
+        searchActive={phoneToolbar && searchActive}
+      />
+      {phoneToolbar ? (
+        <HostBottomToolbar
+          controller={controller}
+          bottomInset={controller.insets.bottom}
+          searchActive={searchActive}
+          onSearchActiveChange={setSearchActive}
+          onLayout={(event) => setToolbarHeight(event.nativeEvent.layout.height)}
+        />
+      ) : null}
       <HostScreenOverlays controller={controller} />
     </View>
   )

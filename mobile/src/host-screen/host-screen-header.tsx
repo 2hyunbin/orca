@@ -147,13 +147,15 @@ export function HostScreenHeader({
               accessibilityLabel="More"
               onPress={() => setMenuOpen(true)}
             />
-            <IconButton
-              icon={Plus}
-              variant="primary"
-              accessibilityLabel="New workspace"
-              onPress={actions.openNewWorktreeModal}
-              disabled={!connected}
-            />
+            {embedded ? (
+              <IconButton
+                icon={Plus}
+                variant="primary"
+                accessibilityLabel="New workspace"
+                onPress={actions.openNewWorktreeModal}
+                disabled={!connected}
+              />
+            ) : null}
           </>
         }
       />
@@ -167,11 +169,23 @@ export function HostScreenHeader({
   )
 }
 
-/** The large title, its status line, and search with the Workspace options button beside it. */
-export function HostListTitle({ controller }: { controller: HostScreenController }) {
-  const { connState, hostDisplay, state } = controller
+/**
+ * The large title and its status line. In the sidebar, search and Workspace options sit under it;
+ * on a phone they live in the bottom toolbar, and the title folds into the bar while searching.
+ */
+export function HostListTitle({
+  controller,
+  searchActive = false
+}: {
+  controller: HostScreenController
+  searchActive?: boolean
+}) {
+  const { connState, embedded, hostDisplay, state } = controller
   const verdict = hostHeaderVerdict(controller)
   const status = hostStatusLabel(connState, verdict, controller.displayWorktrees.length)
+  if (!embedded && searchActive) {
+    return null
+  }
   return (
     <View style={styles.titleBlock}>
       <LargeTitle
@@ -185,26 +199,28 @@ export function HostListTitle({ controller }: { controller: HostScreenController
           </View>
         }
       />
-      <View style={styles.searchRow}>
-        <View style={styles.searchField}>
-          <MobileSearchField
-            value={state.search}
-            onChangeText={state.setSearch}
-            placeholder="Search workspaces"
-            accessibilityLabel="Search workspaces"
-          />
+      {embedded ? (
+        <View style={styles.searchRow}>
+          <View style={styles.searchField}>
+            <MobileSearchField
+              value={state.search}
+              onChangeText={state.setSearch}
+              placeholder="Search workspaces"
+              accessibilityLabel="Search workspaces"
+            />
+          </View>
+          <View>
+            <IconButton
+              icon={SlidersHorizontal}
+              iconSize={18}
+              accessibilityLabel={workspaceOptionsAccessibilityLabel(controller.activeFilterCount)}
+              selected={controller.activeFilterCount > 0}
+              onPress={() => state.setShowWorkspaceOptions(true)}
+            />
+            <WorkspaceOptionsCountBadge count={controller.activeFilterCount} />
+          </View>
         </View>
-        <View>
-          <IconButton
-            icon={SlidersHorizontal}
-            iconSize={18}
-            accessibilityLabel={workspaceOptionsAccessibilityLabel(controller.activeFilterCount)}
-            selected={controller.activeFilterCount > 0}
-            onPress={() => state.setShowWorkspaceOptions(true)}
-          />
-          <WorkspaceOptionsCountBadge count={controller.activeFilterCount} />
-        </View>
-      </View>
+      ) : null}
     </View>
   )
 }

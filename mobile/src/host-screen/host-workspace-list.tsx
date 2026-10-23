@@ -35,11 +35,17 @@ import type { HostScreenController } from './use-host-screen-controller'
 
 export function HostWorkspaceList({
   controller,
-  onScroll
+  onScroll,
+  bottomChrome = 0,
+  searchActive = false
 }: {
   controller: HostScreenController
   /** Drives the bar's title and hairline as the large title scrolls away. */
   onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void
+  /** Height of the phone's bottom toolbar, which the last rows must clear. */
+  bottomChrome?: number
+  /** Search is active in the bottom toolbar: the large title folds into the bar. */
+  searchActive?: boolean
 }) {
   const {
     actions,
@@ -154,7 +160,7 @@ export function HostWorkspaceList({
           styles.list,
           sections.length === 0 && listStyles.listEmpty,
           {
-            paddingBottom: (embedded ? spacing.lg : spacing.xl) + insets.bottom
+            paddingBottom: embedded ? spacing.lg + insets.bottom : spacing.lg + bottomChrome
           },
           isWideLayout &&
             !embedded && {
@@ -166,7 +172,7 @@ export function HostWorkspaceList({
         // An element, not a component: the search field must stay mounted while the list filters.
         ListHeaderComponent={
           <>
-            <HostListTitle controller={controller} />
+            <HostListTitle controller={controller} searchActive={searchActive} />
             {/* A feed this page cannot read: the host is older or newer than the page. */}
             {reopen && sections.length > 0 ? <HostWorkspaceListReopen aboveRows /> : null}
           </>
