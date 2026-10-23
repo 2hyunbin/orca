@@ -134,7 +134,7 @@ afterEach(() => {
 
 describe('SidebarHeader', () => {
   it.each(['workspaces', 'agents'] as const)(
-    'prioritizes questions, then working, and hides settled counts in the %s view',
+    'prioritizes questions, then working, and shows idle zero in the %s view',
     (sidebarBody) => {
       mockState.sidebarBody = sidebarBody
       const render = () => {
@@ -154,9 +154,22 @@ describe('SidebarHeader', () => {
 
       mocks.bucketCounts.working = 0
       button = render()
-      expect(button.querySelector('span')).toBeNull()
+      expect(button.querySelector('[aria-label="Idle: 0"]')?.textContent).toBe('0')
+      expect(button.querySelector('.lucide-message-circle-question-mark')).toBeNull()
+      expect(button.getAttribute('aria-describedby')).toBe(
+        button.querySelector('[aria-label="Idle: 0"]')?.id
+      )
     }
   )
+
+  it.each([9, 12, 99, 100])('keeps the working count accessible at %s agents', (working) => {
+    mocks.bucketCounts.working = working
+    act(() => root.render(<SidebarHeader onWorkspaceBoardMenuOpenChange={vi.fn()} />))
+    const button = headerButton('View activity')
+    const status = button.querySelector(`[aria-label="Working: ${working}"]`)
+    expect(status?.textContent).toBe(working > 99 ? '99+' : String(working))
+    expect(button.getAttribute('aria-describedby')).toBe(status?.id)
+  })
 
   it('keeps New workspace clickable with zero projects, since the composer adds the first one', async () => {
     act(() => {
