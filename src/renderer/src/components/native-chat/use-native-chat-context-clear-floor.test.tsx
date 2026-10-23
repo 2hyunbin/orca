@@ -97,6 +97,7 @@ function visitRead(key: string, initialProps: VisitRead) {
         turnDiffs: new Map(),
         expandedTurnKeys: new Set(),
         isWorking: false,
+        liveTurnKey: undefined,
         lifecycleWorking: false
       })
       const visit = useNativeChatNewRowsMarker(

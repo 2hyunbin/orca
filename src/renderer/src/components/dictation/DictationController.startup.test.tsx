@@ -2,7 +2,7 @@
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { useAppStore } from '@/store'
-import { getDefaultSettings } from '../../../../shared/constants'
+import { getDefaultSettings, getDefaultVoiceSettings } from '../../../../shared/constants'
 import { DictationController } from './DictationController'
 import { DICTATION_CONTROL_EVENT } from './dictation-control-events'
 
@@ -28,7 +28,7 @@ it.each(['keyup', 'Stop', 'blur'] as const)(
     vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Macintosh')
     const settings = getDefaultSettings('/tmp')
     settings.voice = {
-      ...settings.voice,
+      ...getDefaultVoiceSettings(),
       enabled: true,
       sttModel: 'fixture',
       dictationMode: 'hold'

@@ -111,8 +111,6 @@ function watchRetirement(): void {
     if (
       !changedWorkspaceHost &&
       state.unifiedTabsByWorktree === previous.unifiedTabsByWorktree &&
-      state.settings?.activeRuntimeEnvironmentId ===
-        previous.settings?.activeRuntimeEnvironmentId &&
       ownerInputs.every((key) => state[key] === previous[key])
     ) {
       return

@@ -270,7 +270,7 @@ describe('async questions', () => {
       { stoppedBeforeStart: true },
       { awaitsRetry: true },
       { sentWhileStopping: true }
-    ]) {
+    ] as const) {
       expect(titles([asked, userRow('waiting', flags)])).toEqual(['A?'])
     }
     const sent = { ...userRow('sent'), journalPosition: { sequence: 2, index: 0 } }

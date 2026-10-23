@@ -637,6 +637,7 @@ it.each([27, 270])(
         observe(entry[1])
         yield entry
       }
+      return undefined
     })
     const valueSpy = vi.spyOn(Map.prototype, 'values').mockImplementation(function* (
       this: Map<unknown, unknown>
@@ -645,6 +646,7 @@ it.each([27, 270])(
         observe(value)
         yield value
       }
+      return undefined
     })
     const sort = Array.prototype.sort
     const sortSpy = vi.spyOn(Array.prototype, 'sort').mockImplementation(function (
@@ -671,7 +673,7 @@ it.each([27, 270])(
         sourceVisits++
         return 'agent-session' as const
       },
-      executionHostId: 'local',
+      executionHostId: index === count - 1 ? undefined : 'local',
       agentSessionAgent: 'codex',
       label: 'Chat',
       customLabel: null,
@@ -683,7 +685,13 @@ it.each([27, 270])(
     for (const tab of tabs) {
       ;(grouped[tab.worktreeId] ??= []).push(tab)
     }
-    await act(async () => useAppStore.setState({ unifiedTabsByWorktree: grouped }))
+    await act(async () =>
+      useAppStore.setState({
+        activeWorktreeId: null,
+        activeWorkspaceExecutionHostId: null,
+        unifiedTabsByWorktree: grouped
+      })
+    )
     for (const tab of tabs) {
       for (const field of fields) {
         for (const scope of ['a', 'b']) {
@@ -725,6 +733,16 @@ it.each([27, 270])(
     )
     expect(policyVisits).toBe(beforeStatus)
     expect(sourceVisits).toBe(0)
+    for (const activeRuntimeEnvironmentId of ['settings-only', null]) {
+      await act(async () =>
+        useAppStore.setState((state) => ({
+          settings: { ...state.settings!, activeRuntimeEnvironmentId }
+        }))
+      )
+      expect(sourceVisits).toBe(0)
+      expect(policyVisits).toBe(beforeStatus)
+      expect(retiredCells).toBe(0)
+    }
     await act(async () => {
       useAppStore.setState({
         activeWorktreeId: 'folder:w-0',
@@ -750,6 +768,21 @@ it.each([27, 270])(
     expect(comparisons).toBeGreaterThan(0)
     expect(comparisons).toBeLessThan(4 * count * Math.ceil(Math.log2(count)))
     expect(committedUpdates).toBe(count - 6)
+    // Recorded host changes and supported legacy workspace selection still retire old owners.
+    tabs[0]!.executionHostId = 'runtime:count-owner'
+    await act(async () => useAppStore.setState({ unifiedTabsByWorktree: { ...grouped } }))
+    expect(sourceVisits).toBe(count)
+    expect(retiredCells).toBe(4)
+    sourceVisits = 0
+    await act(async () =>
+      useAppStore.setState({
+        activeWorktreeId: tabs.at(-1)!.worktreeId,
+        activeWorkspaceExecutionHostId: 'runtime:count-owner'
+      })
+    )
+    expect(sourceVisits).toBe(count)
+    expect(retiredCells).toBe(8)
+    sourceVisits = 0
     await act(async () => useAppStore.setState({ unifiedTabsByWorktree: {} }))
     expect(sourceVisits).toBe(0)
     expect(retiredCells).toBe(4 * count)
