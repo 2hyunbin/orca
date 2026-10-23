@@ -50,7 +50,10 @@ const evidence = {
   ageMinutes: 90,
   nonce: 'n-1'
 }
-const answer = (status: string, extra: object = {}) =>
+// What orcad adds to a status line beyond the fields every answer carries.
+type AnswerExtras = { exitCode?: number; evidence?: typeof evidence }
+
+const answer = (status: string, extra: AnswerExtras = {}) =>
   JSON.stringify({ status, lockPath: '/home/dev/.orca/orcad.lock', message: status, ...extra })
 
 const roots: string[] = []
