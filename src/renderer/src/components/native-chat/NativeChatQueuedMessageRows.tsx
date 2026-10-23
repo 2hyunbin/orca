@@ -1,4 +1,14 @@
-import { useState, type CSSProperties, type ReactNode, type Ref } from 'react'
+import {
+  createContext,
+  memo,
+  useContext,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type Ref
+} from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -21,6 +31,13 @@ type Props = {
   reorder?: QueuedMessageReorder
   renderCard: (card: QueuedMessageCard, drag?: QueuedMessageDragPresentation) => ReactNode
 }
+
+// Consume fresh render callbacks below the memoized sortable hooks.
+const QueuedMessageRenderer = createContext<{
+  renderCard: Props['renderCard']
+  move: QueuedMessageReorder['move']
+} | null>(null)
+const pointerOptions = { activationConstraint: { distance: 4 } }
 
 export function NativeChatQueuedMessageRows(props: Props): ReactNode {
   if (!props.reorder) {
@@ -45,77 +62,107 @@ function SortableQueuedMessages({
   reorder,
   renderCard
 }: Props & { reorder: QueuedMessageReorder }): React.JSX.Element {
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
-  const users = cards.filter((card) => !card.from && card.hold !== 'sending')
+  const sensors = useSensors(useSensor(PointerSensor, pointerOptions))
+  const users = useShallow((input: QueuedMessageCard[]) =>
+    input.filter((card) => !card.from && card.hold !== 'sending').map((card) => card.messageId)
+  )(cards)
   const [drag, setDrag] = useState<{ from: string; over: string } | null>(null)
-  const fromIndex = users.findIndex((card) => card.messageId === drag?.from)
-  const overIndex = users.findIndex((card) => card.messageId === drag?.over)
+  const fromIndex = drag ? users.indexOf(drag.from) : -1
+  const overIndex = drag ? users.indexOf(drag.over) : -1
+  const renderer = useMemo(() => ({ renderCard, move: reorder.move }), [renderCard, reorder.move])
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragStart={({ active }) => setDrag({ from: String(active.id), over: String(active.id) })}
-      onDragOver={({ active, over }) =>
-        setDrag(over ? { from: String(active.id), over: String(over.id) } : null)
-      }
-      onDragCancel={() => setDrag(null)}
-      onDragEnd={({ active, over }) => {
-        setDrag(null)
-        if (!over || active.id === over.id) {
-          return
+    <QueuedMessageRenderer.Provider value={renderer}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={({ active }) => setDrag({ from: String(active.id), over: String(active.id) })}
+        onDragOver={({ active, over }) =>
+          setDrag(over ? { from: String(active.id), over: String(over.id) } : null)
         }
-        const from = users.findIndex((card) => card.messageId === active.id)
-        const to = users.findIndex((card) => card.messageId === over.id)
-        if (from !== -1 && to !== -1) {
-          void reorder.move(
-            String(active.id),
-            from < to ? { afterMessageId: String(over.id) } : { beforeMessageId: String(over.id) }
-          )
-        }
-      }}
-    >
-      <SortableContext
-        items={users.map((card) => card.messageId)}
-        strategy={verticalListSortingStrategy}
+        onDragCancel={() => setDrag(null)}
+        onDragEnd={({ active, over }) => {
+          setDrag(null)
+          if (!over || active.id === over.id) {
+            return
+          }
+          const from = users.indexOf(String(active.id))
+          const to = users.indexOf(String(over.id))
+          if (from !== -1 && to !== -1) {
+            void reorder.move(
+              String(active.id),
+              from < to ? { afterMessageId: String(over.id) } : { beforeMessageId: String(over.id) }
+            )
+          }
+        }}
       >
-        {cards.map((card) => (
-          <SortableQueuedMessage
-            key={card.messageId}
-            card={card}
-            users={users}
-            reorder={reorder}
-            insertion={
-              card.messageId === drag?.over && fromIndex !== overIndex
-                ? fromIndex < overIndex
-                  ? 'after'
-                  : 'before'
-                : undefined
-            }
-            renderCard={renderCard}
-          />
-        ))}
-      </SortableContext>
-    </DndContext>
+        <SortableContext items={users} strategy={verticalListSortingStrategy}>
+          {cards.map((card) => (
+            <SortableQueuedMessage
+              key={card.messageId}
+              card={card}
+              users={users}
+              pending={reorder.pending}
+              insertion={
+                card.messageId === drag?.over && fromIndex !== overIndex
+                  ? fromIndex < overIndex
+                    ? 'after'
+                    : 'before'
+                  : undefined
+              }
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </QueuedMessageRenderer.Provider>
   )
 }
 
-function SortableQueuedMessage({
+const SortableQueuedMessage = memo(function SortableQueuedMessage({
   card,
   users,
-  reorder,
-  insertion,
-  renderCard
+  pending,
+  insertion
 }: {
   card: QueuedMessageCard
-  users: QueuedMessageCard[]
-  reorder: QueuedMessageReorder
+  users: string[]
+  pending: boolean
   insertion: QueuedMessageDragPresentation['insertion']
-  renderCard: Props['renderCard']
 }): ReactNode {
+  const sortable = useSortable({
+    id: card.messageId,
+    disabled: !!card.from || card.hold === 'sending' || pending
+  })
+  return (
+    <QueuedMessagePresentation
+      card={card}
+      users={users}
+      pending={pending}
+      insertion={insertion}
+      sortable={sortable}
+    />
+  )
+})
+
+function QueuedMessagePresentation({
+  card,
+  users,
+  pending,
+  insertion,
+  sortable
+}: {
+  card: QueuedMessageCard
+  users: string[]
+  pending: boolean
+  insertion: QueuedMessageDragPresentation['insertion']
+  sortable: ReturnType<typeof useSortable>
+}): ReactNode {
+  const renderer = useContext(QueuedMessageRenderer)
+  if (!renderer) {
+    throw new Error('Queued message renderer is missing')
+  }
   const movable = !card.from && card.hold !== 'sending'
-  const sortable = useSortable({ id: card.messageId, disabled: !movable || reorder.pending })
   const label = translate('components.native-chat.queuedMessages.reorderMessage', 'Reorder message')
-  return renderCard(card, {
+  return renderer.renderCard(card, {
     rowRef: sortable.setNodeRef,
     rowStyle: {
       transform: CSS.Transform.toString(sortable.transform),
@@ -136,20 +183,20 @@ function SortableQueuedMessage({
               {...sortable.listeners}
               aria-label={label}
               aria-keyshortcuts="ArrowUp ArrowDown"
-              aria-disabled={reorder.pending}
+              aria-disabled={pending}
               onKeyDown={(event) => {
-                if (reorder.pending || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+                if (pending || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
                   return
                 }
                 event.preventDefault()
-                const index = users.indexOf(card)
+                const index = users.indexOf(card.messageId)
                 const neighbor = users[index + (event.key === 'ArrowUp' ? -1 : 1)]
                 if (neighbor) {
-                  void reorder.move(
+                  void renderer.move(
                     card.messageId,
                     event.key === 'ArrowUp'
-                      ? { beforeMessageId: neighbor.messageId }
-                      : { afterMessageId: neighbor.messageId }
+                      ? { beforeMessageId: neighbor }
+                      : { afterMessageId: neighbor }
                   )
                 }
               }}
