@@ -1,3 +1,4 @@
+import { hostTestState } from '../../../native-chat/agent-session-wire/structured-agent-session-host-test-harness'
 import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
@@ -98,19 +99,16 @@ describe('worker-stop on a structured worker this runtime cannot reach', () => {
   it('keeps a restarted worker unsettled when close finds no attached session', async () => {
     const dispatchId = startStructuredWorker()
     const close = vi.fn(async () => {})
-    setStructuredAgentSessionHost({
-      close,
-      setSessionTabVisibility: async () => {},
-      hasSession: () => false,
-      deps: {
-        store: {
-          getConversation: () =>
-            agentSessionConversationView(
-              agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId: SESSION }))
-            )
-        }
-      }
-    } as never)
+    const { host, store } = hostTestState()
+    vi.spyOn(host, 'close').mockImplementation(close)
+    vi.spyOn(host, 'setSessionTabVisibility').mockResolvedValue(undefined)
+    vi.spyOn(host, 'hasSession').mockReturnValue(false)
+    vi.spyOn(store, 'getConversation').mockImplementation(() =>
+      agentSessionConversationView(
+        agentSessionRecordFixture(agentSessionLeaseFixture({ sessionId: SESSION }))
+      )
+    )
+    setStructuredAgentSessionHost(host)
 
     await expect(call('orchestration.workerStop', { dispatch: dispatchId })).resolves.toMatchObject(
       {

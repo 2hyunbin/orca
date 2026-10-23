@@ -1,3 +1,4 @@
+import { hostTestState } from '../native-chat/agent-session-wire/structured-agent-session-host-test-harness'
 import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
@@ -102,17 +103,14 @@ describe('structured worker incarnation liveness', () => {
   const LOCAL_SCOPE = JSON.stringify({ kind: 'local', hostId: 'local' })
 
   function installHost(lease: Partial<AgentSessionLease>): void {
-    setStructuredAgentSessionHost({
-      hasSession: () => false,
-      deps: {
-        store: {
-          getConversation: () =>
-            agentSessionConversationView(
-              agentSessionRecordFixture(agentSessionLeaseFixture({ ...lease, sessionId: SESSION }))
-            )
-        }
-      }
-    } as never)
+    const { host, store } = hostTestState()
+    vi.spyOn(host, 'hasSession').mockReturnValue(false)
+    vi.spyOn(store, 'getConversation').mockImplementation(() =>
+      agentSessionConversationView(
+        agentSessionRecordFixture(agentSessionLeaseFixture({ ...lease, sessionId: SESSION }))
+      )
+    )
+    setStructuredAgentSessionHost(host)
   }
 
   afterEach(() => {

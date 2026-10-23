@@ -1,3 +1,4 @@
+import { hostTestState } from '../../../native-chat/agent-session-wire/structured-agent-session-host-test-harness'
 import {
   agentSessionLeaseFixture,
   agentSessionRecordFixture
@@ -49,32 +50,27 @@ function installHost(options: { closeThrows?: boolean; lease?: Partial<AgentSess
     }
     attached = false
   })
-  setStructuredAgentSessionHost({
-    setSessionTabVisibility,
-    close,
-    hasSession: () => attached,
-    hold: async () => {},
-    release: () => {},
-    subscribe: () => () => {},
-    deps: {
-      store: {
-        getConversation: () =>
-          agentSessionConversationView(
-            agentSessionRecordFixture(
-              agentSessionLeaseFixture({
-                sessionId: SESSION,
-                claimStatus: attached ? 'live' : 'released',
-                deathEvidence: attached
-                  ? null
-                  : { kind: 'exit-observed', detail: 'closed', observedAt: 1 },
-                runtimeFence: 2,
-                ...options.lease
-              })
-            )
-          )
-      }
-    }
-  } as never)
+  const { host, store } = hostTestState()
+  vi.spyOn(host, 'setSessionTabVisibility').mockImplementation(setSessionTabVisibility)
+  vi.spyOn(host, 'close').mockImplementation(close)
+  vi.spyOn(host, 'hasSession').mockImplementation(() => attached)
+  vi.spyOn(host, 'subscribe').mockResolvedValue(() => {})
+  vi.spyOn(store, 'getConversation').mockImplementation(() =>
+    agentSessionConversationView(
+      agentSessionRecordFixture(
+        agentSessionLeaseFixture({
+          sessionId: SESSION,
+          claimStatus: attached ? 'live' : 'released',
+          deathEvidence: attached
+            ? null
+            : { kind: 'exit-observed', detail: 'closed', observedAt: 1 },
+          runtimeFence: 2,
+          ...options.lease
+        })
+      )
+    )
+  )
+  setStructuredAgentSessionHost(host)
   return { close, setSessionTabVisibility }
 }
 
@@ -249,6 +245,9 @@ describe('structured worker release retires the chat tab', () => {
         runtimeFence: 2
       }
     })
+    vi.spyOn(hostTestState().host, 'history').mockRejectedValue(
+      new Error('The closed chat journal is unavailable')
+    )
     const identity = registerIdentity()
     const resource = {
       id: 'resource-2',
