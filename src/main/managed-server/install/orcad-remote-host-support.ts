@@ -34,6 +34,11 @@ export const ORCAD_READINESS_MAX_BYTES = 256 * 1024
 
 /** PID of the launched orcad, written into its own version dir at launch. */
 export const ORCAD_PID_FILENAME = '.orcad-pid'
+/** The machine that wrote `.orcad-pid` (boot id, then node name): a shared home is no machine. */
+export const ORCAD_PID_MACHINE_FILENAME = `${ORCAD_PID_FILENAME}-machine`
+/** Prints that record, or nothing on a host with no boot id; a launch and a later wait compare it. */
+export const ORCAD_LAUNCH_MACHINE_COMMAND = 'cat /proc/sys/kernel/random/boot_id&&uname -n'
+
 /** Windows' `.orcad-pid`: `{"pid":N,"creationTimeMs":M|null}`, since a PID alone is no identity there. */
 export const ORCAD_WINDOWS_PROCESS_FILENAME = '.orcad-process.json'
 

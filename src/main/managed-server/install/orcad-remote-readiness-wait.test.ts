@@ -6,6 +6,7 @@ import { runProcess } from '@orca/process-host'
 import { orcadReadinessWaitCommand } from './orcad-remote-readiness-wait'
 import { getRemoteHostPlatform } from '../../ssh/ssh-remote-platform'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
+import { ORCAD_LAUNCH_MACHINE_COMMAND } from './orcad-remote-host-support'
 
 const roots: string[] = []
 afterEach(() => {
@@ -39,25 +40,43 @@ describe.skipIf(process.platform === 'win32')('the host-side readiness wait', ()
     expect(Date.now() - startedAt).toBeLessThan(4_500)
   })
 
-  // The wait ends only on an exit the host proved; a live or unnamed PID waits out its deadline.
-  it.each([
-    ['ends at once when the launched PID is gone', true],
-    ['waits while the launched PID still runs', false]
-  ])('%s', async (_case, exited) => {
+  async function waitAfter(gone: boolean, machine: 'here' | 'elsewhere' | 'unrecorded') {
     const root = mkdtempSync(join(tmpdir(), 'orcad-readiness-wait-'))
     roots.push(root)
     const slot = join(root, 'slot')
     mkdirSync(slot)
-    const pidFile = join(slot, '.orcad-pid')
+    const pidFile = quotePosixShell(join(slot, '.orcad-pid'))
+    const machineFile = quotePosixShell(join(slot, '.orcad-pid-machine'))
     const command = orcadReadinessWaitCommand(getRemoteHostPlatform('linux-x64'), slot, 2)
-    const prefix = exited
-      ? `sh -c 'echo $$ > "$1"' orcad-test ${quotePosixShell(pidFile)};`
-      : `echo ${process.pid} > ${quotePosixShell(pidFile)};`
+    const prefix = [
+      gone ? `sh -c 'echo $$ > "$1"' orcad-test ${pidFile};` : `echo ${process.pid} > ${pidFile};`,
+      ...(machine === 'here'
+        ? [`{ ${ORCAD_LAUNCH_MACHINE_COMMAND};} > ${machineFile} 2>/dev/null;`]
+        : machine === 'elsewhere'
+          ? [`echo 'other-boot other-node' > ${machineFile};`]
+          : [])
+    ].join(' ')
     const { stdout } = await runProcess({
       program: '/bin/sh',
       args: ['-c', `${prefix} ${command}`],
       timeoutMs: 30_000
     })
-    expect(stdout.startsWith('ORCAD_LAUNCH_EXITED\n')).toBe(exited)
+    return stdout.startsWith('ORCAD_LAUNCH_EXITED\n')
+  }
+
+  // Only Linux has the boot id that makes a PID evidence; elsewhere the wait keeps its deadline.
+  it.skipIf(process.platform !== 'linux')(
+    'ends at once when the launched PID is gone here',
+    async () => {
+      expect(await waitAfter(true, 'here')).toBe(true)
+    }
+  )
+
+  it.each([
+    ['waits while the launched PID still runs', false, 'here'],
+    ['waits for a PID another machine sharing the home launched', true, 'elsewhere'],
+    ['waits for a launch that recorded no machine', true, 'unrecorded']
+  ] as const)('%s', async (_case, gone, machine) => {
+    expect(await waitAfter(gone, machine)).toBe(false)
   })
 })
