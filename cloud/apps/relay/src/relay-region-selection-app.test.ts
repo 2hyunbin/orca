@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, type Mock } from 'vitest'
 import type { RelayConfig } from './config.js'
 import { ReservePaceError } from './reserve-assignment.js'
 
@@ -96,6 +96,25 @@ describe('Relay region selection counters', () => {
     ])
   })
 
+  it('counts a drain-return re-placement out of the target region as a fallback', async () => {
+    const recordRegionSelection = vi.fn()
+    const recordAssignmentAdmission = vi.fn()
+    await assign(
+      {
+        recordRegionSelection,
+        recordAssignmentAdmission,
+        assign: vi.fn(async () => usAssignment({ placed: true })),
+        resolve: vi.fn(async () => usAssignment({ cellId: 'asia-c1', region: 'asia-east2', homeCellRollIsolated: true }))
+      },
+      { reconnect: true }
+    )
+
+    expect(recordAssignmentAdmission).toHaveBeenCalledWith('drain-return')
+    expect(recordRegionSelection.mock.calls).toEqual([
+      [{ targetRegion: 'asia-east2', selectedRegion: 'us-central1', fallback: true }]
+    ])
+  })
+
   it('does not count a migration report as a fallback', async () => {
     const recordRegionSelection = vi.fn()
     await assign(
@@ -125,11 +144,12 @@ describe('Relay region selection counters', () => {
 
 async function assign(
   operations: {
-    recordRegionSelection: ReturnType<typeof vi.fn>
-    plan?: ReturnType<typeof vi.fn>
-    assign?: ReturnType<typeof vi.fn>
-    resolve?: ReturnType<typeof vi.fn>
-    exchangeRegionCorrection?: ReturnType<typeof vi.fn>
+    recordRegionSelection: Mock
+    recordAssignmentAdmission?: Mock
+    plan?: Mock
+    assign?: Mock
+    resolve?: Mock
+    exchangeRegionCorrection?: Mock
   },
   extra: Record<string, unknown> = {}
 ): Promise<Response> {
@@ -143,7 +163,10 @@ async function assign(
     ...(operations.plan ? { reservePlacement: { plan: operations.plan } as never } : {}),
     drain: vi.fn(),
     ready: vi.fn(async () => true),
-    recordRegionSelection: operations.recordRegionSelection
+    recordRegionSelection: operations.recordRegionSelection,
+    ...(operations.recordAssignmentAdmission
+      ? { recordAssignmentAdmission: operations.recordAssignmentAdmission }
+      : {})
   })
   return await app.request('/v1/assign', {
     method: 'POST',
