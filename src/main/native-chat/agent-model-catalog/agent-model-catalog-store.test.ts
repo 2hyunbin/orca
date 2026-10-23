@@ -326,14 +326,16 @@ describe('agent model catalog store', () => {
     )
   })
 
-  it('rewrites the file only when a listing changes, while still refreshing its age', () => {
+  it.each([10, 100])('ignores %i unchanged listings while still refreshing their age', (count) => {
     let at = 1_000
     const store = new AgentModelCatalogStore({ now: () => at })
     const save = vi.fn()
     void store.attachPersistence({ load: async () => [], save, flush: async () => {} })
     store.recordSuccess('fp', 'grok', success('opus'), 'discovery')
     at += AGENT_MODEL_CATALOG_FRESH_MS
-    store.recordSuccess('fp', 'grok', success('opus'), 'discovery')
+    for (let index = 0; index < count; index++) {
+      store.recordSuccess('fp', 'grok', success('opus'), 'discovery')
+    }
     expect(save).toHaveBeenCalledTimes(1)
     expect(store.shouldRefresh('fp')).toBe(false)
     store.recordSuccess('fp', 'grok', success('opus', 'sonnet'), 'discovery')

@@ -99,6 +99,51 @@ describe('model catalog prewarm', () => {
     expect(grok).toHaveBeenCalledTimes(2)
   })
 
+  it.each([10, 100])(
+    'joins %i same-folder reads and bounds distinct-folder acquisition',
+    async (count) => {
+      let gate = deferred<void>()
+      let active = 0
+      let peak = 0
+      const probe = vi.fn(
+        async (_home: AgentSessionAccountHome, options?: { workspacePath?: string }) => {
+          peak = Math.max(peak, ++active)
+          await gate.promise
+          active--
+          return listing(options?.workspacePath ?? 'missing folder')
+        }
+      )
+      const service = createAgentModelCatalogService({
+        store: new AgentModelCatalogStore(),
+        getRecord: () => undefined,
+        drivesRecord: () => true,
+        resolveAccountHome: async () => HOME('PI_CODING_AGENT_DIR', '/homes/a'),
+        probes: { pi: probe },
+        listsInChatFolder: new Set(['pi'])
+      })
+      const read = (workspacePath: string) =>
+        service.read({ agent: 'pi', workspacePath, waitForListing: true })
+      const joined = Array.from({ length: count }, () => read('/work/shared'))
+      await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(1))
+      gate.resolve()
+      await Promise.all(joined)
+      await Promise.all(Array.from({ length: count }, () => read('/work/shared')))
+      expect(probe).toHaveBeenCalledTimes(1)
+      const folders = Array.from({ length: count }, (_, index) => `/work/${index}`)
+      gate = deferred<void>()
+      const pending = folders.map(read)
+      await vi.waitFor(() => expect(probe).toHaveBeenCalledTimes(3))
+      gate.resolve()
+      const results = await Promise.all(pending)
+      expect(results.map((result) => result.origin !== 'unknown' && result.models[0]?.id)).toEqual(
+        folders
+      )
+      expect(probe).toHaveBeenCalledTimes(count + 1)
+      expect(peak).toBeLessThanOrEqual(2)
+      service.stop()
+    }
+  )
+
   // A project's opencode.json can add or remove models, so its folder keeps its own list.
   // The folder lookup can answer the earlier report last; the later report must still win.
   it("saves a running chat's reports in the order it sent them, per folder", async () => {

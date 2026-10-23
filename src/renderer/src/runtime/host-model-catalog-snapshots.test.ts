@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
 
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -36,6 +39,16 @@ import {
   resetHostModelCatalogSnapshotsForTests
 } from './host-model-catalog-snapshots'
 import { installHostModelCatalogSnapshotsSync } from './host-model-catalog-snapshots-sync'
+
+import { AgentModelCatalogStore } from '../../../main/native-chat/agent-model-catalog/agent-model-catalog-store'
+import { createAgentModelCatalogService } from '../../../main/native-chat/agent-model-catalog/agent-model-catalog-service'
+import { agentModelCatalogFingerprint } from '../../../main/native-chat/agent-model-catalog/agent-model-catalog-fingerprint'
+import { createAgentModelCatalogFilePersistence } from '../../../main/native-chat/agent-model-catalog/agent-model-catalog-persistence'
+import { PI_RPC_RUNTIME_METADATA } from '../../../main/pi/rpc-runtime-metadata'
+import { acpLaunchSpecFor, acpListingNeedsChatFolder } from '../../../main/acp/acp-launch-specs'
+import { firstFrameOptionState } from '../components/native-chat/use-structured-agent-session-option-state'
+import { applyStructuredAgentSessionModelCatalog } from '../../../shared/structured-agent-session-options'
+import { structuredAgentSessionSeedCatalog } from '../../../shared/structured-agent-session-seed-catalog'
 
 const LOCAL = { kind: 'local' } as const
 const PAIRED = { kind: 'environment', environmentId: 'server-1' } as const
@@ -169,6 +182,133 @@ describe('host model catalog snapshots sync', () => {
     expect(readHostModelCatalogSnapshot(LOCAL, 'claude', NEW_CHAT)).toBeUndefined()
     expect(readHostModelCatalogSnapshot(LOCAL, 'codex', NEW_CHAT)).toBeUndefined()
   })
+
+  it.each(['pi', 'opencode2', 'grok'] as const)(
+    '%s upgrade preload preserves account rows without borrowing folder-sensitive inventory',
+    async (agent) => {
+      const directory = await mkdtemp(join(tmpdir(), 'pi-rpc-inventory-preload-'))
+      try {
+        const unused = async (): Promise<never> => {
+          throw new Error('no probe during registration')
+        }
+        const piDiscovery = PI_RPC_RUNTIME_METADATA.modelCatalog({
+          deps: {
+            stateDirectory: directory,
+            hostId: 'local',
+            claimKeyId: 'preload',
+            resolveWorkspacePath: unused,
+            resolveLaunchArgs: () => [],
+            resolveClaudeAuthPolicy: () => ({ account: 'system' }),
+            logger: { warn: vi.fn(), error: vi.fn() }
+          },
+          environment: {
+            resolveBaseEnvironment: unused,
+            resolveAgentEnvironment: unused,
+            refreshAfterMissingProgram: unused
+          }
+        })
+        const folderScoped =
+          agent === 'pi'
+            ? piDiscovery.kind === 'probe' && piDiscovery.listsInChatFolder === true
+            : acpListingNeedsChatFolder(acpLaunchSpecFor(agent)!.modelDiscovery)
+        const accountHome = {
+          variable:
+            agent === 'pi'
+              ? 'PI_CODING_AGENT_DIR'
+              : agent === 'grok'
+                ? 'GROK_HOME'
+                : 'OPENCODE_HOME',
+          path: '/account/a'
+        }
+        const key = agentModelCatalogFingerprint({ agent, accountHome, wslDistro: null })
+        const previous = new AgentModelCatalogStore()
+        await previous.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+        previous.recordSuccess(
+          key,
+          agent,
+          {
+            origin: 'probe',
+            models: [
+              {
+                id: 'provider/old',
+                label: 'Old',
+                isDefault: false,
+                efforts: [{ value: 'high', label: 'High' }]
+              }
+            ]
+          },
+          'discovery'
+        )
+        await previous.flushPersistence()
+        const store = new AgentModelCatalogStore()
+        await store.attachPersistence(createAgentModelCatalogFilePersistence(directory))
+        const oldEntry = store.get(key)
+        const probe = vi.fn(async () => {
+          throw new Error('folder B discovery failed')
+        })
+        const service = createAgentModelCatalogService({
+          store,
+          getRecord: () => undefined,
+          drivesRecord: () => true,
+          resolveAccountHome: async () => accountHome,
+          listsInChatFolder: new Set(folderScoped ? [agent] : []),
+          probes: { [agent]: probe }
+        })
+        mocks.capabilities = [SAVED_ONLY]
+        mocks.call.mockImplementation((_target, _method, params) => service.read(params))
+        stop = installHostModelCatalogSnapshotsSync()
+        mocks.agents.set('local', { runtimeId: null, agents: [{ agent }] })
+        mocks.agentListeners.forEach((listener) => listener())
+        await vi.waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(1))
+        const account = await mocks.call.mock.results[0]!.value
+        expect(account).toMatchObject({ models: [{ id: 'provider/old' }] })
+        expect(account.modelsDifferByWorkspace).toBe(folderScoped ? true : undefined)
+        expect(mocks.call.mock.calls[0]).toEqual([
+          LOCAL,
+          'agentSession.modelCatalog',
+          { agent, savedOnly: true }
+        ])
+        expect(probe).not.toHaveBeenCalled()
+        const launch = { newLaunch: true, worktree: 'folder-b', seedsModel: true }
+        let frame = firstFrameOptionState(agent, LOCAL, launch)
+        const saved = {
+          model: { value: 'provider/saved-literal', source: 'applied' as const },
+          effort: { value: 'high', source: 'applied' as const }
+        }
+        frame.record.values = structuredClone(saved)
+        const ids = () => frame.catalog?.models.map((model) => model.id) ?? []
+        expect(ids().includes('provider/old')).toBe(!folderScoped)
+        const failed = await service.read({ agent, workspacePath: '/work/b', waitForListing: true })
+        if (folderScoped) {
+          expect(failed.origin).toBe('unknown')
+        }
+        recordHostModelCatalogSnapshot(LOCAL, agent, launch.worktree, failed)
+        frame = applyStructuredAgentSessionModelCatalog(
+          frame,
+          structuredAgentSessionSeedCatalog(agent),
+          failed,
+          launch
+        )
+        expect(ids().includes('provider/old')).toBe(!folderScoped)
+        expect(frame.record.values).toEqual(saved)
+        expect(await service.read({ agent, savedOnly: true })).toEqual(account)
+        expect(store.get(key)).toEqual(oldEntry)
+        expect((await createAgentModelCatalogFilePersistence(directory).load())[0]).toEqual(
+          oldEntry
+        )
+        recordHostModelCatalogSnapshot(LOCAL, agent, null, {
+          ...list(false),
+          models: oldEntry!.models
+        })
+        expect(firstFrameOptionState(agent, LOCAL, launch).catalog?.models[0]?.id).toBe(
+          'provider/old'
+        )
+        service.stop()
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    }
+  )
 
   it('reads again for the new account after an account change, dropping an answer sent before it', async () => {
     mocks.capabilities = [SAVED_ONLY]
