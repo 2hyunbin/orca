@@ -22,6 +22,7 @@ import { useAppStore } from '@/store'
 import { installLegacyChatRenameMigration } from './legacy-chat-rename-migration'
 import { uploadLegacyStructuredChatRename } from './structured-chat-rename'
 import { readStructuredChatTabName } from './structured-chat-tab-name'
+import { guardPinnedTabClose, resolvePinnedTabLabel } from '@/store/pinned-tab-close-guard'
 import {
   subscribeStructuredChatTabNames,
   getStructuredChatTabNames
@@ -293,6 +294,28 @@ function name(tab: Tab, conversationName: string): AgentSessionStatusSummary {
     conversationName
   }
 }
+
+it('names a native pinned-close confirmation from the owning host after alias retirement', () => {
+  const tab = chat({ executionHostId: 'runtime:paired', isPinned: true, customLabel: null })
+  seed(tab)
+  const requestPinnedTabCloseConfirm = vi.fn()
+  useAppStore.setState({
+    settings: createGlobalSettingsFixture({ confirmClosePinnedTab: true }),
+    requestPinnedTabCloseConfirm
+  })
+  mock.snapshot = new Map([[tab.entityId, name(tab, 'Other host name')]])
+  mock.paired = new Map([[tab.entityId, name(tab, 'Saved native name')]])
+  const onClose = vi.fn()
+  guardPinnedTabClose({
+    isPinned: tab.isPinned === true,
+    tabLabel: resolvePinnedTabLabel(useAppStore.getState(), tab.worktreeId, tab.id),
+    onClose
+  })
+  expect(requestPinnedTabCloseConfirm).toHaveBeenCalledWith({
+    tabLabel: 'Saved native name',
+    onConfirm: onClose
+  })
+})
 
 it('shares qualified current names with live dashboard and attachments without activating plain reads', () => {
   const tab = chat({ worktreeId: 'folder:twin' })
