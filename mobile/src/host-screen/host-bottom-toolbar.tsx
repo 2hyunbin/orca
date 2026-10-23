@@ -1,11 +1,10 @@
-import { Keyboard, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native'
+import { Keyboard, StyleSheet, View, type LayoutChangeEvent } from 'react-native'
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
-import { Plus, SlidersHorizontal } from 'lucide-react-native'
+import { Plus, SlidersHorizontal, X } from 'lucide-react-native'
 import { MobileSearchField } from '../components/MobileSearchField'
 import { IconButton } from '../components/ui/IconButton'
-import { pressTransition } from '../components/ui/transition-styles'
 import { useKeyboardOcclusion } from '../platform/keyboard-occlusion'
-import { colors, spacing, textStyles } from '../theme/mobile-theme'
+import { colors, spacing } from '../theme/mobile-theme'
 import { workspaceOptionsAccessibilityLabel } from '../worktree/workspace-options-copy'
 import { WorkspaceOptionsCountBadge } from './workspace-options-count-badge'
 import type { HostScreenController } from './use-host-screen-controller'
@@ -14,7 +13,7 @@ const FADE_ID = 'host-bottom-toolbar-fade'
 
 /**
  * The phone list's one toolbar, under the thumb: filter, search and New workspace. While search is
- * active it rides on the keyboard and New workspace gives way to Cancel, which clears the query.
+ * active it rides on the keyboard and New workspace gives way to a close button that clears the query.
  */
 export function HostBottomToolbar({
   controller,
@@ -33,7 +32,7 @@ export function HostBottomToolbar({
   const keyboardHeight = useKeyboardOcclusion()
   const keyboardUp = keyboardHeight > 0
 
-  const cancel = () => {
+  const closeSearch = () => {
     state.setSearch('')
     onSearchActiveChange(false)
     Keyboard.dismiss()
@@ -88,18 +87,12 @@ export function HostBottomToolbar({
           />
         </View>
         {searchActive ? (
-          <Pressable
-            onPress={cancel}
-            accessibilityRole="button"
-            accessibilityLabel="Cancel search"
-            style={({ pressed }) => [
-              styles.cancel,
-              pressed && styles.cancelPressed,
-              pressed ? pressTransition.pressed : pressTransition.rest
-            ]}
-          >
-            <Text style={styles.cancelLabel}>Cancel</Text>
-          </Pressable>
+          <IconButton
+            icon={X}
+            iconSize={18}
+            accessibilityLabel="Close search"
+            onPress={closeSearch}
+          />
         ) : (
           <IconButton
             icon={Plus}
@@ -125,13 +118,5 @@ const styles = StyleSheet.create({
   },
   fade: { ...StyleSheet.absoluteFillObject },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  search: { flex: 1, minWidth: 0 },
-  cancel: {
-    minHeight: 44,
-    paddingHorizontal: spacing.md,
-    borderRadius: 22,
-    justifyContent: 'center'
-  },
-  cancelPressed: { backgroundColor: colors.fill },
-  cancelLabel: { ...textStyles.body, fontWeight: '500', color: colors.textPrimary }
+  search: { flex: 1, minWidth: 0 }
 })
