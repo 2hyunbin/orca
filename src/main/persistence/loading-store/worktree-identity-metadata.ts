@@ -117,15 +117,18 @@ function migrateLegacyWorktreeMetadata(
   return changed
 }
 
-/** Drop the identity rows a locator owns, for one host or for every host. */
+/** Drop the identity rows locators own, for one host or for every host. */
 export function removeWorktreeMetadataForHost(
   state: PersistedState,
-  worktreeId: string,
+  worktreeIds: string | ReadonlySet<string>,
   executionHostId: ExecutionHostId | undefined
 ): boolean {
   let changed = false
   for (const alias of Object.keys(state.worktreeIdentityAliases ?? {})) {
-    if (getWorktreeIdFromHostIdentity(alias) !== worktreeId) {
+    const worktreeId = getWorktreeIdFromHostIdentity(alias)
+    if (
+      typeof worktreeIds === 'string' ? worktreeId !== worktreeIds : !worktreeIds.has(worktreeId)
+    ) {
       continue
     }
     if (

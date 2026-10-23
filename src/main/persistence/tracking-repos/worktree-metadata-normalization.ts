@@ -38,7 +38,7 @@ export function gcStaleWorktreeMeta(state: PersistedState): number {
   const repoById = new Map(state.repos.map((repo) => [repo.id, repo]))
   const projectIds = new Set((state.projects ?? []).map((project) => project.id))
   const now = Date.now()
-  let removed = 0
+  const removed = new Set<string>()
   for (const key of Object.keys(state.worktreeMeta)) {
     // Why: folder-project workspace instances (keyed repoId::path::workspace:<uuid>) ARE the workspace record, not a checkout row; skip them.
     if (key.includes(FOLDER_WORKSPACE_INSTANCE_SEPARATOR)) {
@@ -83,12 +83,13 @@ export function gcStaleWorktreeMeta(state: PersistedState): number {
     delete state.worktreeMeta[key]
     delete state.worktreeLineageById[key]
     delete state.workspaceLineageByChildKey[worktreeWorkspaceKey(key)]
-    // Identity rows are companions too: a surviving alias would re-attach this dead metadata to a
-    // worktree later created at the same repoId::path, and nothing else ever reclaims them.
-    removeWorktreeMetadataForHost(state, key, LOCAL_EXECUTION_HOST_ID)
-    removed++
+    removed.add(key)
   }
-  return removed
+  if (removed.size > 0) {
+    // Reclaim companion identities once per batch so stale rows cannot reattach at reused paths.
+    removeWorktreeMetadataForHost(state, removed, LOCAL_EXECUTION_HOST_ID)
+  }
+  return removed.size
 }
 
 function normalizeLinkedMetadata(meta: WorktreeMeta): boolean {

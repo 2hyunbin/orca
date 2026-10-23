@@ -1,4 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { getDefaultPersistedState } from '../../../shared/constants'
 import type { WorktreeMeta } from '../../../shared/worktree/meta-types'
 import { WORKTREE_META_PERSISTED_DEFAULTS } from '../../../shared/worktree/meta-persisted-defaults'
 import type { PersistedState } from '../../../shared/persisted-state-types'
@@ -148,6 +152,60 @@ describe('normalizeWorktreeLinkedItemMetadata', () => {
 })
 
 describe('gcStaleWorktreeMeta', () => {
+  it('collects multiple stale rows while preserving remote twins and shared identities', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'orca-stale-meta-'))
+    try {
+      const state = getDefaultPersistedState(directory)
+      const firstId = `r1::${join(directory, 'missing-first')}`
+      const secondId = `r1::${join(directory, 'missing-second')}`
+      const liveId = `r1::${directory}`
+      const staleMeta = {
+        ...makeMeta(),
+        hostId: 'local',
+        lastActivityAt: Date.now() - WORKTREE_META_GC_GRACE_MS - 60_000
+      } as const
+      state.worktreeMeta = {
+        [firstId]: staleMeta,
+        [secondId]: staleMeta,
+        [liveId]: staleMeta
+      }
+      state.worktreeMetaByIdentity = {
+        first: makeMeta(),
+        second: makeMeta(),
+        remote: makeMeta(),
+        shared: makeMeta(),
+        unreferenced: makeMeta()
+      }
+      state.worktreeIdentityAliases = {
+        [`local|${firstId}`]: ['first', 'shared'],
+        [`local|${secondId}`]: ['second'],
+        [`ssh:builder|${firstId}`]: ['remote'],
+        [`local|${liveId}`]: ['shared']
+      }
+
+      expect(gcStaleWorktreeMeta(state)).toBe(2)
+      expect(state.worktreeMeta).toEqual({ [liveId]: staleMeta })
+      expect(state.worktreeIdentityAliases).toEqual({
+        [`ssh:builder|${firstId}`]: ['remote'],
+        [`local|${liveId}`]: ['shared']
+      })
+      expect(state.worktreeMetaByIdentity).toEqual({
+        remote: makeMeta(),
+        shared: makeMeta()
+      })
+    } finally {
+      rmSync(directory, { recursive: true, force: true })
+    }
+  })
+
+  it('leaves unrelated identity metadata alone when no rows are collected', () => {
+    const state = getDefaultPersistedState(tmpdir())
+    state.worktreeMetaByIdentity = { unreferenced: makeMeta() }
+
+    expect(gcStaleWorktreeMeta(state)).toBe(0)
+    expect(state.worktreeMetaByIdentity).toEqual({ unreferenced: makeMeta() })
+  })
+
   it('reclaims the identity rows of a collected worktree', () => {
     const worktreeId = 'r1::/definitely/missing/orca/path'
     const identityKey = 'wt2:local:dead'
