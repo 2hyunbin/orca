@@ -88,6 +88,19 @@ export function startWindowsTreeKill(
   let deadline: ReturnType<typeof setTimeout> | undefined
   let afterRootExit: ReturnType<typeof setTimeout> | undefined
   const abandon = (): void => {
+    console.log(
+      '[tree-diagnostic]',
+      JSON.stringify({
+        event: 'abandon',
+        at: Date.now(),
+        rootPid,
+        rootExit: child.exitCode,
+        rootSignal: child.signalCode,
+        killerPid: killer?.pid,
+        killerExit: killer?.exitCode,
+        killerSignal: killer?.signalCode
+      })
+    )
     try {
       killer?.kill()
     } catch {
@@ -96,10 +109,24 @@ export function startWindowsTreeKill(
     finish('unverifiable')
   }
   const onRootExit = (): void => {
+    console.log(
+      '[tree-diagnostic]',
+      JSON.stringify({
+        event: 'root-exit',
+        at: Date.now(),
+        rootPid,
+        rootExit: child.exitCode,
+        rootSignal: child.signalCode
+      })
+    )
     afterRootExit ??= setTimeout(abandon, WINDOWS_TASKKILL_AFTER_ROOT_EXIT_MS)
     afterRootExit.unref?.()
   }
   function finish(next: SettledWindowsTreeKillVerdict): void {
+    console.log(
+      '[tree-diagnostic]',
+      JSON.stringify({ event: 'finish', at: Date.now(), rootPid, next, previous: verdict })
+    )
     if (verdict !== 'live') {
       return
     }
@@ -114,12 +141,22 @@ export function startWindowsTreeKill(
   }
   try {
     killer = launchTaskkill(rootPid)
+    console.log(
+      '[tree-diagnostic]',
+      JSON.stringify({ event: 'launched', at: Date.now(), rootPid, killerPid: killer.pid })
+    )
   } catch {
     finish('unverifiable')
     return kill
   }
   killer.once('error', () => finish('unverifiable'))
-  killer.once('close', (code) => finish(code === 0 ? 'exited' : 'unverifiable'))
+  killer.once('close', (code, signal) => {
+    console.log(
+      '[tree-diagnostic]',
+      JSON.stringify({ event: 'killer-close', at: Date.now(), rootPid, code, signal })
+    )
+    finish(code === 0 ? 'exited' : 'unverifiable')
+  })
   deadline = setTimeout(abandon, WINDOWS_TASKKILL_DEADLINE_MS)
   deadline.unref?.()
   child.once('exit', onRootExit)

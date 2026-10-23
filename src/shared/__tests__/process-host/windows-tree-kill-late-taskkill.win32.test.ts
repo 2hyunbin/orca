@@ -174,6 +174,7 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
       terminationBarrier: true,
       onChildTerminated: () => {
         reportedAt = Date.now()
+        console.log('[tree-diagnostic]', JSON.stringify({ event: 'reported', at: reportedAt }))
       }
     })
     try {
@@ -201,6 +202,15 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
       }
 
       const abortedAt = Date.now()
+      console.log(
+        '[tree-diagnostic]',
+        JSON.stringify({
+          event: 'abort',
+          at: abortedAt,
+          grandchild,
+          burners: burners.map((burner) => burner.pid)
+        })
+      )
       controller.abort()
       await pending
       const settledAfterMs = Date.now() - abortedAt
@@ -217,6 +227,18 @@ describeOnWindows('Windows barrier with a taskkill slower than its caller', () =
       }
       expect(isAlive(grandchild)).toBe(false)
     } finally {
+      const pidFile = join(dir, 'grandchild.pid')
+      const pid = existsSync(pidFile) ? Number(readFileSync(pidFile, 'utf8')) : null
+      console.log(
+        '[tree-diagnostic]',
+        JSON.stringify({
+          event: 'fixture-finally',
+          at: Date.now(),
+          reportedAt,
+          grandchild: pid,
+          alive: pid === null ? null : isAlive(pid)
+        })
+      )
       controller.abort()
       await pending
     }

@@ -308,6 +308,10 @@ export function runProcess(
       settle(() => reject(error))
     })
     child.once('exit', (code, signal) => {
+      console.log(
+        '[tree-diagnostic]',
+        JSON.stringify({ event: 'run-root-exit', at: Date.now(), pid: child.pid, code, signal })
+      )
       if (!barrierStopping) {
         rootExitedBeforeBarrier = true
       }
@@ -317,6 +321,10 @@ export function runProcess(
       }
     })
     child.once('close', (code, signal) => {
+      console.log(
+        '[tree-diagnostic]',
+        JSON.stringify({ event: 'run-root-close', at: Date.now(), pid: child.pid, code, signal })
+      )
       terminationReporter.report()
       if (!barrierStopping) {
         rootExitedBeforeBarrier = true
