@@ -57,6 +57,8 @@ export type EditorSaveFileTarget = {
   fallbackContent?: string
   /** Only the conflict banner's Overwrite sets this. */
   overwrite?: true
+  /** Only the user's confirmation to replace a non-UTF-8 file's unreadable characters sets this. */
+  convertToUtf8?: true
 }
 
 export type EditorSaveAndCloseDetail = {
