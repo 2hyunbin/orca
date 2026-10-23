@@ -79,6 +79,11 @@ export type OrcadManagedRestartResult =
   | { outcome: 'terminals-running'; liveSessions: number | null }
   | { outcome: 'not-restarted'; reason: string }
 
+/** A dry run, or a confirmation pinned to the lock record that dry run showed. */
+export type OrcadManagedStaleLockReclaimRequest =
+  | { yes: false }
+  | { yes: true; expectNonce: string }
+
 /** `orcad --reclaim-stale-lock` run on a managed host's active slot (#32177). */
 export type OrcadManagedStaleLockReclaimResult =
   | {
@@ -93,6 +98,8 @@ export type OrcadManagedStaleLockReclaimResult =
       environmentId: string
       message: string
       lockPath: string
+      /** The record the reclaim acted on. */
+      evidence?: OrcadStaleLockEvidence
       notRestarted?: string
     }
   /** The host can't run the command; `lockPath` names the lock to delete by hand. Nothing changed. */

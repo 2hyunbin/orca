@@ -33,7 +33,14 @@ const eligible: OrcadManagedStaleLockReclaimResult = {
   status: 'eligible',
   lockPath: '/home/dev/.orca/orcad.lock',
   message: 'eligible',
-  evidence: { pid: 41, host: 'box', bootId: 'boot-old', currentBootId: 'boot-new', ageMinutes: 90 }
+  evidence: {
+    pid: 41,
+    host: 'box',
+    bootId: 'boot-old',
+    currentBootId: 'boot-new',
+    ageMinutes: 90,
+    nonce: 'n-approved'
+  }
 }
 const reclaimStaleLock = vi.fn(
   async (args: { yes: boolean }): Promise<OrcadManagedStaleLockReclaimResult> =>
@@ -106,9 +113,13 @@ describe('Recover server', () => {
     expect(confirm.disabled).toBe(true)
     await act(async () => container.querySelector<HTMLButtonElement>('[role="checkbox"]')!.click())
     expect(confirm.disabled).toBe(false)
-    expect(reclaimStaleLock).not.toHaveBeenCalledWith({ selector: 'env-1', yes: true })
+    expect(reclaimStaleLock).toHaveBeenCalledTimes(1)
     await act(async () => confirm.click())
-    expect(reclaimStaleLock).toHaveBeenLastCalledWith({ selector: 'env-1', yes: true })
+    expect(reclaimStaleLock).toHaveBeenLastCalledWith({
+      selector: 'env-1',
+      yes: true,
+      expectNonce: 'n-approved'
+    })
     expect(onChanged).toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })

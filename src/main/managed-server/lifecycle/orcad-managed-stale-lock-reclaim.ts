@@ -7,9 +7,13 @@ import { z } from 'zod'
 import { quotePosixShell } from '../../../shared/shell-argument-quoting'
 import {
   ORCAD_RECLAIM_STALE_LOCK_FLAG,
-  ORCAD_STALE_LOCK_DATA_ROOT_FLAG
+  ORCAD_STALE_LOCK_DATA_ROOT_FLAG,
+  ORCAD_STALE_LOCK_EXPECT_NONCE_FLAG
 } from '../../../shared/orcad-stale-lock-reclaim'
-import type { OrcadManagedStaleLockReclaimResult } from '../../../shared/orcad-managed-runtime'
+import type {
+  OrcadManagedStaleLockReclaimRequest,
+  OrcadManagedStaleLockReclaimResult
+} from '../../../shared/orcad-managed-runtime'
 import {
   ORCAD_LAUNCHER_FILENAME,
   ORCAD_SERVER_ENTRY_FILENAME
@@ -37,7 +41,8 @@ const ReclaimAnswerSchema = z.object({
       host: z.string(),
       bootId: z.string(),
       currentBootId: z.string(),
-      ageMinutes: z.number()
+      ageMinutes: z.number(),
+      nonce: z.string().optional()
     })
     .optional()
 })
@@ -53,7 +58,7 @@ type SlotReclaim =
 export function runManagedOrcadStaleLockReclaim(
   userDataPath: string,
   selector: string,
-  options: { yes: boolean }
+  request: OrcadManagedStaleLockReclaimRequest
 ): Promise<OrcadManagedStaleLockReclaimResult> {
   return withManagedOrcadLifecycle(userDataPath, selector, async ({ environment, deployment }) => {
     const context = await resolveLinkedOrcadContext(environment, deployment)
@@ -65,7 +70,7 @@ export function runManagedOrcadStaleLockReclaim(
     // Serialized with launches, so a wake never reads the lock while it is being cleared.
     const ran = await withOrcadActivationLock(
       slot,
-      () => runOnActiveSlot(slot, options.yes),
+      () => runOnActiveSlot(slot, request),
       (): SlotReclaim => ({
         status: 'busy',
         message: 'An update, rollback or recovery holds this host; try again when it finishes.'
@@ -88,7 +93,8 @@ export function runManagedOrcadStaleLockReclaim(
       status: 'reclaimed',
       environmentId: environment.id,
       message: answer.message,
-      lockPath: answer.lockPath
+      lockPath: answer.lockPath,
+      ...(answer.evidence ? { evidence: answer.evidence } : {})
     } as const
     const wake = await wakeStoppedManagedOrcad(slot)
     if (wake.outcome !== 'started' && wake.outcome !== 'serving') {
@@ -106,7 +112,10 @@ export function runManagedOrcadStaleLockReclaim(
   })
 }
 
-async function runOnActiveSlot(slot: OrcadSlotOptions, yes: boolean): Promise<SlotReclaim> {
+async function runOnActiveSlot(
+  slot: OrcadSlotOptions,
+  request: OrcadManagedStaleLockReclaimRequest
+): Promise<SlotReclaim> {
   // Re-read under the fence: another client may have changed the active slot.
   const active = (await readOrcadActivationRecord(slot)).active
   if (!active) {
@@ -115,12 +124,17 @@ async function runOnActiveSlot(slot: OrcadSlotOptions, yes: boolean): Promise<Sl
   const slotDir = orcadSlotDir(slot, active)
   const entry = joinRemotePath(slot.host, slotDir, ORCAD_LAUNCHER_FILENAME)
   const bundle = joinRemotePath(slot.host, slotDir, ORCAD_SERVER_ENTRY_FILENAME)
-  // Why first: an orcad without the flag would ignore it and start serving in the foreground.
+  // The confirmation clears only the record the user approved, never one written since.
+  const confirm = request.yes
+    ? ` ${ORCAD_STALE_LOCK_EXPECT_NONCE_FLAG} ${quotePosixShell(request.expectNonce)} --yes`
+    : ''
+  // Why first: an orcad without the flag would ignore it and start serving in the foreground, and
+  // one without the nonce pin could clear a lock written after the check.
   const command =
-    `if grep -qF -- ${quotePosixShell(ORCAD_RECLAIM_STALE_LOCK_FLAG)} ${quotePosixShell(bundle)} 2>/dev/null; then ` +
+    `if grep -qF -- ${quotePosixShell(ORCAD_STALE_LOCK_EXPECT_NONCE_FLAG)} ${quotePosixShell(bundle)} 2>/dev/null; then ` +
     `${selectOrcadSlotRuntimeCommand(slot.host, slotDir, '')} && ` +
     `"$orcad_runtime" ${quotePosixShell(entry)} ${ORCAD_RECLAIM_STALE_LOCK_FLAG} ` +
-    `${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} ${quotePosixShell(slot.userDataDir)} --json${yes ? ' --yes' : ''}; ` +
+    `${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} ${quotePosixShell(slot.userDataDir)} --json${confirm}; ` +
     `else echo ${RECLAIM_UNSUPPORTED_SENTINEL}; fi`
   let output: string
   try {

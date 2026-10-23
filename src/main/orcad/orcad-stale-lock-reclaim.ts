@@ -32,6 +32,7 @@ import { RUNTIME_SOCKET_NAME_REGEX } from '../runtime/runtime-rpc/runtime-rpc-so
 import {
   ORCAD_RECLAIM_STALE_LOCK_FLAG,
   ORCAD_STALE_LOCK_DATA_ROOT_FLAG,
+  ORCAD_STALE_LOCK_EXPECT_NONCE_FLAG,
   ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES,
   type OrcadReclaimHintRuntime,
   type OrcadStaleLockEvidence,
@@ -67,6 +68,8 @@ export async function reclaimStaleOrcadInstanceLock(
   dataRoot: string,
   options: {
     yes: boolean
+    /** Refuse unless the lock still holds this nonce: the record the user approved. */
+    expectNonce?: string
     /** Who to name in a refusal's command: an orcad names its own runtime, the CLI `orca serve`. */
     hintRuntime: OrcadReclaimHintRuntime | null
   },
@@ -98,6 +101,9 @@ export async function reclaimStaleOrcadInstanceLock(
   const holder = parseOrcadInstanceLockRecord(contents)
   if (!holder) {
     return result('refused', `The lock ${lockPath} is not a complete record. Check it by hand.`)
+  }
+  if (options.expectNonce !== undefined && holder.nonce !== options.expectNonce) {
+    return result('refused', 'The lock changed after you checked it. Check it again.')
   }
   const currentBoot = (hooks.bootId ?? currentBootId)()
   const checked = await checkStaleLock(dataRoot, lockPath, holder, currentBoot, hooks)
@@ -198,7 +204,8 @@ async function checkStaleLock(
       host: holder.host,
       bootId: holder.bootId,
       currentBootId: bootId,
-      ageMinutes: Math.round((now - Date.parse(holder.acquiredAt)) / 60_000)
+      ageMinutes: Math.round((now - Date.parse(holder.acquiredAt)) / 60_000),
+      nonce: holder.nonce
     }
   }
 }
@@ -284,26 +291,34 @@ export function printOrcadStaleLockReclaimResult(
   ;(result.status === 'reclaimed' ? console.log : console.error)(result.message)
 }
 
-/** `orcad --reclaim-stale-lock [--data-root <dir>] [--yes] [--json]`. */
+/** `orcad --reclaim-stale-lock [--data-root <dir>] [--expect-nonce <nonce>] [--yes] [--json]`. */
 export async function runOrcadStaleLockReclaimCommandAndExit(argv: string[]): Promise<never> {
   const args = argv.slice(1)
   const json = args.includes('--json')
-  const dataRootIndex = args.indexOf(ORCAD_STALE_LOCK_DATA_ROOT_FLAG)
-  const dataRoot = dataRootIndex === -1 ? resolveUserDataPath() : args[dataRootIndex + 1]
+  const valueFlags = [ORCAD_STALE_LOCK_DATA_ROOT_FLAG, ORCAD_STALE_LOCK_EXPECT_NONCE_FLAG]
+  const valueIndexes = valueFlags.map((flag) => args.indexOf(flag)).filter((index) => index !== -1)
+  const valueOf = (flag: string): string | undefined => {
+    const index = args.indexOf(flag)
+    return index === -1 ? undefined : (args[index + 1] ?? '')
+  }
+  const dataRoot = valueOf(ORCAD_STALE_LOCK_DATA_ROOT_FLAG) ?? resolveUserDataPath()
+  const expectNonce = valueOf(ORCAD_STALE_LOCK_EXPECT_NONCE_FLAG)
   const unknown = args.filter(
     (arg, index) =>
-      !['--yes', '--json', ORCAD_STALE_LOCK_DATA_ROOT_FLAG].includes(arg) &&
-      (dataRootIndex === -1 || index !== dataRootIndex + 1)
+      !['--yes', '--json', ...valueFlags].includes(arg) && !valueIndexes.includes(index - 1)
   )
-  // A missing value must never fall through to another data root, nor read a flag as a path.
-  if (!dataRoot?.trim() || dataRoot.startsWith('-') || unknown.length) {
+  // A missing value must never fall through to another data root or nonce, nor read a flag as one.
+  const badValue = (value: string | undefined): boolean =>
+    value !== undefined && (!value.trim() || value.startsWith('-'))
+  if (!dataRoot || badValue(dataRoot) || badValue(expectNonce) || unknown.length) {
     console.error(
-      `Usage: orcad ${ORCAD_RECLAIM_STALE_LOCK_FLAG} [${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} <dir>] [--yes] [--json]`
+      `Usage: orcad ${ORCAD_RECLAIM_STALE_LOCK_FLAG} [${ORCAD_STALE_LOCK_DATA_ROOT_FLAG} <dir>] [${ORCAD_STALE_LOCK_EXPECT_NONCE_FLAG} <nonce>] [--yes] [--json]`
     )
     process.exit(ORCAD_STALE_LOCK_RECLAIM_EXIT_CODES.refused)
   }
   const result = await reclaimStaleOrcadInstanceLock(dataRoot, {
     yes: args.includes('--yes'),
+    ...(expectNonce !== undefined ? { expectNonce } : {}),
     hintRuntime: { execPath: process.execPath, entry: process.argv[1] }
   })
   printOrcadStaleLockReclaimResult(result, json)

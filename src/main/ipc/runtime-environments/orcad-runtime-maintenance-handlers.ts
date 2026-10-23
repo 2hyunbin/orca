@@ -30,11 +30,14 @@ export function registerOrcadRuntimeMaintenanceHandlers(options: ManagedOrcadAct
   )
   ipcMain.handle(
     'runtimeEnvironments:reclaimOrcadStaleLock',
-    async (_event, args: { selector: string; yes?: boolean }) =>
+    async (_event, args: { selector: string; yes?: boolean; expectNonce?: string }) =>
       reclaimManagedOrcadStaleLock(
         options,
         requiredString(args?.selector, 'Server'),
+        // A confirmation without the checked record's nonce could clear a lock written since.
         args?.yes === true
+          ? { yes: true, expectNonce: requiredString(args.expectNonce, 'The checked lock') }
+          : { yes: false }
       )
   )
   ipcMain.handle('runtimeEnvironments:stopOrcad', async (_event, args: { selector: string }) =>

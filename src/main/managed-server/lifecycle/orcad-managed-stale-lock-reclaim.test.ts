@@ -42,7 +42,14 @@ vi.mock('../install/orcad-remote-runtime-control', () => ({ execOrcadRemote: moc
 
 const { runManagedOrcadStaleLockReclaim } = await import('./orcad-managed-stale-lock-reclaim')
 
-const evidence = { pid: 41, host: 'box', bootId: 'b1', currentBootId: 'b2', ageMinutes: 90 }
+const evidence = {
+  pid: 41,
+  host: 'box',
+  bootId: 'b1',
+  currentBootId: 'b2',
+  ageMinutes: 90,
+  nonce: 'n-1'
+}
 const answer = (status: string, extra: object = {}) =>
   JSON.stringify({ status, lockPath: '/home/dev/.orca/orcad.lock', message: status, ...extra })
 
@@ -74,12 +81,17 @@ describe('runManagedOrcadStaleLockReclaim', () => {
     const command: string = mocks.exec.mock.calls[0][1]
     expect(command).toContain("--reclaim-stale-lock --data-root '/home/dev/.orca' --json")
     expect(command).not.toContain('--yes')
+    // Only the slot gate names the pin; a dry run passes no nonce to orcad.
+    expect(command.split('--expect-nonce')).toHaveLength(2)
     expect(mocks.wake).not.toHaveBeenCalled()
   })
 
   it('never guesses from an orcad that answers without JSON', async () => {
     mocks.exec.mockRejectedValue(sshCommandExitError('orcad', 1, 'Error: lock held'))
-    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', { yes: true })
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', {
+      yes: true,
+      expectNonce: 'n-1'
+    })
     // Main names the lock for a manual delete; the renderer never parses it out of the detail.
     expect(result).toMatchObject({ status: 'unsupported', lockPath: '/home/dev/.orca/orcad.lock' })
     expect(mocks.wake).not.toHaveBeenCalled()
@@ -87,16 +99,22 @@ describe('runManagedOrcadStaleLockReclaim', () => {
 
   it('runs nothing on a host whose starts never refuse a shared-home lock', async () => {
     mocks.host.current = getRemoteHostPlatform('darwin-arm64')
-    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', { yes: true })
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', {
+      yes: true,
+      expectNonce: 'n-1'
+    })
     expect(result.status).toBe('unsupported')
     expect(mocks.exec).not.toHaveBeenCalled()
   })
 
   it('starts the server again once the confirmed reclaim cleared the lock', async () => {
-    mocks.exec.mockResolvedValue(`${answer('reclaimed', { exitCode: 0 })}\n`)
-    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', { yes: true })
-    expect(mocks.exec.mock.calls[0][1]).toContain('--json --yes')
-    expect(result).toMatchObject({ status: 'reclaimed', environmentId: 'env-1' })
+    mocks.exec.mockResolvedValue(`${answer('reclaimed', { exitCode: 0, evidence })}\n`)
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', {
+      yes: true,
+      expectNonce: 'n-1'
+    })
+    expect(mocks.exec.mock.calls[0][1]).toContain("--json --expect-nonce 'n-1' --yes")
+    expect(result).toMatchObject({ status: 'reclaimed', environmentId: 'env-1', evidence })
     expect(result).not.toHaveProperty('notRestarted')
     expect(mocks.wake).toHaveBeenCalledOnce()
     expect(mocks.rebuild).toHaveBeenCalledWith('/u', 'env-1')
@@ -104,8 +122,13 @@ describe('runManagedOrcadStaleLockReclaim', () => {
 
   // Runs the real command in a shell against a slot whose runtime records any invocation.
   it.skipIf(process.platform === 'win32').each([
-    ['never starts an orcad whose bundle lacks the flag', 'orcad server', false],
-    ['runs the slot that names the flag', 'argv[2] === "--reclaim-stale-lock"', true]
+    // A build with the reclaim but not the nonce pin must never be confirmed.
+    [
+      'never starts an orcad whose bundle lacks the pin',
+      'argv[2] === "--reclaim-stale-lock"',
+      false
+    ],
+    ['runs the slot that names the pin', '"--reclaim-stale-lock" "--expect-nonce"', true]
   ])('%s', async (_case, bundle, invoked) => {
     const home = mkdtempSync(join(tmpdir(), 'orcad-reclaim-gate-'))
     roots.push(home)
@@ -121,7 +144,10 @@ describe('runManagedOrcadStaleLockReclaim', () => {
       const { stdout } = await runProcess({ program: '/bin/sh', args: ['-c', command] })
       return stdout
     })
-    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', { yes: true })
+    const result = await runManagedOrcadStaleLockReclaim('/u', 'env-1', {
+      yes: true,
+      expectNonce: 'n-1'
+    })
     expect(result.status).toBe('unsupported')
     expect(existsSync(join(home, 'invoked'))).toBe(invoked)
   })

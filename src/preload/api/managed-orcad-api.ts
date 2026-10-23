@@ -10,6 +10,7 @@ import type {
   OrcadManagedPendingMigrationRow,
   OrcadManagedRecoveryResult,
   OrcadManagedRestartResult,
+  OrcadManagedStaleLockReclaimRequest,
   OrcadManagedStaleLockReclaimResult,
   OrcadManagedRollbackResult,
   OrcadManagedRuntimeStatus,
@@ -38,10 +39,9 @@ export type ManagedOrcadPreloadApi = {
   /** Restarts from this client's SSH session; refused while terminals run. */
   restart: (args: { selector: string }) => Promise<OrcadManagedRestartResult>
   /** Without `yes`, only reports whether the host's instance lock may be cleared. */
-  reclaimStaleLock: (args: {
-    selector: string
-    yes: boolean
-  }) => Promise<OrcadManagedStaleLockReclaimResult>
+  reclaimStaleLock: (
+    args: { selector: string } & OrcadManagedStaleLockReclaimRequest
+  ) => Promise<OrcadManagedStaleLockReclaimResult>
   stop: (args: { selector: string }) => Promise<OrcadManagedStopResult>
   cancelStop: (args: { selector: string }) => Promise<OrcadManagedCancelStopResult>
   forget: (args: { selector: string }) => Promise<OrcadManagedForgetResult>

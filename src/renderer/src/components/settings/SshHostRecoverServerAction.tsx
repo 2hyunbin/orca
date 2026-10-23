@@ -101,11 +101,11 @@ function OpenRecoverServerDialog({
     )
   }, [api, environmentId, mountedRef])
 
-  const reclaim = async (): Promise<void> => {
+  const reclaim = async (expectNonce: string): Promise<void> => {
     setBusy(true)
     setError(null)
     try {
-      const result = await api.reclaimStaleLock({ selector: environmentId, yes: true })
+      const result = await api.reclaimStaleLock({ selector: environmentId, yes: true, expectNonce })
       if (!mountedRef.current) {
         return
       }
@@ -130,6 +130,8 @@ function OpenRecoverServerDialog({
     }
   }
   const eligible = check?.status === 'eligible'
+  // The confirmation is pinned to the record the user saw; without its nonce there is none to pin.
+  const approvedNonce = eligible ? check.evidence?.nonce : undefined
   return (
     <Dialog open onOpenChange={(next) => !next && !busy && onOpenChange(false)}>
       <DialogContent showCloseButton={!busy}>
@@ -179,7 +181,10 @@ function OpenRecoverServerDialog({
             {translate('auto.components.settings.recoverServer.cancel', 'Cancel')}
           </Button>
           {eligible ? (
-            <Button onClick={() => void reclaim()} disabled={busy || !confirmed}>
+            <Button
+              onClick={() => approvedNonce && void reclaim(approvedNonce)}
+              disabled={busy || !confirmed || !approvedNonce}
+            >
               {translate(
                 'auto.components.settings.recoverServer.confirm',
                 'Clear lock and restart'

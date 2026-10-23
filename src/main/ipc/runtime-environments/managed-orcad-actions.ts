@@ -14,6 +14,7 @@ import { getOrcadSshDeployment } from '../../../shared/runtime-environments'
 import { resolveEnvironment } from '../../../shared/runtime-environment-store'
 import type {
   OrcadManagedRestartResult,
+  OrcadManagedStaleLockReclaimRequest,
   OrcadManagedStaleLockReclaimResult
 } from '../../../shared/orcad-managed-runtime'
 import { restartManagedOrcadEnvironment } from '../../managed-server/lifecycle/orcad-managed-launch-session'
@@ -115,9 +116,9 @@ export async function restartManagedOrcad(
 export async function reclaimManagedOrcadStaleLock(
   options: ManagedOrcadActionOptions,
   selector: string,
-  yes: boolean
+  request: OrcadManagedStaleLockReclaimRequest
 ): Promise<OrcadManagedStaleLockReclaimResult> {
-  const result = await runManagedOrcadStaleLockReclaim(options.getUserDataPath(), selector, { yes })
+  const result = await runManagedOrcadStaleLockReclaim(options.getUserDataPath(), selector, request)
   // Even unstarted: the reconnect's own start replaces the note that offered this.
   if (result.status === 'reclaimed') {
     await reconnectRestartedManagedOrcad(options, result.environmentId)
