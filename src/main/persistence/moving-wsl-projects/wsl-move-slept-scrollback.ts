@@ -141,6 +141,12 @@ export async function readWslMoveSleptScrollbackFromHistory(
         continue
       }
       const { scrollbackAnsi, snapshotAnsi } = detection.restoreInfo
+      // awin verify-5: an open pane carried 140 B after 3,000 lines; say where each pane's bytes came from.
+      console.info(
+        `[wsl-move] Slept pane ${leaf.tabId}: scrollback ${scrollbackAnsi.length} chars, screen ` +
+          `${snapshotAnsi.length} chars, cwd ${detection.restoreInfo.cwd ? 'set' : 'none'}` +
+          `${detection.cwdFromSpawn ? ' (spawn folder)' : ''}`
+      )
       const bytes = capped(Buffer.from(`${scrollbackAnsi}${snapshotAnsi}`, 'utf8'))
       if (bytes.length === 0) {
         continue
